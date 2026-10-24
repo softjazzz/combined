@@ -6,7 +6,7 @@ import json
 import pytest
 
 from app.services.luxian_0609.transfusion_course_presence import (
-    SCHEMA_VERSION, classify_transfusion_course_records,
+    LEGACY_SCHEMA_VERSION, SCHEMA_VERSION, classify_transfusion_course_records,
 )
 
 
@@ -15,17 +15,19 @@ def _row(index=0, content="红细胞已输完。", **kwargs):
 
 
 class FakeClient:
-    def __init__(self, kinds=None, mutate=None, choices=False):
+    def __init__(self, kinds=None, mutate=None, choices=False, schema=SCHEMA_VERSION):
         self.kinds = kinds or {}
         self.mutate = mutate
         self.choices = choices
         self.prompts = []
+        self.schema = schema
 
     async def generate(self, prompt):
         self.prompts.append(prompt)
         inputs = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])["records"]
-        payload = {"schema_version": SCHEMA_VERSION, "records": [
-            {"index": item["index"], "kind": self.kinds.get(item["index"], "record"), "quote": item["content"]}
+        payload = {"schema_version": self.schema, "records": [
+            {"index": item["index"], "kind": self.kinds.get(item["index"], "record"),
+             "quote": item["content"] if self.schema == LEGACY_SCHEMA_VERSION else item["content"][:120]}
             for item in inputs]}
         if self.mutate:
             self.mutate(payload)
@@ -182,7 +184,7 @@ def test_quote_punctuation_and_whitespace_differences_keep_binding():
     content = "输注去白悬浮红细胞2U、过程顺利，无输血反应。"
     def mutate(payload):
         payload["records"][0]["quote"] = "输注去白悬浮红细胞2U,过程顺利, 无输血反应"
-    result = _run([_row(content=content)], FakeClient(mutate=mutate))
+    result = _run([_row(content=content)], FakeClient(mutate=mutate, schema=LEGACY_SCHEMA_VERSION))
     assert result.state == "present"
     assert result.valid_document_ids == ("D0",)
 
@@ -196,7 +198,7 @@ def test_quote_character_differences_still_break_binding(quote):
     content = "输注去白悬浮红细胞2U、过程顺利，无输血反应。"
     def mutate(payload):
         payload["records"][0]["quote"] = quote
-    assert _run([_row(content=content)], FakeClient(mutate=mutate)).state == "technical_error"
+    assert _run([_row(content=content)], FakeClient(mutate=mutate, schema=LEGACY_SCHEMA_VERSION)).state == "technical_error"
 
 
 def test_duplicate_indices_with_matching_length_rejected():

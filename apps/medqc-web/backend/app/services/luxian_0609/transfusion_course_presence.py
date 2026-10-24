@@ -18,10 +18,13 @@ from .llm_prompt_privacy import (
     redact_luxian_0609_patient_privacy,
 )
 from .transfusion_order_trigger import MAX_BATCH_CHARS, MAX_BATCH_ROWS, PROTOCOL_ATTEMPTS, _json_response_object, _usage
+from .transfusion_extraction_scope import reuse_transfusion_extraction
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "lx0609-transfusion-course-presence-v1"
+SCHEMA_VERSION = "lx0609-transfusion-course-presence-v2"
+LEGACY_SCHEMA_VERSION = "lx0609-transfusion-course-presence-v1"
+MAX_QUOTE_CHARS = 120
 MAX_RETRY_PREVIOUS_CHARS = 24000
 
 
@@ -114,7 +117,9 @@ def _prompt(batch: Sequence[Mapping[str, Any]]) -> str:
         "治疗方案中的给予输血、继续申请输血也不证明已经输注；若仅有既往实施加本次治疗计划，仍为not_record。"
         "本次住院入院后已输注、昨日输血后改善等明确回顾本次已实施的表述可以为record。"
         "无法可靠确定则kind=unknown，不能推测为阴性。"
-        "每份输入必须且仅输出一次，index原样保留，quote必须逐字等于该份完整content，禁止截断、改写。"
+        "每份输入必须且仅输出一次，index原样保留。完整阅读content后，quote只返回支持该kind的连续原文短引句，"
+        "不超过120个字符，不回抄全文、不改字或拼接。not_record引用计划、既往史或空模板等判断依据；"
+        "unknown引用导致无法确认的原文，不补造实施事实。文书身份和完整正文由程序保留，不能以短引句代替阅读全文。"
         "输出必须为可解析JSON，quote中的换行、双引号和反斜杠必须按JSON字符串规范转义。"
         "严格JSON根对象只含schema_version和records；schema_version=" + SCHEMA_VERSION
         + "；records每项仅含index、kind、quote；kind仅允许record/not_record/unknown。\nINPUT_JSON="
@@ -150,7 +155,7 @@ def _retry_prompt(prompt: str, indices: Sequence[int], response: Mapping[str, An
     hint = (
         f"上一轮以下记录的quote将换行或制表符多转义了一层：{positions}。"
         "请按各自index重新阅读完整content，只修正这些quote的JSON转义，保留其他记录和kind判断。"
-        "JSON解码后的quote必须逐字等于该份content；不要输出字面量反斜杠加n/r/t。"
+        "JSON解码后的短引句必须逐字连续存在于该份content，且不超过120字符；不要输出字面量反斜杠加n/r/t。"
         "例如正文为两行时，正确的JSON写法是"
         + json.dumps({"quote": "第一行\n第二行"}, ensure_ascii=False)
         + "；不得把换行再转义一层。"
@@ -176,8 +181,10 @@ def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) ->
             raise ValueError("incomplete response")
         content = response.get("content", response.get("text"))
     payload = _json_response_object(content)
-    if not isinstance(payload, dict) or set(payload) != {"schema_version", "records"} or payload["schema_version"] != SCHEMA_VERSION:
+    if (not isinstance(payload, dict) or set(payload) != {"schema_version", "records"}
+            or payload["schema_version"] not in {SCHEMA_VERSION, LEGACY_SCHEMA_VERSION}):
         raise ValueError("invalid response schema")
+    legacy = payload["schema_version"] == LEGACY_SCHEMA_VERSION
     expected = {item["index"]: item["content"] for item in batch}
     records = payload["records"]
     if not isinstance(records, list) or len(records) != len(expected):
@@ -196,11 +203,18 @@ def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) ->
             raise ValueError("invalid document binding")
         if not isinstance(kind, str) or kind not in {"record", "not_record", "unknown"}:
             raise ValueError("invalid record kind")
-        if _binding_text(item["quote"]) != _binding_text(expected[index]):
+        def matches(quote: str) -> bool:
+            if legacy:
+                # 存量已录应答只按旧全文合同验收，不把旧引句放宽为新合同。
+                return _binding_text(quote) == _binding_text(expected[index])
+            return (0 < len(quote) <= MAX_QUOTE_CHARS and bool(_binding_text(quote))
+                    and quote in expected[index])
+
+        if not matches(item["quote"]):
             # 只识别可确定的转义错误来触发同批补核，不能直接采用替换后的引用。
             unescaped = re.sub(r"\\([nrt])", lambda match: {"n": "\n", "r": "\r", "t": "\t"}[match[1]], item["quote"])
             # 与绑定核对同口径忽略空白：原文为回车换行时把换行抄成字面量反斜杠n也属转义错误（C20，2026-10-19）。
-            if _binding_text(unescaped) == _binding_text(expected[index]):
+            if matches(unescaped):
                 escaped_indices.append(index)
             else:
                 raise ValueError("invalid document binding")
@@ -213,6 +227,29 @@ def _records(response: Mapping[str, Any], batch: Sequence[Mapping[str, Any]]) ->
 
 
 async def classify_transfusion_course_records(
+    rows: Sequence[Mapping[str, Any]], llm_client: Any,
+) -> TransfusionCoursePresenceResult:
+    # 输入次序、原始正文/标题与身份均参与键，脱敏后碰巧相同也不能互相借用。
+    try:
+        inputs, identities = _inputs(rows)
+        material = json.dumps({"inputs": inputs, "identities": identities,
+            "originals": [{
+                "content": next((row[key] for key in (
+                    "content", "record_content", "assembled_text", "raw_text") if row.get(key)), ""),
+                "title": next((row[key] for key in (
+                    "document_title", "record_title", "title", "document_name") if row.get(key)), ""),
+                "source_type": row.get("source_type"), "source_key": row.get("source_key"),
+            } for row in rows]}, ensure_ascii=False, sort_keys=True, default=str)
+    except (ValueError, TypeError, OverflowError):
+        return TransfusionCoursePresenceResult("data_gap")
+    return await reuse_transfusion_extraction(
+        protocol=SCHEMA_VERSION, material=material, client=llm_client,
+        extract=lambda: _classify_transfusion_course_records(rows, llm_client),
+        confirmed=lambda result: result.state in {"present", "absent"},
+    )
+
+
+async def _classify_transfusion_course_records(
     rows: Sequence[Mapping[str, Any]], llm_client: Any,
 ) -> TransfusionCoursePresenceResult:
     """核验完整候选范围；阳性和不确定混合仍为资料缺口。"""

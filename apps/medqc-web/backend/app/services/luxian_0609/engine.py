@@ -27,6 +27,7 @@ from .executor_registry import (
     Luxian0609ExecutorRegistry,
 )
 from .rule_contracts import Luxian0609RuleContract
+from .transfusion_extraction_scope import with_transfusion_extraction_scope
 
 
 logger = logging.getLogger(__name__)
@@ -194,6 +195,7 @@ class Luxian0609ExecutionEngine:
             raise TypeError("registry must be Luxian0609ExecutorRegistry")
         self._registry = registry
 
+    @with_transfusion_extraction_scope
     async def execute(
         self,
         *,
