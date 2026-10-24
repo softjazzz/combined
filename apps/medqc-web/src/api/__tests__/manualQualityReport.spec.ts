@@ -30,6 +30,59 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 describe('人工质控回执边界', () => {
+  it.each([{}, { root_job_id: null, envelope_id: null }, { root_job_id: 'J1', envelope_id: 5 }])(
+    '可信来源必须携带完整冻结结果引用%j',
+    async (anchors) => {
+      const row = {
+        id: 'D1',
+        creator_name: '录入人',
+        created_at: '2026-10-24T00:00:00Z',
+        institute_id: 'H1',
+        patient_id: 'P1',
+        visit_id: 'V1',
+        department: '内科',
+        creator_id: 'U1',
+        task_id: 'T1',
+        task_name: '任务',
+        task_record_id: 'TR1',
+        rule_name: '人工缺陷',
+        run_number: 1,
+        scene: 'running',
+        source_verified: true,
+        review_status: 'approved',
+        rectification_status: 'unassigned',
+        ...anchors,
+      }
+      const payload = {
+        ...result,
+        items: [row],
+        total: 1,
+        summary: {
+          entered: 1,
+          review: { pending: 0, approved: 1, rejected: 0, unknown: 0 },
+          rectification: {
+            pending: 0,
+            submitted: 0,
+            approved: 0,
+            rejected: 0,
+            unassigned: 1,
+            unknown: 0,
+          },
+        },
+      }
+      mock.mockResolvedValue({ data: { success: true, data: payload } })
+      await expect(getManualQualityReport(filters)).rejects.toThrow('回执不完整')
+      mock.mockResolvedValue({
+        data: {
+          success: true,
+          data: { ...payload, items: [{ ...row, root_job_id: 'J1', envelope_id: 'E1' }] },
+        },
+      })
+      await expect(getManualQualityReport(filters)).resolves.toMatchObject({
+        items: [{ root_job_id: 'J1', envelope_id: 'E1' }],
+      })
+    },
+  )
   it('完整回执保持当前状态桶与冻结筛选', async () => {
     mock.mockResolvedValue({ data: { success: true, data: result } })
     expect(await getManualQualityReport(filters)).toEqual(result)

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import ManualQualityReportPanel from '../ManualQualityReportPanel.vue'
 import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
+import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 const mocks = vi.hoisted(() => ({
@@ -54,6 +55,11 @@ function make() {
   return mount(ManualQualityReportPanel, {
     global: {
       stubs: {
+        CaseRectificationCreate: {
+          name: 'CaseRectificationCreate',
+          props: ['instituteId', 'patientId', 'visitId', 'jobId', 'initialTarget'],
+          template: '<button>整改处理</button>',
+        },
         'a-alert': {
           props: ['message', 'type'],
           template: '<p :data-type="type">{{ message }}</p>',
@@ -85,6 +91,58 @@ beforeEach(() => {
   mocks.export.mockResolvedValue(new Blob(['synthetic csv']))
 })
 describe('人工质控报表', () => {
+  it.each(['pending', 'rejected', 'approved'])(
+    '仅可信且审核通过的%s缺陷可进入冻结整改链',
+    async (status) => {
+      const row = {
+        ...data.items[0],
+        patient_id: 'P1',
+        visit_id: 'V1',
+        scene: 'running',
+        review_status: status,
+        source_verified: true,
+        root_job_id: 'J1',
+        envelope_id: 'E1',
+      }
+      mocks.report.mockResolvedValue({ ...data, items: [row] })
+      const wrapper = make()
+      await flushPromises()
+      await wrapper.get('.rows button').trigger('click')
+      const form = wrapper.findComponent(CaseRectificationCreate)
+      expect(form.exists()).toBe(status === 'approved')
+      if (status === 'approved') {
+        expect(form.props()).toMatchObject({
+          jobId: 'J1',
+          initialTarget: { source: 'manual', defectId: 'd1', rootJobId: 'J1', envelopeId: 'E1' },
+        })
+        form.vm.$emit('created')
+        await flushPromises()
+        expect(mocks.report).toHaveBeenCalledTimes(2)
+        expect(wrapper.emitted('changed')).toHaveLength(1)
+        expect(wrapper.findComponent(CaseRectificationCreate).exists()).toBe(false)
+      }
+      wrapper.unmount()
+    },
+  )
+  it('来源不全时不开放整改入口', async () => {
+    mocks.report.mockResolvedValue({
+      ...data,
+      items: [
+        {
+          ...data.items[0],
+          review_status: 'approved',
+          source_verified: false,
+          root_job_id: null,
+          envelope_id: null,
+        },
+      ],
+    })
+    const wrapper = make()
+    await flushPromises()
+    await wrapper.get('.rows button').trigger('click')
+    expect(wrapper.findComponent(CaseRectificationCreate).exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('人工操作成功后刷新当前页并通知工作分析，不重置筛选', async () => {
     const wrapper = make()
     await flushPromises()

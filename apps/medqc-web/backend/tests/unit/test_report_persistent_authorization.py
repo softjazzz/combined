@@ -449,6 +449,10 @@ def test_manual_report_default_readers_never_bootstrap_tables(
         assert data["total"] == 3
         assert {row["institute_id"] for row in data["items"]} == {"A"}
         assert all(row["source_verified"] is False for row in data["items"])
+        assert all(
+            row["root_job_id"] is None and row["envelope_id"] is None
+            for row in data["items"]
+        )
         assert all(row["rectification_status"] == "unknown" for row in data["items"])
         assert any("qc_defects.institute_id" in sql for sql in statements)
     finally:

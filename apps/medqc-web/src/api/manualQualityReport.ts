@@ -28,6 +28,8 @@ export interface ManualReportRow {
   review_status: string
   rectification_status: string
   source_verified: boolean
+  root_job_id: string | null
+  envelope_id: string | null
 }
 export interface ManualReport {
   as_of: string
@@ -153,11 +155,14 @@ function assertReport(value: unknown, page: number): asserts value is ManualRepo
           'task_name',
           'task_record_id',
           'rule_name',
+          'root_job_id',
+          'envelope_id',
         ].every((key) => nullableText(item[key])) &&
         (item.run_number === null || (integer(item.run_number) && item.run_number > 0)) &&
         (item.scene === null ||
           ['running', 'final', 'outpatient_emergency'].includes(String(item.scene))) &&
         typeof item.source_verified === 'boolean' &&
+        (!item.source_verified || (text(item.root_job_id) && text(item.envelope_id))) &&
         reviewStates.includes(String(item.review_status)) &&
         rectificationStates.includes(String(item.rectification_status)),
     )

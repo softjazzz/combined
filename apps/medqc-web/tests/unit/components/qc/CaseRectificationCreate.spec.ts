@@ -64,6 +64,22 @@ beforeEach(() => {
   mocks.create.mockResolvedValue({ id: 'rect1' })
 })
 describe('病例缺陷整改派发', () => {
+  it('人工缺陷必须匹配所选冻结job和信封，不能静默跟随新轮', async () => {
+    mocks.candidates.mockResolvedValue({
+      targets: [
+        { ...target, target_kind: 'task_manual_defect', target_id: 'D1', envelope_id: 'E2' },
+      ],
+      doctors: [],
+    })
+    const wrapper = make({
+      initialTarget: { source: 'manual', defectId: 'D1', rootJobId: 'J1', envelopeId: 'E1' },
+    })
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('所选缺陷已变化')
+    expect(wrapper.findComponent({ name: 'HomeRectificationTodos' }).exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('缺陷和医生菜单跟随弹窗容器，不落到被遮挡的页面根层', async () => {
     const wrapper = make()
     await wrapper.get('button').trigger('click')

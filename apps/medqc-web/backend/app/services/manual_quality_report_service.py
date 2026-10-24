@@ -275,6 +275,8 @@ class ManualQualityReportService:
                         else "unknown",
                         "rectification_status": status,
                         "source_verified": source is not None,
+                        "root_job_id": source[6] if source else None,
+                        "envelope_id": source[7] if source else None,
                     }
                 )
             options = {

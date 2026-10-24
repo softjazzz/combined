@@ -1,9 +1,7 @@
 <template>
   <section>
     <a-button class="rectification-launch" @click="openForm">
-      <template #icon>
-        <MqIcon name="task" :size="16" /> </template
-      >派发整改 / 整改处理
+      <template #icon> <MqIcon name="task" :size="16" /> </template>派发整改 / 整改处理
     </a-button>
     <a-modal
       v-model:open="open"
@@ -120,7 +118,7 @@ async function load() {
   doctors.value = []
   try {
     if (
-      props.initialTarget?.source === 'auto' &&
+      props.initialTarget &&
       (!props.initialTarget.rootJobId ||
         !props.initialTarget.envelopeId ||
         props.initialTarget.rootJobId !== props.jobId)
@@ -141,8 +139,8 @@ async function load() {
         (target) =>
           target.target_kind === expectedKind &&
           target.target_id === expectedId &&
-          (props.initialTarget?.source !== 'auto' ||
-            target.envelope_id === props.initialTarget.envelopeId),
+          target.root_job_id === props.initialTarget?.rootJobId &&
+          target.envelope_id === props.initialTarget?.envelopeId,
       )
       if (targets.value.length === 1) targetKey.value = '0'
       else {

@@ -183,13 +183,20 @@
           {{ detailValue(field.key) }}
         </a-descriptions-item>
       </a-descriptions>
+      <CaseRectificationCreate
+        v-if="rectificationContext"
+        v-bind="rectificationContext"
+        @created="workflowChanged"
+        @changed="workflowChanged"
+      />
     </a-drawer>
   </section>
 </template>
 
 <script setup lang="ts">
 import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
-import { onUnmounted, reactive, ref, watch } from 'vue'
+import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
+import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -224,6 +231,33 @@ const applied = ref<ManualReportFilters>({
 const report = ref<ManualReport | null>(null),
   selected = ref<ManualReportRow | null>(null)
 const workflowOpen = ref(false)
+const rectificationContext = computed(() => {
+  const row = selected.value
+  if (
+    !row ||
+    row.review_status !== 'approved' ||
+    !row.source_verified ||
+    !row.institute_id ||
+    !row.patient_id ||
+    !row.visit_id ||
+    !row.root_job_id ||
+    !row.envelope_id ||
+    !['running', 'final'].includes(row.scene || '')
+  )
+    return null
+  return {
+    instituteId: row.institute_id,
+    patientId: row.patient_id,
+    visitId: row.visit_id,
+    jobId: row.root_job_id,
+    initialTarget: {
+      source: 'manual' as const,
+      defectId: row.id,
+      rootJobId: row.root_job_id,
+      envelopeId: row.envelope_id,
+    },
+  }
+})
 const emit = defineEmits<{ changed: [] }>()
 function workflowChanged() {
   emit('changed')
@@ -297,6 +331,8 @@ const detailFields: Array<{ key: keyof ManualReportRow; label: string }> = [
   { key: 'review_status', label: '当前审核' },
   { key: 'rectification_status', label: '当前整改' },
   { key: 'source_verified', label: '冻结来源核验' },
+  { key: 'root_job_id', label: '冻结结果任务' },
+  { key: 'envelope_id', label: '冻结结果信封' },
 ]
 function selectDetail(id: unknown) {
   selected.value = report.value?.items.find((item) => item.id === id) ?? null
