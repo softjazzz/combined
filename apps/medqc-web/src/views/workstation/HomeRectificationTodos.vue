@@ -24,7 +24,9 @@
         </template>
       </a-button>
     </header>
-    <a-alert v-if="error" :message="error" type="error" show-icon />
+    <p v-if="error" class="state-error" role="alert">
+      <MqIcon name="issue" :size="16" />{{ error }}
+    </p>
     <a-spin :spinning="loading">
       <ul class="rectification-task-list" :class="{ 'mq-card': !scope && items.length > 0 }">
         <li v-for="item in items" :key="item.id">
@@ -59,7 +61,9 @@
       :root-style="{ zIndex: 1300 }"
       root-class-name="rectification-detail-drawer"
     >
-      <a-alert v-if="detailError" :message="detailError" type="error" show-icon />
+      <p v-if="detailError" class="state-error" role="alert">
+        <MqIcon name="issue" :size="16" />{{ detailError }}
+      </p>
       <a-button v-if="detailError" :disabled="saving" @click="activeId && show(activeId)">
         刷新核对
       </a-button>
@@ -112,7 +116,9 @@
           </a-space>
         </a-form>
         <h3 class="rectification-section-title">操作记录</h3>
-        <a-alert v-if="comparisonError" :message="comparisonError" type="error" show-icon />
+        <p v-if="comparisonError" class="state-error" role="alert">
+          <MqIcon name="issue" :size="16" />{{ comparisonError }}
+        </p>
         <section v-if="comparison" class="document-comparison">
           <h3 class="rectification-section-title">派发时 / 本次提交时正文</h3>
           <p v-if="!comparison.available">

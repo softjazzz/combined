@@ -56,6 +56,36 @@ describe('机构代码配置抽屉', () => {
     expect(wrapper.emitted('saved')).toHaveLength(1)
     wrapper.unmount()
   })
+  it('抽屉位于1100层，代码选择菜单挂在局部容器而非body', async () => {
+    const containers: Array<(trigger: HTMLElement) => HTMLElement> = []
+    const wrapper = mount(SpecialReportConfigDrawer, {
+      props: { open: true, instituteId: 'H1' },
+      global: {
+        stubs: {
+          'a-drawer': {
+            props: ['open', 'rootStyle'],
+            template: '<div v-if="open" :data-z="rootStyle?.zIndex"><slot /></div>',
+          },
+          'a-select': {
+            props: ['getPopupContainer'],
+            setup(props: { getPopupContainer: (trigger: HTMLElement) => HTMLElement }) {
+              containers.push(props.getPopupContainer)
+              return {}
+            },
+            template: '<span />',
+          },
+        },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-z]').attributes('data-z')).toBe('1100')
+    expect(containers).toHaveLength(8)
+    const parent = document.createElement('div')
+    const trigger = document.createElement('span')
+    parent.appendChild(trigger)
+    for (const container of containers) expect(container(trigger)).toBe(parent)
+    wrapper.unmount()
+  })
   it('未知写入回读失败禁止重写，不误报已保存', async () => {
     const wrapper = render()
     await flushPromises()

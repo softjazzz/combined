@@ -167,6 +167,7 @@
       :open="!!selected"
       title="人工缺陷统计明细"
       width="min(560px, 100vw)"
+      :root-style="{ zIndex: 1100 }"
       @close="selected = null"
     >
       <a-descriptions v-if="selected" :column="1" bordered size="small">

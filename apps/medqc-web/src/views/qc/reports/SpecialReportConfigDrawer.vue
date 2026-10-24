@@ -3,6 +3,7 @@
     :open="open"
     title="机构特殊病历代码配置"
     width="min(640px, 100vw)"
+    :root-style="{ zIndex: 1100 }"
     class="special-config-drawer"
     @close="$emit('close')"
   >
@@ -27,6 +28,7 @@
             :id="`sr-${group.key}-positive`"
             v-model:value="draft[group.key].positive_codes"
             mode="tags"
+            :get-popup-container="popupContainer"
             :disabled="saving"
           />
         </div>
@@ -36,6 +38,7 @@
             :id="`sr-${group.key}-negative`"
             v-model:value="draft[group.key].negative_codes"
             mode="tags"
+            :get-popup-container="popupContainer"
             :disabled="saving"
           />
         </div>
@@ -49,6 +52,7 @@
               :id="`sr-level-${level}`"
               v-model:value="draft.surgery_level_codes[level]"
               mode="tags"
+              :get-popup-container="popupContainer"
               :disabled="saving"
             />
           </div>
@@ -86,6 +90,8 @@ const groups = [
   { key: 'difficult', label: '疑难' },
 ] as const
 const levels = ['1', '2', '3', '4'] as const
+// 抽屉在1100层，菜单挂在触发器父节点，避免落到body的1050层被遮挡
+const popupContainer = (trigger: HTMLElement) => trigger.parentElement || trigger
 const receipt = ref<SpecialConfigReceipt | null>(null)
 const draft = ref<SpecialSourceConfig | null>(null)
 const loading = ref(false)

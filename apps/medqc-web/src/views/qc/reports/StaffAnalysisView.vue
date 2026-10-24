@@ -300,7 +300,7 @@
           role="alert"
           data-testid="staff-details-error"
         >
-          {{ detailsError }}
+          <MqIcon name="issue" :size="18" />{{ detailsError }}
         </p>
         <p v-else-if="detailsLoading" class="state-message" role="status">正在读取人员工作明细…</p>
         <template v-else-if="detailsPage">

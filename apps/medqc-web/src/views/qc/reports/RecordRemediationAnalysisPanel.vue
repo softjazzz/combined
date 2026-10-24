@@ -11,7 +11,9 @@
         <MqIcon name="download" :size="16" />导出 CSV
       </button>
     </header>
-    <a-alert v-if="error" :message="error" type="error" show-icon />
+    <p v-if="error" class="state-error" role="alert">
+      <MqIcon name="issue" :size="16" />{{ error }}
+    </p>
     <a-button v-if="error" :disabled="busy" @click="load(1)"> 重试读取 </a-button>
     <a-spin :spinning="busy">
       <template v-if="analysis">
@@ -104,7 +106,7 @@
                 </td>
               </tr>
               <tr v-if="!analysis.items.length">
-                <td colspan="4">暂无匹配的保存缺陷</td>
+                <td colspan="4" class="empty-cell">暂无匹配的保存缺陷</td>
               </tr>
             </tbody>
           </table>

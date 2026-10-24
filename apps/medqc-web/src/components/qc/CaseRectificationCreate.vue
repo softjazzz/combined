@@ -26,7 +26,9 @@
           ><span>{{ instituteId }} · {{ patientId }}</span>
         </div>
       </div>
-      <a-alert v-if="error" type="error" :message="error" show-icon />
+      <p v-if="error" class="state-error" role="alert">
+        <MqIcon name="issue" :size="16" />{{ error }}
+      </p>
       <a-button v-if="error" :disabled="saving" @click="load"> 重新核对候选 </a-button>
       <a-spin :spinning="loading">
         <a-form layout="vertical" class="rectification-create-form">

@@ -223,9 +223,9 @@
         </button>
       </div>
       <p v-if="recordsError" class="status error" role="alert">
-        {{ recordsError }}
+        <MqIcon name="issue" :size="18" />{{ recordsError }}
       </p>
-      <p v-else-if="recordsLoading" class="status">正在读取病案…</p>
+      <p v-else-if="recordsLoading" class="status" role="status">正在读取病案…</p>
       <div v-else-if="recordsPage" class="table-scroll">
         <table class="mq-table">
           <thead>
