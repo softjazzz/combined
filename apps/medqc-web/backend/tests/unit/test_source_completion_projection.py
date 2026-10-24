@@ -23,9 +23,11 @@ ORDER_TIMES = (
 DEATH_FIELDS = ("death_datetime", "admission_condition", "treatment_course", "death_reason")
 
 
-@pytest.mark.parametrize("table", ("inpat_drug_order", "inpat_nondrug_order", "death_record"))
+@pytest.mark.parametrize("table", ("inpat_drug_order", "inpat_nondrug_order", "death_record", "discharge_record"))
 def test_business_fields_survive_select_inventory_and_emr_without_changing_document_clock(table):
-    fields = DEATH_FIELDS if table == "death_record" else ORDER_TIMES
+    fields = (DEATH_FIELDS if table == "death_record" else (
+        "record_content", "admission_condition", "treatment_course", "discharge_order", "chief_physician_sign_datetime", "v2_schema",
+    ) if table == "discharge_record" else ORDER_TIMES)
     row = {
         "document_id": "synthetic-document", "order_id": "synthetic-order",
         "record_content": "合成正文", "generic_name": "合成药品", "order_name": "合成检查",
@@ -33,6 +35,8 @@ def test_business_fields_survive_select_inventory_and_emr_without_changing_docum
     for index, field in enumerate(fields):
         row[field] = (datetime(2026, 1, index + 1, tzinfo=timezone.utc)
                       if field.endswith("datetime") else "合成结构化内容" * (index + 1))
+    if table == "discharge_record":
+        row["v2_schema"] = '{"synthetic":"extra JSON"}'
     selected = build_document_select_columns(table, set(row))
     assert set(fields).issubset(selected)
     projected = {field: row[field] for field in selected}

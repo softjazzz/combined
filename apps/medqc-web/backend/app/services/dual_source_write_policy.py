@@ -132,6 +132,7 @@ def _offered(candidate, columns, case):
 
 def build_write_batch(table, plan, case, columns, primary_keys, local_rows, *, approved_records=()):
     """仅补空值。身份问题整条隔离，非空冲突逐字段跳过；新增文书必须有明确正文。"""
+    from .document_assembly.signature_sync import safe_body_signature_supplement
     if not plan.complete:
         raise ValueError("source_coverage_incomplete")
     batch = WriteBatch()
@@ -158,6 +159,14 @@ def build_write_batch(table, plan, case, columns, primary_keys, local_rows, *, a
             report["skipped"] = ["unresolved_local_composite_identity"]
             continue
         offered, issues = _offered(candidate, columns, case)
+        if table in {"daily_course_record", "senior_course_record", "postsurg_firstcourse_record"} and "physician_sign" in columns:
+            names = safe_body_signature_supplement(candidate)
+            if names:
+                try:
+                    offered.setdefault("physician_sign", []).append(cast_cell(" ".join(names), columns["physician_sign"]))
+                    report["signature_provenance"] = "explicit_body_signature_same_document_core"
+                except (ValueError, TypeError, OverflowError):
+                    issues.add("invalid_target_value:physician_sign")
         conflicts = set(candidate.conflicts)
         blocked_targets = {target for target in columns for name in conflicts
                            if target in (name, *policy.ALIASES.get(name, ())) }

@@ -5149,14 +5149,24 @@ class CustomQCWorkspaceService:
         failed_records: List[Dict[str, Any]],
         persist_record_envelopes: bool = True,
         attempt_filters_json: str | None = None,
+        recovery_baseline: Dict[str, Any] | None = None,
     ) -> bool | None:
         session = _session()
         try:
-            row = session.execute(
-                select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
-            ).mappings().first()
+            statement = select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
+            if recovery_baseline is not None:
+                statement = statement.with_for_update()
+            row = session.execute(statement).mappings().first()
             if not row:
                 return
+            recovery_refs = None
+            if recovery_baseline is not None:
+                from .qc_workspace.offline_failure_recovery import validate_recovery_merge
+                # 在原任务锁内复核备份基线，避免覆盖并发恢复、取消或新一轮任务。
+                for field in ("id", "created_by", "status", "filters_json", "items_json", "failed_records_json", "summary_json", "updated_at"):
+                    if row.get(field) != recovery_baseline.get(field):
+                        raise ValueError("recovery_baseline_changed")
+                recovery_refs = validate_recovery_merge(recovery_baseline, items=items, failures=failed_records)
             parent_job_id = _safe_text(row.get("parent_job_id"))
             now = _now_utc()
             execution_failed = summary.get("execution_status") in {"partial_failed", "failed"}
@@ -5201,7 +5211,11 @@ class CustomQCWorkspaceService:
             }
             completion_update = session.execute(
                 update(self._batch_job_table)
-                .where(_batch_job_write_scope(
+                .where(and_(
+                    self._batch_job_table.c.id == job_id,
+                    self._batch_job_table.c.status == "failed",
+                    self._batch_job_table.c.filters_json == row.get("filters_json"),
+                ) if recovery_refs is not None else _batch_job_write_scope(
                     self._batch_job_table, job_id=job_id, attempt_filters_json=attempt_filters_json,
                     observed_filters_json=row.get("filters_json"),
                 ))
@@ -5233,7 +5247,7 @@ class CustomQCWorkspaceService:
             # 仍会被读取为当前交付。父任务 root 的整体替换由 refresh_parent_batch_job
             # 负责，子任务保持逐病例写入，其它规则集不变；即使调用方本次不写
             # Canonical（persist_record_envelopes=False）也不得留下上一代正式结果。
-            if rule_set_key == LUXIAN_0609_RULE_SET_KEY and not parent_job_id:
+            if rule_set_key == LUXIAN_0609_RULE_SET_KEY and not parent_job_id and recovery_refs is None:
                 session.execute(
                     self._record_result_envelope_table.delete().where(and_(
                         self._record_result_envelope_table.c.root_job_id == job_id,
@@ -5258,6 +5272,10 @@ class CustomQCWorkspaceService:
                         failures=failed_records,
                         expected_rule_ids=expected_rule_ids,
                     )
+            if recovery_refs is not None:
+                # 只为本次补齐且已完整交付的病历写信封；其他成功病历的信封原行不动。
+                envelope_items = [item for item in envelope_items if tuple(str(item.get(key) or "") for key in ("institute_id", "patient_id", "visit_id")) in recovery_refs]
+                envelope_record_refs = list(dict.fromkeys(CaseRef.from_mapping(item) for item in envelope_items))
             diagnostic_receipts = (
                 self._write_record_result_envelopes(
                     session,

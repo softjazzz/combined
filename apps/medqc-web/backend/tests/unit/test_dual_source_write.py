@@ -72,6 +72,19 @@ def test_two_sources_disagree_on_empty_target_field_do_not_fill_it():
     assert "record_content" in result.records[0]["conflicts"]
 
 
+def test_same_body_signature_supplement_fills_only_blank_name_list():
+    table = "senior_course_record"
+    before = row(record_content="合成病程。 医师签名：")
+    source = row(institute_id="UP", record_content="合成病程。 医师签名：甲医生 乙医生")
+    meta = metadata(table)
+    meta["columns"]["physician_sign"] = {"data_type": "text", "is_nullable": "YES", "is_identity": "NO", "is_generated": "NEVER", "column_default": None}
+    result = batch(table, homology=[source], local=[before], meta=meta)
+    assert len(result.operations) == 1
+    assert result.operations[0]["values"] == {"physician_sign": "甲医生 乙医生"}
+    assert "record_content" in result.records[0]["conflicts"]
+    assert before["record_content"] == "合成病程。 医师签名："
+
+
 def test_local_only_never_deleted_or_rewritten():
     result = batch(local=[row(record_content="仍保留")])
     assert not result.operations

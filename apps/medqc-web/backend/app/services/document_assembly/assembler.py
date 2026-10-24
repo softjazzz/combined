@@ -191,6 +191,8 @@ INDEPENDENT_DOCUMENT_FIELDS: dict[str, tuple[str, ...]] = {
         for table in ("inpat_drug_order", "inpat_nondrug_order")
     },
     "death_record": ("death_datetime", "admission_condition", "treatment_course", "death_reason"),
+    # 分节展示不等于完整原文/二级结构化；独立保存，禁止把签署时间提升为文书时钟。
+    "discharge_record": ("record_content", "admission_condition", "treatment_course", "discharge_order", "chief_physician_sign_datetime", "v2_schema"),
 }
 
 _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
