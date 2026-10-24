@@ -519,7 +519,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
@@ -579,6 +579,14 @@ const baseColumns: Array<{ key: ColumnKey; label: string }> = [
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const authKey = computed(() =>
+  JSON.stringify([
+    authStore.user?.id,
+    authStore.user?.institute_id,
+    authStore.user?.department,
+    authStore.user?.roles || authStore.user?.role,
+  ]),
+)
 const scene = computed<ReportScene>(() => (route.query.scene === 'final' ? 'final' : 'running'))
 const draft = ref({
   department: '',
@@ -635,6 +643,25 @@ const recordsLoading = ref(false)
 const recordsError = ref('')
 let reportRequest = 0
 let recordsRequest = 0
+let exportRequest = 0
+const exportScope = computed(() =>
+  JSON.stringify([scene.value, filters.value, draft.value, drilldown.value, shownColumns.value]),
+)
+function invalidateExport(): void {
+  ++exportRequest
+  exporting.value = null
+}
+watch([authKey, exportScope], invalidateExport, { flush: 'sync' })
+watch(authKey, () => {
+  ++reportRequest
+  ++recordsRequest
+  report.value = null
+  recordsPage.value = null
+  drawerOpen.value = false
+  loading.value = false
+  recordsLoading.value = false
+  if (authStore.user?.id) void loadReport()
+})
 
 const topLists = computed(() => ({
   rules: report.value?.top_rules,
@@ -738,7 +765,9 @@ function unavailableReason(code: string): string {
 }
 
 async function loadReport(): Promise<void> {
+  invalidateExport()
   const request = ++reportRequest
+  const identity = authKey.value
   ++recordsRequest
   drawerOpen.value = false
   drilldown.value = {}
@@ -748,7 +777,7 @@ async function loadReport(): Promise<void> {
   loadError.value = ''
   report.value = null
   const result = await getRecordQualityReport(filters.value)
-  if (request !== reportRequest) return
+  if (request !== reportRequest || identity !== authKey.value) return
   loading.value = false
   if (result.success && result.data) {
     report.value = result.data
@@ -832,6 +861,7 @@ function applyColumnPreset(): void {
 }
 async function loadRecords(page = 1): Promise<void> {
   const request = ++recordsRequest
+  const identity = authKey.value
   recordsLoading.value = true
   recordsError.value = ''
   recordsPage.value = null
@@ -841,7 +871,7 @@ async function loadRecords(page = 1): Promise<void> {
     page,
     page_size: 20,
   })
-  if (request !== recordsRequest) return
+  if (request !== recordsRequest || identity !== authKey.value) return
   recordsLoading.value = false
   if (result.success && result.data) recordsPage.value = result.data
   else recordsError.value = result.message || '病例明细暂不可用'
@@ -870,26 +900,42 @@ function changePage(page: number): void {
   void loadRecords(page)
 }
 async function download(sheet: ReportSheet): Promise<void> {
+  if (!report.value || !authStore.user?.id) return
+  const request = ++exportRequest
+  const identity = authKey.value
+  const scope = exportScope.value
+  const query = { ...filters.value, ...(sheet === 'records' ? drilldown.value : {}) }
+  const columns = sheet === 'records' ? undefined : shownColumns.value.map((column) => column.key)
+  const filename = `病历质量分析-${query.scene}-${sheet}.csv`
+  const current = () =>
+    request === exportRequest && identity === authKey.value && scope === exportScope.value
   exporting.value = sheet
-  const result = await exportRecordQualityReport(
-    { ...filters.value, ...(sheet === 'records' ? drilldown.value : {}) },
-    sheet,
-    sheet === 'records' ? undefined : shownColumns.value.map((column) => column.key),
-  )
-  exporting.value = null
-  if (!result.success || !result.data) {
-    message.error(result.message || '导出失败')
-    return
+  try {
+    const result = await exportRecordQualityReport(query, sheet, columns)
+    if (!current()) return
+    if (!result.success || !result.data) {
+      message.error(result.message || '导出失败')
+      return
+    }
+    const url = URL.createObjectURL(result.data)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  } catch {
+    if (current()) message.error('导出失败')
+  } finally {
+    if (request === exportRequest) exporting.value = null
   }
-  const url = URL.createObjectURL(result.data)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = `病历质量分析-${scene.value}-${sheet}.csv`
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(url)
 }
+onBeforeUnmount(() => {
+  ++reportRequest
+  ++recordsRequest
+  invalidateExport()
+})
 onMounted(() => {
   restoreColumns()
   void loadReport()

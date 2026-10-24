@@ -14,6 +14,7 @@ vi.mock('@/api/frontpageQualityReport', () => ({
   exportFrontpageQualityReport: state.exportReport,
 }))
 vi.mock('ant-design-vue', () => ({ message: { error: vi.fn() } }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 'manager' } }) }))
 
 const drawerStub = {
   props: ['open', 'width', 'rootStyle'],
