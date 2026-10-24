@@ -1,6 +1,7 @@
 """目标50真实Alembic环境升级；仅在专属合成PG运行器内执行。"""
 
 import json
+import os
 import runpy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,7 +11,8 @@ import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from app.database.models import qc as legacy
-from sqlalchemy.orm import Session
+
+from scripts import bootstrap_pr8_empty_database as bootstrap
 
 pytest_plugins = ("test_report_migration_compatibility",)
 
@@ -31,25 +33,7 @@ def target50(engine, monkeypatch):
     config = Config()
     config.set_main_option("script_location", str(BACKEND / "alembic"))
     config.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False))
-    command.upgrade(config, "20260810_000028")
-    # 29仅补progress，旧安装由runtime建原表。冻结77170da9702a的原owner定义。
-    with engine.begin() as conn:
-        conn.exec_driver_sql(
-            "CREATE TABLE qc.sync_job_state (job_name VARCHAR(64) PRIMARY KEY, "
-            "is_running BOOLEAN NOT NULL DEFAULT FALSE, last_sync_time VARCHAR(32), "
-            "last_sync_status VARCHAR(32) NOT NULL DEFAULT 'never', "
-            "total_records_synced INTEGER NOT NULL DEFAULT 0, logs_json TEXT, "
-            "remote_connected BOOLEAN NOT NULL DEFAULT FALSE, "
-            "local_connected BOOLEAN NOT NULL DEFAULT FALSE, "
-            "updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
-        )
-    command.upgrade(config, "20261003_000046")
-    from app.services.visit_index_service import _ensure_visit_index_table
-
-    with engine.begin() as conn:
-        conn.exec_driver_sql("SET LOCAL search_path=qc,public")
-        _ensure_visit_index_table(Session(conn))
-    command.upgrade(config, TARGET50)
+    bootstrap.initialize(url.database, target=TARGET50)
     with engine.connect() as conn:
         assert revision(conn) == TARGET50
         assert not HELPER["BASE_TABLES"].intersection(
@@ -317,3 +301,125 @@ def test_partial_public_baseline_is_rejected_before_ddl(pg, monkeypatch):
     with pg.connect() as conn:
         assert revision(conn) == TARGET50
         assert before == snapshot(conn)
+
+
+def test_empty_database_to_51_through_explicit_entrypoint(raw_pg, monkeypatch):
+    with raw_pg.connect() as conn:
+        assert sa.inspect(conn).get_schema_names() == ["information_schema", "public"]
+        assert sa.inspect(conn).get_table_names(schema="public") == []
+    monkeypatch.setenv("DATABASE_URL", "must-not-use-dotenv-or-business-dsn")
+    monkeypatch.setenv("DB_SEARCH_PATH", "public")
+    assert bootstrap.main(["--database", raw_pg.url.database, "--apply"]) == 0
+    assert os.environ["DATABASE_URL"] == "must-not-use-dotenv-or-business-dsn"
+    with raw_pg.begin() as conn:
+        assert revision(conn) == REPORT51
+        bootstrap.validate_prerequisites(conn)
+        # 默认值、JSON及复合唯一身份也走真实数据库，不只核对DDL文本。
+        conn.exec_driver_sql(
+            "INSERT INTO qc.sync_job_state(job_name) VALUES ('synthetic')"
+        )
+        conn.exec_driver_sql(
+            "INSERT INTO qc.visit_index(institute_id,patient_id,visit_id) VALUES ('i','p','v')"
+        )
+        assert conn.exec_driver_sql(
+            "SELECT is_running,total_records_synced,progress_json FROM qc.sync_job_state"
+        ).one() == (False, 0, {})
+        assert conn.exec_driver_sql(
+            "SELECT mirror_delay_base_minutes,sync_interval_minutes FROM qc.visit_index"
+        ).one() == (30, 30)
+        before = snapshot(conn)
+    assert bootstrap.initialize(raw_pg.url.database) == []
+    with raw_pg.connect() as conn:
+        assert before == snapshot(conn)
+    print(
+        json.dumps(
+            {"from": "empty", "to": REPORT51, "tables": len(before), "idempotent": True}
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "database",
+    ["medqc", "medqc_v36_validation_20260924", "postgres", "pr8_reports_fake"],
+)
+def test_empty_bootstrap_refuses_existing_database_names(database):
+    with pytest.raises(RuntimeError, match="只允许运行器新建"):
+        bootstrap.initialize(database)
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "",
+        "postgresql+psycopg2://pr8_synthetic@127.0.0.1:5432/postgres",
+        "postgresql+psycopg2://other@127.0.0.1:55432/postgres",
+    ],
+)
+def test_empty_bootstrap_refuses_unowned_cluster(monkeypatch, address):
+    monkeypatch.setenv("PR8_DISPOSABLE_PG_URL", address)
+    with pytest.raises(RuntimeError, match="缺少专属合成"):
+        bootstrap.initialize("pr8_reports_" + "a" * 32)
+
+
+def test_nonempty_and_interrupted_database_never_auto_repaired(raw_pg, monkeypatch):
+    original = command.upgrade
+
+    def interrupted(config, target):
+        if target == "20261003_000046":
+            raise RuntimeError("synthetic interrupted")
+        original(config, target)
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(command, "upgrade", interrupted)
+        with pytest.raises(RuntimeError, match="synthetic interrupted"):
+            bootstrap.initialize(raw_pg.url.database)
+    with raw_pg.connect() as conn:
+        assert revision(conn) == "20260810_000028"
+        before = snapshot(conn)
+    with pytest.raises(RuntimeError, match="只接受空库"):
+        bootstrap.initialize(raw_pg.url.database)
+    with raw_pg.connect() as conn:
+        assert before == snapshot(conn)
+        assert revision(conn) == "20260810_000028"
+
+
+def test_completed_bootstrap_refuses_prerequisite_drift(raw_pg):
+    bootstrap.initialize(raw_pg.url.database)
+    with raw_pg.begin() as conn:
+        conn.exec_driver_sql(
+            "ALTER TABLE qc.visit_index ALTER COLUMN sync_interval_minutes SET DEFAULT 99"
+        )
+        before = snapshot(conn)
+    with pytest.raises(RuntimeError, match="历史前置合同漂移"):
+        bootstrap.initialize(raw_pg.url.database)
+    with raw_pg.connect() as conn:
+        assert before == snapshot(conn)
+        assert revision(conn) == REPORT51
+
+
+def test_unversioned_nonempty_database_is_preserved(raw_pg):
+    with raw_pg.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE public.local_product (payload TEXT)")
+        conn.exec_driver_sql("INSERT INTO public.local_product VALUES ('keep')")
+        before = snapshot(conn)
+    with pytest.raises(RuntimeError, match="只接受空库"):
+        bootstrap.initialize(raw_pg.url.database)
+    with raw_pg.connect() as conn:
+        assert not sa.inspect(conn).has_table("alembic_version", schema="public")
+        assert before == snapshot(conn)
+
+
+def test_parallel_initializer_is_rejected_before_ddl(raw_pg):
+    with raw_pg.connect() as owner:
+        owner.exec_driver_sql("SELECT pg_advisory_lock(20261023, 51)")
+        try:
+            with pytest.raises(RuntimeError, match="已有初始化器"):
+                bootstrap.initialize(raw_pg.url.database)
+            assert sa.inspect(owner).get_table_names(schema="public") == []
+        finally:
+            owner.exec_driver_sql("SELECT pg_advisory_unlock(20261023, 51)")
+
+
+def test_explicit_apply_required_without_connecting():
+    with pytest.raises(SystemExit):
+        bootstrap.main(["--database", "pr8_reports_" + "a" * 32])

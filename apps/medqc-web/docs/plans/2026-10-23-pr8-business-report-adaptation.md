@@ -250,3 +250,46 @@
 迁移兼容19项和正式Alembic升级3项合计22项通过；补充合成CDM原文/签名/长描述后，正式升级3项独立复跑。V5路由及18个V7.1/本地产品文件保护集25项通过；Python Ruff与格式检查、只读ESLint错误门禁、提交前编码/密钥检查按本批执行。没有更改前端源码，未重跑全仓类型检查或全部测试。
 
 可复现：在backend执行 `python scripts/run_pr8_disposable_pg_tests.py --pg-bin "D:/Program Files/PostgreSQL/18/bin" --port 55436 tests/unit/test_report_alembic_upgrade.py tests/unit/test_report_migration_compatibility.py -s`。端口须空闲；只新建合成集群/库，日志与数据留应用忽略目录 `.tmp/0910-full-audit/pr8-pg-*-private/`，结束自动停止，不清理其他库或工作树。旧空库初始化前置缺口、实际医院存量数据、安装包恢复、业务库部署和全站视觉验收不因本次演练而自动关闭。仍不合并、不写业务库、不提升80项代码完成台账。
+
+## 第六阶段：空库初始化前置与完整升级
+
+本节补齐第五阶段的空库历史前置，**在专属合成PG内完成空库到51的升级**。没有把兼容逻辑塞进应用启动，也没有修改旧迁移、原Alembic环境、51父revision、生产后端、前端或报表读取规则。
+
+### 独立初始化入口
+
+新增 `backend/scripts/bootstrap_pr8_empty_database.py`，仅供专属合成集群演练，不是现存客户库部署工具。按以下顺序调用正式Alembic：
+
+1. 从空库执行原base到28。
+2. 显式建立 `qc.sync_job_state` 的历史runtime前置，定义固定来自 `77170da9702a`；不提前添加29负责的 `progress_json`。
+3. 正式执行29到46。
+4. 显式建立 `qc.visit_index` 及场景/更新时间索引，冻结本分支 `4370c7f03` 的原owner定义；47继续检查其同步列。
+5. 正式执行47到51，并核对实际 `public.alembic_version`、两项历史前置完整列/默认值/主键/owner和visit索引、报表增量规划为空。
+
+测试不再自行补表：旧50起点夹具也改用此入口的固定50检查点；空库正例通过实际 `main(["--database", ..., "--apply"])` 调用完整入口。没有stamp或手写版本，没有直接调用51替代正式迁移。
+
+### 安全边界与失败策略
+
+- 地址仅取专属运行器的 `PR8_DISPOSABLE_PG_URL`，固定本机55000段端口、`pr8_synthetic`账号及32位随机后缀的 `pr8_reports_` 库名。不接收任意DSN，不读dotenv/默认ini，不回退到业务库或已有验收副本。
+- 所有新SQLAlchemy连接限制到指定合成库，连接后再次检查库名/账号/服务器端口。`--apply` 必须显式提供；原进程环境退出后恢复。不改任何工作树的 `.env`。
+- 空库核验先于DDL。同库会话级advisory lock覆盖整个编排，另一初始化器立即拒绝；不把并发建表交给 `IF NOT EXISTS` 掩盖。
+- 只允许空库，或已完整达到指定终点并只读核验通过的库。非空无版本库、中断版本、前置合同漂移、51标记但报表结构未完成，都拒绝补写，不建替身、不清洗历史。
+- 这不是跨所有阶段的单事务安装：原Alembic各阶段及两次前置建表分别提交。故障保留现场，重复调用拒绝自动修复中间版本；须另行评审或在运行器新建空库重演。没有自动删库、降级或恢复覆盖。
+- 单独运行原 `alembic upgrade head` 的历史前置需求仍在；本次关闭的是**显式隔离初始化编排**，不是宣称原1–50历史天然支持空库直升。
+
+### 实测与复现
+
+全新数据库起始只有PG自带的public/information_schema、没有应用表；完整入口成功到 `20261023_000051`，形成113张应用表。真实插入同步状态/病例索引合成行，JSON默认值为 `{}`，同步间隔/延迟默认30；第二次初始化返回零步骤，全部表的结构、数据、索引和约束快照相等。
+
+迁移两文件共35项通过：包含空库完整升级、旧50到51的104张原表保留、重复执行、错误库名/集群地址拒绝、必须显式apply、并发拒绝、非空库保留、中断现场拒绝接续、前置默认值漂移拒绝，以及原有51事务回滚/双schema兼容/漂移检查。首轮新入口的预检SQL曾因驱动对百分号的处理报错，改用SQLAlchemy文本执行后重新完整跑通；未改旧迁移或移除失败用例。
+
+复现入口仍为backend下：
+
+```powershell
+python scripts/run_pr8_disposable_pg_tests.py --pg-bin "D:/Program Files/PostgreSQL/18/bin" --port 55432 tests/unit/test_report_alembic_upgrade.py tests/unit/test_report_migration_compatibility.py -s
+```
+
+运行器负责新建集群和随机空库、注入专属地址、执行测试，最后停止自己的集群；不要给默认业务环境直接运行初始化命令。测试日志和PG数据只留忽略目录 `.tmp/0910-full-audit/pr8-*-private/`，没有提交凭据或数据文件。
+
+V5路由及V7.1/本地产品18文件保护集25项通过；Python Ruff/格式、只读ESLint错误门禁、提交前暂存区格式/编码及密钥检查按本轮执行。用 `git diff 4370c7f03 -- backend/alembic/versions backend/alembic/env.py` 核对历史迁移及环境无差异（命令需在应用目录带正确backend路径执行）。本批没有前端或生产API改动，未重跑全仓类型检查、全部测试或浏览器验收，不重复写上一阶段的验收副本。
+
+本轮不合并、不写业务库/源验收库，不改PR8源分支或另一条线工作树。医院存量数据、安装包故障恢复、业务库部署、全站视觉验收仍须独立签收；80项代码完成台账不因此提升。

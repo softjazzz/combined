@@ -11,7 +11,6 @@ import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-
 from app.database.models import qc as legacy
 from app.database.models import v36_reports as report
 
@@ -22,7 +21,7 @@ CONTRACT = HELPER["contract"]()
 
 
 @pytest.fixture
-def pg():
+def raw_pg():
     url = os.environ.get("PR8_DISPOSABLE_PG_URL", "")
     if not url:
         pytest.skip("须经run_pr8_disposable_pg_tests.py启动新建合成集群")
@@ -31,13 +30,18 @@ def pg():
     with admin.connect() as conn:
         conn.exec_driver_sql(f'CREATE DATABASE "{name}"')
     engine = sa.create_engine(sa.engine.make_url(url).set(database=name))
-    with engine.begin() as conn:
-        for schema in ("qc", "sys", "cdm"):
-            conn.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
     yield engine
     engine.dispose()
     admin.dispose()
     # 保留合成数据供排查；运行器负责关闭整个专属集群，不触碰现有数据库。
+
+
+@pytest.fixture
+def pg(raw_pg):
+    with raw_pg.begin() as conn:
+        for schema in ("qc", "sys", "cdm"):
+            conn.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+    return raw_pg
 
 
 def baseline(conn, modern=False):
@@ -229,10 +233,9 @@ def test_expression_comparison_keeps_boolean_precedence_literals_and_defaults():
 
 
 def test_runtime_account_owner_and_legacy_orm_survive_migration(pg, monkeypatch):
-    from sqlalchemy.orm import Session
-
     from app.services import user_scope_owner
     from app.services.report_institute_scope import authorized_institute
+    from sqlalchemy.orm import Session
 
     with pg.begin() as conn:
         baseline(conn)
@@ -270,10 +273,9 @@ def test_runtime_account_owner_and_legacy_orm_survive_migration(pg, monkeypatch)
 
 
 def test_missing_report_columns_do_not_mutate_legacy_tables(pg, monkeypatch):
-    from sqlalchemy.orm import Session
-
     from app.services import user_scope_owner
     from app.services.report_institute_scope import authorized_institute
+    from sqlalchemy.orm import Session
 
     with pg.begin() as conn:
         baseline(conn)
