@@ -70,6 +70,11 @@ from .routers import clinical_completeness as clinical_completeness_router
 from .routers import pre_grouping as pre_grouping_router
 from .routers import payment_monitoring as payment_monitoring_router
 from .routers import product_activation as product_activation_router
+from .routers import quality_reports as quality_reports_router
+from .routers import staff_work_analysis as staff_work_analysis_router
+from .routers import manual_quality_reports as manual_quality_reports_router
+from .routers import core_system_reports as core_system_reports_router
+from .routers import special_record_reports as special_record_reports_router
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
@@ -140,7 +145,8 @@ def create_app() -> FastAPI:
         allow_methods=settings.CORS_ALLOW_METHODS,
         allow_headers=settings.CORS_ALLOW_HEADERS,
         # 任务详情 409 时附带任务状态，跨域部署下前端也需能读取
-        expose_headers=["X-Batch-Job-Status"],
+        expose_headers=["X-Batch-Job-Status", "Content-Disposition", "X-Special-Classification-Version",
+                        "X-Special-Standard-Id", "X-Special-Standard-Version", "X-Special-Binding-Version"],
     )
 
     # API Version middleware (with backward compatibility)
@@ -336,6 +342,11 @@ def create_app() -> FastAPI:
     # 医保付费监测
     app.include_router(payment_monitoring_router.router)
     app.include_router(product_activation_router.router)
+    app.include_router(quality_reports_router.router)
+    app.include_router(staff_work_analysis_router.router)
+    app.include_router(manual_quality_reports_router.router)
+    app.include_router(core_system_reports_router.router)
+    app.include_router(special_record_reports_router.router)
 
     # Include legacy routes afterwards to keep compatibility
     # Temporarily disabled to avoid route conflicts with semantic-rules
