@@ -9,9 +9,12 @@ from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from functools import wraps
 import json
+import logging
 from typing import Any, Awaitable, Callable
 
 from .rule_decision_settings import _luxian_0609_model_identity
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -19,6 +22,11 @@ class _Scope:
     active: bool = True
     pending: dict[tuple, asyncio.Future] = field(default_factory=dict)
     clients: dict[int, Any] = field(default_factory=dict)
+    counters: dict[str, dict[str, int]] = field(default_factory=dict)
+
+    def count(self, protocol: str, event: str):
+        values = self.counters.setdefault(protocol, {})
+        values[event] = values.get(event, 0) + 1
 
 
 _ACTIVE: ContextVar[_Scope | None] = ContextVar("transfusion_extraction_scope", default=None)
@@ -31,7 +39,7 @@ def transfusion_extraction_scope():
     scope = _Scope()
     token = _ACTIVE.set(scope)
     try:
-        yield
+        yield scope
     finally:
         scope.active = False
         for future in scope.pending.values():
@@ -40,6 +48,9 @@ def transfusion_extraction_scope():
         scope.pending.clear()
         scope.clients.clear()
         _ACTIVE.reset(token)
+        if scope.counters:
+            # 仅固定协议名与计数；不记录缓存键、患者坐标、正文或原始应答。
+            logger.info("transfusion_extraction_reuse %s", json.dumps(scope.counters, sort_keys=True))
 
 
 def with_transfusion_extraction_scope(function):
@@ -73,16 +84,21 @@ async def reuse_transfusion_extraction(
     while scope.active:
         future = scope.pending.get(key)
         if future is not None:
+            if not future.done():
+                scope.count(protocol, "waits")
             result = await asyncio.shield(future)
             if result is _RETRY:
                 continue
+            scope.count(protocol, "hits")
             return replace(deepcopy(result), llm_call_count=0, prompt_tokens=0,
                            completion_tokens=0, total_tokens=0, api_time=0.0)
         future = asyncio.get_running_loop().create_future()
         scope.pending[key] = future
+        scope.count(protocol, "executions")
         try:
             result = await extract()
         except BaseException:
+            scope.count(protocol, "aborted")
             scope.pending.pop(key, None)
             if not future.done():
                 future.set_result(_RETRY)
@@ -90,6 +106,7 @@ async def reuse_transfusion_extraction(
         if confirmed(result) and scope.active:
             future.set_result(deepcopy(result))
         else:
+            scope.count(protocol, "unconfirmed")
             scope.pending.pop(key, None)
             if not future.done():
                 future.set_result(_RETRY)

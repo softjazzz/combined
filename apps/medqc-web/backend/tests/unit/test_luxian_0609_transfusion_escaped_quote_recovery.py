@@ -65,7 +65,8 @@ async def test_escaped_newline_with_changed_clinical_text_is_not_escape_recovery
     result = await classify_transfusion_course_records(rows(), client)
     assert result.state == "technical_error"
     assert result.valid_document_ids == ()
-    assert result.llm_call_count == client.calls == 1
+    # 除转义外还改了临床文字时走短引句补核；两次均未纠正仍拒收。
+    assert result.llm_call_count == client.calls == 2
 
 
 @pytest.mark.asyncio

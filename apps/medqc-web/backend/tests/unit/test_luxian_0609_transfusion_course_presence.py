@@ -162,22 +162,23 @@ def test_content_precedes_record_content_as_native_reader():
     assert item["content"] == "首选正文"
 
 
-@pytest.mark.parametrize("mutation", [
-    lambda payload: payload["records"].pop(),
-    lambda payload: payload["records"].append(payload["records"][0]),
-    lambda payload: payload["records"][0].update(index=True),
-    lambda payload: payload["records"][0].update(index=42),
-    lambda payload: payload["records"][0].update(quote="改写或截断正文"),
-    lambda payload: payload["records"][0].update(quote=None),
-    lambda payload: payload["records"][0].update(kind="present"),
-    lambda payload: payload["records"][0].update(kind=[]),
-    lambda payload: payload.update(extra=True),
+@pytest.mark.parametrize("mutation,calls", [
+    (lambda payload: payload["records"].pop(), 1),
+    (lambda payload: payload["records"].append(payload["records"][0]), 1),
+    (lambda payload: payload["records"][0].update(index=True), 1),
+    (lambda payload: payload["records"][0].update(index=42), 1),
+    (lambda payload: payload["records"][0].update(quote="改写或截断正文"), 2),
+    (lambda payload: payload["records"][0].update(quote=None), 1),
+    (lambda payload: payload["records"][0].update(kind="present"), 1),
+    (lambda payload: payload["records"][0].update(kind=[]), 1),
+    (lambda payload: payload.update(extra=True), 1),
 ])
-def test_malformed_protocol_is_technical_error(mutation):
+def test_malformed_protocol_is_technical_error(mutation, calls):
     result = _run([_row()], FakeClient(mutate=mutation))
     assert result.state == "technical_error"
     assert result.valid_document_ids == ()
-    assert result.total_tokens == 30
+    assert result.llm_call_count == calls
+    assert result.total_tokens == 30 * calls
 
 
 def test_quote_punctuation_and_whitespace_differences_keep_binding():

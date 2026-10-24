@@ -91,7 +91,7 @@ def test_targeted_retry_omits_oversized_previous_output():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("persistent,changed_word,calls", [(True, False, 2), (False, True, 1)])
+@pytest.mark.parametrize("persistent,changed_word,calls", [(True, False, 2), (False, True, 2)])
 async def test_targeted_retry_never_accepts_unrepaired_or_changed_quote(persistent, changed_word, calls):
     client = TargetedRepairClient(persistent=persistent, changed_word=changed_word)
     result = await presence.classify_transfusion_course_records(rows(), client)
