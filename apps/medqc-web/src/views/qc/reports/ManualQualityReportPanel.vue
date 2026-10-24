@@ -67,6 +67,9 @@
         </select></label
       >
       <div class="manual-actions">
+        <button class="mq-btn" type="button" @click="workflowOpen = true">
+          <MqIcon name="task" :size="16" />人工缺陷处理
+        </button>
         <button class="mq-btn mq-btn--primary" type="submit" :disabled="loading">
           <MqIcon name="search" :size="16" />查询
         </button>
@@ -163,6 +166,11 @@
         </div>
       </template>
     </a-spin>
+    <ManualDefectWorkflowDrawer
+      :open="workflowOpen"
+      @close="workflowOpen = false"
+      @changed="workflowChanged"
+    />
     <a-drawer
       :open="!!selected"
       title="人工缺陷统计明细"
@@ -180,6 +188,7 @@
 </template>
 
 <script setup lang="ts">
+import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
 import { onUnmounted, reactive, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -214,6 +223,12 @@ const applied = ref<ManualReportFilters>({
 })
 const report = ref<ManualReport | null>(null),
   selected = ref<ManualReportRow | null>(null)
+const workflowOpen = ref(false)
+const emit = defineEmits<{ changed: [] }>()
+function workflowChanged() {
+  emit('changed')
+  void loadPage(page.value)
+}
 const loading = ref(false),
   exporting = ref(false),
   error = ref(''),
@@ -362,6 +377,7 @@ watch(
     ++exportToken
     report.value = null
     selected.value = null
+    workflowOpen.value = false
     loading.value = false
     exporting.value = false
     options.value = { institutes: [], departments: [], creators: [], tasks: [] }

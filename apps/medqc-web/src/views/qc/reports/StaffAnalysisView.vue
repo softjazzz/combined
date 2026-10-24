@@ -45,7 +45,7 @@
         </div>
       </div>
     </header>
-    <ManualQualityReportPanel v-if="reportTab === 'manual'" />
+    <ManualQualityReportPanel v-if="reportTab === 'manual'" @changed="loadReport" />
     <div v-show="reportTab === 'staff'" class="staff-body">
       <section class="filters mq-card mq-card--padded" aria-label="工作分析筛选">
         <div class="filter-switches">

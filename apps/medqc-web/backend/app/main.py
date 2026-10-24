@@ -73,6 +73,7 @@ from .routers import product_activation as product_activation_router
 from .routers import quality_reports as quality_reports_router
 from .routers import staff_work_analysis as staff_work_analysis_router
 from .routers import manual_quality_reports as manual_quality_reports_router
+from .routers import manual_defect_reviews as manual_defect_reviews_router
 from .routers import core_system_reports as core_system_reports_router
 from .routers import special_record_reports as special_record_reports_router
 from .routers import defect_rectifications as defect_rectifications_router
@@ -347,6 +348,7 @@ def create_app() -> FastAPI:
     app.include_router(quality_reports_router.router)
     app.include_router(staff_work_analysis_router.router)
     app.include_router(manual_quality_reports_router.router)
+    app.include_router(manual_defect_reviews_router.router)
     app.include_router(core_system_reports_router.router)
     app.include_router(special_record_reports_router.router)
 

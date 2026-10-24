@@ -137,6 +137,7 @@ function render(): VueWrapper {
     global: {
       stubs: {
         ManualQualityReportPanel: {
+          name: 'ManualQualityReportPanel',
           template: '<section class="manual-report-entry">人工报表入口</section>',
         },
         'a-drawer': {
@@ -165,6 +166,17 @@ function deferred<T>() {
 }
 
 describe('StaffAnalysisView', () => {
+  it('人工报表操作成功后用原筛选刷新工作分析', async () => {
+    const wrapper = render()
+    await flushPromises()
+    const before = state.getReport.mock.calls[0][0]
+    await wrapper.get('[data-testid="staff-report-tab-manual"]').trigger('click')
+    await flushPromises()
+    wrapper.getComponent({ name: 'ManualQualityReportPanel' }).vm.$emit('changed')
+    await flushPromises()
+    expect(state.getReport).toHaveBeenCalledTimes(2)
+    expect(state.getReport.mock.calls[1][0]).toEqual(before)
+  })
   it('下钻抽屉宽度不超过窄窗口', async () => {
     const wrapper = render()
     await settle()

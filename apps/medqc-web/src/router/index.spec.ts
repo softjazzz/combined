@@ -1,11 +1,23 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.unmock('vue-router')
+const auth = vi.hoisted(() => ({ roles: ['admin'] }))
+vi.mock('@/components/layout/WorkstationLayout.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/workstation/HomeRectificationTodos.vue', () => ({
+  default: { template: '<div />' },
+}))
+vi.mock('@/views/qc/reports/StaffAnalysisView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/workstation-v4/WorkstationV4HomeEntry.vue', () => ({
+  default: { template: '<div />' },
+}))
+vi.mock('@/views/workstation-v4/QcRecordResultListView.vue', () => ({
+  default: { template: '<div />' },
+}))
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     isAuthenticated: true,
-    userRoles: ['admin'],
+    userRoles: auth.roles,
     initialize: vi.fn(),
   }),
 }))
@@ -15,6 +27,20 @@ window.scrollTo = vi.fn()
 const { default: router } = await import('./index')
 
 describe('旧 Dashboard 首页路由', () => {
+  it('普通质控员被拒绝后进入有权访问的待办，不扩大报表权限', async () => {
+    auth.roles.splice(0, auth.roles.length, 'qc_staff')
+    try {
+      await router.push('/workstation-v5/reports/staff-analysis')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/feedback')
+      expect(
+        router.resolve('/workstation-v5/reports/staff-analysis').meta.permission,
+      ).not.toContain('qc_staff')
+      await router.push('/workstation-v5')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/feedback')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  }, 15000)
   it('不再挂载 DashboardView，并安全跳转到工作台首页', async () => {
     const dashboardRoute = router.getRoutes().find((route) => route.name === 'Dashboard')
 
@@ -50,15 +76,9 @@ describe('旧 Dashboard 首页路由', () => {
     expect(target.query).toEqual({ entry: 'direct' })
   })
 
-  it(
-    '旧 V4 链接自动升级到对应的 V5 地址',
-    async () => {
-      await router.push('/workstation-v4/records/running?source=legacy')
+  it('旧 V4 链接自动升级到对应的 V5 地址', async () => {
+    await router.push('/workstation-v4/records/running?source=legacy')
 
-      expect(router.currentRoute.value.fullPath).toBe(
-        '/workstation-v5/records/running?source=legacy',
-      )
-    },
-    15_000,
-  )
+    expect(router.currentRoute.value.fullPath).toBe('/workstation-v5/records/running?source=legacy')
+  }, 15_000)
 })

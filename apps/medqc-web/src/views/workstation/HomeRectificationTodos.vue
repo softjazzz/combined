@@ -7,6 +7,9 @@
           {{ scope ? '该缺陷整改' : '缺陷整改待办' }}
         </h2>
       </div>
+      <button v-if="!scope && manager" class="mq-btn" type="button" @click="manualOpen = true">
+        <MqIcon name="task" :size="16" />人工缺陷处理
+      </button>
       <label class="sr-only" :for="scope ? 'defect-rectification-status' : 'rectification-status'"
         >整改状态</label
       >
@@ -54,6 +57,12 @@
         @change="load"
       />
     </a-spin>
+    <ManualDefectWorkflowDrawer
+      v-if="!scope && manager && manualOpen"
+      :open="manualOpen"
+      @close="manualOpen = false"
+      @changed="emit('changed')"
+    />
     <a-drawer
       v-model:open="open"
       title="缺陷整改"
@@ -181,6 +190,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   actOnRectification,
@@ -198,6 +208,7 @@ import {
 const props = defineProps<{ scope?: RectificationSource; refreshKey?: number }>()
 const emit = defineEmits<{ changed: [] }>()
 const auth = useAuthStore()
+const manualOpen = ref(false)
 const popupContainer = (trigger: HTMLElement) => trigger.parentElement || trigger
 const manager = computed(() =>
   ['admin', 'qc_manager', 'qc_staff'].some((role) => auth.hasRole(role)),
@@ -404,6 +415,7 @@ async function submit(action: RectificationAction, urgeEventId?: string) {
   }
 }
 function reset() {
+  manualOpen.value = false
   resetComparison()
   ++listToken
   ++detailToken

@@ -86,6 +86,21 @@ beforeEach(() => {
   mocks.act.mockResolvedValue({ ...task, status: 'submitted' })
 })
 describe('站内整改待办', () => {
+  it('仅质控人员独立待办页显示人工缺陷入口，医生和嵌入页不显示', async () => {
+    const doctor = make()
+    await flushPromises()
+    expect(doctor.text()).not.toContain('人工缺陷处理')
+    doctor.unmount()
+    mocks.roles = ['qc_staff']
+    const staff = make()
+    await flushPromises()
+    expect(staff.text()).toContain('人工缺陷处理')
+    staff.unmount()
+    const embedded = make({ scope: task })
+    await flushPromises()
+    expect(embedded.text()).not.toContain('人工缺陷处理')
+    embedded.unmount()
+  })
   it('独立页使用V7.1页头，嵌入缺陷时不重复外壳且筛选有真实标签', async () => {
     const page = make()
     await flushPromises()

@@ -1337,6 +1337,11 @@ router.beforeEach(async (to, from, next) => {
       const hasPermission = requiredPermissions.some((permission) => userRoles.includes(permission))
 
       if (!hasPermission) {
+        // 普通质控员已有待办权限，不能回到无权进入的首页形成重定向循环。
+        if (userRoles.includes('qc_staff')) {
+          next('/workstation-v5/feedback')
+          return
+        }
         // 没有权限，重定向到仪表板
         next('/dashboard')
         return

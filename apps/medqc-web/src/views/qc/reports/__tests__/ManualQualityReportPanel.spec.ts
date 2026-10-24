@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import ManualQualityReportPanel from '../ManualQualityReportPanel.vue'
+import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 const mocks = vi.hoisted(() => ({
@@ -84,6 +85,17 @@ beforeEach(() => {
   mocks.export.mockResolvedValue(new Blob(['synthetic csv']))
 })
 describe('人工质控报表', () => {
+  it('人工操作成功后刷新当前页并通知工作分析，不重置筛选', async () => {
+    const wrapper = make()
+    await flushPromises()
+    const before = mocks.report.mock.calls[0][0]
+    wrapper.getComponent(ManualDefectWorkflowDrawer).vm.$emit('changed')
+    await flushPromises()
+    expect(mocks.report).toHaveBeenCalledTimes(2)
+    expect(mocks.report.mock.calls[1][0]).toEqual(before)
+    expect(wrapper.emitted('changed')).toHaveLength(1)
+    wrapper.unmount()
+  })
   it('根网格允许收缩，非空长表格不能撑宽整页筛选', () => {
     // JSDOM 不计算网格尺寸；真实数据的 390px 浏览器断言另见交付记录。
     const styles = readFileSync(
