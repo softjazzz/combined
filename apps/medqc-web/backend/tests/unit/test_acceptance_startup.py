@@ -33,6 +33,11 @@ class DatabaseRecorder:
     def __init__(self):
         self.dialect = SimpleNamespace(name="postgresql")
         self.tables = set(TABLES)
+        self.tables.add(("cdm", "discharge_record"))
+        self.discharge_columns = {
+            "chief_physician_sign_datetime": {"type": acceptance_startup.sa.DateTime(timezone=True), "nullable": True},
+            "v2_schema": {"type": acceptance_startup.sa.Text(), "nullable": True},
+        }
         self.columns = set(PARENT_COLUMNS)
         self.indexes = [{"name": PARENT_INDEX, "column_names": ["parent_job_id"]}]
         self.events = []
@@ -85,6 +90,9 @@ class DatabaseRecorder:
 
     def get_columns(self, table, *, schema):
         self.events.append(("columns", schema, table))
+        if table == "discharge_record":
+            assert schema == "cdm"
+            return [{"name": name, **metadata} for name, metadata in self.discharge_columns.items()]
         if table == "visit_index":
             assert schema == self.visit_table["schema_name"]
             return [{"name": column} for column in self.visit_columns]
@@ -151,12 +159,40 @@ def test_complete_structure_is_checked_read_only(database):
     assert database.events[-2:] == ["rollback", "close"]
 
 
+@pytest.mark.parametrize("column", ["chief_physician_sign_datetime", "v2_schema"])
+def test_discharge_payload_requires_cdm_051_columns_even_if_public_exists(database, column):
+    database.tables.add(("public", "discharge_record"))
+    del database.discharge_columns[column]
+    with pytest.raises(RuntimeError, match=f"cdm.discharge_record.{column}"):
+        validate_acceptance_schema(database, schema_mode="split")
+    assert ("columns", "public", "discharge_record") not in database.events
+    assert database.events[-2:] == ["rollback", "close"]
+
+
+def test_discharge_table_cannot_be_substituted_by_public(database):
+    database.tables.remove(("cdm", "discharge_record"))
+    database.tables.add(("public", "discharge_record"))
+    with pytest.raises(RuntimeError, match="cdm.discharge_record"):
+        validate_acceptance_schema(database, schema_mode="split")
+
+
+@pytest.mark.parametrize("column,metadata", [
+    ("chief_physician_sign_datetime", {"type": acceptance_startup.sa.DateTime(timezone=False), "nullable": True}),
+    ("chief_physician_sign_datetime", {"type": acceptance_startup.sa.DateTime(timezone=True), "nullable": False}),
+    ("v2_schema", {"type": acceptance_startup.sa.String(100), "nullable": True}),
+])
+def test_discharge_payload_type_contract_cannot_be_silently_weakened(database, column, metadata):
+    database.discharge_columns[column] = metadata
+    with pytest.raises(RuntimeError, match=f"Invalid acceptance column: cdm.discharge_record.{column}"):
+        validate_acceptance_schema(database, schema_mode="split")
+
+
 def test_public_bundle_tables_do_not_require_cdm_caches(database):
     cache_tables = {
         "running_record_bundle", "final_record_bundle", "frontpage_bundle",
         "coding_bundle", "settlement_bundle",
     }
-    database.tables = {
+    database.tables = {("cdm", "discharge_record")} | {
         (schema, table) for schema, table in TABLES if table not in cache_tables
     } | {("public", table) for table in cache_tables}
     assert all(("cdm", table) not in database.tables for table in cache_tables)
