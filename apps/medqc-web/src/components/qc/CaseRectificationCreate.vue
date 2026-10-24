@@ -5,6 +5,7 @@
       v-model:open="open"
       title="缺陷整改"
       width="min(760px, 100vw)"
+      :z-index="1200"
       :confirm-loading="saving"
       :ok-button-props="{
         disabled: loading || uncertain || !targetKey || !doctorId || requirement.trim().length < 10,
@@ -184,17 +185,20 @@ function reset() {
   doctors.value = []
 }
 watch(
-  () => [
-    props.instituteId,
-    props.patientId,
-    props.visitId,
-    props.jobId,
-    props.initialTarget,
-    auth.user?.id,
-    auth.user?.roles,
+  [
+    () => props.instituteId,
+    () => props.patientId,
+    () => props.visitId,
+    () => props.jobId,
+    () => props.initialTarget?.source,
+    () => props.initialTarget?.ruleId,
+    () => props.initialTarget?.defectId,
+    () => props.initialTarget?.rootJobId,
+    () => props.initialTarget?.envelopeId,
+    () => auth.user?.id,
+    () => JSON.stringify(auth.user?.roles || []),
   ],
   reset,
-  { deep: true },
 )
 watch(open, (value) => {
   if (!value) reset()

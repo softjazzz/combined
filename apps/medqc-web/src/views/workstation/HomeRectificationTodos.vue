@@ -16,7 +16,7 @@
     <a-spin :spinning="loading">
       <ul>
         <li v-for="item in items" :key="item.id">
-          <button @click="show(item.id)">
+          <button type="button" @click="show(item.id)">
             <span>{{ item.department }} · {{ item.visit_id }} · {{ item.target_id }}</span>
             <span>{{ item.assignee_name }} · {{ labels[item.status] }}</span>
             <span>{{ item.requirement }}</span>
@@ -35,13 +35,18 @@
         @change="load"
       />
     </a-spin>
-    <a-drawer v-model:open="open" title="缺陷整改" width="min(560px, 100vw)">
+    <a-drawer
+      v-model:open="open"
+      title="缺陷整改"
+      width="min(560px, 100vw)"
+      :root-style="{ zIndex: 1300 }"
+    >
       <a-alert v-if="detailError" :message="detailError" type="error" show-icon />
       <a-button v-if="detailError" :disabled="saving" @click="activeId && show(activeId)">
         刷新核对
       </a-button>
       <template v-if="selected">
-        <a-descriptions :column="1" bordered>
+        <a-descriptions class="rectification-detail" :column="1" bordered>
           <a-descriptions-item label="就诊号">
             {{ selected.visit_id }}
           </a-descriptions-item>
@@ -437,6 +442,13 @@ li button {
 .rectification-todos__action {
   margin: 20px 0;
 }
+.rectification-detail :deep(.ant-descriptions-item-label) {
+  width: 104px;
+  white-space: nowrap;
+}
+.rectification-detail :deep(.ant-descriptions-item-content) {
+  overflow-wrap: anywhere;
+}
 .document-comparison article {
   border-top: 1px solid #e5e7eb;
 }
@@ -459,6 +471,10 @@ li button {
   background: #fff7d6;
 }
 @media (max-width: 480px) {
+  .rectification-detail :deep(.ant-descriptions-item-label),
+  .rectification-detail :deep(.ant-descriptions-item-content) {
+    padding: 12px;
+  }
   .comparison-row {
     grid-template-columns: minmax(0, 1fr);
   }

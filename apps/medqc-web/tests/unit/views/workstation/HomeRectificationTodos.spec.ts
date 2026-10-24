@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent } from 'vue'
 import HomeRectificationTodos from '@/views/workstation/HomeRectificationTodos.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -40,6 +41,10 @@ const task = {
   requirement: '请补齐相应病历资料并提交',
   events: [],
 }
+const Drawer = defineComponent({
+  props: ['open', 'rootStyle'],
+  template: '<div v-if="open"><slot/></div>',
+})
 function make(props = {}) {
   return mount(HomeRectificationTodos, {
     props,
@@ -50,7 +55,7 @@ function make(props = {}) {
         'a-spin': { template: '<div><slot/></div>' },
         'a-select': true,
         'a-pagination': true,
-        'a-drawer': { props: ['open'], template: '<div v-if="open"><slot/></div>' },
+        'a-drawer': Drawer,
         'a-descriptions': { template: '<div><slot/></div>' },
         'a-descriptions-item': { template: '<div><slot/></div>' },
         'a-form': { template: '<div><slot/></div>' },
@@ -77,6 +82,15 @@ beforeEach(() => {
   mocks.act.mockResolvedValue({ ...task, status: 'submitted' })
 })
 describe('站内整改待办', () => {
+  it('任务详情高于1200层处理弹窗，任务按钮不会提交外层派发表单', async () => {
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.get('li button').attributes('type')).toBe('button')
+    await wrapper.get('li button').trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(Drawer).props('rootStyle')).toEqual({ zIndex: 1300 })
+    wrapper.unmount()
+  })
   it.each([
     ['doctor', 'pending'],
     ['qc_manager', 'submitted'],
