@@ -46,7 +46,7 @@
             :record-refs="selectedQcRecordRefs"
             :selected-count="selectedCount"
             :status-target="`#qc-record-result-task-status-${carePhase}`"
-            @completed="refreshAfterSelectedQc"
+            @results-updated="refreshAfterSelectedQc"
           />
         </div>
       </div>

@@ -483,6 +483,35 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(props.exportBatchJobReport).toHaveBeenCalledWith('html')
   })
 
+  it.each([
+    { retry: undefined, expected: '后台未确认自动补跑计划' },
+    { retry: { status: 'queued', should_retry: true }, expected: '已排队等待自动补跑' },
+    { retry: { status: 'running', should_retry: true }, expected: '正在自动补跑失败项' },
+    { retry: { status: 'not_retryable', should_retry: false }, expected: '不适合自动补跑' },
+    { retry: { status: 'exhausted', should_retry: false }, expected: '自动补跑次数已用尽' },
+    { retry: { status: 'completed', should_retry: false }, expected: '自动补跑已结束' },
+    { retry: { status: 'queued', should_retry: false }, expected: '后台未确认自动补跑计划' },
+    { retry: { status: 'unknown', should_retry: true }, expected: '后台未确认自动补跑计划' },
+  ])('部分失败说明按后台重试状态显示：$expected', ({ retry, expected }) => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'failed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    Object.assign(props.batchJobDetail.summary!, {
+      execution_status: 'partial_failed',
+      completed_rule_count: 2050,
+      failed_rule_count: 2,
+      automatic_failed_rule_retry: retry,
+    })
+    props.batchJobDetail.failed_records = [{ rule_id: 'LX0609-07-01-02', record_ref: 'safe-case' }]
+    const wrapper = mount(SemanticRulesBatchResultDrawer, { props, global: { stubs: drawerStubs } })
+    const notice = wrapper.get('[data-testid="partial-failure-notice"]')
+    expect(notice.text()).toContain(expected)
+    expect(notice.text()).toContain('2050')
+    expect(notice.text()).toContain('2')
+    expect(notice.text()).not.toContain('系统会自动重试')
+    wrapper.unmount()
+  })
+
   it('部分失败任务应保留有效结果并单独展示失败规则', async () => {
     const props = buildProps()
     props.batchJobDetail.status = 'failed'
@@ -519,7 +548,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     // 2026-10-23 客户视图：泸县任务只给一行轻提示，规则编号等明细按需展开。
     const notice = wrapper.find('[data-testid="partial-failure-notice"]')
     expect(notice.text()).toContain('有 3 项质控点本次未能完成判定')
-    expect(notice.text()).toContain('不影响已给出的 1297 项结果')
+    expect(notice.text()).toContain('已保留 1297 项有效结果')
     expect(notice.text()).not.toContain('LX0609-06-01-05')
     await notice.find('button').trigger('click')
     expect(wrapper.text()).toContain('LX0609-06-01-05')

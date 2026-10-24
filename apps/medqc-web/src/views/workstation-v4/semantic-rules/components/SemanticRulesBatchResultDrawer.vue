@@ -82,8 +82,9 @@
           data-testid="partial-failure-notice"
         >
           <p>
-            有 {{ partialFailureSummary.failedCount }} 项质控点本次未能完成判定，系统会自动重试，
-            不影响已给出的 {{ partialFailureSummary.completedCount }} 项结果。
+            有 {{ partialFailureSummary.failedCount }} 项质控点本次未能完成判定， 已保留
+            {{ partialFailureSummary.completedCount }} 项有效结果。
+            {{ failedRuleRetryMessage }}
             <button type="button" @click="showFailureDetail = !showFailureDetail">
               {{ showFailureDetail ? '收起明细' : '查看明细' }}
             </button>
@@ -108,7 +109,7 @@
                 {{ partialFailureSummary.failedCount }} 项模型执行失败未形成临床结论。
               </p>
             </div>
-            <span>系统将自动重试下列失败项</span>
+            <span>{{ failedRuleRetryMessage }}</span>
           </div>
           <div class="partial-failure-list">
             <div
@@ -2090,6 +2091,7 @@ const {
   openIssueTrace,
   partialFailureItems,
   partialFailureSummary,
+  failedRuleRetryMessage,
   progressSummary,
   QCRecordCompareWorkbench,
   recordCompareCoordinates,

@@ -167,6 +167,37 @@ describe('RecordPoolQcTaskStatusBar', () => {
     expect(mocks.getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
     expect(wrapper.text()).toContain('质控任务已完成')
     expect(wrapper.emitted('completed')).toHaveLength(1)
+    expect(wrapper.emitted('results-updated')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('轮询确认部分失败时通知刷新已保存结果，只发一次终态事件', async () => {
+    const terminal = job({
+      status: 'failed',
+      summary: {
+        total_records: 2,
+        success_count: 1,
+        failed_count: 1,
+        issue_records: 0,
+        compliant_records: 1,
+        total_tokens: 0,
+        total_processing_time: 0,
+        execution_status: 'partial_failed',
+        completed_rule_count: 151,
+        failed_rule_count: 1,
+        automatic_failed_rule_retry: { status: 'not_retryable', should_retry: false },
+      },
+    })
+    mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: terminal })
+    const wrapper = mount(RecordPoolQcTaskStatusBar, { props: { job: job({ status: 'running' }) } })
+    await flushPromises()
+    expect(wrapper.emitted('results-updated')).toHaveLength(1)
+    expect(wrapper.emitted('completed')).toBeUndefined()
+    expect(wrapper.text()).toContain('不适合自动补跑')
+    expect(wrapper.text()).toContain('质控任务部分执行失败')
+    expect(wrapper.text()).toContain('已保留 151 项有效结果')
+    expect(wrapper.text()).toContain('1 项未完成')
+    expect(wrapper.classes()).not.toContain('is-active')
     wrapper.unmount()
   })
 

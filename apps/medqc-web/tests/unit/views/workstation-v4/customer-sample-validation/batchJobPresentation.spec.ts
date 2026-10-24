@@ -34,9 +34,11 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 
 describe('batchJobPresentation', () => {
   it('任务摘要使用创建时保存的待验收标记', () => {
-    const model = buildBatchJobPresentation(buildJob({
-      acceptance_only_rule_ids: ['LX0609-06-02-01'],
-    }))
+    const model = buildBatchJobPresentation(
+      buildJob({
+        acceptance_only_rule_ids: ['LX0609-06-02-01'],
+      }),
+    )
     expect(model.scopeText).toContain('待验收 1 条')
   })
 
@@ -59,8 +61,8 @@ describe('batchJobPresentation', () => {
     expect(model.isRunning).toBe(true)
     expect(model.statusLabel).toBe('自动补跑中')
     expect(model.statusClass).toBe('is-running')
-    expect(model.phaseText).toContain('系统正在自动补跑失败项')
-    expect(model.overviewText).toContain('已有有效结果会继续保留')
+    expect(model.phaseText).toContain('已排队等待自动补跑')
+    expect(model.overviewText).toContain('已保存的结果不会被覆盖')
   })
 
   it('部分执行失败保留有效结果并明确未完成项数', () => {
@@ -75,7 +77,8 @@ describe('batchJobPresentation', () => {
     const model = buildBatchJobPresentation(job)
     expect(model.isRunning).toBe(false)
     expect(model.statusLabel).toBe('部分执行失败')
-    expect(model.phaseText).toBe('1 项质控执行未完成，已完成的 1 条结果仍可查看。')
+    expect(model.phaseText).toContain('1 项质控执行未完成，已完成的 1 条结果仍可查看。')
+    expect(model.phaseText).toContain('后台未确认自动补跑计划')
     expect(model.overviewText).toBe(model.phaseText)
     expect(model.resultCount).toBe(1)
     expect(model.phaseText).not.toContain('无问题')
@@ -91,8 +94,23 @@ describe('batchJobPresentation', () => {
     }
     const model = buildBatchJobPresentation(job)
     expect(model.isRunning).toBe(false)
-    expect(model.phaseText).toBe('2 项质控执行未完成，本次未形成可交付的判定。')
+    expect(model.phaseText).toContain('2 项质控执行未完成，本次未形成可交付的判定。')
+    expect(model.phaseText).not.toContain('已有有效结果')
     expect(model.overviewText).toBe(model.phaseText)
+  })
+
+  it('全部失败且补跑耗尽时不声称存在有效结果', () => {
+    const job = buildJob({ status: 'failed' })
+    Object.assign(job.summary!, {
+      execution_status: 'failed',
+      completed_rule_count: 0,
+      failed_rule_count: 2,
+      automatic_failed_rule_retry: { status: 'exhausted', should_retry: false },
+    })
+    const model = buildBatchJobPresentation(job)
+    expect(model.phaseText).toContain('自动补跑次数已用尽')
+    expect(model.phaseText).not.toContain('已有有效结果')
+    expect(model.isRunning).toBe(false)
   })
 
   it('归一对象型状态分布、规则范围、病历和结果进度', () => {
@@ -132,7 +150,9 @@ describe('batchJobPresentation', () => {
     expect(model.statusLabel).toBe('已完成')
     expect(model.ruleSetText).toBe('泸县0609质控点验证 v1')
     expect(model.scopeText).toBe('选定 6 个质控点')
-    expect(model.compactRuleIdsText).toContain('LX0609-01-01-01、LX0609-01-02-01、LX0609-04-02-01 +3')
+    expect(model.compactRuleIdsText).toContain(
+      'LX0609-01-01-01、LX0609-01-02-01、LX0609-04-02-01 +3',
+    )
     expect(model.recordText).toBe('1 份病历')
     expect(model.recordProgressText).toBe('病历进度：已完成 1 / 1 份')
     expect(model.resultCount).toBe(6)

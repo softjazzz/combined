@@ -38,6 +38,7 @@ import {
 import {
   isBatchJobCancelable,
   isBatchJobPollingActive,
+  getBatchJobRetryMessage,
 } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 import BatchResultOverview from '@/views/workstation-v4/semantic-rules/components/BatchResultOverview.vue'
 import BatchResultTraceModal from '@/views/workstation-v4/semantic-rules/components/BatchResultTraceModal.vue'
@@ -2342,6 +2343,8 @@ export function useSemanticRulesBatchResultDrawerController(
     ),
   }))
 
+  const failedRuleRetryMessage = computed(() => getBatchJobRetryMessage(props.batchJobDetail))
+
   const primarySummaryCards = computed(() => {
     const summary = props.batchJobDetail?.summary
     const totalRecords = Number(
@@ -3204,6 +3207,7 @@ export function useSemanticRulesBatchResultDrawerController(
     openIssueTrace,
     partialFailureItems,
     partialFailureSummary,
+    failedRuleRetryMessage,
     progressSummary,
     QCRecordCompareWorkbench,
     recordCompareCoordinates,

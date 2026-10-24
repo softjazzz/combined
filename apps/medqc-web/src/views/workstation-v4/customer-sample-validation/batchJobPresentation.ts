@@ -2,7 +2,10 @@ import type {
   SichuanBatchIssueItem,
   SichuanBatchJob,
 } from '@/views/workstation-v4/semantic-rules/types'
-import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
+import {
+  getBatchJobRetryMessage,
+  isBatchJobPollingActive,
+} from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
 export type BatchJobStatusChip = {
   key: string
@@ -350,6 +353,7 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
     .toLowerCase()
   const isRunning = isBatchJobPollingActive(job)
   const automaticRetrying = isRunning && normalizedStatus === 'failed'
+  const retryMessage = getBatchJobRetryMessage(job)
   const ruleIds = selectedRuleIds(job)
   const customerRuleCount = resolveCustomerRuleCount(job, ruleIds)
   const recordCount = resolveRecordCount(job)
@@ -436,9 +440,12 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
 
   let phaseText = '任务状态待返回。'
   if (normalizedStatus === 'queued') phaseText = '等待后台领取任务，请勿重复发起。'
-  else if (automaticRetrying) phaseText = '部分规则输出无效，系统正在自动补跑失败项。'
+  else if (automaticRetrying) phaseText = retryMessage
   else if (normalizedStatus === 'failed')
-    phaseText = executionFailureText || job.error_message || '本次任务执行失败。'
+    phaseText = [
+      executionFailureText || job.error_message || '本次任务执行失败。',
+      retryMessage,
+    ].join(' ')
   else if (normalizedStatus === 'canceled') phaseText = '本次任务已取消，已返回结果仍可查看。'
   else if (normalizedStatus === 'completed') phaseText = '任务已完成，可查看结果或导出明细。'
   else if (normalizedStatus === 'running' && resultCount > 0) {
@@ -449,9 +456,8 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
 
   const attentionChips = statusChips.filter((chip) => ATTENTION_STATUSES.has(chip.key))
   let overviewText = '暂无结果摘要'
-  if (automaticRetrying) overviewText = '系统正在自动补跑失败项，已有有效结果会继续保留'
-  else if (normalizedStatus === 'failed')
-    overviewText = executionFailureText || job.error_message || '任务失败'
+  if (automaticRetrying) overviewText = retryMessage
+  else if (normalizedStatus === 'failed') overviewText = phaseText
   else if (isRunning) {
     overviewText =
       progressPercent > 0 ? `任务执行中，已完成 ${progressPercent}%` : '任务执行中，等待结果回写'

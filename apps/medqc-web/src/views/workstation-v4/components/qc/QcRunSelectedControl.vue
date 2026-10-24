@@ -51,7 +51,6 @@
           :job="taskJob"
           :auto-poll="false"
           @dismiss="taskJob = null"
-          @completed="emit('completed')"
         />
       </div>
     </Teleport>
@@ -81,7 +80,6 @@
         :job="taskJob"
         :auto-poll="false"
         @dismiss="taskJob = null"
-        @completed="emit('completed')"
       />
     </template>
   </div>
@@ -96,6 +94,11 @@ import {
   getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import { useAuthStore } from '@/stores/auth'
+import {
+  getBatchJobRetryMessage,
+  isBatchJobFinished,
+  isBatchJobPollingActive,
+} from '../../semantic-rules/utils/batchJobStatus'
 import RecordPoolQcTaskStatusBar from '../workbench/RecordPoolQcTaskStatusBar.vue'
 import type { SichuanBatchJob } from '../../semantic-rules/types'
 
@@ -118,6 +121,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   completed: []
+  'results-updated': []
 }>()
 
 const authStore = useAuthStore()
@@ -127,7 +131,7 @@ const state = ref<RunState>('idle')
 const progressMessage = ref('')
 const frozenRecordRefs = ref<SelectedQcRecordRef[]>([])
 const taskJob = ref<SichuanBatchJob | null>(null)
-let pollTimer: number | null = null
+let pollTimer: ReturnType<typeof setTimeout> | null = null
 let pollFailures = 0
 let disposed = false
 
@@ -183,13 +187,13 @@ function clearPersistedJob() {
 
 function clearPollTimer() {
   if (pollTimer === null) return
-  window.clearTimeout(pollTimer)
+  clearTimeout(pollTimer)
   pollTimer = null
 }
 
 function schedulePoll(jobId: string) {
   clearPollTimer()
-  pollTimer = window.setTimeout(() => void pollJob(jobId), POLL_INTERVAL_MS)
+  pollTimer = setTimeout(() => void pollJob(jobId), POLL_INTERVAL_MS)
 }
 
 function fail(message: string) {
@@ -225,6 +229,16 @@ async function pollJob(jobId: string) {
     const status = String(response.data.status || '')
       .trim()
       .toLowerCase()
+    // failed 可以是后台自动补跑的中间态，此时不能清除轮询或允许重复提交。
+    if (isBatchJobPollingActive(response.data)) {
+      state.value = 'running'
+      progressMessage.value =
+        getBatchJobRetryMessage(response.data) ||
+        '正在使用本地已同步资料执行质控，完成后会自动刷新结果页。'
+      schedulePoll(jobId)
+      return
+    }
+    if (isBatchJobFinished(response.data)) emit('results-updated')
     if (status === 'completed') {
       clearPollTimer()
       clearPersistedJob()
@@ -236,7 +250,9 @@ async function pollJob(jobId: string) {
     if (['failed', 'canceled', 'cancelled'].includes(status)) {
       fail(
         localDataFailureMessage(
-          response.data.error_message || '质控任务未完成，请核对任务详情后重试。',
+          getBatchJobRetryMessage(response.data) ||
+            response.data.error_message ||
+            '质控任务已停止，已保存的结果仍可查看。',
         ),
       )
       return
