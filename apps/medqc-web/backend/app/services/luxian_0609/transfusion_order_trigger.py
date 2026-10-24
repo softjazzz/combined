@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import json
@@ -28,6 +29,7 @@ MAX_NAME_CHARS = 4096
 MAX_METADATA_CHARS = 1024
 SCHEMA_VERSION = "lx0609-transfusion-order-trigger-v1"
 PROTOCOL_ATTEMPTS = 2
+MAX_CONCURRENT_BATCHES = 2
 
 
 @dataclass(frozen=True)
@@ -278,6 +280,108 @@ def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
     return values[0], values[1], total, float(elapsed)
 
 
+@dataclass(frozen=True)
+class _OrderBatchResult:
+    classifications: tuple[tuple[int, str, bool | None], ...] = ()
+    llm_call_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_time: float = 0.0
+    reason_code: str = ""
+
+
+async def _classify_order_batch(
+    batch: Sequence[Mapping[str, Any]], llm_client: Any,
+) -> _OrderBatchResult:
+    """单批拥有自己的补核和用量；同批两次调用始终串行。"""
+    calls = prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    pending = batch
+    resolved_rows: list[tuple[int, str, bool | None]] = []
+    attempt_prompt = _prompt(pending)
+    reason_code = "model_invalid_output"
+    # 用户口径（2026-10-11）：协议违规（漏行、引用不符等）重试1次；仍违规才拒收。
+    for attempt in range(PROTOCOL_ATTEMPTS):
+        started = perf_counter()
+        calls += 1
+        try:
+            response = await llm_client.generate(attempt_prompt, **structured_output_kwargs(llm_client))
+        except Exception as error:
+            api_time += perf_counter() - started
+            reason_code = classify_luxian_0609_llm_call_failure(error)
+            break
+        try:
+            usage = _usage(response)
+            prompt_tokens += usage[0]
+            completion_tokens += usage[1]
+            total_tokens += usage[2]
+            api_time += usage[3] or perf_counter() - started
+            resolved = resolved_rows + _classifications(response, pending)
+            return _OrderBatchResult(tuple(resolved), calls, prompt_tokens, completion_tokens, total_tokens, api_time)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
+            logger.warning(
+                "LX0609 输血医嘱识别输出无效: attempt=%s pending_rows=%s %s",
+                attempt + 1, len(pending), describe_luxian_0609_llm_parse_failure(error, response),
+            )
+            if attempt + 1 == PROTOCOL_ATTEMPTS:
+                break
+            if isinstance(error, _IncompleteCoverage):
+                resolved_rows.extend(error.resolved)
+                pending = [row for row in pending if row["index"] in error.missing]
+            attempt_prompt = _recheck_prompt(_prompt(pending), error, response)
+    return _OrderBatchResult((), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code)
+
+
+async def _classify_order_batches(
+    batches: Sequence[Sequence[Mapping[str, Any]]], llm_client: Any,
+) -> tuple[_OrderBatchResult, ...]:
+    """两个worker按需领取；失败停止新批，已发请求收尾后完整汇总用量。"""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        parallel = False  # 保留旧的无I/O同步协议入口，不引入额外事件循环。
+    else:
+        parallel = len(batches) > 1
+    if not parallel:
+        completed = []
+        for batch in batches:
+            result = await _classify_order_batch(batch, llm_client)
+            completed.append(result)
+            if result.reason_code:
+                break
+        return tuple(completed)
+
+    remaining = iter(enumerate(batches))
+    results: list[_OrderBatchResult | None] = [None] * len(batches)
+    stopped = False
+
+    async def worker():
+        nonlocal stopped
+        while not stopped:
+            entry = next(remaining, None)
+            if entry is None:
+                break
+            index, batch = entry
+            result = await _classify_order_batch(batch, llm_client)
+            results[index] = result
+            if result.reason_code:
+                stopped = True
+
+    tasks = [asyncio.create_task(worker()) for _ in range(min(MAX_CONCURRENT_BATCHES, len(batches)))]
+    try:
+        await asyncio.gather(*tasks)
+    except BaseException:
+        stopped = True
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+    # 始终按原批次序归并，不能由模型返回先后来决定结果或失败原因。
+    return tuple(result for result in results if result is not None)
+
+
 async def classify_transfusion_orders(
     rows: Sequence[tuple[str, Mapping[str, Any]]], llm_client: Any,
 ) -> TransfusionOrderTriggerResult:
@@ -290,10 +394,6 @@ async def classify_transfusion_orders(
         return TransfusionOrderTriggerResult("data_gap")
     if llm_client is None or not callable(getattr(llm_client, "generate", None)):
         return TransfusionOrderTriggerResult("technical_error", reason_code="model_transport_error")
-    calls = prompt_tokens = completion_tokens = total_tokens = 0
-    api_time = 0.0
-    selected: set[int] = set()
-    unresolved = False
     # 同名重复开立只在全部模型输入字段一致时共享语义事实；仍保留每条医嘱的身份。
     # 不跨病例缓存，也不按关键词筛掉阴性候选，取消状态/类别不同的医嘱分别核验。
     representatives: dict[str, dict[str, Any]] = {}
@@ -303,40 +403,19 @@ async def classify_transfusion_orders(
                          ensure_ascii=False, sort_keys=True)
         representative = representatives.setdefault(key, item)
         equivalent_indices.setdefault(representative["index"], []).append(item["index"])
-    for batch in _batches(list(representatives.values())):
-        pending = batch
-        resolved_rows: list[tuple[int, str, bool | None]] = []
-        attempt_prompt = _prompt(pending)
-        # 用户口径（2026-10-11）：协议违规（漏行、引用不符等）可确定识别，重试 1 次；仍违规才拒收。
-        for attempt in range(PROTOCOL_ATTEMPTS):
-            started = perf_counter()
-            calls += 1
-            try:
-                # 严格 JSON 协议须关闭 thinking：真实模型开 thinking 时会把逐条分析写进正文，整批被拒收。
-                response = await llm_client.generate(attempt_prompt, **structured_output_kwargs(llm_client))
-            except Exception as error:
-                api_time += perf_counter() - started
-                return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code=classify_luxian_0609_llm_call_failure(error))
-            try:
-                usage = _usage(response)
-                prompt_tokens += usage[0]
-                completion_tokens += usage[1]
-                total_tokens += usage[2]
-                api_time += usage[3] or perf_counter() - started
-                resolved = resolved_rows + _classifications(response, pending)
-                break
-            except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
-                logger.warning(
-                    "LX0609 输血医嘱识别输出无效: attempt=%s pending_rows=%s %s",
-                    attempt + 1, len(pending), describe_luxian_0609_llm_parse_failure(error, response),
-                )
-                if attempt + 1 == PROTOCOL_ATTEMPTS:
-                    return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code="model_invalid_output")
-                if isinstance(error, _IncompleteCoverage):
-                    resolved_rows.extend(error.resolved)
-                    pending = [row for row in pending if row["index"] in error.missing]
-                attempt_prompt = _recheck_prompt(_prompt(pending), error, response)
-        for index, classification, cancelled in resolved:
+    batches = await _classify_order_batches(_batches(list(representatives.values())), llm_client)
+    calls = sum(result.llm_call_count for result in batches)
+    prompt_tokens = sum(result.prompt_tokens for result in batches)
+    completion_tokens = sum(result.completion_tokens for result in batches)
+    total_tokens = sum(result.total_tokens for result in batches)
+    api_time = sum(result.api_time for result in batches)
+    failed = next((result.reason_code for result in batches if result.reason_code), "")
+    if failed:
+        return TransfusionOrderTriggerResult("technical_error", (), calls, prompt_tokens, completion_tokens, total_tokens, api_time, reason_code=failed)
+    selected: set[int] = set()
+    unresolved = False
+    for result in batches:
+        for index, classification, cancelled in result.classifications:
             if cancelled is True:
                 continue
             if classification == "transfusion" and cancelled is False:
