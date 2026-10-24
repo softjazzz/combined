@@ -84,6 +84,9 @@ _COURSE_SIGNATURE_COLUMN_ALIASES["postsurg_firstcourse_record"]["surgeon_sign"] 
 # 仅在目标列存在、本条记录未携带目标列时生效。
 _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
     **_COURSE_SIGNATURE_COLUMN_ALIASES,
+    "death_record": {
+        "death_datetime": ("death_datetime", "death_time"),
+    },
     "discharge_record": {
         "chief_physician_sign_datetime": ("chief_physician_sign_datetime", "cheifphy_sign_time"),
     },
@@ -1083,6 +1086,10 @@ def _validate_document_field_preservation(
     elif normalized_table == "discharge_record":
         # 独立保存签署时钟与完整JSON，缺列必须在写SQL前报出，不静默过滤。
         required_structured_targets = ("chief_physician_sign_datetime", "v2_schema")
+    elif normalized_table == "death_record":
+        required_structured_targets = (
+            "death_datetime", "admission_condition", "treatment_course", "death_reason",
+        )
     elif normalized_table == "handoff_record":
         required_structured_targets = ("shift_time", "handoff_doctor")
     elif normalized_table == "handover_record":

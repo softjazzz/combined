@@ -4,6 +4,8 @@ from datetime import datetime
 import re
 from typing import Any
 
+from ..document_assembly.assembler import INDEPENDENT_DOCUMENT_FIELDS
+
 from .assembly import (
     assemble_domain_bundle,
     load_domain_bundle,
@@ -409,6 +411,9 @@ def _normalize_source_document(
     }
     if raw_doc.get("chief_physician_sign_datetime") is not None:
         normalized["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
+    for field_name in INDEPENDENT_DOCUMENT_FIELDS.get(doc_type, ()):
+        if raw_doc.get(field_name) is not None:
+            normalized[field_name] = raw_doc[field_name]
     if doc_type in _ORDER_DOC_TYPES:
         normalized.update(
             {
@@ -896,6 +901,9 @@ def _normalize_source_document_summary(
     if raw_doc.get("chief_physician_sign_datetime") is not None:
         summary["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     if doc_type in _ORDER_DOC_TYPES:
+        for field_name in INDEPENDENT_DOCUMENT_FIELDS[doc_type]:
+            if raw_doc.get(field_name) is not None:
+                summary[field_name] = raw_doc[field_name]
         summary.update(
             {
                 f"order_{key}" if key not in {"order_id", "order_type", "order_item", "order_status"} else key: value

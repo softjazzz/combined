@@ -825,6 +825,10 @@ class DeathRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
+    death_datetime = Column(DateTime(timezone=True), comment="死亡时间，独立于文书记录及提交时间")
+    admission_condition = Column(Text, comment="入院情况")
+    treatment_course = Column(Text, comment="诊疗经过")
+    death_reason = Column(Text, comment="死亡原因")
     record_content = Column(Text, comment="非结构化全文")
 
 

@@ -461,6 +461,9 @@ _NATIVE_SOURCE_FIELDS = {
         *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "death_datetime",
         "death_time",
+        "admission_condition",
+        "treatment_course",
+        "death_reason",
         "record_content",
     ),
     "death_discussion": (

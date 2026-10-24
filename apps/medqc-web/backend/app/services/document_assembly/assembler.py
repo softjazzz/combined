@@ -184,6 +184,15 @@ def extract_document_identity_metadata(
         "participants": participants,
     }
 
+# 业务事实独立保留，不用于回填记录、提交、显示时间或实际停止时间。
+INDEPENDENT_DOCUMENT_FIELDS: dict[str, tuple[str, ...]] = {
+    **{
+        table: ("planned_end_datetime", "reviewed_datetime", "carried_datetime", "canceled_datetime")
+        for table in ("inpat_drug_order", "inpat_nondrug_order")
+    },
+    "death_record": ("death_datetime", "admission_condition", "treatment_course", "death_reason"),
+}
+
 _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
     "exam_item_report": (
         # 检查主记录与报告明细依赖 exam_id 合并；其余字段由既有报告
@@ -535,6 +544,8 @@ _SECTION_LABELS: dict[str, str] = {
     "treatment_plan": "诊疗计划",
     "admission_condition": "入院情况",
     "treatment_course": "诊疗经过",
+    "death_datetime": "死亡时间",
+    "death_reason": "死亡原因",
     "transfer_purpose": "转科目的",
     "transfer_treatment_plan": "转入诊疗计划",
     "current_situation": "目前情况",
@@ -759,6 +770,7 @@ _MULTI_FIELD_RULES: dict[str, tuple[AssemblyFieldSpec, ...]] = {
         AssemblyFieldSpec("discharge_condition", required=True),
         AssemblyFieldSpec("discharge_order", required=True),
     ),
+    "death_record": tuple(AssemblyFieldSpec(key) for key in INDEPENDENT_DOCUMENT_FIELDS["death_record"]),
     "transfer_in_record": (
         AssemblyFieldSpec("transfer_purpose", required=True),
         AssemblyFieldSpec("admission_condition"),
@@ -1284,7 +1296,10 @@ def build_document_select_columns(document_type: str, available_columns: set[str
             selected.append(field_name)
     if document_type in _MULTI_FIELD_RULES and "v2_schema" in available_columns and "v2_schema" not in selected:
         selected.append("v2_schema")
-    for field_name in _SPECIAL_SELECT_FIELDS.get(document_type, ()):
+    for field_name in (
+        *_SPECIAL_SELECT_FIELDS.get(document_type, ()),
+        *INDEPENDENT_DOCUMENT_FIELDS.get(document_type, ()),
+    ):
         if field_name in available_columns and field_name not in selected:
             selected.append(field_name)
     return selected
@@ -1357,7 +1372,9 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
                 text=assembled_text, source_field="presurg_discussion_template",
                 order_index=len(sections),
             ))
-    elif document_type in _MULTI_FIELD_RULES:
+    elif document_type in _MULTI_FIELD_RULES and not (
+        document_type == "death_record" and _merge_field_text(payload, "record_content")
+    ):
         texts: list[str] = []
         for index, spec in enumerate(_MULTI_FIELD_RULES[document_type]):
             text_value = _merge_field_text(payload, spec.key)
@@ -1389,7 +1406,10 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
             # 医嘱表的展示列不一定属于正文拼接字段，但必须随领域包保留，
             # 供病历查看和质控结果使用同一份结构化医嘱事实。
             source_field_names = {field.source_field for field in source_fields}
-            for field_name in _SPECIAL_SELECT_FIELDS.get(document_type, ()):
+            for field_name in (
+                *_SPECIAL_SELECT_FIELDS.get(document_type, ()),
+                *INDEPENDENT_DOCUMENT_FIELDS.get(document_type, ()),
+            ):
                 if field_name in source_field_names:
                     continue
                 raw_value = _normalize_text(payload.get(field_name))
