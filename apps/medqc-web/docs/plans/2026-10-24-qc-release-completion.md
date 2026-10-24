@@ -68,3 +68,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 项目目录按实际部署位置替换。首次核对可以使用已有MEDQC_STARTUP_MODE=acceptance启动方式，避免旧队列自动恢复；Verify不补数、不刷新、不发模型请求。PreviewMaterials/ApplyMaterials、PreviewRecovery/ApplyRecovery作为正式、显式后续操作保留，本次交付不自动执行。
 
 本包沿用迁移head053，没有因为冻结或保护集新增054迁移。新增两类冻结位于原exam_analysis_freeze目录下，运行账号仍需对原四个冻结目录可写；写失败仅记录复用能力丢失，不改变本次临床判定。
+
+## 完整客户包交付证据
+
+- 构建来源：独立分支提交`4b1ec0db424b61d159394395ef7703f8bb1ea0f6`。构建检出`C:/medqc-release-build-20261024`只有已提交源码；现有工作树的生成CSS未暂存、未覆盖，业务集成线HEAD保持`754fa2f7af23e9d60209f3cbbcf96e3d59d9813f`。
+- 完整包：`C:/Users/Coldplay/Downloads/medqc-web-customer-20261024-011747.zip`，12,484,720字节、1344个ZIP条目。SHA256：`1f2edd93863589128b64c97820c0c5181f6b0b2708f5d14346a2e664035e43bc`，同目录有.sha256文件。
+- 前端重新编译成功；前后端build_id同为`medqc-web-customer-20261024-011747`，git_commit均为上述源码提交。正式源码门禁通过，无脏源码、私有运行资料、凭据或旧公网API地址；关键后端模块与构建检出逐字一致。
+- 从实际完整包导入后端，在阻止数据库连接及真实HTTP传输的最小应用中通过GET /api/v1/runtime-build读取并核对版本、loaded_equals_disk和recovery_supported均通过；未依赖补丁marker。此为包内实际源码和公开版本接口验证，不冒充完整lifespan连接真实PG的启动验收。
+- 包内Alembic heads仅有`20261023_000053 (head)`，正式验收PowerShell语法及ZIP完整性通过；客户启动器没有开发JWT默认值，仍要求产品激活。本包不新发激活，沿用客户既有ProgramData激活状态。
+- 本轮没有改动前端功能源文件、合并PR、推送集成分支、替换本机正在运行的服务，亦未在客户机执行操作。需要客户按正常完整包部署、先备份升级到053，再做只读Verify及明确授权后的恢复；原任务成功与否不能由本机包校验替代。
