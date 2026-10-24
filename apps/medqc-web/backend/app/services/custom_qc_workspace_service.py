@@ -5,6 +5,8 @@ import json
 import re
 import uuid
 
+from ..core.execution_timing import project_stage_timing, timed
+
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO, StringIO
@@ -1227,6 +1229,12 @@ def project_customer_safe_batch_job(
             "token_breakdown_complete"
         ]
     safe_summary["performance_profile"] = safe_performance_profile
+    stage_timing = project_stage_timing(raw_profile.get("stage_timing"))
+    if stage_timing is not None:
+        safe_performance_profile["stage_timing"] = stage_timing
+    if raw_profile.get("rule_duration_basis") == "allocated_or_reported_metadata":
+        safe_performance_profile["rule_duration_basis"] = "allocated_or_reported_metadata"
+        safe_performance_profile["slow_rule_ranking_is_measured"] = False
     safe_summary["total_tokens"] = _to_int(
         safe_performance_profile.get("tokens_total"),
         safe_summary["total_tokens"],
@@ -5017,6 +5025,7 @@ class CustomQCWorkspaceService:
             self.refresh_parent_batch_job(parent_job_id=parent_id)
         return tuple(failed_ids)
 
+    @timed("result_write")
     def update_batch_job_progress(
         self,
         *,
@@ -5140,6 +5149,7 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    @timed("final_save")
     def complete_batch_job(
         self,
         *,

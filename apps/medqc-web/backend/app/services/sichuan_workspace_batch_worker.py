@@ -14,6 +14,7 @@ import uuid
 from fastapi import HTTPException
 
 from ..core.settings import get_settings
+from ..core.execution_timing import current_timing_snapshot, finish_current_timing, observe_worker_timing, timed
 from .luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
 from .luxian_0609.privacy_identity_context import _Luxian0609IdentityCollector
 from .luxian_0609.privacy_request_scope import luxian_0609_case_identity_scope
@@ -822,6 +823,7 @@ def _build_result_performance_profile(item: Dict[str, Any]) -> Dict[str, Any]:
         "final_status": str(item.get("status") or item.get("display_status") or "").strip().lower(),
         "executor_type": executor_type or "llm",
         "duration_seconds": round(max(0.0, duration_seconds), 4),
+        "duration_basis": str(metadata.get("api_time_basis") or "reported_result_metadata"),
         "llm_call_count": llm_call_count,
         "program_call_count": program_call_count,
         "retry_count": retry_count,
@@ -1067,6 +1069,9 @@ def _build_batch_performance_profile(
         "result_count": len(result_profiles),
         "wall_clock_time_seconds": round(max(0.0, float(wall_clock_time or 0.0)), 4),
         "sum_rule_duration_seconds": round(total_duration, 4),
+        # 兼容历史分摊值，但禁止把它当作独立规则的实测耗时排名。
+        "rule_duration_basis": "allocated_or_reported_metadata",
+        "slow_rule_ranking_is_measured": False,
         "first_result_latency_seconds": round(max(0.0, float(first_result_latency or 0.0)), 4),
         "llm_call_count": authoritative_llm_calls,
         "llm_call_count_basis": (
@@ -1270,6 +1275,7 @@ def _renew_luxian_0609_lease_until_stopped(
             logger.exception("LX0609 任务续约失败: job_id=%s", job_id)
 
 
+@observe_worker_timing
 @diagnostic_job_lifecycle
 async def run_sichuan_workspace_batch_job(
     job_id: str,
@@ -2841,7 +2847,9 @@ async def run_sichuan_workspace_batch_job(
                     metadata.setdefault("completion_tokens", fallback_completion_tokens[rule_index])
                     metadata.setdefault("input_tokens", fallback_prompt_tokens[rule_index])
                     metadata.setdefault("output_tokens", fallback_completion_tokens[rule_index])
-                    metadata.setdefault("api_time", fallback_api_per_rule)
+                    if "api_time" not in metadata:
+                        metadata["api_time"] = fallback_api_per_rule
+                        metadata["api_time_basis"] = "allocated_record_api_time"
                     metadata.setdefault("first_result_latency", record_first_result_latency)
                     metadata.setdefault("first_result_source", record_first_result_source)
                     metadata.setdefault("execution_domain", str((rule or {}).get("execution_domain") or ""))
@@ -3267,6 +3275,7 @@ async def run_sichuan_workspace_batch_job(
             (retry_base_summary.get("record_timing") or {}).get("attempts") or []
         )
 
+        @timed("record_execution")
         async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
             institute_id = str(record.get("institute_id") or "").strip()
             patient_id = str(record.get("patient_id") or "").strip()
@@ -3798,6 +3807,7 @@ async def run_sichuan_workspace_batch_job(
             actual_prompt_tokens=total_prompt_tokens,
             actual_completion_tokens=total_completion_tokens,
         )
+        performance_profile["stage_timing"] = current_timing_snapshot()
 
         summary = {
             "record_timing": summarize_record_timings(record_timing_attempts),
@@ -4028,6 +4038,7 @@ async def run_sichuan_workspace_batch_job(
             )
             if identity_collector is not None:
                 identity_collector.close()
+            finish_current_timing()
             if delay_seconds:
                 await asyncio.sleep(delay_seconds)
             await run_sichuan_workspace_batch_job(

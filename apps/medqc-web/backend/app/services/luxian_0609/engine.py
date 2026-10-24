@@ -7,12 +7,14 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 import logging
 import math
 from typing import Any, Callable, Iterable, Mapping
 
 from app.services.llm_observability import llm_executor_observation_context
+from app.core.execution_timing import measure_stage, timing_labels
 
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .execution_contract import (
@@ -39,6 +41,17 @@ _FAILURE_REASON_CODES = {
 }
 
 SafeTraceSink = Callable[[Mapping[str, Any]], None]
+
+
+@asynccontextmanager
+async def _family_slot(semaphore):
+    with measure_stage("family_queue"):
+        await semaphore.acquire()
+    try:
+        with measure_stage("family_execution"):
+            yield
+    finally:
+        semaphore.release()
 
 
 @dataclass(frozen=True)
@@ -277,7 +290,7 @@ class Luxian0609ExecutionEngine:
                     )
                     return failure
 
-            async with semaphore:
+            async with _family_slot(semaphore):
                 if abort_event.is_set():
                     return FamilyExecutionFailure.create(
                         executor_key=executor_key,
@@ -380,7 +393,8 @@ class Luxian0609ExecutionEngine:
 
         async def run(executor_key: str) -> FamilyExecutionOutcome:
             try:
-                return await run_family(executor_key)
+                with timing_labels(family=executor_key):
+                    return await run_family(executor_key)
             except asyncio.CancelledError:
                 raise
             except Exception:
