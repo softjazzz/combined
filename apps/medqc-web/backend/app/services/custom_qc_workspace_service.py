@@ -3636,6 +3636,7 @@ class CustomQCWorkspaceService:
         rule_set_version: str = RULE_SET_VERSION,
         session_factory: Optional[Callable[[], Session]] = None,
         include_items: bool = False,
+        include_rule_set_context: bool = False,
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
         """批量读取病历池可展示的最新 Canonical 结果摘要。
 
@@ -3920,12 +3921,21 @@ class CustomQCWorkspaceService:
                             "reason_code": "canonical_result_envelope_invalid",
                         }
                         continue
-                    projections[identity] = self._summarize_completed_record_result_envelope(
+                    summary = self._summarize_completed_record_result_envelope(
                         envelope_row=selected_envelopes[0],
                         completed_at=ready_selection.job.get("finished_at"),
                         include_items=include_items,
                         rule_set_key=normalized_rule_set_key,
                     )
+                    if include_rule_set_context and summary.get("status") == "ready":
+                        # 供报表绑定已选中的持久结果；不改变候选、选轮或旧调用输出。
+                        summary.update({
+                            "root_job_id": selected_job_id,
+                            "envelope_id": _safe_text(selected_envelopes[0].get("id")),
+                            "rule_set_key": normalized_rule_set_key,
+                            "rule_set_version": _rule_set_value(ready_selection.job, "rule_set_version"),
+                        })
+                    projections[identity] = summary
                     continue
 
                 # 仅以 visit_id 保存的历史根任务不能形成 ready。若该任务已有同
