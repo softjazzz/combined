@@ -1,8 +1,17 @@
 <template>
-  <section v-if="allowed" class="rectification-todos">
-    <header>
-      <h2>{{ scope ? '该缺陷整改' : '缺陷整改待办' }}</h2>
+  <section v-if="allowed" class="rectification-todos" :class="{ 'mq-page': !scope }">
+    <header :class="{ 'mq-page-head': !scope }">
+      <div class="rectification-heading mq-page-head__copy">
+        <span v-if="!scope" class="mq-page-eyebrow">质控作业 · 整改处理</span>
+        <h2 :class="scope ? 'mq-card__title' : 'mq-page-title'">
+          {{ scope ? '该缺陷整改' : '缺陷整改待办' }}
+        </h2>
+      </div>
+      <label class="sr-only" :for="scope ? 'defect-rectification-status' : 'rectification-status'"
+        >整改状态</label
+      >
       <a-select
+        :id="scope ? 'defect-rectification-status' : 'rectification-status'"
         v-model:value="state"
         :get-popup-container="popupContainer"
         :options="states"
@@ -10,21 +19,28 @@
         @change="changeState"
       />
       <a-button :disabled="loading" aria-label="刷新整改待办" @click="load">
-        <RefreshCw :size="16" />
+        <template #icon>
+          <MqIcon name="sync" :size="16" />
+        </template>
       </a-button>
     </header>
     <a-alert v-if="error" :message="error" type="error" show-icon />
     <a-spin :spinning="loading">
-      <ul>
+      <ul class="rectification-task-list" :class="{ 'mq-card': !scope && items.length > 0 }">
         <li v-for="item in items" :key="item.id">
           <button type="button" @click="show(item.id)">
             <span>{{ item.department }} · {{ item.visit_id }} · {{ item.target_id }}</span>
-            <span>{{ item.assignee_name }} · {{ labels[item.status] }}</span>
-            <span>{{ item.requirement }}</span>
+            <span
+              >{{ item.assignee_name }} ·
+              <span class="mq-status" :class="statusClass(item.status)">{{
+                labels[item.status]
+              }}</span></span
+            >
+            <span class="rectification-task-requirement">{{ item.requirement }}</span>
           </button>
         </li>
       </ul>
-      <p v-if="!loading && !error && !items.length">
+      <p v-if="!loading && !error && !items.length" class="rectification-empty">
         {{ scope ? '该缺陷尚无整改记录' : '没有待处理整改' }}
       </p>
       <a-pagination
@@ -41,6 +57,7 @@
       title="缺陷整改"
       width="min(560px, 100vw)"
       :root-style="{ zIndex: 1300 }"
+      root-class-name="rectification-detail-drawer"
     >
       <a-alert v-if="detailError" :message="detailError" type="error" show-icon />
       <a-button v-if="detailError" :disabled="saving" @click="activeId && show(activeId)">
@@ -61,7 +78,9 @@
             {{ selected.assignee_name }}
           </a-descriptions-item>
           <a-descriptions-item label="状态">
-            {{ labels[selected.status] }}
+            <span class="mq-status" :class="statusClass(selected.status)">{{
+              labels[selected.status]
+            }}</span>
           </a-descriptions-item>
           <a-descriptions-item label="整改要求">
             {{ selected.requirement }}
@@ -81,6 +100,10 @@
             <a-button
               v-for="action in actions"
               :key="action.value"
+              :type="
+                action.value === 'submit' || action.value === 'approve' ? 'primary' : 'default'
+              "
+              :danger="action.value === 'reject'"
               :disabled="saving || uncertain || comment.trim().length < 10"
               @click="submit(action.value)"
             >
@@ -88,10 +111,10 @@
             </a-button>
           </a-space>
         </a-form>
-        <h3>操作记录</h3>
+        <h3 class="rectification-section-title">操作记录</h3>
         <a-alert v-if="comparisonError" :message="comparisonError" type="error" show-icon />
         <section v-if="comparison" class="document-comparison">
-          <h3>派发时 / 本次提交时正文</h3>
+          <h3 class="rectification-section-title">派发时 / 本次提交时正文</h3>
           <p v-if="!comparison.available">
             {{ comparison.reason }}
           </p>
@@ -126,7 +149,9 @@
         <a-timeline>
           <a-timeline-item v-for="event in selected.events" :key="event.id">
             {{ eventLabels[event.action] || event.action }} · {{ event.comment }}
-            <div>{{ event.created_at }}</div>
+            <div class="rectification-event-time mq-mono">
+              {{ event.created_at }}
+            </div>
             <a-button
               v-if="event.action === 'submit'"
               :loading="comparisonLoading"
@@ -149,7 +174,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { RefreshCw } from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   actOnRectification,
@@ -178,6 +203,13 @@ const labels: Record<RectificationState, string> = {
   approved: '已通过',
   rejected: '已驳回',
 }
+const statusClasses: Record<RectificationState, string> = {
+  pending: 'mq-status--warning',
+  submitted: 'mq-status--info',
+  approved: 'mq-status--success',
+  rejected: 'mq-status--danger',
+}
+const statusClass = (state: RectificationState) => statusClasses[state]
 const eventLabels: Record<string, string> = {
   assign: '派发',
   submit: '提交整改',
@@ -406,79 +438,4 @@ watch(
 )
 onUnmounted(reset)
 </script>
-<style scoped>
-.rectification-todos {
-  padding: 24px;
-  min-width: 0;
-  color: var(--mq-text-primary);
-}
-header {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-h2 {
-  font-size: 18px;
-  margin: 0 auto 0 0;
-}
-ul {
-  list-style: none;
-  padding: 0;
-}
-li {
-  border-bottom: 1px solid #e5e7eb;
-}
-li button {
-  display: grid;
-  gap: 6px;
-  width: 100%;
-  text-align: left;
-  padding: 12px 0;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-.rectification-todos__action {
-  margin: 20px 0;
-}
-.rectification-detail :deep(.ant-descriptions-item-label) {
-  width: 104px;
-  white-space: nowrap;
-}
-.rectification-detail :deep(.ant-descriptions-item-content) {
-  overflow-wrap: anywhere;
-}
-.document-comparison article {
-  border-top: 1px solid #e5e7eb;
-}
-.comparison-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
-  padding: 8px 0;
-}
-.comparison-row strong {
-  grid-column: 1 / -1;
-}
-.comparison-row pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 0;
-  font: inherit;
-}
-.comparison-row.changed {
-  background: #fff7d6;
-}
-@media (max-width: 480px) {
-  .rectification-detail :deep(.ant-descriptions-item-label),
-  .rectification-detail :deep(.ant-descriptions-item-content) {
-    padding: 12px;
-  }
-  .comparison-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-</style>
+<style scoped src="./styles/rectification-todos.css"></style>

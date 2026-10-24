@@ -1,32 +1,52 @@
 <template>
   <section class="remediation-analysis" aria-label="整改分析">
-    <header>
-      <h2>整改分析</h2>
-      <a-button :disabled="!analysis || busy || exporting" @click="download">
-        <Download :size="16" />导出 CSV
-      </a-button>
+    <header class="remediation-head">
+      <h2 class="mq-card__title">整改分析</h2>
+      <button
+        type="button"
+        class="mq-btn"
+        :disabled="!analysis || busy || exporting"
+        @click="download"
+      >
+        <MqIcon name="download" :size="16" />导出 CSV
+      </button>
     </header>
     <a-alert v-if="error" :message="error" type="error" show-icon />
     <a-button v-if="error" :disabled="busy" @click="load(1)"> 重试读取 </a-button>
     <a-spin :spinning="busy">
       <template v-if="analysis">
-        <a-alert type="info" message="七标签统计口径已确认，可重叠，申诉与整改独立" show-icon />
-        <ul class="assumptions">
-          <li v-for="assumption in analysis.assumptions" :key="assumption">
-            {{ assumption }}
-          </li>
-        </ul>
+        <details class="remediation-contract">
+          <summary>
+            <MqIcon name="rules" :size="16" />七标签统计口径已确认<span
+              >可重叠 · 申诉与整改独立</span
+            >
+          </summary>
+          <ul class="assumptions">
+            <li v-for="assumption in analysis.assumptions" :key="assumption">
+              {{ assumption }}
+            </li>
+          </ul>
+        </details>
         <div class="label-counts">
-          <button class="mq-btn" :class="{ active: !label }" @click="selectLabel()">
+          <button
+            type="button"
+            class="mq-btn"
+            :class="{ active: !label }"
+            :aria-pressed="!label"
+            @click="selectLabel()"
+          >
             全部保存缺陷</button
           ><button
             v-for="item in analysis.labels"
             :key="item.key"
-            class="mq-btn"
+            type="button"
+            class="mq-card remediation-metric"
             :class="{ active: label === item.key }"
+            :aria-pressed="label === item.key"
             @click="selectLabel(item.key)"
           >
-            {{ item.label }} <strong>{{ item.defect_total }}</strong
+            <span>{{ item.label }}</span
+            ><strong>{{ item.defect_total }}</strong
             ><small>{{ item.case_total }} 份病历</small>
           </button>
         </div>
@@ -35,13 +55,17 @@
             v-for="(value, key) in analysis.state_counts"
             :key="key"
             class="mq-btn"
+            type="button"
             :class="{ active: label === key }"
+            :aria-pressed="label === key"
             @click="selectLabel(String(key))"
           >
             {{ stateName(String(key)) }}：{{ value }}
           </button>
         </div>
-        <p>当前筛选 {{ analysis.total }} 条保存缺陷；七标签只统计完整冻结来源，缺失来源单列。</p>
+        <p class="remediation-total">
+          当前筛选 {{ analysis.total }} 条保存缺陷；七标签只统计完整冻结来源，缺失来源单列。
+        </p>
         <div class="table-scroll">
           <table class="mq-table">
             <thead>
@@ -66,13 +90,17 @@
                   >
                 </td>
                 <td>
-                  {{ stateName(row.rectification_state)
-                  }}<small v-if="row.source_reason">{{ sourceReason(row.source_reason) }}</small
+                  <span class="mq-status" :class="statusClass(row.rectification_state)">{{
+                    stateName(row.rectification_state)
+                  }}</span
+                  ><small v-if="row.source_reason">{{ sourceReason(row.source_reason) }}</small
                   ><small>{{ row.labels.map(labelName).join('、') || '未纳入七标签' }}</small
                   ><small>受领医生：{{ row.assignee_name || '未知' }}</small>
                 </td>
                 <td>
-                  <a-button @click="selected = row"> 查看历史 </a-button>
+                  <button type="button" class="mq-btn" @click="selected = row">
+                    <MqIcon name="history" :size="16" />查看历史
+                  </button>
                 </td>
               </tr>
               <tr v-if="!analysis.items.length">
@@ -97,15 +125,22 @@
       title="保存缺陷与整改历史"
       width="min(680px, 100vw)"
       :root-style="{ zIndex: 1100 }"
+      root-class-name="remediation-history-drawer"
       @close="selected = undefined"
     >
       <template v-if="selected">
-        <h3>{{ selected.target_label }}</h3>
-        <p>
+        <h3 class="mq-card__title">
+          {{ selected.target_label }}
+        </h3>
+        <p class="mq-card__desc">
           {{ selected.patient_name || '姓名未知' }} · {{ selected.visit_id }} ·
           {{ selected.scene === 'running' ? '运行病历' : '终末病历' }}
         </p>
-        <p>{{ stateName(selected.rectification_state) }}</p>
+        <p>
+          <span class="mq-status" :class="statusClass(selected.rectification_state)">{{
+            stateName(selected.rectification_state)
+          }}</span>
+        </p>
         <CaseRectificationCreate
           v-if="selected.source_known && selected.root_job_id && selected.envelope_id"
           :institute-id="selected.institute_id"
@@ -123,7 +158,7 @@
           @created="load(analysis?.page || 1)"
           @changed="load(analysis?.page || 1)"
         />
-        <dl>
+        <dl class="remediation-source mq-soft">
           <dt>三坐标</dt>
           <dd>{{ selected.institute_id }} / {{ selected.patient_id }} / {{ selected.visit_id }}</dd>
           <dt>冻结运行 / 结果</dt>
@@ -138,7 +173,7 @@
         </p>
         <h4>整改事件</h4>
         <p v-if="!selected.events.length">无已派发整改历史，不能据此认定未整改。</p>
-        <ol>
+        <ol class="remediation-events">
           <li v-for="event in selected.events" :key="event.id">
             <strong>{{ actionName(event.action) }} · 版本 {{ event.version }}</strong
             ><small>{{ event.created_at }}</small>
@@ -164,7 +199,7 @@
 </template>
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { Download } from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
 import { useAuthStore } from '@/stores/auth'
 import { exportRecordRemediationAnalysis, getRecordRemediationAnalysis } from '@/api/qualityReports'
@@ -286,6 +321,13 @@ const appealStates: Record<string, string> = {
   rejected: '申诉驳回',
 }
 const stateName = (state: string) => states[state] || '未知'
+const statusClasses: Record<string, string> = {
+  approved: 'mq-status--success',
+  rejected: 'mq-status--danger',
+  pending: 'mq-status--warning',
+  pending_acceptance: 'mq-status--info',
+}
+const statusClass = (state: string) => statusClasses[state] || ''
 const actionName = (action: string) => actions[action] || '未知动作'
 const appealName = (status: string) => appealStates[status] || '未知'
 const sourceReason = (reason: string) =>

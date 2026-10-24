@@ -106,6 +106,22 @@ beforeEach(() => {
   mocks.export.mockResolvedValue({ success: true, data: new Blob(['合成CSV']) })
 })
 describe('整改分析', () => {
+  it('V7.1口径可展开且不丢失，统计筛选保留按压状态', async () => {
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.get('details').attributes('open')).toBeUndefined()
+    expect(wrapper.get('details').text()).toContain(payload.assumptions[0])
+    expect(wrapper.get('.label-counts button').attributes('aria-pressed')).toBe('true')
+    const metric = wrapper.get('.remediation-metric')
+    expect(metric.classes()).toContain('mq-card')
+    await metric.trigger('click')
+    await flushPromises()
+    expect(metric.attributes('aria-pressed')).toBe('true')
+    expect(mocks.read).toHaveBeenLastCalledWith(
+      expect.objectContaining({ label: 'urged_rectified', page: 1 }),
+    )
+    wrapper.unmount()
+  })
   it.each(['created', 'changed'] as const)('冻结缺陷派发或处理后重读报表：%s', async (event) => {
     const wrapper = make()
     await flushPromises()

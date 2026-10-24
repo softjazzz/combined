@@ -20,7 +20,7 @@ const Select = defineComponent({
     '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="">请选择</option><option v-for="item in options" :key="item.value" :value="item.value">{{item.label}}</option></select>',
 })
 const Modal = defineComponent({
-  props: ['open', 'zIndex'],
+  props: ['open', 'zIndex', 'wrapClassName'],
   emits: ['ok'],
   template:
     '<div v-if="open"><slot/><button data-testid="save" @click="$emit(\'ok\')">保存</button></div>',
@@ -95,6 +95,7 @@ describe('病例缺陷整改派发', () => {
     await wrapper.get('button').trigger('click')
     await flushPromises()
     expect(wrapper.getComponent(Modal).props('zIndex')).toBe(1200)
+    expect(wrapper.getComponent(Modal).props('wrapClassName')).toContain('mq-modal')
     wrapper.unmount()
   })
   it('父层重渲染传入相同冻结目标时保留弹窗，真实换结果时清空', async () => {

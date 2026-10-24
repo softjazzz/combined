@@ -1,9 +1,16 @@
 <template>
   <section>
-    <a-button @click="openForm"> <Send :size="14" />派发整改 / 整改处理 </a-button>
+    <a-button class="rectification-launch" @click="openForm">
+      <template #icon>
+        <MqIcon name="task" :size="16" /> </template
+      >派发整改 / 整改处理
+    </a-button>
     <a-modal
       v-model:open="open"
       title="缺陷整改"
+      wrap-class-name="mq-modal rectification-create-modal"
+      ok-text="派发整改"
+      cancel-text="取消"
       width="min(760px, 100vw)"
       :z-index="1200"
       :confirm-loading="saving"
@@ -12,10 +19,17 @@
       }"
       @ok="save"
     >
+      <div class="rectification-context mq-soft">
+        <MqIcon name="task" :size="28" />
+        <div>
+          <strong>{{ visitId }}</strong
+          ><span>{{ instituteId }} · {{ patientId }}</span>
+        </div>
+      </div>
       <a-alert v-if="error" type="error" :message="error" show-icon />
       <a-button v-if="error" :disabled="saving" @click="load"> 重新核对候选 </a-button>
       <a-spin :spinning="loading">
-        <a-form layout="vertical">
+        <a-form layout="vertical" class="rectification-create-form">
           <a-form-item label="已确认缺陷">
             <a-select
               v-model:value="targetKey"
@@ -45,7 +59,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { Send } from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import HomeRectificationTodos from '@/views/workstation/HomeRectificationTodos.vue'
@@ -215,3 +229,4 @@ watch(
   { immediate: true },
 )
 </script>
+<style scoped src="./styles/case-rectification-create.css"></style>

@@ -86,6 +86,20 @@ beforeEach(() => {
   mocks.act.mockResolvedValue({ ...task, status: 'submitted' })
 })
 describe('站内整改待办', () => {
+  it('独立页使用V7.1页头，嵌入缺陷时不重复外壳且筛选有真实标签', async () => {
+    const page = make()
+    await flushPromises()
+    expect(page.classes()).toContain('mq-page')
+    expect(page.get('label').attributes('for')).toBe('rectification-status')
+    expect(page.getComponent(Select).attributes('id')).toBe('rectification-status')
+    page.unmount()
+    const embedded = make({ scope: task })
+    await flushPromises()
+    expect(embedded.classes()).not.toContain('mq-page')
+    expect(embedded.get('label').attributes('for')).toBe('defect-rectification-status')
+    expect(embedded.getComponent(Select).attributes('id')).toBe('defect-rectification-status')
+    embedded.unmount()
+  })
   it('状态菜单跟随当前容器，嵌入处理弹窗时仍可选择', async () => {
     const wrapper = make()
     await flushPromises()

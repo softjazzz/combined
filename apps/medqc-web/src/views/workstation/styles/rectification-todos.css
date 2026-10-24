@@ -1,0 +1,119 @@
+.rectification-todos {
+  min-width: 0;
+  color: var(--mq-text-primary);
+  letter-spacing: 0;
+}
+.rectification-todos:not(.mq-page) {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--mq-border);
+}
+header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.rectification-heading {
+  margin-right: auto;
+}
+h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+.rectification-task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.rectification-task-list > li + li {
+  border-top: 1px solid var(--mq-border);
+}
+.rectification-task-list button {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 20px;
+  font: inherit;
+  color: var(--mq-text-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.rectification-task-list button:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: -2px;
+}
+.rectification-task-list button:hover > span:first-child {
+  color: var(--mq-brand-600);
+}
+.rectification-task-requirement,
+.rectification-event-time,
+.rectification-empty {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+.rectification-empty {
+  padding: 32px 16px;
+  text-align: center;
+}
+.rectification-todos__action {
+  margin: 24px 0;
+}
+.rectification-section-title {
+  margin: 24px 0 16px;
+  font-size: var(--mq-font-16);
+  font-weight: 600;
+}
+.rectification-detail :deep(.ant-descriptions-item-label) {
+  width: 104px;
+  white-space: nowrap;
+}
+.rectification-detail :deep(.ant-descriptions-item-content) {
+  overflow-wrap: anywhere;
+}
+.rectification-event-time {
+  margin: 6px 0 10px;
+}
+.document-comparison article {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mq-border);
+}
+.document-comparison h4 {
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+.comparison-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+}
+.comparison-row strong {
+  grid-column: 1 / -1;
+  font-size: var(--mq-font-13);
+}
+.comparison-row pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  font: inherit;
+  font-size: var(--mq-font-13);
+  line-height: 1.8;
+}
+.comparison-row.changed {
+  background: var(--mq-warning-bg);
+}
+@media (max-width: 480px) {
+  .rectification-detail :deep(.ant-descriptions-item-label),
+  .rectification-detail :deep(.ant-descriptions-item-content) {
+    padding: 12px;
+  }
+  .comparison-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
