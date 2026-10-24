@@ -344,6 +344,14 @@ def _session() -> Session:
     return SessionLocal()
 
 
+def _use_clinical_read_schema(session: Session) -> None:
+    """样本卡片的临床回查与 Bundle 同源；显式 qc 表仍由 qc 管理。"""
+    from .bundles.assembly import _default_source_schema
+
+    if _default_source_schema() == "cdm":
+        session.connection().execution_options(schema_translate_map={None: "cdm"})
+
+
 def _safe_text(value: Any, default: str = "") -> str:
     if value is None:
         return default
@@ -2699,6 +2707,7 @@ def _load_previous_hospitalization_states(
 
     session = _session()
     try:
+        _use_clinical_read_schema(session)
         for institute_id, patient_id, visit_id in legacy_identities:
             # 先查出院证据，避免旧表之间短暂不一致把出院病例误记为在院。
             discharge = (
@@ -4702,6 +4711,8 @@ class CustomQCSamplePoolService:
             stmt = select(self._item_table).where(where_clause).order_by(self._item_table.c.row_no.asc())
             rows = session.execute(stmt).mappings().all()
             healed_rows = self._heal_customer_test_bundle_statuses(session=session, rows=[dict(row) for row in rows])
+            # 兼容状态修复可能提交会话，在其后绑定本次临床回查连接。
+            _use_clinical_read_schema(session)
             items = [self._row_to_item(row) for row in healed_rows]
             items = self._apply_dynamic_candidate_rule_ids(items=items)
             source_table_map = self._load_bundle_source_table_map(
