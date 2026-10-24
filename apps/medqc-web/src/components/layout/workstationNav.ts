@@ -152,6 +152,13 @@ export const WORKSTATION_NAV: NavGroup[] = [
         demoFeedbackOnly: true,
         match: matchPrefix(p('/qc-feedback-demo')),
       },
+      {
+        key: 'feedback-worklist',
+        label: '整改待办',
+        to: { path: p('/feedback') },
+        iconName: 'doc',
+        match: matchPrefix(p('/feedback')),
+      },
     ],
   },
   {

@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Panel from '../RecordRemediationAnalysisPanel.vue'
+import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
 import type { RecordRemediationAnalysis, RemediationRow } from '@/api/qualityReports'
 const mocks = vi.hoisted(() => ({ read: vi.fn(), export: vi.fn(), download: vi.fn() }))
 const actor = reactive({ id: 'manager' })
@@ -75,6 +76,11 @@ function make() {
     },
     global: {
       stubs: {
+        CaseRectificationCreate: {
+          props: ['jobId', 'initialTarget'],
+          emits: ['created', 'changed'],
+          template: '<div />',
+        },
         'a-button': {
           props: ['disabled'],
           template: '<button :disabled="disabled"><slot/></button>',
@@ -100,6 +106,19 @@ beforeEach(() => {
   mocks.export.mockResolvedValue({ success: true, data: new Blob(['合成CSV']) })
 })
 describe('整改分析', () => {
+  it.each(['created', 'changed'] as const)('冻结缺陷派发或处理后重读报表：%s', async (event) => {
+    const wrapper = make()
+    await flushPromises()
+    const button = wrapper.findAll('button').find((item) => item.text().includes('查看历史'))!
+    await button.trigger('click')
+    const form = wrapper.findComponent(CaseRectificationCreate)
+    expect(form.props('jobId')).toBe('J')
+    const calls = mocks.read.mock.calls.length
+    form.vm.$emit(event)
+    await flushPromises()
+    expect(mocks.read.mock.calls.length).toBe(calls + 1)
+    expect(wrapper.find('aside').exists()).toBe(false)
+  })
   it.each(
     ['标签', '分页', '场景', '账号'].flatMap((change) =>
       ['成功', '失败'].map((outcome) => ({ change, outcome })),

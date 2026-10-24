@@ -27,6 +27,27 @@ function loadPage(loader: unknown): Promise<{ default: unknown }> {
 }
 
 describe('业务线四报表定向适配', () => {
+  it('整改待办保留V5外壳，医生和质控可访问，同步管理员不可访问', () => {
+    const path = `${B}/feedback`
+    const resolved = router.resolve(path)
+    expect(resolved.matched[0].path).toBe(B)
+    expect(resolved.meta.requiresAuth).toBe(true)
+    expect(resolved.meta.permission).toEqual(['admin', 'qc_manager', 'qc_staff', 'doctor'])
+    expect(resolved.redirectedFrom).toBeUndefined()
+    expect(findActiveNav(WORKSTATION_NAV, { path, query: {}, meta: {} })?.item.key).toBe(
+      'feedback-worklist',
+    )
+    for (const role of ['doctor', 'qc_manager', 'sync_admin']) {
+      const nav = filterVisibleNav(WORKSTATION_NAV, {
+        isDemoFeedbackAccount: false,
+        userRoles: [role],
+        resolvePermission: (to) => router.resolve(to).meta.permission as string[] | undefined,
+      })
+      expect(
+        nav.flatMap((group) => group.items).some((item) => item.key === 'feedback-worklist'),
+      ).toBe(role !== 'sync_admin')
+    }
+  })
   it.each(reports)(
     '%s 直接加载页面、保留V5外壳与角色权限',
     async (slug, title) => {
@@ -81,9 +102,11 @@ describe('业务线四报表定向适配', () => {
       'system-config',
     ]
     const items = WORKSTATION_NAV.flatMap((g) => g.items)
-    expect(items.filter((i) => !i.key.startsWith('report-')).map((i) => i.key)).toEqual(
-      originalKeys,
-    )
+    expect(
+      items
+        .filter((i) => !i.key.startsWith('report-') && i.key !== 'feedback-worklist')
+        .map((i) => i.key),
+    ).toEqual(originalKeys)
     expect(DRG_SECTION_TABS.map((tab) => tab.path)).toEqual(
       ['drg/pre', 'drg/mid', 'drg/payment', 'drg/post', 'grouper'].map((p) => `${B}/${p}`),
     )

@@ -1023,6 +1023,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '质控反馈记录', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'feedback',
+        name: 'WorkstationV5Feedback',
+        component: () => import('@/views/workstation/HomeRectificationTodos.vue'),
+        meta: { title: '整改待办', permission: ['admin', 'qc_manager', 'qc_staff', 'doctor'] },
+      },
+      {
         path: 'customer-sample-validation',
         name: 'WorkstationV4CustomerSampleValidation',
         component: () => import('@/views/workstation-v4/CustomerSampleValidationView.vue'),

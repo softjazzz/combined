@@ -134,8 +134,9 @@ describe('workstationNav 可见性', () => {
         resolvePermission,
       }),
     )
-    // 19 个目标线原有入口 + 四张质量报表。
-    expect(visible).toHaveLength(23)
+    // 19个目标线原有入口、四张质量报表和完整整改待办。
+    expect(visible).toHaveLength(24)
+    expect(visible).toContain('feedback-worklist')
     expect(visible).toContain('rule-validation')
   })
 })

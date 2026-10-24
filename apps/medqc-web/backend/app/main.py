@@ -75,6 +75,7 @@ from .routers import staff_work_analysis as staff_work_analysis_router
 from .routers import manual_quality_reports as manual_quality_reports_router
 from .routers import core_system_reports as core_system_reports_router
 from .routers import special_record_reports as special_record_reports_router
+from .routers import defect_rectifications as defect_rectifications_router
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
@@ -282,6 +283,7 @@ def create_app() -> FastAPI:
     app.include_router(reports_router.router)
     app.include_router(appeals_router.router)
     app.include_router(remediation_router.router)
+    app.include_router(defect_rectifications_router.router)
     # Department QC Rules (Migration 009)
     app.include_router(department_qc_rules_router.router)
     # Demo page for LX33 rules (no auth required)

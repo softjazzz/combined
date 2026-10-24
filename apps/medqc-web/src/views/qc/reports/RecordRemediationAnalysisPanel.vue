@@ -106,6 +106,23 @@
           {{ selected.scene === 'running' ? '运行病历' : '终末病历' }}
         </p>
         <p>{{ stateName(selected.rectification_state) }}</p>
+        <CaseRectificationCreate
+          v-if="selected.source_known && selected.root_job_id && selected.envelope_id"
+          :institute-id="selected.institute_id"
+          :patient-id="selected.patient_id"
+          :visit-id="selected.visit_id"
+          :job-id="selected.root_job_id"
+          :initial-target="{
+            source: selected.target_kind === 'canonical_defect' ? 'auto' : 'manual',
+            ruleId: selected.target_kind === 'canonical_defect' ? selected.target_id : undefined,
+            defectId:
+              selected.target_kind === 'task_manual_defect' ? selected.target_id : undefined,
+            rootJobId: selected.root_job_id,
+            envelopeId: selected.envelope_id,
+          }"
+          @created="load(analysis?.page || 1)"
+          @changed="load(analysis?.page || 1)"
+        />
         <dl>
           <dt>三坐标</dt>
           <dd>{{ selected.institute_id }} / {{ selected.patient_id }} / {{ selected.visit_id }}</dd>
@@ -148,6 +165,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { Download } from 'lucide-vue-next'
+import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
 import { useAuthStore } from '@/stores/auth'
 import { exportRecordRemediationAnalysis, getRecordRemediationAnalysis } from '@/api/qualityReports'
 import type {
