@@ -51,6 +51,68 @@ IDENTITY = {
 RULE = "LX0609-01-01-01"
 
 
+def publish_result(saved, scene):
+    """每轮均经过原保存合同，不手写Envelope或改变Canonical选轮。"""
+    job = saved.create_batch_job(
+        draft={
+            "id": "sichuan-rule-library",
+            "rule_code": "SC-BATCH",
+            "name": "合成反馈闭环",
+            "scene": scene,
+        },
+        created_by="qc",
+        scope=scene,
+        filters={
+            "rule_set_key": workspace.LUXIAN_0609_RULE_SET_KEY,
+            "rule_set_version": workspace.RULE_SET_VERSION,
+            "rule_ids": [RULE],
+            "scoped_customer_rule_ids": [RULE],
+        },
+        record_ids=[IDENTITY["visit_id"]],
+        record_refs=[IDENTITY],
+        total_records=1,
+        rule_count=1,
+    )
+    attempt = saved.mark_batch_job_running(job_id=job["id"])
+    item = {
+        **IDENTITY,
+        "record_id": IDENTITY["visit_id"],
+        "schema_version": "lx0609-customer-result-v2",
+        "rule_id": RULE,
+        "status": "non_compliant",
+        "result_status": "non_compliant",
+        "display_status": "non_compliant",
+        "is_compliant": False,
+        "reason_code": "timeliness_requirement_not_met",
+        "conclusion": "合成入院记录超时",
+        "suggestion": "请核对合成文书时限",
+        "customer_display_facts": {
+            "failure_kind": "timeliness_requirement_not_met",
+            "target_document": "admission_record",
+            "source_label": "入院记录",
+            "timeliness_state": "late",
+            "threshold_hours": 24,
+            "elapsed_hours": 25.0,
+        },
+    }
+    item["customer_display_facts"] = safe_basic_timeliness_customer_display_facts(
+        rule_id=RULE, raw=item["customer_display_facts"]
+    )
+    assert saved.complete_batch_job(
+        job_id=job["id"],
+        items=[item],
+        failed_records=[],
+        attempt_filters_json=attempt,
+        summary={
+            "execution_status": "completed",
+            "total_records": 1,
+            "success_count": 1,
+            "failed_count": 0,
+        },
+    )
+    return job
+
+
 @pytest.fixture(params=["running", "final"])
 def feedback(raw_pg, monkeypatch, request):
     scene = request.param
@@ -145,63 +207,7 @@ def feedback(raw_pg, monkeypatch, request):
             )
         )
     saved = workspace.CustomQCWorkspaceService(readonly=True)
-    job = saved.create_batch_job(
-        draft={
-            "id": "sichuan-rule-library",
-            "rule_code": "SC-BATCH",
-            "name": "合成反馈闭环",
-            "scene": scene,
-        },
-        created_by="qc",
-        scope=scene,
-        filters={
-            "rule_set_key": workspace.LUXIAN_0609_RULE_SET_KEY,
-            "rule_set_version": workspace.RULE_SET_VERSION,
-            "rule_ids": [RULE],
-            "scoped_customer_rule_ids": [RULE],
-        },
-        record_ids=[IDENTITY["visit_id"]],
-        record_refs=[IDENTITY],
-        total_records=1,
-        rule_count=1,
-    )
-    attempt = saved.mark_batch_job_running(job_id=job["id"])
-    item = {
-        **IDENTITY,
-        "record_id": IDENTITY["visit_id"],
-        "schema_version": "lx0609-customer-result-v2",
-        "rule_id": RULE,
-        "status": "non_compliant",
-        "result_status": "non_compliant",
-        "display_status": "non_compliant",
-        "is_compliant": False,
-        "reason_code": "timeliness_requirement_not_met",
-        "conclusion": "合成入院记录超时",
-        "suggestion": "请核对合成文书时限",
-        "customer_display_facts": {
-            "failure_kind": "timeliness_requirement_not_met",
-            "target_document": "admission_record",
-            "source_label": "入院记录",
-            "timeliness_state": "late",
-            "threshold_hours": 24,
-            "elapsed_hours": 25.0,
-        },
-    }
-    item["customer_display_facts"] = safe_basic_timeliness_customer_display_facts(
-        rule_id=RULE, raw=item["customer_display_facts"]
-    )
-    assert saved.complete_batch_job(
-        job_id=job["id"],
-        items=[item],
-        failed_records=[],
-        attempt_filters_json=attempt,
-        summary={
-            "execution_status": "completed",
-            "total_records": 1,
-            "success_count": 1,
-            "failed_count": 0,
-        },
-    )
+    job = publish_result(saved, scene)
     service = DefectRectificationService(sessions)
     monkeypatch.setattr(api, "service", service)
     app = FastAPI()
@@ -601,3 +607,207 @@ def test_normal_login_cdm_comparison_and_http_report(feedback, monkeypatch):
     assert all(
         "submission_document_snapshot" not in event for event in detail["events"]
     )
+
+
+def test_new_saved_round_isolates_dispatch_history_and_reports(feedback, monkeypatch):
+    engine, sessions, saved, service, http, actor, old_job, scene = feedback
+    base = "/api/v1/defect-rectifications"
+    report = "/api/v1/quality-reports/record-quality/remediations"
+
+    def candidates(job_id, status=200):
+        response = http.get(
+            f"{base}/candidates", params={**IDENTITY, "expected_job_id": job_id}
+        )
+        assert response.status_code == status, response.text
+        if status == 200:
+            targets = response.json()["data"]["targets"]
+            assert len(targets) == 1
+            return {key: value for key, value in targets[0].items() if key != "label"}
+
+    def payload(source, assignee):
+        return {
+            **IDENTITY,
+            **source,
+            "assignee_id": assignee,
+            "requirement": "请核对本轮合成病例并提交整改说明",
+        }
+
+    def post(body, status=200):
+        response = http.post(base, json=body)
+        assert response.status_code == status, response.text
+        return response.json().get("data")
+
+    def act(user, task, version, action, status=200):
+        actor(user)
+        response = http.post(
+            f"{base}/{task['id']}/actions",
+            json={
+                "version": version,
+                "action": action,
+                "comment": "合成新旧轮次隔离验收处理说明",
+            },
+        )
+        assert response.status_code == status, response.text
+
+    def analysis(label=None):
+        response = http.get(
+            report,
+            params={
+                "scene": scene,
+                "defect_source": "auto",
+                **({"label": label} if label else {}),
+            },
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["data"]
+
+    old_source = candidates(old_job["id"])
+    old_payload = payload(old_source, "doc")
+    old_task = post(old_payload)
+    act("qc", old_task, 1, "urge")
+    assert analysis("urged_pending")["total"] == 1
+
+    # 两轮都是真实保存的非合规结果；没有修改选轮实现或伪造新Envelope。
+    new_job = publish_result(saved, scene)
+    assert new_job["id"] != old_job["id"]
+    candidates(old_job["id"], 409)
+    post(old_payload, 409)
+    new_source = candidates(new_job["id"])
+    assert new_source["root_job_id"] == new_job["id"]
+    assert new_source["envelope_id"] != old_source["envelope_id"]
+    post(
+        payload({**new_source, "envelope_id": old_source["envelope_id"]}, "other"), 409
+    )
+    current = analysis("not_dispatched")
+    assert current["total"] == 1
+    assert current["items"][0]["root_job_id"] == new_job["id"]
+    assert current["items"][0]["rectification_id"] is None
+    assert analysis("urged_pending")["total"] == 0
+    envelopes = workspace._record_result_envelopes_table()
+    with engine.connect() as conn:
+        saved_before = (
+            conn.execute(
+                sa.select(envelopes)
+                .where(envelopes.c.root_job_id.in_([old_job["id"], new_job["id"]]))
+                .order_by(envelopes.c.id)
+            )
+            .mappings()
+            .all()
+        )
+
+    # 已派发旧轮仍按原受领人处理历史，但不能改变当前轮分类或偷换冻结来源。
+    act("doc", old_task, 2, "submit")
+    act("qc", old_task, 3, "approve")
+    old_response = http.get(f"{base}/{old_task['id']}")
+    assert old_response.status_code == 200
+    old_detail = old_response.json()["data"]
+    assert old_detail["root_job_id"] == old_job["id"]
+    assert old_detail["envelope_id"] == old_source["envelope_id"]
+    assert old_detail["status"] == "approved"
+    old_submission = old_detail["events"][-2]["id"]
+    assert analysis("not_dispatched")["total"] == 1
+    assert analysis("urged_rectified")["total"] == 0
+
+    new_payload = payload(new_source, "other")
+    real_create = service.create
+
+    def committed_create_without_receipt(*args, **kwargs):
+        real_create(*args, **kwargs)
+        raise ConnectionError("synthetic committed write receipt unavailable")
+
+    # 只在真实提交之后注入回执故障；503不代表数据库未写入。
+    with monkeypatch.context() as scoped:
+        scoped.setattr(service, "create", committed_create_without_receipt)
+        post(new_payload, 503)
+    refreshed = http.get(base, params={**IDENTITY, **new_source})
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["data"]["total"] == 1
+    new_task = refreshed.json()["data"]["items"][0]
+    assert (new_task["status"], new_task["version"]) == ("pending", 1)
+    post(new_payload, 409)
+    assert new_task["id"] != old_task["id"]
+    act("doc", new_task, 1, "submit", 403)
+    real_transition = service.transition
+
+    def committed_action_without_receipt(*args, **kwargs):
+        real_transition(*args, **kwargs)
+        raise ConnectionError("synthetic committed action receipt unavailable")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(service, "transition", committed_action_without_receipt)
+        act("other", new_task, 1, "submit", 503)
+    refreshed = http.get(f"{base}/{new_task['id']}")
+    assert refreshed.status_code == 200, refreshed.text
+    submitted = refreshed.json()["data"]
+    assert (submitted["status"], submitted["version"], len(submitted["events"])) == (
+        "submitted",
+        2,
+        2,
+    )
+    act("other", new_task, 1, "submit", 409)
+    act("qc", new_task, 2, "approve")
+    current = analysis("self_rectified")
+    assert current["total"] == 1
+    row = current["items"][0]
+    assert (row["rectification_id"], row["root_job_id"], row["envelope_id"]) == (
+        new_task["id"],
+        new_job["id"],
+        new_source["envelope_id"],
+    )
+    assert len(row["events"]) == 3
+    assert old_submission not in {event["id"] for event in row["events"]}
+    assert analysis("urged_rectified")["total"] == 0
+    exported = http.get(
+        f"{report}/export", params={"scene": scene, "defect_source": "auto"}
+    )
+    assert exported.status_code == 200, exported.text
+    rows = list(csv.DictReader(io.StringIO(exported.content.decode("utf-8-sig"))))
+    assert len(rows) == 1
+    assert rows[0]["rectification_id"] == new_task["id"]
+    assert rows[0]["root_job_id"] == new_job["id"]
+
+    # 八维精确筛选须先于分页；旧轮历史不因最新结果变化而消失。
+    for source, task in ((old_source, old_task), (new_source, new_task)):
+        listed = http.get(base, params={**IDENTITY, **source, "page_size": 1})
+        assert listed.status_code == 200, listed.text
+        assert listed.json()["data"]["total"] == 1
+        assert listed.json()["data"]["items"][0]["id"] == task["id"]
+    actor("doc")
+    assert http.get(f"{base}/{old_task['id']}").status_code == 200
+    assert http.get(f"{base}/{new_task['id']}").status_code == 403
+    assert (
+        http.get(
+            f"{base}/{old_task['id']}/comparison", params={"event_id": old_submission}
+        ).status_code
+        == 200
+    )
+    actor("other")
+    assert http.get(f"{base}/{old_task['id']}").status_code == 403
+    assert (
+        http.get(
+            f"{base}/{new_task['id']}/comparison", params={"event_id": old_submission}
+        ).status_code
+        == 404
+    )
+
+    # 整改没有倒改任一轮保存的Envelope和原始非合规结论。
+    with engine.connect() as conn:
+        saved_after = (
+            conn.execute(
+                sa.select(envelopes)
+                .where(envelopes.c.root_job_id.in_([old_job["id"], new_job["id"]]))
+                .order_by(envelopes.c.id)
+            )
+            .mappings()
+            .all()
+        )
+        assert saved_after == saved_before
+        assert {row["id"] for row in saved_after} == {
+            old_source["envelope_id"],
+            new_source["envelope_id"],
+        }
+    raw = saved.build_luxian_0609_completed_record_result_summaries(
+        record_refs=[IDENTITY], include_items=True, include_rule_set_context=True
+    )[tuple(IDENTITY.values())]
+    assert raw["root_job_id"] == new_job["id"]
+    assert raw["items"][0]["status"] == "non_compliant"
