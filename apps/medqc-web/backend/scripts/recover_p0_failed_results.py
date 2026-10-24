@@ -48,6 +48,7 @@ async def prepare_completion(workspace, job, recordings, output):
     from app.services.sichuan_qc_service import SichuanQCService
     from app.services.sichuan_workspace_batch_worker import run_sichuan_workspace_batch_job
     from app.services import llm_observability
+    from app.services.luxian_0609.rule_decision_settings import capture_luxian_0609_task_runtime
 
     class Events:
         def start_attempt_sync(self, event):
@@ -84,10 +85,12 @@ async def prepare_completion(workspace, job, recordings, output):
     service = bind(ReplayService())
     async def provider():
         return service
-    adapter = ReadonlyRetryWorkspace(workspace, job)
+    adapter = ReadonlyRetryWorkspace(workspace, job, replay_runtime=capture_luxian_0609_task_runtime(service))
     await run_sichuan_workspace_batch_job(job["id"], workspace=adapter, qc_service_provider=provider)
     if adapter.failure:
         (output / "worker-error-private.json").write_text(json.dumps(adapter.failure, ensure_ascii=False), encoding="utf8")
+    if adapter.completion:
+        adapter.completion["summary"]["offline_recovery_runtime"] = adapter.runtime_transition
     return adapter.completion, counters
 
 

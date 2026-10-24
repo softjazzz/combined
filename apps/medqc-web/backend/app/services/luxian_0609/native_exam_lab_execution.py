@@ -34,6 +34,7 @@ from .exam_lab_projection_batching import (
     select_exam_lab_projection_batch,
 )
 from .exam_analysis_freeze import freeze_key, load_payload, save_payload
+from .validated_fact_freeze import fact_freeze_key, load_facts, save_facts
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
 from .exam_finding_analysis import FindingAnalysisOutcome, apply_finding_analysis, check_exam_finding_analysis
 from .exam_reason_check import apply_exam_reason, check_exam_reason
@@ -2531,6 +2532,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
     ct_review: Any | None = None
     ct_response_task: asyncio.Task[Mapping[str, Any]] | None = None
     ct_model_failure: str | None = None
+    ct_frozen_payload = None
+    ct_freeze_key = None
     ct_display_insert_index = 0
     # 仅在当前一次 Evidence Session 已读取的行内查找显式 document_id；不回读 DB。
     display_rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]] = {}
@@ -2629,9 +2632,21 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 typed_processed.add(CT_CONSISTENCY_RULE)
                 if ct_review.needs_model:
                     model_rule_count += 1
-                    if llm_client is None:
+                    ct_freeze_key = fact_freeze_key(
+                        protocol="ct-order-course-validated-v1", prompt=build_ct_fact_prompt(ct_review),
+                        client=llm_client, materials=ct_review, scope=evidence_snapshot.visit_ref,
+                    )
+                    ct_frozen_payload = load_facts("ct_order_consistency", ct_freeze_key)
+                    if ct_frozen_payload is not None:
+                        try:
+                            evaluate_ct_review(ct_review, ct_frozen_payload)
+                            if any(item.get("record_state") == "unknown" for item in ct_frozen_payload["events"]):
+                                ct_frozen_payload = None
+                        except (TypeError, ValueError):
+                            ct_frozen_payload = None
+                    if ct_frozen_payload is None and llm_client is None:
                         ct_model_failure = "exam_lab_llm_failure"
-                    else:
+                    elif ct_frozen_payload is None:
                         llm_call_count += 1
 
                         async def generate_ct_response() -> Mapping[str, Any]:
@@ -3162,7 +3177,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     typed_processed.add(rule_id)
 
     if ct_review is not None:
-        ct_payload = None
+        ct_payload = ct_frozen_payload
         if ct_response_task is not None:
             try:
                 ct_response = await ct_response_task
@@ -3196,6 +3211,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 ct_model_failure,
             )
         else:
+            if (ct_response_task is not None and isinstance(ct_payload, dict)
+                    and all(item.get("record_state") != "unknown" for item in ct_payload.get("events", []))):
+                save_facts("ct_order_consistency", ct_freeze_key, ct_payload)
             first_success_count += int(ct_review.needs_model)
             emit_typed(
                 CT_CONSISTENCY_RULE,

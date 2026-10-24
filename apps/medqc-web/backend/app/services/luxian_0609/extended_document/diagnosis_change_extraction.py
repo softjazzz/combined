@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 import json
 import logging
 import math
@@ -19,10 +19,12 @@ from typing import Any, Literal, Mapping, Protocol, Sequence, cast
 from ..llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import _json_response_object
+from ..validated_fact_freeze import fact_freeze_key, load_facts, save_facts
 
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "lx0609_diagnosis_change_documentation_v2"
+FACT_FREEZE_VERSION = "diagnosis-change-validated-v1"
 MAX_DOCUMENTS = 12
 MAX_TEXT_CHARS = 16000
 # 模型可能把整段检查检验结果作为依据引文逐字复制，2048 曾被用满截断（C15）。
@@ -290,6 +292,7 @@ def _retry_hint(error: Exception, previous_content: Any) -> str:
 async def extract_diagnosis_change_documentation(
     documents: Sequence[DiagnosisChangeDocumentInput],
     llm_client: DiagnosisChangeLLMClient | None,
+    *, freeze_scope: str | None = None,
 ) -> DiagnosisChangeExtraction:
     try:
         validated = _validated_documents(documents)
@@ -314,22 +317,36 @@ async def extract_diagnosis_change_documentation(
         return DiagnosisChangeExtraction("data_gap", "source_truncated")
     if llm_client is None:
         return DiagnosisChangeExtraction("technical_error", "model_transport_error")
+    key = fact_freeze_key(protocol=(FACT_FREEZE_VERSION, SCHEMA_VERSION), prompt=_prompt(safe_documents),
+                          client=llm_client, materials=[asdict(item) for item in validated], scope=freeze_scope)
+    if (payload := load_facts("diagnosis_change", key)) is not None:
+        try:
+            assertions = _parse(json.dumps(payload, ensure_ascii=False), safe_documents)
+            if all(item.reason_state != "unknown" and item.basis_state != "unknown" for item in assertions):
+                return DiagnosisChangeExtraction("ready", "diagnosis_change_documentation_extracted", assertions)
+        except (ValueError, TypeError, KeyError, AttributeError):
+            pass
+
+    def freeze(result):
+        if result.state == "ready" and result.assertions and all(item.reason_state != "unknown" and item.basis_state != "unknown" for item in result.assertions):
+            save_facts("diagnosis_change", key, {"schema_version": SCHEMA_VERSION, "items": [asdict(item) for item in result.assertions]})
+        return result
     # 用户口径（2026-10-11）：协议违规（如拼接引文）可确定识别，重试 1 次；仍违规才拒收。
     # 补核按首次失败类型定向：截断提示缩短引文，引文失败逐条指明并附上次输出。
     first, first_error, first_content = await _extract_once(safe_documents, llm_client)
     if first.state != "technical_error" or first.reason_code != "model_invalid_output":
-        return first
+        return freeze(first)
     second, _error, _content = await _extract_once(
         safe_documents, llm_client, retry_hint=_retry_hint(first_error, first_content)
     )
-    return replace(
+    return freeze(replace(
         second,
         llm_call_count=first.llm_call_count + second.llm_call_count,
         prompt_tokens=first.prompt_tokens + second.prompt_tokens,
         completion_tokens=first.completion_tokens + second.completion_tokens,
         total_tokens=first.total_tokens + second.total_tokens,
         api_time=first.api_time + second.api_time,
-    )
+    ))
 
 
 async def _extract_once(

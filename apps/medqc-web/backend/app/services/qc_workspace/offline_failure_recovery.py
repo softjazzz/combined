@@ -73,12 +73,24 @@ def replay_response(recordings, prompt):
 class ReadonlyRetryWorkspace:
     """真实 Worker 的进程内预演适配器；只有读操作委托真实 workspace。"""
 
-    def __init__(self, workspace, job):
+    def __init__(self, workspace, job, *, replay_runtime=None):
         scope = build_failed_rule_retry_scope(job)
         if scope is None:
             raise ValueError("job_has_no_failed_pairs")
         self.owner = workspace
         self.current = deepcopy(job)
+        self.runtime_transition = None
+        if replay_runtime is not None:
+            from ..luxian_0609.rule_decision_settings import LX0609_TASK_RUNTIME_FILTER_KEY
+            original = self.current["filters"].get(LX0609_TASK_RUNTIME_FILTER_KEY)
+            if (not isinstance(original, dict) or set(original) != set(replay_runtime)
+                    or any(original.get(key) != replay_runtime.get(key) for key in ("schema_version", "first_pass", "adjudicator"))):
+                raise ValueError("offline_recovery_model_configuration_changed")
+            # 只允许显式离线工具在进程内重绑定实现版本；原任务filters及模型配置不写回。
+            self.runtime_transition = {"original_implementation": original["implementation"],
+                                       "replay_implementation": replay_runtime["implementation"],
+                                       "model_identity_preserved": True}
+            self.current["filters"][LX0609_TASK_RUNTIME_FILTER_KEY] = deepcopy(replay_runtime)
         self.current["filters"]["failed_rule_retry"] = scope[0]
         self.current["status"] = "queued"
         self.completion = None

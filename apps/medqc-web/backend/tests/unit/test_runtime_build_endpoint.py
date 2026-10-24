@@ -52,7 +52,9 @@ def test_runtime_build_is_public_safe_json_and_frozen_until_new_start(tmp_path, 
         assert response.headers["cache-control"] == "no-store"
         assert response.headers["content-type"].startswith("application/json")
         first = response.json()
-        assert set(first) == {"available", "build_id", "git_commit", "started_at", "pid"}
+        assert set(first) == {"available", "build_id", "git_commit", "started_at", "pid", "p0_acceptance"}
+        assert first["p0_acceptance"]["loaded_equals_disk"] is True
+        assert first["p0_acceptance"]["recovery_supported"] is True
         assert first["available"] is True
         assert first["git_commit"] == "a" * 40
         assert first["pid"] == os.getpid()

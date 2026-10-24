@@ -63,3 +63,12 @@ def test_loaded_runtime_proof_compares_real_loaded_functions(tmp_path, monkeypat
     assert proof["loaded_equals_disk"] is True and proof["recovery_supported"] is True
     marker.write_text(json.dumps({"protocol": "invalid", "source_sha256": {}}), encoding="utf8")
     assert p0_runtime.loaded_p0_proof()["loaded_equals_disk"] is False
+
+
+def test_formal_release_proof_needs_no_patch_marker(tmp_path, monkeypatch):
+    from app.services.qc_workspace import p0_runtime
+    fake_source = tmp_path / "app/services/qc_workspace/p0_runtime.py"
+    monkeypatch.setattr(p0_runtime, "__file__", str(fake_source))
+    assert p0_runtime.loaded_p0_proof() is None
+    proof = p0_runtime.loaded_p0_proof(release_identity={"available": True})
+    assert proof["loaded_equals_disk"] is True and proof["recovery_supported"] is True

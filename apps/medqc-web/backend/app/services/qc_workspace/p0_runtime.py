@@ -1,4 +1,4 @@
-"""只在显式安装验收补丁后，冻结当前进程实际加载的 P0 函数一致性。"""
+"""正式发布或显式安装验收补丁后，冻结进程实际加载的 P0 函数一致性。"""
 
 import hashlib
 import json
@@ -26,13 +26,14 @@ def find_code(code: CodeType, path: tuple[str, ...]) -> CodeType:
     return find_code(matches[0], path[1:])
 
 
-def loaded_p0_proof():
+def loaded_p0_proof(*, release_identity=None):
     backend = Path(__file__).resolve().parents[3]
     marker = backend / ".p0-chain-installed.json"
-    if not marker.exists():
+    official_release = isinstance(release_identity, dict) and release_identity.get("available") is True
+    if not marker.exists() and not official_release:
         return None
-    installation = json.loads(marker.read_text(encoding="utf8"))
-    files_unchanged = installation.get("protocol") == "medqc-p0-chain-v1"
+    installation = json.loads(marker.read_text(encoding="utf8")) if marker.exists() else {}
+    files_unchanged = official_release or installation.get("protocol") == "medqc-p0-chain-v1"
     for relative, expected in installation.get("source_sha256", {}).items():
         target = (backend / relative).resolve()
         target.relative_to(backend)

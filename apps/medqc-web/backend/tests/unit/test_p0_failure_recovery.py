@@ -130,6 +130,22 @@ def test_readonly_workspace_never_delegates_progress_or_completion_writes():
     assert workspace.retry_batch_job() is None
 
 
+def test_offline_recovery_can_rebind_implementation_only_and_keeps_original_job():
+    from app.services.luxian_0609.rule_decision_settings import LX0609_TASK_RUNTIME_FILTER_KEY
+    runtime = {"schema_version": 1, "first_pass": {"model": "synthetic-fixed"}, "adjudicator": {"model": "synthetic-fixed"}, "implementation": {"git_commit": "old"}}
+    job = {"status": "failed", "summary": {"execution_status": "partial_failed"},
+           "filters": {"rule_ids": ["LX0609-07-01-02"], "rule_set_key": "luxian_0609_qc_v1", LX0609_TASK_RUNTIME_FILTER_KEY: runtime},
+           "items": json.loads(baseline()["items_json"]), "failed_records": json.loads(baseline()["failed_records_json"])}
+    original = deepcopy(job)
+    new_runtime = {**runtime, "implementation": {"git_commit": "new"}}
+    adapter = ReadonlyRetryWorkspace(object(), job, replay_runtime=new_runtime)
+    assert job == original
+    assert adapter.current["filters"][LX0609_TASK_RUNTIME_FILTER_KEY] == new_runtime
+    assert adapter.runtime_transition["model_identity_preserved"] is True
+    with pytest.raises(ValueError, match="model_configuration_changed"):
+        ReadonlyRetryWorkspace(object(), job, replay_runtime={**new_runtime, "first_pass": {"model": "other"}})
+
+
 @pytest.mark.parametrize("fault", [None, "stale_baseline", "save_failure"])
 def test_real_completion_transaction_preserves_other_envelope_rows(monkeypatch, fault):
     """实际 Session/UPDATE/事务，信封写入范围受测；不连接业务 PG。"""

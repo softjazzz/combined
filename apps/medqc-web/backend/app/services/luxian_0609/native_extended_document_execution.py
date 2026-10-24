@@ -5823,6 +5823,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     )
                                 ),
                                 llm_client,
+                                freeze_scope=evidence_snapshot.visit_ref if evidence_snapshot is not None else None,
                             )
                         )
                         if diagnosis_change_extraction.state != "ready":
