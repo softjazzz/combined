@@ -9,6 +9,12 @@ import pytest
 from app.services import record_quality_report_service as report
 
 
+@pytest.fixture(autouse=True)
+def report_actor_scope(monkeypatch):
+    # 本文件仅验证聚合；真实持久账号与多院授权由 test_v5_report_institute_scope 覆盖。
+    monkeypatch.setattr(report, "authorized_report_institute", lambda actor_id: None)
+
+
 def _case(institute: str, patient: str, visit: str = "same") -> dict:
     return {
         "institute_id": institute, "patient_id": patient, "visit_id": visit,

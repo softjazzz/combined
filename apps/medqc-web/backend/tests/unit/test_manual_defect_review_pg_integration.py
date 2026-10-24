@@ -16,13 +16,15 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, delete, insert, select, func, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.services import manual_defect_review_service as mds
+from app.database.models.qc import SysUser
+from app.services.user_scope_owner import user_owner_options
 
 TARGET_DB = "medqc_v36_validation_20260924"
 TARGET_REVISION = "20260926_000057"
@@ -67,10 +69,19 @@ class DefectWorld:
         self.engine = engine
         self.marker = uuid.uuid4().hex[:16]
         self.defect_ids: list[str] = []
+        self.actor_ids: set[str] = set()
         self._seq = 0
 
     def actor(self, tag: str) -> str:
-        return f"SYN-{tag}-{self.marker[:10]}"
+        actor_id = f"SYN-{tag}-{self.marker[:10]}"
+        if actor_id not in self.actor_ids:
+            with sessionmaker(bind=self.engine).begin() as session:
+                session.execute(insert(SysUser).values(
+                    id=actor_id, username=actor_id, display_name="SYN 审核账号", role="qc_manager",
+                    institute_id=INSTITUTE, is_active=True,
+                ), execution_options=user_owner_options(session))
+            self.actor_ids.add(actor_id)
+        return actor_id
 
     def add_defect(self, *, created_by: str, origin: str = "manual",
                    source_key: str | None = "task_assigned_qc", identity_version: int | None = 1,
@@ -133,11 +144,18 @@ class DefectWorld:
                 DELETE FROM qc.qc_defects
                 WHERE id = ANY(:ids) OR (institute_id = :inst AND patient_id LIKE :like)
             """), params)
+        with sessionmaker(bind=self.engine).begin() as session:
+            session.execute(delete(SysUser).where(SysUser.id.in_(self.actor_ids)),
+                            execution_options=user_owner_options(session))
 
     def residual(self) -> dict[str, int]:
         params = {"ids": self.defect_ids or [""], "inst": INSTITUTE, "like": f"SYN-P-{self.marker}-%"}
+        with sessionmaker(bind=self.engine)() as session:
+            remaining_users = session.execute(select(func.count()).select_from(SysUser).where(
+                SysUser.id.in_(self.actor_ids)), execution_options=user_owner_options(session)).scalar_one()
         with self.engine.connect() as conn:
             return {
+                "sys_users": remaining_users,
                 "qc_defects": conn.execute(text("""
                     SELECT count(*) FROM qc.qc_defects
                     WHERE id = ANY(:ids) OR (institute_id = :inst AND patient_id LIKE :like)
@@ -291,21 +309,21 @@ def test_self_review_auto_and_legacy_rejected(world):
 # ---------------------------------------------------------------------------
 
 
-def _all_items(review_status: str) -> tuple[int, list[dict]]:
-    first = mds.list_manual_defects(review_status=review_status, page=1, page_size=100)
+def _all_items(review_status: str, actor_id: str) -> tuple[int, list[dict]]:
+    first = mds.list_manual_defects(actor_id=actor_id, review_status=review_status, page=1, page_size=100)
     items = list(first["items"])
     page = 2
     while len(items) < first["total"]:
-        items.extend(mds.list_manual_defects(review_status=review_status, page=page, page_size=100)["items"])
+        items.extend(mds.list_manual_defects(actor_id=actor_id, review_status=review_status, page=page, page_size=100)["items"])
         page += 1
     return first["total"], items
 
 
 def test_pending_count_matches_list_total(world):
     creator, reviewer = world.actor("C"), world.actor("R")
-    base_count = mds.count_pending_manual_defects()
-    base_total, _ = _all_items("pending")
-    base_approved, _ = _all_items("approved")
+    base_count = mds.count_pending_manual_defects(actor_id=reviewer)
+    base_total, _ = _all_items("pending", reviewer)
+    base_approved, _ = _all_items("approved", reviewer)
     assert base_count == base_total
 
     pending_ids = [world.add_defect(created_by=creator) for _ in range(3)]
@@ -313,8 +331,8 @@ def test_pending_count_matches_list_total(world):
     world.add_defect(created_by=creator, origin="auto", source_key="luxian_0609", manual_review_status=None)
     world.add_defect(created_by=creator, source_key=None, identity_version=None)  # 旧行不计入
 
-    count = mds.count_pending_manual_defects()
-    total, items = _all_items("pending")
+    count = mds.count_pending_manual_defects(actor_id=reviewer)
+    total, items = _all_items("pending", reviewer)
     assert count == total == base_count + 3
     mine = [item for item in items if item["institute_id"] == INSTITUTE
             and item["patient_id"].startswith(f"SYN-P-{world.marker}-")]
@@ -323,12 +341,12 @@ def test_pending_count_matches_list_total(world):
         assert item["manual_created_by"] == creator and item["run_number"] == 1
         assert item["task_id"] and item["task_record_id"]
         assert "evidence" not in item
-    approved_total, approved_items = _all_items("approved")
+    approved_total, approved_items = _all_items("approved", reviewer)
     assert approved_total == base_approved + 1
     assert approved_id in {item["id"] for item in approved_items}
 
     mds.review_manual_defect(defect_id=pending_ids[0], reviewer_id=reviewer, decision="approved")
-    count = mds.count_pending_manual_defects()
-    total, _ = _all_items("pending")
+    count = mds.count_pending_manual_defects(actor_id=reviewer)
+    total, _ = _all_items("pending", reviewer)
     assert count == total == base_count + 2
     print(f"\n[计数] 基线 pending={base_count}，写入后={base_count + 3}，审核一条后={count}")

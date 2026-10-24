@@ -163,14 +163,16 @@ def get_departments() -> list[str]:
     return repo.list_departments()
 
 
-def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
+def _load_indexed_registration_records(session, *, institute_id: str | None = None) -> list[SimpleNamespace]:
     """读取已同步但尚无病案首页的病例，不向 ``mr`` 写入伪首页。"""
 
     bind = session.get_bind()
     if not sa_inspect(bind).has_table("visit_index"):
         return []
     indexed_rows = session.execute(
-        text("SELECT institute_id, patient_id, visit_id FROM visit_index")
+        text("SELECT institute_id, patient_id, visit_id FROM visit_index" +
+             (" WHERE institute_id = :institute_id" if institute_id is not None else ""))
+        .bindparams(**({"institute_id": institute_id} if institute_id is not None else {}))
     ).mappings().all()
     indexed_refs = {
         (
@@ -195,7 +197,8 @@ def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
             MedicalRecordFrontpage.patient_id,
             MedicalRecordFrontpage.visit_id,
         )
-        .filter(MedicalRecordFrontpage.visit_id.in_(visit_ids))
+        .filter(MedicalRecordFrontpage.visit_id.in_(visit_ids),
+                True if institute_id is None else MedicalRecordFrontpage.institute_id == institute_id)
         .all()
     }
     missing_refs = indexed_refs - frontpage_refs
@@ -206,13 +209,15 @@ def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
     registrations = [
         row
         for row in session.query(InpatRegistration)
-        .filter(InpatRegistration.visit_id.in_(missing_visit_ids))
+        .filter(InpatRegistration.visit_id.in_(missing_visit_ids),
+                True if institute_id is None else InpatRegistration.institute_id == institute_id)
         .all()
         if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
         in missing_refs
     ]
     admission_rows = session.query(AdmissionRecord).filter(
-        AdmissionRecord.visit_id.in_(missing_visit_ids)
+        AdmissionRecord.visit_id.in_(missing_visit_ids),
+        True if institute_id is None else AdmissionRecord.institute_id == institute_id,
     ).all()
     admission_rows = [
         row

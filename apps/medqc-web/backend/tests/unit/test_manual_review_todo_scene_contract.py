@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database.models.qc import QCDefect, QCDefectHistory
+from app.database.models.qc import QCDefect, QCDefectHistory, SysUser
 from app.services import manual_defect_review_service as service
 
 
@@ -74,6 +74,7 @@ def database(monkeypatch):
     )
     QCDefect.__table__.create(engine)
     QCDefectHistory.__table__.create(engine)
+    SysUser.__table__.create(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     pending = [
         _defect("running-a", scene="running", minutes=1),
@@ -85,6 +86,7 @@ def database(monkeypatch):
         _defect("historic-null", scene=None, minutes=5),
     ]
     with factory.begin() as session:
+        session.add(SysUser(id="global", username="global", display_name="global", role="admin"))
         session.execute(QCDefect.__table__.insert(), [
             *pending,
             _defect(
@@ -119,13 +121,14 @@ def test_pending_list_and_count_share_the_exact_scene_scope(
     database, scene, expected_ids,
 ):
     result = service.list_manual_defects(
+        actor_id="global",
         review_status="pending",
         page=1,
         page_size=100,
         scene=scene,
     )
     listed_ids = {item["id"] for item in result["items"]}
-    count = service.count_pending_manual_defects(scene=scene)
+    count = service.count_pending_manual_defects(scene=scene, actor_id="global")
 
     assert result["scene"] == scene
     assert listed_ids == expected_ids
@@ -134,12 +137,15 @@ def test_pending_list_and_count_share_the_exact_scene_scope(
 
 def test_running_pagination_keeps_total_and_full_identity(database):
     first = service.list_manual_defects(
+        actor_id="global",
         review_status="pending", page=1, page_size=1, scene="running",
     )
     second = service.list_manual_defects(
+        actor_id="global",
         review_status="pending", page=2, page_size=1, scene="running",
     )
     beyond = service.list_manual_defects(
+        actor_id="global",
         review_status="pending", page=3, page_size=1, scene="running",
     )
 

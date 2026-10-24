@@ -17,6 +17,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import QCDefect, QCDefectHistory
+from .report_institute_scope import authorized_institute
+from .defect_rectification_service import RectificationError
 
 REVIEW_STATUSES = frozenset({"pending", "approved", "rejected"})
 REVIEW_DECISIONS = frozenset({"approved", "rejected"})
@@ -73,6 +75,17 @@ def _require_session_factory() -> Any:
     return SessionLocal
 
 
+def _authorized_scope(session, actor_id, *, scene="all", requested_institute=None):
+    try:
+        institute = authorized_institute(session, actor_id)
+    except RectificationError as exc:
+        raise ManualDefectReviewForbidden(str(exc)) from exc
+    if institute is not None and requested_institute is not None and institute != requested_institute:
+        raise ManualDefectReviewForbidden("无权访问其他机构人工缺陷")
+    predicates = _manual_scope(scene=scene)
+    return predicates if institute is None else (*predicates, QCDefect.institute_id == institute)
+
+
 def _now() -> datetime:
     # 与人工缺陷创建保持一致：库内存无时区 UTC。
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -123,22 +136,22 @@ def _list_item(defect: Any, identity: dict[str, Any]) -> dict[str, Any]:
 
 def list_manual_defects(
     *, review_status: str = "pending", page: int = 1, page_size: int = 20,
-    scene: str = "all",
+    scene: str = "all", actor_id: str | None = None,
 ) -> dict[str, Any]:
     """按审核状态分页读取人工缺陷，返回精确 total。"""
     if review_status not in REVIEW_STATUSES:
         raise ManualDefectReviewInvalid("审核状态无效")
+    _manual_scope(scene=scene)
     if (
         type(page) is not int or page < 1
         or type(page_size) is not int or page_size < 1 or page_size > MAX_PAGE_SIZE
     ):
         raise ManualDefectReviewInvalid("分页参数无效")
-    predicates = (
-        *_manual_scope(scene=scene), QCDefect.manual_review_status == review_status,
-    )
     factory = _require_session_factory()
     try:
         with factory() as session:
+            predicates = (*_authorized_scope(session, actor_id, scene=scene),
+                          QCDefect.manual_review_status == review_status)
             total = session.execute(
                 select(func.count(QCDefect.id)).where(*predicates)
             ).scalar_one()
@@ -194,7 +207,7 @@ def _case_identity(institute_id: Any, patient_id: Any, visit_id: Any) -> tuple[s
 
 def list_case_manual_defects(
     *, institute_id: str, patient_id: str, visit_id: str, scene: str = "all",
-    offset: int = 0, limit: int = CASE_LIST_LIMIT,
+    offset: int = 0, limit: int = CASE_LIST_LIMIT, actor_id: str | None = None,
 ) -> dict[str, Any]:
     """按三坐标分页读取该病例全部审核状态的任务人工缺陷。
 
@@ -212,6 +225,9 @@ def list_case_manual_defects(
     )
     try:
         with factory() as session:
+            predicates = (*predicates, *_authorized_scope(
+                session, actor_id, scene=scene, requested_institute=identity[0],
+            ))
             total = session.execute(select(func.count(QCDefect.id)).where(*predicates)).scalar_one()
             defects = session.execute(
                 select(
@@ -351,14 +367,14 @@ def list_manual_defects_for_cases(
     return rows
 
 
-def count_pending_manual_defects(*, scene: str = "all") -> int:
+def count_pending_manual_defects(*, scene: str = "all", actor_id: str | None = None) -> int:
     """待审核人工缺陷精确计数；与 list_manual_defects(review_status='pending') 的 total 同一谓词。"""
-    predicates = (
-        *_manual_scope(scene=scene), QCDefect.manual_review_status == "pending",
-    )
+    _manual_scope(scene=scene)
     factory = _require_session_factory()
     try:
         with factory() as session:
+            predicates = (*_authorized_scope(session, actor_id, scene=scene),
+                          QCDefect.manual_review_status == "pending")
             total = session.execute(
                 select(func.count(QCDefect.id)).where(*predicates)
             ).scalar_one()
@@ -414,11 +430,12 @@ def review_manual_defect(
     try:
         with factory() as session:
             with session.begin():
+                scope = _authorized_scope(session, reviewer_id)
                 current = session.execute(
                     select(
                         QCDefect.id, QCDefect.manual_created_by,
                         QCDefect.manual_review_status,
-                    ).where(QCDefect.id == defect_id, *_manual_scope()).with_for_update()
+                    ).where(QCDefect.id == defect_id, *scope).with_for_update()
                 ).first()
                 if current is None:
                     raise ManualDefectReviewNotFound("人工缺陷不存在")
@@ -436,6 +453,7 @@ def review_manual_defect(
                         QCDefect.__table__.c.source_key == "task_assigned_qc",
                         QCDefect.__table__.c.identity_version == 1,
                         QCDefect.__table__.c.manual_review_status == expected_status,
+                        *scope,
                     )
                     .values(manual_review_status=decision, updated_at=reviewed_at)
                 )

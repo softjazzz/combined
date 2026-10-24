@@ -20,6 +20,7 @@ from decimal import Decimal
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+from .report_institute_scope import authorized_report_institute
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +72,12 @@ class RecordQualityReportUnavailable(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-def _default_scope_loader(*, department: str | None, doctor: str | None, hospital_status: str) -> list[dict]:
+def _default_scope_loader(*, department: str | None, doctor: str | None, hospital_status: str,
+                          institute_id: str | None = None) -> list[dict]:
     from .workstation.luxian_0609_result_analysis_service import _load_current_workstation_records
 
     return _load_current_workstation_records(
-        department=department, doctor=doctor, hospital_status=hospital_status,
+        department=department, doctor=doctor, hospital_status=hospital_status, institute_id=institute_id,
     )
 
 
@@ -221,6 +223,7 @@ def _normalize_params(
 def build_report_context(
     *,
     scene: str,
+    actor_id: str | None = None,
     department: str | None = None,
     doctor: str | None = None,
     completed_from: datetime | None = None,
@@ -244,14 +247,16 @@ def build_report_context(
         scene=scene, department=department, doctor=doctor, completed_from=completed_from,
         completed_to=completed_to, defect_source=defect_source,
     )
+    institute = authorized_report_institute(actor_id)
+    institute_filter = {"institute_id": institute} if institute is not None else {}
     try:
-        scope_records = scope_loader(department=department, doctor=doctor, hospital_status=SCENES[scene])
+        scope_records = scope_loader(department=department, doctor=doctor, hospital_status=SCENES[scene], **institute_filter)
         records_by_identity: dict[tuple[str, str, str], Mapping[str, Any]] = {}
         for record in scope_records:
             identity = (
                 _text(record.get("institute_id")), _text(record.get("patient_id")), _text(record.get("visit_id")),
             )
-            if all(identity):
+            if all(identity) and (institute is None or identity[0] == institute):
                 records_by_identity.setdefault(identity, record)
         if len(records_by_identity) > MAX_REPORT_CASES:
             raise RecordQualityReportTooLarge(f"候选病历超过 {MAX_REPORT_CASES} 例，请缩小科室范围")

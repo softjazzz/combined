@@ -276,7 +276,7 @@ async def _get_review_todo_counts(current_user: dict, scene: str) -> Dict[str, A
     from starlette.concurrency import run_in_threadpool
 
     from ..core.permissions import PermissionAction, ResourceType, has_permission
-    from ..services.manual_defect_review_service import count_pending_manual_defects
+    from ..services.manual_defect_review_service import count_pending_manual_defects, ManualDefectReviewForbidden
     from .record_reviews import count_my_record_review_todos
     from .tasks import _get_task_scope_user_id
 
@@ -285,7 +285,9 @@ async def _get_review_todo_counts(current_user: dict, scene: str) -> Dict[str, A
         record_counts = await run_in_threadpool(count_my_record_review_todos, actor_id, scene)
         manual_defects = None
         if has_permission(current_user, ResourceType.QC_RESULTS, PermissionAction.REVIEW):
-            manual_defects = await run_in_threadpool(count_pending_manual_defects, scene=scene)
+            manual_defects = await run_in_threadpool(count_pending_manual_defects, scene=scene, actor_id=actor_id)
+    except ManualDefectReviewForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except HTTPException:
         raise
     except Exception as exc:

@@ -19,7 +19,8 @@ def env(monkeypatch):
         calls["records"].append((actor_id, scene))
         return {"initial": 3, "recheck": 2}
 
-    def manual(*, scene):
+    def manual(*, scene, actor_id):
+        assert actor_id == "reviewer"
         calls["manual"].append(scene)
         return 4
 

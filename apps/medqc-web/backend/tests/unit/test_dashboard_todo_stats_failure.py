@@ -85,7 +85,7 @@ def _stub_review_counts(monkeypatch, *, initial=0, recheck=0, manual=0, fail=Fal
 
     manual_calls = []
 
-    def manual_counts(*, scene="all"):
+    def manual_counts(*, scene="all", actor_id):
         manual_calls.append(scene)
         return manual
 
