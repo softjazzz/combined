@@ -14,7 +14,7 @@ vi.mock('@/stores/auth', () => ({
 const authState = reactive({ user: { id: 'q1', roles: ['qc_manager'] } })
 vi.mock('ant-design-vue', () => ({ message: { success: mocks.success } }))
 const Select = defineComponent({
-  props: ['value', 'options'],
+  props: ['value', 'options', 'getPopupContainer'],
   emits: ['update:value'],
   template:
     '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="">请选择</option><option v-for="item in options" :key="item.value" :value="item.value">{{item.label}}</option></select>',
@@ -64,6 +64,21 @@ beforeEach(() => {
   mocks.create.mockResolvedValue({ id: 'rect1' })
 })
 describe('病例缺陷整改派发', () => {
+  it('缺陷和医生菜单跟随弹窗容器，不落到被遮挡的页面根层', async () => {
+    const wrapper = make()
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    const container = document.createElement('div')
+    const trigger = document.createElement('div')
+    container.append(trigger)
+    const selects = wrapper.findAllComponents(Select)
+    expect(selects).toHaveLength(2)
+    for (const select of selects) {
+      expect(select.props('getPopupContainer')).toBeTypeOf('function')
+      expect(select.props('getPopupContainer')(trigger)).toBe(container)
+    }
+    wrapper.unmount()
+  })
   it.each(['account', 'role'])('真实%s变化仍会关闭并清空处理弹窗', async (change) => {
     const wrapper = make()
     await wrapper.get('button').trigger('click')

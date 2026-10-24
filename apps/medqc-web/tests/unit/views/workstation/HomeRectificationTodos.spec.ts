@@ -45,6 +45,10 @@ const Drawer = defineComponent({
   props: ['open', 'rootStyle'],
   template: '<div v-if="open"><slot/></div>',
 })
+const Select = defineComponent({
+  props: ['getPopupContainer'],
+  template: '<div />',
+})
 function make(props = {}) {
   return mount(HomeRectificationTodos, {
     props,
@@ -53,7 +57,7 @@ function make(props = {}) {
         'a-button': { template: '<button><slot/></button>' },
         'a-alert': { props: ['message'], template: '<p>{{message}}</p>' },
         'a-spin': { template: '<div><slot/></div>' },
-        'a-select': true,
+        'a-select': Select,
         'a-pagination': true,
         'a-drawer': Drawer,
         'a-descriptions': { template: '<div><slot/></div>' },
@@ -82,6 +86,17 @@ beforeEach(() => {
   mocks.act.mockResolvedValue({ ...task, status: 'submitted' })
 })
 describe('站内整改待办', () => {
+  it('状态菜单跟随当前容器，嵌入处理弹窗时仍可选择', async () => {
+    const wrapper = make()
+    await flushPromises()
+    const container = document.createElement('div')
+    const trigger = document.createElement('div')
+    container.append(trigger)
+    const popup = wrapper.getComponent(Select).props('getPopupContainer')
+    expect(popup).toBeTypeOf('function')
+    expect(popup(trigger)).toBe(container)
+    wrapper.unmount()
+  })
   it('任务详情高于1200层处理弹窗，任务按钮不会提交外层派发表单', async () => {
     const wrapper = make()
     await flushPromises()

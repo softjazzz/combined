@@ -4,6 +4,7 @@
       <h2>{{ scope ? '该缺陷整改' : '缺陷整改待办' }}</h2>
       <a-select
         v-model:value="state"
+        :get-popup-container="popupContainer"
         :options="states"
         style="width: 130px"
         @change="changeState"
@@ -166,6 +167,7 @@ import {
 const props = defineProps<{ scope?: RectificationSource; refreshKey?: number }>()
 const emit = defineEmits<{ changed: [] }>()
 const auth = useAuthStore()
+const popupContainer = (trigger: HTMLElement) => trigger.parentElement || trigger
 const manager = computed(() =>
   ['admin', 'qc_manager', 'qc_staff'].some((role) => auth.hasRole(role)),
 )

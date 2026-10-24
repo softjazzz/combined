@@ -19,12 +19,14 @@
           <a-form-item label="已确认缺陷">
             <a-select
               v-model:value="targetKey"
+              :get-popup-container="popupContainer"
               :options="targets.map((item, index) => ({ value: String(index), label: item.label }))"
             />
           </a-form-item>
           <a-form-item label="受领医生">
             <a-select
               v-model:value="doctorId"
+              :get-popup-container="popupContainer"
               :options="doctors.map((item) => ({ value: item.id, label: item.name }))"
             />
           </a-form-item>
@@ -67,6 +69,7 @@ const props = defineProps<{
   openIntent?: number
 }>()
 const auth = useAuthStore()
+const popupContainer = (trigger: HTMLElement) => trigger.parentElement || trigger
 const emit = defineEmits<{ created: []; changed: [] }>()
 const open = ref(false),
   loading = ref(false),
