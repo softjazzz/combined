@@ -355,14 +355,14 @@ foreach ($fileName in $backendRuntimeFiles) {
 }
 
 $customerLauncherPath = Join-Path $backendDir "start_dev_backend.ps1"
-$customerLauncherSource = Get-Content -LiteralPath $customerLauncherPath -Raw
-# 客户包不得把开发默认密钥注入进程并遮蔽 .env。
-$developmentSecretBlock = 'if (-not $env:JWT_SECRET) {' + "`n" + '    $env:JWT_SECRET = "dev-secret"' + "`n" + '}'
+$customerLauncherSource = Get-Content -LiteralPath $customerLauncherPath -Raw -Encoding UTF8
+# Never inject a development JWT fallback into customer environments.
+[string]$developmentSecretBlock = 'if (-not $env:JWT_SECRET) {' + "`n" + '    $env:JWT_SECRET = "dev-secret"' + "`n" + '}'
 $customerLauncherSource = $customerLauncherSource.Replace("`r`n", "`n")
 if (-not $customerLauncherSource.Contains($developmentSecretBlock)) {
   throw "Cannot locate development JWT fallback in launcher."
 }
-$customerLauncherSource = $customerLauncherSource.Replace($developmentSecretBlock, '')
+$customerLauncherSource = $customerLauncherSource.Replace([string]$developmentSecretBlock, [string]::Empty)
 $activationEnvironmentLine = '$env:PRODUCT_ACTIVATION_REQUIRED = "true"'
 if (-not $customerLauncherSource.Contains($activationEnvironmentLine)) {
   $launcherMarker = '$ErrorActionPreference = "Stop"'
@@ -373,12 +373,12 @@ if (-not $customerLauncherSource.Contains($activationEnvironmentLine)) {
     $launcherMarker,
     "$launcherMarker`n`n$activationEnvironmentLine"
   )
-  [System.IO.File]::WriteAllText(
-    $customerLauncherPath,
-    $customerLauncherSource,
-    (New-Object System.Text.UTF8Encoding($false))
-  )
 }
+[System.IO.File]::WriteAllText(
+  $customerLauncherPath,
+  $customerLauncherSource,
+  (New-Object System.Text.UTF8Encoding($false))
+)
 
 $activationPublicKeyTarget = Join-Path $backendDir "app\data\product_activation_public_key.pem"
 if (-not (Test-Path -LiteralPath $activationPublicKeyTarget -PathType Leaf)) {
