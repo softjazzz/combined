@@ -116,7 +116,11 @@ describe('人工质控报表', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('已确认统计口径')
     expect(wrapper.text()).not.toContain('待确认')
-    expect(wrapper.get('[data-type="info"]').attributes('data-type')).toBe('info')
+    // 统计口径折叠在details内，正文仍完整保留在DOM中
+    const assumption = wrapper.get('[data-testid="manual-assumption"]')
+    expect(assumption.element.tagName).toBe('DETAILS')
+    expect(assumption.text()).toContain('已确认统计口径')
+    expect(wrapper.find('.mq-status--warning').text()).toBe('待审核 1')
     expect(wrapper.text()).toContain('待审核 1')
     expect(wrapper.text()).toContain('待验收 1')
     const selects = wrapper.findAll('select')

@@ -1,101 +1,141 @@
 <template>
-  <main class="staff-analysis">
-    <a-tabs v-model:active-key="reportTab">
-      <a-tab-pane key="staff" tab="质控员工作分析" />
-      <a-tab-pane key="manual" tab="人工质控报表" />
-    </a-tabs>
-    <ManualQualityReportPanel v-if="reportTab === 'manual'" />
-    <div v-show="reportTab === 'staff'">
-      <header class="page-head">
-        <div>
-          <h1>质控员工作分析</h1>
-          <p>按质控场景、病例科室、任务和时间核对人员工作量</p>
+  <main class="mq-page staff-analysis">
+    <header class="mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
+        <h1 class="mq-page-title">
+          {{ reportTab === 'manual' ? '人工质控报表' : '质控员工作分析' }}
+        </h1>
+        <p class="page-desc">
+          {{
+            reportTab === 'manual'
+              ? '按上海自然日的缺陷创建日期统计人工缺陷录入、审核与整改状态'
+              : '按质控场景、病例科室、任务和时间核对人员工作量'
+          }}
+        </p>
+      </div>
+      <div class="mq-page-head__actions">
+        <div class="mq-segmented" role="group" aria-label="报表切换">
+          <button
+            v-for="option in reportTabs"
+            :key="option.value"
+            type="button"
+            class="mq-segmented__item"
+            :class="{ 'is-active': reportTab === option.value }"
+            :aria-pressed="reportTab === option.value"
+            :data-testid="`staff-report-tab-${option.value}`"
+            @click="reportTab = option.value"
+          >
+            {{ option.label }}
+          </button>
         </div>
-        <div class="head-actions">
-          <button class="secondary" type="button" :disabled="loading" @click="loadReport">
-            <RefreshCw :size="16" />刷新
+        <div v-if="reportTab === 'staff'" class="head-actions">
+          <button class="secondary mq-btn" type="button" :disabled="loading" @click="loadReport">
+            <MqIcon name="sync" :size="16" />刷新
           </button>
           <button
-            class="secondary"
+            class="secondary mq-btn"
             type="button"
             :disabled="!report || exporting"
             @click="download"
           >
-            <Download :size="16" />导出 CSV
+            <MqIcon name="download" :size="16" />导出 CSV
           </button>
         </div>
-      </header>
-
-      <section class="filters" aria-label="工作分析筛选">
-        <div class="filter-field wide-field">
-          <span class="filter-label">统计周期</span>
-          <div class="segmented" role="group" aria-label="统计周期">
-            <button
-              v-for="option in periodOptions"
-              :key="option.value"
-              type="button"
-              :class="{ active: draft.period === option.value }"
-              :aria-pressed="draft.period === option.value"
-              @click="draft.period = option.value"
-            >
-              {{ option.label }}
-            </button>
+      </div>
+    </header>
+    <ManualQualityReportPanel v-if="reportTab === 'manual'" />
+    <div v-show="reportTab === 'staff'" class="staff-body">
+      <section class="filters mq-card mq-card--padded" aria-label="工作分析筛选">
+        <div class="filter-switches">
+          <div class="filter-field mq-field">
+            <span class="mq-field__label">统计周期</span>
+            <div class="segmented mq-segmented" role="group" aria-label="统计周期">
+              <button
+                v-for="option in periodOptions"
+                :key="option.value"
+                type="button"
+                class="mq-segmented__item"
+                :class="{ 'is-active': draft.period === option.value }"
+                :aria-pressed="draft.period === option.value"
+                @click="draft.period = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+          <div class="filter-field mq-field">
+            <span class="mq-field__label">质控场景</span>
+            <div class="segmented mq-segmented" role="group" aria-label="质控场景">
+              <button
+                v-for="option in sceneOptions"
+                :key="option.value"
+                type="button"
+                class="mq-segmented__item"
+                :class="{ 'is-active': scene === option.value }"
+                :aria-pressed="scene === option.value"
+                @click="setScene(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
           </div>
         </div>
-        <div class="filter-field wide-field">
-          <span class="filter-label">质控场景</span>
-          <div class="segmented" role="group" aria-label="质控场景">
-            <button
-              v-for="option in sceneOptions"
-              :key="option.value"
-              type="button"
-              :class="{ active: scene === option.value }"
-              :aria-pressed="scene === option.value"
-              @click="setScene(option.value)"
+        <div class="filter-grid">
+          <label class="filter-field mq-field">
+            <span class="mq-field__label">病例科室</span>
+            <select
+              v-model="draft.departmentKey"
+              class="mq-input"
+              data-testid="staff-department-filter"
             >
-              {{ option.label }}
+              <option value="">全部科室</option>
+              <option
+                v-for="option in report?.filter_options.departments || []"
+                :key="departmentKey(option.institute_id, option.department_name)"
+                :value="departmentKey(option.institute_id, option.department_name)"
+              >
+                {{ option.department_name }}（{{ option.institute_id }}）
+              </option>
+            </select>
+          </label>
+          <label class="filter-field mq-field">
+            <span class="mq-field__label">质控任务</span>
+            <select v-model="draft.task_id" class="mq-input" data-testid="staff-task-filter">
+              <option value="">全部任务</option>
+              <option
+                v-for="option in report?.filter_options.tasks || []"
+                :key="option.task_id"
+                :value="option.task_id"
+              >
+                {{ option.task_name || option.task_id }}
+              </option>
+            </select>
+          </label>
+          <label class="filter-field mq-field">
+            <span class="mq-field__label">开始日期</span>
+            <input
+              v-model="draft.start_date"
+              class="mq-input"
+              type="date"
+              data-testid="staff-start-date"
+            />
+          </label>
+          <label class="filter-field mq-field">
+            <span class="mq-field__label">结束日期</span>
+            <input
+              v-model="draft.end_date"
+              class="mq-input"
+              type="date"
+              data-testid="staff-end-date"
+            />
+          </label>
+          <div class="filter-actions">
+            <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
+              <MqIcon name="search" :size="16" />查询
             </button>
+            <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
           </div>
-        </div>
-        <label class="filter-field">
-          <span class="filter-label">病例科室</span>
-          <select v-model="draft.departmentKey" data-testid="staff-department-filter">
-            <option value="">全部科室</option>
-            <option
-              v-for="option in report?.filter_options.departments || []"
-              :key="departmentKey(option.institute_id, option.department_name)"
-              :value="departmentKey(option.institute_id, option.department_name)"
-            >
-              {{ option.department_name }}（{{ option.institute_id }}）
-            </option>
-          </select>
-        </label>
-        <label class="filter-field">
-          <span class="filter-label">质控任务</span>
-          <select v-model="draft.task_id" data-testid="staff-task-filter">
-            <option value="">全部任务</option>
-            <option
-              v-for="option in report?.filter_options.tasks || []"
-              :key="option.task_id"
-              :value="option.task_id"
-            >
-              {{ option.task_name || option.task_id }}
-            </option>
-          </select>
-        </label>
-        <label class="filter-field">
-          <span class="filter-label">开始日期</span>
-          <input v-model="draft.start_date" type="date" data-testid="staff-start-date" />
-        </label>
-        <label class="filter-field">
-          <span class="filter-label">结束日期</span>
-          <input v-model="draft.end_date" type="date" data-testid="staff-end-date" />
-        </label>
-        <div class="filter-actions">
-          <button class="primary" type="button" @click="applyFilters">
-            <Search :size="16" />查询
-          </button>
-          <button class="secondary" type="button" @click="resetFilters">重置</button>
         </div>
         <p v-if="filterError" class="filter-error" role="alert">
           {{ filterError }}
@@ -113,7 +153,7 @@
         role="alert"
         data-testid="staff-error"
       >
-        <CircleAlert :size="18" />{{ errorMessage }}
+        <MqIcon name="issue" :size="18" />{{ errorMessage }}
       </div>
       <template v-else-if="report">
         <div
@@ -121,13 +161,13 @@
           class="state-message unavailable"
           data-testid="staff-unavailable"
         >
-          <CircleAlert :size="18" />{{ unavailableText(report.unavailable_reason) }}
+          <MqIcon name="issue" :size="18" />{{ unavailableText(report.unavailable_reason) }}
         </div>
         <template v-else-if="report.summary && report.staff">
           <section class="overview" aria-label="工作量总览">
             <div class="section-title">
               <h2>工作量总览</h2>
-              <span>{{ report.period_label }} · {{ sceneWorkLabel }}</span>
+              <span class="mq-status">{{ report.period_label }} · {{ sceneWorkLabel }}</span>
             </div>
             <p class="range-label">
               {{ rangeLabel(report.range) }}
@@ -146,9 +186,11 @@
               </template>
             </p>
             <div class="metric-grid">
-              <div v-for="metric in summaryMetrics" :key="metric.label" class="metric">
+              <div v-for="metric in summaryMetrics" :key="metric.label" class="metric mq-card">
                 <span>{{ metric.label }}</span>
-                <strong>{{ metric.value }}</strong>
+                <strong :class="{ 'is-text': typeof metric.value === 'string' }">{{
+                  metric.value
+                }}</strong>
                 <small>{{ metric.note }}</small>
               </div>
             </div>
@@ -160,27 +202,37 @@
               {{ report.context_unavailable_count }}
               条工作事件缺少可核实的任务或病例科室上下文，未纳入相应筛选结果。
             </div>
-            <div class="metric-note">
-              病历份数按机构、患者、就诊三坐标去重；审核次数按初审和复审动作计数。
-              全局病历份数独立去重，不等于各质控员份数之和。人均以有工作记录的人员数为分母。
-            </div>
+            <details class="metric-note mq-soft">
+              <summary>统计口径</summary>
+              <p>
+                病历份数按机构、患者、就诊三坐标去重；审核次数按初审和复审动作计数。
+                全局病历份数独立去重，不等于各质控员份数之和。人均以有工作记录的人员数为分母。
+              </p>
+            </details>
           </section>
 
-          <section class="details" aria-label="人员明细">
+          <section class="details mq-card" aria-label="人员明细">
             <div class="section-title">
               <h2>人员明细</h2>
-              <label class="filter-field"
-                >排名指标
-                <select v-model="rankMetric" data-testid="staff-rank-metric" @change="loadReport">
-                  <option v-for="metric in rowMetrics" :key="metric.key" :value="metric.key">
-                    {{ metric.label }}
-                  </option>
-                </select>
-              </label>
-              <span>共 {{ report.staff.length }} 人有工作记录</span>
+              <div class="details-tools">
+                <label class="rank-field"
+                  >排名指标
+                  <select
+                    v-model="rankMetric"
+                    class="mq-input"
+                    data-testid="staff-rank-metric"
+                    @change="loadReport"
+                  >
+                    <option v-for="metric in rowMetrics" :key="metric.key" :value="metric.key">
+                      {{ metric.label }}
+                    </option>
+                  </select>
+                </label>
+                <span>共 {{ report.staff.length }} 人有工作记录</span>
+              </div>
             </div>
             <div v-if="report.staff.length" class="table-scroll">
-              <table>
+              <table class="mq-table staff-table">
                 <thead>
                   <tr>
                     <th scope="col">排名</th>
@@ -192,7 +244,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="staff in report.staff" :key="staff.user_id">
-                    <td class="rank">
+                    <td class="rank mq-mono">
                       {{ staff.rank ?? '未知' }}
                     </td>
                     <td class="name">
@@ -263,7 +315,7 @@
           <template v-else>
             <div
               v-if="detailsPage.total_complete === false"
-              class="drawer-summary"
+              class="drawer-summary mq-soft"
               data-testid="staff-details-known-only"
             >
               总数未知，可核实 {{ detailsPage.known_total ?? '未知' }} 条已知缺陷；{{
@@ -271,11 +323,11 @@
               }}
               次初审缺少完整缺陷明细。
             </div>
-            <div v-else class="drawer-summary">
+            <div v-else class="drawer-summary mq-soft">
               共 {{ detailsPage.total ?? '未知' }} 条可核实记录
             </div>
             <div class="table-scroll drawer-table">
-              <table>
+              <table class="mq-table">
                 <thead>
                   <tr>
                     <th>发生时间</th>
@@ -288,7 +340,9 @@
                 </thead>
                 <tbody>
                   <tr v-for="item in detailsPage.items || []" :key="item.event_id">
-                    <td>{{ formatTime(item.occurred_at) }}</td>
+                    <td class="mq-mono">
+                      {{ formatTime(item.occurred_at) }}
+                    </td>
                     <td>{{ eventTypeText(item.event_type) }}</td>
                     <td v-if="detailsPage.metric === 'confirmed_defect_count'">
                       {{
@@ -296,7 +350,9 @@
                       }}
                       · {{ item.defect_id || '未知' }}
                     </td>
-                    <td>{{ identityText(item) }}</td>
+                    <td class="mq-mono">
+                      {{ identityText(item) }}
+                    </td>
                     <td>
                       {{ item.department || '未知' }}<small>{{ item.task_id || '任务未知' }}</small>
                     </td>
@@ -317,7 +373,7 @@
             </div>
             <div v-if="detailPaginationTotal > detailsPage.page_size" class="pager">
               <button
-                class="secondary"
+                class="secondary mq-btn"
                 type="button"
                 :disabled="detailsPage.page <= 1 || detailsLoading"
                 @click="loadDetails(detailsPage.page - 1)"
@@ -329,7 +385,7 @@
                 {{ Math.ceil(detailPaginationTotal / detailsPage.page_size) }}</span
               >
               <button
-                class="secondary"
+                class="secondary mq-btn"
                 type="button"
                 :disabled="
                   detailsPage.page * detailsPage.page_size >= detailPaginationTotal ||
@@ -350,10 +406,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CircleAlert, Download, RefreshCw, Search } from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import ManualQualityReportPanel from './ManualQualityReportPanel.vue'
-const reportTab = ref('staff')
+type ReportTab = 'staff' | 'manual'
+const reportTabs: Array<{ value: ReportTab; label: string }> = [
+  { value: 'staff', label: '质控员工作分析' },
+  { value: 'manual', label: '人工质控报表' },
+]
+const reportTab = ref<ReportTab>('staff')
 import { exportStaffAnalysis, getStaffAnalysis, getStaffAnalysisDetails } from '@/api/staffAnalysis'
 import type {
   StaffAnalysisAppliedFilters,
@@ -782,332 +843,4 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
-.staff-analysis {
-  min-height: 100%;
-  padding: 24px;
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
-}
-.page-head,
-.section-title,
-.head-actions,
-.filter-actions,
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.page-head {
-  align-items: flex-start;
-  margin-bottom: 20px;
-}
-h1,
-h2,
-p {
-  margin: 0;
-}
-h1 {
-  font-size: 24px;
-  line-height: 31px;
-  font-weight: 600;
-}
-.page-head p,
-.section-title span {
-  margin-top: 4px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 14px;
-  line-height: 22px;
-}
-h2 {
-  font-size: 17px;
-  line-height: 22px;
-  font-weight: 600;
-}
-button,
-input,
-select {
-  font: inherit;
-}
-.primary,
-.secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.primary {
-  border: 1px solid #007aff;
-  background: #007aff;
-  color: #fff;
-}
-.secondary {
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: #fff;
-  color: #1d1d1f;
-}
-button:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px 16px;
-  align-items: end;
-  padding: 18px 20px;
-  margin-bottom: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 4px 18px rgba(38, 58, 86, 0.04);
-  backdrop-filter: blur(20px) saturate(125%);
-}
-.filter-field {
-  display: grid;
-  gap: 6px;
-  min-width: 170px;
-}
-.wide-field {
-  min-width: auto;
-}
-.filter-label {
-  font-size: 14px;
-  line-height: 22px;
-  color: rgba(29, 29, 31, 0.6);
-}
-.filter-field select,
-.filter-field input {
-  min-height: 36px;
-  padding: 0 10px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  background: #fff;
-  color: #1d1d1f;
-}
-.segmented {
-  display: flex;
-  padding: 3px;
-  background: #e8e8ed;
-  border-radius: 8px;
-}
-.segmented button {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: rgba(29, 29, 31, 0.7);
-  font-size: 14px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.segmented button.active {
-  background: #fff;
-  color: #007aff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-.filter-error,
-.filter-hint {
-  flex-basis: 100%;
-  font-size: 13px;
-  line-height: 20px;
-}
-.filter-error {
-  color: #b42318;
-}
-.filter-hint {
-  color: #875d12;
-}
-.state-message {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 20px;
-  border-radius: 8px;
-  background: #fff;
-  font-size: 14px;
-}
-.state-message.error {
-  color: #b42318;
-}
-.state-message.unavailable {
-  border: 1px solid rgba(245, 158, 11, 0.28);
-  color: #875d12;
-}
-.overview {
-  margin-bottom: 24px;
-}
-.section-title {
-  align-items: baseline;
-  margin-bottom: 12px;
-}
-.range-label {
-  margin: 0 0 12px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  line-height: 20px;
-}
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-.metric {
-  display: grid;
-  gap: 5px;
-  min-height: 96px;
-  padding: 14px 16px;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
-}
-.metric span {
-  font-size: 14px;
-  color: rgba(29, 29, 31, 0.6);
-}
-.metric strong {
-  font-size: 22px;
-  line-height: 27px;
-  font-weight: 600;
-  color: #007aff;
-}
-.metric small {
-  font-size: 12px;
-  line-height: 18px;
-  color: rgba(29, 29, 31, 0.6);
-}
-.metric-note,
-.context-notice {
-  margin-top: 10px;
-  font-size: 13px;
-  line-height: 20px;
-  color: rgba(29, 29, 31, 0.6);
-}
-.context-notice {
-  padding: 10px 12px;
-  border: 1px solid rgba(245, 158, 11, 0.24);
-  border-radius: 8px;
-  background: rgba(245, 158, 11, 0.06);
-  color: #875d12;
-}
-.details {
-  background: #fff;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.details .section-title {
-  padding: 16px 18px;
-  margin: 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-.table-scroll {
-  overflow-x: auto;
-}
-table {
-  width: 100%;
-  min-width: 1160px;
-  border-collapse: collapse;
-  font-size: 14px;
-  line-height: 22px;
-}
-th,
-td {
-  padding: 11px 14px;
-  text-align: right;
-  white-space: nowrap;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-}
-th {
-  background: #fafafa;
-  color: rgba(29, 29, 31, 0.6);
-  font-weight: 400;
-}
-tbody tr:hover {
-  background: rgba(0, 0, 0, 0.025);
-}
-tbody tr:last-child td {
-  border-bottom: 0;
-}
-th:first-child,
-td:first-child,
-th:nth-child(2),
-td:nth-child(2) {
-  text-align: left;
-}
-.rank {
-  color: rgba(29, 29, 31, 0.6);
-}
-.name {
-  font-weight: 600;
-}
-.metric-link {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #007aff;
-  cursor: pointer;
-}
-.unknown {
-  color: rgba(29, 29, 31, 0.38);
-}
-.empty-state {
-  padding: 32px;
-  text-align: center;
-  color: rgba(29, 29, 31, 0.6);
-}
-.drawer-summary {
-  margin-bottom: 12px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-}
-.drawer-table table {
-  min-width: 800px;
-}
-.drawer-table th,
-.drawer-table td {
-  text-align: left;
-  vertical-align: top;
-}
-.drawer-table small {
-  display: block;
-  color: rgba(29, 29, 31, 0.6);
-}
-.pager {
-  justify-content: flex-end;
-  margin-top: 14px;
-}
-@media (max-width: 900px) {
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 600px) {
-  .staff-analysis {
-    padding: 16px;
-  }
-  .page-head {
-    align-items: flex-start;
-  }
-  .head-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-  .metric-grid {
-    grid-template-columns: 1fr;
-  }
-  .filters {
-    padding: 14px;
-  }
-  .segmented button {
-    padding: 0 9px;
-  }
-}
-</style>
+<style scoped src="./styles/staff-analysis.css"></style>

@@ -136,13 +136,6 @@ function render(): VueWrapper {
   const wrapper = mount(StaffAnalysisView, {
     global: {
       stubs: {
-        'a-tabs': {
-          props: ['activeKey'],
-          emits: ['update:activeKey'],
-          template:
-            '<nav><button class="manual-tab" @click="$emit(\'update:activeKey\', \'manual\')">人工质控报表</button><slot /></nav>',
-        },
-        'a-tab-pane': true,
         ManualQualityReportPanel: {
           template: '<section class="manual-report-entry">人工报表入口</section>',
         },
@@ -295,9 +288,17 @@ describe('StaffAnalysisView', () => {
   it('复用既有报告页面的人工质控tab入口', async () => {
     const wrapper = render()
     await settle()
-    await wrapper.get('.manual-tab').trigger('click')
+    expect(wrapper.get('[data-testid="staff-report-tab-staff"]').attributes('aria-pressed')).toBe(
+      'true',
+    )
+    expect(wrapper.get('.mq-page-head .mq-page-title').text()).toBe('质控员工作分析')
+    await wrapper.get('[data-testid="staff-report-tab-manual"]').trigger('click')
     await settle()
     expect(wrapper.get('.manual-report-entry').text()).toContain('人工报表入口')
+    expect(wrapper.get('[data-testid="staff-report-tab-manual"]').classes()).toContain('is-active')
+    expect(wrapper.get('.mq-page-head .mq-page-title').text()).toBe('人工质控报表')
+    // 人工页签不显示质控员导出，避免误导出另一张报表
+    expect(wrapper.get('.mq-page-head').text()).not.toContain('导出 CSV')
   })
   beforeEach(() => {
     vi.clearAllMocks()

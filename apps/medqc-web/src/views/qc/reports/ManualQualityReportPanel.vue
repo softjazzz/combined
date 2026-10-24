@@ -1,25 +1,33 @@
 <template>
-  <section class="manual-report">
-    <h2>人工质控报表</h2>
-    <a-alert
-      :message="
-        report?.assumption ||
-        '已确认统计口径：按上海自然日的缺陷创建日期计录入量，审核与整改分别展示当前状态；支持机构、科室、录入人、任务及场景筛选；同缺陷多次操作只计一条，来源不完整或错配时相关信息为未知。'
-      "
-      type="info"
-      show-icon
-    />
-    <form class="manual-filters" @submit.prevent="query">
-      <label>开始日期<input v-model="draft.start_date" type="date" required /></label>
-      <label>结束日期<input v-model="draft.end_date" type="date" required /></label>
-      <label
-        >机构<select v-model="draft.institute_id" @change="draft.department = ''">
+  <section class="manual-report" aria-label="人工质控报表">
+    <details class="manual-assumption mq-soft" data-testid="manual-assumption">
+      <summary><MqIcon name="rules" :size="16" />统计口径</summary>
+      <p>
+        {{
+          report?.assumption ||
+          '已确认统计口径：按上海自然日的缺陷创建日期计录入量，审核与整改分别展示当前状态；支持机构、科室、录入人、任务及场景筛选；同缺陷多次操作只计一条，来源不完整或错配时相关信息为未知。'
+        }}
+      </p>
+    </details>
+    <form class="manual-filters mq-card mq-card--padded" @submit.prevent="query">
+      <label class="mq-field"
+        ><span class="mq-field__label">开始日期</span
+        ><input v-model="draft.start_date" class="mq-input" type="date" required
+      /></label>
+      <label class="mq-field"
+        ><span class="mq-field__label">结束日期</span
+        ><input v-model="draft.end_date" class="mq-input" type="date" required
+      /></label>
+      <label class="mq-field"
+        ><span class="mq-field__label">机构</span
+        ><select v-model="draft.institute_id" class="mq-input" @change="draft.department = ''">
           <option value="">全部可见机构</option>
           <option v-for="id in options.institutes" :key="id">{{ id }}</option>
         </select></label
       >
-      <label
-        >科室<select v-model="draft.department">
+      <label class="mq-field"
+        ><span class="mq-field__label">科室</span
+        ><select v-model="draft.department" class="mq-input">
           <option value="">全部科室</option>
           <option
             v-for="item in options.departments.filter(
@@ -31,84 +39,128 @@
           </option>
         </select></label
       >
-      <label
-        >录入人<select v-model="draft.creator_id">
+      <label class="mq-field"
+        ><span class="mq-field__label">录入人</span
+        ><select v-model="draft.creator_id" class="mq-input">
           <option value="">全部可见人员</option>
           <option v-for="item in options.creators" :key="item.id" :value="item.id">
             {{ item.name }}
           </option>
         </select></label
       >
-      <label
-        >任务<select v-model="draft.task_id">
+      <label class="mq-field"
+        ><span class="mq-field__label">任务</span
+        ><select v-model="draft.task_id" class="mq-input">
           <option value="">全部可信任务</option>
           <option v-for="item in options.tasks" :key="item.id" :value="item.id">
             {{ item.name }}
           </option>
         </select></label
       >
-      <label
-        >冻结场景<select v-model="draft.scene">
+      <label class="mq-field"
+        ><span class="mq-field__label">冻结场景</span
+        ><select v-model="draft.scene" class="mq-input">
           <option value="all">全部场景</option>
           <option value="running">运行</option>
           <option value="final">终末</option>
           <option value="outpatient_emergency">门急诊</option>
         </select></label
       >
-      <a-button html-type="submit" :loading="loading"> <Search :size="16" />查询 </a-button>
-      <a-button :disabled="loading" @click="reset"> <RotateCcw :size="16" />重置 </a-button>
-      <a-button :disabled="!report || loading || exporting" @click="download">
-        <Download :size="16" />导出 CSV
-      </a-button>
+      <div class="manual-actions">
+        <button class="mq-btn mq-btn--primary" type="submit" :disabled="loading">
+          <MqIcon name="search" :size="16" />查询
+        </button>
+        <button class="mq-btn" type="button" :disabled="loading" @click="reset">重置</button>
+        <button
+          class="mq-btn"
+          type="button"
+          :disabled="!report || loading || exporting"
+          @click="download"
+        >
+          <MqIcon name="download" :size="16" />导出 CSV
+        </button>
+      </div>
     </form>
-    <a-alert v-if="error" :message="error" type="error" show-icon />
+    <p v-if="error" class="manual-error" role="alert">
+      <MqIcon name="issue" :size="16" />{{ error }}
+    </p>
     <a-spin :spinning="loading">
       <template v-if="report">
-        <p>统计读取时间 {{ report.as_of }} · 日期口径 {{ report.timezone }}</p>
-        <h3>录入 {{ report.summary.entered }} 条</h3>
-        <div class="state-summary">
-          <section>
+        <div class="manual-summary">
+          <div class="summary-card mq-card mq-card--padded">
+            <span class="summary-label"><MqIcon name="doc" :size="18" />人工缺陷录入</span>
+            <h3 class="summary-total">录入 {{ report.summary.entered }} 条</h3>
+            <small>统计读取时间 {{ report.as_of }} · 日期口径 {{ report.timezone }}</small>
+          </div>
+          <section class="summary-card mq-card mq-card--padded">
             <h3>当前审核状态</h3>
-            <span v-for="(count, key) in report.summary.review" :key="key"
-              >{{ reviewLabels[key] || key }} {{ count }}</span
-            >
+            <div class="status-list">
+              <span
+                v-for="(count, key) in report.summary.review"
+                :key="key"
+                class="mq-status"
+                :class="statusClass(reviewTones, key, count)"
+                >{{ reviewLabels[key] || key }} {{ count }}</span
+              >
+            </div>
           </section>
-          <section>
+          <section class="summary-card mq-card mq-card--padded">
             <h3>当前现代整改状态</h3>
-            <span v-for="(count, key) in report.summary.rectification" :key="key"
-              >{{ rectificationLabels[key] || key }} {{ count }}</span
-            >
+            <div class="status-list">
+              <span
+                v-for="(count, key) in report.summary.rectification"
+                :key="key"
+                class="mq-status"
+                :class="statusClass(rectificationTones, key, count)"
+                >{{ rectificationLabels[key] || key }} {{ count }}</span
+              >
+            </div>
           </section>
         </div>
-        <a-table
-          :data-source="report.items"
-          :columns="columns"
-          row-key="id"
-          :pagination="false"
-          :scroll="{ x: 1000 }"
-        >
-          <template #bodyCell="{ column, record, text }">
-            <template v-if="column.key === 'review_status'">
-              {{ reviewLabels[record.review_status] || '未知' }}
+        <div class="manual-table mq-card">
+          <a-table
+            :data-source="report.items"
+            :columns="columns"
+            row-key="id"
+            :pagination="false"
+            :scroll="{ x: 1000 }"
+          >
+            <template #bodyCell="{ column, record, text }">
+              <span
+                v-if="column.key === 'review_status'"
+                class="mq-status"
+                :class="statusClass(reviewTones, record.review_status)"
+                >{{ reviewLabels[record.review_status] || '未知' }}</span
+              >
+              <span
+                v-else-if="column.key === 'rectification_status'"
+                class="mq-status"
+                :class="statusClass(rectificationTones, record.rectification_status)"
+                >{{ rectificationLabels[record.rectification_status] || '未知' }}</span
+              >
+              <button
+                v-else-if="column.key === 'detail'"
+                class="link"
+                type="button"
+                @click="selectDetail(record.id)"
+              >
+                查看明细
+              </button>
+              <template v-else>
+                {{ text ?? '未知' }}
+              </template>
             </template>
-            <template v-else-if="column.key === 'rectification_status'">
-              {{ rectificationLabels[record.rectification_status] || '未知' }}
-            </template>
-            <a-button v-else-if="column.key === 'detail'" @click="selectDetail(record.id)">
-              查看明细
-            </a-button>
-            <template v-else>
-              {{ text ?? '未知' }}
-            </template>
-          </template>
-        </a-table>
-        <a-pagination
-          :current="page"
-          :total="report.total"
-          :page-size="20"
-          :show-size-changer="false"
-          @change="loadPage"
-        />
+          </a-table>
+          <div class="manual-pager">
+            <a-pagination
+              :current="page"
+              :total="report.total"
+              :page-size="20"
+              :show-size-changer="false"
+              @change="loadPage"
+            />
+          </div>
+        </div>
       </template>
     </a-spin>
     <a-drawer
@@ -117,7 +169,7 @@
       width="min(560px, 100vw)"
       @close="selected = null"
     >
-      <a-descriptions v-if="selected" :column="1" bordered>
+      <a-descriptions v-if="selected" :column="1" bordered size="small">
         <a-descriptions-item v-for="field in detailFields" :key="field.key" :label="field.label">
           {{ detailValue(field.key) }}
         </a-descriptions-item>
@@ -125,9 +177,10 @@
     </a-drawer>
   </section>
 </template>
+
 <script setup lang="ts">
 import { onUnmounted, reactive, ref, watch } from 'vue'
-import { Download, RotateCcw, Search } from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   getManualQualityReport,
@@ -185,6 +238,23 @@ const rectificationLabels: Record<string, string> = {
   rejected: '整改驳回',
   unassigned: '未派发',
   unknown: '未知',
+}
+// 状态到语义色只做展示映射；未知/未派发保持中性，计数为0时不着色
+type Tone = 'success' | 'warning' | 'danger' | 'info'
+const reviewTones: Record<string, Tone> = {
+  pending: 'warning',
+  approved: 'success',
+  rejected: 'danger',
+}
+const rectificationTones: Record<string, Tone> = {
+  pending: 'warning',
+  submitted: 'info',
+  approved: 'success',
+  rejected: 'danger',
+}
+function statusClass(tones: Record<string, Tone>, key: unknown, count?: number) {
+  const tone = tones[String(key)]
+  return tone && count !== 0 ? `mq-status--${tone}` : ''
 }
 const columns = [
   { title: '机构', dataIndex: 'institute_id' },
@@ -303,38 +373,4 @@ onUnmounted(() => {
   ++exportToken
 })
 </script>
-<style scoped>
-.manual-report {
-  margin-top: 16px;
-}
-.manual-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: end;
-  margin: 16px 0;
-}
-.manual-filters label {
-  display: grid;
-  gap: 6px;
-  font-size: 13px;
-}
-.manual-filters input,
-.manual-filters select {
-  min-height: 32px;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  padding: 4px 8px;
-  max-width: 220px;
-}
-.state-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  margin-bottom: 16px;
-}
-.state-summary span {
-  display: inline-block;
-  margin-right: 16px;
-}
-</style>
+<style scoped src="./styles/manual-quality-report.css"></style>
