@@ -230,7 +230,7 @@ def main(argv=None):
         workspace.export_batch_job_csv(job=saved)
         workspace.export_batch_job_workbook(job=saved)
         emit("done", mode="apply", data_committed=True, recovered_pairs=len(added), remaining_failures=len(remaining), preserved_successful_results=len(old_items), unrelated_envelopes_unchanged=True, read_and_export_verified=True, model_calls=0, qc_tasks_started=0, report_dir=str(output))
-        return 0
+        return 0 if not remaining else 2
     except Exception as exc:
         (output / "error-private.txt").write_text(traceback.format_exc(), encoding="utf8")
         safe_codes = {"restart_patched_backend_required", "no_existing_responses_found", "requires_original_one_or_two_transfusion_failures", "offline_worker_did_not_produce_completion", "recovery_requires_deliverable_new_results", "task_changed_during_rehearsal", "recovery_baseline_changed", "recovery_readback_mismatch", "unrelated_successful_envelope_changed", "recovery_backup_verification_failed", "fresh_live_material_acceptance_required", "material_acceptance_scope_changed", "failed_case_material_chain_not_verified"}
