@@ -1,18 +1,32 @@
 """真实专属PG：正式保存结果、持久账号、整改HTTP与报表同一事件链。"""
 
+import csv
+import io
 import json
+import secrets
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 import pytest
 import sqlalchemy as sa
-from app.core.security import get_current_user
+from app.core.security import get_password_hash
 from app.database import connection
 from app.database.models.v36_reports import DefectRectification as Task
 from app.database.models.v36_reports import SysUser
+from app.routers import auth, quality_reports
 from app.routers import defect_rectifications as api
+from app.services import (
+    auth_store,
+    manual_defect_review_service,
+    record_review_service,
+    rule_set_version_service,
+    scoring_standard_service,
+    user_scope_owner,
+)
 from app.services import custom_qc_workspace_service as workspace
 from app.services import record_quality_report_service as quality
-from app.services import user_scope_owner
+from app.services import record_remediation_report_service as remediation
+from app.services.bundles import assembly
 from app.services.defect_rectification_service import (
     DefectRectificationService,
     RectificationError,
@@ -20,6 +34,7 @@ from app.services.defect_rectification_service import (
 from app.services.luxian_0609.basic_timeliness_customer_projection import (
     safe_basic_timeliness_customer_display_facts,
 )
+from app.services.medical_records import query_service
 from app.services.record_remediation_report_service import build_analysis
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -36,8 +51,9 @@ IDENTITY = {
 RULE = "LX0609-01-01-01"
 
 
-@pytest.fixture
-def feedback(raw_pg, monkeypatch):
+@pytest.fixture(params=["running", "final"])
+def feedback(raw_pg, monkeypatch, request):
+    scene = request.param
     initialize(raw_pg.url.database)
     engine = sa.create_engine(
         raw_pg.url, connect_args={"options": "-csearch_path=qc,sys,cdm,public,legacy"}
@@ -47,8 +63,30 @@ def feedback(raw_pg, monkeypatch):
     monkeypatch.setattr(workspace, "DB_SCHEMA_MODE", "split")
     monkeypatch.setattr(workspace, "SessionLocal", sessions)
     monkeypatch.setattr(connection, "SessionLocal", sessions)
+    monkeypatch.setattr(auth_store, "SessionLocal", sessions)
+    # 绑定专属PG，不替换认证解析或默认CDM文书读取实现。
+    monkeypatch.setattr(auth_store, "users_db", {})
+    monkeypatch.setattr(assembly, "engine", engine)
+    monkeypatch.setattr(assembly, "DB_SCHEMA_MODE", "split")
+    monkeypatch.setattr(query_service, "engine", engine)
+    for module in (
+        manual_defect_review_service,
+        record_review_service,
+        rule_set_version_service,
+        scoring_standard_service,
+    ):
+        monkeypatch.setattr(module, "SessionLocal", sessions)
+    # 离线导入时默认SessionLocal为空，仅替换同一个实现的连接绑定，不伪造报表来源。
+    monkeypatch.setattr(
+        remediation.build_analysis,
+        "__kwdefaults__",
+        {**remediation.build_analysis.__kwdefaults__, "sessions": sessions},
+    )
     monkeypatch.setattr(user_scope_owner, "DB_SEARCH_PATH", "qc,sys,cdm,public,legacy")
     workspace._record_result_envelopes_table.cache_clear()
+    assembly._get_table_columns.cache_clear()
+    password = secrets.token_urlsafe(24)
+    password_hash = get_password_hash(password)
     with engine.begin() as conn:
         # 原workspace表由历史runtime owner管理，不在1–51空库迁移完整性声明内。
         # 夹具显式准备既有owner的qc表；反馈生产路径始终readonly，不允许自动DDL。
@@ -69,6 +107,8 @@ def feedback(raw_pg, monkeypatch):
                 users.insert().values(
                     id=identifier,
                     username=identifier,
+                    email=f"{identifier}@feedback.synthetic.invalid",
+                    password_hash=password_hash,
                     display_name=identifier,
                     role=role,
                     institute_id=hospital,
@@ -79,7 +119,29 @@ def feedback(raw_pg, monkeypatch):
         mr = sa.Table("mr", sa.MetaData(), schema="cdm", autoload_with=conn)
         conn.execute(
             mr.insert().values(
-                **IDENTITY, name="合成病例", discharge_dept_name="合成内科"
+                **IDENTITY,
+                name="合成病例",
+                document_id="synthetic-frontpage",
+                admission_dept_name="合成内科",
+                discharge_dept_name="合成内科",
+                admission_datetime=datetime(2026, 10, 20, 8),
+                discharge_datetime=datetime(2026, 10, 22, 8)
+                if scene == "final"
+                else None,
+            )
+        )
+        document = sa.Table(
+            "admission_record", sa.MetaData(), schema="cdm", autoload_with=conn
+        )
+        conn.execute(
+            document.insert().values(
+                **IDENTITY,
+                document_id="synthetic-document",
+                admission_datetime=datetime(2026, 10, 20, 8),
+                record_datetime=datetime(2026, 10, 21, 9),
+                dept_name="合成内科",
+                record_content="合成整改前正文",
+                chief_complaint="合成整改前主诉",
             )
         )
     saved = workspace.CustomQCWorkspaceService(readonly=True)
@@ -88,10 +150,10 @@ def feedback(raw_pg, monkeypatch):
             "id": "sichuan-rule-library",
             "rule_code": "SC-BATCH",
             "name": "合成反馈闭环",
-            "scene": "running",
+            "scene": scene,
         },
         created_by="qc",
-        scope="running",
+        scope=scene,
         filters={
             "rule_set_key": workspace.LUXIAN_0609_RULE_SET_KEY,
             "rule_set_version": workspace.RULE_SET_VERSION,
@@ -140,37 +202,49 @@ def feedback(raw_pg, monkeypatch):
             "failed_count": 0,
         },
     )
-    # 本测试的正文快照源为显式合成夹具；真实CDM抓取另验，不声称临床整改证明。
-    document = {
-        "documents": [
-            {
-                "execution_domain": "admission",
-                "doc_type": "admission_record",
-                "document_id": "synthetic-document",
-                "content": "合成整改正文",
-            }
-        ],
-        "domain_projection": {
-            "domains": {
-                "admission": {"per_source": {"admission_record": {"has_more": False}}}
-            }
-        },
-    }
-    service = DefectRectificationService(sessions, document_loader=lambda **_: document)
+    service = DefectRectificationService(sessions)
     monkeypatch.setattr(api, "service", service)
     app = FastAPI()
+    app.include_router(auth.router)
     app.include_router(api.router)
-    # HTTP认证解析不在此用例范围；业务服务仍必须读取上述真实持久账号，不信任角色声明。
-    actor = {"id": "qc", "roles": ["admin"]}
-    app.dependency_overrides[get_current_user] = lambda: actor
+    app.include_router(quality_reports.router)
     with TestClient(app) as client:
-        yield engine, sessions, saved, service, client, actor, job
+        assert not app.dependency_overrides
+        assert client.get("/api/v1/defect-rectifications").status_code in {401, 403}
+        assert (
+            client.post(
+                "/api/v1/auth/login", json={"account": "doc", "password": "wrong"}
+            ).status_code
+            == 401
+        )
+        headers = {}
+        for identifier in ("qc", "doc", "other", "cross"):
+            response = client.post(
+                "/api/v1/auth/login",
+                json={"account": identifier, "password": password, "role": "admin"},
+            )
+            assert response.status_code == 200
+            headers[identifier] = {
+                "Authorization": f"Bearer {response.json()['access_token']}"
+            }
+            me = client.get("/api/v1/auth/me", headers=headers[identifier])
+            assert me.status_code == 200
+            assert me.json()["data"]["id"] == identifier
+            assert me.json()["data"]["is_demo_account"] is False
+            assert "admin" not in me.json()["data"]["roles"]
+
+        def select_actor(identifier):
+            client.headers.update(headers[identifier])
+
+        select_actor("qc")
+        yield engine, sessions, saved, service, client, select_actor, job, scene
     engine.dispose()
     workspace._record_result_envelopes_table.cache_clear()
+    assembly._get_table_columns.cache_clear()
 
 
 def test_saved_result_to_rectification_and_report_with_real_pg(feedback, monkeypatch):
-    engine, sessions, saved, service, http, actor, job = feedback
+    engine, sessions, saved, service, http, actor, job, scene = feedback
     with engine.connect() as conn:
         before = snapshot(conn)
     response = http.get(
@@ -200,7 +274,7 @@ def test_saved_result_to_rectification_and_report_with_real_pg(feedback, monkeyp
     assert http.post("/api/v1/defect-rectifications", json=request).status_code == 409
 
     def act(user, version, action, expected=200):
-        actor["id"] = user
+        actor(user)
         response = http.post(
             f"/api/v1/defect-rectifications/{task['id']}/actions",
             json={
@@ -213,7 +287,7 @@ def test_saved_result_to_rectification_and_report_with_real_pg(feedback, monkeyp
         return response.json().get("data")
 
     act("other", 1, "submit", 403)
-    actor["id"] = "cross"
+    actor("cross")
     assert http.get(f"/api/v1/defect-rectifications/{task['id']}").status_code == 403
     assert http.get("/api/v1/defect-rectifications").json()["data"]["total"] == 0
     act("qc", 1, "urge")
@@ -251,7 +325,7 @@ def test_saved_result_to_rectification_and_report_with_real_pg(feedback, monkeyp
         results = list(workers.map(lambda _: approve(), range(2)))
     assert sorted(results) == [200, 409]
     act("qc", 5, "approve", 409)
-    actor["id"] = "doc"
+    actor("doc")
     detail = http.get(f"/api/v1/defect-rectifications/{task['id']}").json()["data"]
     assert [event["action"] for event in detail["events"]] == [
         "assign",
@@ -272,7 +346,7 @@ def test_saved_result_to_rectification_and_report_with_real_pg(feedback, monkeyp
         record_refs=[IDENTITY], include_items=True, include_rule_set_context=True
     )
     context = quality.build_report_context(
-        scene="running",
+        scene=scene,
         actor_id="qc",
         scope_loader=lambda **_: [
             {**IDENTITY, "patient_name": "合成病例", "department": "合成内科"}
@@ -310,4 +384,220 @@ def test_saved_result_to_rectification_and_report_with_real_pg(feedback, monkeyp
                 "protected_tables": len(before) - 2,
             }
         )
+    )
+
+
+def test_normal_login_cdm_comparison_and_http_report(feedback, monkeypatch):
+    engine, sessions, saved, service, http, actor, job, scene = feedback
+    base = "/api/v1/defect-rectifications"
+    report = "/api/v1/quality-reports/record-quality/remediations"
+    params = {"scene": scene, "defect_source": "auto"}
+
+    def analysis(label=None):
+        response = http.get(
+            report, params={**params, **({"label": label} if label else {})}
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["data"]
+
+    initial = analysis("not_dispatched")
+    assert initial["total"] == 1
+    assert initial["items"][0]["rectification_state"] == "not_dispatched"
+    candidates = http.get(
+        f"{base}/candidates", params={**IDENTITY, "expected_job_id": job["id"]}
+    )
+    assert candidates.status_code == 200, candidates.text
+    source = {
+        k: v for k, v in candidates.json()["data"]["targets"][0].items() if k != "label"
+    }
+    payload = {
+        **IDENTITY,
+        **source,
+        "assignee_id": "doc",
+        "requirement": "请核对并补全这份合成病历的记录",
+    }
+    for changed, status in (
+        ({"institute_id": "SYN-OTHER"}, 403),
+        ({"patient_id": "different-patient"}, 409),
+        ({"visit_id": "different-visit"}, 409),
+        ({"scene": "final" if scene == "running" else "running"}, 409),
+        ({"root_job_id": "wrong-job"}, 409),
+        ({"target_id": "wrong-rule"}, 409),
+    ):
+        assert http.post(base, json={**payload, **changed}).status_code == status
+    actor("doc")
+    assert http.post(base, json=payload).status_code == 403
+    assert http.get(report, params=params).status_code == 403
+    actor("qc")
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text("UPDATE sys.sys_users SET department='合成外科' WHERE id='doc'")
+        )
+    assert http.post(base, json=payload).status_code == 403
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text("UPDATE sys.sys_users SET department='合成内科' WHERE id='doc'")
+        )
+    created = http.post(base, json=payload)
+    assert created.status_code == 200, created.text
+    task = created.json()["data"]
+    url = f"{base}/{task['id']}"
+
+    def act(user, version, action, *, expected=200, **extra):
+        actor(user)
+        response = http.post(
+            f"{url}/actions",
+            json={
+                "version": version,
+                "action": action,
+                "comment": "这是仅用于专属合成数据库的处理说明",
+                **extra,
+            },
+        )
+        assert response.status_code == expected, response.text
+        return response.json().get("data")
+
+    # 已签发的真实登录令牌不能绕过实时账号状态、角色或科室授权。
+    for change, restore in (
+        ({"is_active": False}, {"is_active": True}),
+        ({"department": "合成外科"}, {"department": "合成内科"}),
+        ({"role": "nurse"}, {"role": "doctor"}),
+        ({"roles_json": "invalid-json"}, {"roles_json": None}),
+    ):
+        with sessions() as session, session.begin():
+            users = SysUser.__table__.to_metadata(sa.MetaData(), schema="sys")
+            session.execute(users.update().where(users.c.id == "doc").values(**change))
+        act("doc", 1, "submit", expected=403)
+        assert http.get(url).status_code == 403
+        with sessions() as session, session.begin():
+            session.execute(users.update().where(users.c.id == "doc").values(**restore))
+    actor("qc")
+    detail = http.get(url).json()["data"]
+    assert (detail["version"], len(detail["events"])) == (1, 1)
+    assert analysis("not_urged_pending")["total"] == 1
+    act("qc", 1, "urge")
+    assert analysis("urged_pending")["total"] == 1
+    detail = http.get(url).json()["data"]
+    urge = detail["events"][-1]["id"]
+    act("qc", 2, "withdraw_urge", urge_event_id=urge)
+    assert analysis("not_urged_pending")["total"] == 1
+    act("qc", 3, "withdraw_urge", expected=409, urge_event_id=urge)
+
+    with monkeypatch.context() as scoped:
+        # 仅负例注入源读取失败；正例始终走默认CDM实现。
+        scoped.setattr(
+            assembly,
+            "_select_records",
+            lambda **_: (_ for _ in ()).throw(RuntimeError("synthetic source failure")),
+        )
+        act("doc", 3, "submit", expected=503)
+    actor("qc")
+    rolled_back = http.get(url).json()["data"]
+    assert (
+        rolled_back["status"],
+        rolled_back["version"],
+        len(rolled_back["events"]),
+    ) == ("pending", 3, 3)
+
+    def update_document(content, complaint):
+        with engine.begin() as conn:
+            document = sa.Table(
+                "admission_record", sa.MetaData(), schema="cdm", autoload_with=conn
+            )
+            conn.execute(
+                document.update()
+                .where(*[document.c[key] == value for key, value in IDENTITY.items()])
+                .values(record_content=content, chief_complaint=complaint)
+            )
+
+    update_document("合成首次提交正文", "合成首次提交主诉")
+    act("doc", 3, "submit")
+    actor("qc")
+    pending = analysis("pending_acceptance")
+    assert pending["total"] == 1
+    assert analysis("self_rectified")["total"] == 0
+    first_submit = http.get(url).json()["data"]["events"][-1]["id"]
+
+    def comparison(event_id):
+        response = http.get(f"{url}/comparison", params={"event_id": event_id})
+        assert response.status_code == 200, response.text
+        result = response.json()["data"]
+        assert result["available"] is True
+        assert result["unavailable_documents"] == 0
+        return next(
+            doc for doc in result["documents"] if doc["key"][1] == "admission_record"
+        )
+
+    first = comparison(first_submit)
+    assert first["state"] == "matched"
+    assert "合成整改前主诉" in first["before"]["content"]
+    assert "合成首次提交主诉" in first["after"]["content"]
+    assert any(
+        section["source_field"] == "chief_complaint"
+        for section in first["after"]["sections"]
+    )
+    assert http.get(f"{url}/comparison", params={"event_id": urge}).status_code == 404
+    act("qc", 4, "reject")
+    act("qc", 5, "urge")
+    update_document("合成再次提交正文", "合成再次提交主诉")
+    act("doc", 6, "submit")
+    actor("qc")
+    second_submit = http.get(url).json()["data"]["events"][-1]["id"]
+    assert first_submit != second_submit
+    assert comparison(first_submit) == first
+    second = comparison(second_submit)
+    assert second["before"] == first["before"]
+    assert "合成再次提交主诉" in second["after"]["content"]
+    act("qc", 7, "approve")
+    final = analysis("urged_rectified")
+    assert final["total"] == 1
+    row = final["items"][0]
+    assert row["rectification_id"] == task["id"]
+    assert row["submission_event_id"] == second_submit
+    assert row["root_job_id"] == job["id"]
+    assert row["envelope_id"] == source["envelope_id"]
+    assert row["appeals"] == []
+    exported = http.get(
+        f"{report}/export", params={**params, "label": "urged_rectified"}
+    )
+    assert exported.status_code == 200, exported.text
+    rows = list(csv.DictReader(io.StringIO(exported.content.decode("utf-8-sig"))))
+    assert len(rows) == final["total"]
+    assert rows[0]["rectification_id"] == task["id"]
+    assert rows[0]["rectification_state"] == "approved"
+    assert rows[0]["labels"] == "催办已整改"
+    empty_export = http.get(
+        f"{report}/export", params={**params, "label": "self_rectified"}
+    )
+    assert empty_export.status_code == 200, empty_export.text
+    assert (
+        list(csv.DictReader(io.StringIO(empty_export.content.decode("utf-8-sig"))))
+        == []
+    )
+    actor("other")
+    assert http.get(url).status_code == 403
+    assert (
+        http.get(f"{url}/comparison", params={"event_id": second_submit}).status_code
+        == 403
+    )
+    actor("cross")
+    assert analysis()["total"] == 0
+    actor("doc")
+    assert http.get(f"{base}?state=pending").json()["data"]["total"] == 0
+    assert comparison(second_submit) == second
+    actor("qc")
+    detail = http.get(url).json()["data"]
+    assert [event["action"] for event in detail["events"]] == [
+        "assign",
+        "urge",
+        "withdraw_urge",
+        "submit",
+        "reject",
+        "urge",
+        "submit",
+        "approve",
+    ]
+    assert "dispatch_document_snapshot" not in detail
+    assert all(
+        "submission_document_snapshot" not in event for event in detail["events"]
     )
