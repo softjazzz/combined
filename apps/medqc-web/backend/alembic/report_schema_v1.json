@@ -439,7 +439,7 @@
     },
     {
       "name": "qc_defect_rectifications",
-      "scope": "qc_public",
+      "scope": "qc_only",
       "columns": [
         {
           "name": "id",
@@ -736,12 +736,6 @@
           "default": null
         },
         {
-          "name": "evidence",
-          "type": "TEXT",
-          "nullable": true,
-          "default": null
-        },
-        {
           "name": "priority",
           "type": "VARCHAR(20)",
           "nullable": false,
@@ -903,7 +897,10 @@
         {
           "name": "ck_qc_appeals_modern_source",
           "sql": "(target_kind IS NULL AND target_id IS NULL AND institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL AND scene IS NULL AND root_job_id IS NULL AND envelope_id IS NULL AND rule_set_key IS NULL AND rule_set_version IS NULL AND case_department IS NULL AND qc_result_id IS NOT NULL AND record_id IS NOT NULL) OR (target_kind IS NOT NULL AND target_id IS NOT NULL AND institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL AND scene IS NOT NULL AND root_job_id IS NOT NULL AND envelope_id IS NOT NULL AND rule_set_key IS NOT NULL AND rule_set_version IS NOT NULL AND case_department IS NOT NULL AND target_kind IN ('canonical_defect', 'task_manual_defect') AND scene IN ('running', 'final', 'outpatient_emergency') AND qc_result_id IS NULL AND record_id IS NULL)",
-          "pg_sql": "target_kind IS NULL AND target_id IS NULL AND institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL AND scene IS NULL AND root_job_id IS NULL AND envelope_id IS NULL AND rule_set_key IS NULL AND rule_set_version IS NULL AND case_department IS NULL AND qc_result_id IS NOT NULL AND record_id IS NOT NULL OR target_kind IS NOT NULL AND target_id IS NOT NULL AND institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL AND scene IS NOT NULL AND root_job_id IS NOT NULL AND envelope_id IS NOT NULL AND rule_set_key IS NOT NULL AND rule_set_version IS NOT NULL AND case_department IS NOT NULL AND (target_kind::text = ANY (ARRAY['canonical_defect'::character varying, 'task_manual_defect'::character varying]::text[])) AND (scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient_emergency'::character varying]::text[])) AND qc_result_id IS NULL AND record_id IS NULL"
+          "pg_sql": "target_kind IS NULL AND target_id IS NULL AND institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL AND scene IS NULL AND root_job_id IS NULL AND envelope_id IS NULL AND rule_set_key IS NULL AND rule_set_version IS NULL AND case_department IS NULL AND qc_result_id IS NOT NULL AND record_id IS NOT NULL OR target_kind IS NOT NULL AND target_id IS NOT NULL AND institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL AND scene IS NOT NULL AND root_job_id IS NOT NULL AND envelope_id IS NOT NULL AND rule_set_key IS NOT NULL AND rule_set_version IS NOT NULL AND case_department IS NOT NULL AND (target_kind::text = ANY (ARRAY['canonical_defect'::character varying, 'task_manual_defect'::character varying]::text[])) AND (scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient_emergency'::character varying]::text[])) AND qc_result_id IS NULL AND record_id IS NULL",
+          "pg_sql_compatible": [
+            "target_kind IS NULL AND target_id IS NULL AND institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL AND scene IS NULL AND root_job_id IS NULL AND envelope_id IS NULL AND rule_set_key IS NULL AND rule_set_version IS NULL AND case_department IS NULL AND qc_result_id IS NOT NULL AND record_id IS NOT NULL OR target_kind IS NOT NULL AND target_id IS NOT NULL AND institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL AND scene IS NOT NULL AND root_job_id IS NOT NULL AND envelope_id IS NOT NULL AND rule_set_key IS NOT NULL AND rule_set_version IS NOT NULL AND case_department IS NOT NULL AND (target_kind::text = ANY (ARRAY['canonical_defect'::character varying::text, 'task_manual_defect'::character varying::text])) AND (scene::text = ANY (ARRAY['running'::character varying::text, 'final'::character varying::text, 'outpatient_emergency'::character varying::text])) AND qc_result_id IS NULL AND record_id IS NULL"
+          ]
         }
       ],
       "foreign_keys": [],
@@ -965,7 +962,10 @@
           ],
           "unique": true,
           "where": "target_kind IS NOT NULL AND status IN ('pending', 'reviewing')",
-          "pg_where": "((target_kind IS NOT NULL) AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'reviewing'::character varying])::text[])))"
+          "pg_where": "((target_kind IS NOT NULL) AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'reviewing'::character varying])::text[])))",
+          "pg_where_compatible": [
+            "((target_kind IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'reviewing'::text])))"
+          ]
         }
       ]
     },
@@ -1295,17 +1295,26 @@
         {
           "name": "ck_qc_defects_manual_review_status",
           "sql": "manual_review_status IS NULL OR (origin IS NOT NULL AND origin = 'manual' AND manual_review_status IN ('pending', 'approved', 'rejected'))",
-          "pg_sql": "manual_review_status IS NULL OR origin IS NOT NULL AND origin::text = 'manual'::text AND (manual_review_status::text = ANY (ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying]::text[]))"
+          "pg_sql": "manual_review_status IS NULL OR origin IS NOT NULL AND origin::text = 'manual'::text AND (manual_review_status::text = ANY (ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying]::text[]))",
+          "pg_sql_compatible": [
+            "manual_review_status IS NULL OR origin IS NOT NULL AND origin::text = 'manual'::text AND (manual_review_status::text = ANY (ARRAY['pending'::character varying::text, 'approved'::character varying::text, 'rejected'::character varying::text]))"
+          ]
         },
         {
           "name": "ck_qc_defects_origin",
           "sql": "origin IN ('auto', 'manual')",
-          "pg_sql": "origin::text = ANY (ARRAY['auto'::character varying, 'manual'::character varying]::text[])"
+          "pg_sql": "origin::text = ANY (ARRAY['auto'::character varying, 'manual'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "origin::text = ANY (ARRAY['auto'::character varying::text, 'manual'::character varying::text])"
+          ]
         },
         {
           "name": "ck_qc_defects_scene",
           "sql": "scene IS NULL OR scene IN ('running', 'final', 'outpatient_emergency')",
-          "pg_sql": "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient_emergency'::character varying]::text[]))"
+          "pg_sql": "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient_emergency'::character varying]::text[]))",
+          "pg_sql_compatible": [
+            "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying::text, 'final'::character varying::text, 'outpatient_emergency'::character varying::text]))"
+          ]
         }
       ],
       "foreign_keys": [],
@@ -1515,7 +1524,10 @@
         {
           "name": "ck_qc_record_reviews_context",
           "sql": "review_context IN ('task', 'workspace')",
-          "pg_sql": "review_context::text = ANY (ARRAY['task'::character varying, 'workspace'::character varying]::text[])"
+          "pg_sql": "review_context::text = ANY (ARRAY['task'::character varying, 'workspace'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "review_context::text = ANY (ARRAY['task'::character varying::text, 'workspace'::character varying::text])"
+          ]
         },
         {
           "name": "ck_qc_record_reviews_context_fields",
@@ -1525,7 +1537,10 @@
         {
           "name": "ck_qc_record_reviews_decision",
           "sql": "decision IN ('approved', 'doubtful')",
-          "pg_sql": "decision::text = ANY (ARRAY['approved'::character varying, 'doubtful'::character varying]::text[])"
+          "pg_sql": "decision::text = ANY (ARRAY['approved'::character varying, 'doubtful'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "decision::text = ANY (ARRAY['approved'::character varying::text, 'doubtful'::character varying::text])"
+          ]
         },
         {
           "name": "ck_qc_record_reviews_doubtful_reason",
@@ -1545,12 +1560,18 @@
         {
           "name": "ck_qc_record_reviews_scene",
           "sql": "scene IS NULL OR scene IN ('outpatient_emergency', 'running', 'final')",
-          "pg_sql": "scene IS NULL OR (scene::text = ANY (ARRAY['outpatient_emergency'::character varying, 'running'::character varying, 'final'::character varying]::text[]))"
+          "pg_sql": "scene IS NULL OR (scene::text = ANY (ARRAY['outpatient_emergency'::character varying, 'running'::character varying, 'final'::character varying]::text[]))",
+          "pg_sql_compatible": [
+            "scene IS NULL OR (scene::text = ANY (ARRAY['outpatient_emergency'::character varying::text, 'running'::character varying::text, 'final'::character varying::text]))"
+          ]
         },
         {
           "name": "ck_qc_record_reviews_stage",
           "sql": "stage IN ('initial', 'recheck')",
-          "pg_sql": "stage::text = ANY (ARRAY['initial'::character varying, 'recheck'::character varying]::text[])"
+          "pg_sql": "stage::text = ANY (ARRAY['initial'::character varying, 'recheck'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "stage::text = ANY (ARRAY['initial'::character varying::text, 'recheck'::character varying::text])"
+          ]
         }
       ],
       "foreign_keys": [],
@@ -1603,7 +1624,10 @@
           "name": "institute_id",
           "type": "TEXT",
           "nullable": true,
-          "default": null
+          "default": null,
+          "read_compatible_defaults": {
+            "qc": ["'LX001'::text"]
+          }
         },
         {
           "name": "patient_id",
@@ -1832,7 +1856,10 @@
         {
           "name": "ck_qc_rule_set_versions_status",
           "sql": "status IN ('draft', 'published', 'retired')",
-          "pg_sql": "status::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])"
+          "pg_sql": "status::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "status::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])"
+          ]
         },
         {
           "name": "ck_qc_rule_set_versions_version_nonblank",
@@ -1988,7 +2015,10 @@
         {
           "name": "ck_qc_scoring_standards_scene",
           "sql": "scene IN ('running', 'final', 'outpatient', 'frontpage')",
-          "pg_sql": "scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient'::character varying, 'frontpage'::character varying]::text[])"
+          "pg_sql": "scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient'::character varying, 'frontpage'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "scene::text = ANY (ARRAY['running'::character varying::text, 'final'::character varying::text, 'outpatient'::character varying::text, 'frontpage'::character varying::text])"
+          ]
         },
         {
           "name": "ck_qc_scoring_standards_seq_positive",
@@ -1998,7 +2028,10 @@
         {
           "name": "ck_qc_scoring_standards_status",
           "sql": "status IN ('draft', 'active', 'archived')",
-          "pg_sql": "status::text = ANY (ARRAY['draft'::character varying, 'active'::character varying, 'archived'::character varying]::text[])"
+          "pg_sql": "status::text = ANY (ARRAY['draft'::character varying, 'active'::character varying, 'archived'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "status::text = ANY (ARRAY['draft'::character varying::text, 'active'::character varying::text, 'archived'::character varying::text])"
+          ]
         },
         {
           "name": "ck_qc_scoring_standards_veto_nonblank",
@@ -2073,12 +2106,6 @@
           "name": "status",
           "type": "VARCHAR(20)",
           "nullable": false,
-          "default": null
-        },
-        {
-          "name": "score",
-          "type": "FLOAT",
-          "nullable": true,
           "default": null
         },
         {
@@ -2230,30 +2257,6 @@
           "default": null
         },
         {
-          "name": "schedule_config",
-          "type": "TEXT",
-          "nullable": true,
-          "default": null
-        },
-        {
-          "name": "date_range",
-          "type": "TEXT",
-          "nullable": true,
-          "default": null
-        },
-        {
-          "name": "department_filter",
-          "type": "TEXT",
-          "nullable": true,
-          "default": null
-        },
-        {
-          "name": "record_ids",
-          "type": "TEXT",
-          "nullable": true,
-          "default": null
-        },
-        {
           "name": "record_refs",
           "type": "JSONB",
           "nullable": true,
@@ -2266,20 +2269,8 @@
           "default": null
         },
         {
-          "name": "sampling_config",
-          "type": "TEXT",
-          "nullable": true,
-          "default": null
-        },
-        {
           "name": "assign_method",
           "type": "VARCHAR(30)",
-          "nullable": true,
-          "default": null
-        },
-        {
-          "name": "assignee_config",
-          "type": "TEXT",
           "nullable": true,
           "default": null
         },
@@ -2294,12 +2285,6 @@
           "type": "INTEGER",
           "nullable": false,
           "default": "1"
-        },
-        {
-          "name": "progress",
-          "type": "FLOAT",
-          "nullable": false,
-          "default": null
         },
         {
           "name": "total_records",
@@ -2360,7 +2345,10 @@
         {
           "name": "ck_qc_tasks_scene",
           "sql": "scene IS NULL OR scene IN ('running', 'final', 'outpatient')",
-          "pg_sql": "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient'::character varying]::text[]))"
+          "pg_sql": "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient'::character varying]::text[]))",
+          "pg_sql_compatible": [
+            "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying::text, 'final'::character varying::text, 'outpatient'::character varying::text]))"
+          ]
         }
       ],
       "foreign_keys": [],
@@ -2485,10 +2473,6 @@
         },
         {
           "name": null,
-          "columns": ["phone"]
-        },
-        {
-          "name": null,
           "columns": ["username"]
         }
       ],
@@ -2510,13 +2494,6 @@
           "pg_where": null
         },
         {
-          "name": "ix_sys_users_phone",
-          "columns": ["phone"],
-          "unique": false,
-          "where": null,
-          "pg_where": null
-        },
-        {
           "name": "ix_sys_users_role",
           "columns": ["role"],
           "unique": false,
@@ -2527,7 +2504,7 @@
     },
     {
       "name": "qc_defect_rectification_events",
-      "scope": "qc_public",
+      "scope": "qc_only",
       "columns": [
         {
           "name": "id",
@@ -2857,7 +2834,10 @@
         {
           "name": "ck_qc_scoring_items_department_scope_mode",
           "sql": "department_scope_mode IN ('all', 'selected')",
-          "pg_sql": "department_scope_mode::text = ANY (ARRAY['all'::character varying, 'selected'::character varying]::text[])"
+          "pg_sql": "department_scope_mode::text = ANY (ARRAY['all'::character varying, 'selected'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "department_scope_mode::text = ANY (ARRAY['all'::character varying::text, 'selected'::character varying::text])"
+          ]
         },
         {
           "name": "ck_qc_scoring_items_group_nonblank",
@@ -2938,7 +2918,10 @@
         {
           "name": "ck_task_qc_runs_scope",
           "sql": "run_scope IN ('all', 'assigned')",
-          "pg_sql": "run_scope::text = ANY (ARRAY['all'::character varying, 'assigned'::character varying]::text[])"
+          "pg_sql": "run_scope::text = ANY (ARRAY['all'::character varying, 'assigned'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "run_scope::text = ANY (ARRAY['all'::character varying::text, 'assigned'::character varying::text])"
+          ]
         }
       ],
       "foreign_keys": [

@@ -132,6 +132,22 @@ def _same_type(actual, declared):
     return str(actual.compile(dialect=postgresql.dialect())) == declared
 
 
+def _existing_default_matches(column, actual, schema):
+    allowed = [
+        column["default"],
+        *column.get("read_compatible_defaults", {}).get(schema, []),
+    ]
+    return normalized(actual) in {normalized(value) for value in allowed}
+
+
+def _existing_expression_matches(actual, spec, field):
+    # 显式冻结已复核的PG dump/restore无损cast形式，不放宽布尔语义或枚举值。
+    return expression_tokens(actual) in [
+        expression_tokens(value)
+        for value in [spec[field], *spec.get(field + "_compatible", [])]
+    ]
+
+
 def _foreign_keys(inspector, table, schema):
     result = inspector.get_foreign_keys(table, schema=schema)
     # 旧SQLAlchemy对默认public目标可能反射成源schema；以PG目录中的真实owner为准。
@@ -164,7 +180,14 @@ def plan(inspector, *, search_path, data=None):
     if not {"qc", "public"}.issubset(schemas):
         raise SchemaConflict("缺少qc/public双schema基线；不创建猜测的业务表")
     for spec in data["tables"]:
-        for schema in [owner] if spec["scope"] == "account_owner" else ["qc", "public"]:
+        targets = {
+            "account_owner": [owner],
+            "qc_only": ["qc"],
+            "qc_public": ["qc", "public"],
+        }
+        if spec["scope"] not in targets:
+            raise SchemaConflict("未知冻结表owner范围")
+        for schema in targets[spec["scope"]]:
             table = spec["name"]
             exists = inspector.has_table(table, schema=schema)
             if not exists:
@@ -199,8 +222,9 @@ def plan(inspector, *, search_path, data=None):
                     valid = (
                         _same_type(actual["type"], column["type"])
                         and actual["nullable"] is column["nullable"]
-                        and normalized(actual.get("default"))
-                        == normalized(column["default"])
+                        and _existing_default_matches(
+                            column, actual.get("default"), schema
+                        )
                     )
                 if not valid:
                     raise SchemaConflict(
@@ -219,9 +243,9 @@ def plan(inspector, *, search_path, data=None):
             }
             for check in spec["checks"]:
                 previous = checks.get(check["name"])
-                if previous is not None and expression_tokens(
-                    previous["sqltext"]
-                ) != expression_tokens(check["pg_sql"]):
+                if previous is not None and not _existing_expression_matches(
+                    previous["sqltext"], check, "pg_sql"
+                ):
                     raise SchemaConflict(f"{schema}.{table}.{check['name']} CHECK漂移")
                 if previous is None:
                     operations.append(("check", schema, (table, check)))
@@ -252,10 +276,11 @@ def plan(inspector, *, search_path, data=None):
                 elif (
                     previous["column_names"] != index["columns"]
                     or bool(previous["unique"]) != index["unique"]
-                    or expression_tokens(
-                        previous.get("dialect_options", {}).get("postgresql_where")
+                    or not _existing_expression_matches(
+                        previous.get("dialect_options", {}).get("postgresql_where"),
+                        index,
+                        "pg_where",
                     )
-                    != expression_tokens(index["pg_where"])
                 ):
                     raise SchemaConflict(f"{schema}.{table}.{index['name']} 索引漂移")
             foreign_keys = _foreign_keys(inspector, table, schema)

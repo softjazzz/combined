@@ -40,7 +40,7 @@ class SysUser(Base):
     id = Column(String(36), primary_key=True)
     username = Column(String(50), nullable=False, unique=True)
     email = Column(String(100), unique=True)
-    phone = Column(String(20), unique=True, comment="手机号（登录备用标识）")
+    phone = Column(String(20), comment="手机号（报表不声明或修改登录唯一索引）")
     password_hash = Column(Text)
     display_name = Column(String(100), nullable=False)
     institute_id = Column(String(128), comment="管理员绑定的可信机构范围")
@@ -56,7 +56,6 @@ class SysUser(Base):
 
     __table_args__ = (
         Index("ix_sys_users_email", "email"),
-        Index("ix_sys_users_phone", "phone"),
         Index("ix_sys_users_role", "role"),
         Index("ix_sys_users_institute_department", "institute_id", "department"),
     )
@@ -174,22 +173,15 @@ class QCTask(Base):
     rule_set_version = Column(
         String(64), nullable=True, comment="创建时冻结的规则集版本；历史 NULL"
     )
-    schedule_config = Column(Text, comment="JSON text")
-    date_range = Column(Text, comment="JSON text")
-    department_filter = Column(Text, comment="JSON text")
-    record_ids = Column(Text, comment="JSON text")
     record_refs = Column(
         JSON().with_variant(JSONB(), "postgresql"),
         nullable=True,
         comment="显式病例三坐标数组；历史任务为 NULL",
     )
     sampling_method = Column(String(20), comment="all/count/percentage")
-    sampling_config = Column(Text, comment="JSON text")
     assign_method = Column(String(30), comment="keep/by_department/by_ratio/by_type")
-    assignee_config = Column(Text, comment="JSON text")
     status = Column(String(20), default="draft", nullable=False)
     configuration_version = Column(Integer, nullable=False, server_default=text("1"))
-    progress = Column(Float, default=0.0, nullable=False)
     total_records = Column(Integer, default=0, nullable=False)
     completed_records = Column(Integer, default=0, nullable=False)
     creator_id = Column(String(36))
@@ -229,7 +221,6 @@ class QCTaskRecord(Base):
     assignee_id = Column(String(36))
     assignee_name = Column(String(100))
     status = Column(String(20), default="pending", nullable=False)
-    score = Column(Float)
     defect_count = Column(Integer, nullable=True)
     completed_run_number = Column(Integer, nullable=True)
     completed_at = Column(DateTime)
@@ -372,7 +363,6 @@ class QCAppeal(Base):
     appeal_type = Column(String(20), nullable=False, comment="defect/score")
     defect_item = Column(String(200))
     reason = Column(Text, nullable=False)
-    evidence = Column(Text, comment="JSON text")
     priority = Column(String(20), default="medium", nullable=False)
     appellant_id = Column(String(36), nullable=False)
     appellant_name = Column(String(100), nullable=False)

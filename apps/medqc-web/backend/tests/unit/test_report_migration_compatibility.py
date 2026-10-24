@@ -11,6 +11,7 @@ import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+
 from app.database.models import qc as legacy
 from app.database.models import v36_reports as report
 
@@ -228,9 +229,10 @@ def test_expression_comparison_keeps_boolean_precedence_literals_and_defaults():
 
 
 def test_runtime_account_owner_and_legacy_orm_survive_migration(pg, monkeypatch):
+    from sqlalchemy.orm import Session
+
     from app.services import user_scope_owner
     from app.services.report_institute_scope import authorized_institute
-    from sqlalchemy.orm import Session
 
     with pg.begin() as conn:
         baseline(conn)
@@ -268,9 +270,10 @@ def test_runtime_account_owner_and_legacy_orm_survive_migration(pg, monkeypatch)
 
 
 def test_missing_report_columns_do_not_mutate_legacy_tables(pg, monkeypatch):
+    from sqlalchemy.orm import Session
+
     from app.services import user_scope_owner
     from app.services.report_institute_scope import authorized_institute
-    from sqlalchemy.orm import Session
 
     with pg.begin() as conn:
         baseline(conn)
@@ -370,3 +373,106 @@ def test_target_migration_graph_keeps_original_lineage_and_one_head():
         "20261003_000046",
         "20261002_000045",
     ]
+
+
+def test_actual_legacy_shapes_keep_json_integer_phone_and_institute_defaults(pg):
+    with pg.begin() as conn:
+        baseline(conn)
+        for column in (
+            "schedule_config",
+            "date_range",
+            "department_filter",
+            "record_ids",
+            "sampling_config",
+            "assignee_config",
+        ):
+            conn.exec_driver_sql(
+                f"ALTER TABLE qc.qc_tasks ALTER COLUMN {column} TYPE JSONB USING {column}::jsonb"
+            )
+        conn.exec_driver_sql(
+            "ALTER TABLE qc.qc_tasks ALTER COLUMN progress TYPE INTEGER USING progress::integer"
+        )
+        conn.exec_driver_sql(
+            "ALTER TABLE qc.qc_task_records ALTER COLUMN score TYPE INTEGER USING score::integer"
+        )
+        conn.exec_driver_sql(
+            "ALTER TABLE qc.qc_appeals ALTER COLUMN evidence TYPE JSONB USING evidence::jsonb"
+        )
+        conn.exec_driver_sql(
+            "ALTER TABLE qc.qc_results ADD COLUMN institute_id TEXT DEFAULT 'LX001'"
+        )
+        conn.exec_driver_sql("DROP INDEX sys.ix_sys_users_phone")
+        conn.exec_driver_sql(
+            "ALTER TABLE sys.sys_users DROP CONSTRAINT sys_users_phone_key"
+        )
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX ix_sys_users_phone ON sys.sys_users(phone) WHERE phone IS NOT NULL"
+        )
+        migrate(conn)
+        assert migrate(conn) == []
+        inspector = sa.inspect(conn)
+        assert isinstance(
+            next(
+                c
+                for c in inspector.get_columns("qc_tasks", schema="qc")
+                if c["name"] == "schedule_config"
+            )["type"],
+            sa.JSON,
+        )
+        assert (
+            str(
+                next(
+                    c
+                    for c in inspector.get_columns("qc_task_records", schema="qc")
+                    if c["name"] == "score"
+                )["type"]
+            )
+            == "INTEGER"
+        )
+        assert (
+            next(
+                c
+                for c in inspector.get_columns("qc_results", schema="qc")
+                if c["name"] == "institute_id"
+            )["default"]
+            == "'LX001'::text"
+        )
+        assert next(
+            i
+            for i in inspector.get_indexes("sys_users", schema="sys")
+            if i["name"] == "ix_sys_users_phone"
+        )["unique"]
+        assert not inspector.has_table("qc_defect_rectifications", schema="public")
+        conn.exec_driver_sql(
+            "ALTER TABLE qc.qc_results ALTER COLUMN institute_id SET DEFAULT 'untrusted'"
+        )
+        with pytest.raises(HELPER["SchemaConflict"], match="漂移"):
+            migrate(conn)
+
+
+def test_dump_restore_expression_variants_are_explicit_not_generic_relaxation(pg):
+    with pg.begin() as conn:
+        baseline(conn, modern=True)
+        for table in CONTRACT["tables"]:
+            for check in table["checks"]:
+                variants = check.get("pg_sql_compatible", [])
+                if variants:
+                    for schema in (
+                        ["qc"] if table["scope"] == "qc_only" else ["qc", "public"]
+                    ):
+                        conn.exec_driver_sql(
+                            f'ALTER TABLE "{schema}"."{table["name"]}" DROP CONSTRAINT "{check["name"]}"'
+                        )
+                        conn.exec_driver_sql(
+                            f'ALTER TABLE "{schema}"."{table["name"]}" ADD CONSTRAINT "{check["name"]}" CHECK ({variants[0]})'
+                        )
+        assert migrate(conn) == []
+        # 枚举扩大不是cast变化，仍拒绝。
+        conn.exec_driver_sql(
+            "ALTER TABLE qc.qc_tasks DROP CONSTRAINT ck_qc_tasks_scene"
+        )
+        conn.exec_driver_sql(
+            "ALTER TABLE qc.qc_tasks ADD CONSTRAINT ck_qc_tasks_scene CHECK (scene IS NULL OR scene IN ('running','final','outpatient','untrusted'))"
+        )
+        with pytest.raises(HELPER["SchemaConflict"], match="漂移"):
+            migrate(conn)
