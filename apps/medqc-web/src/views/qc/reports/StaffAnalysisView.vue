@@ -15,14 +15,15 @@
         </p>
       </div>
       <div class="mq-page-head__actions">
-        <div class="mq-segmented" role="group" aria-label="报表切换">
+        <div class="mq-segmented" role="tablist" aria-label="报表切换">
           <button
             v-for="option in reportTabs"
             :key="option.value"
             type="button"
             class="mq-segmented__item"
             :class="{ 'is-active': reportTab === option.value }"
-            :aria-pressed="reportTab === option.value"
+            role="tab"
+            :aria-selected="reportTab === option.value"
             :data-testid="`staff-report-tab-${option.value}`"
             @click="reportTab = option.value"
           >

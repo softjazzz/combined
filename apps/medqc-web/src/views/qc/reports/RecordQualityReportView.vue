@@ -70,11 +70,12 @@
       <section class="filters mq-card mq-card--padded" aria-label="报表筛选">
         <div class="field mq-field scene-field">
           <label>场景</label>
-          <div class="segmented mq-segmented">
+          <div class="segmented mq-segmented" role="group" aria-label="质控场景">
             <button
               type="button"
               class="mq-segmented__item"
               :class="{ active: scene === 'running', 'is-active': scene === 'running' }"
+              :aria-pressed="scene === 'running'"
               @click="setScene('running')"
             >
               运行病历</button
@@ -82,6 +83,7 @@
               type="button"
               class="mq-segmented__item"
               :class="{ active: scene === 'final', 'is-active': scene === 'final' }"
+              :aria-pressed="scene === 'final'"
               @click="setScene('final')"
             >
               终末病历

@@ -218,7 +218,10 @@ describe('核心制度专题页面', () => {
     const wrapper = render()
     try {
       await flushPromises()
-      expect(wrapper.text()).toContain('未知分类确认缺陷 3')
+      const unknownDefects = wrapper
+        .findAll('.core-metric')
+        .find((card) => card.text().startsWith('未知分类确认缺陷'))!
+      expect(unknownDefects.get('strong').text()).toBe('3')
       expect(wrapper.get('[data-testid="core-defect-top"]').text()).toContain('合成制度1 · 2 条')
       await wrapper.get('[data-testid="core-defect-top"] button').trigger('click')
       await flushPromises()
@@ -294,6 +297,12 @@ describe('核心制度专题页面', () => {
   it('病例详情保留三坐标、冻结job和envelope而非重新判定', async () => {
     const wrapper = render()
     await flushPromises()
+    // 覆盖状态用胶囊展示，状态文案与映射不变
+    const statuses = wrapper.findAll('tbody .mq-status')
+    expect(statuses.length).toBeGreaterThan(0)
+    for (const status of statuses) {
+      if (status.text() === '已核验分类') expect(status.classes()).toEqual(['mq-status'])
+    }
     await wrapper
       .findAll('button')
       .find((b) => b.text() === '详情')!
@@ -324,7 +333,7 @@ describe('核心制度专题页面', () => {
     await wrapper.findAll('input')[0].setValue('H2')
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === 'CSV')!
+      .find((button) => button.text() === '导出 CSV')!
       .trigger('click')
     await flushPromises()
     expect(mocks.export).toHaveBeenCalledWith(expect.objectContaining({ institute_id: 'H1' }))

@@ -78,7 +78,7 @@
       <section class="distribution" aria-label="分布">
         <div class="section-head">
           <h2>缺陷分布</h2>
-          <div class="segmented mq-segmented">
+          <div class="segmented mq-segmented" role="group" aria-label="缺陷来源">
             <button
               v-for="source in report.sources"
               :key="source.source_key"
@@ -88,6 +88,7 @@
                 active: activeSource === source.source_key,
                 'is-active': activeSource === source.source_key,
               }"
+              :aria-pressed="activeSource === source.source_key"
               @click="activeSource = source.source_key"
             >
               {{ source.label }}

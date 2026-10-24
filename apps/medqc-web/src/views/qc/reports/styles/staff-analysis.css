@@ -130,15 +130,15 @@ h2 {
 }
 .metric strong {
   color: var(--mq-text-primary);
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 600;
-  line-height: 40px;
+  line-height: 44px;
   font-variant-numeric: tabular-nums;
 }
 .metric strong.is-text {
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-16);
-  line-height: 40px;
+  line-height: 44px;
 }
 .metric small {
   color: var(--mq-text-tertiary);

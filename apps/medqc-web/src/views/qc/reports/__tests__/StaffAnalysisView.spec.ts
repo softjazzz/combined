@@ -288,7 +288,7 @@ describe('StaffAnalysisView', () => {
   it('复用既有报告页面的人工质控tab入口', async () => {
     const wrapper = render()
     await settle()
-    expect(wrapper.get('[data-testid="staff-report-tab-staff"]').attributes('aria-pressed')).toBe(
+    expect(wrapper.get('[data-testid="staff-report-tab-staff"]').attributes('aria-selected')).toBe(
       'true',
     )
     expect(wrapper.get('.mq-page-head .mq-page-title').text()).toBe('质控员工作分析')
