@@ -179,11 +179,19 @@ def plan(inspector, *, search_path, data=None):
     schemas = set(inspector.get_schema_names())
     if not {"qc", "public"}.issubset(schemas):
         raise SchemaConflict("缺少qc/public双schema基线；不创建猜测的业务表")
+    # 目标50的正式split迁移已将整套旧业务表移到qc；public不是必需副本。
+    # 兼容已有双套布局，但残缺public基线仍拒绝，不创建或忽略替身表。
+    public_baseline = BASE_TABLES.intersection(
+        inspector.get_table_names(schema="public")
+    )
+    if public_baseline and public_baseline != BASE_TABLES:
+        raise SchemaConflict("public旧业务基线残缺；拒绝创建替身表")
+    business_schemas = ["qc", "public"] if public_baseline else ["qc"]
     for spec in data["tables"]:
         targets = {
             "account_owner": [owner],
             "qc_only": ["qc"],
-            "qc_public": ["qc", "public"],
+            "qc_public": business_schemas,
         }
         if spec["scope"] not in targets:
             raise SchemaConflict("未知冻结表owner范围")
