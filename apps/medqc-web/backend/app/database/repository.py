@@ -16,10 +16,12 @@
     patients = repo.list_frontpages(dept="内科")
 """
 
+
 import os
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime
+from ..services.clinical_read import clinical_query
 
 
 # ==================== 数据传输对象 ====================
@@ -135,7 +137,7 @@ class SqliteRepository(MedicalRecordRepository):
         from .models.cdm import MedicalRecordFrontpage
         session = self._session_factory()
         try:
-            q = session.query(MedicalRecordFrontpage)
+            q = clinical_query(session, MedicalRecordFrontpage)
             if dept:
                 q = q.filter(MedicalRecordFrontpage.discharge_dept_name == dept)
             if keyword:
@@ -167,7 +169,7 @@ class SqliteRepository(MedicalRecordRepository):
                 MedicalRecordFrontpage.discharge_dept_name,
                 MedicalRecordFrontpage.admission_dept_name,
             ):
-                rows = session.query(column).filter(column.isnot(None), column != "").distinct().all()
+                rows = clinical_query(session, column).filter(column.isnot(None), column != "").distinct().all()
                 for row in rows:
                     if row and row[0]:
                         depts.add(str(row[0]))
@@ -179,7 +181,7 @@ class SqliteRepository(MedicalRecordRepository):
         from .models.cdm import MedicalRecordFrontpage, Diagnosis, MrSurgery, MrCost
         session = self._session_factory()
         try:
-            fp = session.query(MedicalRecordFrontpage).filter_by(
+            fp = clinical_query(session, MedicalRecordFrontpage).filter_by(
                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id
             ).first()
             if not fp:
@@ -188,19 +190,19 @@ class SqliteRepository(MedicalRecordRepository):
             result = self._to_dict(fp)
 
             # 附加诊断
-            diags = session.query(Diagnosis).filter_by(
+            diags = clinical_query(session, Diagnosis).filter_by(
                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id
             ).order_by(Diagnosis.diagnosis_no).all()
             result["diagnoses"] = [self._to_dict(d) for d in diags]
 
             # 附加手术
-            surgs = session.query(MrSurgery).filter_by(
+            surgs = clinical_query(session, MrSurgery).filter_by(
                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id
             ).all()
             result["surgeries"] = [self._to_dict(s) for s in surgs]
 
             # 附加费用
-            cost = session.query(MrCost).filter_by(
+            cost = clinical_query(session, MrCost).filter_by(
                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id
             ).first()
             result["cost"] = self._to_dict(cost) if cost else None
@@ -238,7 +240,7 @@ class SqliteRepository(MedicalRecordRepository):
         from .models.cdm import Diagnosis
         session = self._session_factory()
         try:
-            items = session.query(Diagnosis).filter_by(
+            items = clinical_query(session, Diagnosis).filter_by(
                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id
             ).order_by(Diagnosis.diagnosis_no).all()
             return [self._to_dict(d) for d in items]
@@ -249,7 +251,7 @@ class SqliteRepository(MedicalRecordRepository):
         from .models.cdm import MrSurgery
         session = self._session_factory()
         try:
-            items = session.query(MrSurgery).filter_by(
+            items = clinical_query(session, MrSurgery).filter_by(
                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id
             ).all()
             return [self._to_dict(s) for s in items]
@@ -260,7 +262,7 @@ class SqliteRepository(MedicalRecordRepository):
         from .models.cdm import MrCost
         session = self._session_factory()
         try:
-            cost = session.query(MrCost).filter_by(
+            cost = clinical_query(session, MrCost).filter_by(
                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id
             ).first()
             return self._to_dict(cost) if cost else None
@@ -273,7 +275,7 @@ class SqliteRepository(MedicalRecordRepository):
         session = self._session_factory()
         try:
             Model = AdmissionRecord if record_type == "admission" else DischargeRecord
-            record = session.query(Model).filter_by(
+            record = clinical_query(session, Model).filter_by(
                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id
             ).first()
             return record.record_content if record else None
@@ -310,7 +312,7 @@ class SqliteRepository(MedicalRecordRepository):
         from sqlalchemy import func
         session = self._session_factory()
         try:
-            q = session.query(func.count(MedicalRecordFrontpage.visit_id))
+            q = clinical_query(session, func.count(MedicalRecordFrontpage.visit_id))
             if dept:
                 q = q.filter(MedicalRecordFrontpage.discharge_dept_name == dept)
             total_records = q.scalar() or 0

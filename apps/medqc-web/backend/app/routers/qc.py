@@ -1,3 +1,4 @@
+
 import uuid
 import json
 import re
@@ -6,6 +7,7 @@ from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, HTTPException, status, Query, Request, Depends
 
+from ..services.clinical_read import clinical_query
 from ..schemas.qc import QCResult, QCRule
 from ..services.qc_service import QCService
 from ..core.supabase_client import get_supabase, async_execute
@@ -1003,13 +1005,13 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
     try:
         with Session(db_engine) as session:
             # 查询首页基本信息
-            fp_query = session.query(MedicalRecordFrontpage).filter_by(visit_id=visit_id)
+            fp_query = clinical_query(session, MedicalRecordFrontpage).filter_by(visit_id=visit_id)
             if patient_id:
                 fp_query = fp_query.filter_by(patient_id=patient_id)
             fp = fp_query.first()
 
             # 查询诊断列表
-            diag_query = session.query(Diagnosis).filter_by(visit_id=visit_id)
+            diag_query = clinical_query(session, Diagnosis).filter_by(visit_id=visit_id)
             if patient_id:
                 diag_query = diag_query.filter_by(patient_id=patient_id)
             diag_rows = diag_query.all()
@@ -1031,13 +1033,13 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
                 ]
 
             # 查询手术列表
-            surg_query = session.query(MrSurgery).filter_by(visit_id=visit_id)
+            surg_query = clinical_query(session, MrSurgery).filter_by(visit_id=visit_id)
             if patient_id:
                 surg_query = surg_query.filter_by(patient_id=patient_id)
             surg_rows = surg_query.all()
 
             # 查询费用信息，供病理诊断费一致性规则使用
-            cost_query = session.query(MrCost).filter_by(visit_id=visit_id)
+            cost_query = clinical_query(session, MrCost).filter_by(visit_id=visit_id)
             if patient_id:
                 cost_query = cost_query.filter_by(patient_id=patient_id)
             cost = cost_query.first()

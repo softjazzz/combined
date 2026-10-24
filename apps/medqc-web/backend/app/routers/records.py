@@ -7,6 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query
 from sqlalchemy import and_, desc, func, or_, text
 
+from ..services.clinical_read import clinical_query, clinical_read_model
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.security import get_current_user
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
@@ -182,7 +183,7 @@ def _resolve_visit_identity(record_id: str) -> Dict[str, str]:
     with SessionLocal() as session:
         for model in (MedicalRecordFrontpage, DischargeRecord, AdmissionRecord):
             row = (
-                session.query(model)
+                clinical_query(session, model)
                 .filter(or_(model.visit_id == record_id, model.mr_no == record_id))
                 .first()
             )
@@ -940,26 +941,30 @@ async def get_final_records(
         )
 
     with SessionLocal() as session:
+        # 仅将三个临床来源限定到cdm；同一SQL中的质控结果表保持原owner。
+        frontpage_source = clinical_read_model(MedicalRecordFrontpage)
+        discharge_source = clinical_read_model(DischargeRecord)
+        admission_source = clinical_read_model(AdmissionRecord)
         dept_expr = func.coalesce(
-            MedicalRecordFrontpage.discharge_dept_name,
-            MedicalRecordFrontpage.admission_dept_name,
-            DischargeRecord.dept_name,
-            AdmissionRecord.dept_name,
+            frontpage_source.discharge_dept_name,
+            frontpage_source.admission_dept_name,
+            discharge_source.dept_name,
+            admission_source.dept_name,
         )
         discharge_dt_expr = func.coalesce(
-            MedicalRecordFrontpage.discharge_datetime,
-            DischargeRecord.discharge_date,
-            DischargeRecord.update_time,
+            frontpage_source.discharge_datetime,
+            discharge_source.discharge_date,
+            discharge_source.update_time,
         )
         admission_dt_expr = func.coalesce(
-            MedicalRecordFrontpage.admission_datetime,
-            AdmissionRecord.admission_datetime,
-            AdmissionRecord.update_time,
+            frontpage_source.admission_datetime,
+            admission_source.admission_datetime,
+            admission_source.update_time,
         )
         created_at_expr = func.coalesce(
-            MedicalRecordFrontpage.update_time,
-            DischargeRecord.update_time,
-            AdmissionRecord.update_time,
+            frontpage_source.update_time,
+            discharge_source.update_time,
+            admission_source.update_time,
         )
         try:
             latest_qc_time_subquery = (
@@ -995,7 +1000,7 @@ async def get_final_records(
 
             query = (
                 session.query(
-                    MedicalRecordFrontpage,
+                    frontpage_source,
                     discharge_dt_expr.label("effective_discharge_datetime"),
                     admission_dt_expr.label("effective_admission_datetime"),
                     created_at_expr.label("effective_created_at"),
@@ -1003,28 +1008,28 @@ async def get_final_records(
                     func.coalesce(defect_count_subquery.c.defect_count, 0).label("defect_count"),
                 )
                 .outerjoin(
-                    DischargeRecord,
+                    discharge_source,
                     and_(
-                        DischargeRecord.institute_id == MedicalRecordFrontpage.institute_id,
-                        DischargeRecord.patient_id == MedicalRecordFrontpage.patient_id,
-                        DischargeRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                        discharge_source.institute_id == frontpage_source.institute_id,
+                        discharge_source.patient_id == frontpage_source.patient_id,
+                        discharge_source.visit_id == frontpage_source.visit_id,
                     ),
                 )
                 .outerjoin(
-                    AdmissionRecord,
+                    admission_source,
                     and_(
-                        AdmissionRecord.institute_id == MedicalRecordFrontpage.institute_id,
-                        AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
-                        AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                        admission_source.institute_id == frontpage_source.institute_id,
+                        admission_source.patient_id == frontpage_source.patient_id,
+                        admission_source.visit_id == frontpage_source.visit_id,
                     ),
                 )
                 .outerjoin(
                     latest_qc_score_subquery,
-                    latest_qc_score_subquery.c.record_id == MedicalRecordFrontpage.visit_id,
+                    latest_qc_score_subquery.c.record_id == frontpage_source.visit_id,
                 )
                 .outerjoin(
                     defect_count_subquery,
-                    defect_count_subquery.c.record_id == MedicalRecordFrontpage.visit_id,
+                    defect_count_subquery.c.record_id == frontpage_source.visit_id,
                 )
                 .filter(discharge_dt_expr.is_not(None))
             )
@@ -1033,10 +1038,10 @@ async def get_final_records(
                 kw = f"%{keyword.strip()}%"
                 query = query.filter(
                     or_(
-                        MedicalRecordFrontpage.visit_id.ilike(kw),
-                        MedicalRecordFrontpage.mr_no.ilike(kw),
-                        MedicalRecordFrontpage.inpat_no.ilike(kw),
-                        MedicalRecordFrontpage.name.ilike(kw),
+                        frontpage_source.visit_id.ilike(kw),
+                        frontpage_source.mr_no.ilike(kw),
+                        frontpage_source.inpat_no.ilike(kw),
+                        frontpage_source.name.ilike(kw),
                     )
                 )
             if department:
@@ -1119,24 +1124,24 @@ async def get_final_records(
             session.rollback()
             query = (
                 session.query(
-                    MedicalRecordFrontpage,
+                    frontpage_source,
                     discharge_dt_expr.label("effective_discharge_datetime"),
                     created_at_expr.label("effective_created_at"),
                 )
                 .outerjoin(
-                    DischargeRecord,
+                    discharge_source,
                     and_(
-                        DischargeRecord.institute_id == MedicalRecordFrontpage.institute_id,
-                        DischargeRecord.patient_id == MedicalRecordFrontpage.patient_id,
-                        DischargeRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                        discharge_source.institute_id == frontpage_source.institute_id,
+                        discharge_source.patient_id == frontpage_source.patient_id,
+                        discharge_source.visit_id == frontpage_source.visit_id,
                     ),
                 )
                 .outerjoin(
-                    AdmissionRecord,
+                    admission_source,
                     and_(
-                        AdmissionRecord.institute_id == MedicalRecordFrontpage.institute_id,
-                        AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
-                        AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                        admission_source.institute_id == frontpage_source.institute_id,
+                        admission_source.patient_id == frontpage_source.patient_id,
+                        admission_source.visit_id == frontpage_source.visit_id,
                     ),
                 )
                 .filter(discharge_dt_expr.is_not(None))
@@ -1145,10 +1150,10 @@ async def get_final_records(
                 kw = f"%{keyword.strip()}%"
                 query = query.filter(
                     or_(
-                        MedicalRecordFrontpage.visit_id.ilike(kw),
-                        MedicalRecordFrontpage.mr_no.ilike(kw),
-                        MedicalRecordFrontpage.inpat_no.ilike(kw),
-                        MedicalRecordFrontpage.name.ilike(kw),
+                        frontpage_source.visit_id.ilike(kw),
+                        frontpage_source.mr_no.ilike(kw),
+                        frontpage_source.inpat_no.ilike(kw),
+                        frontpage_source.name.ilike(kw),
                     )
                 )
             if department:

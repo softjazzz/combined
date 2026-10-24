@@ -22,6 +22,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import MetaData, Table, and_, delete, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
+
+from .clinical_read import clinical_query
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import (
     AdmissionRecord,
@@ -5264,7 +5266,7 @@ class CustomQCSamplePoolService:
                         AdmissionRecord,
                     ):
                         candidates = (
-                            session.query(model)
+                            clinical_query(session, model)
                             .filter(getattr(model, identifier_name) == identifier_value)
                             .all()
                         )
