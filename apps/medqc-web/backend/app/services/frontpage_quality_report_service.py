@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable, Iterable, Mapping
+from .report_institute_scope import authorized_report_institute
 
 logger = logging.getLogger(__name__)
 
@@ -55,16 +56,16 @@ class FrontpageQualityReportUnavailable(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-def _default_scope_loader(*, department: str | None, doctor: str | None) -> list[dict]:
+def _default_scope_loader(*, department: str | None, doctor: str | None, institute_id: str | None = None) -> list[dict]:
     from .workstation.luxian_0609_result_analysis_service import _load_current_workstation_records
 
-    return _load_current_workstation_records(department=department, doctor=doctor, hospital_status="all")
+    return _load_current_workstation_records(department=department, doctor=doctor, hospital_status="all", institute_id=institute_id)
 
 
-def _default_latest_loader(source_keys: tuple[str, ...]) -> list[dict]:
+def _default_latest_loader(source_keys: tuple[str, ...], *, institute_id: str | None = None) -> list[dict]:
     from .modern_case_qc_result_service import default_modern_case_qc_result_service
 
-    return default_modern_case_qc_result_service.list_latest_results(source_keys)
+    return default_modern_case_qc_result_service.list_latest_results(source_keys, institute_id=institute_id)
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +117,7 @@ def _parse_time(value: Any) -> datetime | None:
 
 def build_report_context(
     *,
+    actor_id: str | None = None,
     department: str | None = None,
     doctor: str | None = None,
     analyzed_from: datetime | None = None,
@@ -132,8 +134,10 @@ def build_report_context(
     window_to = _as_utc(analyzed_to) if analyzed_to else None
     if window_from and window_to and window_from > window_to:
         raise FrontpageQualityReportInvalid("analyzed_from 不能晚于 analyzed_to")
+    institute = authorized_report_institute(actor_id)
+    institute_filter = {"institute_id": institute} if institute is not None else {}
     try:
-        latest = latest_loader(SOURCES)
+        latest = latest_loader(SOURCES, **institute_filter)
     except SchemaUnavailable as exc:
         raise FrontpageQualityReportSchemaUnavailable("首页质控现代数据源未部署") from exc
     except Exception as exc:  # noqa: BLE001 - 结果读取失败整体 503
@@ -144,7 +148,7 @@ def build_report_context(
     for item in latest:
         source = _text(item.get("source_key"))
         identity = (_text(item.get("institute_id")), _text(item.get("patient_id")), _text(item.get("visit_id")))
-        if source not in SOURCES or not all(identity):
+        if source not in SOURCES or not all(identity) or (institute is not None and identity[0] != institute):
             continue
         result = item.get("result") if isinstance(item.get("result"), Mapping) else {}
         analyzed = _parse_time(result.get("analysis_date") or result.get("created_at"))
@@ -159,7 +163,7 @@ def build_report_context(
         rows: list[CaseRow] = []
     else:
         try:
-            pool = scope_loader(department=department, doctor=doctor)
+            pool = scope_loader(department=department, doctor=doctor, **institute_filter)
         except Exception as exc:  # noqa: BLE001 - 范围读取失败整体 503
             logger.warning("病案首页报表范围读取失败 error_type=%s", type(exc).__name__)
             raise FrontpageQualityReportUnavailable("病历范围暂不可用") from exc

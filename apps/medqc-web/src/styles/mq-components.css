@@ -1,0 +1,367 @@
+/*
+ * v7.1 液态玻璃 · 页面级公共样式
+ * 来源：docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md（v7.1 章节）与 v7.1 设计稿。
+ * 页面只组合这些类，不再在页面私有样式里重写玻璃卡、页头、分段切换、状态胶囊等。
+ * 只引用 tokens-v2.css 中的 --mq-* 变量。
+ */
+
+/* ---------- 页面容器与页头 ---------- */
+.mq-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  align-content: start;
+  gap: 20px;
+  max-width: 1440px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 8px 28px 32px 22px;
+  box-sizing: border-box;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+  font-size: var(--mq-font-14);
+  line-height: 1.6;
+}
+
+.mq-page > * {
+  min-width: 0;
+}
+
+.mq-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 4px;
+}
+
+.mq-page-head__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mq-page-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mq-page-eyebrow {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.mq-page-title {
+  margin: 0;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-title);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+/* ---------- 玻璃卡片 ---------- */
+.mq-card {
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
+  -webkit-backdrop-filter: var(--mq-glass-blur);
+  backdrop-filter: var(--mq-glass-blur);
+  box-shadow: var(--mq-glass-shadow);
+}
+
+.mq-card--padded {
+  padding: 22px 28px 24px;
+}
+
+.mq-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.mq-card__title {
+  margin: 0;
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.mq-card__desc {
+  margin: 4px 0 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+/* 卡片内的次级容器：半透明白底（表单块、列表块） */
+.mq-inset {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* 卡片内的浅灰底信息块（指标摘要、弹窗摘要） */
+.mq-soft {
+  border-radius: 18px;
+  background: rgba(118, 128, 160, 0.07);
+}
+
+/* ---------- 分段切换 ---------- */
+.mq-segmented {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--mq-bg-muted);
+}
+
+.mq-segmented__item {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--mq-text-secondary);
+  font: inherit;
+  font-size: var(--mq-font-13);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.mq-segmented__item:hover {
+  color: var(--mq-text-primary);
+}
+
+.mq-segmented__item.is-active {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+
+.mq-segmented--sm .mq-segmented__item {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 9px;
+}
+
+/* ---------- 状态胶囊（带圆点） ---------- */
+.mq-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.mq-status::before {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a1a7b3;
+  content: '';
+}
+
+.mq-status--success {
+  background: var(--mq-success-bg);
+  color: var(--mq-success-text);
+}
+
+.mq-status--success::before {
+  background: var(--mq-success-icon);
+}
+
+.mq-status--warning {
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+}
+
+.mq-status--warning::before {
+  background: var(--mq-warning-icon);
+}
+
+.mq-status--danger {
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+}
+
+.mq-status--danger::before {
+  background: var(--mq-danger-icon);
+}
+
+.mq-status--info {
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+}
+
+.mq-status--info::before {
+  background: var(--mq-info-icon);
+}
+
+/* ---------- 原生按钮（非 antd 场景） ---------- */
+.mq-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 18px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 2px 8px rgba(10, 55, 115, 0.08);
+  color: var(--mq-text-primary);
+  font: inherit;
+  font-size: var(--mq-font-14);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mq-btn:hover {
+  background: #ffffff;
+}
+
+.mq-btn--primary,
+.mq-btn--primary:hover {
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
+  box-shadow: var(--mq-brand-shadow);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.mq-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mq-btn:focus-visible,
+.mq-segmented__item:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+/* ---------- 表单字段 ---------- */
+.mq-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mq-field__label {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.mq-field__required {
+  color: var(--mq-danger-text);
+}
+
+.mq-field__hint {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  line-height: 18px;
+}
+
+/* 原生输入框，与 antd 输入框同外观 */
+.mq-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 1px solid rgba(60, 60, 80, 0.1);
+  border-radius: var(--mq-radius-control);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 1px 2px rgba(10, 55, 115, 0.04);
+  color: var(--mq-text-primary);
+  font: inherit;
+  font-size: var(--mq-font-13);
+  outline: none;
+}
+
+.mq-input:focus {
+  border-color: var(--mq-brand-600);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.12);
+}
+
+.mq-input:disabled {
+  color: var(--mq-text-tertiary);
+  cursor: not-allowed;
+}
+
+/* ---------- 原生表格 ---------- */
+.mq-table {
+  width: 100%;
+  overflow: hidden;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--mq-font-13);
+}
+
+.mq-table th {
+  height: 38px;
+  padding: 0 18px;
+  background: rgba(118, 128, 160, 0.06);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  text-align: left;
+}
+
+.mq-table td {
+  height: 46px;
+  padding: 0 18px;
+  border-top: 0.5px solid var(--mq-border);
+  color: var(--mq-text-primary);
+}
+
+.mq-mono {
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-12);
+}
+
+/* ---------- 弹窗：a-modal 传 wrap-class-name="mq-modal" ---------- */
+.mq-modal .ant-modal-content {
+  padding: 28px 28px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: var(--mq-radius-overlay);
+  background: rgba(255, 255, 255, 0.88);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(40px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    0 2px 6px rgba(10, 45, 90, 0.06),
+    0 30px 80px rgba(10, 40, 90, 0.28);
+}
+
+.mq-modal .ant-modal-close {
+  top: 18px;
+  right: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--mq-bg-muted);
+}

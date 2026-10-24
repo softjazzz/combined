@@ -1,56 +1,74 @@
 <template>
-  <main class="report-page">
-    <header class="page-head">
-      <div>
-        <h1>病案首页统计分析</h1>
+  <main class="mq-page report-page">
+    <header class="page-head mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
+        <h1 class="mq-page-title">病案首页统计分析</h1>
         <p>每份病案首页质控与编码质控的最新一次结果（已核验病例身份）</p>
       </div>
-      <div class="head-actions">
-        <button class="secondary" type="button" :disabled="loading" @click="loadReport">
-          <RefreshCw :size="16" />刷新
+      <div class="head-actions mq-page-head__actions">
+        <button class="secondary mq-btn" type="button" :disabled="loading" @click="loadReport">
+          <MqIcon name="sync" :size="16" />刷新
         </button>
         <button
-          class="secondary"
+          class="secondary mq-btn"
           type="button"
           :disabled="!report || exporting !== null"
           @click="download('departments')"
         >
-          <Download :size="16" />科室 CSV
+          <MqIcon name="download" :size="16" />科室 CSV
         </button>
       </div>
     </header>
 
-    <section class="filters" aria-label="报表筛选">
-      <div class="field">
+    <section class="filters mq-card mq-card--padded" aria-label="报表筛选">
+      <div class="field mq-field">
         <label for="fp-department">科室</label
-        ><input id="fp-department" v-model.trim="draft.department" placeholder="全部科室" />
+        ><input
+          id="fp-department"
+          v-model.trim="draft.department"
+          class="mq-input"
+          placeholder="全部科室"
+        />
       </div>
-      <div class="field">
+      <div class="field mq-field">
         <label for="fp-doctor">主治医师</label
-        ><input id="fp-doctor" v-model.trim="draft.doctor" placeholder="全部医生" />
+        ><input
+          id="fp-doctor"
+          v-model.trim="draft.doctor"
+          class="mq-input"
+          placeholder="全部医生"
+        />
       </div>
-      <div class="field">
+      <div class="field mq-field">
         <label for="fp-from">质控时间起</label
-        ><input id="fp-from" v-model="draft.analyzed_from" type="datetime-local" />
+        ><input id="fp-from" v-model="draft.analyzed_from" class="mq-input" type="datetime-local" />
       </div>
-      <div class="field">
+      <div class="field mq-field">
         <label for="fp-to">质控时间止</label
-        ><input id="fp-to" v-model="draft.analyzed_to" type="datetime-local" />
+        ><input id="fp-to" v-model="draft.analyzed_to" class="mq-input" type="datetime-local" />
       </div>
-      <button class="primary" type="button" @click="applyFilters"><Search :size="16" />查询</button>
-      <button class="secondary" type="button" @click="resetFilters">重置</button>
+      <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
+        <MqIcon name="search" :size="16" />查询
+      </button>
+      <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
     </section>
 
     <div v-if="loading" class="status" role="status">正在读取病案首页统计…</div>
     <div v-else-if="loadError" class="status error" role="alert" data-testid="report-error">
-      <CircleAlert :size="18" />{{ loadError }}
+      <MqIcon name="issue" :size="18" />{{ loadError }}
     </div>
     <template v-else-if="report">
       <section class="overview" aria-label="总览">
         <h2>总览</h2>
         <div class="metrics">
-          <div v-for="item in kpiCards" :key="item.label" class="metric">
-            <span>{{ item.label }}</span
+          <div
+            v-for="item in kpiCards"
+            :key="item.label"
+            class="metric mq-card"
+            :class="{ 'metric--text': /[\u4e00-\u9fff]/.test(item.value) }"
+          >
+            <span class="metric-label"><MqIcon name="stats" :size="20" />{{ item.label }}</span
             ><strong>{{ item.value }}</strong
             ><small>{{ item.note }}</small>
           </div>
@@ -60,12 +78,16 @@
       <section class="distribution" aria-label="分布">
         <div class="section-head">
           <h2>缺陷分布</h2>
-          <div class="segmented">
+          <div class="segmented mq-segmented">
             <button
               v-for="source in report.sources"
               :key="source.source_key"
               type="button"
-              :class="{ active: activeSource === source.source_key }"
+              class="mq-segmented__item"
+              :class="{
+                active: activeSource === source.source_key,
+                'is-active': activeSource === source.source_key,
+              }"
               @click="activeSource = source.source_key"
             >
               {{ source.label }}
@@ -74,7 +96,7 @@
         </div>
         <template v-if="currentSource">
           <div class="distribution-grid">
-            <div class="data-panel">
+            <div class="data-panel mq-card">
               <h3>严重度</h3>
               <div
                 v-for="item in currentSource.severity_distribution"
@@ -86,7 +108,7 @@
               </div>
               <p v-if="!currentSource.severity_distribution.length" class="empty">暂无缺陷</p>
             </div>
-            <div class="data-panel">
+            <div class="data-panel mq-card">
               <h3>缺陷分类</h3>
               <div
                 v-for="item in currentSource.category_distribution"
@@ -99,7 +121,7 @@
               <p v-if="!currentSource.category_distribution.length" class="empty">暂无缺陷</p>
             </div>
           </div>
-          <div class="top-panel">
+          <div class="top-panel mq-card">
             <div class="top-head">
               <h3>{{ currentSource.label }} 规则 Top 20</h3>
             </div>
@@ -122,13 +144,13 @@
       </section>
 
       <section class="details" aria-label="科室明细">
-        <div class="table-panel">
+        <div class="table-panel mq-card">
           <div class="table-head">
             <h3>科室明细</h3>
             <span>{{ report.department_rows.length }} 个科室</span>
           </div>
           <div class="table-scroll">
-            <table>
+            <table class="mq-table">
               <thead>
                 <tr>
                   <th>科室</th>
@@ -181,16 +203,22 @@
       </section>
     </template>
 
-    <a-drawer v-model:open="drawerOpen" :title="drilldownTitle" :width="900" destroy-on-close>
+    <a-drawer
+      v-model:open="drawerOpen"
+      :title="drilldownTitle"
+      width="min(900px, 100vw)"
+      :root-style="{ zIndex: 1100 }"
+      destroy-on-close
+    >
       <div class="drawer-actions">
         <span>{{ recordsPage ? `共 ${recordsPage.total} 份病案` : '病案明细' }}</span
         ><button
-          class="secondary"
+          class="secondary mq-btn"
           type="button"
           :disabled="!recordsPage || exporting !== null"
           @click="download('records')"
         >
-          <Download :size="16" />导出病案 CSV
+          <MqIcon name="download" :size="16" />导出病案 CSV
         </button>
       </div>
       <p v-if="recordsError" class="status error" role="alert">
@@ -198,7 +226,7 @@
       </p>
       <p v-else-if="recordsLoading" class="status">正在读取病案…</p>
       <div v-else-if="recordsPage" class="table-scroll">
-        <table>
+        <table class="mq-table">
           <thead>
             <tr>
               <th>患者 / 就诊号</th>
@@ -236,7 +264,7 @@
       </div>
       <div v-if="recordsPage && recordsPage.total > recordsPage.page_size" class="pager">
         <button
-          class="secondary"
+          class="secondary mq-btn"
           type="button"
           :disabled="recordsPage.page <= 1 || recordsLoading"
           @click="loadRecords(recordsPage.page - 1)"
@@ -245,7 +273,7 @@
         ><span
           >{{ recordsPage.page }} / {{ Math.ceil(recordsPage.total / recordsPage.page_size) }}</span
         ><button
-          class="secondary"
+          class="secondary mq-btn"
           type="button"
           :disabled="
             recordsPage.page * recordsPage.page_size >= recordsPage.total || recordsLoading
@@ -260,9 +288,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { CircleAlert, Download, RefreshCw, Search } from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
+import { useAuthStore } from '@/stores/auth'
 import {
   exportFrontpageQualityReport,
   getFrontpageQualityRecords,
@@ -281,6 +310,15 @@ const SOURCE_FILTER: Record<FrontpageSourceKey, 'frontpage' | 'coding'> = {
   frontpage_formal_qc: 'frontpage',
   coding_qc: 'coding',
 }
+const authStore = useAuthStore()
+const authKey = computed(() =>
+  JSON.stringify([
+    authStore.user?.id,
+    authStore.user?.institute_id,
+    authStore.user?.department,
+    authStore.user?.roles || authStore.user?.role,
+  ]),
+)
 const draft = ref({ department: '', doctor: '', analyzed_from: '', analyzed_to: '' })
 const filters = ref<FrontpageQualityFilters>({})
 const report = ref<FrontpageQualityReport | null>(null)
@@ -296,6 +334,23 @@ const recordsLoading = ref(false)
 const recordsError = ref('')
 let reportRequest = 0
 let recordsRequest = 0
+let exportRequest = 0
+const exportScope = computed(() => JSON.stringify([filters.value, draft.value, drilldown.value]))
+function invalidateExport(): void {
+  ++exportRequest
+  exporting.value = null
+}
+watch([authKey, exportScope], invalidateExport, { flush: 'sync' })
+watch(authKey, () => {
+  ++reportRequest
+  ++recordsRequest
+  report.value = null
+  recordsPage.value = null
+  drawerOpen.value = false
+  loading.value = false
+  recordsLoading.value = false
+  if (authStore.user?.id) void loadReport()
+})
 
 const currentSource = computed(
   () => report.value?.sources.find((item) => item.source_key === activeSource.value) ?? null,
@@ -369,7 +424,9 @@ function formatTime(value: string | null): string {
 }
 
 async function loadReport(): Promise<void> {
+  invalidateExport()
   const request = ++reportRequest
+  const identity = authKey.value
   ++recordsRequest
   drawerOpen.value = false
   drilldown.value = {}
@@ -379,7 +436,7 @@ async function loadReport(): Promise<void> {
   loadError.value = ''
   report.value = null
   const result = await getFrontpageQualityReport(filters.value)
-  if (request !== reportRequest) return
+  if (request !== reportRequest || identity !== authKey.value) return
   loading.value = false
   if (result.success && result.data) report.value = result.data
   else
@@ -406,6 +463,7 @@ function resetFilters(): void {
 }
 async function loadRecords(page = 1): Promise<void> {
   const request = ++recordsRequest
+  const identity = authKey.value
   recordsLoading.value = true
   recordsError.value = ''
   recordsPage.value = null
@@ -415,7 +473,7 @@ async function loadRecords(page = 1): Promise<void> {
     page,
     page_size: 20,
   })
-  if (request !== recordsRequest) return
+  if (request !== recordsRequest || identity !== authKey.value) return
   recordsLoading.value = false
   if (result.success && result.data) recordsPage.value = result.data
   else recordsError.value = result.message || '病案明细暂不可用'
@@ -433,25 +491,41 @@ function openRule(ruleCode: string, ruleName: string): void {
   )
 }
 async function download(sheet: FrontpageSheet): Promise<void> {
+  if (!report.value || !authStore.user?.id) return
+  const request = ++exportRequest
+  const identity = authKey.value
+  const scope = exportScope.value
+  const query = { ...filters.value, ...(sheet === 'records' ? drilldown.value : {}) }
+  const filename = `病案首页统计-${sheet}.csv`
+  const current = () =>
+    request === exportRequest && identity === authKey.value && scope === exportScope.value
   exporting.value = sheet
-  const result = await exportFrontpageQualityReport(
-    { ...filters.value, ...(sheet === 'records' ? drilldown.value : {}) },
-    sheet,
-  )
-  exporting.value = null
-  if (!result.success || !result.data) {
-    message.error(result.message || '导出失败')
-    return
+  try {
+    const result = await exportFrontpageQualityReport(query, sheet)
+    if (!current()) return
+    if (!result.success || !result.data) {
+      message.error(result.message || '导出失败')
+      return
+    }
+    const url = URL.createObjectURL(result.data)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  } catch {
+    if (current()) message.error('导出失败')
+  } finally {
+    if (request === exportRequest) exporting.value = null
   }
-  const url = URL.createObjectURL(result.data)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = `病案首页统计-${sheet}.csv`
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(url)
 }
+onBeforeUnmount(() => {
+  ++reportRequest
+  ++recordsRequest
+  invalidateExport()
+})
 onMounted(() => {
   void loadReport()
 })

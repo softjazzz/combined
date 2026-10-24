@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database.models.qc import QCDefect, QCDefectHistory
+from app.database.models.qc import QCDefect, QCDefectHistory, SysUser
 from app.services import manual_defect_review_service as service
 
 BASE_TIME = datetime(2026, 9, 1, 8, 0, 0)
@@ -55,8 +55,11 @@ def sessions(monkeypatch):
     )
     QCDefect.__table__.create(engine)
     QCDefectHistory.__table__.create(engine)
+    SysUser.__table__.create(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     with factory.begin() as session:
+        session.add_all([SysUser(id=actor, username=actor, display_name=actor, role="qc_manager",
+                                institute_id="hospital-A") for actor in ("mgr-1", "mgr-2", "qc-9")])
         session.execute(QCDefect.__table__.insert(), [
             _defect("m-1", minutes=1),
             _defect("m-2", minutes=2, scene="final"),
@@ -111,7 +114,7 @@ def test_case_pages_reach_rows_after_default_limit(sessions):
             _defect(f"page-{index:03}", minutes=index + 20, scene="running")
             for index in range(205)
         ])
-    params = dict(institute_id="hospital-A", patient_id="patient", visit_id="visit", scene="running")
+    params = dict(institute_id="hospital-A", patient_id="patient", visit_id="visit", scene="running", actor_id="mgr-1")
     first = service.list_case_manual_defects(**params)
     second = service.list_case_manual_defects(**params, offset=200)
     assert first["total"] == second["total"] == 205
@@ -297,7 +300,7 @@ def test_history_db_failure_rolls_back_and_is_unavailable(sessions):
 
 
 def test_list_filters_scope_orders_and_reads_task_identity(sessions):
-    data = service.list_manual_defects(review_status="pending", page=1, page_size=100)
+    data = service.list_manual_defects(actor_id="mgr-1", review_status="pending", page=1, page_size=100)
     ids = [item["id"] for item in data["items"]]
     assert ids == ["m-nohist", "m-self", "m-4b", "m-4a", "m-3", "m-2", "m-1"]
     assert data["total"] == 7
@@ -311,9 +314,9 @@ def test_list_filters_scope_orders_and_reads_task_identity(sessions):
         "run_number", "rule_code", "rule_name", "description", "severity", "location",
         "suggestion", "manual_review_status", "manual_created_by", "created_at",
     }
-    assert [i["id"] for i in service.list_manual_defects(review_status="approved")["items"]] == [
+    assert [i["id"] for i in service.list_manual_defects(actor_id="mgr-1", review_status="approved")["items"]] == [
         "m-approved"]
-    rejected = service.list_manual_defects(review_status="rejected")
+    rejected = service.list_manual_defects(actor_id="mgr-1", review_status="rejected")
     assert rejected["total"] == 1 and rejected["items"][0]["id"] == "m-rejected"
 
 
@@ -324,16 +327,17 @@ def test_list_history_is_batched_in_one_query(sessions):
     def capture(conn, cursor, statement, *args):
         statements.append(statement)
 
-    service.list_manual_defects(review_status="pending", page=1, page_size=100)
+    service.list_manual_defects(actor_id="mgr-1", review_status="pending", page=1, page_size=100)
     sa.event.remove(sessions.kw["bind"], "before_cursor_execute", capture)
     assert sum("qc_defect_history" in s for s in statements) == 1
-    assert len(statements) == 3
+    assert sum("sys_users" in s for s in statements) == 1
+    assert len(statements) == 4
 
 
 def test_list_pagination_boundaries(sessions):
-    page1 = service.list_manual_defects(review_status="pending", page=1, page_size=3)
-    page3 = service.list_manual_defects(review_status="pending", page=3, page_size=3)
-    beyond = service.list_manual_defects(review_status="pending", page=4, page_size=3)
+    page1 = service.list_manual_defects(actor_id="mgr-1", review_status="pending", page=1, page_size=3)
+    page3 = service.list_manual_defects(actor_id="mgr-1", review_status="pending", page=3, page_size=3)
+    beyond = service.list_manual_defects(actor_id="mgr-1", review_status="pending", page=4, page_size=3)
     assert [i["id"] for i in page1["items"]] == ["m-nohist", "m-self", "m-4b"]
     assert [i["id"] for i in page3["items"]] == ["m-1"]
     assert beyond["items"] == [] and beyond["total"] == 7
@@ -344,12 +348,12 @@ def test_list_pagination_boundaries(sessions):
 
 
 def test_count_pending_matches_list_total(sessions):
-    assert service.count_pending_manual_defects() == 7
+    assert service.count_pending_manual_defects(actor_id="mgr-1") == 7
     service.review_manual_defect(defect_id="m-1", reviewer_id="mgr-1",
                                  decision="approved", expected_status="pending")
-    count = service.count_pending_manual_defects()
+    count = service.count_pending_manual_defects(actor_id="mgr-1")
     assert count == 6
-    assert count == service.list_manual_defects(review_status="pending")["total"]
+    assert count == service.list_manual_defects(actor_id="mgr-1", review_status="pending")["total"]
 
 
 @pytest.mark.parametrize(
@@ -366,11 +370,11 @@ def test_list_and_count_filter_exact_scene(sessions, scene, expected_ids):
         session.execute(
             QCDefect.__table__.update().where(QCDefect.id == "m-1").values(scene="running")
         )
-    data = service.list_manual_defects(scene=scene, page_size=100)
+    data = service.list_manual_defects(actor_id="mgr-1", scene=scene, page_size=100)
     assert data["scene"] == scene
     assert [item["id"] for item in data["items"]] == expected_ids
-    assert data["total"] == service.count_pending_manual_defects(scene=scene) == 1
-    all_data = service.list_manual_defects(scene="all", page_size=100)
+    assert data["total"] == service.count_pending_manual_defects(actor_id="mgr-1", scene=scene) == 1
+    all_data = service.list_manual_defects(actor_id="mgr-1", scene="all", page_size=100)
     assert all_data["total"] == 7
     assert "m-nohist" in {item["id"] for item in all_data["items"]}
 
@@ -388,9 +392,9 @@ def test_database_errors_are_unavailable(monkeypatch):
     engine = sa.create_engine("sqlite://", poolclass=StaticPool)  # 空库：无表
     monkeypatch.setattr(service, "SessionLocal", sessionmaker(bind=engine))
     with pytest.raises(service.ManualDefectReviewUnavailable):
-        service.list_manual_defects()
+        service.list_manual_defects(actor_id="mgr-1")
     with pytest.raises(service.ManualDefectReviewUnavailable):
-        service.count_pending_manual_defects()
+        service.count_pending_manual_defects(actor_id="mgr-1")
     with pytest.raises(service.ManualDefectReviewUnavailable):
         service.review_manual_defect(defect_id="m-1", reviewer_id="mgr-1",
                                      decision="approved", expected_status="pending")

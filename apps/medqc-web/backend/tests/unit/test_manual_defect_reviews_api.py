@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database.models.qc import QCDefect, QCDefectHistory
+from app.database.models.qc import QCDefect, QCDefectHistory, SysUser
 from app.routers import manual_defect_reviews as routes
 from app.services import manual_defect_review_service as service
 
@@ -67,8 +67,11 @@ def sessions(monkeypatch):
     )
     QCDefect.__table__.create(engine)
     QCDefectHistory.__table__.create(engine)
+    SysUser.__table__.create(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     with factory.begin() as session:
+        session.add(SysUser(id="mgr-1", username="mgr-1", display_name="manager", role="qc_manager",
+                            institute_id="hospital-A"))
         session.execute(QCDefect.__table__.insert(), [
             _defect("m-1", 1, scene="running"),
             _defect("m-2", 2, scene="final"),
@@ -201,7 +204,7 @@ def test_list_filters_total_pagination_and_task_fields(sessions, monkeypatch):
 def test_count_matches_list_pending_total(sessions, monkeypatch):
     http, _ = client(monkeypatch)
     total = http.get(LIST).json()["data"]["total"]
-    assert routes.count_pending_manual_defects() == total == 4
+    assert routes.count_pending_manual_defects(actor_id="mgr-1") == total == 4
 
 
 def test_list_and_count_use_same_scene_and_response_echoes_it(sessions, monkeypatch):
@@ -210,7 +213,7 @@ def test_list_and_count_use_same_scene_and_response_echoes_it(sessions, monkeypa
     assert data["scene"] == "running"
     assert data["total"] == 1
     assert [item["id"] for item in data["items"]] == ["m-1"]
-    assert routes.count_pending_manual_defects(scene="running") == data["total"]
+    assert routes.count_pending_manual_defects(scene="running", actor_id="mgr-1") == data["total"]
     assert http.get(LIST, params={"scene": "outpatient"}).status_code == 422
 
 

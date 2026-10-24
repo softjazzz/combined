@@ -33,7 +33,7 @@ def _stub_review_counts(monkeypatch, *, initial=0, recheck=0, manual=0):
     monkeypatch.setattr(
         manual_defect_review_service,
         "count_pending_manual_defects",
-        lambda *, scene="all": manual,
+        lambda *, scene="all", actor_id: manual,
     )
     return calls
 

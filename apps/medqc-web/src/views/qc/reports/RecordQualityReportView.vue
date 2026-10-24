@@ -1,14 +1,9 @@
 <template>
-  <main class="report-page">
-    <a-tabs v-model:active-key="reportTab">
-      <a-tab-pane key="quality" tab="病历质量分析" />
-      <a-tab-pane key="core" tab="18项核心制度" />
-    </a-tabs>
-    <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-filters="filters" />
-    <div v-show="reportTab === 'quality'">
-    <header class="page-head">
-      <div>
-        <h1>病历质量分析</h1>
+  <main class="mq-page report-page">
+    <header class="page-head mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
+        <h1 class="mq-page-title">病历质量分析</h1>
         <p>
           {{
             scene === 'running'
@@ -17,416 +12,517 @@
           }}
         </p>
       </div>
-      <div class="head-actions">
-        <button class="secondary" type="button" :disabled="loading" @click="loadReport">
-          <RefreshCw :size="16" />刷新
+      <div class="head-actions mq-page-head__actions">
+        <div class="mq-segmented" role="tablist" aria-label="报表专题">
+          <button
+            type="button"
+            class="mq-segmented__item"
+            :class="{ 'is-active': reportTab === 'quality' }"
+            role="tab"
+            :aria-selected="reportTab === 'quality'"
+            @click="reportTab = 'quality'"
+          >
+            病历质量分析
+          </button>
+          <button
+            type="button"
+            class="mq-segmented__item"
+            :class="{ 'is-active': reportTab === 'core' }"
+            role="tab"
+            :aria-selected="reportTab === 'core'"
+            data-testid="core-tab"
+            @click="reportTab = 'core'"
+          >
+            18项核心制度
+          </button>
+        </div>
+        <button
+          v-if="reportTab === 'quality'"
+          class="secondary mq-btn"
+          type="button"
+          :disabled="loading"
+          @click="loadReport"
+        >
+          <MqIcon name="sync" :size="16" />刷新
         </button>
         <button
-          class="secondary"
+          v-if="reportTab === 'quality'"
+          class="secondary mq-btn"
           type="button"
           :disabled="!report || exporting !== null"
           @click="download('departments')"
         >
-          <Download :size="16" />科室 CSV
+          <MqIcon name="download" :size="16" />科室 CSV
         </button>
         <button
-          class="secondary"
+          v-if="reportTab === 'quality'"
+          class="secondary mq-btn"
           type="button"
           :disabled="!report || exporting !== null"
           @click="download('doctors')"
         >
-          <Download :size="16" />医生 CSV
+          <MqIcon name="download" :size="16" />医生 CSV
         </button>
       </div>
     </header>
-
-    <section class="filters" aria-label="报表筛选">
-      <div class="field scene-field">
-        <label>场景</label>
-        <div class="segmented">
-          <button
-            type="button"
-            :class="{ active: scene === 'running' }"
-            @click="setScene('running')"
-          >
-            运行病历</button
-          ><button type="button" :class="{ active: scene === 'final' }" @click="setScene('final')">
-            终末病历
-          </button>
-        </div>
-      </div>
-      <div class="field">
-        <label for="report-department">科室</label
-        ><input id="report-department" v-model.trim="draft.department" placeholder="全部科室" />
-      </div>
-      <div class="field">
-        <label for="report-doctor">主治医师</label
-        ><input id="report-doctor" v-model.trim="draft.doctor" placeholder="全部医生" />
-      </div>
-      <div class="field">
-        <label for="report-from">完成时间起</label
-        ><input id="report-from" v-model="draft.completed_from" type="datetime-local" />
-      </div>
-      <div class="field">
-        <label for="report-to">完成时间止</label
-        ><input id="report-to" v-model="draft.completed_to" type="datetime-local" />
-      </div>
-      <div class="field">
-        <label for="report-source">质控类型</label
-        ><select id="report-source" v-model="draft.defect_source">
-          <option value="all">全部</option>
-          <option value="auto">自动缺陷</option>
-          <option value="manual">人工缺陷</option>
-        </select>
-      </div>
-      <button class="primary" type="button" @click="applyFilters"><Search :size="16" />查询</button>
-      <button class="secondary" type="button" @click="resetFilters">重置</button>
-    </section>
-
-    <div v-if="loading" class="status" role="status">正在读取病历质量报表…</div>
-    <div v-else-if="loadError" class="status error" role="alert" data-testid="report-error">
-      <CircleAlert :size="18" />{{ loadError }}
-    </div>
-    <template v-else-if="report">
-      <div
-        v-if="report.scope.archive_status === 'unverified'"
-        class="notice archive-notice"
-        role="note"
-        data-testid="archive-unverified"
-      >
-        <CircleAlert :size="16" />终末口径：已出院且有已完成质控结果的病历。医院归档标记尚未接入，
-        统计范围未按“已归档”核验，可能包含尚未归档的病历。
-      </div>
-      <section class="overview" aria-label="总览">
-        <h2>总览</h2>
-        <div class="metrics">
-          <div v-for="item in kpiCards" :key="item.label" class="metric">
-            <span>{{ item.label }}</span
-            ><strong>{{ item.value }}</strong
-            ><small>{{ item.note }}</small>
+    <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-filters="filters" />
+    <div v-show="reportTab === 'quality'">
+      <section class="filters mq-card mq-card--padded" aria-label="报表筛选">
+        <div class="field mq-field scene-field">
+          <label>场景</label>
+          <div class="segmented mq-segmented">
+            <button
+              type="button"
+              class="mq-segmented__item"
+              :class="{ active: scene === 'running', 'is-active': scene === 'running' }"
+              @click="setScene('running')"
+            >
+              运行病历</button
+            ><button
+              type="button"
+              class="mq-segmented__item"
+              :class="{ active: scene === 'final', 'is-active': scene === 'final' }"
+              @click="setScene('final')"
+            >
+              终末病历
+            </button>
           </div>
         </div>
-        <div v-if="report.kpis.qc_unavailable_total" class="notice">
-          {{ report.kpis.qc_unavailable_total }} 份病历的质控结果无法读取，未纳入已完成结果统计。
+        <div class="field mq-field">
+          <label for="report-department">科室</label
+          ><input
+            id="report-department"
+            v-model.trim="draft.department"
+            class="mq-input"
+            placeholder="全部科室"
+          />
         </div>
-        <div
-          v-if="
-            report.source_status?.manual_defect === 'unavailable' ||
-            report.source_status?.review === 'unavailable'
-          "
-          class="notice"
-        >
-          部分来源暂不可用，相关指标显示“不可用”。
+        <div class="field mq-field">
+          <label for="report-doctor">主治医师</label
+          ><input
+            id="report-doctor"
+            v-model.trim="draft.doctor"
+            class="mq-input"
+            placeholder="全部医生"
+          />
         </div>
+        <div class="field mq-field">
+          <label for="report-from">完成时间起</label
+          ><input
+            id="report-from"
+            v-model="draft.completed_from"
+            class="mq-input"
+            type="datetime-local"
+          />
+        </div>
+        <div class="field mq-field">
+          <label for="report-to">完成时间止</label
+          ><input
+            id="report-to"
+            v-model="draft.completed_to"
+            class="mq-input"
+            type="datetime-local"
+          />
+        </div>
+        <div class="field mq-field">
+          <label for="report-source">质控类型</label
+          ><select id="report-source" v-model="draft.defect_source" class="mq-input">
+            <option value="all">全部</option>
+            <option value="auto">自动缺陷</option>
+            <option value="manual">人工缺陷</option>
+          </select>
+        </div>
+        <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
+          <MqIcon name="search" :size="16" />查询
+        </button>
+        <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
       </section>
 
-      <section class="distribution" aria-label="分布">
-        <h2>分布</h2>
-        <div class="distribution-grid">
-          <div v-if="report.score_standard.status === 'configured'" class="data-panel">
-            <h3>等级分布</h3>
+      <div v-if="loading" class="status" role="status">正在读取病历质量报表…</div>
+      <div v-else-if="loadError" class="status error" role="alert" data-testid="report-error">
+        <MqIcon name="issue" :size="18" />{{ loadError }}
+      </div>
+      <template v-else-if="report">
+        <div
+          v-if="report.scope.archive_status === 'unverified'"
+          class="notice archive-notice"
+          role="note"
+          data-testid="archive-unverified"
+        >
+          <MqIcon
+            name="issue"
+            :size="16"
+          />终末口径：已出院且有已完成质控结果的病历。医院归档标记尚未接入，
+          统计范围未按“已归档”核验，可能包含尚未归档的病历。
+        </div>
+        <section class="overview" aria-label="总览">
+          <h2>总览</h2>
+          <div class="metrics">
             <div
-              v-for="item in report.grade_distribution || []"
-              :key="item.grade || 'unknown'"
-              class="data-row"
+              v-for="item in kpiCards"
+              :key="item.label"
+              class="metric mq-card"
+              :class="{ 'metric--text': /[\u4e00-\u9fff]/.test(item.value) }"
             >
-              <span>{{ item.grade || '未分级' }}</span
-              ><strong>{{ item.count }}</strong>
+              <span class="metric-label"><MqIcon name="stats" :size="20" />{{ item.label }}</span
+              ><strong>{{ item.value }}</strong
+              ><small>{{ item.note }}</small>
             </div>
-            <p v-if="!report.grade_distribution?.length" class="empty">暂无数据</p>
           </div>
-          <div v-if="report.score_standard.status === 'configured'" class="data-panel">
-            <h3>得分分布</h3>
-            <div
-              v-for="item in report.score_distribution || []"
-              :key="item.bucket"
-              class="data-row"
-            >
-              <span>{{ item.bucket }}</span
-              ><strong>{{ item.count }}</strong>
-            </div>
-            <p v-if="!report.score_distribution?.length" class="empty">暂无数据</p>
+          <div v-if="report.kpis.qc_unavailable_total" class="notice">
+            {{ report.kpis.qc_unavailable_total }} 份病历的质控结果无法读取，未纳入已完成结果统计。
           </div>
-          <div class="data-panel">
-            <h3>缺陷等级</h3>
-            <template v-if="report.defect_level_distribution">
+          <div
+            v-if="
+              report.source_status?.manual_defect === 'unavailable' ||
+              report.source_status?.review === 'unavailable'
+            "
+            class="notice"
+          >
+            部分来源暂不可用，相关指标显示“不可用”。
+          </div>
+        </section>
+
+        <section class="distribution" aria-label="分布">
+          <h2>分布</h2>
+          <div class="distribution-grid">
+            <div v-if="report.score_standard.status === 'configured'" class="data-panel mq-card">
+              <h3>等级分布</h3>
               <div
-                v-for="item in report.defect_level_distribution"
-                :key="item.name"
+                v-for="item in report.grade_distribution || []"
+                :key="item.grade || 'unknown'"
                 class="data-row"
               >
-                <span>{{ item.name }}</span
-                ><strong>{{ item.defect_total }}</strong>
+                <span>{{ item.grade || '未分级' }}</span
+                ><strong>{{ item.count }}</strong>
               </div>
-              <p v-if="!report.defect_level_distribution.length" class="empty">暂无数据</p>
-            </template>
-            <p v-else class="empty">不可用</p>
-          </div>
-          <div class="data-panel">
-            <h3>缺陷类型分布</h3>
-            <template v-if="report.defect_type_distribution">
-              <button v-for="item in report.defect_type_distribution" :key="item.name" class="data-row row-button" type="button"
-                @click="openDrilldown({ defect_type: item.name }, `缺陷类型：${item.name}`)">
-                <span>{{ item.name }}</span><strong>{{ item.defect_total }}</strong>
-              </button>
-              <p v-if="!report.defect_type_distribution.length" class="empty">暂无已分类缺陷</p>
-            </template>
-            <p v-else class="empty">不可用</p>
-          </div>
-          <div class="data-panel">
-            <h3>文书分布</h3>
-            <template v-if="report.document_distribution">
-              <button
-                v-for="item in report.document_distribution"
-                :key="item.name"
-                class="data-row row-button"
-                type="button"
-                @click="openDrilldown({ document: item.name }, `文书：${item.name}`)"
+              <p v-if="!report.grade_distribution?.length" class="empty">暂无数据</p>
+            </div>
+            <div v-if="report.score_standard.status === 'configured'" class="data-panel mq-card">
+              <h3>得分分布</h3>
+              <div
+                v-for="item in report.score_distribution || []"
+                :key="item.bucket"
+                class="data-row"
               >
-                <span>{{ item.name }}</span
+                <span>{{ item.bucket }}</span
+                ><strong>{{ item.count }}</strong>
+              </div>
+              <p v-if="!report.score_distribution?.length" class="empty">暂无数据</p>
+            </div>
+            <div class="data-panel mq-card">
+              <h3>缺陷等级</h3>
+              <template v-if="report.defect_level_distribution">
+                <div
+                  v-for="item in report.defect_level_distribution"
+                  :key="item.name"
+                  class="data-row"
+                >
+                  <span>{{ item.name }}</span
+                  ><strong>{{ item.defect_total }}</strong>
+                </div>
+                <p v-if="!report.defect_level_distribution.length" class="empty">暂无数据</p>
+              </template>
+              <p v-else class="empty">不可用</p>
+            </div>
+            <div class="data-panel mq-card">
+              <h3>缺陷类型分布</h3>
+              <template v-if="report.defect_type_distribution">
+                <button
+                  v-for="item in report.defect_type_distribution"
+                  :key="item.name"
+                  class="data-row row-button"
+                  type="button"
+                  @click="openDrilldown({ defect_type: item.name }, `缺陷类型：${item.name}`)"
+                >
+                  <span>{{ item.name }}</span
+                  ><strong>{{ item.defect_total }}</strong>
+                </button>
+                <p v-if="!report.defect_type_distribution.length" class="empty">暂无已分类缺陷</p>
+              </template>
+              <p v-else class="empty">不可用</p>
+            </div>
+            <div class="data-panel mq-card">
+              <h3>文书分布</h3>
+              <template v-if="report.document_distribution">
+                <button
+                  v-for="item in report.document_distribution"
+                  :key="item.name"
+                  class="data-row row-button"
+                  type="button"
+                  @click="openDrilldown({ document: item.name }, `文书：${item.name}`)"
+                >
+                  <span>{{ item.name }}</span
+                  ><strong>{{ item.defect_total }}</strong>
+                </button>
+                <p v-if="!report.document_distribution.length" class="empty">暂无数据</p>
+              </template>
+              <p v-else class="empty">不可用</p>
+            </div>
+          </div>
+          <div class="top-panel mq-card">
+            <div class="top-head">
+              <h3>缺陷 Top 20</h3>
+              <div class="segmented mq-segmented">
+                <button
+                  v-for="tab in topTabs"
+                  :key="tab.key"
+                  type="button"
+                  class="mq-segmented__item"
+                  :class="{ active: activeTop === tab.key, 'is-active': activeTop === tab.key }"
+                  @click="activeTop = tab.key"
+                >
+                  {{ tab.label }}
+                </button>
+              </div>
+            </div>
+            <p v-if="activeTopRows === null" class="empty">不可用</p>
+            <p v-else-if="!activeTopRows.length" class="empty">暂无数据</p>
+            <div v-else class="top-grid">
+              <button
+                v-for="(item, index) in activeTopRows"
+                :key="`${item.name}-${index}`"
+                type="button"
+                class="top-row"
+                @click="openTop(item)"
+              >
+                <span class="rank">{{ index + 1 }}</span
+                ><span class="top-name">{{ item.rule_name || item.name }}</span
                 ><strong>{{ item.defect_total }}</strong>
               </button>
-              <p v-if="!report.document_distribution.length" class="empty">暂无数据</p>
-            </template>
-            <p v-else class="empty">不可用</p>
-          </div>
-        </div>
-        <div class="top-panel">
-          <div class="top-head">
-            <h3>缺陷 Top 20</h3>
-            <div class="segmented">
+            </div>
+            <p v-if="activeTop === 'veto'" class="notice">
+              单否按评分标准的自动缺陷计分结果统计；人工缺陷单否归属未知。
+            </p>
+            <div v-if="report.classification_unknown" class="notice">
               <button
-                v-for="tab in topTabs"
-                :key="tab.key"
+                v-for="dimension in classificationDimensions"
+                :key="dimension.key"
                 type="button"
-                :class="{ active: activeTop === tab.key }"
-                @click="activeTop = tab.key"
+                class="link"
+                :disabled="report.classification_unknown[dimension.key] == null"
+                @click="
+                  openDrilldown(
+                    { unknown_classification: dimension.key },
+                    `${dimension.label}未知的病例`,
+                  )
+                "
               >
-                {{ tab.label }}
+                {{ dimension.label }}未知：{{
+                  numberText(report.classification_unknown[dimension.key])
+                }}
               </button>
             </div>
           </div>
-          <p v-if="activeTopRows === null" class="empty">不可用</p>
-          <p v-else-if="!activeTopRows.length" class="empty">暂无数据</p>
-          <div v-else class="top-grid">
-            <button
-              v-for="(item, index) in activeTopRows"
-              :key="`${item.name}-${index}`"
-              type="button"
-              class="top-row"
-              @click="openTop(item)"
-            >
-              <span class="rank">{{ index + 1 }}</span
-              ><span class="top-name">{{ item.rule_name || item.name }}</span
-              ><strong>{{ item.defect_total }}</strong>
-            </button>
-          </div>
-          <p v-if="activeTop === 'veto'" class="notice">单否按评分标准的自动缺陷计分结果统计；人工缺陷单否归属未知。</p>
-          <div class="notice" v-if="report.classification_unknown">
-            <button v-for="dimension in classificationDimensions" :key="dimension.key" type="button" class="link"
-              :disabled="report.classification_unknown[dimension.key] == null"
-              @click="openDrilldown({ unknown_classification: dimension.key }, `${dimension.label}未知的病例`)">
-              {{ dimension.label }}未知：{{ numberText(report.classification_unknown[dimension.key]) }}
-            </button>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="details" aria-label="明细">
-        <div class="section-head">
-          <h2>明细</h2>
-          <div class="head-actions">
-            <label class="column-picker"
-              ><Columns3 :size="16" />显示列<select
-                v-model="columnPreset"
-                @change="applyColumnPreset"
+        <section class="details" aria-label="明细">
+          <div class="section-head">
+            <h2>明细</h2>
+            <div class="head-actions mq-page-head__actions">
+              <label class="column-picker"
+                ><MqIcon name="settings" :size="16" />显示列<select
+                  v-model="columnPreset"
+                  class="mq-input"
+                  @change="applyColumnPreset"
+                >
+                  <option value="all">全部</option>
+                  <option value="quality">质量</option>
+                  <option value="defects">缺陷</option>
+                </select></label
               >
-                <option value="all">全部</option>
-                <option value="quality">质量</option>
-                <option value="defects">缺陷</option>
-              </select></label
+            </div>
+          </div>
+          <div class="column-options">
+            <label v-for="column in optionalColumns" :key="column.key"
+              ><input
+                v-model="visibleColumns"
+                class="mq-input"
+                type="checkbox"
+                :value="column.key"
+                @change="saveColumns"
+              />{{ column.label }}</label
             >
           </div>
-        </div>
-        <div class="column-options">
-          <label v-for="column in optionalColumns" :key="column.key"
-            ><input
-              v-model="visibleColumns"
-              type="checkbox"
-              :value="column.key"
-              @change="saveColumns"
-            />{{ column.label }}</label
-          >
-        </div>
-        <div class="table-panel">
-          <div class="table-head">
-            <h3>科室明细</h3>
-            <span>{{ report.department_rows.length }} 个科室</span>
+          <div class="table-panel mq-card">
+            <div class="table-head">
+              <h3>科室明细</h3>
+              <span>{{ report.department_rows.length }} 个科室</span>
+            </div>
+            <div class="table-scroll">
+              <table class="mq-table">
+                <thead>
+                  <tr>
+                    <th>科室</th>
+                    <th v-for="column in shownColumns" :key="column.key">
+                      {{ column.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in report.department_rows" :key="row.name">
+                    <td>
+                      <button
+                        class="link"
+                        type="button"
+                        @click="openDrilldown({ department: row.name }, `科室：${row.name}`)"
+                      >
+                        {{ row.name }}
+                      </button>
+                    </td>
+                    <td v-for="column in shownColumns" :key="column.key">
+                      {{ cellValue(row, column.key) }}
+                    </td>
+                  </tr>
+                  <tr v-if="!report.department_rows.length">
+                    <td :colspan="shownColumns.length + 1" class="empty">暂无数据</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>科室</th>
-                  <th v-for="column in shownColumns" :key="column.key">
-                    {{ column.label }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in report.department_rows" :key="row.name">
-                  <td>
-                    <button
-                      class="link"
-                      type="button"
-                      @click="openDrilldown({ department: row.name }, `科室：${row.name}`)"
-                    >
-                      {{ row.name }}
-                    </button>
-                  </td>
-                  <td v-for="column in shownColumns" :key="column.key">
-                    {{ cellValue(row, column.key) }}
-                  </td>
-                </tr>
-                <tr v-if="!report.department_rows.length">
-                  <td :colspan="shownColumns.length + 1" class="empty">暂无数据</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="table-panel mq-card">
+            <div class="table-head">
+              <h3>医生明细</h3>
+              <span>{{ report.doctor_rows.length }} 位医生</span>
+            </div>
+            <div class="table-scroll">
+              <table class="mq-table">
+                <thead>
+                  <tr>
+                    <th>主治医师</th>
+                    <th v-for="column in shownColumns" :key="column.key">
+                      {{ column.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in report.doctor_rows" :key="row.name">
+                    <td>
+                      <button
+                        class="link"
+                        type="button"
+                        @click="openDrilldown({ doctor: row.name }, `医生：${row.name}`)"
+                      >
+                        {{ row.name }}
+                      </button>
+                    </td>
+                    <td v-for="column in shownColumns" :key="column.key">
+                      {{ cellValue(row, column.key) }}
+                    </td>
+                  </tr>
+                  <tr v-if="!report.doctor_rows.length">
+                    <td :colspan="shownColumns.length + 1" class="empty">暂无数据</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-        <div class="table-panel">
-          <div class="table-head">
-            <h3>医生明细</h3>
-            <span>{{ report.doctor_rows.length }} 位医生</span>
-          </div>
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>主治医师</th>
-                  <th v-for="column in shownColumns" :key="column.key">
-                    {{ column.label }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in report.doctor_rows" :key="row.name">
-                  <td>
-                    <button
-                      class="link"
-                      type="button"
-                      @click="openDrilldown({ doctor: row.name }, `医生：${row.name}`)"
-                    >
-                      {{ row.name }}
-                    </button>
-                  </td>
-                  <td v-for="column in shownColumns" :key="column.key">
-                    {{ cellValue(row, column.key) }}
-                  </td>
-                </tr>
-                <tr v-if="!report.doctor_rows.length">
-                  <td :colspan="shownColumns.length + 1" class="empty">暂无数据</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-      <RecordRemediationAnalysisPanel :filters="filters" />
-      <section class="unavailable">
-        <h2>暂未接入的维度</h2>
-        <p v-for="item in report.unavailable_dimensions" :key="item.key">
-          {{ item.label }}：{{ unavailableReason(item.reason_code) }}
-        </p>
-        <button class="link" type="button" @click="reportTab = 'core'">核心制度自动缺陷分析</button>
-      </section>
-    </template>
+        </section>
+        <RecordRemediationAnalysisPanel :filters="filters" />
+        <section class="unavailable mq-card">
+          <h2>暂未接入的维度</h2>
+          <p v-for="item in report.unavailable_dimensions" :key="item.key">
+            {{ item.label }}：{{ unavailableReason(item.reason_code) }}
+          </p>
+          <button class="link" type="button" @click="reportTab = 'core'">
+            核心制度自动缺陷分析
+          </button>
+        </section>
+      </template>
 
-    <a-drawer v-model:open="drawerOpen" :title="drilldownTitle" :width="900" destroy-on-close>
-      <div class="drawer-actions">
-        <span>{{ recordsPage ? `共 ${recordsPage.total} 份病历` : '病例明细' }}</span
-        ><button
-          class="secondary"
-          type="button"
-          :disabled="!recordsPage || exporting !== null"
-          @click="download('records')"
-        >
-          <Download :size="16" />导出病例 CSV
-        </button>
-      </div>
-      <p v-if="recordsError" class="status error" role="alert">
-        {{ recordsError }}
-      </p>
-      <p v-else-if="recordsLoading" class="status">正在读取病例…</p>
-      <div v-else-if="recordsPage" class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>患者 / 就诊号</th>
-              <th>科室 / 医生</th>
-              <th>完成时间</th>
-              <th>得分 / 等级</th>
-              <th>自动 / 人工缺陷</th>
-              <th>审核状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in recordsPage.items"
-              :key="`${row.institute_id}/${row.patient_id}/${row.visit_id}`"
-            >
-              <td>
-                <strong>{{ row.patient_name || '姓名未知' }}</strong
-                ><small>{{ row.visit_id }}</small>
-              </td>
-              <td>
-                {{ row.department || '未知' }}<small>{{ row.doctor || '未知' }}</small>
-              </td>
-              <td>{{ formatTime(row.completed_at) }}</td>
-              <td>{{ scoreText(row.score) }} / {{ row.grade || '未分级' }}</td>
-              <td>
-                {{ numberText(row.auto_defect_total) }} / {{ numberText(row.manual_defect_total) }}
-              </td>
-              <td>{{ reviewText(row.review_state) }}</td>
-            </tr>
-            <tr v-if="!recordsPage.items.length">
-              <td colspan="6" class="empty">暂无病例</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div v-if="recordsPage && recordsPage.total > recordsPage.page_size" class="pager">
-        <button
-          class="secondary"
-          type="button"
-          :disabled="recordsPage.page <= 1 || recordsLoading"
-          @click="changePage(recordsPage.page - 1)"
-        >
-          上一页</button
-        ><span
-          >{{ recordsPage.page }} / {{ Math.ceil(recordsPage.total / recordsPage.page_size) }}</span
-        ><button
-          class="secondary"
-          type="button"
-          :disabled="
-            recordsPage.page * recordsPage.page_size >= recordsPage.total || recordsLoading
-          "
-          @click="changePage(recordsPage.page + 1)"
-        >
-          下一页
-        </button>
-      </div>
-    </a-drawer>
+      <a-drawer
+        v-model:open="drawerOpen"
+        :title="drilldownTitle"
+        width="min(900px, 100vw)"
+        :root-style="{ zIndex: 1100 }"
+        destroy-on-close
+      >
+        <div class="drawer-actions">
+          <span>{{ recordsPage ? `共 ${recordsPage.total} 份病历` : '病例明细' }}</span
+          ><button
+            class="secondary mq-btn"
+            type="button"
+            :disabled="!recordsPage || exporting !== null"
+            @click="download('records')"
+          >
+            <MqIcon name="download" :size="16" />导出病例 CSV
+          </button>
+        </div>
+        <p v-if="recordsError" class="status error" role="alert">
+          {{ recordsError }}
+        </p>
+        <p v-else-if="recordsLoading" class="status">正在读取病例…</p>
+        <div v-else-if="recordsPage" class="table-scroll">
+          <table class="mq-table">
+            <thead>
+              <tr>
+                <th>患者 / 就诊号</th>
+                <th>科室 / 医生</th>
+                <th>完成时间</th>
+                <th>得分 / 等级</th>
+                <th>自动 / 人工缺陷</th>
+                <th>审核状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in recordsPage.items"
+                :key="`${row.institute_id}/${row.patient_id}/${row.visit_id}`"
+              >
+                <td>
+                  <strong>{{ row.patient_name || '姓名未知' }}</strong
+                  ><small>{{ row.visit_id }}</small>
+                </td>
+                <td>
+                  {{ row.department || '未知' }}<small>{{ row.doctor || '未知' }}</small>
+                </td>
+                <td>{{ formatTime(row.completed_at) }}</td>
+                <td>{{ scoreText(row.score) }} / {{ row.grade || '未分级' }}</td>
+                <td>
+                  {{ numberText(row.auto_defect_total) }} /
+                  {{ numberText(row.manual_defect_total) }}
+                </td>
+                <td>{{ reviewText(row.review_state) }}</td>
+              </tr>
+              <tr v-if="!recordsPage.items.length">
+                <td colspan="6" class="empty">暂无病例</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="recordsPage && recordsPage.total > recordsPage.page_size" class="pager">
+          <button
+            class="secondary mq-btn"
+            type="button"
+            :disabled="recordsPage.page <= 1 || recordsLoading"
+            @click="changePage(recordsPage.page - 1)"
+          >
+            上一页</button
+          ><span
+            >{{ recordsPage.page }} /
+            {{ Math.ceil(recordsPage.total / recordsPage.page_size) }}</span
+          ><button
+            class="secondary mq-btn"
+            type="button"
+            :disabled="
+              recordsPage.page * recordsPage.page_size >= recordsPage.total || recordsLoading
+            "
+            @click="changePage(recordsPage.page + 1)"
+          >
+            下一页
+          </button>
+        </div>
+      </a-drawer>
     </div>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { CircleAlert, Columns3, Download, RefreshCw, Search } from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import CoreSystemReportPanel from './CoreSystemReportPanel.vue'
 import RecordRemediationAnalysisPanel from './RecordRemediationAnalysisPanel.vue'
@@ -483,6 +579,14 @@ const baseColumns: Array<{ key: ColumnKey; label: string }> = [
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const authKey = computed(() =>
+  JSON.stringify([
+    authStore.user?.id,
+    authStore.user?.institute_id,
+    authStore.user?.department,
+    authStore.user?.roles || authStore.user?.role,
+  ]),
+)
 const scene = computed<ReportScene>(() => (route.query.scene === 'final' ? 'final' : 'running'))
 const draft = ref({
   department: '',
@@ -496,12 +600,17 @@ const report = ref<RecordQualityReport | null>(null)
 const optionalColumns = computed<Array<{ key: ColumnKey; label: string }>>(() => [
   ...baseColumns.map((column) => ({
     ...column,
-    label: column.key === 'top_grade_total' && report.value?.kpis.top_grade_name
-      ? `${report.value.kpis.top_grade_name}病历数` : column.label,
+    label:
+      column.key === 'top_grade_total' && report.value?.kpis.top_grade_name
+        ? `${report.value.kpis.top_grade_name}病历数`
+        : column.label,
   })),
-  ...(report.value?.grade_distribution || []).filter((item) => item.grade !== null).map((item) => ({
-    key: `grade_rate:${item.grade}` as ColumnKey, label: `${item.grade}占比`,
-  })),
+  ...(report.value?.grade_distribution || [])
+    .filter((item) => item.grade !== null)
+    .map((item) => ({
+      key: `grade_rate:${item.grade}` as ColumnKey,
+      label: `${item.grade}占比`,
+    })),
 ])
 const loading = ref(false)
 const loadError = ref('')
@@ -515,7 +624,8 @@ const topTabs = [
   { key: 'rules', label: '规则' },
 ] as const
 const classificationDimensions = [
-  { key: 'defect_category', label: '大类' }, { key: 'defect_type', label: '类型' },
+  { key: 'defect_category', label: '大类' },
+  { key: 'defect_type', label: '类型' },
 ] as const
 const columnPreset = ref('all')
 const storageKey = computed(
@@ -533,6 +643,25 @@ const recordsLoading = ref(false)
 const recordsError = ref('')
 let reportRequest = 0
 let recordsRequest = 0
+let exportRequest = 0
+const exportScope = computed(() =>
+  JSON.stringify([scene.value, filters.value, draft.value, drilldown.value, shownColumns.value]),
+)
+function invalidateExport(): void {
+  ++exportRequest
+  exporting.value = null
+}
+watch([authKey, exportScope], invalidateExport, { flush: 'sync' })
+watch(authKey, () => {
+  ++reportRequest
+  ++recordsRequest
+  report.value = null
+  recordsPage.value = null
+  drawerOpen.value = false
+  loading.value = false
+  recordsLoading.value = false
+  if (authStore.user?.id) void loadReport()
+})
 
 const topLists = computed(() => ({
   rules: report.value?.top_rules,
@@ -586,9 +715,11 @@ function rateText(value: number | null | undefined, fallback = '不可用'): str
   return value == null ? fallback : `${(value * 100).toFixed(1)}%`
 }
 function cellValue(row: ReportGroupRow, key: ColumnKey): string {
-  if (key.startsWith('grade_rate:')) return rateText(row.grade_rates?.[key.slice('grade_rate:'.length)], scoreAvailability.value)
+  if (key.startsWith('grade_rate:'))
+    return rateText(row.grade_rates?.[key.slice('grade_rate:'.length)], scoreAvailability.value)
   const value = row[key as Exclude<ColumnKey, `grade_rate:${string}`>]
-  if (key === 'average_score' || key === 'average_defect_total') return value == null ? '不可用' : value.toFixed(2)
+  if (key === 'average_score' || key === 'average_defect_total')
+    return value == null ? '不可用' : value.toFixed(2)
   if (key === 'top_grade_rate') return rateText(value, scoreAvailability.value)
   return numberText(value)
 }
@@ -626,14 +757,17 @@ function unavailableReason(code: string): string {
     (
       {
         remediation_owner_undefined: '未接入（整改状态归属尚未定义）',
-        core_system_classification_missing: '人工缺陷未接入冻结制度归类；自动缺陷可查看核心制度专题',
+        core_system_classification_missing:
+          '人工缺陷未接入冻结制度归类；自动缺陷可查看核心制度专题',
       } as Record<string, string>
     )[code] || '未接入'
   )
 }
 
 async function loadReport(): Promise<void> {
+  invalidateExport()
   const request = ++reportRequest
+  const identity = authKey.value
   ++recordsRequest
   drawerOpen.value = false
   drilldown.value = {}
@@ -643,13 +777,12 @@ async function loadReport(): Promise<void> {
   loadError.value = ''
   report.value = null
   const result = await getRecordQualityReport(filters.value)
-  if (request !== reportRequest) return
+  if (request !== reportRequest || identity !== authKey.value) return
   loading.value = false
   if (result.success && result.data) {
     report.value = result.data
     restoreColumns()
-  }
-  else loadError.value = result.message || '病历质量报表暂不可用'
+  } else loadError.value = result.message || '病历质量报表暂不可用'
 }
 function applyFilters(): void {
   if (
@@ -728,6 +861,7 @@ function applyColumnPreset(): void {
 }
 async function loadRecords(page = 1): Promise<void> {
   const request = ++recordsRequest
+  const identity = authKey.value
   recordsLoading.value = true
   recordsError.value = ''
   recordsPage.value = null
@@ -737,7 +871,7 @@ async function loadRecords(page = 1): Promise<void> {
     page,
     page_size: 20,
   })
-  if (request !== recordsRequest) return
+  if (request !== recordsRequest || identity !== authKey.value) return
   recordsLoading.value = false
   if (result.success && result.data) recordsPage.value = result.data
   else recordsError.value = result.message || '病例明细暂不可用'
@@ -751,35 +885,57 @@ function openDrilldown(dimensions: Partial<RecordDrilldownFilters>, title: strin
 function openTop(item: ReportDistributionItem): void {
   if (activeTop.value === 'rules')
     openDrilldown({ rule_id: item.rule_id || item.name }, `规则：${item.rule_name || item.name}`)
-  else if (activeTop.value === 'categories') openDrilldown({ defect_category: item.name }, `大类：${item.name}`)
-  else if (activeTop.value === 'types') openDrilldown({ defect_type: item.name }, `类型：${item.name}`)
-  else if (activeTop.value === 'veto') openDrilldown({ defect_source: 'auto', rule_id: item.rule_id || item.name, has_veto: true }, `单否：${item.rule_name || item.name}`)
+  else if (activeTop.value === 'categories')
+    openDrilldown({ defect_category: item.name }, `大类：${item.name}`)
+  else if (activeTop.value === 'types')
+    openDrilldown({ defect_type: item.name }, `类型：${item.name}`)
+  else if (activeTop.value === 'veto')
+    openDrilldown(
+      { defect_source: 'auto', rule_id: item.rule_id || item.name, has_veto: true },
+      `单否：${item.rule_name || item.name}`,
+    )
   else openDrilldown({ document: item.name }, `文书：${item.name}`)
 }
 function changePage(page: number): void {
   void loadRecords(page)
 }
 async function download(sheet: ReportSheet): Promise<void> {
+  if (!report.value || !authStore.user?.id) return
+  const request = ++exportRequest
+  const identity = authKey.value
+  const scope = exportScope.value
+  const query = { ...filters.value, ...(sheet === 'records' ? drilldown.value : {}) }
+  const columns = sheet === 'records' ? undefined : shownColumns.value.map((column) => column.key)
+  const filename = `病历质量分析-${query.scene}-${sheet}.csv`
+  const current = () =>
+    request === exportRequest && identity === authKey.value && scope === exportScope.value
   exporting.value = sheet
-  const result = await exportRecordQualityReport(
-    { ...filters.value, ...(sheet === 'records' ? drilldown.value : {}) },
-    sheet,
-    sheet === 'records' ? undefined : shownColumns.value.map((column) => column.key),
-  )
-  exporting.value = null
-  if (!result.success || !result.data) {
-    message.error(result.message || '导出失败')
-    return
+  try {
+    const result = await exportRecordQualityReport(query, sheet, columns)
+    if (!current()) return
+    if (!result.success || !result.data) {
+      message.error(result.message || '导出失败')
+      return
+    }
+    const url = URL.createObjectURL(result.data)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  } catch {
+    if (current()) message.error('导出失败')
+  } finally {
+    if (request === exportRequest) exporting.value = null
   }
-  const url = URL.createObjectURL(result.data)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = `病历质量分析-${scene.value}-${sheet}.csv`
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(url)
 }
+onBeforeUnmount(() => {
+  ++reportRequest
+  ++recordsRequest
+  invalidateExport()
+})
 onMounted(() => {
   restoreColumns()
   void loadReport()

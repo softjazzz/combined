@@ -18,6 +18,7 @@
 
 ## 工具与交付
 
+- 工作台UI以`docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md`的V7.1为准；先核对MQ Token、公共类和主题已加载，再做页面组合及多视口验证。路由接入或继承新外壳不等于页面已完成视觉迁移。
 - 存在 `.codegraph/` 时，定位代码先用 CodeGraph；索引不代替真实 trace、测试或浏览器验证。`workstation-v4`/V5 页面采用浅色医疗中后台：总览/筛选/明细/结果分区，复用现有 token 与组件；未知值显示为未知，不伪造 0 或通过；纯展示不改后端合同。
 - TypeScript 优先修 DTO、Store、props/emits 边界；不新增宽泛 `any`、`@ts-ignore` 或 `.vue.ts` 镜像文件。不得提交生成物、临时日志或关闭 CI 门禁。
 - 小改动先跑聚焦测试；提交前默认运行 `npm run check:encoding`、`npm run lint`、`npm run type-check`、`npm run test:unit`，Python 改动另跑相关 pytest/Ruff。`npm run lint` 带 `--fix` 会改写无关文件，必要时改用只读 `npx eslint src --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --quiet`。资源不足至少跑编码与 lint，并记录未运行项。

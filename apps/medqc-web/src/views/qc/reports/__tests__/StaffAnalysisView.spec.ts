@@ -11,16 +11,24 @@ const state = vi.hoisted(() => ({
   exportReport: vi.fn(),
 }))
 const route = reactive({ path: '/dashboard/qc/reports/staff-analysis', query: { scene: 'all' } })
-const replace = vi.fn(async ({ query }: { query: { scene: string } }) => { route.query.scene = query.scene })
+const replace = vi.fn(async ({ query }: { query: { scene: string } }) => {
+  route.query.scene = query.scene
+})
 
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ replace }) }))
 vi.mock('@/stores/auth', async () => {
   const { reactive } = await import('vue')
   state.auth = reactive(state.authState)
-  return { useAuthStore: () => ({
-    get user() { return state.auth.userId ? { id: state.auth.userId } : null },
-    get userRoles() { return state.auth.roles },
-  }) }
+  return {
+    useAuthStore: () => ({
+      get user() {
+        return state.auth.userId ? { id: state.auth.userId } : null
+      },
+      get userRoles() {
+        return state.auth.roles
+      },
+    }),
+  }
 })
 vi.mock('@/api/staffAnalysis', () => ({
   getStaffAnalysis: state.getReport,
@@ -29,13 +37,21 @@ vi.mock('@/api/staffAnalysis', () => ({
 }))
 
 const appliedFilters = {
-  period: 'this_month', scene: 'all', institute_id: null, department: null, task_id: null,
-  start_date: null, end_date: null, as_of: '2026-09-28T23:59:59+08:00',
+  period: 'this_month',
+  scene: 'all',
+  institute_id: null,
+  department: null,
+  task_id: null,
+  start_date: null,
+  end_date: null,
+  as_of: '2026-09-28T23:59:59+08:00',
 }
 const allReport = {
-  period: 'this_month', period_label: '本月',
+  period: 'this_month',
+  period_label: '本月',
   range: { start: '2026-09-01T00:00:00Z', end: '2026-09-28T00:00:00Z' },
-  scene: 'all', filters: appliedFilters,
+  scene: 'all',
+  filters: appliedFilters,
   filter_options: {
     departments: [
       { institute_id: 'H1', department_name: '心内科' },
@@ -48,31 +64,71 @@ const allReport = {
   unavailable_reason: null,
   unavailable_metrics: {},
   summary: {
-    active_staff_count: 2, record_reviewer_count: 2, record_review_count: 4,
-    reviewed_case_count: 2, initial_count: 3, recheck_count: 1,
-    avg_record_reviews_per_active_staff: 2, avg_reviewed_cases_per_reviewer: 1.5,
-    avg_reviewed_cases_per_active_staff: 1.5, avg_rechecked_cases_per_active_staff: 0.5,
-    avg_manual_defects_per_active_staff: 0.5, avg_rejected_defects_per_active_staff: 0,
-    rechecked_case_count: 1, urged_defect_count: 1, confirmed_defect_count: null,
-    manual_defect_created_count: 1, manual_review_approved_count: 1,
-    manual_review_rejected_count: 0, appeal_approved_count: 0, appeal_rejected_count: 1,
+    active_staff_count: 2,
+    record_reviewer_count: 2,
+    record_review_count: 4,
+    reviewed_case_count: 2,
+    initial_count: 3,
+    recheck_count: 1,
+    avg_record_reviews_per_active_staff: 2,
+    avg_reviewed_cases_per_reviewer: 1.5,
+    avg_reviewed_cases_per_active_staff: 1.5,
+    avg_rechecked_cases_per_active_staff: 0.5,
+    avg_manual_defects_per_active_staff: 0.5,
+    avg_rejected_defects_per_active_staff: 0,
+    rechecked_case_count: 1,
+    urged_defect_count: 1,
+    confirmed_defect_count: null,
+    manual_defect_created_count: 1,
+    manual_review_approved_count: 1,
+    manual_review_rejected_count: 0,
+    appeal_approved_count: 0,
+    appeal_rejected_count: 1,
   },
-  staff: [{
-    user_id: 'staff-1', name: '张质控', rank: 1,
-    record_review_count: 3, reviewed_case_count: 2, initial_count: 2, recheck_count: 1,
-    rechecked_case_count: 1, urged_defect_count: 1, confirmed_defect_count: null,
-    manual_defect_created_count: 1, manual_review_approved_count: 1,
-    manual_review_rejected_count: 0, appeal_approved_count: 0, appeal_rejected_count: 1,
-  }],
+  staff: [
+    {
+      user_id: 'staff-1',
+      name: '张质控',
+      rank: 1,
+      record_review_count: 3,
+      reviewed_case_count: 2,
+      initial_count: 2,
+      recheck_count: 1,
+      rechecked_case_count: 1,
+      urged_defect_count: 1,
+      confirmed_defect_count: null,
+      manual_defect_created_count: 1,
+      manual_review_approved_count: 1,
+      manual_review_rejected_count: 0,
+      appeal_approved_count: 0,
+      appeal_rejected_count: 1,
+    },
+  ],
 }
 const detailsPage = {
-  filters: appliedFilters, metric: 'reviewed_case_count', user_id: 'staff-1', total: 21, page: 1, page_size: 20,
+  filters: appliedFilters,
+  metric: 'reviewed_case_count',
+  user_id: 'staff-1',
+  total: 21,
+  page: 1,
+  page_size: 20,
   unavailable_reason: null,
-  items: [{
-    event_id: 'event-1', event_type: 'record_review', occurred_at: '2026-09-27T01:00:00Z',
-    institute_id: 'H1', patient_id: 'P1', visit_id: 'V1', task_id: 'task-1', department: '心内科',
-    stage: 'initial', decision: 'approved', defect_id: null, appeal_id: null,
-  }],
+  items: [
+    {
+      event_id: 'event-1',
+      event_type: 'record_review',
+      occurred_at: '2026-09-27T01:00:00Z',
+      institute_id: 'H1',
+      patient_id: 'P1',
+      visit_id: 'V1',
+      task_id: 'task-1',
+      department: '心内科',
+      stage: 'initial',
+      decision: 'approved',
+      defect_id: null,
+      appeal_id: null,
+    },
+  ],
 }
 
 const mounted: VueWrapper[] = []
@@ -80,13 +136,22 @@ function render(): VueWrapper {
   const wrapper = mount(StaffAnalysisView, {
     global: {
       stubs: {
-        'a-tabs': { props: ['activeKey'], emits: ['update:activeKey'], template: '<nav><button class="manual-tab" @click="$emit(\'update:activeKey\', \'manual\')">人工质控报表</button><slot /></nav>' },
+        'a-tabs': {
+          props: ['activeKey'],
+          emits: ['update:activeKey'],
+          template:
+            '<nav><button class="manual-tab" @click="$emit(\'update:activeKey\', \'manual\')">人工质控报表</button><slot /></nav>',
+        },
         'a-tab-pane': true,
-        ManualQualityReportPanel: { template: '<section class="manual-report-entry">人工报表入口</section>' },
+        ManualQualityReportPanel: {
+          template: '<section class="manual-report-entry">人工报表入口</section>',
+        },
         'a-drawer': {
-          props: ['open', 'title'],
+          name: 'ReportDrawerStub',
+          props: ['open', 'title', 'width', 'rootStyle'],
           emits: ['update:open'],
-          template: '<aside v-if="open" class="drawer"><h3>{{ title }}</h3><button class="drawer-close" @click="$emit(\'update:open\', false)">关闭</button><slot /></aside>',
+          template:
+            '<aside v-if="open" class="drawer"><h3>{{ title }}</h3><button class="drawer-close" @click="$emit(\'update:open\', false)">关闭</button><slot /></aside>',
         },
       },
     },
@@ -100,45 +165,113 @@ async function settle(): Promise<void> {
 }
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => { resolve = done })
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
   return { promise, resolve }
 }
 
 describe('StaffAnalysisView', () => {
-  it('初审缺陷缺少明细时显示未知并分页展示已知部分', async () => {
-    const coverage = { initial_review_count: 3, covered_initial_review_count: 1, missing_initial_review_count: 2, known_defect_count: 21 }
-    state.getReport.mockResolvedValue({ success: true, data: {
-      ...allReport, defect_snapshot_coverage: coverage,
-      staff: [{ ...allReport.staff[0], defect_snapshot_coverage: coverage }],
-    } })
-    state.getDetails.mockResolvedValue({ success: true, data: {
-      ...detailsPage, metric: 'confirmed_defect_count', total: null, known_total: 21,
-      total_complete: false, unavailable_reason: 'snapshot_incomplete', defect_snapshot_coverage: coverage,
-      items: [{ ...detailsPage.items[0], event_type: 'initial_defect_confirmed', source: 'auto', defect_id: 'rule-1' }],
-    } })
+  it('下钻抽屉宽度不超过窄窗口', async () => {
     const wrapper = render()
     await settle()
-    expect(wrapper.get('[data-testid="staff-defect-snapshot-coverage"]').text()).toContain('可核实初审记录 1 / 3')
-    expect(wrapper.get('[data-testid="staff-defect-snapshot-coverage"]').text()).toContain('排名未知')
+    expect(wrapper.findComponent({ name: 'ReportDrawerStub' }).props('width')).toBe(
+      'min(880px, 100vw)',
+    )
+    expect(wrapper.findComponent({ name: 'ReportDrawerStub' }).props('rootStyle')).toEqual({
+      zIndex: 1100,
+    })
+  })
+
+  it('初审缺陷缺少明细时显示未知并分页展示已知部分', async () => {
+    const coverage = {
+      initial_review_count: 3,
+      covered_initial_review_count: 1,
+      missing_initial_review_count: 2,
+      known_defect_count: 21,
+    }
+    state.getReport.mockResolvedValue({
+      success: true,
+      data: {
+        ...allReport,
+        defect_snapshot_coverage: coverage,
+        staff: [{ ...allReport.staff[0], defect_snapshot_coverage: coverage }],
+      },
+    })
+    state.getDetails.mockResolvedValue({
+      success: true,
+      data: {
+        ...detailsPage,
+        metric: 'confirmed_defect_count',
+        total: null,
+        known_total: 21,
+        total_complete: false,
+        unavailable_reason: 'snapshot_incomplete',
+        defect_snapshot_coverage: coverage,
+        items: [
+          {
+            ...detailsPage.items[0],
+            event_type: 'initial_defect_confirmed',
+            source: 'auto',
+            defect_id: 'rule-1',
+          },
+        ],
+      },
+    })
+    const wrapper = render()
+    await settle()
+    expect(wrapper.get('[data-testid="staff-defect-snapshot-coverage"]').text()).toContain(
+      '可核实初审记录 1 / 3',
+    )
+    expect(wrapper.get('[data-testid="staff-defect-snapshot-coverage"]').text()).toContain(
+      '排名未知',
+    )
     await wrapper.get('[aria-label="查看张质控的质控缺陷明细"]').trigger('click')
     await settle()
-    expect(wrapper.get('[data-testid="staff-details-known-only"]').text()).toContain('总数未知，可核实 21')
+    expect(wrapper.get('[data-testid="staff-details-known-only"]').text()).toContain(
+      '总数未知，可核实 21',
+    )
     expect(wrapper.get('.drawer').text()).toContain('自动 · rule-1')
     await wrapper.findAll('.pager button')[1]!.trigger('click')
     await settle()
-    expect(state.getDetails).toHaveBeenLastCalledWith('staff-1', expect.objectContaining({ as_of: appliedFilters.as_of }), 'confirmed_defect_count', 2, 20)
+    expect(state.getDetails).toHaveBeenLastCalledWith(
+      'staff-1',
+      expect.objectContaining({ as_of: appliedFilters.as_of }),
+      'confirmed_defect_count',
+      2,
+      20,
+    )
     await wrapper.get('[data-testid="staff-rank-metric"]').setValue('confirmed_defect_count')
     await settle()
-    expect(state.getReport).toHaveBeenLastCalledWith({ period: 'this_month', scene: 'all' }, 'confirmed_defect_count')
+    expect(state.getReport).toHaveBeenLastCalledWith(
+      { period: 'this_month', scene: 'all' },
+      'confirmed_defect_count',
+    )
   })
   it('缺少已知明细总数时不显示为零', async () => {
-    const coverage = { initial_review_count: 1, covered_initial_review_count: 0, missing_initial_review_count: 1, known_defect_count: 0 }
-    state.getReport.mockResolvedValue({ success: true, data: {
-      ...allReport, staff: [{ ...allReport.staff[0], defect_snapshot_coverage: coverage }],
-    } })
-    state.getDetails.mockResolvedValue({ success: true, data: {
-      ...detailsPage, metric: 'confirmed_defect_count', total: null, total_complete: false, unavailable_reason: 'snapshot_incomplete',
-    } })
+    const coverage = {
+      initial_review_count: 1,
+      covered_initial_review_count: 0,
+      missing_initial_review_count: 1,
+      known_defect_count: 0,
+    }
+    state.getReport.mockResolvedValue({
+      success: true,
+      data: {
+        ...allReport,
+        staff: [{ ...allReport.staff[0], defect_snapshot_coverage: coverage }],
+      },
+    })
+    state.getDetails.mockResolvedValue({
+      success: true,
+      data: {
+        ...detailsPage,
+        metric: 'confirmed_defect_count',
+        total: null,
+        total_complete: false,
+        unavailable_reason: 'snapshot_incomplete',
+      },
+    })
     const wrapper = render()
     await settle()
     await wrapper.get('[aria-label="查看张质控的质控缺陷明细"]').trigger('click')
@@ -155,7 +288,8 @@ describe('StaffAnalysisView', () => {
     await wrapper.get('[data-testid="staff-rank-metric"]').setValue('urged_defect_count')
     await settle()
     expect(state.getReport).toHaveBeenLastCalledWith(
-      { period: 'this_month', scene: 'all' }, 'urged_defect_count',
+      { period: 'this_month', scene: 'all' },
+      'urged_defect_count',
     )
   })
   it('复用既有报告页面的人工质控tab入口', async () => {
@@ -181,24 +315,39 @@ describe('StaffAnalysisView', () => {
     await settle()
     expect(state.getReport).toHaveBeenCalledWith({ period: 'this_month', scene: 'all' })
     expect(wrapper.text()).toContain('张质控')
-    expect(wrapper.get('[data-testid="staff-context-unavailable"]').text()).toContain('2 条工作事件')
-    const departmentOptions = wrapper.get('[data-testid="staff-department-filter"]').findAll('option')
-    expect(departmentOptions.map((option) => option.text())).toEqual(['全部科室', '心内科（H1）', '心内科（H2）'])
+    expect(wrapper.get('[data-testid="staff-context-unavailable"]').text()).toContain(
+      '2 条工作事件',
+    )
+    const departmentOptions = wrapper
+      .get('[data-testid="staff-department-filter"]')
+      .findAll('option')
+    expect(departmentOptions.map((option) => option.text())).toEqual([
+      '全部科室',
+      '心内科（H1）',
+      '心内科（H2）',
+    ])
     expect(wrapper.text()).toContain('全局三坐标去重')
   })
 
   it('submits composite department, task and paired Shanghai calendar dates without substring identity', async () => {
     const wrapper = render()
     await settle()
-    await wrapper.get('[data-testid="staff-department-filter"]').setValue(JSON.stringify(['H2', '心内科']))
+    await wrapper
+      .get('[data-testid="staff-department-filter"]')
+      .setValue(JSON.stringify(['H2', '心内科']))
     await wrapper.get('[data-testid="staff-task-filter"]').setValue('task-1')
     await wrapper.get('[data-testid="staff-start-date"]').setValue('2026-09-01')
     await wrapper.get('[data-testid="staff-end-date"]').setValue('2026-09-28')
     await wrapper.get('.primary').trigger('click')
     await settle()
     expect(state.getReport).toHaveBeenLastCalledWith({
-      period: 'this_month', scene: 'all', institute_id: 'H2', department: '心内科',
-      task_id: 'task-1', start_date: '2026-09-01', end_date: '2026-09-28',
+      period: 'this_month',
+      scene: 'all',
+      institute_id: 'H2',
+      department: '心内科',
+      task_id: 'task-1',
+      start_date: '2026-09-01',
+      end_date: '2026-09-28',
     })
   })
 
@@ -224,8 +373,11 @@ describe('StaffAnalysisView', () => {
     await wrapper.findAll('.metric-link')[0]!.trigger('click')
     await settle()
     expect(state.getDetails).toHaveBeenCalledWith(
-      'staff-1', { period: 'this_month', scene: 'all', as_of: appliedFilters.as_of },
-      'reviewed_case_count', 1, 20,
+      'staff-1',
+      { period: 'this_month', scene: 'all', as_of: appliedFilters.as_of },
+      'reviewed_case_count',
+      1,
+      20,
     )
     expect(wrapper.get('.drawer').text()).toContain('H1 / P1 / V1')
     expect(wrapper.get('.drawer').text()).toContain('心内科')
@@ -236,7 +388,11 @@ describe('StaffAnalysisView', () => {
     await wrapper.findAll('.pager button')[1]!.trigger('click')
     await settle()
     expect(state.getDetails).toHaveBeenLastCalledWith(
-      'staff-1', expect.objectContaining({ as_of: appliedFilters.as_of }), 'reviewed_case_count', 2, 20,
+      'staff-1',
+      expect.objectContaining({ as_of: appliedFilters.as_of }),
+      'reviewed_case_count',
+      2,
+      20,
     )
   })
 
@@ -244,10 +400,17 @@ describe('StaffAnalysisView', () => {
     state.getReport.mockResolvedValue({
       success: true,
       data: {
-        ...allReport, scene: 'running', filters: { ...appliedFilters, scene: 'running' },
-        unavailable_metrics: { appeal_approved_count: 'scene_not_attributable', appeal_rejected_count: 'scene_not_attributable' },
+        ...allReport,
+        scene: 'running',
+        filters: { ...appliedFilters, scene: 'running' },
+        unavailable_metrics: {
+          appeal_approved_count: 'scene_not_attributable',
+          appeal_rejected_count: 'scene_not_attributable',
+        },
         summary: { ...allReport.summary, appeal_approved_count: null, appeal_rejected_count: null },
-        staff: [{ ...allReport.staff[0], appeal_approved_count: null, appeal_rejected_count: null }],
+        staff: [
+          { ...allReport.staff[0], appeal_approved_count: null, appeal_rejected_count: null },
+        ],
       },
     })
     route.query.scene = 'running'
@@ -264,14 +427,21 @@ describe('StaffAnalysisView', () => {
       success: true,
       data: {
         ...allReport,
-        unavailable_metrics: { appeal_approved_count: 'filter_not_attributable', appeal_rejected_count: 'filter_not_attributable' },
+        unavailable_metrics: {
+          appeal_approved_count: 'filter_not_attributable',
+          appeal_rejected_count: 'filter_not_attributable',
+        },
         summary: { ...allReport.summary, appeal_approved_count: null, appeal_rejected_count: null },
-        staff: [{ ...allReport.staff[0], appeal_approved_count: null, appeal_rejected_count: null }],
+        staff: [
+          { ...allReport.staff[0], appeal_approved_count: null, appeal_rejected_count: null },
+        ],
       },
     })
     const wrapper = render()
     await settle()
-    const appealMetric = wrapper.findAll('.metric').find((metric) => metric.text().includes('申诉处理'))
+    const appealMetric = wrapper
+      .findAll('.metric')
+      .find((metric) => metric.text().includes('申诉处理'))
     expect(appealMetric?.text()).toContain('未知')
     expect(appealMetric?.text()).toContain('当前筛选无法可靠归属')
   })
@@ -293,8 +463,12 @@ describe('StaffAnalysisView', () => {
 
   it('discards a late report after the applied period filter changes', async () => {
     const oldReport = deferred<{ success: boolean; data: typeof allReport }>()
-    state.getReport.mockImplementationOnce(() => oldReport.promise)
-      .mockResolvedValueOnce({ success: true, data: { ...allReport, period: 'this_week', period_label: '本周', staff: [] } })
+    state.getReport
+      .mockImplementationOnce(() => oldReport.promise)
+      .mockResolvedValueOnce({
+        success: true,
+        data: { ...allReport, period: 'this_week', period_label: '本周', staff: [] },
+      })
     const wrapper = render()
     await wrapper.findAll('.segmented')[0]!.findAll('button')[0]!.trigger('click')
     await wrapper.get('.primary').trigger('click')
@@ -308,7 +482,8 @@ describe('StaffAnalysisView', () => {
 
   it('discards late report and detail responses after account switch or logout', async () => {
     const oldReport = deferred<{ success: boolean; data: typeof allReport }>()
-    state.getReport.mockImplementationOnce(() => oldReport.promise)
+    state.getReport
+      .mockImplementationOnce(() => oldReport.promise)
       .mockResolvedValueOnce({ success: true, data: { ...allReport, staff: [] } })
     const wrapper = render()
     state.auth.userId = 'admin-2'
@@ -343,7 +518,9 @@ describe('StaffAnalysisView', () => {
     await settle()
     await wrapper.findAll('.head-actions button')[1]!.trigger('click')
     expect(state.exportReport).toHaveBeenCalledWith({
-      period: 'this_month', scene: 'all', as_of: appliedFilters.as_of,
+      period: 'this_month',
+      scene: 'all',
+      as_of: appliedFilters.as_of,
     })
     state.auth.userId = 'admin-2'
     await settle()

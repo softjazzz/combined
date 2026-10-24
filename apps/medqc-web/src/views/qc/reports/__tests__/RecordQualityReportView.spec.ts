@@ -25,7 +25,10 @@ vi.mock('@/api/qualityReports', () => ({
 }))
 vi.mock('ant-design-vue', () => ({ message: { error: vi.fn() } }))
 
-const drawerStub = { props: ['open'], template: '<div v-if="open"><slot /></div>' }
+const drawerStub = {
+  props: ['open', 'width', 'rootStyle'],
+  template: '<div v-if="open"><slot /></div>',
+}
 const report = {
   scope: { scene: 'running' },
   score_standard: {
@@ -89,39 +92,90 @@ function render() {
 }
 
 describe('RecordQualityReportView', () => {
+  it('使用 V7.1 公共页头、分段、玻璃卡和胶囊按钮', async () => {
+    const wrapper = render()
+    await flush()
+    expect(wrapper.classes()).toContain('mq-page')
+    expect(wrapper.get('.mq-page-title').text()).toBe('病历质量分析')
+    expect(wrapper.get('[role="tablist"]').classes()).toContain('mq-segmented')
+    expect(wrapper.get('.filters').classes()).toContain('mq-card')
+    expect(wrapper.get('.filters .primary').classes()).toContain('mq-btn--primary')
+    expect(wrapper.get('#report-department').classes()).toContain('mq-input')
+  })
+
+  it('下钻抽屉宽度不超过窄窗口', async () => {
+    const wrapper = render()
+    await flush()
+    expect(wrapper.findComponent(drawerStub).props('width')).toBe('min(900px, 100vw)')
+    expect(wrapper.findComponent(drawerStub).props('rootStyle')).toEqual({ zIndex: 1100 })
+  })
+
   it('四维排行用对应筛选下钻，未知分类可查看且导出不丢筛选', async () => {
-    state.getReport.mockResolvedValue({ success: true, data: { ...report,
-      top_categories: [{ name: '合成大类', defect_total: 2 }],
-      top_types: [{ name: '合成类型', defect_total: 2 }],
-      top_veto_rules: [{ name: 'LX0609-001', rule_id: 'LX0609-001', defect_total: 1 }],
-      classification_unknown: { defect_category: 1, defect_type: 1 },
-    } })
-    state.getRecords.mockResolvedValue({ success: true, data: { total: 1, page: 1, page_size: 20, items: [] } })
+    state.getReport.mockResolvedValue({
+      success: true,
+      data: {
+        ...report,
+        top_categories: [{ name: '合成大类', defect_total: 2 }],
+        top_types: [{ name: '合成类型', defect_total: 2 }],
+        top_veto_rules: [{ name: 'LX0609-001', rule_id: 'LX0609-001', defect_total: 1 }],
+        classification_unknown: { defect_category: 1, defect_type: 1 },
+      },
+    })
+    state.getRecords.mockResolvedValue({
+      success: true,
+      data: { total: 1, page: 1, page_size: 20, items: [] },
+    })
     state.exportReport.mockResolvedValue({ success: false })
     const wrapper = render()
     await flush()
     await wrapper.get('.top-row').trigger('click')
     await flush()
-    expect(state.getRecords).toHaveBeenLastCalledWith(expect.objectContaining({ defect_category: '合成大类' }))
+    expect(state.getRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ defect_category: '合成大类' }),
+    )
     await wrapper.get('.drawer-actions button').trigger('click')
-    expect(state.exportReport).toHaveBeenLastCalledWith(expect.objectContaining({ defect_category: '合成大类' }), 'records', undefined)
+    expect(state.exportReport).toHaveBeenLastCalledWith(
+      expect.objectContaining({ defect_category: '合成大类' }),
+      'records',
+      undefined,
+    )
     const veto = wrapper.findAll('.top-head button').find((button) => button.text() === '单否')
     await veto?.trigger('click')
     await wrapper.get('.top-row').trigger('click')
-    expect(state.getRecords).toHaveBeenLastCalledWith(expect.objectContaining({ rule_id: 'LX0609-001', has_veto: true }))
-    const unknown = wrapper.findAll('.top-panel .notice button').find((button) => button.text().includes('类型未知'))
+    expect(state.getRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rule_id: 'LX0609-001', has_veto: true }),
+    )
+    const unknown = wrapper
+      .findAll('.top-panel .notice button')
+      .find((button) => button.text().includes('类型未知'))
     await unknown?.trigger('click')
-    expect(state.getRecords).toHaveBeenLastCalledWith(expect.objectContaining({ unknown_classification: 'defect_type' }))
+    expect(state.getRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ unknown_classification: 'defect_type' }),
+    )
     wrapper.unmount()
   })
   it('按真实等级展示比例并导出已显示列，使用已查询筛选', async () => {
-    state.getReport.mockResolvedValue({ success: true, data: {
-      ...report,
-      kpis: { ...report.kpis, top_grade_name: '优秀' },
-      grade_distribution: [{ grade: '优秀', count: 1 }, { grade: '待改进', count: 1 }],
-      department_rows: [{ ...report.kpis, name: '合成科室', top_grade_total: 1,
-        defect_total: 4, average_defect_total: 2, grade_rates: { 优秀: 0.5, 待改进: 0.5 } }],
-    } })
+    state.getReport.mockResolvedValue({
+      success: true,
+      data: {
+        ...report,
+        kpis: { ...report.kpis, top_grade_name: '优秀' },
+        grade_distribution: [
+          { grade: '优秀', count: 1 },
+          { grade: '待改进', count: 1 },
+        ],
+        department_rows: [
+          {
+            ...report.kpis,
+            name: '合成科室',
+            top_grade_total: 1,
+            defect_total: 4,
+            average_defect_total: 2,
+            grade_rates: { 优秀: 0.5, 待改进: 0.5 },
+          },
+        ],
+      },
+    })
     state.exportReport.mockResolvedValue({ success: false })
     const wrapper = render()
     await flush()
@@ -130,11 +184,19 @@ describe('RecordQualityReportView', () => {
     expect(wrapper.text()).toContain('50.0%')
     await wrapper.get('input[value="auto_defect_total"]').setValue(false)
     await wrapper.get('#report-department').setValue('尚未查询')
-    const exportButton = wrapper.findAll('.page-head button').find((button) => button.text().includes('科室 CSV'))
+    const exportButton = wrapper
+      .findAll('.page-head button')
+      .find((button) => button.text().includes('科室 CSV'))
     await exportButton?.trigger('click')
     expect(state.exportReport).toHaveBeenCalledWith(
-      { scene: 'running', defect_source: 'all' }, 'departments',
-      expect.arrayContaining(['top_grade_total', 'grade_rate:优秀', 'grade_rate:待改进', 'average_defect_total']),
+      { scene: 'running', defect_source: 'all' },
+      'departments',
+      expect.arrayContaining([
+        'top_grade_total',
+        'grade_rate:优秀',
+        'grade_rate:待改进',
+        'average_defect_total',
+      ]),
     )
     expect(state.exportReport.mock.calls[0][2]).not.toContain('auto_defect_total')
     wrapper.unmount()
@@ -168,7 +230,8 @@ describe('RecordQualityReportView', () => {
     await flush()
     await wrapper.get('[data-testid="core-tab"]').trigger('click')
     expect(wrapper.find('[data-testid="core-panel"]').exists()).toBe(true)
-    expect(wrapper.get('.page-head').isVisible()).toBe(false)
+    expect(wrapper.get('.page-head').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="core-tab"]').attributes('aria-selected')).toBe('true')
   })
   beforeEach(() => {
     vi.clearAllMocks()
@@ -228,7 +291,7 @@ describe('RecordQualityReportView', () => {
       )
       .mockResolvedValueOnce({ success: false, code: 'range_too_large', message: '范围过大' })
     const wrapper = render()
-    await wrapper.get('.page-head button').trigger('click')
+    await wrapper.get('.page-head .secondary').trigger('click')
     await flush()
     resolveOld?.({ success: true, data: report })
     await flush()

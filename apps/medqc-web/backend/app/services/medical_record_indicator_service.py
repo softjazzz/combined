@@ -14,6 +14,7 @@ from datetime import date
 from typing import Any, Mapping
 
 from . import record_quality_report_service as base_report
+from .defect_rectification_service import RectificationError
 
 MAX_PAGE_SIZE = 100
 DIMENSIONS = {"department", "doctor"}
@@ -139,6 +140,7 @@ def _blocked_metric(definition: IndicatorDefinition, cohort_total: int) -> dict[
 
 def build_report_context(
     *, department: str | None = None, doctor: str | None = None,
+    actor_id: str | None = None,
     discharged_from: date | None = None, discharged_to: date | None = None,
 ) -> base_report.ReportContext:
     if discharged_from and discharged_to and discharged_from > discharged_to:
@@ -152,13 +154,15 @@ def build_report_context(
             )
 
         return base_report.build_report_context(
-            scene="final", department=department, doctor=doctor,
+            scene="final", department=department, doctor=doctor, actor_id=actor_id,
             scope_loader=scope_loader,
             review_loader=lambda _anchors: {},
             manual_loader=lambda _identities: [],
             standard_loader=lambda _scene: None,
             rule_meta_loader=lambda: {},
         )
+    except RectificationError:
+        raise
     except (base_report.RecordQualityReportInvalid, base_report.RecordQualityReportTooLarge) as exc:
         raise MedicalRecordIndicatorInvalid(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - 对外由路由脱敏

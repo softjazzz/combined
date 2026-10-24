@@ -1,0 +1,72 @@
+.remediation-analysis {
+  padding: 20px 0;
+  border-top: 1px solid var(--mq-border);
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+h2 {
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+}
+.label-counts,
+.other-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.label-counts button,
+.other-counts button {
+  min-height: 36px;
+  height: auto;
+  padding-block: 8px;
+  white-space: normal;
+}
+.label-counts .active,
+.other-counts .active {
+  border-color: var(--mq-brand-600);
+  background: var(--mq-info-bg);
+}
+small {
+  display: block;
+  margin-top: 4px;
+  color: var(--mq-text-tertiary);
+  overflow-wrap: anywhere;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+}
+th,
+td {
+  padding: 12px;
+  border-bottom: 1px solid var(--mq-border);
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: var(--mq-bg-muted);
+}
+dd,
+li p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.assumptions {
+  padding-left: 20px;
+  color: var(--mq-text-tertiary);
+  line-height: 1.7;
+}
+.checkbox input.mq-input {
+  min-width: 0;
+  width: 16px;
+  height: 16px;
+}

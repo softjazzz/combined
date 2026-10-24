@@ -12,6 +12,12 @@ from app.services import frontpage_quality_report_service as report
 from app.services.modern_case_qc_result_service import SchemaUnavailable
 
 
+@pytest.fixture(autouse=True)
+def report_actor_scope(monkeypatch):
+    # 本文件只验证聚合，持久账号机构范围另有真实 SQLite 合同。
+    monkeypatch.setattr(report, "authorized_report_institute", lambda actor_id: None)
+
+
 def _latest(source, patient, *, date="2026-09-20T02:00:00", defects=()):
     return {
         "source_key": source, "institute_id": "LX", "patient_id": patient, "visit_id": "v1",

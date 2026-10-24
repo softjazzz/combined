@@ -78,6 +78,8 @@ def _drilldown_params(
 
 
 def _raise_report_error(exc: Exception, action: str) -> None:
+    if isinstance(exc, RectificationError):
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     if isinstance(exc, report_service.RecordQualityReportInvalid):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if isinstance(exc, report_service.RecordQualityReportTooLarge):
@@ -89,7 +91,7 @@ def _raise_report_error(exc: Exception, action: str) -> None:
 
 def _authorized_params(current_user: dict, params: dict[str, Any]) -> dict[str, Any]:
     scope = resolve_workstation_data_scope(current_user, params["department"])
-    return {**params, "department": scope.department}
+    return {**params, "department": scope.department, "actor_id": _task_actor_id(current_user)}
 
 
 def _task_actor_id(current_user: dict) -> str:
@@ -115,10 +117,12 @@ def _indicator_params(
 
 def _authorized_indicator_params(current_user: dict, params: dict[str, Any]) -> dict[str, Any]:
     scope = resolve_workstation_data_scope(current_user, params["department"])
-    return {**params, "department": scope.department}
+    return {**params, "department": scope.department, "actor_id": _task_actor_id(current_user)}
 
 
 def _raise_indicator_error(exc: Exception, action: str) -> None:
+    if isinstance(exc, RectificationError):
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     if isinstance(exc, indicator_service.MedicalRecordIndicatorInvalid):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     logger.error("medical_record_indicator_%s_failed error_type=%s", action, type(exc).__name__)
@@ -418,6 +422,8 @@ def _frontpage_drilldown(
 
 
 def _raise_frontpage_error(exc: Exception, action: str) -> None:
+    if isinstance(exc, RectificationError):
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     if isinstance(exc, frontpage_report_service.FrontpageQualityReportInvalid):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if isinstance(exc, frontpage_report_service.FrontpageQualityReportTooLarge):

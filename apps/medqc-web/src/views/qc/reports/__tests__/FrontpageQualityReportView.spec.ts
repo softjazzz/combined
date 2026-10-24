@@ -14,8 +14,12 @@ vi.mock('@/api/frontpageQualityReport', () => ({
   exportFrontpageQualityReport: state.exportReport,
 }))
 vi.mock('ant-design-vue', () => ({ message: { error: vi.fn() } }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 'manager' } }) }))
 
-const drawerStub = { props: ['open'], template: '<div v-if="open"><slot /></div>' }
+const drawerStub = {
+  props: ['open', 'width', 'rootStyle'],
+  template: '<div v-if="open"><slot /></div>',
+}
 const metrics = {
   case_total: 3,
   problem_case_total: 2,
@@ -79,6 +83,13 @@ function render() {
 }
 
 describe('FrontpageQualityReportView', () => {
+  it('下钻抽屉宽度不超过窄窗口', async () => {
+    const wrapper = render()
+    await flush()
+    expect(wrapper.findComponent(drawerStub).props('width')).toBe('min(900px, 100vw)')
+    expect(wrapper.findComponent(drawerStub).props('rootStyle')).toEqual({ zIndex: 1100 })
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     state.getReport.mockResolvedValue({ success: true, data: report })

@@ -2,28 +2,41 @@
   <section class="core-report" aria-label="核心制度专题报表">
     <header>
       <h2>18项核心制度专题</h2>
-      <button type="button" :disabled="!report || loading || exporting" @click="download">
+      <button
+        class="mq-btn"
+        type="button"
+        :disabled="!report || loading || exporting"
+        @click="download"
+      >
         <Download :size="16" /> CSV
       </button>
     </header>
-    <form class="core-filters" @submit.prevent="apply">
+    <form class="core-filters mq-card mq-card--padded" @submit.prevent="apply">
       <label
-        >场景<select v-model="draft.scene">
+        >场景<select v-model="draft.scene" class="mq-input">
           <option value="running">运行病历</option>
           <option value="final">终末病历</option>
         </select></label
       >
-      <label>机构<input v-model.trim="draft.institute_id" /></label>
-      <label>科室<input v-model.trim="draft.department" /></label>
-      <label>主治医师<input v-model.trim="draft.doctor" /></label>
+      <label>机构<input v-model.trim="draft.institute_id" class="mq-input" /></label>
+      <label>科室<input v-model.trim="draft.department" class="mq-input" /></label>
+      <label>主治医师<input v-model.trim="draft.doctor" class="mq-input" /></label>
       <label
-        >完成时间起（上海）<input v-model="draft.completed_from" type="datetime-local" step="any"
+        >完成时间起（上海）<input
+          v-model="draft.completed_from"
+          class="mq-input"
+          type="datetime-local"
+          step="any"
       /></label>
       <label
-        >完成时间止（上海）<input v-model="draft.completed_to" type="datetime-local" step="any"
+        >完成时间止（上海）<input
+          v-model="draft.completed_to"
+          class="mq-input"
+          type="datetime-local"
+          step="any"
       /></label>
       <label
-        >明细制度<select v-model="draft.system_id">
+        >明细制度<select v-model="draft.system_id" class="mq-input">
           <option value="">全部制度</option>
           <option value="unknown">未知覆盖</option>
           <option v-for="system in report?.systems || []" :key="system.id" :value="system.id">
@@ -31,18 +44,22 @@
           </option>
         </select></label
       >
-      <label>明细质控点<input v-model.trim="draft.rule_id" /></label>
+      <label>明细质控点<input v-model.trim="draft.rule_id" class="mq-input" /></label>
       <label class="checkbox"
-        ><input v-model="draft.problems_only" type="checkbox" />仅问题病例</label
+        ><input v-model="draft.problems_only" class="mq-input" type="checkbox" />仅问题病例</label
       >
-      <button type="submit"><Search :size="16" />查询</button
-      ><button type="button" @click="reset"><RotateCcw :size="16" />重置</button>
+      <button class="mq-btn" type="submit"><Search :size="16" />查询</button
+      ><button class="mq-btn" type="button" @click="reset"><RotateCcw :size="16" />重置</button>
     </form>
     <p>仅统计自动质控确认问题，人工缺陷未纳入；多制度归属可重叠。</p>
     <div v-if="loading" role="status">正在读取核心制度报表…</div>
-    <div v-else-if="error" role="alert">{{ error }}</div>
+    <div v-else-if="error" role="alert">
+      {{ error }}
+    </div>
     <template v-else-if="report">
-      <p class="contract">{{ report.contract }}</p>
+      <p class="contract">
+        {{ report.contract }}
+      </p>
       <p>{{ report.scope.scope_label }} · 生成时间 {{ formatTime(report.as_of) }}</p>
       <div class="core-summary">
         <span
@@ -53,7 +70,7 @@
           >未知分类质控点 <strong>{{ report.summary.unknown_points }}</strong></span
         ><span
           >未知分类确认缺陷 <strong>{{ report.summary.unknown_defects ?? '未知' }}</strong></span
-        ><button type="button" @click="drill('unknown')">
+        ><button class="mq-btn" type="button" @click="drill('unknown')">
           结果不可用 {{ report.summary.unavailable_records }} / 未知覆盖
         </button>
       </div>
@@ -62,6 +79,7 @@
         <button
           v-for="system in report.top_systems || []"
           :key="system.id"
+          class="mq-btn"
           type="button"
           @click="drill(system.id, '', true)"
         >
@@ -72,7 +90,7 @@
       </div>
       <h3>制度汇总（院科、医师与完成时间范围）</h3>
       <div class="table-scroll">
-        <table>
+        <table class="mq-table">
           <thead>
             <tr>
               <th>制度</th>
@@ -99,8 +117,10 @@
               </td>
               <td>{{ system.points.length }}</td>
               <td>
-                <button type="button" @click="openSystem(system.id)">原文与缺陷点</button
+                <button class="mq-btn" type="button" @click="openSystem(system.id)">
+                  原文与缺陷点</button
                 ><button
+                  class="mq-btn"
                   type="button"
                   :disabled="system.record_count === null"
                   @click="drill(system.id)"
@@ -114,7 +134,7 @@
       </div>
       <h3>病例明细（{{ report.total }}）</h3>
       <div class="table-scroll">
-        <table>
+        <table class="mq-table">
           <thead>
             <tr>
               <th>病例身份</th>
@@ -147,17 +167,20 @@
                     : row.points.filter((p) => p.is_confirmed_issue).length
                 }}
               </td>
-              <td><button type="button" @click="selectedCase = row">详情</button></td>
+              <td>
+                <button class="mq-btn" type="button" @click="selectedCase = row">详情</button>
+              </td>
             </tr>
           </tbody>
         </table>
         <p v-if="!report.items.length">无匹配病例</p>
       </div>
       <nav aria-label="病例分页">
-        <button :disabled="report.page === 1" @click="load(report.page - 1)">
+        <button class="mq-btn" :disabled="report.page === 1" @click="load(report.page - 1)">
           <ChevronLeft :size="16" /></button
         ><span>第{{ report.page }}页 / {{ report.total }}例</span
         ><button
+          class="mq-btn"
           :disabled="report.page * report.page_size >= report.total"
           @click="load(report.page + 1)"
         >
@@ -167,12 +190,13 @@
     </template>
     <a-drawer
       :open="!!selectedSystem"
-      :width="720"
+      width="min(720px, 100vw)"
+      :root-style="{ zIndex: 1100 }"
       title="制度原文与缺陷点"
       @close="selectedSystem = ''"
     >
-      <template v-if="activeSystem && report"
-        ><h3>{{ activeSystem.name }}</h3>
+      <template v-if="activeSystem && report">
+        <h3>{{ activeSystem.name }}</h3>
         <p>{{ report.reference.reference_note }}</p>
         <a :href="report.reference.source_url" target="_blank" rel="noopener noreferrer"
           >国家卫生健康委员会原文（{{ report.reference.reference_date }}）</a
@@ -188,18 +212,19 @@
           <strong>{{ point.rule_name }}</strong>
           <p>{{ point.rule_id }} · {{ point.rule_set_key }}/{{ point.rule_set_version }}</p>
           <p>病例{{ point.record_count }} · 问题病例{{ point.problem_records }}</p>
-          <button @click="drill(activeSystem.id, point.rule_id)">病例下钻</button>
-        </div></template
-      >
+          <button class="mq-btn" @click="drill(activeSystem.id, point.rule_id)">病例下钻</button>
+        </div>
+      </template>
     </a-drawer>
     <a-drawer
       :open="!!selectedCase"
-      :width="720"
+      width="min(720px, 100vw)"
+      :root-style="{ zIndex: 1100 }"
       title="病例质控点详情"
       @close="selectedCase = null"
     >
-      <template v-if="selectedCase"
-        ><h3>{{ selectedCase.patient_name || '未登记姓名' }}</h3>
+      <template v-if="selectedCase">
+        <h3>{{ selectedCase.patient_name || '未登记姓名' }}</h3>
         <p>
           {{ selectedCase.institute_id }} / {{ selectedCase.patient_id }} /
           {{ selectedCase.visit_id }}
@@ -229,8 +254,8 @@
                   : '明确非核心制度'
             }}
           </p>
-        </div></template
-      >
+        </div>
+      </template>
     </a-drawer>
   </section>
 </template>
@@ -388,134 +413,4 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
-.core-report {
-  background: #fff;
-  color: #243447;
-  padding: 20px;
-  border: 1px solid #e2e8ee;
-}
-.core-report header,
-.core-report nav,
-.core-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.core-filters {
-  display: flex;
-  gap: 12px;
-  align-items: end;
-  flex-wrap: wrap;
-  margin: 18px 0;
-}
-.core-filters label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-}
-.core-filters .checkbox {
-  flex-direction: row;
-  align-items: center;
-}
-input,
-select {
-  border: 1px solid #ccd6df;
-  border-radius: 4px;
-  padding: 7px;
-  min-width: 130px;
-  max-width: 100%;
-}
-.checkbox input {
-  min-width: 0;
-}
-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 7px 10px;
-  border: 1px solid #ccd6df;
-  background: white;
-  border-radius: 4px;
-  color: #16748a;
-  cursor: pointer;
-}
-button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.contract {
-  background: #edf7f8;
-  padding: 12px;
-  line-height: 1.7;
-}
-.core-summary {
-  justify-content: flex-start;
-  padding: 12px 0;
-}
-.table-scroll {
-  overflow: auto;
-  margin: 16px 0;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 760px;
-}
-th,
-td {
-  text-align: left;
-  padding: 12px;
-  border-bottom: 1px solid #e7edf1;
-  white-space: normal;
-  min-width: 90px;
-}
-th {
-  background: #f5f8fa;
-  font-size: 13px;
-}
-td button {
-  margin: 3px;
-}
-small {
-  display: block;
-  color: #697b89;
-  margin-top: 6px;
-  overflow-wrap: anywhere;
-}
-.reference-text {
-  font: inherit;
-  white-space: pre-wrap;
-  line-height: 1.9;
-  overflow-wrap: anywhere;
-  margin: 20px 0;
-}
-.point {
-  padding: 14px 0;
-  border-top: 1px solid #e4ebf0;
-}
-.core-report h2 {
-  font-size: 20px;
-  margin: 0;
-}
-.core-report h3 {
-  font-size: 16px;
-}
-@media (max-width: 640px) {
-  .core-report {
-    padding: 12px;
-  }
-  .core-filters label {
-    width: calc(50% - 6px);
-  }
-  input,
-  select {
-    min-width: 0;
-    width: 100%;
-  }
-}
-</style>
+<style scoped src="@/views/qc/reports/styles/core-system-report.css"></style>

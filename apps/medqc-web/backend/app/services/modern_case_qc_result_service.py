@@ -147,7 +147,7 @@ class ModernCaseQCResultService:
         # 不在导入期强制数据库可用；无 DATABASE_URL 时由 get_snapshot 返回 SourceUnavailable。
         self._session_factory = session_factory or SessionLocal
 
-    def list_latest_results(self, source_keys: Tuple[str, ...]) -> List[Dict[str, Any]]:
+    def list_latest_results(self, source_keys: Tuple[str, ...], *, institute_id: str | None = None) -> List[Dict[str, Any]]:
         """报表批量读取：每个 source_key + 三坐标只取最新 1 条现代结果，附本次结果缺陷。
 
         排序与单病例快照同一（_latest_first）；只读 identity_version = 1 的行，不回退旧行。
@@ -165,7 +165,7 @@ class ModernCaseQCResultService:
             raise SourceUnavailable("modern case QC source is unavailable") from None
         try:
             tables = self._require_modern_tables()
-            return self._load_latest_batch(session, tables, keys)
+            return self._load_latest_batch(session, tables, keys, institute_id=institute_id)
         except ModernCaseQCResultError:
             raise
         except Exception:
@@ -177,7 +177,7 @@ class ModernCaseQCResultService:
                 pass
 
     def _load_latest_batch(
-        self, session: Session, tables: Dict[str, Table], keys: Tuple[str, ...]
+        self, session: Session, tables: Dict[str, Table], keys: Tuple[str, ...], *, institute_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         results = tables["qc_results"]
         owner_columns = [results.c[name] for name in _OWNER_KEYS]
@@ -189,7 +189,8 @@ class ModernCaseQCResultService:
                     partition_by=owner_columns, order_by=self._latest_first(results)
                 ).label("latest_rank"),
             )
-            .where(results.c.identity_version == 1, results.c.source_key.in_(keys))
+            .where(results.c.identity_version == 1, results.c.source_key.in_(keys),
+                   True if institute_id is None else results.c.institute_id == institute_id)
             .subquery()
         )
         rows = session.execute(

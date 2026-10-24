@@ -160,6 +160,19 @@ def _owner(identity=IDENTITY, **overrides):
     return {**identity.columns(), **overrides}
 
 
+def test_report_latest_query_scopes_institute_before_ranking(store):
+    for institute in ("A", "B"):
+        identity = VerifiedQCIdentity(institute, "same", "same", "frontpage_formal_qc")
+        _result(store, f"result-{institute}", identity=identity, date=datetime(2026, 10, 1))
+        _defect(store, f"defect-{institute}", result_id=f"result-{institute}", identity=identity)
+    store.statements.clear()
+    store.calls.clear()
+    rows = store.service.list_latest_results(("frontpage_formal_qc",), institute_id="A")
+    assert [(row["institute_id"], row["result"]["id"]) for row in rows] == [("A", "result-A")]
+    assert [defect["id"] for defect in rows[0]["defects"]] == ["defect-A"]
+    assert any("qc_results.institute_id = ?" in sql and "A" in params for sql, params in store.calls)
+
+
 def _case(store, institute="LX001", patient="patient-a", visit="visit-1"):
     store.insert("mr", institute_id=institute, patient_id=patient, visit_id=visit)
 
@@ -1111,7 +1124,7 @@ def test_missing_required_query_column_is_schema_unavailable(monkeypatch, table_
 
 
 def test_reflection_and_query_errors_map_to_source_unavailable_without_leak(monkeypatch):
-    secret = "postgresql://qc_user:secret-value@db.internal:5432/business"
+    secret = "postgresql://example:example@synthetic.invalid/test"
 
     def _boom(_schema, _name):
         raise RuntimeError(secret)

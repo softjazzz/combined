@@ -113,11 +113,11 @@ async def get_manual_defects(
     current_user: dict = Depends(get_current_user),
 ):
     """按审核状态分页读取人工缺陷（精确 total）。"""
-    _require_review(current_user)
+    actor_id = _require_review(current_user)
     try:
         data = await run_in_threadpool(
             list_manual_defects,
-            review_status=review_status, page=page, page_size=page_size, scene=scene,
+            review_status=review_status, page=page, page_size=page_size, scene=scene, actor_id=actor_id,
         )
         result = {
             "items": [
@@ -129,6 +129,8 @@ async def get_manual_defects(
             "page_size": data["page_size"],
             "scene": data["scene"],
         }
+    except ManualDefectReviewForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ManualDefectReviewInvalid as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
@@ -150,12 +152,12 @@ async def get_case_manual_defects(
     current_user: dict = Depends(get_current_user),
 ):
     """按三坐标分页读取该病例任务人工缺陷，默认第一页 200 条。"""
-    _require_review(current_user)
+    actor_id = _require_review(current_user)
     try:
         data = await run_in_threadpool(
             list_case_manual_defects,
             institute_id=institute_id, patient_id=patient_id, visit_id=visit_id, scene=scene,
-            offset=offset, limit=limit,
+            offset=offset, limit=limit, actor_id=actor_id,
         )
         result = {
             "items": [
@@ -166,6 +168,8 @@ async def get_case_manual_defects(
             "limit": data["limit"],
             "offset": data.get("offset", 0),
         }
+    except ManualDefectReviewForbidden as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ManualDefectReviewInvalid as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:

@@ -83,6 +83,7 @@ def _load_current_workstation_records(
     start_date: date | None = None,
     end_date: date | None = None,
     date_field: str = "visit",
+    institute_id: str | None = None,
 ) -> list[dict[str, str]]:
     """用病历池同一筛选口径读取当前范围的最小身份与维度字段。"""
 
@@ -102,6 +103,8 @@ def _load_current_workstation_records(
     try:
         discharge_summary = _workstation_discharge_summary_subquery(session)
         query = session.query(MedicalRecordFrontpage)
+        if institute_id is not None:
+            query = query.filter(MedicalRecordFrontpage.institute_id == institute_id)
         if discharge_summary is not None:
             query = query.outerjoin(
                 discharge_summary,
@@ -146,7 +149,7 @@ def _load_current_workstation_records(
             for row in rows
         ]
         indexed_records = _filter_indexed_registration_records(
-            _load_indexed_registration_records(session),
+            _load_indexed_registration_records(session, **({"institute_id": institute_id} if institute_id is not None else {})),
             dept=department,
             doctor=doctor,
             keyword=None,
@@ -175,6 +178,7 @@ def _load_current_workstation_records(
                 or "未登记主治医师",
             }
             for record in indexed_records
+            if institute_id is None or _safe_text(record.institute_id) == institute_id
         )
     finally:
         session.close()

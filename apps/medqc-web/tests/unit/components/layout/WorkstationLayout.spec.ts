@@ -11,7 +11,9 @@ const routeState = vi.hoisted(() => ({
 }))
 
 // 菜单过滤依赖真实路由表的 meta.permission，resolve 交给真实 router
-const realRouterRef = vi.hoisted(() => ({ current: null as null | { resolve: (to: unknown) => unknown } }))
+const realRouterRef = vi.hoisted(() => ({
+  current: null as null | { resolve: (to: unknown) => unknown },
+}))
 
 vi.mock('vue-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('vue-router')>()),
@@ -92,8 +94,10 @@ const SubMenuStub = defineComponent({
 function mountLayout() {
   return shallowMount(WorkstationLayout, {
     global: {
+      renderStubDefaultSlot: true,
       stubs: {
         'a-layout': PassThroughStub,
+        ConfigProvider: PassThroughStub,
         'a-layout-sider': SiderStub,
         'a-layout-header': PassThroughStub,
         'a-layout-content': PassThroughStub,
@@ -123,10 +127,10 @@ describe('WorkstationLayout 门急诊入口', () => {
     mediaChange = undefined
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
-      value: vi.fn(() => ({
-        matches: mobileMatches,
+      value: vi.fn((query: string) => ({
+        matches: query.includes('767') ? mobileMatches : false,
         addEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
-          mediaChange = listener
+          if (query.includes('767')) mediaChange = listener
         },
         removeEventListener: vi.fn(),
       })),
@@ -150,18 +154,15 @@ describe('WorkstationLayout 门急诊入口', () => {
     expect(routerPush).toHaveBeenCalledWith('/workstation-v5/records/outpatient-emergency')
   })
 
-  it.each(['doctor', 'reviewer', 'sync_admin', 'super_admin'])(
-    '%s 不显示门急诊入口',
-    (role) => {
-      authState.userRoles = [role]
-      const wrapper = mountLayout()
+  it.each(['doctor', 'reviewer', 'sync_admin', 'super_admin'])('%s 不显示门急诊入口', (role) => {
+    authState.userRoles = [role]
+    const wrapper = mountLayout()
 
-      expect(wrapper.text()).not.toContain('门急诊病历')
-      // 运行/已出院病历路由仅允许 admin、qc_manager，菜单随路由权限隐藏
-      expect(wrapper.text()).not.toContain('运行病历质控')
-      expect(wrapper.text()).not.toContain('已出院病历质控')
-    },
-  )
+    expect(wrapper.text()).not.toContain('门急诊病历')
+    // 运行/已出院病历路由仅允许 admin、qc_manager，菜单随路由权限隐藏
+    expect(wrapper.text()).not.toContain('运行病历质控')
+    expect(wrapper.text()).not.toContain('已出院病历质控')
+  })
 
   it('直达门急诊页面时选中入口并展开工作台菜单', () => {
     routeState.path = '/workstation-v5/records/outpatient-emergency'
@@ -186,10 +187,10 @@ describe('WorkstationLayout 窄屏导航', () => {
     mediaChange = undefined
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
-      value: vi.fn(() => ({
-        matches: mobileMatches,
+      value: vi.fn((query: string) => ({
+        matches: query.includes('767') ? mobileMatches : false,
         addEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
-          mediaChange = listener
+          if (query.includes('767')) mediaChange = listener
         },
         removeEventListener: vi.fn(),
       })),
@@ -237,7 +238,7 @@ describe('WorkstationLayout 窄屏导航', () => {
     expect(wrapper.find('.mobile-menu-trigger').exists()).toBe(false)
     expect(wrapper.classes()).not.toContain('workstation-layout--mobile-menu-open')
     expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(false)
-    await wrapper.find('.desktop-menu-trigger').trigger('click')
+    await wrapper.find('.sidebar-collapse-control').trigger('click')
     expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(true)
   })
 })
@@ -246,7 +247,6 @@ describe('WorkstationLayout 菜单按路由权限过滤', () => {
   const FULL_MENU = [
     '工作台首页',
     '病历池',
-    '统计分析',
     '门急诊病历',
     '运行病历质控',
     '已出院病历质控',
@@ -254,6 +254,11 @@ describe('WorkstationLayout 菜单按路由权限过滤', () => {
     '生成首页',
     '首页质控',
     '结算清单质控',
+    '质控统计总览',
+    '病历质量分析',
+    '特殊病历报表',
+    '病案首页统计分析',
+    '质控员工作分析',
     '编码质控规则',
     '全病历质控规则',
     '首页质控规则',
@@ -299,15 +304,11 @@ describe('WorkstationLayout 菜单按路由权限过滤', () => {
 
   // 菜单快照：以后端接口角色为准，任一角色的可见项变化都需要同步核对后端依赖
   it.each([
-    ['admin', FULL_MENU, 3],
-    ['qc_manager', FULL_MENU, 3],
+    ['admin', FULL_MENU, 4],
+    ['qc_manager', FULL_MENU, 4],
     // 质控员：统计、规则、DRG、上传均无后端权限，仅保留登录即可用的 ICD 查询
     ['qc_staff', ['ICD 编码查询'], 0],
-    [
-      'doctor',
-      ['工作台首页', '病历池', ...STAGES, 'ICD 编码查询', ...DRG_TOOLS, '数据上传'],
-      2,
-    ],
+    ['doctor', ['工作台首页', '病历池', ...STAGES, 'ICD 编码查询', ...DRG_TOOLS, '数据上传'], 2],
     ['reviewer', ['ICD 编码查询', ...DRG_TOOLS, '数据上传'], 1],
     // coder 不在后端 DRG 角色内
     ['coder', ['ICD 编码查询'], 0],
@@ -323,3 +324,64 @@ describe('WorkstationLayout 菜单按路由权限过滤', () => {
   })
 })
 
+describe('WorkstationLayout V5 报表导航', () => {
+  it('V7.1 无顶栏，账号和版本放在侧栏底部', () => {
+    const wrapper = mountLayout()
+    expect(wrapper.find('.header').exists()).toBe(false)
+    expect(wrapper.find('.workstation-account-footer').exists()).toBe(true)
+    expect(wrapper.find('.workstation-account-footer runtime-build-status-stub').exists()).toBe(
+      true,
+    )
+    expect(wrapper.find('.sidebar-collapse-control').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('1280 以下桌面宽度自动折叠为紧凑侧栏，仍可手动展开', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn((query: string) => ({
+        matches: query.includes('1279'),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    })
+    const wrapper = mountLayout()
+    await nextTick()
+    expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(true)
+    await wrapper.find('.sidebar-collapse-control').trigger('click')
+    expect(wrapper.findComponent(SiderStub).props('collapsed')).toBe(false)
+    wrapper.unmount()
+  })
+
+  beforeEach(() => {
+    routerPush.mockReset()
+    authState.userRoles = ['qc_manager']
+    mobileMatches = false
+    routeState.path = '/workstation-v5'
+    routeState.fullPath = routeState.path
+    routeState.query = {}
+  })
+
+  it.each([
+    ['record-quality', '病历质量分析'],
+    ['special-records', '特殊病历报表'],
+    ['frontpage-quality', '病案首页统计分析'],
+    ['staff-analysis', '质控员工作分析'],
+  ])('%s 菜单直接导航到 V5，深链选中并展开统计分组', async (slug, title) => {
+    const path = `/workstation-v5/reports/${slug}`
+    const wrapper = mountLayout()
+    expect(wrapper.findAll('.menu-item').map((item) => item.text().trim())).toContain(title)
+    wrapper.findComponent(MenuStub).vm.$emit('click', { key: path })
+    await nextTick()
+    expect(routerPush).toHaveBeenCalledWith(path)
+
+    reactiveRoute.path = path
+    reactiveRoute.fullPath = `${path}?scene=final`
+    await nextTick()
+    expect(wrapper.findComponent(MenuStub).props('selectedKeys')).toEqual([path])
+    expect(wrapper.findComponent(MenuStub).props('openKeys')).toContain('statistics-sub')
+    expect(wrapper.find('.header').exists()).toBe(false)
+    expect(wrapper.find('.workstation-account-footer').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})

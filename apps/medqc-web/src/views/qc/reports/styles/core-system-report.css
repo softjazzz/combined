@@ -1,0 +1,121 @@
+.core-report {
+  color: var(--mq-text-primary);
+  padding: 0;
+  min-width: 0;
+}
+.core-report header,
+.core-report nav,
+.core-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.core-filters {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+.core-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.core-filters .checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+input,
+select {
+  min-width: 130px;
+  max-width: 100%;
+}
+.checkbox input {
+  min-width: 0;
+}
+button {
+  max-width: 100%;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.contract {
+  background: var(--mq-info-bg);
+  padding: 12px;
+  line-height: 1.7;
+}
+.core-summary {
+  justify-content: flex-start;
+  padding: 12px 0;
+}
+.table-scroll {
+  overflow: auto;
+  margin: 16px 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+th,
+td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid var(--mq-border);
+  white-space: normal;
+  min-width: 90px;
+}
+th {
+  background: var(--mq-bg-muted);
+  font-size: 13px;
+}
+td button {
+  margin: 3px;
+}
+small {
+  display: block;
+  color: var(--mq-text-tertiary);
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.reference-text {
+  font: inherit;
+  white-space: pre-wrap;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+  margin: 20px 0;
+}
+.point {
+  padding: 14px 0;
+  border-top: 1px solid var(--mq-border);
+}
+.core-report h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.core-report h3 {
+  font-size: 16px;
+}
+@media (max-width: 640px) {
+  .core-report {
+    padding: 12px;
+  }
+  .core-filters label {
+    width: calc(50% - 6px);
+  }
+  input,
+  select {
+    min-width: 0;
+    width: 100%;
+  }
+}
+.checkbox input.mq-input {
+  min-width: 0;
+  width: 16px;
+  height: 16px;
+}
