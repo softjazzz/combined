@@ -1,23 +1,23 @@
 <template>
   <div class="charts">
-    <VChart
+    <figure
       v-if="departments.length && departments.some((row) => row.count > 0)"
-      :option="departmentOption"
-      autoresize
-      aria-label="科室数量Top5圆环图"
-    />
-    <VChart
+      class="chart-panel mq-inset"
+    >
+      <VChart :option="departmentOption" autoresize aria-label="科室数量Top5圆环图" />
+    </figure>
+    <figure
       v-if="grades.length && grades.some((row) => row.count > 0)"
-      :option="gradeOption"
-      autoresize
-      aria-label="专用评分等级比例圆环图"
-    />
-    <VChart
+      class="chart-panel mq-inset"
+    >
+      <VChart :option="gradeOption" autoresize aria-label="专用评分等级比例圆环图" />
+    </figure>
+    <figure
       v-if="defects.length && defects.some((row) => row.count > 0)"
-      :option="defectOption"
-      autoresize
-      aria-label="缺陷Top10柱状图"
-    />
+      class="chart-panel mq-inset"
+    >
+      <VChart :option="defectOption" autoresize aria-label="缺陷Top10柱状图" />
+    </figure>
   </div>
 </template>
 <script setup lang="ts">
@@ -47,13 +47,25 @@ const props = defineProps<{
   grades: Array<{ grade: string; count: number; ratio: number }>
   defects: SpecialDefectRow[]
 }>()
-const palette = ['#2b6cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4']
+// ECharts 画布读不到 CSS 变量，挂载时从 V7.1 Token 取值；单一蓝色系，不用语义色暗示好坏
+function token(name: string) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+const palette = [
+  '--mq-brand-600',
+  '--mq-brand-400',
+  '--mq-brand-200',
+  '--mq-brand-700',
+  '--mq-text-tertiary',
+].map(token)
+const textColor = token('--mq-text-secondary')
+const titleStyle = { fontSize: 14, fontWeight: 600, color: token('--mq-text-primary') }
 function donut(title: string, data: Array<{ name: string; value: number }>) {
   return {
     color: palette,
-    title: { text: title, textStyle: { fontSize: 14 } },
+    title: { text: title, textStyle: titleStyle },
     tooltip: { trigger: 'item' },
-    legend: { bottom: 0 },
+    legend: { bottom: 0, type: 'scroll', textStyle: { color: textColor } },
     series: [
       { type: 'pie', radius: ['42%', '65%'], center: ['50%', '45%'], label: { show: false }, data },
     ],
@@ -73,15 +85,15 @@ const gradeOption = computed(() =>
 )
 const defectOption = computed(() => ({
   color: [palette[0]],
-  title: { text: '缺陷 Top10', textStyle: { fontSize: 14 } },
+  title: { text: '缺陷 Top10', textStyle: titleStyle },
   tooltip: { trigger: 'axis' },
   grid: { left: 140, right: 20, top: 40, bottom: 20 },
-  xAxis: { type: 'value', minInterval: 1 },
+  xAxis: { type: 'value', minInterval: 1, axisLabel: { color: textColor } },
   yAxis: {
     type: 'category',
     inverse: true,
     data: props.defects.map((row) => row.name),
-    axisLabel: { width: 120, overflow: 'truncate' },
+    axisLabel: { width: 120, overflow: 'truncate', color: textColor },
   },
   series: [{ type: 'bar', data: props.defects.map((row) => row.count) }],
 }))
@@ -90,14 +102,19 @@ const defectOption = computed(() => ({
 .charts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
-.charts > * {
+.chart-panel {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+}
+.chart-panel > * {
   width: 100%;
-  height: 300px;
+  height: 280px;
   min-width: 0;
 }
-@media (max-width: 900px) {
+@media (max-width: 1180px) {
   .charts {
     grid-template-columns: 1fr;
   }

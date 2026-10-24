@@ -1,49 +1,82 @@
 <template>
-  <a-drawer :open="open" title="机构特殊病历代码配置" :width="640" @close="$emit('close')">
-    <p>机构：{{ instituteId }}</p>
-    <p v-if="loading" role="status">正在读取机构代码配置…</p>
-    <p v-else-if="error" role="alert">
-      {{ error }}
+  <a-drawer
+    :open="open"
+    title="机构特殊病历代码配置"
+    width="min(640px, 100vw)"
+    class="special-config-drawer"
+    @close="$emit('close')"
+  >
+    <div class="config-summary mq-soft">
+      <span
+        >机构 <strong class="mq-mono">{{ instituteId }}</strong></span
+      >
+      <span v-if="receipt"
+        >当前版本 <strong class="mq-mono">{{ receipt.version_seq }}</strong></span
+      >
+    </div>
+    <p v-if="loading" role="status" class="config-status">正在读取机构代码配置…</p>
+    <p v-else-if="error" role="alert" class="config-status is-error">
+      <MqIcon name="issue" :size="16" />{{ error }}
     </p>
     <form v-else-if="receipt && draft" class="config-form" @submit.prevent="save">
-      <section v-for="group in groups" :key="group.key">
+      <section v-for="group in groups" :key="group.key" class="config-group mq-inset">
         <h3>{{ group.label }}</h3>
-        <label
-          >明确命中代码<a-select
+        <div class="mq-field">
+          <label class="mq-field__label" :for="`sr-${group.key}-positive`">明确命中代码</label
+          ><a-select
+            :id="`sr-${group.key}-positive`"
             v-model:value="draft[group.key].positive_codes"
             mode="tags"
             :disabled="saving"
-        /></label>
-        <label
-          >明确非该类型代码<a-select
+          />
+        </div>
+        <div class="mq-field">
+          <label class="mq-field__label" :for="`sr-${group.key}-negative`">明确非该类型代码</label
+          ><a-select
+            :id="`sr-${group.key}-negative`"
             v-model:value="draft[group.key].negative_codes"
             mode="tags"
             :disabled="saving"
-        /></label>
+          />
+        </div>
       </section>
-      <section>
+      <section class="config-group mq-inset">
         <h3>院方手术等级代码</h3>
-        <label v-for="level in levels" :key="level"
-          >{{ level }}级代码<a-select
-            v-model:value="draft.surgery_level_codes[level]"
-            mode="tags"
-            :disabled="saving"
-        /></label>
+        <div class="level-grid">
+          <div v-for="level in levels" :key="level" class="mq-field">
+            <label class="mq-field__label" :for="`sr-level-${level}`">{{ level }}级代码</label
+            ><a-select
+              :id="`sr-level-${level}`"
+              v-model:value="draft.surgery_level_codes[level]"
+              mode="tags"
+              :disabled="saving"
+            />
+          </div>
+        </div>
       </section>
-      <p>未配置、未映射代码保持未知。当前版本 {{ receipt.version_seq }}。</p>
-      <a-button type="primary" html-type="submit" :loading="saving" :disabled="saving">
-        确认保存
-      </a-button>
+      <p class="mq-field__hint">未配置、未映射代码保持未知。当前版本 {{ receipt.version_seq }}。</p>
     </form>
-    <p v-if="notice" role="status">
+    <p v-if="notice" role="status" class="config-status">
       {{ notice }}
     </p>
-    <a-button :disabled="saving" @click="load"> 重新读取 </a-button>
+    <div class="config-actions">
+      <button class="mq-btn" type="button" :disabled="saving" @click="load">重新读取</button>
+      <button
+        v-if="!loading && !error && receipt && draft"
+        class="mq-btn mq-btn--primary"
+        type="button"
+        :disabled="saving"
+        @click="save"
+      >
+        {{ saving ? '正在保存…' : '确认保存' }}
+      </button>
+    </div>
   </a-drawer>
 </template>
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { getSpecialSourceConfig, saveSpecialSourceConfig } from '@/api/specialRecordReports'
 import type { SpecialConfigReceipt, SpecialSourceConfig } from '@/api/specialRecordReports'
 const props = defineProps<{ open: boolean; instituteId: string }>()
@@ -129,21 +162,59 @@ onBeforeUnmount(() => {
 })
 </script>
 <style scoped>
+.config-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+.config-summary strong {
+  color: var(--mq-text-primary);
+}
+.config-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  color: var(--mq-text-tertiary);
+}
+.config-status.is-error {
+  padding: 12px 16px;
+  border-radius: var(--mq-radius-control);
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+}
 .config-form {
   display: grid;
   gap: 16px;
 }
-.config-form section,
-label {
+.config-group {
   display: grid;
-  gap: 8px;
+  gap: 12px;
+  padding: 16px;
 }
-h3 {
+.config-group h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--mq-font-16);
+  font-weight: 600;
 }
-label {
-  color: var(--text-secondary);
-  font-size: 13px;
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.config-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+@media (max-width: 480px) {
+  .level-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

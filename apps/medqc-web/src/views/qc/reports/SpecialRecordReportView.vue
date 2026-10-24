@@ -1,35 +1,56 @@
 <template>
-  <main class="report-page">
-    <header class="page-head">
-      <h1>特殊病历报表</h1>
-      <div class="head-actions">
-        <a-button :disabled="loading" title="刷新报表" @click="load">
-          <RefreshCw :size="16" />
-        </a-button>
-        <a-button
+  <main class="mq-page report-page special-report">
+    <header class="page-head mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
+        <h1 class="mq-page-title">特殊病历报表</h1>
+        <p>按出院日期统计八类特殊病历的来源、专用评分与确认缺陷</p>
+      </div>
+      <div class="head-actions mq-page-head__actions">
+        <button class="mq-btn" type="button" :disabled="loading" title="刷新报表" @click="load">
+          <MqIcon name="sync" :size="16" />刷新
+        </button>
+        <button
+          class="mq-btn"
+          type="button"
           :disabled="!report || loading || exporting"
-          :loading="exporting"
           @click="download()"
         >
-          <Download :size="16" />下载报表
-        </a-button>
-        <a-button :disabled="!report || loading || exporting" @click="download('defects')">
-          <Download :size="16" />下载缺陷明细
-        </a-button>
-        <a-button v-if="canConfigure" :disabled="!draft.institute_id" @click="configOpen = true">
-          机构代码配置
-        </a-button>
+          <MqIcon name="download" :size="16" />下载报表
+        </button>
+        <button
+          class="mq-btn"
+          type="button"
+          :disabled="!report || loading || exporting"
+          @click="download('defects')"
+        >
+          <MqIcon name="download" :size="16" />下载缺陷明细
+        </button>
+        <button
+          v-if="canConfigure"
+          class="mq-btn"
+          type="button"
+          :disabled="!draft.institute_id"
+          @click="configOpen = true"
+        >
+          <MqIcon name="settings" :size="16" />机构代码配置
+        </button>
       </div>
     </header>
-    <form class="filters" aria-label="报表筛选" @submit.prevent="apply">
-      <label class="field"
-        >特殊类型<a-select
+    <form class="filters mq-card mq-card--padded" aria-label="报表筛选" @submit.prevent="apply">
+      <div class="field mq-field">
+        <label for="sr-type">特殊类型</label
+        ><a-select
+          id="sr-type"
           v-model:value="draft.record_type"
           :options="typeOptions"
           class="type-select"
-      /></label>
-      <label class="field"
-        >来源状态<a-select
+        />
+      </div>
+      <div class="field mq-field">
+        <label for="sr-state">来源状态</label
+        ><a-select
+          id="sr-state"
           v-model:value="draft.record_type_state"
           :options="[
             { value: 'positive', label: '已知命中' },
@@ -37,83 +58,147 @@
             { value: 'negative', label: '明确非该类型' },
           ]"
           class="type-select"
-      /></label>
-      <label class="field"
-        >机构<a-input v-model:value="draft.institute_id" placeholder="授权范围内机构"
-      /></label>
-      <label class="field"
-        >科室<a-input v-model:value="draft.department" placeholder="全部科室"
-      /></label>
-      <label class="field"
-        >出院日期起（上海）<input v-model="draft.discharged_from" type="date" required
-      /></label>
-      <label class="field"
-        >出院日期止（上海）<input v-model="draft.discharged_to" type="date" required
-      /></label>
-      <a-button type="primary" html-type="submit"> <Search :size="16" />查询 </a-button>
-      <a-button @click="reset"> <RotateCcw :size="16" />重置 </a-button>
+        />
+      </div>
+      <div class="field mq-field">
+        <label for="sr-institute">机构</label
+        ><input
+          id="sr-institute"
+          v-model="draft.institute_id"
+          class="mq-input"
+          placeholder="授权范围内机构"
+        />
+      </div>
+      <div class="field mq-field">
+        <label for="sr-department">科室</label
+        ><input
+          id="sr-department"
+          v-model="draft.department"
+          class="mq-input"
+          placeholder="全部科室"
+        />
+      </div>
+      <div class="field mq-field">
+        <label for="sr-from">出院日期起（上海）</label
+        ><input
+          id="sr-from"
+          v-model="draft.discharged_from"
+          class="mq-input"
+          type="date"
+          required
+        />
+      </div>
+      <div class="field mq-field">
+        <label for="sr-to">出院日期止（上海）</label
+        ><input id="sr-to" v-model="draft.discharged_to" class="mq-input" type="date" required />
+      </div>
+      <div class="filter-actions">
+        <button class="mq-btn mq-btn--primary" type="submit">
+          <MqIcon name="search" :size="16" />查询
+        </button>
+        <button class="mq-btn" type="button" @click="reset">重置</button>
+      </div>
     </form>
     <p v-if="filterError" role="alert" class="status error">
-      {{ filterError }}
+      <MqIcon name="issue" :size="18" />{{ filterError }}
     </p>
     <div v-if="loading" role="status" class="status">正在读取特殊病历报表…</div>
     <div v-else-if="error" role="alert" class="status error">
-      {{ error }}
+      <MqIcon name="issue" :size="18" />{{ error }}
     </div>
     <template v-else-if="report">
-      <p class="notice">八类可重叠；缺失来源单列未知。已出院病例未核验归档。</p>
+      <p class="notice archive-notice">
+        <MqIcon name="issue" :size="16" />八类可重叠；缺失来源单列未知。已出院病例未核验归档。
+      </p>
       <section class="metrics" aria-label="病例概览">
-        <div class="metric">
-          <span>范围病例</span><strong>{{ report.summary.cohort_total }}</strong>
+        <div class="metric mq-card">
+          <span class="metric-label"><MqIcon name="pool" :size="20" />范围病例</span
+          ><strong>{{ report.summary.cohort_total }}</strong>
         </div>
-        <div class="metric">
-          <span>选中类型病例</span><strong>{{ report.summary.record_total }}</strong>
+        <div class="metric mq-card">
+          <span class="metric-label"><MqIcon name="doc" :size="20" />选中类型病例</span
+          ><strong>{{ report.summary.record_total }}</strong>
         </div>
-        <div class="metric">
-          <span>范围内结果不可用</span
+        <div class="metric mq-card">
+          <span class="metric-label"><MqIcon name="issue" :size="20" />范围内结果不可用</span
           ><strong>{{ report.summary.unavailable_result_total }}</strong>
         </div>
-        <div class="metric">
-          <span>专用评分标准</span><strong class="standard-name">{{ standardName }}</strong
+        <div class="metric metric--text mq-card">
+          <span class="metric-label"><MqIcon name="rules" :size="20" />专用评分标准</span
+          ><strong class="standard-name">{{ standardName }}</strong
           ><small
             >{{ report.score_standard.standard_id || '未知' }} / 版本
             {{ report.score_standard.standard_version_seq ?? '未知' }}</small
           >
         </div>
       </section>
-      <section aria-label="八类来源边界">
-        <h2>类型来源</h2>
+      <section class="mq-card mq-card--padded" aria-label="八类来源边界">
+        <div class="mq-card__head">
+          <div>
+            <h2 class="mq-card__title">类型来源</h2>
+            <p class="mq-card__desc">点击类型查看已知命中，点击“未知”查看来源缺失病例</p>
+          </div>
+        </div>
         <div class="type-summary">
-          <div v-for="item in report.types" :key="item.key" class="type-item">
-            <button type="button" class="link" @click="selectType(item.key)">
-              <strong>{{ item.label }} {{ item.count ?? '未知' }}</strong></button
-            ><small
+          <div
+            v-for="item in report.types"
+            :key="item.key"
+            class="type-item mq-inset"
+            :class="{ 'is-active': applied.record_type === item.key }"
+          >
+            <button
+              type="button"
+              class="type-main"
+              :aria-pressed="
+                applied.record_type === item.key && applied.record_type_state === 'positive'
+              "
+              @click="selectType(item.key)"
+            >
+              <span class="type-label">{{ item.label }}</span
+              ><strong class="type-count">{{ item.count ?? '未知' }}</strong>
+            </button>
+            <small
               >已知命中 {{ item.known_positive_total }} ·
-              <button type="button" class="link" @click="selectType(item.key, 'unknown')">
+              <button
+                type="button"
+                class="link type-unknown"
+                :aria-pressed="
+                  applied.record_type === item.key && applied.record_type_state === 'unknown'
+                "
+                @click="selectType(item.key, 'unknown')"
+              >
                 未知 {{ item.unknown_total }}
               </button></small
             >
           </div>
         </div>
       </section>
-      <section aria-label="专题分析">
-        <div class="section-head">
-          <h2>{{ activeTypeLabel }}分析</h2>
-          <a-segmented
-            v-model:value="mode"
-            :options="[
-              { value: 'charts', label: '图表' },
-              { value: 'details', label: '明细' },
-            ]"
-          />
+      <section class="mq-card mq-card--padded" aria-label="专题分析">
+        <div class="mq-card__head section-head">
+          <div>
+            <h2 class="mq-card__title">{{ activeTypeLabel }}分析</h2>
+            <p class="mq-card__desc">
+              等级比例分母：已计分 {{ report.summary.graded_total }} 例；未计分
+              {{ report.summary.ungraded_total }}
+              例。缺陷占比分母为已确认自动缺陷，人工缺陷未纳入；已知结果
+              {{ report.summary.known_result_total }} 例，结果不可用
+              {{ report.summary.selected_unavailable_result_total }} 例。
+            </p>
+          </div>
+          <div class="mq-segmented" role="group" aria-label="分析视图">
+            <button
+              v-for="option in modeOptions"
+              :key="option.value"
+              type="button"
+              class="mq-segmented__item"
+              :class="{ 'is-active': mode === option.value }"
+              :aria-pressed="mode === option.value"
+              @click="mode = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
         </div>
-        <p>
-          等级比例分母：已计分 {{ report.summary.graded_total }} 例；未计分
-          {{ report.summary.ungraded_total }}
-          例。缺陷占比分母为已确认自动缺陷，人工缺陷未纳入；已知结果
-          {{ report.summary.known_result_total }} 例，结果不可用
-          {{ report.summary.selected_unavailable_result_total }} 例。
-        </p>
         <SpecialReportCharts
           v-if="mode === 'charts'"
           :departments="report.top_departments || []"
@@ -121,13 +206,14 @@
           :defects="report.top_defects || []"
         />
         <div v-if="mode === 'charts'" class="analysis-grid">
-          <section>
+          <section class="data-panel mq-inset">
             <h3>科室数量 Top5</h3>
             <p v-if="report.top_departments === null" class="empty">数量来源未知</p>
             <p v-else-if="!report.top_departments.length" class="empty">无已知命中病例</p>
             <button
               v-for="item in report.top_departments || []"
               :key="item.name"
+              type="button"
               class="data-row row-button"
               @click="drill({ department: item.name })"
             >
@@ -135,26 +221,28 @@
               ><strong>{{ item.count }}</strong>
             </button>
           </section>
-          <section>
+          <section class="data-panel mq-inset">
             <h3>专用评分等级比例</h3>
             <p v-if="report.grade_distribution === null" class="empty">等级未知或无可评分病例</p>
             <button
               v-for="item in report.grade_distribution || []"
               :key="item.grade"
+              type="button"
               class="data-row row-button"
               @click="drill({ grade: item.grade })"
             >
               <span>{{ item.grade }}</span
-              ><span>{{ item.count }} · {{ (item.ratio * 100).toFixed(1) }}%</span>
+              ><strong>{{ item.count }} · {{ (item.ratio * 100).toFixed(1) }}%</strong>
             </button>
           </section>
-          <section>
+          <section class="data-panel mq-inset">
             <h3>缺陷 Top10</h3>
             <p v-if="report.top_defects === null" class="empty">缺陷来源不可用</p>
             <p v-else-if="!report.top_defects.length" class="empty">暂无确认缺陷</p>
             <button
               v-for="item in report.top_defects || []"
               :key="defectKey(item)"
+              type="button"
               class="data-row row-button"
               @click="drill({ rule_id: item.rule_id })"
             >
@@ -165,11 +253,11 @@
         </div>
         <div v-else-if="defectsLoading" role="status" class="status">正在读取缺陷明细…</div>
         <p v-else-if="defectsError" role="alert" class="status error">
-          {{ defectsError }}
+          <MqIcon name="issue" :size="18" />{{ defectsError }}
         </p>
-        <div v-else-if="defects" class="table-panel">
+        <div v-else-if="defects" class="table-panel mq-inset">
           <div class="table-scroll">
-            <table>
+            <table class="mq-table">
               <thead>
                 <tr>
                   <th>缺陷名称</th>
@@ -178,14 +266,14 @@
                   <th>类型</th>
                   <th>文书</th>
                   <th>单否</th>
-                  <th>数量</th>
-                  <th>占比</th>
+                  <th class="num">数量</th>
+                  <th class="num">占比</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="item in defects.items" :key="defectKey(item)">
                   <td>
-                    <button class="link" @click="drill({ rule_id: item.rule_id })">
+                    <button type="button" class="link" @click="drill({ rule_id: item.rule_id })">
                       {{ item.name }}
                     </button>
                   </td>
@@ -194,45 +282,66 @@
                   <td>{{ item.type ?? '未知' }}</td>
                   <td>{{ item.document ?? '未知' }}</td>
                   <td>{{ item.is_veto === null ? '未知' : item.is_veto ? '是' : '否' }}</td>
-                  <td>{{ item.count }}</td>
-                  <td>{{ (item.ratio * 100).toFixed(1) }}%</td>
+                  <td class="num">
+                    {{ item.count }}
+                  </td>
+                  <td class="num">{{ (item.ratio * 100).toFixed(1) }}%</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p v-if="!defects.items.length" class="empty">暂无确认缺陷</p>
           <nav class="pager" aria-label="缺陷分页">
-            <a-button :disabled="defects.page === 1" @click="loadDefects(defects.page - 1)">
-              <ChevronLeft :size="16" /> </a-button
+            <button
+              class="mq-btn"
+              type="button"
+              :disabled="defects.page === 1"
+              title="上一页"
+              @click="loadDefects(defects.page - 1)"
+            >
+              上一页</button
             ><span>第 {{ defects.page }} 页 · {{ defects.total }} 项</span
-            ><a-button
+            ><button
+              class="mq-btn"
+              type="button"
               :disabled="defects.page * defects.page_size >= defects.total"
+              title="下一页"
               @click="loadDefects(defects.page + 1)"
             >
-              <ChevronRight :size="16" />
-            </a-button>
+              下一页
+            </button>
           </nav>
         </div>
       </section>
-      <section aria-label="病例下钻">
-        <div class="section-head">
-          <h2>病例明细</h2>
+      <section class="mq-card mq-card--padded" aria-label="病例下钻">
+        <div class="mq-card__head section-head">
+          <div>
+            <h2 class="mq-card__title">病例明细</h2>
+            <p class="mq-card__desc">点击科室、等级或缺陷可下钻；导出按当前下钻条件</p>
+          </div>
           <div class="head-actions">
-            <a-button :disabled="exporting || !records" @click="download('records')">
-              <Download :size="16" />下载病例 </a-button
-            ><a-button :disabled="recordsLoading" @click="drill({})"> 清除下钻 </a-button>
+            <button
+              class="mq-btn"
+              type="button"
+              :disabled="exporting || !records"
+              @click="download('records')"
+            >
+              <MqIcon name="download" :size="16" />下载病例</button
+            ><button class="mq-btn" type="button" :disabled="recordsLoading" @click="drill({})">
+              清除下钻
+            </button>
           </div>
         </div>
-        <p v-if="drillLabel" class="notice">
-          {{ drillLabel }}
+        <p v-if="drillLabel" class="drill-chip">
+          <span class="mq-status mq-status--info">当前下钻</span>{{ drillLabel }}
         </p>
         <div v-if="recordsLoading" class="status" role="status">正在读取病例明细…</div>
         <p v-else-if="recordsError" role="alert" class="status error">
-          {{ recordsError }}
+          <MqIcon name="issue" :size="18" />{{ recordsError }}
         </p>
-        <div v-else-if="records" class="table-panel">
+        <div v-else-if="records" class="table-panel mq-inset">
           <div class="table-scroll">
-            <table>
+            <table class="mq-table">
               <thead>
                 <tr>
                   <th>病例身份</th>
@@ -251,13 +360,21 @@
                 >
                   <td>
                     <strong>{{ row.patient_name || '未登记姓名' }}</strong
-                    ><small
+                    ><small class="mq-mono"
                       >{{ row.institute_id }} / {{ row.patient_id }} / {{ row.visit_id }}</small
                     >
                   </td>
                   <td>{{ row.department || '未知科室' }}</td>
-                  <td>{{ row.discharged_at || '未知' }}</td>
-                  <td>{{ factLabel(row.types[applied.record_type || 'death']) }}</td>
+                  <td class="mq-mono">
+                    {{ row.discharged_at || '未知' }}
+                  </td>
+                  <td>
+                    <span
+                      class="mq-status"
+                      :class="factClass(row.types[applied.record_type || 'death'])"
+                      >{{ factLabel(row.types[applied.record_type || 'death']) }}</span
+                    >
+                  </td>
                   <td>
                     {{
                       row.report_score_status === 'scored'
@@ -265,7 +382,7 @@
                         : '未知'
                     }}<small>{{ row.reason_code || '' }}</small>
                   </td>
-                  <td>
+                  <td class="mq-mono">
                     {{ row.standard_id || '未知' }} / {{ row.standard_version_seq ?? '未知' }}
                   </td>
                   <td>
@@ -277,26 +394,30 @@
           </div>
           <p v-if="!records.items.length" class="empty">无匹配病例</p>
           <nav class="pager" aria-label="病例分页">
-            <a-button
+            <button
+              class="mq-btn"
+              type="button"
               :disabled="records.page === 1"
               title="上一页"
               @click="loadRecords(records.page - 1)"
             >
-              <ChevronLeft :size="16" /> </a-button
+              上一页</button
             ><span>第 {{ records.page }} 页 · {{ records.total }} 例</span
-            ><a-button
+            ><button
+              class="mq-btn"
+              type="button"
               :disabled="records.page * records.page_size >= records.total"
               title="下一页"
               @click="loadRecords(records.page + 1)"
             >
-              <ChevronRight :size="16" />
-            </a-button>
+              下一页
+            </button>
           </nav>
         </div>
       </section>
     </template>
     <p v-if="exportError" role="alert" class="status error">
-      {{ exportError }}
+      <MqIcon name="issue" :size="18" />{{ exportError }}
     </p>
     <SpecialReportConfigDrawer
       v-if="canConfigure"
@@ -310,7 +431,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ChevronLeft, ChevronRight, Download, RefreshCw, RotateCcw, Search } from 'lucide-vue-next'
+import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   getSpecialRecordReport,
@@ -361,7 +482,11 @@ function initial(): SpecialRecordFilters {
 const draft = ref<SpecialRecordFilters>(initial())
 const applied = ref<SpecialRecordFilters>(initial())
 const drillFilters = ref<Partial<SpecialRecordFilters>>({})
-const mode = ref('charts')
+const modeOptions = [
+  { value: 'charts', label: '图表' },
+  { value: 'details', label: '明细' },
+] as const
+const mode = ref<'charts' | 'details'>('charts')
 const report = ref<SpecialRecordReport | null>(null)
 const records = ref<SpecialReportRecords | null>(null)
 const defects = ref<SpecialDefectsPage | null>(null)
@@ -413,6 +538,10 @@ function factLabel(fact: SpecialTypeFact) {
     : fact.state === 'negative'
       ? '明确非该类型'
       : `未知（${fact.reason_code || '来源缺失'}）`
+}
+function factClass(fact: SpecialTypeFact) {
+  // 只有明确命中用语义色；未知/非该类型保持中性，不暗示结论
+  return fact.state === 'positive' ? 'mq-status--info' : ''
 }
 async function load() {
   if (!applied.value.institute_id) {
@@ -563,67 +692,5 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
-@import './reportPage.css';
-.report-page :deep(.ant-btn) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.filters .field {
-  min-width: 0;
-  flex: 1 1 170px;
-}
-.type-select {
-  width: 100%;
-}
-.type-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-.type-item {
-  text-align: left;
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--background-light);
-  cursor: pointer;
-  color: var(--text-primary);
-}
-.type-item small {
-  display: block;
-  color: var(--text-secondary);
-  margin-top: 6px;
-}
-.analysis-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
-  padding: 16px 0;
-}
-.analysis-grid section {
-  min-width: 0;
-}
-.analysis-grid .data-row span {
-  overflow-wrap: anywhere;
-}
-.standard-name {
-  font-size: 16px;
-}
-@media (max-width: 900px) {
-  .analysis-grid {
-    grid-template-columns: 1fr;
-  }
-  .type-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 640px) {
-  .section-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-</style>
+<style scoped src="./reportPage.css"></style>
+<style scoped src="./styles/special-record-report.css"></style>

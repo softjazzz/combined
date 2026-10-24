@@ -148,6 +148,20 @@ describe('特殊病历报表页面', () => {
     expect(wrapper.text()).toContain('历史分 / 等级')
     wrapper.unmount()
   })
+  it('V7.1页头、分段按压态与类型选中态，未知来源提示保留', async () => {
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.find('main.mq-page .mq-page-head .mq-page-title').text()).toBe('特殊病历报表')
+    expect(wrapper.find('.archive-notice').text()).toContain('缺失来源单列未知')
+    expect(wrapper.find('.type-item.is-active .type-main').attributes('aria-pressed')).toBe('true')
+    const segments = wrapper.findAll('.mq-segmented__item')
+    expect(segments.map((node) => node.attributes('aria-pressed'))).toEqual(['true', 'false'])
+    await segments[1].trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('.mq-segmented__item')[1].classes()).toContain('is-active')
+    expect(wrapper.find('table.mq-table').exists()).toBe(true)
+    wrapper.unmount()
+  })
   it('缺陷明细是8列原合同，按已应用条件导出而不混草稿科室', async () => {
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:synthetic'),
