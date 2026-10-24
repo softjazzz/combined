@@ -118,12 +118,12 @@ describe('workstationNav 可见性', () => {
 
   it('质控反馈记录只对演示反馈账号可见', () => {
     const base = { userRoles: ['admin'], resolvePermission }
-    expect(keys(filterVisibleNav(WORKSTATION_NAV, { ...base, isDemoFeedbackAccount: false }))).not.toContain(
-      'qc-feedback-demo',
-    )
-    expect(keys(filterVisibleNav(WORKSTATION_NAV, { ...base, isDemoFeedbackAccount: true }))).toContain(
-      'qc-feedback-demo',
-    )
+    expect(
+      keys(filterVisibleNav(WORKSTATION_NAV, { ...base, isDemoFeedbackAccount: false })),
+    ).not.toContain('qc-feedback-demo')
+    expect(
+      keys(filterVisibleNav(WORKSTATION_NAV, { ...base, isDemoFeedbackAccount: true })),
+    ).toContain('qc-feedback-demo')
   })
 
   it('原有入口一个不少（演示账号 + 管理员）', () => {
@@ -134,8 +134,8 @@ describe('workstationNav 可见性', () => {
         resolvePermission,
       }),
     )
-    // 18 个原有入口 + 规则验收
-    expect(visible).toHaveLength(19)
+    // 19 个目标线原有入口 + 四张质量报表。
+    expect(visible).toHaveLength(23)
     expect(visible).toContain('rule-validation')
   })
 })

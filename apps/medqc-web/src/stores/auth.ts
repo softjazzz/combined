@@ -12,6 +12,7 @@ interface User {
   display_name?: string
   department?: string
   hospital_id?: string
+  institute_id?: string
   roles?: string[]
   is_active?: boolean
   last_login?: string

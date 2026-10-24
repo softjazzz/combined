@@ -5,7 +5,10 @@ const WORKSTATION_BASE_PATH = '/workstation-v5'
 const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
 
 function normalizeWorkstationPath(path: string) {
-  if (path === LEGACY_WORKSTATION_BASE_PATH || path.startsWith(`${LEGACY_WORKSTATION_BASE_PATH}/`)) {
+  if (
+    path === LEGACY_WORKSTATION_BASE_PATH ||
+    path.startsWith(`${LEGACY_WORKSTATION_BASE_PATH}/`)
+  ) {
     return `${WORKSTATION_BASE_PATH}${path.slice(LEGACY_WORKSTATION_BASE_PATH.length)}`
   }
   return path.startsWith(WORKSTATION_BASE_PATH) ? path : WORKSTATION_BASE_PATH
@@ -1036,7 +1039,9 @@ const routes: RouteRecordRaw[] = [
         path: 'customer-sample-validation/tasks',
         name: 'WorkstationV4CustomerSampleValidationTasks',
         component: () =>
-          import('@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'),
+          import(
+            '@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'
+          ),
         meta: { title: '质控记录', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
@@ -1071,6 +1076,30 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4Stats',
         component: () => import('@/views/workstation-v4/LuxianQcAnalyticsView.vue'),
         meta: { title: '统计分析' },
+      },
+      {
+        path: 'reports/record-quality',
+        name: 'WorkstationV5RecordQualityReport',
+        component: () => import('@/views/qc/reports/RecordQualityReportView.vue'),
+        meta: { title: '病历质量分析', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'reports/special-records',
+        name: 'WorkstationV5SpecialRecordReport',
+        component: () => import('@/views/qc/reports/SpecialRecordReportView.vue'),
+        meta: { title: '特殊病历报表', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'reports/frontpage-quality',
+        name: 'WorkstationV5FrontpageQualityReport',
+        component: () => import('@/views/qc/reports/FrontpageQualityReportView.vue'),
+        meta: { title: '病案首页统计', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'reports/staff-analysis',
+        name: 'WorkstationV5StaffAnalysisReport',
+        component: () => import('@/views/qc/reports/StaffAnalysisView.vue'),
+        meta: { title: '质控员工作分析', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'drg/pre',
@@ -1127,19 +1156,22 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'rules/validation',
         name: 'WorkstationV4RuleValidation',
-        component: () => import('@/views/workstation-v4/rule-validation/RuleValidationListView.vue'),
+        component: () =>
+          import('@/views/workstation-v4/rule-validation/RuleValidationListView.vue'),
         meta: { title: '规则验收', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'rules/validation/:ruleId',
         name: 'WorkstationV4RuleValidationDetail',
-        component: () => import('@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'),
+        component: () =>
+          import('@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'),
         meta: { title: '规则验收详情', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'rules/validation/:ruleId/cases/new',
         name: 'WorkstationV4RuleValidationNewCase',
-        component: () => import('@/views/workstation-v4/rule-validation/RuleValidationNewCaseView.vue'),
+        component: () =>
+          import('@/views/workstation-v4/rule-validation/RuleValidationNewCaseView.vue'),
         meta: { title: '新建测试病例', permission: ['admin', 'qc_manager'] },
       },
       {
