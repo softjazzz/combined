@@ -25,9 +25,9 @@ from sqlalchemy.pool import NullPool
 from app.services import manual_defect_review_service as mds
 from app.database.models.qc import SysUser
 from app.services.user_scope_owner import user_owner_options
+from scripts.manual_review_pg_preflight import preflight
 
 TARGET_DB = "medqc_v36_validation_20260924"
-TARGET_REVISION = "20260926_000057"
 INSTITUTE = "SYN-V36-RR"
 
 
@@ -52,11 +52,8 @@ def pg_engine():
         connect_args={"connect_timeout": 5, "options": "-csearch_path=qc,sys,cdm,public,legacy"},
     )
     try:
-        with engine.connect() as conn:
-            assert conn.execute(text("SELECT current_database()")).scalar_one() == TARGET_DB
-            # 版本号格式固定为 YYYYMMDD_NNNNNN，按字符串比较即可要求“不低于所需迁移”。
-            assert conn.execute(text("SELECT version_num FROM public.alembic_version")).scalar_one() >= TARGET_REVISION
-            assert conn.execute(text("SELECT current_schema()")).scalar_one() == "qc"
+        # 先只读核验实际账号 owner 和模型/约束，不从 revision 排序猜测结构兼容。
+        preflight(engine)
         yield engine
     finally:
         engine.dispose()
