@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import ManualQualityReportPanel from '../ManualQualityReportPanel.vue'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 const mocks = vi.hoisted(() => ({
   report: vi.fn(),
   export: vi.fn(),
@@ -82,6 +84,15 @@ beforeEach(() => {
   mocks.export.mockResolvedValue(new Blob(['synthetic csv']))
 })
 describe('人工质控报表', () => {
+  it('根网格允许收缩，非空长表格不能撑宽整页筛选', () => {
+    // JSDOM 不计算网格尺寸；真实数据的 390px 浏览器断言另见交付记录。
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/views/qc/reports/styles/manual-quality-report.css'),
+      'utf8',
+    )
+    const rootRule = styles.match(/\.manual-report\s*\{([^}]+)\}/)?.[1]
+    expect(rootRule).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/)
+  })
   it('表格显示单元格文本，明细从已校验行读取，翻页清理旧明细', async () => {
     const wrapper = make()
     await flushPromises()

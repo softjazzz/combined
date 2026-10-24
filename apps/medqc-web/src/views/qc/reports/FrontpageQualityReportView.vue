@@ -76,7 +76,7 @@
       </section>
 
       <section class="distribution" aria-label="分布">
-        <div class="section-head">
+        <div class="section-head frontpage-distribution-head">
           <h2>缺陷分布</h2>
           <div class="segmented mq-segmented" role="group" aria-label="缺陷来源">
             <button
@@ -533,3 +533,14 @@ onMounted(() => {
 </script>
 
 <style scoped src="./reportPage.css"></style>
+<style scoped>
+@media (max-width: 480px) {
+  .frontpage-distribution-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .frontpage-distribution-head .mq-segmented {
+    width: 100%;
+  }
+}
+</style>

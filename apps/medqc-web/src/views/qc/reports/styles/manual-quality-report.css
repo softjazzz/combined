@@ -1,6 +1,7 @@
 /* 人工质控报表私有布局；材质、字段、按钮、状态使用 V7.1 公共类。 */
 .manual-report {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   min-width: 0;
 }

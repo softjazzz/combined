@@ -2,6 +2,8 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FrontpageQualityReportView from '@/views/qc/reports/FrontpageQualityReportView.vue'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 const state = vi.hoisted(() => ({
   getReport: vi.fn(),
@@ -83,6 +85,18 @@ function render() {
 }
 
 describe('FrontpageQualityReportView', () => {
+  it('窄屏缺陷来源切换独立成行，不挤压标题且不修改共享样式', async () => {
+    const wrapper = render()
+    await flush()
+    expect(wrapper.find('.frontpage-distribution-head [aria-label="缺陷来源"]').exists()).toBe(true)
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/views/qc/reports/FrontpageQualityReportView.vue'),
+      'utf8',
+    )
+    expect(source).toMatch(/@media\s*\(max-width:\s*480px\)/)
+    expect(source).toMatch(/\.frontpage-distribution-head\s*\{\s*flex-direction:\s*column;/)
+    wrapper.unmount()
+  })
   it('下钻抽屉宽度不超过窄窗口', async () => {
     const wrapper = render()
     await flush()
