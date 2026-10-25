@@ -130,8 +130,9 @@ const props = withDefaults(
     open: boolean
     focus: QCRecordResultFocus | null
     presentationMode?: 'flat' | 'grouped'
+    loadJobMetadata?: boolean
   }>(),
-  { presentationMode: 'flat' },
+  { presentationMode: 'flat', loadJobMetadata: true },
 )
 
 const emit = defineEmits<{
@@ -268,7 +269,8 @@ async function loadLatestResult() {
       return
     }
     latestResult.value = result.data
-    void loadQcTime(result.data.job_id, requestSequence)
+    // V5列表已展示病例范围内的完成时间，不额外请求任务创建者权限接口。
+    if (props.loadJobMetadata) void loadQcTime(result.data.job_id, requestSequence)
   } catch {
     if (requestSequence === activeRequestSequence) {
       loadError.value = '质控结果读取失败，请稍后重试'

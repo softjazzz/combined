@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getRaw: vi.fn(),
 }))
 const routeState = vi.hoisted(() => ({
+  path: '/workstation-v4/records/running',
   query: {} as Record<string, string>,
 }))
 
@@ -45,6 +46,7 @@ const ResultDrawerStub = defineComponent({
     open: { type: Boolean, default: false },
     focus: { type: Object, default: null },
     presentationMode: { type: String, default: 'flat' },
+    loadJobMetadata: { type: Boolean, default: true },
   },
   emits: ['close'],
   setup(props) {
@@ -196,12 +198,23 @@ describe('QcRecordResultListView', () => {
     )
     vi.clearAllMocks()
     window.sessionStorage.clear()
+    routeState.path = '/workstation-v4/records/running'
     routeState.query = {}
     mocks.getRaw.mockResolvedValue(response())
     mocks.exportFilteredLuxian0609RecordResults.mockResolvedValue({
       success: true,
       data: new Blob(['xlsx']),
     })
+  })
+
+  it.each([
+    ['/workstation-v5/records/running', false],
+    ['/workstation-v4/records/running', true],
+  ] as const)('%s 的任务元数据读取开关为 %s', async (path, expected) => {
+    routeState.path = path
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    expect(wrapper.getComponent(ResultDrawerStub).props('loadJobMetadata')).toBe(expected)
   })
 
   afterEach(() => {

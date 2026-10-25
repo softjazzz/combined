@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CriterionResultBlock from '@/views/workstation-v4/customer-sample-validation/CriterionResultBlock.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
+import type { SingleRecordQcResultItem } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
 
 const items = [
   {
@@ -185,6 +186,23 @@ const explainedDataGapItem = {
 }
 
 describe('SingleRecordQcResultPanel', () => {
+  it.each([undefined, null, ''])('缺少规则名称(%s)仍能查看保存结果，不改原始条目', async (name) => {
+    const source = Object.freeze({ ...items[0]!, rule_name: name })
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [source as unknown as SingleRecordQcResultItem] },
+    })
+    expect(wrapper.get('.rule-name').text()).toBe(source.rule_id)
+    const toggle = wrapper.get('[data-testid="single-record-result-toggle"]')
+    expect(toggle.attributes('aria-label')).toContain(source.rule_id)
+    expect(toggle.attributes('aria-label')).not.toContain('undefined')
+    await toggle.trigger('click')
+    expect(wrapper.text()).toContain(source.conclusion)
+    expect(wrapper.text()).toContain(source.rule_id)
+    expect(source.rule_name).toBe(name)
+    expect(source.status).toBe('non_compliant')
+    wrapper.unmount()
+  })
+
   it('只复制当前一条脱敏质控结果，不导出整份病历的其他规则', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {

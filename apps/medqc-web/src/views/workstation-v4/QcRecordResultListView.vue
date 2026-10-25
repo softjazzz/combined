@@ -283,6 +283,7 @@
       :open="drawerOpen"
       :focus="selectedFocus"
       presentation-mode="grouped"
+      :load-job-metadata="!route.path?.startsWith('/workstation-v5/')"
       @close="closeResultDrawer"
     />
   </main>

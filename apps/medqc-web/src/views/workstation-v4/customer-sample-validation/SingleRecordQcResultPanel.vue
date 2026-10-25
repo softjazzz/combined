@@ -118,7 +118,7 @@
           type="button"
           class="result-trigger"
           :aria-expanded="expandedKey === item.key"
-          :aria-label="`${expandedKey === item.key ? '收起' : '展开'}${item.rule_name}详情`"
+          :aria-label="`${expandedKey === item.key ? '收起' : '展开'}${displayRuleName(item)}详情`"
           data-testid="single-record-result-toggle"
           @click="handleContentClick($event, item)"
         >
@@ -127,7 +127,7 @@
               <span v-if="isCompliantResult(item)" class="status-cell compliant-dot">
                 <span class="visually-hidden">合规</span>
               </span>
-              <strong class="rule-name" :title="item.rule_name">{{ shortRuleTitle(item) }}</strong>
+              <strong class="rule-name" :title="displayRuleName(item)">{{ shortRuleTitle(item) }}</strong>
               <span v-if="isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
                 shortRuleCode(item.rule_id)
               }}</span>
@@ -428,7 +428,7 @@
             data-testid="single-record-rule-fulltext"
           >
             <dt>规则</dt>
-            <dd>{{ item.rule_name }}</dd>
+            <dd>{{ displayRuleName(item) }}</dd>
             <template v-if="item.source_document">
               <dt>文书</dt>
               <dd>{{ item.source_document }}</dd>
@@ -464,7 +464,7 @@
               class="result-row-debug-copy"
               data-testid="copy-single-qc-debug-result"
               title="复制本条脱敏调试信息"
-              :aria-label="`复制${item.rule_name}的脱敏调试信息`"
+              :aria-label="`复制${displayRuleName(item)}的脱敏调试信息`"
               :disabled="Boolean(debugCopyingKey)"
               @click="copySingleDebugResult(item)"
             >
@@ -1043,6 +1043,10 @@ function toggleRuleText(key: string) {
   ruleTextOpenKey.value = ruleTextOpenKey.value === key ? '' : key
 }
 
+function displayRuleName(item: Pick<SingleRecordQcResultViewItem, 'rule_name' | 'rule_id'>): string {
+  return typeof item.rule_name === 'string' && item.rule_name.trim() ? item.rule_name : item.rule_id
+}
+
 function splitRuleTitle(title: string): { head: string; tail: string } | null {
   const index = title.search(/[：:]/)
   if (index <= 0) return null
@@ -1055,7 +1059,7 @@ function splitRuleTitle(title: string): { head: string; tail: string } | null {
 const ruleTitleHeadCounts = computed(() => {
   const counts = new Map<string, number>()
   viewItems.value.forEach((item) => {
-    const head = splitRuleTitle(item.rule_name)?.head
+    const head = splitRuleTitle(displayRuleName(item))?.head
     if (head) counts.set(head, (counts.get(head) || 0) + 1)
   })
   return counts
@@ -1066,8 +1070,9 @@ const ruleTitleHeadCounts = computed(() => {
  * 完整规则名放在 title 与「规则全文」中，不修改原始规则名称。
  */
 function shortRuleTitle(item: SingleRecordQcResultViewItem): string {
-  const parts = splitRuleTitle(item.rule_name)
-  if (!parts) return item.rule_name
+  const name = displayRuleName(item)
+  const parts = splitRuleTitle(name)
+  if (!parts) return name
   return (ruleTitleHeadCounts.value.get(parts.head) || 0) > 1 ? parts.tail : parts.head
 }
 

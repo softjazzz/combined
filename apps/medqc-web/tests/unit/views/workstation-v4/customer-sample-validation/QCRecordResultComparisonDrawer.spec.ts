@@ -78,7 +78,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function mountDrawer(presentationMode?: 'flat' | 'grouped') {
+function mountDrawer(presentationMode?: 'flat' | 'grouped', loadJobMetadata = true) {
   return mount(QCRecordResultComparisonDrawer, {
     props: {
       open: true,
@@ -93,6 +93,7 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
         label: '测试病历',
       },
       ...(presentationMode ? { presentationMode } : {}),
+      loadJobMetadata,
     },
     global: {
       stubs: {
@@ -161,6 +162,22 @@ describe('QCRecordResultComparisonDrawer', () => {
     const wrapper = mountDrawer()
     await flushPromises()
     expect(wrapper.get('.customer-record-result-title__qc-time').text()).toBe('质控完成时间未返回')
+  })
+
+  it('V5关闭冗余任务元数据请求，仍以三坐标读取原保存结果', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    getSichuanWorkspaceBatchJob.mockResolvedValue({ success: false, status: 404 })
+    const wrapper = mountDrawer('grouped', false)
+    await flushPromises()
+    expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledWith({
+      instituteId: 'H1',
+      patientId: 'P001',
+      visitId: 'V001',
+    })
+    expect(workbenchProps?.singleRecordItems).toEqual(readyResult.items)
+    expect(workbenchProps?.recordRef).toBe(readyResult.record_ref)
+    expect(wrapper.find('.customer-record-result-title__qc-time').exists()).toBe(false)
   })
 
   it('当前结果所属任务仍运行时展示进行中', async () => {
