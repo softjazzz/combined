@@ -58,6 +58,7 @@ type BatchResultOverviewStatusPill = {
 
 type BatchResultOverviewModel = {
   title: string
+  confirmedResultsOnly?: boolean
   statusClass: string
   statusText: string
   createdAtText: string
@@ -130,7 +131,7 @@ const metrics = computed(() => {
       tone: 'success',
       hint: pillValue('not_applicable') > 0 ? `另 ${pillValue('not_applicable')} 条不适用` : '',
     },
-  ]
+  ].filter((metric) => !model.confirmedResultsOnly || ['records', 'issues'].includes(metric.key))
 })
 </script>
 

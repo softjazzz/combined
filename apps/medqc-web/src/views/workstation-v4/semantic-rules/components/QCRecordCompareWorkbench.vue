@@ -309,6 +309,7 @@
 </template>
 
 <script setup lang="ts">
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { ChevronDown, ClipboardCheck, FileSearch, Lightbulb, Scale, Target } from 'lucide-vue-next'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
@@ -344,6 +345,8 @@ import type {
 import type { SaveQcResultFeedbackInput } from '@/api/qc-result-feedback-demo'
 import type { QcResultDebugContext } from '@/views/workstation-v4/customer-sample-validation/qcResultDebugExport'
 import { useQcResultFeedback } from '@/views/workstation-v4/customer-sample-validation/useQcResultFeedback'
+
+const { confirmedResultsOnly } = useQcResultVisibility()
 
 const props = withDefaults(
   defineProps<{
@@ -449,6 +452,7 @@ function resolveDocumentTime(document: EditableMedicalRecordDocument) {
 
 const sortedIssues = computed(() =>
   props.issues
+    .filter((issue) => !confirmedResultsOnly.value || issue.status === 'non_compliant')
     .map((issue, index) => ({ issue, index }))
     .sort(
       (left, right) =>
@@ -460,7 +464,9 @@ const sortedIssues = computed(() =>
 
 const hasSingleRecordResult = computed(() => Array.isArray(props.singleRecordItems))
 const singleRecordViewItems = computed(() =>
-  buildSingleRecordQcResultItems(props.singleRecordItems),
+  buildSingleRecordQcResultItems(props.singleRecordItems).filter(
+    (item) => !confirmedResultsOnly.value || item.status === 'non_compliant',
+  ),
 )
 
 const selectedIssue = computed(

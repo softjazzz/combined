@@ -1,3 +1,6 @@
+import { ApiService } from '@/services/apiService'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 /* eslint-disable vue/one-component-per-file */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -117,6 +120,16 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
     },
   })
 }
+
+// 原有完整视图用例固定为开发身份；演示身份在专项用例中显式切换。
+beforeEach(async () => {
+  setActivePinia(createPinia())
+  vi.spyOn(ApiService, 'isAuthenticated').mockReturnValue(true)
+  vi.spyOn(ApiService, 'getCurrentUser').mockResolvedValue({
+    success: true, data: { id: 'test-developer', roles: ['sync_admin'], is_demo_account: true },
+  })
+  await useAuthStore().initialize()
+})
 
 describe('QCRecordResultComparisonDrawer', () => {
   beforeEach(() => {

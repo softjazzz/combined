@@ -1,5 +1,9 @@
+import { UserRole } from '@/types/auth'
+import { ApiService } from '@/services/apiService'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 /* eslint-disable vue/one-component-per-file */
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, inject, provide } from 'vue'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
@@ -430,6 +434,16 @@ function buildProps(): DrawerTestProps {
       .mockImplementation((value?: string | Date | null) => String(value || '-')),
   }
 }
+
+// 原有完整视图用例固定为开发身份；演示身份在专项用例中显式切换。
+beforeEach(async () => {
+  setActivePinia(createPinia())
+  vi.spyOn(ApiService, 'isAuthenticated').mockReturnValue(true)
+  vi.spyOn(ApiService, 'getCurrentUser').mockResolvedValue({
+    success: true, data: { id: 'test-developer', roles: ['sync_admin'], is_demo_account: true },
+  })
+  await useAuthStore().initialize()
+})
 
 describe('SemanticRulesBatchResultDrawer', () => {
   it('应提供明确返回样本验证入口并复用关闭逻辑', async () => {
@@ -1963,5 +1977,49 @@ describe('SemanticRulesBatchResultDrawer', () => {
     })
 
     expect(wrapper.find('[data-testid="transfusion-documentation-summary"]').exists()).toBe(false)
+  })
+})
+
+
+describe('演示账号的批量结果', () => {
+  it('顶层与嵌套结果都只显示确定问题，隐藏其他计数与高级/完整导出入口', async () => {
+    vi.spyOn(ApiService, 'updateProfile').mockResolvedValue({ success: true, data: { id: 'demo', roles: [UserRole.ADMIN], is_demo_account: true } })
+    await useAuthStore().updateProfile({})
+    const props = buildProps()
+    const statuses = ['non_compliant', 'compliant', 'data_gap', 'not_applicable', 'uncertain', 'not_executed']
+    const mixed = statuses.map((status, index) => ({
+      rule_id: `LX0609-01-01-${String(index + 1).padStart(2, '0')}`, rule_name: `only-${status}`,
+      record_ref: index < 2 ? 'case-A' : 'case-B', status, is_compliant: status === 'compliant', conclusion: `unique-${status}`,
+    }))
+    props.batchJobDetail = { ...props.batchJobDetail, status: 'completed', rule_set_key: 'luxian_0609_qc_v1',
+      total_records: 2, summary: { ...props.batchJobDetail.summary!, total_records: 2 }, items: [...mixed, { ...mixed[0], rule_id: 'LX0609-01-01-99', rule_name: 'only-internal', internal_only: true }], rule_results: [] }
+    const wrapper = mount(SemanticRulesBatchResultDrawer, { props, global: { stubs: drawerStubs } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('only-non_compliant')
+    expect(wrapper.text()).not.toContain('only-internal')
+    const metrics = wrapper.get('[data-testid="batch-result-metrics"]')
+    expect(metrics.text()).toContain('确定问题')
+    expect(metrics.text()).not.toContain('需补充资料')
+    expect(metrics.text()).not.toContain('合格')
+    expect(wrapper.find('[data-testid="batch-result-more"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="batch-result-export-report"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="record-review-tab-data_gap"]').exists()).toBe(false)
+    expect(wrapper.find('.a-switch-stub').exists()).toBe(false)
+    for (const status of statuses.slice(1)) expect(wrapper.text()).not.toContain(`only-${status}`)
+    // 同一任务切换为嵌套传输形态，也不能绕过展示范围。
+    await wrapper.setProps({ batchJobDetail: { ...props.batchJobDetail, items: [], rule_results: [{ id: 'nested', rule_code: 'LX0609-01-01-01', rule_name: '嵌套结果', status: 'completed', items: mixed }] } })
+    expect(wrapper.text()).not.toContain('only-data_gap')
+    // 非空顶层是当前权威结果；过滤为零不能回退到嵌套的过期确定问题。
+    await wrapper.setProps({ batchJobDetail: { ...props.batchJobDetail, items: mixed.filter((item) => item.status !== 'non_compliant'), rule_results: [{ id: 'stale', rule_code: 'LX0609-01-01-01', rule_name: '过期结果', status: 'completed', items: [mixed[0]] }] } })
+    expect(wrapper.text()).not.toContain('only-non_compliant')
+    expect(wrapper.text()).toContain('当前没有可展示的确定问题')
+    await wrapper.setProps({ batchJobDetail: props.batchJobDetail })
+    // 只改变账号，原任务数据未被修改；开发账号恢复完整视图。
+    vi.spyOn(ApiService, 'updateProfile').mockResolvedValue({ success: true, data: { id: 'dev', roles: ['sync_admin'], is_demo_account: true } })
+    await useAuthStore().updateProfile({})
+    await flushPromises()
+    expect(wrapper.find('[data-testid="batch-result-more"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="batch-result-metrics"]').text()).toContain('需补充资料')
+    expect(mixed).toHaveLength(6)
   })
 })

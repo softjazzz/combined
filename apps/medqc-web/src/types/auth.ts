@@ -17,6 +17,9 @@ export enum UserRole {
   DOCTOR = 'doctor',
 }
 
+// API还会返回已有的同步开发角色；不扩展旧权限映射或授予其他操作权限。
+export type AuthUserRole = UserRole | 'sync_admin'
+
 // 权限操作枚举
 export enum PermissionAction {
   CREATE = 'create',
@@ -46,7 +49,7 @@ export interface User extends BaseAuthUser {
   display_name?: string
   department?: string
   hospital_id?: string
-  roles?: UserRole[]
+  roles?: AuthUserRole[]
   permissions?: Permission[]
   is_active?: boolean
   last_login?: string

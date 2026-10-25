@@ -3,7 +3,8 @@
     <header class="record-review__head">
       <div>
         <h3 class="record-review__title">按病历查看结果</h3>
-        <p class="record-review__desc">
+        <p v-if="confirmedOnly" class="record-review__desc">本面板展示 {{ records.length }} 份有确定问题的病历。</p>
+        <p v-else class="record-review__desc">
           共 {{ records.length }} 份病历，{{ issueRecordCount }} 份发现问题；问题多的病历排在前面。
         </p>
       </div>
@@ -27,6 +28,7 @@
             有问题 {{ issueRecordCount }}
           </button>
           <button
+            v-if="!confirmedOnly"
             type="button"
             class="mq-segmented__item"
             :class="{ 'is-active': scope === 'all' }"
@@ -54,12 +56,12 @@
               <span :class="{ 'is-danger': record.counts.non_compliant > 0 }"
                 >问题 {{ record.counts.non_compliant }}</span
               >
-              <span :class="{ 'is-warning': record.counts.data_gap > 0 }"
+              <span v-if="!confirmedOnly" :class="{ 'is-warning': record.counts.data_gap > 0 }"
                 >待补 {{ record.counts.data_gap }}</span
               >
             </span>
           </button>
-          <p v-if="!visibleRecords.length" class="record-review__empty">没有符合条件的病历</p>
+          <p v-if="!visibleRecords.length" class="record-review__empty">{{ confirmedOnly ? '当前没有可展示的确定问题' : '没有符合条件的病历' }}</p>
         </div>
       </aside>
 
@@ -167,6 +169,7 @@ import {
 
 const props = defineProps<{
   records: ReviewRecord[]
+  confirmedOnly?: boolean
 }>()
 
 const STATUS_PILL_LABELS: Record<ReviewStatusKey, string> = {
@@ -215,7 +218,7 @@ const selectedRecord = computed(
 // “未完成判定”只在有时出现，避免给客户制造没有内容的分类。
 const statusTabs = computed(() =>
   REVIEW_STATUS_ORDER.filter(
-    (status) => status !== 'pending' || (selectedRecord.value?.counts.pending || 0) > 0,
+    (status) => props.confirmedOnly ? status === 'non_compliant' : status !== 'pending' || (selectedRecord.value?.counts.pending || 0) > 0,
   ),
 )
 
@@ -226,7 +229,7 @@ const chapterGroups = computed(() =>
 )
 
 function defaultStatus(record: ReviewRecord | null): ReviewStatusKey {
-  if (!record) return 'non_compliant'
+  if (props.confirmedOnly || !record) return 'non_compliant'
   return (
     REVIEW_STATUS_ORDER.find((status) => record.counts[status] > 0 && status !== 'pending') ||
     'non_compliant'
@@ -234,7 +237,7 @@ function defaultStatus(record: ReviewRecord | null): ReviewStatusKey {
 }
 
 watch(
-  () => selectedRecord.value?.key,
+  () => [selectedRecord.value?.key, props.confirmedOnly],
   () => {
     activeStatus.value = defaultStatus(selectedRecord.value)
     expandedKeys.value = new Set()

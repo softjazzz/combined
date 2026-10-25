@@ -54,12 +54,12 @@
         </div>
         <div class="customer-record-result-title__actions">
           <QcDiagnosticExport
-            v-if="open && latestResult && focus"
+            v-if="open && latestResult && focus && !confirmedResultsOnly"
             :items="latestResult.items"
             :context="debugContext"
           />
           <button
-            v-if="latestResult"
+            v-if="latestResult && !confirmedResultsOnly"
             type="button"
             class="customer-record-result-title__export"
             :disabled="exporting"
@@ -98,6 +98,7 @@
 </template>
 
 <script setup lang="ts">
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
@@ -124,6 +125,8 @@ export interface QCRecordResultFocus {
   dischargeTime?: string
   label: string
 }
+
+const { confirmedResultsOnly } = useQcResultVisibility()
 
 const props = withDefaults(
   defineProps<{
@@ -202,6 +205,7 @@ const debugContext = computed(() => {
 })
 
 async function exportCurrentRecord() {
+  if (confirmedResultsOnly.value) return
   const focus = props.focus
   if (
     !latestResult.value ||
@@ -223,6 +227,7 @@ async function exportCurrentRecord() {
       return
     }
     const blob = await normalizeBatchExportBlob(response.data, 'html')
+    if (confirmedResultsOnly.value) return
     downloadBlob(blob, '单病历质控结果.html')
     message.success('单病历质控结果已开始下载')
   } catch {
