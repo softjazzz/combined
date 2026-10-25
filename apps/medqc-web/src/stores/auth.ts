@@ -180,7 +180,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.success) {
         return {
           success: true,
-          message: response.message || '注册成功，请等待管理员审核',
+          message: response.message || '注册申请已保存，请等待管理员审批',
         }
       }
 

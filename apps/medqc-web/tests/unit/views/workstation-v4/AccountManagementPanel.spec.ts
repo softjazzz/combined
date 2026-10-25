@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   success: vi.fn(),
 }))
 const actor = reactive({ id: 'admin', roles: ['admin'] })
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }) }))
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     get user() {

@@ -250,7 +250,7 @@ def test_registration_and_self_profile_cannot_grant_scope(accounts):
         client.post(
             "/api/v1/auth/register", json=request | {"role": "admin"}
         ).status_code
-        == 403
+        == 422
     )
     actor.update(id="doc", roles=["doctor"], department="内科")
     assert (

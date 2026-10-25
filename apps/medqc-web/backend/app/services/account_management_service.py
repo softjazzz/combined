@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from ..core.security import get_password_hash
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import SysUser
+from ..database.models.account_registration import registration_is_approved
 from .defect_rectification_service import RectificationError, _persistent_roles
 from .user_scope_owner import resolve_user_owner_schema
 
@@ -62,6 +63,7 @@ class AccountManagementService:
             row is None
             or not row["is_active"]
             or "admin" not in _persistent_roles(row["role"], row["roles_json"])
+            or not registration_is_approved(session, table, actor_id)
         ):
             raise RectificationError("仅持久系统管理员可以管理账号", 403)
         return row
@@ -214,6 +216,8 @@ class AccountManagementService:
             )
             if row is None:
                 raise RectificationError("账号不存在", 404)
+            if not registration_is_approved(session, table, user_id):
+                raise RectificationError("待审或驳回账号必须通过注册审批开通，不能直接启用", 409)
             self._scope(actor, row["institute_id"])
             self._scope(actor, data["institute_id"])
             if _persistent_roles(row["role"], row["roles_json"]) - ROLES:

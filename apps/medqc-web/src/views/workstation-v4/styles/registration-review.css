@@ -1,0 +1,86 @@
+.registration-table table {
+  min-width: 960px;
+}
+.registration-table th:nth-child(1) {
+  width: 22%;
+}
+.registration-table th:nth-child(2) {
+  width: 18%;
+}
+.registration-table th:nth-child(3) {
+  width: 22%;
+}
+.registration-table th:nth-child(4) {
+  width: 12%;
+}
+.registration-table th:nth-child(5) {
+  width: 16%;
+}
+.registration-table th:nth-child(6) {
+  width: 10%;
+}
+.registration-summary {
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.registration-summary > .mq-status {
+  margin-left: 12px;
+}
+.registration-summary dl {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+  font-size: var(--mq-font-13);
+}
+.registration-summary dl > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+}
+.registration-summary dt {
+  color: var(--mq-text-tertiary);
+}
+.registration-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.registration-review {
+  display: grid;
+  gap: 16px;
+}
+.registration-review .accounts-role-fields {
+  margin: 0;
+}
+.registration-review .accounts-editor-actions {
+  margin-top: 0;
+}
+.registration-history-title {
+  margin: 24px 0 12px;
+  font-size: var(--mq-font-16);
+  font-weight: 600;
+}
+.registration-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.registration-history li {
+  padding: 12px 0;
+  border-top: 1px solid var(--mq-glass-border);
+  font-size: var(--mq-font-13);
+  overflow-wrap: anywhere;
+}
+.registration-history li > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.registration-history time,
+.registration-history small {
+  color: var(--mq-text-tertiary);
+}
+.registration-history p {
+  margin: 8px 0;
+  white-space: pre-wrap;
+}

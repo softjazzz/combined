@@ -41,6 +41,15 @@ async function flushPromises() {
 }
 
 describe('useNotifications overview acceptance', () => {
+  it.each(['account_registration', 'account_registration_result'])('注册消息%s保持精确目标，不按病历号下钻', async (kind) => {
+    const open = vi.fn().mockResolvedValue(undefined)
+    const legacyOpen = vi.fn()
+    const notify = useNotifications(ref([]), legacyOpen, ref(false), ref('message'), ref('fields'), open)
+    const notice = normalizeNotification({ id: 'registration-notice', record_id: 'registration:user:1', is_read: false, interaction_target: { kind, id: 'user-id' } }, 0)
+    await notify.handleAssistNotificationClick(notice)
+    expect(open).toHaveBeenCalledWith({ kind, id: 'user-id' })
+    expect(legacyOpen).not.toHaveBeenCalled()
+  })
   it('病历级沟通沿原消息入口按事件ID定位，不复用缺陷任务或申诉ID', async () => {
     const open = vi.fn().mockResolvedValue(undefined)
     const legacyOpen = vi.fn()

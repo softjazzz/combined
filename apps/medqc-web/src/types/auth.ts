@@ -116,6 +116,8 @@ export interface LoginResponse {
 
 // 注册请求
 export interface RegisterRequest {
+  username?: string
+  institute_id?: string
   email: string
   password: string
   display_name: string

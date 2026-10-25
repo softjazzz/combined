@@ -113,12 +113,19 @@ function mountView() {
     global: {
       stubs: {
         WorkstationLoginForm: WorkstationLoginFormStub,
+        RouterLink: { props: ['to'], template: '<a :href="to"><slot/></a>' },
       },
     },
   })
 }
 
 describe('WorkstationLoginView', () => {
+  it('V5登录提供真实注册与登录外结果查询入口', () => {
+    const wrapper = mountView()
+    expect(wrapper.get('a[href="/auth/register"]').text()).toBe('申请账号')
+    expect(wrapper.get('a[href="/auth/register?mode=status"]').text()).toBe('查询开通结果')
+    wrapper.unmount()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])

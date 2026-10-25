@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import NAMESPACE_URL, uuid5
 
-from sqlalchemy import and_, exists, func, inspect, or_, select, update
+from sqlalchemy import MetaData, and_, exists, func, inspect, or_, select, update
 from sqlalchemy.orm import DeclarativeBase
 
 from ..database.connection import SessionLocal
@@ -17,10 +17,11 @@ from .defect_rectification_service import (
     _persistent_roles,
 )
 from .modern_appeal_service import QCAppeal as Appeal
-from .user_scope_owner import user_owner_options
+from .user_scope_owner import user_owner_options, resolve_user_owner_schema
 
 SOURCE = "v5_doctor_feedback"
 QC_SOURCE = "v5_qc_feedback"
+REGISTRATION_SOURCE = "v5_account_registration"
 
 
 def _publish_qc_notification(
@@ -186,7 +187,7 @@ class DoctorNotificationService:
     def _predicate(self, actor, session):
         legacy = or_(
             Notification.source_key.is_(None),
-            Notification.source_key.not_in((SOURCE, QC_SOURCE)),
+            Notification.source_key.not_in((SOURCE, QC_SOURCE, REGISTRATION_SOURCE)),
         )
         modern = False
         qc_feedback = False
@@ -324,8 +325,31 @@ class DoctorNotificationService:
                     ),
                 ),
             )
+        registration = False
+        owner = resolve_user_owner_schema(session)
+        if inspect(session.connection()).has_table("sys_user_registrations", schema=owner):
+            from ..database.models.account_registration import registration_tables
+
+            users = SysUser.__table__.to_metadata(MetaData(), schema=owner)
+            applications, _ = registration_tables(users)
+            application = exists(select(applications.c.user_id).where(
+                applications.c.user_id == Notification.related_id,
+                applications.c.requested_institute_id == Notification.institute_id,
+            ))
+            reviewer = "admin" in actor["roles"]
+            if reviewer and actor["institute_id"]:
+                reviewer = Notification.institute_id == actor["institute_id"]
+            registration = and_(
+                Notification.source_key == REGISTRATION_SOURCE,
+                Notification.identity_version == 1,
+                application,
+                or_(
+                    and_(Notification.related_type == "account_registration", reviewer),
+                    and_(Notification.related_type == "account_registration_result", Notification.related_id == actor["id"]),
+                ),
+            )
         return and_(
-            Notification.recipient_id == actor["id"], or_(legacy, modern, qc_feedback)
+            Notification.recipient_id == actor["id"], or_(legacy, modern, qc_feedback, registration)
         )
 
     def _view(self, row, actor, session):
@@ -351,6 +375,8 @@ class DoctorNotificationService:
                 "kind": row.related_type,
                 "id": row.related_id,
             }
+        if row.source_key == REGISTRATION_SOURCE:
+            item["interaction_target"] = {"kind": row.related_type, "id": row.related_id}
         return item
 
     def list(self, actor_id, *, type=None, is_read=None, page=1, page_size=20):

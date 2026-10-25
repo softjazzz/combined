@@ -173,6 +173,10 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
               />
             </div>
 
+            <div class="mt-4 flex justify-between text-sm">
+              <router-link to="/auth/register">申请账号</router-link>
+              <router-link to="/auth/register?mode=status">查询开通结果</router-link>
+            </div>
             <!-- 演示账号：整行即按钮，点一次直接登录 -->
             <div class="login-demo-list mt-4">
               <button

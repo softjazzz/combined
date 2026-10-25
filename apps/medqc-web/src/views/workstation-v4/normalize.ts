@@ -330,7 +330,9 @@ export function normalizeDoctorInteraction(value: unknown): NotificationVM['inte
   if (
     (target.kind !== 'rectification' &&
       target.kind !== 'modern_appeal' &&
-      target.kind !== 'case_communication') ||
+      target.kind !== 'case_communication' &&
+      target.kind !== 'account_registration' &&
+      target.kind !== 'account_registration_result') ||
     typeof target.id !== 'string' ||
     !target.id.trim() ||
     target.id.length > 36

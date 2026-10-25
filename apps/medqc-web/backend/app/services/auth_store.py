@@ -7,10 +7,11 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import func, inspect, or_, select
+from sqlalchemy import MetaData, func, inspect, or_, select
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import SysUser
+from ..database.models.account_registration import registration_is_approved
 from ..storage.memory import users_db
 from .user_scope_owner import resolve_user_owner_schema, user_owner_options
 
@@ -171,6 +172,11 @@ def _query_db_user_by_account(account: str) -> dict[str, Any] | None:
         ).scalar_one_or_none()
         if user is None or not bool(user.is_active):
             raise _PersistentNoMatch()
+        users = SysUser.__table__.to_metadata(
+            MetaData(), schema=resolve_user_owner_schema(session)
+        )
+        if not registration_is_approved(session, users, user.id):
+            raise _PersistentNoMatch()
         return _orm_user_to_dict(user)
     except _PersistentNoMatch:
         raise
@@ -208,6 +214,11 @@ def _query_db_user_by_subject(subject: str) -> dict[str, Any] | None:
             execution_options=user_owner_options(session),
         ).scalar_one_or_none()
         if user is None or not bool(user.is_active):
+            raise _PersistentNoMatch()
+        users = SysUser.__table__.to_metadata(
+            MetaData(), schema=resolve_user_owner_schema(session)
+        )
+        if not registration_is_approved(session, users, user.id):
             raise _PersistentNoMatch()
         return _orm_user_to_dict(user)
     except _PersistentNoMatch:

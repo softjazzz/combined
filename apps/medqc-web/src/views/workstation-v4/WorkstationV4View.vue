@@ -1075,16 +1075,27 @@ const {
   assistPanelVisible,
   assistTab,
   frontpageTab,
-  (target) => router.push({
-    path: target.kind === 'case_communication'
-      ? '/workstation-v5/case-communications'
-      : '/workstation-v5/feedback',
-    query: target.kind === 'case_communication'
-      ? { communication_id: target.id }
-      : target.kind === 'rectification'
-        ? { rectification_id: target.id }
-        : { appeal_id: target.id },
-  }),
+  (target) => {
+    if (target.kind === 'account_registration') {
+      return router.push({
+        path: '/workstation-v5/system-config',
+        query: { tab: 'accounts', registration_id: target.id },
+      })
+    }
+    if (target.kind === 'account_registration_result') {
+      return router.push({ path: '/auth/register', query: { mode: 'status' } })
+    }
+    return router.push({
+      path: target.kind === 'case_communication'
+        ? '/workstation-v5/case-communications'
+        : '/workstation-v5/feedback',
+      query: target.kind === 'case_communication'
+        ? { communication_id: target.id }
+        : target.kind === 'rectification'
+          ? { rectification_id: target.id }
+          : { appeal_id: target.id },
+    })
+  },
 )
 
 watch(

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearAuthTokens, getRefreshToken } from '@/utils/auth-token'
 
 type InterceptorFn = (value: any) => any
 
@@ -64,6 +65,14 @@ async function loadApiServiceWithAxiosMock() {
 }
 
 describe('apiService trace propagation', () => {
+  it.each(['/api/v1/auth/register', '/api/v1/auth/registration-status'])('%s的401不清理现有会话或自动重放', async (url) => {
+    const { responseRejected } = await loadApiServiceWithAxiosMock()
+    const error = { config: { method: 'post', url }, response: { status: 401, data: { detail: '账号或口令不正确' } } }
+    await expect(responseRejected!(error)).rejects.toBe(error)
+    expect(getRefreshToken).not.toHaveBeenCalled()
+    expect(clearAuthTokens).not.toHaveBeenCalled()
+    expect(error.config).not.toHaveProperty('_retry')
+  })
   it('账号创建口令和登录令牌不进入调试日志，原请求响应不变', async () => {
     vi.stubEnv('VITE_API_DEBUG', 'true')
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)

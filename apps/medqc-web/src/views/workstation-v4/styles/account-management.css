@@ -1,6 +1,7 @@
 .accounts-panel {
   min-width: 0;
 }
+.accounts-sections { margin-bottom: 24px; }
 .accounts-head,
 .accounts-actions,
 .accounts-pagination,
