@@ -229,7 +229,7 @@ onBeforeUnmount(() => {
 })
 
 const ROLE_LABEL_MAP: Record<string, string> = {
-  sync_admin: '实施管理员',
+  sync_admin: '超级管理员',
   admin: '系统管理员',
   qc_manager: '质控主管',
   QC_MANAGER: '质控主管',

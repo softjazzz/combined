@@ -1,18 +1,19 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
 from pydantic import EmailStr
 
 from ..core.response import success_response, get_trace_id
-from ..schemas.auth import UserCreate, UserUpdate, UserResponse, LoginRequest, RefreshTokenRequest
+from ..schemas.auth import UserCreate, UserUpdate, LoginRequest, RefreshTokenRequest
 from ..core.settings import get_settings
+from ..core.roles import effective_roles
 from ..core.security import (
     create_access_token,
     create_password_reset_token,
     consume_password_reset_jti,
     get_current_user,
+    get_optional_user,
     get_password_hash,
-    resolve_user_by_subject,
     verify_password_reset_token,
     verify_password,
 )
@@ -47,7 +48,7 @@ def _user_payload(user: dict) -> dict:
         "username": user.get("username"),
         "display_name": user["display_name"],
         "department": user["department"],
-        "roles": user["roles"],
+        "roles": effective_roles(user["roles"]),
         "avatar": user["avatar"],
         "phone": user["phone"],
         "bio": user["bio"],
@@ -114,7 +115,11 @@ async def login(request: Request, login_data: LoginRequest):
 
 
 @router.post("/register")
-async def register(request: Request, user_data: UserCreate):
+async def register(request: Request, user_data: UserCreate, current_user: dict | None = Depends(get_optional_user)):
+    requested_role = str(user_data.role or "doctor").strip().lower()
+    privileged = requested_role in {"sync_admin", "super_admin", "admin", "qc_manager", "developer"}
+    if privileged and "admin" not in effective_roles((current_user or {}).get("roles")):
+        raise HTTPException(status_code=403, detail="公开注册不能授予管理角色")
     try:
         new_user = create_user(
             email=str(user_data.email),
@@ -123,7 +128,7 @@ async def register(request: Request, user_data: UserCreate):
             department=user_data.department,
             phone=user_data.phone,
             bio=user_data.bio,
-            role=user_data.role or "doctor",
+            role=requested_role,
             password_hash=get_password_hash(user_data.password),
         )
     except ValueError as exc:

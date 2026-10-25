@@ -119,7 +119,7 @@
           <button
             type="button"
             class="mq-btn"
-            :disabled="readOnly || busy || !note.trim()"
+            :disabled="busy || !note.trim()"
             @click="submit('rejected')"
           >
             驳回
@@ -128,7 +128,7 @@
             type="button"
             class="mq-btn mq-btn--primary"
             data-testid="approve-rule"
-            :disabled="readOnly || busy || !note.trim()"
+            :disabled="busy || !note.trim()"
             @click="submit('approved')"
           >
             批准并生成发布单
@@ -147,7 +147,7 @@ import { approveRule } from '@/services/rule-validation-service'
 import type { RuleDetail, ValidationEvent } from '@/services/rule-validation-service'
 import { EXPECTED_STATUSES, STATUS, buildLabel, formatTime, statusClass } from './presentation'
 
-const props = defineProps<{ open: boolean; detail: RuleDetail; approval: ValidationEvent | null; readOnly?: boolean }>()
+const props = defineProps<{ open: boolean; detail: RuleDetail; approval: ValidationEvent | null }>()
 const emit = defineEmits<{ close: []; done: [] }>()
 
 const note = ref('')
@@ -193,7 +193,6 @@ watch(
 )
 
 async function submit(decision: 'approved' | 'rejected') {
-  if (props.readOnly) return
   busy.value = true
   error.value = ''
   const response = await approveRule(props.detail.rule.rule_id, decision, note.value.trim())

@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { computed, defineComponent } from 'vue'
-import { useBusinessReadAccess } from '@/composables/useBusinessReadAccess'
-vi.mock('@/composables/useBusinessReadAccess', () => ({
-  useBusinessReadAccess: vi.fn(() => ({ isBusinessReadOnly: computed(() => false) })),
-}))
+import { defineComponent } from 'vue'
 import * as api from '@/services/rule-validation-service'
 import type {
   ComparisonRow,
@@ -178,7 +174,6 @@ const button = (wrapper: ReturnType<typeof mount>, text: string) =>
 
 beforeEach(() => {
   vi.resetAllMocks()
-  vi.mocked(useBusinessReadAccess).mockReturnValue({ isBusinessReadOnly: computed(() => false) })
 })
 
 describe('规则验收列表', () => {
@@ -431,30 +426,6 @@ describe('规则验收详情', () => {
 })
 
 describe('逐例核对抽屉', () => {
-  it('同步管理员能读取验收详情，运行和标注按钮禁用', async () => {
-    vi.mocked(useBusinessReadAccess).mockReturnValue({ isBusinessReadOnly: computed(() => true) })
-    vi.mocked(api.getValidationRule).mockResolvedValue({ success: true, data: detail() })
-    const wrapper = mount(RuleValidationDetailView, { global: { stubs } })
-    await flushPromises()
-    expect(wrapper.text()).toContain('医嘱与病程一致性')
-    expect(wrapper.text()).toContain('当前账号仅可查看验收材料')
-    expect(wrapper.get('[data-testid="start-run"]').attributes('disabled')).toBeDefined()
-    await wrapper.get('[data-testid="start-run"]').trigger('click')
-    expect(api.startValidationRun).not.toHaveBeenCalled()
-    expect(wrapper.findComponent({ name: 'CaseAnswerModal' }).exists()).toBe(false)
-    wrapper.unmount()
-  })
-  it('只读核对保留证据和导航，不能提交复核', async () => {
-    const wrapper = mount(CaseReviewDrawer, {
-      props: { runId: 'run-1', runTime: '09-29 14:20', rows, index: 0, reviews: [], readOnly: true },
-      global: { stubs },
-    })
-    await wrapper.find('textarea[aria-label="核对意见"]').setValue('查看证据')
-    expect(wrapper.get('[data-testid="confirm-case"]').attributes('disabled')).toBeDefined()
-    await button(wrapper, '记录问题').trigger('click')
-    expect(api.reviewCase).not.toHaveBeenCalled()
-    expect(wrapper.get('button[aria-label="下一例"]').attributes('disabled')).toBeUndefined()
-  })
   it('状态不一致时不能确认通过，只能记录问题', async () => {
     vi.mocked(api.reviewCase).mockResolvedValue({ success: true, data: {} as never })
     const wrapper = mount(CaseReviewDrawer, {

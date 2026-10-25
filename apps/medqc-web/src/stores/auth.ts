@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { ApiService } from '@/services/apiService'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import type { LoginRequest, RegisterRequest } from '@/types'
 import { message } from 'ant-design-vue'
 
@@ -41,10 +42,10 @@ export const useAuthStore = defineStore('auth', () => {
     if (!user.value) return []
     // 支持两种数据格式：roles数组 或 role字符串
     if (user.value.roles && Array.isArray(user.value.roles)) {
-      return user.value.roles
+      return effectiveRoles(user.value.roles)
     }
     if (user.value.role) {
-      return [user.value.role]
+      return effectiveRoles([user.value.role])
     }
     return []
   })

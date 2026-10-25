@@ -1,6 +1,5 @@
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { computed } from 'vue'
 
 const mocks = vi.hoisted(() => ({
   createWorkspaceBatchJob: vi.fn(),
@@ -85,10 +84,6 @@ vi.mock('@/services/custom-rule-workspace-service', () => ({
 }))
 
 import CustomRuleWorkspaceView from '@/views/rules/CustomRuleWorkspaceView.vue'
-import { useBusinessReadAccess } from '@/composables/useBusinessReadAccess'
-vi.mock('@/composables/useBusinessReadAccess', () => ({
-  useBusinessReadAccess: vi.fn(() => ({ isBusinessReadOnly: computed(() => false) })),
-}))
 
 type WorkspaceViewVm = {
   records: Array<Record<string, unknown>>
@@ -167,17 +162,6 @@ async function mountView() {
 describe('CustomRuleWorkspaceView batch record refs', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(useBusinessReadAccess).mockReturnValue({ isBusinessReadOnly: computed(() => false) })
-  })
-
-  it('同步管理员可查看草稿，但不能调用保存或启动任务', async () => {
-    vi.mocked(useBusinessReadAccess).mockReturnValue({ isBusinessReadOnly: computed(() => true) })
-    const { wrapper, vm } = await mountView()
-    expect(wrapper.text()).toContain('当前账号仅可查看')
-    await vm.runBatchJob()
-    expect(mocks.createWorkspaceBatchJob).not.toHaveBeenCalled()
-    expect(mocks.updateWorkspaceDraft).not.toHaveBeenCalled()
-    wrapper.unmount()
   })
 
   it('跨页保留同visit不同三坐标，并只提交record_refs', async () => {

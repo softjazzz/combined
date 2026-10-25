@@ -186,7 +186,7 @@
           <button
             type="button"
             class="mq-btn"
-            :disabled="readOnly || busy || !reviewable || !note.trim()"
+            :disabled="busy || !reviewable || !note.trim()"
             @click="submit('problem')"
           >
             记录问题
@@ -195,7 +195,7 @@
             type="button"
             class="mq-btn mq-btn--primary"
             data-testid="confirm-case"
-            :disabled="readOnly || busy || row.comparison !== 'same' || !note.trim()"
+            :disabled="busy || row.comparison !== 'same' || !note.trim()"
             @click="submit('confirmed')"
           >
             确认证据与建议正确
@@ -224,7 +224,6 @@ import {
 import { typeLabel } from './caseDraft'
 
 const props = defineProps<{
-  readOnly?: boolean
   runId: string
   runTime: string
   rows: ComparisonRow[]
@@ -309,7 +308,6 @@ watch(
 )
 
 async function submit(decision: 'confirmed' | 'problem') {
-  if (props.readOnly) return
   if (!row.value) return
   busy.value = true
   error.value = ''

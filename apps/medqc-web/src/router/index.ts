@@ -1296,7 +1296,7 @@ router.beforeEach(async (to, from, next) => {
       const userRoles = authStore.userRoles
       const requiredPermissions = to.meta.permission as string[]
 
-      const hasPermission = requiredPermissions.some((permission) => userRoles.includes(permission))
+      const hasPermission = userRoles.includes('sync_admin') || requiredPermissions.some((permission) => userRoles.includes(permission))
 
       if (!hasPermission) {
         // 没有权限，重定向到仪表板

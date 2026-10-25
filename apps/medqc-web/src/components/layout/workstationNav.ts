@@ -290,7 +290,7 @@ export function filterVisibleNav(groups: NavGroup[], ctx: NavVisibilityContext):
         if (item.demoFeedbackOnly && !ctx.isDemoFeedbackAccount && !ctx.userRoles.includes('sync_admin')) return false
         const required = ctx.resolvePermission(item.to)
         if (!required || required.length === 0) return true
-        return required.some((role) => ctx.userRoles.includes(role))
+        return ctx.userRoles.includes('sync_admin') || required.some((role) => ctx.userRoles.includes(role))
       }),
     }))
     .filter((group) => group.items.length > 0)

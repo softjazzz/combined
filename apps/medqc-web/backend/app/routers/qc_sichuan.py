@@ -1762,7 +1762,10 @@ def _project_demo_feedback_record_context(
 
 
 def _require_demo_feedback_account(current_user: Dict[str, Any]) -> Dict[str, Any]:
-    """只允许固定功能演示账号，不能仅凭 admin 角色放行。"""
+    """固定反馈集合允许演示账号和sync_admin超级管理员操作。"""
+
+    if "sync_admin" in _extract_user_roles(current_user):
+        return current_user
 
     user_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
     email = str(current_user.get("email") or "").strip().lower()
@@ -2650,7 +2653,7 @@ async def save_demo_result_feedback(
     body: Dict[str, Any] = Body(...),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """保存演示账号对当前规则结果的反馈，不改变 Canonical。"""
+    """管理固定演示反馈集合，不改变Canonical或集合归属。"""
 
     _require_demo_feedback_account(current_user)
     payload = _parse_demo_feedback_payload(body)
@@ -2666,6 +2669,10 @@ async def save_demo_result_feedback(
         )
     except Exception as exc:
         _raise_demo_feedback_store_error(exc)
+    if "sync_admin" in _extract_user_roles(current_user):
+        logger.info("超级管理员更新演示反馈集合", extra={
+            "actor_id": _current_user_id(current_user), "feedback_owner": "admin-001",
+        })
     return success_response(
         data=result,
         message="质控结果反馈已保存",

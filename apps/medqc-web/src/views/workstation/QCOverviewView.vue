@@ -671,7 +671,7 @@ const syncingFromRoute = ref(false)
 const homeData = ref<WorkstationHomePayload | null>(null)
 
 const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
-const isDemoPresentation = computed(() => authStore.user?.is_demo_account === true)
+const isDemoPresentation = computed(() => authStore.user?.is_demo_account === true && !authStore.userRoles?.includes('sync_admin'))
 const departmentOptions = computed(() => homeData.value?.department_options ?? [])
 const scopeHospitalText = computed(() =>
   clinicalQc.value?.scope.hospital_scope === 'all' ? '全院' : '当前范围',

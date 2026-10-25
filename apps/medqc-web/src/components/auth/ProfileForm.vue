@@ -400,6 +400,8 @@ const getRoleColor = (role: AuthUserRole) => {
     doctor: 'from-emerald-400 to-teal-500',
     viewer: 'from-purple-400 to-pink-500',
     sync_admin: 'from-gray-400 to-gray-500',
+    super_admin: 'from-orange-400 to-amber-500',
+    developer: 'from-gray-400 to-gray-500',
   }
   return colors[role] || 'from-gray-400 to-gray-500'
 }
@@ -413,6 +415,8 @@ const getRoleInitial = (role: AuthUserRole) => {
     doctor: 'D',
     viewer: 'V',
     sync_admin: 'S',
+    super_admin: 'S',
+    developer: 'D',
   }
   return initials[role] || 'U'
 }
@@ -425,7 +429,9 @@ const getRoleLabel = (role: AuthUserRole) => {
     qc_staff: '质控员',
     doctor: '医生',
     viewer: '查看者',
-    sync_admin: '同步开发管理员',
+    sync_admin: '超级管理员',
+    super_admin: '超级管理员',
+    developer: '开发人员',
   }
   return labels[role] || '未知角色'
 }
