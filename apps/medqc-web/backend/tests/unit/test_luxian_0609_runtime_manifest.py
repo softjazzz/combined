@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from app.services.luxian_0609.native_package import (
     load_luxian_0609_dependency_inventory,
@@ -184,7 +187,11 @@ def test_runtime_manifest_rejects_explicit_empty_inventory() -> None:
         raise AssertionError("explicit empty inventory must fail closed")
 
 
-def test_runtime_manifest_script_can_run_directly_from_project_root() -> None:
+@pytest.mark.parametrize("inherited_encoding", ["utf-8", "gbk"])
+def test_runtime_manifest_script_can_run_directly_from_project_root(
+    monkeypatch, inherited_encoding,
+) -> None:
+    monkeypatch.setenv("PYTHONIOENCODING", inherited_encoding)
     project_root = Path(__file__).resolve().parents[3]
     script_path = project_root / "backend" / "scripts" / "build_luxian_0609_runtime_manifest.py"
 
@@ -193,6 +200,8 @@ def test_runtime_manifest_script_can_run_directly_from_project_root() -> None:
         cwd=project_root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         timeout=15,
         check=False,
     )

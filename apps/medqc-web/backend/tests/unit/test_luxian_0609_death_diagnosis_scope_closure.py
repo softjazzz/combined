@@ -74,6 +74,7 @@ async def evaluate(rows, *, unavailable_sources=frozenset()):
 def test_063_single_rule_source_contract_reads_death_context():
     assert set(resolve_luxian_0609_decision_support_source_keys((RULE,))) == {
         "discharge_record", "mr_diagnosis", "inpat_registration", "death_record",
+        "evaluation_context.horizon",
     }
 
 

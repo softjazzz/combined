@@ -191,14 +191,21 @@ def test_native_030_performed_surgery_uses_performed_trigger_fact():
     )
 
 
-def test_native_030_1889002_order_only_does_not_claim_mr_surgery_as_performed():
+@pytest.mark.parametrize("order_name,expected_state", [
+    ("胸腔闭式引流术", "not_applicable"),
+    ("腹腔镜下阑尾切除术", "non_compliant"),
+])
+def test_native_030_order_trigger_does_not_claim_frontpage_procedure_as_surgery(
+    order_name, expected_state,
+):
+    # 当前目录将胸腔闭式引流归为治疗性操作；另用真实手术医嘱保留阳性对照。
     snapshot, materials = _typed_session(
         visit_id="1889002",
         inpat_nondrug_order_rows=(
             {
                 "order_id": "1889002-order-1",
                 "order_type": "手术",
-                "order_name": "胸腔闭式引流术",
+                "order_name": order_name,
                 "order_status": "新开",
             },
         ),
@@ -228,6 +235,15 @@ def test_native_030_1889002_order_only_does_not_claim_mr_surgery_as_performed():
     )[0][0]
     assert result.results == ()
     assert len(result.decisions) == 1
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=("LX0609-04-02-02",),
+        snapshot=snapshot, evidence_materials=materials,
+    )
+    assert reduced[0].final_state.value == expected_state
+    if expected_state == "not_applicable":
+        assert result.decisions[0].reason_code == "trigger_absent_complete"
+        assert result.customer_display_facts == ()
+        return
     assert result.decisions[0].fact_refs == (expected_order_ref,)
     assert result.decisions[0].reason_code == "required_document_missing"
     assert result.customer_display_facts == (
@@ -243,12 +259,18 @@ def test_native_030_1889002_order_only_does_not_claim_mr_surgery_as_performed():
     )
 
 
-def test_native_030_uncertain_order_is_deliverable_data_gap():
+@pytest.mark.parametrize("order_type,expected_state,reason", [
+    ("未知类型", "data_gap", "required_field_missing"),
+    ("麻醉", "not_applicable", "trigger_absent_complete"),
+])
+def test_native_030_distinguishes_unknown_type_from_anesthesia_charge(
+    order_type, expected_state, reason,
+):
     snapshot, materials = _typed_session(
         inpat_nondrug_order_rows=(
             {
                 "order_id": "uncertain-order-030",
-                "order_type": "麻醉",
+                "order_type": order_type,
                 "order_status": "新开",
             },
         ),
@@ -277,8 +299,8 @@ def test_native_030_uncertain_order_is_deliverable_data_gap():
         "inpat_nondrug_order", snapshot=snapshot
     )[0][0]
     assert order_ref not in result.decisions[0].fact_refs
-    assert reduced[0].final_state.value == "data_gap"
-    assert reduced[0].reason_code == "required_field_missing"
+    assert reduced[0].final_state.value == expected_state
+    assert reduced[0].reason_code == reason
 
 
 def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeypatch):

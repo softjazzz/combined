@@ -799,7 +799,8 @@ def test_provider_reuses_truncated_bounded_prefix_without_hiding_snapshot_truth(
 @pytest.mark.parametrize(
     ("order_type", "expected_state", "expected_reason"),
     [
-        ("麻醉", "not_run", "extractor_not_run"),
+        ("未知类型", "not_run", "extractor_not_run"),
+        ("麻醉", "complete", ""),
         ("治疗", "complete", ""),
     ],
 )

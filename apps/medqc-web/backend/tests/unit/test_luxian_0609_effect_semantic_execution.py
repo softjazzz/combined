@@ -1,5 +1,6 @@
 """055 冻结原反例和事实消费回归；协议替身不证明真实语义。"""
 from copy import deepcopy
+from datetime import datetime
 import json
 from pathlib import Path
 
@@ -27,14 +28,19 @@ async def test_original_six_through_finalizer(case):
         rows["daily_course_record"][0]["record_content"] = BODY
         present = ("present", BODY, "美罗培南")
         facts = {(0, 0): fact(present, present)}
+    client = Client(facts)
     snapshot, materials, result, reduced = await _evaluate_selected(
-        (RULE,), rows, llm_client=Client(facts),
+        (RULE,), rows, llm_client=client,
     )
     final = _canonical_extended_result(rule_id=RULE, snapshot=snapshot, materials=materials,
                                      result=result, reduced=reduced)
     assert final["status"] == case["expected"]
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 24
+    # 当前执行器先按时间窗裁剪，47/73 小时的正文不应再送入语义抽取。
+    start = datetime.fromisoformat(rows["inpat_drug_order"][0]["planned_start_datetime"])
+    recorded = datetime.fromisoformat(rows["daily_course_record"][0]["record_time"])
+    expected_calls = int(48 <= (recorded - start).total_seconds() / 3600 <= 72)
+    assert result.llm_call_count == len(client.calls) == expected_calls
+    assert result.total_tokens == 24 * expected_calls
 
 
 def rows(body=BODY):

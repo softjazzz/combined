@@ -48,6 +48,7 @@ C30_SENIOR_TEXT = (
 def _session(
     *,
     senior_rows: tuple[dict, ...],
+    rule_id: str = "LX0609-06-02-02",
     surgery_rows: tuple[dict, ...] = ({"record_content": "术后情况平稳。", "record_time": RECORD_TIME},),
     daily_rows: tuple[dict, ...] = ({"record_content": "继续观察病情变化。", "record_time": RECORD_TIME},),
 ):
@@ -72,7 +73,7 @@ def _session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-06-02-02",),
+        selected_rule_ids=(rule_id,),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -80,7 +81,7 @@ def _session(
         created_at=CREATED_AT,
         row_reader=reader,
         additional_source_keys=resolve_legacy_executor_material_source_keys(
-            ("tumor_pathology",), selected_rule_ids=("LX0609-06-02-02",)
+            ("tumor_pathology",), selected_rule_ids=(rule_id,)
         ),
     )
 
@@ -262,8 +263,18 @@ def test_019_trigger_absent_does_not_claim_target_sources_were_checked() -> None
 
 
 @pytest.mark.asyncio
-async def test_013_does_not_consume_senior_course_source() -> None:
-    session = _session(senior_rows=({"record_content": C30_SENIOR_TEXT, "record_time": RECORD_TIME},))
+@pytest.mark.parametrize("content,reason", [
+    (C30_SENIOR_TEXT, "requirement_violated"),
+    ("病理结果：病理诊断资料。", "requirement_satisfied"),
+])
+async def test_013_consumes_senior_result_but_does_not_treat_followup_as_result(
+    content: str, reason: str,
+) -> None:
+    # 013 已纳入查房中的病理结果，019 取材规则仍排除该来源；快照须按实际规则构建。
+    session = _session(
+        senior_rows=({"document_id": "senior-result", "record_content": content, "record_time": RECORD_TIME},),
+        rule_id="LX0609-06-02-03",
+    )
     client = PathologyFactsClient()
     result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
         rule_ids=("LX0609-06-02-03",),
@@ -280,9 +291,12 @@ async def test_013_does_not_consume_senior_course_source() -> None:
     )
 
     assert result.llm_call_count == 1
-    assert "追踪病检结果" not in client.prompts[0]
-    assert result.decisions[0].reason_code == "requirement_violated"
-    # 013/019 都不读取上级医师查房记录，本会话中也不再请求该来源。
-    assert "senior_course_record" not in {
+    assert content in client.prompts[0]
+    assert result.decisions[0].reason_code == reason
+    assert "senior_course_record" in {
         item.source_key for item in session.snapshot.observations
     }
+    senior_ref = session.materials.document_rows(
+        "senior_course_record", snapshot=session.snapshot,
+    )[0][0]
+    assert senior_ref in result.decisions[0].fact_refs
