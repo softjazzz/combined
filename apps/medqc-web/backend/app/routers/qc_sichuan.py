@@ -49,6 +49,7 @@ from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
     customer_safe_projection_key,
+    project_batch_job_overview,
     project_customer_safe_batch_job,
 )
 from ..services.luxian_0609_result_export_service import (
@@ -1761,13 +1762,23 @@ def _project_demo_feedback_record_context(
 
 
 def _require_demo_feedback_account(current_user: Dict[str, Any]) -> Dict[str, Any]:
-    """只允许固定功能演示账号，不能仅凭 admin 角色放行。"""
+    """固定反馈集合允许演示账号和sync_admin超级管理员操作。"""
+
+    if "sync_admin" in _extract_user_roles(current_user):
+        return current_user
 
     user_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
     email = str(current_user.get("email") or "").strip().lower()
     if user_id != "admin-001" or email != "admin@medqc.com":
         raise HTTPException(status_code=403, detail="当前账号不支持质控结果反馈演示")
     return current_user
+
+
+def _require_demo_feedback_reader(current_user: Dict[str, Any]) -> Dict[str, Any]:
+    """同步管理员可查看演示反馈，提交仍仅允许原固定演示账号。"""
+    if "sync_admin" in _extract_user_roles(current_user):
+        return current_user
+    return _require_demo_feedback_account(current_user)
 
 
 def _parse_demo_feedback_payload(body: Dict[str, Any]) -> QcResultFeedbackRequest:
@@ -2350,11 +2361,40 @@ async def list_workspace_batch_jobs(
     created_start_date: Optional[str] = Query(None),
     created_end_date: Optional[str] = Query(None),
     record_id: Optional[str] = Query(None),
+    view: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
+    if str(view or "").strip().lower() == "overview":
+        # 质控记录页：只要任务元数据与进度，不读结果明细，也不返回结果计数。
+        overview = await run_in_threadpool(
+            workspace.list_batch_job_overviews,
+            created_by=_current_user_id(current_user),
+            status=status,
+            scope=scope,
+            query=q,
+            created_start_date=created_start_date,
+            created_end_date=created_end_date,
+            record_id=record_id,
+            page=page,
+            page_size=page_size,
+        )
+        return success_response(
+            data={
+                "items": [
+                    project_batch_job_overview(item)
+                    for item in overview.items
+                    if _is_workspace_batch_job(item)
+                ],
+                "total": overview.total,
+                "page": overview.page,
+                "page_size": overview.page_size,
+            },
+            message="获取四川规则批量任务成功",
+            trace_id=get_trace_id(request),
+        )
     executor_filter = str(executor_type or "").strip().lower() or None
     cache_hit_filter: Optional[bool] = None
     cache_hit_value = str(cache_hit or "").strip().lower()
@@ -2562,7 +2602,7 @@ async def get_demo_result_feedback(
 ):
     """读取演示账号在当前病历上的反馈，不读取或返回病历身份。"""
 
-    _require_demo_feedback_account(current_user)
+    _require_demo_feedback_reader(current_user)
     try:
         items = get_result_feedback_demo_store().list_for_record(
             root_job_id=root_job_id,
@@ -2590,7 +2630,7 @@ async def list_demo_result_feedbacks(
 ):
     """汇总反馈及客户可识别的病历标签，不返回三坐标或病历正文。"""
 
-    _require_demo_feedback_account(current_user)
+    _require_demo_feedback_reader(current_user)
     try:
         stored_items = get_result_feedback_demo_store().list_all(
             created_by="admin-001",
@@ -2613,7 +2653,7 @@ async def save_demo_result_feedback(
     body: Dict[str, Any] = Body(...),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """保存演示账号对当前规则结果的反馈，不改变 Canonical。"""
+    """管理固定演示反馈集合，不改变Canonical或集合归属。"""
 
     _require_demo_feedback_account(current_user)
     payload = _parse_demo_feedback_payload(body)
@@ -2629,6 +2669,10 @@ async def save_demo_result_feedback(
         )
     except Exception as exc:
         _raise_demo_feedback_store_error(exc)
+    if "sync_admin" in _extract_user_roles(current_user):
+        logger.info("超级管理员更新演示反馈集合", extra={
+            "actor_id": _current_user_id(current_user), "feedback_owner": "admin-001",
+        })
     return success_response(
         data=result,
         message="质控结果反馈已保存",

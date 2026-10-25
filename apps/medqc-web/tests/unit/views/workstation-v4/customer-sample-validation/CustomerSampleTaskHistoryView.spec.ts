@@ -237,6 +237,7 @@ describe('CustomerSampleTaskHistoryView', () => {
     const wrapper = await mountView()
 
     expect(listSichuanWorkspaceBatchJobs).toHaveBeenCalledWith({
+      view: 'overview',
       page: 1,
       page_size: 20,
       q: undefined,
@@ -244,12 +245,16 @@ describe('CustomerSampleTaskHistoryView', () => {
     })
     expect(wrapper.text()).toContain('共 1 条')
     const row = wrapper.get('[data-testid="task-history-row-job-history-1"]')
-    // 2026-10-23 客户视图：任务名为主标题，范围一句话，结果按问题/需补资料/合格计数。
+    // 列表只读任务元信息；点开后才读取结果。
     expect(row.text()).toContain('泸县0609质控点验证')
     expect(row.text()).toContain('2 份病历')
     expect(row.text()).toContain('选定 2 个质控点')
-    expect(row.text()).toContain('1 项问题')
-    expect(row.text()).toContain('1 合格')
+    expect(row.text()).not.toContain('项问题')
+    expect(row.text()).not.toContain('合格')
+    expect(row.text()).not.toContain('首次病程记录未在入院后8小时内完成')
+    expect(wrapper.find('.task-history__counts').exists()).toBe(false)
+    expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+    expect(getSichuanWorkspaceBatchJobDebugSnapshot).not.toHaveBeenCalled()
     expect(row.text()).not.toContain('LX0609-01-02-01')
     expect(row.text()).not.toContain('不合规')
     // 只有 1 页时不显示分页。
@@ -261,11 +266,38 @@ describe('CustomerSampleTaskHistoryView', () => {
     await wrapper.get('[data-testid="task-history-status-completed"]').trigger('click')
     await flushPromises()
     expect(listSichuanWorkspaceBatchJobs).toHaveBeenLastCalledWith({
+      view: 'overview',
       page: 1,
       page_size: 20,
       q: undefined,
       status: 'completed',
     })
+  })
+
+  it('轻量列表分页与搜索保留，翻页不读取任务详情', async () => {
+    listSichuanWorkspaceBatchJobs.mockResolvedValue({
+      success: true,
+      data: {
+        items: [buildCompletedJob()],
+        total: 41,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-history-search"]').setValue('样本')
+    await wrapper.get('[data-testid="task-history-search"]').trigger('keyup.enter')
+    await flushPromises()
+    wrapper.findComponent(APaginationStub).vm.$emit('change', 2)
+    await flushPromises()
+    expect(listSichuanWorkspaceBatchJobs).toHaveBeenLastCalledWith({
+      view: 'overview',
+      page: 2,
+      page_size: 20,
+      q: '样本',
+      status: undefined,
+    })
+    expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
   })
 
   it('从历史任务打开单一结果抽屉', async () => {

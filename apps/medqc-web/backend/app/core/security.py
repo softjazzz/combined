@@ -7,6 +7,7 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 
 from .settings import get_settings
+from .roles import effective_principal, effective_roles
 from ..services.auth_store import resolve_user_by_subject as resolve_auth_store_user_by_subject
 
 
@@ -66,9 +67,9 @@ def resolve_current_user_from_token(token: str) -> dict:
         raise _credentials_exception()
 
     user = resolve_user_by_subject(token_subject)
-    if user is None:
+    if user is None or user.get("is_active") is False:
         raise _credentials_exception()
-    return user
+    return effective_principal(user)
 
 
 async def get_current_user(
@@ -77,7 +78,7 @@ async def get_current_user(
 ):
     cached_user = getattr(request.state, "current_user", None)
     if cached_user is not None:
-        return cached_user
+        return effective_principal(cached_user)
     user = resolve_current_user_from_token(credentials.credentials)
     request.state.current_user = user
     return user
@@ -89,7 +90,7 @@ async def get_optional_user(
 ):
     cached_user = getattr(request.state, "current_user", None)
     if cached_user is not None:
-        return cached_user
+        return effective_principal(cached_user)
     if credentials is None:
         return None
     user = resolve_current_user_from_token(credentials.credentials)
@@ -101,8 +102,8 @@ def require_roles(*roles: str):
     allowed = {r for r in roles}
 
     async def _checker(current_user: dict = Depends(get_current_user)) -> dict:
-        user_roles = {str(r) for r in current_user.get("roles", [])}
-        if not user_roles.intersection(allowed):
+        user_roles = set(effective_roles(current_user.get("roles")))
+        if "sync_admin" not in user_roles and not user_roles.intersection(allowed):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"权限不足，需要角色之一: {', '.join(sorted(allowed))}",
@@ -119,9 +120,9 @@ def require_any_role(roles: Iterable[str]):
 async def require_admin(current_user: dict = Depends(get_current_user)):
     """
     验证当前用户是否为系统管理员
-    只有角色中包含 'admin' 的用户才能访问
+    系统管理员及sync_admin超级管理员可访问。
     """
-    if "admin" not in current_user.get("roles", []):
+    if "admin" not in effective_roles(current_user.get("roles")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="此操作需要系统管理员权限"

@@ -830,8 +830,9 @@ def discharge_customer_fact_status_is_valid(
         )
     if normalized == "LX0609-08-01-02":
         if safe_facts.get("verification_kind") == "discharge_medication_extraction_pending":
+            # 抽取补核后仍不确定按资料不足交付（2026-10-23）。
             return normalized_status == {
-                "unknown": "uncertain", "data_gap": "data_gap", "technical_error": "technical_error",
+                "unknown": "data_gap", "data_gap": "data_gap", "technical_error": "technical_error",
             }.get(safe_facts.get("extraction_state"))
         if safe_facts.get("verification_kind") == "discharge_medication_prescription_identity_gap":
             return normalized_status == "data_gap"

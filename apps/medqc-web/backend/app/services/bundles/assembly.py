@@ -17,6 +17,7 @@ from ..document_assembly import (
     build_document_select_columns,
     extract_document_identity_metadata,
 )
+from ..document_assembly.assembler import INDEPENDENT_DOCUMENT_FIELDS
 from .contracts import BUNDLE_DOMAINS, BUNDLE_SCHEMA_VERSION_CURRENT
 from .factory import (
     build_coding_bundle,
@@ -1733,6 +1734,12 @@ def _inventory_entry(
         "signatures": identity_metadata["signatures"],
         "participants": identity_metadata["participants"],
     }
+    if table_name == "discharge_record" and row.get("chief_physician_sign_datetime") is not None:
+        # 即使未提供签署人姓名，也保留独立签署时钟；不参与record/submit/display选时。
+        entry["chief_physician_sign_datetime"] = _json_safe(row["chief_physician_sign_datetime"])
+    for field_name in INDEPENDENT_DOCUMENT_FIELDS.get(table_name, ()):
+        if row.get(field_name) is not None:
+            entry[field_name] = _json_safe(row[field_name])
     if report_items is not None:
         entry["report_items"] = _json_safe(report_items)
     if report_metadata is not None:
@@ -2845,6 +2852,11 @@ def load_domain_bundle_document_index(
                        'display_time', item -> 'display_time',
                        'record_time', item -> 'record_time',
                        'submit_time', item -> 'submit_time',
+                       'chief_physician_sign_datetime', item -> 'chief_physician_sign_datetime',
+                       'planned_end_datetime', item -> 'planned_end_datetime',
+                       'reviewed_datetime', item -> 'reviewed_datetime',
+                       'carried_datetime', item -> 'carried_datetime',
+                       'canceled_datetime', item -> 'canceled_datetime',
                        'has_content', LENGTH(BTRIM(COALESCE(item ->> 'content', ''))) > 0,
                        'length', LENGTH(COALESCE(item ->> 'content', '')),
                        'source_fields', CASE

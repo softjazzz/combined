@@ -52,7 +52,7 @@ export function useQcResultFeedback(
         .toLowerCase() === 'admin@medqc.com',
   )
   const isEnabled = computed(
-    () => isDemoAccount.value && Boolean(rootJobId.value && recordRef.value),
+    () => (isDemoAccount.value || authStore?.userRoles?.includes('sync_admin')) && Boolean(rootJobId.value && recordRef.value),
   )
 
   async function load() {

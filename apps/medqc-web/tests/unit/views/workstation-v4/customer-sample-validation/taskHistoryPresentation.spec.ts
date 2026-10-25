@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTaskHistoryRow,
   cleanTaskTitle,
-  countSegments,
+  formatDuration,
   groupTaskHistoryRows,
 } from '@/views/workstation-v4/customer-sample-validation/taskHistoryPresentation'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
@@ -43,26 +43,19 @@ describe('质控记录列表展示模型', () => {
     expect(row.metaText).toBe('08:27 发起 · 18 份病历 · 全量 68 个质控点')
   })
 
-  it('结果计数归并为客户口径，内部状态归入未完成判定', () => {
-    const row = buildTaskHistoryRow(job())
-    expect(row.counts).toEqual({
-      issue: 7,
-      dataGap: 4,
-      compliant: 24,
-      notApplicable: 9,
-      pending: 3,
-    })
-    expect(row.countTotal).toBe(47)
+  it('列表不携带结果摘要与计数，完成任务只显示完成时间与用时', () => {
+    const row = buildTaskHistoryRow(
+      job({
+        started_at: '2026-10-23T08:27:00',
+        finished_at: '2026-10-23T08:29:05',
+      }),
+    )
+    expect(row).not.toHaveProperty('counts')
+    expect(row).not.toHaveProperty('countTotal')
+    expect(row.detailText).toBe('08:29 完成 · 执行 2 分 5 秒')
     expect(row.statusLabel).toBe('已完成')
     expect(row.statusTone).toBe('success')
     expect(row.canExport).toBe(true)
-    expect(countSegments(row).map((segment) => segment.key)).toEqual([
-      'issue',
-      'dataGap',
-      'compliant',
-      'notApplicable',
-      'pending',
-    ])
   })
 
   it('部分失败写明已完成结果可查看，仍可导出', () => {
@@ -78,11 +71,39 @@ describe('质控记录列表展示模型', () => {
         },
       }),
     )
-    expect(row.statusLabel).toBe('部分未完成')
+    expect(row.statusLabel).toBe('未全部完成')
     expect(row.statusTone).toBe('warning')
-    expect(row.noticeText).toBe('2 项质控未执行完，已完成结果可查看')
+    expect(row.detailText).toBe('查看原因及已有结果')
     expect(row.canExport).toBe(true)
     expect(row.isCompleted).toBe(false)
+  })
+
+  it('仅有轻量失败元数据时不推断结果全部丢失', () => {
+    const row = buildTaskHistoryRow(job({ status: 'failed', summary: null, has_results: false }))
+    expect(row.statusLabel).toBe('未全部完成')
+    expect(row.detailText).not.toContain('未形成可交付')
+    expect(row.detailText).toContain('查看原因')
+  })
+
+  it('轻量列表的进度只取病历计数', () => {
+    const row = buildTaskHistoryRow(
+      job({ status: 'running', summary: null, total_records: 27, success_count: 9 }),
+    )
+    expect(row.progressText).toBe('已完成 9 / 27 份 · 33%')
+  })
+
+  it('完成时间缺失不虚构用时', () => {
+    expect(buildTaskHistoryRow(job({ summary: null })).detailText).toBe('已完成')
+    expect(formatDuration(0)).toBe('0 秒')
+    expect(formatDuration(3600)).toBe('1 小时')
+  })
+
+  it('有排队等待时与实际执行时长分别显示', () => {
+    const row = buildTaskHistoryRow(job({
+      created_at: '2026-10-23T05:24:24', started_at: '2026-10-23T05:29:28',
+      finished_at: '2026-10-23T05:33:09',
+    }))
+    expect(row.detailText).toBe('05:33 完成 · 等待 5 分 4 秒 · 执行 3 分 41 秒')
   })
 
   it('执行中显示病历进度', () => {

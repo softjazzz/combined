@@ -29,6 +29,10 @@ def initialize_runtime_build(app: FastAPI) -> None:
     }
     if not available:
         snapshot["reason"] = "build_version_unavailable"
+    from ..services.qc_workspace.p0_runtime import loaded_p0_proof
+    p0_proof = loaded_p0_proof(release_identity=build)
+    if p0_proof is not None:
+        snapshot["p0_acceptance"] = p0_proof
     app.state.runtime_build = snapshot
     logger.info(
         "运行版本 available=%s build_id=%s git_commit=%s pid=%s started_at=%s",

@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from ..core.security import get_password_hash, verify_password
 from ..database.models.account_registration import registration_tables
 from .account_management_service import AccountManagementService, ROLES, _iso
-from .defect_rectification_service import RectificationError, _persistent_roles
+from .defect_rectification_service import RectificationError, _persistent_roles, _effective_persistent_roles
 from .doctor_notification_service import Notification
 
 SOURCE = "v5_account_registration"
@@ -123,19 +123,16 @@ class AccountRegistrationService(AccountManagementService):
 
     def _recipients(self, session, users, institute):
         rows = session.execute(
-            sa.select(users.c.id, users.c.role, users.c.roles_json).where(
+            sa.select(users.c.id, users.c.role, users.c.roles_json, users.c.institute_id).where(
                 users.c.is_active.is_(True),
-                sa.or_(
-                    users.c.institute_id == institute,
-                    users.c.institute_id.is_(None),
-                    users.c.institute_id == "",
-                ),
             )
         ).mappings()
         result = [
             row["id"]
             for row in rows
-            if "admin" in _persistent_roles(row["role"], row["roles_json"])
+            if "admin" in _effective_persistent_roles(row["role"], row["roles_json"])
+            and (row["institute_id"] in (institute, None, "")
+                 or "sync_admin" in _persistent_roles(row["role"], row["roles_json"]))
         ]
         if not result:
             raise RectificationError(
@@ -340,7 +337,7 @@ class AccountRegistrationService(AccountManagementService):
                 .join(users, users.c.id == registrations.c.user_id)
                 .where(registrations.c.status == status)
             )
-            if actor["institute_id"]:
+            if self._scoped_institute(actor):
                 statement = statement.where(
                     registrations.c.requested_institute_id == actor["institute_id"]
                 )

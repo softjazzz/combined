@@ -590,10 +590,10 @@ def test_complete_batch_job_rejects_incomplete_luxian_rule_delivery(
     assert session.rollback_count == 1
 
 
-def test_latest_single_record_result_uses_case_coordinate_without_scanning_record_ids_json(
+def test_latest_result_canonical_branch_uses_coordinates_and_partial_branch_is_failed_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """最新结果读取应由三坐标 Envelope 定位，不再扫描任务 JSON。"""
+    """Canonical按三坐标定位；无信封的失败轮走已验收的独立候选分支。"""
 
     session = _QueryCaptureSession()
     monkeypatch.setattr(workspace_module, "_session", lambda: session)
@@ -608,7 +608,8 @@ def test_latest_single_record_result_uses_case_coordinate_without_scanning_recor
 
     assert result["state"] == "not_found"
     statement = session.statements[0]
-    query = str(statement.whereclause)
+    canonical, partial = statement.selects
+    query = str(canonical.whereclause)
     full_query = str(statement)
     assert "record_ids_json" not in query
     for column in (
@@ -620,6 +621,10 @@ def test_latest_single_record_result_uses_case_coordinate_without_scanning_recor
     ):
         assert column in query
     assert "root_job_id" in full_query
+    partial_query = str(partial.compile(compile_kwargs={"literal_binds": True}))
+    assert "status = 'failed'" in partial_query
+    assert "saved_partial_attempt" in partial_query
+    assert "record_ids_json" in str(partial.whereclause)
 
 
 def test_latest_result_index_migration_matches_runtime_case_coordinate(

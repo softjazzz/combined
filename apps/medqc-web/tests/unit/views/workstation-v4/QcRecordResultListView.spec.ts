@@ -580,30 +580,44 @@ describe('QcRecordResultListView', () => {
     const wrapper = mountView('discharged')
     await flushPromises()
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
-    await wrapper.get('tbody tr[data-record-key] .qc-record-result-table__view-button').trigger('click')
+    await wrapper
+      .get('tbody tr[data-record-key] .qc-record-result-table__view-button')
+      .trigger('click')
     await flushPromises()
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
   })
 
-  it('将勾选病历的完整三坐标交给质控控件，完成后刷新当前结果页', async () => {
-    const wrapper = mountView('discharged')
-    await flushPromises()
-    await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+  it.each(['inpatient', 'discharged'] as const)(
+    '%s 任务终态刷新列表和预览，不重复订阅成功事件',
+    async (carePhase) => {
+      const wrapper = mountView(carePhase)
+      await flushPromises()
+      await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
 
-    expect(wrapper.getComponent(QcRunSelectedControl).props('recordRefs')).toEqual([
-      {
-        institute_id: 'H',
-        patient_id: 'P',
-        visit_id: 'V-priority',
-      },
-    ])
-    const requestsBeforeRefresh = mocks.getRaw.mock.calls.length
+      expect(wrapper.getComponent(QcRunSelectedControl).props('recordRefs')).toEqual([
+        {
+          institute_id: 'H',
+          patient_id: 'P',
+          visit_id: 'V-priority',
+        },
+      ])
+      const requestsBeforeRefresh = mocks.getRaw.mock.calls.length
+      const previewRefreshKey = wrapper.getComponent(QcRecordReviewPreview).props('refreshKey')
 
-    wrapper.getComponent(QcRunSelectedControl).vm.$emit('completed')
-    await flushPromises()
+      wrapper.getComponent(QcRunSelectedControl).vm.$emit('completed')
+      await flushPromises()
+      expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh)
 
-    expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh + 1)
-  })
+      wrapper.getComponent(QcRunSelectedControl).vm.$emit('results-updated')
+      await flushPromises()
+
+      expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh + 1)
+      expect(wrapper.getComponent(QcRecordReviewPreview).props('refreshKey')).toBeGreaterThan(
+        previewRefreshKey,
+      )
+      expect(wrapper.getComponent(QcRunSelectedControl).props('recordRefs')).toEqual([])
+    },
+  )
 
   it('在同一页面切换结果分析，并将下钻病历交给既有结果抽屉', async () => {
     const wrapper = mountView('discharged')

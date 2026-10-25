@@ -5,6 +5,31 @@ from app.services.luxian_0609.record_result_read_model import (
 )
 
 
+def test_new_full_run_uses_its_own_frozen_scope_even_when_release_scope_shrinks():
+    old = {**_job("old-full", created_at="2026-10-24T10:00:00"),
+           "result_rule_scope": ["rule-a", "rule-b"], "result_scope_kind": "full"}
+    new = {**_job("new-full", created_at="2026-10-25T10:00:00"),
+           "result_rule_scope": ["rule-a"], "result_scope_kind": "full"}
+    selection = select_latest_authoritative_record_result_job(
+        [old, new], record_id="visit-1", rule_set_key="luxian_0609",
+        rule_set_version="2026-06-09", prefer_full_scope=True,
+    )
+    assert selection.job["id"] == "new-full"
+
+
+def test_incomparable_targeted_scopes_are_not_combined_into_full_results():
+    first = {**_job("target-a", created_at="2026-10-24T10:00:00"),
+             "result_rule_scope": ["rule-a"], "result_scope_kind": "targeted"}
+    second = {**_job("target-b", created_at="2026-10-25T10:00:00"),
+              "result_rule_scope": ["rule-b"], "result_scope_kind": "targeted"}
+    selection = select_latest_authoritative_record_result_job(
+        [first, second], record_id="visit-1", rule_set_key="luxian_0609",
+        rule_set_version="2026-06-09", prefer_full_scope=True,
+    )
+    assert selection.state == "technical_error"
+    assert selection.reason_code == "record_result_scope_conflict"
+
+
 def _job(
     job_id: str,
     *,

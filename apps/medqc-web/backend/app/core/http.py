@@ -2,12 +2,15 @@ import asyncio
 import ipaddress
 import socket
 import threading
+from contextvars import copy_context
+from time import perf_counter
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, Optional, TypeVar
 
 import httpx
 
 from .settings import get_settings
+from .execution_timing import measure_stage, record_stage_duration, track_http_future
 
 
 T = TypeVar("T")
@@ -109,17 +112,36 @@ async def run_shared_http_call(
     """在线程池执行阻塞 HTTP 操作，并与同步旁路共享全进程并发预算。"""
 
     selected_resources = resources or _get_or_create_shared_resources()
+    submitted = perf_counter()
+    context = copy_context()
+
+    def observed_operation():
+        # 包含线程池和共享槽位等待；请求计时从真正取得槽位后开始。
+        record_stage_duration("http_wait", perf_counter() - submitted)
+        with measure_stage("http_request"):
+            return operation()
+
     future = selected_resources.executor.submit(
+        context.run,
         selected_resources.run_with_budget,
-        operation,
+        observed_operation,
     )
+    # 取消 await 不一定终止已经发出的阻塞 HTTP；终态观测必须明确仍有在途请求。
+    track_http_future(future)
     return await asyncio.wrap_future(future)
 
 
 def run_shared_http_call_sync(operation: Callable[[], T]) -> T:
     """执行同步 HTTP 操作，并与异步质控主链共享全进程并发预算。"""
 
-    return _get_or_create_shared_resources().run_with_budget(operation)
+    submitted = perf_counter()
+
+    def observed_operation():
+        record_stage_duration("http_wait", perf_counter() - submitted)
+        with measure_stage("http_request"):
+            return operation()
+
+    return _get_or_create_shared_resources().run_with_budget(observed_operation)
 
 
 def close_shared_http_resources() -> None:

@@ -12,7 +12,7 @@ from ..core.security import get_password_hash
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import SysUser
 from ..database.models.account_registration import registration_is_approved
-from .defect_rectification_service import RectificationError, _persistent_roles
+from .defect_rectification_service import RectificationError, _persistent_roles, _effective_persistent_roles
 from .user_scope_owner import resolve_user_owner_schema
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ class AccountManagementService:
         if (
             row is None
             or not row["is_active"]
-            or "admin" not in _persistent_roles(row["role"], row["roles_json"])
+            or "admin" not in _effective_persistent_roles(row["role"], row["roles_json"])
             or not registration_is_approved(session, table, actor_id)
         ):
             raise RectificationError("仅持久系统管理员可以管理账号", 403)
@@ -74,8 +74,13 @@ class AccountManagementService:
             session.execute(text("SELECT pg_advisory_xact_lock(10252501)"))
 
     def _scope(self, actor, institute_id):
-        if actor["institute_id"] and actor["institute_id"] != institute_id:
+        if self._scoped_institute(actor) and actor["institute_id"] != institute_id:
             raise RectificationError("仅可管理本机构账号", 403)
+
+    def _scoped_institute(self, actor):
+        if "sync_admin" in _persistent_roles(actor["role"], actor["roles_json"]):
+            return None
+        return actor["institute_id"]
 
     def list(
         self, actor_id, *, keyword="", role=None, active=None, page=1, page_size=20
@@ -90,7 +95,7 @@ class AccountManagementService:
             table = self._table(session)
             actor = self._admin(session, table, actor_id)
             statement = select(table)
-            if actor["institute_id"]:
+            if self._scoped_institute(actor):
                 statement = statement.where(
                     table.c.institute_id == actor["institute_id"]
                 )
@@ -141,7 +146,7 @@ class AccountManagementService:
                 "page": page,
                 "page_size": page_size,
                 "actor_id": actor_id,
-                "managed_institute_id": actor["institute_id"],
+                "managed_institute_id": self._scoped_institute(actor),
             }
 
     def create(self, actor_id, data):

@@ -83,6 +83,17 @@ def test_single_record_html_uses_customer_fields_and_hides_internal_payload():
     assert "reason_code" not in content
 
 
+def test_partial_record_export_retains_saved_results_and_failure_notice():
+    result = {**_ready_result(), "execution_status": "partial_failed", "is_complete": False,
+              "failed_rule_count": 1, "failed_rule_ids": ["LX0609-01-02-02"]}
+    content = export_single_record_result_html(result=result, record=_record())
+    assert "本次质控未全部完成" in content
+    assert "已保留 2 项有效结果" in content
+    assert "1 项执行失败" in content
+    assert "LX0609-01-02-02" in content
+    assert "确定问题 1" in content
+
+
 def test_filtered_workbook_contains_summary_and_rule_details_without_internal_fields():
     output = export_filtered_record_results_workbook(
         records=[_record()],

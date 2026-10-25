@@ -1008,20 +1008,20 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4RunningRecords',
         component: () => import('@/views/workstation-v4/QcRecordResultListView.vue'),
         props: { carePhase: 'inpatient' },
-        meta: { title: '运行病历', permission: ['admin', 'qc_manager'] },
+        meta: { title: '运行病历', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'records/final',
         name: 'WorkstationV4FinalRecords',
         component: () => import('@/views/workstation-v4/QcRecordResultListView.vue'),
         props: { carePhase: 'discharged' },
-        meta: { title: '终末病历质控', permission: ['admin', 'qc_manager'] },
+        meta: { title: '终末病历质控', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'qc-feedback-demo',
         name: 'WorkstationV4QcFeedbackDemo',
         component: () => import('@/views/workstation-v4/QcResultFeedbackDemoListView.vue'),
-        meta: { title: '质控反馈记录', permission: ['admin', 'qc_manager'] },
+        meta: { title: '质控反馈记录', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'case-communications',
@@ -1176,21 +1176,19 @@ const routes: RouteRecordRaw[] = [
         path: 'rules/custom-workspace',
         name: 'WorkstationV4CustomRuleWorkspace',
         component: () => import('@/views/rules/CustomRuleWorkspaceView.vue'),
-        meta: { title: '自定义质控点', permission: ['admin', 'qc_manager'] },
+        meta: { title: '自定义质控点', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'rules/validation',
         name: 'WorkstationV4RuleValidation',
-        component: () =>
-          import('@/views/workstation-v4/rule-validation/RuleValidationListView.vue'),
-        meta: { title: '规则验收', permission: ['admin', 'qc_manager'] },
+        component: () => import('@/views/workstation-v4/rule-validation/RuleValidationListView.vue'),
+        meta: { title: '规则验收', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'rules/validation/:ruleId',
         name: 'WorkstationV4RuleValidationDetail',
-        component: () =>
-          import('@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'),
-        meta: { title: '规则验收详情', permission: ['admin', 'qc_manager'] },
+        component: () => import('@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'),
+        meta: { title: '规则验收详情', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'rules/validation/:ruleId/cases/new',
@@ -1203,7 +1201,7 @@ const routes: RouteRecordRaw[] = [
         path: 'qc-overview',
         name: 'WorkstationV4QCOverview',
         component: () => import('@/views/workstation/QCOverviewView.vue'),
-        meta: { title: '问题集中点', permission: ['admin', 'qc_manager'] },
+        meta: { title: '问题集中点', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'system-config',
@@ -1359,7 +1357,7 @@ router.beforeEach(async (to, from, next) => {
       const userRoles = authStore.userRoles
       const requiredPermissions = to.meta.permission as string[]
 
-      const hasPermission = requiredPermissions.some((permission) => userRoles.includes(permission))
+      const hasPermission = userRoles.includes('sync_admin') || requiredPermissions.some((permission) => userRoles.includes(permission))
 
       if (!hasPermission) {
         // 普通质控员已有待办权限，不能回到无权进入的首页形成重定向循环。

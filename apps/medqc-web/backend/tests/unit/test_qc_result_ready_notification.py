@@ -186,6 +186,24 @@ def test_saved_completion_notifies_only_persistent_requester_and_exact_result(
         )
 
 
+def test_persistent_sync_admin_can_read_own_cross_institute_result_notice(storage):
+    _, sessions, notifications = storage
+    with sessions.begin() as session:
+        owner = session.get(SysUser, "owner")
+        owner.role = "sync_admin"
+        owner.roles_json = '["sync_admin"]'
+        owner.institute_id = "another-institute"
+    insert_job(storage)
+    complete(storage)
+    page = notifications.list("owner")
+    assert page["total"] == page["unread_count"] == 1
+    item = page["items"][0]
+    assert notifications.result_ready("owner", item["id"], lambda job, actor: (job, actor)) == ("J", "owner")
+    assert notifications.list("other")["total"] == 0
+    notifications.mark_read("owner", item["id"])
+    assert notifications.list("owner")["unread_count"] == 0
+
+
 def test_parent_child_and_repeated_refresh_have_one_notice_and_preserve_read(storage):
     service, sessions, notifications = storage
     insert_job(storage, job_id="parent", job_kind="parent", child_job_ids_json='["J"]')

@@ -459,6 +459,8 @@ class DischargeRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     resident_physician_sign = Column(String(100), comment="住院医师签名")
     attending_physician_sign = Column(String(100), comment="主治医师签名")
     chief_physician_sign = Column(String(100), comment="主副主任医师签名")
+    chief_physician_sign_datetime = Column(DateTime(timezone=True), comment="主副主任医师签署时间，独立于记录和提交时间")
+    v2_schema = Column(Text, comment="源端完整二级结构化JSON，不截断或替代普通正文")
 
 
 # ==================== 9. 质控结果表（系统新增）====================
@@ -823,6 +825,10 @@ class DeathRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
+    death_datetime = Column(DateTime(timezone=True), comment="死亡时间，独立于文书记录及提交时间")
+    admission_condition = Column(Text, comment="入院情况")
+    treatment_course = Column(Text, comment="诊疗经过")
+    death_reason = Column(Text, comment="死亡原因")
     record_content = Column(Text, comment="非结构化全文")
 
 

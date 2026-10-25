@@ -471,7 +471,9 @@ class _SameCourseBasisClient(_Client):
                 ],
             }
         else:
-            events = json.loads(prompt.split("EVENTS_JSON=", 1)[1])
+            from finding_selection_test_support import prompt_events
+
+            events = prompt_events(prompt)
             course_ref = events[0]["course_docs"][0]["course_doc_ref"]
             event_position = events[0]["event_position"]
             if "核对整份病程的上下文" in prompt and "连续多句或同一逻辑段" in prompt:
@@ -4670,9 +4672,9 @@ async def test_typed_all_empty_complete_sources_are_not_applicable_in_requested_
 
 
 @pytest.mark.asyncio
-async def test_empty_exam_lab_tables_treat_unexecuted_orders_as_not_applicable(
+async def test_target_orders_with_missing_reports_are_not_complete_event_absence(
 ):
-    """只有医嘱、没有实际检查或报告时，CT/MRI规则均不启动。"""
+    """CT/MRI医嘱与已做检查线索存在，报告缺失必须保留资料缺口。"""
     rows_by_source = {
         CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
             {
@@ -4764,22 +4766,22 @@ async def test_empty_exam_lab_tables_treat_unexecuted_orders_as_not_applicable(
 
     assert [item.final_state.value for item in reduced] == [
         "not_applicable",
-        "not_applicable",
-        "not_applicable",
+        "data_gap",
+        "data_gap",
         "data_gap",
         "data_gap",
     ]
-    assert [item.reason_code for item in result.decisions[:3]] == [
-        "trigger_absent_complete",
-        "trigger_absent_complete",
+    assert [item.reason_code for item in result.decisions[:1]] == [
         "trigger_absent_complete",
     ]
-    assert [item.reason_code for item in result.decisions[3:]] == [
+    assert [item.reason_code for item in result.decisions[1:]] == [
+        "target_report_missing",
+        "target_report_missing",
         "target_report_missing",
         "target_report_missing",
     ]
     facts = dict(result.customer_display_facts)
-    assert all(rule_id not in facts for rule_id in ("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"))
+    assert all(rule_id not in facts for rule_id in ("LX0609-06-01-02",))
     for rule_id in ("LX0609-06-03-03", "LX0609-06-03-04"):
         assert facts[rule_id]["trigger_orders"] == [
             {
@@ -4800,8 +4802,9 @@ async def test_empty_exam_lab_tables_treat_unexecuted_orders_as_not_applicable(
     public_facts = {
         item["rule_id"]: item.get("customer_display_facts") for item in canonical
     }
-    assert all(public_facts[rule_id] is None for rule_id in ("LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"))
+    assert all(public_facts[rule_id] is None for rule_id in ("LX0609-06-01-02",))
     assert all(public_facts[rule_id]["trigger_orders"] for rule_id in ("LX0609-06-03-03", "LX0609-06-03-04"))
+    assert all(public_facts[rule_id]["trigger_orders"] for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05"))
     assert result.llm_call_count == 0
     assert client.prompts == []
     assert all(item.fact_refs for item in result.decisions)
@@ -4966,7 +4969,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
+async def test_six_ct_mri_events_keep_main_facts_when_bounded_record_checks_have_no_answer(
     monkeypatch,
 ):
     """同次住院的多次检查必须逐事件核对，不能合并成时间冲突。"""
@@ -5047,9 +5050,9 @@ async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
+    assert result.llm_call_count == 2  # 主抽取 1 次、结果核验 1 次（按输出量一批装下）；替身未作答，保留主抽取。
     assert result.total_tokens == 110
-    assert len(client.prompts) == 2  # 第 2 次为 06-01-04 结果记录核对
+    assert len(client.prompts) == 2
     assert "event_position" in client.prompts[0]
     assert "COURSE_DOC_POSITION=1" in client.prompts[0]
     assert "每个规则与事件组合各一条" in client.prompts[0]
@@ -7214,3 +7217,31 @@ async def test_main_extraction_conclusion_is_frozen_and_reused_without_model(mon
     second = await run(second_client)
     assert second.llm_call_count == 0 and not second_client.prompts
     assert [item.qc_direction for item in second.decisions] == [item.qc_direction for item in first.decisions]
+
+
+@pytest.mark.asyncio
+async def test_unrelated_reports_cannot_prove_absence_of_ordered_ct_report(monkeypatch):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({"exam_id": "US-1", "exam_type": "超声", "exam_name": "心脏彩超",
+                    "report_datetime": "2026-07-01 09:00:00"},),
+        exam_report_rows=({"exam_id": "US-1", "exam_type": "超声", "exam_name": "心脏彩超",
+                           "exam_impression": "未见明显异常", "report_datetime": "2026-07-01 09:00:00"},),
+        nondrug_order_rows=({"order_id": "CT-1", "order_name": "头颅CT", "order_status": "新开",
+                            "prescribed_datetime": "2026-07-01 08:00:00"},),
+    )
+    rules = ("LX0609-06-01-04", "LX0609-06-01-05")
+    client = _Client([])
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=rules, wrapper_rules=[_wrapper(rule_id) for rule_id in rules],
+        evidence_payload=None, llm_client=client, evidence_snapshot=snapshot,
+        evidence_materials=materials, decision_rule_ids=rules,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=rules, snapshot=snapshot,
+        evidence_materials=materials,
+    )
+    assert [(item.final_state.value, item.reason_code) for item in reduced] == [
+        ("data_gap", "target_report_missing"), ("data_gap", "target_report_missing"),
+    ]
+    assert client.prompts == []

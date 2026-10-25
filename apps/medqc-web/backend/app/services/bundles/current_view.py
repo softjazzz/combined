@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Any
 
 from . import assembly, emr_view
+from .frontpage_view import load_frontpage_document
 from ..luxian_0609.basic_timeliness_facts import extract_admission_anchor
 
 # 查看当前病历时医嘱逐条列出，质控 Bundle 的上限（药品700/非药品1500）会让医嘱多的病例
@@ -42,6 +43,11 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
         for domain in emr_view._DOMAIN_LOAD_ORDER
     }
     documents = emr_view.build_documents_from_domain_bundles(bundles)
+    frontpage = load_frontpage_document(**identity) if snapshot.rows_by_table.get("mr") else None
+    if frontpage is not None:
+        # 仅替换当前查看的首页条目；历史 Bundle 和规则输入仍由原有 owner 读取。
+        documents = [document for document in documents if document.get("doc_type") != "mr"]
+        documents.append(frontpage)
     anchor = extract_admission_anchor(
         registration_rows=snapshot.rows_by_table.get("inpat_registration", []),
         admission_rows=snapshot.rows_by_table.get("admission_record", []),

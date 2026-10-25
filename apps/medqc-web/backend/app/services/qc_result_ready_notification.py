@@ -5,7 +5,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import MetaData, Table, and_, exists, inspect, select, update
 
-from .defect_rectification_service import _persistent_roles
+from .defect_rectification_service import _effective_persistent_roles
 from .user_scope_owner import user_owner_options
 from .sample_validation_rule_sets import is_workspace_batch_draft_id
 
@@ -67,7 +67,7 @@ def ready_predicate(session, actor, notification):
             for key in ("institute_id", "patient_id", "visit_id")
         ),
     ]
-    if actor["institute_id"]:
+    if actor["institute_id"] and "sync_admin" not in actor["roles"]:
         conditions.append(envelopes.c.institute_id == actor["institute_id"])
     elif not actor["roles"] & {"admin", "super_admin"}:
         return False
@@ -117,7 +117,7 @@ def publish_result_ready(session, *, job_row, jobs, envelopes, now):
     ).scalar_one_or_none()
     if (
         not recipient
-        or not _persistent_roles(recipient.role, recipient.roles_json) & ROLES
+        or not _effective_persistent_roles(recipient.role, recipient.roles_json) & ROLES
     ):
         return
     rows = (
@@ -150,8 +150,8 @@ def publish_result_ready(session, *, job_row, jobs, envelopes, now):
         for row in rows
     ):
         return
-    roles = _persistent_roles(recipient.role, recipient.roles_json)
-    if recipient.institute_id:
+    roles = _effective_persistent_roles(recipient.role, recipient.roles_json)
+    if recipient.institute_id and "sync_admin" not in roles:
         if any(row["institute_id"] != recipient.institute_id for row in rows):
             return
     elif not roles & {"admin", "super_admin"}:

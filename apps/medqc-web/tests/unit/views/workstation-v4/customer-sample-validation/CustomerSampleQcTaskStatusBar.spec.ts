@@ -60,6 +60,28 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 }
 
 describe('CustomerSampleQcTaskStatusBar', () => {
+  it('C11 结算后的任务卡显示75项有效结果及1项失败，不再显示0条回写', () => {
+    const job = buildJob({
+      status: 'failed', total_records: 1, customer_rule_count: 76, items: [],
+      progress: { processed_records: 1, total_records: 1, step_key: 'failed' },
+    })
+    Object.assign(job.summary!, {
+      total_records: 1, success_count: 0, failed_count: 1, progress_percent: 0,
+      execution_status: 'partial_failed', completed_rule_count: 75, failed_rule_count: 1,
+      display_status_counts: {}, status_breakdown: {},
+      automatic_failed_rule_retry: { status: 'not_retryable', should_retry: false },
+    })
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, { props: { task: job }, global: { stubs } })
+    const text = wrapper.text()
+    expect(text).toContain('部分执行失败')
+    expect(text).toContain('病历进度：已处理 1 / 1 份（全部成功 0 份）')
+    expect(text).toContain('结果回写：75 / 76 条（75 项有效结果，1 项失败）')
+    expect(text).not.toContain('结果回写：0 /')
+    expect(text).not.toContain('自动补跑中')
+    expect(wrapper.find('[data-testid="qc-task-cancel"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   afterEach(() => {
     vi.useRealTimers()
   })

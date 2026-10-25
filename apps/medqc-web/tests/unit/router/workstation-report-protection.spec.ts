@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-// 固定在本地七个产品提交之后；允许新增报表，不允许把gap外壳覆盖回来。
-const baseline = '754fa2f7af23e9d60209f3cbbcf96e3d59d9813f'
+// 固定在两线适配前的产品提交；保留后续权限、轻量列表及正式首页，不退回旧快照。
+const baseline = 'b34cac343b3ef948d9a19ad72c4597aef58177c9'
 const prefix = 'apps/medqc-web/'
 const protectedFiles = [
   'src/components/layout/WorkstationLayout.vue',
@@ -24,6 +24,10 @@ const protectedFiles = [
   'src/views/workstation-v4/customer-sample-validation/taskHistoryPresentation.ts',
   'src/views/workstation-v4/semantic-rules/components/BatchResultOverview.vue',
   'src/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue',
+  'src/views/workstation-v4/components/FrontpageSheet.vue',
+  'src/views/workstation-v4/customer-sample-validation/ReadonlyFrontpageContent.vue',
+  'src/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue',
+  'src/utils/effectiveRoles.ts',
 ]
 
 describe('V7.1与未推送产品成果保护集', () => {

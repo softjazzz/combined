@@ -185,7 +185,7 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
                 type="button"
                 class="login-demo"
                 :disabled="loading"
-                :aria-label="`使用${account.label}一键登录`"
+                aria-label="演示账号快速登录"
                 @click="handleDemoLogin(account)"
               >
                 <span
@@ -196,9 +196,6 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
                 </span>
                 <span class="login-demo__copy">
                   <span class="login-demo__title">演示账号快速登录</span>
-                  <span class="login-demo__meta">
-                    {{ account.label }} · {{ account.account }} / {{ account.password }}
-                  </span>
                 </span>
                 <span
                   class="login-demo__go"
@@ -632,15 +629,6 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
-}
-
-.login-demo__meta {
-  overflow: hidden;
-  color: #6b7a90;
-  font-size: 12px;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .login-demo__go {

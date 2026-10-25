@@ -53,17 +53,20 @@
           </button>
         </div>
         <p
-          v-if="isGroupedPresentation && presentation.counts.technicalError"
+          v-if="!confirmedResultsOnly && isGroupedPresentation && presentation.counts.technicalError"
           class="result-system-status"
           data-testid="single-record-system-status"
         >
           系统状态：{{ presentation.counts.technicalError }} 条结果校验异常，仅在全部规则中展示
         </p>
       </template>
+      <p v-if="confirmedResultsOnly && technicalFailureCount" class="result-system-status" data-testid="single-record-execution-failure">
+        有 {{ technicalFailureCount }} 项未能完成判定，请查看任务状态。
+      </p>
     </header>
 
     <div v-if="!hasVisibleResults" class="empty-state">
-      {{ viewItems.length ? '当前分类下没有质控结果' : '当前没有可展示的质控结果' }}
+      {{ confirmedResultsOnly ? '当前没有可展示的确定问题' : viewItems.length ? '当前分类下没有质控结果' : '当前没有可展示的质控结果' }}
     </div>
 
     <div v-else class="result-list" :class="{ 'is-grouped': isGroupedPresentation }">
@@ -461,6 +464,7 @@
             </button>
             <button
               type="button"
+              v-if="!confirmedResultsOnly"
               class="result-row-debug-copy"
               data-testid="copy-single-qc-debug-result"
               title="复制本条脱敏调试信息"
@@ -485,6 +489,7 @@ import { message } from 'ant-design-vue'
 import { ArrowRight, ChevronRight, ChevronUp, ClipboardCheck, ListFilter } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import QcResultFeedbackControl from './QcResultFeedbackControl.vue'
 import type {
   QcResultFeedbackRecord,
@@ -883,11 +888,20 @@ const DetailBlock = defineComponent({
   },
 })
 
-const viewItems = computed(() => buildSingleRecordQcResultItems(props.items))
+const { confirmedResultsOnly } = useQcResultVisibility()
+const allViewItems = computed(() => buildSingleRecordQcResultItems(props.items))
+const viewItems = computed(() =>
+  confirmedResultsOnly.value
+    ? allViewItems.value.filter((item) => item.status === 'non_compliant')
+    : allViewItems.value,
+)
+const technicalFailureCount = computed(
+  () => allViewItems.value.filter((item) => item.status === 'technical_error').length,
+)
 const debugCopyingKey = ref('')
 
 async function copySingleDebugResult(item: SingleRecordQcResultViewItem) {
-  if (debugCopyingKey.value) return
+  if (confirmedResultsOnly.value || debugCopyingKey.value) return
   debugCopyingKey.value = item.key
   try {
     const copied = await copyQcResultDebugText(buildQcResultDebugText([item], props.debugContext))
@@ -901,6 +915,7 @@ async function copySingleDebugResult(item: SingleRecordQcResultViewItem) {
 const isGroupedPresentation = computed(() => props.presentationMode === 'grouped')
 const presentation = computed(() => buildSingleRecordQcPresentation(props.items))
 const resultExecutionSummary = computed(() => {
+  if (confirmedResultsOnly.value) return `${viewItems.value.length} 条确定问题`
   const total = viewItems.value.length
   const notExecuted = viewItems.value.filter((item) => item.status === 'not_executed').length
   const executed = total - notExecuted
@@ -908,7 +923,11 @@ const resultExecutionSummary = computed(() => {
     ? `${total} 个质控点 · 已执行 ${executed} · 未执行 ${notExecuted}`
     : `${total} 个质控点 · 已执行 ${executed}`
 })
-const statusTabs = computed(() => buildSingleRecordQcStatusTabs(viewItems.value))
+const statusTabs = computed(() =>
+  buildSingleRecordQcStatusTabs(viewItems.value).filter(
+    (tab) => !confirmedResultsOnly.value || tab.key === 'non_compliant',
+  ),
+)
 const activeTab = ref<SingleRecordQcResultTabKey>('non_compliant')
 const activeReportTab = ref<SingleRecordQcResultReportTab>('all')
 const reportTabs = computed(() => [
@@ -926,7 +945,7 @@ const reportTabs = computed(() => [
     count: presentation.value.counts.notApplicable,
   },
   { key: 'all' as const, label: '全部规则', count: viewItems.value.length },
-])
+].filter((tab) => !confirmedResultsOnly.value || tab.key === 'non_compliant'))
 const visibleItems = computed(() =>
   activeTab.value === 'all'
     ? viewItems.value
@@ -934,7 +953,7 @@ const visibleItems = computed(() =>
 )
 const visibleGroups = computed(() => {
   if (isGroupedPresentation.value) {
-    return presentation.value.sectionsByTab[activeReportTab.value]
+    return presentation.value.sectionsByTab[confirmedResultsOnly.value ? 'non_compliant' : activeReportTab.value]
   }
   return visibleItems.value.length
     ? [{ key: 'flat-results', sourceDocument: '', items: visibleItems.value }]
@@ -998,6 +1017,7 @@ function shouldRenderDocumentGroupItem(itemKey: string) {
 }
 
 function resolveDefaultReportTab(): SingleRecordQcResultReportTab {
+  if (confirmedResultsOnly.value) return 'non_compliant'
   if (presentation.value.counts.nonCompliant) return 'non_compliant'
   if (presentation.value.counts.dataGap) return 'data_gap'
   if (presentation.value.counts.uncertain) return 'uncertain'
@@ -1189,6 +1209,14 @@ watch(
   statusTabs,
   (tabs) => {
     if (!tabs.some((tab) => tab.key === activeTab.value)) activeTab.value = 'non_compliant'
+  },
+  { immediate: true },
+)
+
+watch(
+  reportTabs,
+  (tabs) => {
+    if (!tabs.some((tab) => tab.key === activeReportTab.value)) activeReportTab.value = 'non_compliant'
   },
   { immediate: true },
 )

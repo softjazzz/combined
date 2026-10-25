@@ -54,3 +54,33 @@ def test_snapshot_carries_task_frozen_date_without_changing_discharge_horizon():
     assert snapshot["task_frozen_date"] == "2026-10-18"
     assert resolve_snapshot_task_frozen_date(snapshot).isoformat() == "2026-10-18"
     assert resolve_snapshot_task_frozen_date({"evaluation_horizon": "2026-07-03"}) is None
+
+
+@pytest.mark.parametrize("admission,discharge", [
+    ("2026-07-01T08:00:00", "2026-07-03T10:00:00+08:00"),
+    ("2026-07-01T08:00:00+08:00", "2026-07-03T10:00:00"),
+])
+def test_batch_snapshot_handles_mixed_timezone_awareness_without_aborting(admission, discharge):
+    from app.services.luxian_0609.evaluation_horizon import (
+        build_record_evaluation_horizon_snapshot,
+        resolve_record_evaluation_horizon_policy,
+        resolve_record_evaluation_horizon_unavailable_reason,
+    )
+    base = {"institute_id": "H", "patient_id": "P", "scope": "final"}
+    records = [
+        {**base, "visit_id": "V1", "admission_datetime": admission, "discharge_datetime": discharge},
+        {**base, "visit_id": "V2", "admission_datetime": "2026-07-01T08:00:00",
+         "discharge_datetime": "2026-07-03T10:00:00"},
+    ]
+
+    snapshots = build_record_evaluation_horizon_snapshot(records, task_frozen_date="2026-10-23")
+    by_id = {item["record_id"]: item for item in snapshots}
+    mixed = by_id["V1"]
+    assert mixed["resolution_status"] == "time_conflict"
+    assert mixed["evaluation_horizon"] == mixed["evaluation_basis"] == ""
+    assert mixed["admission_datetime"] == admission
+    assert mixed["discharge_datetime"] == discharge
+    assert resolve_record_evaluation_horizon_policy(mixed) == "disabled"
+    assert resolve_record_evaluation_horizon_unavailable_reason(mixed) == "authoritative_time_conflict"
+    assert by_id["V2"]["resolution_status"] == "resolved"
+    assert by_id["V2"]["evaluation_horizon"] == "2026-07-03"

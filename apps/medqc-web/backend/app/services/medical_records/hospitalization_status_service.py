@@ -8,6 +8,7 @@ from typing import Any, Callable, Mapping
 from sqlalchemy import inspect as sa_inspect, text
 from sqlalchemy.orm import Session
 
+from ..clinical_read import clinical_query
 from ...database.connection import engine
 from ...database.models.cdm import (
     AdmissionRecord,
@@ -137,7 +138,7 @@ class HospitalizationStatusService:
             try:
                 existing = {
                     (item.institute_id, item.patient_id, item.visit_id): item
-                    for item in session.query(HospitalizationStatusProjection).all()
+                    for item in clinical_query(session, HospitalizationStatusProjection).all()
                 }
                 for row in rows:
                     identity = (row["institute_id"], row["patient_id"], row["visit_id"])
@@ -188,7 +189,8 @@ class HospitalizationStatusService:
                         break
 
         include(
-            session.query(
+            clinical_query(
+                session,
                 MedicalRecordFrontpage.institute_id,
                 MedicalRecordFrontpage.patient_id,
                 MedicalRecordFrontpage.visit_id,
@@ -197,7 +199,8 @@ class HospitalizationStatusService:
             ("discharge_datetime",),
         )
         include(
-            session.query(
+            clinical_query(
+                session,
                 InpatRegistration.institute_id,
                 InpatRegistration.patient_id,
                 InpatRegistration.visit_id,
@@ -206,14 +209,16 @@ class HospitalizationStatusService:
             ("discharge_datetime",),
         )
         include(
-            session.query(
+            clinical_query(
+                session,
                 AdmissionRecord.institute_id,
                 AdmissionRecord.patient_id,
                 AdmissionRecord.visit_id,
             ).all()
         )
         include(
-            session.query(
+            clinical_query(
+                session,
                 DischargeRecord.institute_id,
                 DischargeRecord.patient_id,
                 DischargeRecord.visit_id,

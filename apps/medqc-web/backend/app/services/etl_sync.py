@@ -84,6 +84,12 @@ _COURSE_SIGNATURE_COLUMN_ALIASES["postsurg_firstcourse_record"]["surgeon_sign"] 
 # 仅在目标列存在、本条记录未携带目标列时生效。
 _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
     **_COURSE_SIGNATURE_COLUMN_ALIASES,
+    "death_record": {
+        "death_datetime": ("death_datetime", "death_time"),
+    },
+    "discharge_record": {
+        "chief_physician_sign_datetime": ("chief_physician_sign_datetime", "cheifphy_sign_time"),
+    },
     "admission_record": {
         # 客户源表以 record_time / sys_index_id 表示文书时间和稳定身份；
         # 001/002 必须用同一份本地字段计算并定位，不能只在展示层读取原值。
@@ -122,6 +128,10 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
         "planned_start_datetime": (
             "planned_start_datetime",
             "planned_start_time",
+        ),
+        "planned_end_datetime": (
+            "planned_end_datetime",
+            "planned_end_time",
         ),
         "order_status": ("order_status", "status"),
         "generic_name": ("generic_name", "drug_name", "order_item_name", "order_item"),
@@ -782,6 +792,8 @@ def _apply_sync_column_aliases(
     existing_columns: set[str],
 ) -> Dict[str, Any]:
     normalized: Dict[str, Any] = {str(k).lower(): v for k, v in record.items()}
+    if table_name.strip().lower() == "discharge_record" and isinstance(normalized.get("v2_schema"), (dict, list)):
+        normalized["v2_schema"] = json.dumps(normalized["v2_schema"], ensure_ascii=False)
     _apply_sync_alias_map(
         normalized=normalized,
         existing_columns=existing_columns,
@@ -800,6 +812,11 @@ def _apply_sync_column_aliases(
         existing_columns=existing_columns,
     )
     _validate_document_field_preservation(
+        table_name=table_name,
+        normalized=normalized,
+        existing_columns=existing_columns,
+    )
+    _validate_order_time_preservation(
         table_name=table_name,
         normalized=normalized,
         existing_columns=existing_columns,
@@ -998,6 +1015,29 @@ def _apply_sync_derived_fields(
             )
 
 
+def _validate_order_time_preservation(
+    *,
+    table_name: str,
+    normalized: Dict[str, Any],
+    existing_columns: set[str],
+) -> None:
+    """源端有值的医嘱时间须原义落库；旧表缺列时在删除旧快照前提示升级。"""
+    normalized_table = str(table_name or "").strip().lower()
+    if normalized_table not in {"inpat_drug_order", "inpat_nondrug_order"}:
+        return
+    for field in (
+        "planned_end_datetime", "reviewed_datetime", "carried_datetime", "canceled_datetime",
+    ):
+        # 与通用 datetime/time 别名映射一致，不把计划、执行、撤销互相替代。
+        source_fields = (field, field.removesuffix("_datetime") + "_time")
+        if _first_non_empty(normalized, source_fields) and (
+            field not in existing_columns or not _first_non_empty(normalized, (field,))
+        ):
+            raise ValueError(
+                f"{normalized_table} 医嘱时间字段未保留：{field}，请先升级本地数据库"
+            )
+
+
 def _validate_document_field_preservation(
     *,
     table_name: str,
@@ -1042,6 +1082,13 @@ def _validate_document_field_preservation(
             "request_time",
             "consultation_time",
             "record_time",
+        )
+    elif normalized_table == "discharge_record":
+        # 独立保存签署时钟与完整JSON，缺列必须在写SQL前报出，不静默过滤。
+        required_structured_targets = ("chief_physician_sign_datetime", "v2_schema")
+    elif normalized_table == "death_record":
+        required_structured_targets = (
+            "death_datetime", "admission_condition", "treatment_course", "death_reason",
         )
     elif normalized_table == "handoff_record":
         required_structured_targets = ("shift_time", "handoff_doctor")

@@ -258,7 +258,7 @@ class _SemanticClient:
                 '{"relation_state":"%s","rationale_code":"%s"}'
                 % (
                     self.state,
-                    "obvious_unrelated_item"
+                    "no_related_item"
                     if self.state == "unrelated"
                     else "insufficient_information"
                     if self.state == "unknown"
@@ -266,6 +266,15 @@ class _SemanticClient:
                 )
             )
         )
+        if not self.invalid:
+            import json
+
+            payload = json.loads(content)
+            payload.update({
+                "medical_analysis": "第一诊断为急性胆囊炎，需结合腹痛的部位、体征和辅助检查核对鉴别诊断是否解释同一临床问题。",
+                "evidence_quote": "消化性溃疡穿孔；急性胰腺炎",
+            })
+            content = json.dumps(payload, ensure_ascii=False)
         return {
             "content": content,
             "usage": {"prompt_tokens": 50, "completion_tokens": 8, "total_tokens": 58},
@@ -296,6 +305,166 @@ def _077_rows() -> dict[str, list[Mapping[str, object]]]:
         "diagnosis": [],
         "admission_record_diagnosis": [],
     }
+
+
+@pytest.mark.asyncio
+async def test_077_same_document_clinical_background_and_analysis_survive_save_projection() -> None:
+    rows = _077_rows()
+    rows["first_course_record"][0].update({
+        "case_characteristic": "外伤后上肢疼痛，额部包块，伴意识改变。",
+        "diagnose_based_on": "影像提示上肢骨折及颞叶可疑挫伤。",
+    })
+    session = _session("LX0609-01-02-02", rows)
+    client = _SemanticClient("unrelated")
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    assert "外伤后上肢疼痛，额部包块，伴意识改变。" in client.prompts[0]
+    assert "影像提示上肢骨折及颞叶可疑挫伤。" in client.prompts[0]
+    assert "不要求鉴别诊断与第一诊断逐病名、一对一替代" in client.prompts[0]
+    assert "仅同次住院或仅共同外伤史" in client.prompts[0]
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    analysis = result["criterion_results"][0]["medical_analysis"]
+    assert "第一诊断为急性胆囊炎" in analysis
+    assert "消化性溃疡穿孔；急性胰腺炎" in analysis
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("analysis,quote", [
+    ("", "消化性溃疡穿孔"),
+    ("不相关", "消化性溃疡穿孔"),
+    ("第一诊断所涉及的临床问题与所列鉴别诊断缺少合理解释关系。", "原文没有的引文"),
+    ("第一诊断所涉及的临床问题与所列鉴别诊断缺少合理解释关系。", ""),
+])
+async def test_077_unrelated_without_concrete_grounded_explanation_is_not_a_defect(analysis, quote) -> None:
+    import json
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            return {"content": json.dumps({
+                "relation_state": "unrelated", "rationale_code": "no_related_item",
+                "medical_analysis": analysis, "evidence_quote": quote,
+            }, ensure_ascii=False)}
+
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=Client(),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert result["status"] == "technical_error"
+    assert execution.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("quote", "expected"), [
+    ("病例特点：右上腹疼痛。\n诊断依据：胆囊影像异常。", "non_compliant"),
+    ("病例特点：右上腹疼痛。 诊断依据：胆囊影像异常。", "non_compliant"),
+    ("病例特点：右上腹疼痛。\t诊断依据：胆囊影像异常。", "non_compliant"),
+    ("病例特点：右上腹疼痛。胆囊影像异常。", "technical_error"),
+    ("病例特点：右上腹疼痛！诊断依据：胆囊影像异常。", "technical_error"),
+    ("急性胆囊炎；慢性胆囊炎 消化性溃疡穿孔；急性胰腺炎", "technical_error"),
+])
+async def test_077_quote_whitespace_normalization_matches_the_same_source(quote, expected) -> None:
+    import json
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            return {"content": json.dumps({
+                "relation_state": "unrelated", "rationale_code": "no_related_item",
+                "medical_analysis": "第一诊断对应的临床问题与所列鉴别缺少对应依据，所列鉴别均未解释该问题。",
+                # 模型逐字引用两个相邻字段，JSON 中保留换行。
+                "evidence_quote": quote,
+            }, ensure_ascii=False)}
+
+    rows = _077_rows()
+    rows["first_course_record"][0].update({
+        "case_characteristic": "右上腹疼痛。", "diagnose_based_on": "胆囊影像异常。",
+    })
+    session = _session("LX0609-01-02-02", rows)
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=Client(),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert result["status"] == expected
+    if expected == "non_compliant":
+        assert "原文依据" in result["criterion_results"][0]["medical_analysis"]
+
+
+@pytest.mark.asyncio
+async def test_077_rejection_logs_specific_safe_codes_without_patient_content(caplog) -> None:
+    import json
+    import logging
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            return {"content": json.dumps({
+                "relation_state": "unrelated", "rationale_code": "same_clinical_problem",
+                "medical_analysis": "过短说明", "evidence_quote": "原文中不存在的合成片段",
+            }, ensure_ascii=False)}
+
+    session = _session("LX0609-01-02-02", _077_rows())
+    with caplog.at_level(logging.WARNING):
+        execution = await execute_luxian_0609_native_course_quality_rules(
+            rule_ids=("LX0609-01-02-02",),
+            wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+            evidence_payload=None, llm_client=Client(),
+            evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+            decision_rule_ids=("LX0609-01-02-02",),
+        )
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert result["status"] == "technical_error"
+    assert "rationale_state_mismatch" in caplog.text
+    assert "analysis_too_short" in caplog.text
+    assert "quote_not_in_source" in caplog.text
+    assert "过短说明" not in caplog.text
+    assert "原文中不存在的合成片段" not in caplog.text
+    assert "急性胆囊炎" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["medical_analysis", "evidence_quote"])
+async def test_077_model_objects_are_not_silently_converted_to_valid_strings(field) -> None:
+    import json
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            payload = {"relation_state": "related", "rationale_code": "same_clinical_problem",
+                       "medical_analysis": "说明", "evidence_quote": ""}
+            payload[field] = {"text": "模型返回了对象"}
+            return {"content": json.dumps(payload, ensure_ascii=False)}
+
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=Client(),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert result["status"] == "technical_error"
+
+
+def test_077_prompt_declares_the_existing_validation_requirements() -> None:
+    from app.services.luxian_0609.course_quality.rule_077 import _prompt
+
+    prompt = _prompt(first_diagnosis="合成诊断", full_diagnosis="合成诊断", differential="合成鉴别")
+    assert "unrelated 的 medical_analysis 必须为20至240字" in prompt
+    assert "related 对应 same_clinical_problem" in prompt
+    assert "unrelated 对应 no_related_item" in prompt
+    assert "unknown 对应 insufficient_information" in prompt
 
 
 def test_077_required_structured_fields_survive_the_production_source_projection() -> None:
@@ -384,7 +553,7 @@ async def test_077_runs_one_controlled_semantic_call_on_the_formal_native_family
     assert "急性胆囊炎" in client.prompts[0]
     assert "慢性胆囊炎" in client.prompts[0]
     assert client.calls == [
-        {"max_completion_tokens": 180, "allow_length_retry": False}
+        {"max_completion_tokens": 768, "allow_length_retry": False}
     ]
     assert "消化性溃疡穿孔" in client.prompts[0]
     assert any(
@@ -448,7 +617,8 @@ async def test_077_bound_structured_diagnosis_is_authoritative_over_body_fallbac
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert "第一诊断：急性胆囊炎" in client.prompts[0]
-    assert "正文回退诊断" not in client.prompts[0]
+    # 正文作为背景可以保留，但不能覆盖已绑定结构化第一诊断。
+    assert "第一诊断：正文回退诊断" not in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -480,7 +650,7 @@ async def test_077_missing_inputs_are_data_gap_without_calling_model() -> None:
 
 
 @pytest.mark.asyncio
-async def test_077_invalid_model_output_is_data_gap() -> None:
+async def test_077_invalid_model_output_is_technical_error() -> None:
     session = _session("LX0609-01-02-02", _077_rows())
     execution = await execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-01-02-02",),
@@ -493,9 +663,9 @@ async def test_077_invalid_model_output_is_data_gap() -> None:
     )
     reduced, result = _canonical("LX0609-01-02-02", session, execution)
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert result["status"] == "data_gap"
-    assert reduced.reason_code == "source_readiness_unproven"
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert result["status"] == "technical_error"
+    assert reduced.reason_code == "model_invalid_output"
     assert result["criterion_results"][0]["reason_code"] == "model_invalid_output"
 
 
@@ -659,3 +829,133 @@ async def test_076_077_use_the_formal_production_plan_without_legacy_fallback(
     assert [item["rule_id"] for item in results] == list(selected)
     assert [item["status"] for item in results] == ["compliant", "compliant"]
     assert all(item.get("customer_evidence") for item in results)
+
+
+@pytest.mark.asyncio
+async def test_077_capable_client_uses_non_thinking_strict_json_through_privacy_wrapper() -> None:
+    from app.services.luxian_0609.llm_prompt_privacy import wrap_luxian_0609_llm_client
+
+    class CapableClient(_SemanticClient):
+        def supports_strict_json_schema(self):
+            return True
+
+        async def generate(self, prompt, **kwargs):
+            # 旧入口只有提示词约束，模拟 HTTP 成功但正文是说明文字。
+            if kwargs.get("enable_thinking") is not False or "response_format" not in kwargs:
+                self.calls.append(dict(kwargs))
+                return {"content": "需要结合临床背景判断，未输出JSON。"}
+            return await super().generate(prompt, **kwargs)
+
+    client = CapableClient()
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=wrap_luxian_0609_llm_client(client),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert result["status"] == "compliant"
+    assert len(client.calls) == 1
+    options = client.calls[0]
+    assert options["enable_thinking"] is False
+    assert options["max_completion_tokens"] == 768
+    assert options["allow_length_retry"] is False
+    response_format = options["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
+    schema = response_format["json_schema"]["schema"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "relation_state", "rationale_code", "medical_analysis", "evidence_quote",
+    }
+
+
+@pytest.mark.asyncio
+async def test_077_unconstrained_clients_keep_compatibility_and_single_call() -> None:
+    client = _SemanticClient()
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    reduced, _ = _canonical("LX0609-01-02-02", session, execution)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert len(client.calls) == 1
+    assert "enable_thinking" not in client.calls[0]
+    assert "response_format" not in client.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_077_invalid_json_logs_safe_output_shape_not_content(caplog) -> None:
+    class Client(_SemanticClient):
+        async def generate(self, prompt, **kwargs):
+            return {"choices": [{"finish_reason": "length", "message": {
+                "content": "PRIVATE_MODEL_PROSE_ONLY", "reasoning_content": "PRIVATE_REASONING",
+            }}], "usage": {"completion_tokens": 768}}
+
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=Client(),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    reduced, _ = _canonical("LX0609-01-02-02", session, execution)
+    assert reduced.reason_code == "model_invalid_output"
+    assert "json_payload_invalid" in caplog.text
+    assert "finish_reason=length" in caplog.text
+    assert "completion_tokens=768" in caplog.text
+    assert "content_chars=24" in caplog.text
+    assert "reasoning_present=True" in caplog.text
+    assert "PRIVATE_MODEL" not in caplog.text
+    assert "PRIVATE_REASONING" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_077_strict_json_and_thinking_override_reach_real_http_payload(monkeypatch) -> None:
+    import jsonschema
+    import app.services.qc_llm_client as client_module
+    from app.services.llm_observability import LLMObservabilityRecorder, NullLLMCallEventStore
+    from app.services.luxian_0609.llm_prompt_privacy import wrap_luxian_0609_llm_client
+    from app.services.qc_llm_client import SichuanQCLLMClient
+
+    recorded = await _SemanticClient().generate("synthetic input")
+    sent = []
+
+    async def fake_post(**kwargs):
+        sent.append(kwargs["payload"])
+        return {"choices": [{"message": {"content": recorded["content"]}, "finish_reason": "stop"}],
+                "usage": recorded["usage"]}
+
+    monkeypatch.setattr(client_module, "safe_post_json", fake_post)
+    client = SichuanQCLLMClient(
+        config={"api_endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "api_key": "synthetic-not-a-key", "model": "qwen3.8-flash", "provider_code": "alibaba",
+                "custom_parameters": {"enable_thinking": True, "thinking_budget": 256}},
+        observability_recorder=LLMObservabilityRecorder(store=NullLLMCallEventStore()),
+    )
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=wrap_luxian_0609_llm_client(client),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    reduced, _ = _canonical("LX0609-01-02-02", session, execution)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert len(sent) == 1
+    assert sent[0]["enable_thinking"] is False
+    assert "thinking_budget" not in sent[0]
+    assert sent[0]["max_tokens"] == 768
+    assert sent[0]["response_format"]["type"] == "json_schema"
+    import json
+    jsonschema.validate(json.loads(recorded["content"]), sent[0]["response_format"]["json_schema"]["schema"])
+    assert client.enable_thinking is True  # 只改此规则调用参数，持久/共享配置不变。

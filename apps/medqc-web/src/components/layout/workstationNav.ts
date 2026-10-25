@@ -28,7 +28,7 @@ export interface NavItem {
   iconName: MqIconName
   /** 分组内的步骤序号（首页与结算清单 1→3），用于读屏与提示 */
   step?: number
-  /** 仅演示反馈账号可见 */
+  /** 反馈演示账号及具有读取权限的同步管理员可见 */
   demoFeedbackOnly?: boolean
   /** 当前路由是否属于该入口 */
   match: (route: NavRouteLike) => boolean
@@ -329,10 +329,10 @@ export function filterVisibleNav(groups: NavGroup[], ctx: NavVisibilityContext):
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.demoFeedbackOnly && !ctx.isDemoFeedbackAccount) return false
+        if (item.demoFeedbackOnly && !ctx.isDemoFeedbackAccount && !ctx.userRoles.includes('sync_admin')) return false
         const required = ctx.resolvePermission(item.to)
         if (!required || required.length === 0) return true
-        return required.some((role) => ctx.userRoles.includes(role))
+        return ctx.userRoles.includes('sync_admin') || required.some((role) => ctx.userRoles.includes(role))
       }),
     }))
     .filter((group) => group.items.length > 0)

@@ -10,6 +10,7 @@ import re
 from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol, Sequence
 
+from ..judgement_examples import DISCHARGE_MEDICATION_DOSE_EXAMPLES
 from ..llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from ...llm_observability import safe_status_for_exception
 
@@ -185,6 +186,7 @@ def _prompt(text: str) -> str:
         "dose指原文明确的一次用量；每次1片、2粒、1袋、1支等表述中的片、粒、袋、支等计数单位也属于dose，"
         "不要求必须有mg/g；睡前1片同时包含用药时机和明确一次用量，dose应为present。"
         "只有频次或用药时机、没有数值用量时，dose仍应为missing或uncertain；不得从频次或药名推算。"
+        + DISCHARGE_MEDICATION_DOSE_EXAMPLES +
         f"schema_version固定为{SCHEMA_VERSION}。只返回JSON，不能有Markdown或额外字段。\n"
         + _TEXT_MARKER
         + text

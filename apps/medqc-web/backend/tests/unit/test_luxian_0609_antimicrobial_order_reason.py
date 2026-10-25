@@ -63,6 +63,19 @@ class _ReasonClient:
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", ["暂继续目前抗感染方案。", "考虑其他系统感染，与本药治疗目的无关。"])
+async def test_unrelated_infection_or_continuation_alone_is_not_this_drug_reason(body):
+    rows = {"daily_course_record": (_course("synthetic-reason", "2026-01-01 20:00:00", body),),
+            "labtest_master": (), "labtest_item_report": ()}
+    client = _ReasonClient()
+    _, reduced = await _run("LX0609-05-01-05", rows, client)
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    prompt = client.calls[0]
+    assert "与本药无关的感染判断不算本药理由" in prompt
+    assert "只写“暂继续目前抗感染方案”" in prompt
+
+
 # ---- 医嘱事件 ----
 
 def test_events_merge_same_drug_course_and_exclude_skin_test_and_canceled() -> None:

@@ -1,0 +1,20 @@
+{
+  "schema_version": "confirmed-qc-delivery-v1",
+  "evidence_kind": "deidentified_controlled_regression",
+  "clinical_full_case_signoff": false,
+  "cases": [
+    {"id": "oral_medication_complete", "pattern_reference": "C16出院带药字段误报", "rule_id": "LX0609-08-01-02", "expected_status": "compliant", "scenario": "complete"},
+    {"id": "written_medication_field_missing", "pattern_reference": "既有明确缺字段反例", "rule_id": "LX0609-08-01-02", "expected_status": "non_compliant", "scenario": "missing_route"},
+    {"id": "semantic_unknown_is_data_gap", "pattern_reference": "C15持续不确定不得交付技术状态", "rule_id": "LX0609-08-01-02", "expected_status": "data_gap", "scenario": "uncertain"},
+    {"id": "explicit_no_medication", "pattern_reference": "C13明确无出院带药", "rule_id": "LX0609-08-01-02", "expected_status": "not_applicable", "scenario": "absent"},
+    {"id": "pathology_in_senior_course", "pattern_reference": "C23上级查房病理结果漏读", "rule_id": "LX0609-06-02-03", "expected_status": "compliant", "scenario": "pathology_senior"},
+    {"id": "same_trauma_clinical_context", "pattern_reference": "C11有明确依据的同次外伤临床关联", "rule_id": "LX0609-01-02-02", "expected_status": "compliant", "scenario": "first_course_context"}
+  ],
+  "confirmed_boundaries": [
+    {"sample": "C23", "rule_id": "LX0609-06-02-03", "assertion": "病理结果核对包含上级查房及正式提交时间回退"},
+    {"sample": "C14", "rule_id": "LX0609-08-01-02", "assertion": "明确比例给药按剂量已记录处理；明确口服颗粒可推定途径"},
+    {"sample": "C11", "rule_id": "LX0609-01-02-02", "assertion": "有依据解释同次外伤的相关临床问题即可构成鉴别诊断关联"},
+    {"sample": "C04", "rule_id": "LX0609-05-01-05", "assertion": "与本药无关的感染判断及单独继续方案不是本药理由"},
+    {"sample": "C06", "rule_id": "LX0609-10-01-01", "assertion": "交接按现有口径质控；多人签名不猜角色"}
+  ]
+}

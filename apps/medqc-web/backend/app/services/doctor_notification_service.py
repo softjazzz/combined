@@ -14,7 +14,7 @@ from .defect_rectification_service import (
     MANAGERS,
     RectificationError,
     _person,
-    _persistent_roles,
+    _effective_persistent_roles,
 )
 from .modern_appeal_service import QCAppeal as Appeal
 from .user_scope_owner import user_owner_options, resolve_user_owner_schema
@@ -47,7 +47,7 @@ def _publish_qc_notification(
         row
         for row in rows
         if row.id != actor_id
-        and _persistent_roles(row.role, row.roles_json)
+        and _effective_persistent_roles(row.role, row.roles_json)
         & ({"admin", "qc_manager"} if appeal else MANAGERS)
     ]
     # 优先原派发人；不能处理申诉或已停用时转同机构主管，避免丢给无权审核者。
@@ -67,7 +67,7 @@ def _publish_qc_notification(
     recipients = preferred or [
         row
         for row in eligible
-        if _persistent_roles(row.role, row.roles_json) & {"admin", "qc_manager"}
+        if _effective_persistent_roles(row.role, row.roles_json) & {"admin", "qc_manager"}
     ]
     if not recipients:
         raise RectificationError(
@@ -338,7 +338,7 @@ class DoctorNotificationService:
                 applications.c.requested_institute_id == Notification.institute_id,
             ))
             reviewer = "admin" in actor["roles"]
-            if reviewer and actor["institute_id"]:
+            if reviewer and actor["institute_id"] and "sync_admin" not in actor["roles"]:
                 reviewer = Notification.institute_id == actor["institute_id"]
             registration = and_(
                 Notification.source_key == REGISTRATION_SOURCE,

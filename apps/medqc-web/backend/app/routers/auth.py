@@ -8,6 +8,7 @@ from ..schemas.auth import UserUpdate, LoginRequest, RefreshTokenRequest
 from ..schemas.registration import RegistrationCreate, RegistrationStatusQuery
 from ..core.rate_limit import enforce_rate_limit
 from ..core.settings import get_settings
+from ..core.roles import effective_roles
 from ..core.security import (
     create_access_token,
     create_password_reset_token,
@@ -61,7 +62,7 @@ def _user_payload(user: dict) -> dict:
         "username": user.get("username"),
         "display_name": user["display_name"],
         "department": user["department"],
-        "roles": user["roles"],
+        "roles": effective_roles(user["roles"]),
         "avatar": user["avatar"],
         "phone": user["phone"],
         "bio": user["bio"],

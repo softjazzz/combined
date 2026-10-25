@@ -1,21 +1,13 @@
 /**
  * 质控记录列表的客户视图展示模型（2026-10-23 改版）。
  *
- * 只做装配：状态、进度、计数沿用 buildBatchJobPresentation；这里把结果计数归并为客户口径
- * （问题 / 需补资料 / 合格 / 不适用 / 未完成判定），与批量结果抽屉一致，不重判任何结论。
+ * 只做装配：状态与进度沿用 buildBatchJobPresentation。列表走后端概览接口（view=overview），
+ * 不读取、也不展示任何结果计数或结论；结果在“查看结果”抽屉里看。
  */
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
 import { buildBatchJobPresentation } from './batchJobPresentation'
 
 export type TaskHistoryTone = 'info' | 'success' | 'warning' | 'danger' | 'neutral'
-
-export type TaskHistoryCounts = {
-  issue: number
-  dataGap: number
-  compliant: number
-  notApplicable: number
-  pending: number
-}
 
 export type TaskHistoryRow = {
   id: string
@@ -24,30 +16,19 @@ export type TaskHistoryRow = {
   statusTone: TaskHistoryTone
   isRunning: boolean
   isCompleted: boolean
-  // 已完成或部分未完成：已有结果可导出、可复核。
+  // 已完成或未全部完成但已有结果：可导出、可复核。
   canExport: boolean
   metaText: string
   dateKey: string
   timeText: string
   progressPercent: number
   progressText: string
-  counts: TaskHistoryCounts
-  countTotal: number
-  noticeText: string
+  // 非执行中任务的一句话说明：完成时间与用时，或失败、取消的提示。
+  detailText: string
+  detailTone: 'muted' | 'warning'
 }
 
 export type TaskHistoryGroup = { key: string; label: string; rows: TaskHistoryRow[] }
-
-// 显示状态 → 客户口径；未列出的（技术异常、AI 判断、未执行等）归入“未完成判定”。
-const COUNT_BUCKETS: Record<string, keyof TaskHistoryCounts> = {
-  non_compliant: 'issue',
-  ai_suggested_non_compliant: 'issue',
-  data_gap: 'dataGap',
-  data_quality_gap: 'dataGap',
-  compliant: 'compliant',
-  ai_suggested_compliant: 'compliant',
-  not_applicable: 'notApplicable',
-}
 
 function pad(value: number) {
   return String(value).padStart(2, '0')
@@ -64,28 +45,28 @@ function dateKeyOf(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+function clockText(date: Date) {
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** 用时：不足 1 分钟按秒，不足 1 小时按“分 秒”，否则按“小时 分”。 */
+export function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds))
+  if (total < 60) return `${total} 秒`
+  if (total < 3600) {
+    const rest = total % 60
+    return rest ? `${Math.floor(total / 60)} 分 ${rest} 秒` : `${total / 60} 分钟`
+  }
+  const minutes = Math.floor((total % 3600) / 60)
+  return minutes ? `${Math.floor(total / 3600)} 小时 ${minutes} 分` : `${total / 3600} 小时`
+}
+
 /** 任务名去掉末尾的“(68条规则)”，范围另在元信息里写明。 */
 export function cleanTaskTitle(name: string): string {
   const text = String(name || '')
     .replace(/\s*[（(]\s*\d+\s*条规则\s*[)）]\s*$/u, '')
     .trim()
   return text || '质控任务'
-}
-
-function resolveCounts(statusCounts: Record<string, number>): TaskHistoryCounts {
-  const counts: TaskHistoryCounts = {
-    issue: 0,
-    dataGap: 0,
-    compliant: 0,
-    notApplicable: 0,
-    pending: 0,
-  }
-  for (const [status, value] of Object.entries(statusCounts)) {
-    const amount = Number(value) || 0
-    if (amount <= 0) continue
-    counts[COUNT_BUCKETS[status] || 'pending'] += amount
-  }
-  return counts
 }
 
 function resolveTone(status: string, isRunning: boolean, partialFailure: boolean): TaskHistoryTone {
@@ -100,43 +81,57 @@ export function buildTaskHistoryRow(job: SichuanBatchJob): TaskHistoryRow {
   const base = buildBatchJobPresentation(job)
   const summary = (job.summary || {}) as Record<string, unknown>
   const status = base.normalizedStatus
-  const partialFailure = status === 'failed' && summary.execution_status === 'partial_failed'
-  const counts = resolveCounts(base.statusCounts)
-  const countTotal = Object.values(counts).reduce((total, value) => total + value, 0)
+  // 概览接口只告知“失败任务是否已有结果”；完整详情接口仍可给出 partial_failed。
+  const partialFailure =
+    status === 'failed' &&
+    !base.isRunning &&
+    (summary.execution_status === 'partial_failed' || job.has_results === true)
   const created = localDate(job.created_at)
+  const finished = localDate(job.finished_at)
+  const started = localDate(job.started_at) || created
   const ruleCount = Number(job.customer_rule_count || summary.customer_rule_count || 0)
   const scopeText =
     base.scopeText.startsWith('选定') || ruleCount <= 0
       ? base.scopeText
       : `全量 ${ruleCount} 个质控点`
   const metaParts = [
-    created ? `${pad(created.getHours())}:${pad(created.getMinutes())} 发起` : '',
+    created ? `${clockText(created)} 发起` : '',
     base.recordCount > 0 ? `${base.recordCount} 份病历` : '',
     scopeText,
   ].filter(Boolean)
-  const failedRuleCount = Number(summary.failed_rule_count || 0)
-  let noticeText = ''
-  if (partialFailure) {
-    noticeText = `${failedRuleCount || '部分'} 项质控未执行完，已完成结果可查看`
-  } else if (status === 'failed' && !base.isRunning) {
-    noticeText = '本次未形成可交付的结果，可查看原因后重新发起'
+
+  let detailText = ''
+  let detailTone: TaskHistoryRow['detailTone'] = 'muted'
+  if (status === 'failed' && !base.isRunning) {
+    detailText = '查看原因及已有结果'
+    detailTone = 'warning'
   } else if (status === 'canceled') {
-    noticeText = '任务已取消，已返回的结果仍可查看'
-  } else if (!base.isRunning && status === 'completed' && countTotal === 0) {
-    noticeText = '暂无结果摘要，可打开查看'
+    detailText = '任务已取消，已返回的结果仍可查看'
+  } else if (status === 'completed') {
+    const seconds =
+      finished && started ? (finished.getTime() - started.getTime()) / 1000 : Number.NaN
+    const waitingSeconds = created && started ? (started.getTime() - created.getTime()) / 1000 : 0
+    detailText = [
+      finished ? `${clockText(finished)} 完成` : '已完成',
+      waitingSeconds >= 60 ? `等待 ${formatDuration(waitingSeconds)}` : '',
+      Number.isFinite(seconds) && seconds >= 0 ? `执行 ${formatDuration(seconds)}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
   }
+
   const completed = Math.min(base.completedRecordCount, base.recordCount)
   return {
     id: job.id,
     title: cleanTaskTitle(String(job.rule_name || base.ruleSetText)),
-    statusLabel: partialFailure ? '部分未完成' : base.statusLabel,
-    statusTone: resolveTone(status, base.isRunning, partialFailure),
+    statusLabel: status === 'failed' && !base.isRunning ? '未全部完成' : base.statusLabel,
+    statusTone: resolveTone(status, base.isRunning, status === 'failed'),
     isRunning: base.isRunning || status === 'queued',
     isCompleted: status === 'completed',
     canExport: status === 'completed' || partialFailure,
     metaText: metaParts.join(' · '),
     dateKey: created ? dateKeyOf(created) : '',
-    timeText: created ? `${pad(created.getHours())}:${pad(created.getMinutes())}` : '',
+    timeText: created ? clockText(created) : '',
     progressPercent: base.progressPercent,
     progressText:
       base.recordCount > 0
@@ -144,9 +139,8 @@ export function buildTaskHistoryRow(job: SichuanBatchJob): TaskHistoryRow {
         : status === 'queued'
           ? '排队中，等待执行'
           : `进度 ${base.progressPercent}%`,
-    counts,
-    countTotal,
-    noticeText,
+    detailText,
+    detailTone,
   }
 }
 
@@ -175,24 +169,4 @@ export function groupTaskHistoryRows(rows: TaskHistoryRow[], now = new Date()): 
     group.rows.push(row)
   }
   return groups
-}
-
-/** 结果比例条：只画有数量的分段，宽度按结果总数计算。 */
-export function countSegments(row: TaskHistoryRow) {
-  const total = Math.max(1, row.countTotal)
-  return (
-    [
-      ['issue', 'is-danger'],
-      ['dataGap', 'is-warning'],
-      ['compliant', 'is-success'],
-      ['notApplicable', 'is-muted'],
-      ['pending', 'is-muted'],
-    ] as Array<[keyof TaskHistoryCounts, string]>
-  )
-    .filter(([key]) => row.counts[key] > 0)
-    .map(([key, className]) => ({
-      key,
-      className,
-      width: Math.max(1, Math.round((row.counts[key] / total) * 100)),
-    }))
 }

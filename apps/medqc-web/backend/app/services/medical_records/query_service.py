@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional
 from sqlalchemy import DateTime, String, and_, case, cast, exists, func, inspect as sa_inspect, or_, text
 from sqlalchemy.orm import Session
 
+from ..clinical_read import clinical_query, clinical_read_schema
 from ...database.connection import engine
 from ...database.repository import get_repository
 from ...database.models.cdm import (
@@ -80,7 +81,7 @@ def _load_hospitalization_projection_map(
             "source": str(row.source or ""),
             "discharge_datetime": row.discharge_datetime,
         }
-        for row in session.query(HospitalizationStatusProjection).all()
+        for row in clinical_query(session, HospitalizationStatusProjection).all()
     }
 
 
@@ -144,7 +145,8 @@ def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
     visit_ids = sorted({visit_id for _institute_id, _patient_id, visit_id in indexed_refs})
     frontpage_refs = {
         (str(row.institute_id), str(row.patient_id), str(row.visit_id))
-        for row in session.query(
+        for row in clinical_query(
+            session,
             MedicalRecordFrontpage.institute_id,
             MedicalRecordFrontpage.patient_id,
             MedicalRecordFrontpage.visit_id,
@@ -159,13 +161,13 @@ def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
     missing_visit_ids = sorted({visit_id for _institute_id, _patient_id, visit_id in missing_refs})
     registrations = [
         row
-        for row in session.query(InpatRegistration)
+        for row in clinical_query(session, InpatRegistration)
         .filter(InpatRegistration.visit_id.in_(missing_visit_ids))
         .all()
         if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
         in missing_refs
     ]
-    admission_rows = session.query(AdmissionRecord).filter(
+    admission_rows = clinical_query(session, AdmissionRecord).filter(
         AdmissionRecord.visit_id.in_(missing_visit_ids)
     ).all()
     admission_rows = [
@@ -186,7 +188,8 @@ def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
     discharge_summary = _workstation_discharge_summary_subquery(session)
     if discharge_summary is not None:
         discharge_rows = (
-            session.query(
+            clinical_query(
+                session,
                 discharge_summary.c.institute_id,
                 discharge_summary.c.patient_id,
                 discharge_summary.c.visit_id,
@@ -638,22 +641,21 @@ def _workstation_discharge_record_columns(session) -> dict[str, dict[str, Any]] 
                 SELECT table_schema, column_name, data_type, udt_name
                 FROM information_schema.columns
                 WHERE table_name = :table_name
-                  AND table_schema = ANY (current_schemas(false))
-                ORDER BY array_position(current_schemas(false), table_schema)
+                  AND table_schema = :source_schema
             """),
-            {"table_name": table_name},
+            {"table_name": table_name, "source_schema": clinical_read_schema() or "public"},
         ).mappings().all()
         columns: dict[str, dict[str, Any]] = {}
         for row in rows:
-            # rows 已按 search_path 优先级排序；同名表跨 schema 时保留首个命中，
-            # 避免后续低优先级 schema 的列类型覆盖实际查询所用表。
+            # 字段和类型仅来自本次实际读取的临床表，不混合影子表元数据。
             columns.setdefault(row["column_name"], dict(row))
         return columns if required_columns.issubset(columns) else None
 
     inspector = sa_inspect(bind)
-    if not inspector.has_table(table_name):
+    schema = clinical_read_schema()
+    if not inspector.has_table(table_name, schema=schema):
         return None
-    columns = {column["name"]: column for column in inspector.get_columns(table_name)}
+    columns = {column["name"]: column for column in inspector.get_columns(table_name, schema=schema)}
     return columns if required_columns.issubset(columns) else None
 
 
@@ -685,7 +687,8 @@ def _workstation_discharge_summary_subquery(session):
         "",
     )
     ranked_discharge_records = (
-        session.query(
+        clinical_query(
+            session,
             DischargeRecord.institute_id.label("institute_id"),
             DischargeRecord.patient_id.label("patient_id"),
             DischargeRecord.visit_id.label("visit_id"),
@@ -709,7 +712,8 @@ def _workstation_discharge_summary_subquery(session):
         .subquery("ranked_discharge_records")
     )
     return (
-        session.query(
+        clinical_query(
+            session,
             ranked_discharge_records.c.institute_id,
             ranked_discharge_records.c.patient_id,
             ranked_discharge_records.c.visit_id,
@@ -1001,7 +1005,7 @@ def get_workstation_data(
         hospitalization_projection_map = _load_hospitalization_projection_map(session)
         indexed_registration_records = _load_indexed_registration_records(session)
         real_total_count = (
-            session.query(func.count()).select_from(MedicalRecordFrontpage).scalar() or 0
+            clinical_query(session, func.count()).select_from(MedicalRecordFrontpage).scalar() or 0
         ) + len(indexed_registration_records)
         demo_candidates = demo_records_builder()
         demo_filtered = demo_filter(demo_candidates, dept=dept, keyword=keyword)
@@ -1019,7 +1023,7 @@ def get_workstation_data(
             visible_demos = []
         discharge_summary = _workstation_discharge_summary_subquery(session)
 
-        base_query = session.query(MedicalRecordFrontpage)
+        base_query = clinical_query(session, MedicalRecordFrontpage)
         if discharge_summary is not None:
             base_query = base_query.outerjoin(
                 discharge_summary,
@@ -1209,7 +1213,8 @@ def get_workstation_data(
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}
         if records and discharge_summary is not None:
-            discharge_rows = session.query(
+            discharge_rows = clinical_query(
+                session,
                 discharge_summary.c.institute_id,
                 discharge_summary.c.patient_id,
                 discharge_summary.c.visit_id,
@@ -1227,7 +1232,8 @@ def get_workstation_data(
 
         bed_map: dict[str, str] = {}
         if records:
-            beds = session.query(
+            beds = clinical_query(
+                session,
                 AdmissionRecord.institute_id,
                 AdmissionRecord.patient_id,
                 AdmissionRecord.visit_id,
@@ -1241,7 +1247,8 @@ def get_workstation_data(
                     bed_map[key] = b.bed_no
 
         dept_expr = _workstation_department_expr(discharge_summary).label("dept_name")
-        dept_stats_base_query = session.query(
+        dept_stats_base_query = clinical_query(
+            session,
             dept_expr,
             func.count().label("total"),
         ).select_from(MedicalRecordFrontpage)
@@ -1282,7 +1289,7 @@ def get_workstation_data(
             for row in indexed_department_records
         )
 
-        dept_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage)
+        dept_total_count = clinical_query(session, func.count()).select_from(MedicalRecordFrontpage)
         if discharge_summary is not None:
             dept_total_count = dept_total_count.outerjoin(
                 discharge_summary,
@@ -1307,7 +1314,8 @@ def get_workstation_data(
         doctor_name_expr = func.trim(MedicalRecordFrontpage.attending_physician_sign).label(
             "doctor_name"
         )
-        doctor_stats_base_query = session.query(
+        doctor_stats_base_query = clinical_query(
+            session,
             doctor_name_expr,
             func.count().label("total"),
         ).select_from(MedicalRecordFrontpage)

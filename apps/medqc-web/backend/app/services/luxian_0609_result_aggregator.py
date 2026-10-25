@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Mapping
 
+from ..core.execution_timing import timed
+
 from .luxian_0609_result_schema import CANONICAL_RESULT_STATUSES
 from .luxian_0609.canonical_result_finalizer import (
     CUSTOMER_RESULT_CONTRACT_VIOLATION,
@@ -77,6 +79,7 @@ def _index_reduced_decisions(
     return {item.rule_id: item for item in reduced_decisions}
 
 
+@timed("result_assembly")
 def aggregate_luxian_0609_results(
     *,
     wrapper_rules: list[dict[str, Any]],

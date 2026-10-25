@@ -11,6 +11,8 @@
   D 类：系统自动生成
 """
 
+from .clinical_read import clinical_table_sql
+
 import logging
 import re
 from datetime import datetime
@@ -801,14 +803,14 @@ class SettlementAssemblyService:
         try:
             # mr 表
             row = db.execute(text(
-                "SELECT * FROM mr WHERE patient_id = :pid AND visit_id = :vid LIMIT 1"
+                f"SELECT * FROM {clinical_table_sql('mr')} WHERE patient_id = :pid AND visit_id = :vid LIMIT 1"
             ), {"pid": patient_id, "vid": visit_id}).mappings().first()
             if row:
                 sql_data["mr"] = dict(row)
 
             # mr_surgery 主手术
             row = db.execute(text(
-                "SELECT * FROM mr_surgery WHERE patient_id = :pid AND visit_id = :vid "
+                f"SELECT * FROM {clinical_table_sql('mr_surgery')} WHERE patient_id = :pid AND visit_id = :vid "
                 "AND main_surgery_sign = '1' LIMIT 1"
             ), {"pid": patient_id, "vid": visit_id}).mappings().first()
             if row:
@@ -816,7 +818,7 @@ class SettlementAssemblyService:
 
             # 医保结算清单，同步库只读补充
             row = db.execute(text(
-                "SELECT * FROM medical_insurance_settlement "
+                f"SELECT * FROM {clinical_table_sql('medical_insurance_settlement')} "
                 "WHERE patient_id = :pid AND visit_id = :vid LIMIT 1"
             ), {"pid": patient_id, "vid": visit_id}).mappings().first()
             if row:
@@ -824,7 +826,7 @@ class SettlementAssemblyService:
 
             # 重症监护明细
             rows = db.execute(text(
-                "SELECT * FROM mr_icu WHERE patient_id = :pid AND visit_id = :vid "
+                f"SELECT * FROM {clinical_table_sql('mr_icu')} WHERE patient_id = :pid AND visit_id = :vid "
                 "ORDER BY icu_start_datetime"
             ), {"pid": patient_id, "vid": visit_id}).mappings().all()
             if rows:

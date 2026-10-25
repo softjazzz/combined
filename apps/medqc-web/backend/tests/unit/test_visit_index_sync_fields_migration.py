@@ -8,22 +8,26 @@ from alembic.ddl.base import AddColumn
 from sqlalchemy.dialects import postgresql
 
 
-PATH = (
-    Path(__file__).resolve().parents[2]
-    / "alembic/versions/20261006_000047_visit_index_sync_fields.py"
-)
+VERSIONS = Path(__file__).resolve().parents[2] / "alembic/versions"
 
 
-@pytest.fixture
-def migration(monkeypatch):
-    spec = importlib.util.spec_from_file_location("visit_index_sync_migration", PATH)
+@pytest.fixture(params=[
+    ("20261006_000047_visit_index_sync_fields.py", "20261006_000047", "20261003_000046"),
+    ("20261023_000053_visit_index_resolved_sync_fields.py", "20261023_000053", "20261023_000052"),
+])
+def migration(monkeypatch, request):
+    filename, revision, down_revision = request.param
+    path = VERSIONS / filename
+    spec = importlib.util.spec_from_file_location("visit_index_sync_migration", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    assert module.revision == revision
+    assert module.down_revision == down_revision
     columns = {}
     emitted = []
     state = SimpleNamespace(
         columns=columns, emitted=emitted, table_exists=True, schemas=[],
-        resolved_schema=None, connection_calls=[],
+        resolved_schema=None, connection_calls=[], schema_columns={},
     )
 
     def execute(statement, parameters=None):
@@ -43,7 +47,7 @@ def migration(monkeypatch):
 
     inspector = SimpleNamespace(
         has_table=has_table,
-        get_columns=lambda table, schema: list(columns.values()),
+        get_columns=lambda table, schema: list(state.schema_columns.get(schema, columns).values()),
     )
 
     def add_column(table, column, *, schema):
@@ -107,8 +111,6 @@ def test_upgrade_compiles_exact_three_adds(migration, monkeypatch, mode, schema)
         f"ALTER TABLE {schema}.visit_index ADD COLUMN mirror_delay_base_minutes INTEGER DEFAULT 30 NOT NULL",
         f"ALTER TABLE {schema}.visit_index ADD COLUMN sync_interval_minutes INTEGER DEFAULT 30 NOT NULL",
     ]
-    assert module.revision == "20261006_000047"
-    assert module.down_revision == "20261003_000046"
 
 
 @pytest.mark.parametrize("present", [NAMES, NAMES[:1], NAMES[1:], NAMES[::2]])
@@ -228,3 +230,29 @@ def test_split_default_search_path_matches_application(migration):
     module, state = migration
     module.upgrade()
     assert state.connection_calls[0][1] == {"search_path": "public,qc,sys,cdm,legacy"}
+
+
+def test_repairs_resolved_public_table_when_qc_already_has_fields(migration, monkeypatch):
+    module, state = migration
+    state.resolved_schema = "public"
+    monkeypatch.setenv("DB_SEARCH_PATH", "public,qc,sys,cdm,legacy")
+    qc_columns = {name: existing(name) for name in NAMES}
+    state.schema_columns["qc"] = qc_columns
+    module.upgrade()
+    assert state.schemas == ["public"]
+    assert len(state.emitted) == 3
+    assert all("ALTER TABLE public.visit_index" in statement for statement in state.emitted)
+    assert all("UPDATE " not in statement and "DELETE " not in statement for statement in state.emitted)
+    assert state.schema_columns["qc"] == qc_columns
+
+
+def test_already_upgraded_database_receives_forward_repair():
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config()
+    config.set_main_option("script_location", str(VERSIONS.parent))
+    scripts = ScriptDirectory.from_config(config)
+    assert scripts.get_heads() == ["20261023_000053"]
+    revisions = scripts.iterate_revisions("head", "20261023_000052")
+    assert [revision.revision for revision in revisions] == ["20261023_000053"]

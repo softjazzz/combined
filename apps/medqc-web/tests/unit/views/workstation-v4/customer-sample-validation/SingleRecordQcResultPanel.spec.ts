@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { UserRole, type AuthUserRole } from '@/types/auth'
+import { ApiService } from '@/services/apiService'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CriterionResultBlock from '@/views/workstation-v4/customer-sample-validation/CriterionResultBlock.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
@@ -184,6 +188,16 @@ const explainedDataGapItem = {
     },
   ],
 }
+
+// 原有完整视图用例固定为开发身份；演示身份在专项用例中显式切换。
+beforeEach(async () => {
+  setActivePinia(createPinia())
+  vi.spyOn(ApiService, 'isAuthenticated').mockReturnValue(true)
+  vi.spyOn(ApiService, 'getCurrentUser').mockResolvedValue({
+    success: true, data: { id: 'test-developer', roles: ['sync_admin'], is_demo_account: true },
+  })
+  await useAuthStore().initialize()
+})
 
 describe('SingleRecordQcResultPanel', () => {
   it.each([undefined, null, ''])('缺少规则名称(%s)仍能查看保存结果，不改原始条目', async (name) => {
@@ -1774,5 +1788,53 @@ describe('SingleRecordQcResultPanel', () => {
     const evidence = wrapper.get('[data-testid="single-record-evidence"]')
     expect(evidence.text()).toContain('会诊记录')
     expect(evidence.text()).not.toContain('来源文书')
+  })
+})
+
+
+async function setViewer(id: string, roles: AuthUserRole[]) {
+  vi.spyOn(ApiService, 'updateProfile').mockResolvedValue({
+    success: true, data: { id, roles, is_demo_account: true },
+  })
+  await useAuthStore().updateProfile({})
+}
+
+describe('演示账号质控结果范围', () => {
+  const demoItems = ['non_compliant', 'compliant', 'data_gap', 'not_applicable', 'uncertain', 'not_executed', 'technical_error', 'ai_suggested_non_compliant'].map((status, index) => ({
+    rule_id: `LX0609-01-01-${String(index + 1).padStart(2, '0')}`,
+    rule_name: `only-${status}`, status, conclusion: `conclusion-${status}`,
+  }))
+  it.each(['flat', 'grouped'] as const)('%s面板仅保留确定问题及计数，失败仍提示', async (presentationMode) => {
+    await setViewer('demo', [UserRole.ADMIN])
+    const wrapper = mount(SingleRecordQcResultPanel, { props: { items: demoItems, presentationMode } })
+    expect(wrapper.findAll('[data-testid="single-record-result-toggle"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('1 条确定问题')
+    expect(wrapper.text()).toContain('only-non_compliant')
+    for (const status of ['compliant', 'data_gap', 'not_applicable', 'uncertain', 'not_executed', 'technical_error']) {
+      expect(wrapper.find(`[data-testid="single-record-result-tab-${status}"]`).exists()).toBe(false)
+      expect(wrapper.find(`[data-testid="single-record-report-tab-${status}"]`).exists()).toBe(false)
+      expect(wrapper.text()).not.toContain(`only-${status}`)
+    }
+    expect(wrapper.find('[data-testid="single-record-report-tab-all"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="single-record-execution-failure"]').exists()).toBe(true)
+    expect(demoItems).toHaveLength(8)
+  })
+  it('同一面板切换开发和演示身份立即重算，不能保留已打开的非问题分类', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, { props: { items: demoItems } })
+    await wrapper.get('[data-testid="single-record-result-tab-pending"]').trigger('click')
+    expect(wrapper.text()).toContain('only-data_gap')
+    await setViewer('demo', [UserRole.ADMIN])
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).not.toContain('only-data_gap')
+    expect(wrapper.text()).toContain('only-non_compliant')
+    await setViewer('dev', ['sync_admin'])
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="single-record-result-tab-pending"]').exists()).toBe(true)
+  })
+  it('没有确定问题时不宣称合规或全部通过', async () => {
+    await setViewer('demo', [UserRole.ADMIN])
+    const wrapper = mount(SingleRecordQcResultPanel, { props: { items: demoItems.slice(1) } })
+    expect(wrapper.text()).toContain('当前没有可展示的确定问题')
+    expect(wrapper.text()).not.toContain('全部通过')
   })
 })

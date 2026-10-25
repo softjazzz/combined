@@ -34,6 +34,7 @@ from .exam_lab_projection_batching import (
     select_exam_lab_projection_batch,
 )
 from .exam_analysis_freeze import freeze_key, load_payload, save_payload
+from .validated_fact_freeze import fact_freeze_key, load_facts, save_facts
 from .exam_finding_relevance import apply_relevance_hints, classify_exam_finding_relevance
 from .exam_finding_analysis import FindingAnalysisOutcome, apply_finding_analysis, check_exam_finding_analysis
 from .exam_reason_check import apply_exam_reason, check_exam_reason
@@ -2078,7 +2079,14 @@ class _ExamLabBatchResult:
 
 
 def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str]) -> str:
-    return freeze_key(build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection))
+    from .exam_output_batching import OUTPUT_PROTOCOL_VERSION
+
+    prompt = build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection)
+    # 06-01-02/04/05 专项核验改为按输出量拆批、病程去重（2026-10-23）；核验结果随主抽取一并冻结，
+    # 不含这三条规则的冻结结论不受影响。
+    if {'LX0609-06-01-02', 'LX0609-06-01-04', 'LX0609-06-01-05'}.intersection(eligible_rule_ids):
+        prompt = OUTPUT_PROTOCOL_VERSION + '\x1e' + prompt
+    return freeze_key(prompt)
 
 
 def _load_frozen_exam_lab_batch(key: str) -> _ExamLabBatchResult | None:
@@ -2524,6 +2532,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
     ct_review: Any | None = None
     ct_response_task: asyncio.Task[Mapping[str, Any]] | None = None
     ct_model_failure: str | None = None
+    ct_frozen_payload = None
+    ct_freeze_key = None
     ct_display_insert_index = 0
     # 仅在当前一次 Evidence Session 已读取的行内查找显式 document_id；不回读 DB。
     display_rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]] = {}
@@ -2622,9 +2632,21 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 typed_processed.add(CT_CONSISTENCY_RULE)
                 if ct_review.needs_model:
                     model_rule_count += 1
-                    if llm_client is None:
+                    ct_freeze_key = fact_freeze_key(
+                        protocol="ct-order-course-validated-v1", prompt=build_ct_fact_prompt(ct_review),
+                        client=llm_client, materials=ct_review, scope=evidence_snapshot.visit_ref,
+                    )
+                    ct_frozen_payload = load_facts("ct_order_consistency", ct_freeze_key)
+                    if ct_frozen_payload is not None:
+                        try:
+                            evaluate_ct_review(ct_review, ct_frozen_payload)
+                            if any(item.get("record_state") == "unknown" for item in ct_frozen_payload["events"]):
+                                ct_frozen_payload = None
+                        except (TypeError, ValueError):
+                            ct_frozen_payload = None
+                    if ct_frozen_payload is None and llm_client is None:
                         ct_model_failure = "exam_lab_llm_failure"
-                    else:
+                    elif ct_frozen_payload is None:
                         llm_call_count += 1
 
                         async def generate_ct_response() -> Mapping[str, Any]:
@@ -2821,6 +2843,13 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         family == "culture"
                         and _culture_orders_lack_report_material(rows_by_source, projection)
                     )
+                    # 其它模态的报告只能排除这些报告本身，不能排除仍有医嘱的CT/MRI。
+                    missing_exam_report = (
+                        family == "exam"
+                        and rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
+                        and bool(_effective_target_orders(rows_by_source, fact_kind=family))
+                        and (not events or all(event.target_explicitly_absent for event in events))
+                    )
                     absence_gap, absence_refs = (
                         _culture_absence_gap(evidence_snapshot, evidence_materials)
                         if family == "culture" and not missing_culture_report and (
@@ -2836,13 +2865,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             absence_refs,
                         )
                         typed_processed.add(rule_id)
-                    elif not events or missing_culture_report:
-                        if family == "exam":
-                            emit_typed(
-                                rule_id,
-                                "not_applicable",
-                                "trigger_absent_complete",
-                            )
+                    elif not events or missing_culture_report or missing_exam_report:
+                        if rule_id == "LX0609-06-01-02":
+                            # 010核对实际检查前理由；医嘱本身不证明检查已执行。
+                            emit_typed(rule_id, "not_applicable", "trigger_absent_complete")
                         elif _effective_target_orders(rows_by_source, fact_kind=family):
                             emit_typed(
                                 rule_id,
@@ -2862,7 +2888,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             emit_typed(
                                 rule_id,
                                 "not_applicable",
-                                "exam_lab_target_event_absent",
+                                "trigger_absent_complete" if family == "exam" else "exam_lab_target_event_absent",
                             )
                         typed_processed.add(rule_id)
                     elif rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"} and all(
@@ -3155,7 +3181,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     typed_processed.add(rule_id)
 
     if ct_review is not None:
-        ct_payload = None
+        ct_payload = ct_frozen_payload
         if ct_response_task is not None:
             try:
                 ct_response = await ct_response_task
@@ -3189,6 +3215,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 ct_model_failure,
             )
         else:
+            if (ct_response_task is not None and isinstance(ct_payload, dict)
+                    and all(item.get("record_state") != "unknown" for item in ct_payload.get("events", []))):
+                save_facts("ct_order_consistency", ct_freeze_key, ct_payload)
             first_success_count += int(ct_review.needs_model)
             emit_typed(
                 CT_CONSISTENCY_RULE,

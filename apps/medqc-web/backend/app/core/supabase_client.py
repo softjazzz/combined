@@ -304,7 +304,8 @@ class _Query:
                     col_parts.append(f'"{c}"' if c != "*" else "*")
             cols = ", ".join(col_parts) if col_parts else "*"
 
-        sql = f"SELECT {cols} FROM {_quote_qualified_identifier(self._table)}"
+        from ..services.clinical_read import clinical_adapter_table
+        sql = f"SELECT {cols} FROM {_quote_qualified_identifier(clinical_adapter_table(self._table))}"
         if where:
             sql += f" WHERE {where}"
 
@@ -326,7 +327,8 @@ class _Query:
 
     def _build_count_sql(self) -> Tuple[str, Dict[str, Any]]:
         where, params = self._build_where()
-        sql = f"SELECT COUNT(*) FROM {_quote_qualified_identifier(self._table)}"
+        from ..services.clinical_read import clinical_adapter_table
+        sql = f"SELECT COUNT(*) FROM {_quote_qualified_identifier(clinical_adapter_table(self._table))}"
         if where:
             sql += f" WHERE {where}"
         return sql, params

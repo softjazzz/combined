@@ -29,7 +29,7 @@
             停止任务
           </a-button>
           <!-- 明细导出、诊断包、复核、高级视图属于管理排查操作，收进“更多”，主操作只留导出报告（2026-10-23） -->
-          <a-dropdown v-if="batchJobDetail" :trigger="['click']">
+          <a-dropdown v-if="batchJobDetail && !confirmedResultsOnly" :trigger="['click']">
             <a-button
               :loading="diagnosticPackageLoading || reviewBatchJobLoading"
               data-testid="batch-result-more"
@@ -60,7 +60,7 @@
             </template>
           </a-dropdown>
           <a-button
-            v-if="batchJobDetail?.status === 'completed'"
+            v-if="batchJobDetail?.status === 'completed' && !confirmedResultsOnly"
             type="primary"
             :loading="batchJobDetailLoading"
             data-testid="batch-result-export-report"
@@ -82,8 +82,9 @@
           data-testid="partial-failure-notice"
         >
           <p>
-            有 {{ partialFailureSummary.failedCount }} 项质控点本次未能完成判定，系统会自动重试，
-            不影响已给出的 {{ partialFailureSummary.completedCount }} 项结果。
+            有 {{ partialFailureSummary.failedCount }} 项质控点本次未能完成判定， 已保留
+            {{ partialFailureSummary.completedCount }} 项有效结果。
+            {{ failedRuleRetryMessage }}
             <button type="button" @click="showFailureDetail = !showFailureDetail">
               {{ showFailureDetail ? '收起明细' : '查看明细' }}
             </button>
@@ -108,7 +109,7 @@
                 {{ partialFailureSummary.failedCount }} 项模型执行失败未形成临床结论。
               </p>
             </div>
-            <span>系统将自动重试下列失败项</span>
+            <span>{{ failedRuleRetryMessage }}</span>
           </div>
           <div class="partial-failure-list">
             <div
@@ -178,7 +179,7 @@
         </div>
 
         <div
-          v-if="focusedSummaryCards.length && !isLuxian0609BatchJob"
+          v-if="!confirmedResultsOnly && focusedSummaryCards.length && !isLuxian0609BatchJob"
           class="drawer-summary summary-grid-primary"
         >
           <div v-for="item in focusedSummaryCards" :key="item.key" class="summary-card">
@@ -211,7 +212,7 @@
           </div>
         </div>
 
-        <div v-if="luxianReviewReport" class="drawer-card luxian-review-card">
+        <div v-if="!confirmedResultsOnly && luxianReviewReport" class="drawer-card luxian-review-card">
           <div class="drawer-section-head">
             <div class="drawer-section-title-group">
               <div class="drawer-section-title">结果复核建议</div>
@@ -254,7 +255,7 @@
             :rules="customerTopIssueRules"
             :total-records="customerReviewRecords.length"
           />
-          <BatchRecordReviewPanel :records="customerReviewRecords" />
+          <BatchRecordReviewPanel :records="customerReviewRecords" :confirmed-only="confirmedResultsOnly" />
         </template>
         <div
           v-else
@@ -274,7 +275,7 @@
               </span>
             </div>
             <div class="drawer-section-actions">
-              <a-radio-group v-model:value="issueViewMode" size="small">
+              <a-radio-group v-if="!confirmedResultsOnly" v-model:value="issueViewMode" size="small">
                 <a-radio-button value="business"> 业务视图 </a-radio-button>
                 <a-radio-button
                   v-if="enableRecordComparison && isFocusedSingleRecordScope"
@@ -284,9 +285,9 @@
                 </a-radio-button>
                 <a-radio-button value="advanced"> 高级视图 </a-radio-button>
               </a-radio-group>
-              <a-switch v-model:checked="showAllStatuses" size="small" />
+              <a-switch v-if="!confirmedResultsOnly" v-model:checked="showAllStatuses" size="small" />
               <span class="drawer-section-meta">
-                {{ showAllStatuses ? '全部状态' : '仅问题项' }}
+                {{ confirmedResultsOnly ? '确定问题' : showAllStatuses ? '全部状态' : '仅问题项' }}
               </span>
             </div>
           </div>
@@ -342,7 +343,8 @@
                 @click="selectedIssueRecordKey = group.key"
               >
                 <strong>{{ group.label }}</strong>
-                <span>
+                <span v-if="confirmedResultsOnly">确定问题 {{ group.nonCompliant }} 条</span>
+                <span v-else>
                   {{ group.total }} 条 · 不合规 {{ group.nonCompliant }} · 数据不足
                   {{ group.dataGap }}
                 </span>
@@ -469,7 +471,7 @@
             </aside>
             <div class="issue-business-main">
               <section
-                v-if="transfusionDocumentationSummary"
+                v-if="!confirmedResultsOnly && transfusionDocumentationSummary"
                 class="transfusion-documentation-summary"
                 :class="{
                   'transfusion-documentation-summary--complete':
@@ -914,7 +916,7 @@
                     <div class="issue-record-result-stats">
                       <span>结果 {{ group.total }}</span>
                       <span>不合规 {{ group.nonCompliant }}</span>
-                      <span>数据不足 {{ group.dataGap }}</span>
+                      <span v-if="!confirmedResultsOnly">数据不足 {{ group.dataGap }}</span>
                     </div>
                   </div>
                   <TransitionGroup
@@ -1379,7 +1381,7 @@
               </div>
               <a-empty v-else :description="emptyIssueText" />
               <section
-                v-if="!showAllStatuses && noIssueEvidenceItems.length"
+                v-if="!confirmedResultsOnly && !showAllStatuses && noIssueEvidenceItems.length"
                 class="no-issue-evidence-panel"
               >
                 <div class="no-issue-evidence-head">
@@ -2013,6 +2015,7 @@ const props = defineProps<SemanticRulesBatchResultDrawerProps>()
 const showFailureDetail = ref(false)
 
 const {
+  confirmedResultsOnly,
   customerReviewRecords,
   customerTopIssueRules,
   failureRecordLabel,
@@ -2090,6 +2093,7 @@ const {
   openIssueTrace,
   partialFailureItems,
   partialFailureSummary,
+  failedRuleRetryMessage,
   progressSummary,
   QCRecordCompareWorkbench,
   recordCompareCoordinates,

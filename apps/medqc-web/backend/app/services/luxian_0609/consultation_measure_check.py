@@ -34,6 +34,7 @@ from time import perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
 from .consultation_disposition_record import _ReviewIssue, _ReviewViolation, _review_retry_prompt
+from .execution_time_budget import follow_up_fits
 from .judgement_examples import CONSULTATION_MEASURE_EXAMPLES
 from .transfusion_order_trigger import _json_response_object, _usage
 
@@ -363,7 +364,8 @@ async def check_consultation_measures(
             missing, conditional = _parse(response, completed, candidates_by_ref, allowed_refs, ref_by_alias)
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
-            if attempt + 1 == PROTOCOL_ATTEMPTS:
+            # 剩余预算放不下补核时按末次处理（2026-10-23 会诊时间预算）。
+            if attempt + 1 == PROTOCOL_ATTEMPTS or not follow_up_fits(llm_client):
                 # 末次仍漏拆：漏拆段落未经执行证据核对，既不算未执行也不算已执行；
                 # 已拆出且明确无执行证据的措施仍随结果返回，由下游决定能否据此判缺（1022 C10）。
                 if isinstance(error, _CoverageGap):

@@ -258,6 +258,10 @@ Write-Step "Copy frontend build artifacts"
 Copy-Item -LiteralPath (Join-Path $projectRoot "dist") -Destination (Join-Path $frontendDir "dist") -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\serve_dist_spa.py") -Destination (Join-Path $toolsDir "serve_dist_spa.py") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\customer-db-preflight.ps1") -Destination (Join-Path $toolsDir "customer-db-preflight.ps1") -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\accept-medqc-release.ps1") -Destination (Join-Path $toolsDir "accept-medqc-release.ps1") -Force
+foreach ($acceptanceScript in @('verify_p0_material_chain.py','repair_p0_materials.py','recover_p0_failed_results.py')) {
+  Copy-Item -LiteralPath (Join-Path $projectRoot ("backend\scripts\" + $acceptanceScript)) -Destination (Join-Path $toolsDir $acceptanceScript) -Force
+}
 Write-Step "Remove frontend font files (use customer/system fonts)"
 $distFontsDir = Join-Path $frontendDir "dist\fonts"
 if (Test-Path -LiteralPath $distFontsDir) {
@@ -351,14 +355,14 @@ foreach ($fileName in $backendRuntimeFiles) {
 }
 
 $customerLauncherPath = Join-Path $backendDir "start_dev_backend.ps1"
-$customerLauncherSource = Get-Content -LiteralPath $customerLauncherPath -Raw
-# 客户包不得把开发默认密钥注入进程并遮蔽 .env。
-$developmentSecretBlock = 'if (-not $env:JWT_SECRET) {' + "`n" + '    $env:JWT_SECRET = "dev-secret"' + "`n" + '}'
+$customerLauncherSource = Get-Content -LiteralPath $customerLauncherPath -Raw -Encoding UTF8
+# Never inject a development JWT fallback into customer environments.
+[string]$developmentSecretBlock = 'if (-not $env:JWT_SECRET) {' + "`n" + '    $env:JWT_SECRET = "dev-secret"' + "`n" + '}'
 $customerLauncherSource = $customerLauncherSource.Replace("`r`n", "`n")
 if (-not $customerLauncherSource.Contains($developmentSecretBlock)) {
   throw "Cannot locate development JWT fallback in launcher."
 }
-$customerLauncherSource = $customerLauncherSource.Replace($developmentSecretBlock, '')
+$customerLauncherSource = $customerLauncherSource.Replace([string]$developmentSecretBlock, [string]::Empty)
 $activationEnvironmentLine = '$env:PRODUCT_ACTIVATION_REQUIRED = "true"'
 if (-not $customerLauncherSource.Contains($activationEnvironmentLine)) {
   $launcherMarker = '$ErrorActionPreference = "Stop"'
@@ -369,12 +373,12 @@ if (-not $customerLauncherSource.Contains($activationEnvironmentLine)) {
     $launcherMarker,
     "$launcherMarker`n`n$activationEnvironmentLine"
   )
-  [System.IO.File]::WriteAllText(
-    $customerLauncherPath,
-    $customerLauncherSource,
-    (New-Object System.Text.UTF8Encoding($false))
-  )
 }
+[System.IO.File]::WriteAllText(
+  $customerLauncherPath,
+  $customerLauncherSource,
+  (New-Object System.Text.UTF8Encoding($false))
+)
 
 $activationPublicKeyTarget = Join-Path $backendDir "app\data\product_activation_public_key.pem"
 if (-not (Test-Path -LiteralPath $activationPublicKeyTarget -PathType Leaf)) {
@@ -474,6 +478,7 @@ $readmeLines = @(
   "- agent-runtime: business assistant Node source and locked dependencies (no installed dependencies or sessions)",
   "- backend/start_dev_backend.ps1: customer backend launcher (default port 8001)",
   "- tools/customer-db-preflight.ps1: PostgreSQL and Alembic read-only preflight",
+  "- tools/accept-medqc-release.ps1: five material chains and original failed-pair acceptance; Verify is read-only, Apply modes are explicit and back up first",
   "- docs/0418/QC/sheet2_exact_review_acceptance_package.json: runtime acceptance-package artifact",
   "",
   "## Excluded from this package",

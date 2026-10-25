@@ -73,6 +73,28 @@ beforeEach(() => {
 })
 
 describe('V5 持久账号管理', () => {
+  it('超级管理员的全局DTO不锁机构输入，可创建其他机构账号', async () => {
+    actor.roles = ['sync_admin', 'admin']
+    api.list.mockResolvedValue({ ...structuredClone(payload), managed_institute_id: null })
+    const wrapper = make()
+    await flushPromises()
+    await wrapper.get('.accounts-actions button:last-child').trigger('click')
+    expect(wrapper.get('input[aria-label="机构 ID"]').attributes('readonly')).toBeUndefined()
+    for (const [label, value] of Object.entries({
+      用户名: 'other_doctor',
+      邮箱: 'other@example.com',
+      姓名: '其他机构医生',
+      '机构 ID': 'B',
+      科室: '外科',
+      初始口令: 'test-only-password!',
+    }))
+      await wrapper.get(`input[aria-label="${label}"]`).setValue(value)
+    await wrapper.get('.accounts-editor').trigger('submit')
+    await flushPromises()
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ institute_id: 'B' }))
+    wrapper.unmount()
+  })
+
   it('真实列表、加载、未知范围及错误状态不使用演示用户', async () => {
     const request = deferred<AccountPage>()
     api.list.mockReturnValueOnce(request.promise)

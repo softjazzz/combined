@@ -13,6 +13,7 @@ import re
 from typing import Any, Awaitable, Callable, Iterable, Protocol, TYPE_CHECKING
 
 from .evidence_material import Luxian0609EvidenceMaterialStore
+from .execution_time_budget import CONSULTATION_FAMILY_WATCHDOG_SECONDS
 from .execution_contract import (
     FamilyExecutionEnvelope,
     build_family_usage_attribution,
@@ -681,6 +682,8 @@ def build_luxian_0609_legacy_executor_registry(
         ExecutorRegistration(
             executor_key=executor_key,
             executor=_RequestScopedExecutor(callbacks[executor_key]),
+            # 会诊两条规则各自计时，族级只保留取消/清理兜底，避免抹掉已完成的兄弟结果。
+            deadline_seconds=(CONSULTATION_FAMILY_WATCHDOG_SECONDS if executor_key == 'consultation_quality' else None),
         )
         for executor_key in LEGACY_NATIVE_EXECUTION_ORDER
     )

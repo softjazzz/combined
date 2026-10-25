@@ -4,7 +4,7 @@ import asyncio
 import json
 
 import pytest
-from finding_selection_test_support import selection_answer
+from finding_selection_test_support import prompt_events, selection_answer
 
 from app.services.luxian_0609.exam_finding_analysis import (
     SCHEMA_VERSION,
@@ -81,7 +81,7 @@ async def test_listing_then_diagnosis_is_not_analysis_and_pre_report_note_is_exc
     outcome = await check_exam_finding_analysis(projection, client)
     assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
     assert outcome.llm_call_count == 2  # 判为未分析的事件单独复核一次（用户决定 2026-10-19）
-    sent = json.loads(client.prompts[0].split("EVENTS_JSON=", 1)[1])
+    sent = prompt_events(client.prompts[0])
     assert [doc["course_doc_ref"] for doc in sent[0]["course_docs"]] == [ref]
     assert "罗列后直接列出诊断" in client.prompts[0] and "diagnosis_only" in client.prompts[0]
 

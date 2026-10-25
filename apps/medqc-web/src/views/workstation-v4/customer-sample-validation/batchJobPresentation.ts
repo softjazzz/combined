@@ -2,7 +2,10 @@ import type {
   SichuanBatchIssueItem,
   SichuanBatchJob,
 } from '@/views/workstation-v4/semantic-rules/types'
-import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
+import {
+  getBatchJobRetryMessage,
+  isBatchJobPollingActive,
+} from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
 export type BatchJobStatusChip = {
   key: string
@@ -135,6 +138,14 @@ function asRecord(value: unknown): Record<string, unknown> {
 function numeric(value: unknown): number {
   const parsed = Number(value ?? 0)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+// 缺失与显式零分开处理，避免用可见问题数替代后台持久完成数。
+function persistedCount(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  const count = Number(value)
+  return Number.isInteger(count) && count >= 0 ? count : null
 }
 
 function normalizeStatusCounts(value: unknown): Record<string, number> {
@@ -350,10 +361,18 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
     .toLowerCase()
   const isRunning = isBatchJobPollingActive(job)
   const automaticRetrying = isRunning && normalizedStatus === 'failed'
+  const retryMessage = getBatchJobRetryMessage(job)
   const ruleIds = selectedRuleIds(job)
   const customerRuleCount = resolveCustomerRuleCount(job, ruleIds)
   const recordCount = resolveRecordCount(job)
   const completedRecordCount = resolveCompletedRecordCount(job)
+  const processedRecordCount = persistedCount(
+    progress.processed_records ?? asRecord(summary.progress).processed_records,
+  )
+  const recordProgressCount = Math.min(
+    recordCount,
+    Math.max(completedRecordCount, processedRecordCount ?? completedRecordCount),
+  )
   const statusCounts = resolveStatusCounts(job)
   const diagnosticRuleFailureCount = numeric(summary.diagnostic_rule_failure_count)
   const statusChips = STATUS_META.map(({ key, label, className }) => ({
@@ -367,9 +386,10 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
     0,
   )
   const resultCount =
-    resultCountFromStatuses > 0
+    persistedCount(summary.completed_rule_count) ??
+    (resultCountFromStatuses > 0
       ? resultCountFromStatuses
-      : numeric(summary.total_results || job.items?.length)
+      : numeric(summary.total_results || job.items?.length))
   const expectedResultCount =
     recordCount > 0 && customerRuleCount > 0 ? recordCount * customerRuleCount : 0
   const directProgress = numeric(summary.progress_percent || progress.progress_percent)
@@ -378,8 +398,8 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
   const progressPercent =
     directProgress > 0
       ? Math.min(100, Math.max(0, Math.round(directProgress)))
-      : recordCount > 0 && completedRecordCount > 0
-        ? Math.min(100, Math.round((completedRecordCount / recordCount) * 100))
+      : recordCount > 0 && recordProgressCount > 0
+        ? Math.min(100, Math.round((recordProgressCount / recordCount) * 100))
         : streamRuleCount > 0 && streamRuleIndex > 0
           ? Math.min(100, Math.round((streamRuleIndex / streamRuleCount) * 100))
           : expectedResultCount > 0 && resultCount > 0
@@ -422,10 +442,12 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
   const recordText = recordCount > 0 ? `${recordCount} 份病历` : '病历数未返回'
   const recordProgressText =
     recordCount > 0
-      ? `病历进度：已完成 ${Math.min(completedRecordCount, recordCount)} / ${recordCount} 份`
+      ? recordProgressCount > completedRecordCount
+        ? `病历进度：已处理 ${recordProgressCount} / ${recordCount} 份（全部成功 ${Math.min(completedRecordCount, recordCount)} 份）`
+        : `病历进度：已完成 ${Math.min(completedRecordCount, recordCount)} / ${recordCount} 份`
       : '病历进度：未返回'
   const resultCountText = resultCount > 0 ? `${resultCount} 条结果` : '结果数待返回'
-  const resultProgressText =
+  const resultProgressBase =
     isRunning && resultCount <= 0
       ? '结果回写：等待结果'
       : expectedResultCount > 0
@@ -433,12 +455,19 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
         : resultCount > 0
           ? `结果回写：已返回 ${resultCount} 条`
           : '结果回写：等待结果'
+  const resultProgressText =
+    failedRuleCount > 0
+      ? `${resultProgressBase}（${resultCount} 项有效结果，${failedRuleCount} 项失败）`
+      : resultProgressBase
 
   let phaseText = '任务状态待返回。'
   if (normalizedStatus === 'queued') phaseText = '等待后台领取任务，请勿重复发起。'
-  else if (automaticRetrying) phaseText = '部分规则输出无效，系统正在自动补跑失败项。'
+  else if (automaticRetrying) phaseText = retryMessage
   else if (normalizedStatus === 'failed')
-    phaseText = executionFailureText || job.error_message || '本次任务执行失败。'
+    phaseText = [
+      executionFailureText || job.error_message || '本次任务执行失败。',
+      retryMessage,
+    ].join(' ')
   else if (normalizedStatus === 'canceled') phaseText = '本次任务已取消，已返回结果仍可查看。'
   else if (normalizedStatus === 'completed') phaseText = '任务已完成，可查看结果或导出明细。'
   else if (normalizedStatus === 'running' && resultCount > 0) {
@@ -449,9 +478,8 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
 
   const attentionChips = statusChips.filter((chip) => ATTENTION_STATUSES.has(chip.key))
   let overviewText = '暂无结果摘要'
-  if (automaticRetrying) overviewText = '系统正在自动补跑失败项，已有有效结果会继续保留'
-  else if (normalizedStatus === 'failed')
-    overviewText = executionFailureText || job.error_message || '任务失败'
+  if (automaticRetrying) overviewText = retryMessage
+  else if (normalizedStatus === 'failed') overviewText = phaseText
   else if (isRunning) {
     overviewText =
       progressPercent > 0 ? `任务执行中，已完成 ${progressPercent}%` : '任务执行中，等待结果回写'

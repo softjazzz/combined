@@ -37,7 +37,7 @@ describe('业务线四报表定向适配', () => {
     expect(await loadPage(route.components?.default)).toHaveProperty('default')
     // 与下方报表相同的真实懒加载合同；冷编译文书组件可能超过默认5秒。
   }, 30_000)
-  it('整改待办保留V5外壳，医生和质控可访问，同步管理员不可访问', () => {
+  it('整改待办保留V5外壳，医生、质控和同步超级管理员可访问', () => {
     const path = `${B}/feedback`
     const resolved = router.resolve(path)
     expect(resolved.matched[0].path).toBe(B)
@@ -55,7 +55,7 @@ describe('业务线四报表定向适配', () => {
       })
       expect(
         nav.flatMap((group) => group.items).some((item) => item.key === 'feedback-worklist'),
-      ).toBe(role !== 'sync_admin')
+      ).toBe(true)
     }
   })
   it.each(reports)(
@@ -80,13 +80,24 @@ describe('业务线四报表定向适配', () => {
     30_000,
   )
 
-  it.each(['doctor', 'sync_admin'])('%s 不新增四报表可见权限', (role) => {
+  it.each(['doctor'])('%s 不新增四报表可见权限', (role) => {
     const nav = filterVisibleNav(WORKSTATION_NAV, {
       isDemoFeedbackAccount: false,
       userRoles: [role],
       resolvePermission: (to) => router.resolve(to).meta.permission as string[] | undefined,
     })
     expect(nav.flatMap((g) => g.items).filter((i) => i.key.startsWith('report-'))).toEqual([])
+  })
+
+  it('sync_admin超级管理员保留四报表直接访问及菜单入口', () => {
+    const nav = filterVisibleNav(WORKSTATION_NAV, {
+      isDemoFeedbackAccount: false,
+      userRoles: ['sync_admin'],
+      resolvePermission: (to) => router.resolve(to).meta.permission as string[] | undefined,
+    })
+    expect(
+      nav.flatMap((group) => group.items).filter((item) => item.key.startsWith('report-')),
+    ).toHaveLength(4)
   })
 
   it('保留19个旧入口、手术目录、规则验收及全部DRG页内地址', () => {

@@ -637,11 +637,15 @@ export interface SichuanBatchJob {
   total_tokens?: number
   total_processing_time?: number
   wall_clock_time?: number
+  /** 轻量任务概览已确认存在结果；不携带结果计数或正文。 */
+  has_results?: boolean
   rule_results?: SichuanBatchJobRuleResult[]
   idempotency_reused?: boolean
 }
 
 export interface SichuanBatchJobQuery {
+  /** 仅质控记录页使用，跳过完整结果摘要读取。 */
+  view?: 'overview'
   status?: SichuanBatchJobStatus
   scope?: 'all' | 'running' | 'final'
   q?: string

@@ -24,6 +24,41 @@ describe('editable medical-record document normalization', () => {
     vi.clearAllMocks()
   })
 
+  it('preserves structured frontpage through the actual current-document normalization', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_type: 'mr',
+            document_id: 'FP1',
+            content: '首页字段：未返回',
+            has_content: true,
+            frontpage_display: {
+              groups: [
+                {
+                  key: 'basic',
+                  label: '首页基本信息',
+                  fields: [{ key: 'sex', label: '性别', value: null }],
+                },
+              ],
+              diagnoses: {
+                columns: [{ key: 'diagnosis_name', label: '诊断名称' }],
+                rows: [{ diagnosis_name: '合成诊断' }],
+              },
+              surgeries: { columns: [], rows: [] },
+            },
+          },
+        ],
+      },
+    })
+    const result = await getEditableMedicalRecordDocuments('test-visit', { source_view: 'current' })
+    const homepage = result.data?.documents[0]
+    expect(homepage?.frontpage_display?.diagnoses.rows[0].diagnosis_name).toBe('合成诊断')
+    expect(homepage?.frontpage_display?.groups[0].fields[0].value).toBeNull()
+    expect(homepage?.content_loaded).toBe(true)
+    expect(homepage?.record_time).toBe('')
+  })
+
   it('preserves source order ID in list and selected detail', async () => {
     mocks.requestRaw.mockResolvedValue({
       data: {
