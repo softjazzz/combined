@@ -13,106 +13,203 @@
     </a-button>
     <a-modal
       v-model:open="open"
-      title="病历沟通"
-      wrap-class-name="mq-modal"
+      wrap-class-name="mq-modal communication-dialog-modal"
       width="min(720px, 100vw)"
       :z-index="1200"
       :footer="null"
       :mask-closable="!saving"
       :closable="!saving"
       :keyboard="!saving"
+      :style="{ top: '24px' }"
     >
-      <p class="case-communication__context">
-        {{ visitId }}<span v-if="candidates"> · {{ candidates.source.scene === 'running' ? '运行病历' : '终末病历' }}</span>
-      </p>
-      <a-alert
-        v-if="error"
-        :message="error"
-        type="error"
-        show-icon
-      />
-      <a-button
-        v-if="error"
-        :disabled="loading || saving"
-        @click="load"
-      >
-        刷新核对
-      </a-button>
-      <a-spin :spinning="loading">
-        <a-form
-          layout="vertical"
-          :model="formModel"
-          @finish="save"
+      <template #title>
+        <div class="communication-dialog__heading">
+          <MqIconTile
+            name="task"
+            tone="brand"
+            :size="36"
+          />
+          <div>
+            <span>质控作业 · 病历反馈</span>
+            <h2>病历沟通</h2>
+          </div>
+        </div>
+      </template>
+      <div class="communication-dialog">
+        <a-alert
+          v-if="error"
+          :message="error"
+          type="error"
+          show-icon
+        />
+        <a-button
+          v-if="error"
+          :disabled="loading || saving"
+          @click="load"
         >
-          <a-form-item label="操作">
-            <a-radio-group
-              v-model:value="action"
-              :disabled="loading || saving || uncertain"
-            >
-              <a-radio-button value="urge">
-                催办
-              </a-radio-button><a-radio-button value="opinion">
-                质控意见
-              </a-radio-button>
-            </a-radio-group>
-          </a-form-item>
-          <a-form-item label="受领医生">
-            <a-select
-              v-model:value="recipient"
-              :get-popup-container="popupContainer"
-              :options="
-                candidates?.doctors.map((person) => ({ value: person.id, label: person.name })) ||
-                  []
-              "
-              :disabled="loading || saving || uncertain"
-            />
-          </a-form-item>
-          <a-form-item :label="action === 'urge' ? '催办说明' : '意见正文'">
-            <a-textarea
-              v-model:value="content"
-              :maxlength="2000"
-              :rows="4"
-              :disabled="loading || saving || uncertain"
-            />
-          </a-form-item>
-          <a-button
-            type="primary"
-            html-type="submit"
-            :loading="saving"
-            :disabled="loading || uncertain || !candidates || !recipient || !content.trim()"
+          刷新核对
+        </a-button>
+        <a-spin
+          :spinning="loading"
+          tip="正在核对病历来源"
+        >
+          <a-form
+            layout="vertical"
+            :model="formModel"
+            @finish="save"
           >
-            发送站内通知
-          </a-button>
-        </a-form>
-        <h3>操作历史</h3>
-        <ul class="case-communication__history">
-          <li
-            v-for="item in candidates?.items"
-            :key="item.id"
-          >
-            <div class="case-communication__meta">
-              <strong>{{ labels[item.action] }}</strong><span>{{ doctorName(item.recipient_id) }}</span><span>{{ item.withdrawn ? '已撤回' : item.is_read ? '已读' : '未读' }}</span><time>{{ formatTime(item.created_at) }}</time>
+            <div class="communication-dialog__body">
+              <div class="communication-dialog__object mq-soft">
+                <div class="communication-dialog__object-head">
+                  <MqIconTile
+                    name="doc"
+                    :size="36"
+                    tone="brand"
+                  />
+                  <div>
+                    <span class="communication-dialog__label">沟通病历</span>
+                    <h3>{{ visitId }}</h3>
+                  </div>
+                </div>
+                <div
+                  v-if="candidates"
+                  class="communication-dialog__context"
+                >
+                  <span>{{ candidates.source.scene === 'running' ? '运行病历' : '终末病历' }}</span><span>{{ candidates.department }}</span><span>规则版本 {{ candidates.source.rule_set_version }}</span>
+                </div>
+                <details
+                  v-if="candidates"
+                  class="communication-dialog__source"
+                >
+                  <summary>保存结果来源</summary>
+                  <dl>
+                    <div>
+                      <dt>机构</dt>
+                      <dd>{{ candidates.source.institute_id }}</dd>
+                    </div>
+                    <div>
+                      <dt>患者</dt>
+                      <dd>{{ candidates.source.patient_id }}</dd>
+                    </div>
+                    <div>
+                      <dt>任务</dt>
+                      <dd>{{ candidates.source.root_job_id }}</dd>
+                    </div>
+                    <div>
+                      <dt>保存结果</dt>
+                      <dd>{{ candidates.source.envelope_id }}</dd>
+                    </div>
+                    <div>
+                      <dt>规则集</dt>
+                      <dd>
+                        {{ candidates.source.rule_set_key }} ·
+                        {{ candidates.source.rule_set_version }}
+                      </dd>
+                    </div>
+                  </dl>
+                </details>
+              </div>
+              <div class="communication-dialog__fields">
+                <a-form-item label="操作">
+                  <a-radio-group
+                    v-model:value="action"
+                    :disabled="loading || saving || uncertain"
+                  >
+                    <a-radio-button value="urge">
+                      催办
+                    </a-radio-button><a-radio-button value="opinion">
+                      质控意见
+                    </a-radio-button>
+                  </a-radio-group>
+                </a-form-item>
+                <a-form-item label="受领医生">
+                  <a-select
+                    v-model:value="recipient"
+                    :get-popup-container="popupContainer"
+                    :options="
+                      candidates?.doctors.map((person) => ({
+                        value: person.id,
+                        label: person.name,
+                      })) || []
+                    "
+                    :disabled="loading || saving || uncertain"
+                  />
+                </a-form-item>
+              </div>
+              <a-form-item :label="action === 'urge' ? '催办说明' : '意见正文'">
+                <a-textarea
+                  v-model:value="content"
+                  :maxlength="2000"
+                  :rows="4"
+                  :disabled="loading || saving || uncertain"
+                />
+              </a-form-item>
+              <section class="communication-dialog__history">
+                <div class="communication-dialog__section-head">
+                  <h3>
+                    <MqIcon
+                      name="history"
+                      :size="18"
+                    />操作历史
+                  </h3>
+                  <span>{{
+                    candidates ? `${candidates.items.length} 条 · 北京时间` : '尚未核实'
+                  }}</span>
+                </div>
+                <CaseCommunicationHistory
+                  class="case-communication__history"
+                  :items="candidates?.items || []"
+                  :recipient-label="doctorName"
+                >
+                  <template #actions="{ event: item }">
+                    <a-button
+                      v-if="item.action === 'urge' && !item.withdrawn"
+                      class="communication-dialog__withdraw"
+                      :disabled="loading || saving || uncertain"
+                      @click="withdraw(item)"
+                    >
+                      <template #icon>
+                        <MqIcon
+                          name="back"
+                          :size="16"
+                        />
+                      </template>撤回本次催办
+                    </a-button>
+                  </template>
+                </CaseCommunicationHistory>
+                <p
+                  v-if="candidates && !candidates.items.length"
+                  class="communication-dialog__empty"
+                >
+                  暂无沟通记录
+                </p>
+              </section>
             </div>
-            <p>{{ item.content }}</p>
-            <p
-              v-if="item.related_event_id"
-              class="case-communication__relation"
-            >
-              原催办：{{ item.related_event_id }}
-            </p>
-            <a-button
-              v-if="item.action === 'urge' && !item.withdrawn"
-              :disabled="loading || saving || uncertain"
-              @click="withdraw(item)"
-            >
-              撤回本次催办
-            </a-button>
-          </li>
-        </ul>
-        <p v-if="candidates && !candidates.items.length">
-          暂无沟通记录
-        </p>
-      </a-spin>
+            <div class="communication-dialog__actions">
+              <a-button
+                :disabled="saving"
+                @click="open = false"
+              >
+                取消
+              </a-button>
+              <a-button
+                type="primary"
+                html-type="submit"
+                :loading="saving"
+                :disabled="loading || uncertain || !candidates || !recipient || !content.trim()"
+              >
+                <template #icon>
+                  <MqIcon
+                    name="task"
+                    :size="16"
+                  />
+                </template>
+                发送站内通知
+              </a-button>
+            </div>
+          </a-form>
+        </a-spin>
+      </div>
     </a-modal>
   </section>
 </template>
@@ -120,7 +217,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
-import { formatDateTime as formatTime } from '@/utils/date'
+import MqIconTile from '@/components/icons/MqIconTile.vue'
+import CaseCommunicationHistory from './CaseCommunicationHistory.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   CommunicationError,
@@ -161,7 +259,6 @@ const formModel = computed(() => ({
 const candidates = ref<CommunicationCandidates>()
 let generation = 0
 let pending: CommunicationCreate | undefined
-const labels = { urge: '催办', opinion: '质控意见', withdraw: '撤回催办' }
 const popupContainer = (trigger: HTMLElement) => trigger.parentElement || trigger
 const doctorName = (id: string) =>
   candidates.value?.doctors.find((person) => person.id === id)?.name || id
@@ -289,37 +386,4 @@ watch(
 onUnmounted(reset)
 </script>
 
-<style scoped>
-.case-communication__context {
-  color: var(--mq-text-secondary, #667085);
-  overflow-wrap: anywhere;
-}
-.case-communication h3 {
-  margin: 24px 0 8px;
-  font-size: 16px;
-}
-.case-communication__history {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.case-communication__history li {
-  padding: 14px 0;
-  border-top: 1px solid var(--mq-border, #edf0f4);
-}
-.case-communication__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  font-size: 13px;
-}
-.case-communication__history p {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 8px 0;
-}
-.case-communication__relation {
-  color: var(--mq-text-secondary, #667085);
-  font-size: 12px;
-}
-</style>
+<style scoped src="./styles/case-communication-dialog.css"></style>

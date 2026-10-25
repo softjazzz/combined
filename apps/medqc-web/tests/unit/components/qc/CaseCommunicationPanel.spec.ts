@@ -103,6 +103,28 @@ beforeEach(() => {
   }))
 })
 describe('病历沟通', () => {
+  it('真实Form中取消不会提交，撤回按钮仍是独立button而非表单发送', async () => {
+    mocks.candidates.mockResolvedValue({ ...candidates(), items: [original] })
+    const wrapper = make(true)
+    try {
+      await openAndFill(wrapper)
+      const cancel = () => wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '取消')!
+      expect(cancel().attributes('type')).toBe('button')
+      const withdraw = wrapper.findAll('button').find((button) => button.text() === '撤回本次催办')!
+      expect(withdraw.attributes('type')).toBe('button')
+      await withdraw.trigger('click')
+      await flushPromises()
+      expect(mocks.create).toHaveBeenCalledTimes(1)
+      expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ action: 'withdraw', related_event_id: 'urge1', recipient_id: 'doc', ...source }))
+      mocks.create.mockClear()
+      await cancel().trigger('click')
+      await flushPromises()
+      expect(mocks.create).not.toHaveBeenCalled()
+      expect(wrapper.getComponent(Modal).props('open')).toBe(false)
+    } finally {
+      wrapper.unmount()
+    }
+  })
   it('真实Ant Form点击发送后调用API并刷新操作历史', async () => {
     const saved = { ...original, id: 'created', content: '请核对病历记录' }
     mocks.candidates
