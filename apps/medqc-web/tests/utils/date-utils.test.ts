@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest'
 import {
   formatRelativeTime,
   formatDate,
@@ -13,6 +13,14 @@ import {
   formatDuration,
   getFriendlyDate
 } from '@/utils/date-utils'
+
+// 本文件的日期断言以北京时间为基准，不能依赖开发机或CI宿主时区。
+const originalTimezone = process.env.TZ
+beforeAll(() => { process.env.TZ = 'Asia/Shanghai' })
+afterAll(() => {
+  if (originalTimezone === undefined) delete process.env.TZ
+  else process.env.TZ = originalTimezone
+})
 
 describe('formatRelativeTime', () => {
   it('returns friendly labels based on time difference', () => {
