@@ -2843,6 +2843,13 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         family == "culture"
                         and _culture_orders_lack_report_material(rows_by_source, projection)
                     )
+                    # 其它模态的报告只能排除这些报告本身，不能排除仍有医嘱的CT/MRI。
+                    missing_exam_report = (
+                        family == "exam"
+                        and rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
+                        and bool(_effective_target_orders(rows_by_source, fact_kind=family))
+                        and (not events or all(event.target_explicitly_absent for event in events))
+                    )
                     absence_gap, absence_refs = (
                         _culture_absence_gap(evidence_snapshot, evidence_materials)
                         if family == "culture" and not missing_culture_report and (
@@ -2858,13 +2865,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             absence_refs,
                         )
                         typed_processed.add(rule_id)
-                    elif not events or missing_culture_report:
-                        if family == "exam":
-                            emit_typed(
-                                rule_id,
-                                "not_applicable",
-                                "trigger_absent_complete",
-                            )
+                    elif not events or missing_culture_report or missing_exam_report:
+                        if rule_id == "LX0609-06-01-02":
+                            # 010核对实际检查前理由；医嘱本身不证明检查已执行。
+                            emit_typed(rule_id, "not_applicable", "trigger_absent_complete")
                         elif _effective_target_orders(rows_by_source, fact_kind=family):
                             emit_typed(
                                 rule_id,
@@ -2884,7 +2888,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             emit_typed(
                                 rule_id,
                                 "not_applicable",
-                                "exam_lab_target_event_absent",
+                                "trigger_absent_complete" if family == "exam" else "exam_lab_target_event_absent",
                             )
                         typed_processed.add(rule_id)
                     elif rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"} and all(

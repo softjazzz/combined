@@ -65,10 +65,10 @@ async def test_undated_body_takes_time_gap_priority_over_window_shell():
 
 
 @pytest.mark.asyncio
-async def test_undated_shell_keeps_existing_time_gap_contract():
+async def test_empty_undated_placeholder_does_not_hide_missing_course():
     result = await _run((_row(None, time=None),))
-    assert result["reason_code"] == "authoritative_time_missing"
-    assert [item["source_document_id"] for item in result["customer_evidence"]] == ["shell"]
+    assert result["status"] == "non_compliant"
+    assert result["reason_code"] == "required_document_missing"
 
 
 @pytest.mark.asyncio
@@ -103,3 +103,13 @@ def test_body_gap_display_rejects_invalid_executor_facts(field, value):
     }
     raw[field] = value
     assert safe_discharge_customer_display_facts(rule_id="LX0609-08-02-01", raw=raw) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [("physician_sign", "测试签署人"), ("v2_schema", '{"record_content":"病情平稳"}')])
+async def test_undated_signature_or_json_is_not_an_empty_placeholder(field, value):
+    row = _row(None, time=None)
+    row[field] = value
+    result = await _run((row,))
+    assert result["status"] == "data_gap"
+    assert result["reason_code"] == "authoritative_time_missing"

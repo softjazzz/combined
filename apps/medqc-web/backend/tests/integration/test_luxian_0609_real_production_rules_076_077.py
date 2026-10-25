@@ -359,7 +359,7 @@ async def test_077_unrelated_without_concrete_grounded_explanation_is_not_a_defe
         decision_rule_ids=("LX0609-01-02-02",),
     )
     _reduced, result = _canonical("LX0609-01-02-02", session, execution)
-    assert result["status"] == "data_gap"
+    assert result["status"] == "technical_error"
     assert execution.llm_call_count == 1
 
 
@@ -546,7 +546,7 @@ async def test_077_missing_inputs_are_data_gap_without_calling_model() -> None:
 
 
 @pytest.mark.asyncio
-async def test_077_invalid_model_output_is_data_gap() -> None:
+async def test_077_invalid_model_output_is_technical_error() -> None:
     session = _session("LX0609-01-02-02", _077_rows())
     execution = await execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-01-02-02",),
@@ -559,9 +559,9 @@ async def test_077_invalid_model_output_is_data_gap() -> None:
     )
     reduced, result = _canonical("LX0609-01-02-02", session, execution)
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert result["status"] == "data_gap"
-    assert reduced.reason_code == "source_readiness_unproven"
+    assert reduced.final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert result["status"] == "technical_error"
+    assert reduced.reason_code == "model_invalid_output"
     assert result["criterion_results"][0]["reason_code"] == "model_invalid_output"
 
 

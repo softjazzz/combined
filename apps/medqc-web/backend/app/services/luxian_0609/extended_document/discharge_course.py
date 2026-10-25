@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import re
 from typing import Any, Mapping, Sequence
 
+from ..course_row_material import course_row_has_material
 from .shared import _clean, _row_time
 
 
@@ -85,7 +86,7 @@ def evaluate_predischarge_course_presence(
             ("senior_course_record", senior_rows),
         )
         for row in rows
-        if _row_time(row) is None
+        if _row_time(row) is None and course_row_has_material(row)
     )
     matched_course_rows = tuple(
         (source_key, row)

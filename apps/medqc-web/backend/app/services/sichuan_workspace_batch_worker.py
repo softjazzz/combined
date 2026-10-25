@@ -1942,6 +1942,17 @@ async def run_sichuan_workspace_batch_job(
                     rejected_record_ids_for_rule,
                     rule_failed_record_ids,
                 )
+                # 策略暂停是未执行，不是成功的医学合规结论。
+                not_executed_record_ids_for_rule = {
+                    str(item.get("record_key") or item.get("record_id") or "")
+                    for item in rule_items
+                    if str(item.get("status") or "").strip().lower() == "not_executed"
+                }
+                not_executed_record_ids_for_rule.difference_update(
+                    confirmed_record_ids, uncertain_record_ids_for_rule,
+                    data_gap_record_ids_for_rule, rejected_record_ids_for_rule,
+                    not_applicable_record_ids_for_rule, rule_failed_record_ids,
+                )
                 rule_summary = {
                     "total_records": effective_total_records,
                     "success_count": max(0, effective_total_records - len(rule_failed)),
@@ -1959,7 +1970,8 @@ async def run_sichuan_workspace_batch_job(
                         - len(uncertain_record_ids_for_rule)
                         - len(data_gap_record_ids_for_rule)
                         - len(rejected_record_ids_for_rule)
-                        - len(not_applicable_record_ids_for_rule),
+                        - len(not_applicable_record_ids_for_rule)
+                        - len(not_executed_record_ids_for_rule),
                     ),
                     "total_tokens": int(state.get("total_tokens") or 0),
                     "total_processing_time": float(state.get("total_processing_time") or 0.0),

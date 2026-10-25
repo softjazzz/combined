@@ -580,8 +580,8 @@ async def evaluate_rule_077(
         decision = _decision(
             snapshot=snapshot,
             refs=refs,
-            status="data_gap",
-            reason_code="source_readiness_unproven",
+            status="technical_error",
+            reason_code="model_invalid_output",
             criterion=criterion,
         )
     else:

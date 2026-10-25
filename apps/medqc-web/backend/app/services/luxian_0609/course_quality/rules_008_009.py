@@ -9,6 +9,7 @@ import logging
 import re
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
+from ..course_row_material import course_row_has_material
 from ..decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -593,6 +594,9 @@ def _rule_008_009_decision(
                 authoritative_document_time_value(row)
             )
             if parsed_date is None:
+                # 无正文、签名、标题或JSON的无时间行不构成待定病程。
+                if not course_row_has_material(row):
+                    continue
                 if document_ref:
                     refs.add(document_ref)
                 return decision(

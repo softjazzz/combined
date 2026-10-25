@@ -4025,16 +4025,19 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
 ) -> None:
     """样本池策略暂停必须经 worker 投影为客户可懂结果，而不是执行异常。"""
 
-    active_rule = get_luxian_0609_rule("LX0609-03-01-01")
-    paused_rule = get_luxian_0609_rule("LX0609-07-04-02")
-    assert active_rule is not None and paused_rule is not None
+    active_rule = get_luxian_0609_rule("LX0609-12-01-01")
+    paused_ids = ["LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03",
+                  "LX0609-04-02-04", "LX0609-04-04-01", "LX0609-04-04-02",
+                  "LX0609-07-04-02", "LX0609-05-03-01"]
+    paused_rules = [get_luxian_0609_rule(rule_id) for rule_id in paused_ids]
+    assert active_rule is not None and all(paused_rules)
     workspace = _WorkspaceStub()
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["filters"] = {
-        "rule_ids": ["LX0609-03-01-01"],
-        "selected_rule_ids": ["LX0609-03-01-01"],
-        "scoped_customer_rule_ids": ["LX0609-03-01-01", "LX0609-07-04-02"],
-        "paused_customer_rule_ids": ["LX0609-07-04-02"],
+        "rule_ids": ["LX0609-12-01-01"],
+        "selected_rule_ids": ["LX0609-12-01-01"],
+        "scoped_customer_rule_ids": ["LX0609-12-01-01", *paused_ids],
+        "paused_customer_rule_ids": paused_ids,
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
     }
@@ -4044,7 +4047,7 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
         return {
             "evaluation_results": [
                 {
-                    "rule_id": "LX0609-03-01-01",
+                    "rule_id": "LX0609-12-01-01",
                     "status": "compliant",
                     "result_status": "compliant",
                     "reason_code": "requirement_satisfied",
@@ -4070,8 +4073,20 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
     monkeypatch.setattr(
         batch_worker,
         "load_luxian_0609_rules",
-        lambda: [active_rule, paused_rule],
+        lambda: [active_rule, *paused_rules],
     )
+
+    from app.core.settings import Settings
+    from app.services.luxian_0609.rule_decision_settings import (
+        capture_luxian_0609_task_runtime, capture_luxian_0609_task_settings,
+        resolve_mainline_rule_decision_settings,
+    )
+    settings = Settings(_env_file=None, JWT_SECRET="offline-count-test", **vars(_luxian_native_settings()))
+    workspace.job["filters"]["lx0609_task_settings"] = capture_luxian_0609_task_settings(
+        resolve_mainline_rule_decision_settings(settings)
+    )
+    workspace.job["filters"]["lx0609_task_runtime"] = capture_luxian_0609_task_runtime(service)
+    monkeypatch.setattr(batch_worker, "get_settings", lambda: settings)
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -4087,6 +4102,23 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
         == "charging_source_unavailable_customer_scope"
     )
     assert "不参与正式结论" in paused_item["findings"]
+    rule_rows = workspace.summary["rule_results"]
+    paused_summary = next(row for row in rule_rows if row["rule_code"] == "LX0609-07-04-02")
+    active_summary = next(row for row in rule_rows if row["rule_code"] == "LX0609-12-01-01")
+    assert paused_summary["compliant_records"] == 0
+    assert active_summary["compliant_records"] == 1
+    assert workspace.summary["record_status_breakdown"]["compliant"] == 1
+
+    assert len(rule_rows) == 9
+    for row in rule_rows:
+        if row["rule_code"] in paused_ids:
+            assert row["compliant_records"] == 0
+    assert workspace.summary["status_breakdown"]["not_executed"] == 8
+    assert workspace.summary["status_breakdown"]["compliant"] == 1
+    for update in workspace.progress_updates:
+        for row in update["summary_patch"].get("rule_results", []):
+            if row["rule_code"] in paused_ids:
+                assert row["compliant_records"] == 0
 
 
 @pytest.mark.asyncio
