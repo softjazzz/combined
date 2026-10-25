@@ -1,5 +1,21 @@
 /* v7.1 液态玻璃 · 系统配置（页头/卡片/分段/胶囊来自 styles/mq-components.css） */
 
+.system-config-page {
+  grid-template-columns: minmax(0, 1fr);
+}
+.system-config-page > .mq-page-head {
+  min-width: 0;
+}
+.system-config-page > .mq-page-head > .mq-segmented {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .system-config-page .account-config-panel {
+    padding: 16px;
+  }
+}
+
 /* ---------- 同步三步流程 ---------- */
 .sync-steps {
   margin: 22px 0 0;

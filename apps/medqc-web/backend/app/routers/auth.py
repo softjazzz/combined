@@ -115,6 +115,8 @@ async def login(request: Request, login_data: LoginRequest):
 
 @router.post("/register")
 async def register(request: Request, user_data: UserCreate):
+    if user_data.role not in (None, "doctor"):
+        raise HTTPException(403, "质控及管理员角色仅可由系统管理员分配")
     try:
         new_user = create_user(
             email=str(user_data.email),
@@ -138,6 +140,8 @@ async def get_current_user_info(    request: Request,current_user: dict = Depend
 
 @router.put("/profile")
 async def update_profile(    request: Request,profile_data: UserUpdate, current_user: dict = Depends(get_current_user)):
+    if profile_data.department is not None and profile_data.department != current_user.get("department"):
+        raise HTTPException(403, "账号科室授权仅可由系统管理员变更")
     try:
         user = update_user_profile(
             user_id=str(current_user.get("id") or ""),

@@ -114,12 +114,32 @@ function mountPage() {
         FrontpageExtractionSettingsPanel: { template: '<div />' },
         LLMApiConfig: { template: '<div />' },
         LlmPerformanceObservabilityPanel: { template: '<div />' },
+        AccountManagementPanel: { template: '<div data-testid="real-accounts-panel" />' },
       },
     },
   })
 }
 
 describe('DataSyncConfigPage visit progress', () => {
+  it('管理员可在V5系统配置进入真实账号管理，不跳旧版页面', async () => {
+    mockUserRoles = ['admin']
+    mockRoute.query = { tab: 'accounts' }
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="account-management-tab"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="real-accounts-panel"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('非管理员不显示账号管理，不能通过查询参数打开', async () => {
+    mockUserRoles = ['qc_manager']
+    mockRoute.query = { tab: 'accounts' }
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="account-management-tab"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="real-accounts-panel"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
   beforeEach(() => {
     mockRunPreflight.mockReset()
     mockMessageWarning.mockReset()

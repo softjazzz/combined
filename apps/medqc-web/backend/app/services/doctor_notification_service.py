@@ -9,10 +9,95 @@ from sqlalchemy.orm import DeclarativeBase
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import DefectRectification as Task
 from ..database.models.v36_reports import Notification as ReportNotification
-from .defect_rectification_service import RectificationError, _person
+from ..database.models.v36_reports import SysUser
+from .defect_rectification_service import (
+    MANAGERS,
+    RectificationError,
+    _person,
+    _persistent_roles,
+)
 from .modern_appeal_service import QCAppeal as Appeal
+from .user_scope_owner import user_owner_options
 
 SOURCE = "v5_doctor_feedback"
+QC_SOURCE = "v5_qc_feedback"
+
+
+def _publish_qc_notification(
+    session, source, *, event_id, action, actor_id, appeal, comment
+):
+    labels = (
+        {"create": "医生提交了申诉", "withdraw": "医生撤回了申诉"}
+        if appeal
+        else {"submit": "医生提交了整改"}
+    )
+    rows = (
+        session.execute(
+            select(SysUser).where(
+                SysUser.is_active.is_(True), SysUser.institute_id == source.institute_id
+            ),
+            execution_options=user_owner_options(session),
+        )
+        .scalars()
+        .all()
+    )
+    eligible = [
+        row
+        for row in rows
+        if row.id != actor_id
+        and _persistent_roles(row.role, row.roles_json)
+        & ({"admin", "qc_manager"} if appeal else MANAGERS)
+    ]
+    # 优先原派发人；不能处理申诉或已停用时转同机构主管，避免丢给无权审核者。
+    creator_id = getattr(source, "creator_id", None)
+    if appeal:
+        from .modern_appeal_service import SOURCE_FIELDS
+
+        creator_id = session.scalar(
+            select(Task.creator_id)
+            .where(
+                Task.assignee_id == source.appellant_id,
+                *(getattr(Task, key) == getattr(source, key) for key in SOURCE_FIELDS),
+            )
+            .limit(1)
+        )
+    preferred = [row for row in eligible if row.id == creator_id]
+    recipients = preferred or [
+        row
+        for row in eligible
+        if _persistent_roles(row.role, row.roles_json) & {"admin", "qc_manager"}
+    ]
+    if not recipients:
+        raise RectificationError(
+            "没有可接收反馈的同机构质控账号，请联系管理员配置", 409
+        )
+    kind = "modern_appeal" if appeal else "rectification"
+    for recipient in recipients:
+        session.add(
+            Notification(
+                id=str(
+                    uuid5(
+                        NAMESPACE_URL, f"{QC_SOURCE}:{kind}:{event_id}:{recipient.id}"
+                    )
+                ),
+                type="appeal_result" if appeal else "remediation",
+                title=labels[action],
+                content=f"{ {'running': '运行', 'final': '终末'}.get(source.scene, '未知场景') } · {source.visit_id} · {source.target_id}。{comment or ''}",
+                record_id=f"feedback:{kind}:{source.id}",
+                identity_version=1,
+                source_key=QC_SOURCE,
+                institute_id=source.institute_id,
+                patient_id=source.patient_id,
+                visit_id=source.visit_id,
+                severity="info",
+                sender_id=actor_id,
+                recipient_id=recipient.id,
+                related_type=kind,
+                related_id=source.id,
+                is_read=False,
+                created_at=datetime.utcnow(),
+            )
+        )
 
 
 class _Base(DeclarativeBase):
@@ -26,6 +111,18 @@ class Notification(_Base):
 def publish_doctor_notification(
     session, source, *, event_id, action, actor_id, appeal=False, comment=None
 ):
+    if (appeal and action in {"create", "withdraw"}) or (
+        not appeal and action == "submit"
+    ):
+        return _publish_qc_notification(
+            session,
+            source,
+            event_id=event_id,
+            action=action,
+            actor_id=actor_id,
+            appeal=appeal,
+            comment=comment,
+        )
     labels = (
         {"approve": "申诉审核通过", "reject": "申诉已驳回"}
         if appeal
@@ -63,7 +160,7 @@ def publish_doctor_notification(
                 "defect_urge" if action in {"urge", "withdraw_urge"} else "remediation"
             ),
             title=labels[action],
-            content=f"{ {'running':'运行','final':'终末','outpatient_emergency':'门急诊'}.get(source.scene,'未知场景')} · {source.visit_id} · {source.target_id}。{comment or ''}",
+            content=f"{ {'running': '运行', 'final': '终末', 'outpatient_emergency': '门急诊'}.get(source.scene, '未知场景') } · {source.visit_id} · {source.target_id}。{comment or ''}",
             record_id=f"feedback:{kind}:{source.id}",
             identity_version=1,
             source_key=SOURCE,
@@ -88,9 +185,77 @@ class DoctorNotificationService:
 
     def _predicate(self, actor, session):
         legacy = or_(
-            Notification.source_key.is_(None), Notification.source_key != SOURCE
+            Notification.source_key.is_(None),
+            Notification.source_key.not_in((SOURCE, QC_SOURCE)),
         )
         modern = False
+        qc_feedback = False
+        if actor["roles"] & MANAGERS and actor["institute_id"]:
+            identity = ("institute_id", "patient_id", "visit_id")
+            task = exists(
+                select(Task.id).where(
+                    Task.id == Notification.related_id,
+                    Task.institute_id == actor["institute_id"],
+                    Task.assignee_id != actor["id"],
+                    Task.scene.in_(("running", "final")),
+                    Task.target_kind.in_(("canonical_defect", "task_manual_defect")),
+                    *(
+                        func.trim(getattr(Task, key)) != ""
+                        for key in (
+                            "patient_id",
+                            "visit_id",
+                            "root_job_id",
+                            "envelope_id",
+                            "target_id",
+                            "rule_set_key",
+                            "rule_set_version",
+                        )
+                    ),
+                    *(
+                        getattr(Task, key) == getattr(Notification, key)
+                        for key in identity
+                    ),
+                )
+            )
+            appeal = False
+            if actor["roles"] & {"admin", "qc_manager"}:
+                appeal = exists(
+                    select(Appeal.id).where(
+                        Appeal.id == Notification.related_id,
+                        Appeal.institute_id == actor["institute_id"],
+                        Appeal.appellant_id != actor["id"],
+                        Appeal.scene.in_(("running", "final")),
+                        Appeal.target_kind.in_(
+                            ("canonical_defect", "task_manual_defect")
+                        ),
+                        func.trim(Appeal.case_department) != "",
+                        *(
+                            func.trim(getattr(Appeal, key)) != ""
+                            for key in (
+                                "patient_id",
+                                "visit_id",
+                                "root_job_id",
+                                "envelope_id",
+                                "target_id",
+                                "rule_set_key",
+                                "rule_set_version",
+                            )
+                        ),
+                        *(
+                            getattr(Appeal, key) == getattr(Notification, key)
+                            for key in identity
+                        ),
+                    )
+                )
+            qc_feedback = and_(
+                Notification.source_key == QC_SOURCE,
+                Notification.identity_version == 1,
+                Notification.institute_id == actor["institute_id"],
+                or_(
+                    and_(Notification.related_type == "rectification", task),
+                    and_(Notification.related_type == "modern_appeal", appeal),
+                ),
+            )
         if "doctor" in actor["roles"] and actor["institute_id"] and actor["department"]:
             identity = ["institute_id", "patient_id", "visit_id"]
             task = exists(
@@ -132,12 +297,17 @@ class DoctorNotificationService:
                         *(
                             func.trim(getattr(CaseCommunication, key)) != ""
                             for key in (
-                                "patient_id", "visit_id", "root_job_id", "envelope_id",
-                                "rule_set_key", "rule_set_version",
+                                "patient_id",
+                                "visit_id",
+                                "root_job_id",
+                                "envelope_id",
+                                "rule_set_key",
+                                "rule_set_version",
                             )
                         ),
                         *(
-                            getattr(CaseCommunication, key) == getattr(Notification, key)
+                            getattr(CaseCommunication, key)
+                            == getattr(Notification, key)
                             for key in identity
                         ),
                     )
@@ -149,12 +319,16 @@ class DoctorNotificationService:
                 or_(
                     and_(Notification.related_type == "rectification", task),
                     and_(Notification.related_type == "modern_appeal", appeal),
-                    and_(Notification.related_type == "case_communication", communication),
+                    and_(
+                        Notification.related_type == "case_communication", communication
+                    ),
                 ),
             )
-        return and_(Notification.recipient_id == actor["id"], or_(legacy, modern))
+        return and_(
+            Notification.recipient_id == actor["id"], or_(legacy, modern, qc_feedback)
+        )
 
-    def _view(self, row, actor):
+    def _view(self, row, actor, session):
         item = {
             column.name: (
                 getattr(row, column.name).replace(tzinfo=timezone.utc).isoformat()
@@ -163,9 +337,16 @@ class DoctorNotificationService:
             )
             for column in row.__table__.columns
         }
-        if row.source_key == SOURCE:
+        if row.source_key in (SOURCE, QC_SOURCE):
             # EXISTS 已证明对象冻结科室与持久账号一致。
-            item["department"] = actor["department"]
+            if row.source_key == QC_SOURCE:
+                model = Task if row.related_type == "rectification" else Appeal
+                column = Task.department if model is Task else Appeal.case_department
+                item["department"] = session.scalar(
+                    select(column).where(model.id == row.related_id)
+                )
+            else:
+                item["department"] = actor["department"]
             item["interaction_target"] = {
                 "kind": row.related_type,
                 "id": row.related_id,
@@ -195,7 +376,7 @@ class DoctorNotificationService:
                 .limit(page_size)
             ).all()
             return {
-                "items": [self._view(row, actor) for row in rows],
+                "items": [self._view(row, actor, session) for row in rows],
                 "total": total,
                 "unread_count": unread,
                 "page": page,
@@ -215,7 +396,7 @@ class DoctorNotificationService:
                 .order_by(Notification.created_at.desc(), Notification.id)
                 .limit(500)
             ).all()
-            return [self._view(row, actor) for row in rows]
+            return [self._view(row, actor, session) for row in rows]
 
     def mark_read(self, actor_id, notification_id=None):
         with self.sessions() as session, session.begin():

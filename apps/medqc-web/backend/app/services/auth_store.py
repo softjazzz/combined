@@ -7,11 +7,12 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import func, inspect, or_, select
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import SysUser
 from ..storage.memory import users_db
+from .user_scope_owner import resolve_user_owner_schema, user_owner_options
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,10 @@ _REQUIRED_AUTH_COLUMNS = {
     "created_at",
     "phone",
 }
+
+
+class _PersistentNoMatch(Exception):
+    """持久账号 owner 已就绪但账号不存在/停用，不得回退演示缓存。"""
 
 
 def _iso_or_none(value: Any) -> Optional[str]:
@@ -74,22 +79,11 @@ def _memory_overlay(*, email: str | None, user_id: str | None) -> dict[str, Any]
 
 
 def _supports_persistent_auth(session) -> bool:
-    try:
-        rows = session.execute(
-            text(
-                """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema IN ('sys', 'public')
-              AND table_name = 'sys_users'
-                """
-            )
-        ).fetchall()
-    except Exception:
-        logger.warning("Failed to inspect sys_users schema; fallback to memory store", exc_info=True)
+    owner = resolve_user_owner_schema(session)
+    inspector = inspect(session.connection())
+    if not inspector.has_table("sys_users", schema=owner):
         return False
-
-    columns = {str(row[0]) for row in rows}
+    columns = {column["name"] for column in inspector.get_columns("sys_users", schema=owner)}
     return _REQUIRED_AUTH_COLUMNS.issubset(columns)
 
 
@@ -171,13 +165,18 @@ def _query_db_user_by_account(account: str) -> dict[str, Any] | None:
         if _PHONE_PATTERN.fullmatch(normalized):
             conditions.insert(1, SysUser.phone == normalized)
 
-        user = session.execute(select(SysUser).where(or_(*conditions)).limit(1)).scalar_one_or_none()
+        user = session.execute(
+            select(SysUser).where(or_(*conditions)).limit(1),
+            execution_options=user_owner_options(session),
+        ).scalar_one_or_none()
         if user is None or not bool(user.is_active):
-            return None
+            raise _PersistentNoMatch()
         return _orm_user_to_dict(user)
+    except _PersistentNoMatch:
+        raise
     except Exception:
-        logger.warning("Auth DB account lookup failed; fallback to memory store", exc_info=True)
-        return None
+        logger.warning("Auth DB account lookup failed; refusing memory fallback", exc_info=True)
+        raise
     finally:
         session.close()
 
@@ -204,19 +203,27 @@ def _query_db_user_by_subject(subject: str) -> dict[str, Any] | None:
         if _PHONE_PATTERN.fullmatch(normalized):
             conditions.append(SysUser.phone == normalized)
 
-        user = session.execute(select(SysUser).where(or_(*conditions)).limit(1)).scalar_one_or_none()
+        user = session.execute(
+            select(SysUser).where(or_(*conditions)).limit(1),
+            execution_options=user_owner_options(session),
+        ).scalar_one_or_none()
         if user is None or not bool(user.is_active):
-            return None
+            raise _PersistentNoMatch()
         return _orm_user_to_dict(user)
+    except _PersistentNoMatch:
+        raise
     except Exception:
-        logger.warning("Auth DB subject lookup failed; fallback to memory store", exc_info=True)
-        return None
+        logger.warning("Auth DB subject lookup failed; refusing memory fallback", exc_info=True)
+        raise
     finally:
         session.close()
 
 
 def find_user_by_account(account: str) -> dict[str, Any] | None:
-    db_user = _query_db_user_by_account(account)
+    try:
+        db_user = _query_db_user_by_account(account)
+    except _PersistentNoMatch:
+        return None
     if db_user is not None:
         return db_user
 
@@ -238,7 +245,10 @@ def resolve_user_by_subject(subject: str | None) -> dict[str, Any] | None:
     if not normalized:
         return None
 
-    db_user = _query_db_user_by_subject(normalized)
+    try:
+        db_user = _query_db_user_by_subject(normalized)
+    except _PersistentNoMatch:
+        return None
     if db_user is not None:
         return db_user
 

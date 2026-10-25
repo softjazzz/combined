@@ -157,6 +157,13 @@ class ModernAppealService:
                 )
                 session.add(row)
                 session.flush()
+                from .doctor_notification_service import publish_doctor_notification
+
+                (self.notification_writer or publish_doctor_notification)(
+                    session, row, event_id=row.id, action="create", actor_id=actor_id,
+                    appeal=True, comment=reason.strip(),
+                )
+                session.flush()
                 return _view(row)
         except IntegrityError as exc:
             constraint = getattr(

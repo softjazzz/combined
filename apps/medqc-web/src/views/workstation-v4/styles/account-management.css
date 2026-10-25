@@ -1,0 +1,166 @@
+.accounts-panel {
+  min-width: 0;
+}
+.accounts-head,
+.accounts-actions,
+.accounts-pagination,
+.accounts-editor-head,
+.accounts-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.accounts-head {
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.accounts-actions {
+  flex-wrap: wrap;
+}
+.accounts-filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.accounts-search {
+  flex: 1 1 240px;
+}
+.accounts-filters .mq-field {
+  min-width: 140px;
+}
+.accounts-table {
+  overflow-x: auto;
+}
+.accounts-table table {
+  min-width: 1040px;
+  width: 100%;
+  table-layout: fixed;
+}
+.accounts-col-user {
+  width: 180px;
+}
+.accounts-col-login {
+  width: 210px;
+}
+.accounts-col-scope {
+  width: 210px;
+}
+.accounts-col-role {
+  width: 140px;
+}
+.accounts-col-state {
+  width: 70px;
+}
+.accounts-col-time {
+  width: 120px;
+}
+.accounts-col-action {
+  width: 110px;
+}
+.accounts-table th,
+.accounts-table td {
+  padding: 12px;
+}
+.accounts-table td {
+  vertical-align: middle;
+}
+.accounts-table small {
+  display: block;
+  margin-top: 4px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  overflow-wrap: anywhere;
+}
+.accounts-table td:first-child {
+  max-width: 240px;
+}
+.accounts-table strong {
+  font-weight: 600;
+}
+.accounts-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 220px;
+}
+.accounts-error {
+  color: var(--mq-danger-text);
+  font-size: var(--mq-font-13);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.accounts-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--mq-text-tertiary);
+}
+.accounts-pagination {
+  justify-content: flex-end;
+  margin-top: 16px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+.accounts-editor {
+  padding-top: 8px;
+}
+.accounts-editor-head {
+  margin-bottom: 24px;
+}
+.accounts-editor h2 {
+  margin: 0;
+  font-size: var(--mq-font-20);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.accounts-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.accounts-editor-fields .mq-field {
+  min-width: 0;
+}
+.accounts-role-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 0;
+  margin: 20px 0;
+  border: 0;
+}
+.accounts-role-fields legend {
+  margin-bottom: 8px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+.accounts-role-fields label,
+.accounts-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-size: var(--mq-font-14);
+}
+.accounts-editor-actions {
+  margin-top: 24px;
+}
+.accounts-editor-actions button {
+  flex: 1;
+}
+@media (max-width: 600px) {
+  .accounts-panel {
+    min-width: 0;
+  }
+  .accounts-editor-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .accounts-filters .mq-field {
+    flex: 1 1 140px;
+  }
+  .accounts-pagination {
+    flex-wrap: wrap;
+  }
+}

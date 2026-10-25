@@ -21,6 +21,7 @@ vi.mock('@/utils/auth-token', () => ({
 async function loadApiServiceWithAxiosMock() {
   let requestFulfilled: InterceptorFn | undefined
   let responseRejected: InterceptorFn | undefined
+  let responseFulfilled: InterceptorFn | undefined
 
   const apiClientMock = {
     interceptors: {
@@ -32,6 +33,7 @@ async function loadApiServiceWithAxiosMock() {
       },
       response: {
         use: vi.fn((_fulfilled: InterceptorFn, rejected: InterceptorFn) => {
+          responseFulfilled = _fulfilled
           responseRejected = rejected
           return 0
         }),
@@ -57,10 +59,40 @@ async function loadApiServiceWithAxiosMock() {
   return {
     requestFulfilled,
     responseRejected,
+    responseFulfilled,
   }
 }
 
 describe('apiService trace propagation', () => {
+  it('账号创建口令和登录令牌不进入调试日志，原请求响应不变', async () => {
+    vi.stubEnv('VITE_API_DEBUG', 'true')
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const { requestFulfilled, responseFulfilled } = await loadApiServiceWithAxiosMock()
+      const password = 'synthetic-initial-password-never-log'
+      const accessToken = 'synthetic-access-token-never-log'
+      const request = {
+        method: 'post',
+        url: '/api/v1/account-management',
+        headers: {},
+        data: { password },
+      }
+      const response = {
+        config: { method: 'post', url: '/api/v1/auth/login' },
+        status: 200,
+        data: { access_token: accessToken, nested: { password_hash: password } },
+      }
+      requestFulfilled!(request)
+      responseFulfilled!(response)
+      const output = JSON.stringify(log.mock.calls)
+      expect(output).not.toContain(password)
+      expect(output).not.toContain(accessToken)
+      expect(request.data.password).toBe(password)
+      expect(response.data.access_token).toBe(accessToken)
+    } finally {
+      log.mockRestore()
+    }
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()

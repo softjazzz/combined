@@ -57,6 +57,7 @@ from .routers import emr_render as emr_render_router
 from .routers import scoring_rules as scoring_rules_router
 from .routers import staff_ranking as staff_ranking_router
 from .routers import notifications as notifications_router
+from .routers import account_management as account_management_router
 from .routers import settlement as settlement_router
 from .routers import scoring_config as scoring_config_router
 from .routers import sync as sync_router
@@ -206,7 +207,9 @@ def create_app() -> FastAPI:
         trace_id = getattr(request.state, "trace_id", "unknown")
 
         logger.warning(
-            f"Validation Error: {exc.errors()}",
+            "Validation Error: %s",
+            [{"field": ".".join(str(loc) for loc in error["loc"]), "type": error["type"]}
+             for error in exc.errors()],
             extra={"trace_id": trace_id, "path": request.url.path}
         )
 
@@ -326,6 +329,7 @@ def create_app() -> FastAPI:
     app.include_router(staff_ranking_router.router)
     # 通知与申诉（消息+整改跟踪+问题闭环）
     app.include_router(notifications_router.router)
+    app.include_router(account_management_router.router)
     # 医保结算清单（查询+质控+导出）
     app.include_router(settlement_router.router)
     # 甲乙丙阈值配置

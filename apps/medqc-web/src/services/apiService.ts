@@ -59,7 +59,15 @@ const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
 const API_DEBUG =
   import.meta.env.DEV && String(import.meta.env.VITE_API_DEBUG || '').toLowerCase() === 'true'
 const DEBUG_REDACTED = '[REDACTED]'
-const DEBUG_SENSITIVE_KEYS = new Set(['activation_code'])
+const DEBUG_SENSITIVE_KEYS = new Set([
+  'activation_code',
+  'password',
+  'password_hash',
+  'new_password',
+  'old_password',
+  'access_token',
+  'refresh_token',
+])
 
 function redactDebugSensitiveValues(value: unknown, seen = new WeakSet<object>()): unknown {
   if (Array.isArray(value)) {
@@ -182,7 +190,7 @@ apiClient.interceptors.response.use(
         `✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`,
         {
           status: response.status,
-          data: response.data,
+          data: redactDebugSensitiveValues(response.data),
         },
       )
     }
@@ -453,7 +461,7 @@ export class ApiService {
       })
 
       const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', payload)
-      console.log('📡 ApiService.login 收到响应:', response.data)
+      console.log('📡 ApiService.login 收到响应:', redactDebugSensitiveValues(response.data))
 
       // 保存token
       if (response.data.access_token) {
