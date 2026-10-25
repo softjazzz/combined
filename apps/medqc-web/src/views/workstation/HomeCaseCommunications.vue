@@ -5,27 +5,34 @@
   >
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
-        <h2 class="mq-page-title">
+        <span class="mq-page-eyebrow">质控作业 · 医生消息</span>
+        <h1 class="mq-page-title">
           病历沟通
-        </h2>
+        </h1>
       </div>
-      <router-link
-        class="mq-btn"
-        to="/workstation-v5/worklist?assist=message"
-      >
-        消息面板
-      </router-link><a-button
-        :disabled="loading"
-        aria-label="刷新病历沟通"
-        @click="load()"
-      >
-        <template #icon>
+      <div class="mq-page-head__actions">
+        <router-link
+          class="mq-btn"
+          to="/workstation-v5/worklist?assist=message"
+        >
           <MqIcon
-            name="sync"
+            name="task"
             :size="16"
-          />
-        </template>
-      </a-button>
+          />消息面板
+        </router-link><a-button
+          :disabled="loading"
+          aria-label="刷新病历沟通"
+          title="刷新病历沟通"
+          @click="load()"
+        >
+          <template #icon>
+            <MqIcon
+              name="sync"
+              :size="16"
+            />
+          </template>
+        </a-button>
+      </div>
     </header>
     <a-alert
       v-if="error"
@@ -33,94 +40,187 @@
       type="error"
       show-icon
     />
-    <a-spin :spinning="loading">
-      <ul>
-        <li
-          v-for="item in items"
-          :key="item.id"
-        >
-          <button
-            type="button"
-            @click="show(item.id)"
+    <section
+      class="case-inbox__records"
+      aria-label="病历沟通记录"
+    >
+      <div class="case-inbox__section-head">
+        <h2>
+          <MqIcon
+            name="task"
+            :size="18"
+          />接收记录
+        </h2>
+        <span v-if="loading">正在读取</span><span v-else-if="error">数据未核实</span><span v-else>共 {{ total }} 条记录</span>
+      </div>
+      <a-spin :spinning="loading">
+        <ul class="case-inbox__list">
+          <li
+            v-for="item in items"
+            :key="item.id"
           >
-            <span>{{ item.department }} · {{ item.visit_id }} · {{ labels[item.action] }}</span><span>{{ item.withdrawn ? '已撤回' : item.is_read ? '已读' : '未读' }}</span><span>{{ item.content }}</span>
-          </button>
-        </li>
-      </ul>
-      <p v-if="!loading && !error && !items.length">
-        暂无病历沟通
-      </p>
-    </a-spin>
-    <a-pagination
-      v-if="total && !error"
-      v-model:current="page"
-      :total="total"
-      :page-size="20"
-      :show-size-changer="false"
-      @change="load(false)"
-    />
+            <button
+              type="button"
+              class="case-inbox__row"
+              :class="{ 'is-unread': !item.is_read && !item.withdrawn }"
+              :aria-label="`查看${item.visit_id}的${labels[item.action]}消息`"
+              @click="show(item.id)"
+            >
+              <MqIconTile
+                :name="communicationIcon(item.action)"
+                :size="40"
+                :tone="item.action === 'withdraw' ? 'neutral' : 'brand'"
+              />
+              <span class="case-inbox__row-copy">
+                <span class="case-inbox__row-title"><strong>{{ labels[item.action] }}</strong><span
+                  class="mq-status"
+                  :class="communicationStatusClass(item)"
+                >{{
+                  communicationStatus(item)
+                }}</span></span>
+                <span class="case-inbox__row-context"><span>{{ item.visit_id }}</span><span>{{ item.scene === 'running' ? '运行病历' : '终末病历' }}</span><span>{{ item.department }}</span></span>
+                <span class="case-inbox__excerpt">{{ item.content }}</span>
+              </span>
+              <time :datetime="item.created_at">{{ formatTime(item.created_at) }}</time>
+              <MqIcon
+                class="case-inbox__row-arrow"
+                name="back"
+                :size="16"
+              />
+            </button>
+          </li>
+        </ul>
+        <div
+          v-if="!loading && !error && !items.length"
+          class="case-inbox__empty mq-soft"
+        >
+          <MqIconTile
+            name="task"
+            :size="44"
+          /><strong>暂无病历沟通</strong>
+        </div>
+      </a-spin>
+      <a-pagination
+        v-if="total && !error"
+        v-model:current="page"
+        :total="total"
+        :page-size="20"
+        :show-size-changer="false"
+        @change="load(false)"
+      />
+    </section>
     <a-drawer
       :open="detailOpen"
-      title="病历沟通"
       width="min(620px, 100vw)"
       :root-style="{ zIndex: 1300 }"
       @close="close"
     >
-      <a-alert
-        v-if="detailError"
-        :message="detailError"
-        type="error"
-        show-icon
-      /><a-button
-        v-if="detailError"
-        :disabled="detailLoading"
-        @click="refreshDetail"
+      <template #title>
+        <div class="case-detail__heading">
+          <MqIconTile
+            name="task"
+            tone="brand"
+            :size="36"
+          />
+          <div>
+            <span>质控作业 · 消息详情</span>
+            <h2>病历沟通</h2>
+          </div>
+        </div>
+      </template>
+      <section
+        class="case-detail"
+        aria-label="病历沟通详情"
       >
-        刷新核对
-      </a-button>
-      <a-spin :spinning="detailLoading">
-        <template v-if="selected">
-          <a-descriptions
-            :column="1"
-            bordered
-          >
-            <a-descriptions-item label="病历">
-              {{ selected.visit_id }} ·
-              {{ selected.scene === 'running' ? '运行病历' : '终末病历' }}
-            </a-descriptions-item><a-descriptions-item label="冻结结果">
-              {{ selected.root_job_id }} / {{ selected.envelope_id }}
-            </a-descriptions-item><a-descriptions-item label="规则版本">
-              {{ selected.rule_set_key }} · {{ selected.rule_set_version }}
-            </a-descriptions-item><a-descriptions-item label="通知状态">
-              {{
-                selected.withdrawn ? '原催办已撤回' : selected.is_read ? '已读' : '未读'
-              }}
-            </a-descriptions-item>
-          </a-descriptions>
-          <h3>{{ labels[selected.action] }}</h3>
-          <p class="case-inbox__content">
-            {{ selected.content }}
-          </p>
-          <h3>操作历史</h3>
-          <ol class="case-inbox__history">
-            <li
-              v-for="event in selected.history"
-              :key="event.id"
-              :class="{ 'case-inbox__active': event.id === selected.id }"
-            >
-              <strong>{{ labels[event.action] }} ·
-                {{ event.withdrawn ? '已撤回' : event.is_read ? '已读' : '未读' }}</strong><time>{{ formatTime(event.created_at) }}</time>
-              <p>{{ event.content }}</p>
-              <p
-                v-if="event.related_event_id"
-                class="case-inbox__reference"
-              >
-                原催办：{{ event.related_event_id }}
+        <a-alert
+          v-if="detailError"
+          :message="detailError"
+          type="error"
+          show-icon
+        /><a-button
+          v-if="detailError"
+          :disabled="detailLoading"
+          @click="refreshDetail"
+        >
+          刷新核对
+        </a-button>
+        <a-spin
+          :spinning="detailLoading"
+          tip="正在核对消息来源"
+        >
+          <template v-if="selected">
+            <div class="case-detail__object mq-soft">
+              <div class="case-detail__object-head">
+                <MqIconTile
+                  :name="selected.scene === 'running' ? 'running' : 'final'"
+                  :size="40"
+                  tone="brand"
+                />
+                <div class="case-detail__object-copy">
+                  <span>沟通病历</span>
+                  <h3>{{ selected.visit_id }}</h3>
+                </div>
+                <span
+                  class="mq-status"
+                  :class="communicationStatusClass(selected)"
+                >{{
+                  selected.withdrawn ? '原催办已撤回' : communicationStatus(selected)
+                }}</span>
+              </div>
+              <div class="case-detail__meta">
+                <span>{{ selected.scene === 'running' ? '运行病历' : '终末病历' }}</span><span>{{ selected.department }}</span><span>规则版本 {{ selected.rule_set_version }}</span>
+              </div>
+              <details class="case-detail__source">
+                <summary>保存结果来源</summary>
+                <dl>
+                  <div>
+                    <dt>机构</dt>
+                    <dd>{{ selected.institute_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>患者</dt>
+                    <dd>{{ selected.patient_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>就诊</dt>
+                    <dd>{{ selected.visit_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>冻结结果</dt>
+                    <dd>{{ selected.root_job_id }} / {{ selected.envelope_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>规则集</dt>
+                    <dd>{{ selected.rule_set_key }} · {{ selected.rule_set_version }}</dd>
+                  </div>
+                </dl>
+              </details>
+            </div>
+            <section class="case-detail__body">
+              <h3>{{ labels[selected.action] }}</h3>
+              <p class="case-inbox__content">
+                {{ selected.content }}
               </p>
-            </li>
-          </ol>
-        </template>
-      </a-spin>
+            </section>
+            <section class="case-detail__history">
+              <div class="case-inbox__section-head">
+                <h3>
+                  <MqIcon
+                    name="history"
+                    :size="18"
+                  />操作历史
+                </h3>
+                <span>{{ selected.history.length }} 条 · 北京时间</span>
+              </div>
+              <CaseCommunicationHistory
+                class="case-inbox__history"
+                :items="selected.history"
+                :active-id="selected.id"
+              />
+            </section>
+          </template>
+        </a-spin>
+      </section>
     </a-drawer>
   </section>
 </template>
@@ -129,7 +229,15 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import MqIcon from '@/components/icons/MqIcon.vue'
-import { formatDateTime as formatTime } from '@/utils/date'
+import MqIconTile from '@/components/icons/MqIconTile.vue'
+import CaseCommunicationHistory from '@/components/qc/CaseCommunicationHistory.vue'
+import {
+  communicationLabels as labels,
+  communicationIcon,
+  communicationStatus,
+  communicationStatusClass,
+  formatCommunicationTime as formatTime,
+} from '@/components/qc/caseCommunicationPresentation'
 import { useAuthStore } from '@/stores/auth'
 import {
   getCommunication,
@@ -153,7 +261,6 @@ const page = ref(1),
 let generation = 0,
   detailGeneration = 0,
   activeId = ''
-const labels = { urge: '病历催办', opinion: '质控意见', withdraw: '催办撤回' }
 async function load(reset = true) {
   if (!allowed.value) return
   const token = ++generation
@@ -273,56 +380,4 @@ watch(
 onUnmounted(reset)
 </script>
 
-<style scoped>
-.case-inbox ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.case-inbox li button {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  width: 100%;
-  padding: 14px 0;
-  text-align: left;
-  background: none;
-  border: 0;
-  border-bottom: 1px solid var(--mq-border, #edf0f4);
-  cursor: pointer;
-}
-.case-inbox li button span:last-child {
-  flex-basis: 100%;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.case-inbox h3 {
-  font-size: 16px;
-  margin: 22px 0 10px;
-}
-.case-inbox__content,
-.case-inbox__history p {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.case-inbox__history {
-  padding-left: 22px;
-}
-.case-inbox__history li {
-  padding: 12px 8px;
-  border-bottom: 1px solid var(--mq-border, #edf0f4);
-}
-.case-inbox__history time {
-  display: block;
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--mq-text-secondary, #667085);
-}
-.case-inbox__active {
-  background: var(--mq-soft-bg, #f2f8fc);
-}
-.case-inbox__reference {
-  font-size: 12px;
-  color: var(--mq-text-secondary, #667085);
-}
-</style>
+<style scoped src="./styles/case-communications.css"></style>
