@@ -122,6 +122,10 @@
             :selected-key="selectedDocumentKey"
             @select="selectDocument"
           />
+          <ReadonlyFrontpageContent
+            v-else-if="selectedDocument.document_type === 'mr' && selectedDocument.frontpage_display"
+            :display="selectedDocument.frontpage_display"
+          />
           <div v-else-if="documentSectionViews.length" class="record-content-sections">
             <section
               v-for="section in documentSectionViews"
@@ -317,6 +321,7 @@ import {
   getEditableMedicalRecordDocuments,
 } from '@/services/manual-case-sample-service'
 import ReadonlyMedicalDocumentDirectory from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalDocumentDirectory.vue'
+import ReadonlyFrontpageContent from '@/views/workstation-v4/customer-sample-validation/ReadonlyFrontpageContent.vue'
 import ReadonlyMedicalOrderTable from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalOrderTable.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
 import {
