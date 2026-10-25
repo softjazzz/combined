@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import re
 from typing import Any, Mapping, Protocol
 
@@ -22,6 +23,9 @@ from ..evidence_material import (
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
 from ..llm_prompt_privacy import classify_luxian_0609_llm_call_failure
 from .shared import clean_text, response_json_payload
+
+
+logger = logging.getLogger(__name__)
 
 
 RULE_ID = "LX0609-01-02-02"
@@ -400,8 +404,9 @@ relation_state 只能是 related、unrelated、unknown：
 - related：至少一项鉴别诊断与第一诊断或其同一临床问题存在合理临床关联；
 - unrelated：没有任何一项与第一诊断的临床问题相关，且正文未解释关联；
 - unknown：信息存在但无法可靠判断。
+rationale_code 必须与 relation_state 成对：related 对应 same_clinical_problem；unrelated 对应 no_related_item；unknown 对应 insufficient_information。
 
-medical_analysis 用不超过240字说明具体关联或不相关依据，点明诊断及临床问题，不得只重复“未围绕第一诊断展开”。unrelated 必须解释为什么所有已写的鉴别均不能解释该临床问题，并在 evidence_quote 引用上述材料中8至100字的连续原文；不得编造。信息不足以支持明确不相关时填 unknown。不要输出人员姓名或身份信息。
+medical_analysis 用不超过240字说明具体关联或不相关依据，点明诊断及临床问题，不得只重复“未围绕第一诊断展开”。unrelated 的 medical_analysis 必须为20至240字，解释为什么所有已写的鉴别均不能解释该临床问题，并在 evidence_quote 引用上述材料中8至100字的连续原文；不得编造，不得拼接不相邻的片段。四个字段均使用字符串，说明或引文不得输出数组或对象。信息不足以支持明确不相关时填 unknown。不要输出人员姓名或身份信息。
 只输出 JSON：{{"relation_state":"related|unrelated|unknown","rationale_code":"same_clinical_problem|no_related_item|insufficient_information","medical_analysis":"具体依据","evidence_quote":"连续原文"}}。"""
 
 
@@ -552,25 +557,53 @@ async def evaluate_rule_077(
     rationale = clean_text(payload.get("rationale_code")) if payload else ""
     analysis = clean_text(payload.get("medical_analysis")) if payload else ""
     quote = clean_text(payload.get("evidence_quote")) if payload else ""
-    source_text = "\n".join((diagnosis_evidence.full_text, differential, clinical_background))
-    grounded_explanation = (
-        20 <= len(analysis) <= 240
-        and 8 <= len(quote) <= 100
-        and quote in source_text
+    # quote 已经由 clean_text 合并空白；材料必须使用同一规则，避免真实的
+    # 相邻换行引文被误判为编造。保留标点和顺序，不跨片段拼接或模糊匹配。
+    source_texts = tuple(
+        clean_text(value)
+        for value in (diagnosis_evidence.full_text, differential, clinical_background)
     )
+    quote_in_source = bool(quote) and any(quote in text for text in source_texts)
     rationale_matches_state = {
         "related": "same_clinical_problem",
         "unrelated": "no_related_item",
         "unknown": "insufficient_information",
     }
-    if (
-        state not in _RELATION_STATES
-        or rationale not in _RATIONALE_CODES
-        or rationale != rationale_matches_state.get(state)
-        or (state == "unrelated" and (not grounded_explanation or context_truncated))
-        or len(analysis) > 240
-        or "\x00" in analysis
-    ):
+    validation_errors: list[str] = []
+    if payload is None:
+        validation_errors.append("json_payload_invalid")
+    else:
+        for field in ("relation_state", "rationale_code", "medical_analysis", "evidence_quote"):
+            if field in payload and not isinstance(payload[field], str):
+                validation_errors.append(f"{field}_type_invalid")
+    if state not in _RELATION_STATES:
+        validation_errors.append("relation_state_invalid")
+    if rationale not in _RATIONALE_CODES:
+        validation_errors.append("rationale_code_invalid")
+    elif state in _RELATION_STATES and rationale != rationale_matches_state[state]:
+        validation_errors.append("rationale_state_mismatch")
+    if len(analysis) > 240:
+        validation_errors.append("analysis_too_long")
+    if "\x00" in analysis:
+        validation_errors.append("analysis_contains_nul")
+    if state == "unrelated":
+        if len(analysis) < 20:
+            validation_errors.append("analysis_too_short")
+        if not 8 <= len(quote) <= 100:
+            validation_errors.append("quote_length_invalid")
+        if quote and not quote_in_source:
+            validation_errors.append("quote_not_in_source")
+        if context_truncated:
+            validation_errors.append("clinical_context_truncated")
+    if validation_errors:
+        # 仅记录固定错误码、长度及快照标识；不记录模型应答、引文、姓名或凭据。
+        logger.warning(
+            "rule_077_model_validation_failed snapshot=%s codes=%s analysis_chars=%d quote_chars=%d",
+            snapshot.snapshot_hash,
+            ",".join(validation_errors),
+            len(analysis),
+            len(quote),
+        )
         criterion = _criterion(
             status=CriterionStatus.UNKNOWN,
             reason_code="model_invalid_output",
@@ -605,7 +638,7 @@ async def evaluate_rule_077(
             refs=refs,
             actual=state,
             medical_analysis=(
-                f"{analysis}\n原文依据：{quote}" if analysis and quote in source_text and quote
+                f"{analysis}\n原文依据：{quote}" if analysis and quote_in_source
                 else analysis
             ),
         )

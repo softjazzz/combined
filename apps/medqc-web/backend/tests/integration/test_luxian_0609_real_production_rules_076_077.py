@@ -363,6 +363,110 @@ async def test_077_unrelated_without_concrete_grounded_explanation_is_not_a_defe
     assert execution.llm_call_count == 1
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("quote", "expected"), [
+    ("病例特点：右上腹疼痛。\n诊断依据：胆囊影像异常。", "non_compliant"),
+    ("病例特点：右上腹疼痛。 诊断依据：胆囊影像异常。", "non_compliant"),
+    ("病例特点：右上腹疼痛。\t诊断依据：胆囊影像异常。", "non_compliant"),
+    ("病例特点：右上腹疼痛。胆囊影像异常。", "technical_error"),
+    ("病例特点：右上腹疼痛！诊断依据：胆囊影像异常。", "technical_error"),
+    ("急性胆囊炎；慢性胆囊炎 消化性溃疡穿孔；急性胰腺炎", "technical_error"),
+])
+async def test_077_quote_whitespace_normalization_matches_the_same_source(quote, expected) -> None:
+    import json
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            return {"content": json.dumps({
+                "relation_state": "unrelated", "rationale_code": "no_related_item",
+                "medical_analysis": "第一诊断对应的临床问题与所列鉴别缺少对应依据，所列鉴别均未解释该问题。",
+                # 模型逐字引用两个相邻字段，JSON 中保留换行。
+                "evidence_quote": quote,
+            }, ensure_ascii=False)}
+
+    rows = _077_rows()
+    rows["first_course_record"][0].update({
+        "case_characteristic": "右上腹疼痛。", "diagnose_based_on": "胆囊影像异常。",
+    })
+    session = _session("LX0609-01-02-02", rows)
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=Client(),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert result["status"] == expected
+    if expected == "non_compliant":
+        assert "原文依据" in result["criterion_results"][0]["medical_analysis"]
+
+
+@pytest.mark.asyncio
+async def test_077_rejection_logs_specific_safe_codes_without_patient_content(caplog) -> None:
+    import json
+    import logging
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            return {"content": json.dumps({
+                "relation_state": "unrelated", "rationale_code": "same_clinical_problem",
+                "medical_analysis": "过短说明", "evidence_quote": "原文中不存在的合成片段",
+            }, ensure_ascii=False)}
+
+    session = _session("LX0609-01-02-02", _077_rows())
+    with caplog.at_level(logging.WARNING):
+        execution = await execute_luxian_0609_native_course_quality_rules(
+            rule_ids=("LX0609-01-02-02",),
+            wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+            evidence_payload=None, llm_client=Client(),
+            evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+            decision_rule_ids=("LX0609-01-02-02",),
+        )
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert result["status"] == "technical_error"
+    assert "rationale_state_mismatch" in caplog.text
+    assert "analysis_too_short" in caplog.text
+    assert "quote_not_in_source" in caplog.text
+    assert "过短说明" not in caplog.text
+    assert "原文中不存在的合成片段" not in caplog.text
+    assert "急性胆囊炎" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["medical_analysis", "evidence_quote"])
+async def test_077_model_objects_are_not_silently_converted_to_valid_strings(field) -> None:
+    import json
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            payload = {"relation_state": "related", "rationale_code": "same_clinical_problem",
+                       "medical_analysis": "说明", "evidence_quote": ""}
+            payload[field] = {"text": "模型返回了对象"}
+            return {"content": json.dumps(payload, ensure_ascii=False)}
+
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=Client(),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    _reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert result["status"] == "technical_error"
+
+
+def test_077_prompt_declares_the_existing_validation_requirements() -> None:
+    from app.services.luxian_0609.course_quality.rule_077 import _prompt
+
+    prompt = _prompt(first_diagnosis="合成诊断", full_diagnosis="合成诊断", differential="合成鉴别")
+    assert "unrelated 的 medical_analysis 必须为20至240字" in prompt
+    assert "related 对应 same_clinical_problem" in prompt
+    assert "unrelated 对应 no_related_item" in prompt
+    assert "unknown 对应 insufficient_information" in prompt
+
+
 def test_077_required_structured_fields_survive_the_production_source_projection() -> None:
     from app.services.luxian_0609 import source_evidence_reader
 
