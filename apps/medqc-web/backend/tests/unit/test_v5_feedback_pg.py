@@ -13,7 +13,7 @@ from app.core.security import get_password_hash
 from app.database import connection
 from app.database.models.v36_reports import DefectRectification as Task
 from app.database.models.v36_reports import SysUser
-from app.routers import auth, quality_reports
+from app.routers import auth, notifications, quality_reports
 from app.routers import defect_rectifications as api
 from app.services import (
     auth_store,
@@ -31,6 +31,7 @@ from app.services.defect_rectification_service import (
     DefectRectificationService,
     RectificationError,
 )
+from app.services.doctor_notification_service import DoctorNotificationService
 from app.services.luxian_0609.basic_timeliness_customer_projection import (
     safe_basic_timeliness_customer_display_facts,
 )
@@ -210,10 +211,12 @@ def feedback(raw_pg, monkeypatch, request):
     job = publish_result(saved, scene)
     service = DefectRectificationService(sessions)
     monkeypatch.setattr(api, "service", service)
+    monkeypatch.setattr(notifications, "service", DoctorNotificationService(sessions))
     app = FastAPI()
     app.include_router(auth.router)
     app.include_router(api.router)
     app.include_router(quality_reports.router)
+    app.include_router(notifications.router)
     with TestClient(app) as client:
         assert not app.dependency_overrides
         assert client.get("/api/v1/defect-rectifications").status_code in {401, 403}
@@ -378,8 +381,16 @@ def test_saved_result_to_rectification_and_report_with_real_pg(feedback, monkeyp
         if key not in {
             ("qc", "qc_defect_rectifications"),
             ("qc", "qc_defect_rectification_events"),
+            ("qc", "notifications"),
         }:
             assert old["rows"] == after[key]["rows"], key
+    actor("doc")
+    notices = http.get("/api/v1/notifications").json()["data"]
+    assert notices["total"] == notices["unread_count"] == 4
+    assert all(
+        item["interaction_target"] == {"kind": "rectification", "id": task["id"]}
+        for item in notices["items"]
+    )
     print(
         json.dumps(
             {
@@ -387,7 +398,7 @@ def test_saved_result_to_rectification_and_report_with_real_pg(feedback, monkeyp
                 "events": 6,
                 "event_failure_rolled_back": True,
                 "report_state": "approved",
-                "protected_tables": len(before) - 2,
+                "protected_tables": len(before) - 3,
             }
         )
     )
