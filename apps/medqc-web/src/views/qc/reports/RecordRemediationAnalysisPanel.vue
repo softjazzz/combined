@@ -17,56 +17,93 @@
     <a-button v-if="error" :disabled="busy" @click="load(1)"> 重试读取 </a-button>
     <a-spin :spinning="busy">
       <template v-if="analysis">
-        <details class="remediation-contract">
-          <summary>
-            <MqIcon name="rules" :size="16" />七标签统计口径已确认<span
-              >可重叠 · 申诉与整改独立</span
-            >
-          </summary>
-          <ul class="assumptions">
-            <li v-for="assumption in analysis.assumptions" :key="assumption">
-              {{ assumption }}
-            </li>
-          </ul>
-        </details>
         <div class="label-counts">
-          <button
-            type="button"
-            class="mq-btn"
-            :class="{ active: !label }"
-            :aria-pressed="!label"
-            @click="selectLabel()"
-          >
-            全部保存缺陷</button
-          ><button
-            v-for="item in analysis.labels"
-            :key="item.key"
-            type="button"
-            class="mq-card remediation-metric"
-            :class="{ active: label === item.key }"
-            :aria-pressed="label === item.key"
-            @click="selectLabel(item.key)"
-          >
-            <span>{{ item.label }}</span
-            ><strong>{{ item.defect_total }}</strong
-            ><small>{{ item.case_total }} 份病历</small>
-          </button>
+          <div class="remediation-toolbar">
+            <button
+              type="button"
+              class="mq-btn"
+              :class="{ active: !label }"
+              :aria-pressed="!label"
+              @click="selectLabel()"
+            >
+              全部保存缺陷
+            </button>
+            <details class="remediation-contract">
+              <summary><MqIcon name="rules" :size="16" />统计口径</summary>
+              <div class="remediation-contract-body">
+                <p>七标签统计口径已确认，可重叠；申诉与整改独立。</p>
+                <ul class="assumptions">
+                  <li v-for="assumption in analysis.assumptions" :key="assumption">
+                    {{ assumption }}
+                  </li>
+                </ul>
+              </div>
+            </details>
+          </div>
+          <div class="remediation-groups">
+            <template v-for="group in metricGroups" :key="group.key">
+              <section
+                v-if="group.items.length"
+                class="remediation-group"
+                :class="`remediation-group--${group.key}`"
+                :aria-label="group.label"
+              >
+                <header class="remediation-group-head">
+                  <MqIcon :name="group.icon" :size="16" />
+                  <h3>{{ group.label }}</h3>
+                </header>
+                <div class="remediation-group-metrics">
+                  <button
+                    v-for="item in group.items"
+                    :key="item.key"
+                    type="button"
+                    class="remediation-metric"
+                    :class="{
+                      active: label === item.key,
+                      'has-value': item.defect_total > 0,
+                      'is-success': [
+                        'self_rectified',
+                        'urged_rectified',
+                        'appeal_approved',
+                      ].includes(item.key),
+                      'is-warning': ['urged_pending', 'not_urged_pending'].includes(item.key),
+                      'is-danger': item.key === 'appeal_rejected',
+                    }"
+                    :data-label="item.key"
+                    :aria-pressed="label === item.key"
+                    @click="selectLabel(item.key)"
+                  >
+                    <span class="remediation-metric-label">{{ item.label }}</span>
+                    <span class="remediation-metric-value">
+                      <strong>{{ item.defect_total }}</strong
+                      ><span>条</span>
+                    </span>
+                    <small>{{ item.case_total }} 份病历</small>
+                  </button>
+                </div>
+              </section>
+            </template>
+          </div>
         </div>
-        <div class="other-counts">
-          <button
-            v-for="(value, key) in analysis.state_counts"
-            :key="key"
-            class="mq-btn"
-            type="button"
-            :class="{ active: label === key }"
-            :aria-pressed="label === key"
-            @click="selectLabel(String(key))"
-          >
-            {{ stateName(String(key)) }}：{{ value }}
-          </button>
+        <div class="remediation-state-bar">
+          <span class="remediation-state-label">处理状态</span>
+          <div class="other-counts mq-segmented" role="group" aria-label="其他处理状态">
+            <button
+              v-for="(value, key) in analysis.state_counts"
+              :key="key"
+              class="mq-segmented__item"
+              type="button"
+              :class="{ 'is-active': label === key, 'has-value': value > 0 }"
+              :aria-pressed="label === key"
+              @click="selectLabel(String(key))"
+            >
+              <span>{{ stateName(String(key)) }}</span
+              ><strong>{{ value }}</strong>
+            </button>
+          </div>
         </div>
         <p class="remediation-total">
-          当前筛选 {{ analysis.total }} 条保存缺陷；七标签只统计完整冻结来源，缺失来源单列。
+          当前筛选 <strong>{{ analysis.total }}</strong> 条保存缺陷
         </p>
         <div class="table-scroll">
           <table class="mq-table">
@@ -200,7 +237,7 @@
   </section>
 </template>
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -219,6 +256,32 @@ const label = ref<string>(),
   busy = ref(false),
   exporting = ref(false),
   error = ref('')
+const appealLabelKeys = new Set(['clinical_appeal', 'appeal_rejected', 'appeal_approved'])
+const rectificationLabelOrder: Record<string, number> = {
+  urged_pending: 0,
+  not_urged_pending: 1,
+  self_rectified: 2,
+  urged_rectified: 3,
+}
+const metricGroups = computed(() => [
+  {
+    key: 'rectification',
+    label: '整改跟踪',
+    icon: 'task' as const,
+    items: (analysis.value?.labels || [])
+      .filter((item) => !appealLabelKeys.has(item.key))
+      .sort(
+        (left, right) =>
+          (rectificationLabelOrder[left.key] ?? 4) - (rectificationLabelOrder[right.key] ?? 4),
+      ),
+  },
+  {
+    key: 'appeal',
+    label: '申诉复核',
+    icon: 'history' as const,
+    items: (analysis.value?.labels || []).filter((item) => appealLabelKeys.has(item.key)),
+  },
+])
 let generation = 0
 async function load(page = 1) {
   const token = ++generation

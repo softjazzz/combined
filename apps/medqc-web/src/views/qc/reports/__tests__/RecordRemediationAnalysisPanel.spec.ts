@@ -113,7 +113,9 @@ describe('整改分析', () => {
     expect(wrapper.get('details').text()).toContain(payload.assumptions[0])
     expect(wrapper.get('.label-counts button').attributes('aria-pressed')).toBe('true')
     const metric = wrapper.get('.remediation-metric')
-    expect(metric.classes()).toContain('mq-card')
+    expect(metric.classes()).not.toContain('mq-card')
+    expect(wrapper.get('[aria-label="整改跟踪"]').findAll('.remediation-metric')).toHaveLength(1)
+    expect(wrapper.get('[aria-label="申诉复核"]').findAll('.remediation-metric')).toHaveLength(1)
     await metric.trigger('click')
     await flushPromises()
     expect(metric.attributes('aria-pressed')).toBe('true')
@@ -212,7 +214,10 @@ describe('整改分析', () => {
     const wrapper = make()
     await flushPromises()
     expect(wrapper.text()).toContain('七标签统计口径已确认')
-    expect(wrapper.text()).toContain('尚未派发：2')
+    const unassigned = wrapper
+      .findAll('.other-counts button')
+      .find((item) => item.text().startsWith('尚未派发'))!
+    expect(unassigned.get('strong').text()).toBe('2')
     await wrapper
       .findAll('button')
       .find((item) => item.text() === '查看历史')!
@@ -223,6 +228,88 @@ describe('整改分析', () => {
     expect(wrapper.get('aside').text()).toContain('urge1')
     expect(wrapper.get('aside').text()).toContain('合成医生提交说明')
     expect(wrapper.get('aside').text()).toContain('独立申诉')
+    wrapper.unmount()
+  })
+  it('七标签分组仅搬运owner计数，零值仍可筛选且不把可重叠计数相加', async () => {
+    const labels = [
+      { key: 'clinical_appeal', label: '临床申诉', defect_total: 3, case_total: 2 },
+      { key: 'appeal_rejected', label: '申诉驳回', defect_total: 0, case_total: 0 },
+      { key: 'appeal_approved', label: '申诉通过', defect_total: 2, case_total: 1 },
+      { key: 'urged_pending', label: '催办待整改', defect_total: 0, case_total: 0 },
+      { key: 'self_rectified', label: '医生自行整改', defect_total: 1, case_total: 1 },
+      { key: 'not_urged_pending', label: '未催办待整改', defect_total: 0, case_total: 0 },
+      { key: 'urged_rectified', label: '催办已整改', defect_total: 1, case_total: 1 },
+    ]
+    mocks.read.mockImplementation(async (filters) => ({
+      success: true,
+      data: {
+        ...payload,
+        labels,
+        scope: filters,
+        filter_label: filters.label || null,
+        page: filters.page,
+      },
+    }))
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.get('[aria-label="整改跟踪"]').findAll('.remediation-metric')).toHaveLength(4)
+    expect(wrapper.get('[aria-label="申诉复核"]').findAll('.remediation-metric')).toHaveLength(3)
+    expect(
+      wrapper
+        .get('[aria-label="整改跟踪"]')
+        .findAll('.remediation-metric')
+        .map((item) => item.attributes('data-label')),
+    ).toEqual(['urged_pending', 'not_urged_pending', 'self_rectified', 'urged_rectified'])
+    for (const item of labels) {
+      const metric = wrapper.get(`[data-label="${item.key}"]`)
+      expect(metric.get('strong').text()).toBe(String(item.defect_total))
+      expect(metric.get('small').text()).toBe(`${item.case_total} 份病历`)
+      expect(metric.classes().includes('has-value')).toBe(item.defect_total > 0)
+    }
+    await wrapper.get('[data-label="appeal_rejected"]').trigger('click')
+    await flushPromises()
+    expect(mocks.read).toHaveBeenLastCalledWith(
+      expect.objectContaining({ label: 'appeal_rejected', page: 1 }),
+    )
+    expect(wrapper.get('[data-label="appeal_rejected"]').attributes('aria-pressed')).toBe('true')
+    wrapper.unmount()
+  })
+  it('次级状态筛选、导出和全部重置仍使用原始label键', async () => {
+    const wrapper = make()
+    await flushPromises()
+    const pending = wrapper
+      .findAll('.other-counts button')
+      .find((item) => item.text().startsWith('待质控验收'))!
+    await pending.trigger('click')
+    await flushPromises()
+    expect(pending.attributes('aria-pressed')).toBe('true')
+    expect(mocks.read).toHaveBeenLastCalledWith(
+      expect.objectContaining({ label: 'pending_acceptance', page: 1 }),
+    )
+    await wrapper.get('header button').trigger('click')
+    await flushPromises()
+    expect(mocks.export).toHaveBeenLastCalledWith(
+      expect.objectContaining({ label: 'pending_acceptance' }),
+    )
+    await wrapper.get('.remediation-toolbar button').trigger('click')
+    await flushPromises()
+    expect(mocks.read).toHaveBeenLastCalledWith(
+      expect.objectContaining({ label: undefined, page: 1 }),
+    )
+    expect(wrapper.get('.remediation-toolbar button').attributes('aria-pressed')).toBe('true')
+    wrapper.unmount()
+  })
+  it('未识别的owner标签仍原样展示，不因分组丢失计数', async () => {
+    mocks.read.mockResolvedValue({
+      success: true,
+      data: {
+        ...payload,
+        labels: [{ key: 'future_label', label: '新增统计标签', defect_total: 4, case_total: 2 }],
+      },
+    })
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.get('[data-label="future_label"]').get('strong').text()).toBe('4')
     wrapper.unmount()
   })
   it('标签筛选、分页和受认证导出保持同一scope，标签改变复位页码', async () => {
