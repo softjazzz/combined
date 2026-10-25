@@ -1,16 +1,16 @@
 <template>
   <WorkstationAssistPanel
-    v-if="selectedRecord || assistTab === 'message'"
+    v-if="(selectedRecord || assistTab === 'message') && (reminderPanelEnabled || assistTab !== 'message')"
     :visible="visible"
     :default-tab="assistTab"
     :variant="chatEnabled ? 'assistant' : 'analysis'"
-    :available-tabs="!selectedRecord ? ['message'] : chatEnabled ? undefined : ANALYSIS_TABS"
+    :available-tabs="availableAssistTabs"
     :patient-info="assistPatientInfo"
     :content-count="contentQCCount"
     :qc-count="assistBadgeCount"
     :profile-count="frontpageDraft ? 1 : 0"
     :drg-count="drgResult ? 1 : 0"
-    :message-count="notificationUnreadCount"
+    :message-count="reminderPanelEnabled ? notificationUnreadCount : 0"
     @update:visible="emit('update:visible', $event)"
     @tab-change="emit('tab-change', $event)"
     @refresh-tab="emit('refresh-tab', $event)"
@@ -322,7 +322,7 @@
         </div>
       </a-modal>
     </template>
-    <template #message>
+    <template v-if="reminderPanelEnabled" #message>
       <div class="assist-message-inbox">
         <div
           class="assist-message-inbox__toolbar"
@@ -645,7 +645,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, inject, onMounted, ref } from 'vue'
+import { WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'
 import {
   CheckOutlined,
   EyeOutlined,
@@ -678,6 +679,15 @@ const ANALYSIS_TABS: AssistTabKey[] = [
   'drg',
   'message',
 ]
+const reminderPanelEnabled = inject(WORKSTATION_REMINDER_PANEL, computed(() => true))
+const availableAssistTabs = computed(() => {
+  const tabs: AssistTabKey[] | undefined = !props.selectedRecord
+    ? ['message']
+    : props.chatEnabled ? undefined : ANALYSIS_TABS
+  return reminderPanelEnabled.value
+    ? tabs
+    : (tabs ?? ['chat', ...ANALYSIS_TABS]).filter((tab) => tab !== 'message')
+})
 
 const AsyncAIProfileDashboard = defineAsyncComponent(
   () => import('@/views/workstation-v4/frontpage/components/AIProfileDashboard.vue'),

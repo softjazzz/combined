@@ -45,6 +45,14 @@ describe('V7.1与未推送产品成果保护集', () => {
         '            <a-popover v-else placement="rightBottom" trigger="click">',
       ].join('\n')
       const entryChanges = [
+        [
+          "import { canUseReminderPanel, WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'\n",
+          '',
+        ],
+        [
+          'provide(WORKSTATION_REMINDER_PANEL, computed(() => canUseReminderPanel(authStore.userRoles)))\n',
+          '',
+        ],
         [managerEntry, '            <a-popover placement="rightBottom" trigger="click">'],
         ["import { canUseMessageCenter } from '@/views/workstation/notificationNavigation'\n", ''],
         [
@@ -66,6 +74,46 @@ describe('V7.1与未推送产品成果保护集', () => {
       }).trim()
     } else if (file.endsWith('/WorkstationV4AssistView.vue')) {
       let source = readFileSync(file, 'utf8')
+      const reminderPolicy = [
+        'const reminderPanelEnabled = inject(WORKSTATION_REMINDER_PANEL, computed(() => true))',
+        'const availableAssistTabs = computed(() => {',
+        '  const tabs: AssistTabKey[] | undefined = !props.selectedRecord',
+        "    ? ['message']",
+        '    : props.chatEnabled ? undefined : ANALYSIS_TABS',
+        '  return reminderPanelEnabled.value',
+        '    ? tabs',
+        "    : (tabs ?? ['chat', ...ANALYSIS_TABS]).filter((tab) => tab !== 'message')",
+        '})',
+        '',
+      ].join('\n')
+      const reminderChanges = [
+        [
+          "    v-if=\"(selectedRecord || assistTab === 'message') && (reminderPanelEnabled || assistTab !== 'message')\"",
+          '    v-if="selectedRecord || assistTab === \'message\'"',
+        ],
+        [
+          ':available-tabs="availableAssistTabs"',
+          ':available-tabs="!selectedRecord ? [\'message\'] : chatEnabled ? undefined : ANALYSIS_TABS"',
+        ],
+        [
+          ':message-count="reminderPanelEnabled ? notificationUnreadCount : 0"',
+          ':message-count="notificationUnreadCount"',
+        ],
+        ['<template v-if="reminderPanelEnabled" #message>', '<template #message>'],
+        [
+          "import { computed, defineAsyncComponent, inject, onMounted, ref } from 'vue'",
+          "import { computed, defineAsyncComponent, onMounted, ref } from 'vue'",
+        ],
+        [
+          "import { WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'\n",
+          '',
+        ],
+        [reminderPolicy, ''],
+      ]
+      for (const [allowed, previous] of reminderChanges) {
+        expect(source.split(allowed)).toHaveLength(2)
+        source = source.replace(allowed, previous)
+      }
       // 只允许消息插槽的样式挂点，不允许改原事件、数据和其他业务页签。
       const hooks: Array<[string, string, number]> = [
         ['class="assist-message-inbox"', 'class="space-y-3 p-3"', 1],

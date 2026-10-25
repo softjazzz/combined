@@ -187,6 +187,7 @@ import GlobalAssistantHost from '@/views/workstation-v4/components/GlobalAssista
 import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { useAuthStore } from '@/stores/auth'
 import { canUseMessageCenter } from '@/views/workstation/notificationNavigation'
+import { canUseReminderPanel, WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'
 import {
   DRG_SECTION_TABS,
   WORKSTATION_BASE,
@@ -210,6 +211,7 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const useFullMessageCenter = computed(() => canUseMessageCenter(authStore.userRoles))
+provide(WORKSTATION_REMINDER_PANEL, computed(() => canUseReminderPanel(authStore.userRoles)))
 
 // 宽度小于 1280 时默认折叠；用户手动切换后以用户选择为准，直到下次跨越断点
 const COLLAPSE_QUERY = '(max-width: 1279px)'

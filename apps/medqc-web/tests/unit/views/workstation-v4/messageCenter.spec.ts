@@ -23,6 +23,7 @@ import {
 } from '@/views/workstation/useMessageCenter'
 import {
   canUseMessageCenter,
+  canUseReminderPanel,
   notificationLocation,
 } from '@/views/workstation/notificationNavigation'
 
@@ -243,6 +244,17 @@ describe('主管独立消息中心', () => {
     expect(canUseMessageCenter(['qc_manager'])).toBe(true)
     expect(canUseMessageCenter(['qc_staff'])).toBe(true)
     expect(canUseMessageCenter(['doctor'])).toBe(false)
+  })
+
+  it('管理员不提供浮动提醒，主管与医生保持原提醒资格', () => {
+    for (const role of ['admin', 'sync_admin', 'super_admin']) {
+      expect(canUseReminderPanel([role])).toBe(false)
+      expect(canUseReminderPanel([role, 'doctor'])).toBe(false)
+      expect(canUseMessageCenter([role])).toBe(true)
+    }
+    expect(canUseReminderPanel(['qc_manager'])).toBe(true)
+    expect(canUseReminderPanel(['qc_staff'])).toBe(true)
+    expect(canUseReminderPanel(['doctor'])).toBe(true)
   })
 
   it.each([

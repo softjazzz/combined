@@ -1,4 +1,5 @@
-import { defineComponent } from 'vue'
+import { computed, defineComponent } from 'vue'
+import { WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -251,6 +252,23 @@ describe('智能助手面板的对话页签', () => {
 
 // 2026-10-23 客户要求：医生病历页恢复为原“智能分析面板”弹窗，不带对话。
 describe('医生病历页默认的分析面板', () => {
+  it('管理员隐藏消息入口与角标，旧消息链接不唤起面板，其他分析页签保留', async () => {
+    const wrapper = shallowMount(WorkstationV4AssistView, {
+      props: baseProps({ assistTab: 'form', chatEnabled: false, notificationUnreadCount: 12 }),
+      global: {
+        provide: { [WORKSTATION_REMINDER_PANEL as symbol]: computed(() => false) },
+        stubs: { WorkstationAssistPanel: PanelStub, BusinessAgentDrawer: ChatStub },
+      },
+    })
+    const panel = wrapper.findComponent(PanelStub)
+    expect(panel.props('availableTabs')).not.toContain('message')
+    expect(panel.props('availableTabs')).toContain('form')
+    expect(panel.attributes('message-count')).toBe('0')
+    await wrapper.setProps({ assistTab: 'message' })
+    expect(wrapper.findComponent(PanelStub).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('消息样式重排后仍逐条派发原处理对象和已读事件', async () => {
     const MessagePanel = defineComponent({
       name: 'WorkstationAssistPanel',
