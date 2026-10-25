@@ -10,6 +10,9 @@
       <button v-if="!scope && manager" class="mq-btn" type="button" @click="manualOpen = true">
         <MqIcon name="task" :size="16" />人工缺陷处理
       </button>
+      <button v-if="!scope && appealAllowed" class="mq-btn" type="button" @click="openAppeals()">
+        <MqIcon name="task" :size="16" />申诉处理
+      </button>
       <label class="sr-only" :for="scope ? 'defect-rectification-status' : 'rectification-status'"
         >整改状态</label
       >
@@ -63,6 +66,13 @@
       @close="manualOpen = false"
       @changed="emit('changed')"
     />
+    <ModernAppealWorkflowDrawer
+      v-if="appealOpen"
+      :open="appealOpen"
+      :source="appealSource"
+      @close="appealOpen = false"
+      @changed="emit('changed')"
+    />
     <a-drawer
       v-model:open="open"
       title="缺陷整改"
@@ -105,6 +115,18 @@
             {{ selected.review_comment || '尚未验收' }}
           </a-descriptions-item>
         </a-descriptions>
+        <button
+          v-if="
+            auth.hasRole('doctor') &&
+            selected.assignee_id === auth.user?.id &&
+            ['running', 'final'].includes(selected.scene)
+          "
+          class="mq-btn"
+          type="button"
+          @click="openAppeals(selected)"
+        >
+          申诉该缺陷
+        </button>
         <a-form v-if="actions.length" layout="vertical" class="rectification-todos__action">
           <a-form-item label="处理说明">
             <a-textarea v-model:value="comment" :rows="4" :maxlength="2000" />
@@ -191,6 +213,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
+import ModernAppealWorkflowDrawer from '@/components/qc/ModernAppealWorkflowDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   actOnRectification,
@@ -209,6 +232,16 @@ const props = defineProps<{ scope?: RectificationSource; refreshKey?: number }>(
 const emit = defineEmits<{ changed: [] }>()
 const auth = useAuthStore()
 const manualOpen = ref(false)
+const appealOpen = ref(false),
+  appealSource = ref<Rectification | null>(null)
+const appealAllowed = computed(() =>
+  ['admin', 'qc_manager', 'doctor'].some((role) => auth.hasRole(role)),
+)
+function openAppeals(source: Rectification | null = null) {
+  appealSource.value = source
+  open.value = false
+  appealOpen.value = true
+}
 const popupContainer = (trigger: HTMLElement) => trigger.parentElement || trigger
 const manager = computed(() =>
   ['admin', 'qc_manager', 'qc_staff'].some((role) => auth.hasRole(role)),
@@ -415,6 +448,8 @@ async function submit(action: RectificationAction, urgeEventId?: string) {
   }
 }
 function reset() {
+  appealOpen.value = false
+  appealSource.value = null
   manualOpen.value = false
   resetComparison()
   ++listToken

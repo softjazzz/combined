@@ -136,6 +136,12 @@ function render(): VueWrapper {
   const wrapper = mount(StaffAnalysisView, {
     global: {
       stubs: {
+        ModernAppealWorkflowDrawer: {
+          name: 'ModernAppealWorkflowDrawer',
+          props: ['open', 'appealId'],
+          emits: ['changed', 'close'],
+          template: '<section v-if="open" class="modern-appeal-workflow" />',
+        },
         ManualQualityReportPanel: {
           name: 'ManualQualityReportPanel',
           template: '<section class="manual-report-entry">人工报表入口</section>',
@@ -166,6 +172,43 @@ function deferred<T>() {
 }
 
 describe('StaffAnalysisView', () => {
+  it('申诉事件下钻到指定历史，审核成功刷新原工作分析，换账号关闭抽屉', async () => {
+    state.getDetails.mockResolvedValue({
+      success: true,
+      data: {
+        ...detailsPage,
+        metric: 'appeal_approved_count',
+        total: 1,
+        items: [
+          {
+            ...detailsPage.items[0],
+            event_type: 'appeal_approved',
+            appeal_id: 'appeal-1',
+            stage: null,
+            decision: 'approved',
+          },
+        ],
+      },
+    })
+    const wrapper = render()
+    await settle()
+    await wrapper.get('[aria-label="查看张质控的申诉通过明细"]').trigger('click')
+    await settle()
+    expect(wrapper.text()).toContain('申诉审核')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '查看申诉')!
+      .trigger('click')
+    const workflow = wrapper.findComponent({ name: 'ModernAppealWorkflowDrawer' })
+    expect(workflow.props('appealId')).toBe('appeal-1')
+    const calls = state.getReport.mock.calls.length
+    workflow.vm.$emit('changed')
+    await settle()
+    expect(state.getReport.mock.calls.length).toBe(calls + 1)
+    state.auth.userId = 'another-user'
+    await settle()
+    expect(wrapper.find('.modern-appeal-workflow').exists()).toBe(false)
+  })
   it('人工报表操作成功后用原筛选刷新工作分析', async () => {
     const wrapper = render()
     await flushPromises()
@@ -529,7 +572,10 @@ describe('StaffAnalysisView', () => {
     state.exportReport.mockImplementationOnce(() => delayed.promise)
     const wrapper = render()
     await settle()
-    await wrapper.findAll('.head-actions button')[1]!.trigger('click')
+    await wrapper
+      .findAll('.head-actions button')
+      .find((button) => button.text().includes('导出 CSV'))!
+      .trigger('click')
     expect(state.exportReport).toHaveBeenCalledWith({
       period: 'this_month',
       scene: 'all',

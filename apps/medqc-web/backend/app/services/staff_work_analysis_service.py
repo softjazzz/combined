@@ -106,13 +106,8 @@ class AnalysisScope:
 
     @property
     def appeals_attributable(self) -> bool:
-        # 运行/终末按申诉创建时冻结的 scene 归属；历史无 scene 的申诉只进入全场景。
-        # 科室/机构/任务筛选下申诉事件仍无可信归属，保持未知。
-        return (
-            self.institute_id is None
-            and self.department is None
-            and self.task_id is None
-        )
+        # 现代申诉有冻结机构、病例科室；没有可信任务引用，任务筛选继续未知。
+        return self.task_id is None
 
     def filters(self) -> dict[str, Any]:
         return {
@@ -532,39 +527,55 @@ def _load_base_events(
     if scope.appeals_attributable:
         start = window.utc_start.replace(tzinfo=timezone.utc)
         end = window.utc_end.replace(tzinfo=timezone.utc)
-        statement = select(QCAppealReview).where(
-            QCAppealReview.action.in_(("approve", "reject")),
-            QCAppealReview.created_at >= start,
-            QCAppealReview.created_at < end,
+        statement = (
+            select(QCAppealReview, QCAppeal)
+            .outerjoin(
+                QCAppeal,
+                QCAppeal.id == QCAppealReview.appeal_id,
+            )
+            .where(
+                QCAppealReview.action.in_(("approve", "reject")),
+                QCAppealReview.created_at >= start,
+                QCAppealReview.created_at < end,
+            )
         )
         if scope.scene != SCENE_ALL:
             # 只统计审核事件关联的、已冻结为该场景的申诉；历史 NULL 不计入具体场景。
-            statement = statement.join(
-                QCAppeal,
-                QCAppeal.id == QCAppealReview.appeal_id,
-            ).where(QCAppeal.scene == scope.scene)
-        appeals = (
-            session.execute(
-                statement,
-                execution_options=_appeal_execution_options(session),
-            )
-            .scalars()
-            .all()
-        )
-        for row in appeals:
+            statement = statement.where(QCAppeal.scene == scope.scene)
+        if scope.institute_id is not None or scope.department is not None:
+            # 筛选统计仅消费完整冻结来源；旧申诉不按当前病历猜测归属。
+            from .modern_appeal_service import _modern
+
+            statement = _modern(statement, QCAppeal)
+        if scope.institute_id is not None:
+            statement = statement.where(QCAppeal.institute_id == scope.institute_id)
+        if scope.department is not None:
+            statement = statement.where(QCAppeal.case_department == scope.department)
+        appeals = session.execute(
+            statement,
+            execution_options=_appeal_execution_options(session),
+        ).all()
+        for row, source in appeals:
             if not row.reviewer_id:
                 raise StaffWorkAnalysisUnavailable("申诉审核事件缺少审核人")
-            events.append(
-                _event(
-                    event_id=row.id,
-                    event_type="appeal_approved"
-                    if row.action == "approve"
-                    else "appeal_rejected",
-                    occurred_at=row.created_at,
-                    user_id=str(row.reviewer_id),
-                    appeal_id=row.appeal_id,
-                )
+            event = _event(
+                event_id=row.id,
+                event_type="appeal_approved"
+                if row.action == "approve"
+                else "appeal_rejected",
+                occurred_at=row.created_at,
+                user_id=str(row.reviewer_id),
+                appeal_id=row.appeal_id,
+                decision="approved" if row.action == "approve" else "rejected",
+                institute_id=source.institute_id if source else None,
+                patient_id=source.patient_id if source else None,
+                visit_id=source.visit_id if source else None,
             )
+            event.update(
+                department=source.case_department if source else None,
+                scene=source.scene if source else None,
+            )
+            events.append(event)
     return events, task_source_unavailable
 
 
@@ -671,13 +682,20 @@ def _load_events(
         | {
             (event["institute_id"], event["department"])
             for event in events
-            if event["event_type"] == "defect_urged" and event["department"]
+            if (
+                event["event_type"] == "defect_urged"
+                or event["event_type"].startswith("appeal_")
+            )
+            and event.get("department")
+            and event["institute_id"]
         },
         key=lambda item: (item[0], item[1]),
     )
     for event in events:
         identity = (event["institute_id"], event["patient_id"], event["visit_id"])
-        if event["event_type"] != "defect_urged":
+        if event["event_type"] != "defect_urged" and not event["event_type"].startswith(
+            "appeal_"
+        ):
             event["department"] = departments.get(identity)
 
     context_unavailable_count = 0

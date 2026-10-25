@@ -432,20 +432,50 @@ def test_scene_filters_events_and_counts_only_frozen_scene_appeals(db):
     assert [item["appeal_id"] for item in detail["items"]] == ["appeal-final"]
 
 
-def test_scene_appeals_remain_unknown_under_department_filter(db):
+def test_modern_appeals_use_frozen_department_not_current_department(db, monkeypatch):
+    with db.begin() as session:
+        session.execute(QCAppeal.__table__.insert(), [appeal_row("modern", "final")])
+        session.execute(
+            QCAppealReview.__table__.insert(),
+            [
+                appeal("approved", "reviewer", "approve", 1, appeal_id="modern"),
+                appeal("withdrawn", "doctor", "withdraw", 2, appeal_id="modern"),
+                appeal("legacy", "reviewer", "approve", 3),
+            ],
+        )
     data = service.get_staff_work_analysis(
         period="this_week",
         scene="final",
         institute_id="A",
         department="内科",
         now=NOW,
-        department_loader=lambda identities, *, session: {},
+        department_loader=lambda identities, *, session: {
+            identity: "当前其他科室" for identity in identities
+        },
     )
-    assert data["summary"]["appeal_approved_count"] is None
-    assert data["unavailable_metrics"] == {
-        "appeal_approved_count": "filter_not_attributable",
-        "appeal_rejected_count": "filter_not_attributable",
-    }
+    assert data["summary"]["appeal_approved_count"] == 1
+    assert data["summary"]["appeal_rejected_count"] == 0
+    assert data["unavailable_metrics"] == {}
+    assert data["staff"][0]["user_id"] == "reviewer"
+    original_read = service._read
+    monkeypatch.setattr(
+        service,
+        "_read",
+        lambda scope: original_read(
+            scope, department_loader=lambda identities, *, session: {}
+        ),
+    )
+    detail = service.get_staff_work_details(
+        period="this_week",
+        scene="final",
+        institute_id="A",
+        department="内科",
+        user_id="reviewer",
+        metric="appeal_approved_count",
+        now=NOW,
+    )
+    assert detail["total"] == 1
+    assert detail["items"][0]["appeal_id"] == "modern"
 
 
 def test_empty_and_source_error_are_distinct(db):
@@ -533,7 +563,7 @@ def test_department_filter_uses_institute_and_current_case_department(db):
     assert data["filter_options"]["departments"] == [
         {"institute_id": "A", "department_name": "内科"},
     ]
-    assert data["summary"]["appeal_approved_count"] is None
+    assert data["summary"]["appeal_approved_count"] == 0
 
 
 def test_summary_details_and_export_share_the_frozen_event_window(db):
@@ -1040,6 +1070,7 @@ def test_confirmed_event_dedup_keeps_full_result_identity_and_actor():
     session = SimpleNamespace(
         execute=lambda *_args, **_kwargs: SimpleNamespace(
             scalars=lambda: SimpleNamespace(all=lambda: next(batches)),
+            all=lambda: next(batches),
         ),
         get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="sqlite")),
     )

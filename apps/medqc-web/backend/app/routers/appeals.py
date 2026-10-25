@@ -38,6 +38,11 @@ router = APIRouter(prefix="/api/v1/appeals", tags=["appeals"])
 logger = logging.getLogger(__name__)
 
 
+def _legacy_only(query):
+    # 只使用旧版已有列，兼容旧库；现代申诉的两个旧主键必须为 NULL。
+    return query.is_not("qc_result_id", None).is_not("record_id", None)
+
+
 # ============================
 # 申诉管理
 # ============================
@@ -171,7 +176,7 @@ async def list_appeals(
 
     try:
         # 构建查询
-        query = supabase.table("qc_appeals").select("*", count="exact")
+        query = _legacy_only(supabase.table("qc_appeals").select("*", count="exact"))
 
         # 应用过滤条件
         if status:
@@ -241,7 +246,7 @@ async def get_appeal(
 
     try:
         # 获取申诉记录
-        appeal_result = supabase.table("qc_appeals").select("*").eq("id", appeal_id).execute()
+        appeal_result = _legacy_only(supabase.table("qc_appeals").select("*").eq("id", appeal_id)).execute()
 
         if not appeal_result.data:
             raise HTTPException(
@@ -303,7 +308,7 @@ async def update_appeal(
 
     try:
         # 验证申诉是否存在且属于当前用户
-        existing = supabase.table("qc_appeals").select("*").eq("id", appeal_id).execute()
+        existing = _legacy_only(supabase.table("qc_appeals").select("*").eq("id", appeal_id)).execute()
 
         if not existing.data:
             raise HTTPException(
@@ -344,7 +349,7 @@ async def update_appeal(
             )
 
         # 更新申诉
-        result = supabase.table("qc_appeals").update(update_data).eq("id", appeal_id).execute()
+        result = _legacy_only(supabase.table("qc_appeals").update(update_data).eq("id", appeal_id)).execute()
 
         if not result.data:
             raise HTTPException(
@@ -405,7 +410,7 @@ async def withdraw_appeal(
 
     try:
         # 验证申诉是否存在且属于当前用户
-        existing = supabase.table("qc_appeals").select("*").eq("id", appeal_id).execute()
+        existing = _legacy_only(supabase.table("qc_appeals").select("*").eq("id", appeal_id)).execute()
 
         if not existing.data:
             raise HTTPException(
@@ -436,7 +441,7 @@ async def withdraw_appeal(
             "resolution_date": datetime.utcnow().isoformat()
         }
 
-        result = supabase.table("qc_appeals").update(update_data).eq("id", appeal_id).execute()
+        result = _legacy_only(supabase.table("qc_appeals").update(update_data).eq("id", appeal_id)).execute()
 
         if not result.data:
             raise HTTPException(
@@ -501,7 +506,7 @@ async def review_appeal(
 
     try:
         # 验证申诉是否存在
-        existing = supabase.table("qc_appeals").select("*").eq("id", appeal_id).execute()
+        existing = _legacy_only(supabase.table("qc_appeals").select("*").eq("id", appeal_id)).execute()
 
         if not existing.data:
             raise HTTPException(
@@ -553,7 +558,7 @@ async def review_appeal(
 
         update_data["review_result"] = review.comment
 
-        appeal_result = supabase.table("qc_appeals").update(update_data).eq("id", appeal_id).execute()
+        appeal_result = _legacy_only(supabase.table("qc_appeals").update(update_data).eq("id", appeal_id)).execute()
 
         if not appeal_result.data:
             raise HTTPException(

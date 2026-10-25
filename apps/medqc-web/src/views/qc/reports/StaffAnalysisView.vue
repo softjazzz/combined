@@ -10,7 +10,7 @@
           {{
             reportTab === 'manual'
               ? '按上海自然日的缺陷创建日期统计人工缺陷录入、审核与整改状态'
-              : '按质控场景、病例科室、任务和时间核对人员工作量'
+              : '按质控场景、病例科室、任务和时间核对人员工作量；机构、科室内申诉只统计冻结来源完整的现代申诉'
           }}
         </p>
       </div>
@@ -31,6 +31,9 @@
           </button>
         </div>
         <div v-if="reportTab === 'staff'" class="head-actions">
+          <button v-if="canReviewAppeals" class="mq-btn" type="button" @click="openAppealHistory()">
+            <MqIcon name="task" :size="16" />申诉处理
+          </button>
           <button class="secondary mq-btn" type="button" :disabled="loading" @click="loadReport">
             <MqIcon name="sync" :size="16" />刷新
           </button>
@@ -46,6 +49,13 @@
       </div>
     </header>
     <ManualQualityReportPanel v-if="reportTab === 'manual'" @changed="loadReport" />
+    <ModernAppealWorkflowDrawer
+      v-if="appealOpen"
+      :open="appealOpen"
+      :appeal-id="appealId"
+      @close="appealOpen = false"
+      @changed="loadReport"
+    />
     <div v-show="reportTab === 'staff'" class="staff-body">
       <section class="filters mq-card mq-card--padded" aria-label="工作分析筛选">
         <div class="filter-switches">
@@ -344,7 +354,17 @@
                     <td class="mq-mono">
                       {{ formatTime(item.occurred_at) }}
                     </td>
-                    <td>{{ eventTypeText(item.event_type) }}</td>
+                    <td>
+                      {{ eventTypeText(item.event_type) }}
+                      <button
+                        v-if="item.appeal_id && canReviewAppeals"
+                        class="mq-btn"
+                        type="button"
+                        @click="openAppealHistory(item.appeal_id)"
+                      >
+                        查看申诉
+                      </button>
+                    </td>
                     <td v-if="detailsPage.metric === 'confirmed_defect_count'">
                       {{
                         item.source === 'auto' ? '自动' : item.source === 'manual' ? '人工' : '未知'
@@ -358,7 +378,8 @@
                       {{ item.department || '未知' }}<small>{{ item.task_id || '任务未知' }}</small>
                     </td>
                     <td>
-                      {{ stageText(item.stage) }}<small>{{ decisionText(item.decision) }}</small>
+                      {{ item.event_type.startsWith('appeal_') ? '申诉审核' : stageText(item.stage)
+                      }}<small>{{ decisionText(item.decision) }}</small>
                     </td>
                   </tr>
                   <tr v-if="!detailsPage.items?.length">
@@ -410,6 +431,7 @@ import { useRoute, useRouter } from 'vue-router'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import ManualQualityReportPanel from './ManualQualityReportPanel.vue'
+import ModernAppealWorkflowDrawer from '@/components/qc/ModernAppealWorkflowDrawer.vue'
 type ReportTab = 'staff' | 'manual'
 const reportTabs: Array<{ value: ReportTab; label: string }> = [
   { value: 'staff', label: '质控员工作分析' },
@@ -458,6 +480,15 @@ const rankMetric = ref<StaffAnalysisMetric>('record_review_count')
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const appealOpen = ref(false)
+const appealId = ref<string>()
+function openAppealHistory(id?: string) {
+  appealId.value = id
+  appealOpen.value = true
+}
+const canReviewAppeals = computed(() =>
+  authStore.userRoles.some((role) => ['admin', 'qc_manager'].includes(role)),
+)
 const scene = computed<StaffAnalysisScene>(() => {
   if (route.query.scene === 'running' || route.query.scene === 'final') return route.query.scene
   return 'all'
@@ -823,6 +854,10 @@ function decisionText(value: string | null): string {
 watch(
   [scene, authKey],
   ([nextScene, nextAuth], previous) => {
+    if (previous?.[1] !== undefined && previous[1] !== nextAuth) {
+      appealOpen.value = false
+      appealId.value = undefined
+    }
     const previousScene = previous?.[0]
     appliedFilters.value = { ...appliedFilters.value, scene: nextScene }
     if (previousScene !== undefined && previousScene !== nextScene) filterError.value = ''
