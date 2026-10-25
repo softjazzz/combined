@@ -1242,7 +1242,17 @@
       @cancel="closeEditableCopyDrawer"
     >
       <div class="editable-copy-drawer">
-        <header class="editable-copy-hero">
+        <header v-if="editableCopyReadonly" class="editable-copy-readonly-header">
+          <div class="editable-copy-readonly-title">
+            <FileText :size="18" aria-hidden="true" />
+            <h2>查看病历</h2>
+            <span>只读</span>
+          </div>
+          <MedicalRecordContextBanner
+            :context="editableCopySourceRecord ? resolveRecordResultFocus(editableCopySourceRecord) : null"
+          />
+        </header>
+        <header v-else class="editable-copy-hero">
           <div>
             <div v-if="!editableCopyReadonly" class="editable-copy-eyebrow">
               客户样本验证 / {{ editableCopyReadonly ? '查看病历' : '编辑副本' }}
@@ -1792,6 +1802,8 @@
 <script setup lang="ts">
 import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
+import MedicalRecordContextBanner from './customer-sample-validation/MedicalRecordContextBanner.vue'
+import { FileText } from 'lucide-vue-next'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
 
 const {
@@ -1970,6 +1982,7 @@ const {
   resetFilters,
   resetImportForm,
   resolveEditableOrderTypeLabel,
+  resolveRecordResultFocus,
   reviewBatchJobLoadingId,
   reviewDrawerRecord,
   reviewDrawerVisible,

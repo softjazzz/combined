@@ -27,31 +27,7 @@
             <strong>病历质控结果</strong>
           </span>
         </div>
-        <div class="customer-record-result-title__context" :aria-label="recordContextAriaLabel">
-          <img
-            class="patient-context-avatar"
-            :src="contextAvatar"
-            :alt="`${focus?.patientName || '患者'}头像`"
-          />
-          <span class="customer-record-result-title__context-label">当前病历</span>
-          <span class="customer-record-result-title__context-details">
-            <span class="customer-record-result-title__context-value">
-              <span
-                v-for="(part, index) in (focus?.label || '病历原文与质控结果对照').split(' · ')"
-                :key="index"
-                class="patient-context-part"
-                :class="{ 'is-primary': index === 0 }"
-                >{{ part }}</span
-              >
-            </span>
-            <span v-if="hospitalizationTimeText" class="customer-record-result-title__context-time">
-              {{ hospitalizationTimeText }}
-            </span>
-          </span>
-          <span v-if="qcTimeText" class="customer-record-result-title__qc-time">
-            {{ qcTimeText }}
-          </span>
-        </div>
+        <MedicalRecordContextBanner :context="focus" :qc-time-text="qcTimeText" />
         <div class="customer-record-result-title__actions">
           <QcDiagnosticExport
             v-if="open && latestResult && focus && !confirmedResultsOnly"
@@ -122,6 +98,7 @@ import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
+import MedicalRecordContextBanner from './MedicalRecordContextBanner.vue'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import {
   exportLatestLuxian0609RecordResult,
@@ -161,19 +138,6 @@ const emit = defineEmits<{
   (event: 'close'): void
 }>()
 
-import avatarBoy from '@/assets/avatar-icons/patient-icon-boy.png'
-import avatarGirl from '@/assets/avatar-icons/patient-icon-girl.png'
-import avatarMan from '@/assets/avatar-icons/patient-icon-man.png'
-import avatarWoman from '@/assets/avatar-icons/patient-icon-woman.png'
-import avatarElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
-import avatarElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
-const contextAvatar = computed(() => {
-  const female = /女|female|^f$/i.test(String(props.focus?.patientSex || '').trim())
-  const age = Number(props.focus?.patientAge || 0)
-  if (age > 0 && age < 14) return female ? avatarGirl : avatarBoy
-  if (age >= 55) return female ? avatarElderWoman : avatarElderMan
-  return female ? avatarWoman : avatarMan
-})
 const loading = ref(false)
 const exporting = ref(false)
 const loadError = ref('')
@@ -181,25 +145,6 @@ const latestResult = ref<SingleRecordQcResultPayload | null>(null)
 const authorizedRecordRef = ref('')
 const qcTimeText = ref('')
 let activeRequestSequence = 0
-
-const hospitalizationTimeText = computed(() => {
-  const admissionTime = props.focus?.admissionTime
-  const dischargeTime = props.focus?.dischargeTime
-  if (admissionTime && dischargeTime) return `住院时间 ${admissionTime} → ${dischargeTime}`
-  if (admissionTime) return `入院时间 ${admissionTime}`
-  if (dischargeTime) return `出院时间 ${dischargeTime}`
-  return ''
-})
-
-const recordContextAriaLabel = computed(() =>
-  [
-    `当前病历：${props.focus?.label || '病历原文与质控结果对照'}`,
-    props.focus?.admissionTime ? `入院时间：${props.focus.admissionTime}` : '',
-    props.focus?.dischargeTime ? `出院时间：${props.focus.dischargeTime}` : '',
-  ]
-    .filter(Boolean)
-    .join('，'),
-)
 
 const debugContext = computed(() => {
   const result = latestResult.value
@@ -434,63 +379,6 @@ watch(
   font-size: 16px;
   line-height: 21px;
   font-weight: 700;
-  white-space: nowrap;
-}
-.customer-record-result-title__context {
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 12px 7px 10px;
-  border: 1px solid rgba(10, 108, 255, 0.12);
-  border-left: 3px solid #0a6cff;
-  border-radius: 11px;
-  background: #f5f9ff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-.customer-record-result-title__context-label {
-  flex: none;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: rgba(10, 108, 255, 0.11);
-  color: #0a6cff;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 20px;
-}
-.customer-record-result-title__context-value {
-  min-width: 0;
-  overflow: hidden;
-  color: rgba(29, 29, 31, 0.8);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 22px;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.customer-record-result-title__context-details {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.customer-record-result-title__context-time {
-  flex: none;
-  padding-left: 10px;
-  border-left: 1px solid rgba(10, 108, 255, 0.14);
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 20px;
-  white-space: nowrap;
-}
-.customer-record-result-title__qc-time {
-  margin-left: auto;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  line-height: 20px;
   white-space: nowrap;
 }
 .customer-record-result-title__export {

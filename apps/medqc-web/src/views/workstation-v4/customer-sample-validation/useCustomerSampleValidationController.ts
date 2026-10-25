@@ -271,6 +271,8 @@ export function useCustomerSampleValidationController() {
     recordId: string
     recordRef?: string
     patientName?: string
+    patientSex?: string
+    patientAge?: number
     admissionTime?: string
     dischargeTime?: string
     label: string
@@ -2308,6 +2310,8 @@ export function useCustomerSampleValidationController() {
       instituteId: String(record.matched_institute_id || '').trim(),
       patientId: String(record.matched_patient_id || '').trim(),
       recordId: resolveRecordIdentifier(record),
+      patientSex: record.patient_sex,
+      patientAge: Number(record.patient_age) || undefined,
       patientName: resolveRecordPatientName(record) === '-' ? '' : resolveRecordPatientName(record),
       admissionTime: formatRecordDateTime(record.admission_time),
       dischargeTime: formatRecordDateTime(record.discharge_time),
@@ -3388,6 +3392,7 @@ export function useCustomerSampleValidationController() {
     resetFilters,
     resetImportForm,
     resolveEditableOrderTypeLabel,
+    resolveRecordResultFocus,
     reviewBatchJobLoadingId,
     reviewDrawerRecord,
     reviewDrawerVisible,
