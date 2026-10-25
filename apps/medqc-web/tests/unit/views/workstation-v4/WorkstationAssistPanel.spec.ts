@@ -65,6 +65,23 @@ describe('智能助手面板外壳', () => {
     wrapper.unmount()
   })
 
+  it('消息页签使用V7.1公共表面，刷新仍派发原消息事件', async () => {
+    const wrapper = mountPanel({
+      visible: true,
+      availableTabs: ['message'],
+      defaultTab: 'message',
+      variant: 'analysis',
+    })
+    expect(wrapper.get('.assist-panel').classes()).toContain('mq-card')
+    expect(wrapper.get('.assist-panel').classes()).toContain('assist-panel--message')
+    expect(wrapper.get('.assist-panel__title').text()).toBe('消息提醒')
+    await wrapper.get('[aria-label="刷新当前面板"]').trigger('click')
+    expect(wrapper.emitted('refresh-tab')).toEqual([['message']])
+    await wrapper.get('[aria-label="关闭当前面板"]').trigger('click')
+    expect(wrapper.emitted('update:visible')).toEqual([[false]])
+    wrapper.unmount()
+  })
+
   it('只保留对话页签时不渲染侧栏，页签名可自定义', () => {
     const wrapper = mountPanel({
       visible: true,

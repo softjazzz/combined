@@ -251,6 +251,40 @@ describe('智能助手面板的对话页签', () => {
 
 // 2026-10-23 客户要求：医生病历页恢复为原“智能分析面板”弹窗，不带对话。
 describe('医生病历页默认的分析面板', () => {
+  it('消息样式重排后仍逐条派发原处理对象和已读事件', async () => {
+    const MessagePanel = defineComponent({
+      name: 'WorkstationAssistPanel',
+      template: '<div><slot name="message" /></div>',
+    })
+    const notification = {
+      id: 'notification-id',
+      title: '整改结果',
+      content: '完整整改说明',
+      is_read: false,
+      created_at: '2026-10-25T12:00:00Z',
+    }
+    const wrapper = shallowMount(WorkstationV4AssistView, {
+      props: baseProps({
+        selectedRecord: null,
+        assistTab: 'message',
+        chatEnabled: false,
+        overviewViewMode: 'detail',
+        notificationUnreadCount: 1,
+        filteredAssistNotifications: [notification],
+        formatRelativeTime: () => '刚刚',
+      }),
+      global: { stubs: { WorkstationAssistPanel: MessagePanel } },
+    })
+    expect(wrapper.get('.assist-message-inbox__body').text()).toBe('完整整改说明')
+    expect(wrapper.get('.assist-message-inbox__body').classes()).not.toContain('text-xs')
+    const actions = wrapper.findAll('.assist-message-inbox__item a-button')
+    await actions[0].trigger('click')
+    await actions[1].trigger('click')
+    expect(wrapper.emitted('assist-notification-click')).toEqual([[notification]])
+    expect(wrapper.emitted('mark-assist-notification-read')).toEqual([[notification]])
+    wrapper.unmount()
+  })
+
   it('未开启对话时使用分析面板样式，去掉对话页签，不读取助手授权', async () => {
     let accessCalls = 0
     handler.run = async () => {

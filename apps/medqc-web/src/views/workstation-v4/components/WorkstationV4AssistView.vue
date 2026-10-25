@@ -323,9 +323,9 @@
       </a-modal>
     </template>
     <template #message>
-      <div class="space-y-3 p-3">
+      <div class="assist-message-inbox">
         <div
-          class="flex items-center justify-between gap-2 rounded-[16px] border border-slate-200/80 bg-white/72 px-3 py-2"
+          class="assist-message-inbox__toolbar"
         >
           <a-segmented
             :value="overviewViewMode"
@@ -348,7 +348,7 @@
         </div>
         <div
           v-if="overviewViewMode === 'overview'"
-          class="grid grid-cols-3 gap-2 rounded-[16px] border border-slate-200/70 bg-white/72 p-2"
+          class="assist-message-inbox__filters"
         >
           <a-select
             :value="overviewDepartmentFilter"
@@ -378,7 +378,7 @@
             @update:value="emit('update:overviewSeverityFilter', $event as string)"
           />
         </div>
-        <div v-else class="rounded-[16px] border border-slate-200/70 bg-white/72 p-2">
+        <div v-else class="assist-message-inbox__read-filter">
           <a-segmented
             :value="notificationReadFilter"
             size="small"
@@ -398,12 +398,12 @@
         >
           <a-spin />
         </div>
-        <div v-else class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1">
+        <div v-else class="assist-message-inbox__list">
           <template v-if="overviewViewMode === 'overview'">
             <div
               v-for="item in filteredNotificationOverviewItems"
               :key="item.overview_id"
-              class="rounded-[16px] border p-3 shadow-[0_4px_12px_rgba(15,23,42,0.025)]"
+              class="assist-message-inbox__item"
               :class="
                 item.unread_count > 0
                   ? 'border-blue-200/80 bg-blue-50/72'
@@ -414,7 +414,7 @@
                 <div class="min-w-0">
                   <div class="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <NotificationOutlined class="text-blue-500" />
-                    <span class="truncate">{{ item.title || '病案问题集中点' }}</span>
+                    <span class="assist-message-inbox__subject">{{ item.title || '病案问题集中点' }}</span>
                     <a-tag color="blue" class="!text-[10px]">
                       {{ item.type || 'general' }}
                     </a-tag>
@@ -422,10 +422,10 @@
                       {{ item.severity || 'info' }}
                     </a-tag>
                   </div>
-                  <div class="mt-1 text-xs text-slate-500 leading-5">
+                  <div class="assist-message-inbox__body">
                     {{ item.summary || '暂无内容' }}
                   </div>
-                  <div class="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
+                  <div class="assist-message-inbox__meta assist-message-inbox__meta--overview">
                     <span>{{ item.department || '未分科室' }}</span>
                     <span>·</span>
                     <span>触发 {{ item.occurrence_count }} 次</span>
@@ -452,7 +452,7 @@
             <div
               v-for="notif in filteredAssistNotifications"
               :key="notif.id"
-              class="rounded-[16px] border p-3 shadow-[0_4px_12px_rgba(15,23,42,0.025)]"
+              class="assist-message-inbox__item"
               :class="
                 notif.is_read
                   ? 'border-slate-200/80 bg-white/74'
@@ -463,12 +463,12 @@
                 <div class="min-w-0">
                   <div class="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <NotificationOutlined class="text-blue-500" />
-                    <span class="truncate">{{ notif.title || '通知消息' }}</span>
+                    <span class="assist-message-inbox__subject">{{ notif.title || '通知消息' }}</span>
                   </div>
-                  <div class="mt-1 text-xs text-slate-500 leading-5">
+                  <div class="assist-message-inbox__body">
                     {{ notif.content || '暂无内容' }}
                   </div>
-                  <div class="mt-1 text-[11px] text-slate-400">
+                  <div class="assist-message-inbox__meta">
                     {{ formatRelativeTime(notif.created_at) }}
                   </div>
                 </div>
@@ -887,3 +887,5 @@ defineExpose({
   runCodingQC: () => qcResultTabRef.value?.runCodingQC(),
 })
 </script>
+
+<style scoped src="../styles/assist-message-inbox.css"></style>

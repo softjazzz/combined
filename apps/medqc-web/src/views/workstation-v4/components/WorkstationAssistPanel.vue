@@ -29,14 +29,15 @@
       <section
         v-if="mergedVisible"
         ref="panelEl"
-        :class="['assist-panel', { 'assist-panel--wide': currentTab === 'chat' }]"
+        :class="['assist-panel', { 'assist-panel--wide': currentTab === 'chat', 'assist-panel--message mq-card': currentTab === 'message' }]"
       >
         <header class="assist-panel__header">
           <div class="assist-panel__title-wrap">
-            <RobotOutlined class="assist-panel__title-icon" />
+            <NotificationOutlined v-if="currentTab === 'message'" class="assist-panel__title-icon" />
+            <RobotOutlined v-else class="assist-panel__title-icon" />
             <div>
               <div class="assist-panel__title">
-                {{ panelTitle }}
+                {{ currentTab === 'message' ? '消息提醒' : panelTitle }}
               </div>
             </div>
           </div>
@@ -45,6 +46,7 @@
               type="text"
               size="small"
               class="assist-panel__action-btn"
+              aria-label="刷新当前面板"
               @click="$emit('refresh-tab', currentTab)"
             >
               <template #icon>
@@ -55,6 +57,7 @@
               type="text"
               size="small"
               class="assist-panel__action-btn"
+              aria-label="关闭当前面板"
               @click="setVisible(false)"
             >
               <template #icon>
@@ -514,6 +517,9 @@ function changeTab(tab: AssistTabKey) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.assist-panel:not(.assist-panel--message) {
   border-radius: 22px;
   background: linear-gradient(180deg, #f5f9ff 0%, #edf4ff 100%);
   border: 1px solid rgba(59, 130, 246, 0.2);
@@ -913,3 +919,5 @@ function changeTab(tab: AssistTabKey) {
   }
 }
 </style>
+
+<style scoped src="../styles/assist-message-panel.css"></style>

@@ -47,7 +47,10 @@ describe('V7.1与未推送产品成果保护集', () => {
       const entryChanges = [
         [managerEntry, '            <a-popover placement="rightBottom" trigger="click">'],
         ["import { canUseMessageCenter } from '@/views/workstation/notificationNavigation'\n", ''],
-        ['const useFullMessageCenter = computed(() => canUseMessageCenter(authStore.userRoles))\n', ''],
+        [
+          'const useFullMessageCenter = computed(() => canUseMessageCenter(authStore.userRoles))\n',
+          '',
+        ],
       ]
       for (const [allowedChange, previous] of entryChanges) {
         expect(source.split(allowedChange)).toHaveLength(2)
@@ -63,6 +66,48 @@ describe('V7.1与未推送产品成果保护集', () => {
       }).trim()
     } else if (file.endsWith('/WorkstationV4AssistView.vue')) {
       let source = readFileSync(file, 'utf8')
+      // 只允许消息插槽的样式挂点，不允许改原事件、数据和其他业务页签。
+      const hooks: Array<[string, string, number]> = [
+        ['class="assist-message-inbox"', 'class="space-y-3 p-3"', 1],
+        [
+          'class="assist-message-inbox__toolbar"',
+          'class="flex items-center justify-between gap-2 rounded-[16px] border border-slate-200/80 bg-white/72 px-3 py-2"',
+          1,
+        ],
+        [
+          'class="assist-message-inbox__filters"',
+          'class="grid grid-cols-3 gap-2 rounded-[16px] border border-slate-200/70 bg-white/72 p-2"',
+          1,
+        ],
+        [
+          'class="assist-message-inbox__read-filter"',
+          'class="rounded-[16px] border border-slate-200/70 bg-white/72 p-2"',
+          1,
+        ],
+        [
+          'class="assist-message-inbox__list"',
+          'class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1"',
+          1,
+        ],
+        [
+          'class="assist-message-inbox__item"',
+          'class="rounded-[16px] border p-3 shadow-[0_4px_12px_rgba(15,23,42,0.025)]"',
+          2,
+        ],
+        ['class="assist-message-inbox__subject"', 'class="truncate"', 2],
+        ['class="assist-message-inbox__body"', 'class="mt-1 text-xs text-slate-500 leading-5"', 2],
+        [
+          'class="assist-message-inbox__meta assist-message-inbox__meta--overview"',
+          'class="mt-1 flex items-center gap-2 text-[11px] text-slate-400"',
+          1,
+        ],
+        ['class="assist-message-inbox__meta"', 'class="mt-1 text-[11px] text-slate-400"', 1],
+        ['\n<style scoped src="../styles/assist-message-inbox.css"></style>\n', '', 1],
+      ]
+      for (const [hook, previous, count] of hooks) {
+        expect(source.split(hook)).toHaveLength(count + 1)
+        source = source.split(hook).join(previous)
+      }
       const replacements = [
         ['    v-if="selectedRecord || assistTab === \'message\'"', '    v-if="selectedRecord"'],
         [
@@ -73,6 +118,34 @@ describe('V7.1与未推送产品成果保护集', () => {
       for (const [allowed, originalLine] of replacements) {
         expect(source.split(allowed)).toHaveLength(2)
         source = source.replace(allowed, originalLine)
+      }
+      actual = execFileSync('git', ['hash-object', `--path=${prefix}${file}`, '--stdin'], {
+        encoding: 'utf8',
+        input: source,
+      }).trim()
+    } else if (file.endsWith('/WorkstationAssistPanel.vue')) {
+      let source = readFileSync(file, 'utf8')
+      const allowedChanges = [
+        [
+          ":class=\"['assist-panel', { 'assist-panel--wide': currentTab === 'chat', 'assist-panel--message mq-card': currentTab === 'message' }]\"",
+          ":class=\"['assist-panel', { 'assist-panel--wide': currentTab === 'chat' }]\"",
+        ],
+        [
+          '<NotificationOutlined v-if="currentTab === \'message\'" class="assist-panel__title-icon" />\n            <RobotOutlined v-else class="assist-panel__title-icon" />',
+          '<RobotOutlined class="assist-panel__title-icon" />',
+        ],
+        ["{{ currentTab === 'message' ? '消息提醒' : panelTitle }}", '{{ panelTitle }}'],
+        ['              aria-label="刷新当前面板"\n', ''],
+        ['              aria-label="关闭当前面板"\n', ''],
+        [
+          '}\n\n.assist-panel:not(.assist-panel--message) {\n  border-radius: 22px;',
+          '  border-radius: 22px;',
+        ],
+        ['\n<style scoped src="../styles/assist-message-panel.css"></style>\n', ''],
+      ]
+      for (const [allowed, previous] of allowedChanges) {
+        expect(source.split(allowed)).toHaveLength(2)
+        source = source.replace(allowed, previous)
       }
       actual = execFileSync('git', ['hash-object', `--path=${prefix}${file}`, '--stdin'], {
         encoding: 'utf8',

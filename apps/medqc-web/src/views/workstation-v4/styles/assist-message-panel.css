@@ -1,0 +1,50 @@
+/* 只作用于消息页签；分析、编码、DRG 和对话的原外壳不变。 */
+.assist-panel.assist-panel--message {
+  width: min(460px, calc(100vw - 36px));
+  height: min(720px, calc(100dvh - 36px));
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-family);
+}
+.assist-panel--message .assist-panel__header {
+  padding: 20px 24px 16px;
+  background: transparent;
+  border-bottom: 1px solid var(--mq-border);
+  box-shadow: none;
+}
+.assist-panel--message .assist-panel__title-wrap {
+  align-items: center;
+}
+.assist-panel--message .assist-panel__title-icon {
+  margin-top: 0;
+  color: var(--mq-brand-600);
+  filter: none;
+  font-size: 20px;
+}
+.assist-panel--message .assist-panel__title {
+  color: var(--mq-text-primary);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.assist-panel--message .assist-panel__action-btn {
+  width: 36px;
+  height: 36px;
+  color: var(--mq-text-secondary);
+  background: transparent;
+  border: 0;
+}
+.assist-panel--message .assist-panel__action-btn:hover {
+  background: var(--mq-bg-muted);
+}
+.assist-panel--message .assist-panel__content {
+  background: transparent;
+}
+.assist-panel--message .assist-panel__slot {
+  padding: 0;
+}
+@media (max-width: 640px) {
+  .assist-panel.assist-panel--message {
+    width: min(460px, calc(100vw - 24px));
+    height: min(720px, calc(100dvh - 24px));
+  }
+}
