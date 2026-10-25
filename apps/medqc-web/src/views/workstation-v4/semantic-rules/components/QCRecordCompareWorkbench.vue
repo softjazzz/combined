@@ -366,11 +366,13 @@ const props = withDefaults(
     issues: QCRecordCompareIssue[]
     /** 单病历纵向切片专用；存在时右栏不再使用批量结果旧模型。 */
     singleRecordItems?: SingleRecordQcResultItem[]
+    /** 未完成整例交付的保存结果可查看，但不冒充可反馈的正式结果。 */
+    feedbackAvailable?: boolean
     presentationMode?: 'flat' | 'grouped'
     debugContext?: QcResultDebugContext
     activeIssueKey?: string
   }>(),
-  { presentationMode: 'flat', sourceView: 'saved' },
+  { presentationMode: 'flat', sourceView: 'saved', feedbackAvailable: true },
 )
 
 const emit = defineEmits<{
@@ -378,7 +380,7 @@ const emit = defineEmits<{
 }>()
 
 const qcFeedback = useQcResultFeedback(
-  () => props.jobId,
+  () => props.feedbackAvailable ? props.jobId : undefined,
   () => props.recordRef,
 )
 const feedbackByRule = qcFeedback.feedbackByRule
@@ -388,6 +390,7 @@ const feedbackError = qcFeedback.error
 const feedbackSavingRuleId = qcFeedback.savingRuleId
 
 function handleSubmitFeedback(ruleId: string, input: SaveQcResultFeedbackInput) {
+  if (!props.feedbackAvailable) return
   void qcFeedback.save(ruleId, input)
 }
 

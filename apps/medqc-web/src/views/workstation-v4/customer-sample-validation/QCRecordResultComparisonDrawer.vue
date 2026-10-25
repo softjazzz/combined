@@ -72,6 +72,25 @@
     </template>
 
     <a-spin :spinning="loading">
+      <section
+        v-if="latestResult?.execution_status === 'partial_failed' || latestResult?.execution_status === 'failed'"
+        role="alert"
+        class="customer-record-result-warning"
+        data-testid="record-result-partial-failure"
+      >
+        <strong>本次质控未全部完成</strong>
+        <p>已保留 {{ latestResult.result_rule_count }} 项有效结果；{{ latestResult.failed_rule_count }} 项执行失败，未形成质控结论。</p>
+        <p v-if="latestResult.failed_rule_ids?.length">
+          失败项：{{ latestResult.failed_rule_ids.join('、') }}
+        </p>
+      </section>
+      <section
+        v-else-if="latestResult?.result_scope === 'targeted'"
+        role="status"
+        class="customer-record-result-warning"
+      >
+        当前为定向质控结果，仅覆盖本次选择的 {{ latestResult.expected_rule_count }} 项。
+      </section>
       <QCRecordCompareWorkbench
         v-if="latestResult && focus.visitId"
         :visit-id="focus.visitId"
@@ -82,6 +101,7 @@
         :discharge-time="focus.dischargeTime"
         :record-ref="authorizedRecordRef"
         :job-id="latestResult.job_id"
+        :feedback-available="!latestResult.execution_status"
         :issues="[]"
         :single-record-items="latestResult.items"
         :debug-context="debugContext"
@@ -293,13 +313,13 @@ async function loadQcTime(jobId: string, requestSequence: number) {
     const job = response.success ? response.data : undefined
     if (job?.status === 'running' || job?.status === 'queued') {
       qcTimeText.value = '质控进行中'
-    } else if (job?.status === 'completed' && job.finished_at) {
+    } else if (job?.finished_at && (job.status === 'completed' || latestResult.value?.execution_status)) {
       // 任务服务以无时区 UTC 保存时间；已有偏移量的值保持原有时区含义。
       const rawTime = job.finished_at.trim().replace(' ', 'T')
       const date = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(rawTime) ? rawTime : `${rawTime}Z`)
       qcTimeText.value = Number.isNaN(date.getTime())
         ? '质控完成时间未返回'
-        : `质控完成时间：${date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`
+        : `${latestResult.value?.execution_status ? '质控结束时间' : '质控完成时间'}：${date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`
     } else {
       qcTimeText.value = '质控完成时间未返回'
     }
@@ -324,6 +344,18 @@ watch(
 
 <style scoped>
 @import '../styles/qc-result-view-apple.css';
+.customer-record-result-warning {
+  margin: 12px 16px;
+  padding: 12px 16px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.customer-record-result-warning p {
+  margin: 4px 0 0;
+}
 .customer-record-result-drawer :deep(.ant-drawer-close) {
   display: grid;
   width: 38px;

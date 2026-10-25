@@ -81,6 +81,7 @@ from .qc_workspace.canonical_result_store import (
     validated_customer_explanation as _validated_customer_explanation,
 )
 from .qc_workspace.partial_record_delivery import select_complete_record_items
+from .qc_workspace.partial_record_read import read_saved_partial_record, saved_record_rule_scope
 from .qc_workspace.record_repository import RecordRepository, WorkspaceListResult
 from .qc_workspace.execution_failure import (
     validate_failed_task_items,
@@ -3539,10 +3540,9 @@ class CustomQCWorkspaceService:
     ) -> Dict[str, Any]:
         """读取一份病历当前规则代次的唯一客户结果。
 
-        这是单病历结果页唯一允许使用的读取入口。候选首先由三坐标
-        ``institute_id + patient_id + visit_id`` 限定，再从全院所有创建者中
-        选择已为该病历写入 Canonical Envelope 的当前规则代次最新唯一根任务；
-        不得以批次整体状态、文案丰富度、证据数量或完整度替换较新的任务。
+        三坐标、规则版本及任务冻结范围共同约束候选；定向子集不得替代全量任务。
+        完整结果沿用 Canonical Envelope，最新失败全量任务则只读展示同次已保存、
+        通过逐条合同校验的结果及独立失败提示，不与其他任务拼接或标为完整交付。
         """
 
         normalized_institute_id = _safe_text(institute_id)
@@ -3585,6 +3585,8 @@ class CustomQCWorkspaceService:
                         self._batch_job_table.c.record_ids_json,
                         self._batch_job_table.c.finished_at,
                         self._batch_job_table.c.created_at,
+                        self._batch_job_table.c.status,
+                        sa.literal(False).label("saved_partial_attempt"),
                     )
                     .join(
                         self._record_result_envelope_table,
@@ -3612,20 +3614,62 @@ class CustomQCWorkspaceService:
                         )
                     )
                     .distinct()
+                    .union_all(
+                        select(
+                            self._batch_job_table.c.id,
+                            self._batch_job_table.c.filters_json,
+                            self._batch_job_table.c.record_ids_json,
+                            self._batch_job_table.c.finished_at,
+                            self._batch_job_table.c.created_at,
+                            self._batch_job_table.c.status,
+                            sa.literal(True).label("saved_partial_attempt"),
+                        ).where(and_(
+                            self._batch_job_table.c.status == "failed",
+                            or_(self._batch_job_table.c.parent_job_id.is_(None),
+                                self._batch_job_table.c.parent_job_id == ""),
+                            self._batch_job_table.c.record_ids_json.contains(
+                                json.dumps(normalized_visit_id, ensure_ascii=False), autoescape=True,
+                            ),
+                        ))
+                    )
                     .order_by(
-                        desc(self._batch_job_table.c.finished_at),
-                        desc(self._batch_job_table.c.created_at),
+                        desc("finished_at"), desc("created_at"),
                     )
                 )
                 .mappings()
                 .all()
             )
             candidates = []
+            case_ref = CaseRef(normalized_institute_id, normalized_patient_id, normalized_visit_id)
+            canonical_job_ids = {row["id"] for row in root_rows if not row.get("saved_partial_attempt")}
             for row in root_rows:
-                # 代次选择只需要任务身份、病例范围和时间，不读取历史结果大字段。
-                # 父任务聚合不改变这些字段；当前病例完成性已由精确 Envelope 确认。
+                # 先用轻量身份与冻结范围选轮，只加载选中任务的结果大字段。
                 candidate = _row_to_batch_job(dict(row))
                 filters = candidate.get("filters") or {}
+                saved_partial_attempt = bool(row.get("saved_partial_attempt"))
+                if saved_partial_attempt:
+                    if row["id"] in canonical_job_ids:
+                        continue
+                    # SQL 仅作就诊号预筛；无 Envelope 时必须由持久三坐标证明归属。
+                    refs = filters.get("record_refs")
+                    if not isinstance(refs, list) or case_ref not in {
+                        CaseRef.from_mapping(ref) for ref in refs if isinstance(ref, Mapping)
+                    }:
+                        continue
+                try:
+                    scope = saved_record_rule_scope(filters, case_ref)
+                except (ValueError, TypeError):
+                    if saved_partial_attempt:
+                        continue
+                    scope = []  # 无冻结范围的旧 Envelope 保留原合同兼容读取。
+                candidate["result_rule_scope"] = scope
+                candidate["saved_partial_attempt"] = saved_partial_attempt
+                if saved_partial_attempt:
+                    candidate["saved_filters_json"] = row["filters_json"]
+                candidate["result_scope_kind"] = (
+                    "targeted" if filters.get("selected_rule_ids") or filters.get("record_rule_map")
+                    else "full" if "selected_rule_ids" in filters else "unknown"
+                )
                 if not all(filters.get(key) for key in ("rule_set_key", "rule_set_version")):
                     # 仅旧任务缺少 filters 身份时加载 summary，保留逐字段兼容回退。
                     summary_rows = session.execute(
@@ -3637,8 +3681,9 @@ class CustomQCWorkspaceService:
                     )
                     candidate["summary"] = summary if isinstance(summary, dict) else None
                 if _safe_text(candidate.get("status")).lower() != "completed":
-                    # 批次可因其他病历失败、取消或仍在收尾，但精确 Envelope 的
-                    # 存在已证明当前病历独立交付完成。这里只投影读取状态，不改库。
+                    # 选择器使用 completed 表示可选读。独立 Envelope 或失败任务的
+                    # 结果校验在后面分别完成；部分失败通过 execution_status 明示，
+                    # 不修改持久任务状态或声称整例已经交付。
                     candidate = {**candidate, "status": "completed"}
                 candidates.append(candidate)
             selection = select_latest_authoritative_record_result_job(
@@ -3646,6 +3691,7 @@ class CustomQCWorkspaceService:
                 record_id=normalized_visit_id,
                 rule_set_key=normalized_rule_set_key,
                 rule_set_version=normalized_rule_set_version,
+                prefer_full_scope=True,
             )
             if selection.state != "ready" or not isinstance(selection.job, dict):
                 return {
@@ -3661,6 +3707,12 @@ class CustomQCWorkspaceService:
                 }
 
             selected_job = selection.job
+            if not expected_rule_ids and selected_job.get("result_rule_scope"):
+                expected_rule_ids_for_count = [
+                    rule_id for rule_id in selected_job["result_rule_scope"]
+                    if rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+                ]
+            partial_details: Dict[str, Any] = {}
             try:
                 envelope = self._load_record_result_envelope_items(
                     session,
@@ -3671,15 +3723,35 @@ class CustomQCWorkspaceService:
                     rule_set_key=normalized_rule_set_key,
                     rule_set_version=normalized_rule_set_version,
                 )
+                if not envelope and selected_job.get("saved_partial_attempt"):
+                    saved = session.execute(select(
+                        self._batch_job_table.c.summary_json,
+                        self._batch_job_table.c.failed_records_json,
+                    ).where(and_(
+                        self._batch_job_table.c.id == selected_job["id"],
+                        self._batch_job_table.c.status == "failed",
+                        self._batch_job_table.c.filters_json == selected_job["saved_filters_json"],
+                    ))).mappings().one_or_none()
+                    if saved is None:
+                        raise ValueError("saved_partial_task_changed")
+                    projection_key = customer_safe_projection_key()
+                    partial_details = read_saved_partial_record(
+                        summary=_safe_json_loads(saved["summary_json"], {}),
+                        failures=_safe_json_loads(saved["failed_records_json"], []),
+                        ref=case_ref, expected_rules=selected_job["result_rule_scope"],
+                        projection_key=projection_key,
+                        projector=lambda item: self._envelope_item_from_rule_result(item, hmac_key=projection_key),
+                    )
+                    envelope = partial_details
             except ValueError as exc:
                 # 已发布合同损坏沿用既有结构化失败，不变成未找到，也不吞其他错误。
-                if str(exc) != LX0609_CUSTOMER_RESULT_CONTRACT_ERROR:
+                if str(exc) != LX0609_CUSTOMER_RESULT_CONTRACT_ERROR and not str(exc).startswith("saved_partial_"):
                     raise
                 return {
                     "schema_version": "lx0609-single-record-result-v1",
                     "state": "technical_error",
-                    "reason_code": "canonical_result_envelope_invalid",
-                    "data_origin": "canonical_result_envelope",
+                    "reason_code": "saved_partial_result_invalid" if selected_job.get("saved_partial_attempt") else "canonical_result_envelope_invalid",
+                    "data_origin": "saved_partial_task" if selected_job.get("saved_partial_attempt") else "canonical_result_envelope",
                     "record_ref": "",
                     "job_id": _safe_text(selected_job.get("id")),
                     "items": [],
@@ -3792,17 +3864,19 @@ class CustomQCWorkspaceService:
                 "schema_version": "lx0609-single-record-result-v1",
                 "state": "ready",
                 "reason_code": "",
-                "data_origin": "canonical_result_envelope",
+                "data_origin": "saved_partial_task" if partial_details else "canonical_result_envelope",
                 "record_ref": _safe_text(envelope.get("record_ref")),
                 "job_id": _safe_text(selected_job.get("id")),
                 "rule_set_key": normalized_rule_set_key,
                 "rule_set_version": normalized_rule_set_version,
+                "result_scope": selected_job.get("result_scope_kind", "unknown"),
                 "items": projected_items,
                 "expected_rule_count": len(resolved_expected_rule_ids),
                 "result_rule_count": len(items),
-                "is_complete": not missing_rule_ids and not conflicting_rule_ids,
+                "is_complete": not partial_details and not missing_rule_ids and not conflicting_rule_ids,
                 "missing_rule_ids": missing_rule_ids,
                 "conflicting_rule_ids": sorted(conflicting_rule_ids),
+                **{key: value for key, value in partial_details.items() if key not in {"items", "record_ref"}},
             }
         finally:
             session.close()
@@ -4047,6 +4121,15 @@ class CustomQCWorkspaceService:
                     if job_id not in jobs_by_id:
                         continue
                     candidate = dict(jobs_by_id[job_id])
+                    filters = candidate.get("filters") or {}
+                    try:
+                        candidate["result_rule_scope"] = saved_record_rule_scope(filters, CaseRef(*identity))
+                    except (ValueError, TypeError):
+                        candidate["result_rule_scope"] = []
+                    candidate["result_scope_kind"] = (
+                        "targeted" if filters.get("selected_rule_ids") or filters.get("record_rule_map")
+                        else "full" if "selected_rule_ids" in filters else "unknown"
+                    )
                     if _safe_text(candidate.get("status")).lower() != "completed":
                         # Canonical Envelope 的存在只代表这一份病历已经完整交付。
                         # 选择器仍坚持 completed 合同，因此在本次单病历选择范围内
@@ -4068,6 +4151,7 @@ class CustomQCWorkspaceService:
                     record_id=visit_id,
                     rule_set_key=normalized_rule_set_key,
                     rule_set_version=normalized_rule_set_version,
+                    prefer_full_scope=True,
                 )
                 # 只有当前规则版本、且没有任何当前版本同 visit Envelope 的根任务
                 # 才是无法确认三坐标归属的缺失候选。旧版本 Envelope 完全不参与

@@ -192,6 +192,12 @@ export interface SingleRecordQcResultPayload {
   is_complete: boolean
   missing_rule_ids?: string[]
   conflicting_rule_ids?: string[]
+  /** 任务执行范围及失败提示，不参与临床结论计数。 */
+  result_scope?: 'full' | 'targeted' | 'unknown'
+  execution_status?: 'partial_failed' | 'failed'
+  completed_rule_count?: number
+  failed_rule_count?: number
+  failed_rule_ids?: string[]
 }
 
 export type SingleRecordQcResultTone = 'danger' | 'warning' | 'success' | 'neutral'
