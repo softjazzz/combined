@@ -6,76 +6,90 @@
     <p class="readonly-frontpage-note">
       空缺字段显示“未返回”，不代表临床未填写。
     </p>
-    <section
-      v-for="group in display.groups"
-      :key="group.key"
-    >
-      <h5>{{ group.label }}</h5>
-      <dl class="readonly-frontpage-fields">
+    <div class="readonly-system-sheet-scroll">
+      <FrontpageSheet
+        :data="sheetData"
+        :post-processing="false"
+        source-readonly
+      />
+    </div>
+    <details class="readonly-frontpage-supplement">
+      <summary>查看完整首页字段及诊断明细</summary>
+      <section
+        v-for="group in display.groups"
+        :key="group.key"
+      >
+        <h5>{{ group.label }}</h5>
+        <dl class="readonly-frontpage-fields">
+          <div
+            v-for="field in group.fields"
+            :key="field.key"
+          >
+            <dt>{{ field.label }}</dt>
+            <dd :class="{ 'is-missing': field.value === null }">
+              {{ field.value ?? '未返回' }}
+            </dd>
+          </div>
+        </dl>
+      </section>
+      <section
+        v-for="item in tables"
+        :key="item.key"
+      >
+        <h5>
+          {{ item.label
+          }}<span v-if="item.table.rows.length"> · {{ item.table.rows.length }}条</span>
+        </h5>
         <div
-          v-for="field in group.fields"
-          :key="field.key"
+          v-if="item.table.rows.length"
+          class="readonly-frontpage-table-wrap"
         >
-          <dt>{{ field.label }}</dt>
-          <dd :class="{ 'is-missing': field.value === null }">
-            {{ field.value ?? '未返回' }}
-          </dd>
+          <table>
+            <thead>
+              <tr>
+                <th
+                  v-for="column in item.table.columns"
+                  :key="column.key"
+                >
+                  {{ column.label }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(row, index) in item.table.rows"
+                :key="index"
+              >
+                <td
+                  v-for="column in item.table.columns"
+                  :key="column.key"
+                  :class="{ 'is-missing': row[column.key] === null }"
+                >
+                  {{ row[column.key] ?? '未返回' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </dl>
-    </section>
-    <section
-      v-for="item in tables"
-      :key="item.key"
-    >
-      <h5>
-        {{ item.label }}<span v-if="item.table.rows.length"> · {{ item.table.rows.length }}条</span>
-      </h5>
-      <div
-        v-if="item.table.rows.length"
-        class="readonly-frontpage-table-wrap"
-      >
-        <table>
-          <thead>
-            <tr>
-              <th
-                v-for="column in item.table.columns"
-                :key="column.key"
-              >
-                {{ column.label }}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(row, index) in item.table.rows"
-              :key="index"
-            >
-              <td
-                v-for="column in item.table.columns"
-                :key="column.key"
-                :class="{ 'is-missing': row[column.key] === null }"
-              >
-                {{ row[column.key] ?? '未返回' }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p
-        v-else
-        class="is-missing"
-      >
-        未返回
-      </p>
-    </section>
+        <p
+          v-else
+          class="is-missing"
+        >
+          未返回
+        </p>
+      </section>
+    </details>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FrontpageDisplay } from './types'
+import FrontpageSheet from '../components/FrontpageSheet.vue'
+import { toSystemFrontpageSheet } from './frontpageDisplay'
 
 const props = defineProps<{ display: FrontpageDisplay }>()
+const sheetData = computed(() => toSystemFrontpageSheet(props.display))
 const tables = computed(() => [
   { key: 'diagnoses', label: '首页诊断', table: props.display.diagnoses },
   { key: 'surgeries', label: '手术及操作', table: props.display.surgeries },
@@ -91,6 +105,24 @@ const tables = computed(() => [
 .readonly-frontpage-note {
   margin: 16px 0 0;
   color: #64748b;
+}
+.readonly-system-sheet-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 16px 0;
+}
+.readonly-system-sheet-scroll :deep(.fp-sheet-wrap) {
+  min-width: 860px;
+}
+.readonly-frontpage-supplement {
+  margin-top: 12px;
+  border-top: 1px solid #edf1f5;
+}
+summary {
+  padding: 12px 0;
+  color: #64748b;
+  cursor: pointer;
 }
 section {
   padding: 20px 0;

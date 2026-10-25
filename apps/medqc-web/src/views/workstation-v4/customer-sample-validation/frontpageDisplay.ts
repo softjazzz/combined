@@ -58,3 +58,22 @@ export function normalizeFrontpageDisplay(value: unknown): FrontpageDisplay | un
     surgeries: table(source.surgeries),
   }
 }
+
+/** 只做字段对接，复用系统首页表单；不生成诊断或补写源值。 */
+export function toSystemFrontpageSheet(display: FrontpageDisplay) {
+  const fields = (cost: boolean) =>
+    Object.fromEntries(
+      display.groups
+        .filter((group) => (group.key === 'cost') === cost)
+        .flatMap((group) => group.fields.map((field) => [field.key, field.value])),
+    )
+  return {
+    basic: fields(false),
+    cost: fields(true),
+    diagnoses: display.diagnoses.rows.map((row) => ({ ...row })),
+    surgeries: display.surgeries.rows.map((row) => ({
+      ...row,
+      surgeon_code: row.surgeon_physician_code ?? null,
+    })),
+  }
+}
