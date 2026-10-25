@@ -22,7 +22,8 @@ from ..evidence_material import (
 )
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
 from ..llm_prompt_privacy import classify_luxian_0609_llm_call_failure
-from .shared import clean_text, response_json_payload
+from ..structured_output import structured_output_kwargs
+from .shared import clean_text, response_json_payload, response_text
 
 
 logger = logging.getLogger(__name__)
@@ -410,6 +411,51 @@ medical_analysis 用不超过240字说明具体关联或不相关依据，点明
 只输出 JSON：{{"relation_state":"related|unrelated|unknown","rationale_code":"same_clinical_problem|no_related_item|insufficient_information","medical_analysis":"具体依据","evidence_quote":"连续原文"}}。"""
 
 
+def _output_options(llm_client: Rule077LLMClient) -> dict[str, Any]:
+    # 复用0609既有能力探测，不改变全局模型配置或不支持此能力的客户端。
+    options = structured_output_kwargs(llm_client)
+    if not options:
+        return options
+    options["response_format"] = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "first_course_differential_relation",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "relation_state": {"type": "string", "enum": sorted(_RELATION_STATES)},
+                    "rationale_code": {"type": "string", "enum": sorted(_RATIONALE_CODES)},
+                    "medical_analysis": {"type": "string"},
+                    "evidence_quote": {"type": "string"},
+                },
+                "required": [
+                    "relation_state", "rationale_code", "medical_analysis", "evidence_quote",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    }
+    return options
+
+
+def _safe_output_shape(response: Mapping[str, Any]) -> tuple[str, int, bool, bool]:
+    choices = response.get("choices")
+    choice = choices[0] if isinstance(choices, list) and choices else {}
+    choice = choice if isinstance(choice, Mapping) else {}
+    finish = choice.get("finish_reason")
+    finish = finish if finish in ("stop", "length", "content_filter", "tool_calls") else "unknown"
+    message = choice.get("message")
+    message = message if isinstance(message, Mapping) else {}
+    observation = response.get("_cot_observation")
+    observation = observation if isinstance(observation, Mapping) else {}
+    content = response_text(response)
+    return (
+        finish, len(content), "{" in content,
+        bool(message.get("reasoning_content") or observation.get("response_has_reasoning_content")),
+    )
+
+
 async def evaluate_rule_077(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -514,6 +560,7 @@ async def evaluate_rule_077(
             ),
             max_completion_tokens=768,
             allow_length_retry=False,
+            **_output_options(llm_client),
         )
     except TimeoutError:
         criterion = _criterion(
@@ -596,13 +643,16 @@ async def evaluate_rule_077(
         if context_truncated:
             validation_errors.append("clinical_context_truncated")
     if validation_errors:
-        # 仅记录固定错误码、长度及快照标识；不记录模型应答、引文、姓名或凭据。
+        # 仅记录受控枚举、长度和布尔形状，不输出模型正文、引文或任意上游字符串。
+        finish, content_chars, json_start, reasoning_present = _safe_output_shape(response)
         logger.warning(
-            "rule_077_model_validation_failed snapshot=%s codes=%s analysis_chars=%d quote_chars=%d",
+            "rule_077_model_validation_failed snapshot=%s codes=%s analysis_chars=%d quote_chars=%d "
+            "finish_reason=%s completion_tokens=%d content_chars=%d json_start=%s reasoning_present=%s",
             snapshot.snapshot_hash,
             ",".join(validation_errors),
             len(analysis),
             len(quote),
+            finish, completion_tokens, content_chars, json_start, reasoning_present,
         )
         criterion = _criterion(
             status=CriterionStatus.UNKNOWN,

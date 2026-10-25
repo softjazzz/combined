@@ -829,3 +829,133 @@ async def test_076_077_use_the_formal_production_plan_without_legacy_fallback(
     assert [item["rule_id"] for item in results] == list(selected)
     assert [item["status"] for item in results] == ["compliant", "compliant"]
     assert all(item.get("customer_evidence") for item in results)
+
+
+@pytest.mark.asyncio
+async def test_077_capable_client_uses_non_thinking_strict_json_through_privacy_wrapper() -> None:
+    from app.services.luxian_0609.llm_prompt_privacy import wrap_luxian_0609_llm_client
+
+    class CapableClient(_SemanticClient):
+        def supports_strict_json_schema(self):
+            return True
+
+        async def generate(self, prompt, **kwargs):
+            # 旧入口只有提示词约束，模拟 HTTP 成功但正文是说明文字。
+            if kwargs.get("enable_thinking") is not False or "response_format" not in kwargs:
+                self.calls.append(dict(kwargs))
+                return {"content": "需要结合临床背景判断，未输出JSON。"}
+            return await super().generate(prompt, **kwargs)
+
+    client = CapableClient()
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=wrap_luxian_0609_llm_client(client),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    reduced, result = _canonical("LX0609-01-02-02", session, execution)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert result["status"] == "compliant"
+    assert len(client.calls) == 1
+    options = client.calls[0]
+    assert options["enable_thinking"] is False
+    assert options["max_completion_tokens"] == 768
+    assert options["allow_length_retry"] is False
+    response_format = options["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
+    schema = response_format["json_schema"]["schema"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "relation_state", "rationale_code", "medical_analysis", "evidence_quote",
+    }
+
+
+@pytest.mark.asyncio
+async def test_077_unconstrained_clients_keep_compatibility_and_single_call() -> None:
+    client = _SemanticClient()
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    reduced, _ = _canonical("LX0609-01-02-02", session, execution)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert len(client.calls) == 1
+    assert "enable_thinking" not in client.calls[0]
+    assert "response_format" not in client.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_077_invalid_json_logs_safe_output_shape_not_content(caplog) -> None:
+    class Client(_SemanticClient):
+        async def generate(self, prompt, **kwargs):
+            return {"choices": [{"finish_reason": "length", "message": {
+                "content": "PRIVATE_MODEL_PROSE_ONLY", "reasoning_content": "PRIVATE_REASONING",
+            }}], "usage": {"completion_tokens": 768}}
+
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=Client(),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    reduced, _ = _canonical("LX0609-01-02-02", session, execution)
+    assert reduced.reason_code == "model_invalid_output"
+    assert "json_payload_invalid" in caplog.text
+    assert "finish_reason=length" in caplog.text
+    assert "completion_tokens=768" in caplog.text
+    assert "content_chars=24" in caplog.text
+    assert "reasoning_present=True" in caplog.text
+    assert "PRIVATE_MODEL" not in caplog.text
+    assert "PRIVATE_REASONING" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_077_strict_json_and_thinking_override_reach_real_http_payload(monkeypatch) -> None:
+    import jsonschema
+    import app.services.qc_llm_client as client_module
+    from app.services.llm_observability import LLMObservabilityRecorder, NullLLMCallEventStore
+    from app.services.luxian_0609.llm_prompt_privacy import wrap_luxian_0609_llm_client
+    from app.services.qc_llm_client import SichuanQCLLMClient
+
+    recorded = await _SemanticClient().generate("synthetic input")
+    sent = []
+
+    async def fake_post(**kwargs):
+        sent.append(kwargs["payload"])
+        return {"choices": [{"message": {"content": recorded["content"]}, "finish_reason": "stop"}],
+                "usage": recorded["usage"]}
+
+    monkeypatch.setattr(client_module, "safe_post_json", fake_post)
+    client = SichuanQCLLMClient(
+        config={"api_endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "api_key": "synthetic-not-a-key", "model": "qwen3.8-flash", "provider_code": "alibaba",
+                "custom_parameters": {"enable_thinking": True, "thinking_budget": 256}},
+        observability_recorder=LLMObservabilityRecorder(store=NullLLMCallEventStore()),
+    )
+    session = _session("LX0609-01-02-02", _077_rows())
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-01-02-02",),
+        wrapper_rules=[get_luxian_0609_rule("LX0609-01-02-02")],
+        evidence_payload=None, llm_client=wrap_luxian_0609_llm_client(client),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-01-02-02",),
+    )
+    reduced, _ = _canonical("LX0609-01-02-02", session, execution)
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert len(sent) == 1
+    assert sent[0]["enable_thinking"] is False
+    assert "thinking_budget" not in sent[0]
+    assert sent[0]["max_tokens"] == 768
+    assert sent[0]["response_format"]["type"] == "json_schema"
+    import json
+    jsonschema.validate(json.loads(recorded["content"]), sent[0]["response_format"]["json_schema"]["schema"])
+    assert client.enable_thinking is True  # 只改此规则调用参数，持久/共享配置不变。
