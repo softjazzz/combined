@@ -52,6 +52,27 @@ describe('Auth Store', () => {
     is_active: true,
   }
 
+  it('keeps auth identity fields without logging passwords or session tokens', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const password = 'synthetic-login-secret'
+    const token = 'synthetic-session-secret'
+    vi.mocked(ApiService.login).mockResolvedValue({ success: true, data: { access_token: token } })
+    vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+      success: true, data: { ...mockUser, institute_id: 'A' },
+    })
+    try {
+      const store = useAuthStore()
+      expect((await store.signIn('synthetic-account', password)).success).toBe(true)
+      expect(store.user?.institute_id).toBe('A')
+      expect(store.user?.is_active).toBe(true)
+      const logged = JSON.stringify(warn.mock.calls)
+      expect(logged).not.toContain(password)
+      expect(logged).not.toContain(token)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   describe('initial state', () => {
     it('should have the correct initial state', () => {
       const store = useAuthStore()

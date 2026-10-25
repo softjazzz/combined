@@ -2153,6 +2153,45 @@ describe('CustomerSampleValidationView', () => {
     )
   })
 
+  it('JSON三坐标行键只提交勾选病例且不混入同号另一院', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord({ id: JSON.stringify(['H1', 'P001', 'V-SHARED']), matched_visit_id: 'V-SHARED', sample_item_ids: ['item-a'] }),
+          buildRecord({
+            id: JSON.stringify(['H2', 'P002', 'V-SHARED']),
+            matched_institute_id: 'H2',
+            matched_patient_id: 'P002',
+            matched_visit_id: 'V-SHARED',
+            sample_item_ids: ['item-b'],
+          }),
+        ],
+        total: 2,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+    await wrapper.findAll('input.record-checkbox')[1]!.setValue(true)
+
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      expect.objectContaining({
+        sample_item_ids: ['item-b'],
+        record_refs: [
+          { institute_id: 'H2', patient_id: 'P002', visit_id: 'V-SHARED' },
+        ],
+      }),
+      { timeout: 90000 },
+    )
+  })
+
   it('两个选择项映射同一三坐标时失败关闭且不调用运行接口', async () => {
     getManualSamplePoolRecords.mockResolvedValueOnce({
       success: true,

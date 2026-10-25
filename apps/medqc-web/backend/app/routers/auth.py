@@ -61,6 +61,8 @@ def _user_payload(user: dict) -> dict:
         "email": user["email"],
         "username": user.get("username"),
         "display_name": user["display_name"],
+        "institute_id": str(user.get("institute_id") or "").strip(),
+        "is_active": bool(user.get("is_active", True)),
         "department": user["department"],
         "roles": effective_roles(user["roles"]),
         "avatar": user["avatar"],

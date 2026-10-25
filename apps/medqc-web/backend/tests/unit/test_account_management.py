@@ -93,6 +93,31 @@ def test_create_persistent_login_and_never_return_hash(accounts):
     assert "password_hash" not in str(page)
 
 
+def test_real_auth_payload_keeps_persistent_institute_and_active_state(accounts):
+    _, sessions, client, _ = accounts
+    created = client.post("/api/v1/account-management", json=payload()).json()["data"]
+    client.app.dependency_overrides.clear()
+    login = client.post("/api/v1/auth/login", json={
+        "account": payload()["username"], "password": payload()["password"],
+    })
+    assert login.status_code == 200
+    headers = {"Authorization": "Bearer " + login.json()["data"]["access_token"]}
+    before = client.get("/api/v1/auth/me", headers=headers)
+    assert before.status_code == 200
+    assert before.json()["data"]["institute_id"] == "A"
+    assert before.json()["data"]["is_active"] is True
+    with sessions.begin() as session:
+        session.get(SysUser, created["id"]).institute_id = "B"
+    after = client.get("/api/v1/auth/me", headers=headers)
+    assert after.status_code == 200
+    assert after.json()["data"]["institute_id"] == "B"
+    assert after.json()["data"]["id"] == before.json()["data"]["id"]
+    assert after.json()["data"]["roles"] == before.json()["data"]["roles"]
+    with sessions.begin() as session:
+        session.get(SysUser, created["id"]).is_active = False
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+
+
 @pytest.mark.parametrize("actor_id", ["qc", "doc", "memory-only"])
 def test_token_role_does_not_replace_persistent_admin(accounts, actor_id):
     _, _, client, actor = accounts

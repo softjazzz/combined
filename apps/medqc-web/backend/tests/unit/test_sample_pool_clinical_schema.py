@@ -100,3 +100,33 @@ def test_split_missing_evidence_stays_unknown_without_public_fallback(database, 
         {f"matched_{key}": value for key, value in IDENTITY.items()}
     ])
     assert states == {}
+
+
+def test_sample_cards_keep_cross_institute_and_patient_identity(database, monkeypatch):
+    engine, service = database
+    monkeypatch.setattr(assembly, "DB_SCHEMA_MODE", "split")
+    identities = [IDENTITY, {**IDENTITY, "institute_id": "H2"},
+                  {**IDENTITY, "patient_id": "P2"}]
+    for index, identity in enumerate(identities):
+        seed(engine, "cdm", identity)
+        # 不同患者人口信息也必须在本机构内回查。
+        with engine.begin() as connection:
+            for model in (MedicalRecordFrontpage, InpatRegistration, DischargeRecord):
+                table = model.__table__.to_metadata(MetaData(), schema="cdm")
+                connection.execute(table.update().where(*[
+                    table.c[field] == value for field, value in identity.items()
+                ]).values(name=f"合成病例{index}"))
+            if index:
+                connection.execute(insert(service._item_table), {
+                    "id": f"item-{index + 1}", "pool_id": "pool-1", "row_no": index + 1,
+                    **{f"matched_{key}": value for key, value in identity.items()},
+                    "sync_status": "synced", "bundle_status": "ready",
+                })
+    result = service.list_pool_records(pool_id="pool-1")
+    assert result.total == 3
+    assert len({row["id"] for row in result.items}) == 3
+    names = {(row["matched_institute_id"], row["matched_patient_id"]): row["patient_name"]
+             for row in result.items}
+    assert names == {("H1", "P1"): "合成病例0", ("H2", "P1"): "合成病例1",
+                     ("H1", "P2"): "合成病例2"}
+    assert all(row["issue_count"] == 1 for row in result.items)

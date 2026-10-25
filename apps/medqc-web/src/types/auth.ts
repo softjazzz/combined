@@ -49,6 +49,7 @@ export interface User extends BaseAuthUser {
   display_name?: string
   department?: string
   hospital_id?: string
+  institute_id?: string
   roles?: AuthUserRole[]
   permissions?: Permission[]
   is_active?: boolean

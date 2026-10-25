@@ -116,9 +116,7 @@ export const useAuthStore = defineStore('auth', () => {
         // role 参数暂时注释掉
       }
 
-      console.warn('🔐 Auth Store 登录请求:', loginRequest)
       const response = await ApiService.login(loginRequest)
-      console.warn('📡 API 响应:', response)
 
       if (response.success && response.data) {
         // 登录成功后，使用token拉取当前用户信息

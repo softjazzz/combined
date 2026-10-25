@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import secrets
+from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -17,6 +18,7 @@ from app.routers import auth, notifications, quality_reports
 from app.routers import defect_rectifications as api
 from app.services import (
     auth_store,
+    custom_qc_sample_pool_service as sample_pools,
     manual_defect_review_service,
     record_review_service,
     rule_set_version_service,
@@ -26,12 +28,13 @@ from app.services import (
 from app.services import custom_qc_workspace_service as workspace
 from app.services import record_quality_report_service as quality
 from app.services import record_remediation_report_service as remediation
-from app.services.bundles import assembly
+from app.services.bundles import assembly, frontpage_view
 from app.services.defect_rectification_service import (
     DefectRectificationService,
     RectificationError,
 )
 from app.services.doctor_notification_service import DoctorNotificationService
+from app.services.case_identity import CaseRef
 from app.services.luxian_0609.basic_timeliness_customer_projection import (
     safe_basic_timeliness_customer_display_facts,
 )
@@ -50,6 +53,40 @@ IDENTITY = {
     "visit_id": "synthetic-visit",
 }
 RULE = "LX0609-01-01-01"
+
+
+def test_bundle_inventory_isolated_by_full_case_identity(feedback, monkeypatch):
+    engine, *_ = feedback
+    monkeypatch.setattr(sample_pools, "engine", engine)
+    first = CaseRef("SYN-A", "P", "V")
+    second = CaseRef("SYN-B", "P", "V")
+    third = CaseRef("SYN-A", "OTHER-P", "V")
+    with engine.begin() as connection:
+        for name in ("running_record_bundle", "final_record_bundle"):
+            table = sa.Table(name, sa.MetaData(),
+                             sa.Column("institute_id", sa.Text), sa.Column("patient_id", sa.Text),
+                             sa.Column("visit_id", sa.Text), sa.Column("structured_context", sa.Text),
+                             schema="public")
+            table.create(connection)
+            if name == "final_record_bundle":
+                connection.execute(table.insert(), [
+                    {**ref.as_dict(), "structured_context": json.dumps({"document_inventory": [
+                        {"source_table": source}
+                    ]})}
+                    for ref, source in ((first, "surgery_record"), (second, "discharge_record"),
+                                        (third, "consultation_record"))
+                ])
+    service = sample_pools.CustomQCSamplePoolService.__new__(sample_pools.CustomQCSamplePoolService)
+    sources = service._load_bundle_source_table_map(case_refs=[first, second])
+    assert sources == {first: {"surgery_record"}, second: {"discharge_record"}}
+    items = [{**{f"matched_{key}": value for key, value in ref.as_dict().items()},
+              "coverage_type": "llm_intrinsic", "manual_issue_text": "", "candidate_rule_ids": []}
+             for ref in (first, second, third)]
+    enriched = service._apply_dynamic_candidate_rule_ids(items=items, source_table_map=sources)
+    assert "SC-093" in enriched[0]["candidate_rule_ids"]
+    assert "SC-118" in enriched[1]["candidate_rule_ids"]
+    assert "SC-093" not in enriched[1]["candidate_rule_ids"]
+    assert enriched[2]["candidate_rule_ids"] == []
 
 
 def publish_result(saved, scene):
@@ -130,6 +167,8 @@ def feedback(raw_pg, monkeypatch, request):
     # 绑定专属PG，不替换认证解析或默认CDM文书读取实现。
     monkeypatch.setattr(auth_store, "users_db", {})
     monkeypatch.setattr(assembly, "engine", engine)
+    # 当前文书快照新增首页四表投影；与组装器绑定同一个专属PG，不能留在离线None连接。
+    monkeypatch.setattr(frontpage_view, "engine", engine)
     monkeypatch.setattr(assembly, "DB_SCHEMA_MODE", "split")
     monkeypatch.setattr(query_service, "engine", engine)
     for module in (
@@ -151,6 +190,9 @@ def feedback(raw_pg, monkeypatch, request):
     password = secrets.token_urlsafe(24)
     password_hash = get_password_hash(password)
     with engine.begin() as conn:
+        # mr_diagnosis 是同步/导入管理的既有CDM镜像前置，不属于报表51的新增表。
+        # 合成库显式准备与正式诊断相同的列合同，不用假的首页响应替代真实读取。
+        conn.exec_driver_sql("CREATE TABLE cdm.mr_diagnosis (LIKE cdm.diagnosis INCLUDING ALL)")
         # 原workspace表由历史runtime owner管理，不在1–51空库迁移完整性声明内。
         # 夹具显式准备既有owner的qc表；反馈生产路径始终readonly，不允许自动DDL。
         for table in (
@@ -250,6 +292,16 @@ def feedback(raw_pg, monkeypatch, request):
     engine.dispose()
     workspace._record_result_envelopes_table.cache_clear()
     assembly._get_table_columns.cache_clear()
+
+
+def test_dispatch_snapshot_reads_frontpage_and_documents_from_same_pg(feedback):
+    _, _, _, service, _, _, _, _ = feedback
+    captured = json.loads(service._snapshot(SimpleNamespace(**IDENTITY)))
+    assert captured["identity"] == IDENTITY
+    assert {
+        (document["doc_type"], document["document_id"])
+        for document in captured["documents"]
+    } >= {("mr", "synthetic-frontpage"), ("admission_record", "synthetic-document")}
 
 
 def test_saved_result_to_rectification_and_report_with_real_pg(feedback, monkeypatch):
@@ -475,17 +527,18 @@ def test_normal_login_cdm_comparison_and_http_report(feedback, monkeypatch):
         return response.json().get("data")
 
     # 已签发的真实登录令牌不能绕过实时账号状态、角色或科室授权。
-    for change, restore in (
-        ({"is_active": False}, {"is_active": True}),
-        ({"department": "合成外科"}, {"department": "合成内科"}),
-        ({"role": "nurse"}, {"role": "doctor"}),
-        ({"roles_json": "invalid-json"}, {"roles_json": None}),
+    for change, restore, expected_status in (
+        ({"is_active": False}, {"is_active": True}, 401),
+        ({"department": "合成外科"}, {"department": "合成内科"}, 403),
+        ({"role": "nurse"}, {"role": "doctor"}, 403),
+        ({"roles_json": "invalid-json"}, {"roles_json": None}, 403),
     ):
         with sessions() as session, session.begin():
             users = SysUser.__table__.to_metadata(sa.MetaData(), schema="sys")
             session.execute(users.update().where(users.c.id == "doc").values(**change))
-        act("doc", 1, "submit", expected=403)
-        assert http.get(url).status_code == 403
+        # 停用账号由真实认证入口拒绝401，仍启用但无对象权限的账号由owner拒绝403。
+        act("doc", 1, "submit", expected=expected_status)
+        assert http.get(url).status_code == expected_status
         with sessions() as session, session.begin():
             session.execute(users.update().where(users.c.id == "doc").values(**restore))
     actor("qc")
