@@ -1017,7 +1017,9 @@ const contentQCCount = ref(0)
 const assistViewRef = ref<InstanceType<typeof WorkstationV4AssistView> | null>(null)
 
 function handleAssistTabRefresh(tabKey: string) {
-  if (tabKey === 'form' || tabKey === 'cost') {
+  if (tabKey === 'message') {
+    return fetchAssistNotifications()
+  } else if (tabKey === 'form' || tabKey === 'cost') {
     assistViewRef.value?.runFormQC()
   } else if (tabKey === 'coding') {
     assistViewRef.value?.runCodingQC()
