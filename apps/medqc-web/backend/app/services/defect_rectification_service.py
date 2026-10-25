@@ -133,6 +133,7 @@ class DefectRectificationService:
         person_loader=None,
         visibility_check=None,
         document_loader=None,
+        notification_writer=None,
     ):
         self.sessions = session_factory or SessionLocal
         self.source = source_loader or _source
@@ -140,6 +141,7 @@ class DefectRectificationService:
         self.person = person_loader or _person
         self.visible = visibility_check or _visible
         self.document_loader = document_loader
+        self.notification_writer = notification_writer
 
     def _snapshot(self, row):
         from .rectification_document_snapshot import capture_documents
@@ -166,9 +168,10 @@ class DefectRectificationService:
         related_event_id=None,
         document_snapshot=None,
     ):
+        event_id = str(uuid4())
         session.add(
             Event(
-                id=str(uuid4()),
+                id=event_id,
                 rectification_id=row.id,
                 action=action,
                 actor_id=actor["id"],
@@ -181,6 +184,17 @@ class DefectRectificationService:
                 related_event_id=related_event_id,
                 submission_document_snapshot=document_snapshot,
             )
+        )
+        from .doctor_notification_service import publish_doctor_notification
+
+        writer = self.notification_writer or publish_doctor_notification
+        writer(
+            session,
+            row,
+            event_id=event_id,
+            action=action,
+            actor_id=actor["id"],
+            comment=comment,
         )
 
     def create(self, actor_id, data):

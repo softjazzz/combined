@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { ref } from 'vue'
+import { readFileSync } from 'node:fs'
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   messageWarning: vi.fn(),
   messageError: vi.fn(),
   messageSuccess: vi.fn(),
+  auth: { user: { id: 'doctor' }, userRoles: ['doctor'] },
 }))
 
 vi.mock('@/services/apiService', () => ({
@@ -18,6 +20,7 @@ vi.mock('@/services/apiService', () => ({
     isAuthenticated: mocks.isAuthenticated,
   },
 }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }))
 
 vi.mock('ant-design-vue', () => ({
   message: {
@@ -41,6 +44,127 @@ describe('useNotifications overview acceptance', () => {
     vi.clearAllMocks()
     mocks.isAuthenticated.mockReturnValue(true)
     mocks.put.mockResolvedValue({ success: true })
+  })
+
+  it('消息入口不预加载仅管理角色可读的首页配置', () => {
+    const view = readFileSync('src/views/workstation-v4/WorkstationV4View.vue', 'utf8')
+    expect(view).toContain(
+      "if (route.query.assist !== 'message') void ensureExtractionSettingsLoaded()",
+    )
+  })
+
+  it('消息已读失败不跳转、不伪造已读，概览错误可恢复', async () => {
+    const open = vi.fn()
+    const notify = useNotifications(
+      ref([]),
+      vi.fn(),
+      ref(false),
+      ref('message'),
+      ref('fields'),
+      open,
+    )
+    const notice = {
+      id: 'notice',
+      record_id: 'feedback:rectification:task',
+      title: '整改提醒',
+      content: '',
+      message: '',
+      created_at: '',
+      is_read: false,
+      interaction_target: { kind: 'rectification' as const, id: 'task' },
+    }
+    mocks.put.mockResolvedValueOnce({ success: false })
+    await notify.handleAssistNotificationClick(notice)
+    expect(notice.is_read).toBe(false)
+    expect(open).not.toHaveBeenCalled()
+    mocks.put.mockRejectedValueOnce(new Error('network'))
+    await notify.handleAssistOverviewClick({
+      overview_id: 'summary',
+      type: 'remediation',
+      severity: 'warning',
+      department: '',
+      record_id: '',
+      title: '',
+      summary: '',
+      occurrence_count: 1,
+      unread_count: 1,
+      latest_created_at: '',
+      source_notification_ids: ['notice'],
+      interaction_target: { kind: 'rectification', id: 'task' },
+    })
+    expect(open).not.toHaveBeenCalled()
+    expect(mocks.messageError).toHaveBeenCalledWith('消息状态未核实，请刷新核对')
+  })
+
+  it('整改与申诉在原消息列表定位精确对象，不按同号就诊找病例', async () => {
+    const open = vi.fn().mockResolvedValue(undefined)
+    const records = ref<PatientRecord[]>([])
+    const notify = useNotifications(
+      records,
+      vi.fn(),
+      ref(false),
+      ref('message'),
+      ref('fields'),
+      open,
+    )
+    const item = {
+      id: 'notice',
+      record_id: 'feedback:rectification:task',
+      title: '整改驳回',
+      content: '请重提',
+      message: '请重提',
+      created_at: '2026-10-25T00:00:00Z',
+      is_read: false,
+      interaction_target: { kind: 'rectification' as const, id: 'task' },
+    }
+    await notify.handleAssistNotificationClick(item)
+    expect(open).toHaveBeenCalledWith({ kind: 'rectification', id: 'task' })
+    expect(mocks.put).toHaveBeenCalledWith('/api/v1/notifications/notice/read')
+    await notify.handleAssistOverviewClick({
+      overview_id: 'summary',
+      type: 'appeal_result',
+      severity: 'info',
+      department: '内科',
+      record_id: 'feedback:modern_appeal:appeal',
+      title: '申诉通过',
+      summary: '已通过',
+      occurrence_count: 1,
+      unread_count: 1,
+      latest_created_at: '2026-10-25T00:00:00Z',
+      source_notification_ids: ['history-not-in-page'],
+      interaction_target: { kind: 'modern_appeal', id: 'appeal' },
+    })
+    expect(mocks.put).toHaveBeenCalledWith('/api/v1/notifications/history-not-in-page/read')
+    expect(open).toHaveBeenLastCalledWith({ kind: 'modern_appeal', id: 'appeal' })
+  })
+
+  it('服务器全量未读数不被当前30条分页的本地数覆盖，读取失败保留旧记录', async () => {
+    mocks.get
+      .mockResolvedValueOnce({ success: true, data: { items: [], unread_count: 45 } })
+      .mockResolvedValueOnce({ success: true, data: { items: [] } })
+      .mockRejectedValueOnce(new Error('network'))
+    const notify = useNotifications(ref([]), vi.fn(), ref(false), ref('message'), ref('fields'))
+    await notify.fetchAssistNotifications()
+    expect(notify.notificationUnreadCount.value).toBe(45)
+    await notify.fetchAssistNotifications()
+    expect(notify.notificationUnreadCount.value).toBe(45)
+    expect(mocks.messageError).toHaveBeenCalled()
+  })
+
+  it('缺少可信处理目标的反馈消息不退回旧病例定位', async () => {
+    const legacyOpen = vi.fn()
+    const notify = useNotifications(ref([]), legacyOpen, ref(false), ref('message'), ref('fields'))
+    await notify.handleAssistNotificationClick({
+      id: 'n',
+      record_id: 'feedback:rectification:unknown',
+      title: '提醒',
+      content: '',
+      message: '',
+      created_at: '',
+      is_read: true,
+    })
+    expect(legacyOpen).not.toHaveBeenCalled()
+    expect(mocks.messageError).toHaveBeenCalledWith('消息处理对象未核实，请刷新核对')
   })
 
   it('falls back to local same-record aggregation and opens linked record', async () => {

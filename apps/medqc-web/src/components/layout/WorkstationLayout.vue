@@ -121,7 +121,7 @@
               <template #content>
                 <div class="ws-notice">
                   <div class="ws-notice__title">通知</div>
-                  <p class="ws-notice__empty">暂无通知</p>
+                  <router-link class="ws-notice__empty" to="/workstation-v5/worklist?assist=message">查看消息与待办</router-link>
                 </div>
               </template>
               <button type="button" class="ws-icon-button" aria-label="通知">

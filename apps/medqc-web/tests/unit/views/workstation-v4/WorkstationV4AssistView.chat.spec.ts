@@ -11,6 +11,7 @@ import WorkstationV4AssistView from '@/views/workstation-v4/components/Workstati
 // 面板外壳只负责渲染 chat 插槽，便于单独验证“对话”页签的上下文与跨页签请求。
 const PanelStub = defineComponent({
   name: 'WorkstationAssistPanel',
+  props: ['availableTabs'],
   template: '<div><slot name="chat" :active="true" /></div>',
 })
 const ChatStub = defineComponent({
@@ -66,6 +67,19 @@ async function mountView(extra: Record<string, unknown> = {}) {
 }
 
 describe('智能助手面板的对话页签', () => {
+  it('消息不要求先选病例，无病例时不开放质控或DRG页签', async () => {
+    const messages = await mountView({
+      selectedRecord: null,
+      assistTab: 'message',
+      chatEnabled: false,
+    })
+    expect(messages.findComponent(PanelStub).exists()).toBe(true)
+    expect(messages.findComponent(PanelStub).props('availableTabs')).toEqual(['message'])
+    messages.unmount()
+    const qc = await mountView({ selectedRecord: null, assistTab: 'form', chatEnabled: false })
+    expect(qc.findComponent(PanelStub).exists()).toBe(false)
+    qc.unmount()
+  })
   beforeEach(() => {
     handler.run = async () => ({ doctor_case_count: 1, doctor_cases: [] })
   })

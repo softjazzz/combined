@@ -177,6 +177,12 @@ export interface NotificationVM {
   is_read: boolean
   level?: string
   type?: string
+  interaction_target?: DoctorInteractionTarget
+}
+
+export interface DoctorInteractionTarget {
+  kind: 'rectification' | 'modern_appeal'
+  id: string
 }
 
 export interface NotificationOverviewItem {
@@ -191,6 +197,7 @@ export interface NotificationOverviewItem {
   unread_count: number
   latest_created_at: string
   source_notification_ids: string[]
+  interaction_target?: DoctorInteractionTarget
 }
 
 export interface HomeKpis {

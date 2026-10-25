@@ -1,10 +1,10 @@
 <template>
   <WorkstationAssistPanel
-    v-if="selectedRecord"
+    v-if="selectedRecord || assistTab === 'message'"
     :visible="visible"
     :default-tab="assistTab"
     :variant="chatEnabled ? 'assistant' : 'analysis'"
-    :available-tabs="chatEnabled ? undefined : ANALYSIS_TABS"
+    :available-tabs="!selectedRecord ? ['message'] : chatEnabled ? undefined : ANALYSIS_TABS"
     :patient-info="assistPatientInfo"
     :content-count="contentQCCount"
     :qc-count="assistBadgeCount"

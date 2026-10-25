@@ -96,6 +96,7 @@ def setup():
         lambda session, actor: deepcopy(people[actor]),
         lambda session, data: dict(source),
         lambda session, identity: "内科",
+        notification_writer=lambda *args, **kwargs: None,
     )
     yield service, sessions, people, source
     engine.dispose()

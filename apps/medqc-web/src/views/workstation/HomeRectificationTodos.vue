@@ -13,6 +13,12 @@
       <button v-if="!scope && appealAllowed" class="mq-btn" type="button" @click="openAppeals()">
         <MqIcon name="task" :size="16" />申诉处理
       </button>
+      <router-link
+        v-if="!scope && auth.hasRole('doctor')"
+        class="mq-btn"
+        to="/workstation-v5/worklist?assist=message"
+        >消息面板</router-link
+      >
       <label class="sr-only" :for="scope ? 'defect-rectification-status' : 'rectification-status'"
         >整改状态</label
       >
@@ -70,6 +76,7 @@
       v-if="appealOpen"
       :open="appealOpen"
       :source="appealSource"
+      :appeal-id="appealId"
       @close="appealOpen = false"
       @changed="emit('changed')"
     />
@@ -211,6 +218,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
 import ModernAppealWorkflowDrawer from '@/components/qc/ModernAppealWorkflowDrawer.vue'
@@ -231,13 +239,16 @@ import {
 const props = defineProps<{ scope?: RectificationSource; refreshKey?: number }>()
 const emit = defineEmits<{ changed: [] }>()
 const auth = useAuthStore()
+const route = useRoute()
 const manualOpen = ref(false)
 const appealOpen = ref(false),
   appealSource = ref<Rectification | null>(null)
+const appealId = ref<string>()
 const appealAllowed = computed(() =>
   ['admin', 'qc_manager', 'doctor'].some((role) => auth.hasRole(role)),
 )
 function openAppeals(source: Rectification | null = null) {
+  appealId.value = undefined
   appealSource.value = source
   open.value = false
   appealOpen.value = true
@@ -448,6 +459,7 @@ async function submit(action: RectificationAction, urgeEventId?: string) {
   }
 }
 function reset() {
+  appealId.value = undefined
   appealOpen.value = false
   appealSource.value = null
   manualOpen.value = false
@@ -490,5 +502,31 @@ watch(
   { deep: true },
 )
 onUnmounted(reset)
+watch(
+  () => [route?.query.rectification_id, route?.query.appeal_id, auth.user?.id],
+  () => {
+    if (props.scope) return
+    const rectification = route?.query.rectification_id,
+      appeal = route?.query.appeal_id
+    if (!rectification && !appeal) return
+    if (
+      (rectification && appeal) ||
+      [rectification, appeal].some(
+        (value) =>
+          value !== undefined && (typeof value !== 'string' || !value.trim() || value.length > 36),
+      )
+    ) {
+      error.value = '消息处理对象无效，请从消息面板重新打开'
+      return
+    }
+    if (typeof rectification === 'string') void show(rectification)
+    if (typeof appeal === 'string' && appealAllowed.value) {
+      appealSource.value = null
+      appealId.value = appeal
+      appealOpen.value = true
+    }
+  },
+  { immediate: true },
+)
 </script>
 <style scoped src="./styles/rectification-todos.css"></style>

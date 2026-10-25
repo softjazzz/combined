@@ -10,7 +10,13 @@ const mocks = vi.hoisted(() => ({
   comparison: vi.fn(),
   roles: ['doctor'],
   userId: 'd1',
+  route: { query: {} as Record<string, string | string[]> },
 }))
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  mocks.route = reactive(mocks.route)
+  return { useRoute: () => mocks.route }
+})
 vi.mock('@/api/defectRectifications', () => ({
   listRectifications: mocks.list,
   getRectification: mocks.detail,
@@ -54,6 +60,11 @@ function make(props = {}) {
     props,
     global: {
       stubs: {
+        'router-link': { template: '<a><slot/></a>' },
+        ModernAppealWorkflowDrawer: {
+          props: ['open', 'appealId'],
+          template: '<div data-testid="appeal-link" :data-appeal-id="appealId"/>',
+        },
         'a-button': { template: '<button><slot/></button>' },
         'a-alert': { props: ['message'], template: '<p>{{message}}</p>' },
         'a-spin': { template: '<div><slot/></div>' },
@@ -81,11 +92,50 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.roles = ['doctor']
   mocks.userId = 'd1'
+  mocks.route.query = {}
   mocks.list.mockResolvedValue({ items: [task], total: 1 })
   mocks.detail.mockResolvedValue(task)
   mocks.act.mockResolvedValue({ ...task, status: 'submitted' })
 })
 describe('站内整改待办', () => {
+  it('消息按精确整改ID打开，同页切换消息重新核对对象', async () => {
+    mocks.route.query = { rectification_id: 'r1' }
+    const wrapper = make()
+    await flushPromises()
+    expect(mocks.detail).toHaveBeenCalledWith('r1')
+    expect(wrapper.text()).toContain('请补齐相应病历资料并提交')
+    mocks.route.query = { rectification_id: 'r2' }
+    await flushPromises()
+    expect(mocks.detail).toHaveBeenLastCalledWith('r2')
+    wrapper.unmount()
+  })
+  it('申诉消息传精确历史ID，嵌入缺陷不消费全局消息链接', async () => {
+    mocks.route.query = { appeal_id: 'appeal-final-manual' }
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="appeal-link"]').attributes('data-appeal-id')).toBe(
+      'appeal-final-manual',
+    )
+    expect(mocks.detail).not.toHaveBeenCalled()
+    wrapper.unmount()
+    const embedded = make({ scope: task })
+    await flushPromises()
+    expect(embedded.find('[data-testid="appeal-link"]').exists()).toBe(false)
+    embedded.unmount()
+  })
+  it.each([
+    { rectification_id: 'r1', appeal_id: 'a1' },
+    { rectification_id: ['r1', 'r2'] },
+    { appeal_id: 'x'.repeat(37) },
+  ])('歧义或非法消息对象拒绝打开 %#', async (query) => {
+    mocks.route.query = query
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.text()).toContain('消息处理对象无效')
+    expect(mocks.detail).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="appeal-link"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('仅质控人员独立待办页显示人工缺陷入口，医生和嵌入页不显示', async () => {
     const doctor = make()
     await flushPromises()

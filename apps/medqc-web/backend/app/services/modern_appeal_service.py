@@ -86,11 +86,13 @@ class ModernAppealService:
         person_loader=None,
         source_loader=None,
         department_loader=None,
+        notification_writer=None,
     ):
         self.sessions = session_factory or SessionLocal
         self.person = person_loader or _person
         self.source = source_loader or resolve_target
         self.department = department_loader or _department
+        self.notification_writer = notification_writer
 
     @contextmanager
     def _session(self):
@@ -295,9 +297,10 @@ class ModernAppealService:
             )
             if result.rowcount != 1:
                 raise RectificationError("申诉状态已变化，请刷新核对", 409)
+            event_id = str(uuid4())
             session.add(
                 QCAppealReview(
-                    id=str(uuid4()),
+                    id=event_id,
                     appeal_id=row.id,
                     reviewer_id=actor_id,
                     reviewer_name=actor["name"],
@@ -308,6 +311,18 @@ class ModernAppealService:
                     comment=comment.strip(),
                     created_at=now,
                 )
+            )
+            from .doctor_notification_service import publish_doctor_notification
+
+            writer = self.notification_writer or publish_doctor_notification
+            writer(
+                session,
+                row,
+                event_id=event_id,
+                action=action,
+                actor_id=actor_id,
+                appeal=True,
+                comment=comment.strip(),
             )
             session.flush()
             session.refresh(row)

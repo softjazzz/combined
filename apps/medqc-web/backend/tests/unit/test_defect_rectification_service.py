@@ -160,6 +160,7 @@ def setup():
         lambda session, identity: "内科",
         lambda session, user_id: deepcopy(people[user_id]),
         lambda target, person: None,
+        notification_writer=lambda *args, **kwargs: None,
         document_loader=lambda **identity: document_payload(
             {
                 "execution_domain": "admission",
@@ -565,9 +566,7 @@ def test_source_failure_is_not_fallback(setup):
 @pytest.mark.parametrize("method", ["create", "candidates"])
 def test_cross_institute_rejected_before_reading_case(setup, method):
     service, _, _, data = setup
-    service.department = lambda *args: (_ for _ in ()).throw(
-        AssertionError("不可读取外院病例")
-    )
+    service.department = lambda *args: (_ for _ in ()).throw(AssertionError("不可读取外院病例"))
     with pytest.raises(RectificationError) as caught:
         if method == "create":
             service.create("cross", data)

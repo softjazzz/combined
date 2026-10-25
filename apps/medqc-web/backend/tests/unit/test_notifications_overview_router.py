@@ -90,10 +90,7 @@ def test_notifications_overview_aggregate_and_sort(client, monkeypatch):
         },
     ]
 
-    async def _fake_async_execute(_query):
-        return _Resp(rows)
-
-    monkeypatch.setattr("app.routers.notifications.async_execute", _fake_async_execute)
+    monkeypatch.setattr("app.routers.notifications.service.overview_rows", lambda *args: rows)
 
     resp = client.get("/api/v1/notifications/overview?date=2026-03-23")
     assert resp.status_code == 200

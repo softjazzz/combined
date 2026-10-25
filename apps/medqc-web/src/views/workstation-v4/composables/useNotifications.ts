@@ -1,8 +1,14 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { ApiService } from '@/services/apiService'
-import { normalizeNotification } from '../normalize'
-import type { NotificationOverviewItem, NotificationVM, PatientRecord } from '../types'
+import { normalizeNotification, normalizeDoctorInteraction } from '../normalize'
+import { useAuthStore } from '@/stores/auth'
+import type {
+  DoctorInteractionTarget,
+  NotificationOverviewItem,
+  NotificationVM,
+  PatientRecord,
+} from '../types'
 
 type NotificationPayload = {
   items?: unknown[]
@@ -58,7 +64,10 @@ export function useNotifications(
   assistPanelVisible: Ref<boolean>,
   assistTab: Ref<string>,
   frontpageTab: Ref<string>,
+  openInteraction?: (target: DoctorInteractionTarget) => Promise<unknown>,
 ) {
+  const auth = useAuthStore()
+  let generation = 0
   const assistNotifications = ref<NotificationVM[]>([])
   const notificationUnreadCount = ref(0)
   const notificationLoading = ref(false)
@@ -130,6 +139,7 @@ export function useNotifications(
       unread_count: Number(item.unread_count || 0),
       latest_created_at: String(item.latest_created_at || ''),
       source_notification_ids: sourceIds,
+      interaction_target: normalizeDoctorInteraction(item.interaction_target),
     }
   }
 
@@ -165,6 +175,7 @@ export function useNotifications(
         unread_count: notif.is_read ? 0 : 1,
         latest_created_at: notif.created_at,
         source_notification_ids: notif.id ? [notif.id] : [],
+        interaction_target: notif.interaction_target,
       })
     }
     return Array.from(groups.values()).sort(
@@ -176,6 +187,7 @@ export function useNotifications(
   }
 
   async function fetchAssistNotificationOverview() {
+    const token = generation
     if (!ApiService.isAuthenticated()) {
       notificationOverviewItems.value = []
       return
@@ -191,6 +203,7 @@ export function useNotifications(
           date: dateKey,
         },
       )
+      if (token !== generation) return
       if (!res.success) {
         notificationOverviewItems.value = buildLocalOverview(assistNotifications.value)
         return
@@ -201,16 +214,18 @@ export function useNotifications(
         .map((item, index) => normalizeOverviewItem(item, index))
         .filter((item) => !isBatchSummaryType(item.type))
     } catch (err) {
+      if (token !== generation) return
       if (!isAuthError(err)) {
         console.error('加载当天问题概览失败:', err)
       }
       notificationOverviewItems.value = buildLocalOverview(assistNotifications.value)
     } finally {
-      overviewLoading.value = false
+      if (token === generation) overviewLoading.value = false
     }
   }
 
   async function fetchAssistNotifications() {
+    const token = generation
     if (!ApiService.isAuthenticated()) {
       assistNotifications.value = []
       notificationUnreadCount.value = 0
@@ -222,9 +237,9 @@ export function useNotifications(
       const res = await ApiService.get<NotificationListResponse>('/api/v1/notifications', {
         page_size: 30,
       })
+      if (token !== generation) return
       if (!res.success) {
-        assistNotifications.value = []
-        notificationUnreadCount.value = 0
+        message.error('消息读取失败，当前未读状态不可用，请刷新核对')
         return
       }
 
@@ -233,47 +248,59 @@ export function useNotifications(
       assistNotifications.value = items
         .map((item, index) => normalizeNotification(item, index))
         .filter((item) => !isBatchSummaryType(item.type))
-      notificationUnreadCount.value = assistNotifications.value.filter(
-        (item) => !item.is_read,
-      ).length
+      notificationUnreadCount.value =
+        typeof payload?.unread_count === 'number'
+          ? payload.unread_count
+          : assistNotifications.value.filter((item) => !item.is_read).length
       await fetchAssistNotificationOverview()
     } catch (err) {
+      if (token !== generation) return
       if (!isAuthError(err)) {
         console.error('加载消息概览失败:', err)
       }
-      assistNotifications.value = []
-      notificationUnreadCount.value = 0
-      notificationOverviewItems.value = []
+      message.error('消息读取失败，保留上次已核实记录，请刷新核对')
     } finally {
-      notificationLoading.value = false
+      if (token === generation) notificationLoading.value = false
     }
   }
 
   async function markAssistNotificationRead(notif: NotificationVM) {
-    if (!notif.id || notif.is_read || !ApiService.isAuthenticated()) return
+    const token = generation
+    if (!notif.id || !ApiService.isAuthenticated()) return false
+    if (notif.is_read) return true
 
     try {
       const res = await ApiService.put(`/api/v1/notifications/${notif.id}/read`)
-      if (!res.success) return
+      if (token !== generation) return false
+      if (!res.success) {
+        message.error('标记已读失败，请刷新核对')
+        return false
+      }
       notif.is_read = true
       notificationUnreadCount.value = Math.max(0, notificationUnreadCount.value - 1)
+      return true
     } catch (err) {
+      if (token !== generation) return false
       if (!isAuthError(err)) {
         console.error('标记消息已读失败:', err)
         message.error('标记已读失败')
       }
+      return false
     }
   }
 
   async function markAllAssistNotificationsRead() {
+    const token = generation
     if (!ApiService.isAuthenticated()) return
 
     try {
       const res = await ApiService.put('/api/v1/notifications/read-all')
+      if (token !== generation) return
       if (!res.success) return
       await fetchAssistNotifications()
       message.success('已全部标记为已读')
     } catch (err) {
+      if (token !== generation) return
       if (!isAuthError(err)) {
         console.error('全部已读失败:', err)
         message.error('全部已读失败')
@@ -282,7 +309,21 @@ export function useNotifications(
   }
 
   async function handleAssistNotificationClick(notif: NotificationVM) {
-    await markAssistNotificationRead(notif)
+    const token = generation
+    if (!(await markAssistNotificationRead(notif))) return
+    if (token !== generation) return
+    if (notif.interaction_target) {
+      if (!openInteraction) {
+        message.warning('当前入口不能打开该处理对象')
+        return
+      }
+      await openInteraction(notif.interaction_target)
+      return
+    }
+    if (notif.record_id?.startsWith('feedback:')) {
+      message.error('消息处理对象未核实，请刷新核对')
+      return
+    }
     const targetRecordId = notif.record_id
     if (!targetRecordId) {
       assistTab.value = 'form'
@@ -306,6 +347,30 @@ export function useNotifications(
   }
 
   async function handleAssistOverviewClick(item: NotificationOverviewItem) {
+    if (item.interaction_target) {
+      const token = generation
+      try {
+        for (const id of item.source_notification_ids) {
+          const response = await ApiService.put(
+            `/api/v1/notifications/${encodeURIComponent(id)}/read`,
+          )
+          if (token !== generation) return
+          if (!response.success) {
+            message.error('消息状态未核实，请刷新核对')
+            return
+          }
+        }
+      } catch {
+        if (token === generation) message.error('消息状态未核实，请刷新核对')
+        return
+      }
+      if (!openInteraction) {
+        message.warning('当前入口不能打开该处理对象')
+        return
+      }
+      await openInteraction(item.interaction_target)
+      return
+    }
     if (item.source_notification_ids.length > 0) {
       for (const notifId of item.source_notification_ids) {
         const target = assistNotifications.value.find((notif) => notif.id === notifId)
@@ -350,6 +415,19 @@ export function useNotifications(
     if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
     return `${Math.floor(diff / 86400)} 天前`
   }
+
+  watch(
+    () => [auth.user?.id, auth.userRoles],
+    () => {
+      ++generation
+      assistNotifications.value = []
+      notificationOverviewItems.value = []
+      notificationUnreadCount.value = 0
+      notificationLoading.value = false
+      overviewLoading.value = false
+    },
+    { deep: true },
+  )
 
   return {
     assistNotifications,
