@@ -76,6 +76,52 @@ beforeEach(() => {
   mocks.submit.mockResolvedValue({ id: 'review' })
 })
 describe('病历初审复审抽屉', () => {
+  it('历史按V7.1状态与时间线展示，原始身份折叠保留且不改变审核', async () => {
+    const event = {
+      ...source, id: 'old-review', request_id: 'request', stage: 'initial',
+      decision: 'doubtful', reason: '需核对本次记录', reviewer_id: 'reviewer-id',
+      created_at: '2026-10-25T07:27:45.000000', case_department: '内科',
+    }
+    mocks.history.mockResolvedValue({ ...detail, state: 'doubtful', can_submit: false, current_review: event, history: [event] })
+    const wrapper = make({ reviewId: 'old-review' })
+    await flushPromises()
+    expect(wrapper.find('.review-filters').exists()).toBe(false)
+    expect(wrapper.get('.review-object .mq-status').classes()).toContain('mq-status--warning')
+    expect(wrapper.get('.review-history__reason').text()).toBe('需核对本次记录')
+    expect(wrapper.get('.review-history time').text()).toBe('2026/10/25 15:27')
+    expect(wrapper.get('.review-history .is-viewing').text()).toContain('当前查看')
+    expect(wrapper.get('.review-source').attributes('open')).toBeUndefined()
+    expect(wrapper.get('.review-source').text()).toContain('保存结果')
+    expect(wrapper.get('.review-history .review-source').text()).toContain('reviewer-id')
+    expect(wrapper.find('textarea').exists()).toBe(false)
+    expect(mocks.submit).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('待办保留筛选和未知计数，当前对象不重复显示空队列提示', async () => {
+    mocks.list.mockResolvedValue({ items: [], total: 0, pending_count: 0, initial_count: 0, recheck_count: 0 })
+    const wrapper = make({ source })
+    await flushPromises()
+    expect(wrapper.find('.review-filters').exists()).toBe(true)
+    expect(wrapper.get('.review-counts').text()).toContain('待初审 0')
+    expect(wrapper.find('.review-empty').exists()).toBe(false)
+    expect(wrapper.get('.review-object .mq-status').classes()).toContain('mq-status--info')
+    expect(wrapper.find('textarea').exists()).toBe(true)
+    wrapper.unmount()
+  })
+  it('历史筛选打开旧结果时标明历史，不误称当前轮次', async () => {
+    mocks.list.mockResolvedValue({ items: [{ ...row, review_id: 'old-review' }], total: 1, pending_count: 0, initial_count: 0, recheck_count: 0 })
+    const wrapper = make()
+    await flushPromises()
+    await wrapper.findAll('select')[1].setValue('history')
+    await flushPromises()
+    await wrapper.get('.review-row').trigger('click')
+    await flushPromises()
+    expect(mocks.history).toHaveBeenCalledWith('old-review')
+    expect(wrapper.get('.review-label').text()).toBe('历史审核病历')
+    expect(mocks.current).not.toHaveBeenCalled()
+    expect(wrapper.find('textarea').exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('待办选中当前结果，审核成功带CAS和完整来源并刷新父报表', async () => {
     const wrapper = make()
     await flushPromises()

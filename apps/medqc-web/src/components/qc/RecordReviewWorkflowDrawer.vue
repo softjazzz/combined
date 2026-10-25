@@ -1,43 +1,91 @@
 <template>
   <a-drawer
     :open="open"
-    title="病历初审 / 复审"
     width="min(760px, 100vw)"
     :root-style="{ zIndex: 1400 }"
     :closable="!saving"
     :mask-closable="!saving"
     @close="emit('close')"
   >
+    <template #title>
+      <div class="review-heading">
+        <MqIconTile
+          name="rule_validation"
+          tone="brand"
+          :size="36"
+        />
+        <div>
+          <span class="review-heading__eyebrow">{{
+            reviewId ? '质量管理 · 审核历史' : '质量管理 · 审核工作台'
+          }}</span>
+          <h2>病历初审 / 复审</h2>
+        </div>
+      </div>
+    </template>
     <section
       class="record-review-workflow"
       aria-label="病历审核"
     >
-      <div class="review-toolbar">
-        <strong>待初审 {{ initialCount ?? '未知' }} · 待复审 {{ recheckCount ?? '未知' }}</strong>
-        <label class="mq-field"><span class="mq-field__label">场景</span><select
-          v-model="scene"
-          class="mq-input"
-          :disabled="saving"
-          @change="query"
+      <template v-if="!reviewId">
+        <div
+          class="review-counts mq-soft"
+          aria-label="审核待办概况"
         >
-          <option value="">全部场景</option>
-          <option value="running">运行</option>
-          <option value="final">终末</option>
-        </select></label>
-        <label class="mq-field"><span class="mq-field__label">审核状态</span><select
-          v-model="state"
-          class="mq-input"
-          :disabled="saving"
-          @change="query"
-        >
-          <option value="open">待处理</option>
-          <option value="history">审核历史</option>
-          <option
-            v-for="(label, key) in labels"
-            :key="key"
-            :value="key"
-          >{{ label }}</option>
-        </select></label>
+          <div>
+            <MqIcon
+              name="rule_validation"
+              :size="20"
+            /><span>待初审 <strong>{{ initialCount ?? '未知' }}</strong></span>
+          </div>
+          <div>
+            <MqIcon
+              name="history"
+              :size="20"
+            /><span>待复审 <strong>{{ recheckCount ?? '未知' }}</strong></span>
+          </div>
+        </div>
+        <div class="review-filters">
+          <label class="mq-field"><span class="mq-field__label">场景</span><select
+            v-model="scene"
+            class="mq-input"
+            :disabled="saving"
+            @change="query"
+          >
+            <option value="">全部场景</option>
+            <option value="running">运行</option>
+            <option value="final">终末</option>
+          </select></label>
+          <label class="mq-field"><span class="mq-field__label">审核状态</span><select
+            v-model="state"
+            class="mq-input"
+            :disabled="saving"
+            @change="query"
+          >
+            <option value="open">待处理</option>
+            <option value="history">审核历史</option>
+            <option
+              v-for="(label, key) in labels"
+              :key="key"
+              :value="key"
+            >{{ label }}</option>
+          </select></label>
+          <button
+            class="mq-btn"
+            :disabled="saving || loading"
+            @click="refresh"
+          >
+            <MqIcon
+              name="sync"
+              :size="16"
+            />刷新核对
+          </button>
+        </div>
+      </template>
+      <div
+        v-else
+        class="review-history-context"
+      >
+        <span class="mq-status">历史记录 · 只读</span>
         <button
           class="mq-btn"
           :disabled="saving || loading"
@@ -51,24 +99,35 @@
       </div>
       <p
         v-if="error"
-        class="review-error"
+        class="review-message review-message--error"
         role="alert"
       >
-        {{ error }}
+        <MqIcon
+          name="history"
+          :size="18"
+        />{{ error }}
       </p>
       <p
         v-if="notice"
+        class="review-message review-message--success"
         role="status"
       >
-        {{ notice }}
+        <MqIcon
+          name="rule_validation"
+          :size="18"
+        />{{ notice }}
       </p>
       <p
         v-if="loading"
+        class="review-message"
         role="status"
       >
-        正在核对审核来源…
+        <MqIcon
+          name="sync"
+          :size="18"
+        />正在核对审核来源…
       </p>
-      <template v-else>
+      <template v-else-if="!reviewId">
         <ul class="review-list">
           <li
             v-for="(row, index) in items"
@@ -76,20 +135,38 @@
           >
             <button
               class="review-row"
+              :class="{ 'is-selected': selected?.envelope_id === row.envelope_id }"
+              :aria-pressed="selected?.envelope_id === row.envelope_id"
               :disabled="saving"
               @click="show(row)"
             >
-              <span>{{ row.scene === 'running' ? '运行' : '终末' }} · {{ row.visit_id }} ·
-                {{ row.case_department || '科室未知' }}</span><span class="mq-status">{{ labels[row.state] }}</span>
+              <MqIconTile
+                :name="row.scene === 'running' ? 'running' : 'final'"
+                :size="32"
+                tone="brand"
+              />
+              <span class="review-row__copy"><strong>{{ row.visit_id }}</strong><span>{{ row.scene === 'running' ? '运行' : '终末' }} ·
+                {{ row.case_department || '科室未知' }}</span></span>
+              <span
+                class="mq-status"
+                :class="statusClass(row.state)"
+              >{{ labels[row.state] }}</span>
             </button>
           </li>
         </ul>
-        <p v-if="!error && !items.length">
-          没有符合条件的病历审核
-        </p>
+        <div
+          v-if="!error && !items.length && !selected"
+          class="review-empty mq-soft"
+        >
+          <MqIconTile
+            name="rule_validation"
+            :size="44"
+          />
+          <strong>没有符合条件的病历审核</strong>
+        </div>
         <nav
           v-if="total"
-          class="review-toolbar"
+          class="review-pagination"
           aria-label="审核分页"
         >
           <button
@@ -112,16 +189,57 @@
         class="review-detail"
         aria-label="审核详情"
       >
-        <h3 class="mq-card__title">
-          {{ selected.visit_id }} · {{ labels[selected.state] }}
-        </h3>
-        <p class="mq-mono review-identity">
-          {{ selected.institute_id }} / {{ selected.patient_id }} / {{ selected.visit_id }}
-        </p>
-        <p class="mq-mono review-identity">
-          {{ selected.root_job_id }} / {{ selected.envelope_id }}
-        </p>
-        <p>规则版本：{{ selected.rule_set_key }} · {{ selected.rule_set_version }}</p>
+        <div class="review-object mq-soft">
+          <div class="review-object__head">
+            <MqIconTile
+              :name="selected.scene === 'running' ? 'running' : 'final'"
+              :size="40"
+              tone="brand"
+            />
+            <div class="review-object__copy">
+              <span class="review-label">{{ historyView ? '历史审核病历' : '当前审核病历' }}</span>
+              <h3>{{ selected.visit_id }}</h3>
+            </div>
+            <span
+              class="mq-status"
+              :class="statusClass(selected.state)"
+            >{{
+              labels[selected.state]
+            }}</span>
+          </div>
+          <div class="review-object__meta">
+            <span>{{ selected.scene === 'running' ? '运行病历' : '终末病历' }}</span><span>{{ selected.case_department || '科室未知' }}</span><span>规则版本 {{ selected.rule_set_version }}</span>
+          </div>
+          <details class="review-source">
+            <summary>保存结果来源</summary>
+            <dl>
+              <div>
+                <dt>机构</dt>
+                <dd>{{ selected.institute_id }}</dd>
+              </div>
+              <div>
+                <dt>患者</dt>
+                <dd>{{ selected.patient_id }}</dd>
+              </div>
+              <div>
+                <dt>就诊</dt>
+                <dd>{{ selected.visit_id }}</dd>
+              </div>
+              <div>
+                <dt>任务</dt>
+                <dd>{{ selected.root_job_id }}</dd>
+              </div>
+              <div>
+                <dt>保存结果</dt>
+                <dd>{{ selected.envelope_id }}</dd>
+              </div>
+              <div>
+                <dt>规则集</dt>
+                <dd>{{ selected.rule_set_key }} · {{ selected.rule_set_version }}</dd>
+              </div>
+            </dl>
+          </details>
+        </div>
         <form
           v-if="selected.can_submit && reviewer"
           class="review-form"
@@ -135,32 +253,84 @@
             :disabled="saving || uncertain"
           />
           </label>
-          <div class="review-toolbar">
+          <div class="review-actions">
             <button
               class="mq-btn mq-btn--primary"
               :disabled="saving || uncertain"
               @click="decide('approved')"
             >
+              <MqIcon
+                name="rule_validation"
+                :size="16"
+              />
               审核通过
             </button><button
               class="mq-btn"
               :disabled="saving || uncertain || !reason.trim()"
               @click="decide('doubtful')"
             >
+              <MqIcon
+                name="history"
+                :size="16"
+              />
               标记存疑
             </button>
           </div>
         </form>
-        <h4>审核历史</h4>
+        <div class="review-section-head">
+          <h4>
+            <MqIcon
+              name="history"
+              :size="18"
+            />审核历史
+          </h4>
+          <span>{{ selected.history.length }} 条记录</span>
+        </div>
         <ul class="review-history">
           <li
             v-for="event in selected.history"
             :key="event.id"
+            :class="{ 'is-viewing': historyView && event.id === selected.current_review?.id }"
           >
-            <strong>{{ event.stage === 'initial' ? '初审' : '复审' }} ·
-              {{ labels[event.decision] }}</strong><span>{{ event.reviewer_id }} · {{ event.reason || '无附加意见' }}</span><time class="mq-mono">{{ event.created_at }}</time><span class="mq-mono review-identity">{{ event.root_job_id }} / {{ event.envelope_id }}</span>
+            <div class="review-history__head">
+              <strong>{{ event.stage === 'initial' ? '初审' : '复审' }}</strong><span
+                class="mq-status"
+                :class="statusClass(event.decision)"
+              >{{
+                labels[event.decision]
+              }}</span><span
+                v-if="historyView && event.id === selected.current_review?.id"
+                class="review-history__viewing"
+              >当前查看</span><time :datetime="event.created_at">{{ formatReviewTime(event.created_at) }}</time>
+            </div>
+            <p class="review-history__reason">
+              {{ event.reason || '无附加意见' }}
+            </p>
+            <details class="review-source">
+              <summary>审核人及结果来源</summary>
+              <dl>
+                <div>
+                  <dt>审核人ID</dt>
+                  <dd>{{ event.reviewer_id }}</dd>
+                </div>
+                <div>
+                  <dt>任务</dt>
+                  <dd>{{ event.root_job_id }}</dd>
+                </div>
+                <div>
+                  <dt>保存结果</dt>
+                  <dd>{{ event.envelope_id }}</dd>
+                </div>
+              </dl>
+            </details>
           </li>
         </ul>
+        <p
+          v-if="!selected.history.length"
+          class="review-history__empty"
+        >
+          暂无审核记录
+        </p>
       </article>
     </section>
   </a-drawer>
@@ -168,6 +338,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   getRecordReviewCurrent,
@@ -197,8 +368,27 @@ const labels: Record<ReviewState, string> = {
   approved: '已通过',
   doubtful: '存疑',
 }
+const statusClass = (value: ReviewState) => ({
+  'mq-status--success': value === 'approved',
+  'mq-status--warning': value === 'doubtful',
+  'mq-status--info': value === 'pending_review' || value === 'pending_recheck',
+})
+function formatReviewTime(value: string) {
+  const date = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value}Z`)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
 const scene = ref<'' | 'running' | 'final'>(''),
   state = ref<ReviewState | 'open' | 'history'>('open')
+const historyView = computed(() => !!props.reviewId || state.value === 'history')
 const items = ref<RecordReviewItem[]>([]),
   selected = ref<RecordReviewDetail | null>(null)
 const initialCount = ref<number | null>(null),
@@ -365,64 +555,4 @@ onUnmounted(() => {
   epoch++
 })
 </script>
-<style scoped>
-.record-review-workflow {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-.review-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 12px;
-}
-.review-list,
-.review-history {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.review-row {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 0;
-  border: 0;
-  border-bottom: 1px solid var(--mq-border, #dce3eb);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-.review-detail {
-  border-top: 1px solid var(--mq-border, #dce3eb);
-  padding-top: 16px;
-  min-width: 0;
-}
-.review-form {
-  display: grid;
-  gap: 12px;
-  margin: 16px 0;
-}
-.review-identity {
-  overflow-wrap: anywhere;
-}
-.review-error {
-  color: var(--mq-danger, #c43c40);
-}
-.review-history li {
-  display: grid;
-  gap: 6px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--mq-border, #dce3eb);
-}
-.mq-field {
-  min-width: 120px;
-}
-textarea {
-  width: 100%;
-  resize: vertical;
-}
-</style>
+<style scoped src="./styles/record-review-workflow.css"></style>
