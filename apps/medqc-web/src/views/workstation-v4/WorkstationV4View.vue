@@ -1078,6 +1078,9 @@ const {
   assistTab,
   frontpageTab,
   (target) => {
+    if (target.kind === 'qc_result_ready') {
+      return router.push({ path: '/workstation-v5/qc-result', query: { notification_id: target.id } })
+    }
     if (target.kind === 'account_registration') {
       return router.push({
         path: '/workstation-v5/system-config',

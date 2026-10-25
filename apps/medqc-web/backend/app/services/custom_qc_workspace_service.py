@@ -2634,6 +2634,8 @@ class CustomQCWorkspaceService:
                     items=canonical_items,
                     now=now,
                 )
+                if canonical_items:
+                    self._notify_saved_result(session, job_row=dict(row), now=now)
             elif formal_luxian_parent and status == "failed" and partial_items:
                 self._write_record_result_envelopes(
                     session,
@@ -5108,6 +5110,8 @@ class CustomQCWorkspaceService:
                 if envelope_items
                 else ()
             )
+            if envelope_items and not execution_failed:
+                self._notify_saved_result(session, job_row=dict(row), now=now)
             session.commit()
             if getattr(completion_update, "rowcount", None) == 1:
                 capture_committed_results(diagnostic_receipts)
@@ -5124,6 +5128,14 @@ class CustomQCWorkspaceService:
         item: Dict[str, Any], *, hmac_key: str | None = None,
     ) -> Dict[str, Any]:
         return envelope_item_from_rule_result(item, hmac_key=hmac_key)
+
+    def _notify_saved_result(self, session: Session, *, job_row: Dict[str, Any], now: datetime) -> None:
+        from .qc_result_ready_notification import publish_result_ready
+
+        publish_result_ready(
+            session, job_row=job_row, jobs=self._batch_job_table,
+            envelopes=self._record_result_envelope_table, now=now,
+        )
 
     def _write_record_result_envelopes(
         self,

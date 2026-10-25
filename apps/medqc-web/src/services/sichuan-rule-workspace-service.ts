@@ -127,6 +127,17 @@ export async function getSichuanWorkspaceBatchJob(jobId: string) {
   )
 }
 
+export function getNotificationQcResult(notificationId: string) {
+  return requestEnvelope<SichuanBatchJob>(
+    {
+      method: 'GET',
+      url: `/api/v1/notifications/${encodeURIComponent(notificationId)}/qc-result`,
+      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+    },
+    '结果通知已失效或读取失败，请返回消息列表刷新',
+  )
+}
+
 /** 结果页病历标识：按客户安全引用 record_ref 回查住院号、科室等，不含患者姓名。 */
 export type BatchJobRecordIdentity = {
   record_ref: string

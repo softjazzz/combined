@@ -41,7 +41,7 @@ async function flushPromises() {
 }
 
 describe('useNotifications overview acceptance', () => {
-  it.each(['account_registration', 'account_registration_result'])('注册消息%s保持精确目标，不按病历号下钻', async (kind) => {
+  it.each(['account_registration', 'account_registration_result', 'qc_result_ready'])('现代消息%s保持精确目标，不按病历号下钻', async (kind) => {
     const open = vi.fn().mockResolvedValue(undefined)
     const legacyOpen = vi.fn()
     const notify = useNotifications(ref([]), legacyOpen, ref(false), ref('message'), ref('fields'), open)

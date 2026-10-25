@@ -332,7 +332,8 @@ export function normalizeDoctorInteraction(value: unknown): NotificationVM['inte
       target.kind !== 'modern_appeal' &&
       target.kind !== 'case_communication' &&
       target.kind !== 'account_registration' &&
-      target.kind !== 'account_registration_result') ||
+      target.kind !== 'account_registration_result' &&
+      target.kind !== 'qc_result_ready') ||
     typeof target.id !== 'string' ||
     !target.id.trim() ||
     target.id.length > 36

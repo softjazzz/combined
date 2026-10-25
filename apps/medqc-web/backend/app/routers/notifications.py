@@ -36,6 +36,8 @@ async def _owned_call(user, method, *args, **kwargs):
         return await run_in_threadpool(method, str(actor_id), *args, **kwargs)
     except RectificationError as exc:
         raise HTTPException(exc.status, str(exc)) from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("通知操作失败 error_type=%s", type(exc).__name__)
         raise HTTPException(503, "通知服务暂不可用，请刷新核对") from exc
@@ -240,6 +242,35 @@ async def list_notification_overview(
     except Exception as e:
         logger.error(f"查询通知概览失败: {e}")
         raise HTTPException(status_code=500, detail=f"查询通知概览失败: {str(e)}")
+
+
+def _load_ready_batch_result(job_id, actor_id):
+    from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+    from .qc_sichuan import (
+        LUXIAN_0609_RULE_SET_KEY,
+        _hydrate_luxian_canonical_batch_job_or_409,
+        _is_workspace_batch_job,
+        _workspace_batch_response_item,
+    )
+
+    workspace = CustomQCWorkspaceService(readonly=True)
+    job = workspace.get_batch_job(job_id=job_id, created_by=actor_id)
+    if not _is_workspace_batch_job(job) or job.get("status") != "completed":
+        raise RectificationError("结果通知已失效，请重新查询任务", 404)
+    if (job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+        job = _hydrate_luxian_canonical_batch_job_or_409(workspace=workspace, job=job)
+    return _workspace_batch_response_item(job)
+
+
+@router.get("/{notification_id}/qc-result")
+async def get_notification_qc_result(
+    notification_id: str, request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    data = await _owned_call(
+        current_user, service.result_ready, notification_id, _load_ready_batch_result
+    )
+    return success_response(data=data, trace_id=get_trace_id(request))
 
 
 @router.post("/qc-batch-summary")

@@ -1035,6 +1035,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '整改待办', permission: ['admin', 'qc_manager', 'qc_staff', 'doctor'] },
       },
       {
+        path: 'qc-result',
+        name: 'WorkstationV5NotificationQcResult',
+        component: () => import('@/views/workstation/NotificationQcResult.vue'),
+        meta: { title: '质控任务结果', permission: ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'] },
+      },
+      {
         path: 'customer-sample-validation',
         name: 'WorkstationV4CustomerSampleValidation',
         component: () => import('@/views/workstation-v4/CustomerSampleValidationView.vue'),

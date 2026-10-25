@@ -18,6 +18,7 @@ from .defect_rectification_service import (
 )
 from .modern_appeal_service import QCAppeal as Appeal
 from .user_scope_owner import user_owner_options, resolve_user_owner_schema
+from .qc_result_ready_notification import SOURCE as RESULT_SOURCE, ready_predicate, result_tables
 
 SOURCE = "v5_doctor_feedback"
 QC_SOURCE = "v5_qc_feedback"
@@ -187,7 +188,7 @@ class DoctorNotificationService:
     def _predicate(self, actor, session):
         legacy = or_(
             Notification.source_key.is_(None),
-            Notification.source_key.not_in((SOURCE, QC_SOURCE, REGISTRATION_SOURCE)),
+            Notification.source_key.not_in((SOURCE, QC_SOURCE, REGISTRATION_SOURCE, RESULT_SOURCE)),
         )
         modern = False
         qc_feedback = False
@@ -349,7 +350,8 @@ class DoctorNotificationService:
                 ),
             )
         return and_(
-            Notification.recipient_id == actor["id"], or_(legacy, modern, qc_feedback, registration)
+            Notification.recipient_id == actor["id"],
+            or_(legacy, modern, qc_feedback, registration, ready_predicate(session, actor, Notification))
         )
 
     def _view(self, row, actor, session):
@@ -377,7 +379,29 @@ class DoctorNotificationService:
             }
         if row.source_key == REGISTRATION_SOURCE:
             item["interaction_target"] = {"kind": row.related_type, "id": row.related_id}
+        if row.source_key == RESULT_SOURCE:
+            item["interaction_target"] = {"kind": "qc_result_ready", "id": row.id}
         return item
+
+    def result_ready(self, actor_id, notification_id, loader):
+        with self.sessions() as session:
+            actor = self.person(session, actor_id)
+            row = session.scalar(select(Notification).where(
+                Notification.id == notification_id,
+                Notification.source_key == RESULT_SOURCE,
+                Notification.recipient_id == actor_id,
+            ))
+            tables = result_tables(session)
+            if row is None or not tables:
+                raise RectificationError("结果通知不存在或已失效", 404)
+            jobs, _ = tables
+            # 读取期间锁定同一根任务，避免重试把旧通知悄悄换成新一轮结果。
+            session.execute(select(jobs.c.id).where(jobs.c.id == row.record_id).with_for_update(read=True)).first()
+            if not session.scalar(select(Notification.id).where(
+                Notification.id == notification_id, self._predicate(actor, session)
+            )):
+                raise RectificationError("结果通知不存在或已失效", 404)
+            return loader(row.record_id, actor_id)
 
     def list(self, actor_id, *, type=None, is_read=None, page=1, page_size=20):
         with self.sessions() as session:
