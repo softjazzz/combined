@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
-from ..core.security import get_current_user, require_roles
+from ..core.security import get_current_user, require_roles_with_read_access
 from ..services.product_activation import require_product_activation
 from ..services.rule_validation import (
     RuleValidationConflict,
@@ -22,7 +22,7 @@ from ..services.rule_validation import (
 router = APIRouter(
     prefix="/api/v1/qc/rule-validation",
     tags=["规则验收"],
-    dependencies=[Depends(require_roles("admin", "qc_manager"))],
+    dependencies=[Depends(require_roles_with_read_access("admin", "qc_manager", read_roles=("sync_admin",)))],
 )
 
 

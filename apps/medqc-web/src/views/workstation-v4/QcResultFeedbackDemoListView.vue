@@ -10,8 +10,8 @@
       </button>
     </header>
 
-    <section v-if="!isDemoAccount" class="feedback-demo-state mq-card">
-      此页面仅对演示账号开放。
+    <section v-if="!canViewFeedback" class="feedback-demo-state mq-card">
+      当前账号没有反馈记录查看权限。
     </section>
     <template v-else>
       <section class="feedback-demo-filters mq-card" aria-label="反馈筛选">
@@ -163,6 +163,9 @@ const isDemoAccount = computed(
       .trim()
       .toLowerCase() === 'admin@medqc.com',
 )
+const canViewFeedback = computed(
+  () => isDemoAccount.value || authStore.userRoles?.includes('sync_admin') === true,
+)
 const typeOptions = computed(() => [
   { value: '' as const, label: '全部反馈', count: feedbacks.value.length },
   ...(['incorrect', 'correct', 'note'] as const).map((value) => ({
@@ -281,7 +284,7 @@ function formatTime(value?: string) {
 }
 
 async function load() {
-  if (!isDemoAccount.value) return
+  if (!canViewFeedback.value) return
   loading.value = true
   error.value = ''
   try {

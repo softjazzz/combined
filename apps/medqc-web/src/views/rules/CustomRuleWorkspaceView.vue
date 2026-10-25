@@ -35,6 +35,8 @@
       </div>
     </header>
 
+    <p v-if="isBusinessReadOnly" class="mq-soft" role="status">当前账号仅可查看自定义质控点和已有任务，不能编辑、发布或运行。</p>
+
     <section class="ops-overview mq-card">
       <div class="ops-kpis">
         <article class="kpi-card">
@@ -106,6 +108,7 @@
               刷新
             </a-button>
             <a-button
+              :disabled="isBusinessReadOnly"
               type="primary"
               @click="openCreateDrawer"
             >
@@ -173,7 +176,7 @@
             </template>
             <template v-else-if="column.key === 'actions'">
               <div class="draft-actions">
-                <a-tooltip title="继续编辑">
+                <a-tooltip :title="isBusinessReadOnly ? '查看规则' : '继续编辑'">
                   <a-button
                     type="text"
                     size="small"
@@ -186,6 +189,7 @@
                 </a-tooltip>
                 <a-tooltip title="复制草稿">
                   <a-button
+                    :disabled="isBusinessReadOnly"
                     type="text"
                     size="small"
                     @click.stop="copyDraft(record as CustomRuleDraft)"
@@ -196,12 +200,14 @@
                   </a-button>
                 </a-tooltip>
                 <a-popconfirm
+                  :disabled="isBusinessReadOnly"
                   title="确认删除该草稿？"
                   @confirm="deleteDraft(record as CustomRuleDraft)"
                 >
                   <a-button
                     type="text"
                     danger
+                    :disabled="isBusinessReadOnly"
                     size="small"
                     @click.stop
                   >
@@ -232,6 +238,7 @@
           </h2>
         </div>
         <a-button
+          :disabled="isBusinessReadOnly"
           type="primary"
           @click="openCreateDrawer"
         >
@@ -350,6 +357,7 @@
             取消
           </a-button>
           <a-button
+            :disabled="isBusinessReadOnly"
             type="primary"
             :loading="creatingDraft"
             @click="createDraft"
@@ -389,7 +397,7 @@
             打开编辑器
           </a-button>
           <a-button
-            :disabled="!selectedDraft"
+            :disabled="isBusinessReadOnly || !selectedDraft"
             :loading="generatingPrompt"
             @click="generatePromptForDraft"
           >
@@ -441,7 +449,7 @@
             {{ promptReady ? '可发布' : '待补全' }}
           </a-tag>
           <a-button
-            :disabled="!selectedDraft"
+            :disabled="isBusinessReadOnly || !selectedDraft"
             :loading="generatingPrompt"
             @click="generatePromptForDraft"
           >
@@ -461,7 +469,7 @@
           </a-button>
           <a-button
             type="primary"
-            :disabled="!selectedDraft"
+            :disabled="isBusinessReadOnly || !selectedDraft"
             :loading="savingDraft"
             @click="saveDraftEditor"
           >
@@ -521,7 +529,7 @@
       <template #extra>
         <div class="panel-actions">
           <a-button
-            :disabled="!selectedDraft"
+            :disabled="isBusinessReadOnly || !selectedDraft"
             :loading="generatingPrompt"
             @click="generatePromptForDraft"
           >
@@ -532,7 +540,7 @@
           </a-button>
           <a-button
             type="primary"
-            :disabled="!selectedDraft"
+            :disabled="isBusinessReadOnly || !selectedDraft"
             :loading="savingDraft"
             @click="saveDraftEditor"
           >
@@ -630,7 +638,7 @@
           </a-button>
           <a-button
             type="primary"
-            :disabled="!selectedDraft"
+            :disabled="isBusinessReadOnly || !selectedDraft"
             :loading="savingDraft"
             @click="saveDraftEditor"
           >
@@ -670,7 +678,7 @@
           </a-radio-group>
           <a-button
             type="primary"
-            :disabled="!canRunBatchJob"
+            :disabled="isBusinessReadOnly || !canRunBatchJob"
             :loading="runningBatchJob"
             @click="runBatchJob"
           >
@@ -823,7 +831,7 @@
             <a-button
               type="link"
               size="small"
-              :disabled="!selectedDraft"
+              :disabled="isBusinessReadOnly || !selectedDraft"
               :loading="testingSingleRecordId === record.record_id"
               @click="runSingleTest(record as CustomRuleWorkspaceRecord)"
             >
@@ -923,6 +931,7 @@
                   查看
                 </a-button>
                 <a-button
+                  :disabled="isBusinessReadOnly"
                   v-if="record.cancellable"
                   size="small"
                   danger
@@ -932,6 +941,7 @@
                   停止
                 </a-button>
                 <a-button
+                  :disabled="isBusinessReadOnly"
                   v-else
                   size="small"
                   :loading="retryingBatchJobId === record.id"
@@ -1048,6 +1058,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useBusinessReadAccess } from '@/composables/useBusinessReadAccess'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
@@ -1103,6 +1114,8 @@ import type {
 type DateRangeValue = [Dayjs, Dayjs] | null
 
 type StepStatus = 'pending' | 'ready' | 'running' | 'done'
+
+const { isBusinessReadOnly } = useBusinessReadAccess()
 
 const JOB_POLL_INTERVAL_MS = 3000
 
@@ -1449,6 +1462,7 @@ function selectDraft(record: CustomRuleDraft) {
 }
 
 function openCreateDrawer() {
+  if (isBusinessReadOnly.value) return
   createDrawerVisible.value = true
 }
 
@@ -1460,6 +1474,7 @@ function openPromptDrawer() {
   promptDrawerVisible.value = true
 }
 async function createDraft() {
+  if (isBusinessReadOnly.value) return
   const name = createForm.name.trim()
   const requirement = createForm.source_requirement.trim()
   if (!name) {
@@ -1535,6 +1550,7 @@ function validateEditorReady(showWarning = true): boolean {
 }
 
 async function saveDraftEditor() {
+  if (isBusinessReadOnly.value) return
   if (!selectedDraft.value) {
     message.warning('请先选择草稿')
     return false
@@ -1584,6 +1600,7 @@ async function saveDraftEditor() {
 }
 
 async function generatePromptForDraft() {
+  if (isBusinessReadOnly.value) return
   if (!selectedDraft.value) {
     message.warning('请先选择草稿')
     return
@@ -1612,6 +1629,7 @@ async function generatePromptForDraft() {
 }
 
 async function copyDraft(record: CustomRuleDraft) {
+  if (isBusinessReadOnly.value) return
   const normalizedDocumentType = normalizeWorkspaceDocumentType(
     record.document_type,
     defaultDocumentTypeByScene(record.scene || 'running'),
@@ -1645,6 +1663,7 @@ async function copyDraft(record: CustomRuleDraft) {
 }
 
 async function deleteDraft(record: CustomRuleDraft) {
+  if (isBusinessReadOnly.value) return
   try {
     const response = await deleteWorkspaceDraft(record.id)
     if (!response.success) {
@@ -1662,6 +1681,7 @@ async function deleteDraft(record: CustomRuleDraft) {
 }
 
 async function publishDraftById(draftId: string) {
+  if (isBusinessReadOnly.value) return
   publishingDraft.value = true
   try {
     const response = await publishWorkspaceDraft(draftId)
@@ -1811,6 +1831,7 @@ function buildSelectedRecordRefs():
 }
 
 async function runSingleTest(record: CustomRuleWorkspaceRecord) {
+  if (isBusinessReadOnly.value) return
   if (!selectedDraft.value) {
     message.warning('请先选择草稿规则')
     return
@@ -1974,6 +1995,7 @@ async function openBatchJob(job: CustomRuleBatchJob) {
 }
 
 async function cancelBatchJob(jobId: string) {
+  if (isBusinessReadOnly.value) return
   if (!jobId || cancellingBatchJobId.value) return
   cancellingBatchJobId.value = jobId
   try {
@@ -1992,6 +2014,7 @@ async function cancelBatchJob(jobId: string) {
 }
 
 async function retryBatchJob(jobId: string) {
+  if (isBusinessReadOnly.value) return
   if (!jobId || retryingBatchJobId.value) return
   retryingBatchJobId.value = jobId
   try {
@@ -2093,6 +2116,7 @@ const executionTipText = computed(() => {
 })
 
 async function runBatchJob() {
+  if (isBusinessReadOnly.value) return
   if (!canRunBatchJob.value) {
     message.warning('请先补全 Prompt、选择病历并确定执行规则')
     return

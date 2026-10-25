@@ -8,10 +8,11 @@ const mocks = vi.hoisted(() => ({
     email: 'admin@medqc.com',
     is_demo_account: true,
   },
+  roles: [] as string[],
 }))
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ user: mocks.user }),
+  useAuthStore: () => ({ user: mocks.user, userRoles: mocks.roles }),
 }))
 
 vi.mock('@/api/qc-result-feedback-demo', () => ({
@@ -22,6 +23,7 @@ import QcResultFeedbackDemoListView from '@/views/workstation-v4/QcResultFeedbac
 
 describe('QcResultFeedbackDemoListView', () => {
   beforeEach(() => {
+    mocks.roles = []
     mocks.user.id = 'admin-001'
     mocks.user.email = 'admin@medqc.com'
     mocks.user.is_demo_account = true
@@ -53,6 +55,18 @@ describe('QcResultFeedbackDemoListView', () => {
     })
   })
 
+  it('同步管理员可读取演示反馈记录，但不增加反馈提交入口', async () => {
+    mocks.user.id = 'sync-reader'
+    mocks.user.email = 'sync-reader@test.local'
+    mocks.roles = ['sync_admin']
+    const wrapper = mount(QcResultFeedbackDemoListView)
+    await flushPromises()
+    expect(mocks.list).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('LX0609-06-01-05')
+    expect(wrapper.text()).not.toContain('没有反馈记录查看权限')
+    expect(wrapper.find('form').exists()).toBe(false)
+  })
+
   it('汇总反馈时明确展示病历和质控点上下文', async () => {
     const wrapper = mount(QcResultFeedbackDemoListView)
     await flushPromises()
@@ -76,7 +90,7 @@ describe('QcResultFeedbackDemoListView', () => {
     await flushPromises()
 
     expect(mocks.list).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('此页面仅对演示账号开放。')
+    expect(wrapper.text()).toContain('当前账号没有反馈记录查看权限。')
   })
 
   it('按反馈类型筛选并保留病历与规则上下文，不重复请求接口', async () => {

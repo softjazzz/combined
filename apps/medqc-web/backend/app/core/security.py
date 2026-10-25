@@ -116,6 +116,18 @@ def require_any_role(roles: Iterable[str]):
     return require_roles(*list(roles))
 
 
+def require_roles_with_read_access(*roles: str, read_roles: Iterable[str]):
+    """仅为显式使用此依赖的路由增加读取角色，不继承其他角色的写权限。"""
+    require_write = require_roles(*roles)
+    require_read = require_roles(*roles, *read_roles)
+
+    async def _checker(request: Request, current_user: dict = Depends(get_current_user)) -> dict:
+        checker = require_read if request.method in {"GET", "HEAD"} else require_write
+        return await checker(current_user)
+
+    return _checker
+
+
 async def require_admin(current_user: dict = Depends(get_current_user)):
     """
     验证当前用户是否为系统管理员

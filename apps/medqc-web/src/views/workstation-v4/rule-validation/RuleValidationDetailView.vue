@@ -36,6 +36,8 @@
       show-icon
     />
 
+    <p v-if="isBusinessReadOnly" class="mq-soft" role="status">当前账号仅可查看验收材料与已有结论，不能标注、运行、复核或批准。</p>
+
     <a-spin
       :spinning="loading && !detail"
       class="rule-validation-page"
@@ -158,6 +160,7 @@
             </div>
             <div class="mq-page-head__actions">
               <button
+                :disabled="isBusinessReadOnly"
                 type="button"
                 class="mq-btn"
                 data-testid="link-case"
@@ -166,6 +169,7 @@
                 关联已有病例
               </button>
               <router-link
+                v-if="!isBusinessReadOnly"
                 class="mq-btn"
                 data-testid="new-case"
                 :to="{ name: 'WorkstationV4RuleValidationNewCase', params: { ruleId } }"
@@ -228,6 +232,7 @@
                   </td>
                   <td class="rv-right rv-row-actions">
                     <router-link
+                      v-if="!isBusinessReadOnly"
                       class="mq-btn"
                       :to="{
                         name: 'WorkstationV4RuleValidationNewCase',
@@ -238,6 +243,7 @@
                       复制
                     </router-link>
                     <button
+                      :disabled="isBusinessReadOnly"
                       type="button"
                       class="mq-btn"
                       @click="openAnswer(item)"
@@ -289,7 +295,7 @@
               type="button"
               class="mq-btn mq-btn--primary"
               data-testid="start-run"
-              :disabled="!detail.cases.length || starting || runInProgress"
+              :disabled="isBusinessReadOnly || (!detail.cases.length || starting || runInProgress)"
               @click="startRun"
             >
               {{
@@ -577,7 +583,7 @@
               <button
                 type="button"
                 class="mq-btn"
-                :disabled="!canConclude || busy || !conclusionNote.trim()"
+                :disabled="isBusinessReadOnly || (!canConclude || busy || !conclusionNote.trim())"
                 @click="conclude('rejected')"
               >
                 记录不通过
@@ -586,9 +592,9 @@
                 type="button"
                 class="mq-btn mq-btn--primary"
                 data-testid="accept-rule"
-                :disabled="
+                :disabled="isBusinessReadOnly || (
                   !canAccept || busy || !conclusionNote.trim() || (hasGaps && !gapAck.trim())
-                "
+                )"
                 @click="conclude('accepted')"
               >
                 验收通过
@@ -609,7 +615,7 @@
                 type="button"
                 class="mq-btn"
                 data-testid="open-approval"
-                :disabled="detail.rule.publication_supported === false || !['pending_approval', 'approved_pending_release'].includes(detail.stage)"
+                :disabled="(isBusinessReadOnly && approval?.decision !== 'approved') || detail.rule.publication_supported === false || !['pending_approval', 'approved_pending_release'].includes(detail.stage)"
                 @click="approvalOpen = true"
               >
                 {{ approval?.decision === 'approved' ? '查看发布单' : '批准…' }}
@@ -621,6 +627,7 @@
     </a-spin>
 
     <CaseAnswerModal
+      v-if="!isBusinessReadOnly"
       :open="answerOpen"
       :rule-id="ruleId"
       :current="answerTarget"
@@ -628,6 +635,7 @@
       @saved="onAnswerSaved"
     />
     <CaseReviewDrawer
+      :read-only="isBusinessReadOnly"
       v-if="latestRun"
       :run-id="latestRun.id"
       :run-time="formatTime(latestRun.created_at)"
@@ -639,6 +647,7 @@
       @reviewed="load"
     />
     <ApprovalModal
+      :read-only="isBusinessReadOnly"
       v-if="detail"
       :open="approvalOpen"
       :detail="detail"
@@ -650,6 +659,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBusinessReadAccess } from '@/composables/useBusinessReadAccess'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -682,6 +692,8 @@ import {
   statusLabel,
 } from './presentation'
 import type { Labeled } from './presentation'
+
+const { isBusinessReadOnly } = useBusinessReadAccess()
 
 const POLL_MS = 5000
 
@@ -911,6 +923,7 @@ function schedulePoll() {
 }
 
 function openAnswer(item: ValidationCase | null) {
+  if (isBusinessReadOnly.value) return
   answerTarget.value = item
   answerOpen.value = true
 }
@@ -921,6 +934,7 @@ async function onAnswerSaved() {
 }
 
 async function startRun() {
+  if (isBusinessReadOnly.value) return
   starting.value = true
   actionError.value = ''
   const response = await startValidationRun(ruleId.value)
@@ -939,6 +953,7 @@ async function startRun() {
 }
 
 async function conclude(decision: 'accepted' | 'rejected') {
+  if (isBusinessReadOnly.value) return
   if (!latestRun.value) return
   busy.value = true
   actionError.value = ''

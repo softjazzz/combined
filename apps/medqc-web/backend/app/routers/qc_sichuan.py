@@ -1771,6 +1771,13 @@ def _require_demo_feedback_account(current_user: Dict[str, Any]) -> Dict[str, An
     return current_user
 
 
+def _require_demo_feedback_reader(current_user: Dict[str, Any]) -> Dict[str, Any]:
+    """同步管理员可查看演示反馈，提交仍仅允许原固定演示账号。"""
+    if "sync_admin" in _extract_user_roles(current_user):
+        return current_user
+    return _require_demo_feedback_account(current_user)
+
+
 def _parse_demo_feedback_payload(body: Dict[str, Any]) -> QcResultFeedbackRequest:
     """把校验错误收敛为安全文案，避免 422 回显用户输入。"""
 
@@ -2592,7 +2599,7 @@ async def get_demo_result_feedback(
 ):
     """读取演示账号在当前病历上的反馈，不读取或返回病历身份。"""
 
-    _require_demo_feedback_account(current_user)
+    _require_demo_feedback_reader(current_user)
     try:
         items = get_result_feedback_demo_store().list_for_record(
             root_job_id=root_job_id,
@@ -2620,7 +2627,7 @@ async def list_demo_result_feedbacks(
 ):
     """汇总反馈及客户可识别的病历标签，不返回三坐标或病历正文。"""
 
-    _require_demo_feedback_account(current_user)
+    _require_demo_feedback_reader(current_user)
     try:
         stored_items = get_result_feedback_demo_store().list_all(
             created_by="admin-001",

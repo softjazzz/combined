@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
+import { WORKSTATION_NAV, filterVisibleNav } from '@/components/layout/workstationNav'
 
 vi.unmock('vue-router')
+const authState = vi.hoisted(() => ({ roles: ['admin'] }))
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     isAuthenticated: true,
-    userRoles: ['admin'],
+    userRoles: authState.roles,
     initialize: vi.fn(),
   }),
 }))
@@ -15,6 +17,27 @@ window.scrollTo = vi.fn()
 const { default: router } = await import('./index')
 
 describe('旧 Dashboard 首页路由', () => {
+  it('sync_admin通过真实路由守卫进入旧首页地址，不回退dashboard', async () => {
+    authState.roles.splice(0, authState.roles.length, 'sync_admin')
+    try {
+      await router.push('/workstation-v5/qc-overview')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/qc-overview')
+    } finally {
+      authState.roles.splice(0, authState.roles.length, 'admin')
+    }
+  }, 15_000)
+  it('同步管理员业务查看菜单与演示账号一致，直接URL同样允许，创建验收病例仍受限', () => {
+    const visible = (roles: string[], demo: boolean) => filterVisibleNav(WORKSTATION_NAV, {
+      userRoles: roles,
+      isDemoFeedbackAccount: demo,
+      resolvePermission: (to) => router.resolve(to).meta.permission as string[] | undefined,
+    }).flatMap((group) => group.items.map((item) => item.key))
+    expect(visible(['sync_admin'], false)).toEqual(visible(['admin', 'qc_manager'], true))
+    for (const path of ['records/running', 'records/final', 'qc-feedback-demo', 'rules/custom-workspace', 'rules/validation', 'rules/validation/LX0609-01-01-01', 'qc-overview', 'system-config']) {
+      expect(router.resolve(`/workstation-v5/${path}`).meta.permission).toContain('sync_admin')
+    }
+    expect(router.resolve('/workstation-v5/rules/validation/LX0609-01-01-01/cases/new').meta.permission).not.toContain('sync_admin')
+  })
   it('不再挂载 DashboardView，并安全跳转到工作台首页', async () => {
     const dashboardRoute = router.getRoutes().find((route) => route.name === 'Dashboard')
 

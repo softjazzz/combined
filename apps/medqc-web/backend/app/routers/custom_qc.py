@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from ..core.response import get_trace_id, success_response
-from ..core.security import get_current_user, require_roles
+from ..core.security import get_current_user, require_roles_with_read_access
 from ..services.custom_qc_service import (
     create_custom_qc_service,
     ensure_record_medical_text,
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/v1/custom-qc",
     tags=["custom-qc"],
-    dependencies=[Depends(require_roles("admin", "qc_manager"))],
+    dependencies=[Depends(require_roles_with_read_access("admin", "qc_manager", read_roles=("sync_admin",)))],
 )
 
 
