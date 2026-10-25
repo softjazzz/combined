@@ -389,6 +389,17 @@ export type EditableMedicalReportItem = {
   recommendation?: string
 }
 
+export type FrontpageDisplayField = { key: string; label: string; value: string | null }
+export type FrontpageDisplayTable = {
+  columns: Array<{ key: string; label: string }>
+  rows: Array<Record<string, string | null>>
+}
+export type FrontpageDisplay = {
+  groups: Array<{ key: string; label: string; fields: FrontpageDisplayField[] }>
+  diagnoses: FrontpageDisplayTable
+  surgeries: FrontpageDisplayTable
+}
+
 export type ManualTestRecordSourceMeta = {
   type: 'customer_source_editable_copy' | string
   source_pool_id?: string
@@ -421,6 +432,7 @@ export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   sections?: EditableMedicalRecordSection[]
   report_items?: EditableMedicalReportItem[]
   report_metadata?: Record<string, string>
+  frontpage_display?: FrontpageDisplay
   order_start_time?: string
   order_id?: string
   order_planned_end_time?: string

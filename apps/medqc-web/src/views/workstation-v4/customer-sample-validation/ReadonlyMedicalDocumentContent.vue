@@ -3,7 +3,11 @@
     class="readonly-medical-document-content"
     data-testid="readonly-medical-document-content"
   >
-    <template v-if="isReportDocument">
+    <ReadonlyFrontpageContent
+      v-if="document.document_type === 'mr' && document.frontpage_display"
+      :display="document.frontpage_display"
+    />
+    <template v-else-if="isReportDocument">
       <section
         v-if="reportMetadataRows.length"
         class="readonly-report-metadata"
@@ -111,6 +115,7 @@ import {
 } from './medicalDocumentDisplay'
 import { resolveSafeMedicalSectionLabel } from '@/utils/medicalFieldLabels'
 import { buildMedicalReportMetadataRows } from '@/utils/medicalReportDisplay'
+import ReadonlyFrontpageContent from './ReadonlyFrontpageContent.vue'
 
 const props = defineProps<{
   document: EditableMedicalRecordDocument
