@@ -30,6 +30,7 @@
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import { MESSAGE_CENTER_PATH } from './notificationNavigation'
 import {
   getNotificationQcResult,
   getSichuanWorkspaceBatchJobDebugSnapshot,
@@ -144,7 +145,7 @@ async function reviewResult(): Promise<void> {
 
 function close() {
   generation += 1
-  void router.push('/workstation-v5/worklist?assist=message')
+  void router.push(MESSAGE_CENTER_PATH)
 }
 
 watch(() => route.query.notification_id, load, { immediate: true })

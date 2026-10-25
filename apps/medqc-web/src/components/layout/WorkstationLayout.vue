@@ -117,7 +117,12 @@
               </template>
             </a-dropdown>
 
-            <a-popover placement="rightBottom" trigger="click">
+            <a-tooltip v-if="useFullMessageCenter" title="消息中心" placement="right">
+              <router-link class="ws-icon-button" to="/workstation-v5/messages" aria-label="消息中心">
+                <Bell aria-hidden="true" />
+              </router-link>
+            </a-tooltip>
+            <a-popover v-else placement="rightBottom" trigger="click">
               <template #content>
                 <div class="ws-notice">
                   <div class="ws-notice__title">通知</div>
@@ -181,6 +186,7 @@ import MqIcon from '@/components/icons/MqIcon.vue'
 import GlobalAssistantHost from '@/views/workstation-v4/components/GlobalAssistantHost.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { useAuthStore } from '@/stores/auth'
+import { canUseMessageCenter } from '@/views/workstation/notificationNavigation'
 import {
   DRG_SECTION_TABS,
   WORKSTATION_BASE,
@@ -203,6 +209,7 @@ onBeforeUnmount(workstationConfirmation.dispose)
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const useFullMessageCenter = computed(() => canUseMessageCenter(authStore.userRoles))
 
 // 宽度小于 1280 时默认折叠；用户手动切换后以用户选择为准，直到下次跨越断点
 const COLLAPSE_QUERY = '(max-width: 1279px)'

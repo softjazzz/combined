@@ -35,7 +35,8 @@ describe('业务线四报表定向适配', () => {
     expect(resolved.meta.permission).toEqual(['doctor'])
     const route = router.getRoutes().find((route) => route.path === path)!
     expect(await loadPage(route.components?.default)).toHaveProperty('default')
-  })
+    // 与下方报表相同的真实懒加载合同；冷编译文书组件可能超过默认5秒。
+  }, 30_000)
   it('整改待办保留V5外壳，医生和质控可访问，同步管理员不可访问', () => {
     const path = `${B}/feedback`
     const resolved = router.resolve(path)
@@ -113,9 +114,15 @@ describe('业务线四报表定向适配', () => {
     const items = WORKSTATION_NAV.flatMap((g) => g.items)
     expect(
       items
-        .filter((i) => !i.key.startsWith('report-') && i.key !== 'feedback-worklist')
+        .filter(
+          (i) =>
+            !i.key.startsWith('report-') &&
+            i.key !== 'feedback-worklist' &&
+            i.key !== 'message-center',
+        )
         .map((i) => i.key),
     ).toEqual(originalKeys)
+    expect(items.find((item) => item.key === 'message-center')?.to.path).toBe(`${B}/messages`)
     expect(DRG_SECTION_TABS.map((tab) => tab.path)).toEqual(
       ['drg/pre', 'drg/mid', 'drg/payment', 'drg/post', 'grouper'].map((p) => `${B}/${p}`),
     )

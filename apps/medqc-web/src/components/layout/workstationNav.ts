@@ -159,6 +159,13 @@ export const WORKSTATION_NAV: NavGroup[] = [
         iconName: 'doc',
         match: matchPrefix(p('/feedback')),
       },
+      {
+        key: 'message-center',
+        label: '消息中心',
+        to: { path: p('/messages') },
+        iconName: 'doc',
+        match: matchPrefix(p('/messages')),
+      },
     ],
   },
   {

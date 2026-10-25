@@ -57,7 +57,7 @@ describe('结果就绪通知的精确V5下钻', () => {
     expect(mocks.get).toHaveBeenCalledWith('notice')
     expect(wrapper.get('[data-testid="result"]').text()).toContain('saved-root')
     await wrapper.get('button').trigger('click')
-    expect(mocks.push).toHaveBeenCalledWith('/workstation-v5/worklist?assist=message')
+    expect(mocks.push).toHaveBeenCalledWith('/workstation-v5/messages')
     wrapper.unmount()
   })
 

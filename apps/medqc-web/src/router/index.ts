@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { canUseMessageCenter, MESSAGE_CENTER_PATH, MESSAGE_CENTER_ROLES } from '@/views/workstation/notificationNavigation'
 import type { RouteRecordRaw } from 'vue-router'
 
 const WORKSTATION_BASE_PATH = '/workstation-v5'
@@ -1041,6 +1042,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '质控任务结果', permission: ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'] },
       },
       {
+        path: 'messages',
+        name: 'WorkstationV5MessageCenter',
+        component: () => import('@/views/workstation/MessageCenter.vue'),
+        meta: { title: '消息中心', permission: MESSAGE_CENTER_ROLES },
+      },
+      {
         path: 'customer-sample-validation',
         name: 'WorkstationV4CustomerSampleValidation',
         component: () => import('@/views/workstation-v4/CustomerSampleValidationView.vue'),
@@ -1339,6 +1346,12 @@ router.beforeEach(async (to, from, next) => {
         }
         return
       }
+    }
+
+    if (to.path === `${WORKSTATION_BASE_PATH}/worklist` && to.query.assist === 'message' &&
+        Object.keys(to.query).length === 1 && canUseMessageCenter(authStore.userRoles)) {
+      next({ path: MESSAGE_CENTER_PATH, replace: true })
+      return
     }
 
     // 检查权限

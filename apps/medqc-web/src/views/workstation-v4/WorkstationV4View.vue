@@ -340,6 +340,7 @@
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { defineAsyncComponent, ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { notificationLocation } from '@/views/workstation/notificationNavigation'
 import { apiClient } from '@/services/apiService'
 import { message } from 'ant-design-vue'
 import {
@@ -1077,30 +1078,7 @@ const {
   assistPanelVisible,
   assistTab,
   frontpageTab,
-  (target) => {
-    if (target.kind === 'qc_result_ready') {
-      return router.push({ path: '/workstation-v5/qc-result', query: { notification_id: target.id } })
-    }
-    if (target.kind === 'account_registration') {
-      return router.push({
-        path: '/workstation-v5/system-config',
-        query: { tab: 'accounts', registration_id: target.id },
-      })
-    }
-    if (target.kind === 'account_registration_result') {
-      return router.push({ path: '/auth/register', query: { mode: 'status' } })
-    }
-    return router.push({
-      path: target.kind === 'case_communication'
-        ? '/workstation-v5/case-communications'
-        : '/workstation-v5/feedback',
-      query: target.kind === 'case_communication'
-        ? { communication_id: target.id }
-        : target.kind === 'rectification'
-          ? { rectification_id: target.id }
-          : { appeal_id: target.id },
-    })
-  },
+  (target) => router.push(notificationLocation(target)),
 )
 
 watch(

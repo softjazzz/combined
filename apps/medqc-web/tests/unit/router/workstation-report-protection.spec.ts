@@ -34,7 +34,25 @@ describe('V7.1与未推送产品成果保护集', () => {
     // 本批用户明确要求统一医生消息入口：仅允许消息无病例打开及限制无病例页签。
     let actual: string
     if (file.endsWith('/WorkstationLayout.vue')) {
-      const source = readFileSync(file, 'utf8')
+      let source = readFileSync(file, 'utf8')
+      // 本轮用户要求主管独立入口；只允许这一段铃铛路由，医生弹出层与外壳样式不变。
+      const managerEntry = [
+        '            <a-tooltip v-if="useFullMessageCenter" title="消息中心" placement="right">',
+        '              <router-link class="ws-icon-button" to="/workstation-v5/messages" aria-label="消息中心">',
+        '                <Bell aria-hidden="true" />',
+        '              </router-link>',
+        '            </a-tooltip>',
+        '            <a-popover v-else placement="rightBottom" trigger="click">',
+      ].join('\n')
+      const entryChanges = [
+        [managerEntry, '            <a-popover placement="rightBottom" trigger="click">'],
+        ["import { canUseMessageCenter } from '@/views/workstation/notificationNavigation'\n", ''],
+        ['const useFullMessageCenter = computed(() => canUseMessageCenter(authStore.userRoles))\n', ''],
+      ]
+      for (const [allowedChange, previous] of entryChanges) {
+        expect(source.split(allowedChange)).toHaveLength(2)
+        source = source.replace(allowedChange, previous)
+      }
       const allowed =
         '<router-link class="ws-notice__empty" to="/workstation-v5/worklist?assist=message">查看消息与待办</router-link>'
       expect(source.split(allowed)).toHaveLength(2)

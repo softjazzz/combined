@@ -10,6 +10,10 @@ vi.mock('@/views/qc/reports/StaffAnalysisView.vue', () => ({ default: { template
 vi.mock('@/views/workstation-v4/WorkstationV4HomeEntry.vue', () => ({
   default: { template: '<div />' },
 }))
+vi.mock('@/views/workstation-v4/WorkstationV4View.vue', () => ({
+  default: { template: '<div />' },
+}))
+vi.mock('@/views/workstation/MessageCenter.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/workstation-v4/QcRecordResultListView.vue', () => ({
   default: { template: '<div />' },
 }))
@@ -27,6 +31,33 @@ window.scrollTo = vi.fn()
 const { default: router } = await import('./index')
 
 describe('旧 Dashboard 首页路由', () => {
+  it('管理角色旧消息入口改走独立中心，普通质控员不因此得到病历池权限', async () => {
+    auth.roles.splice(0, auth.roles.length, 'qc_staff')
+    try {
+      await router.push('/workstation-v5/worklist?assist=message')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/messages')
+      expect(router.resolve('/workstation-v5/worklist').meta.permission).not.toContain('qc_staff')
+      expect(router.resolve('/workstation-v5/records/running').meta.permission).not.toContain(
+        'qc_staff',
+      )
+      await router.push('/workstation-v5/worklist')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/feedback')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  }, 15000)
+
+  it('医生旧消息面板保持原址，管理侧消息中心不开放给医生', async () => {
+    auth.roles.splice(0, auth.roles.length, 'doctor')
+    try {
+      await router.push('/workstation-v5/worklist?assist=message')
+      expect(router.currentRoute.value.fullPath).toBe('/workstation-v5/worklist?assist=message')
+      expect(router.resolve('/workstation-v5/messages').meta.permission).not.toContain('doctor')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  }, 15000)
+
   it('普通质控员被拒绝后进入有权访问的待办，不扩大报表权限', async () => {
     auth.roles.splice(0, auth.roles.length, 'qc_staff')
     try {
