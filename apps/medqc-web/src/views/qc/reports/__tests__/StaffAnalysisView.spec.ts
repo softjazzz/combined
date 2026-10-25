@@ -136,6 +136,12 @@ function render(): VueWrapper {
   const wrapper = mount(StaffAnalysisView, {
     global: {
       stubs: {
+        RecordReviewWorkflowDrawer: {
+          name: 'RecordReviewWorkflowDrawer',
+          props: ['open', 'reviewId'],
+          emits: ['changed', 'close'],
+          template: '<section v-if="open" class="record-review-workflow" />',
+        },
         ModernAppealWorkflowDrawer: {
           name: 'ModernAppealWorkflowDrawer',
           props: ['open', 'appealId'],
@@ -172,6 +178,25 @@ function deferred<T>() {
 }
 
 describe('StaffAnalysisView', () => {
+  it('病历审核事件直达精确历史，操作后刷新原筛选，换角色清空抽屉', async () => {
+    const wrapper = render()
+    await settle()
+    await wrapper.get('[aria-label="查看张质控的审核次数明细"]').trigger('click')
+    await settle()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '查看审核')!
+      .trigger('click')
+    const workflow = wrapper.getComponent({ name: 'RecordReviewWorkflowDrawer' })
+    expect(workflow.props('reviewId')).toBe('event-1')
+    const previous = state.getReport.mock.calls.at(-1)?.[0]
+    workflow.vm.$emit('changed')
+    await settle()
+    expect(state.getReport.mock.calls.at(-1)?.[0]).toEqual(previous)
+    state.auth.roles = ['doctor']
+    await settle()
+    expect(wrapper.find('.record-review-workflow').exists()).toBe(false)
+  })
   it('申诉事件下钻到指定历史，审核成功刷新原工作分析，换账号关闭抽屉', async () => {
     state.getDetails.mockResolvedValue({
       success: true,

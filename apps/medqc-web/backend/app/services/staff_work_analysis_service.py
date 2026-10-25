@@ -289,7 +289,10 @@ def _load_base_events(
     if scope.institute_id is not None:
         review_predicates.append(QCRecordReview.institute_id == scope.institute_id)
     reviews = (
-        session.execute(select(QCRecordReview).where(*review_predicates))
+        session.execute(
+            select(QCRecordReview).where(*review_predicates),
+            execution_options=_appeal_execution_options(session),
+        )
         .scalars()
         .all()
     )

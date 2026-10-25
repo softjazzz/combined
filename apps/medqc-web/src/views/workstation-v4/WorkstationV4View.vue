@@ -1076,10 +1076,14 @@ const {
   assistTab,
   frontpageTab,
   (target) => router.push({
-    path: '/workstation-v5/feedback',
-    query: target.kind === 'rectification'
-      ? { rectification_id: target.id }
-      : { appeal_id: target.id },
+    path: target.kind === 'case_communication'
+      ? '/workstation-v5/case-communications'
+      : '/workstation-v5/feedback',
+    query: target.kind === 'case_communication'
+      ? { communication_id: target.id }
+      : target.kind === 'rectification'
+        ? { rectification_id: target.id }
+        : { appeal_id: target.id },
   }),
 )
 

@@ -1023,6 +1023,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '质控反馈记录', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'case-communications',
+        name: 'WorkstationV5CaseCommunications',
+        component: () => import('@/views/workstation/HomeCaseCommunications.vue'),
+        meta: { title: '病历沟通', permission: ['doctor'] },
+      },
+      {
         path: 'feedback',
         name: 'WorkstationV5Feedback',
         component: () => import('@/views/workstation/HomeRectificationTodos.vue'),

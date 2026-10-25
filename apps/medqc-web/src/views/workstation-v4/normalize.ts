@@ -327,9 +327,16 @@ export function normalizeNotification(raw: unknown, index: number): Notification
 export function normalizeDoctorInteraction(value: unknown): NotificationVM['interaction_target'] {
   if (!value || typeof value !== 'object') return undefined
   const target = value as Record<string, unknown>
-  if ((target.kind !== 'rectification' && target.kind !== 'modern_appeal') ||
-      typeof target.id !== 'string' || !target.id.trim() || target.id.length > 36) return undefined
-  return {kind: target.kind, id: target.id}
+  if (
+    (target.kind !== 'rectification' &&
+      target.kind !== 'modern_appeal' &&
+      target.kind !== 'case_communication') ||
+    typeof target.id !== 'string' ||
+    !target.id.trim() ||
+    target.id.length > 36
+  )
+    return undefined
+  return { kind: target.kind, id: target.id }
 }
 
 export function normalizeWorklistItem(raw: unknown): WorkstationWorklistItem {

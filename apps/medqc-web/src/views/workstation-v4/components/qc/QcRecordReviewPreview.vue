@@ -225,6 +225,14 @@
         </footer>
       </template>
     </template>
+    <CaseCommunicationPanel
+      v-if="row && ready && loadedResult?.job_id && !loading && !loadError"
+      :institute-id="row.instituteId"
+      :patient-id="row.patientId"
+      :visit-id="row.visitId"
+      :scene="carePhase === 'discharged' ? 'final' : 'running'"
+      :job-id="loadedResult.job_id"
+    />
   </aside>
 </template>
 
@@ -233,6 +241,7 @@ import { ArrowRight, ArrowUpRight, ClipboardCheck, FileText, RotateCcw } from 'l
 import { Select } from 'ant-design-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
+import CaseCommunicationPanel from '@/components/qc/CaseCommunicationPanel.vue'
 import { getLatestLuxian0609RecordResult } from '@/services/sichuan-rule-workspace-service'
 import {
   buildSingleRecordQcResultItems,

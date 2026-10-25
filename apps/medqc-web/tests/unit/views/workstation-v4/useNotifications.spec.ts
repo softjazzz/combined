@@ -32,6 +32,7 @@ vi.mock('ant-design-vue', () => ({
 }))
 
 import { useNotifications } from '@/views/workstation-v4/composables/useNotifications'
+import { normalizeNotification } from '@/views/workstation-v4/normalize'
 import type { PatientRecord } from '@/views/workstation-v4/types'
 
 async function flushPromises() {
@@ -40,6 +41,30 @@ async function flushPromises() {
 }
 
 describe('useNotifications overview acceptance', () => {
+  it('病历级沟通沿原消息入口按事件ID定位，不复用缺陷任务或申诉ID', async () => {
+    const open = vi.fn().mockResolvedValue(undefined)
+    const legacyOpen = vi.fn()
+    const notify = useNotifications(
+      ref([]),
+      legacyOpen,
+      ref(false),
+      ref('message'),
+      ref('fields'),
+      open,
+    )
+    const notice = normalizeNotification(
+      {
+        id: 'notice',
+        record_id: 'feedback:case_communication:event',
+        is_read: false,
+        interaction_target: { kind: 'case_communication', id: 'event' },
+      },
+      0,
+    )
+    await notify.handleAssistNotificationClick(notice)
+    expect(open).toHaveBeenCalledWith({ kind: 'case_communication', id: 'event' })
+    expect(legacyOpen).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.isAuthenticated.mockReturnValue(true)

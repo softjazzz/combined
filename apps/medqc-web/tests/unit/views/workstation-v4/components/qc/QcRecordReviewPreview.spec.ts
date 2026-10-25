@@ -2,6 +2,7 @@ import { Select } from 'ant-design-vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
+import CaseCommunicationPanel from '@/components/qc/CaseCommunicationPanel.vue'
 import QcRecordReviewPreview from '@/views/workstation-v4/components/qc/QcRecordReviewPreview.vue'
 import type { QcRecordResultRow } from '@/views/workstation-v4/components/qc/QcRecordResultTable.vue'
 import type { SingleRecordQcResultPayload } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
@@ -9,6 +10,12 @@ import type { SingleRecordQcResultPayload } from '@/views/workstation-v4/custome
 const { getLatestResult } = vi.hoisted(() => ({ getLatestResult: vi.fn() }))
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getLatestLuxian0609RecordResult: getLatestResult,
+}))
+vi.mock('@/components/qc/CaseCommunicationPanel.vue', () => ({
+  default: {
+    props: ['instituteId', 'patientId', 'visitId', 'scene', 'jobId'],
+    template: '<div data-testid="case-communication-entry" />',
+  },
 }))
 
 const row: QcRecordResultRow = {
@@ -55,6 +62,20 @@ function deferred() {
 }
 
 describe('QcRecordReviewPreview', () => {
+  it('病历沟通只传递当前已保存结果及精确三坐标，不改变原预览', async () => {
+    const wrapper = mount(QcRecordReviewPreview, { props: { row, carePhase: 'discharged' } })
+    await flushPromises()
+    expect(wrapper.getComponent(CaseCommunicationPanel).props()).toEqual({
+      instituteId: 'H-1',
+      patientId: 'P-1',
+      visitId: 'V-1',
+      scene: 'final',
+      jobId: 'job-1',
+    })
+    await wrapper.setProps({ row: { ...row, resultStatus: 'not-run' } })
+    expect(wrapper.findComponent(CaseCommunicationPanel).exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('接口展示字段返回英文枚举时使用中文状态，不改变状态筛选', async () => {
     const data = payload()
     data.items[0].display_status = 'non_compliant'

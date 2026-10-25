@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import NAMESPACE_URL, uuid5
 
-from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy import and_, exists, func, inspect, or_, select, update
 from sqlalchemy.orm import DeclarativeBase
 
 from ..database.connection import SessionLocal
@@ -86,7 +86,7 @@ class DoctorNotificationService:
         self.sessions = session_factory or SessionLocal
         self.person = person_loader or _person
 
-    def _predicate(self, actor):
+    def _predicate(self, actor, session):
         legacy = or_(
             Notification.source_key.is_(None), Notification.source_key != SOURCE
         )
@@ -115,6 +115,33 @@ class DoctorNotificationService:
                     ),
                 )
             )
+            # 沟通表属于独立历史前置；缺表时只拒绝此类消息，不影响既有整改/申诉。
+            communication = False
+            connection = session.connection()
+            schema = None if connection.dialect.name == "sqlite" else "qc"
+            if inspect(connection).has_table("qc_case_communications", schema=schema):
+                from ..database.models.case_communication import CaseCommunication
+
+                communication = exists(
+                    select(CaseCommunication.id).where(
+                        CaseCommunication.id == Notification.related_id,
+                        CaseCommunication.recipient_id == actor["id"],
+                        CaseCommunication.department == actor["department"],
+                        CaseCommunication.notification_id == Notification.id,
+                        CaseCommunication.scene.in_(("running", "final")),
+                        *(
+                            func.trim(getattr(CaseCommunication, key)) != ""
+                            for key in (
+                                "patient_id", "visit_id", "root_job_id", "envelope_id",
+                                "rule_set_key", "rule_set_version",
+                            )
+                        ),
+                        *(
+                            getattr(CaseCommunication, key) == getattr(Notification, key)
+                            for key in identity
+                        ),
+                    )
+                )
             modern = and_(
                 Notification.source_key == SOURCE,
                 Notification.identity_version == 1,
@@ -122,6 +149,7 @@ class DoctorNotificationService:
                 or_(
                     and_(Notification.related_type == "rectification", task),
                     and_(Notification.related_type == "modern_appeal", appeal),
+                    and_(Notification.related_type == "case_communication", communication),
                 ),
             )
         return and_(Notification.recipient_id == actor["id"], or_(legacy, modern))
@@ -147,7 +175,7 @@ class DoctorNotificationService:
     def list(self, actor_id, *, type=None, is_read=None, page=1, page_size=20):
         with self.sessions() as session:
             actor = self.person(session, actor_id)
-            predicate = self._predicate(actor)
+            predicate = self._predicate(actor, session)
             statement = select(Notification).where(predicate)
             if type:
                 statement = statement.where(Notification.type == type)
@@ -180,7 +208,7 @@ class DoctorNotificationService:
             rows = session.scalars(
                 select(Notification)
                 .where(
-                    self._predicate(actor),
+                    self._predicate(actor, session),
                     Notification.created_at >= start,
                     Notification.created_at < end,
                 )
@@ -192,7 +220,7 @@ class DoctorNotificationService:
     def mark_read(self, actor_id, notification_id=None):
         with self.sessions() as session, session.begin():
             actor = self.person(session, actor_id)
-            statement = update(Notification).where(self._predicate(actor))
+            statement = update(Notification).where(self._predicate(actor, session))
             if notification_id:
                 statement = statement.where(Notification.id == notification_id)
             else:

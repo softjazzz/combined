@@ -27,6 +27,15 @@ function loadPage(loader: unknown): Promise<{ default: unknown }> {
 }
 
 describe('业务线四报表定向适配', () => {
+  it('医生病历沟通保留V5外壳，不跳旧页面且不开放管理角色', async () => {
+    const path = `${B}/case-communications`
+    const resolved = router.resolve(path)
+    expect(resolved.matched[0].path).toBe(B)
+    expect(resolved.meta.requiresAuth).toBe(true)
+    expect(resolved.meta.permission).toEqual(['doctor'])
+    const route = router.getRoutes().find((route) => route.path === path)!
+    expect(await loadPage(route.components?.default)).toHaveProperty('default')
+  })
   it('整改待办保留V5外壳，医生和质控可访问，同步管理员不可访问', () => {
     const path = `${B}/feedback`
     const resolved = router.resolve(path)

@@ -275,3 +275,60 @@ def test_overview_uses_owned_scope_and_exact_day(setup):
         )
         == []
     )
+
+
+def test_missing_communication_table_does_not_expand_or_disable_existing_messages(setup):
+    sessions, _, _, service, _ = setup
+    with sessions.begin() as session:
+        session.add(Notification(
+            id="missing-communication", type="case_communication", title="无来源消息",
+            source_key=SOURCE, identity_version=1, institute_id="A", patient_id="P", visit_id="V",
+            recipient_id="doc", related_type="case_communication", related_id="missing",
+            is_read=False, created_at=datetime.utcnow(),
+        ))
+    assert service.list("doc")["total"] == 2
+    with pytest.raises(RectificationError):
+        service.mark_read("doc", "missing-communication")
+
+
+@pytest.mark.parametrize("tamper", [None, "recipient", "department", "identity", "receipt"])
+def test_communication_target_rechecks_frozen_owner_before_read_and_count(setup, tamper):
+    from app.database.models.case_communication import CaseCommunication
+
+    sessions, _, source, service, _ = setup
+    with sessions() as session:
+        engine = session.get_bind()
+    CaseCommunication.__table__.create(engine)
+    with sessions.begin() as session:
+        communication = CaseCommunication(
+            id="communication", **{key: value for key, value in source.items() if key not in {"target_kind", "target_id"}},
+            department="内科", actor_id="qc", recipient_id="doc", action="opinion",
+            content="合成病历级意见", request_id="request", notification_id="receipt", created_at=datetime.utcnow(),
+        )
+        if tamper == "recipient":
+            communication.recipient_id = "other"
+        elif tamper == "department":
+            communication.department = "外科"
+        elif tamper == "identity":
+            communication.patient_id = "other-patient"
+        elif tamper == "receipt":
+            communication.notification_id = "wrong-notice"
+        session.add(communication)
+        session.add(Notification(
+            id="receipt", type="case_communication", title="质控意见", record_id="feedback:case_communication:communication",
+            source_key=SOURCE, identity_version=1, institute_id="A", patient_id="P", visit_id="V",
+            recipient_id="doc", related_type="case_communication", related_id="communication",
+            is_read=False, created_at=datetime.utcnow(),
+        ))
+    notices = service.list("doc")
+    if tamper:
+        assert notices["total"] == notices["unread_count"] == 2
+        with pytest.raises(RectificationError):
+            service.mark_read("doc", "receipt")
+    else:
+        assert notices["total"] == notices["unread_count"] == 3
+        row = next(item for item in notices["items"] if item["id"] == "receipt")
+        assert row["interaction_target"] == {"kind": "case_communication", "id": "communication"}
+        service.mark_read("doc", "receipt")
+        with sessions() as session:
+            assert session.get(CaseCommunication, "communication").content == "合成病历级意见"

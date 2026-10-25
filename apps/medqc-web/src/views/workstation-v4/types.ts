@@ -181,7 +181,7 @@ export interface NotificationVM {
 }
 
 export interface DoctorInteractionTarget {
-  kind: 'rectification' | 'modern_appeal'
+  kind: 'rectification' | 'modern_appeal' | 'case_communication'
   id: string
 }
 

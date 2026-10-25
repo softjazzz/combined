@@ -31,6 +31,9 @@
           </button>
         </div>
         <div v-if="reportTab === 'staff'" class="head-actions">
+          <button v-if="canReviewRecords" class="mq-btn" type="button" @click="openReviewHistory()">
+            <MqIcon name="task" :size="16" />病历审核
+          </button>
           <button v-if="canReviewAppeals" class="mq-btn" type="button" @click="openAppealHistory()">
             <MqIcon name="task" :size="16" />申诉处理
           </button>
@@ -54,6 +57,13 @@
       :open="appealOpen"
       :appeal-id="appealId"
       @close="appealOpen = false"
+      @changed="loadReport"
+    />
+    <RecordReviewWorkflowDrawer
+      v-if="reviewOpen"
+      :open="reviewOpen"
+      :review-id="reviewId"
+      @close="reviewOpen = false"
       @changed="loadReport"
     />
     <div v-show="reportTab === 'staff'" class="staff-body">
@@ -357,6 +367,14 @@
                     <td>
                       {{ eventTypeText(item.event_type) }}
                       <button
+                        v-if="item.event_type === 'record_review' && canReviewRecords"
+                        class="mq-btn"
+                        type="button"
+                        @click="openReviewHistory(item.event_id)"
+                      >
+                        查看审核
+                      </button>
+                      <button
                         v-if="item.appeal_id && canReviewAppeals"
                         class="mq-btn"
                         type="button"
@@ -432,6 +450,7 @@ import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import ManualQualityReportPanel from './ManualQualityReportPanel.vue'
 import ModernAppealWorkflowDrawer from '@/components/qc/ModernAppealWorkflowDrawer.vue'
+import RecordReviewWorkflowDrawer from '@/components/qc/RecordReviewWorkflowDrawer.vue'
 type ReportTab = 'staff' | 'manual'
 const reportTabs: Array<{ value: ReportTab; label: string }> = [
   { value: 'staff', label: '质控员工作分析' },
@@ -482,6 +501,15 @@ const router = useRouter()
 const authStore = useAuthStore()
 const appealOpen = ref(false)
 const appealId = ref<string>()
+const reviewOpen = ref(false)
+const reviewId = ref<string>()
+function openReviewHistory(id?: string) {
+  reviewId.value = id
+  reviewOpen.value = true
+}
+const canReviewRecords = computed(() =>
+  authStore.userRoles.some((role) => ['admin', 'qc_manager', 'qc_staff'].includes(role)),
+)
 function openAppealHistory(id?: string) {
   appealId.value = id
   appealOpen.value = true
@@ -855,6 +883,8 @@ watch(
   [scene, authKey],
   ([nextScene, nextAuth], previous) => {
     if (previous?.[1] !== undefined && previous[1] !== nextAuth) {
+      reviewOpen.value = false
+      reviewId.value = undefined
       appealOpen.value = false
       appealId.value = undefined
     }

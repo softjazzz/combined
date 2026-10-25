@@ -13,6 +13,12 @@
       <button v-if="!scope && appealAllowed" class="mq-btn" type="button" @click="openAppeals()">
         <MqIcon name="task" :size="16" />申诉处理
       </button>
+      <button v-if="!scope && manager" class="mq-btn" type="button" @click="reviewOpen = true">
+        <MqIcon name="task" :size="16" />病历审核
+      </button>
+      <router-link v-if="!scope && auth.hasRole('doctor')" class="mq-btn" to="/workstation-v5/case-communications">
+        <MqIcon name="task" :size="16" />病历沟通
+      </router-link>
       <router-link
         v-if="!scope && auth.hasRole('doctor')"
         class="mq-btn"
@@ -78,6 +84,12 @@
       :source="appealSource"
       :appeal-id="appealId"
       @close="appealOpen = false"
+      @changed="emit('changed')"
+    />
+    <RecordReviewWorkflowDrawer
+      v-if="!scope && manager && reviewOpen"
+      :open="reviewOpen"
+      @close="reviewOpen = false"
       @changed="emit('changed')"
     />
     <a-drawer
@@ -222,6 +234,7 @@ import { useRoute } from 'vue-router'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
 import ModernAppealWorkflowDrawer from '@/components/qc/ModernAppealWorkflowDrawer.vue'
+import RecordReviewWorkflowDrawer from '@/components/qc/RecordReviewWorkflowDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   actOnRectification,
@@ -241,6 +254,7 @@ const emit = defineEmits<{ changed: [] }>()
 const auth = useAuthStore()
 const route = useRoute()
 const manualOpen = ref(false)
+const reviewOpen = ref(false)
 const appealOpen = ref(false),
   appealSource = ref<Rectification | null>(null)
 const appealId = ref<string>()
@@ -459,6 +473,7 @@ async function submit(action: RectificationAction, urgeEventId?: string) {
   }
 }
 function reset() {
+  reviewOpen.value = false
   appealId.value = undefined
   appealOpen.value = false
   appealSource.value = null

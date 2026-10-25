@@ -65,6 +65,11 @@ function make(props = {}) {
           props: ['open', 'appealId'],
           template: '<div data-testid="appeal-link" :data-appeal-id="appealId"/>',
         },
+        RecordReviewWorkflowDrawer: {
+          props: ['open'],
+          emits: ['close', 'changed'],
+          template: '<div v-if="open" data-testid="record-review-entry"/>',
+        },
         'a-button': { template: '<button><slot/></button>' },
         'a-alert': { props: ['message'], template: '<p>{{message}}</p>' },
         'a-spin': { template: '<div><slot/></div>' },
@@ -98,6 +103,25 @@ beforeEach(() => {
   mocks.act.mockResolvedValue({ ...task, status: 'submitted' })
 })
 describe('站内整改待办', () => {
+  it('病历审核在质控待办内打开，不给医生或嵌入缺陷开放审核', async () => {
+    const doctor = make()
+    await flushPromises()
+    expect(doctor.text()).toContain('病历沟通')
+    expect(doctor.text()).not.toContain('病历审核')
+    doctor.unmount()
+    mocks.roles = ['qc_staff']
+    const staff = make()
+    await flushPromises()
+    await staff
+      .findAll('button')
+      .find((button) => button.text() === '病历审核')!
+      .trigger('click')
+    expect(staff.find('[data-testid="record-review-entry"]').exists()).toBe(true)
+    staff.unmount()
+    const embedded = make({ scope: task })
+    expect(embedded.text()).not.toContain('病历审核')
+    embedded.unmount()
+  })
   it('消息按精确整改ID打开，同页切换消息重新核对对象', async () => {
     mocks.route.query = { rectification_id: 'r1' }
     const wrapper = make()

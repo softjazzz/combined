@@ -194,7 +194,12 @@ def _batch_case_decisions(
                 ).in_(chunk),
                 QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
             )
-            .order_by(QCRecordReview.created_at.desc(), QCRecordReview.id.desc())
+            .order_by(QCRecordReview.created_at.desc(), QCRecordReview.id.desc()),
+            execution_options=(
+                {"schema_translate_map": {None: "qc"}}
+                if session.get_bind().dialect.name == "postgresql"
+                else {}
+            ),
         ).all():
             case = (row.institute_id, row.patient_id, row.visit_id)
             if case in anchors:
