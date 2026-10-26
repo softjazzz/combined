@@ -108,8 +108,8 @@ async def login(request: Request, login_data: LoginRequest):
         user = updated_user
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    # 兼容迁移入口：当前仍保留 sub=email，后续可切换到 sub=user_id。
-    token_sub = str(user.get("email") or "")
+    # 旧账号沿用邮箱 subject；无邮箱注册账号使用已有持久 ID 解析链路。
+    token_sub = str(user.get("email") or user["id"])
     access_token = create_access_token(
         data={"sub": token_sub, "uid": user.get("id")},
         expires_delta=access_token_expires,
@@ -135,6 +135,13 @@ async def register(request: Request, user_data: RegistrationCreate):
     enforce_rate_limit(request, bucket="registration_submit", max_requests=10, window_seconds=60)
     result = await _registration_call("submit", user_data.model_dump())
     return _auth_shell(request, result, message="注册申请已保存，请等待管理员审批")
+
+
+@router.get("/registration-departments")
+async def registration_departments(request: Request):
+    enforce_rate_limit(request, bucket="registration_departments", max_requests=60, window_seconds=60)
+    result = await _registration_call("departments")
+    return _auth_shell(request, result)
 
 
 @router.post("/registration-status")

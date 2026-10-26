@@ -140,6 +140,89 @@ def status(client, **changes):
     )
 
 
+def seed_department_catalog(sessions, monkeypatch):
+    from app.services import registration_departments
+
+    monkeypatch.setattr(registration_departments, "clinical_read_schema", lambda: None)
+    table = sa.Table(
+        "discharge_record", sa.MetaData(),
+        sa.Column("institute_id", sa.String), sa.Column("dept_name", sa.String),
+        sa.Column("is_deleted", sa.String),
+    )
+    table.create(sessions.kw["bind"])
+    with sessions.begin() as session:
+        session.execute(table.insert(), [
+            {"institute_id": "A", "dept_name": "内科", "is_deleted": "0"},
+            {"institute_id": "A", "dept_name": " 内科 ", "is_deleted": "0"},
+            {"institute_id": "B", "dept_name": "内科", "is_deleted": "0"},
+            {"institute_id": "A", "dept_name": "已删除科室", "is_deleted": "1"},
+            {"institute_id": "A", "dept_name": "-", "is_deleted": "0"},
+            {"institute_id": "", "dept_name": "无机构科室", "is_deleted": "0"},
+        ])
+
+
+def test_public_department_catalog_and_no_email_registration_real_login(registration, monkeypatch):
+    client, sessions, _, _, _ = registration
+    seed_department_catalog(sessions, monkeypatch)
+    response = client.get("/api/v1/auth/registration-departments")
+    assert response.status_code == 200, response.text
+    options = response.json()["data"]["items"]
+    assert len(options) == 2
+    assert {option["label"] for option in options} == {"内科（A）", "内科（B）"}
+    assert all(set(option) == {"key", "name", "label"} for option in options)
+    data = application()
+    for field in ("email", "institute_id", "department"):
+        data.pop(field)
+    data["department_key"] = next(option["key"] for option in options if option["label"] == "内科（A）")
+    response = client.post("/api/v1/auth/register", json=data)
+    assert response.status_code == 200, response.text
+    row = response.json()["data"]
+    assert row["requested_institute_id"] == "A"
+    assert row["requested_department"] == "内科"
+    assert client.post("/api/v1/auth/login", json={"account": data["username"], "password": data["password"]}).status_code == 401
+    assert review(client, row).status_code == 200
+    with sessions() as session:
+        assert session.scalar(sa.select(SysUser.email).where(SysUser.id == row["user_id"])) is None
+    login = client.post("/api/v1/auth/login", json={"account": data["username"], "password": data["password"]})
+    assert login.status_code == 200, login.text
+    tokens = login.json()["data"]
+    profile = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {tokens['access_token']}"})
+    assert profile.status_code == 200 and profile.json()["data"]["id"] == row["user_id"]
+    assert client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}).status_code == 200
+
+
+def test_department_selection_rejects_stale_key_and_conflicting_institution(registration, monkeypatch):
+    client, sessions, _, _, _ = registration
+    seed_department_catalog(sessions, monkeypatch)
+    data = {"username": "doctor_empty", "display_name": "合成申请", "password": "synthetic-applicant-only!", "department_key": "0" * 64}
+    assert client.post("/api/v1/auth/register", json=data).status_code == 409
+    assert client.post("/api/v1/auth/register", json=data | {"institute_id": "B"}).status_code == 422
+    with sessions() as session:
+        assert session.scalar(sa.select(sa.func.count()).select_from(SysUser).where(SysUser.username == data["username"])) == 0
+
+
+def test_no_email_rejected_application_can_resubmit_without_identity_change(registration, monkeypatch):
+    client, sessions, _, _, _ = registration
+    seed_department_catalog(sessions, monkeypatch)
+    options = client.get("/api/v1/auth/registration-departments").json()["data"]["items"]
+    data = {"username": "doctor_without_email", "display_name": "合成申请", "password": "synthetic-applicant-only!", "department_key": options[0]["key"]}
+    row = client.post("/api/v1/auth/register", json=data).json()["data"]
+    assert review(client, row, decision="reject", institute_id=None, department=None, roles=None).status_code == 200
+    retry = client.post("/api/v1/auth/register", json=data)
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["data"]["user_id"] == row["user_id"]
+
+
+def test_empty_department_catalog_reports_unavailable(registration, monkeypatch):
+    from app.services import registration_departments
+
+    client, _, _, _, _ = registration
+    monkeypatch.setattr(registration_departments, "clinical_read_schema", lambda: None)
+    response = client.get("/api/v1/auth/registration-departments")
+    assert response.status_code == 503
+    assert "尚无可用科室" in response.json()["detail"]
+
+
 def test_register_pending_cannot_login_refresh_or_use_old_token(
     registration, monkeypatch
 ):

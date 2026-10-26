@@ -25,16 +25,17 @@ export interface RegistrationResult {
 }
 export interface RegistrationApplication {
   username: string
-  email: string
+  email?: string
   display_name: string
-  institute_id: string
-  department: string
+  institute_id?: string
+  department?: string
+  department_key?: string
   phone?: string
   password: string
 }
 export interface RegistrationItem extends RegistrationResult {
   username: string
-  email: string
+  email: string | null
   display_name: string
 }
 export interface RegistrationDetail extends RegistrationItem {
@@ -77,6 +78,16 @@ async function request<T>(config: Parameters<typeof ApiService.requestRaw>[0]): 
 }
 export const submitRegistration = (data: RegistrationApplication) =>
   request<RegistrationResult>({ url: '/api/v1/auth/register', method: 'POST', data })
+export interface RegistrationDepartment {
+  key: string
+  name: string
+  label: string
+}
+export const getRegistrationDepartments = () =>
+  request<{ items: RegistrationDepartment[] }>({
+    url: '/api/v1/auth/registration-departments',
+    method: 'GET',
+  })
 export const queryRegistrationStatus = (account: string, password: string) =>
   request<RegistrationResult>({
     url: '/api/v1/auth/registration-status',
