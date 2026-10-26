@@ -9,6 +9,7 @@ from sqlalchemy import text
 from ...database.connection import engine
 from ...database.models.cdm import MedicalRecordFrontpage, MrCost, MrSurgery
 from ..clinical_read import clinical_table_sql
+from ..validation_material_source import is_material_copy, material_source_schema
 
 
 _HIDDEN = frozenset({
@@ -56,11 +57,15 @@ def load_frontpage_document(*, institute_id: str, patient_id: str, visit_id: str
     if not all(str(v).strip() for v in identity.values()):
         raise ValueError("missing_frontpage_identity")
     tables: dict[str, list[dict[str, Any]]] = {}
+    copy_schema = None
+    if is_material_copy(patient_id, visit_id):
+        from .assembly import _default_source_schema
+        copy_schema = material_source_schema(default_schema=_default_source_schema(), **identity)
     # 全字段仅用于只读展示，不能扩大公共组装器的规则输入白名单。
     with engine.connect() as connection:
         for table in ("mr", "mr_diagnosis", "mr_surgery", "mr_cost"):
             records = connection.execute(text(
-                f"SELECT * FROM {clinical_table_sql(table)} "
+                f"SELECT * FROM {f'{copy_schema}.{table}' if copy_schema else clinical_table_sql(table)} "
                 "WHERE institute_id=:institute_id AND patient_id=:patient_id AND visit_id=:visit_id "
                 "LIMIT 1001"
             ), identity).mappings().all()

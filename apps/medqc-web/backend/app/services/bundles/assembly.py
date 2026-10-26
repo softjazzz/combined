@@ -481,6 +481,9 @@ def _build_material_snapshot(
     visit_id: str,
     table_limits: dict[str, int],
 ) -> _MaterialSnapshot:
+    from ..validation_material_source import material_source_schema
+    source_schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=source_schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     snapshot = _MaterialSnapshot(
         key=(source_schema, institute_id, patient_id, visit_id),
     )
@@ -766,6 +769,9 @@ def _select_records(
     visit_id: str,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
+    from ..validation_material_source import material_source_schema
+    schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     columns = set(_get_table_columns(schema, table))
     if not columns:
         return []
@@ -2208,6 +2214,9 @@ def _assemble_scene_bundle(
     policy_version: str = "",
     material_snapshot: _MaterialSnapshot | None = None,
 ) -> dict[str, Any]:
+    from ..validation_material_source import material_source_schema
+    source_schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=source_schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; bundle assembly unavailable.")
     if scene not in _SCENE_DOC_PRIORITY:
@@ -2636,7 +2645,9 @@ def assemble_domain_bundle(
     if execution_domain not in _DOMAIN_DOC_PRIORITY:
         raise ValueError(f"Unsupported execution domain: {execution_domain}")
 
-    effective_schema = source_schema or _default_source_schema()
+    from ..validation_material_source import material_source_schema
+    effective_schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=source_schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     priority = _DOMAIN_DOC_PRIORITY[execution_domain]
     docs: dict[str, list[dict[str, Any]]] = {}
     domain_projection_per_source: dict[str, dict[str, Any]] = {}

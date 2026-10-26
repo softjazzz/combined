@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from app.services.bundles import assembly as bundle_assembly
+from app.services.validation_material_source import material_source_schema
 
 from .surgery_procedure_catalog import catalog_surgery_state
 
@@ -33,6 +34,15 @@ _PERFORMED_TIME_OFFSETS: Mapping[str, timezone] = MappingProxyType(
     }
 )
 _HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
+
+
+def _case_source_schema(*, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None) -> str:
+    try:
+        return material_source_schema(default_schema=bundle_assembly._default_source_schema(),
+            requested_schema=source_schema, institute_id=institute_id, patient_id=patient_id,
+            visit_id=visit_id, strict=True)
+    except ValueError:
+        raise SourceEvidenceUnavailable() from None
 SURGERY_TIME_FIELDS = (
     "surgery_begin_time",
     "surgery_begin_datetime",
@@ -930,9 +940,8 @@ def read_luxian_0609_course_round_timeline(
     coordinates = (institute_id, patient_id, visit_id)
     if not all(isinstance(value, str) and value.strip() for value in coordinates):
         raise SourceEvidenceUnavailable()
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1116,9 +1125,8 @@ def has_luxian_0609_current_visit_unstable_order(
 ) -> bool:
     """判断本次就诊是否下达过病危或病重医嘱，不返回医嘱原文。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1165,9 +1173,8 @@ def read_luxian_0609_severity_order_rows(
 ) -> SnapshotSourceRows:
     """读取病重/病危医嘱类别及生命周期时间，不返回医嘱原文。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1320,9 +1327,8 @@ def read_luxian_0609_exam_lab_order_rows(
 ) -> SnapshotSourceRows:
     """只读取当前住院 CT/MRI/培养/药敏医嘱，避免被全量医嘱截断。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1397,9 +1403,8 @@ def read_luxian_0609_rescue_order_rows(
 ) -> SnapshotSourceRows:
     """数据库侧只读取明确抢救医嘱及最小状态，不受普通医嘱数量影响。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1493,9 +1498,8 @@ def read_luxian_0609_discharge_horizon_rows(
 ) -> SnapshotSourceRows:
     """读取本次住院的权威出院时间，登记表缺行或出院时间为空时回退病案首页。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1581,9 +1585,8 @@ def read_luxian_0609_runtime_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:
     """显式、有界、参数化的读侧查询；调用时才访问数据库。"""
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1637,9 +1640,8 @@ def read_luxian_0609_native_source_rows(
     approved_fields = _NATIVE_SOURCE_FIELDS.get(str(source_key or "").strip())
     if approved_fields is None:
         raise SourceEvidenceUnavailable()
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1783,9 +1785,8 @@ def read_luxian_0609_snapshot_source_rows(
     approved_fields = _SNAPSHOT_SOURCE_FIELDS.get(normalized_source)
     if approved_fields is None:
         raise SourceEvidenceUnavailable()
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()

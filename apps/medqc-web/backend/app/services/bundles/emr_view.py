@@ -46,6 +46,7 @@ _GROUP_DEFS: tuple[dict[str, str], ...] = (
     {"key": "surgery", "label": "手术相关单据"},
     {"key": "terminal", "label": "出院记录"},
     {"key": "orders", "label": "医嘱"},
+    {"key": "pdf_supplement", "label": "PDF补充待核对"},
 )
 
 _DOC_TYPE_LABELS: dict[str, str] = {
@@ -849,6 +850,8 @@ def build_documents_tree(documents: list[dict[str, Any]]) -> list[dict[str, Any]
     for group in _GROUP_DEFS:
         key = group["key"]
         children = by_group.get(key, [])
+        if key == "pdf_supplement" and not children:
+            continue
         tree.append(
             {
                 "key": key,

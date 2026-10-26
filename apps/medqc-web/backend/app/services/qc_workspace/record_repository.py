@@ -153,8 +153,13 @@ class WorkspaceListResult:
 class RecordRepository:
     """工作区病历池的唯一只读查询与正文水合实现。"""
 
-    def __init__(self, *, session_factory: Callable[[], Session]) -> None:
+    def __init__(self, *, session_factory: Callable[[], Session], _material_schema: str | None = None) -> None:
         self._session_factory = session_factory
+        if _material_schema:
+            from ..validation_material_source import MATERIAL_SCHEMA
+            if not MATERIAL_SCHEMA.fullmatch(_material_schema):
+                raise ValueError("invalid_material_repository_schema")
+        self._material_schema = _material_schema
 
     def _open_session(self) -> Session:
         """只在本仓库会话绑定CDM来源，避免public影子表遮挡已迁移的业务表。"""
@@ -162,10 +167,10 @@ class RecordRepository:
 
         session = self._session_factory()
         try:
-            if _default_source_schema() == "cdm":
+            if self._material_schema or _default_source_schema() == "cdm":
                 # 与同步、Bundle和051的owner一致；不改连接池search_path或ORM元数据。
                 # 只影响本次会话的ORM SQL，单模式/SQLite保留原行为；失败不回退public。
-                session.connection().execution_options(schema_translate_map={None: "cdm"})
+                session.connection().execution_options(schema_translate_map={None: self._material_schema or "cdm"})
             return session
         except BaseException:
             session.close()
@@ -837,6 +842,25 @@ class RecordRepository:
         sync_scope: Optional[str] = None,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
+        from ..validation_material_source import is_material_copy, material_source_schema
+        if not self._material_schema and record_refs:
+            refs = normalize_case_refs(record_refs)
+            if any(is_material_copy(ref.patient_id, ref.visit_id) for ref in refs):
+                groups: dict[str | None, list[CaseRef]] = {}
+                for ref in refs:
+                    schema = (material_source_schema(default_schema="cdm", institute_id=ref.institute_id,
+                        patient_id=ref.patient_id, visit_id=ref.visit_id)
+                        if is_material_copy(ref.patient_id, ref.visit_id) else None)
+                    groups.setdefault(schema, []).append(ref)
+                collected = []
+                for schema, group in groups.items():
+                    repository = RecordRepository(session_factory=self._session_factory, _material_schema=schema)
+                    collected.extend(repository.collect_records(scope=scope, department=department, doctor=doctor,
+                        date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
+                        record_refs=group, sync_scope=sync_scope, _private_identity_collector=_private_identity_collector))
+                return collected
+        if record_ids and any(str(value).startswith("pdfv_") for value in record_ids):
+            raise ValueError("material_copy_requires_complete_case_refs")
         session = self._open_session()
         try:
             query = self._build_records_query(
@@ -985,6 +1009,20 @@ class RecordRepository:
         self,
         records: Sequence[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
+        from ..validation_material_source import is_material_copy, material_source_schema
+        if not self._material_schema and any(is_material_copy(str(item.get("patient_id") or ""),
+                str(item.get("visit_id") or "")) for item in records):
+            hydrated = []
+            for item in records:
+                ref = CaseRef.from_mapping(item)
+                if not all(ref):
+                    raise ValueError("material_copy_requires_complete_case_refs")
+                schema = (material_source_schema(default_schema="cdm", institute_id=ref.institute_id,
+                    patient_id=ref.patient_id, visit_id=ref.visit_id)
+                    if is_material_copy(ref.patient_id, ref.visit_id) else None)
+                repository = RecordRepository(session_factory=self._session_factory, _material_schema=schema)
+                hydrated.extend(repository.hydrate_records_with_medical_text([item]))
+            return hydrated
         visit_ids = {
             _safe_text(item.get("visit_id") or item.get("record_id"))
             for item in records

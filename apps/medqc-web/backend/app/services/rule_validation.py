@@ -631,7 +631,9 @@ REAL_SOURCE_COPY_TYPE = "customer_source_editable_copy"
 def _source_kind(raw: dict) -> str:
     """只有从真实病历复制的测试病例算真实副本；测试病例之间的复制、模板/手工构建都是合成病例。"""
     source = raw.get("source_record") or {}
-    return "real_copy" if source.get("type") == REAL_SOURCE_COPY_TYPE else "synthetic"
+    return "real_copy" if source.get("type") in {
+        REAL_SOURCE_COPY_TYPE, "authorized_pdf_material_copy",
+    } else "synthetic"
 
 
 def _item_ref(item: dict) -> CaseRef | None:

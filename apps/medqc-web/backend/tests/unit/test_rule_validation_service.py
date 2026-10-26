@@ -288,6 +288,7 @@ def test_coverage_splits_synthetic_and_real_copy(make_service):
 def test_only_copies_of_real_records_count_as_real():
     from app.services.rule_validation import _source_kind
     assert _source_kind({"source_record": {"type": "customer_source_editable_copy"}}) == "real_copy"
+    assert _source_kind({"source_record": {"type": "authorized_pdf_material_copy"}}) == "real_copy"
     # 测试病例之间复制仍是合成病例，不能冒充客户真实病例验收
     assert _source_kind({"source_record": {"type": "rule_validation_case_copy"}}) == "synthetic"
     assert _source_kind({}) == "synthetic"
