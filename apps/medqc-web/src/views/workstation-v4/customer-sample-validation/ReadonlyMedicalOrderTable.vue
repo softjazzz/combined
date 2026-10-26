@@ -35,6 +35,8 @@
         <thead>
           <tr>
             <th title="优先显示计划开始时间；未返回时显示开嘱时间">开始时间</th>
+            <th title="北京时间；计划结束不代表已实际停止">计划结束时间</th>
+            <th>实际停止时间</th>
             <th>医嘱类型</th>
             <th>医嘱项目</th>
             <th>医嘱号</th>
@@ -43,8 +45,6 @@
             <th>频次</th>
             <th>用法</th>
             <th>数量</th>
-            <th title="北京时间；计划结束不代表已实际停止">计划结束时间</th>
-            <th>实际停止时间</th>
             <th>医嘱状态</th>
             <th>下达医生</th>
           </tr>
@@ -57,6 +57,8 @@
             @click="emit('select', row.document.key)"
           >
             <td>{{ row.startTime }}</td>
+            <td>{{ row.plannedEndTime || '未返回' }}</td>
+            <td>{{ row.stopTime || '未返回' }}</td>
             <td>{{ row.orderType }}</td>
             <td :title="row.item">
               {{ row.item }}
@@ -79,8 +81,6 @@
             <td :title="row.quantity">
               {{ row.quantity || '-' }}
             </td>
-            <td>{{ row.plannedEndTime || '未返回' }}</td>
-            <td>{{ row.stopTime || '未返回' }}</td>
             <td>{{ row.status }}</td>
             <td :title="row.prescribedDoctor">
               {{ row.prescribedDoctor || '-' }}
@@ -268,32 +268,32 @@ watch(
 
 .editable-copy-order-table th:nth-child(2),
 .editable-copy-order-table td:nth-child(2) {
-  width: 88px;
+  width: 160px;
 }
 
 .editable-copy-order-table th:nth-child(3),
 .editable-copy-order-table td:nth-child(3) {
-  width: 240px;
+  width: 160px;
 }
 
 .editable-copy-order-table th:nth-child(4),
 .editable-copy-order-table td:nth-child(4) {
-  width: 160px;
+  width: 88px;
 }
 
 .editable-copy-order-table th:nth-child(5),
 .editable-copy-order-table td:nth-child(5) {
-  width: 130px;
+  width: 240px;
 }
 
 .editable-copy-order-table th:nth-child(6),
 .editable-copy-order-table td:nth-child(6) {
-  width: 100px;
+  width: 160px;
 }
 
 .editable-copy-order-table th:nth-child(7),
 .editable-copy-order-table td:nth-child(7) {
-  width: 100px;
+  width: 130px;
 }
 
 .editable-copy-order-table th:nth-child(8),
@@ -303,17 +303,17 @@ watch(
 
 .editable-copy-order-table th:nth-child(9),
 .editable-copy-order-table td:nth-child(9) {
-  width: 90px;
+  width: 100px;
 }
 
 .editable-copy-order-table th:nth-child(10),
 .editable-copy-order-table td:nth-child(10) {
-  width: 160px;
+  width: 100px;
 }
 
 .editable-copy-order-table th:nth-child(11),
 .editable-copy-order-table td:nth-child(11) {
-  width: 160px;
+  width: 90px;
 }
 
 .editable-copy-order-table th:nth-child(12),
