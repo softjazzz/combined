@@ -337,7 +337,7 @@ const roleOptions: Array<{ value: AccountRole; label: string }> = [
   { value: 'admin', label: '系统管理员' },
 ]
 const roleName = (role: string) =>
-  roleOptions.find((item) => item.value === role)?.label || '未知角色'
+  role === 'sync_admin' ? '超级管理员' : roleOptions.find((item) => item.value === role)?.label || '未知角色'
 const editableRoles = (roles: string[]) =>
   roles.every((role) => roleOptions.some((item) => item.value === role))
 const formatTime = (value: string | null) => {

@@ -73,6 +73,20 @@ beforeEach(() => {
 })
 
 describe('V5 持久账号管理', () => {
+  it('超级管理员角色正确显示，仍由专用权限系统维护', async () => {
+    actor.roles = ['sync_admin', 'admin']
+    api.list.mockResolvedValue({
+      ...payload,
+      managed_institute_id: null,
+      items: [{ ...row, display_name: '超级管理员验收', roles: ['sync_admin'] }],
+    })
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.text()).toContain('超级管理员')
+    expect(wrapper.text()).not.toContain('未知角色')
+    expect(wrapper.get('[aria-label="编辑超级管理员验收"]').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
   it('无邮箱注册用户可以显示和编辑，不要求补填邮箱', async () => {
     api.list.mockResolvedValue({ ...payload, items: [{ ...row, email: null }] })
     const wrapper = make()
