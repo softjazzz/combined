@@ -420,6 +420,7 @@ function openEdit(row: ManagedAccount) {
   if (!editableRoles(row.roles)) return
   editing.value = row
   Object.assign(form, emptyForm(), row, {
+    email: row.email || '',
     roles: [...row.roles],
     institute_id: row.institute_id || '',
     department: row.department || '',

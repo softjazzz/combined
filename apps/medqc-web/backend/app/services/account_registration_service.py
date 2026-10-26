@@ -349,7 +349,7 @@ class AccountRegistrationService(AccountManagementService):
             raise RectificationError("申请筛选无效")
         with self.sessions() as session, session.begin():
             users, registrations, _ = self._tables(session)
-            actor = self._admin(session, users, actor_id)
+            actor = self._admin(session, users, actor_id, for_update=False)
             statement = (
                 sa.select(
                     registrations, users.c.username, users.c.email, users.c.display_name
@@ -385,7 +385,7 @@ class AccountRegistrationService(AccountManagementService):
     def detail(self, actor_id, user_id):
         with self.sessions() as session, session.begin():
             users, registrations, events = self._tables(session)
-            actor = self._admin(session, users, actor_id)
+            actor = self._admin(session, users, actor_id, for_update=False)
             row = (
                 session.execute(
                     sa.select(

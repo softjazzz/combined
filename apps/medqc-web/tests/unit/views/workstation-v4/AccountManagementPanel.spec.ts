@@ -73,6 +73,18 @@ beforeEach(() => {
 })
 
 describe('V5 持久账号管理', () => {
+  it('无邮箱注册用户可以显示和编辑，不要求补填邮箱', async () => {
+    api.list.mockResolvedValue({ ...payload, items: [{ ...row, email: null }] })
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.text()).toContain('合成医生')
+    await wrapper.get('[aria-label="编辑合成医生"]').trigger('click')
+    expect((wrapper.get('input[aria-label="邮箱"]').element as HTMLInputElement).value).toBe('')
+    await wrapper.get('.accounts-editor').trigger('submit')
+    await flushPromises()
+    expect(api.update).toHaveBeenCalledWith('doc', expect.not.objectContaining({ email: expect.anything() }))
+    wrapper.unmount()
+  })
   it('超级管理员的全局DTO不锁机构输入，可创建其他机构账号', async () => {
     actor.roles = ['sync_admin', 'admin']
     api.list.mockResolvedValue({ ...structuredClone(payload), managed_institute_id: null })

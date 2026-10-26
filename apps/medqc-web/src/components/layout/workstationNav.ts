@@ -312,6 +312,13 @@ export const WORKSTATION_NAV: NavGroup[] = [
         iconName: 'settings',
         match: matchPrefix(p('/system-config')),
       },
+      {
+        key: 'user-management',
+        label: '用户管理',
+        to: { path: p('/users') },
+        iconName: 'settings',
+        match: matchPrefix(p('/users')),
+      },
     ],
   },
 ]

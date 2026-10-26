@@ -5,7 +5,7 @@ export type AccountRole = 'admin' | 'qc_manager' | 'qc_staff' | 'doctor'
 export interface ManagedAccount {
   id: string
   username: string
-  email: string
+  email: string | null
   display_name: string
   institute_id: string | null
   department: string | null

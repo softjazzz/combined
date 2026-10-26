@@ -1213,6 +1213,12 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'users',
+        name: 'WorkstationUserManagement',
+        component: () => import('@/views/workstation/UserManagementView.vue'),
+        meta: { title: '用户管理', permission: ['admin', 'sync_admin'] },
+      },
+      {
         path: 'tender-acceptance',
         name: 'WorkstationV4TenderAcceptance',
         component: () => import('@/views/workstation-v4/components/TenderAcceptanceDashboard.vue'),

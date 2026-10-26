@@ -51,10 +51,13 @@ class AccountManagementService:
         owner = resolve_user_owner_schema(session)
         return SysUser.__table__.to_metadata(MetaData(), schema=owner)
 
-    def _admin(self, session, table, actor_id):
+    def _admin(self, session, table, actor_id, *, for_update=True):
+        statement = select(table).where(table.c.id == actor_id)
+        if for_update:
+            statement = statement.with_for_update()
         row = (
             session.execute(
-                select(table).where(table.c.id == actor_id).with_for_update()
+                statement
             )
             .mappings()
             .one_or_none()
@@ -93,7 +96,7 @@ class AccountManagementService:
             raise RectificationError("账号筛选无效")
         with self.sessions() as session, session.begin():
             table = self._table(session)
-            actor = self._admin(session, table, actor_id)
+            actor = self._admin(session, table, actor_id, for_update=False)
             statement = select(table)
             if self._scoped_institute(actor):
                 statement = statement.where(

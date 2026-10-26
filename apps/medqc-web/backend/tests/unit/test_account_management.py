@@ -75,6 +75,28 @@ def payload(**changes):
     )
 
 
+def test_listing_uses_nonlocking_authorization_but_writes_keep_actor_lock(accounts):
+    from sqlalchemy import event
+    from sqlalchemy.dialects import postgresql
+
+    service, sessions, _, _ = accounts
+    statements = []
+    engine = sessions.kw["bind"]
+
+    def observe(conn, clauseelement, multiparams, params, execution_options):
+        statements.append(str(clauseelement.compile(dialect=postgresql.dialect())))
+
+    event.listen(engine, "before_execute", observe)
+    try:
+        assert service.list("admin")["total"] == 3
+        assert not any("FOR UPDATE" in statement for statement in statements)
+        statements.clear()
+        service.create("admin", payload())
+        assert any("FOR UPDATE" in statement for statement in statements)
+    finally:
+        event.remove(engine, "before_execute", observe)
+
+
 def test_create_persistent_login_and_never_return_hash(accounts):
     _, sessions, client, _ = accounts
     response = client.post("/api/v1/account-management", json=payload())
