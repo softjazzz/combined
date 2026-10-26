@@ -161,3 +161,17 @@ def test_terminal_chinese_record_time_is_distinct_from_discharge_time():
     result=preview.explicit_record_time(lines(
         (1,"出院时间：2026年10月11日 08:27"),(2,"记录时间：2026年10月11日 22:37")))
     assert result["value"]=="2026-10-11T22:37+08:00"
+
+
+def test_parenthesized_page_footer_is_removed_only_in_footer_area():
+    class Page:
+        number = 0
+        rect = type("Rect", (), {"height": 842})()
+
+        def get_text(self, *_args, **_kwargs):
+            return {"blocks": [{"lines": [
+                {"bbox": (0,200,100,215), "spans": [{"text":"第(6)页"}]},
+                {"bbox": (0,802,100,812), "spans": [{"text":"第(6)页"}]},
+            ]}]}
+
+    assert [line.text for line in preview.read_page_lines(Page())] == ["第(6)页"]

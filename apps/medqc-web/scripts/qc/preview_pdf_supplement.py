@@ -35,7 +35,7 @@ TITLES = (
     (r"术前讨论(?:记录)?", "presurg_discussion"),
     (r".*手术记录", "surgery_record"),
     (r"疑难病例讨论(?:记录)?", "diffcase_discussion_record"),
-    (r"死亡病例讨论(?:记录)?", "death_discussion_record"),
+    (r"死亡病例讨论(?:记录)?", "death_discussion"),
     (r"阶段小结", "summary_record"),
     (r".*沟通(?:记录)?|谈话记录", "docpat_commu_record"),
     (r"死亡记录", "death_record"),
@@ -214,7 +214,7 @@ def read_page_lines(page: Any) -> list[Line]:
     labels = {label for _,text in headers for label in ("姓名","住院号","病案号","科室") if label in text}
     cutoff = max(bbox[3] for bbox,_ in headers) + 1 if len(labels) >= 2 else -1
     return [Line(page.number + 1, text) for bbox,text in raw if bbox[1] >= cutoff and
-            not (bbox[1] > page.rect.height - 60 and re.fullmatch(r"(?:第\s*)?\d+\s*(?:页|/\s*\d+)?", text))]
+            not (bbox[1] > page.rect.height - 60 and re.fullmatch(r"(?:第\s*)?[（(]?\s*\d+\s*[）)]?\s*(?:页|/\s*\d+)?", text))]
 
 
 def read_baseline(connection: Any, pool_name: str) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]], dict[str, Any]]:
@@ -247,7 +247,8 @@ def read_baseline(connection: Any, pool_name: str) -> tuple[list[dict[str, Any]]
         counts: dict[str, Any] = {}
         for table in sorted(tables):
             count_rows = {}
-            is_doc = table in relevant
+            # 也覆盖麻醉、申请、同意及操作等已有正文，不能仅因不在标题映射中就漏掉排重。
+            is_doc = table in relevant or "record_content" in tables[table]
             for case in cases:
                 where = sql.SQL(" AND ").join(sql.SQL("{}=%s").format(sql.Identifier(key)) for key in CASE_KEY)
                 if is_doc:
