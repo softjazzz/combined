@@ -1,6 +1,7 @@
 """注册科室只读目录：复用临床读取 owner，仅返回科室选项，不返回患者数据。"""
 
 import hashlib
+import os
 
 import sqlalchemy as sa
 
@@ -10,6 +11,12 @@ from .defect_rectification_service import RectificationError
 
 def registration_departments(session):
     schema = clinical_read_schema()
+    # 部署级范围，不采用公开请求参数；兼容已有双源同步目标机构配置。
+    target_institute = (
+        os.getenv("REGISTRATION_INSTITUTE_ID")
+        or os.getenv("HOMOLOGY_TARGET_INSTITUTE_ID")
+        or ""
+    ).strip()
     inspector = sa.inspect(session.connection())
     pairs = set()
     for name, fields in (
@@ -39,6 +46,8 @@ def registration_departments(session):
                 department.is_not(None),
                 department.not_in(("", "-", "未知", "未返回")),
             )
+            if target_institute:
+                query = query.where(institute == target_institute)
             if "is_deleted" in columns:
                 query = query.where(
                     sa.func.coalesce(sa.cast(table.c.is_deleted, sa.String), "0").in_(
