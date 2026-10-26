@@ -5,7 +5,7 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from ..services.medical_records import detail_service as medical_records_detail_service
 from ..services.medical_records.detail_service import (
@@ -115,10 +115,21 @@ async def get_record_content_api(
 
 @router.get("/documents/{visit_id}")
 async def get_documents_api(
+    request: Request,
     visit_id: str,
     mode: Optional[str] = Query(None, description="返回模式: 默认返回列表, concat=拼接全文"),
 ):
     try:
+        own_identity = getattr(request.state, "doctor_case_identity", None)
+        if own_identity:
+            from ..services.bundles.current_view import load_current_documents
+
+            result = load_current_documents(**own_identity)
+            if mode == "concat":
+                content = "\n\n".join(doc.get("content", "") for doc in result["documents"])
+                return {"text": content, "visit_id": visit_id, "mode": "concat", "total_length": len(content),
+                        "document_count": sum(bool(doc.get("has_content")) for doc in result["documents"])}
+            return result
         get_documents_impl = _get_documents_runtime_callable()
         return get_documents_impl(visit_id, mode=mode)
     except Exception as exc:

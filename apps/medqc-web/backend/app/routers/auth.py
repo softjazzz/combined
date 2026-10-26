@@ -164,6 +164,13 @@ async def get_current_user_info(    request: Request,current_user: dict = Depend
 
 @router.put("/profile")
 async def update_profile(    request: Request,profile_data: UserUpdate, current_user: dict = Depends(get_current_user)):
+    if (
+        "doctor" in (current_user.get("roles") or [])
+        and not set(current_user.get("roles") or []) & {"admin", "qc_manager", "qc_staff", "sync_admin", "super_admin"}
+        and profile_data.display_name is not None
+        and profile_data.display_name.strip() != str(current_user.get("display_name") or "").strip()
+    ):
+        raise HTTPException(403, "医生姓名用于病历授权，仅可由系统管理员核定变更")
     if profile_data.department is not None and profile_data.department != current_user.get("department"):
         raise HTTPException(403, "账号科室授权仅可由系统管理员变更")
     try:

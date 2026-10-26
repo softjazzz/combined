@@ -10,6 +10,7 @@ from sqlalchemy import and_, desc, func, or_, text
 from ..services.clinical_read import clinical_query, clinical_read_model
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.security import get_current_user
+from ..services.doctor_case_scope import get_doctor_case_scope
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
@@ -196,8 +197,8 @@ def _resolve_visit_identity(record_id: str) -> Dict[str, str]:
     return {}
 
 
-def _load_bundle_payload_for_record(record_id: str) -> Dict[str, Any]:
-    identity = _resolve_visit_identity(record_id)
+def _load_bundle_payload_for_record(record_id: str, *, authorized_identity=None) -> Dict[str, Any]:
+    identity = authorized_identity or _resolve_visit_identity(record_id)
     if not identity:
         return {}
     try:
@@ -659,6 +660,34 @@ def _normalize_final_status(status_value: Optional[str]) -> Optional[str]:
     )
 
 
+def _doctor_record_page(scope, *, department=None, keyword=None, qc_status=None, final=False,
+                        start_date=None, end_date=None, page=1, page_size=20):
+    from ..services.medical_records.query_service import get_workstation_data
+
+    data = get_workstation_data(
+        dept=department, keyword=keyword, hospital_status="discharged" if final else "all",
+        date_field="discharge" if final else "visit", start_date=start_date, end_date=end_date,
+        page=1, page_size=max(len(scope.case_refs), 1), case_scope=scope,
+    )
+    items = []
+    for row in data["records"]:
+        summary = row.get("latest_qc_summary") or {}
+        counts = summary.get("status_counts") or {}
+        defects = int(counts.get("non_compliant") or 0)
+        state = ("failed" if defects else "passed") if summary.get("status") == "ready" else "pending"
+        if qc_status and qc_status != state:
+            continue
+        items.append({
+            "id": row["id"], "record_id": row["id"], "task_id": "",
+            "institute_id": row["instituteId"], "patient_id": row["patientId"], "visit_id": row["id"],
+            "patient_name": row["name"], "department": row["department"], "doctor_name": row["doctor"],
+            "admission_date": row["admissionDate"], "discharge_date": row["dischargeDate"],
+            "created_at": row["updateTime"], "status": state, "score": None,
+            "defect_count": defects, "latest_qc_summary": summary,
+        })
+    return items[(page - 1) * page_size:page * page_size], len(items)
+
+
 @router.get("")
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_medical_records(
@@ -674,6 +703,12 @@ async def get_medical_records(
     current_user: dict = Depends(get_current_user),
 ):
     """获取病案记录列表（支持分页、筛选、排序）"""
+    own_scope = get_doctor_case_scope(request)
+    if own_scope is not None:
+        items, total = _doctor_record_page(own_scope, department=department, keyword=keyword,
+                                          qc_status=_normalize_final_status(status), page=page, page_size=page_size)
+        return paginated_response(items=items, total=total, page=page, page_size=page_size,
+                                  message="获取本人病历成功", trace_id=get_trace_id(request))
     supabase = get_supabase()
     settings = get_settings()
     try:
@@ -889,6 +924,7 @@ async def get_final_records(
     id/task_id/record_id/patient_name/department/discharge_date/status/score/defect_count/created_at
     """
     normalized_status = _normalize_final_status(qc_status)
+    own_scope = get_doctor_case_scope(request)
     start_dt = _parse_iso_date_or_422(start_date, "start_date")
     end_dt = _parse_iso_date_or_422(end_date, "end_date")
     if start_dt and end_dt and start_dt > end_dt:
@@ -896,6 +932,14 @@ async def get_final_records(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="start_date 不能晚于 end_date",
         )
+
+    if own_scope is not None:
+        items, total = _doctor_record_page(
+            own_scope, department=department, keyword=keyword, qc_status=normalized_status,
+            final=True, start_date=start_dt, end_date=end_dt, page=page, page_size=page_size,
+        )
+        return paginated_response(items=items, total=total, page=page, page_size=page_size,
+                                  message="获取本人终末病历成功", trace_id=get_trace_id(request))
 
     if SessionLocal is None:
         # 数据库不可用时降级为内存数据（仅用于保证接口可用性）
@@ -1226,7 +1270,8 @@ async def get_record_qc_detail(
       exists: bool
     }
     """
-    supabase = get_supabase()
+    own_identity = getattr(request.state, "doctor_case_identity", None)
+    supabase = None if own_identity else get_supabase()
     settings = get_settings()
 
     payload: Dict[str, Any] = {
@@ -1338,7 +1383,7 @@ async def get_record_qc_detail(
                     payload["exists"] = True
             except Exception as exc:
                 logger.warning("查询文书内容失败: %s", exc)
-        else:
+        elif own_identity is None:
             record = medical_records_db.get(record_id)
             if record:
                 payload["record"] = {**payload["record"], **record}
@@ -1346,7 +1391,10 @@ async def get_record_qc_detail(
                 payload["documents"]["admissionNote"] = payload["admissionNote"]
                 payload["exists"] = True
 
-        bundle_payload = _load_bundle_payload_for_record(record_id)
+        bundle_payload = (
+            _load_bundle_payload_for_record(record_id, authorized_identity=own_identity)
+            if own_identity else _load_bundle_payload_for_record(record_id)
+        )
         bundle_docs = list(bundle_payload.get("documents") or [])
         if _should_prefer_bundle_documents(payload["documents"]["raw_documents"], bundle_docs):
             _apply_document_payload(
@@ -1366,7 +1414,7 @@ async def get_record_qc_detail(
                 payload["review_items"] = canonical_items
                 payload["review_job"] = canonical_payload.get("review_job")
                 payload["review_result_state"] = canonical_state
-            else:
+            elif own_identity is None:
                 review_payload = _load_review_items_from_latest_batch(record_id)
                 payload["review_items"] = list(review_payload.get("review_items") or [])
                 payload["review_job"] = review_payload.get("review_job")
@@ -1375,6 +1423,9 @@ async def get_record_qc_detail(
                     if canonical_state in {"technical_error", "identity_ambiguous", "identity_conflict", "unavailable"}
                     else ("legacy" if payload["review_items"] else canonical_state)
                 )
+            else:
+                payload["review_result_state"] = canonical_state
+                payload["review_job"] = canonical_payload.get("review_job")
             if payload["review_items"]:
                 payload["exists"] = True
 

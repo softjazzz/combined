@@ -73,3 +73,6 @@ async def enforce_default_auth(
         )
 
     request.state.current_user = resolve_current_user_from_token(credentials.credentials)
+    from ..services.doctor_case_scope import enforce_doctor_case_access
+
+    await enforce_doctor_case_access(request, request.state.current_user)

@@ -338,6 +338,7 @@ class WorkstationAggregationService:
         department: Optional[str] = None,
         keyword: Optional[str] = None,
         priority_limit: int = 20,
+        case_scope=None,
     ) -> Dict[str, Any]:
         """返回当前全病历质控首页所需的最小 Canonical 汇总。
 
@@ -352,6 +353,7 @@ class WorkstationAggregationService:
                 department=department,
                 keyword=keyword,
                 priority_limit=priority_limit,
+                **({"case_scope": case_scope} if case_scope is not None else {}),
             )
             return {
                 "department_options": clinical_qc["department_options"],
@@ -793,6 +795,7 @@ class WorkstationAggregationService:
         department: Optional[str],
         keyword: Optional[str],
         priority_limit: int,
+        case_scope=None,
     ) -> Dict[str, Any]:
         """按病历池相同三坐标范围聚合全病历 Canonical 质控摘要。
 
@@ -804,6 +807,7 @@ class WorkstationAggregationService:
             session,
             department=department,
             keyword=keyword,
+            **({"case_scope": case_scope} if case_scope is not None else {}),
         )
         record_refs = [
             {
@@ -1026,6 +1030,7 @@ class WorkstationAggregationService:
         *,
         department: Optional[str],
         keyword: Optional[str],
+        case_scope=None,
     ) -> List[Dict[str, str]]:
         """复用病历池的筛选器，仅读取三坐标齐全的真实 CDM 病历。"""
 
@@ -1038,7 +1043,12 @@ class WorkstationAggregationService:
         )
 
         discharge_summary = _workstation_discharge_summary_subquery(session)
-        query = session.query(MedicalRecordFrontpage)
+        from ..clinical_read import clinical_query
+
+        query = (clinical_query(session, MedicalRecordFrontpage) if case_scope is not None
+                 else session.query(MedicalRecordFrontpage))
+        if case_scope is not None:
+            query = query.filter(case_scope.predicate(MedicalRecordFrontpage))
         if discharge_summary is not None:
             query = query.outerjoin(
                 discharge_summary,
