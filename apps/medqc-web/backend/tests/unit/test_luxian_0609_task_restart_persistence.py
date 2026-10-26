@@ -326,7 +326,8 @@ def test_restarted_worker_renews_persisted_attempt_during_wait(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_application_startup_invokes_queued_luxian_recovery(monkeypatch):
+@pytest.mark.parametrize("resume_tasks", [None, "false"])
+async def test_application_startup_invokes_queued_luxian_recovery(monkeypatch, resume_tasks):
     from app import main as main_module
     from app import database
     from app.database import repository
@@ -337,6 +338,11 @@ async def test_application_startup_invokes_queued_luxian_recovery(monkeypatch):
     from app.services.llm_config_loader import LLMConfigLoader
 
     calls = []
+    monkeypatch.setenv("MEDQC_STARTUP_MODE", "normal")
+    if resume_tasks is None:
+        monkeypatch.delenv("MEDQC_RESUME_QC_TASKS", raising=False)
+    else:
+        monkeypatch.setenv("MEDQC_RESUME_QC_TASKS", resume_tasks)
 
     async def load_config(**_kwargs):
         return None
@@ -362,7 +368,7 @@ async def test_application_startup_invokes_queued_luxian_recovery(monkeypatch):
     app = main_module.create_app()
     startup = next(callback for callback in app.router.on_startup if callback.__name__ == "startup_event")
     await startup()
-    assert calls == ["recover", "monitor"]
+    assert calls == (["recover", "monitor"] if resume_tasks is None else [])
 
 
 @pytest.mark.asyncio
