@@ -39,6 +39,14 @@ describe('V7.1与未推送产品成果保护集', () => {
     let actual: string
     if (file.endsWith('/WorkstationLayout.vue')) {
       let source = readFileSync(file, 'utf8')
+      // 注册不再要求邮箱：仅允许两处账号文案回退现有持久用户姓名。
+      for (const [current, previous] of [
+        ["authStore.user?.email || authStore.userName || ''", "authStore.user?.email || ''"],
+        ["authStore.user?.email || authStore.userName || '未登录'", "authStore.user?.email || '未登录'"],
+      ]) {
+        expect(source.split(current)).toHaveLength(2)
+        source = source.replace(current, previous)
+      }
       // 本轮用户要求主管独立入口；只允许这一段铃铛路由，医生弹出层与外壳样式不变。
       const managerEntry = [
         '            <a-tooltip v-if="useFullMessageCenter" title="消息中心" placement="right">',
