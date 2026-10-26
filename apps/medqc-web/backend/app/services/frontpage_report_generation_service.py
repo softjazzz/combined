@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
+from .clinical_read import clinical_table_sql
 from ..database.connection import engine
 from ..schemas.frontpage import FrontPageDraft
 from .frontpage_extraction_service import FrontPageExtractionService, default_frontpage_service
@@ -577,7 +578,7 @@ class FrontPageReportGenerationService:
                     where += " AND patient_id = :patient_id"
                     params["patient_id"] = patient_id
                 row = db.execute(
-                    sql_text(f"SELECT * FROM mr WHERE {where} LIMIT 1"),
+                    sql_text(f"SELECT * FROM {clinical_table_sql('mr')} WHERE {where} LIMIT 1"),
                     params,
                 ).mappings().first()
                 return dict(row) if row else {}

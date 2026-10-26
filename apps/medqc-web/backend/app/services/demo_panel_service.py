@@ -11,11 +11,13 @@
 2. 数据库无数据或查询异常时降级到 Mock 数据
 """
 
+
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List
 
 from sqlalchemy import desc, func
+from .clinical_read import clinical_query
 
 logger = logging.getLogger(__name__)
 
@@ -309,7 +311,7 @@ class DemoPanelService:
             from ..database.models.cdm import Diagnosis, MedicalRecordFrontpage
 
             records = (
-                session.query(MedicalRecordFrontpage)
+                clinical_query(session, MedicalRecordFrontpage)
                 .filter(MedicalRecordFrontpage.discharge_datetime.isnot(None))
                 .order_by(desc(MedicalRecordFrontpage.discharge_datetime))
                 .limit(20)
@@ -323,7 +325,7 @@ class DemoPanelService:
             alerts = []
             for idx, rec in enumerate(records, 1):
                 main_diag = (
-                    session.query(Diagnosis)
+                    clinical_query(session, Diagnosis)
                     .filter(
                         Diagnosis.institute_id == rec.institute_id,
                         Diagnosis.patient_id == rec.patient_id,
@@ -390,7 +392,7 @@ class DemoPanelService:
                 day_end = day_start + timedelta(days=1)
 
                 count = (
-                    session.query(func.count(MedicalRecordFrontpage.patient_id))
+                    clinical_query(session, func.count(MedicalRecordFrontpage.patient_id))
                     .filter(
                         MedicalRecordFrontpage.discharge_datetime >= day_start,
                         MedicalRecordFrontpage.discharge_datetime < day_end,
@@ -425,7 +427,8 @@ class DemoPanelService:
             from ..database.models.cdm import MedicalRecordFrontpage, MrCost
 
             results = (
-                session.query(
+                clinical_query(
+                    session,
                     MedicalRecordFrontpage.discharge_dept_name,
                     func.count(MedicalRecordFrontpage.patient_id).label("cnt"),
                     func.avg(func.cast(MrCost.total_fee, float)).label("avg_cost"),
@@ -494,10 +497,10 @@ class DemoPanelService:
             try:
                 from ..database.models.cdm import MedicalRecordFrontpage
 
-                total = session.query(func.count(MedicalRecordFrontpage.patient_id)).scalar() or 0
+                total = clinical_query(session, func.count(MedicalRecordFrontpage.patient_id)).scalar() or 0
                 if total > 0:
                     avg_los_result = (
-                        session.query(func.avg(MedicalRecordFrontpage.actual_hospitalized_day))
+                        clinical_query(session, func.avg(MedicalRecordFrontpage.actual_hospitalized_day))
                         .filter(MedicalRecordFrontpage.actual_hospitalized_day.isnot(None))
                         .scalar()
                     )

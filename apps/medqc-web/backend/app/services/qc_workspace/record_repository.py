@@ -156,6 +156,21 @@ class RecordRepository:
     def __init__(self, *, session_factory: Callable[[], Session]) -> None:
         self._session_factory = session_factory
 
+    def _open_session(self) -> Session:
+        """只在本仓库会话绑定CDM来源，避免public影子表遮挡已迁移的业务表。"""
+        from ..bundles.assembly import _default_source_schema
+
+        session = self._session_factory()
+        try:
+            if _default_source_schema() == "cdm":
+                # 与同步、Bundle和051的owner一致；不改连接池search_path或ORM元数据。
+                # 只影响本次会话的ORM SQL，单模式/SQLite保留原行为；失败不回退public。
+                session.connection().execution_options(schema_translate_map={None: "cdm"})
+            return session
+        except BaseException:
+            session.close()
+            raise
+
     def _collect_explicit_anchor_records(
         self,
         session: Session,
@@ -716,7 +731,7 @@ class RecordRepository:
         page: int,
         page_size: int,
     ) -> WorkspaceListResult:
-        session = self._session_factory()
+        session = self._open_session()
         try:
             query = self._build_records_query(
                 session,
@@ -749,7 +764,7 @@ class RecordRepository:
         scope: str,
         department: Optional[str],
     ) -> Dict[str, Any]:
-        session = self._session_factory()
+        session = self._open_session()
         try:
             dept_expr = func.coalesce(
                 MedicalRecordFrontpage.discharge_dept_name,
@@ -822,7 +837,7 @@ class RecordRepository:
         sync_scope: Optional[str] = None,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
-        session = self._session_factory()
+        session = self._open_session()
         try:
             query = self._build_records_query(
                 session,
@@ -939,7 +954,7 @@ class RecordRepository:
                 }
             )
 
-        session = self._session_factory()
+        session = self._open_session()
         try:
             query = self._build_records_query(
                 session,
@@ -987,7 +1002,7 @@ class RecordRepository:
             all(CaseRef.from_mapping(item)) for item in records
         )
 
-        session = self._session_factory()
+        session = self._open_session()
         try:
             dept_expr = func.coalesce(
                 MedicalRecordFrontpage.discharge_dept_name,

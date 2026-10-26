@@ -26,6 +26,7 @@ from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import (
     _RecheckIssue, _RecheckViolation, _json_response_object, _recheck_prompt,
 )
+from ..transfusion_extraction_scope import reuse_transfusion_extraction
 from .shared import _parse_datetime
 
 logger = logging.getLogger(__name__)
@@ -207,6 +208,18 @@ def _prompt(documents: Sequence[Mapping[str, Any]]) -> str:
 
 
 async def extract_transfusion_performance(rows: Sequence[Mapping[str, Any]], llm_client: Any) -> PerformanceExtraction:
+    # 实施事实与开始时刻的合同保持原样；时间不同的同正文请求不能共享。
+    material = json.dumps([{key: row.get(key) for key in (
+        "document_id", "id", "record_content", "record_time", "source_type", "source_key",
+    )} for row in rows], ensure_ascii=False, sort_keys=True, default=str)
+    return await reuse_transfusion_extraction(
+        protocol=SCHEMA_VERSION, material=material, client=llm_client,
+        extract=lambda: _extract_transfusion_performance(rows, llm_client),
+        confirmed=lambda result: not result.reason_code and "unknown" not in result.states,
+    )
+
+
+async def _extract_transfusion_performance(rows: Sequence[Mapping[str, Any]], llm_client: Any) -> PerformanceExtraction:
     """按单次预算完整分批核验；任一批失败时不发布部分实施事实。"""
     if not rows:
         return PerformanceExtraction()

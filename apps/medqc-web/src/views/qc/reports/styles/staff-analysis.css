@@ -1,0 +1,336 @@
+/* 质控员工作分析私有布局；材质、页头、分段、按钮、表格使用 V7.1 公共类。 */
+.staff-analysis {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.page-desc {
+  margin: 4px 0 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.staff-body {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+h2,
+p {
+  margin: 0;
+}
+h2 {
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+  line-height: 28px;
+}
+
+/* 筛选：上排两个分段，下排字段网格 */
+.filters {
+  display: grid;
+  gap: 16px;
+}
+.filter-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+}
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  align-items: end;
+  gap: 16px;
+}
+.filter-field {
+  min-width: 0;
+}
+.filter-switches .mq-segmented {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filter-error,
+.filter-hint {
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+.filter-error {
+  color: var(--mq-danger-text);
+}
+.filter-hint {
+  color: var(--mq-warning-text);
+}
+
+/* 加载、错误、不可用状态 */
+.state-message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 22px;
+  border-radius: var(--mq-radius-control);
+  background: var(--mq-glass-bg);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-14);
+}
+.state-message .mq-icon {
+  flex-shrink: 0;
+}
+.state-message.error {
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+}
+.state-message.unavailable {
+  border: 1px solid var(--mq-warning-border);
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+}
+
+/* 总览 */
+.overview {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.section-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.range-label {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 132px;
+  padding: 18px 20px;
+}
+.metric span {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+.metric strong {
+  color: var(--mq-text-primary);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 44px;
+  font-variant-numeric: tabular-nums;
+}
+.metric strong.is-text {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-16);
+  line-height: 44px;
+}
+.metric small {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  line-height: 18px;
+}
+.context-notice {
+  padding: 10px 14px;
+  border: 1px solid var(--mq-warning-border);
+  border-radius: var(--mq-radius-control);
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+.metric-note {
+  padding: 10px 14px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+.metric-note summary {
+  min-height: 24px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.metric-note p {
+  margin-top: 6px;
+}
+
+/* 人员明细 */
+.details {
+  min-width: 0;
+  overflow: hidden;
+}
+.details > .section-title {
+  padding: 18px 22px;
+  border-bottom: 0.5px solid var(--mq-border);
+}
+.details-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+.rank-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mq-text-secondary);
+  white-space: nowrap;
+}
+.rank-field .mq-input {
+  width: auto;
+}
+.table-scroll {
+  overflow-x: auto;
+  min-width: 0;
+}
+.staff-table {
+  min-width: 1160px;
+}
+.staff-table th,
+.staff-table td {
+  padding: 0 14px;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.staff-table th:nth-child(-n + 2),
+.staff-table td:nth-child(-n + 2) {
+  text-align: left;
+}
+.staff-table tbody tr:hover {
+  background: var(--mq-bg-subtle);
+}
+.rank {
+  color: var(--mq-text-tertiary);
+}
+.name {
+  font-weight: 600;
+}
+.metric-link {
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mq-brand-600);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.metric-link:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+.unknown {
+  color: var(--mq-text-tertiary);
+}
+.empty-state {
+  padding: 32px;
+  text-align: center;
+  color: var(--mq-text-tertiary);
+}
+
+/* 明细抽屉 */
+.drawer-summary {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+.drawer-table table {
+  min-width: 800px;
+}
+.drawer-table th,
+.drawer-table td {
+  white-space: nowrap;
+  vertical-align: top;
+}
+.drawer-table td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.drawer-table small {
+  display: block;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--mq-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1180px) {
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .staff-analysis {
+    padding: 8px 16px 24px;
+  }
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .mq-page-head__actions,
+  .mq-page-head__actions .mq-segmented {
+    width: 100%;
+  }
+  .mq-page-head__actions .mq-segmented__item {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+  .head-actions {
+    width: 100%;
+  }
+  .head-actions .mq-btn {
+    flex: 1 1 auto;
+  }
+  .filter-switches .filter-field,
+  .filter-switches .mq-segmented {
+    width: 100%;
+  }
+  .filter-switches .mq-segmented {
+    flex-wrap: nowrap;
+  }
+  .filter-switches .mq-segmented__item {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 0 8px;
+  }
+  .filter-grid,
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+  .metric {
+    min-height: 0;
+  }
+  .filter-actions .mq-btn {
+    flex: 1 1 auto;
+  }
+  .details > .section-title {
+    padding: 16px;
+  }
+}

@@ -134,6 +134,7 @@ _FINALIZER_DATA_GAP_CUSTOMER_MESSAGES = {
 _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
     ("LX0609-04-05-02", "semantic_extraction_unresolved"): "现有上级医师查房正文尚未形成可靠抽取结果，暂时无法确认病程内容是否完整。",
     ("LX0609-04-05-02", "candidate_scope_incomplete"): "现有上级医师查房正文超出本次受控抽取范围，暂时无法完成病程内容核对。",
+    ("LX0609-08-01-02", "semantic_extraction_unresolved"): "已读取出院医嘱，但部分带药的剂量、途径或用药时间仍无法可靠确认，暂时无法判定带药信息是否完整，请复核原文。",
     ("LX0609-08-02-01", "semantic_extraction_unresolved"): "现有出院前病程正文尚未形成可靠抽取结果，暂时无法确认病程内容是否完整。",
     ("LX0609-08-02-02", "semantic_extraction_unresolved"): "出院前病程中疑似有上级医师同意出院的意见，但医师身份或原文未能可靠确认，暂时无法判定。",
     ("LX0609-08-02-01", "candidate_scope_incomplete"): "现有出院前病程正文超出本次受控抽取范围，暂时无法完成病程内容核对。",
@@ -639,6 +640,11 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
         "上级医师查房正文超出本次可核范围",
         _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-04-05-02", "candidate_scope_incomplete")],
         "请复核现有材料或联系质控系统支持。",
+    ),
+    ("LX0609-08-01-02", "semantic_extraction_unresolved"): (
+        "出院带药信息暂无法确认",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-08-01-02", "semantic_extraction_unresolved")],
+        "请复核出院医嘱中各药的剂量、给药途径和用药时间，或重试质控。",
     ),
     ("LX0609-08-02-01", "semantic_extraction_unresolved"): (
         "出院前病程正文暂无法确认",
@@ -4941,6 +4947,7 @@ def render_luxian_0609_customer_result(
                 ("LX0609-04-04-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-05-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-05-02", "candidate_scope_incomplete"),
+                ("LX0609-08-01-02", "semantic_extraction_unresolved"),
                 ("LX0609-08-02-01", "semantic_extraction_unresolved"),
                 ("LX0609-08-02-01", "candidate_scope_incomplete"),
                 ("LX0609-07-01-03", "semantic_extraction_unresolved"),

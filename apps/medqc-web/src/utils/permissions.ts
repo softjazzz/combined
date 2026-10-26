@@ -1,10 +1,11 @@
-﻿/**
+/**
  * 权限管理工具函数
  * 病案质控系统 - 权限检查与控制
  */
 
 import { PermissionAction, ResourceType, UserRole } from '@/types/auth'
 import type { Permission, PermissionCheckResult, RolePermissions, User } from '@/types/auth'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 
 const createPermission = (
   id: string,
@@ -136,8 +137,8 @@ export function hasPermission(
     return false
   }
 
-  return user.roles.some((role: UserRole) => {
-    const rolePermissions = ROLE_PERMISSIONS[role] || []
+  return effectiveRoles(user.roles).some((role) => {
+    const rolePermissions = ROLE_PERMISSIONS[role as UserRole] || []
     return rolePermissions.some(
       (permission: Permission) => permission.resource === resource && permission.action === action,
     )
@@ -175,6 +176,7 @@ function checkPermissionConditions(
   action: PermissionAction,
   context?: Record<string, unknown>,
 ): PermissionCheckResult {
+  if (user.roles?.includes('sync_admin')) return { allowed: true }
   const doctorId = typeof context?.doctor_id === 'string' ? context.doctor_id : undefined
   const department = typeof context?.department === 'string' ? context.department : undefined
   const hospitalId = typeof context?.hospital_id === 'string' ? context.hospital_id : undefined
@@ -220,7 +222,7 @@ function checkPermissionConditions(
 
 // 角色权限检查
 export function hasRole(user: User | null, role: UserRole): boolean {
-  return user?.roles?.includes(role) || false
+  return effectiveRoles(user?.roles || []).includes(role)
 }
 
 // 多角色权限检查
@@ -229,7 +231,7 @@ export function hasAnyRole(user: User | null, roles: UserRole[]): boolean {
     return false
   }
 
-  return roles.some((role) => user.roles!.includes(role))
+  return roles.some((role) => effectiveRoles(user.roles!).includes(role))
 }
 
 // 检查是否为管理员
@@ -269,8 +271,8 @@ export function getUserPermissions(user: User | null): Permission[] {
   }
 
   const permissions: Permission[] = []
-  user.roles.forEach((role) => {
-    const rolePermissions = ROLE_PERMISSIONS[role] || []
+  effectiveRoles(user.roles).forEach((role) => {
+    const rolePermissions = ROLE_PERMISSIONS[role as UserRole] || []
     permissions.push(...rolePermissions)
   })
 

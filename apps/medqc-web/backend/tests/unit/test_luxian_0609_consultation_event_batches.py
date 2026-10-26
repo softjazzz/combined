@@ -1,6 +1,7 @@
 """长住院会诊逐事件投递，完整校验后再合并判定。"""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -8,6 +9,24 @@ from app.services.luxian_0609 import native_consultation_episode_execution as ep
 from test_luxian_0609_native_consultation_episode_execution import (
     _episode, _payload, _window_session, _materialize_recommendation_quotes,
 )
+
+
+def test_capacity_preflight_uses_same_shared_order_mode_as_execution(monkeypatch):
+    modes = []
+
+    def prompt(*, completed, candidates, share_visible_order_refs=False):
+        modes.append(share_visible_order_refs)
+        if share_visible_order_refs and len(completed) > 2:
+            raise episode._SourceGap()
+        return 'synthetic', {}
+
+    monkeypatch.setattr(episode, '_execution_prompt', prompt)
+    completed = tuple(SimpleNamespace(episode_ref=f'E{i}', recommendation=SimpleNamespace(opinion_ref=f'D{i}'))
+                      for i in range(4))
+    batches = episode._execution_event_batches(completed=completed,candidates=(),share_visible_order_refs=True)
+    assert [len(batch) for batch in batches] == [2, 2]
+    assert tuple(item for batch in batches for item in batch) == completed
+    assert modes and all(modes)
 
 
 class _EventClient:

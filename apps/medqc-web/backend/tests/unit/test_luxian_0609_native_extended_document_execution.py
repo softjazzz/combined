@@ -7865,8 +7865,9 @@ async def test_062_partial_uncertainty_only_reports_confirmed_missing_fields(mis
         assert facts["missing_fields"] == ["route"]
         assert facts["medication_count"] == 1
     else:
-        assert reduced.final_state is CustomerFinalState.EVALUATION_UNKNOWN
-        assert reduced.reason_code == "semantic_low_confidence"
+        # 2026-10-23：仍不确定且无确认缺项时按资料不足交付。
+        assert reduced.final_state is CustomerFinalState.DATA_GAP
+        assert reduced.reason_code == "semantic_extraction_unresolved"
 
 
 @pytest.mark.asyncio

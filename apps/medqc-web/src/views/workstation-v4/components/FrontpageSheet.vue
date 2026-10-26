@@ -1,5 +1,8 @@
 <template>
-  <div class="fp-sheet-wrap">
+  <div
+    class="fp-sheet-wrap"
+    :class="{ 'fp-source-readonly': sourceReadonly }"
+  >
     <div
       v-if="diagnosisGenerationPending"
       class="fp-pending"
@@ -169,25 +172,31 @@
       </table>
 
       <!-- 门急诊诊断 -->
-      <table class="fp-tbl">
+      <table
+        class="fp-tbl"
+        data-testid="frontpage-outpatient-diagnosis"
+      >
         <tr>
           <td colspan="3">
-            门(急)诊诊断<u class="fill">{{ mainDiag?.diagnosis_name || '' }}</u>
+            门(急)诊诊断<u class="fill">{{ outpatientDiagnosis.diagnosis_name }}</u>
           </td>
           <td colspan="3">
-            疾病编码<u class="fill">{{ mainDiag?.diagnosis_code || '' }}</u>
+            疾病编码<u class="fill">{{ outpatientDiagnosis.diagnosis_code }}</u>
           </td>
         </tr>
       </table>
 
       <!-- 入院诊断 -->
-      <table class="fp-tbl">
+      <table
+        class="fp-tbl"
+        data-testid="frontpage-admission-diagnosis"
+      >
         <tr>
           <td colspan="3">
-            入院诊断<u class="fill">{{ mainDiag?.diagnosis_name || '' }}</u>
+            入院诊断<u class="fill">{{ admissionDiagnosis.diagnosis_name }}</u>
           </td>
           <td colspan="3">
-            疾病编码<u class="fill">{{ mainDiag?.diagnosis_code || '' }}</u>
+            疾病编码<u class="fill">{{ admissionDiagnosis.diagnosis_code }}</u>
           </td>
         </tr>
       </table>
@@ -239,7 +248,7 @@
                 }}
               </span>
               <button
-                v-if="row.left.name && isMainDiagnosisName(row.left.name)"
+                v-if="!sourceReadonly && row.left.name && isMainDiagnosisName(row.left.name)"
                 type="button"
                 class="fp-inline-evidence"
                 :disabled="!canOpenMainEvidence"
@@ -284,7 +293,7 @@
                 }}
               </span>
               <button
-                v-if="row.right.name && isMainDiagnosisName(row.right.name)"
+                v-if="!sourceReadonly && row.right.name && isMainDiagnosisName(row.right.name)"
                 type="button"
                 class="fp-inline-evidence"
                 :disabled="!canOpenMainEvidence"
@@ -338,7 +347,9 @@
           <td>
             病理号<u class="fill">{{ d.other_medical_info.pathology_no || '' }}</u>
           </td>
-          <td>TNM分期<u class="fill" /></td>
+          <td>
+            TNM分期<u class="fill">{{ sourceReadonly ? '未返回' : '' }}</u>
+          </td>
         </tr>
       </table>
 
@@ -449,7 +460,13 @@
             2.有
           </td>
           <td colspan="3">
-            死亡患者尸检 □ 1.是 2.否
+            死亡患者尸检<u
+              v-if="sourceReadonly"
+              class="fill"
+            >{{
+              firstValue(data?.basic?.death_autopsy_sign, '未返回')
+            }}</u>
+            □ 1.是 2.否
           </td>
         </tr>
         <tr>
@@ -528,13 +545,17 @@
       </table>
 
       <div class="fp-footer">
-        （注：本首页由 AI 自动提取生成，仅供参考，需人工审核确认）
+        {{
+          sourceReadonly
+            ? '本页展示已同步的病案首页数据；未返回不代表临床未填写。'
+            : '（注：本首页由 AI 自动提取生成，仅供参考，需人工审核确认）'
+        }}
       </div>
     </div>
 
     <!-- ===== 诊断证据区域（LLM 主导） ===== -->
     <section
-      v-if="mainDiagnosisName"
+      v-if="!sourceReadonly && mainDiagnosisName"
       class="fp-evidence-section"
     >
       <div class="fp-evidence-title">
@@ -585,6 +606,7 @@
       </div>
     </section>
     <MainDiagnosisEvidenceModal
+      v-if="!sourceReadonly"
       :visible="evidencePanel.visible"
       :main-diagnosis-llm-evidence="mainDiagnosisLlmEvidence"
       :coding-audit-llm-evidence="codingAuditLlmEvidence"
@@ -605,6 +627,7 @@ import MainDiagnosisEvidenceModal from './frontpage/MainDiagnosisEvidenceModal.v
 
 interface DiagnosisItem {
   diagnosis_type?: string
+  diagnosis_main?: string
   diagnosis_name?: string
   diagnosis_code?: string
   admission_condition?: string | number
@@ -671,6 +694,7 @@ const props = defineProps<{
   data: any
   displaySource?: any
   postProcessing?: boolean
+  sourceReadonly?: boolean
 }>()
 
 const diagnosisRows = computed<DiagnosisItem[]>(() => {
@@ -755,6 +779,17 @@ function firstValue(...values: any[]): any {
 
 const DEFAULT_HOSPITAL_NAME = '泸县人民医院'
 
+/** 仅填充展示对象的空单元格，不回写输入或推断临床事实。 */
+function fillSourceMissingFields(record: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(record)) {
+    if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) {
+      record[key] = '未返回'
+    } else if (typeof value === 'object' && !Array.isArray(value)) {
+      fillSourceMissingFields(value as Record<string, unknown>)
+    }
+  }
+}
+
 /** 标准化后的首页数据（与之前的 normalizedDraft 相同） */
 const d = computed(() => {
   const src = props.data || {}
@@ -773,7 +808,7 @@ const d = computed(() => {
   const mainProc = first(surgeries, null)
   const otherProcs = Array.isArray(surgeries) ? surgeries.slice(1) : []
 
-  return {
+  const result = {
     basic_info: {
       patient_name: firstValue(basic.name, displayBasic.name),
       gender: firstValue(basic.sex, displayBasic.sex),
@@ -781,7 +816,11 @@ const d = computed(() => {
       age_years: firstValue(basic.age, basic.age_year, displayBasic.age, displayBasic.age_year),
       id_number: firstValue(basic.id_card_no, displayBasic.id_card_no),
       marital_status: firstValue(basic.marital_status, displayBasic.marital_status),
-      nationality: firstValue(basic.nationality, displayBasic.nationality, '中国'),
+      nationality: firstValue(
+        basic.nationality,
+        displayBasic.nationality,
+        props.sourceReadonly ? '' : '中国',
+      ),
       ethnicity: firstValue(basic.ethnicity, displayBasic.ethnicity),
       occupation: firstValue(basic.occupation_category, displayBasic.occupation_category),
       nativeplace: firstValue(basic.nativeplace, displayBasic.nativeplace),
@@ -796,14 +835,14 @@ const d = computed(() => {
       hospital_name: firstValue(
         basic.institute_county_desc,
         displayBasic.institute_county_desc,
-        DEFAULT_HOSPITAL_NAME,
+        props.sourceReadonly ? '' : DEFAULT_HOSPITAL_NAME,
       ),
       organization_code: firstValue(basic.institute_code, displayBasic.institute_code),
       medical_record_no: firstValue(
         basic.mr_no,
-        basic.document_id,
+        props.sourceReadonly ? '' : basic.document_id,
         displayBasic.mr_no,
-        displayBasic.document_id,
+        props.sourceReadonly ? '' : displayBasic.document_id,
       ),
       admission_times_in_hospital: firstValue(basic.visit_cnt, displayBasic.visit_cnt),
       payment_method_text: firstValue(
@@ -882,10 +921,12 @@ const d = computed(() => {
       medical_record_quality: basic.medicalrecord_quality || '',
     },
     costs: {
-      total_cost: cost.total_cost || '',
-      self_paid: cost.self_pay || '',
+      total_cost: props.sourceReadonly ? firstValue(cost.total_cost) : cost.total_cost || '',
+      self_paid: props.sourceReadonly ? firstValue(cost.self_pay) : cost.self_pay || '',
     },
   }
+  if (props.sourceReadonly) fillSourceMissingFields(result)
+  return result
 })
 
 /** 主诊断 */
@@ -894,9 +935,58 @@ const mainDiag = computed(() => {
   return list.find((dd) => String(dd?.diagnosis_type || '').includes('主要')) || first(list, null)
 })
 
+function sourceDiagnosisSummary(pattern: RegExp) {
+  const rows = diagnosisRows.value.filter((row) => pattern.test(String(row.diagnosis_type || '')))
+  const values = (key: 'diagnosis_name' | 'diagnosis_code') =>
+    rows.map((row) => firstValue(row[key], '未返回')).join('；') || '未返回'
+  return { diagnosis_name: values('diagnosis_name'), diagnosis_code: values('diagnosis_code') }
+}
+const outpatientDiagnosis = computed(() =>
+  props.sourceReadonly
+    ? sourceDiagnosisSummary(/门诊|急诊|门.*诊/u)
+    : {
+        diagnosis_name: mainDiag.value?.diagnosis_name || '',
+        diagnosis_code: mainDiag.value?.diagnosis_code || '',
+      },
+)
+const admissionDiagnosis = computed(() =>
+  props.sourceReadonly
+    ? sourceDiagnosisSummary(/入院/u)
+    : {
+        diagnosis_name: mainDiag.value?.diagnosis_name || '',
+        diagnosis_code: mainDiag.value?.diagnosis_code || '',
+      },
+)
+
 /** 诊断表格（双列布局：左列10行，右列10行，共20个诊断位） */
 const diagnosisPairedRows = computed(() => {
   const allDiags = [...diagnosisRows.value]
+  if (props.sourceReadonly) {
+    const sourceMain = (item: DiagnosisItem) =>
+      item.diagnosis_main === '是' || /主要/u.test(String(item.diagnosis_type || ''))
+    const dischargeRows = allDiags
+      .filter((item) => !/门诊|急诊|门.*诊|入院/u.test(String(item.diagnosis_type || '')))
+      .sort((left, right) => Number(sourceMain(right)) - Number(sourceMain(left)))
+    // 源诊断逐行保留；纸面双列可以扩展，不能截断第21条及之后的诊断。
+    const rowsPerColumn = Math.max(10, Math.ceil(dischargeRows.length / 2))
+    const cell = (item: DiagnosisItem | undefined) =>
+      item
+        ? {
+            label: sourceMain(item)
+              ? '主要诊断：'
+              : item.diagnosis_type
+                ? `${item.diagnosis_type}：`
+                : '',
+            name: firstValue(item.diagnosis_name, '未返回'),
+            code: firstValue(item.diagnosis_code, '未返回'),
+            condition: firstValue(item.admission_condition, '未返回'),
+          }
+        : { label: '', name: '', code: '', condition: '' }
+    return Array.from({ length: rowsPerColumn }, (_, index) => ({
+      left: cell(dischargeRows[index]),
+      right: cell(dischargeRows[index + rowsPerColumn]),
+    }))
+  }
   const ROWS_PER_COL = 10
   // 填充到至少 ROWS_PER_COL * 2 行
   while (allDiags.length < ROWS_PER_COL * 2) {
@@ -946,6 +1036,7 @@ const paddedSurgeries = computed(() => {
     anesthetist: s?.anesthesiologist || s?.anesthetist_name || '',
     anesthetistCode: s?.anesthesiologist_code || s?.anesthetist_code || '',
   }))
+  if (props.sourceReadonly) rows.forEach(fillSourceMissingFields)
   const minRows = Math.max(8, rows.length + 1)
   while (rows.length < minRows) {
     rows.push({
@@ -969,10 +1060,10 @@ const paddedSurgeries = computed(() => {
 })
 
 function formatDoctorDisplay(name: unknown, code: unknown): string {
-  const doctorName = String(name || '').trim()
-  const doctorCode = String(code || '').trim()
+  const doctorName = props.sourceReadonly && name === '未返回' ? '' : String(name || '').trim()
+  const doctorCode = props.sourceReadonly && code === '未返回' ? '' : String(code || '').trim()
   if (doctorName && doctorCode) return `${doctorName}(${doctorCode})`
-  return doctorName || doctorCode || ''
+  return doctorName || doctorCode || (props.sourceReadonly ? '未返回' : '')
 }
 
 // ===== 诊断证据逻辑（LLM主导） =====

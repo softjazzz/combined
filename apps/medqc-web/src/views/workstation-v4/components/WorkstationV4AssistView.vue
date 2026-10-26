@@ -1,19 +1,21 @@
 <template>
   <WorkstationAssistPanel
-    v-if="selectedRecord"
+    v-if="(selectedRecord || assistTab === 'message') && (reminderPanelEnabled || assistTab !== 'message')"
     :visible="visible"
     :default-tab="assistTab"
+    :variant="chatEnabled ? 'assistant' : 'analysis'"
+    :available-tabs="availableAssistTabs"
     :patient-info="assistPatientInfo"
     :content-count="contentQCCount"
     :qc-count="assistBadgeCount"
     :profile-count="frontpageDraft ? 1 : 0"
     :drg-count="drgResult ? 1 : 0"
-    :message-count="notificationUnreadCount"
+    :message-count="reminderPanelEnabled ? notificationUnreadCount : 0"
     @update:visible="emit('update:visible', $event)"
     @tab-change="emit('tab-change', $event)"
     @refresh-tab="emit('refresh-tab', $event)"
   >
-    <template #chat="{ active }">
+    <template v-if="chatEnabled" #chat="{ active }">
       <BusinessAgentDrawer
         embedded
         :open="active && accessSettled"
@@ -34,6 +36,7 @@
         :institute-id="selectedRecord?.instituteId"
         :scene="resolveContentScene(selectedRecord)"
         :documents="documentsList"
+        :ask-assistant-enabled="chatEnabled"
         @issues-change="emit('content-issues-change', $event)"
         @ask-assistant="askAboutRule"
       />
@@ -319,10 +322,10 @@
         </div>
       </a-modal>
     </template>
-    <template #message>
-      <div class="space-y-3 p-3">
+    <template v-if="reminderPanelEnabled" #message>
+      <div class="assist-message-inbox">
         <div
-          class="flex items-center justify-between gap-2 rounded-[16px] border border-slate-200/80 bg-white/72 px-3 py-2"
+          class="assist-message-inbox__toolbar"
         >
           <a-segmented
             :value="overviewViewMode"
@@ -345,7 +348,7 @@
         </div>
         <div
           v-if="overviewViewMode === 'overview'"
-          class="grid grid-cols-3 gap-2 rounded-[16px] border border-slate-200/70 bg-white/72 p-2"
+          class="assist-message-inbox__filters"
         >
           <a-select
             :value="overviewDepartmentFilter"
@@ -375,7 +378,7 @@
             @update:value="emit('update:overviewSeverityFilter', $event as string)"
           />
         </div>
-        <div v-else class="rounded-[16px] border border-slate-200/70 bg-white/72 p-2">
+        <div v-else class="assist-message-inbox__read-filter">
           <a-segmented
             :value="notificationReadFilter"
             size="small"
@@ -395,12 +398,12 @@
         >
           <a-spin />
         </div>
-        <div v-else class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1">
+        <div v-else class="assist-message-inbox__list">
           <template v-if="overviewViewMode === 'overview'">
             <div
               v-for="item in filteredNotificationOverviewItems"
               :key="item.overview_id"
-              class="rounded-[16px] border p-3 shadow-[0_4px_12px_rgba(15,23,42,0.025)]"
+              class="assist-message-inbox__item"
               :class="
                 item.unread_count > 0
                   ? 'border-blue-200/80 bg-blue-50/72'
@@ -411,7 +414,7 @@
                 <div class="min-w-0">
                   <div class="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <NotificationOutlined class="text-blue-500" />
-                    <span class="truncate">{{ item.title || '病案问题集中点' }}</span>
+                    <span class="assist-message-inbox__subject">{{ item.title || '病案问题集中点' }}</span>
                     <a-tag color="blue" class="!text-[10px]">
                       {{ item.type || 'general' }}
                     </a-tag>
@@ -419,10 +422,10 @@
                       {{ item.severity || 'info' }}
                     </a-tag>
                   </div>
-                  <div class="mt-1 text-xs text-slate-500 leading-5">
+                  <div class="assist-message-inbox__body">
                     {{ item.summary || '暂无内容' }}
                   </div>
-                  <div class="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
+                  <div class="assist-message-inbox__meta assist-message-inbox__meta--overview">
                     <span>{{ item.department || '未分科室' }}</span>
                     <span>·</span>
                     <span>触发 {{ item.occurrence_count }} 次</span>
@@ -449,7 +452,7 @@
             <div
               v-for="notif in filteredAssistNotifications"
               :key="notif.id"
-              class="rounded-[16px] border p-3 shadow-[0_4px_12px_rgba(15,23,42,0.025)]"
+              class="assist-message-inbox__item"
               :class="
                 notif.is_read
                   ? 'border-slate-200/80 bg-white/74'
@@ -460,12 +463,12 @@
                 <div class="min-w-0">
                   <div class="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <NotificationOutlined class="text-blue-500" />
-                    <span class="truncate">{{ notif.title || '通知消息' }}</span>
+                    <span class="assist-message-inbox__subject">{{ notif.title || '通知消息' }}</span>
                   </div>
-                  <div class="mt-1 text-xs text-slate-500 leading-5">
+                  <div class="assist-message-inbox__body">
                     {{ notif.content || '暂无内容' }}
                   </div>
-                  <div class="mt-1 text-[11px] text-slate-400">
+                  <div class="assist-message-inbox__meta">
                     {{ formatRelativeTime(notif.created_at) }}
                   </div>
                 </div>
@@ -473,7 +476,7 @@
               </div>
               <div class="mt-2 flex items-center justify-end gap-2">
                 <a-button
-                  v-if="isCurrentRecordNotification(notif)"
+                  v-if="chatEnabled && isCurrentRecordNotification(notif)"
                   size="small"
                   class="!h-8 !rounded-full !border-slate-200/90 !shadow-none"
                   data-testid="assist-notification-ask"
@@ -642,7 +645,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, inject, onMounted, ref } from 'vue'
+import { WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'
 import {
   CheckOutlined,
   EyeOutlined,
@@ -665,6 +669,26 @@ import type { DocItem, PatientRecord } from '../types'
 
 type AssistTabKey = 'chat' | 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
+// 医生病历页按客户要求恢复为原“智能分析面板”弹窗：不含对话页签（2026-10-23）。
+const ANALYSIS_TABS: AssistTabKey[] = [
+  'content',
+  'form',
+  'coding',
+  'cost',
+  'profile',
+  'drg',
+  'message',
+]
+const reminderPanelEnabled = inject(WORKSTATION_REMINDER_PANEL, computed(() => true))
+const availableAssistTabs = computed(() => {
+  const tabs: AssistTabKey[] | undefined = !props.selectedRecord
+    ? ['message']
+    : props.chatEnabled ? undefined : ANALYSIS_TABS
+  return reminderPanelEnabled.value
+    ? tabs
+    : (tabs ?? ['chat', ...ANALYSIS_TABS]).filter((tab) => tab !== 'message')
+})
+
 const AsyncAIProfileDashboard = defineAsyncComponent(
   () => import('@/views/workstation-v4/frontpage/components/AIProfileDashboard.vue'),
 )
@@ -675,6 +699,8 @@ const AsyncDRGGroupingTab = defineAsyncComponent(
 const props = defineProps<{
   visible: boolean
   assistTab: AssistTabKey
+  // 是否在面板中提供对话页签及“问助手”入口；默认关闭，即原分析面板样式。
+  chatEnabled?: boolean
   activeDocType?: string
   selectedRecord?: PatientRecord | null
   assistPatientInfo?: Record<string, unknown> | null
@@ -753,6 +779,7 @@ const emit = defineEmits<{
 const access = ref<BusinessAgentAccess | null>(null)
 const accessSettled = ref(false)
 onMounted(() => {
+  if (!props.chatEnabled) return
   businessAgentApi.access().then(
     (value) => {
       access.value = value
@@ -870,3 +897,5 @@ defineExpose({
   runCodingQC: () => qcResultTabRef.value?.runCodingQC(),
 })
 </script>
+
+<style scoped src="../styles/assist-message-inbox.css"></style>

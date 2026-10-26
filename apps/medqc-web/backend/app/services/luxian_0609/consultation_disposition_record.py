@@ -9,6 +9,7 @@ import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
+from .execution_time_budget import follow_up_fits
 from .llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
@@ -725,11 +726,11 @@ async def check_disposition_record(
                 len(documents),
                 describe_luxian_0609_llm_parse_failure(error, response),
             )
-            if stage == "opinion" and calls < _OPINION_ATTEMPTS:
+            if stage == "opinion" and calls < _OPINION_ATTEMPTS and follow_up_fits(llm_client):
                 prompt = _review_retry_prompt(stage_prompt, error, response, "\nDOCUMENTS_JSON=")
                 continue
             if stage == "action" and isinstance(error, _ReviewViolation):
-                if not action_retried:
+                if not action_retried and follow_up_fits(llm_client):
                     action_retried = True
                     action_fallback = error.fallback
                     prompt = _review_retry_prompt(stage_prompt, error, response, "\nROLE_FACTS_JSON=")

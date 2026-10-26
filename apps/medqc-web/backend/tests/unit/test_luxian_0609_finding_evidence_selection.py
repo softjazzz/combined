@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from finding_selection_test_support import prompt_events
 from app.services.luxian_0609.exam_finding_analysis import check_exam_finding_analysis
 from app.services.luxian_0609.exam_finding_relevance import apply_relevance_hints
 from app.services.luxian_0609.exam_lab_fact_extraction import build_exam_lab_text_projection
@@ -20,7 +21,7 @@ class SelectionClient:
 
     async def generate(self, prompt, **kwargs):
         self.calls += 1
-        event = json.loads(prompt.split("EVENTS_JSON=", 1)[1])[0]
+        event = prompt_events(prompt)[0]
         doc = event["course_docs"][0]
         # 合成正文完整提供明确影像所见与症状联系，选原文而不重写原文。
         selected = [fragment["id"] for fragment in doc["fragments"]]
@@ -168,7 +169,7 @@ async def test_retry_keeps_fully_checked_event_and_only_rechecks_unresolved_even
             self.events = []
 
         async def generate(self, prompt, **kwargs):
-            events = json.loads(prompt.split("EVENTS_JSON=", 1)[1])
+            events = prompt_events(prompt)
             self.events.append([event["event_position"] for event in events])
             if len(self.events) == 2 and retry_fails:
                 raise RuntimeError("synthetic failure")

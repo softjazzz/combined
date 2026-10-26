@@ -28,7 +28,7 @@ export interface NavItem {
   iconName: MqIconName
   /** 分组内的步骤序号（首页与结算清单 1→3），用于读屏与提示 */
   step?: number
-  /** 仅演示反馈账号可见 */
+  /** 反馈演示账号及具有读取权限的同步管理员可见 */
   demoFeedbackOnly?: boolean
   /** 当前路由是否属于该入口 */
   match: (route: NavRouteLike) => boolean
@@ -152,6 +152,20 @@ export const WORKSTATION_NAV: NavGroup[] = [
         demoFeedbackOnly: true,
         match: matchPrefix(p('/qc-feedback-demo')),
       },
+      {
+        key: 'feedback-worklist',
+        label: '整改待办',
+        to: { path: p('/feedback') },
+        iconName: 'doc',
+        match: matchPrefix(p('/feedback')),
+      },
+      {
+        key: 'message-center',
+        label: '消息中心',
+        to: { path: p('/messages') },
+        iconName: 'doc',
+        match: matchPrefix(p('/messages')),
+      },
     ],
   },
   {
@@ -230,6 +244,34 @@ export const WORKSTATION_NAV: NavGroup[] = [
         match: matchPrefix(p('/stats')),
       },
       {
+        key: 'report-record-quality',
+        label: '病历质量分析',
+        to: { path: p('/reports/record-quality') },
+        iconName: 'stats',
+        match: matchPrefix(p('/reports/record-quality')),
+      },
+      {
+        key: 'report-special-records',
+        label: '特殊病历报表',
+        to: { path: p('/reports/special-records') },
+        iconName: 'doc',
+        match: matchPrefix(p('/reports/special-records')),
+      },
+      {
+        key: 'report-frontpage-quality',
+        label: '病案首页统计',
+        to: { path: p('/reports/frontpage-quality') },
+        iconName: 'fp_qc',
+        match: matchPrefix(p('/reports/frontpage-quality')),
+      },
+      {
+        key: 'report-staff-analysis',
+        label: '质控员工作分析',
+        to: { path: p('/reports/staff-analysis') },
+        iconName: 'stats',
+        match: matchPrefix(p('/reports/staff-analysis')),
+      },
+      {
         key: 'drg',
         label: 'DRG/DIP 分析',
         to: { path: DRG_SECTION_TABS[0].path },
@@ -287,10 +329,10 @@ export function filterVisibleNav(groups: NavGroup[], ctx: NavVisibilityContext):
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.demoFeedbackOnly && !ctx.isDemoFeedbackAccount) return false
+        if (item.demoFeedbackOnly && !ctx.isDemoFeedbackAccount && !ctx.userRoles.includes('sync_admin')) return false
         const required = ctx.resolvePermission(item.to)
         if (!required || required.length === 0) return true
-        return required.some((role) => ctx.userRoles.includes(role))
+        return ctx.userRoles.includes('sync_admin') || required.some((role) => ctx.userRoles.includes(role))
       }),
     }))
     .filter((group) => group.items.length > 0)

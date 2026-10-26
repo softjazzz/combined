@@ -51,6 +51,7 @@ function criterionLabel(criterionId: string) {
   const labels: Record<string, string> = {
     chief_complaint_length: '主诉书写规范性',
     diagnostic_direction: '诊断指向性',
+    differential_diagnosis_relation: '鉴别诊断关联性',
   }
   return labels[criterionId] || '子项核对'
 }
@@ -78,10 +79,19 @@ function criterionFactText(criterion: SingleRecordQcCriterionResult) {
     if (criterion.status === 'failed') return '主诉与第一诊断的医学指向关系未通过核对。'
     return '当前资料不足以完成主诉与第一诊断的医学指向核对。'
   }
-  const actual = criterion.actual_value === undefined ? '' : `实际值：${criterion.actual_value}；`
-  const expected =
-    criterion.expected_value === undefined ? '' : `标准：${criterion.expected_value}。`
-  return actual || expected ? `${actual}${expected}` : '该子项已按规则要求完成核对。'
+  if (criterion.criterion_id === 'differential_diagnosis_relation') {
+    if (criterion.actual_value === 'related') return '鉴别诊断与第一诊断的临床问题存在合理关联。'
+    if (criterion.actual_value === 'unrelated') return '鉴别诊断与第一诊断的临床问题未发现合理关联。'
+    return '当前资料不足以可靠判断鉴别诊断与第一诊断的关联。'
+  }
+  const facts = []
+  if (criterion.actual_value != null && criterion.actual_value !== '') {
+    facts.push(`实际值：${criterion.actual_value}`)
+  }
+  if (criterion.expected_value != null && criterion.expected_value !== '') {
+    facts.push(`标准：${criterion.expected_value}`)
+  }
+  return facts.length ? `${facts.join('；')}。` : '该子项已按规则要求完成核对。'
 }
 </script>
 

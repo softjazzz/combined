@@ -41,3 +41,13 @@ def test_antimicrobial_selection_reason_examples_reach_order_reason_prompt():
     event = reason.AntimicrobialUseEvent("E1", "头孢曲松", "start", datetime(2026, 1, 1, 8), ())
     prompt = reason._prompt([event], [], {"E1": ()})
     assert prompt.index(ANTIMICROBIAL_SELECTION_REASON_EXAMPLES) < prompt.index("INPUT_JSON=")
+
+
+def test_discharge_medication_dose_examples_reach_extraction_and_recheck_prompts():
+    # 2026-10-23 C15：“只有数字没有单位”的剂量写法成对例子进入首轮与定向补核提示词。
+    from app.services.luxian_0609.extended_document import discharge_medication_extraction as module
+    from app.services.luxian_0609.judgement_examples import DISCHARGE_MEDICATION_DOSE_EXAMPLES
+
+    assert DISCHARGE_MEDICATION_DOSE_EXAMPLES in module._prompt("出院带药：合成药甲0.1 一天三次")
+    assert DISCHARGE_MEDICATION_DOSE_EXAMPLES in module._uncertain_recheck_prompt(
+        "出院带药：合成药甲0.1 一天三次", ((0, "dose"),))

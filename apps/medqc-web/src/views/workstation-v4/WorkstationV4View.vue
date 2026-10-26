@@ -110,7 +110,7 @@
               @toggle-expand-all-sections="toggleExpandAllSections"
               @toggle-section="toggleConcatSection"
               @select-document="selectDocumentByKey"
-              @open-assist-chat="openAssistChat"
+              @open-content-qc="openAssistContentQC"
             />
           </template>
           <template #frontpage>
@@ -160,81 +160,6 @@
             />
           </template>
         </WorkstationV4DetailView>
-
-        <WorkstationV4AssistView
-          ref="assistViewRef"
-          :visible="assistPanelVisible"
-          :assist-tab="assistTab"
-          :active-doc-type="activeDocType"
-          :selected-record="selectedRecord"
-          :assist-patient-info="assistPatientInfo"
-          :content-q-c-count="contentQCCount"
-          :assist-badge-count="assistBadgeCount"
-          :frontpage-draft="frontpageDraft"
-          :frontpage-generating="frontpageGenerating"
-          :qc-refresh-seed="qcRefreshSeed"
-          :selected-id="selectedId"
-          :documents-list="documentsList"
-          :notification-unread-count="notificationUnreadCount"
-          :profile-analyzed="profileAnalyzed"
-          :profile-analyzing="profileAnalyzing"
-          :ai-profile-modal-visible="aiProfileModalVisible"
-          :combined-medical-text="combinedMedicalText"
-          :drg-result="drgResult"
-          :drg-loading="drgLoading"
-          :drg-detail-modal-visible="drgDetailModalVisible"
-          :overview-view-mode="overviewViewMode"
-          :overview-department-filter="overviewDepartmentFilter"
-          :overview-type-filter="overviewTypeFilter"
-          :overview-severity-filter="overviewSeverityFilter"
-          :notification-read-filter="notificationReadFilter"
-          :overview-departments="overviewDepartments"
-          :overview-types="overviewTypes"
-          :overview-severities="overviewSeverities"
-          :notification-loading="notificationLoading"
-          :overview-loading="overviewLoading"
-          :filtered-notification-overview-items="filteredNotificationOverviewItems"
-          :filtered-assist-notifications="filteredAssistNotifications"
-          :format-relative-time="formatRelativeTime"
-          :suggestion-drawer-visible="suggestionDrawerVisible"
-          :suggestions="suggestions"
-          :suggestions-loading="suggestionsLoading"
-          :get-suggestion-title="getSuggestionTitle"
-          :suggestion-severity-tag="suggestionSeverityTag"
-          :icd-drawer-visible="icdDrawerVisible"
-          :icd-apply-target="icdApplyTarget"
-          :icd-target-options="icdTargetOptions"
-          :is-other-target="isOtherTarget"
-          :icd-apply-index="icdApplyIndex"
-          :icd-apply-label="icdApplyLabel"
-          @update:visible="assistPanelVisible = $event"
-          @tab-change="handleAssistTabChange"
-          @refresh-tab="handleAssistTabRefresh"
-          @content-issues-change="contentQCCount = $event"
-          @qc-issues-change="(issues) => handleAssistIssuesChange(issues)"
-          @locate-field="handleLocateFromQC"
-          @jump-evidence="handleJumpEvidenceFromQC"
-          @open-ai-profile="openAiProfilePanel"
-          @update:ai-profile-modal-visible="aiProfileModalVisible = $event"
-          @group-drg="performDRGGrouping"
-          @open-optimization="openOptimization"
-          @update:drg-detail-modal-visible="drgDetailModalVisible = $event"
-          @update:overview-view-mode="overviewViewMode = $event"
-          @mark-all-assist-notifications-read="markAllAssistNotificationsRead"
-          @update:overview-department-filter="overviewDepartmentFilter = $event"
-          @update:overview-type-filter="overviewTypeFilter = $event"
-          @update:overview-severity-filter="overviewSeverityFilter = $event"
-          @update:notification-read-filter="notificationReadFilter = $event"
-          @assist-overview-click="handleAssistOverviewClick"
-          @assist-notification-click="handleAssistNotificationClick"
-          @mark-assist-notification-read="markAssistNotificationRead"
-          @update:suggestion-drawer-visible="suggestionDrawerVisible = $event"
-          @drg-suggestion="handleDRGSuggestion"
-          @update:icd-drawer-visible="icdDrawerVisible = $event"
-          @update:icd-apply-target="icdApplyTarget = $event as typeof icdApplyTarget"
-          @update:icd-apply-index="icdApplyIndex = $event"
-          @apply-icd-code="handleApplyICDCode"
-        />
       </div>
     </template>
     <!-- ====== 质控规则模式 ====== -->
@@ -252,6 +177,82 @@
         @back="viewMode = 'list'"
       />
     </template>
+
+    <WorkstationV4AssistView
+      v-if="viewMode === 'detail' || assistTab === 'message'"
+      ref="assistViewRef"
+      :visible="assistPanelVisible"
+      :assist-tab="assistTab"
+      :active-doc-type="activeDocType"
+      :selected-record="viewMode === 'detail' ? selectedRecord : null"
+      :assist-patient-info="assistPatientInfo"
+      :content-q-c-count="contentQCCount"
+      :assist-badge-count="assistBadgeCount"
+      :frontpage-draft="frontpageDraft"
+      :frontpage-generating="frontpageGenerating"
+      :qc-refresh-seed="qcRefreshSeed"
+      :selected-id="selectedId"
+      :documents-list="documentsList"
+      :notification-unread-count="notificationUnreadCount"
+      :profile-analyzed="profileAnalyzed"
+      :profile-analyzing="profileAnalyzing"
+      :ai-profile-modal-visible="aiProfileModalVisible"
+      :combined-medical-text="combinedMedicalText"
+      :drg-result="drgResult"
+      :drg-loading="drgLoading"
+      :drg-detail-modal-visible="drgDetailModalVisible"
+      :overview-view-mode="overviewViewMode"
+      :overview-department-filter="overviewDepartmentFilter"
+      :overview-type-filter="overviewTypeFilter"
+      :overview-severity-filter="overviewSeverityFilter"
+      :notification-read-filter="notificationReadFilter"
+      :overview-departments="overviewDepartments"
+      :overview-types="overviewTypes"
+      :overview-severities="overviewSeverities"
+      :notification-loading="notificationLoading"
+      :overview-loading="overviewLoading"
+      :filtered-notification-overview-items="filteredNotificationOverviewItems"
+      :filtered-assist-notifications="filteredAssistNotifications"
+      :format-relative-time="formatRelativeTime"
+      :suggestion-drawer-visible="viewMode === 'detail' && suggestionDrawerVisible"
+      :suggestions="suggestions"
+      :suggestions-loading="suggestionsLoading"
+      :get-suggestion-title="getSuggestionTitle"
+      :suggestion-severity-tag="suggestionSeverityTag"
+      :icd-drawer-visible="viewMode === 'detail' && icdDrawerVisible"
+      :icd-apply-target="icdApplyTarget"
+      :icd-target-options="icdTargetOptions"
+      :is-other-target="isOtherTarget"
+      :icd-apply-index="icdApplyIndex"
+      :icd-apply-label="icdApplyLabel"
+      @update:visible="assistPanelVisible = $event"
+      @tab-change="handleAssistTabChange"
+      @refresh-tab="handleAssistTabRefresh"
+      @content-issues-change="contentQCCount = $event"
+      @qc-issues-change="(issues) => handleAssistIssuesChange(issues)"
+      @locate-field="handleLocateFromQC"
+      @jump-evidence="handleJumpEvidenceFromQC"
+      @open-ai-profile="openAiProfilePanel"
+      @update:ai-profile-modal-visible="aiProfileModalVisible = $event"
+      @group-drg="performDRGGrouping"
+      @open-optimization="openOptimization"
+      @update:drg-detail-modal-visible="drgDetailModalVisible = $event"
+      @update:overview-view-mode="overviewViewMode = $event"
+      @mark-all-assist-notifications-read="markAllAssistNotificationsRead"
+      @update:overview-department-filter="overviewDepartmentFilter = $event"
+      @update:overview-type-filter="overviewTypeFilter = $event"
+      @update:overview-severity-filter="overviewSeverityFilter = $event"
+      @update:notification-read-filter="notificationReadFilter = $event"
+      @assist-overview-click="handleAssistOverviewClick"
+      @assist-notification-click="handleAssistNotificationClick"
+      @mark-assist-notification-read="markAssistNotificationRead"
+      @update:suggestion-drawer-visible="suggestionDrawerVisible = $event"
+      @drg-suggestion="handleDRGSuggestion"
+      @update:icd-drawer-visible="icdDrawerVisible = $event"
+      @update:icd-apply-target="icdApplyTarget = $event as typeof icdApplyTarget"
+      @update:icd-apply-index="icdApplyIndex = $event"
+      @apply-icd-code="handleApplyICDCode"
+    />
 
     <a-modal
       v-model:open="pasteFrontpageModalVisible"
@@ -339,6 +340,7 @@
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { defineAsyncComponent, ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { notificationLocation } from '@/views/workstation/notificationNavigation'
 import { apiClient } from '@/services/apiService'
 import { message } from 'ant-design-vue'
 import {
@@ -1016,7 +1018,9 @@ const contentQCCount = ref(0)
 const assistViewRef = ref<InstanceType<typeof WorkstationV4AssistView> | null>(null)
 
 function handleAssistTabRefresh(tabKey: string) {
-  if (tabKey === 'form' || tabKey === 'cost') {
+  if (tabKey === 'message') {
+    return fetchAssistNotifications()
+  } else if (tabKey === 'form' || tabKey === 'cost') {
     assistViewRef.value?.runFormQC()
   } else if (tabKey === 'coding') {
     assistViewRef.value?.runCodingQC()
@@ -1068,7 +1072,26 @@ const {
   handleAssistNotificationClick,
   handleAssistOverviewClick,
   formatRelativeTime,
-} = useNotifications(allRecords, openSessionRecord, assistPanelVisible, assistTab, frontpageTab)
+} = useNotifications(
+  allRecords,
+  openSessionRecord,
+  assistPanelVisible,
+  assistTab,
+  frontpageTab,
+  (target) => router.push(notificationLocation(target)),
+)
+
+watch(
+  () => route.query.assist,
+  (value) => {
+    if (value === 'message') {
+      assistPanelVisible.value = true
+      assistTab.value = 'message'
+      void fetchAssistNotifications()
+    }
+  },
+  { immediate: true },
+)
 
 const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRViewer.vue'))
 const AsyncAIProfileDashboard = defineAsyncComponent(
@@ -1445,9 +1468,9 @@ const profileAnalyzing = ref(false)
 const drgDetailModalVisible = ref(false)
 
 // 助手只能请求打开同一病例的既有画像面板；不自动运行分析。
-// 详情页入口与悬浮入口合并：只打开智能助手面板并停在“对话”页签。
-function openAssistChat() {
-  assistTab.value = 'chat'
+// 详情页“查看质控问题与依据”：打开分析面板并停在“内涵质控”页签。
+function openAssistContentQC() {
+  assistTab.value = 'content'
   assistPanelVisible.value = true
 }
 
@@ -2181,7 +2204,7 @@ function clearAnalyticsDrilldown() {
 }
 
 onMounted(() => {
-  void ensureExtractionSettingsLoaded()
+  if (route.query.assist !== 'message') void ensureExtractionSettingsLoaded()
   fetchData()
   void refreshActiveWorklist()
   fetchAssistNotifications()

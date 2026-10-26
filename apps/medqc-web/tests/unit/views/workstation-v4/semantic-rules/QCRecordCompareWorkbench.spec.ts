@@ -1,3 +1,6 @@
+import { ApiService } from '@/services/apiService'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
@@ -50,7 +53,55 @@ const issues: QCRecordCompareIssue[] = [
   },
 ]
 
+// 原有完整视图用例固定为开发身份；演示身份在专项用例中显式切换。
+beforeEach(async () => {
+  setActivePinia(createPinia())
+  vi.spyOn(ApiService, 'isAuthenticated').mockReturnValue(true)
+  vi.spyOn(ApiService, 'getCurrentUser').mockResolvedValue({
+    success: true,
+    data: { id: 'test-developer', roles: ['sync_admin'], is_demo_account: true },
+  })
+  await useAuthStore().initialize()
+})
+
 describe('QCRecordCompareWorkbench', () => {
+  it('查看病历实际阅读入口优先渲染系统首页表单而非普通分节正文', async () => {
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'frontpage-visit',
+        issues: [],
+        documentOnly: true,
+        providedDocuments: [
+          {
+            key: 'frontpage',
+            document_type: 'mr',
+            title: '病案首页',
+            content: '旧版字段拼接正文',
+            sections: [{ key: 'basic', label: '首页基本信息', text: '旧版字段拼接正文' }],
+            frontpage_display: {
+              groups: [
+                {
+                  key: 'basic',
+                  label: '首页基本信息',
+                  fields: [{ key: 'mr_no', label: '病案号', value: 'TEST-MR' }],
+                },
+              ],
+              diagnoses: { columns: [], rows: [] },
+              surgeries: { columns: [], rows: [] },
+            },
+          },
+        ],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="readonly-frontpage"]').exists()).toBe(true)
+    expect(wrapper.find('.fp-wrapper').exists()).toBe(true)
+    expect(wrapper.find('.record-content-sections').exists()).toBe(false)
+    expect(wrapper.find('.record-content-column').text()).toContain('TEST-MR')
+    expect(wrapper.find('.record-content-column').text()).not.toContain('AI辅助')
+    wrapper.unmount()
+  })
+
   it('缺记录时间时显示提交时间及其来源标签', async () => {
     const wrapper = mount(QCRecordCompareWorkbench, {
       props: {

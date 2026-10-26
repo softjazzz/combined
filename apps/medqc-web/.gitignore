@@ -134,6 +134,7 @@ files/
 *.code-workspace
 workspace/
 reports/
+!/src/views/qc/reports/
 poc_test/
 production_system/
 tools/coordination/

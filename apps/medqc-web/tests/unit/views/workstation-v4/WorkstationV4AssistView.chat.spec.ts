@@ -1,4 +1,5 @@
-import { defineComponent } from 'vue'
+import { computed, defineComponent } from 'vue'
+import { WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -11,6 +12,7 @@ import WorkstationV4AssistView from '@/views/workstation-v4/components/Workstati
 // 面板外壳只负责渲染 chat 插槽，便于单独验证“对话”页签的上下文与跨页签请求。
 const PanelStub = defineComponent({
   name: 'WorkstationAssistPanel',
+  props: ['availableTabs'],
   template: '<div><slot name="chat" :active="true" /></div>',
 })
 const ChatStub = defineComponent({
@@ -41,6 +43,7 @@ function baseProps(extra: Record<string, unknown> = {}) {
   return {
     visible: true,
     assistTab: 'chat',
+    chatEnabled: true,
     activeDocType: 'progress_note',
     documentsList: [],
     suggestions: [],
@@ -65,6 +68,19 @@ async function mountView(extra: Record<string, unknown> = {}) {
 }
 
 describe('智能助手面板的对话页签', () => {
+  it('消息不要求先选病例，无病例时不开放质控或DRG页签', async () => {
+    const messages = await mountView({
+      selectedRecord: null,
+      assistTab: 'message',
+      chatEnabled: false,
+    })
+    expect(messages.findComponent(PanelStub).exists()).toBe(true)
+    expect(messages.findComponent(PanelStub).props('availableTabs')).toEqual(['message'])
+    messages.unmount()
+    const qc = await mountView({ selectedRecord: null, assistTab: 'form', chatEnabled: false })
+    expect(qc.findComponent(PanelStub).exists()).toBe(false)
+    qc.unmount()
+  })
   beforeEach(() => {
     handler.run = async () => ({ doctor_case_count: 1, doctor_cases: [] })
   })
@@ -231,5 +247,83 @@ describe('智能助手面板的对话页签', () => {
     const prefill = wrapper.findComponent(ChatStub).props('prefill') as { text: string }
     expect(prefill.text).toContain('LX0609-01-01-01')
     expect(prefill.text).toContain('首次病程记录')
+  })
+})
+
+// 2026-10-23 客户要求：医生病历页恢复为原“智能分析面板”弹窗，不带对话。
+describe('医生病历页默认的分析面板', () => {
+  it('管理员隐藏消息入口与角标，旧消息链接不唤起面板，其他分析页签保留', async () => {
+    const wrapper = shallowMount(WorkstationV4AssistView, {
+      props: baseProps({ assistTab: 'form', chatEnabled: false, notificationUnreadCount: 12 }),
+      global: {
+        provide: { [WORKSTATION_REMINDER_PANEL as symbol]: computed(() => false) },
+        stubs: { WorkstationAssistPanel: PanelStub, BusinessAgentDrawer: ChatStub },
+      },
+    })
+    const panel = wrapper.findComponent(PanelStub)
+    expect(panel.props('availableTabs')).not.toContain('message')
+    expect(panel.props('availableTabs')).toContain('form')
+    expect(panel.attributes('message-count')).toBe('0')
+    await wrapper.setProps({ assistTab: 'message' })
+    expect(wrapper.findComponent(PanelStub).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('消息样式重排后仍逐条派发原处理对象和已读事件', async () => {
+    const MessagePanel = defineComponent({
+      name: 'WorkstationAssistPanel',
+      template: '<div><slot name="message" /></div>',
+    })
+    const notification = {
+      id: 'notification-id',
+      title: '整改结果',
+      content: '完整整改说明',
+      is_read: false,
+      created_at: '2026-10-25T12:00:00Z',
+    }
+    const wrapper = shallowMount(WorkstationV4AssistView, {
+      props: baseProps({
+        selectedRecord: null,
+        assistTab: 'message',
+        chatEnabled: false,
+        overviewViewMode: 'detail',
+        notificationUnreadCount: 1,
+        filteredAssistNotifications: [notification],
+        formatRelativeTime: () => '刚刚',
+      }),
+      global: { stubs: { WorkstationAssistPanel: MessagePanel } },
+    })
+    expect(wrapper.get('.assist-message-inbox__body').text()).toBe('完整整改说明')
+    expect(wrapper.get('.assist-message-inbox__body').classes()).not.toContain('text-xs')
+    const actions = wrapper.findAll('.assist-message-inbox__item a-button')
+    await actions[0].trigger('click')
+    await actions[1].trigger('click')
+    expect(wrapper.emitted('assist-notification-click')).toEqual([[notification]])
+    expect(wrapper.emitted('mark-assist-notification-read')).toEqual([[notification]])
+    wrapper.unmount()
+  })
+
+  it('未开启对话时使用分析面板样式，去掉对话页签，不读取助手授权', async () => {
+    let accessCalls = 0
+    handler.run = async () => {
+      accessCalls += 1
+      return {}
+    }
+    const PropsPanel = defineComponent({
+      name: 'WorkstationAssistPanel',
+      props: { variant: String, availableTabs: Array, defaultTab: String },
+      template: '<div><slot name="chat" :active="true" /></div>',
+    })
+    const wrapper = shallowMount(WorkstationV4AssistView, {
+      props: baseProps({ chatEnabled: undefined, assistTab: 'form' }),
+      global: { stubs: { WorkstationAssistPanel: PropsPanel, BusinessAgentDrawer: ChatStub } },
+    })
+    await flushPromises()
+    const panel = wrapper.findComponent(PropsPanel)
+    expect(panel.props('variant')).toBe('analysis')
+    expect(panel.props('availableTabs')).not.toContain('chat')
+    expect(panel.props('availableTabs')).toContain('content')
+    expect(wrapper.findComponent(ChatStub).exists()).toBe(false)
+    expect(accessCalls).toBe(0)
   })
 })

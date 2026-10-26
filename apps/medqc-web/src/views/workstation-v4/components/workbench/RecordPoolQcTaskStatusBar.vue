@@ -121,7 +121,7 @@
           v-if="pollError"
           class="record-pool-qc-status__refresh-note"
         >
-          进度暂时未更新，系统将自动重试。
+          进度暂时未更新，正在重试读取任务状态。
         </p>
       </div>
     </div>
@@ -160,7 +160,11 @@ import {
   getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import type { SichuanBatchJob } from '../../semantic-rules/types'
-import { isBatchJobPollingActive } from '../../semantic-rules/utils/batchJobStatus'
+import {
+  getBatchJobRetryMessage,
+  isBatchJobFinished,
+  isBatchJobPollingActive,
+} from '../../semantic-rules/utils/batchJobStatus'
 import {
   decidePollReadFailure,
   pollReadFailureMessage,
@@ -185,6 +189,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   dismiss: []
   completed: []
+  'results-updated': []
 }>()
 
 const currentJob = ref<SichuanBatchJob | null>(null)
@@ -331,7 +336,11 @@ const statusTitle = computed(() => {
   if (status === 'queued') return '质控任务已进入队列'
   if (status === 'running') return '正在执行质控'
   if (status === 'completed') return '质控任务已完成'
-  if (status === 'failed') return '质控任务未完成'
+  if (status === 'failed') {
+    return currentJob.value?.summary?.execution_status === 'partial_failed'
+      ? '质控任务部分执行失败'
+      : '质控任务执行失败'
+  }
   if (status === 'canceled') return '质控任务已停止'
   return '正在准备质控任务'
 })
@@ -421,10 +430,9 @@ const workflowStages = computed<WorkflowStageItem[]>(() => {
 const stageText = computed(() => {
   const status = currentJob.value?.status
   if (resultReadError.value) return resultReadError.value
-  if (automaticRetrying.value) return '部分规则输出无效，系统正在自动补跑，已有有效结果会继续保留。'
+  if (status === 'failed') return getBatchJobRetryMessage(currentJob.value)
   if (status === 'queued') return '系统正在分配执行资源，开始后将自动更新病历和质控点进度。'
   if (status === 'completed') return '质控结果已生成，请前往运行病历质控或终末病历质控查看。'
-  if (status === 'failed') return '部分或全部病历未完成质控，请稍后重新发起或联系管理员。'
   if (status === 'canceled') return '任务已停止，未完成的病历不会继续执行。'
   const currentRule = currentJob.value?.summary?.current_rule
   const ruleCode = String(currentRule?.rule_code || '').trim()
@@ -437,8 +445,17 @@ const stageText = computed(() => {
 })
 
 const terminalSummary = computed(() => {
-  if (currentJob.value?.status !== 'completed') return ''
-  return `成功 ${successRecords.value} 份 · 失败 ${failedRecords.value} 份`
+  if (currentJob.value?.status === 'completed') {
+    return `成功 ${successRecords.value} 份 · 失败 ${failedRecords.value} 份`
+  }
+  if (!isBatchJobFinished(currentJob.value)) return ''
+  const summary = currentJob.value?.summary
+  const completed = finiteCount(summary?.completed_rule_count)
+  const failed = finiteCount(summary?.failed_rule_count)
+  if (completed === null || failed === null) return ''
+  return completed > 0
+    ? `已保留 ${completed} 项有效结果 · ${failed} 项未完成`
+    : `尚无有效结果 · ${failed} 项未完成`
 })
 
 const tone = computed(() => {
@@ -468,12 +485,12 @@ async function refreshJob(sequence: number) {
   const result = await getSichuanWorkspaceBatchJob(jobId)
   if (sequence !== requestSequence) return
   if (result.success && result.data) {
-    const wasCompleted = currentJob.value?.status === 'completed'
     currentJob.value = result.data
     consecutiveReadFailures = 0
     pollError.value = false
     resultReadError.value = ''
-    if (!wasCompleted && result.data.status === 'completed') emit('completed')
+    if (isBatchJobFinished(result.data)) emit('results-updated')
+    if (result.data.status === 'completed') emit('completed')
   } else {
     consecutiveReadFailures += 1
     const decision = decidePollReadFailure(

@@ -18,11 +18,6 @@
   font-size: 20px;
   font-weight: 600;
 }
-:global(.customer-record-result-drawer .customer-record-result-title__context) {
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.65);
-  box-shadow: none;
-}
 :global(.customer-record-result-drawer .single-record-result-panel) {
   background: #f3f6fa;
   color: #303640;
@@ -554,35 +549,6 @@
   font-size: 17px;
   white-space: nowrap;
 }
-:global(.customer-record-result-drawer .customer-record-result-title__context) {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  padding: 4px 16px;
-  border: 0;
-  border-left: 1px solid #e1e7ee;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-:global(.customer-record-result-drawer .customer-record-result-title__context-label) {
-  display: none;
-}
-:global(.customer-record-result-drawer .customer-record-result-title__context-value) {
-  color: #465366;
-  font-size: 13px;
-  font-weight: 500;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-:global(.customer-record-result-drawer .customer-record-result-title__qc-time) {
-  color: #8792a2;
-  font-size: 12px;
-  font-weight: 400;
-}
 :global(.customer-record-result-drawer .customer-record-result-title__export) {
   flex: 0 0 auto;
   width: auto;
@@ -602,13 +568,6 @@
   :global(.customer-record-result-drawer .customer-record-result-title) {
     flex-wrap: wrap;
     gap: 8px 12px;
-  }
-  :global(.customer-record-result-drawer .customer-record-result-title__context) {
-    flex-basis: 100%;
-    order: 2;
-    padding: 8px 0 0;
-    border-left: 0;
-    border-top: 1px solid #edf0f4;
   }
 }
 
@@ -653,67 +612,6 @@
 :global(.customer-record-result-drawer .result-tab.is-active b) {
   background: var(--mq-info-bg);
   color: var(--mq-info-text);
-}
-
-:global(.customer-record-result-drawer .customer-record-result-title__context) {
-  background: transparent !important;
-  border: 0 !important;
-  border-left: 1px solid #e3e8ef !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  padding: 4px 16px;
-}
-:global(.customer-record-result-drawer .customer-record-result-title__context-value) {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 14px;
-  font-weight: 400 !important;
-}
-:global(.customer-record-result-drawer .patient-context-part) {
-  color: #727b87;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 22px;
-}
-:global(.customer-record-result-drawer .patient-context-part.is-primary) {
-  color: #303640;
-  font-size: 15px;
-  font-weight: 500;
-}
-
-:global(.customer-record-result-drawer .customer-record-result-title__context) {
-  padding: 8px 14px !important;
-  border: 1px solid rgba(213, 223, 236, 0.65) !important;
-  border-radius: 10px !important;
-  background: rgba(246, 249, 253, 0.72) !important;
-}
-:global(.customer-record-result-drawer .customer-record-result-title__context-value) {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 2px 14px;
-}
-:global(.customer-record-result-drawer .patient-context-part.is-primary) {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-}
-:global(.customer-record-result-drawer .patient-context-part:nth-child(2)) {
-  color: #526174;
-  font-size: 13px;
-}
-:global(.customer-record-result-drawer .patient-context-part:nth-child(n + 3)) {
-  color: #8792a2;
-  font-size: 12px;
-}
-
-:global(.customer-record-result-drawer .patient-context-avatar) {
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  object-fit: cover;
 }
 
 /* 由抽屉实际剩余高度分配阅读区，去掉固定视口扣减留下的底部空白。 */
@@ -778,11 +676,6 @@
   font-family: var(--mq-font-display);
   font-weight: 700;
   letter-spacing: -0.02em;
-}
-:global(.customer-record-result-drawer .customer-record-result-title__context) {
-  border: 1px solid var(--mq-glass-border);
-  border-radius: 16px;
-  background: var(--mq-glass-bg-strong);
 }
 :global(.customer-record-result-drawer .result-tabs) {
   border-radius: 13px;

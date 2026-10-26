@@ -7,11 +7,13 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import MetaData, column, func, inspect, or_, select
 
 from ..database.connection import SessionLocal
 from ..database.models.qc import SysUser
+from ..database.models.account_registration import registration_is_approved
 from ..storage.memory import users_db
+from .user_scope_owner import resolve_user_owner_schema, user_owner_options
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,10 @@ _REQUIRED_AUTH_COLUMNS = {
     "created_at",
     "phone",
 }
+
+
+class _PersistentNoMatch(Exception):
+    """持久账号 owner 已就绪但账号不存在/停用，不得回退演示缓存。"""
 
 
 def _iso_or_none(value: Any) -> Optional[str]:
@@ -74,22 +80,11 @@ def _memory_overlay(*, email: str | None, user_id: str | None) -> dict[str, Any]
 
 
 def _supports_persistent_auth(session) -> bool:
-    try:
-        rows = session.execute(
-            text(
-                """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema IN ('sys', 'public')
-              AND table_name = 'sys_users'
-                """
-            )
-        ).fetchall()
-    except Exception:
-        logger.warning("Failed to inspect sys_users schema; fallback to memory store", exc_info=True)
+    owner = resolve_user_owner_schema(session)
+    inspector = inspect(session.connection())
+    if not inspector.has_table("sys_users", schema=owner):
         return False
-
-    columns = {str(row[0]) for row in rows}
+    columns = {column["name"] for column in inspector.get_columns("sys_users", schema=owner)}
     return _REQUIRED_AUTH_COLUMNS.issubset(columns)
 
 
@@ -108,15 +103,25 @@ def _normalize_memory_user(user: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _orm_user_to_dict(user: SysUser) -> dict[str, Any]:
+def _orm_user_to_dict(user: SysUser, *, session) -> dict[str, Any]:
     overlay = _memory_overlay(email=user.email, user_id=user.id)
     roles = _normalize_roles(user.role, user.roles_json)
     username = str(user.username or "").strip() or overlay.get("username") or _derive_username(user.email)
+    # 旧登录ORM不声明报表51新增列；从同一持久owner读取，不能采用缓存或客户端机构。
+    owner = resolve_user_owner_schema(session)
+    columns = {item["name"] for item in inspect(session.connection()).get_columns("sys_users", schema=owner)}
+    institute_id = ""
+    if "institute_id" in columns:
+        table = SysUser.__table__.to_metadata(MetaData(), schema=owner)
+        institute_id = session.execute(
+            select(column("institute_id")).select_from(table).where(table.c.id == user.id)
+        ).scalar_one()
     return {
         "id": user.id,
         "username": username,
         "email": str(user.email or "").strip().lower(),
         "display_name": str(user.display_name or "").strip(),
+        "institute_id": str(institute_id or "").strip(),
         "department": str(user.department or "").strip(),
         "roles": roles,
         "role": roles[0] if roles else "doctor",
@@ -139,6 +144,8 @@ def _sync_memory_user(user: dict[str, Any]) -> None:
         "username": str(user.get("username") or "").strip() or _derive_username(email),
         "email": email,
         "display_name": user.get("display_name") or "",
+        "institute_id": user.get("institute_id") or "",
+        "is_active": bool(user.get("is_active", True)),
         "department": user.get("department") or "",
         "roles": list(user.get("roles") or ["doctor"]),
         "password_hash": user.get("password_hash") or "",
@@ -171,13 +178,23 @@ def _query_db_user_by_account(account: str) -> dict[str, Any] | None:
         if _PHONE_PATTERN.fullmatch(normalized):
             conditions.insert(1, SysUser.phone == normalized)
 
-        user = session.execute(select(SysUser).where(or_(*conditions)).limit(1)).scalar_one_or_none()
+        user = session.execute(
+            select(SysUser).where(or_(*conditions)).limit(1),
+            execution_options=user_owner_options(session),
+        ).scalar_one_or_none()
         if user is None or not bool(user.is_active):
-            return None
-        return _orm_user_to_dict(user)
+            raise _PersistentNoMatch()
+        users = SysUser.__table__.to_metadata(
+            MetaData(), schema=resolve_user_owner_schema(session)
+        )
+        if not registration_is_approved(session, users, user.id):
+            raise _PersistentNoMatch()
+        return _orm_user_to_dict(user, session=session)
+    except _PersistentNoMatch:
+        raise
     except Exception:
-        logger.warning("Auth DB account lookup failed; fallback to memory store", exc_info=True)
-        return None
+        logger.warning("Auth DB account lookup failed; refusing memory fallback", exc_info=True)
+        raise
     finally:
         session.close()
 
@@ -204,19 +221,32 @@ def _query_db_user_by_subject(subject: str) -> dict[str, Any] | None:
         if _PHONE_PATTERN.fullmatch(normalized):
             conditions.append(SysUser.phone == normalized)
 
-        user = session.execute(select(SysUser).where(or_(*conditions)).limit(1)).scalar_one_or_none()
+        user = session.execute(
+            select(SysUser).where(or_(*conditions)).limit(1),
+            execution_options=user_owner_options(session),
+        ).scalar_one_or_none()
         if user is None or not bool(user.is_active):
-            return None
-        return _orm_user_to_dict(user)
+            raise _PersistentNoMatch()
+        users = SysUser.__table__.to_metadata(
+            MetaData(), schema=resolve_user_owner_schema(session)
+        )
+        if not registration_is_approved(session, users, user.id):
+            raise _PersistentNoMatch()
+        return _orm_user_to_dict(user, session=session)
+    except _PersistentNoMatch:
+        raise
     except Exception:
-        logger.warning("Auth DB subject lookup failed; fallback to memory store", exc_info=True)
-        return None
+        logger.warning("Auth DB subject lookup failed; refusing memory fallback", exc_info=True)
+        raise
     finally:
         session.close()
 
 
 def find_user_by_account(account: str) -> dict[str, Any] | None:
-    db_user = _query_db_user_by_account(account)
+    try:
+        db_user = _query_db_user_by_account(account)
+    except _PersistentNoMatch:
+        return None
     if db_user is not None:
         return db_user
 
@@ -238,7 +268,10 @@ def resolve_user_by_subject(subject: str | None) -> dict[str, Any] | None:
     if not normalized:
         return None
 
-    db_user = _query_db_user_by_subject(normalized)
+    try:
+        db_user = _query_db_user_by_subject(normalized)
+    except _PersistentNoMatch:
+        return None
     if db_user is not None:
         return db_user
 
@@ -328,7 +361,7 @@ def create_user(
             session.add(orm_user)
             session.commit()
             session.refresh(orm_user)
-            payload = _orm_user_to_dict(orm_user)
+            payload = _orm_user_to_dict(orm_user, session=session)
             payload["bio"] = bio or ""
             payload["avatar"] = ""
         except Exception as exc:
@@ -353,7 +386,7 @@ def touch_last_login(user_id: str) -> dict[str, Any] | None:
                 user.last_login_at = datetime.utcnow()
                 session.commit()
                 session.refresh(user)
-                payload = _orm_user_to_dict(user)
+                payload = _orm_user_to_dict(user, session=session)
                 _sync_memory_user(payload)
                 return payload
         except Exception:
@@ -403,7 +436,7 @@ def update_user_profile(
                     user.department = department
                 session.commit()
                 session.refresh(user)
-                updated_payload = _orm_user_to_dict(user)
+                updated_payload = _orm_user_to_dict(user, session=session)
         except ValueError:
             session.rollback()
             raise
@@ -457,7 +490,7 @@ def update_user_password(*, user_id: str, password_hash: str) -> dict[str, Any] 
                 user.password_hash = password_hash
                 session.commit()
                 session.refresh(user)
-                updated_payload = _orm_user_to_dict(user)
+                updated_payload = _orm_user_to_dict(user, session=session)
         except Exception:
             session.rollback()
             logger.warning("Auth DB password update failed", exc_info=True)

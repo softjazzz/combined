@@ -7,6 +7,7 @@
 3. 提供列表查询、详情查询、质控调用三种能力
 """
 
+
 import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime
@@ -14,6 +15,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func, tuple_
 
+from .clinical_read import clinical_query
 from ..database.connection import engine
 from ..database.models.cdm import (
     MedicalInsuranceSettlement,
@@ -69,7 +71,7 @@ class SettlementService:
             {"items": [...], "total": N, "page": P, "page_size": S}
         """
         with Session(engine) as session:
-            q = session.query(MedicalInsuranceSettlement)
+            q = clinical_query(session, MedicalInsuranceSettlement)
 
             if dept:
                 q = q.filter(MedicalInsuranceSettlement.discharge_dept_name == dept)
@@ -90,7 +92,8 @@ class SettlementService:
             keys = [(r.institute_id, r.patient_id, r.visit_id) for r in rows]
             name_map = {}
             if keys:
-                mrs = session.query(
+                mrs = clinical_query(
+                    session,
                     MedicalRecordFrontpage.institute_id,
                     MedicalRecordFrontpage.patient_id,
                     MedicalRecordFrontpage.visit_id,
@@ -163,7 +166,7 @@ class SettlementService:
         """
         with Session(engine) as session:
             # 1. 主表
-            q = session.query(MedicalInsuranceSettlement).filter(
+            q = clinical_query(session, MedicalInsuranceSettlement).filter(
                 MedicalInsuranceSettlement.patient_id == patient_id,
                 MedicalInsuranceSettlement.visit_id == visit_id,
             )
@@ -178,7 +181,7 @@ class SettlementService:
             result = _row_to_dict(settlement)
 
             # 2. 从病案首页补充患者基本信息
-            mr = session.query(MedicalRecordFrontpage).filter(
+            mr = clinical_query(session, MedicalRecordFrontpage).filter(
                 MedicalRecordFrontpage.institute_id == inst_id,
                 MedicalRecordFrontpage.patient_id == patient_id,
                 MedicalRecordFrontpage.visit_id == visit_id,
@@ -197,7 +200,7 @@ class SettlementService:
                 result["hospital_duration"] = mr.hospital_duration
 
             # 3. 诊断列表
-            diags = session.query(Diagnosis).filter(
+            diags = clinical_query(session, Diagnosis).filter(
                 Diagnosis.institute_id == inst_id,
                 Diagnosis.patient_id == patient_id,
                 Diagnosis.visit_id == visit_id,
@@ -214,7 +217,7 @@ class SettlementService:
             ]
 
             # 4. 手术列表
-            surgeries = session.query(MrSurgery).filter(
+            surgeries = clinical_query(session, MrSurgery).filter(
                 MrSurgery.institute_id == inst_id,
                 MrSurgery.patient_id == patient_id,
                 MrSurgery.visit_id == visit_id,
@@ -232,7 +235,7 @@ class SettlementService:
             ]
 
             # 5. 费用汇总（mr_cost）
-            cost = session.query(MrCost).filter(
+            cost = clinical_query(session, MrCost).filter(
                 MrCost.institute_id == inst_id,
                 MrCost.patient_id == patient_id,
                 MrCost.visit_id == visit_id,
@@ -241,7 +244,7 @@ class SettlementService:
                 result["cost_summary"] = _row_to_dict(cost)
 
             # 6. 费用明细
-            cost_items = session.query(MedicalInsuranceSettlementCost).filter(
+            cost_items = clinical_query(session, MedicalInsuranceSettlementCost).filter(
                 MedicalInsuranceSettlementCost.institute_id == inst_id,
                 MedicalInsuranceSettlementCost.patient_id == patient_id,
                 MedicalInsuranceSettlementCost.visit_id == visit_id,

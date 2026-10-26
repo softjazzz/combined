@@ -18,6 +18,7 @@ import asyncio
 
 from pydantic import ValidationError
 
+from .clinical_read import clinical_table_sql
 from ..schemas.frontpage import FrontPageDraft
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
@@ -1515,7 +1516,7 @@ class FrontPageExtractionService:
                 patient_id = None
                 try:
                     reg = session.execute(sql_text(
-                        "SELECT * FROM inpat_registration WHERE visit_id = :vid LIMIT 1"
+                        f"SELECT * FROM {clinical_table_sql('inpat_registration')} WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
 
                     if reg:
@@ -1559,7 +1560,7 @@ class FrontPageExtractionService:
                 if patient_id:
                     try:
                         pi = session.execute(sql_text(
-                            "SELECT * FROM patient_information WHERE patient_id = :pid LIMIT 1"
+                            f"SELECT * FROM {clinical_table_sql('patient_information')} WHERE patient_id = :pid LIMIT 1"
                         ), {"pid": patient_id}).mappings().first()
 
                         if pi:
@@ -1604,7 +1605,7 @@ class FrontPageExtractionService:
                 # ---- 3. admission_record 表 → 入院记录结构化列 ----
                 try:
                     adm = session.execute(sql_text(
-                        "SELECT * FROM admission_record WHERE visit_id = :vid LIMIT 1"
+                        f"SELECT * FROM {clinical_table_sql('admission_record')} WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
 
                     if adm:
@@ -1647,7 +1648,7 @@ class FrontPageExtractionService:
                 # ---- 4. discharge_record 表 → 出院记录结构化列 ----
                 try:
                     dis = session.execute(sql_text(
-                        "SELECT * FROM discharge_record WHERE visit_id = :vid LIMIT 1"
+                        f"SELECT * FROM {clinical_table_sql('discharge_record')} WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
 
                     if dis:
@@ -1671,7 +1672,7 @@ class FrontPageExtractionService:
                 # ---- 5. diagnosis 表 → 诊断名称清单（名称锁定，编码后续单独生成） ----
                 try:
                     diag_rows = session.execute(sql_text(
-                        "SELECT * FROM diagnosis WHERE visit_id = :vid"
+                        f"SELECT * FROM {clinical_table_sql('diagnosis')} WHERE visit_id = :vid"
                     ), {"vid": visit_id}).mappings().all()
 
                     if diag_rows:
@@ -1693,7 +1694,7 @@ class FrontPageExtractionService:
                 if not self._is_diagnosis_locked(fp_data.get("diagnoses")):
                     try:
                         record_diag_rows = session.execute(sql_text(
-                            "SELECT * FROM discharge_record_diagnosis "
+                            f"SELECT * FROM {clinical_table_sql('discharge_record_diagnosis')} "
                             "WHERE visit_id = :vid "
                             "AND diagnosis_type LIKE '%出院诊断%' "
                             "AND COALESCE(is_deleted, '0') <> '1'"
@@ -1718,7 +1719,7 @@ class FrontPageExtractionService:
                 try:
                     bill_rows = session.execute(sql_text(
                         "SELECT item_type, SUM(CAST(cost AS NUMERIC)) as total "
-                        "FROM inpat_bill_item WHERE visit_id = :vid "
+                        f"FROM {clinical_table_sql('inpat_bill_item')} WHERE visit_id = :vid "
                         "GROUP BY item_type"
                     ), {"vid": visit_id}).mappings().all()
 
@@ -1794,7 +1795,7 @@ class FrontPageExtractionService:
                 # 注：mr 是首页目标表，此处仅读取源头文书中无法获取的管理类字段
                 try:
                     mr_row = session.execute(sql_text(
-                        "SELECT * FROM mr WHERE visit_id = :vid LIMIT 1"
+                        f"SELECT * FROM {clinical_table_sql('mr')} WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
 
                     if mr_row:
@@ -1992,7 +1993,7 @@ class FrontPageExtractionService:
                 # 入院记录全文
                 try:
                     adm = session.execute(sql_text(
-                        "SELECT * FROM admission_record WHERE visit_id = :vid LIMIT 1"
+                        f"SELECT * FROM {clinical_table_sql('admission_record')} WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
                     if adm:
                         content = adm.get("record_content") or ""
@@ -2028,7 +2029,7 @@ class FrontPageExtractionService:
                 # 出院记录全文
                 try:
                     dis = session.execute(sql_text(
-                        "SELECT * FROM discharge_record WHERE visit_id = :vid LIMIT 1"
+                        f"SELECT * FROM {clinical_table_sql('discharge_record')} WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
                     if dis:
                         content = dis.get("record_content") or ""
@@ -2061,7 +2062,7 @@ class FrontPageExtractionService:
                 # 作为首页生成的诊断来源，不读取正式首页 mr/diagnosis 目标表。
                 try:
                     rows = session.execute(sql_text(
-                        "SELECT * FROM discharge_record_diagnosis "
+                        f"SELECT * FROM {clinical_table_sql('discharge_record_diagnosis')} "
                         "WHERE visit_id = :vid AND COALESCE(is_deleted, '0') <> '1'"
                     ), {"vid": visit_id}).mappings().all()
                     if rows:
@@ -2092,7 +2093,7 @@ class FrontPageExtractionService:
                 for table_name, label in extra_tables:
                     try:
                         rows = session.execute(sql_text(
-                            f"SELECT record_content FROM {table_name} WHERE visit_id = :vid"
+                            f"SELECT record_content FROM {clinical_table_sql(table_name)} WHERE visit_id = :vid"
                         ), {"vid": visit_id}).mappings().all()
                         if rows:
                             for idx, row in enumerate(rows, 1):
@@ -2127,7 +2128,7 @@ class FrontPageExtractionService:
                 # 1. 病案首页基本信息
                 try:
                     mr_row = session.execute(sql_text(
-                        "SELECT * FROM mr WHERE visit_id = :vid LIMIT 1"
+                        f"SELECT * FROM {clinical_table_sql('mr')} WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
 
                     if mr_row:
@@ -2151,7 +2152,7 @@ class FrontPageExtractionService:
                 # 2. 入院记录
                 try:
                     adm_row = session.execute(sql_text(
-                        "SELECT * FROM admission_record WHERE visit_id = :vid LIMIT 1"
+                        f"SELECT * FROM {clinical_table_sql('admission_record')} WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
 
                     if adm_row:
@@ -2180,7 +2181,7 @@ class FrontPageExtractionService:
                 # 3. 出院记录
                 try:
                     dis_row = session.execute(sql_text(
-                        "SELECT * FROM discharge_record WHERE visit_id = :vid LIMIT 1"
+                        f"SELECT * FROM {clinical_table_sql('discharge_record')} WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
 
                     if dis_row:
@@ -2205,7 +2206,7 @@ class FrontPageExtractionService:
                 # 4. 诊断列表
                 try:
                     diag_rows = session.execute(sql_text(
-                        "SELECT * FROM diagnosis WHERE visit_id = :vid"
+                        f"SELECT * FROM {clinical_table_sql('diagnosis')} WHERE visit_id = :vid"
                     ), {"vid": visit_id}).mappings().all()
 
                     if diag_rows:
@@ -2238,7 +2239,7 @@ class FrontPageExtractionService:
                 for table_name, label in extra_tables:
                     try:
                         rows = session.execute(sql_text(
-                            f"SELECT record_content FROM {table_name} WHERE visit_id = :vid"
+                            f"SELECT record_content FROM {clinical_table_sql(table_name)} WHERE visit_id = :vid"
                         ), {"vid": visit_id}).mappings().all()
                         
                         if rows:

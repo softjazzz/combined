@@ -76,6 +76,7 @@ def select_latest_authoritative_record_result_job(
     record_id: str,
     rule_set_key: str,
     rule_set_version: str,
+    prefer_full_scope: bool = False,
 ) -> LatestRecordResultJobSelection:
     """按任务身份选唯一权威任务，不以状态、文案或解释完整度裁决。
 
@@ -110,6 +111,32 @@ def select_latest_authoritative_record_result_job(
         if _rule_set_value(candidate, "rule_set_version") != normalized_rule_set_version:
             continue
         eligible.append(dict(candidate))
+
+    if prefer_full_scope:
+        # 比较任务冻结的规则集合，而不是结果条数、问题数或当前目录大小。
+        # 有已证明的较完整范围时，较新的定向子集不能替代它。
+        scoped = [candidate for candidate in eligible if candidate.get("result_rule_scope")]
+        if scoped:
+            full = [candidate for candidate in scoped if candidate.get("result_scope_kind") == "full"]
+            if full:
+                latest_full = max(full, key=_generation_key)
+                full_scope = set(latest_full["result_rule_scope"])
+                eligible = [
+                    {**candidate, "result_scope_kind": "full"}
+                    for candidate in scoped
+                    if candidate in full or full_scope <= set(candidate["result_rule_scope"])
+                ]
+            else:
+                maximal = [candidate for candidate in scoped if not any(
+                    set(candidate["result_rule_scope"]) < set(other["result_rule_scope"])
+                    for other in scoped
+                )]
+                if len({frozenset(candidate["result_rule_scope"]) for candidate in maximal}) != 1:
+                    return LatestRecordResultJobSelection(
+                        state="technical_error", reason_code="record_result_scope_conflict",
+                        candidate_count=len(maximal),
+                    )
+                eligible = maximal
 
     if not eligible:
         return LatestRecordResultJobSelection(

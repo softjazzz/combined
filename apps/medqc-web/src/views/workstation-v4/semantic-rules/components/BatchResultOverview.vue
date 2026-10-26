@@ -1,19 +1,14 @@
 <template>
-  <div
-    v-if="model"
-    class="result-review-overview result-overview-card"
-  >
+  <section v-if="model" class="result-review-overview result-overview-card mq-card">
     <div class="result-overview-card-main">
       <div class="result-overview-identity">
-        <div class="result-overview-icon">
-          <span>质</span>
-        </div>
+        <MqIconTile class="result-overview-icon" name="task" tone="brand" :size="44" />
         <div class="result-review-overview-copy">
           <div class="result-review-overview-title-row">
             <h3>{{ model.title }}</h3>
             <span
-              class="result-review-status-chip"
-              :class="model.statusClass"
+              class="result-review-status-chip mq-status"
+              :class="[model.statusClass, `mq-status--${statusTone}`]"
             >
               {{ model.statusText }}
             </span>
@@ -23,6 +18,7 @@
             <span v-if="model.finishedAtText"> 完成时间：{{ model.finishedAtText }} </span>
             <span>规则集：泸县0609质控点验证 v1</span>
             <span>执行病历：{{ model.recordCount }} 份</span>
+            <span>客户质控点：{{ model.customerRuleCount }} 个</span>
           </div>
           <p class="result-review-overview-desc">
             {{ model.outcomeText }}
@@ -32,41 +28,27 @@
           </p>
         </div>
       </div>
-      <div class="result-review-overview-stats">
-        <div>
-          <span>病历</span>
-          <strong>{{ model.recordCount }}</strong>
-          <small>份</small>
-        </div>
-        <div>
-          <span>客户质控点</span>
-          <strong>{{ model.customerRuleCount }}</strong>
-          <small>个</small>
-        </div>
-        <div>
-          <span>结果</span>
-          <strong>{{ model.resultCount }}</strong>
-          <small>条</small>
-        </div>
-      </div>
-      <div class="result-overview-status-block">
-        <span class="result-overview-status-label">状态分布</span>
-        <div class="result-review-status-pills">
-          <span
-            v-for="item in model.statusPills"
-            :key="item.key"
-            class="result-review-status-pill"
-            :class="item.className"
-          >
-            {{ item.label }} <strong>{{ item.value }}</strong>
-          </span>
+      <div class="result-review-overview-stats" data-testid="batch-result-metrics">
+        <div
+          v-for="metric in metrics"
+          :key="metric.key"
+          class="mq-soft"
+          :class="metric.value > 0 && metric.tone ? `is-${metric.tone}` : ''"
+        >
+          <span>{{ metric.label }}</span>
+          <strong>{{ metric.value }}</strong>
+          <small>{{ metric.unit }}</small>
+          <em v-if="metric.hint">{{ metric.hint }}</em>
         </div>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import MqIconTile from '@/components/icons/MqIconTile.vue'
+
 type BatchResultOverviewStatusPill = {
   key: string
   label: string
@@ -76,6 +58,7 @@ type BatchResultOverviewStatusPill = {
 
 type BatchResultOverviewModel = {
   title: string
+  confirmedResultsOnly?: boolean
   statusClass: string
   statusText: string
   createdAtText: string
@@ -86,80 +69,91 @@ type BatchResultOverviewModel = {
   outcomeText: string
   scopeText: string
   statusPills: BatchResultOverviewStatusPill[]
+  /** 发现确定问题的病历数（客户视图模型提供；缺省时不显示该说明）。 */
+  issueRecordCount?: number
 }
 
-defineProps<{
+const props = defineProps<{
   model: BatchResultOverviewModel | null
 }>()
+
+// 任务状态类名沿用父组件旧的 tailwind 取值；这里只映射为 v7.1 状态胶囊色调。
+const statusTone = computed(() => {
+  const value = props.model?.statusClass || ''
+  if (/emerald|completed/.test(value)) return 'success'
+  if (/rose|failed/.test(value)) return 'danger'
+  if (/blue|running/.test(value)) return 'info'
+  if (/slate|canceled/.test(value)) return 'neutral'
+  return 'warning'
+})
+
+function pillValue(key: string): number {
+  return props.model?.statusPills.find((item) => item.key === key)?.value || 0
+}
+
+// 客户只看四个结论性指标；数值为 0 时不着色（规范 §8）。
+const metrics = computed(() => {
+  const model = props.model
+  if (!model) return []
+  const issues = pillValue('non_compliant')
+  const records = Math.max(0, model.recordCount)
+  return [
+    {
+      key: 'records',
+      label: '质控病历',
+      value: records,
+      unit: '份',
+      tone: '',
+      hint:
+        typeof model.issueRecordCount === 'number' ? `${model.issueRecordCount} 份发现问题` : '',
+    },
+    {
+      key: 'issues',
+      label: '确定问题',
+      value: issues,
+      unit: '条',
+      tone: 'danger',
+      hint: records > 1 && issues > 0 ? `平均每份 ${(issues / records).toFixed(1)} 条` : '',
+    },
+    {
+      key: 'data-gap',
+      label: '需补充资料',
+      value: pillValue('data_gap'),
+      unit: '条',
+      tone: 'warning',
+      hint: '资料不全，暂无法判定',
+    },
+    {
+      key: 'compliant',
+      label: '合格',
+      value: pillValue('compliant'),
+      unit: '条',
+      tone: 'success',
+      hint: pillValue('not_applicable') > 0 ? `另 ${pillValue('not_applicable')} 条不适用` : '',
+    },
+  ].filter((metric) => !model.confirmedResultsOnly || ['records', 'issues'].includes(metric.key))
+})
 </script>
 
 <style scoped>
-.result-review-overview {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
-  padding: 18px 20px;
-}
-
+/* v7.1：玻璃卡 + 指标小块 + 状态胶囊；只引用 --mq-* Token。 */
 .result-overview-card {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.045),
-    0 6px 22px rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(18px);
+  padding: 22px 28px 24px;
 }
 
-/* 三栏只在宽屏使用；列宽可收缩，避免窄窗口下网格溢出被裁切 */
 .result-overview-card-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 0.92fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: var(--mq-space-6);
   align-items: center;
 }
 
 .result-overview-identity {
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr);
-  gap: 14px;
-  align-items: center;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: var(--mq-space-4);
+  align-items: start;
   min-width: 0;
-}
-
-.result-overview-icon {
-  display: inline-flex;
-  width: 44px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(0, 102, 204, 0.16);
-  border-radius: 12px;
-  background: rgba(0, 102, 204, 0.08);
-  color: #0066cc;
-  font-size: 18px;
-  font-weight: 850;
-  box-shadow: none;
-}
-
-.result-overview-status-block {
-  min-width: 0;
-  border-left: 1px solid rgba(0, 0, 0, 0.08);
-  padding-left: 20px;
-}
-
-.result-overview-status-label {
-  display: block;
-  margin-bottom: 8px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 18px;
-}
-
-.result-overview-status-block .result-review-status-pills {
-  margin-top: 0;
 }
 
 .result-review-overview-copy {
@@ -169,160 +163,114 @@ defineProps<{
 .result-review-overview-title-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
   align-items: center;
+  gap: var(--mq-space-3);
 }
 
 .result-review-overview-title-row h3 {
   margin: 0;
-  color: #1d1d1f;
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 22px;
-}
-
-.result-review-status-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  border: 1px solid rgba(16, 185, 129, 0.18);
-  border-radius: 999px;
-  background: rgba(16, 185, 129, 0.08);
-  color: #087f5b;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 20px;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }
 
 .result-review-overview-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
-  margin-top: 8px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  line-height: 20px;
+  gap: var(--mq-space-1) var(--mq-space-4);
+  margin-top: var(--mq-space-2);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
 }
 
 .result-review-overview-desc,
 .result-review-overview-scope {
-  margin: 8px 0 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  line-height: 20px;
+  margin: var(--mq-space-2) 0 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  line-height: 1.6;
 }
 
 .result-review-overview-scope {
-  margin-top: 6px;
+  margin-top: var(--mq-space-1);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
 }
 
 .result-review-overview-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(106px, 1fr));
-  gap: 0;
+  grid-template-columns: repeat(4, minmax(112px, 1fr));
+  gap: var(--mq-space-3);
 }
 
-.result-review-overview-stats div {
-  min-width: 104px;
-  border-left: 1px solid rgba(0, 0, 0, 0.08);
-  padding: 0 20px;
+.result-review-overview-stats > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  column-gap: var(--mq-space-1);
+  padding: 14px 16px;
 }
 
-.result-review-overview-stats span {
-  display: block;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 20px;
-}
-
-.result-review-overview-stats strong {
-  margin-right: 4px;
-  color: #1d1d1f;
-  font-size: 28px;
-  font-weight: 850;
-  line-height: 32px;
-}
-
-.result-review-overview-stats small {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.result-review-status-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.result-review-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: rgba(29, 29, 31, 0.72);
-  padding: 0 12px;
-  font-size: 12px;
+.result-review-overview-stats span,
+.result-review-overview-stats em {
+  grid-column: 1 / -1;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-style: normal;
   font-weight: 600;
 }
 
-.result-review-status-pill strong {
-  font-size: 15px;
+.result-review-overview-stats em {
+  font-weight: 400;
 }
 
-.result-review-status-pill.is-warning,
-.result-review-status-pill.is-success,
-.result-review-status-pill.is-muted {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.035);
-  color: rgba(29, 29, 31, 0.68);
+.result-review-overview-stats strong {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
-.result-review-status-pill.is-danger {
-  border-color: rgba(239, 68, 68, 0.2);
-  background: rgba(239, 68, 68, 0.055);
-  color: #b42318;
+.result-review-overview-stats small {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
 }
 
-/* 常用笔记本/窄桌面：任务信息与指标同排，状态分布另起一行 */
+.result-review-overview-stats .is-danger strong {
+  color: var(--mq-danger-text);
+}
+
+.result-review-overview-stats .is-warning strong {
+  color: var(--mq-warning-text);
+}
+
+.result-review-overview-stats .is-success strong {
+  color: var(--mq-success-text);
+}
+
 @media (max-width: 1439px) {
   .result-overview-card-main {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .result-overview-status-block {
-    grid-column: 1 / -1;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
-    border-left: none;
-    padding-top: 14px;
-    padding-left: 0;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* 窄窗口：单列堆叠，指标三等分 */
-@media (max-width: 767px) {
+@media (max-width: 900px) {
+  .result-overview-card {
+    padding: 18px 20px;
+  }
+
   .result-overview-card-main {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .result-review-overview-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .result-review-overview-stats div {
-    min-width: 0;
-    padding: 0 12px;
-  }
-
-  .result-review-overview-stats div:first-child {
-    border-left: none;
-    padding-left: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

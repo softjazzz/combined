@@ -1,11 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { canUseMessageCenter, MESSAGE_CENTER_PATH, MESSAGE_CENTER_ROLES } from '@/views/workstation/notificationNavigation'
 import type { RouteRecordRaw } from 'vue-router'
 
 const WORKSTATION_BASE_PATH = '/workstation-v5'
 const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
 
 function normalizeWorkstationPath(path: string) {
-  if (path === LEGACY_WORKSTATION_BASE_PATH || path.startsWith(`${LEGACY_WORKSTATION_BASE_PATH}/`)) {
+  if (
+    path === LEGACY_WORKSTATION_BASE_PATH ||
+    path.startsWith(`${LEGACY_WORKSTATION_BASE_PATH}/`)
+  ) {
     return `${WORKSTATION_BASE_PATH}${path.slice(LEGACY_WORKSTATION_BASE_PATH.length)}`
   }
   return path.startsWith(WORKSTATION_BASE_PATH) ? path : WORKSTATION_BASE_PATH
@@ -1004,20 +1008,44 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4RunningRecords',
         component: () => import('@/views/workstation-v4/QcRecordResultListView.vue'),
         props: { carePhase: 'inpatient' },
-        meta: { title: '运行病历', permission: ['admin', 'qc_manager'] },
+        meta: { title: '运行病历', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'records/final',
         name: 'WorkstationV4FinalRecords',
         component: () => import('@/views/workstation-v4/QcRecordResultListView.vue'),
         props: { carePhase: 'discharged' },
-        meta: { title: '终末病历质控', permission: ['admin', 'qc_manager'] },
+        meta: { title: '终末病历质控', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'qc-feedback-demo',
         name: 'WorkstationV4QcFeedbackDemo',
         component: () => import('@/views/workstation-v4/QcResultFeedbackDemoListView.vue'),
-        meta: { title: '质控反馈记录', permission: ['admin', 'qc_manager'] },
+        meta: { title: '质控反馈记录', permission: ['admin', 'qc_manager', 'sync_admin'] },
+      },
+      {
+        path: 'case-communications',
+        name: 'WorkstationV5CaseCommunications',
+        component: () => import('@/views/workstation/HomeCaseCommunications.vue'),
+        meta: { title: '病历沟通', permission: ['doctor'] },
+      },
+      {
+        path: 'feedback',
+        name: 'WorkstationV5Feedback',
+        component: () => import('@/views/workstation/HomeRectificationTodos.vue'),
+        meta: { title: '整改待办', permission: ['admin', 'qc_manager', 'qc_staff', 'doctor'] },
+      },
+      {
+        path: 'qc-result',
+        name: 'WorkstationV5NotificationQcResult',
+        component: () => import('@/views/workstation/NotificationQcResult.vue'),
+        meta: { title: '质控任务结果', permission: ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'] },
+      },
+      {
+        path: 'messages',
+        name: 'WorkstationV5MessageCenter',
+        component: () => import('@/views/workstation/MessageCenter.vue'),
+        meta: { title: '消息中心', permission: MESSAGE_CENTER_ROLES },
       },
       {
         path: 'customer-sample-validation',
@@ -1036,7 +1064,9 @@ const routes: RouteRecordRaw[] = [
         path: 'customer-sample-validation/tasks',
         name: 'WorkstationV4CustomerSampleValidationTasks',
         component: () =>
-          import('@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'),
+          import(
+            '@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'
+          ),
         meta: { title: '质控记录', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
@@ -1071,6 +1101,30 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4Stats',
         component: () => import('@/views/workstation-v4/LuxianQcAnalyticsView.vue'),
         meta: { title: '统计分析' },
+      },
+      {
+        path: 'reports/record-quality',
+        name: 'WorkstationV5RecordQualityReport',
+        component: () => import('@/views/qc/reports/RecordQualityReportView.vue'),
+        meta: { title: '病历质量分析', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'reports/special-records',
+        name: 'WorkstationV5SpecialRecordReport',
+        component: () => import('@/views/qc/reports/SpecialRecordReportView.vue'),
+        meta: { title: '特殊病历报表', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'reports/frontpage-quality',
+        name: 'WorkstationV5FrontpageQualityReport',
+        component: () => import('@/views/qc/reports/FrontpageQualityReportView.vue'),
+        meta: { title: '病案首页统计', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'reports/staff-analysis',
+        name: 'WorkstationV5StaffAnalysisReport',
+        component: () => import('@/views/qc/reports/StaffAnalysisView.vue'),
+        meta: { title: '质控员工作分析', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'drg/pre',
@@ -1122,31 +1176,32 @@ const routes: RouteRecordRaw[] = [
         path: 'rules/custom-workspace',
         name: 'WorkstationV4CustomRuleWorkspace',
         component: () => import('@/views/rules/CustomRuleWorkspaceView.vue'),
-        meta: { title: '自定义质控点', permission: ['admin', 'qc_manager'] },
+        meta: { title: '自定义质控点', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'rules/validation',
         name: 'WorkstationV4RuleValidation',
         component: () => import('@/views/workstation-v4/rule-validation/RuleValidationListView.vue'),
-        meta: { title: '规则验收', permission: ['admin', 'qc_manager'] },
+        meta: { title: '规则验收', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'rules/validation/:ruleId',
         name: 'WorkstationV4RuleValidationDetail',
         component: () => import('@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'),
-        meta: { title: '规则验收详情', permission: ['admin', 'qc_manager'] },
+        meta: { title: '规则验收详情', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'rules/validation/:ruleId/cases/new',
         name: 'WorkstationV4RuleValidationNewCase',
-        component: () => import('@/views/workstation-v4/rule-validation/RuleValidationNewCaseView.vue'),
+        component: () =>
+          import('@/views/workstation-v4/rule-validation/RuleValidationNewCaseView.vue'),
         meta: { title: '新建测试病例', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'qc-overview',
         name: 'WorkstationV4QCOverview',
         component: () => import('@/views/workstation/QCOverviewView.vue'),
-        meta: { title: '问题集中点', permission: ['admin', 'qc_manager'] },
+        meta: { title: '问题集中点', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'system-config',
@@ -1291,14 +1346,25 @@ router.beforeEach(async (to, from, next) => {
       }
     }
 
+    if (to.path === `${WORKSTATION_BASE_PATH}/worklist` && to.query.assist === 'message' &&
+        Object.keys(to.query).length === 1 && canUseMessageCenter(authStore.userRoles)) {
+      next({ path: MESSAGE_CENTER_PATH, replace: true })
+      return
+    }
+
     // 检查权限
     if (to.meta.permission) {
       const userRoles = authStore.userRoles
       const requiredPermissions = to.meta.permission as string[]
 
-      const hasPermission = requiredPermissions.some((permission) => userRoles.includes(permission))
+      const hasPermission = userRoles.includes('sync_admin') || requiredPermissions.some((permission) => userRoles.includes(permission))
 
       if (!hasPermission) {
+        // 普通质控员已有待办权限，不能回到无权进入的首页形成重定向循环。
+        if (userRoles.includes('qc_staff')) {
+          next('/workstation-v5/feedback')
+          return
+        }
         // 没有权限，重定向到仪表板
         next('/dashboard')
         return

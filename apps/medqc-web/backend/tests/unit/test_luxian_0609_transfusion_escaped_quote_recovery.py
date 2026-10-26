@@ -65,7 +65,8 @@ async def test_escaped_newline_with_changed_clinical_text_is_not_escape_recovery
     result = await classify_transfusion_course_records(rows(), client)
     assert result.state == "technical_error"
     assert result.valid_document_ids == ()
-    assert result.llm_call_count == client.calls == 1
+    # 除转义外还改了临床文字时走短引句补核；两次均未纠正仍拒收。
+    assert result.llm_call_count == client.calls == 2
 
 
 @pytest.mark.asyncio
@@ -83,7 +84,7 @@ def test_literal_newline_against_crlf_source_is_escape_error_not_binding_failure
 
     content = "今日输注红细胞2U，过程顺利。\r\n医生签名：某医师"
     quote = "今日输注红细胞2U，过程顺利。" + chr(92) + "n医生签名：某医师"  # 字面量反斜杠 n
-    response = {"content": json.dumps({"schema_version": module.SCHEMA_VERSION, "records": [
+    response = {"content": json.dumps({"schema_version": module.LEGACY_SCHEMA_VERSION, "records": [
         {"index": 0, "kind": "record", "quote": quote}]}, ensure_ascii=False)}
     with pytest.raises(module._EscapedQuoteBinding) as caught:
         module._records(response, [{"index": 0, "title": "病程", "content": content}])

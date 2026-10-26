@@ -9,6 +9,7 @@ import {
   setRefreshToken as writeRefreshToken,
 } from '@/utils/auth-token'
 import { extractApiErrorMessage, unwrapApiEnvelope } from '@/utils/api-envelope'
+import type { RegistrationResult } from '@/api/accountRegistration'
 import {
   attachTraceIdToError,
   ensureTraceHeaders,
@@ -59,7 +60,15 @@ const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
 const API_DEBUG =
   import.meta.env.DEV && String(import.meta.env.VITE_API_DEBUG || '').toLowerCase() === 'true'
 const DEBUG_REDACTED = '[REDACTED]'
-const DEBUG_SENSITIVE_KEYS = new Set(['activation_code'])
+const DEBUG_SENSITIVE_KEYS = new Set([
+  'activation_code',
+  'password',
+  'password_hash',
+  'new_password',
+  'old_password',
+  'access_token',
+  'refresh_token',
+])
 
 function redactDebugSensitiveValues(value: unknown, seen = new WeakSet<object>()): unknown {
   if (Array.isArray(value)) {
@@ -182,7 +191,7 @@ apiClient.interceptors.response.use(
         `✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`,
         {
           status: response.status,
-          data: response.data,
+          data: redactDebugSensitiveValues(response.data),
         },
       )
     }
@@ -210,9 +219,14 @@ apiClient.interceptors.response.use(
 
     // Token过期处理（带单航刷新，避免并发冲突）
     if (error.response?.status === 401 && !originalRequest._retry) {
-      // 避免对登录/刷新接口自身进行循环处理
+      // 登录外的口令查询失败不是会话过期，不刷新令牌或重放注册写入。
       const url: string = originalRequest?.url || ''
-      if (url.includes('/api/v1/auth/login') || url.includes('/api/v1/auth/refresh')) {
+      if (
+        url.includes('/api/v1/auth/login') ||
+        url.includes('/api/v1/auth/refresh') ||
+        url.includes('/api/v1/auth/registration-status') ||
+        url.endsWith('/api/v1/auth/register')
+      ) {
         return Promise.reject(error)
       }
 
@@ -453,7 +467,7 @@ export class ApiService {
       })
 
       const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', payload)
-      console.log('📡 ApiService.login 收到响应:', response.data)
+      console.log('📡 ApiService.login 收到响应:', redactDebugSensitiveValues(response.data))
 
       // 保存token
       if (response.data.access_token) {
@@ -480,13 +494,13 @@ export class ApiService {
   /**
    * 用户注册
    */
-  static async register(userData: RegisterRequest): Promise<ApiResponse<User>> {
+  static async register(userData: RegisterRequest): Promise<ApiResponse<RegistrationResult>> {
     try {
-      const response = await apiClient.post<User>('/api/v1/auth/register', userData)
+      const response = await apiClient.post('/api/v1/auth/register', userData)
       return {
         success: true,
-        data: response.data,
-        message: '注册成功',
+        data: unwrapApiEnvelope<RegistrationResult>(response.data),
+        message: response.data.message || '注册申请已保存，请等待管理员审批',
       }
     } catch (error: unknown) {
       return {

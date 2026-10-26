@@ -1,3 +1,4 @@
+
 from typing import Callable, Dict, Any, List, Optional, Tuple
 import json
 import hashlib
@@ -9,6 +10,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from app.constants.doc_types import DOC_TYPE_CN_TO_EN, DOC_TYPE_FULL_MAP
+from .clinical_read import clinical_query
 from ..core.settings import Settings, get_settings
 from ..core.http import safe_post_json
 from ..core.supabase_client import get_supabase
@@ -2636,7 +2638,7 @@ class SichuanQCService:
         session = SessionLocal()
         try:
             rows = (
-                session.query(Diagnosis)
+                clinical_query(session, Diagnosis)
                 .filter(
                     Diagnosis.institute_id == institute_id,
                     Diagnosis.patient_id == patient_id,
@@ -2677,7 +2679,7 @@ class SichuanQCService:
             return []
         session = SessionLocal()
         try:
-            diagnosis_query = session.query(Diagnosis).filter(
+            diagnosis_query = clinical_query(session, Diagnosis).filter(
                 Diagnosis.institute_id == institute_id,
                 Diagnosis.dept_name == dept_name,
                 Diagnosis.visit_id != current_visit_id,
@@ -2693,7 +2695,7 @@ class SichuanQCService:
             if not visit_ids:
                 return []
             first_course_rows = (
-                session.query(FirstCourseRecord)
+                clinical_query(session, FirstCourseRecord)
                 .filter(
                     FirstCourseRecord.institute_id == institute_id,
                     FirstCourseRecord.visit_id.in_(visit_ids),

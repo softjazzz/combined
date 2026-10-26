@@ -1,0 +1,280 @@
+/* 批量质控结果客户视图（v7.1 液态玻璃）：只引用 --mq-* Token 与公共类。 */
+.record-review {
+  display: grid;
+  gap: var(--mq-space-4);
+  padding: 22px 28px 24px;
+}
+
+.record-review__title {
+  margin: 0;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.record-review__desc {
+  margin: var(--mq-space-1) 0 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+.record-review__body {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: var(--mq-space-5);
+  align-items: start;
+}
+
+/* ---------- 左侧病历列表 ---------- */
+.record-review__list {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: var(--mq-space-3);
+  max-height: calc(100vh - 160px);
+  padding: var(--mq-space-3);
+  overflow: hidden;
+}
+
+.record-review__search {
+  width: 100%;
+}
+
+.record-review__scope {
+  justify-self: start;
+}
+
+.record-review__records {
+  display: grid;
+  gap: var(--mq-space-1);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.record-review__record {
+  display: grid;
+  gap: 2px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.record-review__record:hover {
+  background: var(--mq-glass-bg-strong);
+}
+
+.record-review__record.is-active {
+  border-color: var(--mq-info-border);
+  background: var(--mq-brand-50);
+}
+
+.record-review__record-title {
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.record-review__record-meta {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.record-review__record-counts {
+  display: flex;
+  gap: var(--mq-space-2);
+  margin-top: 2px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.record-review__record-counts .is-danger {
+  color: var(--mq-danger-text);
+  font-weight: 600;
+}
+
+.record-review__record-counts .is-warning {
+  color: var(--mq-warning-text);
+  font-weight: 600;
+}
+
+/* ---------- 右侧单份病历 ---------- */
+.record-review__detail {
+  display: grid;
+  gap: var(--mq-space-4);
+  min-width: 0;
+}
+
+.record-review__detail-head h4 {
+  margin: 0;
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: var(--mq-font-20);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.record-review__detail-head p {
+  margin: var(--mq-space-1) 0 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.record-review__status-tabs {
+  justify-self: start;
+  flex-wrap: wrap;
+}
+
+.record-review__chapter {
+  display: grid;
+  gap: var(--mq-space-2);
+}
+
+.record-review__chapter-title {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+
+.record-review__item {
+  display: grid;
+  gap: var(--mq-space-2);
+  padding: 14px 16px;
+}
+
+.record-review__item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--mq-space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.record-review__item-title {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.record-review__item-head .mq-status {
+  flex-shrink: 0;
+}
+
+.record-review__item-summary {
+  margin: 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  line-height: 1.7;
+}
+
+.record-review__item:not(.is-expanded) .record-review__item-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.record-review__item-detail {
+  display: grid;
+  gap: var(--mq-space-3);
+}
+
+.record-review__label {
+  display: block;
+  margin-bottom: var(--mq-space-1);
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.record-review__evidence {
+  display: grid;
+  gap: var(--mq-space-2);
+  padding: 12px 14px;
+}
+
+.record-review__evidence-row {
+  display: grid;
+  gap: 2px;
+  font-size: var(--mq-font-13);
+}
+
+.record-review__evidence-row strong {
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+
+.record-review__evidence-row span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.record-review__evidence-row q {
+  color: var(--mq-text-secondary);
+  quotes: '“' '”';
+}
+
+.record-review__suggestion {
+  margin: 0;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  line-height: 1.7;
+}
+
+.record-review__rule-code {
+  justify-self: start;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+.record-review__toggle {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mq-brand-600);
+  font: inherit;
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.record-review__empty {
+  margin: 0;
+  padding: var(--mq-space-6) 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .record-review {
+    padding: 18px 20px;
+  }
+
+  .record-review__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .record-review__list {
+    position: static;
+    max-height: 360px;
+  }
+}

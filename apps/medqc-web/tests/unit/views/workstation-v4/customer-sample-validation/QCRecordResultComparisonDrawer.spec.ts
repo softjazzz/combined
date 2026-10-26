@@ -1,3 +1,7 @@
+import { ApiService } from '@/services/apiService'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
+import { UserRole } from '@/types/auth'
 /* eslint-disable vue/one-component-per-file */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -42,6 +46,7 @@ const QCRecordCompareWorkbenchStub = defineComponent({
     singleRecordItems: { type: Array, default: () => [] },
     debugContext: { type: Object, default: undefined },
     presentationMode: { type: String, default: 'flat' },
+    feedbackAvailable: { type: Boolean, default: true },
   },
   setup(props) {
     workbenchProps = props as unknown as Record<string, unknown>
@@ -78,7 +83,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function mountDrawer(presentationMode?: 'flat' | 'grouped') {
+function mountDrawer(presentationMode?: 'flat' | 'grouped', loadJobMetadata = true) {
   return mount(QCRecordResultComparisonDrawer, {
     props: {
       open: true,
@@ -93,6 +98,7 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
         label: '测试病历',
       },
       ...(presentationMode ? { presentationMode } : {}),
+      loadJobMetadata,
     },
     global: {
       stubs: {
@@ -118,6 +124,16 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped') {
   })
 }
 
+// 原有完整视图用例固定为开发身份；演示身份在专项用例中显式切换。
+beforeEach(async () => {
+  setActivePinia(createPinia())
+  vi.spyOn(ApiService, 'isAuthenticated').mockReturnValue(true)
+  vi.spyOn(ApiService, 'getCurrentUser').mockResolvedValue({
+    success: true, data: { id: 'test-developer', roles: ['sync_admin'], is_demo_account: true },
+  })
+  await useAuthStore().initialize()
+})
+
 describe('QCRecordResultComparisonDrawer', () => {
   beforeEach(() => {
     getLatestLuxian0609RecordResult.mockReset()
@@ -129,6 +145,46 @@ describe('QCRecordResultComparisonDrawer', () => {
     exportLatestLuxian0609RecordResult.mockReset()
     downloadBlob.mockReset()
     workbenchProps = null
+  })
+
+  it.each(['sync_admin', UserRole.ADMIN] as const)('部分失败时保留已完成结果和失败提示（%s）', async (role) => {
+    vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+      success: true, data: { id: 'test-viewer', roles: [role], is_demo_account: true },
+    })
+    await useAuthStore().initialize()
+    const partial = {
+      ...readyResult,
+      job_id: 'latest-partial-full',
+      expected_rule_count: 76,
+      result_rule_count: 75,
+      is_complete: false,
+      execution_status: 'partial_failed',
+      failed_rule_count: 1,
+      failed_rule_ids: ['LX0609-01-02-02'],
+    }
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: partial })
+    getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true, data: { status: 'failed', finished_at: '2026-10-25T09:16:48' },
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(workbenchProps?.jobId).toBe('latest-partial-full')
+    expect(workbenchProps?.singleRecordItems).toEqual(partial.items)
+    expect(workbenchProps?.feedbackAvailable).toBe(false)
+    expect(wrapper.get('[data-testid="record-result-partial-failure"]').text()).toContain('已保留 75 项有效结果')
+    expect(wrapper.text()).toContain('1 项执行失败')
+    expect(wrapper.text()).toContain('LX0609-01-02-02')
+    expect(wrapper.text()).not.toContain('自动重试')
+    expect(wrapper.get('.customer-record-result-title__qc-time').text()).toContain('质控结束时间：')
+  })
+
+  it('只有定向结果时明确说明检查范围', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: {
+      ...readyResult, result_scope: 'targeted', expected_rule_count: 13,
+    } })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.text()).toContain('当前为定向质控结果，仅覆盖本次选择的 13 项')
   })
 
   it('以醒目的当前病历上下文栏展示患者与质控完成信息', async () => {
@@ -161,6 +217,22 @@ describe('QCRecordResultComparisonDrawer', () => {
     const wrapper = mountDrawer()
     await flushPromises()
     expect(wrapper.get('.customer-record-result-title__qc-time').text()).toBe('质控完成时间未返回')
+  })
+
+  it('V5关闭冗余任务元数据请求，仍以三坐标读取原保存结果', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    getSichuanWorkspaceBatchJob.mockResolvedValue({ success: false, status: 404 })
+    const wrapper = mountDrawer('grouped', false)
+    await flushPromises()
+    expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledWith({
+      instituteId: 'H1',
+      patientId: 'P001',
+      visitId: 'V001',
+    })
+    expect(workbenchProps?.singleRecordItems).toEqual(readyResult.items)
+    expect(workbenchProps?.recordRef).toBe(readyResult.record_ref)
+    expect(wrapper.find('.customer-record-result-title__qc-time').exists()).toBe(false)
   })
 
   it('当前结果所属任务仍运行时展示进行中', async () => {

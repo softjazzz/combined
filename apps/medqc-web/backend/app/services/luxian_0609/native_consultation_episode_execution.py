@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from enum import Enum
@@ -45,6 +46,7 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .extended_document.shared import _parse_datetime
 from .consultation_response_freeze import FrozenResponseClient
+from .execution_time_budget import CONSULTATION_RULE_BUDGET_SECONDS, execution_time_budget, follow_up_fits
 from .judgement_examples import CONSULTATION_SCOPE_EXAMPLES
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .model_failure import classify_model_failure, log_model_failure
@@ -409,6 +411,7 @@ class NativeConsultationEpisodeExecutionResult:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    usage_observation_complete: bool = True
 
 
 @dataclass(frozen=True)
@@ -3337,6 +3340,7 @@ def _execution_event_batches(
     *,
     completed: Sequence[_CompletedRecommendation],
     candidates: Sequence[_CandidateDocument],
+    share_visible_order_refs: bool = False,
 ) -> tuple[tuple[_CompletedRecommendation, ...], ...]:
     """按完整会诊意见事件分批，沿用原有后续时序过滤，不裁短正文。
 
@@ -3344,7 +3348,7 @@ def _execution_event_batches(
     资料不足，不能跳过事件或把下一次会诊当成未经确认的执行截止点。
     """
     try:
-        _execution_prompt(completed=completed, candidates=candidates)
+        _execution_prompt(completed=completed, candidates=candidates, share_visible_order_refs=share_visible_order_refs)
         return (tuple(completed),)
     except _SourceGap:
         pass
@@ -3356,13 +3360,13 @@ def _execution_event_batches(
     for items in grouped.values():
         event = tuple(items)
         try:
-            _execution_prompt(completed=event, candidates=candidates)
+            _execution_prompt(completed=event, candidates=candidates, share_visible_order_refs=share_visible_order_refs)
         except _SourceGap:
             # 单次会诊建议多、每条各带当日及（继续类）此前医嘱时，整事件可超上限
             # （真实 C01 一次会诊 13 条建议、571 条医嘱候选）。逐条建议单独成批，
             # 候选与时序口径不变；单条仍超限才按资料不足。
             for item in event:
-                _execution_prompt(completed=(item,), candidates=candidates)
+                _execution_prompt(completed=(item,), candidates=candidates, share_visible_order_refs=share_visible_order_refs)
             if pending:
                 batches.append(pending)
                 pending = ()
@@ -3370,7 +3374,7 @@ def _execution_event_batches(
             continue
         proposed = (*pending, *event)
         try:
-            _execution_prompt(completed=proposed, candidates=candidates)
+            _execution_prompt(completed=proposed, candidates=candidates, share_visible_order_refs=share_visible_order_refs)
         except _SourceGap:
             batches.append(pending)
             pending = event
@@ -5224,7 +5228,8 @@ async def _execute_consultation_episode_rules(
                 if not issues:
                     break
                 error = _EpisodeGroundingViolation(issues)
-                if attempt:
+                # 剩余预算放不下补核时按补核失败处理，不发起注定超时的请求。
+                if attempt or not follow_up_fits(llm_client):
                     if all(item.reason in _UNRESOLVABLE_STATE_ISSUES for item in issues):
                         raise _OpinionStateUnresolved() from error
                     raise error
@@ -5538,6 +5543,7 @@ async def _execute_consultation_episode_rules(
                         execution_batches = _execution_event_batches(
                             completed=all_completed_recommendations,
                             candidates=projection.candidates,
+                            share_visible_order_refs=('LX0609-03-01-04' in stage_two_rule_ids),
                         )
                     except _SourceGap:
                         execution_batches = ()
@@ -5625,7 +5631,8 @@ async def _execute_consultation_episode_rules(
                                     response = await llm_client.generate(second_prompt)
                                 except Exception as first_error:
                                     api_time += time.perf_counter() - started
-                                    if not _is_retryable_execution_transport_failure(first_error):
+                                    if (not _is_retryable_execution_transport_failure(first_error)
+                                            or not follow_up_fits(llm_client)):
                                         raise
                                     calls += 1
                                     retry_attempted = True
@@ -5656,6 +5663,7 @@ async def _execute_consultation_episode_rules(
                                         if (
                                             not semantic_error.retryable_stage_two_shape
                                             or retry_attempted
+                                            or not follow_up_fits(llm_client)
                                         ):
                                             raise
                                         # 只对 HTTP 已成功、且 payload 的 executions
@@ -5718,7 +5726,8 @@ async def _execute_consultation_episode_rules(
                                     completed_missing_assessments: tuple[
                                         _ExecutionAssessment, ...
                                     ] = ()
-                                    if not retry_attempted:
+                                    # 预算不足时等同补问失败：漏项按既有路径不判已执行。
+                                    if not retry_attempted and follow_up_fits(llm_client):
                                         missing_prompt, missing_allowed_refs = (
                                             _execution_prompt(
                                                 completed=missing_completed,
@@ -5852,7 +5861,9 @@ async def _execute_consultation_episode_rules(
                                     and item.recommendation_ref
                                     not in recommendation_refs_without_course_candidates
                                 }
-                                if low_confidence_refs and not retry_attempted:
+                                # 预算不足时等同复核失败：保留首轮结论。
+                                if (low_confidence_refs and not retry_attempted
+                                        and follow_up_fits(llm_client)):
                                     # 只对首轮明确标为中/低信心的建议做一次
                                     # 最小上下文重问；已高信心的其他建议不重复投递。
                                     recheck_completed = tuple(
@@ -6324,12 +6335,55 @@ async def _execute_luxian_0609_native_consultation_episode_rules_uncached(
     shared = dict(institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
                   source_schema=source_schema, llm_client=llm_client, evidence_materials=evidence_materials,
                   evidence_snapshot=evidence_snapshot)
-    old = await _execute_consultation_episode_rules(
-        rule_ids=tuple(requested - {DISPOSITION_RECORD_RULE_ID}),
-        decision_rule_ids=tuple(typed - {DISPOSITION_RECORD_RULE_ID}),
-        opinion_freeze_dir=opinion_freeze_dir, opinion_freeze_rebuild=opinion_freeze_rebuild, **shared)
-    if DISPOSITION_RECORD_RULE_ID not in requested:
-        return old
+    async def timed(selected, operation):
+        try:
+            with execution_time_budget(CONSULTATION_RULE_BUDGET_SECONDS):
+                return await asyncio.wait_for(operation(), timeout=CONSULTATION_RULE_BUDGET_SECONDS)
+        except asyncio.TimeoutError:
+            return replace(_finish(
+                selected=tuple(sorted(selected)), status='technical_error', reason_code='executor_timeout',
+                evidence_snapshot=evidence_snapshot,
+                decision_rule_ids=frozenset(typed.intersection(selected)),
+            ), usage_observation_complete=False)
+
+    jobs = []
+    old_selected = requested - {DISPOSITION_RECORD_RULE_ID}
+    if old_selected:
+        jobs.append(timed(old_selected, lambda: _execute_consultation_episode_rules(
+            rule_ids=tuple(sorted(old_selected)), decision_rule_ids=tuple(sorted(typed.intersection(old_selected))),
+            opinion_freeze_dir=opinion_freeze_dir, opinion_freeze_rebuild=opinion_freeze_rebuild, **shared)))
+    if DISPOSITION_RECORD_RULE_ID in requested:
+        jobs.append(timed({DISPOSITION_RECORD_RULE_ID}, lambda: _execute_disposition_rule(
+            decision_rule_ids=tuple(typed.intersection({DISPOSITION_RECORD_RULE_ID})), **shared)))
+    # 两条规则独立取消；外层取消仍须清理全部任务，不能留下继续调用模型的孤儿任务。
+    tasks = [asyncio.create_task(job) for job in jobs]
+    try:
+        parts = await asyncio.gather(*tasks)
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    return NativeConsultationEpisodeExecutionResult(
+        results=tuple(item for part in parts for item in part.results),
+        planned_rule_ids=tuple(item for part in parts for item in part.planned_rule_ids),
+        decisions=tuple(item for part in parts for item in part.decisions),
+        customer_display_facts=tuple(item for part in parts for item in part.customer_display_facts),
+        diagnostic_semantic_snapshot=next((part.diagnostic_semantic_snapshot for part in parts
+                                           if part.diagnostic_semantic_snapshot is not None), None),
+        llm_call_count=sum(part.llm_call_count for part in parts),
+        prompt_tokens=sum(part.prompt_tokens for part in parts),
+        completion_tokens=sum(part.completion_tokens for part in parts),
+        total_tokens=sum(part.total_tokens for part in parts), api_time=sum(part.api_time for part in parts),
+        usage_observation_complete=all(part.usage_observation_complete for part in parts),
+    )
+
+
+async def _execute_disposition_rule(
+    *, institute_id, patient_id, visit_id, source_schema, llm_client,
+    evidence_materials, evidence_snapshot, decision_rule_ids,
+) -> NativeConsultationEpisodeExecutionResult:
+    typed = frozenset(decision_rule_ids)
     from .consultation_disposition_record import DispositionRecordOutcome
 
     try:
@@ -6359,17 +6413,14 @@ async def _execute_luxian_0609_native_consultation_episode_rules_uncached(
         calls=outcome.llm_call_count, prompt_tokens=outcome.prompt_tokens,
         completion_tokens=outcome.completion_tokens, total_tokens=outcome.total_tokens, api_time=outcome.api_time)
     return NativeConsultationEpisodeExecutionResult(
-        results=old.results + new.results,
-        planned_rule_ids=old.planned_rule_ids + new.planned_rule_ids,
-        decisions=old.decisions + new.decisions,
-        customer_display_facts=old.customer_display_facts + new.customer_display_facts + (
+        results=new.results,
+        planned_rule_ids=new.planned_rule_ids,
+        decisions=new.decisions,
+        customer_display_facts=new.customer_display_facts + (
             ((DISPOSITION_RECORD_RULE_ID, {
                 "failure_kind": "consultation_disposition_unspecific",
                 "unspecific_document_count": unspecific_document_count,
             }),) if outcome.status == "non_compliant" else ()
         ),
-        diagnostic_semantic_snapshot=old.diagnostic_semantic_snapshot,
-        llm_call_count=old.llm_call_count + new.llm_call_count,
-        prompt_tokens=old.prompt_tokens + new.prompt_tokens,
-        completion_tokens=old.completion_tokens + new.completion_tokens,
-        total_tokens=old.total_tokens + new.total_tokens, api_time=old.api_time + new.api_time)
+        llm_call_count=new.llm_call_count, prompt_tokens=new.prompt_tokens,
+        completion_tokens=new.completion_tokens, total_tokens=new.total_tokens, api_time=new.api_time)

@@ -7,6 +7,8 @@ from datetime import date, datetime
 from typing import Any, Callable, Mapping
 from zoneinfo import ZoneInfo
 
+from app.core.execution_timing import timed
+
 from .evidence_snapshot import (
     EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
     Luxian0609EvidenceSnapshot,
@@ -307,6 +309,7 @@ def _parse_admission_date(value: Any) -> date | None:
     return _parse_authoritative_date(value, field_name="admission_datetime")
 
 
+@timed("evidence_snapshot")
 def build_luxian_0609_evidence_read_session(
     *,
     selected_rule_ids: tuple[str, ...],

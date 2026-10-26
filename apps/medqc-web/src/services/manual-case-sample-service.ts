@@ -18,6 +18,7 @@ import type {
   Sheet2ExactReviewAcceptancePackage,
 } from '@/views/workstation-v4/customer-sample-validation/types'
 import { deduplicateMedicalDocumentSections } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
+import { normalizeFrontpageDisplay } from '@/views/workstation-v4/customer-sample-validation/frontpageDisplay'
 
 type ServiceResult<T> = {
   success: boolean
@@ -322,6 +323,8 @@ function normalizeEditableDocumentsResponse(
         sections: readDocumentSections(row),
         report_items: reportItems,
         report_metadata: reportMetadata,
+        frontpage_display:
+          documentType === 'mr' ? normalizeFrontpageDisplay(row.frontpage_display) : undefined,
         record_time: rawRecordTime || orderDisplayTime || submitTime,
         record_time_source:
           readStringField(row, ['record_time_source']) ||

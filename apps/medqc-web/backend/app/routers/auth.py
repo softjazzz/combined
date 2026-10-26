@@ -1,23 +1,24 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
 from pydantic import EmailStr
 
 from ..core.response import success_response, get_trace_id
-from ..schemas.auth import UserCreate, UserUpdate, UserResponse, LoginRequest, RefreshTokenRequest
+from ..schemas.auth import UserUpdate, LoginRequest, RefreshTokenRequest
+from ..schemas.registration import RegistrationCreate, RegistrationStatusQuery
+from ..core.rate_limit import enforce_rate_limit
 from ..core.settings import get_settings
+from ..core.roles import effective_roles
 from ..core.security import (
     create_access_token,
     create_password_reset_token,
     consume_password_reset_jti,
     get_current_user,
     get_password_hash,
-    resolve_user_by_subject,
     verify_password_reset_token,
     verify_password,
 )
 from ..services.auth_store import (
-    create_user,
     find_user_by_account,
     resolve_user_by_subject as resolve_auth_store_user_by_subject,
     touch_last_login,
@@ -29,6 +30,20 @@ from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
+
+
+async def _registration_call(method, *args):
+    from starlette.concurrency import run_in_threadpool
+    from ..services.account_registration_service import AccountRegistrationService
+    from ..services.defect_rectification_service import RectificationError
+
+    try:
+        return await run_in_threadpool(getattr(AccountRegistrationService(), method), *args)
+    except RectificationError as exc:
+        raise HTTPException(exc.status, str(exc)) from None
+    except Exception as exc:
+        logger.warning("注册服务失败 error_type=%s", type(exc).__name__)
+        raise HTTPException(503, "注册审批服务暂不可用，请刷新核对，勿重复提交") from None
 
 
 def _normalize_account(raw_value: str | None) -> str:
@@ -46,8 +61,10 @@ def _user_payload(user: dict) -> dict:
         "email": user["email"],
         "username": user.get("username"),
         "display_name": user["display_name"],
+        "institute_id": str(user.get("institute_id") or "").strip(),
+        "is_active": bool(user.get("is_active", True)),
         "department": user["department"],
-        "roles": user["roles"],
+        "roles": effective_roles(user["roles"]),
         "avatar": user["avatar"],
         "phone": user["phone"],
         "bio": user["bio"],
@@ -114,21 +131,23 @@ async def login(request: Request, login_data: LoginRequest):
 
 
 @router.post("/register")
-async def register(request: Request, user_data: UserCreate):
-    try:
-        new_user = create_user(
-            email=str(user_data.email),
-            username=user_data.username,
-            display_name=user_data.display_name,
-            department=user_data.department,
-            phone=user_data.phone,
-            bio=user_data.bio,
-            role=user_data.role or "doctor",
-            password_hash=get_password_hash(user_data.password),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return _auth_shell(request, _user_payload(new_user), message="注册成功")
+async def register(request: Request, user_data: RegistrationCreate):
+    enforce_rate_limit(request, bucket="registration_submit", max_requests=10, window_seconds=60)
+    result = await _registration_call("submit", user_data.model_dump())
+    return _auth_shell(request, result, message="注册申请已保存，请等待管理员审批")
+
+
+@router.post("/registration-status")
+async def registration_status(request: Request, query: RegistrationStatusQuery):
+    enforce_rate_limit(request, bucket="registration_status", max_requests=10, window_seconds=60)
+    result = await _registration_call("status", query.account, query.password)
+    return _auth_shell(request, result)
+
+
+@router.get("/registration")
+async def own_registration(request: Request, current_user: dict = Depends(get_current_user)):
+    result = await _registration_call("own_status", str(current_user.get("id") or ""))
+    return _auth_shell(request, result)
 
 
 @router.get("/me")
@@ -138,6 +157,8 @@ async def get_current_user_info(    request: Request,current_user: dict = Depend
 
 @router.put("/profile")
 async def update_profile(    request: Request,profile_data: UserUpdate, current_user: dict = Depends(get_current_user)):
+    if profile_data.department is not None and profile_data.department != current_user.get("department"):
+        raise HTTPException(403, "账号科室授权仅可由系统管理员变更")
     try:
         user = update_user_profile(
             user_id=str(current_user.get("id") or ""),

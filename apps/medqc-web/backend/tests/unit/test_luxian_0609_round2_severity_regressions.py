@@ -63,3 +63,11 @@ async def test_ended_severity_without_restart_does_not_extend_to_discharge(sever
               _order("2026-01-01 10:00:00", severity, "end")]
     result = await _final(f"LX0609-02-01-{suffix}", orders, [_note(1)])
     assert result["status"] == "compliant"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body,expected", [(None, "non_compliant"), ("患者病情危重，继续抢救。", "data_gap")])
+async def test_undated_empty_placeholder_does_not_hide_critical_course_gap(body, expected):
+    notes = [_note(1), {"document_id": "undated", "record_content": body}]
+    result = await _final("LX0609-02-01-05", [_order("2026-01-01 08:00:00", "critical")], notes)
+    assert result["status"] == expected

@@ -270,10 +270,10 @@ class TestAuthAPI:
         })
         token = login_response.json()["access_token"]
 
-        # 更新资料
+        # 更新个人资料，但科室授权只能由管理员维护。
         update_data = {
             "display_name": "新用户名",
-            "department": "新部门",
+            "department": "原始部门",
             "phone": _unique_phone(),
             "bio": "新的个人简介"
         }
@@ -286,7 +286,7 @@ class TestAuthAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["display_name"] == "新用户名"
-        assert data["department"] == "新部门"
+        assert data["department"] == "原始部门"
         assert data["phone"] == update_data["phone"]
         assert data["bio"] == "新的个人简介"
 

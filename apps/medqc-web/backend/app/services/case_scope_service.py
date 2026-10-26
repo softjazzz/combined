@@ -71,7 +71,12 @@ class CaseScopeService:
         discharge_end_date: date | None,
         departments: Sequence[str],
         admission_start_date: date | None = None,
+        institute_id: str | None = None,
     ) -> HospitalizationScopeResult:
+        if institute_id is not None and (
+            not isinstance(institute_id, str) or not institute_id.strip() or institute_id != institute_id.strip()
+        ):
+            raise ValueError("机构范围必须是明确非空ID")
         normalized_mode = _normalize_scope(
             scope_mode=scope_mode,
             admission_start_date=admission_start_date,
@@ -143,6 +148,8 @@ class CaseScopeService:
                     return []
                 table_name = _text(source.get("table_name"))
                 columns = set(source.get("columns") or set())
+                if institute_id is not None and "institute_id" not in columns and default_institute_id != institute_id:
+                    return []
                 if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name):
                     raise ValueError("住院来源表名称非法")
                 admission_column = _text(source.get("admission_time_column"))
@@ -302,6 +309,9 @@ class CaseScopeService:
                 order_time_alias = (
                     "admission_time" if admission_column else "discharge_time"
                 )
+                if institute_id is not None and "institute_id" in columns:
+                    where_sql += " AND source_row.institute_id::text = %s::text"
+                    date_params.append(institute_id)
                 cursor.execute(
                     f"""
                     WITH scoped AS (
@@ -330,6 +340,7 @@ class CaseScopeService:
                 return [
                     {**dict(row), "source_table": table_name}
                     for row in (cursor.fetchall() or [])
+                    if institute_id is None or _text(row.get("institute_id")) == institute_id
                 ]
 
             active_source = plan.get("active")

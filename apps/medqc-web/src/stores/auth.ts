@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { ApiService } from '@/services/apiService'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import type { LoginRequest, RegisterRequest } from '@/types'
 import { message } from 'ant-design-vue'
 
@@ -12,6 +13,7 @@ interface User {
   display_name?: string
   department?: string
   hospital_id?: string
+  institute_id?: string
   roles?: string[]
   is_active?: boolean
   last_login?: string
@@ -41,10 +43,10 @@ export const useAuthStore = defineStore('auth', () => {
     if (!user.value) return []
     // 支持两种数据格式：roles数组 或 role字符串
     if (user.value.roles && Array.isArray(user.value.roles)) {
-      return user.value.roles
+      return effectiveRoles(user.value.roles)
     }
     if (user.value.role) {
-      return [user.value.role]
+      return effectiveRoles([user.value.role])
     }
     return []
   })
@@ -114,9 +116,7 @@ export const useAuthStore = defineStore('auth', () => {
         // role 参数暂时注释掉
       }
 
-      console.warn('🔐 Auth Store 登录请求:', loginRequest)
       const response = await ApiService.login(loginRequest)
-      console.warn('📡 API 响应:', response)
 
       if (response.success && response.data) {
         // 登录成功后，使用token拉取当前用户信息
@@ -179,7 +179,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.success) {
         return {
           success: true,
-          message: response.message || '注册成功，请等待管理员审核',
+          message: response.message || '注册申请已保存，请等待管理员审批',
         }
       }
 

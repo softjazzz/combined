@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
-from sqlalchemy import text as sql_text
+from sqlalchemy import inspect as sa_inspect, text as sql_text
 from sqlalchemy.orm import Session
 
+from ..clinical_read import clinical_query, clinical_read_schema, clinical_table_sql
 from ...database.connection import engine
 from ...database.repository import get_repository
 from ...database.models.cdm import (
@@ -33,21 +34,28 @@ TIME_COLUMNS = (
 
 def _get_table_columns(session: Session, table_name: str) -> set[str]:
     try:
+        bind = session.get_bind() if hasattr(session, "get_bind") else None
+        if bind is not None and bind.dialect.name == "sqlite":
+            inspector = sa_inspect(bind)
+            schema = clinical_read_schema()
+            if not inspector.has_table(table_name, schema=schema):
+                return set()
+            return {column["name"] for column in inspector.get_columns(table_name, schema=schema)}
         rows = session.execute(
             sql_text(
                 """
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = :table_name
-                  AND table_schema NOT IN ('information_schema', 'pg_catalog')
+                  AND table_schema = :source_schema
                 """
             ),
-            {"table_name": table_name},
+            {"table_name": table_name, "source_schema": clinical_read_schema() or "public"},
         ).mappings().all()
     except Exception:
         return {"record_content"}
     columns = {str(row.get("column_name")) for row in rows if row.get("column_name")}
-    return columns or {"record_content"}
+    return columns
 
 
 def _pick_time_columns(columns: set[str]) -> list[str]:
@@ -157,7 +165,7 @@ def get_documents(
 
                     rows = session.execute(
                         sql_text(
-                            f"SELECT {', '.join(select_fields)} FROM {table_name} "
+                            f"SELECT {', '.join(select_fields)} FROM {clinical_table_sql(table_name)} "
                             "WHERE visit_id = :vid"
                             f"{order_by}"
                         ),
@@ -195,7 +203,7 @@ def get_frontpage_sheet(
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
     with session_factory() as session:
-        fp = session.query(MedicalRecordFrontpage).filter_by(
+        fp = clinical_query(session, MedicalRecordFrontpage).filter_by(
             patient_id=patient_id, visit_id=visit_id
         ).first()
         if not fp:
@@ -206,7 +214,7 @@ def get_frontpage_sheet(
             val = getattr(fp, col.name, None)
             basic[col.name] = str(val) if val is not None else None
 
-        diag_rows = session.query(Diagnosis).filter_by(
+        diag_rows = clinical_query(session, Diagnosis).filter_by(
             patient_id=patient_id, visit_id=visit_id
         ).order_by(Diagnosis.diagnosis_type, Diagnosis.diagnosis_no).all()
         diagnoses = []
@@ -231,7 +239,7 @@ def get_frontpage_sheet(
                 "discharge_condition": diag.discharge_condition,
             })
 
-        surg_rows = session.query(MrSurgery).filter_by(
+        surg_rows = clinical_query(session, MrSurgery).filter_by(
             patient_id=patient_id, visit_id=visit_id
         ).all()
         surgeries = []
@@ -251,7 +259,7 @@ def get_frontpage_sheet(
                 "main_surgery_sign": surg.main_surgery_sign,
             })
 
-        cost_row = session.query(MrCost).filter_by(
+        cost_row = clinical_query(session, MrCost).filter_by(
             patient_id=patient_id, visit_id=visit_id
         ).first()
         cost_data = None

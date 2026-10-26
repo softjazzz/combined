@@ -420,3 +420,17 @@ async def test_combined_procedures_cannot_share_one_action_as_full_execution():
     assert "逐项拆开" in client.prompts[1]
     failed = await _check(_Client([bad, bad]))
     assert _final(failed) == ("data_gap", "semantic_extraction_unresolved")
+
+
+@pytest.mark.asyncio
+async def test_no_follow_up_when_remaining_budget_cannot_fit_full_request():
+    # 2026-10-23 C02：剩余预算放不下一次完整请求时不再补核，按末次核验失败处理（资料不足）。
+    from app.services.luxian_0609.execution_time_budget import execution_time_budget
+
+    _, _, _, alias = _setup()
+    client = _Client([_measures(alias, bad="quote"), _measures(alias)])
+    client.timeout_seconds = 120
+    with execution_time_budget(30):
+        outcome = await _check(client)
+    assert outcome.state == "failed" and outcome.llm_call_count == 1 and len(client.prompts) == 1
+    assert _final(outcome) == ("data_gap", "semantic_extraction_unresolved")

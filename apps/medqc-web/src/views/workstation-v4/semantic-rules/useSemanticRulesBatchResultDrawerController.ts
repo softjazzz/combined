@@ -1,3 +1,4 @@
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
@@ -13,8 +14,18 @@ import type {
 } from '@/views/workstation-v4/semantic-rules/types'
 import {
   evaluateSichuanRuleForVisit,
+  getSichuanWorkspaceBatchJobRecordIdentities,
   getSichuanWorkspaceBatchJobResultTrace,
+  type BatchJobRecordIdentity,
 } from '@/services/sichuan-rule-workspace-service'
+import {
+  buildReviewRecords,
+  buildTopIssueRules,
+  cleanRuleTitle,
+  reviewStatusOf,
+  ruleChapterName,
+  type ReviewItem,
+} from '@/views/workstation-v4/semantic-rules/batchRecordReviewModel'
 import type {
   StructuredQCFilterState,
   StructuredQCIssue,
@@ -28,6 +39,7 @@ import {
 import {
   isBatchJobCancelable,
   isBatchJobPollingActive,
+  getBatchJobRetryMessage,
 } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 import BatchResultOverview from '@/views/workstation-v4/semantic-rules/components/BatchResultOverview.vue'
 import BatchResultTraceModal from '@/views/workstation-v4/semantic-rules/components/BatchResultTraceModal.vue'
@@ -77,16 +89,21 @@ export function useSemanticRulesBatchResultDrawerController(
   props: Readonly<SemanticRulesBatchResultDrawerProps>,
 ) {
   const workstationConfirmation = useWorkstationConfirmation()
+  const { confirmedResultsOnly } = useQcResultVisibility()
   type BatchJobExportFormat = 'xlsx' | 'csv' | 'html'
   const diagnosticPackageLoading = ref(false)
-  const canLoadDebugSnapshot = computed(() => Boolean(props.fetchBatchJobDebugSnapshot))
+  const canLoadDebugSnapshot = computed(
+    () => !confirmedResultsOnly.value && Boolean(props.fetchBatchJobDebugSnapshot),
+  )
 
   function handleExportMenuClick(event: { key?: unknown }) {
+    if (confirmedResultsOnly.value) return
     const format = String(event?.key || 'html') as BatchJobExportFormat
     props.exportBatchJobReport(['xlsx', 'csv', 'html'].includes(format) ? format : 'html')
   }
 
   async function downloadBatchJobDiagnosticPackage() {
+    if (confirmedResultsOnly.value) return
     const job = props.batchJobDetail
     if (!job || diagnosticPackageLoading.value) return
     diagnosticPackageLoading.value = true
@@ -94,6 +111,7 @@ export function useSemanticRulesBatchResultDrawerController(
       const refreshedSnapshot = props.fetchBatchJobDebugSnapshot
         ? await props.fetchBatchJobDebugSnapshot(job.id, { itemLimit: 200 })
         : null
+      if (confirmedResultsOnly.value) return
       const snapshot = refreshedSnapshot || props.batchJobDebugSnapshot
       const content = buildBatchJobDiagnosticText(job, snapshot)
       downloadBlob(
@@ -105,6 +123,21 @@ export function useSemanticRulesBatchResultDrawerController(
       message.error('生成质控诊断包失败，请稍后重试')
     } finally {
       diagnosticPackageLoading.value = false
+    }
+  }
+
+  /** 页头“更多”菜单：明细导出、诊断包、复核与高级视图均为管理排查用途，不占客户主操作位。 */
+  function handleMoreMenuClick(event: { key?: unknown }) {
+    if (confirmedResultsOnly.value) return
+    const key = String(event?.key || '')
+    if (key === 'xlsx' || key === 'csv' || key === 'html') {
+      handleExportMenuClick({ key })
+    } else if (key === 'diagnostic') {
+      void downloadBatchJobDiagnosticPackage()
+    } else if (key === 'review') {
+      void handleReviewBatchJobResult()
+    } else if (key === 'advanced') {
+      issueViewMode.value = issueViewMode.value === 'advanced' ? 'business' : 'advanced'
     }
   }
 
@@ -221,6 +254,14 @@ export function useSemanticRulesBatchResultDrawerController(
   let liveTicker: ReturnType<typeof setInterval> | null = null
 
   const issueViewMode = ref<'business' | 'advanced' | 'compare'>('business')
+  watch(confirmedResultsOnly, (restricted) => {
+    if (restricted) {
+      issueViewMode.value = 'business'
+      showAllStatuses.value = false
+      resultTraceModalOpen.value = false
+      deepReviewModalOpen.value = false
+    }
+  })
   const showAllStatuses = ref(false)
   const issueFilter = ref<StructuredQCFilterState>(createDefaultStructuredQCFilter())
   const advancedSectionKeys = ref<string[]>([])
@@ -440,15 +481,22 @@ export function useSemanticRulesBatchResultDrawerController(
     return []
   })
 
+  function visibleForResultViewer(item: SichuanBatchIssueItem): boolean {
+    return !confirmedResultsOnly.value ||
+      (resolveIssueCanonicalStatus(item) === 'non_compliant' && item.internal_only !== true)
+  }
+
   const canonicalLuxianIssueSourceItems = computed<SichuanBatchIssueItem[]>(() => {
     const topLevelItems = props.batchJobDetail?.items || []
     if (topLevelItems.length > 0) {
-      if (!isFocusedRecordMode.value) return topLevelItems
-      return topLevelItems.filter((item) => matchesFocusedRecord(item))
+      const visibleItems = topLevelItems.filter(visibleForResultViewer)
+      if (!isFocusedRecordMode.value) return visibleItems
+      return visibleItems.filter((item) => matchesFocusedRecord(item))
     }
     const seen = new Set<string>()
     return resolvedRuleResults.value
       .flatMap((ruleResult) => ruleResult.items || [])
+      .filter(visibleForResultViewer)
       .filter((item) => {
         const key = [
           item.record_ref || item.record_id || item.visit_id || '',
@@ -520,7 +568,7 @@ export function useSemanticRulesBatchResultDrawerController(
   const resultTraceData = ref<SichuanBatchJobResultTrace | null>(null)
 
   const batchJobDebugSnapshot = computed(() => props.batchJobDebugSnapshot || null)
-  const canShowResultTrace = computed(() => issueViewMode.value === 'advanced')
+  const canShowResultTrace = computed(() => !confirmedResultsOnly.value && issueViewMode.value === 'advanced')
 
   type ResultTraceRow = {
     key: string
@@ -761,7 +809,7 @@ export function useSemanticRulesBatchResultDrawerController(
         })
     }
     const mapped = structuredIssues.value.map(mapStructuredIssueToBatchIssueItem)
-    return mapped
+    return mapped.filter(visibleForResultViewer)
   })
 
   const resolvedDeepReviewResult = computed(() => {
@@ -1143,6 +1191,7 @@ export function useSemanticRulesBatchResultDrawerController(
   })
 
   const noIssueEvidenceSourceItems = computed<SichuanBatchIssueItem[]>(() => {
+    if (confirmedResultsOnly.value) return []
     if (isLuxian0609BatchJob.value) {
       let items = canonicalLuxianIssueSourceItems.value.filter((item) =>
         ['compliant', 'not_applicable', 'ai_suggested_compliant'].includes(
@@ -1826,7 +1875,9 @@ export function useSemanticRulesBatchResultDrawerController(
       if (!key) return
       counts.set(key, Number(counts.get(key) || 0) + 1)
     })
-    return LUXIAN_0609_STATUS_ORDER.map((key) => ({
+    return LUXIAN_0609_STATUS_ORDER
+      .filter((key) => !confirmedResultsOnly.value || key === 'non_compliant')
+      .map((key) => ({
       key,
       label: resolveEvidenceStatusText(key),
       value: Number(counts.get(key) || 0),
@@ -1923,6 +1974,7 @@ export function useSemanticRulesBatchResultDrawerController(
     const status = props.batchJobDetail?.status || 'queued'
     return {
       title: resultReviewOverviewTitle.value,
+      confirmedResultsOnly: confirmedResultsOnly.value,
       statusClass: props.getBatchJobStatusTagClass(status),
       statusText: props.getBatchJobStatusText(status),
       createdAtText: props.batchJobDetail?.created_at
@@ -1937,8 +1989,89 @@ export function useSemanticRulesBatchResultDrawerController(
       outcomeText: resultReviewOutcomeText.value,
       scopeText: resultReviewScopeText.value,
       statusPills: resultReviewStatusPills.value,
+      issueRecordCount: customerReviewRecords.value.length
+        ? customerReviewRecords.value.filter((record) => record.counts.non_compliant > 0).length
+        : undefined,
     }
   })
+
+  // ---- 客户视图（2026-10-23 改版）：病历标识回查 + 按病历、按章节的结果模型 ----
+  const recordIdentities = ref<Map<string, BatchJobRecordIdentity>>(new Map())
+  let recordIdentityJobId = ''
+  watch(
+    () => [props.open, props.batchJobDetail?.id, isLuxian0609BatchJob.value] as const,
+    async ([open, jobId, isLuxian]) => {
+      const normalizedJobId = String(jobId || '')
+      if (!open || !normalizedJobId || !isLuxian || recordIdentityJobId === normalizedJobId) return
+      recordIdentityJobId = normalizedJobId
+      recordIdentities.value = new Map()
+      const result = await getSichuanWorkspaceBatchJobRecordIdentities(normalizedJobId)
+      if (recordIdentityJobId !== normalizedJobId) return
+      // 回查失败不影响结果查看：病历按序号展示。
+      const items = result.success ? result.data?.items || [] : []
+      recordIdentities.value = new Map(items.map((item) => [item.record_ref, item]))
+    },
+    { immediate: true },
+  )
+
+  function toCustomerReviewItem(item: SichuanBatchIssueItem): ReviewItem {
+    const card = enrichBusinessIssueCard(item)
+    const ruleCode = String(item.rule_code || item.rule_id || '').trim()
+    return {
+      key: resolveIssueStableKey(item),
+      ruleCode,
+      title: cleanRuleTitle(String(item.rule_name || '')),
+      status: reviewStatusOf(resolveIssueCanonicalStatus(item)),
+      chapter: ruleChapterName(ruleCode),
+      summary: String(card.customer_display?.conclusion || card.customer_findings_text || ''),
+      suggestion: String(card.customer_suggestion_text || ''),
+      evidence: resolveEvidenceChainItems(item, 600)
+        .slice(0, 4)
+        .map((evidence) => ({
+          key: evidence.key,
+          source: evidence.source,
+          time: evidence.recordTime,
+          quote: evidence.quote,
+        })),
+    }
+  }
+
+  const customerReviewRecords = computed(() =>
+    isLuxian0609BatchJob.value
+      ? buildReviewRecords(
+          canonicalLuxianIssueSourceItems.value.filter((item) => item.internal_only !== true),
+          {
+            recordKey: resolveIssueRecordKey,
+            toReviewItem: toCustomerReviewItem,
+            identities: recordIdentities.value,
+          },
+        )
+      : [],
+  )
+
+  const customerTopIssueRules = computed(() => buildTopIssueRules(customerReviewRecords.value))
+
+  /** 执行失败明细中的病历：有标识时显示“病历 NN · 住院号”，否则退回安全引用。 */
+  function failureRecordLabel(
+    failure: Partial<Pick<SichuanBatchIssueItem, 'record_ref' | 'visit_id' | 'record_id'>>,
+  ) {
+    const identity = recordIdentities.value.get(String(failure.record_ref || '').trim())
+    if (identity) {
+      const sequence = `病历 ${String(identity.sequence).padStart(2, '0')}`
+      return identity.inpatient_no ? `${sequence} · 住院号 ${identity.inpatient_no}` : sequence
+    }
+    return (
+      String(failure.record_ref || failure.visit_id || failure.record_id || '').trim() || '未知病历'
+    )
+  }
+
+  /** 多份病历的泸县 0609 任务默认用客户视图；“高级视图”仍保留给管理员排查。 */
+  const showCustomerReview = computed(
+    () =>
+      (customerReviewRecords.value.length > 1 ||
+        (confirmedResultsOnly.value && resultReviewRecordCount.value > 1)) &&
+      issueViewMode.value === 'business',
+  )
 
   const luxianReviewReport = computed<Luxian0609ReviewReport | null>(() => {
     const report = props.batchJobDetail?.summary?.review_report
@@ -2144,6 +2277,17 @@ export function useSemanticRulesBatchResultDrawerController(
       }
     }
     if (status === 'completed') {
+      if (confirmedResultsOnly.value) {
+        return {
+          tone: 'completed',
+          title: '任务已完成',
+          description: issueRecords > 0
+            ? `当前展示 ${issueRecords} 条确定问题。`
+            : '当前没有可展示的确定问题。',
+          meta,
+          pulse: false,
+        }
+      }
       const focusCount =
         issueRecords +
         uncertainRecords +
@@ -2239,6 +2383,8 @@ export function useSemanticRulesBatchResultDrawerController(
       props.batchJobDetail?.summary?.failed_rule_count || partialFailureItems.value.length || 0,
     ),
   }))
+
+  const failedRuleRetryMessage = computed(() => getBatchJobRetryMessage(props.batchJobDetail))
 
   const primarySummaryCards = computed(() => {
     const summary = props.batchJobDetail?.summary
@@ -2539,6 +2685,9 @@ export function useSemanticRulesBatchResultDrawerController(
   const issueFocusSummary = computed(() => {
     const currentItems = displayIssueItems.value
     const total = currentItems.length
+    if (confirmedResultsOnly.value) {
+      return total > 0 ? `当前展示 ${total} 条确定问题。` : '当前没有可展示的确定问题。'
+    }
     if (!total) {
       return showAllStatuses.value
         ? '当前没有可展示的规则结果。'
@@ -2575,7 +2724,7 @@ export function useSemanticRulesBatchResultDrawerController(
   })
 
   const issueSectionTitle = computed(() =>
-    isLuxian0609BatchJob.value
+    confirmedResultsOnly.value ? '确定问题' : isLuxian0609BatchJob.value
       ? 'LX0609 客户质控点结果'
       : isPostprocessedFormalResult.value
         ? '确认缺陷/数据缺口/系统驳回'
@@ -2583,7 +2732,7 @@ export function useSemanticRulesBatchResultDrawerController(
   )
 
   const emptyIssueText = computed(() =>
-    isLuxian0609BatchJob.value
+    confirmedResultsOnly.value ? '当前没有可展示的确定问题' : isLuxian0609BatchJob.value
       ? '暂无 LX0609 不合规、数据不足或 AI 判断结果'
       : isPostprocessedFormalResult.value
         ? '暂无确认缺陷、数据缺口或系统驳回项'
@@ -3024,6 +3173,13 @@ export function useSemanticRulesBatchResultDrawerController(
   })
 
   return {
+    confirmedResultsOnly,
+    failureRecordLabel,
+    handleMoreMenuClick,
+    customerReviewRecords,
+    customerTopIssueRules,
+    recordIdentities,
+    showCustomerReview,
     activeRuleFilterLabel,
     advancedSectionKeys,
     advancedSummaryCards,
@@ -3096,6 +3252,7 @@ export function useSemanticRulesBatchResultDrawerController(
     openIssueTrace,
     partialFailureItems,
     partialFailureSummary,
+    failedRuleRetryMessage,
     progressSummary,
     QCRecordCompareWorkbench,
     recordCompareCoordinates,

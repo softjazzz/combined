@@ -7,6 +7,7 @@ from typing import Any, Callable
 from sqlalchemy import MetaData, func, select, text
 from sqlalchemy.orm import Session
 
+from ..clinical_read import clinical_query, clinical_read_table, clinical_table_sql, is_synced_clinical_table
 from ...database.connection import Base, engine
 from ...database.models.cdm import MedicalRecordFrontpage, Diagnosis, MrSurgery, MrCost
 from .errors import MedicalRecordsNotFoundError
@@ -68,6 +69,9 @@ def get_table_data(
 
     session_factory = session_factory or _session_factory
     table_obj = metadata.tables[table_name]
+    # 通用查表也包含QC/系统表，只限定同步目录中的临床表。
+    if is_synced_clinical_table(table_obj.name):
+        table_obj = clinical_read_table(table_obj)
 
     with session_factory() as session:
         total = session.execute(select(func.count()).select_from(table_obj)).scalar() or 0
@@ -162,7 +166,7 @@ def get_frontpage_sheet(
     session_factory = session_factory or _session_factory
 
     with session_factory() as session:
-        fp = session.query(MedicalRecordFrontpage).filter_by(
+        fp = clinical_query(session, MedicalRecordFrontpage).filter_by(
             patient_id=patient_id, visit_id=visit_id
         ).first()
         if not fp:
@@ -174,7 +178,7 @@ def get_frontpage_sheet(
         if not str(basic.get("institute_county_desc") or "").strip():
             basic["institute_county_desc"] = DEFAULT_HOSPITAL_NAME
 
-        diag_rows = session.query(Diagnosis).filter_by(
+        diag_rows = clinical_query(session, Diagnosis).filter_by(
             patient_id=patient_id, visit_id=visit_id
         ).order_by(Diagnosis.diagnosis_type, Diagnosis.diagnosis_no).all()
         diagnoses = []
@@ -187,7 +191,7 @@ def get_frontpage_sheet(
         if not diagnoses:
             mr_diag_rows = session.execute(
                 text(
-                    "SELECT * FROM mr_diagnosis "
+                    f"SELECT * FROM {clinical_table_sql('mr_diagnosis')} "
                     "WHERE patient_id = :patient_id AND visit_id = :visit_id "
                     "AND diagnosis_type LIKE '%出院诊断%' "
                     "ORDER BY CASE WHEN diagnosis_main = '是' THEN 0 ELSE 1 END, "
@@ -208,7 +212,7 @@ def get_frontpage_sheet(
         if not diagnoses:
             record_diag_rows = session.execute(
                 text(
-                    "SELECT * FROM discharge_record_diagnosis "
+                    f"SELECT * FROM {clinical_table_sql('discharge_record_diagnosis')} "
                     "WHERE patient_id = :patient_id AND visit_id = :visit_id "
                     "AND diagnosis_type LIKE '%出院诊断%' "
                     "AND COALESCE(is_deleted, '0') <> '1' "
@@ -241,7 +245,7 @@ def get_frontpage_sheet(
         else:
             mr_pathology_row = session.execute(
                 text(
-                    "SELECT * FROM mr_diagnosis "
+                    f"SELECT * FROM {clinical_table_sql('mr_diagnosis')} "
                     "WHERE patient_id = :patient_id AND visit_id = :visit_id "
                     "AND COALESCE(is_deleted, '0') <> '1' "
                     "AND (diagnosis_type LIKE '%病理%' OR diagnosis_code LIKE 'M%') "
@@ -255,7 +259,7 @@ def get_frontpage_sheet(
                 row["source_table"] = "mr_diagnosis"
                 pathology_info = _build_pathology_info(row)
 
-        surg_rows = session.query(MrSurgery).filter_by(
+        surg_rows = clinical_query(session, MrSurgery).filter_by(
             patient_id=patient_id, visit_id=visit_id
         ).all()
         surgeries = []
@@ -275,7 +279,7 @@ def get_frontpage_sheet(
                 "main_surgery_sign": surg.main_surgery_sign,
             })
 
-        cost_row = session.query(MrCost).filter_by(
+        cost_row = clinical_query(session, MrCost).filter_by(
             patient_id=patient_id, visit_id=visit_id
         ).first()
         cost_data = None

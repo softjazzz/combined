@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 
 import logging
@@ -15,6 +16,8 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
+
+from app.core.execution_timing import measure_stage, timing_labels
 
 from .decision_model import (
     ApplicabilityState,
@@ -2453,6 +2456,75 @@ async def execute_luxian_0609_native_extended_document_rules(
     evidence_materials: Luxian0609EvidenceMaterialStore,
     decision_rule_ids: Sequence[str] = (),
     llm_client: Any = None,
+    **kwargs: Any,
+) -> NativeExtendedDocumentExecutionResult:
+    """仅并行两个独立事实组；不拆抗菌药共享缓存，不改变临床内核。"""
+    selected = tuple(rule_id for rule_id in EXTENDED_DOCUMENT_RULE_IDS
+                     if rule_id in {str(item or "").strip().upper() for item in rule_ids})
+    if not selected:
+        return NativeExtendedDocumentExecutionResult((), (), ())
+    if (not isinstance(evidence_snapshot, Luxian0609EvidenceSnapshot)
+            or not isinstance(evidence_materials, Luxian0609EvidenceMaterialStore)
+            or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash):
+        raise ValueError("extended document rules require one evidence session")
+    if set(decision_rule_ids) != set(selected):
+        raise ValueError("extended document rules require typed decisions")
+
+    # 054/057 共用一次理由抽取，055/056/058 也留在同组；其余文书不消费
+    # 这些局部缓存。两组只读同一不可变材料仓，HTTP 仍走既有共享预算。
+    antimicrobial = frozenset({
+        "LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-04",
+        "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-05-03-01",
+    })
+    groups = tuple((label, rules) for label, rules in (
+        ("antimicrobial", tuple(rule for rule in selected if rule in antimicrobial)),
+        ("documents", tuple(rule for rule in selected if rule not in antimicrobial)),
+    ) if rules)
+
+    async def run_group(label, rules):
+        with timing_labels(unit=label), measure_stage("extended_group"):
+            return await _execute_extended_document_group(
+                rule_ids=rules, decision_rule_ids=rules,
+                evidence_snapshot=evidence_snapshot, evidence_materials=evidence_materials,
+                llm_client=llm_client, **kwargs,
+            )
+
+    if len(groups) == 1:
+        return await run_group(*groups[0])
+    tasks = [asyncio.create_task(run_group(*group)) for group in groups]
+    try:
+        parts = await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+    order = {rule_id: index for index, rule_id in enumerate(selected)}
+    return NativeExtendedDocumentExecutionResult(
+        results=tuple(sorted((item for part in parts for item in part.results),
+                             key=lambda item: order[item["rule_id"]])),
+        planned_rule_ids=selected,
+        decisions=tuple(sorted((item for part in parts for item in part.decisions),
+                               key=lambda item: order[item.rule_id])),
+        customer_display_facts=tuple(sorted(
+            (item for part in parts for item in part.customer_display_facts),
+            key=lambda item: order[item[0]],
+        )),
+        **{key: sum(getattr(part, key) for part in parts) for key in (
+            "llm_call_count", "prompt_tokens", "completion_tokens", "total_tokens", "api_time",
+        )},
+    )
+
+
+async def _execute_extended_document_group(
+    *,
+    rule_ids: Sequence[str],
+    evidence_snapshot: Luxian0609EvidenceSnapshot,
+    evidence_materials: Luxian0609EvidenceMaterialStore,
+    decision_rule_ids: Sequence[str] = (),
+    llm_client: Any = None,
     **_: Any,
 ) -> NativeExtendedDocumentExecutionResult:
     course_content_extraction = None
@@ -4379,8 +4451,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                     medications = list(medication_extraction.medications)
                     medication_error = ""
                 else:
+                    # 定向补核后仍不确定：按资料不足交付（uncertain 不得交付，2026-10-23 C15）。
                     final_state = {
-                        "unknown": "uncertain",
+                        "unknown": "data_gap",
                         "data_gap": "data_gap",
                         "technical_error": "technical_error",
                     }[medication_extraction.state]
@@ -4392,7 +4465,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                         rule_id=rule_id, snapshot=evidence_snapshot,
                         source_keys=("discharge_record",),
                         final_state=final_state,
-                        reason_code=medication_extraction.reason_code,
+                        reason_code=(
+                            "semantic_extraction_unresolved" if medication_extraction.state == "unknown"
+                            else medication_extraction.reason_code
+                        ),
                         document_refs=selected_discharge_document_refs,
                     ))
                     continue
@@ -5819,6 +5895,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     )
                                 ),
                                 llm_client,
+                                freeze_scope=evidence_snapshot.visit_ref if evidence_snapshot is not None else None,
                             )
                         )
                         if diagnosis_change_extraction.state != "ready":

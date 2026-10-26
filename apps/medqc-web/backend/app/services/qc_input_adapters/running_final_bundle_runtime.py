@@ -4,6 +4,8 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from ...core.execution_timing import timed
+
 from ...database.connection import engine
 from ..bundles import load_or_assemble_scene_bundle
 from ..sichuan_qc_service import SichuanQCService
@@ -35,6 +37,7 @@ def _loads_json(value: Any) -> Any:
     return {}
 
 
+@timed("bundle_read")
 def load_running_final_bundle(
     *,
     scene: str,

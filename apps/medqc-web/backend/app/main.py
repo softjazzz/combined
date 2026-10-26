@@ -57,6 +57,7 @@ from .routers import emr_render as emr_render_router
 from .routers import scoring_rules as scoring_rules_router
 from .routers import staff_ranking as staff_ranking_router
 from .routers import notifications as notifications_router
+from .routers import account_management as account_management_router
 from .routers import settlement as settlement_router
 from .routers import scoring_config as scoring_config_router
 from .routers import sync as sync_router
@@ -70,6 +71,16 @@ from .routers import clinical_completeness as clinical_completeness_router
 from .routers import pre_grouping as pre_grouping_router
 from .routers import payment_monitoring as payment_monitoring_router
 from .routers import product_activation as product_activation_router
+from .routers import quality_reports as quality_reports_router
+from .routers import staff_work_analysis as staff_work_analysis_router
+from .routers import manual_quality_reports as manual_quality_reports_router
+from .routers import manual_defect_reviews as manual_defect_reviews_router
+from .routers import core_system_reports as core_system_reports_router
+from .routers import special_record_reports as special_record_reports_router
+from .routers import defect_rectifications as defect_rectifications_router
+from .routers import modern_appeals as modern_appeals_router
+from .routers import case_communications as case_communications_router
+from .routers import record_reviews as record_reviews_router
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
@@ -140,7 +151,8 @@ def create_app() -> FastAPI:
         allow_methods=settings.CORS_ALLOW_METHODS,
         allow_headers=settings.CORS_ALLOW_HEADERS,
         # 任务详情 409 时附带任务状态，跨域部署下前端也需能读取
-        expose_headers=["X-Batch-Job-Status"],
+        expose_headers=["X-Batch-Job-Status", "Content-Disposition", "X-Special-Classification-Version",
+                        "X-Special-Standard-Id", "X-Special-Standard-Version", "X-Special-Binding-Version"],
     )
 
     # API Version middleware (with backward compatibility)
@@ -195,7 +207,9 @@ def create_app() -> FastAPI:
         trace_id = getattr(request.state, "trace_id", "unknown")
 
         logger.warning(
-            f"Validation Error: {exc.errors()}",
+            "Validation Error: %s",
+            [{"field": ".".join(str(loc) for loc in error["loc"]), "type": error["type"]}
+             for error in exc.errors()],
             extra={"trace_id": trace_id, "path": request.url.path}
         )
 
@@ -276,6 +290,10 @@ def create_app() -> FastAPI:
     app.include_router(reports_router.router)
     app.include_router(appeals_router.router)
     app.include_router(remediation_router.router)
+    app.include_router(defect_rectifications_router.router)
+    app.include_router(modern_appeals_router.router)
+    app.include_router(case_communications_router.router)
+    app.include_router(record_reviews_router.router)
     # Department QC Rules (Migration 009)
     app.include_router(department_qc_rules_router.router)
     # Demo page for LX33 rules (no auth required)
@@ -311,6 +329,7 @@ def create_app() -> FastAPI:
     app.include_router(staff_ranking_router.router)
     # 通知与申诉（消息+整改跟踪+问题闭环）
     app.include_router(notifications_router.router)
+    app.include_router(account_management_router.router)
     # 医保结算清单（查询+质控+导出）
     app.include_router(settlement_router.router)
     # 甲乙丙阈值配置
@@ -336,6 +355,12 @@ def create_app() -> FastAPI:
     # 医保付费监测
     app.include_router(payment_monitoring_router.router)
     app.include_router(product_activation_router.router)
+    app.include_router(quality_reports_router.router)
+    app.include_router(staff_work_analysis_router.router)
+    app.include_router(manual_quality_reports_router.router)
+    app.include_router(manual_defect_reviews_router.router)
+    app.include_router(core_system_reports_router.router)
+    app.include_router(special_record_reports_router.router)
 
     # Include legacy routes afterwards to keep compatibility
     # Temporarily disabled to avoid route conflicts with semantic-rules

@@ -18,6 +18,7 @@ describe('workstationNav 选中项', () => {
     [route(B), 'home'],
     [route(`${B}/qc-overview`), 'home'],
     [route(`${B}/worklist`), 'worklist'],
+    [route(`${B}/messages`), 'message-center'],
     [route(B, { record_id: 'r1' }), 'worklist'],
     [route(`${B}/worklist`, { stage: 'frontpage_generate' }), 'stage-frontpage-generate'],
     [route(B, { stage: 'frontpage_qc' }), 'stage-frontpage-qc'],
@@ -93,6 +94,7 @@ describe('workstationNav 面包屑', () => {
 
 describe('workstationNav 可见性', () => {
   const permissions: Record<string, string[]> = {
+    [`${B}/messages`]: ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'],
     [`${B}/records/running`]: ['admin', 'qc_manager'],
     [`${B}/customer-sample-validation/surgery-catalog`]: ['admin', 'qc_manager', 'sync_admin'],
     [`${B}/rules/validation`]: ['admin', 'qc_manager'],
@@ -111,6 +113,7 @@ describe('workstationNav 可见性', () => {
       }),
     )
     expect(visible).not.toContain('records-running')
+    expect(visible).not.toContain('message-center')
     expect(visible).not.toContain('surgery-catalog')
     expect(visible).not.toContain('rule-validation')
     expect(visible).toContain('worklist')
@@ -118,12 +121,12 @@ describe('workstationNav 可见性', () => {
 
   it('质控反馈记录只对演示反馈账号可见', () => {
     const base = { userRoles: ['admin'], resolvePermission }
-    expect(keys(filterVisibleNav(WORKSTATION_NAV, { ...base, isDemoFeedbackAccount: false }))).not.toContain(
-      'qc-feedback-demo',
-    )
-    expect(keys(filterVisibleNav(WORKSTATION_NAV, { ...base, isDemoFeedbackAccount: true }))).toContain(
-      'qc-feedback-demo',
-    )
+    expect(
+      keys(filterVisibleNav(WORKSTATION_NAV, { ...base, isDemoFeedbackAccount: false })),
+    ).not.toContain('qc-feedback-demo')
+    expect(
+      keys(filterVisibleNav(WORKSTATION_NAV, { ...base, isDemoFeedbackAccount: true })),
+    ).toContain('qc-feedback-demo')
   })
 
   it('原有入口一个不少（演示账号 + 管理员）', () => {
@@ -134,8 +137,9 @@ describe('workstationNav 可见性', () => {
         resolvePermission,
       }),
     )
-    // 18 个原有入口 + 规则验收
-    expect(visible).toHaveLength(19)
+    // 原入口保留，新增独立消息中心。
+    expect(visible).toHaveLength(25)
+    expect(visible).toContain('feedback-worklist')
     expect(visible).toContain('rule-validation')
   })
 })

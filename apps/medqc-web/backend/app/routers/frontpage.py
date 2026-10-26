@@ -1,3 +1,4 @@
+
 from typing import Any, Dict, List, Optional
 
 import asyncio
@@ -12,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..services.clinical_read import clinical_query
 from ..core.response import success_response, error_response, get_trace_id
 from ..core.security import get_optional_user
 from ..database.connection import engine
@@ -50,7 +52,7 @@ def _resolve_visit_identity(visit_id: str) -> Dict[str, Optional[str]]:
 
     with Session(engine) as session:
         record = (
-            session.query(MedicalRecordFrontpage)
+            clinical_query(session, MedicalRecordFrontpage)
             .filter_by(visit_id=normalized_visit_id)
             .first()
         )

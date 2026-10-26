@@ -46,7 +46,7 @@
             :record-refs="selectedQcRecordRefs"
             :selected-count="selectedCount"
             :status-target="`#qc-record-result-task-status-${carePhase}`"
-            @completed="refreshAfterSelectedQc"
+            @results-updated="refreshAfterSelectedQc"
           />
         </div>
       </div>
@@ -283,6 +283,7 @@
       :open="drawerOpen"
       :focus="selectedFocus"
       presentation-mode="grouped"
+      :load-job-metadata="!route.path?.startsWith('/workstation-v5/')"
       @close="closeResultDrawer"
     />
   </main>

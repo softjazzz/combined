@@ -1,6 +1,14 @@
 import { defineComponent, h, nextTick } from 'vue'
 import { shallowMount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// 本文件的日期断言以北京时间为基准，不能依赖开发机或CI宿主时区。
+const originalTimezone = process.env.TZ
+beforeAll(() => { process.env.TZ = 'Asia/Shanghai' })
+afterAll(() => {
+  if (originalTimezone === undefined) delete process.env.TZ
+  else process.env.TZ = originalTimezone
+})
 
 const apiGet = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({

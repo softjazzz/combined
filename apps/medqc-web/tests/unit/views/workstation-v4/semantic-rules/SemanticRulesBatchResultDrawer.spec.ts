@@ -1,7 +1,11 @@
+import { UserRole } from '@/types/auth'
+import { ApiService } from '@/services/apiService'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 /* eslint-disable vue/one-component-per-file */
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, inject, provide } from 'vue'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
 import type {
   SichuanBatchJob,
@@ -105,17 +109,39 @@ const ADropdownStub = defineComponent({
 const AMenuStub = defineComponent({
   name: 'AMenuStub',
   emits: ['click'],
-  setup(_, { slots }) {
+  setup(_, { slots, emit }) {
+    // 菜单项通过 data-menu-key 声明自己的键，点击时按 antd 的 { key } 形状回传。
+    provide('menuStubClick', (key: unknown) => emit('click', { key }))
     return () => h('div', { class: 'a-menu-stub' }, slots.default?.())
   },
 })
 
 const AMenuItemStub = defineComponent({
   name: 'AMenuItemStub',
-  setup(_, { slots }) {
-    return () => h('button', { class: 'a-menu-item-stub' }, slots.default?.())
+  inheritAttrs: false,
+  setup(_, { slots, attrs }) {
+    const click = inject<((key: unknown) => void) | null>('menuStubClick', null)
+    return () =>
+      h(
+        'button',
+        { class: 'a-menu-item-stub', onClick: () => click?.(attrs['data-menu-key']) },
+        slots.default?.(),
+      )
   },
 })
+
+async function openAdvancedView(wrapper: {
+  findAll: (
+    selector: string,
+  ) => Array<{ text: () => string; trigger: (event: string) => Promise<void> }>
+}) {
+  const item = wrapper
+    .findAll('.a-menu-item-stub')
+    .find((button) => button.text().includes('高级视图'))
+  expect(item).toBeTruthy()
+  await item?.trigger('click')
+  await flushPromises()
+}
 
 const ATagStub = defineComponent({
   name: 'ATagStub',
@@ -409,6 +435,16 @@ function buildProps(): DrawerTestProps {
   }
 }
 
+// 原有完整视图用例固定为开发身份；演示身份在专项用例中显式切换。
+beforeEach(async () => {
+  setActivePinia(createPinia())
+  vi.spyOn(ApiService, 'isAuthenticated').mockReturnValue(true)
+  vi.spyOn(ApiService, 'getCurrentUser').mockResolvedValue({
+    success: true, data: { id: 'test-developer', roles: ['sync_admin'], is_demo_account: true },
+  })
+  await useAuthStore().initialize()
+})
+
 describe('SemanticRulesBatchResultDrawer', () => {
   it('应提供明确返回样本验证入口并复用关闭逻辑', async () => {
     const props = buildProps()
@@ -461,7 +497,36 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(props.exportBatchJobReport).toHaveBeenCalledWith('html')
   })
 
-  it('部分失败任务应保留有效结果并单独展示失败规则', () => {
+  it.each([
+    { retry: undefined, expected: '后台未确认自动补跑计划' },
+    { retry: { status: 'queued', should_retry: true }, expected: '已排队等待自动补跑' },
+    { retry: { status: 'running', should_retry: true }, expected: '正在自动补跑失败项' },
+    { retry: { status: 'not_retryable', should_retry: false }, expected: '不适合自动补跑' },
+    { retry: { status: 'exhausted', should_retry: false }, expected: '自动补跑次数已用尽' },
+    { retry: { status: 'completed', should_retry: false }, expected: '自动补跑已结束' },
+    { retry: { status: 'queued', should_retry: false }, expected: '后台未确认自动补跑计划' },
+    { retry: { status: 'unknown', should_retry: true }, expected: '后台未确认自动补跑计划' },
+  ])('部分失败说明按后台重试状态显示：$expected', ({ retry, expected }) => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'failed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    Object.assign(props.batchJobDetail.summary!, {
+      execution_status: 'partial_failed',
+      completed_rule_count: 2050,
+      failed_rule_count: 2,
+      automatic_failed_rule_retry: retry,
+    })
+    props.batchJobDetail.failed_records = [{ rule_id: 'LX0609-07-01-02', record_ref: 'safe-case' }]
+    const wrapper = mount(SemanticRulesBatchResultDrawer, { props, global: { stubs: drawerStubs } })
+    const notice = wrapper.get('[data-testid="partial-failure-notice"]')
+    expect(notice.text()).toContain(expected)
+    expect(notice.text()).toContain('2050')
+    expect(notice.text()).toContain('2')
+    expect(notice.text()).not.toContain('系统会自动重试')
+    wrapper.unmount()
+  })
+
+  it('部分失败任务应保留有效结果并单独展示失败规则', async () => {
     const props = buildProps()
     props.batchJobDetail.status = 'failed'
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
@@ -494,9 +559,12 @@ describe('SemanticRulesBatchResultDrawer', () => {
       global: { stubs: drawerStubs },
     })
 
-    expect(wrapper.text()).toContain('部分执行失败')
-    expect(wrapper.text()).toContain('已保留并可查看 1297 项有效结果')
-    expect(wrapper.text()).toContain('系统将自动重试下列失败项')
+    // 2026-10-23 客户视图：泸县任务只给一行轻提示，规则编号等明细按需展开。
+    const notice = wrapper.find('[data-testid="partial-failure-notice"]')
+    expect(notice.text()).toContain('有 3 项质控点本次未能完成判定')
+    expect(notice.text()).toContain('已保留 1297 项有效结果')
+    expect(notice.text()).not.toContain('LX0609-06-01-05')
+    await notice.find('button').trigger('click')
     expect(wrapper.text()).toContain('LX0609-06-01-05')
     expect(wrapper.text()).toContain('病例-失败-1')
     expect(wrapper.text()).toContain('模型输出失败，未形成质控结论')
@@ -575,16 +643,9 @@ describe('SemanticRulesBatchResultDrawer', () => {
       },
     })
 
-    const deepReviewButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('深度复核'))
-    expect(deepReviewButton).toBeTruthy()
-    await deepReviewButton?.trigger('click')
-    await wrapper.vm.$nextTick()
     expect(wrapper.text()).not.toContain('INTERNAL_NATIVE_MODEL_MARKER')
-
-    await wrapper.find('.a-radio-advanced-stub').trigger('click')
-    await wrapper.vm.$nextTick()
+    // 2026-10-23：多病历泸县任务默认客户视图，排查表格在“更多 → 高级视图”中。
+    await openAdvancedView(wrapper as never)
 
     const issueTable = wrapper
       .findAllComponents(ATableStub)
@@ -784,18 +845,13 @@ describe('SemanticRulesBatchResultDrawer', () => {
       },
     })
 
-    const allRecordButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('全部病历'))
-    expect(allRecordButton).toBeTruthy()
-    await allRecordButton?.trigger('click')
-    await wrapper.vm.$nextTick()
-
+    // 2026-10-23 客户视图：按病历查看，问题以“确定问题”胶囊标注。
+    const panel = wrapper.find('[data-testid="batch-record-review"]')
+    expect(panel.exists()).toBe(true)
     const text = wrapper.text()
     expect(text).toContain('任务已完成，已发现泸县0609质控点问题')
-    expect(text).toContain('不合规 2 条')
-    expect(text).toContain('当前展示泸县0609选定质控点验证结果，共 2 条客户质控点结果')
-    expect(text).toContain('LX0609 客户质控点结果')
+    expect(panel.text()).toContain('2 份发现问题')
+    expect(panel.text()).toContain('确定问题')
     expect(text).not.toContain('本次未发现泸县0609质控点问题')
   })
 
@@ -827,14 +883,13 @@ describe('SemanticRulesBatchResultDrawer', () => {
     })
 
     const text = wrapper.text()
-    expect(text).toContain('全量 0609 规则集')
     expect(text).toContain('未限定，执行全量 0609 质控点')
     expect(text).toContain('全量运行，不按单病历限定执行规则')
-    expect(text).toContain('当前展示泸县0609全量 0609 规则集结果')
+    expect(text).toContain('客户质控点：49 个')
     expect(text).not.toContain('scoped run')
   })
 
-  it('无问题默认视图应展示合规和不适用结果的判定依据', () => {
+  it('无问题默认视图应展示合规和不适用结果的判定依据', async () => {
     const props = buildProps()
     props.batchJobDetail.status = 'completed'
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
@@ -871,13 +926,12 @@ describe('SemanticRulesBatchResultDrawer', () => {
       },
     })
 
-    const text = wrapper.text()
-    expect(text).toContain('当前没有需要复核或整改的问题项')
-    expect(text).toContain('未提示问题的依据')
-    expect(text).toContain('未发现问题依据')
-    expect(text).toContain('首次病程记录记录时间：2026-06-01 10:30:00')
-    expect(text).toContain('不适用依据')
-    expect(text).toContain('未发现本次住院存在输血医嘱')
+    // 2026-10-23 客户视图：无问题时默认停在合格结果，不适用结果切换病历/分类查看。
+    const panel = wrapper.find('[data-testid="batch-record-review"]')
+    expect(panel.text()).toContain('0 份发现问题')
+    expect(panel.text()).toContain('首次病程记录已在入院后8小时内完成。')
+    await panel.find('[data-testid="record-review-record-2"]').trigger('click')
+    expect(panel.text()).toContain('未发现本次住院发生输血相关事件。')
   })
 
   it('客户结果卡不应暴露内部触发状态，应优先展示执行证据', async () => {
@@ -1008,7 +1062,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(issueCard?.text()).not.toContain('映射执行规则')
   })
 
-  it('data_gap 结果摘要应展示数据缺口，不应展示门控关键词', () => {
+  it('data_gap 结果摘要应展示数据缺口，不应展示门控关键词', async () => {
     const props = buildProps()
     props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
@@ -1038,12 +1092,24 @@ describe('SemanticRulesBatchResultDrawer', () => {
       },
     })
 
-    const issueCard = wrapper
-      .findAll('.issue-conclusion-card')
+    // 2026-10-23 客户视图：资料不足的结果在“需补资料”分类下，以“需补资料”胶囊标注。
+    const panel = wrapper.find('[data-testid="batch-record-review"]')
+    // 只有待补资料的病历不在“有问题”范围内，先切到“全部”。
+    await panel
+      .findAll('button')
+      .find((button) => button.text().startsWith('全部'))
+      ?.trigger('click')
+    for (const record of panel.findAll('[data-testid^="record-review-record-"]')) {
+      await record.trigger('click')
+      if (panel.text().includes('需补资料 1')) break
+    }
+    await panel.find('[data-testid="record-review-tab-data_gap"]').trigger('click')
+    const issueCard = panel
+      .findAll('.record-review__item')
       .find((card) => card.text().includes('缺少病理报告时间'))
     expect(issueCard).toBeTruthy()
     expect(issueCard?.text()).toContain('缺少病理报告时间')
-    expect(issueCard?.text()).toContain('数据不足，需补充资料')
+    expect(issueCard?.text()).toContain('需补资料')
     expect(issueCard?.text()).not.toContain('轻微缺陷')
     expect(issueCard?.text()).not.toContain('触发门控')
     expect(issueCard?.text()).not.toContain('匹配关键词')
@@ -1351,7 +1417,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(navItems.some((item) => item.text().includes('AI判断'))).toBe(true)
     expect(navItems.some((item) => item.text().includes('数据不足'))).toBe(true)
     expect(navItems.some((item) => item.text().includes('技术异常'))).toBe(true)
-    expect(wrapper.text()).not.toContain('确定问题')
+    expect(navItems.some((item) => item.text().includes('确定问题'))).toBe(false)
     const lx021Nav = navItems.find((item) => item.text().includes('LX0609-03-01-02'))
     expect(lx021Nav).toBeTruthy()
     await lx021Nav!.trigger('click')
@@ -1911,5 +1977,49 @@ describe('SemanticRulesBatchResultDrawer', () => {
     })
 
     expect(wrapper.find('[data-testid="transfusion-documentation-summary"]').exists()).toBe(false)
+  })
+})
+
+
+describe('演示账号的批量结果', () => {
+  it('顶层与嵌套结果都只显示确定问题，隐藏其他计数与高级/完整导出入口', async () => {
+    vi.spyOn(ApiService, 'updateProfile').mockResolvedValue({ success: true, data: { id: 'demo', roles: [UserRole.ADMIN], is_demo_account: true } })
+    await useAuthStore().updateProfile({})
+    const props = buildProps()
+    const statuses = ['non_compliant', 'compliant', 'data_gap', 'not_applicable', 'uncertain', 'not_executed']
+    const mixed = statuses.map((status, index) => ({
+      rule_id: `LX0609-01-01-${String(index + 1).padStart(2, '0')}`, rule_name: `only-${status}`,
+      record_ref: index < 2 ? 'case-A' : 'case-B', status, is_compliant: status === 'compliant', conclusion: `unique-${status}`,
+    }))
+    props.batchJobDetail = { ...props.batchJobDetail, status: 'completed', rule_set_key: 'luxian_0609_qc_v1',
+      total_records: 2, summary: { ...props.batchJobDetail.summary!, total_records: 2 }, items: [...mixed, { ...mixed[0], rule_id: 'LX0609-01-01-99', rule_name: 'only-internal', internal_only: true }], rule_results: [] }
+    const wrapper = mount(SemanticRulesBatchResultDrawer, { props, global: { stubs: drawerStubs } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('only-non_compliant')
+    expect(wrapper.text()).not.toContain('only-internal')
+    const metrics = wrapper.get('[data-testid="batch-result-metrics"]')
+    expect(metrics.text()).toContain('确定问题')
+    expect(metrics.text()).not.toContain('需补充资料')
+    expect(metrics.text()).not.toContain('合格')
+    expect(wrapper.find('[data-testid="batch-result-more"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="batch-result-export-report"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="record-review-tab-data_gap"]').exists()).toBe(false)
+    expect(wrapper.find('.a-switch-stub').exists()).toBe(false)
+    for (const status of statuses.slice(1)) expect(wrapper.text()).not.toContain(`only-${status}`)
+    // 同一任务切换为嵌套传输形态，也不能绕过展示范围。
+    await wrapper.setProps({ batchJobDetail: { ...props.batchJobDetail, items: [], rule_results: [{ id: 'nested', rule_code: 'LX0609-01-01-01', rule_name: '嵌套结果', status: 'completed', items: mixed }] } })
+    expect(wrapper.text()).not.toContain('only-data_gap')
+    // 非空顶层是当前权威结果；过滤为零不能回退到嵌套的过期确定问题。
+    await wrapper.setProps({ batchJobDetail: { ...props.batchJobDetail, items: mixed.filter((item) => item.status !== 'non_compliant'), rule_results: [{ id: 'stale', rule_code: 'LX0609-01-01-01', rule_name: '过期结果', status: 'completed', items: [mixed[0]] }] } })
+    expect(wrapper.text()).not.toContain('only-non_compliant')
+    expect(wrapper.text()).toContain('当前没有可展示的确定问题')
+    await wrapper.setProps({ batchJobDetail: props.batchJobDetail })
+    // 只改变账号，原任务数据未被修改；开发账号恢复完整视图。
+    vi.spyOn(ApiService, 'updateProfile').mockResolvedValue({ success: true, data: { id: 'dev', roles: ['sync_admin'], is_demo_account: true } })
+    await useAuthStore().updateProfile({})
+    await flushPromises()
+    expect(wrapper.find('[data-testid="batch-result-more"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="batch-result-metrics"]').text()).toContain('需补充资料')
+    expect(mixed).toHaveLength(6)
   })
 })

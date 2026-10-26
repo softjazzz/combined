@@ -43,6 +43,25 @@ beforeEach(() => {
 })
 
 describe('QcResultFeedbackControl', () => {
+  it('sync_admin超级管理员可加载并管理反馈', async () => {
+    useAuthStoreMock.mockReturnValue({
+      user: { id: 'sync-test', roles: ['sync_admin'], is_demo_account: true },
+      userRoles: ['sync_admin'],
+    })
+    const Harness = defineComponent({
+      setup() {
+        const feedback = useQcResultFeedback('root-1', 'rec_0123456789abcdef01234567')
+        return () => h('button', { onClick: () => feedback.save('LX0609-01-01-01', { feedback_type: 'correct' }) }, feedback.isEnabled.value ? 'enabled' : 'disabled')
+      },
+    })
+    const wrapper = mount(Harness)
+    await flushPromises()
+    expect(wrapper.text()).toBe('enabled')
+    expect(getFeedbackMock).toHaveBeenCalled()
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(saveFeedbackMock).toHaveBeenCalledTimes(1)
+  })
   it('准确反馈可以直接提交', async () => {
     const wrapper = mount(QcResultFeedbackControl)
 

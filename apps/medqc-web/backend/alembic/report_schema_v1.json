@@ -1,0 +1,2939 @@
+{
+  "version": 1,
+  "legacy_columns": {
+    "sys_users": [
+      "id",
+      "username",
+      "email",
+      "phone",
+      "password_hash",
+      "display_name",
+      "department",
+      "role",
+      "roles_json",
+      "is_active",
+      "last_login_at",
+      "created_at",
+      "updated_at"
+    ],
+    "sys_departments": [
+      "id",
+      "code",
+      "name",
+      "category",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "qc_results": [
+      "id",
+      "record_id",
+      "rule_set",
+      "overall_score",
+      "grade",
+      "defect_count",
+      "analysis_engine",
+      "analysis_date",
+      "raw_output",
+      "created_by",
+      "created_at",
+      "updated_at"
+    ],
+    "qc_defects": [
+      "id",
+      "result_id",
+      "record_id",
+      "department",
+      "rule_code",
+      "rule_name",
+      "description",
+      "severity",
+      "category",
+      "deduct_score",
+      "location",
+      "evidence",
+      "suggestion",
+      "status",
+      "urged_at",
+      "urged_by",
+      "urged_message",
+      "urged_deadline",
+      "remediated_at",
+      "remediated_by",
+      "remediation_note",
+      "remediation_evidence",
+      "approved_at",
+      "approved_by",
+      "approve_comment",
+      "rejected_at",
+      "rejected_by",
+      "reject_reason",
+      "reject_suggestion",
+      "created_at",
+      "updated_at"
+    ],
+    "qc_defect_history": [
+      "id",
+      "defect_id",
+      "action",
+      "actor_id",
+      "actor_name",
+      "details",
+      "created_at"
+    ],
+    "qc_tasks": [
+      "id",
+      "task_number",
+      "task_name",
+      "task_type",
+      "schedule_config",
+      "date_range",
+      "department_filter",
+      "record_ids",
+      "sampling_method",
+      "sampling_config",
+      "assign_method",
+      "assignee_config",
+      "status",
+      "progress",
+      "total_records",
+      "completed_records",
+      "creator_id",
+      "creator_name",
+      "deadline",
+      "created_at",
+      "updated_at"
+    ],
+    "qc_task_records": [
+      "id",
+      "task_id",
+      "record_id",
+      "assignee_id",
+      "assignee_name",
+      "status",
+      "score",
+      "defect_count",
+      "completed_at",
+      "created_at"
+    ],
+    "qc_appeals": [
+      "id",
+      "appeal_number",
+      "qc_result_id",
+      "record_id",
+      "appeal_type",
+      "defect_item",
+      "reason",
+      "evidence",
+      "priority",
+      "appellant_id",
+      "appellant_name",
+      "appellant_department",
+      "reviewer_id",
+      "reviewer_name",
+      "review_result",
+      "review_date",
+      "resolution",
+      "resolution_date",
+      "notes",
+      "status",
+      "created_at",
+      "updated_at"
+    ],
+    "qc_appeal_reviews": [
+      "id",
+      "appeal_id",
+      "reviewer_id",
+      "reviewer_name",
+      "reviewer_role",
+      "action",
+      "comment",
+      "metadata",
+      "created_at"
+    ],
+    "qc_remediation_tasks": [
+      "id",
+      "task_number",
+      "qc_result_id",
+      "record_id",
+      "defect_type",
+      "defect_description",
+      "defect_location",
+      "severity",
+      "remediation_requirement",
+      "deadline",
+      "assignee_id",
+      "assignee_name",
+      "assignee_department",
+      "status",
+      "remediation_description",
+      "remediation_evidence",
+      "submitted_at",
+      "reviewer_id",
+      "reviewer_name",
+      "review_comment",
+      "reviewed_at",
+      "notes",
+      "created_at",
+      "updated_at",
+      "closed_at"
+    ],
+    "qc_remediation_history": [
+      "id",
+      "task_id",
+      "action",
+      "actor_id",
+      "actor_name",
+      "old_status",
+      "new_status",
+      "comment",
+      "metadata",
+      "created_at"
+    ],
+    "qc_rules": [
+      "id",
+      "rule_code",
+      "name",
+      "description",
+      "category",
+      "severity",
+      "scope",
+      "department_id",
+      "parent_rule_id",
+      "override_action",
+      "override_config",
+      "priority",
+      "status",
+      "version",
+      "effective_from",
+      "effective_to",
+      "check_logic",
+      "scoring_config",
+      "applicable_documents",
+      "primary_document_category",
+      "is_active",
+      "metadata",
+      "approved_by",
+      "approved_at",
+      "created_at",
+      "updated_at"
+    ],
+    "qc_coder_workload_daily": [
+      "id",
+      "stat_date",
+      "coder_id",
+      "coder_name",
+      "department_id",
+      "department_name",
+      "qc_count",
+      "recheck_count",
+      "defect_found",
+      "passed_count",
+      "warning_count",
+      "failed_count",
+      "avg_handle_seconds",
+      "created_at",
+      "updated_at"
+    ],
+    "medical_documents": [
+      "id",
+      "record_id",
+      "document_type",
+      "content",
+      "qc_status",
+      "qc_score",
+      "qc_last_analyzed",
+      "status",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "scoring_rules": [
+      "id",
+      "sort_order",
+      "category",
+      "name",
+      "description",
+      "deduction",
+      "max_deduction",
+      "veto",
+      "severity",
+      "enabled",
+      "created_at",
+      "updated_at"
+    ],
+    "scoring_config": [
+      "id",
+      "config_key",
+      "config_value",
+      "description",
+      "updated_by",
+      "updated_at"
+    ],
+    "notifications": [
+      "id",
+      "type",
+      "title",
+      "content",
+      "record_id",
+      "severity",
+      "sender_id",
+      "recipient_id",
+      "related_type",
+      "related_id",
+      "is_read",
+      "read_at",
+      "created_at"
+    ]
+  },
+  "source": "88e8f864b/read-owner-adaptation",
+  "tables": [
+    {
+      "name": "notifications",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(30)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(200)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "content",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "record_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "identity_version",
+          "type": "SMALLINT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "source_key",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "institute_id",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "patient_id",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "visit_id",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "severity",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "sender_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "recipient_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "related_type",
+          "type": "VARCHAR(30)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "related_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "is_read",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "read_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [],
+      "checks": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_notifications_created_at",
+          "columns": ["created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_notifications_is_read",
+          "columns": ["is_read"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_notifications_recipient",
+          "columns": ["recipient_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_notifications_type",
+          "columns": ["type"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "qc_defect_rectifications",
+      "scope": "qc_only",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "scene",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "target_kind",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "target_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "root_job_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "envelope_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "rule_set_key",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "rule_set_version",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "department",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "creator_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "assignee_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "assignee_name",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "requirement",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "version",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "submission",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "review_comment",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "dispatch_document_snapshot",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": "uq_rectification_source",
+          "columns": [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "scene",
+            "target_kind",
+            "target_id",
+            "root_job_id",
+            "envelope_id"
+          ]
+        }
+      ],
+      "checks": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_rectification_assignee_status",
+          "columns": ["assignee_id", "status"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "qc_appeal_reviews",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "appeal_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reviewer_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reviewer_name",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reviewer_role",
+          "type": "VARCHAR(50)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "action",
+          "type": "VARCHAR(30)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "comment",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [],
+      "checks": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_qc_appeal_reviews_appeal",
+          "columns": ["appeal_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_appeal_reviews_created_at",
+          "columns": ["created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_appeal_reviews_reviewer",
+          "columns": ["reviewer_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "qc_appeals",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "appeal_number",
+          "type": "VARCHAR(40)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "qc_result_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "record_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "appeal_type",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "defect_item",
+          "type": "VARCHAR(200)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "priority",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "appellant_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "appellant_name",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "appellant_department",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "reviewer_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "reviewer_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "review_result",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "review_date",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "resolution",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "resolution_date",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "notes",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "target_kind",
+          "type": "VARCHAR(32)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "target_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "scene",
+          "type": "VARCHAR(24)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "root_job_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "envelope_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rule_set_key",
+          "type": "VARCHAR(96)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rule_set_version",
+          "type": "VARCHAR(96)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "case_department",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": null,
+          "columns": ["appeal_number"]
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_qc_appeals_modern_source",
+          "sql": "(target_kind IS NULL AND target_id IS NULL AND institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL AND scene IS NULL AND root_job_id IS NULL AND envelope_id IS NULL AND rule_set_key IS NULL AND rule_set_version IS NULL AND case_department IS NULL AND qc_result_id IS NOT NULL AND record_id IS NOT NULL) OR (target_kind IS NOT NULL AND target_id IS NOT NULL AND institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL AND scene IS NOT NULL AND root_job_id IS NOT NULL AND envelope_id IS NOT NULL AND rule_set_key IS NOT NULL AND rule_set_version IS NOT NULL AND case_department IS NOT NULL AND target_kind IN ('canonical_defect', 'task_manual_defect') AND scene IN ('running', 'final', 'outpatient_emergency') AND qc_result_id IS NULL AND record_id IS NULL)",
+          "pg_sql": "target_kind IS NULL AND target_id IS NULL AND institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL AND scene IS NULL AND root_job_id IS NULL AND envelope_id IS NULL AND rule_set_key IS NULL AND rule_set_version IS NULL AND case_department IS NULL AND qc_result_id IS NOT NULL AND record_id IS NOT NULL OR target_kind IS NOT NULL AND target_id IS NOT NULL AND institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL AND scene IS NOT NULL AND root_job_id IS NOT NULL AND envelope_id IS NOT NULL AND rule_set_key IS NOT NULL AND rule_set_version IS NOT NULL AND case_department IS NOT NULL AND (target_kind::text = ANY (ARRAY['canonical_defect'::character varying, 'task_manual_defect'::character varying]::text[])) AND (scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient_emergency'::character varying]::text[])) AND qc_result_id IS NULL AND record_id IS NULL",
+          "pg_sql_compatible": [
+            "target_kind IS NULL AND target_id IS NULL AND institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL AND scene IS NULL AND root_job_id IS NULL AND envelope_id IS NULL AND rule_set_key IS NULL AND rule_set_version IS NULL AND case_department IS NULL AND qc_result_id IS NOT NULL AND record_id IS NOT NULL OR target_kind IS NOT NULL AND target_id IS NOT NULL AND institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL AND scene IS NOT NULL AND root_job_id IS NOT NULL AND envelope_id IS NOT NULL AND rule_set_key IS NOT NULL AND rule_set_version IS NOT NULL AND case_department IS NOT NULL AND (target_kind::text = ANY (ARRAY['canonical_defect'::character varying::text, 'task_manual_defect'::character varying::text])) AND (scene::text = ANY (ARRAY['running'::character varying::text, 'final'::character varying::text, 'outpatient_emergency'::character varying::text])) AND qc_result_id IS NULL AND record_id IS NULL"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_qc_appeals_created_at",
+          "columns": ["created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_appeals_priority",
+          "columns": ["priority"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_appeals_record",
+          "columns": ["record_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_appeals_scene_status",
+          "columns": ["scene", "status"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_appeals_status",
+          "columns": ["status"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_appeals_type",
+          "columns": ["appeal_type"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "uq_qc_appeals_open_target",
+          "columns": [
+            "appellant_id",
+            "target_kind",
+            "target_id",
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "scene",
+            "root_job_id",
+            "envelope_id"
+          ],
+          "unique": true,
+          "where": "target_kind IS NOT NULL AND status IN ('pending', 'reviewing')",
+          "pg_where": "((target_kind IS NOT NULL) AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'reviewing'::character varying])::text[])))",
+          "pg_where_compatible": [
+            "((target_kind IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'reviewing'::text])))"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "qc_defect_history",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "defect_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "action",
+          "type": "VARCHAR(40)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "actor_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "actor_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "details",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [],
+      "checks": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_qc_defect_history_action",
+          "columns": ["action"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_defect_history_created_at",
+          "columns": ["created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_defect_history_defect",
+          "columns": ["defect_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "qc_defects",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "result_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "record_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "identity_version",
+          "type": "SMALLINT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "source_key",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "scene",
+          "type": "VARCHAR(24)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "institute_id",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "patient_id",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "visit_id",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "department",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rule_code",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rule_name",
+          "type": "VARCHAR(200)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "severity",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "category",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "deduct_score",
+          "type": "FLOAT",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "location",
+          "type": "VARCHAR(300)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "evidence",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "suggestion",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "origin",
+          "type": "VARCHAR(16)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "manual_review_status",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "manual_created_by",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "urged_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "urged_by",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "urged_message",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "urged_deadline",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "remediated_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "remediated_by",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "remediation_note",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "remediation_evidence",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "approved_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "approved_by",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "approve_comment",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rejected_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rejected_by",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "reject_reason",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "reject_suggestion",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "ck_qc_defects_manual_review_status",
+          "sql": "manual_review_status IS NULL OR (origin IS NOT NULL AND origin = 'manual' AND manual_review_status IN ('pending', 'approved', 'rejected'))",
+          "pg_sql": "manual_review_status IS NULL OR origin IS NOT NULL AND origin::text = 'manual'::text AND (manual_review_status::text = ANY (ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying]::text[]))",
+          "pg_sql_compatible": [
+            "manual_review_status IS NULL OR origin IS NOT NULL AND origin::text = 'manual'::text AND (manual_review_status::text = ANY (ARRAY['pending'::character varying::text, 'approved'::character varying::text, 'rejected'::character varying::text]))"
+          ]
+        },
+        {
+          "name": "ck_qc_defects_origin",
+          "sql": "origin IN ('auto', 'manual')",
+          "pg_sql": "origin::text = ANY (ARRAY['auto'::character varying, 'manual'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "origin::text = ANY (ARRAY['auto'::character varying::text, 'manual'::character varying::text])"
+          ]
+        },
+        {
+          "name": "ck_qc_defects_scene",
+          "sql": "scene IS NULL OR scene IN ('running', 'final', 'outpatient_emergency')",
+          "pg_sql": "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient_emergency'::character varying]::text[]))",
+          "pg_sql_compatible": [
+            "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying::text, 'final'::character varying::text, 'outpatient_emergency'::character varying::text]))"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_qc_defects_category",
+          "columns": ["category"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_defects_created_at",
+          "columns": ["created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_defects_department",
+          "columns": ["department"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_defects_record",
+          "columns": ["record_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_defects_result",
+          "columns": ["result_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_defects_scene_created",
+          "columns": ["scene", "created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_defects_severity",
+          "columns": ["severity"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_defects_status",
+          "columns": ["status"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "qc_record_reviews",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "request_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "rule_set_key",
+          "type": "VARCHAR(96)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "rule_set_version",
+          "type": "VARCHAR(96)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "job_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "envelope_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "task_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "task_record_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "run_number",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "stage",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "decision",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "reviewer_id",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "review_context",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": "'task'"
+        },
+        {
+          "name": "scene",
+          "type": "VARCHAR(24)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "defect_snapshot",
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": "uq_qc_record_reviews_request",
+          "columns": ["request_id"]
+        },
+        {
+          "name": "uq_qc_record_reviews_result",
+          "columns": [
+            "job_id",
+            "envelope_id",
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "rule_set_key"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_qc_record_reviews_context",
+          "sql": "review_context IN ('task', 'workspace')",
+          "pg_sql": "review_context::text = ANY (ARRAY['task'::character varying, 'workspace'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "review_context::text = ANY (ARRAY['task'::character varying::text, 'workspace'::character varying::text])"
+          ]
+        },
+        {
+          "name": "ck_qc_record_reviews_context_fields",
+          "sql": "(review_context = 'task' AND task_id IS NOT NULL AND task_record_id IS NOT NULL AND run_number IS NOT NULL) OR (review_context = 'workspace' AND task_id IS NULL AND task_record_id IS NULL AND run_number IS NULL)",
+          "pg_sql": "review_context::text = 'task'::text AND task_id IS NOT NULL AND task_record_id IS NOT NULL AND run_number IS NOT NULL OR review_context::text = 'workspace'::text AND task_id IS NULL AND task_record_id IS NULL AND run_number IS NULL"
+        },
+        {
+          "name": "ck_qc_record_reviews_decision",
+          "sql": "decision IN ('approved', 'doubtful')",
+          "pg_sql": "decision::text = ANY (ARRAY['approved'::character varying, 'doubtful'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "decision::text = ANY (ARRAY['approved'::character varying::text, 'doubtful'::character varying::text])"
+          ]
+        },
+        {
+          "name": "ck_qc_record_reviews_doubtful_reason",
+          "sql": "decision <> 'doubtful' OR (reason IS NOT NULL AND trim(reason, ' \t\n\r\f\u000b') <> '')",
+          "pg_sql": "decision::text <> 'doubtful'::text OR reason IS NOT NULL AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM reason) <> ''::text"
+        },
+        {
+          "name": "ck_qc_record_reviews_identity_nonblank",
+          "sql": "trim(request_id, ' \t\n\r\f\u000b') <> '' AND trim(institute_id, ' \t\n\r\f\u000b') <> '' AND trim(patient_id, ' \t\n\r\f\u000b') <> '' AND trim(visit_id, ' \t\n\r\f\u000b') <> '' AND trim(rule_set_key, ' \t\n\r\f\u000b') <> '' AND trim(rule_set_version, ' \t\n\r\f\u000b') <> '' AND trim(job_id, ' \t\n\r\f\u000b') <> '' AND trim(envelope_id, ' \t\n\r\f\u000b') <> '' AND trim(task_id, ' \t\n\r\f\u000b') <> '' AND trim(task_record_id, ' \t\n\r\f\u000b') <> '' AND trim(reviewer_id, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "TRIM(BOTH ' \t\n\r\f\u000b'::text FROM request_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM institute_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM patient_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM visit_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM rule_set_key) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM rule_set_version) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM job_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM envelope_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM task_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM task_record_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM reviewer_id) <> ''::text"
+        },
+        {
+          "name": "ck_qc_record_reviews_run_number_positive",
+          "sql": "run_number > 0",
+          "pg_sql": "run_number > 0"
+        },
+        {
+          "name": "ck_qc_record_reviews_scene",
+          "sql": "scene IS NULL OR scene IN ('outpatient_emergency', 'running', 'final')",
+          "pg_sql": "scene IS NULL OR (scene::text = ANY (ARRAY['outpatient_emergency'::character varying, 'running'::character varying, 'final'::character varying]::text[]))",
+          "pg_sql_compatible": [
+            "scene IS NULL OR (scene::text = ANY (ARRAY['outpatient_emergency'::character varying::text, 'running'::character varying::text, 'final'::character varying::text]))"
+          ]
+        },
+        {
+          "name": "ck_qc_record_reviews_stage",
+          "sql": "stage IN ('initial', 'recheck')",
+          "pg_sql": "stage::text = ANY (ARRAY['initial'::character varying, 'recheck'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "stage::text = ANY (ARRAY['initial'::character varying::text, 'recheck'::character varying::text])"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_qc_record_reviews_case",
+          "columns": ["institute_id", "patient_id", "visit_id", "rule_set_key", "created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_record_reviews_scene_created",
+          "columns": ["scene", "created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "qc_results",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "record_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "identity_version",
+          "type": "SMALLINT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "source_key",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "institute_id",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "read_compatible_defaults": {
+            "qc": ["'LX001'::text"]
+          }
+        },
+        {
+          "name": "patient_id",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "visit_id",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rule_set",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "overall_score",
+          "type": "FLOAT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "grade",
+          "type": "VARCHAR(10)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "defect_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "analysis_engine",
+          "type": "VARCHAR(30)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "analysis_date",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "raw_output",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_by",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [],
+      "checks": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_qc_results_created_at",
+          "columns": ["created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_results_created_by",
+          "columns": ["created_by"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_results_record",
+          "columns": ["record_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "qc_rule_set_versions",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "rule_set_key",
+          "type": "VARCHAR(96)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "version",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "base_version",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "entries_json",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "content_digest",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "note",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "version_seq",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "created_by",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "published_by",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "published_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "retired_by",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "retired_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": "uq_qc_rule_set_versions_key_version",
+          "columns": ["rule_set_key", "version"]
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_qc_rule_set_versions_key_nonblank",
+          "sql": "trim(rule_set_key, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "TRIM(BOTH ' \t\n\r\f\u000b'::text FROM rule_set_key) <> ''::text"
+        },
+        {
+          "name": "ck_qc_rule_set_versions_published_fields",
+          "sql": "status = 'draft' OR (content_digest IS NOT NULL AND published_at IS NOT NULL)",
+          "pg_sql": "status::text = 'draft'::text OR content_digest IS NOT NULL AND published_at IS NOT NULL"
+        },
+        {
+          "name": "ck_qc_rule_set_versions_retired_fields",
+          "sql": "status <> 'retired' OR retired_at IS NOT NULL",
+          "pg_sql": "status::text <> 'retired'::text OR retired_at IS NOT NULL"
+        },
+        {
+          "name": "ck_qc_rule_set_versions_seq_positive",
+          "sql": "version_seq > 0",
+          "pg_sql": "version_seq > 0"
+        },
+        {
+          "name": "ck_qc_rule_set_versions_status",
+          "sql": "status IN ('draft', 'published', 'retired')",
+          "pg_sql": "status::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "status::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])"
+          ]
+        },
+        {
+          "name": "ck_qc_rule_set_versions_version_nonblank",
+          "sql": "trim(version, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "TRIM(BOTH ' \t\n\r\f\u000b'::text FROM version) <> ''::text"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "uq_qc_rule_set_versions_draft",
+          "columns": ["rule_set_key"],
+          "unique": true,
+          "where": "status = 'draft'",
+          "pg_where": "((status)::text = 'draft'::text)"
+        }
+      ]
+    },
+    {
+      "name": "qc_scoring_standards",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "scene",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "rule_set_key",
+          "type": "VARCHAR(96)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "is_default",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "base_score",
+          "type": "NUMERIC(6, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "grade_bands_json",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "veto_grade",
+          "type": "VARCHAR(50)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "version_seq",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "created_by",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_by",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "activated_by",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "activated_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": "uq_qc_scoring_standards_name_scene",
+          "columns": ["name", "scene"]
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_qc_scoring_standards_activated_fields",
+          "sql": "status = 'draft' OR (activated_by IS NOT NULL AND activated_at IS NOT NULL)",
+          "pg_sql": "status::text = 'draft'::text OR activated_by IS NOT NULL AND activated_at IS NOT NULL"
+        },
+        {
+          "name": "ck_qc_scoring_standards_base_positive",
+          "sql": "base_score > 0",
+          "pg_sql": "base_score > 0::numeric"
+        },
+        {
+          "name": "ck_qc_scoring_standards_default_active",
+          "sql": "status = 'active' OR NOT is_default",
+          "pg_sql": "status::text = 'active'::text OR NOT is_default"
+        },
+        {
+          "name": "ck_qc_scoring_standards_key_nonblank",
+          "sql": "trim(rule_set_key, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "TRIM(BOTH ' \t\n\r\f\u000b'::text FROM rule_set_key) <> ''::text"
+        },
+        {
+          "name": "ck_qc_scoring_standards_name_nonblank",
+          "sql": "trim(name, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "TRIM(BOTH ' \t\n\r\f\u000b'::text FROM name) <> ''::text"
+        },
+        {
+          "name": "ck_qc_scoring_standards_scene",
+          "sql": "scene IN ('running', 'final', 'outpatient', 'frontpage')",
+          "pg_sql": "scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient'::character varying, 'frontpage'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "scene::text = ANY (ARRAY['running'::character varying::text, 'final'::character varying::text, 'outpatient'::character varying::text, 'frontpage'::character varying::text])"
+          ]
+        },
+        {
+          "name": "ck_qc_scoring_standards_seq_positive",
+          "sql": "version_seq > 0",
+          "pg_sql": "version_seq > 0"
+        },
+        {
+          "name": "ck_qc_scoring_standards_status",
+          "sql": "status IN ('draft', 'active', 'archived')",
+          "pg_sql": "status::text = ANY (ARRAY['draft'::character varying, 'active'::character varying, 'archived'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "status::text = ANY (ARRAY['draft'::character varying::text, 'active'::character varying::text, 'archived'::character varying::text])"
+          ]
+        },
+        {
+          "name": "ck_qc_scoring_standards_veto_nonblank",
+          "sql": "trim(veto_grade, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "TRIM(BOTH ' \t\n\r\f\u000b'::text FROM veto_grade) <> ''::text"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "uq_qc_scoring_standards_default",
+          "columns": ["scene"],
+          "unique": true,
+          "where": "status = 'active' AND is_default",
+          "pg_where": "(((status)::text = 'active'::text) AND is_default)"
+        }
+      ]
+    },
+    {
+      "name": "qc_task_records",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "task_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "record_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "assignee_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "assignee_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "defect_count",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "completed_run_number",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "completed_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "department",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "record_type_snapshot",
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "ck_qc_task_records_base_identity_nonblank",
+          "sql": "task_id IS NOT NULL AND trim(task_id, ' \t\n\r\f\u000b') <> '' AND record_id IS NOT NULL AND trim(record_id, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "task_id IS NOT NULL AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM task_id) <> ''::text AND record_id IS NOT NULL AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM record_id) <> ''::text"
+        },
+        {
+          "name": "ck_qc_task_records_case_identity_complete",
+          "sql": "(institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL) OR (institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL AND trim(institute_id, ' \t\n\r\f\u000b') <> '' AND trim(patient_id, ' \t\n\r\f\u000b') <> '' AND trim(visit_id, ' \t\n\r\f\u000b') <> '')",
+          "pg_sql": "institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL OR institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM institute_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM patient_id) <> ''::text AND TRIM(BOTH ' \t\n\r\f\u000b'::text FROM visit_id) <> ''::text"
+        },
+        {
+          "name": "ck_qc_task_records_completed_run_number_positive",
+          "sql": "completed_run_number > 0",
+          "pg_sql": "completed_run_number > 0"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_qc_task_records_assignee",
+          "columns": ["assignee_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_task_records_record",
+          "columns": ["record_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_task_records_status",
+          "columns": ["status"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_task_records_task",
+          "columns": ["task_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "uq_qc_task_records_case_identity",
+          "columns": ["task_id", "institute_id", "patient_id", "visit_id"],
+          "unique": true,
+          "where": "institute_id IS NOT NULL AND patient_id IS NOT NULL AND visit_id IS NOT NULL",
+          "pg_where": "((institute_id IS NOT NULL) AND (patient_id IS NOT NULL) AND (visit_id IS NOT NULL))"
+        },
+        {
+          "name": "uq_qc_task_records_legacy_record",
+          "columns": ["task_id", "record_id"],
+          "unique": true,
+          "where": "institute_id IS NULL AND patient_id IS NULL AND visit_id IS NULL",
+          "pg_where": "((institute_id IS NULL) AND (patient_id IS NULL) AND (visit_id IS NULL))"
+        }
+      ]
+    },
+    {
+      "name": "qc_tasks",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "task_number",
+          "type": "VARCHAR(40)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "task_name",
+          "type": "VARCHAR(200)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "task_type",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "scene",
+          "type": "VARCHAR(32)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rule_set_key",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rule_set_version",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "record_refs",
+          "type": "JSONB",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "sampling_method",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "assign_method",
+          "type": "VARCHAR(30)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "configuration_version",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "total_records",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "completed_records",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "creator_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "creator_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "deadline",
+          "type": "VARCHAR(32)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": null,
+          "columns": ["task_number"]
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_qc_tasks_configuration_version_positive",
+          "sql": "configuration_version > 0",
+          "pg_sql": "configuration_version > 0"
+        },
+        {
+          "name": "ck_qc_tasks_scene",
+          "sql": "scene IS NULL OR scene IN ('running', 'final', 'outpatient')",
+          "pg_sql": "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying, 'final'::character varying, 'outpatient'::character varying]::text[]))",
+          "pg_sql_compatible": [
+            "scene IS NULL OR (scene::text = ANY (ARRAY['running'::character varying::text, 'final'::character varying::text, 'outpatient'::character varying::text]))"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_qc_tasks_created_at",
+          "columns": ["created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_tasks_creator",
+          "columns": ["creator_id"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_qc_tasks_status",
+          "columns": ["status"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "sys_users",
+      "scope": "account_owner",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR(50)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "email",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "phone",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "password_hash",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "display_name",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "department",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "role",
+          "type": "VARCHAR(50)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "roles_json",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "last_login_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": null,
+          "columns": ["email"]
+        },
+        {
+          "name": null,
+          "columns": ["username"]
+        }
+      ],
+      "checks": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "name": "ix_sys_users_email",
+          "columns": ["email"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_sys_users_institute_department",
+          "columns": ["institute_id", "department"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        },
+        {
+          "name": "ix_sys_users_role",
+          "columns": ["role"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "qc_defect_rectification_events",
+      "scope": "qc_only",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "rectification_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "action",
+          "type": "VARCHAR(24)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "actor_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "old_status",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "new_status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "version",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "comment",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "recipient_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "related_event_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "submission_document_snapshot",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": "uq_rectification_event_version",
+          "columns": ["rectification_id", "version"]
+        },
+        {
+          "name": "uq_rectification_event_withdrawal",
+          "columns": ["related_event_id"]
+        }
+      ],
+      "checks": [],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": ["rectification_id"],
+          "table": "qc_defect_rectifications",
+          "remote": ["id"],
+          "ondelete": null
+        },
+        {
+          "name": null,
+          "columns": ["related_event_id"],
+          "table": "qc_defect_rectification_events",
+          "remote": ["id"],
+          "ondelete": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_rectification_event_recipient",
+          "columns": ["recipient_id", "created_at"],
+          "unique": false,
+          "where": null,
+          "pg_where": null
+        }
+      ]
+    },
+    {
+      "name": "qc_scoring_default_bindings",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "purpose",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "execution_scene",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "standard_id",
+          "type": "VARCHAR(36)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "standard_version_seq",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "version_seq",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_by",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["purpose", "execution_scene"],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "ck_qc_scoring_default_bindings_reference",
+          "sql": "(standard_id IS NULL AND standard_version_seq IS NULL) OR (standard_id IS NOT NULL AND standard_version_seq IS NOT NULL AND standard_version_seq > 0)",
+          "pg_sql": "standard_id IS NULL AND standard_version_seq IS NULL OR standard_id IS NOT NULL AND standard_version_seq IS NOT NULL AND standard_version_seq > 0"
+        },
+        {
+          "name": "ck_qc_scoring_default_bindings_scope",
+          "sql": "purpose = 'special_report' AND execution_scene = 'final'",
+          "pg_sql": "purpose::text = 'special_report'::text AND execution_scene::text = 'final'::text"
+        },
+        {
+          "name": "ck_qc_scoring_default_bindings_seq",
+          "sql": "version_seq > 0",
+          "pg_sql": "version_seq > 0"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_qc_scoring_default_bindings_standard",
+          "columns": ["standard_id"],
+          "table": "qc_scoring_standards",
+          "remote": ["id"],
+          "ondelete": null
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "qc_scoring_groups",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "standard_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "group_name",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "max_deduction",
+          "type": "NUMERIC(6, 2)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "sort_order",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "0"
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": "uq_qc_scoring_groups_standard_group",
+          "columns": ["standard_id", "group_name"]
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_qc_scoring_groups_max_nonnegative",
+          "sql": "max_deduction IS NULL OR max_deduction >= 0",
+          "pg_sql": "max_deduction IS NULL OR max_deduction >= 0::numeric"
+        },
+        {
+          "name": "ck_qc_scoring_groups_name_nonblank",
+          "sql": "trim(group_name, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "TRIM(BOTH ' \t\n\r\f\u000b'::text FROM group_name) <> ''::text"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_qc_scoring_groups_standard",
+          "columns": ["standard_id"],
+          "table": "qc_scoring_standards",
+          "remote": ["id"],
+          "ondelete": "CASCADE"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "qc_scoring_items",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "standard_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "group_name",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "rule_id",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "deduction",
+          "type": "NUMERIC(6, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "is_veto",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "enabled",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": "true"
+        },
+        {
+          "name": "department_scope_mode",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": "'all'"
+        },
+        {
+          "name": "department_refs_json",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "'[]'"
+        }
+      ],
+      "pk": ["id"],
+      "uniques": [
+        {
+          "name": "uq_qc_scoring_items_standard_rule",
+          "columns": ["standard_id", "rule_id"]
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_qc_scoring_items_deduction_nonnegative",
+          "sql": "deduction >= 0",
+          "pg_sql": "deduction >= 0::numeric"
+        },
+        {
+          "name": "ck_qc_scoring_items_department_scope_mode",
+          "sql": "department_scope_mode IN ('all', 'selected')",
+          "pg_sql": "department_scope_mode::text = ANY (ARRAY['all'::character varying, 'selected'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "department_scope_mode::text = ANY (ARRAY['all'::character varying::text, 'selected'::character varying::text])"
+          ]
+        },
+        {
+          "name": "ck_qc_scoring_items_group_nonblank",
+          "sql": "trim(group_name, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "TRIM(BOTH ' \t\n\r\f\u000b'::text FROM group_name) <> ''::text"
+        },
+        {
+          "name": "ck_qc_scoring_items_rule_nonblank",
+          "sql": "trim(rule_id, ' \t\n\r\f\u000b') <> ''",
+          "pg_sql": "TRIM(BOTH ' \t\n\r\f\u000b'::text FROM rule_id) <> ''::text"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_qc_scoring_items_standard",
+          "columns": ["standard_id"],
+          "table": "qc_scoring_standards",
+          "remote": ["id"],
+          "ondelete": "CASCADE"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "task_qc_runs",
+      "scope": "qc_public",
+      "columns": [
+        {
+          "name": "task_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "run_number",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "job_id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "triggered_by",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "run_scope",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": "'all'"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITHOUT TIME ZONE",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "pk": ["task_id", "run_number"],
+      "uniques": [
+        {
+          "name": "uq_task_qc_runs_job",
+          "columns": ["job_id"]
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_task_qc_runs_positive_number",
+          "sql": "run_number > 0",
+          "pg_sql": "run_number > 0"
+        },
+        {
+          "name": "ck_task_qc_runs_scope",
+          "sql": "run_scope IN ('all', 'assigned')",
+          "pg_sql": "run_scope::text = ANY (ARRAY['all'::character varying, 'assigned'::character varying]::text[])",
+          "pg_sql_compatible": [
+            "run_scope::text = ANY (ARRAY['all'::character varying::text, 'assigned'::character varying::text])"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_task_qc_runs_task",
+          "columns": ["task_id"],
+          "table": "qc_tasks",
+          "remote": ["id"],
+          "ondelete": null
+        }
+      ],
+      "indexes": []
+    }
+  ]
+}

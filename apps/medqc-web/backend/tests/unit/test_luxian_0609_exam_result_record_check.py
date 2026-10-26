@@ -1,9 +1,11 @@
 """011 报告结果记录核对（用户口径 2026-10-12）：逐份病程单句归类，引文须出自病程并与本次报告对得上。"""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from finding_selection_test_support import prompt_events
 from app.services.luxian_0609.exam_lab_fact_extraction import ExamLabEventFact, build_exam_lab_text_projection
 from app.services.luxian_0609.exam_result_record_check import (
     SCHEMA_VERSION,
@@ -13,7 +15,8 @@ from app.services.luxian_0609.exam_result_record_check import (
 )
 
 PLAN_ONLY = "完善血常规、胸部CT及心电图了解心肺功能，择期手术。"
-RECORDED = "今于我院急诊完善胸部CT提示右肺下叶占位，考虑恶性可能，拟行纤支镜检查。"
+# 概括写法（不逐字抄报告），走模型判断路径；逐字抄录由 Python 直接确认，另有用例。
+RECORDED = "今于我院急诊完善胸部CT提示右肺下叶占位，恶性待排，拟行纤支镜检查。"
 
 
 def _projection(*course_texts):
@@ -57,6 +60,71 @@ def _answer(*docs):
 
 
 @pytest.mark.asyncio
+async def test_truncation_splits_pairs_instead_of_repeating_same_oversized_request():
+    class Client:
+        def __init__(self):
+            self.pairs = []
+
+        async def generate(self, prompt, **kwargs):
+            events = prompt_events(prompt)
+            pairs = [(event['event_position'], doc['course_doc_ref'])
+                     for event in events for doc in event['course_docs']]
+            self.pairs.append(pairs)
+            if len(pairs) > 3:
+                return {'choices': [{'finish_reason': 'length', 'message': {'content': ''}}]}
+            answer = _answer(*[{**_doc(ref), 'event_position': position} for position, ref in pairs])
+            return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(answer)}}]}
+
+    client = Client()
+    outcome = await check_exam_result_record(_projection(*([PLAN_ONLY] * 6)), client)
+    assert outcome.state == 'ready' and outcome.recorded_refs == {1: ()}
+    assert all(pairs != client.pairs[0] for pairs in client.pairs[1:])
+    assert all(len(pairs) <= 3 for pairs in client.pairs[1:])
+    assert len(client.pairs) <= 8
+
+
+@pytest.mark.asyncio
+async def test_batch_failure_preserves_other_complete_events_and_never_fixes_incomplete_as_absent(monkeypatch):
+    from app.services.luxian_0609 import exam_result_record_check as module
+
+    projection = _projection(RECORDED, RECORDED)
+    first, second = _post_report_refs(projection)
+    # 输出上限只容得下一个配对（预留 256 + 每对估算 150），每批一对。
+    monkeypatch.setattr(module, 'MAX_COMPLETION_TOKENS', 406)
+    monkeypatch.setattr(module, '_targets', lambda projection: {
+        1: ('右肺下叶占位', (first, second)), 2: ('右肺下叶占位', (first,)),
+    })
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            [event] = prompt_events(prompt)
+            [doc] = event['course_docs']
+            if event['event_position'] == 1 and doc['course_doc_ref'] == second:
+                return {'choices': [{'finish_reason': 'length', 'message': {'content': ''}}]}
+            answer = _answer({**_doc(doc['course_doc_ref']), 'event_position': event['event_position']})
+            return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(answer)}}]}
+
+    outcome = await check_exam_result_record(projection, Client())
+    assert outcome.state == 'ready' and outcome.recorded_refs == {2: ()}
+    assert outcome.llm_call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_repeated_truncation_obeys_total_call_limit():
+    class Client:
+        calls = 0
+
+        async def generate(self, prompt, **kwargs):
+            self.calls += 1
+            return {'choices': [{'finish_reason': 'length', 'message': {'content': ''}}]}
+
+    client = Client()
+    outcome = await check_exam_result_record(_projection(*([PLAN_ONLY] * 8)), client)
+    assert outcome.state == 'failed' and outcome.recorded_refs == {}
+    assert outcome.llm_call_count == client.calls == 8
+
+
+@pytest.mark.asyncio
 async def test_first_course_restating_this_ct_conclusion_counts_and_pre_report_note_is_excluded():
     """真实样本：首次病程写“今于我院急诊完善胸部CT提示……”与本次报告一致，一轮漏引即误判超时。"""
     projection = _projection(RECORDED)
@@ -64,7 +132,7 @@ async def test_first_course_restating_this_ct_conclusion_counts_and_pre_report_n
     client = _Client([_answer(_doc(ref, "result_recorded", "完善胸部CT提示右肺下叶占位", "右肺下叶占位"))])
     outcome = await check_exam_result_record(projection, client)
     assert outcome.state == "ready" and outcome.recorded_refs == {1: (ref,)} and outcome.llm_call_count == 1
-    sent = json.loads(client.prompts[0].split("EVENTS_JSON=", 1)[1])
+    sent = prompt_events(client.prompts[0])
     assert [doc["course_doc_ref"] for doc in sent[0]["course_docs"]] == [ref]
     assert "急诊完善胸部CT" in client.prompts[0] and "mention_only" in client.prompts[0]
 
@@ -133,8 +201,9 @@ def test_apply_overrides_only_011_facts_and_keeps_report_evidence():
 
 
 @pytest.mark.asyncio
-async def test_long_verbatim_restatement_of_report_is_accepted():
-    """真实样本：查房记录整段转抄报告结论，引文 132 字超出原 80 字上限，两次校验失败后整步回退。"""
+async def test_long_verbatim_restatement_of_report_is_confirmed_without_model():
+    """真实样本：查房记录整段转抄报告结论（原引文超限两次失败回退）。2026-10-23 起逐字转抄本次报告
+    独有的结果句由 Python 直接确认，不再调用模型。"""
     restated = "辅助检查：2026-08-18 胸部CT平扫 右肺下叶占位，考虑恶性可能；主动脉壁钙化。" * 3
     projection = _projection(restated)
     [ref] = _post_report_refs(projection)
@@ -142,7 +211,29 @@ async def test_long_verbatim_restatement_of_report_is_accepted():
     assert len(quote) > 80
     outcome = await check_exam_result_record(projection, _Client([_answer(
         _doc(ref, "result_recorded", quote, "右肺下叶占位，考虑恶性可能；主动脉壁钙化。"))]))
-    assert outcome.state == "ready" and outcome.llm_call_count == 1 and outcome.recorded_refs == {1: (ref,)}
+    assert outcome.state == "ready" and outcome.llm_call_count == 0 and outcome.recorded_refs == {1: (ref,)}
+
+
+@pytest.mark.asyncio
+async def test_verbatim_confirmation_is_positive_only_and_skips_shared_report_sentences(monkeypatch):
+    """逐字确认只作正面认定：未逐字出现的病程照常送模型；两次检查报告同句时不确认，交模型判断归属。"""
+    from app.services.luxian_0609 import exam_result_record_check as module
+
+    projection = _projection("胸部CT提示右肺下叶占位，考虑恶性可能，拟行纤支镜检查。", PLAN_ONLY)
+    verbatim, other = _post_report_refs(projection)
+    client = _Client([_answer(_doc(other, "plan_only"))])
+    outcome = await check_exam_result_record(projection, client)
+    assert outcome.recorded_refs == {1: (verbatim,)} and outcome.llm_call_count == 1
+    assert prompt_events(client.prompts[0])[0]["course_doc_refs"] == [other]
+
+    report = "右肺下叶占位，考虑恶性可能；主动脉壁钙化。"
+    monkeypatch.setattr(module, "_targets", lambda _: {1: (report, (verbatim,)), 2: (report, (verbatim,))})
+    same_reports = [SimpleNamespace(result_texts=(report,))] * 2
+    monkeypatch.setattr(module, "events_for_family", lambda projection, family: same_reports)
+    shared = _Client([_answer(*[{**_doc(verbatim, "result_recorded", "右肺下叶占位，考虑恶性可能", "右肺下叶占位"),
+                                 "event_position": position} for position in (1, 2)])])
+    outcome = await check_exam_result_record(projection, shared)
+    assert shared.prompts and outcome.recorded_refs == {1: (verbatim,), 2: (verbatim,)}
 
 
 @pytest.mark.asyncio

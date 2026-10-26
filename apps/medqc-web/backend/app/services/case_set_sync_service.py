@@ -171,6 +171,16 @@ class CaseSetSyncService:
         if not normalized_tables:
             raise ValueError("同步表集合不能为空")
 
+        from .dual_source_case_service import dual_source_enabled, sync_case_set as sync_dual_sources
+
+        if dual_source_enabled():
+            return sync_dual_sources(
+                self, case_refs=normalized_refs, table_names=normalized_tables,
+                policy_version=policy_version, sync_scene=normalized_sync_scene,
+                case_scene_by_ref=normalized_scene_by_ref,
+                progress_callback=progress_callback, config=config,
+            )
+
         remote_url = self._remote_url_loader()
         if not remote_url:
             raise ValueError("REMOTE_DB_URL 未配置")

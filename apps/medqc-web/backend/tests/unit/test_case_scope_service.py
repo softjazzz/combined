@@ -85,6 +85,27 @@ class _SourceConnection:
         return None
 
 
+def test_report_institute_scope_is_bound_in_source_sql_and_keeps_default_unscoped():
+    cursor = _SourceCursor(
+        table_columns={"mr": {"institute_id", "patient_id", "visit_id", "admission_time", "discharge_time"}},
+        source_rows={"mr": [dict(institute_id=i, patient_id="same", visit_id="same",
+                                  admission_time="2026-09-01", discharge_time="2026-09-20") for i in ("A", "B")]},
+    )
+    service = CaseScopeService(remote_url_loader=lambda: "synthetic-only",
+                               db_config_loader=lambda: {"remote_schema": "public"},
+                               connection_factory=lambda *args, **kwargs: _SourceConnection(cursor))
+    params = dict(scope_mode="discharged", as_of_date=date(2026, 10, 1),
+                  discharge_start_date=date(2026, 9, 1), discharge_end_date=date(2026, 9, 30), departments=[])
+    scoped = service.resolve_hospitalization_scope(institute_id="A", **params)
+    assert {ref.institute_id for ref in scoped.case_refs} == {"A"}
+    assert any("AND source_row.institute_id::text = %s::text" in sql and args[-1] == "A"
+               for sql, args in cursor.queries if "WITH scoped" in sql)
+    cursor.queries.clear()
+    unscoped = service.resolve_hospitalization_scope(**params)
+    assert {ref.institute_id for ref in unscoped.case_refs} == {"A", "B"}
+    assert all("AND source_row.institute_id::text = %s::text" not in sql for sql, _ in cursor.queries)
+
+
 def test_active_scope_falls_back_to_recent_admission_minus_discharge_facts():
     identity_columns = {"institute_id", "patient_id", "visit_id"}
     cursor = _SourceCursor(

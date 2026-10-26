@@ -46,6 +46,28 @@ _VISIT_COLUMNS = {
 }
 
 
+def validate_discharge_record_schema(connection: Connection, *, inspector: Inspector) -> None:
+    """与split读取及051迁移相同，只验cdm；public同名表不作为替代来源。"""
+    if not inspector.has_table("discharge_record", schema="cdm"):
+        raise RuntimeError("Missing acceptance table: cdm.discharge_record")
+    columns = {
+        column["name"]: column
+        for column in inspector.get_columns("discharge_record", schema="cdm")
+    }
+    for name in ("chief_physician_sign_datetime", "v2_schema"):
+        if name not in columns:
+            raise RuntimeError(f"Missing acceptance column: cdm.discharge_record.{name} (migration 051)")
+        column = columns[name]
+        column_type = column["type"]
+        valid_type = (
+            isinstance(column_type, sa.DateTime) and column_type.timezone
+            if name == "chief_physician_sign_datetime"
+            else isinstance(column_type, sa.Text)
+        )
+        if not valid_type or column.get("nullable") is not True:
+            raise RuntimeError(f"Invalid acceptance column: cdm.discharge_record.{name} (migration 051)")
+
+
 def validate_visit_index_schema(
     connection: Connection, *, inspector: Inspector | None = None,
 ) -> None:
@@ -130,5 +152,6 @@ def validate_acceptance_schema(engine: Engine | None, *, schema_mode: str) -> No
             ):
                 raise RuntimeError(f"Missing or invalid acceptance parent index: {_PARENT_INDEX}")
             validate_visit_index_schema(connection, inspector=inspector)
+            validate_discharge_record_schema(connection, inspector=inspector)
         finally:
             connection.rollback()

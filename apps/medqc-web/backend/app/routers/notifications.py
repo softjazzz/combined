@@ -10,18 +10,37 @@
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Any, Dict
 from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
+from starlette.concurrency import run_in_threadpool
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
 from ..core.security import get_current_user
+from ..services.doctor_notification_service import DoctorNotificationService
+from ..services.defect_rectification_service import RectificationError
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 logger = logging.getLogger(__name__)
+service = DoctorNotificationService()
+
+
+async def _owned_call(user, method, *args, **kwargs):
+    actor_id = user.get("id") or user.get("user_id")
+    if not actor_id:
+        raise HTTPException(403, "缺少持久账号")
+    try:
+        return await run_in_threadpool(method, str(actor_id), *args, **kwargs)
+    except RectificationError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("通知操作失败 error_type=%s", type(exc).__name__)
+        raise HTTPException(503, "通知服务暂不可用，请刷新核对") from exc
 
 
 def _ensure_db():
@@ -39,7 +58,8 @@ def _to_datetime(value: object) -> Optional[datetime]:
         return None
     normalized = text.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized)
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None) if parsed.tzinfo else parsed
     except ValueError:
         return None
 
@@ -130,49 +150,8 @@ async def list_notifications(
     current_user: dict = Depends(get_current_user),
 ):
     """获取通知消息列表"""
-    sb = _ensure_db()
-
-    try:
-        user_id = current_user.get("id") or current_user.get("user_id")
-
-        query = sb.table('notifications').select('*', count='exact')
-        if user_id:
-            query = query.eq('recipient_id', user_id)
-        if type:
-            query = query.eq('type', type)
-        if is_read is not None:
-            query = query.eq('is_read', is_read)
-        query = query.order('created_at', desc=True)
-
-        offset = (page - 1) * page_size
-        query = query.range(offset, offset + page_size - 1)
-
-        resp = await async_execute(query)
-        items = list(getattr(resp, 'data', None) or [])
-        total = getattr(resp, 'count', None) or len(items)
-
-        # 未读计数
-        unread_query = sb.table('notifications').select('id', count='exact').eq('is_read', False)
-        if user_id:
-            unread_query = unread_query.eq('recipient_id', user_id)
-        unread_resp = await async_execute(unread_query)
-        unread_count = getattr(unread_resp, 'count', None) or 0
-
-        return success_response(
-            data={
-                "items": items,
-                "total": total,
-                "unread_count": unread_count,
-                "page": page,
-                "page_size": page_size,
-            },
-            trace_id=get_trace_id(request),
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"查询通知失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询通知失败: {str(e)}")
+    data = await _owned_call(current_user, service.list, type=type, is_read=is_read, page=page, page_size=page_size)
+    return success_response(data=data, trace_id=get_trace_id(request))
 
 
 @router.get("/overview")
@@ -182,9 +161,7 @@ async def list_notification_overview(
     current_user: dict = Depends(get_current_user),
 ):
     """按问题类型/严重度/科室/病历聚合当天通知集中点。"""
-    sb = _ensure_db()
     try:
-        user_id = current_user.get("id") or current_user.get("user_id")
 
         if date:
             try:
@@ -196,14 +173,7 @@ async def list_notification_overview(
         start_dt = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_dt = start_dt + timedelta(days=1)
 
-        query = sb.table("notifications").select("*")
-        if user_id:
-            query = query.eq("recipient_id", user_id)
-        query = query.gte("created_at", start_dt.isoformat()).lt("created_at", end_dt.isoformat())
-        query = query.order("created_at", desc=True).limit(500)
-
-        resp = await async_execute(query)
-        rows = list(getattr(resp, "data", None) or [])
+        rows = await _owned_call(current_user, service.overview_rows, start_dt, end_dt)
 
         groups: dict[str, dict] = {}
         for row in rows:
@@ -230,6 +200,7 @@ async def list_notification_overview(
                     "unread_count": 0,
                     "latest_created_at": created_at,
                     "source_notification_ids": [],
+                    "interaction_target": row.get("interaction_target"),
                 }
                 groups[key] = entry
 
@@ -271,6 +242,35 @@ async def list_notification_overview(
     except Exception as e:
         logger.error(f"查询通知概览失败: {e}")
         raise HTTPException(status_code=500, detail=f"查询通知概览失败: {str(e)}")
+
+
+def _load_ready_batch_result(job_id, actor_id):
+    from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+    from .qc_sichuan import (
+        LUXIAN_0609_RULE_SET_KEY,
+        _hydrate_luxian_canonical_batch_job_or_409,
+        _is_workspace_batch_job,
+        _workspace_batch_response_item,
+    )
+
+    workspace = CustomQCWorkspaceService(readonly=True)
+    job = workspace.get_batch_job(job_id=job_id, created_by=actor_id)
+    if not _is_workspace_batch_job(job) or job.get("status") != "completed":
+        raise RectificationError("结果通知已失效，请重新查询任务", 404)
+    if (job.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+        job = _hydrate_luxian_canonical_batch_job_or_409(workspace=workspace, job=job)
+    return _workspace_batch_response_item(job)
+
+
+@router.get("/{notification_id}/qc-result")
+async def get_notification_qc_result(
+    notification_id: str, request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    data = await _owned_call(
+        current_user, service.result_ready, notification_id, _load_ready_batch_result
+    )
+    return success_response(data=data, trace_id=get_trace_id(request))
 
 
 @router.post("/qc-batch-summary")
@@ -374,24 +374,8 @@ async def mark_read(
     current_user: dict = Depends(get_current_user),
 ):
     """标记消息为已读"""
-    sb = _ensure_db()
-
-    try:
-        from datetime import datetime
-        resp = await async_execute(
-            sb.table('notifications')
-            .update({"is_read": True, "read_at": datetime.now().isoformat()})
-            .eq('id', notification_id)
-            .select()
-        )
-        if not getattr(resp, 'data', None):
-            raise HTTPException(status_code=404, detail="通知不存在")
-        return success_response(message="已标记为已读", trace_id=get_trace_id(request))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"标记已读失败: {e}")
-        raise HTTPException(status_code=500, detail=f"操作失败: {str(e)}")
+    await _owned_call(current_user, service.mark_read, notification_id)
+    return success_response(message="已标记为已读", trace_id=get_trace_id(request))
 
 
 @router.put("/read-all")
@@ -400,29 +384,5 @@ async def mark_all_read(
     current_user: dict = Depends(get_current_user),
 ):
     """全部已读"""
-    sb = _ensure_db()
-
-    try:
-        from datetime import datetime
-        user_id = current_user.get("id") or current_user.get("user_id")
-
-        query = sb.table('notifications').update({
-            "is_read": True,
-            "read_at": datetime.now().isoformat(),
-        }).eq('is_read', False)
-        if user_id:
-            query = query.eq('recipient_id', user_id)
-
-        resp = await async_execute(query.select())
-        count = len(getattr(resp, 'data', None) or [])
-
-        return success_response(
-            data={"marked_count": count},
-            message=f"已标记 {count} 条为已读",
-            trace_id=get_trace_id(request),
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"全部已读失败: {e}")
-        raise HTTPException(status_code=500, detail=f"操作失败: {str(e)}")
+    count = await _owned_call(current_user, service.mark_read)
+    return success_response(data={"marked_count": count}, message=f"已标记 {count} 条为已读", trace_id=get_trace_id(request))

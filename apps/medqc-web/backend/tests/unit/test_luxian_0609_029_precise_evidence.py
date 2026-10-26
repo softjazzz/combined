@@ -15,7 +15,8 @@ async def test_029_excludes_unrelated_orders_from_decision_and_customer_evidence
 ):
     """超过引用上限的无关医嘱不能中断交付；少量无关医嘱也不得污染证据。"""
     orders = (
-        {"order_id": "operation||1", "order_type": "手术", "order_status": "新开", "order_name": "气管插管术"},
+        # 用户已将气管插管排除为治疗性操作；阳性证据隔离须使用真正的手术。
+        {"order_id": "operation||1", "order_type": "手术", "order_status": "新开", "order_name": "腹腔镜下阑尾切除术"},
         *(
             {"order_id": f"unrelated||{index}", "order_type": "护理", "order_status": "新开", "order_name": "常规护理"}
             for index in range(unrelated_count)

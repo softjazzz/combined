@@ -1,0 +1,95 @@
+.assist-message-inbox {
+  padding: 0;
+}
+.assist-message-inbox > .assist-message-inbox__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 16px 20px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  flex-wrap: wrap;
+}
+.assist-message-inbox > .assist-message-inbox__filters {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 20px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  grid-template-columns: 1fr 1fr;
+}
+.assist-message-inbox__filters > :last-child {
+  grid-column: 1 / -1;
+}
+.assist-message-inbox > .assist-message-inbox__read-filter {
+  margin: 0;
+  padding: 0 20px 16px;
+  border: 0;
+  background: transparent;
+}
+.assist-message-inbox :deep(.ant-select-selector) {
+  min-height: 36px;
+  align-items: center;
+}
+.assist-message-inbox :deep(.ant-segmented-item-label) {
+  min-height: 36px;
+  line-height: 36px;
+}
+.assist-message-inbox > .assist-message-inbox__list {
+  max-height: none;
+  margin: 0;
+  padding: 0 20px 16px;
+  overflow: visible;
+}
+.assist-message-inbox__list > .assist-message-inbox__item {
+  margin: 0;
+  padding: 20px 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--mq-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+.assist-message-inbox__item :deep(.anticon) {
+  color: var(--mq-brand-600);
+}
+.assist-message-inbox__subject {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--mq-text-primary);
+  font-weight: 600;
+}
+.assist-message-inbox__item > div > .min-w-0 > div:first-child {
+  flex-wrap: wrap;
+}
+.assist-message-inbox__item .assist-message-inbox__body {
+  margin-top: 10px;
+  color: var(--mq-text-secondary);
+  font-size: 14px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.assist-message-inbox__item .assist-message-inbox__meta {
+  margin-top: 10px;
+  flex-wrap: wrap;
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.assist-message-inbox__meta--overview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.assist-message-inbox__item > div:last-child {
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.assist-message-inbox__item > div:last-child :deep(.ant-btn) {
+  min-height: 36px;
+}

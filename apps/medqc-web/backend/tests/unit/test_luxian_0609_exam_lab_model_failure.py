@@ -150,7 +150,7 @@ async def test_cross_event_citation_recovers_with_event_isolated_context(monkeyp
         {"enable_thinking": False},
         {"enable_thinking": False},
         # 06-01-04 结果记录核对（严格 JSON 抽取，限制输出长度）。
-        {"allow_length_retry": False, "max_completion_tokens": 2048},
+        {"allow_length_retry": False, "max_completion_tokens": 4096},
     ]
 
 
@@ -170,7 +170,7 @@ async def test_complex_assessment_event_recovery_keeps_configured_thinking(monke
     assert client.call_options == [
         {}, {}, {},
         # 06-01-04 结果记录核对（严格 JSON 抽取，限制输出长度）。
-        {"allow_length_retry": False, "max_completion_tokens": 2048},
+        {"allow_length_retry": False, "max_completion_tokens": 4096},
     ]
 
 

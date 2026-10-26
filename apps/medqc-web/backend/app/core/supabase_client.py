@@ -186,6 +186,12 @@ class _Query:
         self._filters.append((column, "IS", value))
         return self
 
+    def is_not(self, column: str, value: Any) -> _Query:
+        if value is not None and not isinstance(value, bool):
+            raise ValueError("IS NOT only accepts NULL or boolean")
+        self._filters.append((column, "IS NOT", value))
+        return self
+
     def or_(self, filter_str: str) -> _Query:
         """兼容 Supabase 的 or_ 过滤，格式如 'col1.ilike.%val%,col2.ilike.%val%'"""
         self._or_filters.append(filter_str)
@@ -238,6 +244,9 @@ class _Query:
                     clauses.append(f'"{col}" IN ({placeholders})')
                     for i, v in enumerate(val):
                         params[f"{pname}_{i}"] = v
+            elif op == "IS NOT":
+                literal = "NULL" if val is None else ("TRUE" if val else "FALSE")
+                clauses.append(f'"{col}" IS NOT {literal}')
             elif op == "IS":
                 if val is None:
                     clauses.append(f'"{col}" IS NULL')
@@ -295,7 +304,8 @@ class _Query:
                     col_parts.append(f'"{c}"' if c != "*" else "*")
             cols = ", ".join(col_parts) if col_parts else "*"
 
-        sql = f"SELECT {cols} FROM {_quote_qualified_identifier(self._table)}"
+        from ..services.clinical_read import clinical_adapter_table
+        sql = f"SELECT {cols} FROM {_quote_qualified_identifier(clinical_adapter_table(self._table))}"
         if where:
             sql += f" WHERE {where}"
 
@@ -317,7 +327,8 @@ class _Query:
 
     def _build_count_sql(self) -> Tuple[str, Dict[str, Any]]:
         where, params = self._build_where()
-        sql = f"SELECT COUNT(*) FROM {_quote_qualified_identifier(self._table)}"
+        from ..services.clinical_read import clinical_adapter_table
+        sql = f"SELECT COUNT(*) FROM {_quote_qualified_identifier(clinical_adapter_table(self._table))}"
         if where:
             sql += f" WHERE {where}"
         return sql, params

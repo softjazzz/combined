@@ -33,11 +33,12 @@ def saved_rows(monkeypatch):
 
     monkeypatch.setattr(etl_sync, "engine", object())
     monkeypatch.setattr(etl_sync, "Session", lambda _engine: Session())
-    # 与客户归档相同：目标表没有诊疗经过等结构化列。
+    # 新迁移保留章节和死亡时间，原有全文组装仍须兼容。
     monkeypatch.setattr(etl_sync, "_get_local_table_meta", lambda *_args: (
         "cdm",
         ["institute_id", "patient_id", "visit_id", "document_id", "record_content",
-         "record_time", "submit_datetime"],
+         "record_time", "submit_datetime", "death_datetime", "admission_condition",
+         "treatment_course", "death_reason"],
         ["institute_id", "patient_id", "visit_id", "document_id"],
     ))
     return saved
@@ -86,6 +87,9 @@ def test_actual_source_field_shapes_survive_upsert_and_display(
     )
     assert assemble_document("death_record", saved).assembled_text == body
     assert saved["record_time"] == record["record_time"]
+    assert saved["death_datetime"] == record["death_time"]
+    for field in ("admission_condition", "treatment_course", "death_reason"):
+        assert saved[field] == record[field]
     assert "v2_schema" not in saved
     assert "模板数据" not in body
     assert record == original

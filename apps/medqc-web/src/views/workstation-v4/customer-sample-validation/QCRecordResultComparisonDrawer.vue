@@ -27,39 +27,15 @@
             <strong>病历质控结果</strong>
           </span>
         </div>
-        <div class="customer-record-result-title__context" :aria-label="recordContextAriaLabel">
-          <img
-            class="patient-context-avatar"
-            :src="contextAvatar"
-            :alt="`${focus?.patientName || '患者'}头像`"
-          />
-          <span class="customer-record-result-title__context-label">当前病历</span>
-          <span class="customer-record-result-title__context-details">
-            <span class="customer-record-result-title__context-value">
-              <span
-                v-for="(part, index) in (focus?.label || '病历原文与质控结果对照').split(' · ')"
-                :key="index"
-                class="patient-context-part"
-                :class="{ 'is-primary': index === 0 }"
-                >{{ part }}</span
-              >
-            </span>
-            <span v-if="hospitalizationTimeText" class="customer-record-result-title__context-time">
-              {{ hospitalizationTimeText }}
-            </span>
-          </span>
-          <span v-if="qcTimeText" class="customer-record-result-title__qc-time">
-            {{ qcTimeText }}
-          </span>
-        </div>
+        <MedicalRecordContextBanner :context="focus" :qc-time-text="qcTimeText" />
         <div class="customer-record-result-title__actions">
           <QcDiagnosticExport
-            v-if="open && latestResult && focus"
+            v-if="open && latestResult && focus && !confirmedResultsOnly"
             :items="latestResult.items"
             :context="debugContext"
           />
           <button
-            v-if="latestResult"
+            v-if="latestResult && !confirmedResultsOnly"
             type="button"
             class="customer-record-result-title__export"
             :disabled="exporting"
@@ -72,6 +48,25 @@
     </template>
 
     <a-spin :spinning="loading">
+      <section
+        v-if="latestResult?.execution_status === 'partial_failed' || latestResult?.execution_status === 'failed'"
+        role="alert"
+        class="customer-record-result-warning"
+        data-testid="record-result-partial-failure"
+      >
+        <strong>本次质控未全部完成</strong>
+        <p>已保留 {{ latestResult.result_rule_count }} 项有效结果；{{ latestResult.failed_rule_count }} 项执行失败，未形成质控结论。</p>
+        <p v-if="latestResult.failed_rule_ids?.length">
+          失败项：{{ latestResult.failed_rule_ids.join('、') }}
+        </p>
+      </section>
+      <section
+        v-else-if="latestResult?.result_scope === 'targeted'"
+        role="status"
+        class="customer-record-result-warning"
+      >
+        当前为定向质控结果，仅覆盖本次选择的 {{ latestResult.expected_rule_count }} 项。
+      </section>
       <QCRecordCompareWorkbench
         v-if="latestResult && focus.visitId"
         :visit-id="focus.visitId"
@@ -82,6 +77,7 @@
         :discharge-time="focus.dischargeTime"
         :record-ref="authorizedRecordRef"
         :job-id="latestResult.job_id"
+        :feedback-available="!latestResult.execution_status"
         :issues="[]"
         :single-record-items="latestResult.items"
         :debug-context="debugContext"
@@ -98,9 +94,11 @@
 </template>
 
 <script setup lang="ts">
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
+import MedicalRecordContextBanner from './MedicalRecordContextBanner.vue'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import {
   exportLatestLuxian0609RecordResult,
@@ -125,32 +123,22 @@ export interface QCRecordResultFocus {
   label: string
 }
 
+const { confirmedResultsOnly } = useQcResultVisibility()
+
 const props = withDefaults(
   defineProps<{
     open: boolean
     focus: QCRecordResultFocus | null
     presentationMode?: 'flat' | 'grouped'
+    loadJobMetadata?: boolean
   }>(),
-  { presentationMode: 'flat' },
+  { presentationMode: 'flat', loadJobMetadata: true },
 )
 
 const emit = defineEmits<{
   (event: 'close'): void
 }>()
 
-import avatarBoy from '@/assets/avatar-icons/patient-icon-boy.png'
-import avatarGirl from '@/assets/avatar-icons/patient-icon-girl.png'
-import avatarMan from '@/assets/avatar-icons/patient-icon-man.png'
-import avatarWoman from '@/assets/avatar-icons/patient-icon-woman.png'
-import avatarElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
-import avatarElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
-const contextAvatar = computed(() => {
-  const female = /女|female|^f$/i.test(String(props.focus?.patientSex || '').trim())
-  const age = Number(props.focus?.patientAge || 0)
-  if (age > 0 && age < 14) return female ? avatarGirl : avatarBoy
-  if (age >= 55) return female ? avatarElderWoman : avatarElderMan
-  return female ? avatarWoman : avatarMan
-})
 const loading = ref(false)
 const exporting = ref(false)
 const loadError = ref('')
@@ -158,25 +146,6 @@ const latestResult = ref<SingleRecordQcResultPayload | null>(null)
 const authorizedRecordRef = ref('')
 const qcTimeText = ref('')
 let activeRequestSequence = 0
-
-const hospitalizationTimeText = computed(() => {
-  const admissionTime = props.focus?.admissionTime
-  const dischargeTime = props.focus?.dischargeTime
-  if (admissionTime && dischargeTime) return `住院时间 ${admissionTime} → ${dischargeTime}`
-  if (admissionTime) return `入院时间 ${admissionTime}`
-  if (dischargeTime) return `出院时间 ${dischargeTime}`
-  return ''
-})
-
-const recordContextAriaLabel = computed(() =>
-  [
-    `当前病历：${props.focus?.label || '病历原文与质控结果对照'}`,
-    props.focus?.admissionTime ? `入院时间：${props.focus.admissionTime}` : '',
-    props.focus?.dischargeTime ? `出院时间：${props.focus.dischargeTime}` : '',
-  ]
-    .filter(Boolean)
-    .join('，'),
-)
 
 const debugContext = computed(() => {
   const result = latestResult.value
@@ -202,6 +171,7 @@ const debugContext = computed(() => {
 })
 
 async function exportCurrentRecord() {
+  if (confirmedResultsOnly.value) return
   const focus = props.focus
   if (
     !latestResult.value ||
@@ -223,6 +193,7 @@ async function exportCurrentRecord() {
       return
     }
     const blob = await normalizeBatchExportBlob(response.data, 'html')
+    if (confirmedResultsOnly.value) return
     downloadBlob(blob, '单病历质控结果.html')
     message.success('单病历质控结果已开始下载')
   } catch {
@@ -268,7 +239,8 @@ async function loadLatestResult() {
       return
     }
     latestResult.value = result.data
-    void loadQcTime(result.data.job_id, requestSequence)
+    // V5列表已展示病例范围内的完成时间，不额外请求任务创建者权限接口。
+    if (props.loadJobMetadata) void loadQcTime(result.data.job_id, requestSequence)
   } catch {
     if (requestSequence === activeRequestSequence) {
       loadError.value = '质控结果读取失败，请稍后重试'
@@ -288,13 +260,13 @@ async function loadQcTime(jobId: string, requestSequence: number) {
     const job = response.success ? response.data : undefined
     if (job?.status === 'running' || job?.status === 'queued') {
       qcTimeText.value = '质控进行中'
-    } else if (job?.status === 'completed' && job.finished_at) {
+    } else if (job?.finished_at && (job.status === 'completed' || latestResult.value?.execution_status)) {
       // 任务服务以无时区 UTC 保存时间；已有偏移量的值保持原有时区含义。
       const rawTime = job.finished_at.trim().replace(' ', 'T')
       const date = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(rawTime) ? rawTime : `${rawTime}Z`)
       qcTimeText.value = Number.isNaN(date.getTime())
         ? '质控完成时间未返回'
-        : `质控完成时间：${date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`
+        : `${latestResult.value?.execution_status ? '质控结束时间' : '质控完成时间'}：${date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`
     } else {
       qcTimeText.value = '质控完成时间未返回'
     }
@@ -319,6 +291,18 @@ watch(
 
 <style scoped>
 @import '../styles/qc-result-view-apple.css';
+.customer-record-result-warning {
+  margin: 12px 16px;
+  padding: 12px 16px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.customer-record-result-warning p {
+  margin: 4px 0 0;
+}
 .customer-record-result-drawer :deep(.ant-drawer-close) {
   display: grid;
   width: 38px;
@@ -397,63 +381,6 @@ watch(
   font-size: 16px;
   line-height: 21px;
   font-weight: 700;
-  white-space: nowrap;
-}
-.customer-record-result-title__context {
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 12px 7px 10px;
-  border: 1px solid rgba(10, 108, 255, 0.12);
-  border-left: 3px solid #0a6cff;
-  border-radius: 11px;
-  background: #f5f9ff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-.customer-record-result-title__context-label {
-  flex: none;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: rgba(10, 108, 255, 0.11);
-  color: #0a6cff;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 20px;
-}
-.customer-record-result-title__context-value {
-  min-width: 0;
-  overflow: hidden;
-  color: rgba(29, 29, 31, 0.8);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 22px;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.customer-record-result-title__context-details {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.customer-record-result-title__context-time {
-  flex: none;
-  padding-left: 10px;
-  border-left: 1px solid rgba(10, 108, 255, 0.14);
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 20px;
-  white-space: nowrap;
-}
-.customer-record-result-title__qc-time {
-  margin-left: auto;
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
-  line-height: 20px;
   white-space: nowrap;
 }
 .customer-record-result-title__export {

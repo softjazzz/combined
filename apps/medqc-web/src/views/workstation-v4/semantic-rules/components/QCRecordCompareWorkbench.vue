@@ -122,6 +122,10 @@
             :selected-key="selectedDocumentKey"
             @select="selectDocument"
           />
+          <ReadonlyFrontpageContent
+            v-else-if="selectedDocument.document_type === 'mr' && selectedDocument.frontpage_display"
+            :display="selectedDocument.frontpage_display"
+          />
           <div v-else-if="documentSectionViews.length" class="record-content-sections">
             <section
               v-for="section in documentSectionViews"
@@ -309,6 +313,7 @@
 </template>
 
 <script setup lang="ts">
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { ChevronDown, ClipboardCheck, FileSearch, Lightbulb, Scale, Target } from 'lucide-vue-next'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
@@ -316,6 +321,7 @@ import {
   getEditableMedicalRecordDocuments,
 } from '@/services/manual-case-sample-service'
 import ReadonlyMedicalDocumentDirectory from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalDocumentDirectory.vue'
+import ReadonlyFrontpageContent from '@/views/workstation-v4/customer-sample-validation/ReadonlyFrontpageContent.vue'
 import ReadonlyMedicalOrderTable from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalOrderTable.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
 import {
@@ -345,6 +351,8 @@ import type { SaveQcResultFeedbackInput } from '@/api/qc-result-feedback-demo'
 import type { QcResultDebugContext } from '@/views/workstation-v4/customer-sample-validation/qcResultDebugExport'
 import { useQcResultFeedback } from '@/views/workstation-v4/customer-sample-validation/useQcResultFeedback'
 
+const { confirmedResultsOnly } = useQcResultVisibility()
+
 const props = withDefaults(
   defineProps<{
     visitId: string
@@ -363,11 +371,13 @@ const props = withDefaults(
     issues: QCRecordCompareIssue[]
     /** 单病历纵向切片专用；存在时右栏不再使用批量结果旧模型。 */
     singleRecordItems?: SingleRecordQcResultItem[]
+    /** 未完成整例交付的保存结果可查看，但不冒充可反馈的正式结果。 */
+    feedbackAvailable?: boolean
     presentationMode?: 'flat' | 'grouped'
     debugContext?: QcResultDebugContext
     activeIssueKey?: string
   }>(),
-  { presentationMode: 'flat', sourceView: 'saved' },
+  { presentationMode: 'flat', sourceView: 'saved', feedbackAvailable: true },
 )
 
 const emit = defineEmits<{
@@ -375,7 +385,7 @@ const emit = defineEmits<{
 }>()
 
 const qcFeedback = useQcResultFeedback(
-  () => props.jobId,
+  () => props.feedbackAvailable ? props.jobId : undefined,
   () => props.recordRef,
 )
 const feedbackByRule = qcFeedback.feedbackByRule
@@ -385,6 +395,7 @@ const feedbackError = qcFeedback.error
 const feedbackSavingRuleId = qcFeedback.savingRuleId
 
 function handleSubmitFeedback(ruleId: string, input: SaveQcResultFeedbackInput) {
+  if (!props.feedbackAvailable) return
   void qcFeedback.save(ruleId, input)
 }
 
@@ -449,6 +460,7 @@ function resolveDocumentTime(document: EditableMedicalRecordDocument) {
 
 const sortedIssues = computed(() =>
   props.issues
+    .filter((issue) => !confirmedResultsOnly.value || issue.status === 'non_compliant')
     .map((issue, index) => ({ issue, index }))
     .sort(
       (left, right) =>
@@ -460,7 +472,9 @@ const sortedIssues = computed(() =>
 
 const hasSingleRecordResult = computed(() => Array.isArray(props.singleRecordItems))
 const singleRecordViewItems = computed(() =>
-  buildSingleRecordQcResultItems(props.singleRecordItems),
+  buildSingleRecordQcResultItems(props.singleRecordItems).filter(
+    (item) => !confirmedResultsOnly.value || item.status === 'non_compliant',
+  ),
 )
 
 const selectedIssue = computed(

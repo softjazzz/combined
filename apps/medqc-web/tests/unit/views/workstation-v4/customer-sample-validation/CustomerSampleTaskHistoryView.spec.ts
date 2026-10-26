@@ -1,7 +1,7 @@
 /* eslint-disable vue/one-component-per-file */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, inject, provide } from 'vue'
 import CustomerSampleTaskHistoryView from '@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'
 
 let latestResultDrawerProps: Record<string, unknown> | null = null
@@ -56,6 +56,46 @@ const AButtonStub = defineComponent({
   inheritAttrs: false,
   setup(_, { attrs, slots }) {
     return () => h('button', attrs, slots.default?.())
+  },
+})
+
+// 菜单桩：a-menu 通过 provide 把点击回调交给菜单项，菜单项按 data-menu-key 触发对应 key。
+const AMenuStub = defineComponent({
+  name: 'AMenuStub',
+  emits: ['click'],
+  setup(_, { emit, slots }) {
+    provide('menuStubClick', (key: string) => emit('click', { key }))
+    return () => h('div', { class: 'a-menu-stub' }, slots.default?.())
+  },
+})
+
+const AMenuItemStub = defineComponent({
+  name: 'AMenuItemStub',
+  inheritAttrs: false,
+  setup(_, { attrs, slots }) {
+    const click = inject<(key: string) => void>('menuStubClick', () => undefined)
+    return () =>
+      h(
+        'button',
+        { class: 'a-menu-item-stub', onClick: () => click(String(attrs['data-menu-key'] || '')) },
+        slots.default?.(),
+      )
+  },
+})
+
+const ADropdownStub = defineComponent({
+  name: 'ADropdownStub',
+  setup(_, { slots }) {
+    return () => h('div', { class: 'a-dropdown-stub' }, [slots.default?.(), slots.overlay?.()])
+  },
+})
+
+const APaginationStub = defineComponent({
+  name: 'APaginationStub',
+  props: { current: Number, total: Number, pageSize: Number },
+  emits: ['change'],
+  setup(props) {
+    return () => h('div', { class: 'a-pagination-stub' }, `${props.current}/${props.total}`)
   },
 })
 
@@ -134,6 +174,10 @@ async function mountView() {
         SemanticRulesBatchResultDrawer: SemanticRulesBatchResultDrawerStub,
         'a-button': AButtonStub,
         'a-spin': ASpinStub,
+        'a-dropdown': ADropdownStub,
+        'a-menu': AMenuStub,
+        'a-menu-item': AMenuItemStub,
+        'a-pagination': APaginationStub,
         'semantic-rules-batch-result-drawer': SemanticRulesBatchResultDrawerStub,
       },
     },
@@ -193,27 +237,74 @@ describe('CustomerSampleTaskHistoryView', () => {
     const wrapper = await mountView()
 
     expect(listSichuanWorkspaceBatchJobs).toHaveBeenCalledWith({
+      view: 'overview',
       page: 1,
       page_size: 20,
       q: undefined,
       status: undefined,
     })
-    expect(wrapper.text()).toContain('共 1 条任务')
-    expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
-    expect(wrapper.text()).toContain('2 份病历')
-    expect(wrapper.text()).toContain('发现需关注结果：不合规 1')
-    expect(wrapper.text()).toContain('LX0609-01-02-01 首次病程记录未在入院后8小时内完成')
-    expect(wrapper.text()).toContain('合规 1')
+    expect(wrapper.text()).toContain('共 1 条')
+    const row = wrapper.get('[data-testid="task-history-row-job-history-1"]')
+    // 列表只读任务元信息；点开后才读取结果。
+    expect(row.text()).toContain('泸县0609质控点验证')
+    expect(row.text()).toContain('2 份病历')
+    expect(row.text()).toContain('选定 2 个质控点')
+    expect(row.text()).not.toContain('项问题')
+    expect(row.text()).not.toContain('合格')
+    expect(row.text()).not.toContain('首次病程记录未在入院后8小时内完成')
+    expect(wrapper.find('.task-history__counts').exists()).toBe(false)
+    expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+    expect(getSichuanWorkspaceBatchJobDebugSnapshot).not.toHaveBeenCalled()
+    expect(row.text()).not.toContain('LX0609-01-02-01')
+    expect(row.text()).not.toContain('不合规')
+    // 只有 1 页时不显示分页。
+    expect(wrapper.find('.a-pagination-stub').exists()).toBe(false)
+  })
+
+  it('状态切换即按状态重新查询，从第 1 页开始', async () => {
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-history-status-completed"]').trigger('click')
+    await flushPromises()
+    expect(listSichuanWorkspaceBatchJobs).toHaveBeenLastCalledWith({
+      view: 'overview',
+      page: 1,
+      page_size: 20,
+      q: undefined,
+      status: 'completed',
+    })
+  })
+
+  it('轻量列表分页与搜索保留，翻页不读取任务详情', async () => {
+    listSichuanWorkspaceBatchJobs.mockResolvedValue({
+      success: true,
+      data: {
+        items: [buildCompletedJob()],
+        total: 41,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-history-search"]').setValue('样本')
+    await wrapper.get('[data-testid="task-history-search"]').trigger('keyup.enter')
+    await flushPromises()
+    wrapper.findComponent(APaginationStub).vm.$emit('change', 2)
+    await flushPromises()
+    expect(listSichuanWorkspaceBatchJobs).toHaveBeenLastCalledWith({
+      view: 'overview',
+      page: 2,
+      page_size: 20,
+      q: '样本',
+      status: undefined,
+    })
+    expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
   })
 
   it('从历史任务打开单一结果抽屉', async () => {
     const wrapper = await mountView()
-    const viewButton = wrapper
-      .findAll('.customer-task-history-actions button')
-      .find((button) => button.text().includes('查看结果'))
-
-    expect(viewButton).toBeTruthy()
-    await viewButton!.trigger('click')
+    const viewButton = wrapper.get('[data-testid="task-history-open"]')
+    expect(viewButton.text()).toContain('查看结果')
+    await viewButton.trigger('click')
     await flushPromises()
 
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
@@ -232,11 +323,11 @@ describe('CustomerSampleTaskHistoryView', () => {
     expect(latestResultDrawerProps?.fetchBatchJobDebugSnapshot).toBeTypeOf('function')
   })
 
-  it('已完成任务提供复核与HTML导出入口', async () => {
+  it('已完成任务在“更多”中提供复核与导出质控报告', async () => {
     const wrapper = await mountView()
-    const actionButtons = wrapper.findAll('.customer-task-history-actions button')
-    const reviewButton = actionButtons.find((button) => button.text().includes('复核'))
-    const exportButton = actionButtons.find((button) => button.text().includes('导出HTML'))
+    const menuItems = wrapper.findAll('.a-menu-item-stub')
+    const reviewButton = menuItems.find((button) => button.text().includes('复核本次结果'))
+    const exportButton = menuItems.find((button) => button.text().includes('导出质控报告'))
 
     expect(reviewButton).toBeTruthy()
     expect(exportButton).toBeTruthy()

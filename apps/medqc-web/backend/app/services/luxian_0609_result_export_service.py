@@ -135,7 +135,7 @@ def export_single_record_result_html(
     record: Mapping[str, Any],
 ) -> str:
     if _text(result.get("state")) != "ready":
-        raise ValueError("只有已形成 Canonical 最终结论的病历可以导出")
+        raise ValueError("只有通过读取校验的已保存结果可以导出")
     items = [item for item in result.get("items") or [] if isinstance(item, Mapping)]
     counts = _status_counts(items)
     groups: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
@@ -184,6 +184,15 @@ def export_single_record_result_html(
             f'<section><h2>{_escape(source_document)}</h2>{"".join(cards)}</section>'
         )
 
+    execution_notice = ""
+    if result.get("execution_status") in {"partial_failed", "failed"}:
+        execution_notice = (
+            '<p role="alert"><b>本次质控未全部完成</b>；'
+            f'已保留 {len(items)} 项有效结果；{_escape(result.get("failed_rule_count", 0))} 项执行失败，未形成质控结论。'
+            f'失败项：{_escape("、".join(result.get("failed_rule_ids") or []))}</p>'
+        )
+    elif result.get("result_scope") == "targeted":
+        execution_notice = '<p role="status">当前为定向质控结果，仅覆盖本次选择的质控点。</p>'
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     document = f"""<!doctype html>
 <html lang="zh-CN">
@@ -213,6 +222,7 @@ def export_single_record_result_html(
     <h1>单病历质控结果</h1>
     <div class="meta">{_escape(record.get("patient_name") or "患者信息待核实")} · {_escape(record.get("department") or "未分科室")} · 住院号 {_escape(record.get("visit_id") or "-")}</div>
     <div class="meta">规则版本 {_escape(result.get("rule_set_version") or "-")} · 导出时间 {_escape(generated_at)}</div>
+    {execution_notice}
     <div class="metrics">{metrics}</div>
   </div>
   {"".join(sections)}

@@ -320,7 +320,26 @@ export function normalizeNotification(raw: unknown, index: number): Notification
     is_read: Boolean(source.is_read ?? source.isRead),
     level: pickString(source, ['level', 'severity']) || undefined,
     type: pickString(source, ['type', 'category']) || undefined,
+    interaction_target: normalizeDoctorInteraction(source.interaction_target),
   }
+}
+
+export function normalizeDoctorInteraction(value: unknown): NotificationVM['interaction_target'] {
+  if (!value || typeof value !== 'object') return undefined
+  const target = value as Record<string, unknown>
+  if (
+    (target.kind !== 'rectification' &&
+      target.kind !== 'modern_appeal' &&
+      target.kind !== 'case_communication' &&
+      target.kind !== 'account_registration' &&
+      target.kind !== 'account_registration_result' &&
+      target.kind !== 'qc_result_ready') ||
+    typeof target.id !== 'string' ||
+    !target.id.trim() ||
+    target.id.length > 36
+  )
+    return undefined
+  return { kind: target.kind, id: target.id }
 }
 
 export function normalizeWorklistItem(raw: unknown): WorkstationWorklistItem {

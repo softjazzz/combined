@@ -256,7 +256,12 @@ def resolve_record_evaluation_horizon(
             evaluation_basis="",
             resolution_status="authoritative_time_missing",
         )
-    if discharge_time < admission_time:
+    try:
+        time_conflict = discharge_time < admission_time
+    except TypeError:
+        # 与冻结终点读取口径一致：时区信息混用时保留冲突，不隐式补时区或中断建任务。
+        time_conflict = True
+    if time_conflict:
         return RecordEvaluationHorizon(
             record_id=normalized_record_id,
             record_scene=normalized_scene,

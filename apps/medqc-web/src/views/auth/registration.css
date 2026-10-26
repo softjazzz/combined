@@ -1,0 +1,74 @@
+.registration-page {
+  max-width: 880px;
+  min-height: 100vh;
+  padding: 40px 24px;
+  margin: 0 auto;
+}
+.registration-head,
+.registration-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.registration-head {
+  margin-bottom: 24px;
+}
+.registration-form {
+  display: grid;
+  gap: 20px;
+}
+.registration-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.registration-fields .mq-field {
+  min-width: 0;
+}
+.registration-actions {
+  justify-content: flex-end;
+}
+.registration-error {
+  color: var(--mq-danger-text);
+  margin-top: 16px;
+  font-size: var(--mq-font-14);
+}
+.registration-result {
+  margin-top: 24px;
+  padding: 20px;
+}
+.registration-result dl {
+  margin: 20px 0;
+  display: grid;
+  gap: 12px;
+  font-size: var(--mq-font-14);
+}
+.registration-result dl > div {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 12px;
+}
+.registration-result dt {
+  color: var(--mq-text-tertiary);
+}
+.registration-result dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .registration-page {
+    padding: 24px 16px;
+  }
+  .registration-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .registration-result dl > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .registration-head {
+    align-items: flex-start;
+  }
+}

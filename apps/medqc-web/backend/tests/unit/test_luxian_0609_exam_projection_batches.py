@@ -373,7 +373,9 @@ async def test_exam_batches_run_result_record_verification_for_all_global_events
             if "EVENTS_JSON=" not in prompt:
                 return await super().generate(prompt, **kwargs)
             self.prompts.append(prompt)
-            events = json.loads(prompt.split("EVENTS_JSON=", 1)[1])
+            from finding_selection_test_support import prompt_events
+
+            events = prompt_events(prompt)
             docs = []
             for event in events:
                 for doc in event["course_docs"]:

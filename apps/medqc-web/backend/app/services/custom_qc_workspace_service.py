@@ -5,6 +5,8 @@ import json
 import re
 import uuid
 
+from ..core.execution_timing import project_stage_timing, timed
+
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO, StringIO
@@ -79,6 +81,7 @@ from .qc_workspace.canonical_result_store import (
     validated_customer_explanation as _validated_customer_explanation,
 )
 from .qc_workspace.partial_record_delivery import select_complete_record_items
+from .qc_workspace.partial_record_read import read_saved_partial_record, saved_record_rule_scope
 from .qc_workspace.record_repository import RecordRepository, WorkspaceListResult
 from .qc_workspace.execution_failure import (
     validate_failed_task_items,
@@ -976,6 +979,53 @@ def _safe_review_report(
     }
 
 
+def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
+    """质控记录列表的一行：任务元数据、范围与病历进度，不含任何结果计数、结论或证据。
+
+    只白名单输出；filters 原始对象不透传。
+    ``has_results`` 只表示失败任务是否已有可打开查看的结果，不代表结果条数。
+    """
+
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    # 与完整投影同一取法（选定规则优先，其次规则范围），列表“选定 N 个质控点”口径不变。
+    raw_rule_ids = filters.get("selected_rule_ids") or filters.get("rule_ids") or []
+    rule_ids = [
+        _safe_text(value)
+        for value in (raw_rule_ids if isinstance(raw_rule_ids, list) else [])
+        if _safe_text(value)
+    ]
+    total_records = _to_int(job.get("total_records"))
+    success_count = _to_int(job.get("success_count"))
+    customer_rule_count = _to_int(filters.get("customer_rule_count"))
+    return {
+        "schema_version": "customer-qc-job-overview-v1",
+        "id": _safe_text(job.get("id")),
+        "status": _safe_text(job.get("status")).lower(),
+        "job_kind": _safe_text(job.get("job_kind")),
+        "rule_code": _safe_text(job.get("rule_code")).upper(),
+        "rule_name": _safe_text(job.get("rule_name")),
+        "rule_set_key": _safe_text(filters.get("rule_set_key")),
+        "rule_set_name": _safe_text(filters.get("rule_set_name")),
+        "scene": _safe_text(job.get("scene")),
+        "scope": _safe_text(job.get("scope")),
+        "created_at": _safe_text(job.get("created_at")),
+        "started_at": _safe_text(job.get("started_at")),
+        "finished_at": _safe_text(job.get("finished_at")),
+        "updated_at": _safe_text(job.get("updated_at")),
+        "total_records": total_records,
+        "success_count": success_count,
+        "failed_count": _to_int(job.get("failed_count")),
+        "customer_rule_count": customer_rule_count,
+        "draft_ids": rule_ids,
+        "has_results": bool(job.get("has_results")),
+        "summary": {
+            "total_records": total_records,
+            "success_count": success_count,
+            "customer_rule_count": customer_rule_count,
+        },
+    }
+
+
 def project_customer_safe_batch_job(
     job: Dict[str, Any],
     *,
@@ -1180,6 +1230,12 @@ def project_customer_safe_batch_job(
             "token_breakdown_complete"
         ]
     safe_summary["performance_profile"] = safe_performance_profile
+    stage_timing = project_stage_timing(raw_profile.get("stage_timing"))
+    if stage_timing is not None:
+        safe_performance_profile["stage_timing"] = stage_timing
+    if raw_profile.get("rule_duration_basis") == "allocated_or_reported_metadata":
+        safe_performance_profile["rule_duration_basis"] = "allocated_or_reported_metadata"
+        safe_performance_profile["slow_rule_ranking_is_measured"] = False
     safe_summary["total_tokens"] = _to_int(
         safe_performance_profile.get("tokens_total"),
         safe_summary["total_tokens"],
@@ -2634,6 +2690,8 @@ class CustomQCWorkspaceService:
                     items=canonical_items,
                     now=now,
                 )
+                if canonical_items:
+                    self._notify_saved_result(session, job_row=dict(row), now=now)
             elif formal_luxian_parent and status == "failed" and partial_items:
                 self._write_record_result_envelopes(
                     session,
@@ -3206,6 +3264,165 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def _batch_job_list_where(
+        self,
+        *,
+        created_by: str,
+        draft_id: Optional[str] = None,
+        status: Optional[str] = None,
+        scope: Optional[str] = None,
+        query: Optional[str] = None,
+        created_start_date: Optional[str] = None,
+        created_end_date: Optional[str] = None,
+        record_id: Optional[str] = None,
+        include_children: bool = False,
+    ):
+        """任务列表的筛选条件；完整列表与概览列表共用，保证两者筛选口径一致。"""
+
+        clauses = [self._batch_job_table.c.created_by == created_by]
+        if not include_children:
+            clauses.append(
+                or_(
+                    self._batch_job_table.c.parent_job_id.is_(None),
+                    self._batch_job_table.c.parent_job_id == "",
+                )
+            )
+        if draft_id:
+            clauses.append(self._batch_job_table.c.draft_id == draft_id)
+        status_value = _safe_text(status).lower()
+        if status_value:
+            clauses.append(self._batch_job_table.c.status == status_value)
+        scope_value = _safe_text(scope).lower()
+        if scope_value:
+            clauses.append(self._batch_job_table.c.scope == _normalize_scope(scope_value))
+        query_value = _safe_text(query)
+        if query_value:
+            clauses.append(
+                or_(
+                    self._batch_job_table.c.rule_code.ilike(f"%{query_value}%"),
+                    self._batch_job_table.c.rule_name.ilike(f"%{query_value}%"),
+                )
+            )
+        start = _as_date(created_start_date)
+        end = _as_date(created_end_date)
+        if start:
+            clauses.append(func.date(self._batch_job_table.c.created_at) >= start)
+        if end:
+            clauses.append(func.date(self._batch_job_table.c.created_at) <= end)
+        record_id_value = _safe_text(record_id)
+        if record_id_value:
+            escaped_record_id = (
+                record_id_value
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+                .replace('"', '\\"')
+            )
+            clauses.append(
+                self._batch_job_table.c.record_ids_json.ilike(
+                    f'%"{escaped_record_id}"%',
+                    escape="\\",
+                )
+            )
+        return and_(*clauses)
+
+    def list_batch_job_overviews(
+        self,
+        *,
+        created_by: str,
+        status: Optional[str] = None,
+        scope: Optional[str] = None,
+        query: Optional[str] = None,
+        created_start_date: Optional[str] = None,
+        created_end_date: Optional[str] = None,
+        record_id: Optional[str] = None,
+        page: int = 1,
+        page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
+    ) -> WorkspaceBatchJobListResult:
+        """质控记录页的轻量任务列表：只读任务元数据，不读取结果明细与完整摘要。
+
+        完整摘要（含全部规则结果）单个可达数十 MB；仅读取或在库内解析一次就要数秒，
+        列表逐行做客户安全投影要十余秒。概览因此完全不读 summary_json / items_json，
+        进度取自病历计数列；失败任务只用结果计数列判断“是否已有结果”，不返回计数本身。
+        """
+
+        table = self._batch_job_table
+        where_clause = self._batch_job_list_where(
+            created_by=created_by,
+            status=status,
+            scope=scope,
+            query=query,
+            created_start_date=created_start_date,
+            created_end_date=created_end_date,
+            record_id=record_id,
+        )
+        columns = (
+            table.c.id,
+            table.c.draft_id,
+            table.c.rule_code,
+            table.c.rule_name,
+            table.c.scene,
+            table.c.scope,
+            table.c.status,
+            table.c.job_kind,
+            table.c.filters_json,
+            table.c.created_at,
+            table.c.started_at,
+            table.c.finished_at,
+            table.c.updated_at,
+            table.c.total_records,
+            table.c.success_count,
+            table.c.failed_count,
+            table.c.issue_records,
+            table.c.compliant_records,
+        )
+        session = _session()
+        try:
+            total = int(
+                session.execute(select(func.count()).select_from(table).where(where_clause)).scalar()
+                or 0
+            )
+            rows = (
+                session.execute(
+                    select(*columns)
+                    .where(where_clause)
+                    .order_by(desc(table.c.created_at))
+                    .offset(max(page - 1, 0) * page_size)
+                    .limit(page_size)
+                )
+                .mappings()
+                .all()
+            )
+        finally:
+            session.close()
+        items: List[Dict[str, Any]] = []
+        for raw_row in rows:
+            row = dict(raw_row)
+            filters = _safe_json_loads(row.get("filters_json"), {})
+            items.append(
+                {
+                    "id": _safe_text(row.get("id")),
+                    "draft_id": _safe_text(row.get("draft_id")),
+                    "rule_code": _safe_text(row.get("rule_code")),
+                    "rule_name": _safe_text(row.get("rule_name")),
+                    "scene": _safe_text(row.get("scene")),
+                    "scope": _safe_text(row.get("scope")),
+                    "status": _safe_text(row.get("status"), "queued").lower(),
+                    "job_kind": _safe_text(row.get("job_kind")),
+                    "filters": filters if isinstance(filters, dict) else {},
+                    "has_results": _to_int(row.get("issue_records")) > 0
+                    or _to_int(row.get("compliant_records")) > 0,
+                    "created_at": row.get("created_at"),
+                    "started_at": row.get("started_at"),
+                    "finished_at": row.get("finished_at"),
+                    "updated_at": row.get("updated_at"),
+                    "total_records": _to_int(row.get("total_records")),
+                    "success_count": _to_int(row.get("success_count")),
+                    "failed_count": _to_int(row.get("failed_count")),
+                }
+            )
+        return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
+
     def list_batch_jobs(
         self,
         *,
@@ -3225,52 +3442,17 @@ class CustomQCWorkspaceService:
     ) -> WorkspaceBatchJobListResult:
         session = _session()
         try:
-            clauses = [self._batch_job_table.c.created_by == created_by]
-            if not include_children:
-                clauses.append(
-                    or_(
-                        self._batch_job_table.c.parent_job_id.is_(None),
-                        self._batch_job_table.c.parent_job_id == "",
-                    )
-                )
-            if draft_id:
-                clauses.append(self._batch_job_table.c.draft_id == draft_id)
-            status_value = _safe_text(status).lower()
-            if status_value:
-                clauses.append(self._batch_job_table.c.status == status_value)
-            scope_value = _safe_text(scope).lower()
-            if scope_value:
-                clauses.append(self._batch_job_table.c.scope == _normalize_scope(scope_value))
-            query_value = _safe_text(query)
-            if query_value:
-                clauses.append(
-                    or_(
-                        self._batch_job_table.c.rule_code.ilike(f"%{query_value}%"),
-                        self._batch_job_table.c.rule_name.ilike(f"%{query_value}%"),
-                    )
-                )
-            start = _as_date(created_start_date)
-            end = _as_date(created_end_date)
-            if start:
-                clauses.append(func.date(self._batch_job_table.c.created_at) >= start)
-            if end:
-                clauses.append(func.date(self._batch_job_table.c.created_at) <= end)
-            record_id_value = _safe_text(record_id)
-            if record_id_value:
-                escaped_record_id = (
-                    record_id_value
-                    .replace("\\", "\\\\")
-                    .replace("%", "\\%")
-                    .replace("_", "\\_")
-                    .replace('"', '\\"')
-                )
-                clauses.append(
-                    self._batch_job_table.c.record_ids_json.ilike(
-                        f'%"{escaped_record_id}"%',
-                        escape="\\",
-                    )
-                )
-            where_clause = and_(*clauses)
+            where_clause = self._batch_job_list_where(
+                created_by=created_by,
+                draft_id=draft_id,
+                status=status,
+                scope=scope,
+                query=query,
+                created_start_date=created_start_date,
+                created_end_date=created_end_date,
+                record_id=record_id,
+                include_children=include_children,
+            )
             executor_value = _safe_text(executor_type).lower()
             enable_runtime_filter = executor_value in {"program", "llm"} or cache_hit is not None
 
@@ -3360,10 +3542,9 @@ class CustomQCWorkspaceService:
     ) -> Dict[str, Any]:
         """读取一份病历当前规则代次的唯一客户结果。
 
-        这是单病历结果页唯一允许使用的读取入口。候选首先由三坐标
-        ``institute_id + patient_id + visit_id`` 限定，再从全院所有创建者中
-        选择已为该病历写入 Canonical Envelope 的当前规则代次最新唯一根任务；
-        不得以批次整体状态、文案丰富度、证据数量或完整度替换较新的任务。
+        三坐标、规则版本及任务冻结范围共同约束候选；定向子集不得替代全量任务。
+        完整结果沿用 Canonical Envelope，最新失败全量任务则只读展示同次已保存、
+        通过逐条合同校验的结果及独立失败提示，不与其他任务拼接或标为完整交付。
         """
 
         normalized_institute_id = _safe_text(institute_id)
@@ -3406,6 +3587,8 @@ class CustomQCWorkspaceService:
                         self._batch_job_table.c.record_ids_json,
                         self._batch_job_table.c.finished_at,
                         self._batch_job_table.c.created_at,
+                        self._batch_job_table.c.status,
+                        sa.literal(False).label("saved_partial_attempt"),
                     )
                     .join(
                         self._record_result_envelope_table,
@@ -3433,20 +3616,62 @@ class CustomQCWorkspaceService:
                         )
                     )
                     .distinct()
+                    .union_all(
+                        select(
+                            self._batch_job_table.c.id,
+                            self._batch_job_table.c.filters_json,
+                            self._batch_job_table.c.record_ids_json,
+                            self._batch_job_table.c.finished_at,
+                            self._batch_job_table.c.created_at,
+                            self._batch_job_table.c.status,
+                            sa.literal(True).label("saved_partial_attempt"),
+                        ).where(and_(
+                            self._batch_job_table.c.status == "failed",
+                            or_(self._batch_job_table.c.parent_job_id.is_(None),
+                                self._batch_job_table.c.parent_job_id == ""),
+                            self._batch_job_table.c.record_ids_json.contains(
+                                json.dumps(normalized_visit_id, ensure_ascii=False), autoescape=True,
+                            ),
+                        ))
+                    )
                     .order_by(
-                        desc(self._batch_job_table.c.finished_at),
-                        desc(self._batch_job_table.c.created_at),
+                        desc("finished_at"), desc("created_at"),
                     )
                 )
                 .mappings()
                 .all()
             )
             candidates = []
+            case_ref = CaseRef(normalized_institute_id, normalized_patient_id, normalized_visit_id)
+            canonical_job_ids = {row["id"] for row in root_rows if not row.get("saved_partial_attempt")}
             for row in root_rows:
-                # 代次选择只需要任务身份、病例范围和时间，不读取历史结果大字段。
-                # 父任务聚合不改变这些字段；当前病例完成性已由精确 Envelope 确认。
+                # 先用轻量身份与冻结范围选轮，只加载选中任务的结果大字段。
                 candidate = _row_to_batch_job(dict(row))
                 filters = candidate.get("filters") or {}
+                saved_partial_attempt = bool(row.get("saved_partial_attempt"))
+                if saved_partial_attempt:
+                    if row["id"] in canonical_job_ids:
+                        continue
+                    # SQL 仅作就诊号预筛；无 Envelope 时必须由持久三坐标证明归属。
+                    refs = filters.get("record_refs")
+                    if not isinstance(refs, list) or case_ref not in {
+                        CaseRef.from_mapping(ref) for ref in refs if isinstance(ref, Mapping)
+                    }:
+                        continue
+                try:
+                    scope = saved_record_rule_scope(filters, case_ref)
+                except (ValueError, TypeError):
+                    if saved_partial_attempt:
+                        continue
+                    scope = []  # 无冻结范围的旧 Envelope 保留原合同兼容读取。
+                candidate["result_rule_scope"] = scope
+                candidate["saved_partial_attempt"] = saved_partial_attempt
+                if saved_partial_attempt:
+                    candidate["saved_filters_json"] = row["filters_json"]
+                candidate["result_scope_kind"] = (
+                    "targeted" if filters.get("selected_rule_ids") or filters.get("record_rule_map")
+                    else "full" if "selected_rule_ids" in filters else "unknown"
+                )
                 if not all(filters.get(key) for key in ("rule_set_key", "rule_set_version")):
                     # 仅旧任务缺少 filters 身份时加载 summary，保留逐字段兼容回退。
                     summary_rows = session.execute(
@@ -3458,8 +3683,9 @@ class CustomQCWorkspaceService:
                     )
                     candidate["summary"] = summary if isinstance(summary, dict) else None
                 if _safe_text(candidate.get("status")).lower() != "completed":
-                    # 批次可因其他病历失败、取消或仍在收尾，但精确 Envelope 的
-                    # 存在已证明当前病历独立交付完成。这里只投影读取状态，不改库。
+                    # 选择器使用 completed 表示可选读。独立 Envelope 或失败任务的
+                    # 结果校验在后面分别完成；部分失败通过 execution_status 明示，
+                    # 不修改持久任务状态或声称整例已经交付。
                     candidate = {**candidate, "status": "completed"}
                 candidates.append(candidate)
             selection = select_latest_authoritative_record_result_job(
@@ -3467,6 +3693,7 @@ class CustomQCWorkspaceService:
                 record_id=normalized_visit_id,
                 rule_set_key=normalized_rule_set_key,
                 rule_set_version=normalized_rule_set_version,
+                prefer_full_scope=True,
             )
             if selection.state != "ready" or not isinstance(selection.job, dict):
                 return {
@@ -3482,6 +3709,12 @@ class CustomQCWorkspaceService:
                 }
 
             selected_job = selection.job
+            if not expected_rule_ids and selected_job.get("result_rule_scope"):
+                expected_rule_ids_for_count = [
+                    rule_id for rule_id in selected_job["result_rule_scope"]
+                    if rule_id not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+                ]
+            partial_details: Dict[str, Any] = {}
             try:
                 envelope = self._load_record_result_envelope_items(
                     session,
@@ -3492,15 +3725,35 @@ class CustomQCWorkspaceService:
                     rule_set_key=normalized_rule_set_key,
                     rule_set_version=normalized_rule_set_version,
                 )
+                if not envelope and selected_job.get("saved_partial_attempt"):
+                    saved = session.execute(select(
+                        self._batch_job_table.c.summary_json,
+                        self._batch_job_table.c.failed_records_json,
+                    ).where(and_(
+                        self._batch_job_table.c.id == selected_job["id"],
+                        self._batch_job_table.c.status == "failed",
+                        self._batch_job_table.c.filters_json == selected_job["saved_filters_json"],
+                    ))).mappings().one_or_none()
+                    if saved is None:
+                        raise ValueError("saved_partial_task_changed")
+                    projection_key = customer_safe_projection_key()
+                    partial_details = read_saved_partial_record(
+                        summary=_safe_json_loads(saved["summary_json"], {}),
+                        failures=_safe_json_loads(saved["failed_records_json"], []),
+                        ref=case_ref, expected_rules=selected_job["result_rule_scope"],
+                        projection_key=projection_key,
+                        projector=lambda item: self._envelope_item_from_rule_result(item, hmac_key=projection_key),
+                    )
+                    envelope = partial_details
             except ValueError as exc:
                 # 已发布合同损坏沿用既有结构化失败，不变成未找到，也不吞其他错误。
-                if str(exc) != LX0609_CUSTOMER_RESULT_CONTRACT_ERROR:
+                if str(exc) != LX0609_CUSTOMER_RESULT_CONTRACT_ERROR and not str(exc).startswith("saved_partial_"):
                     raise
                 return {
                     "schema_version": "lx0609-single-record-result-v1",
                     "state": "technical_error",
-                    "reason_code": "canonical_result_envelope_invalid",
-                    "data_origin": "canonical_result_envelope",
+                    "reason_code": "saved_partial_result_invalid" if selected_job.get("saved_partial_attempt") else "canonical_result_envelope_invalid",
+                    "data_origin": "saved_partial_task" if selected_job.get("saved_partial_attempt") else "canonical_result_envelope",
                     "record_ref": "",
                     "job_id": _safe_text(selected_job.get("id")),
                     "items": [],
@@ -3613,17 +3866,19 @@ class CustomQCWorkspaceService:
                 "schema_version": "lx0609-single-record-result-v1",
                 "state": "ready",
                 "reason_code": "",
-                "data_origin": "canonical_result_envelope",
+                "data_origin": "saved_partial_task" if partial_details else "canonical_result_envelope",
                 "record_ref": _safe_text(envelope.get("record_ref")),
                 "job_id": _safe_text(selected_job.get("id")),
                 "rule_set_key": normalized_rule_set_key,
                 "rule_set_version": normalized_rule_set_version,
+                "result_scope": selected_job.get("result_scope_kind", "unknown"),
                 "items": projected_items,
                 "expected_rule_count": len(resolved_expected_rule_ids),
                 "result_rule_count": len(items),
-                "is_complete": not missing_rule_ids and not conflicting_rule_ids,
+                "is_complete": not partial_details and not missing_rule_ids and not conflicting_rule_ids,
                 "missing_rule_ids": missing_rule_ids,
                 "conflicting_rule_ids": sorted(conflicting_rule_ids),
+                **{key: value for key, value in partial_details.items() if key not in {"items", "record_ref"}},
             }
         finally:
             session.close()
@@ -3636,6 +3891,7 @@ class CustomQCWorkspaceService:
         rule_set_version: str = RULE_SET_VERSION,
         session_factory: Optional[Callable[[], Session]] = None,
         include_items: bool = False,
+        include_rule_set_context: bool = False,
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
         """批量读取病历池可展示的最新 Canonical 结果摘要。
 
@@ -3868,6 +4124,15 @@ class CustomQCWorkspaceService:
                     if job_id not in jobs_by_id:
                         continue
                     candidate = dict(jobs_by_id[job_id])
+                    filters = candidate.get("filters") or {}
+                    try:
+                        candidate["result_rule_scope"] = saved_record_rule_scope(filters, CaseRef(*identity))
+                    except (ValueError, TypeError):
+                        candidate["result_rule_scope"] = []
+                    candidate["result_scope_kind"] = (
+                        "targeted" if filters.get("selected_rule_ids") or filters.get("record_rule_map")
+                        else "full" if "selected_rule_ids" in filters else "unknown"
+                    )
                     if _safe_text(candidate.get("status")).lower() != "completed":
                         # Canonical Envelope 的存在只代表这一份病历已经完整交付。
                         # 选择器仍坚持 completed 合同，因此在本次单病历选择范围内
@@ -3889,6 +4154,7 @@ class CustomQCWorkspaceService:
                     record_id=visit_id,
                     rule_set_key=normalized_rule_set_key,
                     rule_set_version=normalized_rule_set_version,
+                    prefer_full_scope=True,
                 )
                 # 只有当前规则版本、且没有任何当前版本同 visit Envelope 的根任务
                 # 才是无法确认三坐标归属的缺失候选。旧版本 Envelope 完全不参与
@@ -3920,12 +4186,21 @@ class CustomQCWorkspaceService:
                             "reason_code": "canonical_result_envelope_invalid",
                         }
                         continue
-                    projections[identity] = self._summarize_completed_record_result_envelope(
+                    summary = self._summarize_completed_record_result_envelope(
                         envelope_row=selected_envelopes[0],
                         completed_at=ready_selection.job.get("finished_at"),
                         include_items=include_items,
                         rule_set_key=normalized_rule_set_key,
                     )
+                    if include_rule_set_context and summary.get("status") == "ready":
+                        # 供报表绑定已选中的持久结果；不改变候选、选轮或旧调用输出。
+                        summary.update({
+                            "root_job_id": selected_job_id,
+                            "envelope_id": _safe_text(selected_envelopes[0].get("id")),
+                            "rule_set_key": normalized_rule_set_key,
+                            "rule_set_version": _rule_set_value(ready_selection.job, "rule_set_version"),
+                        })
+                    projections[identity] = summary
                     continue
 
                 # 仅以 visit_id 保存的历史根任务不能形成 ready。若该任务已有同
@@ -4846,6 +5121,7 @@ class CustomQCWorkspaceService:
             self.refresh_parent_batch_job(parent_job_id=parent_id)
         return tuple(failed_ids)
 
+    @timed("result_write")
     def update_batch_job_progress(
         self,
         *,
@@ -4969,6 +5245,7 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    @timed("final_save")
     def complete_batch_job(
         self,
         *,
@@ -4978,14 +5255,24 @@ class CustomQCWorkspaceService:
         failed_records: List[Dict[str, Any]],
         persist_record_envelopes: bool = True,
         attempt_filters_json: str | None = None,
+        recovery_baseline: Dict[str, Any] | None = None,
     ) -> bool | None:
         session = _session()
         try:
-            row = session.execute(
-                select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
-            ).mappings().first()
+            statement = select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
+            if recovery_baseline is not None:
+                statement = statement.with_for_update()
+            row = session.execute(statement).mappings().first()
             if not row:
                 return
+            recovery_refs = None
+            if recovery_baseline is not None:
+                from .qc_workspace.offline_failure_recovery import validate_recovery_merge
+                # 在原任务锁内复核备份基线，避免覆盖并发恢复、取消或新一轮任务。
+                for field in ("id", "created_by", "status", "filters_json", "items_json", "failed_records_json", "summary_json", "updated_at"):
+                    if row.get(field) != recovery_baseline.get(field):
+                        raise ValueError("recovery_baseline_changed")
+                recovery_refs = validate_recovery_merge(recovery_baseline, items=items, failures=failed_records)
             parent_job_id = _safe_text(row.get("parent_job_id"))
             now = _now_utc()
             execution_failed = summary.get("execution_status") in {"partial_failed", "failed"}
@@ -5030,7 +5317,11 @@ class CustomQCWorkspaceService:
             }
             completion_update = session.execute(
                 update(self._batch_job_table)
-                .where(_batch_job_write_scope(
+                .where(and_(
+                    self._batch_job_table.c.id == job_id,
+                    self._batch_job_table.c.status == "failed",
+                    self._batch_job_table.c.filters_json == row.get("filters_json"),
+                ) if recovery_refs is not None else _batch_job_write_scope(
                     self._batch_job_table, job_id=job_id, attempt_filters_json=attempt_filters_json,
                     observed_filters_json=row.get("filters_json"),
                 ))
@@ -5062,7 +5353,7 @@ class CustomQCWorkspaceService:
             # 仍会被读取为当前交付。父任务 root 的整体替换由 refresh_parent_batch_job
             # 负责，子任务保持逐病例写入，其它规则集不变；即使调用方本次不写
             # Canonical（persist_record_envelopes=False）也不得留下上一代正式结果。
-            if rule_set_key == LUXIAN_0609_RULE_SET_KEY and not parent_job_id:
+            if rule_set_key == LUXIAN_0609_RULE_SET_KEY and not parent_job_id and recovery_refs is None:
                 session.execute(
                     self._record_result_envelope_table.delete().where(and_(
                         self._record_result_envelope_table.c.root_job_id == job_id,
@@ -5087,6 +5378,10 @@ class CustomQCWorkspaceService:
                         failures=failed_records,
                         expected_rule_ids=expected_rule_ids,
                     )
+            if recovery_refs is not None:
+                # 只为本次补齐且已完整交付的病历写信封；其他成功病历的信封原行不动。
+                envelope_items = [item for item in envelope_items if tuple(str(item.get(key) or "") for key in ("institute_id", "patient_id", "visit_id")) in recovery_refs]
+                envelope_record_refs = list(dict.fromkeys(CaseRef.from_mapping(item) for item in envelope_items))
             diagnostic_receipts = (
                 self._write_record_result_envelopes(
                     session,
@@ -5098,6 +5393,8 @@ class CustomQCWorkspaceService:
                 if envelope_items
                 else ()
             )
+            if envelope_items and not execution_failed:
+                self._notify_saved_result(session, job_row=dict(row), now=now)
             session.commit()
             if getattr(completion_update, "rowcount", None) == 1:
                 capture_committed_results(diagnostic_receipts)
@@ -5114,6 +5411,14 @@ class CustomQCWorkspaceService:
         item: Dict[str, Any], *, hmac_key: str | None = None,
     ) -> Dict[str, Any]:
         return envelope_item_from_rule_result(item, hmac_key=hmac_key)
+
+    def _notify_saved_result(self, session: Session, *, job_row: Dict[str, Any], now: datetime) -> None:
+        from .qc_result_ready_notification import publish_result_ready
+
+        publish_result_ready(
+            session, job_row=job_row, jobs=self._batch_job_table,
+            envelopes=self._record_result_envelope_table, now=now,
+        )
 
     def _write_record_result_envelopes(
         self,
@@ -5144,6 +5449,27 @@ class CustomQCWorkspaceService:
             collect_receipts=diagnostic_capture_enabled(),
             projection_key=projection_key,
         )
+
+    def list_record_result_case_refs(self, *, job_id: str, limit: int = 500) -> List[CaseRef]:
+        """按任务读取正式结果信封的病历三坐标（结果页身份回查用），按首次写入顺序去重。"""
+        table = self._record_result_envelope_table
+        session = _session()
+        try:
+            rows = session.execute(
+                select(table.c.institute_id, table.c.patient_id, table.c.visit_id)
+                .where(or_(table.c.root_job_id == job_id, table.c.job_id == job_id))
+                .order_by(table.c.created_at, table.c.id)
+            ).all()
+        finally:
+            session.close()
+        refs: List[CaseRef] = []
+        for row in rows:
+            ref = CaseRef(_safe_text(row[0]), _safe_text(row[1]), _safe_text(row[2]))
+            if all(ref) and ref not in refs:
+                refs.append(ref)
+                if len(refs) >= limit:
+                    break
+        return refs
 
     def _load_record_result_envelope_items(
         self,

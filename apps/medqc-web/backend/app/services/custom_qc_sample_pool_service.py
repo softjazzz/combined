@@ -22,6 +22,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import MetaData, Table, and_, delete, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
+
+from .clinical_read import clinical_query
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import (
     AdmissionRecord,
@@ -69,6 +71,11 @@ def _reject_customer_test_pool_source_write(pool_id: str) -> None:
     """自建测试病历创建后固定；源库匹配/同步会改写病例绑定，甚至绑定到真实患者。"""
     if _safe_text(pool_id) == CUSTOMER_TEST_POOL_ID:
         raise ValueError("客户自建测试病历创建后固定，不支持源库匹配或同步；如需修改请复制为新病例")
+
+
+def _matched_case_ref(item: Dict[str, Any]) -> CaseRef:
+    return CaseRef(*(_safe_text(item.get(f"matched_{field}"))
+                     for field in ("institute_id", "patient_id", "visit_id")))
 
 
 class SampleSyncJobConflictError(RuntimeError):
@@ -342,6 +349,14 @@ def _session() -> Session:
     if SessionLocal is None:
         raise RuntimeError("DATABASE_URL is not configured; sample pool unavailable")
     return SessionLocal()
+
+
+def _use_clinical_read_schema(session: Session) -> None:
+    """样本卡片的临床回查与 Bundle 同源；显式 qc 表仍由 qc 管理。"""
+    from .bundles.assembly import _default_source_schema
+
+    if _default_source_schema() == "cdm":
+        session.connection().execution_options(schema_translate_map={None: "cdm"})
 
 
 def _safe_text(value: Any, default: str = "") -> str:
@@ -2699,6 +2714,7 @@ def _load_previous_hospitalization_states(
 
     session = _session()
     try:
+        _use_clinical_read_schema(session)
         for institute_id, patient_id, visit_id in legacy_identities:
             # 先查出院证据，避免旧表之间短暂不一致把出院病例误记为在院。
             discharge = (
@@ -3351,69 +3367,68 @@ class CustomQCSamplePoolService:
             "updated_at": row.get("updated_at"),
         }
 
-    def _load_bundle_source_table_map(self, *, visit_ids: Sequence[str]) -> Dict[str, set[str]]:
-        normalized_ids = [str(item).strip() for item in visit_ids if str(item).strip()]
-        if not normalized_ids or engine is None:
+    def _load_bundle_source_table_map(self, *, case_refs: Sequence[CaseRef]) -> Dict[CaseRef, set[str]]:
+        identities = sorted({ref for ref in case_refs if all(ref)})
+        if not identities or engine is None:
             return {}
         sql = (
             sa.text(
                 """
-                SELECT visit_id::text AS visit_id,
+                SELECT institute_id, patient_id, visit_id,
                        COALESCE(doc.value ->> 'source_table', doc.value ->> 'document_type', '') AS source_table
                 FROM public.running_record_bundle
                 CROSS JOIN LATERAL jsonb_array_elements(
                     COALESCE((structured_context::jsonb -> 'document_inventory'), '[]'::jsonb)
                 ) AS doc(value)
-                WHERE visit_id IN :visit_ids
+                WHERE (institute_id, patient_id, visit_id) IN :case_refs
 
                 UNION ALL
 
-                SELECT visit_id::text AS visit_id,
+                SELECT institute_id, patient_id, visit_id,
                        COALESCE(doc.value ->> 'source_table', doc.value ->> 'document_type', '') AS source_table
                 FROM public.final_record_bundle
                 CROSS JOIN LATERAL jsonb_array_elements(
                     COALESCE((structured_context::jsonb -> 'document_inventory'), '[]'::jsonb)
                 ) AS doc(value)
-                WHERE visit_id IN :visit_ids
+                WHERE (institute_id, patient_id, visit_id) IN :case_refs
                 """
             )
-            .bindparams(sa.bindparam("visit_ids", expanding=True))
+            .bindparams(sa.bindparam("case_refs", expanding=True))
         )
-        source_table_map: Dict[str, set[str]] = {}
+        source_table_map: Dict[CaseRef, set[str]] = {}
         try:
             with engine.connect() as conn:
-                rows = conn.execute(sql, {"visit_ids": normalized_ids}).mappings().all()
+                rows = conn.execute(sql, {"case_refs": [tuple(ref) for ref in identities]}).mappings().all()
         except Exception:
             return {}
         for row in rows:
-            visit_id = _safe_text(row.get("visit_id"))
+            identity = CaseRef.from_mapping(row)
             source_table = _safe_text(row.get("source_table")).lower()
-            if not visit_id or not source_table:
+            if not all(identity) or identity not in identities or not source_table:
                 continue
-            source_table_map.setdefault(visit_id, set()).add(source_table)
+            source_table_map.setdefault(identity, set()).add(source_table)
         return source_table_map
 
     def _apply_dynamic_candidate_rule_ids(
         self,
         *,
         items: Sequence[Dict[str, Any]],
-        source_table_map: Optional[Dict[str, set[str]]] = None,
+        source_table_map: Optional[Dict[CaseRef, set[str]]] = None,
     ) -> List[Dict[str, Any]]:
         item_list = [dict(item) for item in items]
-        visit_ids = [
-            str(item.get("matched_visit_id") or "").strip()
-            for item in item_list
-            if str(item.get("matched_visit_id") or "").strip()
-        ]
-        effective_source_table_map = source_table_map or self._load_bundle_source_table_map(visit_ids=visit_ids)
+        case_refs = [_matched_case_ref(item) for item in item_list]
+        effective_source_table_map = (
+            source_table_map if source_table_map is not None
+            else self._load_bundle_source_table_map(case_refs=case_refs)
+        )
         if not effective_source_table_map:
             return item_list
         for item in item_list:
-            visit_id = str(item.get("matched_visit_id") or "").strip()
-            if not visit_id:
+            identity = _matched_case_ref(item)
+            if not all(identity):
                 continue
             dynamic_rule_ids = _derive_dynamic_candidate_rule_ids_from_source_tables(
-                sorted(effective_source_table_map.get(visit_id, set()))
+                sorted(effective_source_table_map.get(identity, set()))
             )
             if not dynamic_rule_ids:
                 continue
@@ -4702,19 +4717,18 @@ class CustomQCSamplePoolService:
             stmt = select(self._item_table).where(where_clause).order_by(self._item_table.c.row_no.asc())
             rows = session.execute(stmt).mappings().all()
             healed_rows = self._heal_customer_test_bundle_statuses(session=session, rows=[dict(row) for row in rows])
+            # 兼容状态修复可能提交会话，在其后绑定本次临床回查连接。
+            _use_clinical_read_schema(session)
             items = [self._row_to_item(row) for row in healed_rows]
-            items = self._apply_dynamic_candidate_rule_ids(items=items)
             source_table_map = self._load_bundle_source_table_map(
-                visit_ids=[
-                    str(item.get("matched_visit_id") or "").strip()
-                    for item in items
-                    if str(item.get("matched_visit_id") or "").strip()
-                ]
+                case_refs=[_matched_case_ref(item) for item in items]
             )
+            items = self._apply_dynamic_candidate_rule_ids(items=items, source_table_map=source_table_map)
 
             grouped: Dict[str, Dict[str, Any]] = {}
             for item in items:
-                group_key = item["matched_visit_id"] or f"id:{item['visit_id'] or item['mr_no'] or item['id']}"
+                identity = _matched_case_ref(item)
+                group_key = identity.as_key() if all(identity) else f"id:{item['id']}"
                 current = grouped.get(group_key)
                 hospitalization_state = _trusted_item_hospitalization_state(item) or {}
                 raw_payload = item.get("raw_payload")
@@ -4786,37 +4800,23 @@ class CustomQCSamplePoolService:
                 for rule_id in item.get("candidate_rule_ids") or []:
                     if rule_id not in current["candidate_rule_ids"]:
                         current["candidate_rule_ids"].append(rule_id)
-                visit_id = str(item.get("matched_visit_id") or "").strip()
-                if visit_id:
+                if all(identity):
                     for label in _derive_document_scope_labels_from_source_tables(
-                        sorted(source_table_map.get(visit_id, set()))
+                        sorted(source_table_map.get(identity, set()))
                     ):
                         if label not in current["document_scope_labels"]:
                             current["document_scope_labels"].append(label)
 
-            matched_visit_ids = [
-                str(item.get("matched_visit_id") or "").strip()
-                for item in grouped.values()
-                if str(item.get("matched_visit_id") or "").strip()
-            ]
-            matched_patient_ids = [
-                str(item.get("matched_patient_id") or "").strip()
-                for item in grouped.values()
-                if str(item.get("matched_patient_id") or "").strip()
-            ]
-            record_display_map = self._load_record_display_map(session=session, visit_ids=matched_visit_ids)
-            patient_display_map = self._load_patient_display_map(
-                session=session,
-                patient_ids=matched_patient_ids,
-            )
+            case_refs = [_matched_case_ref(row) for row in grouped.values() if all(_matched_case_ref(row))]
+            record_display_map = self._load_record_display_map(session=session, case_refs=case_refs)
+            patient_display_map = self._load_patient_display_map(session=session, case_refs=case_refs)
             for row in grouped.values():
-                visit_id = str(row.get("matched_visit_id") or "").strip()
-                patient_id = str(row.get("matched_patient_id") or "").strip()
+                identity = _matched_case_ref(row)
                 display = {
-                    **(patient_display_map.get(patient_id) or {}),
+                    **(patient_display_map.get(identity[:2]) or {}),
                     **{
                         key: value
-                        for key, value in (record_display_map.get(visit_id) or {}).items()
+                        for key, value in (record_display_map.get(identity) or {}).items()
                         if _safe_text(value)
                     },
                 }
@@ -4940,13 +4940,15 @@ class CustomQCSamplePoolService:
         finally:
             session.close()
 
-    def _load_record_display_map(self, *, session: Session, visit_ids: Sequence[str]) -> Dict[str, Dict[str, str]]:
-        normalized_ids = [str(item).strip() for item in visit_ids if str(item).strip()]
-        if not normalized_ids:
+    def _load_record_display_map(self, *, session: Session, case_refs: Sequence[CaseRef]) -> Dict[CaseRef, Dict[str, str]]:
+        identities = sorted({ref for ref in case_refs if all(ref)})
+        if not identities:
             return {}
         rows = session.execute(
             sa.union_all(
                 select(
+                    MedicalRecordFrontpage.institute_id.label("institute_id"),
+                    MedicalRecordFrontpage.patient_id.label("patient_id"),
                     MedicalRecordFrontpage.visit_id.label("visit_id"),
                     sa.literal(0).label("source_priority"),
                     MedicalRecordFrontpage.name.label("patient_name"),
@@ -4961,8 +4963,11 @@ class CustomQCSamplePoolService:
                         MedicalRecordFrontpage.inpat_no,
                     ).label("mr_no"),
                     MedicalRecordFrontpage.admission_dept_name.label("department"),
-                ).where(MedicalRecordFrontpage.visit_id.in_(normalized_ids)),
+                ).where(sa.tuple_(MedicalRecordFrontpage.institute_id, MedicalRecordFrontpage.patient_id,
+                                 MedicalRecordFrontpage.visit_id).in_(identities)),
                 select(
+                    InpatRegistration.institute_id.label("institute_id"),
+                    InpatRegistration.patient_id.label("patient_id"),
                     InpatRegistration.visit_id.label("visit_id"),
                     sa.literal(1).label("source_priority"),
                     InpatRegistration.name.label("patient_name"),
@@ -4977,8 +4982,11 @@ class CustomQCSamplePoolService:
                         InpatRegistration.inpat_no,
                     ).label("mr_no"),
                     InpatRegistration.admission_dept_name.label("department"),
-                ).where(InpatRegistration.visit_id.in_(normalized_ids)),
+                ).where(sa.tuple_(InpatRegistration.institute_id, InpatRegistration.patient_id,
+                                 InpatRegistration.visit_id).in_(identities)),
                 select(
+                    AdmissionRecord.institute_id.label("institute_id"),
+                    AdmissionRecord.patient_id.label("patient_id"),
                     AdmissionRecord.visit_id.label("visit_id"),
                     sa.literal(2).label("source_priority"),
                     AdmissionRecord.name.label("patient_name"),
@@ -4993,16 +5001,17 @@ class CustomQCSamplePoolService:
                         AdmissionRecord.inpat_no,
                     ).label("mr_no"),
                     AdmissionRecord.dept_name.label("department"),
-                ).where(AdmissionRecord.visit_id.in_(normalized_ids)),
+                ).where(sa.tuple_(AdmissionRecord.institute_id, AdmissionRecord.patient_id,
+                                 AdmissionRecord.visit_id).in_(identities)),
             )
         ).mappings().all()
-        display_map: Dict[str, Dict[str, str]] = {}
+        display_map: Dict[CaseRef, Dict[str, str]] = {}
         for row in sorted(rows, key=lambda item: int(item.get("source_priority") or 0)):
-            visit_id = _safe_text(row.get("visit_id"))
-            if not visit_id:
+            identity = CaseRef.from_mapping(row)
+            if identity not in identities:
                 continue
             display = display_map.setdefault(
-                visit_id,
+                identity,
                 {
                     "patient_name": "",
                     "patient_sex": "",
@@ -5020,20 +5029,21 @@ class CustomQCSamplePoolService:
         self,
         *,
         session: Session,
-        patient_ids: Sequence[str],
-    ) -> Dict[str, Dict[str, str]]:
-        normalized_ids = [str(item).strip() for item in patient_ids if str(item).strip()]
-        if not normalized_ids:
+        case_refs: Sequence[CaseRef],
+    ) -> Dict[tuple[str, str], Dict[str, str]]:
+        identities = sorted({ref[:2] for ref in case_refs if all(ref)})
+        if not identities:
             return {}
         rows = session.execute(
             select(
+                PatientInformation.institute_id,
                 PatientInformation.patient_id,
                 PatientInformation.name.label("patient_name"),
                 PatientInformation.sex.label("patient_sex"),
-            ).where(PatientInformation.patient_id.in_(normalized_ids))
+            ).where(sa.tuple_(PatientInformation.institute_id, PatientInformation.patient_id).in_(identities))
         ).mappings().all()
         return {
-            _safe_text(row.get("patient_id")): {
+            (_safe_text(row.get("institute_id")), _safe_text(row.get("patient_id"))): {
                 "patient_name": _safe_text(row.get("patient_name")),
                 "patient_sex": _safe_text(row.get("patient_sex")),
                 "patient_age": "",
@@ -5041,7 +5051,7 @@ class CustomQCSamplePoolService:
                 "department": "",
             }
             for row in rows
-            if _safe_text(row.get("patient_id"))
+            if (_safe_text(row.get("institute_id")), _safe_text(row.get("patient_id"))) in identities
         }
 
     def _check_running_bundle_status(self, *, institute_id: str, patient_id: str, visit_id: str) -> str:
@@ -5253,7 +5263,7 @@ class CustomQCSamplePoolService:
                         AdmissionRecord,
                     ):
                         candidates = (
-                            session.query(model)
+                            clinical_query(session, model)
                             .filter(getattr(model, identifier_name) == identifier_value)
                             .all()
                         )

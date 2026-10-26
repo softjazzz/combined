@@ -425,6 +425,13 @@
     </section>
 
     <section
+      v-else-if="activeTab === 'accounts' && canManageAccounts"
+      class="mq-card system-config-panel account-config-panel"
+    >
+      <AccountManagementPanel />
+    </section>
+
+    <section
       v-else-if="activeTab === 'llmConfig' && canManageLlmConfig"
       class="mq-card system-config-panel"
     >
@@ -494,6 +501,7 @@ import FrontpageExtractionSettingsPanel from './components/system-config/Frontpa
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import { useDataSync } from './composables/useDataSync'
 import LlmPerformanceObservabilityPanel from './components/system-config/LlmPerformanceObservabilityPanel.vue'
+import AccountManagementPanel from './components/system-config/AccountManagementPanel.vue'
 import { useAuthStore } from '@/stores/auth'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
@@ -531,6 +539,7 @@ const canManageFrontpageConfig = computed(() =>
 const canManageLlmConfig = computed(() =>
   authStore.userRoles.some((role) => ['admin', 'sync_admin', 'super_admin'].includes(role)),
 )
+const canManageAccounts = computed(() => authStore.userRoles.includes('admin'))
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
 
 const isObservabilityOperationalAdmin = computed(() =>
@@ -562,6 +571,12 @@ const configTabs = computed(() =>
       label: '模型配置',
       testId: 'llm-config-tab',
       visible: canManageLlmConfig.value,
+    },
+    {
+      key: 'accounts',
+      label: '账号管理',
+      testId: 'account-management-tab',
+      visible: canManageAccounts.value,
     },
   ].filter((tab) => tab.visible),
 )
@@ -1029,17 +1044,18 @@ onMounted(async () => {
   const canOpenRequestedTab =
     (requestedTab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||
     (requestedTab === 'llmConfig' && canManageLlmConfig.value) ||
-    (requestedTab === 'llmObservability' && canViewLlmObservability.value)
+    (requestedTab === 'llmObservability' && canViewLlmObservability.value) ||
+    (requestedTab === 'accounts' && canManageAccounts.value)
   if (canOpenRequestedTab) {
     activeTab.value = requestedTab
   }
-  if (activeTab.value !== 'llmConfig' && activeTab.value !== 'llmObservability') {
+  if (!['llmConfig', 'llmObservability', 'accounts'].includes(activeTab.value)) {
     await ensureSyncInitialized()
   }
 })
 
 watch(activeTab, async (tab) => {
-  if (tab === 'llmConfig' || tab === 'llmObservability') return
+  if (['llmConfig', 'llmObservability', 'accounts'].includes(tab)) return
   await ensureSyncInitialized()
 })
 

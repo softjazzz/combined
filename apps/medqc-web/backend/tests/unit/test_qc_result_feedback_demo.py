@@ -110,6 +110,19 @@ def test_demo_account_can_load_current_feedback(monkeypatch):
     assert response.json()["data"]["items"]["LX0609-01-01-01"]["feedback_type"] == "correct"
 
 
+def test_sync_admin_can_manage_demo_feedback_and_records_actual_actor(monkeypatch, caplog):
+    store = _FeedbackStore()
+    user = {"id": "superuser-test", "roles": ["sync_admin"]}
+    with caplog.at_level("INFO", logger=qc_sichuan_module.__name__):
+        response = _client(monkeypatch, user, store).put(
+            "/api/v1/qc/sichuan/workspace/result-feedback-demo/LX0609-01-01-01",
+            json={"root_job_id": "root-1", "record_ref": "rec_0123456789abcdef01234567", "feedback_type": "correct"},
+        )
+    assert response.status_code == 200, response.text
+    assert store.saved[0]["created_by"] == "admin-001"
+    assert any(getattr(record, "actor_id", None) == "superuser-test" for record in caplog.records)
+
+
 class _WorkspaceRecords:
     def collect_records(self, **_kwargs):
         return [
