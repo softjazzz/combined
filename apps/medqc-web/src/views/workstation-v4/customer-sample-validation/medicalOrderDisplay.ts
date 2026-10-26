@@ -155,9 +155,10 @@ export function buildMedicalOrderRow(document: EditableMedicalRecordDocument): M
   return {
     document,
     orderId: document.order_id?.trim() || '',
-    startTime: normalizeOrderTime(
-      document.order_start_time || document.record_time || document.submit_time,
-    ),
+    startTime:
+      formatPlannedOrderEndTime(
+        document.order_start_time || document.record_time || document.submit_time,
+      ) || '-',
     stopTime: normalizeOrderTime(document.order_stop_time, ''),
     plannedEndTime: formatPlannedOrderEndTime(document.order_planned_end_time),
     orderType: resolveOrderCategory(document),

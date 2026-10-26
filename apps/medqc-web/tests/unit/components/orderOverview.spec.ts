@@ -16,6 +16,52 @@ function makeOrderDoc(content: string, extra: Partial<OrderDocLike> = {}): Order
 }
 
 describe('orderOverview', () => {
+  it('计划开始优先于开嘱时间，分别保留计划结束和实际停止', () => {
+    const row = normalizeOrderRow(
+      makeOrderDoc('病危', {
+        planned_start_datetime: '2026-05-31T05:20:19Z',
+        order_start_time: '2026-05-31 13:21:54',
+        order_planned_end_time: '2026-06-03T03:30:42Z',
+        source_fields: [
+          { source_field: 'canceled_datetime', raw_value_preview: '2026-06-02 08:00:00' },
+        ],
+      }),
+      0,
+    )
+    expect(row.startTime).toBe('2026-05-31 13:20:19')
+    expect(row.plannedEndTime).toBe('2026-06-03 11:30:42')
+    expect(row.stopTime).toBe('')
+    expect(row.searchText).toContain('2026-06-03 11:30:42')
+  })
+
+  it('兼容旧文书受控来源字段；无时区的开始时间不按浏览器时区偏移', () => {
+    const row = normalizeOrderRow(
+      makeOrderDoc('病危', {
+        source_fields: [
+          { source_field: 'prescribed_datetime', raw_value_preview: '2026-06-03 12:09:54' },
+          { source_field: 'planned_start_datetime', raw_value_preview: '2026-06-03 12:09:51' },
+          { source_field: 'planned_end_datetime', raw_value_preview: '2026-06-08 09:19:22+08:00' },
+          { source_field: 'stop_time', raw_value_preview: '2026-06-08T02:00:00Z' },
+        ],
+      }),
+      0,
+    )
+    expect(row.startTime).toBe('2026-06-03 12:09:51')
+    expect(row.plannedEndTime).toBe('2026-06-08 09:19:22')
+    expect(row.stopTime).toBe('2026-06-08 10:00:00')
+    const legacy = normalizeOrderRow(
+      makeOrderDoc('护理', {
+        source_fields: [
+          { source_field: 'prescribed_datetime', raw_value_preview: '2026-06-03 12:09:54' },
+        ],
+      }),
+      1,
+    )
+    expect(legacy.startTime).toBe('2026-06-03 12:09:54')
+    expect(legacy.plannedEndTime).toBe('')
+    expect(legacy.stopTime).toBe('')
+  })
+
   it('不把今日出院/明日出院归为药品医嘱', () => {
     expect(normalizeOrderRow(makeOrderDoc('今日出院'), 0).category).toBe('discharge_admin')
     expect(normalizeOrderRow(makeOrderDoc('明日出院'), 1).category).toBe('discharge_admin')

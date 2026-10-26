@@ -331,6 +331,7 @@ function normalizeEditableDocumentsResponse(
           (!rawRecordTime && !orderDisplayTime && submitTime ? 'source_submit_time' : ''),
         submit_time: submitTime,
         order_start_time: readStringField(row, [
+          'planned_start_datetime',
           'order_start_time',
           'start_time',
           'start_datetime',

@@ -2853,6 +2853,7 @@ def load_domain_bundle_document_index(
                        'record_time', item -> 'record_time',
                        'submit_time', item -> 'submit_time',
                        'chief_physician_sign_datetime', item -> 'chief_physician_sign_datetime',
+                       'planned_start_datetime', item -> 'planned_start_datetime',
                        'planned_end_datetime', item -> 'planned_end_datetime',
                        'reviewed_datetime', item -> 'reviewed_datetime',
                        'carried_datetime', item -> 'carried_datetime',

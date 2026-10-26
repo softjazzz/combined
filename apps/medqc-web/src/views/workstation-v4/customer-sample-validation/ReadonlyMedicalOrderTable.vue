@@ -34,7 +34,7 @@
       <table class="editable-copy-order-table">
         <thead>
           <tr>
-            <th>开始时间</th>
+            <th title="优先显示计划开始时间；未返回时显示开嘱时间">开始时间</th>
             <th>医嘱类型</th>
             <th>医嘱项目</th>
             <th>医嘱号</th>
@@ -79,8 +79,8 @@
             <td :title="row.quantity">
               {{ row.quantity || '-' }}
             </td>
-            <td>{{ row.plannedEndTime || '-' }}</td>
-            <td>{{ row.stopTime || '-' }}</td>
+            <td>{{ row.plannedEndTime || '未返回' }}</td>
+            <td>{{ row.stopTime || '未返回' }}</td>
             <td>{{ row.status }}</td>
             <td :title="row.prescribedDoctor">
               {{ row.prescribedDoctor || '-' }}

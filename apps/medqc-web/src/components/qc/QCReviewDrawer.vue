@@ -359,15 +359,18 @@
                     <table class="order-overview__table">
                       <thead>
                         <tr>
-                          <th>日期/时间</th>
+                          <th title="优先显示计划开始时间；未返回时显示开嘱时间">
+                            开始时间
+                          </th>
+                          <th title="北京时间；计划结束不代表已实际停止">
+                            计划结束时间
+                          </th>
+                          <th>实际停止时间</th>
                           <th>医嘱类型</th>
                           <th>医嘱类别</th>
                           <th>医嘱内容</th>
                           <th v-if="showOrderDoseUsageColumn">
                             剂量/频次/用法
-                          </th>
-                          <th v-if="showOrderStopTimeColumn">
-                            停止时间
                           </th>
                           <th v-if="showOrderStatusColumn">
                             状态
@@ -387,7 +390,13 @@
                           }"
                         >
                           <td class="order-overview__time">
-                            {{ row.time || row.startTime || '-' }}
+                            {{ row.startTime || '未返回' }}
+                          </td>
+                          <td class="order-overview__time">
+                            {{ row.plannedEndTime || '未返回' }}
+                          </td>
+                          <td class="order-overview__time">
+                            {{ row.stopTime || '未返回' }}
                           </td>
                           <td>
                             <span class="order-overview__tag">{{ row.orderTypeLabel }}</span>
@@ -404,9 +413,6 @@
                           </td>
                           <td v-if="showOrderDoseUsageColumn">
                             {{ row.doseUsage || '-' }}
-                          </td>
-                          <td v-if="showOrderStopTimeColumn">
-                            {{ row.stopTime || '-' }}
                           </td>
                           <td v-if="showOrderStatusColumn">
                             {{ row.status || '-' }}
@@ -877,6 +883,11 @@ interface ReviewDocItem {
   document_title?: string
   sort_time?: string
   record_time?: string
+  order_start_time?: string
+  planned_start_datetime?: string
+  order_planned_end_time?: string
+  planned_end_datetime?: string
+  order_stop_time?: string
   source_table?: string
   group_key?: string
   source_fields?: Array<{
@@ -1361,6 +1372,11 @@ function normalizeReviewDocItem(raw: unknown, index: number): ReviewDocItem | nu
     document_title: safeText(source.document_title) || title,
     sort_time: safeText(source.sort_time) || safeText(source.record_time) || undefined,
     record_time: safeText(source.record_time) || safeText(source.sort_time) || undefined,
+    order_start_time: safeText(source.order_start_time) || undefined,
+    planned_start_datetime: safeText(source.planned_start_datetime) || undefined,
+    order_planned_end_time: safeText(source.order_planned_end_time) || undefined,
+    planned_end_datetime: safeText(source.planned_end_datetime) || undefined,
+    order_stop_time: safeText(source.order_stop_time) || undefined,
     source_table: safeText(source.source_table) || docType || undefined,
     group_key: safeText(source.group_key) || undefined,
     source_fields: Array.isArray(source.source_fields)
@@ -2004,9 +2020,6 @@ const filteredOrderRows = computed(() => {
 
 const showOrderDoseUsageColumn = computed(() =>
   filteredOrderRows.value.some((row) => Boolean(row.doseUsage)),
-)
-const showOrderStopTimeColumn = computed(() =>
-  filteredOrderRows.value.some((row) => Boolean(row.stopTime)),
 )
 const showOrderStatusColumn = computed(() =>
   filteredOrderRows.value.some((row) => Boolean(row.status)),

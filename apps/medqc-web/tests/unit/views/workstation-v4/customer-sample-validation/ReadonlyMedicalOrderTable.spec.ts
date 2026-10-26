@@ -111,7 +111,7 @@ describe('ReadonlyMedicalOrderTable', () => {
     expect(headers).toContain('计划结束时间')
     expect(headers).toContain('实际停止时间')
     expect(cells[headers.indexOf('计划结束时间')]).toBe('2026-09-22 22:00:00')
-    expect(cells[headers.indexOf('实际停止时间')]).toBe('-')
+    expect(cells[headers.indexOf('实际停止时间')]).toBe('未返回')
   })
   it('任一医嘱未完整时在表格上方提示且切换后保留', async () => {
     const wrapper = mount(ReadonlyMedicalOrderTable, {

@@ -1322,7 +1322,7 @@ def _order_display_values(document: dict[str, Any]) -> dict[str, str]:
         )
     return {
         "start_time": _order_value(
-            document, source_values, "order_start_time", "start_time", "order_time", "prescribed_datetime"
+            document, source_values, "planned_start_datetime", "order_start_time", "start_time", "order_time", "prescribed_datetime"
         ),
         "order_type": order_type,
         "order_item": order_item,

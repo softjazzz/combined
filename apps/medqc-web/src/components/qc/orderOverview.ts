@@ -26,6 +26,11 @@ export interface OrderDocLike {
   document_title?: string
   sort_time?: string
   record_time?: string
+  order_start_time?: string
+  planned_start_datetime?: string
+  order_planned_end_time?: string
+  planned_end_datetime?: string
+  order_stop_time?: string
   source_table?: string
   group_key?: string
   source_fields?: OrderSourceField[]
@@ -42,6 +47,7 @@ export interface OrderRow {
   content: string
   time: string
   startTime: string
+  plannedEndTime: string
   stopTime: string
   status: string
   doctor: string
@@ -67,6 +73,8 @@ export function safeOrderText(value: unknown): string {
 function formatOrderDate(value?: string): string {
   const raw = safeOrderText(value)
   if (!raw) return ''
+  // 无时区的医院钟表时间保持原值，避免被浏览器所在时区再次偏移。
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/iu.test(raw)) return raw.replace('T', ' ').slice(0, 19)
   const normalized = raw.endsWith('Z') ? raw : raw.replace(' ', 'T')
   const date = new Date(normalized)
   if (!Number.isNaN(date.getTime())) {
@@ -77,12 +85,13 @@ function formatOrderDate(value?: string): string {
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
+      second: '2-digit',
       hour12: false,
     })
     const parts = formatter.formatToParts(date)
     const get = (type: Intl.DateTimeFormatPartTypes) =>
       parts.find((part) => part.type === type)?.value || ''
-    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
   }
   return raw.slice(0, 16)
 }
@@ -226,19 +235,32 @@ export function normalizeOrderRow(doc: OrderDocLike, index: number): OrderRow {
   const orderType = inferOrderTypeFromText(typeProbe)
   const category = inferOrderCategory(content, fields)
   const startTime = formatOrderDate(
-    pickFieldValue(fields, [
-      'start_time',
-      'start_datetime',
-      'prescribed_datetime',
-      'order_time',
-      'record_time',
-      'create_time',
-    ]) ||
+    doc.planned_start_datetime ||
+      pickFieldValue(fields, ['planned_start_datetime']) ||
+      doc.order_start_time ||
+      pickFieldValue(fields, [
+        'start_time',
+        'start_datetime',
+        'prescribed_datetime',
+        'order_time',
+        'record_time',
+        'create_time',
+      ]) ||
       doc.record_time ||
       doc.sort_time,
   )
+  const plannedEndTime = formatOrderDate(
+    doc.order_planned_end_time ||
+      doc.planned_end_datetime ||
+      pickFieldValue(fields, [
+        'planned_end_datetime',
+        'planned_end_time',
+        'order_planned_end_time',
+      ]),
+  )
   const stopTime = formatOrderDate(
-    pickFieldValue(fields, ['stop_time', 'stop_datetime', 'end_time', 'end_datetime']),
+    doc.order_stop_time ||
+      pickFieldValue(fields, ['stop_time', 'stop_datetime', 'end_time', 'end_datetime']),
   )
   const doseUsage = [
     pickFieldValue(fields, ['dosage', 'dose', 'single_dose', '一次剂量', '剂量']),
@@ -262,6 +284,7 @@ export function normalizeOrderRow(doc: OrderDocLike, index: number): OrderRow {
     doc.source_table,
     doc.doc_type,
     startTime,
+    plannedEndTime,
     stopTime,
     doseUsage,
     status,
@@ -279,6 +302,7 @@ export function normalizeOrderRow(doc: OrderDocLike, index: number): OrderRow {
     content,
     time: startTime,
     startTime,
+    plannedEndTime,
     stopTime,
     status,
     doctor,

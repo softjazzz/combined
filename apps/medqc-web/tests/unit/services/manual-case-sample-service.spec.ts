@@ -98,6 +98,8 @@ describe('editable medical-record document normalization', () => {
             doc_key: 'inpat_drug_order::safe-order',
             doc_type: 'inpat_drug_order',
             content: '示例医嘱',
+            planned_start_datetime: '2026-09-20T00:30:12+00:00',
+            order_start_time: '2026-09-20 08:31:00',
             order_planned_end_time: '2026-09-22T14:00:00+00:00',
             order_stop_time: '2026-09-23 10:00:00',
           },
@@ -108,6 +110,7 @@ describe('editable medical-record document normalization', () => {
     const document = list.data?.documents[0]
     if (!document) throw new Error('缺少测试医嘱')
     expect(buildMedicalOrderRow(document)).toMatchObject({
+      startTime: '2026-09-20 08:30:12',
       plannedEndTime: '2026-09-22 22:00:00',
       stopTime: '2026-09-23 10:00:00',
     })

@@ -102,3 +102,32 @@ def test_order_plan_end_is_selected_and_preserved_as_separate_source_field(docum
     fields = {field.source_field: field.raw_value_preview for field in document.source_fields}
     assert fields["planned_end_datetime"] == "2026-09-22T14:00:00+00:00"
     assert not fields.get("stop_time")
+
+
+@pytest.mark.parametrize("document_type", ["inpat_drug_order", "inpat_nondrug_order"])
+def test_order_plan_start_survives_select_assembly_and_render_without_changing_record_clock(document_type):
+    from app.services.bundles.emr_view import build_documents_from_domain_bundles, build_render_view
+
+    start = "2026-05-31T13:20:19+08:00"
+    end = "2026-06-03T11:30:42+08:00"
+    assert "planned_start_datetime" in build_document_select_columns(
+        document_type, {"order_id", "planned_start_datetime", "planned_end_datetime"},
+    )
+    assembled = assemble_document(document_type, {
+        "order_id": "safe-order", "order_name": "病危", "generic_name": "合成项目",
+        "planned_start_datetime": start, "planned_end_datetime": end,
+        "prescribed_datetime": "2026-05-31 13:21:54",
+    })
+    assert assembled.record_time is None
+    assert assembled.display_time == "2026-05-31 13:21:54"
+    fields = {field.source_field: field.raw_value_preview for field in assembled.source_fields}
+    assert fields["planned_start_datetime"] == start
+    assert not fields.get("stop_time")
+    documents = build_documents_from_domain_bundles({"course": {"source_documents": [assembled.to_dict()]}})
+    assert documents[0]["order_start_time"] == start
+    assert documents[0]["order_planned_end_time"] == end
+    assert not documents[0]["order_stop_time"]
+    row = build_render_view(documents[0])["render_blocks"][0]["rows"][0]
+    assert row["start_time"] == start
+    assert row["planned_end_time"] == end
+    assert not row["stop_time"]
