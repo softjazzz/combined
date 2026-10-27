@@ -26,6 +26,7 @@ from ..source_evidence_reader import (
     authoritative_document_time_value,
 )
 from .shared import authoritative_course_time, row_text
+from ..basic_timeliness_facts import parse_authoritative_datetime as _typed_course_time
 
 
 RULE_007_RECORD_SOURCES = ("daily_course_record", "senior_course_record")
@@ -58,8 +59,8 @@ def _missing_time_capacity_exceeded(
         return None
     return {
         "failure_kind": "course_interval_capacity_exceeded",
-        "admission_time": admission_time.strftime("%Y-%m-%d %H:%M:%S"),
-        "horizon_lower_bound_time": lower_bound.strftime("%Y-%m-%d %H:%M:%S"),
+        "admission_time": admission_time.isoformat(sep=" "),
+        "horizon_lower_bound_time": lower_bound.isoformat(sep=" "),
         "horizon_precision": "datetime" if horizon_time is not None else "date",
         "known_record_count": len(known_times), "missing_time_count": missing_time_count,
         "minimum_required_records": required, "threshold_hours": 72,
@@ -71,11 +72,11 @@ def _admission_for_007(materials):
     registration = tuple(materials.rows("inpat_registration"))
     anchor = extract_admission_anchor(registration_rows=registration, admission_rows=(), discharge_rows=(), allow_date_fallback=False)
     if anchor.state is not AdmissionAnchorState.MISSING:
-        selected = tuple(row for row in registration if authoritative_course_time(row.get("admission_datetime") or row.get("admission_time")) == anchor.anchor_time)
+        selected = tuple(row for row in registration if _typed_course_time(row.get("admission_datetime") or row.get("admission_time")) == anchor.anchor_time)
         return anchor, selected if anchor.state is AdmissionAnchorState.EXACT else registration
     admission = tuple(materials.rows("admission_record"))
     anchor = extract_admission_anchor(registration_rows=registration, admission_rows=admission, discharge_rows=(), allow_date_fallback=False)
-    selected = tuple(row for row in admission if authoritative_course_time(row.get("admission_datetime") or row.get("admission_time")) == anchor.anchor_time)
+    selected = tuple(row for row in admission if _typed_course_time(row.get("admission_datetime") or row.get("admission_time")) == anchor.anchor_time)
     return anchor, selected if anchor.state is AdmissionAnchorState.EXACT else admission
 
 
@@ -536,7 +537,7 @@ def evaluate_rule_007_typed(
         )
     refs.add(horizon_fact.fact_id)
     admission_time = admission_anchor.anchor_time
-    horizon_time = authoritative_course_time(horizon_rows[0].get("horizon_datetime"))
+    horizon_time = _typed_course_time(horizon_rows[0].get("horizon_datetime"))
     horizon_date = _evaluation_horizon_date(horizon_rows[0].get("horizon_date"))
     if (
         admission_time is None
@@ -615,7 +616,7 @@ def evaluate_rule_007_typed(
         for row in rows:
             if not _is_round_record(row, source_key=source_key):
                 continue
-            parsed = authoritative_course_time(
+            parsed = _typed_course_time(
                 authoritative_document_time_value(row)
             )
             if parsed is not None:
@@ -827,9 +828,9 @@ def rule_007_customer_display_facts(
                 if decision.reason_code != "authoritative_time_missing":
                     continue
                 valid = (
-                    authoritative_course_time(rows[0].get("admission_datetime")) is not None
+                    _typed_course_time(rows[0].get("admission_datetime")) is not None
                     if source == _RULE_007_ADMISSION_SOURCE else
-                    authoritative_course_time(rows[0].get("horizon_datetime")) is not None
+                    _typed_course_time(rows[0].get("horizon_datetime")) is not None
                     or _evaluation_horizon_date(rows[0].get("horizon_date")) is not None
                 )
                 if not valid:
@@ -843,7 +844,7 @@ def rule_007_customer_display_facts(
                 missing_refs = build_material_document_refs(
                     source_key=source, rows=tuple(
                         row for row in round_rows
-                        if authoritative_course_time(authoritative_document_time_value(row)) is None
+                        if _typed_course_time(authoritative_document_time_value(row)) is None
                         and row_text(row)
                     ),
                 )
@@ -865,7 +866,7 @@ def rule_007_customer_display_facts(
         if admission_anchor.state is not AdmissionAnchorState.EXACT or len(horizon_rows) != 1:
             return None
         admission_time = admission_anchor.anchor_time
-        horizon_time = authoritative_course_time(
+        horizon_time = _typed_course_time(
             horizon_rows[0].get("horizon_datetime")
         )
         horizon_date = _evaluation_horizon_date(horizon_rows[0].get("horizon_date"))
@@ -885,7 +886,7 @@ def rule_007_customer_display_facts(
             for row in materials.rows(source_key):
                 if not _is_round_record(row, source_key=source_key):
                     continue
-                record_time = authoritative_course_time(
+                record_time = _typed_course_time(
                     authoritative_document_time_value(row)
                 )
                 if record_time is None and row_text(row):
@@ -938,7 +939,7 @@ def rule_007_customer_display_facts(
                 "failure_kind": "course_record_interval_over_72h",
                 "interval_start_source": previous_source,
                 "interval_end_source": EVALUATION_HORIZON_SOURCE_KEY,
-                "interval_start_time": previous_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "interval_start_time": previous_time.isoformat(sep=" "),
                 "interval_end_date": horizon_date.isoformat(),
                 "interval_end_precision": "date",
                 "interval_start_position": previous_position,
@@ -964,7 +965,9 @@ def rule_007_customer_display_facts(
     if not intervals:
         return None
     interval, previous, current = max(intervals, key=lambda item: item[0])
-    interval_seconds = round(interval.total_seconds())
+    interval_seconds = interval.total_seconds()
+    if interval_seconds.is_integer():
+        interval_seconds = int(interval_seconds)
     threshold_seconds = round(_MAX_INTERVAL.total_seconds())
     if (
         decision.qc_direction is QcDirection.DEFECT
@@ -993,8 +996,8 @@ def rule_007_customer_display_facts(
         ),
         "interval_start_source": previous_source,
         "interval_end_source": current_source,
-        "interval_start_time": previous_time.strftime("%Y-%m-%d %H:%M:%S"),
-        "interval_end_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "interval_start_time": previous_time.isoformat(sep=" "),
+        "interval_end_time": current_time.isoformat(sep=" "),
         "interval_start_position": previous_position,
         "interval_end_position": current_position,
         "record_count": len(ordered_records),

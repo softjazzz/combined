@@ -1950,6 +1950,20 @@ _ANESTHESIA_VISIT_FIELD_LABELS = {
 }
 
 
+def _course_007_duration_text(total_seconds: int | float) -> str:
+    """仅稳定病程按原始微秒展示，避免边界被舍成0秒或浮点尾数。"""
+    if type(total_seconds) is int:
+        return _duration_text(total_seconds)
+    hours, remainder = divmod(round(total_seconds * 1_000_000), 3_600_000_000)
+    minutes, micros = divmod(remainder, 60_000_000)
+    seconds = f"{micros / 1_000_000:.6f}".rstrip("0").rstrip(".")
+    if hours:
+        return f"{hours}小时{minutes}分{seconds}秒"
+    if minutes:
+        return f"{minutes}分{seconds}秒"
+    return f"{seconds}秒"
+
+
 def _duration_text(total_seconds: int) -> str:
     hours, remainder = divmod(total_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
@@ -2417,8 +2431,8 @@ def customer_finding_from_controlled_facts(
             and isinstance(start_time, str)
             and isinstance(facts.get("interval_end_time"), str)
             and threshold_hours == 72
-            and type(facts.get("interval_seconds")) is int
-            and type(facts.get("overdue_seconds")) is int
+            and type(facts.get("interval_seconds")) in {int, float}
+            and type(facts.get("overdue_seconds")) in {int, float}
             and facts["interval_seconds"] > 72 * 3600
             and facts["overdue_seconds"] == facts["interval_seconds"] - 72 * 3600
         ):
@@ -2426,8 +2440,8 @@ def customer_finding_from_controlled_facts(
             no_rounds = "；期间未见有效查房" if start_source in {"inpat_registration", "admission_record"} else ""
             return (
                 f"{start_label}（{start_time}）至评价截止时间（{facts['interval_end_time']}）间隔"
-                f"{_duration_text(facts['interval_seconds'])}，超过72小时要求"
-                f"{_duration_text(facts['overdue_seconds'])}{no_rounds}。"
+                f"{_course_007_duration_text(facts['interval_seconds'])}，超过72小时要求"
+                f"{_course_007_duration_text(facts['overdue_seconds'])}{no_rounds}。"
             )
         if (
             kind == "course_record_interval_over_72h"
@@ -2436,15 +2450,15 @@ def customer_finding_from_controlled_facts(
             and isinstance(start_time, str)
             and isinstance(facts.get("interval_end_time"), str)
             and threshold_hours == 72
-            and type(facts.get("interval_seconds")) is int
-            and type(facts.get("overdue_seconds")) is int
+            and type(facts.get("interval_seconds")) in {int, float}
+            and type(facts.get("overdue_seconds")) in {int, float}
             and facts["interval_seconds"] > 72 * 3600
             and facts["overdue_seconds"] == facts["interval_seconds"] - 72 * 3600
         ):
             return (
                 f"权威入院时间（{start_time}）至首次查房（{facts['interval_end_time']}）间隔"
-                f"{_duration_text(facts['interval_seconds'])}，超过72小时要求"
-                f"{_duration_text(facts['overdue_seconds'])}。"
+                f"{_course_007_duration_text(facts['interval_seconds'])}，超过72小时要求"
+                f"{_course_007_duration_text(facts['overdue_seconds'])}。"
             )
         start_position = facts.get("interval_start_position")
         end_position = facts.get("interval_end_position")
@@ -2461,13 +2475,13 @@ def customer_finding_from_controlled_facts(
                     start_position,
                     end_position,
                     record_count,
-                    interval_seconds,
-                    overdue_seconds,
                 )
             )
             or not isinstance(facts.get("interval_start_time"), str)
             or not isinstance(facts.get("interval_end_time"), str)
             or facts.get("threshold_hours") != 72
+            or type(interval_seconds) not in {int, float}
+            or type(overdue_seconds) not in {int, float}
             or interval_seconds <= 72 * 3600
             or overdue_seconds != interval_seconds - 72 * 3600
         ):
@@ -2476,8 +2490,8 @@ def customer_finding_from_controlled_facts(
             f"共识别{record_count}次有效查房记录；"
             f"第{start_position}次查房（{facts['interval_start_time']}）至"
             f"第{end_position}次查房（{facts['interval_end_time']}）间隔"
-            f"{_duration_text(interval_seconds)}，超过72小时要求"
-            f"{_duration_text(overdue_seconds)}。"
+            f"{_course_007_duration_text(interval_seconds)}，超过72小时要求"
+            f"{_course_007_duration_text(overdue_seconds)}。"
         )
 
     def labels(key: str, mapping: Mapping[str, str]) -> str:

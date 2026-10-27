@@ -2205,8 +2205,9 @@ async def test_course_008_009_active_rows_ignore_unreached_planned_end_time() ->
 
     result, reduced = await _run_typed_severity(session)
 
-    assert reduced[1].final_state is CustomerFinalState.NON_COMPLIANT
-    assert reduced[1].reason_code == "requirement_violated"
+    # 未停止的医嘱仍有效，但冻结当天尚未结束，不能提前报当天缺失。
+    assert reduced[1].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[1].reason_code == "evaluation_window_not_mature"
     assert result.llm_call_count == 0
 
 
@@ -2371,8 +2372,8 @@ async def test_course_008_discharge_query_error_is_technical_error_even_with_as_
         (
             "2026-01-03",
             ["2026-01-01 08:00:00", "2026-01-02 08:00:00"],
-            CustomerFinalState.NON_COMPLIANT,
-            "requirement_violated",
+            CustomerFinalState.NOT_APPLICABLE,
+            "evaluation_window_not_mature",
         ),
         (
             "2026-01-03",

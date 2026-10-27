@@ -80,6 +80,27 @@ def course_007_gap_display(raw: Any) -> tuple[list[str], list[str], str] | None:
             [field] if gap in {"empty", "ambiguous", "time_missing"} else [], message)
 
 
+def _course_007_time(value: Any) -> bool:
+    if not isinstance(value, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?", value) is None:
+        return False
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _course_007_seconds(value: Any) -> bool:
+    try:
+        return type(value) in {int, float} and isfinite(value) and value >= 0
+    except OverflowError:
+        return False
+
+
+def _course_007_exact_time(value: Any) -> str:
+    return value if _course_007_time(value) else ""
+
+
 def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("failure_kind")
     if kind == "course_interval_source_gap":
@@ -96,8 +117,8 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             facts.update(record_count=count, missing_time_count=missing)
         return facts
     if kind == "course_interval_capacity_exceeded":
-        start = _strict_copy_time(raw.get("admission_time"))
-        end = _strict_copy_time(raw.get("horizon_lower_bound_time"))
+        start = _course_007_exact_time(raw.get("admission_time"))
+        end = _course_007_exact_time(raw.get("horizon_lower_bound_time"))
         precision = raw.get("horizon_precision")
         known, missing, required = (raw.get(key) for key in (
             "known_record_count", "missing_time_count", "minimum_required_records"))
@@ -122,7 +143,7 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or start_source not in _COURSE_SOURCES | {"inpat_registration", "admission_record"}
         or end_source not in _COURSE_SOURCES | {"evaluation_context.horizon"}
         or start_source == "evaluation_context.horizon" or end_source == "inpat_registration"
-        or not _time(raw.get("interval_start_time")) or raw.get("threshold_hours") != 72
+        or not _course_007_time(raw.get("interval_start_time")) or raw.get("threshold_hours") != 72
         or not isinstance(dates, list) or len(dates) > 64 or not all(_date(item) for item in dates)
     ):
         return None
@@ -141,7 +162,7 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             return None
         try:
             if datetime.strptime(end_date, "%Y-%m-%d").date() <= (
-                datetime.strptime(raw["interval_start_time"], "%Y-%m-%d %H:%M:%S") + timedelta(hours=72)
+                datetime.fromisoformat(raw["interval_start_time"]) + timedelta(hours=72)
             ).date():
                 return None
         except ValueError:
@@ -152,10 +173,10 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         # 带秒事实以精确秒核对阈值；下方仍验证原始时间、秒与展示小时一致。
         duration = raw.get("interval_seconds")
         threshold = 72 * 3600
-        if type(duration) is not int:
+        if not _course_007_seconds(duration):
             duration, threshold = interval, 72
         if (raw.get("interval_end_precision") is not None or raw.get("interval_end_date") is not None
-                or not _time(raw.get("interval_end_time")) or isinstance(interval, bool)
+                or not _course_007_time(raw.get("interval_end_time")) or isinstance(interval, bool)
                 or not isinstance(interval, (int, float))
                 or (kind == "course_record_interval_over_72h" and duration <= threshold)
                 or (kind == "course_record_interval_within_72h" and duration > threshold)):
@@ -175,13 +196,13 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             facts.update({"interval_start_position": start, "interval_end_position": end, "record_count": count})
         else:
             seconds, overdue = enhanced["interval_seconds"], enhanced["overdue_seconds"]
-            if type(seconds) is not int or type(overdue) is not int:
+            if not _course_007_seconds(seconds) or not _course_007_seconds(overdue):
                 return None
             try:
-                actual = round((datetime.strptime(raw["interval_end_time"], "%Y-%m-%d %H:%M:%S") - datetime.strptime(raw["interval_start_time"], "%Y-%m-%d %H:%M:%S")).total_seconds())
+                actual = (datetime.fromisoformat(raw["interval_end_time"]) - datetime.fromisoformat(raw["interval_start_time"])).total_seconds()
             except ValueError:
                 return None
-            if actual <= 0 or seconds != actual or overdue != max(0, actual - 72 * 3600) or round(actual / 3600, 2) != facts["interval_hours"]:
+            if actual <= 0 or seconds != actual or overdue != max(0, seconds - 72 * 3600) or round(actual / 3600, 2) != facts["interval_hours"]:
                 return None
             facts.update({"interval_start_position": start, "interval_end_position": end, "record_count": count, "interval_seconds": seconds, "overdue_seconds": overdue})
     # interval_*_document_id 是执行器内部的选择坐标；本层不读取、不复验，也不投影。
@@ -219,8 +240,8 @@ def validate_published_course_007_facts(raw: Any) -> dict[str, Any] | None:
                     "known_record_count", "missing_time_count", "minimum_required_records", "threshold_hours"}
         known, missing, required = (raw.get(key) for key in (
             "known_record_count", "missing_time_count", "minimum_required_records"))
-        if (keys != expected or not _strict_copy_time(raw.get("admission_time"))
-                or not _strict_copy_time(raw.get("horizon_lower_bound_time"))
+        if (keys != expected or not _course_007_exact_time(raw.get("admission_time"))
+                or not _course_007_exact_time(raw.get("horizon_lower_bound_time"))
                 or raw["admission_time"] >= raw["horizon_lower_bound_time"]
                 or type(raw.get("horizon_precision")) is not str
                 or raw["horizon_precision"] not in {"datetime", "date"}
@@ -245,7 +266,7 @@ def validate_published_course_007_facts(raw: Any) -> dict[str, Any] | None:
     dates = raw.get("recorded_dates")
     if (type(start_source) is not str or start_source not in _COURSE_SOURCES | {"inpat_registration", "admission_record"}
             or type(end_source) is not str or end_source not in _COURSE_SOURCES | {"evaluation_context.horizon"}
-            or not _time(raw.get("interval_start_time"))
+            or not _course_007_time(raw.get("interval_start_time"))
             or type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 72
             or not isinstance(dates, list) or len(dates) > 64
             or not all(_date(item) for item in dates)):
@@ -257,7 +278,7 @@ def validate_published_course_007_facts(raw: Any) -> dict[str, Any] | None:
             return None
         try:
             if datetime.strptime(raw["interval_end_date"], "%Y-%m-%d").date() <= (
-                datetime.strptime(raw["interval_start_time"], "%Y-%m-%d %H:%M:%S") + timedelta(hours=72)
+                datetime.fromisoformat(raw["interval_start_time"]) + timedelta(hours=72)
             ).date():
                 return None
         except ValueError:
@@ -268,7 +289,7 @@ def validate_published_course_007_facts(raw: Any) -> dict[str, Any] | None:
             finite_hours = type(hours) in {int, float} and isfinite(float(hours))
         except (OverflowError, ValueError):
             finite_hours = False
-        if (not _time(raw.get("interval_end_time")) or not finite_hours
+        if (not _course_007_time(raw.get("interval_end_time")) or not finite_hours
                 or hours < 0 or hours != round(float(hours), 2)
                 or (kind == "course_record_interval_within_72h" and hours > 72)):
             return None
@@ -281,14 +302,16 @@ def validate_published_course_007_facts(raw: Any) -> dict[str, Any] | None:
             return None
         if not date_only:
             seconds, overdue = raw.get("interval_seconds"), raw.get("overdue_seconds")
-            if type(seconds) is not int or type(overdue) is not int:
+            if not _course_007_seconds(seconds) or not _course_007_seconds(overdue):
                 return None
             try:
-                actual = round((datetime.strptime(raw["interval_end_time"], "%Y-%m-%d %H:%M:%S")
-                                - datetime.strptime(raw["interval_start_time"], "%Y-%m-%d %H:%M:%S")).total_seconds())
+                actual = (datetime.fromisoformat(raw["interval_end_time"])
+                                - datetime.fromisoformat(raw["interval_start_time"])).total_seconds()
             except ValueError:
                 return None
-            if (actual <= 0 or seconds != actual or overdue != max(0, actual - 72 * 3600)
+            if (actual <= 0 or seconds != actual or overdue != max(0, seconds - 72 * 3600)
+                    or (kind == "course_record_interval_over_72h" and seconds <= 72 * 3600)
+                    or (kind == "course_record_interval_within_72h" and seconds > 72 * 3600)
                     or round(actual / 3600, 2) != raw["interval_hours"]):
                 return None
     return dict(raw)
