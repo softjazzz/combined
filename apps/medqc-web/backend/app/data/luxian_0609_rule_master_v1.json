@@ -733,6 +733,42 @@
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed", "hospital_local_extension"],
       "policy_summary": "客户确认：从会诊执行记录正文引用的意见逐项核对本科室书面处置；仅写遵照执行不算。具体处理、明确安排或注明原因的不采纳可计入；不以医嘱或实际执行证据替代书写质量。"
+    },
+    {
+      "rule_id": "LX0609-04-02-09",
+      "source_document": "死亡记录",
+      "qc_point": "死亡记录未在患者死亡后24小时内完成",
+      "implementation_status": "active",
+      "release_scope": "acceptance_only",
+      "policy_sources": ["customer_confirmed", "hospital_local_extension"],
+      "policy_summary": "客户09659（附件三第293行）。死亡记录承担死亡病例终末记录职责，按有效标题识别，不另要求出院记录；复用既有出院文书时钟和最后权威版本选择，起点为实际死亡时刻，精确比较24小时。存在性由04-02-06负责，不重复扣分。"
+    },
+    {
+      "rule_id": "LX0609-10-04-01",
+      "source_document": "阶段小结",
+      "qc_point": "住院超过30天缺阶段小结，交接班或转科记录可替代",
+      "implementation_status": "active",
+      "release_scope": "acceptance_only",
+      "policy_sources": ["customer_confirmed", "hospital_local_extension"],
+      "policy_summary": "客户09299（附件三第239行）。逐个30天周期核对阶段小结，真实交接班或转科记录可替代并重新起算；迟到补记不抹掉已缺失周期。用户2026-10-26确认不增加31天出院豁免，精确等于30天尚不触发超过条件。冻结住院终点不足以证明时限时保留资料不足。"
+    },
+    {
+      "rule_id": "LX0609-06-03-05",
+      "source_document": "血常规检验结果",
+      "qc_point": "住院超过48小时缺少血常规结果，可核验门诊转抄除外",
+      "implementation_status": "active",
+      "release_scope": "acceptance_only",
+      "policy_sources": ["customer_confirmed", "hospital_local_extension"],
+      "policy_summary": "客户00717，附件166行。超过48小时为适用门槛，不要求报告48小时内出具。用户确认按本院同报告完整24项组合及具体结果、报告时刻识别；门诊转抄须明确来源、项目、检验日期及具体结果，日期不晚于入院，不另设有效期。"
+    },
+    {
+      "rule_id": "LX0609-06-03-06",
+      "source_document": "尿常规检验结果",
+      "qc_point": "住院超过48小时缺少尿常规结果，可核验门诊转抄除外",
+      "implementation_status": "active",
+      "release_scope": "acceptance_only",
+      "policy_sources": ["customer_confirmed", "hospital_local_extension"],
+      "policy_summary": "客户00718，附件167行。超过48小时为适用门槛，按本院同报告尿常规十项的代码、名称、结果及报告时刻核对；不拼接跨报告项目。可核验门诊转抄按用户确认的住院例外处理，不开启门急诊质控。"
     }
   ]
 }

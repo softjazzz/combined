@@ -214,8 +214,14 @@ def bind_transfer_evidence(
     transfer_in_rows: Sequence[Mapping[str, Any]],
     transfer_out_rows: Sequence[Mapping[str, Any]],
     display_facts: Mapping[str, Any] | None,
+    consumed_rows: Sequence[tuple[str, Mapping[str, Any]]] | None = None,
 ) -> ContinuityEvidenceBinding:
     """绑定唯一转科医嘱及既有判定器实际匹配的转入、转出文书。"""
+
+    if consumed_rows is not None:
+        return bind_consumed_continuity_document_rows(
+            snapshot=snapshot, materials=materials, consumed_rows=consumed_rows,
+        )
 
     orders = select_transfer_order_rows(nondrug_order_rows)
     if len(orders) > 1 and isinstance(display_facts, Mapping) and (

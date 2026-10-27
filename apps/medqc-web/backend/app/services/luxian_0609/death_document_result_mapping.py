@@ -14,7 +14,7 @@ import re
 from typing import Any
 
 
-DEATH_DOCUMENT_CUSTOMER_RULE_IDS = frozenset({"LX0609-09-02-01", "LX0609-04-02-06"})
+DEATH_DOCUMENT_CUSTOMER_RULE_IDS = frozenset({"LX0609-09-02-01", "LX0609-04-02-06", "LX0609-04-02-09"})
 _DATETIME = re.compile(
     r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}"
     r"(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})?"
@@ -157,6 +157,17 @@ def _safe_060(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     return facts
 
 
+def _safe_record_timeliness(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    """只校验新规则已裁定的公开事实，不重新读取或比较起止时间。"""
+    expected = {"verification_kind", "death_time", "record_time", "threshold_hours", "elapsed_seconds"}
+    if (set(raw) != expected or raw.get("verification_kind") != "death_record_timeliness_check"
+            or not _safe_time(raw.get("death_time")) or not _safe_time(raw.get("record_time"))
+            or type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 24
+            or not _published_number(raw.get("elapsed_seconds"))):
+        return None
+    return dict(raw)
+
+
 def safe_death_document_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None:
@@ -165,6 +176,8 @@ def safe_death_document_customer_display_facts(
     if not isinstance(raw, Mapping):
         return None
     normalized = str(rule_id or "").strip().upper()
+    if normalized == "LX0609-04-02-09":
+        return _safe_record_timeliness(raw)
     if normalized == "LX0609-09-02-01":
         return _safe_051(raw)
     if normalized == "LX0609-04-02-06":
@@ -180,6 +193,8 @@ def validate_published_death_document_facts(
     if not isinstance(raw, dict) or any(type(key) is not str for key in raw):
         return None
     rid = str(rule_id or "").strip().upper()
+    if rid == "LX0609-04-02-09":
+        return _safe_record_timeliness(raw)
     keys = set(raw)
     if rid == "LX0609-04-02-06":
         expected = {"verification_kind", "death_confirmed", "death_record_count"}
@@ -240,6 +255,12 @@ def death_document_customer_fact_status_is_valid(
     if not is_death_document_customer_rule(rule_id):
         return True
     normalized_status = str(status or "").strip().lower()
+    if str(rule_id or "").strip().upper() == "LX0609-04-02-09":
+        if normalized_status in {"data_gap", "not_applicable", "technical_error"}:
+            return safe_facts is None
+        if not isinstance(safe_facts, Mapping) or _safe_record_timeliness(safe_facts) is None:
+            return False
+        return normalized_status in {"compliant", "non_compliant"}
     if normalized_status == "technical_error":
         return True
     if not isinstance(safe_facts, Mapping):

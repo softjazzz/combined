@@ -104,6 +104,26 @@ def test_missing_original_preserves_pdf_and_independent_document(source):
     assert not result.truncated
 
 
+@pytest.mark.parametrize("source_key,physical_table", [
+    ("summary_record", "summary_record"),
+    ("death_record", "death_record"),
+    (reader.ROUTINE_LAB_ITEM_SOURCE_KEY, "labtest_item_report"),
+])
+def test_timeliness_sources_keep_pdf_selection_on_physical_table(source, source_key, physical_table):
+    result = reader.read_luxian_0609_snapshot_source_rows(
+        source_key=source_key, source_schema=SCHEMA, **IDENTITY,
+    )
+    assert result.source_key == source_key
+    assert [row["document_id"] for row in result.rows] == ["PG", "UNIQUE"]
+    assert not result.truncated
+    queries = [(sql, params) for sql, params in source.calls if "limit_rows" in params]
+    assert len(queries) == 1
+    sql, params = queries[0]
+    assert f'FROM "{SCHEMA}"."{physical_table}"' in sql
+    assert sql.index("material_excluded_ids") < sql.index("LIMIT")
+    assert params["material_excluded_ids"] == ["PDF"]
+
+
 def test_review_read_failure_blocks_rule_instead_of_returning_duplicate_material(source):
     source.review_error = True
     with pytest.raises(reader.SourceEvidenceQueryError):

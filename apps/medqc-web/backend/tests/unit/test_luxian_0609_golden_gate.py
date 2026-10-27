@@ -402,6 +402,7 @@ def test_v2_default_gate_requires_exact_current_candidate_acceptance_matrix() ->
     )
     acceptance_only = {raw["rule_id"] for raw in raw_active if raw.get("release_scope") == "acceptance_only"}
     assert acceptance_only == {
+        "LX0609-04-02-09", "LX0609-06-03-05", "LX0609-06-03-06", "LX0609-10-04-01",
         "LX0609-06-01-03", "LX0609-06-03-02", "LX0609-06-02-01",
         "LX0609-09-01-02", "LX0609-08-01-05",
     }

@@ -1764,6 +1764,7 @@ def test_all_raw_registered_contracts_query_each_bounded_source_once_and_never_q
             "inpat_prescription",
             "inpat_prescription_item",
             "labtest_master",
+            "labtest_item_report.routine_panel",
             "pathology_exam_master",
             "pathology_exam_report",
             "physician_change_event",
@@ -1802,6 +1803,7 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
         EVALUATION_HORIZON_SOURCE_KEY,
+        "labtest_item_report.routine_panel",
         "admission_record_diagnosis",
         "blood_application",
         "inpat_bill_item",
@@ -2010,8 +2012,11 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
 
 
 def test_source_registry_keeps_confirmed_handbook_identity_version() -> None:
-    # ea5ed2b047 新增手册来源时已正式从 v33 升为 v34；此处保留全局冻结门禁。
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v34"
+    # v36新增血尿常规专用明细投影；既有来源query_version不变。
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v36"
+    entry = load_luxian_0609_source_registry()["summary_record"]
+    assert entry.query_version == "snapshot-provider-summary_record-v1"
+    assert entry.source_keys == ("summary_record",)
 
 
 def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:
@@ -2732,13 +2737,14 @@ def test_every_bounded_snapshot_source_uses_only_allowlisted_columns_and_bound_c
     active_source = ""
 
     def columns(_schema, source_key):
-        assert source_key == active_source
+        expected_table = "labtest_item_report" if active_source == "labtest_item_report.routine_panel" else active_source
+        assert source_key == expected_table
         return [
             "institute_id",
             "patient_id",
             "visit_id",
             "document_id",
-            *source_evidence_reader._SNAPSHOT_SOURCE_FIELDS[source_key],
+            *source_evidence_reader._SNAPSHOT_SOURCE_FIELDS[active_source],
             "forbidden_column",
         ]
 

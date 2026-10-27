@@ -1,5 +1,23 @@
 [
   {
+    "rule_id": "LX0609-04-02-09",
+    "rule_code": "LX0609-04-02-09",
+    "name": "死亡记录：死亡后24小时内完成",
+    "description": "按有效死亡记录标题识别终末文书，以死亡时刻与最后权威文书时间核对24小时；资料不足不推定临床超时。",
+    "positive_example": "死亡后24小时内完成死亡记录。",
+    "negative_example": "死亡记录完成时间超过死亡后24小时。",
+    "category": "死亡记录",
+    "applicable_documents": ["death_record", "discharge_record"],
+    "applicable_document_labels": ["死亡记录", "出院记录"],
+    "data_dependencies": ["死亡时刻", "死亡记录权威完成时间", "终末文书标题"],
+    "dependency_type": "跨文书时限",
+    "executor_type": "program",
+    "rule_version": "2026-10-26",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-04-02-09"],
+    "primary_execution_rule_id": "LX0609-04-02-09"
+  },
+  {
     "rule_id": "LX0609-09-02-01",
     "rule_code": "LX0609-09-02-01",
     "name": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
@@ -782,5 +800,93 @@
     "prompt_version": "consultation-disposition-record-v4",
     "mapped_rule_ids": ["LX0609-03-01-05"],
     "primary_execution_rule_id": "LX0609-03-01-05"
+  },
+  {
+    "rule_id": "LX0609-10-04-01",
+    "rule_code": "LX0609-10-04-01",
+    "name": "阶段小结：超过30天逐周期核对",
+    "description": "在冻结住院范围内逐周期核对阶段小结，交接班及转科记录可替代并重新起算，迟到补记不消除旧周期缺口。",
+    "positive_example": "长住院各30天周期均有阶段小结，或有真实交接班/转科记录重启下一周期。",
+    "negative_example": "住院超过30天仍无阶段小结或可替代记录，或长住院只写过早期一份。",
+    "category": "连续医疗记录",
+    "applicable_documents": [
+      "summary_record",
+      "handoff_record",
+      "handover_record",
+      "transfer_in_record",
+      "transfer_out_record"
+    ],
+    "applicable_document_labels": ["阶段小结", "交班记录", "接班记录", "转入记录", "转出记录"],
+    "data_dependencies": ["真实入院时刻", "冻结评价终点", "阶段小结及替代文书的正文与权威完成时间"],
+    "dependency_type": "跨文书时限",
+    "executor_type": "program",
+    "rule_version": "2026-10-26",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-10-04-01"],
+    "primary_execution_rule_id": "LX0609-10-04-01"
+  },
+  {
+    "rule_id": "LX0609-06-03-05",
+    "rule_code": "LX0609-06-03-05",
+    "name": "血常规：住院超过48小时结果完整性",
+    "description": "完整同报告24项结果或可核验门诊转抄，不能跨报告拼接。",
+    "positive_example": "同份血常规报告24项代码、名称、结果与报告时间完整。",
+    "negative_example": "完整来源中住院超过48小时仍无血常规结果或有效转抄。",
+    "category": "检验结果",
+    "applicable_documents": [
+      "labtest_master",
+      "labtest_item_report",
+      "admission_record",
+      "first_course_record",
+      "daily_course_record",
+      "senior_course_record"
+    ],
+    "applicable_document_labels": [
+      "检验主记录",
+      "检验结果",
+      "入院记录",
+      "首次病程",
+      "日常病程",
+      "上级查房"
+    ],
+    "data_dependencies": ["真实入院时刻", "冻结终点", "同报告项目结果", "可核验门诊转抄"],
+    "dependency_type": "跨文书时限",
+    "executor_type": "program",
+    "rule_version": "2026-10-26",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-06-03-05"],
+    "primary_execution_rule_id": "LX0609-06-03-05"
+  },
+  {
+    "rule_id": "LX0609-06-03-06",
+    "rule_code": "LX0609-06-03-06",
+    "name": "尿常规：住院超过48小时结果完整性",
+    "description": "完整同报告尿常规十项结果或可核验门诊转抄。",
+    "positive_example": "同份尿常规十项代码、名称、结果与报告时间完整。",
+    "negative_example": "完整来源中住院超过48小时仍无尿常规结果或有效转抄。",
+    "category": "检验结果",
+    "applicable_documents": [
+      "labtest_master",
+      "labtest_item_report",
+      "admission_record",
+      "first_course_record",
+      "daily_course_record",
+      "senior_course_record"
+    ],
+    "applicable_document_labels": [
+      "检验主记录",
+      "检验结果",
+      "入院记录",
+      "首次病程",
+      "日常病程",
+      "上级查房"
+    ],
+    "data_dependencies": ["真实入院时刻", "冻结终点", "同报告项目结果", "可核验门诊转抄"],
+    "dependency_type": "跨文书时限",
+    "executor_type": "program",
+    "rule_version": "2026-10-26",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-06-03-06"],
+    "primary_execution_rule_id": "LX0609-06-03-06"
   }
 ]

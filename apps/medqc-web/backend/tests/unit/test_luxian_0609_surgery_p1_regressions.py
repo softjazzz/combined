@@ -7,6 +7,7 @@ import pytest
 
 from test_luxian_0609_surgery_record_event_coverage_regression import master, record, run
 from test_luxian_0609_surgery_presence_freeze import _execute_and_aggregate
+from test_luxian_0609_rescue_surgery_timeliness_closure import pipeline
 from app.services.luxian_0609 import native_surgery_document_execution as document
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.evidence_snapshot_provider import (
@@ -27,13 +28,15 @@ def presence_record():
     }
 
 
-@pytest.mark.parametrize("count", [1, 2])
-def test_missing_record_is_reported_without_end_time(count):
+@pytest.mark.parametrize("count,reason", [(1, "authoritative_time_missing"), (2, "association_failed")])
+def test_missing_record_without_end_clock_does_not_prove_24_hour_failure(count, reason):
     rows = [confirmed_master(day=i + 1) for i in range(count)]
     for row in rows:
         row["surgery_end_datetime"] = None
-    result = asyncio.run(run({"mr_surgery": rows}, "LX0609-04-02-01", "2026-01-10"))
-    assert result == {"state": "non_compliant", "reason": "required_document_missing", "calls": 0}
+    # 09832以结束时刻判断成熟窗口；不以开始时刻补结束，也不混成记录存在性规则。
+    # 复用正式执行到SQLite保存读取链，原关联字段提示保护用例保持不变。
+    result = asyncio.run(pipeline("LX0609-04-02-01", {"mr_surgery": rows}))
+    assert (result["status"], result["reason_code"]) == ("data_gap", reason)
 
 
 @pytest.mark.parametrize("record_time", [datetime(2026, 1, 1, 8), "2026-01-01 08:00:00+08"])

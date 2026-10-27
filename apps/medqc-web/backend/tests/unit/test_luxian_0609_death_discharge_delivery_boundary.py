@@ -14,6 +14,7 @@ from app.services.luxian_0609.canonical_result_finalizer import validate_luxian_
 from app.services.qc_workspace.canonical_result_store import CanonicalResultStore, envelope_item_from_rule_result
 
 CASES = [
+    ("LX0609-04-02-09", "death_document", {"verification_kind": "death_record_timeliness_check", "death_time": "2026-09-01 01:00:00", "record_time": "2026-09-02 01:00:01", "threshold_hours": 24, "elapsed_seconds": 86401.0}),
     ("LX0609-09-02-01", "death_document", {"verification_kind": "death_discussion_timeliness_check", "death_time": "2026-09-01 01:00:00", "discussion_time": "2026-09-01 02:00:00", "threshold_hours": 168, "actual_interval_hours": 1.23456}),
     ("LX0609-04-02-06", "death_document", {"verification_kind": "death_record_presence_check", "death_confirmed": True, "death_record_count": 1}),
     ("LX0609-08-01-01", "discharge", {"verification_kind": "discharge_record_timeliness_check", "discharge_time": "2026-09-01 01:00:00", "record_time": "2026-09-01 02:00:00", "threshold_hours": 24, "actual_interval_hours": 1.23}),

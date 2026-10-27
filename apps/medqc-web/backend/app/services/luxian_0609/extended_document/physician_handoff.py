@@ -687,6 +687,17 @@ def evaluate_physician_handoff(
                 derivation_facts,
             )
     if not effective_change_rows:
+        has_signature_material = any(
+            not _is_blank_course(row)
+            and not _NON_ROUTINE_COURSE_TITLE_PATTERN.search(_clean(row.get("document_title")))
+            for row in daily_course_rows
+        )
+        if (physician_change_error or nondrug_order_error) and not has_signature_material:
+            # 空或非常规病程不能替代不可读的变更来源证明“没有变更”；
+            # 已核完整的普通病程签名序列仍可沿客户确认口径回退。
+            return PhysicianHandoffOutcome(
+                "data_gap", physician_change_error or nondrug_order_error, change_source_key,
+            )
         return PhysicianHandoffOutcome(
             "not_applicable",
             "trigger_absent_complete",

@@ -40,7 +40,7 @@ from .source_evidence_reader import (
     read_luxian_0609_runtime_source_rows,
 )
 from .surgery_applicability import resolve_surgery_applicability
-from .surgery_event_association import group_surgery_rows_by_start, merge_surgery_component_rows
+from .surgery_event_association import group_surgery_rows_by_start
 from .surgery_record_coverage import definitely_uncovered_surgery_rows, surgery_event_time
 from .prophylactic_antimicrobial_duration import (
     SurgeryEventInput as _ProphylaxisSurgeryEvent,
@@ -898,6 +898,37 @@ def _authoritative_surgery_begin_time(row: Mapping[str, Any]) -> datetime | None
     return max(values) if values else None
 
 
+def _timeliness_surgery_end(
+    source_key: str, row: Mapping[str, Any],
+) -> tuple[datetime | None, str]:
+    """003独立校验端点原值；不改变其他手术规则的历史取值路径。"""
+    fields = ("surgery_end_datetime",) if source_key == "mr_surgery" else ("surgery_end_time", "surgery_end_datetime")
+    raw = tuple(row[field] for field in fields if row.get(field) is not None and str(row[field]).strip())
+    if not raw:
+        return None, ""
+    parsed = tuple(
+        (value if isinstance(value, datetime) and value.tzinfo is None else None)
+        if source_key == "mr_surgery" else _authoritative_surgery_time(value)
+        for value in raw
+    )
+    if any(value is None for value in parsed):
+        return None, "authoritative_time_missing"
+    if len(set(parsed)) != 1:
+        return None, "authoritative_time_conflict"
+    return parsed[0], ""
+
+
+def _timeliness_group_end(rows: Sequence[Mapping[str, Any]]) -> tuple[datetime | None, str]:
+    """同开始时间的组件必须结束时刻完整且一致，才能评价整台缺文书窗口。"""
+    endpoints = tuple(_timeliness_surgery_end("mr_surgery", row) for row in rows)
+    if any(issue == "authoritative_time_conflict" for _, issue in endpoints):
+        return None, "authoritative_time_conflict"
+    if not endpoints or any(end is None or issue for end, issue in endpoints):
+        return None, "authoritative_time_missing"
+    ends = {end for end, _ in endpoints}
+    return (next(iter(ends)), "") if len(ends) == 1 else (None, "authoritative_time_conflict")
+
+
 def _surgery_records_cover_master_rows(
     master_rows: Sequence[Mapping[str, Any]],
     record_rows: Sequence[Mapping[str, Any]],
@@ -1103,19 +1134,23 @@ def _typed_003_decision(
             horizon_time = datetime.fromisoformat(str(horizon_value)) if horizon_value else None
         except (KeyError, TypeError, ValueError):
             horizon_date, horizon_time = None, None
+        if horizon_time is not None and (horizon_time.tzinfo is not None or horizon_time.date() != horizon_date):
+            horizon_date, horizon_time = None, None
         for row in missing_rows:
-            end = surgery_event_time(row, end=True)
+            same_start_rows = tuple(
+                other for other in missing_rows
+                if (pair := group_surgery_rows_by_start("mr_surgery", (row, other))) is not None
+                and len(pair) == 1
+            )
+            end, end_issue = _timeliness_group_end(same_start_rows)
             begin = surgery_event_time(row)
             mature = False
-            if end is not None and horizon_date is not None:
+            if end is not None and not end_issue and horizon_date is not None:
                 mature = (
                     horizon_time.tzinfo is None and horizon_time - end >= timedelta(hours=24)
                     if horizon_time is not None
                     else horizon_date > (end + timedelta(hours=24)).date()
                 )
-            elif begin is not None and horizon_date is not None:
-                # 无结束时间时不计算精确时差；仅在事件日后完整跨过24小时再报缺失。
-                mature = horizon_date > begin.date() + timedelta(days=1)
             if mature:
                 reference = _material_document_ref_for_row(
                     materials=materials, snapshot=snapshot,
@@ -1140,16 +1175,18 @@ def _typed_003_decision(
             # 结论。同一结束时间不能把不同开始时间的手术压成一个时间点。
             if len(groups) != 1:
                 return decision("data_gap", "association_failed")
-            selected_event = merge_surgery_component_rows(groups[0])
             selected_mr_ref = _material_document_ref_for_row(
                 materials=materials,
                 snapshot=snapshot,
                 source_key="mr_surgery",
                 selected_row=qualified_mr_rows[0],
             )
-            surgery_end_time = _authoritative_surgery_end_time(
-                source_key="mr_surgery", row=selected_event
-            )
+            surgery_end_time, end_issue = _timeliness_group_end(groups[0])
+            if end_issue == "authoritative_time_conflict":
+                return decision("data_gap", "authoritative_time_conflict", {
+                    "failure_kind": "surgery_timeliness_data_gap", "gap_reason": "authoritative_time_conflict",
+                    "missing_fields": [], "conflicting_end_fields": True,
+                })
             if surgery_end_time is None:
                 return decision("data_gap", "authoritative_time_missing")
             horizon_observation = observations["evaluation_context.horizon"]
@@ -1269,11 +1306,21 @@ def _typed_003_decision(
     missing_time_fields: set[str] = set()
     time_conflict = False
     fallback_resolved = False
+    explicit_end_issue = False
+    conflicting_end_fields = False
     for row in surgery_rows:
-        surgery_end_time = _authoritative_surgery_end_time(
-            source_key="surgery_record", row=row
-        )
+        surgery_end_time, end_issue = _timeliness_surgery_end("surgery_record", row)
         record_time = _authoritative_record_time(authoritative_document_time_value(row))
+        if end_issue:
+            explicit_end_issue = True
+            incomplete_performed_row = True
+            if end_issue == "authoritative_time_conflict":
+                time_conflict = conflicting_end_fields = True
+            else:
+                missing_time_fields.add("surgery_end_time")
+            if record_time is None:
+                missing_time_fields.add("record_time")
+            continue
         if surgery_end_time is None or record_time is None:
             if surgery_end_time is None:
                 missing_time_fields.add("surgery_end_time")
@@ -1305,7 +1352,8 @@ def _typed_003_decision(
 
     # 当 surgery_record 自身没有批准手术时间时，仅允许唯一 mr_surgery 时间
     # 与唯一手术记录时间配对；多记录无关联键时必须保守为数据不足。
-    if not intervals:
+    mr_end_times = record_times = ()
+    if not intervals and not explicit_end_issue:
         mr_end_times = tuple(
             sorted({
                 time
@@ -1356,7 +1404,7 @@ def _typed_003_decision(
     # 中明确标注的手术结束时间补齐锚点，避免跨手术串用。
     anesthesia_rows = support_rows["anesthesia_record"]
     anesthesia_association_failed = False
-    if not intervals and len(surgery_rows) == len(anesthesia_rows) == 1:
+    if not intervals and not explicit_end_issue and len(surgery_rows) == len(anesthesia_rows) == 1:
         surgery_begin_time = _authoritative_surgery_begin_time(surgery_rows[0])
         anesthesia_begin_time = _labeled_anesthesia_surgery_time(
             anesthesia_rows[0], label="手术开始时间"
@@ -1422,8 +1470,8 @@ def _typed_003_decision(
         display_facts: dict[str, Any] = {
             "failure_kind": "surgery_record_late",
             "performed_surgery_confirmed": True,
-            "surgery_end_time": surgery_end_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "record_time": record_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "surgery_end_time": surgery_end_time.isoformat(sep=" "),
+            "record_time": record_time.isoformat(sep=" "),
             "elapsed_seconds": interval.total_seconds(),
             "elapsed_hours": round(interval.total_seconds() / 3600, 2),
             "threshold_hours": 24,
@@ -1438,6 +1486,10 @@ def _typed_003_decision(
             document_refs,
         )
     if intervals and (not incomplete_performed_row or fallback_resolved):
+        if observations["mr_surgery"].query_state.value == "unavailable":
+            return decision("data_gap", "source_unavailable")
+        if observations["mr_surgery"].completeness.value == "truncated":
+            return decision("data_gap", "source_truncated")
         qualified_mr_rows = tuple(
             row for row in mr_rows if _qualified_traditional_surgery_present((row,))
         )
@@ -1457,8 +1509,8 @@ def _typed_003_decision(
         display_facts = {
             "failure_kind": "surgery_record_within_threshold",
             "performed_surgery_confirmed": True,
-            "surgery_end_time": surgery_end_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "record_time": record_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "surgery_end_time": surgery_end_time.isoformat(sep=" "),
+            "record_time": record_time.isoformat(sep=" "),
             "elapsed_seconds": interval.total_seconds(),
             "elapsed_hours": round(interval.total_seconds() / 3600, 2),
             "threshold_hours": 24,
@@ -1479,7 +1531,7 @@ def _typed_003_decision(
         return decision("data_gap", "source_truncated")
     # 只报告本次实际未能完成核对的字段，不把所有可能原因混成一句话。
     reason = "authoritative_time_missing"
-    if time_conflict and not missing_time_fields:
+    if conflicting_end_fields or (time_conflict and not missing_time_fields):
         reason = "authoritative_time_conflict"
     elif not intervals and anesthesia_association_failed:
         reason = "association_failed"
@@ -1497,6 +1549,7 @@ def _typed_003_decision(
         "failure_kind": "surgery_timeliness_data_gap",
         "gap_reason": reason,
         "missing_fields": sorted(missing_time_fields),
+        **({"conflicting_end_fields": True} if conflicting_end_fields else {}),
     })
 
 

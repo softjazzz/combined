@@ -10,6 +10,7 @@ import re
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from ..course_row_material import course_row_has_material
+from ..basic_timeliness_facts import parse_authoritative_datetime, parse_authoritative_date
 from ..decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -29,7 +30,6 @@ from ..source_evidence_reader import (
 )
 from .rule_007 import RULE_007_RECORD_SOURCES as _RULE_007_RECORD_SOURCES
 from .shared import (
-    authoritative_course_time as _authoritative_course_time,
     clean_text as _clean,
     response_json_payload as _response_json_payload,
     row_text as _row_text,
@@ -198,6 +198,73 @@ def _date_in_active_intervals(
     )
 
 
+def _critical_date(value: Any) -> date | None:
+    """病危频次按医院自然日投影，带时区的同一时刻不得落入不同日期。"""
+    clock = parse_authoritative_datetime(value)
+    return clock.date() if clock is not None else parse_authoritative_date(value)
+
+
+def _critical_active_intervals(
+    rows: Sequence[Mapping[str, Any]], *, horizon_date: date | None,
+    horizon_time: datetime | None,
+) -> tuple[tuple[datetime, datetime | None, bool], ...] | None:
+    """逐医嘱维护生命周期后求并集；一条医嘱停止不关闭另一条有效医嘱。"""
+    events: list[tuple[datetime, int, int, str]] = []
+    for index, row in enumerate(rows):
+        if row.get("status_state") not in {None, "effective"}:
+            continue
+        kind = row.get("event_kind") or "start"
+        clock = parse_authoritative_datetime(
+            row.get("planned_start_datetime") or row.get("prescribed_datetime")
+        )
+        if clock is None:
+            return None
+        if (horizon_time is not None and clock > horizon_time) or (
+            horizon_time is None and horizon_date is not None and clock.date() > horizon_date
+        ):
+            continue
+        events.append((clock, 0 if kind == "start" else 1, index, kind))
+        if kind == "start" and row.get("lifecycle_state") == "stopped":
+            end = parse_authoritative_datetime(row.get("planned_end_datetime"))
+            if end is None or end < clock:
+                return None
+            events.append((end, 1, index, "own_end"))
+    simultaneous: dict[datetime, tuple[set[int], set[int]]] = {}
+    active: set[int] = set()
+    start: datetime | None = None
+    intervals: list[tuple[datetime, datetime | None, bool]] = []
+    for clock, _priority, index, kind in sorted(events):
+        if (horizon_time is not None and clock > horizon_time) or (
+            horizon_time is None and horizon_date is not None and clock.date() > horizon_date
+        ):
+            continue
+        starts, ends = simultaneous.setdefault(clock, (set(), set()))
+        (starts if kind == "start" else ends).add(index)
+        if starts and ends and len(starts | ends) > 1:
+            # 不同医嘱同刻停止/重开，不能编造先后关系；保留已有资料不足合同。
+            return None
+        if kind == "start":
+            if not active:
+                start = clock
+            active.add(index)
+        elif kind == "own_end":
+            active.discard(index)
+        else:
+            # 明确解除病危是等级事件，结束此前尚有效的同等级医嘱。
+            active.clear()
+        if not active and start is not None:
+            intervals.append((start, clock, True))
+            start = None
+    if start is not None:
+        intervals.append((start, horizon_time, horizon_time is not None))
+    return tuple(intervals)
+
+
+def _critical_interval_dates(intervals, horizon_date):
+    return tuple((start.date(), end.date() if end else horizon_date)
+                 for start, end, _closed in intervals)
+
+
 def _material_document_refs_by_row(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -236,7 +303,8 @@ def _rule_008_009_decision(
         or materials.snapshot_hash != snapshot.snapshot_hash
     ):
         raise ValueError("typed severity evidence session mismatch")
-    evaluator_version = "course-severity-natural-day-v2"
+    evaluator_version = "critical-lifecycle-natural-day-v3" if rule_id == "LX0609-02-01-05" else "course-severity-natural-day-v2"
+    natural_date = _critical_date if rule_id == "LX0609-02-01-05" else _authoritative_natural_date
     observation_by_source = {
         item.source_key: item for item in snapshot.observations
     }
@@ -426,7 +494,7 @@ def _rule_008_009_decision(
             confidence=None,
         )
     order_dates = tuple(
-        _authoritative_natural_date(
+        natural_date(
             row.get("planned_start_datetime") or row.get("prescribed_datetime")
         )
         for row in relevant_orders
@@ -443,6 +511,7 @@ def _rule_008_009_decision(
     anchor_date = min(item for item in order_dates if item is not None)
 
     horizon_date: date | None = None
+    horizon_time: datetime | None = None
     if horizon_observation.query_state.value == "available":
         try:
             horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
@@ -464,8 +533,16 @@ def _rule_008_009_decision(
                 refs=refs,
                 confidence=None,
             )
-        horizon_date = _authoritative_natural_date(horizon_rows[0].get("horizon_date"))
+        horizon_date = natural_date(horizon_rows[0].get("horizon_date"))
+        if rule_id == "LX0609-02-01-05":
+            horizon_time = parse_authoritative_datetime(horizon_rows[0].get("horizon_datetime"))
         if horizon_date is None or horizon_date < anchor_date:
+            if rule_id == "LX0609-02-01-05" and horizon_date is not None:
+                return decision(
+                    applicability=ApplicabilityState.NOT_APPLICABLE,
+                    evidence_state=EvidenceState.SUFFICIENT, qc_direction=QcDirection.UNKNOWN,
+                    reason_code="evaluation_window_not_mature", refs=refs, confidence=1.0,
+                )
             return decision(
                 applicability=ApplicabilityState.ERROR,
                 evidence_state=EvidenceState.TECHNICAL_ERROR,
@@ -503,10 +580,15 @@ def _rule_008_009_decision(
             confidence=None,
         )
 
-    active_intervals = _severity_active_date_intervals(
-        target_rows,
-        horizon_date=horizon_date,
-    )
+    critical_intervals = ()
+    if rule_id == "LX0609-02-01-05":
+        critical_intervals = _critical_active_intervals(
+            target_rows, horizon_date=horizon_date, horizon_time=horizon_time,
+        )
+        active_intervals = (None if critical_intervals is None else
+                            _critical_interval_dates(critical_intervals, horizon_date))
+    else:
+        active_intervals = _severity_active_date_intervals(target_rows, horizon_date=horizon_date)
     if active_intervals is None:
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
@@ -590,7 +672,7 @@ def _rule_008_009_decision(
             )
         for row in rows:
             document_ref = course_document_refs.get(id(row))
-            parsed_date = _authoritative_natural_date(
+            parsed_date = natural_date(
                 authoritative_document_time_value(row)
             )
             if parsed_date is None:
@@ -607,6 +689,19 @@ def _rule_008_009_decision(
                     refs=refs,
                     confidence=None,
                 )
+            if rule_id == "LX0609-02-01-05":
+                clock = parse_authoritative_datetime(authoritative_document_time_value(row))
+                if clock is None and course_row_has_material(row):
+                    if document_ref:
+                        refs.add(document_ref)
+                    return decision(
+                        applicability=ApplicabilityState.APPLICABLE,
+                        evidence_state=EvidenceState.DATA_GAP, qc_direction=QcDirection.UNKNOWN,
+                        reason_code="authoritative_time_missing", refs=refs, confidence=None,
+                    )
+                # 每日频次沿用自然日覆盖；精确终点之后的记录不能倒填已结束窗口。
+                if clock is not None and horizon_time is not None and clock > horizon_time:
+                    continue
             # 008与009都必须有实际正文，时间戳/模板壳不能证明已写病程。
             if _date_in_active_intervals(parsed_date, active_intervals) and (
                 bool(_rule_009_substantive_text(row))
@@ -693,15 +788,21 @@ def _rule_008_009_decision(
             ),
         )
 
-    expected_dates = {
-        start_date + timedelta(days=offset)
-        for start_date, end_date in active_intervals
-        for interval_end in (end_date or max(
-            (item for item in ordered_dates if item >= start_date),
-            default=start_date,
-        ),)
-        for offset in range((interval_end - start_date).days + 1)
-    }
+    expected_dates: set[date] = set()
+    pending_dates: set[date] = set()
+    for start, end, closed in critical_intervals:
+        last_date = end.date() if end else horizon_date
+        if last_date is None:
+            last_date = max((item for item in ordered_dates if item >= start.date()), default=start.date())
+        dates = {start.date() + timedelta(days=offset)
+                 for offset in range((last_date - start.date()).days + 1)}
+        if not closed and horizon_date is not None and horizon_date in dates:
+            # 运行任务仅冻结日期；当天尚未结束，不能提前判为缺失。
+            pending_dates.add(horizon_date)
+            dates.discard(horizon_date)
+        expected_dates.update(dates)
+    pending_dates.difference_update(expected_dates)
+    expected_dates.update(pending_dates.intersection(timed_record_dates))
     missing_dates = tuple(sorted(expected_dates.difference(timed_record_dates)))
     if missing_dates:
         return decision(
@@ -730,6 +831,12 @@ def _rule_008_009_decision(
                 "missing_first_date": missing_dates[0].isoformat(),
                 "missing_last_date": missing_dates[-1].isoformat(),
             },
+        )
+    if pending_dates.difference(timed_record_dates) or not expected_dates:
+        return decision(
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT, qc_direction=QcDirection.UNKNOWN,
+            reason_code="evaluation_window_not_mature", refs=refs, confidence=1.0,
         )
     if horizon_date is None:
         return decision(
@@ -786,7 +893,7 @@ def _rule_009_external_event_time(
         "mr_surgery": ("surgery_begin_datetime", "surgery_end_datetime"),
     }
     for field_name in fields_by_source.get(source_key, ()):
-        if (parsed := _authoritative_course_time(row.get(field_name))) is not None:
+        if (parsed := parse_authoritative_datetime(row.get(field_name))) is not None:
             return parsed
     return None
 
@@ -988,7 +1095,7 @@ def _rule_009_semantic_context(
             if row.get("severity") == "critical"
         )
         critical_dates = tuple(
-            _authoritative_natural_date(
+            _critical_date(
                 row.get("planned_start_datetime") or row.get("prescribed_datetime")
             )
             for row in critical_rows
@@ -1004,18 +1111,16 @@ def _rule_009_semantic_context(
     ):
         return "", False, False, {}, {}, {}, {}, date.min
     anchor_date = min(item for item in critical_dates if item is not None)
-    horizon_date = _authoritative_natural_date(horizon_rows[0].get("horizon_date"))
+    horizon_date = _critical_date(horizon_rows[0].get("horizon_date"))
     if horizon_date is None or horizon_date < anchor_date:
         return "", False, False, {}, {}, {}, {}, date.min
-    active_intervals = _severity_active_date_intervals(
-        critical_rows,
-        horizon_date=horizon_date,
+    horizon_datetime = parse_authoritative_datetime(horizon_rows[0].get("horizon_datetime"))
+    critical_intervals = _critical_active_intervals(
+        critical_rows, horizon_date=horizon_date, horizon_time=horizon_datetime,
     )
-    if active_intervals is None:
+    if critical_intervals is None:
         return "", False, False, {}, {}, {}, {}, date.min
-    horizon_datetime = _authoritative_course_time(
-        horizon_rows[0].get("horizon_datetime")
-    )
+    active_intervals = _critical_interval_dates(critical_intervals, horizon_date)
     evaluation_horizon: datetime | date = horizon_datetime or horizon_date
 
     observation_by_source = {item.source_key: item for item in snapshot.observations}
@@ -1041,6 +1146,8 @@ def _rule_009_semantic_context(
         for index, row in enumerate(source_rows):
             event_kind, event_ref = _rule_009_external_event_identity(source_key, index, row)
             event_time = _rule_009_external_event_time(source_key, row)
+            if event_time is not None and horizon_datetime is not None and event_time > horizon_datetime:
+                continue
             if source_key in {"labtest_master", "labtest_item_report"}:
                 history_group = lab_history_groups.setdefault(
                     (event_kind, event_ref), {"items": [], "times_by_source": {}},
@@ -1126,7 +1233,9 @@ def _rule_009_semantic_context(
         except Exception:
             return "", False, False, {}, {}, {}, {}, evaluation_horizon
         for index, row in enumerate(rows):
-            record_time = _authoritative_course_time(authoritative_document_time_value(row))
+            record_time = parse_authoritative_datetime(authoritative_document_time_value(row))
+            if record_time is not None and horizon_datetime is not None and record_time > horizon_datetime:
+                continue
             record_date = record_time.date() if record_time is not None else None
             content = _rule_009_substantive_text(row)
             if not content or (

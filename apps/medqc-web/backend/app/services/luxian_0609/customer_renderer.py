@@ -208,6 +208,9 @@ def data_gap_customer_message(
 _CONSULTATION_023_BODY_EXTRACTION_NOTE = "会诊意见按会诊执行记录正文语义提取"
 
 _RULE_MISSING_ITEM_LABELS = {
+    "LX0609-06-03-05": ("同报告完整血常规结果、报告时刻或可核验门诊转抄",),
+    "LX0609-06-03-06": ("同报告完整尿常规结果、报告时刻或可核验门诊转抄",),
+    "LX0609-10-04-01": ("真实入院时刻、冻结评价终点及阶段小结/交接班/转科记录",),
     "LX0609-01-01-01": ("入院时间或入院记录时间",),
     "LX0609-01-02-01": ("入院时间、首次病程记录时间或有效正文",),
     "LX0609-09-01-01": ("抢救结束时间或抢救记录时间",),
@@ -271,6 +274,7 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-12-02-01": ("诊断修正时间、修改理由或诊断依据",),
     "LX0609-10-03-01": ("非药医嘱、操作时间或病程/手术记录",),
     "LX0609-04-02-08": ("死亡记录中的具体死亡时间",),
+    "LX0609-04-02-09": ("有效死亡记录、实际死亡时刻及文书记录/提交时间",),
     "LX0609-01-02-02": ("首次病程记录、第一诊断或鉴别诊断",),
     "LX0609-04-01-04": ("术前小结正文",),
     "LX0609-04-01-05": ("术前讨论结构字段与正文/可核验内容",),
@@ -287,6 +291,13 @@ _DISCHARGE_EVENT_LABELS = {
     "crisis_value_record": "危急值",
 }
 _RULE_DATA_GAP_MESSAGES = {
+    "LX0609-06-03-05": ("暂无法核对住院血常规结果", "入院/评价时钟、报告关联、完整项目结果或转抄证据不足。", "请核实同报告完整项目及实际结果，资料不足不等于医生漏查。"),
+    "LX0609-06-03-06": ("暂无法核对住院尿常规结果", "入院/评价时钟、报告关联、完整项目结果或转抄证据不足。", "请核实同报告十项结果及实际报告时刻。"),
+    "LX0609-10-04-01": (
+        "暂无法核对阶段小结30天周期",
+        "入院或评价时钟、阶段小结或可替代记录的时间、正文或来源完整性不足。",
+        "请核实本次住院的阶段小结、交接班及转科资料，资料不足不等于医生漏写。",
+    ),
     "LX0609-08-01-05": (
         "暂无法完成出院诊疗经过与主要住院事件的内容核对",
         "出院记录、关联诊断或住院过程材料尚不足以形成可靠的内容核对事实。",
@@ -487,6 +498,11 @@ _RULE_DATA_GAP_MESSAGES = {
         "暂无法确认本次就诊是否属于死亡病例",
         "当前缺少可确认患者死亡状态及死亡时间的权威资料。",
         "请确认住院结局和死亡相关资料已完整同步后重新评估。",
+    ),
+    "LX0609-04-02-09": (
+        "暂无法核对死亡记录24小时完成时限",
+        "有效死亡记录、死亡时刻或权威完成时间不完整，或来源存在冲突。",
+        "请核实有效终末文书及权威时间；死亡记录缺失由存在性规则单独处理。",
     ),
     "LX0609-08-01-02": (
         "暂无法核对出院带药信息是否完整",
@@ -698,9 +714,9 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
         "请先核对抢救记录是否已完整同步；仅在人工确认记录确实缺失后再按本质控点整改。",
     ),
     ("LX0609-09-01-01", "rescue_end_time_missing"): (
-        "抢救记录缺少抢救结束时间，暂无法核对6小时时限",
+        "抢救记录缺少抢救结束时间或其值无法唯一核实，暂无法核对6小时时限",
         "已读取抢救记录，但无法计算抢救结束至记录完成的间隔。",
-        "请核对并补充本次抢救的权威结束时间后重新评估。",
+        "请核对本次抢救可唯一核实的权威结束时间后重新评估。",
     ),
     ("LX0609-09-01-01", "document_completion_time_missing"): (
         "抢救记录缺少权威完成时间，暂无法核对6小时时限",
@@ -871,6 +887,18 @@ def _evaluation_window_gap_message(
         )
     return None
 _RULE_NON_COMPLIANT_MESSAGES = {
+    "LX0609-06-03-05": ("住院超过48小时未见完整血常规结果", "已核对完整来源，未见同报告血常规结果或有效门诊转抄。", "请复核检验及住院记录并规范记录，保留真实检验时间。"),
+    "LX0609-06-03-06": ("住院超过48小时未见完整尿常规结果", "已核对完整来源，未见同报告尿常规结果或有效门诊转抄。", "请复核检验及住院记录并规范记录，保留真实检验时间。"),
+    "LX0609-10-04-01": (
+        "住院存在超过30天未完成阶段小结或有效替代记录的周期",
+        "已逐周期核对，后续迟到补记不消除已发生的周期缺口。",
+        "请复核已缺失周期并按规范处理，保留真实文书完成时间。",
+    ),
+    "LX0609-04-02-09": (
+        "死亡记录未在实际死亡后24小时内完成",
+        "已比较本次有效死亡记录的最后权威完成时间与实际死亡时刻，间隔超过24小时。",
+        "请核实迟记原因并按规范处理，保留真实死亡及文书完成时刻。",
+    ),
     "LX0609-03-01-05": (
         "会诊意见的处置记录不具体：存在建议仅作笼统遵嘱回应，或未记载对应处置情况。",
         "已逐条核对正文中引用的会诊建议及本科室反馈；会诊建议本身不作为处置反馈，医嘱与实际执行情况不参与本项判定。",
@@ -1079,6 +1107,13 @@ _RULE_NON_COMPLIANT_MESSAGES = {
     ),
 }
 _RULE_NOT_APPLICABLE_MESSAGES = {
+    ("LX0609-06-03-05", "trigger_absent_complete"): ("住院尚未超过48小时", "未触发血常规结果的住院时长门槛。", "无需按本质控点处理。"),
+    ("LX0609-06-03-06", "trigger_absent_complete"): ("住院尚未超过48小时", "未触发尿常规结果的住院时长门槛。", "无需按本质控点处理。"),
+    ("LX0609-10-04-01", "trigger_absent_complete"): (
+        "本次住院尚未超过30天，不启动阶段小结周期要求",
+        "按真实入院时刻与冻结评价终点核对，未超过30天。",
+        "无需按本质控点处理。",
+    ),
     ("LX0609-08-01-05", "eligibility_not_met"): (
         "尚无出院记录，不启动诊疗经过内容核对",
         "本项检查已形成出院记录的内容，不替代出院记录存在性及时效性检查。",
@@ -1539,6 +1574,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "死亡记录存在性由 LX0609-04-02-06 单独核对，避免同一缺失事实重复报错。",
         "请先处理死亡记录缺失问题。",
     ),
+    ("LX0609-04-02-09", "trigger_absent_complete"): (
+        "本次终末文书为出院记录，不启动死亡记录时限核对",
+        "有效标题已按出院记录分流，死亡记录与出院记录互斥。",
+        "无需按本质控点处理。",
+    ),
 }
 _RULE_UNCERTAIN_MESSAGES = {
     "LX0609-01-02-02": (
@@ -1567,6 +1607,9 @@ _RULE_UNCERTAIN_MESSAGES = {
 # 合规结果也必须回答“为什么合规”。这里仅使用规则目录身份和 reducer 已确认的
 # 终态生成受控短句，不读取病历原文，也不在展示层重新判断规则。
 _RULE_COMPLIANT_FINDINGS = {
+    "LX0609-06-03-05": "已找到完整血常规结果或可核验门诊转抄。",
+    "LX0609-06-03-06": "已找到完整尿常规结果或可核验门诊转抄。",
+    "LX0609-10-04-01": "已逐周期核对阶段小结或真实交接/转科替代记录，未发现超过30天的缺口。",
     "LX0609-03-01-05": "已逐条核对正文所引会诊建议，本科室均具体记录了处理、安排或有原因的不采纳决定；本项不代表措施已经实际执行。",
     "LX0609-08-01-05": "已核对出院诊疗经过的具体措施、病情演变及疗效转归，未发现所核查重要事件遗漏。",
     "LX0609-01-01-01": "已确认入院记录在入院后 24 小时内完成。",
@@ -1579,6 +1622,7 @@ _RULE_COMPLIANT_FINDINGS = {
     "LX0609-02-01-04": "已核对病重期间的查房记录，未发现超过 2 天的记录缺口。",
     "LX0609-02-01-05": "已核对病危期间的查房记录，未发现应记录日期缺失。",
     "LX0609-04-02-08": "已确认死亡记录填写了具体死亡时间。",
+    "LX0609-04-02-09": "已确认死亡记录在实际死亡后24小时内完成。",
     "LX0609-01-02-02": "已确认首次病程中的鉴别诊断围绕第一诊断展开。",
     "LX0609-04-01-04": "已确认术前小结的必填内容记录完整。",
     "LX0609-04-01-05": "已确认术前讨论记录的必填内容记录完整。",
@@ -1906,6 +1950,20 @@ _ANESTHESIA_VISIT_FIELD_LABELS = {
 }
 
 
+def _precise_duration_text(total_seconds: int | float) -> str:
+    """按原始微秒展示，整数秒沿用旧文案，避免边界被舍成0秒。"""
+    if type(total_seconds) is int or (type(total_seconds) is float and total_seconds.is_integer()):
+        return _duration_text(int(total_seconds))
+    hours, remainder = divmod(round(total_seconds * 1_000_000), 3_600_000_000)
+    minutes, micros = divmod(remainder, 60_000_000)
+    seconds = f"{micros / 1_000_000:.6f}".rstrip("0").rstrip(".")
+    if hours:
+        return f"{hours}小时{minutes}分{seconds}秒"
+    if minutes:
+        return f"{minutes}分{seconds}秒"
+    return f"{seconds}秒"
+
+
 def _duration_text(total_seconds: int) -> str:
     hours, remainder = divmod(total_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
@@ -1923,28 +1981,28 @@ def _format_exact_elapsed_duration(
     started_at: Any,
     finished_at: Any,
     threshold_hours: Any,
+    preserve_microseconds: bool = False,
 ) -> str:
     """按权威时间展示精确间隔，避免边界超时被小时小数四舍五入掩盖。"""
 
     if not isinstance(started_at, str) or not isinstance(finished_at, str):
         return ""
     try:
-        elapsed_seconds = ceil(
-            (datetime.fromisoformat(finished_at) - datetime.fromisoformat(started_at))
-            .total_seconds()
-        )
+        elapsed = (datetime.fromisoformat(finished_at) - datetime.fromisoformat(started_at)).total_seconds()
+        elapsed_seconds = elapsed if preserve_microseconds else ceil(elapsed)
     except (TypeError, ValueError):
         return ""
     if elapsed_seconds < 0:
         return ""
-    duration = _duration_text(elapsed_seconds)
+    format_duration = _precise_duration_text if preserve_microseconds else _duration_text
+    duration = format_duration(elapsed_seconds)
     if (
         isinstance(threshold_hours, (int, float))
         and not isinstance(threshold_hours, bool)
     ):
         threshold_seconds = round(float(threshold_hours) * 3600)
         if elapsed_seconds > threshold_seconds:
-            overdue = _duration_text(elapsed_seconds - threshold_seconds)
+            overdue = format_duration(elapsed_seconds - threshold_seconds)
             duration = f"{duration}（超时{overdue}）"
     return duration
 
@@ -2373,8 +2431,8 @@ def customer_finding_from_controlled_facts(
             and isinstance(start_time, str)
             and isinstance(facts.get("interval_end_time"), str)
             and threshold_hours == 72
-            and type(facts.get("interval_seconds")) is int
-            and type(facts.get("overdue_seconds")) is int
+            and type(facts.get("interval_seconds")) in {int, float}
+            and type(facts.get("overdue_seconds")) in {int, float}
             and facts["interval_seconds"] > 72 * 3600
             and facts["overdue_seconds"] == facts["interval_seconds"] - 72 * 3600
         ):
@@ -2382,8 +2440,8 @@ def customer_finding_from_controlled_facts(
             no_rounds = "；期间未见有效查房" if start_source in {"inpat_registration", "admission_record"} else ""
             return (
                 f"{start_label}（{start_time}）至评价截止时间（{facts['interval_end_time']}）间隔"
-                f"{_duration_text(facts['interval_seconds'])}，超过72小时要求"
-                f"{_duration_text(facts['overdue_seconds'])}{no_rounds}。"
+                f"{_precise_duration_text(facts['interval_seconds'])}，超过72小时要求"
+                f"{_precise_duration_text(facts['overdue_seconds'])}{no_rounds}。"
             )
         if (
             kind == "course_record_interval_over_72h"
@@ -2392,15 +2450,15 @@ def customer_finding_from_controlled_facts(
             and isinstance(start_time, str)
             and isinstance(facts.get("interval_end_time"), str)
             and threshold_hours == 72
-            and type(facts.get("interval_seconds")) is int
-            and type(facts.get("overdue_seconds")) is int
+            and type(facts.get("interval_seconds")) in {int, float}
+            and type(facts.get("overdue_seconds")) in {int, float}
             and facts["interval_seconds"] > 72 * 3600
             and facts["overdue_seconds"] == facts["interval_seconds"] - 72 * 3600
         ):
             return (
                 f"权威入院时间（{start_time}）至首次查房（{facts['interval_end_time']}）间隔"
-                f"{_duration_text(facts['interval_seconds'])}，超过72小时要求"
-                f"{_duration_text(facts['overdue_seconds'])}。"
+                f"{_precise_duration_text(facts['interval_seconds'])}，超过72小时要求"
+                f"{_precise_duration_text(facts['overdue_seconds'])}。"
             )
         start_position = facts.get("interval_start_position")
         end_position = facts.get("interval_end_position")
@@ -2417,13 +2475,13 @@ def customer_finding_from_controlled_facts(
                     start_position,
                     end_position,
                     record_count,
-                    interval_seconds,
-                    overdue_seconds,
                 )
             )
             or not isinstance(facts.get("interval_start_time"), str)
             or not isinstance(facts.get("interval_end_time"), str)
             or facts.get("threshold_hours") != 72
+            or type(interval_seconds) not in {int, float}
+            or type(overdue_seconds) not in {int, float}
             or interval_seconds <= 72 * 3600
             or overdue_seconds != interval_seconds - 72 * 3600
         ):
@@ -2432,8 +2490,8 @@ def customer_finding_from_controlled_facts(
             f"共识别{record_count}次有效查房记录；"
             f"第{start_position}次查房（{facts['interval_start_time']}）至"
             f"第{end_position}次查房（{facts['interval_end_time']}）间隔"
-            f"{_duration_text(interval_seconds)}，超过72小时要求"
-            f"{_duration_text(overdue_seconds)}。"
+            f"{_precise_duration_text(interval_seconds)}，超过72小时要求"
+            f"{_precise_duration_text(overdue_seconds)}。"
         )
 
     def labels(key: str, mapping: Mapping[str, str]) -> str:
@@ -3594,6 +3652,33 @@ def customer_finding_from_controlled_facts(
             return f"已开立特殊级抗菌药物 {medicines} 计划，但专家支持记录缺少可核对的权威时间。"
         return f"已开立特殊级抗菌药物 {medicines} 计划，未找到可关联到该药计划的专家查房或会诊支持记录。"
 
+    if rule_id in {"LX0609-06-03-05", "LX0609-06-03-06"} and kind == "routine_lab_presence_check":
+        label = "血常规" if facts.get("panel") == "blood" else "尿常规"
+        source = {"inpatient_report":"本次住院完整检验报告", "outpatient_transcription":"住院记录中的可核验门诊转抄", "none":"未提供目标结果"}[facts["evidence_kind"]]
+        return (f"{label}：入院时刻{facts.get('admission_time')}，冻结评价终点"
+                f"{facts.get('evaluation_time') or facts.get('evaluation_date')}；依据：{source}；"
+                f"检验日期{facts.get('report_date') or '未取得'}。48小时为住院适用门槛。")
+
+    if rule_id == "LX0609-10-04-01" and kind == "stage_summary_interval_check":
+        end = facts.get("evaluation_time") or f"{facts.get('evaluation_date')}（仅日期）"
+        missing = facts.get("overdue_deadlines") or []
+        return (
+            f"入院时刻：{facts.get('admission_time')}；冻结评价终点：{end}；"
+            f"阶段小结{len(facts.get('summary_times') or [])}份，交接/转科替代{len(facts.get('substitute_times') or [])}份。"
+            + ("已缺失周期的截止时刻：" + "、".join(missing) + "。" if missing else "未发现已超过30天的周期缺口。")
+        )
+
+    if rule_id == "LX0609-04-02-09" and kind == "death_record_timeliness_check":
+        seconds = facts.get("elapsed_seconds")
+        if type(seconds) not in (int, float):
+            return ""
+        hours, remainder = divmod(seconds, 3600)
+        minutes, remaining_seconds = divmod(remainder, 60)
+        return (
+            f"实际死亡时刻：{facts.get('death_time')}；死亡记录完成时刻：{facts.get('record_time')}；"
+            f"间隔{int(hours)}小时{int(minutes)}分{remaining_seconds:g}秒，要求不超过24小时。"
+        )
+
     if rule_id == "LX0609-04-02-06" and kind == "death_record_presence_check":
         return (
             (f"已确认患者死亡（死亡时间 {facts['death_time']}），" if facts.get("death_time") else "已确认患者死亡，")
@@ -3745,6 +3830,11 @@ def customer_finding_from_controlled_facts(
                 f"共核对 {len(surgery_events)} 台手术，均从手术次日开始计算连续 3 天（术后当天不计入）。"
             ]
             for index, event in enumerate(surgery_events, start=1):
+                if event.get("window_state") == "evaluation_window_not_mature":
+                    event_findings.append(
+                        f"手术 {index}：{event.get('surgery_time')}，术后三日评价窗口尚未结束，本次暂不判定缺失。"
+                    )
+                    continue
                 required_dates = event.get("required_postop_dates")
                 covered_dates = event.get("covered_postop_dates")
                 required = "、".join(required_dates) if isinstance(required_dates, list) else "未返回"
@@ -3999,6 +4089,13 @@ def customer_finding_from_controlled_facts(
                 if isinstance(interval_hours, (int, float))
                 else "间隔无法计算"
             )
+            exact = _format_exact_elapsed_duration(
+                started_at=facts.get("transfer_order_time"), finished_at=record_time,
+                threshold_hours=24, preserve_microseconds=True,
+            )
+            # 小数小时可能将临界超时舍为24.0；展示既有权威时刻的精确间隔。
+            if exact and "超时" in exact:
+                interval_text = f"间隔 {exact}"
             return f"记录时间{time_text}，{interval_text}"
 
         return (

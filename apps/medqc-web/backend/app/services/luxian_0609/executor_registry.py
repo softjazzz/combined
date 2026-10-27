@@ -173,6 +173,10 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
 }
 
 LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
+    "LX0609-10-04-01": (
+        "inpat_registration", "admission_record", "summary_record", "handoff_record", "handover_record",
+        "transfer_in_record", "transfer_out_record",
+    ),
     "LX0609-01-01-01": ("admission_record", "inpat_registration"),
     "LX0609-01-02-01": (
         "admission_record",

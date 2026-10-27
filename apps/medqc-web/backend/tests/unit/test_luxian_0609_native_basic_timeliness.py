@@ -677,6 +677,7 @@ def test_001_time_conflict_exposes_both_times_and_exact_lead_for_customer_projec
             "senior_course_record": [],
         },
         selected_rule_ids=("LX0609-01-01-01",),
+        evaluation_as_of_date="2026-08-17",
     )
 
     execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
@@ -852,6 +853,7 @@ def test_001_002_accept_the_localized_customer_record_time_and_document_identity
             "senior_course_record": [],
         },
         selected_rule_ids=selected,
+        evaluation_as_of_date="2026-08-17",
     )
 
     execution, reduced = _reduce_typed_basic(session, selected)

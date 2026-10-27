@@ -145,6 +145,7 @@ _LX0609_058_SUPPORT_WINDOW = timedelta(hours=24)
 
 EXECUTOR_KEY = "extended_document"
 EXTENDED_DOCUMENT_RULE_IDS = (
+    "LX0609-10-04-01",
     "LX0609-03-02-01",
     "LX0609-09-02-01",
     "LX0609-06-04-01",
@@ -172,6 +173,7 @@ EXTENDED_DOCUMENT_RULE_IDS = (
     "LX0609-12-02-01",
     "LX0609-10-03-01",
     "LX0609-04-02-08",
+    "LX0609-04-02-09",
     "LX0609-08-01-05",
 )
 
@@ -800,22 +802,32 @@ def _death_context(
     death_rows: Sequence[Mapping[str, Any]],
     discharge_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[str, datetime | None]:
+    from .basic_timeliness_facts import parse_authoritative_date, parse_authoritative_datetime
+
+    raw_death_times = tuple(
+        value for row in (*death_rows, *registration_rows)
+        if (value := row.get("death_datetime") or row.get("death_time")) is not None
+        and str(value).strip()
+    )
     explicit_death_times = {
         candidate
-        for row in (*death_rows, *registration_rows)
-        if (
-            candidate := _parse_datetime(
-                row.get("death_datetime") or row.get("death_time")
-            )
-        )
-        is not None
+        for value in raw_death_times
+        if (candidate := parse_authoritative_datetime(value)) is not None
     }
+    if len(explicit_death_times) > 1:
+        return "conflict", None
+    if any(parse_authoritative_datetime(value) is None for value in raw_death_times) and (
+        death_rows or explicit_death_times
+        or any(parse_authoritative_date(value) is not None for value in raw_death_times)
+    ):
+        # 有死亡字段只能证明死亡，纯日期不能升级零点参与精确小时判定。
+        return "present", None
     if not explicit_death_times:
         # 正文死亡时间也统一到医院时区，与结构化时间及讨论时间保持一致。
         explicit_death_times = {
             candidate
             for row in death_rows
-            if (candidate := _parse_datetime(death_time_from_body(row))) is not None
+            if (candidate := parse_authoritative_datetime(death_time_from_body(row))) is not None
         }
     if len(explicit_death_times) > 1:
         return "conflict", None
@@ -2302,10 +2314,10 @@ def _postoperative_window_gate(
     horizon_rows: Sequence[Mapping[str, Any]],
     horizon_error: str,
 ) -> tuple[str, str, Mapping[str, Any]] | None:
-    """在逐台核对前确认术后三日观察窗口已经成熟。
+    """在逐台核对前确认至少有一台术后三日观察窗口已经成熟。
 
     评价终点必须来自同一冻结 Evidence Session。只有日期时按保守口径，
-    评价日期严格晚于每台手术结束日后的第三个自然日，避免在窗口当天提前
+    评价日期严格晚于对应手术结束日后的第三个自然日，避免在窗口当天提前
     把尚未发生的病程判为缺失。
     """
 
@@ -2354,9 +2366,9 @@ def _postoperative_window_gate(
         return unavailable("authoritative_time_conflict")
 
     mature = (
-        all(horizon_time.date() > deadline for deadline in deadlines)
+        any(horizon_time.date() > deadline for deadline in deadlines)
         if horizon_time is not None
-        else all(horizon_date > deadline for deadline in deadlines)
+        else any(horizon_date > deadline for deadline in deadlines)
     )
     if mature:
         return None
@@ -2583,6 +2595,7 @@ async def _execute_extended_document_group(
             "LX0609-08-02-01",
             "LX0609-08-02-02",
             "LX0609-10-02-01",
+            "LX0609-10-04-01",
         }.intersection(selected)
         else ((), "")
     )
@@ -4071,6 +4084,76 @@ async def _execute_extended_document_group(
             ))
             continue
 
+        if rule_id == "LX0609-10-04-01":
+            from .extended_document.stage_summary_timeliness import evaluate_stage_summary_timeliness
+
+            source_keys = ("summary_record", "handoff_record", "handover_record", "transfer_in_record", "transfer_out_record")
+            all_sources = (*source_keys, "inpat_registration", "admission_record", "evaluation_context.horizon")
+            try:
+                documents = {source: _source_rows(evidence_materials, source) for source in source_keys}
+                source_error = registration_error or admission_error or horizon_error or next(
+                    (error for _, error in documents.values() if error), "",
+                )
+                outcome = evaluate_stage_summary_timeliness(
+                    registration_rows=registration_rows, admission_rows=admission_rows,
+                    document_rows={source: rows for source, (rows, _) in documents.items()},
+                    horizon_rows=horizon_rows, source_error=source_error,
+                )
+                binding = bind_consumed_continuity_document_rows(
+                    snapshot=evidence_snapshot, materials=evidence_materials,
+                    consumed_rows=outcome.consumed_rows,
+                )
+                selected_refs = binding.document_refs
+                if binding.binding_failed:
+                    raise EvidenceMaterialUnavailable("selected_stage_document_unavailable")
+            except Exception:
+                decisions.append(_decision(rule_id=rule_id, snapshot=evidence_snapshot, source_keys=all_sources,
+                    final_state="technical_error", reason_code="native_stage_summary_failure"))
+                continue
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
+            decisions.append(_decision(rule_id=rule_id, snapshot=evidence_snapshot, source_keys=all_sources,
+                final_state=outcome.final_state, reason_code=outcome.reason_code,
+                document_refs=selected_refs, exact_document_refs=bool(selected_refs)))
+            continue
+
+        if rule_id == "LX0609-04-02-09":
+            from .extended_document.death_record_timeliness import evaluate_death_record_timeliness
+
+            try:
+                outcome = evaluate_death_record_timeliness(
+                    death_rows=death_rows, discharge_rows=discharge_rows,
+                    registration_rows=registration_rows,
+                    source_error=registration_error or death_error or discharge_error,
+                    frozen_at=evidence_snapshot.created_at,
+                )
+                # 只绑定执行器实际消费的原始行，避免同ID未来版本重新混入证据。
+                binding = bind_consumed_continuity_document_rows(
+                    snapshot=evidence_snapshot, materials=evidence_materials,
+                    consumed_rows=outcome.consumed_rows,
+                )
+                selected_refs = binding.document_refs
+                if binding.binding_failed:
+                    raise EvidenceMaterialUnavailable("selected_death_document_unavailable")
+            except Exception:
+                # 新规则意外故障只影响自身，不重新裁定相邻死亡/出院规则。
+                decisions.append(_decision(
+                    rule_id=rule_id, snapshot=evidence_snapshot,
+                    source_keys=("death_record", "discharge_record", "inpat_registration"),
+                    final_state="technical_error", reason_code="native_death_timeliness_failure",
+                ))
+                continue
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
+            decisions.append(_decision(
+                rule_id=rule_id, snapshot=evidence_snapshot,
+                source_keys=("death_record", "discharge_record", "inpat_registration"),
+                final_state=outcome.final_state, reason_code=outcome.reason_code,
+                # 空集合也是执行器的明确选择，不能退回整个来源重新带入未来文书。
+                document_refs=selected_refs, exact_document_refs=True,
+            ))
+            continue
+
         if rule_id in {"LX0609-09-02-01", "LX0609-04-02-06", "LX0609-04-02-08"}:
             source_error = registration_error or death_error or discharge_error
             if source_error and death_state == "unknown":
@@ -4744,6 +4827,9 @@ async def _execute_extended_document_group(
                     _physician_identity_is_masked(name)
                     for name in event.surgeon_names
                 )
+                and _postoperative_window_gate(
+                    surgery_events=(event,), horizon_rows=horizon_rows, horizon_error=horizon_error,
+                ) is None
                 for event in surgery_events
             ):
                 final_state, reason_code = "data_gap", "association_failed"
@@ -4925,6 +5011,7 @@ async def _execute_extended_document_group(
                 else:
                     event_facts = []
                     unmet_events = []
+                    pending_window_events = []
                     missing_surgeon_events = []
                     definite_missing_events: list[str] = []
                     empty_body_events = []
@@ -4940,6 +5027,21 @@ async def _execute_extended_document_group(
                             (event.surgery_end_time + timedelta(days=offset)).date()
                             for offset in (1, 2, 3)
                         }
+                        event_window = _postoperative_window_gate(
+                            surgery_events=(event,), horizon_rows=horizon_rows,
+                            horizon_error=horizon_error,
+                        )
+                        if event_window is not None:
+                            pending_window_events.append(event.document_id)
+                            event_facts.append({
+                                **_event_display_base(event),
+                                "required_postop_dates": sorted(value.isoformat() for value in required_dates),
+                                "covered_postop_dates": [],
+                                "surgeon_round_present": None,
+                                "preop_surgeon_round_present": None,
+                                "window_state": "evaluation_window_not_mature",
+                            })
+                            continue
                         dated_postop_rows = tuple(
                             row
                             for row in (*daily_rows, *senior_rows)
@@ -5100,6 +5202,8 @@ async def _execute_extended_document_group(
                             "data_gap",
                             "required_field_missing",
                         )
+                    elif not unmet_events and pending_window_events:
+                        final_state, reason_code = "not_applicable", "evaluation_window_not_mature"
                     else:
                         final_state = "compliant" if not unmet_events else "non_compliant"
                         reason_code = (
@@ -5673,6 +5777,13 @@ async def _execute_extended_document_group(
             continue
 
         if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"}:
+            transfer_visibility_date = None
+            transfer_visibility_error = None
+            if rule_id == "LX0609-10-02-01" and len(horizon_rows) == 1 and horizon_rows[0].get("basis") == "discharge_date":
+                try:
+                    transfer_visibility_date = date.fromisoformat(str(horizon_rows[0].get("task_frozen_date") or ""))
+                except ValueError:
+                    transfer_visibility_error = "authoritative_time_missing"
             outcome = evaluate_transfer_documentation(
                 rule_id=rule_id,
                 nondrug_order_error=nondrug_order_error,
@@ -5683,7 +5794,8 @@ async def _execute_extended_document_group(
                 transfer_out_rows=transfer_out_rows,
                 evaluation_horizon_date=transfer_horizon_date,
                 evaluation_horizon_datetime=transfer_horizon_datetime,
-                evaluation_horizon_error=transfer_horizon_error,
+                evaluation_horizon_error=transfer_horizon_error or transfer_visibility_error,
+                evaluation_visibility_date=transfer_visibility_date,
             )
             final_state, reason_code = outcome.final_state, outcome.reason_code
             if outcome.display_facts is not None:
@@ -5695,6 +5807,7 @@ async def _execute_extended_document_group(
                 transfer_in_rows=transfer_in_rows,
                 transfer_out_rows=transfer_out_rows,
                 display_facts=outcome.display_facts,
+                consumed_rows=outcome.consumed_rows,
             )
             decisions.append(
                 _decision(

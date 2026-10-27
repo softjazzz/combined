@@ -1264,7 +1264,7 @@ NOT_APPLICABLE_CASES = (
             "rescue_end_time_missing",
             "抢救记录缺少抢救结束时间",
             "无法计算抢救结束至记录完成的间隔",
-            "补充本次抢救的权威结束时间",
+            "核对本次抢救可唯一核实的权威结束时间",
         ),
         (
             "document_completion_time_missing",

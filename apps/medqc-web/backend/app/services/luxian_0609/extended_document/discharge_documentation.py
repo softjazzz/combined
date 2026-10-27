@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Mapping, Sequence
 
 from ..source_evidence_reader import authoritative_document_time_value
-from .shared import _parse_datetime
+from ..basic_timeliness_facts import parse_authoritative_datetime
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,7 @@ def _discharge_record_completion_time(row: Mapping[str, Any]) -> datetime | None
     """读取出院记录正式记录/提交时间。"""
 
     value = authoritative_document_time_value(row)
-    return _parse_datetime(value)
+    return parse_authoritative_datetime(value)
 
 
 def evaluate_discharge_documentation_timeliness(
@@ -90,7 +90,8 @@ def evaluate_discharge_documentation_timeliness(
             "data_gap",
             "source_empty",
         )
-    elif record_time is None:
+    elif len(record_times) != len(discharge_rows):
+        # 最新权威版本的时间可能恰好缺失，不能丢掉它再选一份已知版本通过。
         final_state, reason_code = "data_gap", "authoritative_time_missing"
     else:
         hours = (record_time - discharge_time).total_seconds() / 3600

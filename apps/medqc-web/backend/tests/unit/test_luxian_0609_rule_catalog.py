@@ -92,6 +92,9 @@ def test_luxian_0609_catalog_contains_migrated_rules_and_released_extensions():
     rules = load_luxian_0609_rules()
     migrated_rule_ids = set(_migration_id_map().values())
     released_extension_rule_ids = {
+        "LX0609-04-02-09",
+        "LX0609-10-04-01",
+        "LX0609-06-03-05", "LX0609-06-03-06",
         "LX0609-03-01-05",
         "LX0609-06-01-01",
         "LX0609-06-01-03",

@@ -188,6 +188,7 @@ _DEFAULT_DATA_GAP_EXPLANATION = {
 }
 
 _CUSTOMER_SOURCE_LABELS = {
+    "summary_record": "阶段小结",
     "labtest_item_report": "检验结果明细",
     "exam_item_report": "检查报告明细",
     "consultation_record": "会诊记录",
@@ -699,6 +700,16 @@ def validate_luxian_0609_published_customer_display_facts(
                 or not transfusion_customer_fact_status_is_valid(
                     rule_id=normalized_rule_id, status=status, safe_facts=validated,
                 )):
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if normalized_rule_id in {"LX0609-06-03-05", "LX0609-06-03-06"}:
+        from .routine_lab_presence import safe_routine_lab_facts
+        if raw is None or raw == {}:
+            if status in {"compliant", "non_compliant", "not_applicable"}:
+                raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+            return None
+        validated = safe_routine_lab_facts(normalized_rule_id, raw) if type(raw) is dict else None
+        if validated is None:
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
     if raw is None or not isinstance(raw, dict):

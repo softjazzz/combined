@@ -3203,15 +3203,15 @@ async def test_071_uses_explicit_physician_change_order_when_event_table_is_empt
 
 
 @pytest.mark.asyncio
-async def test_071_missing_event_table_with_complete_empty_daily_source_is_not_applicable() -> None:
+async def test_071_missing_event_table_with_empty_daily_source_is_data_gap() -> None:
     _, reduced = await _evaluate(
         "LX0609-10-01-01",
         {},
         unavailable_sources={"physician_change_event"},
     )
 
-    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
-    assert reduced.reason_code == "trigger_absent_complete"
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_unavailable"
 
 
 @pytest.mark.asyncio
