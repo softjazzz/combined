@@ -802,22 +802,32 @@ def _death_context(
     death_rows: Sequence[Mapping[str, Any]],
     discharge_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[str, datetime | None]:
+    from .basic_timeliness_facts import parse_authoritative_date, parse_authoritative_datetime
+
+    raw_death_times = tuple(
+        value for row in (*death_rows, *registration_rows)
+        if (value := row.get("death_datetime") or row.get("death_time")) is not None
+        and str(value).strip()
+    )
     explicit_death_times = {
         candidate
-        for row in (*death_rows, *registration_rows)
-        if (
-            candidate := _parse_datetime(
-                row.get("death_datetime") or row.get("death_time")
-            )
-        )
-        is not None
+        for value in raw_death_times
+        if (candidate := parse_authoritative_datetime(value)) is not None
     }
+    if len(explicit_death_times) > 1:
+        return "conflict", None
+    if any(parse_authoritative_datetime(value) is None for value in raw_death_times) and (
+        death_rows or explicit_death_times
+        or any(parse_authoritative_date(value) is not None for value in raw_death_times)
+    ):
+        # 有死亡字段只能证明死亡，纯日期不能升级零点参与精确小时判定。
+        return "present", None
     if not explicit_death_times:
         # 正文死亡时间也统一到医院时区，与结构化时间及讨论时间保持一致。
         explicit_death_times = {
             candidate
             for row in death_rows
-            if (candidate := _parse_datetime(death_time_from_body(row))) is not None
+            if (candidate := parse_authoritative_datetime(death_time_from_body(row))) is not None
         }
     if len(explicit_death_times) > 1:
         return "conflict", None
