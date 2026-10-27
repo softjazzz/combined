@@ -915,6 +915,8 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
     assert "未记录输血前评估" in incomplete_assessment["record_content"]
     assessment_status = transfusion._programmatic_044_status(
         {
+            "mr_bloodtrans": [row for row in rows_by_table["mr_bloodtrans"]
+                              if row.get("visit_id") == visit_ids[25]],
             "bloodtrans_record": [incomplete_assessment],
             "blood_application": [
                 row

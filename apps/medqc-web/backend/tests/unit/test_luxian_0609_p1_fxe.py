@@ -201,7 +201,8 @@ async def test_pretransfusion_assessment_reads_full_senior_course_body(title, ex
     assessment = "一般情况记录。" * 250 + "输血前评估：存在输血指征，贫血，输血风险已评估，既往无不良反应。"
     result = await _run("LX0609-07-01-02", {
         "inpat_nondrug_order": [OPEN_TRANSFUSION_ORDER], "inpat_drug_order": [],
-        "bloodtrans_record": [{"document_id": "synthetic-blood", "record_time": "2026-06-05 17:00:00", "record_content": FIRST_RECORD}],
+        "bloodtrans_record": [{"document_id": "synthetic-blood", "record_time": "2026-06-05 17:00:00",
+                               "transfusion_start_time": "2026-06-05 14:20:00", "record_content": FIRST_RECORD}],
         "senior_course_record": [{"document_title": title, "document_id": "synthetic-full-senior", "record_time": "2026-06-05 09:00:00", "record_content": assessment}],
     }, {FIRST_RECORD: "record"})
     assert result["final"]["status"] == expected, result["final"]

@@ -248,7 +248,8 @@ def test_recent_incompatible_pre_is_not_masked_by_older_matching_pre():
 
 
 def test_ordinary_course_is_not_a_pre_assessment_candidate_even_if_it_mentions_assessment():
-    docs = {"bloodtrans_record": [record("B1")], "daily_course_record": [
+    docs = {"bloodtrans_record": [record("B1")], "blood_application": [],
+            "senior_course_record": [], "daily_course_record": [
         {**assessment(), "document_title": "日常病程记录"}]}
     result = build_transfusion_associations(docs, end_evidence=execution._transfusion_end_evidence)
     assert not result.documents
@@ -295,3 +296,74 @@ def test_associated_but_unclear_pre_content_is_not_reported_as_association_failu
             "daily_course_record": [assessment(), {**assessment("P2", day="06"),
                                       "record_content": "输血前评估：有输血指征，其他情况待进一步说明。"}]}
     assert execution._programmatic_044_status(docs) == ("data_gap", "semantic_extraction_unresolved")
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_embedded_pre_text_cannot_replace_dedicated_assessment_for_any_event_count(count):
+    records = [record(f"B{index}", day=f"{index + 4:02d}", ordinal=index)
+               for index in range(1, count + 1)]
+    for row in records:
+        row["record_content"] += "输血前评估：存在输血指征，血红蛋白65g/L，已告知输血风险。"
+    docs = {"bloodtrans_record": records, "blood_application": [],
+            "daily_course_record": [], "senior_course_record": [],
+            "__logical_source_states__": {"blood_application": "empty",
+                "daily_course_record": "empty", "senior_course_record": "empty"}}
+    before = deepcopy(docs)
+    outcome = execution._programmatic_044_status(docs)
+    assert outcome[:2] == ("non_compliant", "pretransfusion_assessment_missing")
+    assert outcome[2]["source_document_refs"] == [
+        {"source_type": "bloodtrans_record", "source_document_id": "B1"}]
+    assert docs == before
+
+
+@pytest.mark.parametrize("count", [1, 2])
+@pytest.mark.parametrize("timing", ["before", "after", "unknown"])
+def test_dedicated_pre_uses_same_time_qualification_for_single_and_multiple_events(count, timing):
+    records = [record(f"B{index}", day=f"{index + 4:02d}", ordinal=index)
+               for index in range(1, count + 1)]
+    pre = [assessment(f"P{index}", day=f"{index + 4:02d}",
+                      clock="09:00" if timing != "after" else "14:00")
+           for index in range(1, count + 1)]
+    if timing == "unknown":
+        for row in pre:
+            row.pop("record_time")
+    docs = {"bloodtrans_record": records, "blood_application": [],
+            "daily_course_record": pre, "senior_course_record": [],
+            "__logical_source_states__": {"blood_application": "empty",
+                "daily_course_record": "available", "senior_course_record": "empty"}}
+    outcome = execution._programmatic_044_status(docs)
+    expected = {"before": ("compliant", "pretransfusion_assessment_complete"),
+                "after": ("non_compliant", "pretransfusion_assessment_missing"),
+                "unknown": ("data_gap", "authoritative_time_missing")}
+    assert outcome[:2] == expected[timing]
+
+
+@pytest.mark.parametrize("state,expected", [("unavailable", "data_gap"),
+    ("error", "technical_error"), ("truncated", "data_gap")])
+def test_single_embedded_pre_cannot_hide_unread_dedicated_sources(state, expected):
+    item = record("B1")
+    item["record_content"] += "输血前评估：存在输血指征，血红蛋白65g/L，已告知输血风险。"
+    docs = {"bloodtrans_record": [item], "blood_application": [],
+            "daily_course_record": [], "senior_course_record": [],
+            "__logical_source_states__": {"blood_application": state,
+                "daily_course_record": "empty", "senior_course_record": "empty"}}
+    assert execution._programmatic_044_status(docs)[0] == expected
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_entire_pre_document_absence_keeps_order_contract_without_actual_time(count):
+    docs = {"bloodtrans_record": [{"document_id": f"B{i}", "record_content": "拟输注红细胞。"}
+                                 for i in range(count)],
+            "blood_application": [], "daily_course_record": [], "senior_course_record": []}
+    assert execution._programmatic_044_status(docs)[:2] == (
+        "non_compliant", "pretransfusion_assessment_missing")
+
+
+def test_unique_structured_actual_time_keeps_single_application_contract():
+    docs = {"bloodtrans_record": [{"document_id": "B1", "record_content": "实际输注红细胞2U。"}],
+            "mr_bloodtrans": [{"transfution_datetime": "2026-06-05 10:00"}],
+            "blood_application": [{"application_id": "APP1", "request_datetime": "2026-06-05 09:00",
+                                   "reason_for_blood": "纠正贫血", "hemoglobin": "65"}],
+            "daily_course_record": [], "senior_course_record": []}
+    assert execution._programmatic_044_status(docs)[:2] == (
+        "compliant", "pretransfusion_assessment_complete")

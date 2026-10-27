@@ -182,6 +182,8 @@ export interface Luxian0609ReviewReport {
 }
 
 export interface SichuanBatchJobSummary {
+  result_count?: number
+  first_result_latency?: number
   total_records: number
   success_count: number
   failed_count: number
@@ -303,6 +305,14 @@ export interface SichuanBatchJobSummary {
   }
   result_aggregation?: SichuanBatchResultAggregation
   stream_state?: {
+    kind?: string
+    event?: string
+    executor_key?: string
+    completed_batches?: number
+    total_batches?: number
+    current_rule_count?: number
+    completed_rule_count?: number
+    total_rule_count?: number
     enabled?: boolean
     processed_records?: number
     total_records?: number

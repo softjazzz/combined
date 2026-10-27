@@ -3806,7 +3806,7 @@ async def test_native_luxian_worker_coalesces_executor_phase_before_canonical_re
     monkeypatch: pytest.MonkeyPatch,
     sample_pool_id: Optional[str],
 ) -> None:
-    """Native族阶段按病历合并为一次终态回写，结果只在完整交付后写入。"""
+    """样本阶段在执行中可见；仅阶段回调不能伪造临床结果，旧调用者仍只合并终态。"""
     workspace = _WorkspaceStub()
     original_update_progress = workspace.update_batch_job_progress
 
@@ -3841,6 +3841,16 @@ async def test_native_luxian_worker_coalesces_executor_phase_before_canonical_re
     if sample_pool_id:
         workspace.job["filters"]["sample_pool_id"] = sample_pool_id
     service = _ServiceStub()
+    # 正式任务必须冻结同一运行配置；不绕过新增的医学计划准入合同。
+    from app.core.settings import Settings
+    from app.services.luxian_0609.rule_decision_settings import (
+        capture_luxian_0609_task_settings, capture_luxian_0609_task_runtime,
+        resolve_mainline_rule_decision_settings,
+    )
+    task_settings = Settings(_env_file=None, JWT_SECRET="synthetic-phase-only", **vars(_luxian_native_settings()))
+    workspace.job["filters"]["lx0609_task_settings"] = capture_luxian_0609_task_settings(
+        resolve_mainline_rule_decision_settings(task_settings))
+    workspace.job["filters"]["lx0609_task_runtime"] = capture_luxian_0609_task_runtime(service)
     observed_stream_states: List[Dict[str, Any]] = []
     observed_llm_contexts: List[Any] = []
 
@@ -3903,7 +3913,7 @@ async def test_native_luxian_worker_coalesces_executor_phase_before_canonical_re
         return service
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "get_settings", lambda: task_settings)
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
@@ -3912,6 +3922,11 @@ async def test_native_luxian_worker_coalesces_executor_phase_before_canonical_re
     assert observed_llm_contexts[0].root_job_id == "parent-job-throughput-001"
     assert observed_llm_contexts[0].record_key_hash
     assert observed_llm_contexts[0].rule_set_key == qc_sichuan.LUXIAN_0609_RULE_SET_KEY
+    if sample_pool_id:
+        assert observed_stream_states[0]["event"] == "failed"
+        assert observed_stream_states[0]["completed_batches"] == 0
+        assert observed_stream_states[0]["executor_key"] == "exam_lab"
+        observed_stream_states = observed_stream_states[1:]
     assert observed_stream_states == [
         {
         "enabled": True,
@@ -4956,6 +4971,8 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
             "failed_records": base_failures,
             "summary": {
                 "execution_status": "partial_failed",
+                "first_result_latency": 9.25,
+                "first_result_source": "validated_family_write",
                 "total_records": 2,
                 "rule_count": 3,
                 "execution_rule_count": 3,
@@ -5026,6 +5043,8 @@ async def test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_com
     assert workspace.failed_records == []
     assert workspace.summary is not None
     assert workspace.summary["execution_status"] == "completed"
+    assert workspace.summary["first_result_latency"] == 9.25
+    assert workspace.summary["first_result_source"] == "validated_family_write"
     assert workspace.summary["rule_count"] == 3
     assert workspace.summary["retry_recovered_count"] == 2
     assert workspace.summary["retry_remaining_count"] == 0
