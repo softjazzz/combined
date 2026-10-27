@@ -43,6 +43,13 @@ from .posttransfusion_effect_extraction import (
     PosttransfusionEffectCandidate,
     confirm_posttransfusion_effects,
 )
+from .transfusion_association import (
+    build_transfusion_associations,
+    document_ref as association_document_ref,
+    is_pre_assessment_document,
+    is_post_evaluation_document,
+    source_start_times,
+)
 from .intraoperative_transfusion_facts import (
     SOURCES as INTRAOPERATIVE_SOURCES,
     IntraoperativeDocument,
@@ -74,7 +81,7 @@ TRANSFUSION_RULE_IDS = (
 )
 EXECUTOR_KEY = "transfusion"
 _TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
-_TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-order-trigger-v2"
+_TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-dedicated-post-batches-v7"
 
 # 049 仍缺少可受控关联的收费数量，因此旧的直接执行入口继续保守返回 DATA_GAP；
 # 新建客户任务会在任务入口明确暂停该规则，不会把此系统缺口交付为客户质控结论。
@@ -564,12 +571,12 @@ def _typed_decision_from_outcome(
             and outcome.reason_code == "posttransfusion_evaluation_horizon_conflict"
         )
         association_gap = (
-            outcome.rule_id == "LX0609-07-03-01"
+            outcome.rule_id in {"LX0609-07-01-02", "LX0609-07-03-01"}
             and outcome.reason_code == "association_failed"
         )
         # 047 效果评价交受控模型后的两类资料不足，原因码原样保留供客户文案区分。
         effect_extraction_gap = (
-            outcome.rule_id == "LX0609-07-03-01"
+            outcome.rule_id in {"LX0609-07-01-02", "LX0609-07-03-01"}
             and outcome.reason_code in {"semantic_extraction_unresolved", "candidate_scope_incomplete"}
         )
         dimensions = (
@@ -1453,7 +1460,16 @@ def evaluate_pretransfusion_nine_items(
     return "compliant", "pretransfusion_items_complete", base_facts
 
 
+def _pre_assessment_documents(documents: Mapping[str, Any]) -> dict[str, Any]:
+    """前评估候选只保留专门文书；申请单仍走原有结构化合同。"""
+    return {**documents, **{source: [row for row in _source_document_rows(documents, source)
+                                   if is_pre_assessment_document(row)]
+                           for source in ("daily_course_record", "senior_course_record")}}
+
+
 def _context(rule_id: str, documents: Mapping[str, Any]) -> str:
+    if rule_id == "LX0609-07-01-02":
+        documents = _pre_assessment_documents(documents)
     parts: list[str] = []
     for source_key in _RULE_CONTEXT_SOURCES[rule_id]:
         for index, content in enumerate(_source_rows(documents, source_key), start=1):
@@ -1462,6 +1478,90 @@ def _context(rule_id: str, documents: Mapping[str, Any]) -> str:
 
 
 def _programmatic_044_status(
+    documents: Mapping[str, Any],
+) -> tuple[str, str] | tuple[str, str, Mapping[str, Any]] | None:
+    """按次只核对最近一份专门评估；同一份评估不重复满足后续输血。"""
+    legacy_pre_sources_complete = not isinstance(documents.get("__logical_source_states__"), Mapping) and all(
+        isinstance(documents.get(source), list) for source in ("blood_application", "daily_course_record", "senior_course_record"))
+    documents = _pre_assessment_documents(documents)
+    records = _source_document_rows(documents, "bloodtrans_record")
+    source_times = {value for row in _transfusion_event_rows(documents) for value in source_start_times(row)}
+    pre_count = sum(len(_source_document_rows(documents, source)) for source in (
+        "blood_application", "daily_course_record", "senior_course_record"))
+    if len(records) <= 1 and len(source_times) <= 1 and pre_count <= 1:
+        return _programmatic_044_single_status(documents)
+    try:
+        associations = build_transfusion_associations(documents, end_evidence=_transfusion_end_evidence)
+    except ValueError:
+        return "technical_error", "snapshot_mismatch"
+    represented_times = {value for event in associations.events for value in event.start_times}
+    if not records or source_times - represented_times:
+        return "data_gap", "association_failed"
+    outcomes = []
+    pending = False
+    semantic_pending = False
+    unavailable = []
+    for event, record in zip(associations.events, records):
+        selected = {item.document_ref for item in associations.documents
+                    if item.stage == "pre" and item.state == "linked" and item.event_refs == (event.record_ref,)}
+        if event.start is None or event.time_unresolved:
+            pending = True
+            continue
+        if not selected:
+            # 不能把时间未知、候选冲突或读取失败解释成医院漏写；但完整来源中
+            # 明确缺少这次评估时，应与单次输血一样判文书缺失，而非关联资料不足。
+            pre_links = [item for item in associations.documents if item.stage == "pre"]
+            if any(item.document_time is None for item in pre_links):
+                unavailable.append(("data_gap", "authoritative_time_missing"))
+                continue
+            if any(event.record_ref in item.event_refs and item.state not in {"linked", "ignored"}
+                   for item in pre_links):
+                pending = True
+                continue
+            sources = ("blood_application", "daily_course_record", "senior_course_record")
+            states = {_logical_source_state(documents, source) for source in sources}
+            if "error" in states:
+                unavailable.append(("technical_error", "source_query_error"))
+                continue
+            if not legacy_pre_sources_complete and not states.issubset({"available", "empty"}):
+                unavailable.append(("data_gap", "pretransfusion_assessment_source_unavailable"))
+                continue
+            facts = dict(_customer_display_facts_for_outcome(rule_id="LX0609-07-01-02",
+                status="non_compliant", reason_code="pretransfusion_assessment_missing") or {})
+            facts["source_document_refs"] = _source_document_refs([record], source_type="bloodtrans_record", limit=None)
+            outcomes.append(("non_compliant", "pretransfusion_assessment_missing", facts))
+            continue
+        scoped = dict(documents)
+        scoped["bloodtrans_record"] = [record]
+        # 实际开始时间来自同份记录的原文/源字段，不使用记录或提交时间猜测。
+        scoped["mr_bloodtrans"] = [{"transfution_datetime": event.start.isoformat(sep=" ")}]
+        for source in ("blood_application", "daily_course_record", "senior_course_record"):
+            scoped[source] = [row for index, row in enumerate(_source_document_rows(documents, source))
+                              if association_document_ref(source, row, index) in selected]
+        outcome = _programmatic_044_single_status(scoped)
+        if outcome is None:
+            semantic_pending = True
+        elif outcome[0] not in {"compliant", "non_compliant"}:
+            unavailable.append(outcome)
+        else:
+            outcomes.append(outcome)
+    # 确定的问题仍保留；剩余关系不清不能抹掉已确认的问题，也不能判整例合规。
+    failed = next((outcome for outcome in outcomes if outcome[0] == "non_compliant"), None)
+    if failed:
+        return failed
+    if unavailable:
+        return unavailable[0]
+    if pending:
+        return "data_gap", "association_failed"
+    if semantic_pending:
+        return "data_gap", "semantic_extraction_unresolved"
+    facts = dict(outcomes[0][2]) if len(outcomes[0]) == 3 else {}
+    refs = [ref for outcome in outcomes if len(outcome) == 3 for ref in outcome[2].get("source_document_refs", ())]
+    facts["source_document_refs"] = [dict(pair) for pair in dict.fromkeys(tuple(sorted(ref.items())) for ref in refs)]
+    return "compliant", "pretransfusion_assessment_complete", facts
+
+
+def _programmatic_044_single_status(
     documents: Mapping[str, Any],
 ) -> tuple[str, str] | tuple[str, str, Mapping[str, Any]] | None:
     """输血申请单的理由、客观指标及时序直接构成输血前评估。"""
@@ -2130,8 +2230,19 @@ def _course_effect_confirmed(
     )
 
 
+def _post_evaluation_documents(documents: Mapping[str, Any]) -> dict[str, Any]:
+    """后评价只核对专门单据；不变更源完整性状态，也不造空来源。"""
+    selected = dict(documents)
+    for source in ("daily_course_record", "senior_course_record"):
+        if isinstance(documents.get(source), list):
+            selected[source] = [row for row in _source_document_rows(documents, source)
+                                if is_post_evaluation_document(row)]
+    return selected
+
+
 def _047_effect_candidates(documents: Mapping[str, Any]) -> tuple[PosttransfusionEffectCandidate, ...]:
-    """结束后 24 小时内、正则未认出评价的病程；窗口与对应关系仍由 Python 判定。"""
+    """结束后24小时内、正则未认出效果的专门后评价；时间与关联仍由Python判定。"""
+    documents = _post_evaluation_documents(documents)
     end_times = [
         max(event[0] for event in events)
         for row in _source_document_rows(documents, "bloodtrans_record")
@@ -2231,47 +2342,19 @@ def _programmatic_047_assessment(
 ) -> _PosttransfusionEvaluationAssessment:
     """按输血结束后24小时窗口判定，评价正文必须有可用的完成时间。"""
 
+    documents = _post_evaluation_documents(documents)
     end_rows: list[tuple[datetime, bool, datetime | None, tuple[str, str] | None]] = []
     unresolved_end_marker = False
     for row in _source_document_rows(documents, "bloodtrans_record"):
-        text = _row_text(row)
-        events, row_unresolved = _transfusion_end_evidence(text)
+        events, row_unresolved = _transfusion_end_evidence(_row_text(row))
         unresolved_end_marker = unresolved_end_marker or row_unresolved
         if not events:
             continue
-        row_explicit_missing_evaluation = False
-        ordered_events = sorted(events, key=lambda event: event[1])
-        for index, (_, _, marker_end) in enumerate(ordered_events[:-1]):
-            next_marker_start = ordered_events[index + 1][1]
-            row_explicit_missing_evaluation = (
-                row_explicit_missing_evaluation
-                or _POSTTRANSFUSION_MISSING_PATTERN.search(
-                    text[marker_end:next_marker_start]
-                )
-                is not None
-            )
-        last_end, _, last_marker_end = max(events, key=lambda event: event[0])
-        last_tail = text[last_marker_end : last_marker_end + 360]
-        row_explicit_missing_evaluation = (
-            row_explicit_missing_evaluation
-            or _POSTTRANSFUSION_MISSING_PATTERN.search(last_tail) is not None
-        )
-        evaluation_time = _authoritative_record_time(row)
-        end_rows.append(
-            (
-                last_end,
-                (
-                    not row_explicit_missing_evaluation
-                    and _has_clinical_posttransfusion_evaluation(last_tail)
-                ),
-                evaluation_time,
-                (
-                    (str(row.get("__source_key__") or "bloodtrans_record"), document_id)
-                    if (document_id := str(row.get("document_id") or row.get("id") or "").strip())
-                    else None
-                ),
-            )
-        )
+        last_end = max(event[0] for event in events)
+        # 输血记录仅提供本次实际结束时刻，正文评价或安全性观察不能代替专门后评价。
+        end_rows.append((last_end, False, None,
+            (str(row.get("__source_key__") or "bloodtrans_record"), document_id)
+            if (document_id := str(row.get("document_id") or row.get("id") or "").strip()) else None))
 
     if unresolved_end_marker or not end_rows:
         return _PosttransfusionEvaluationAssessment(
@@ -2297,52 +2380,25 @@ def _programmatic_047_assessment(
         return _PosttransfusionEvaluationAssessment(
             "data_gap", "posttransfusion_evaluation_horizon_conflict"
         )
-    qualified_evaluations: list[tuple[datetime, datetime, tuple[str, str] | None]] = []
-    qualified_by_index: dict[int, tuple[datetime, tuple[str, str] | None]] = {}
-    pending_indices: list[int] = []
-    unusable_indices: set[int] = set()
+    pending_indices = list(range(len(end_rows)))
     unusable_evaluation_time = False
     late_evaluation_found = False
     late_evaluation_indices: set[int] = set()
-    for index, (end_time, has_evaluation, evaluation_time, document_ref) in enumerate(end_rows):
-        if not has_evaluation:
-            pending_indices.append(index)
-            continue
-        if evaluation_time is None or evaluation_time < end_time:
-            pending_indices.append(index)
-            unusable_indices.add(index)
-            unusable_evaluation_time = True
-            continue
-        if horizon_date is not None and _047_evaluation_time_is_after_horizon(
-            evaluation_time,
-            horizon_datetime=horizon_datetime,
-            horizon_date=horizon_date,
-        ):
-            pending_indices.append(index)
-            continue
-        if (evaluation_time - end_time).total_seconds() <= 24 * 3600:
-            qualified_evaluations.append((end_time, evaluation_time, document_ref))
-            qualified_by_index[index] = (evaluation_time, document_ref)
-        else:
-            late_evaluation_found = True
-            late_evaluation_indices.add(index)
-            pending_indices.append(index)
 
-    if len(qualified_evaluations) == len(end_rows):
-        latest_evaluation_time = min(
-            evaluation_time
-            for end_time, evaluation_time, _ in qualified_evaluations
-            if end_time == latest_end
-        )
-        return _PosttransfusionEvaluationAssessment(
-            "compliant",
-            "posttransfusion_evaluation_complete",
-            latest_end_time=latest_end,
-            evaluation_time=latest_evaluation_time,
-            selected_source_document_refs=end_document_refs,
-        )
+    post_refs = frozenset(association_document_ref(key, row, index)
+        for key in ("daily_course_record", "senior_course_record")
+        for index, row in enumerate(_source_document_rows(documents, key))
+        if _course_effect_confirmed(documents, key, row, _row_text(row)))
+    try:
+        associations = build_transfusion_associations(documents, end_evidence=_transfusion_end_evidence,
+                                                      post_document_refs=post_refs)
+    except ValueError:
+        return _PosttransfusionEvaluationAssessment("technical_error", "snapshot_mismatch")
+    post_links = {(source, id(row)): associations.find(association_document_ref(source, row, index), "post")
+                  for source in ("daily_course_record", "senior_course_record")
+                  for index, row in enumerate(_source_document_rows(documents, source))}
 
-    # 多份独立输血记录按结束事件关联日常病程；任何笼统评价都不得扇出。
+    # 多份独立输血记录按结束事件关联专门后评价；任何笼统评价都不得扇出。
     if len(end_rows) > 1:
         pending = set(pending_indices)
         daily_state = _logical_source_state(documents, "daily_course_record")
@@ -2359,6 +2415,7 @@ def _programmatic_047_assessment(
         ambiguous_daily_refs: list[tuple[str, str]] = []
         unusable_daily_indices: set[int] = set()
         unusable_daily_refs: list[tuple[str, str]] = []
+        late_daily_refs: dict[int, list[tuple[str, str]]] = {}
         for source_key, row in ((key, row) for key in ("daily_course_record", "senior_course_record")
                                 for row in _source_document_rows(documents, key)):
             text = _row_text(row)
@@ -2376,22 +2433,16 @@ def _programmatic_047_assessment(
                 horizon_date=horizon_date,
             ):
                 continue
-            anchors, unresolved_anchor = _transfusion_end_evidence(text)
+            association = post_links.get((source_key, id(row)))
             anchored_indices = {
-                index
-                for anchor_time, _, _ in anchors
-                for index, (end_time, _, _, _) in enumerate(end_rows)
-                if anchor_time == end_time
+                index for index, event in enumerate(associations.events)
+                if association is not None and event.record_ref in association.event_refs
             }
+            anchors = association is not None and (association.explicit or "blood_component" in association.basis)
+            _, unresolved_anchor = _transfusion_end_evidence(text)
+            unresolved_anchor = unresolved_anchor or bool(association and association.state == "ambiguous")
             if unresolved_anchor:
                 affected_indices = set(pending)
-                if affected_indices:
-                    ambiguous_pending_indices.update(affected_indices)
-                    if daily_ref is not None:
-                        ambiguous_daily_refs.append(daily_ref)
-                continue
-            if len({anchor_time for anchor_time, _, _ in anchors}) > 1:
-                affected_indices = anchored_indices.intersection(pending)
                 if affected_indices:
                     ambiguous_pending_indices.update(affected_indices)
                     if daily_ref is not None:
@@ -2426,6 +2477,9 @@ def _programmatic_047_assessment(
                             unusable_daily_refs.append(daily_ref)
                     else:
                         late_evaluation_indices.update(anchored_pending)
+                        if daily_ref is not None:
+                            for index in anchored_pending:
+                                late_daily_refs.setdefault(index, []).append(daily_ref)
                 continue
             if len(candidate_indices) > 1 and candidate_indices.intersection(pending):
                 ambiguous_pending_indices.update(candidate_indices.intersection(pending))
@@ -2441,6 +2495,28 @@ def _programmatic_047_assessment(
                 ):
                     associated_daily[candidate_index] = (record_time, daily_ref)
         pending.difference_update(associated_daily)
+        # 只从没有本次关联/时间歧义的事件形成确定问题；另一事件未知不抹掉它。
+        confirmed = pending - ambiguous_pending_indices - unusable_daily_indices
+        late = confirmed.intersection(late_evaluation_indices)
+        mature_missing = {
+            index for index in confirmed - late_evaluation_indices
+            if not horizon_error and horizon_date is not None
+            and _047_window_is_mature(end_rows[index][0], horizon_datetime=horizon_datetime,
+                                     horizon_date=horizon_date)[0]
+        }
+        if late or mature_missing:
+            selected = late or mature_missing
+            refs = tuple(dict.fromkeys(
+                ref for index in sorted(selected)
+                for ref in (*((end_rows[index][3],) if end_rows[index][3] is not None else ()),
+                            *late_daily_refs.get(index, ()))
+            ))
+            return _PosttransfusionEvaluationAssessment(
+                "non_compliant",
+                "posttransfusion_evaluation_late" if late else "posttransfusion_evaluation_missing",
+                latest_end_time=max(end_rows[index][0] for index in selected),
+                selected_source_document_refs=refs,
+            )
         if pending.intersection(ambiguous_pending_indices):
             return _PosttransfusionEvaluationAssessment(
                 "data_gap",
@@ -2449,7 +2525,7 @@ def _programmatic_047_assessment(
                     dict.fromkeys((*end_document_refs, *ambiguous_daily_refs))
                 ),
             )
-        if pending.intersection(unusable_indices | unusable_daily_indices):
+        if pending.intersection(unusable_daily_indices):
             return _PosttransfusionEvaluationAssessment(
                 "data_gap",
                 "posttransfusion_evaluation_time_unavailable",
@@ -2465,13 +2541,7 @@ def _programmatic_047_assessment(
                 selected_source_document_refs=end_document_refs,
             )
         if not pending:
-            evaluations = dict(qualified_by_index)
-            evaluations.update(
-                {
-                    index: (evaluation_time, daily_ref)
-                    for index, (evaluation_time, daily_ref) in associated_daily.items()
-                }
-            )
+            evaluations = associated_daily
             selected_refs = tuple(
                 dict.fromkeys(
                     (*end_document_refs, *(ref for _, ref in associated_daily.values() if ref))
@@ -2521,6 +2591,13 @@ def _programmatic_047_assessment(
         record_time = _authoritative_record_time(row)
         text = _row_text(row)
         if not _course_effect_confirmed(documents, source_key, row, text):
+            continue
+        association = post_links.get((source_key, id(row)))
+        if association is not None and (association.explicit or "blood_component" in association.basis) and (
+            association.state in {"unmatched", "ambiguous"}
+            or associations.events[0].record_ref not in association.event_refs
+        ):
+            # 正文明确评价另一时次输血时，即使落在24小时内也不能借用。
             continue
         if (
             record_time is not None
@@ -2854,6 +2931,7 @@ def _programmatic_transfusion_display_facts(
         return _customer_display_facts_for_outcome(rule_id=rule_id, status=status, reason_code=reason_code)
     records = _source_document_rows(documents, "bloodtrans_record")
     if rule_id == "LX0609-07-01-02":
+        documents = _pre_assessment_documents(documents)
         entries = [
             _row_text(row)
             for source_key in ("bloodtrans_record", "blood_application", "daily_course_record", "senior_course_record")
@@ -3751,7 +3829,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                 executor_type="program",
             )
             continue
-        # 044–047 的专用输血记录具有更高证据优先级。先尝试确定性判定，
+        # 各规则先尝试确定性判定；047只认专门后评价，输血记录仅作事件锚点，
         # 只有不能定论时才检查日常病程等辅助投影并进入裁剪模型。
         if rule_id == "LX0609-07-01-02":
             # 首页输血表缺失时，按 07-01-01 同一实施抽取从专用输血记录正文取开始输注时间

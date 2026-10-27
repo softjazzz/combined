@@ -126,10 +126,13 @@ async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contra
             ],
             "daily_course_record": [
                 {
+                    "document_title": "输血后评价记录",
                     "document_id": "daily-freeze-1",
-                    "record_content": "输血后复查血红蛋白上升，症状改善。",
-                    "record_time": "2026-06-05 20:00:00",
-                }
+                    "record_content": "2026-06-05 16:10输血结束后复查血红蛋白上升，症状改善。",
+                    "record_time": "2026-06-05 16:20:00",
+                },
+                {"document_title": "输血后评价记录", "document_id": "daily-freeze-2",
+                 "record_content": "2026-06-05 19:00输血结束后复查凝血功能改善。", "record_time": "2026-06-05 19:10:00"},
             ],
         },
     )
@@ -168,6 +171,8 @@ async def test_transfusion_freeze_complete_multiple_events_keeps_customer_contra
         "source_document_refs": [
             {"source_type": "bloodtrans_record", "source_document_id": "blood-freeze-1"},
             {"source_type": "bloodtrans_record", "source_document_id": "blood-freeze-2"},
+            {"source_type": "daily_course_record", "source_document_id": "daily-freeze-1"},
+            {"source_type": "daily_course_record", "source_document_id": "daily-freeze-2"},
         ],
         "transfusion_end_time": "2026-06-05 19:00:00",
         # 多次独立输血时，评价时间必须与最后一次输血结束关联，不能把前一次

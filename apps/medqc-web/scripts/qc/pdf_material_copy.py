@@ -21,6 +21,13 @@ BUSINESS_IDS = frozenset({
 })
 
 
+def clone_pool_metadata(source: dict) -> dict:
+    """复制材料范围，不继承只属于原样本集的质控任务及完成状态。"""
+    result = copy.deepcopy(source)
+    result.update(latest_job_id="", latest_job_status="", ready_items=0)
+    return result
+
+
 def digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str,
                                     separators=(",", ":")).encode()).hexdigest()

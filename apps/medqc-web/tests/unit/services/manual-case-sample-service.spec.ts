@@ -20,6 +20,33 @@ import {
 import { buildMedicalOrderRow } from '@/views/workstation-v4/customer-sample-validation/medicalOrderDisplay'
 
 describe('editable medical-record document normalization', () => {
+  it('保留当前查看的PDF版本关联、备注和来源页码', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_type: 'pdf_candidate',
+            document_id: 'PDF-1',
+            content: '保留的PDF提取正文',
+            pdf_review_parent_key: 'consultation_record::SYN-1',
+            pdf_review_relation: 'version_difference',
+            pdf_review_notes: ['时间差异待核对'],
+            source_file_id: 'F001',
+            source_pages: [2, 3],
+          },
+        ],
+      },
+    })
+    const result = await getEditableMedicalRecordDocuments('test-visit', { source_view: 'current' })
+    expect(result.data?.documents[0]).toMatchObject({
+      pdf_review_parent_key: 'consultation_record::SYN-1',
+      pdf_review_relation: 'version_difference',
+      pdf_review_notes: ['时间差异待核对'],
+      pdf_source_file_id: 'F001',
+      pdf_source_pages: [2, 3],
+      content: '保留的PDF提取正文',
+    })
+  })
   beforeEach(() => {
     vi.clearAllMocks()
   })

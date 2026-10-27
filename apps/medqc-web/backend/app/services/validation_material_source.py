@@ -50,6 +50,104 @@ def material_source_schema(*, default_schema: str, institute_id: str, patient_id
     return schema
 
 
+def reviewed_pdf_document_exclusions(
+    *, reviews: dict[str, dict[str, Any]], original_document_ids: set[str] | None,
+    available_document_ids: set[str],
+) -> frozenset[str]:
+    """页面、Bundle和规则共用已复核选择；不按日期或题名猜测重复。"""
+    return frozenset(
+        str(review["pdf_document_id"])
+        for review in reviews.values()
+        if review.get("decision") == "remove_pdf_duplicate"
+        and review.get("pdf_document_id")
+        and (original_document_ids is None or review["pdf_document_id"] not in original_document_ids)
+        and (parents := review.get("original_pg_ids"))
+        and all(parent in available_document_ids
+                and (original_document_ids is None or parent in original_document_ids) for parent in parents)
+    )
+
+
+def material_document_sql_filter(
+    *, source_schema: str, source_table: str, institute_id: str, patient_id: str, visit_id: str,
+) -> tuple[str, dict[str, Any]]:
+    """在排序/条数限制前排除确认重复的活动PDF；原始行及审计登记不变。"""
+    if not is_material_copy(patient_id, visit_id):
+        return "", {}
+    schema = material_source_schema(default_schema=source_schema, requested_schema=source_schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", source_table):
+        raise ValueError("validation_material_table_invalid")
+    from ..database.connection import engine
+
+    identity = {"institute": institute_id, "patient": patient_id, "visit": visit_id}
+    with engine.connect() as connection:
+        rows = connection.execute(text(
+            "SELECT d.candidate_id,d.target_document_id,c.identity_map,"
+            "d.provenance->'pg_preference_review' AS review "
+            "FROM qc.validation_material_documents d JOIN qc.validation_material_copies c ON c.id=d.copy_id "
+            "WHERE c.institute_id=:institute AND c.patient_id=:patient AND c.visit_id=:visit "
+            "AND d.target_table=:source_table AND d.state='new_candidate' "
+            "AND d.provenance->'pg_preference_review'->>'decision'='remove_pdf_duplicate'"
+        ), {**identity, "source_table": source_table}).mappings().all()
+        if not rows:
+            return "", {}
+        originals = set((rows[0]["identity_map"].get("entities") or {}).values())
+        reviews = {row["candidate_id"]: {**row["review"], "pdf_document_id": row["target_document_id"]}
+                   for row in rows}
+        parents = sorted({parent for review in reviews.values() for parent in review.get("original_pg_ids", [])
+                          if parent in originals})
+        if not parents:
+            return "", {}
+        available = set(connection.execute(text(
+            f'SELECT document_id FROM "{schema}"."{source_table}" '
+            "WHERE institute_id=:institute AND patient_id=:patient AND visit_id=:visit "
+            "AND document_id=ANY(:parent_ids)"
+        ), {**identity, "parent_ids": parents}).scalars().all())
+    excluded = reviewed_pdf_document_exclusions(reviews=reviews, original_document_ids=originals,
+                                               available_document_ids=available)
+    if not excluded:
+        return "", {}
+    return (' AND ("document_id" IS NULL OR NOT ("document_id"=ANY(:material_excluded_ids)))',
+            {"material_excluded_ids": sorted(excluded)})
+
+
+def material_original_document_ids(*, institute_id: str, patient_id: str, visit_id: str) -> set[str] | None:
+    """副本原PG实体白名单，防止把新补入的PDF误当作原PG文书。"""
+    if not is_material_copy(patient_id, visit_id):
+        return None
+    from ..database.connection import engine
+
+    _registered_schema(institute_id, patient_id, visit_id)
+    with engine.connect() as connection:
+        mapping = connection.execute(text(
+            "SELECT identity_map FROM qc.validation_material_copies "
+            "WHERE institute_id=:institute AND patient_id=:patient AND visit_id=:visit"
+        ), {"institute": institute_id, "patient": patient_id, "visit": visit_id}).scalar_one()
+    return set((mapping.get("entities") or {}).values())
+
+
+def material_pg_preference_reviews(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, dict[str, Any]]:
+    """当前副本已核对的PG优先展示决定；不改变临床行或质控材料。"""
+    if not is_material_copy(patient_id, visit_id):
+        return {}
+    from ..database.connection import engine
+
+    _registered_schema(institute_id, patient_id, visit_id)
+    with engine.connect() as connection:
+        rows = connection.execute(text(
+            "SELECT d.candidate_id,d.state,d.target_document_id,d.target_table,d.file_id,d.page_start,d.page_end,"
+            "d.provenance->'pg_preference_review' AS review "
+            "FROM qc.validation_material_documents d JOIN qc.validation_material_copies c ON c.id=d.copy_id "
+            "WHERE c.institute_id=:institute AND c.patient_id=:patient AND c.visit_id=:visit "
+            "AND d.provenance ? 'pg_preference_review'"
+        ), {"institute": institute_id, "patient": patient_id, "visit": visit_id}).mappings().all()
+    return {row["candidate_id"]: {**row["review"],
+            "pdf_document_id": row["target_document_id"] if row["state"] == "new_candidate" else "",
+            "pdf_document_type": row["target_table"], "source_file_id": row["file_id"],
+            "source_pages": [row["page_start"], row["page_end"]]}
+            for row in rows}
+
+
 def material_review_documents(*, institute_id: str, patient_id: str, visit_id: str) -> list[dict[str, Any]]:
     """仅用于当前查看；未启用的PDF候选永不进入质控Bundle。"""
     if not is_material_copy(patient_id, visit_id):
@@ -60,7 +158,8 @@ def material_review_documents(*, institute_id: str, patient_id: str, visit_id: s
     _registered_schema(institute_id, patient_id, visit_id)
     with engine.connect() as connection:
         rows = connection.execute(text(
-            "SELECT d.candidate_id,d.title,d.record_time_text,d.content,d.state,d.file_id,d.page_start,d.page_end "
+            "SELECT d.candidate_id,d.title,d.record_time_text,d.content,d.state,d.file_id,d.page_start,d.page_end,"
+            "d.target_table,d.target_document_id,d.provenance "
             "FROM qc.validation_material_documents d JOIN qc.validation_material_copies c ON c.id=d.copy_id "
             "WHERE c.institute_id=:institute AND c.patient_id=:patient AND c.visit_id=:visit "
             "AND d.state IN ('version_review','held') ORDER BY d.file_id,d.page_start,d.candidate_id"
@@ -75,6 +174,8 @@ def material_review_documents(*, institute_id: str, patient_id: str, visit_id: s
         sections=[{"section_key":"pdf_source", "section_label":"PDF原文（待核对）", "text":row["content"], "order_index":0}],
         source_table="pdf_candidate", validation_material_state=row["state"],
         source_file_id=row["file_id"], source_pages=[row["page_start"], row["page_end"]],
+        _review_reference={"target_table":row["target_table"] or "", "target_document_id":row["target_document_id"] or "",
+                           "original_title":row["title"], "differences":(row["provenance"].get("refinement") or {}).get("differences", [])},
     ) for row in rows]
 
 

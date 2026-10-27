@@ -840,12 +840,18 @@ def _select_records(
     else:
         return []
 
+    from ..validation_material_source import material_document_sql_filter
+    document_filter, document_params = material_document_sql_filter(
+        source_schema=schema, source_table=table, institute_id=institute_id,
+        patient_id=patient_id, visit_id=visit_id,
+    ) if "document_id" in columns else ("", {})
+    params.update(document_params)
     order_column = _pick_first(columns, _ORDER_COLUMNS_PRIORITY)
     order_sql = f" ORDER BY {_quote_ident(order_column)} DESC NULLS LAST" if order_column else ""
     sql = (
         f"SELECT {', '.join(_quote_ident(col) for col in selected)} "
         f"FROM {_qualified_table(schema, table)} "
-        f"WHERE {where_sql}{order_sql} LIMIT :limit_rows"
+        f"WHERE {where_sql}{document_filter}{order_sql} LIMIT :limit_rows"
     )
 
     with engine.connect() as conn:
@@ -2585,7 +2591,9 @@ def load_or_assemble_scene_bundle(
         raise ValueError(f"Unsupported scene bundle table: {scene}")
     ensure_scene_bundle_tables(schema=bundle_schema)
 
-    if not force_refresh:
+    from ..validation_material_source import is_material_copy
+    # 独立验证材料可补入/替换/撤回文书，新任务不能复用去重前的旧Bundle。
+    if not force_refresh and not is_material_copy(patient_id, visit_id):
         existing = _load_scene_bundle(
             scene=scene,
             institute_id=institute_id,
@@ -3303,7 +3311,9 @@ def load_or_assemble_domain_bundle(
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     ensure_domain_bundle_tables(schema=bundle_schema)
-    if not force_refresh:
+    from ..validation_material_source import is_material_copy
+    # 仅改变副本的新任务取材；历史结果及显式历史Bundle读取仍保留。
+    if not force_refresh and not is_material_copy(patient_id, visit_id):
         existing = load_domain_bundle(
             execution_domain=execution_domain,
             institute_id=institute_id,

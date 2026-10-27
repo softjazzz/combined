@@ -26,12 +26,41 @@ def _wrapper(rule_id: str) -> dict[str, str]:
     return {"rule_id": rule_id, "rule_name": rule_id}
 
 
+@pytest.mark.asyncio
+async def test_047_known_late_event_survives_unknown_and_publishes_only_defect_evidence():
+    from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
+    from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
+
+    rule = "LX0609-07-03-01"
+    execution, decision, session = await _execute_typed(rule_id=rule, rows_by_source={
+        "bloodtrans_record": [
+            {"document_id": "LATE", "record_time": "2026-06-06 10:00:01", "record_content":
+             "于2026-06-05 09:00开始输血，于2026-06-05 10:00输血结束；输血后复查血红蛋白较前改善。"},
+            {"document_id": "UNKNOWN", "record_content":
+             "于2026-06-10 09:00开始输血，于2026-06-10 10:00输血结束；输血后复查血红蛋白较前改善。"},
+        ], "daily_course_record": [
+            {"document_title": "输血后评价记录", "document_id": "EVAL-LATE", "record_time": "2026-06-06 10:00:01", "record_content": "于2026-06-05 10:00输血结束，输血后复查血红蛋白较前改善。"},
+            {"document_title": "输血后评价记录", "document_id": "EVAL-UNKNOWN", "record_content": "于2026-06-10 10:00输血结束，输血后复查血红蛋白较前改善。"},
+        ], "senior_course_record": [],
+        "mr_bloodtrans": _trigger(),
+    })
+    assert decision.final_state.value == "non_compliant"
+    assert ("bloodtrans_record", "LATE") in _coordinates(decision=decision, session=session)
+    assert ("bloodtrans_record", "UNKNOWN") not in _coordinates(decision=decision, session=session)
+    results = aggregate_luxian_0609_results(wrapper_rules=[_wrapper(rule)], reduced_decisions=(decision,),
+        execution_results=[], format_evidence=False, customer_display_facts=execution.customer_display_facts,
+        audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials})
+    assert results[0]["status"] == "non_compliant"
+    envelope_item_from_rule_result(results[0], hmac_key="synthetic-confirmed-late-save-validation")
+
+
 async def _execute_typed(
     *,
     rule_id: str,
     rows_by_source: dict[str, list[dict[str, Any]]],
     source_limit: int = 50,
     add_orders: bool = True,
+    horizon_date: str | None = None,
 ) -> tuple[object, object, object]:
     """走输血 native→Binding→公共逐行证据投影所依赖的同一 Evidence Session。"""
 
@@ -62,6 +91,8 @@ async def _execute_typed(
         visit_id="selected-evidence-visit",
         source_schema=None,
         created_at="2026-09-06T10:00:00+08:00",
+        evaluation_as_of_date=horizon_date,
+        evaluation_horizon_policy="frozen_task_date" if horizon_date else "disabled",
         row_reader=read,
     )
     execution = await transfusion.execute_luxian_0609_native_transfusion_rules(
@@ -123,6 +154,40 @@ def _complete_course(*, end_time: str = "2026-06-05 16:10") -> str:
 
 def _trigger() -> list[dict[str, datetime]]:
     return [{"transfution_datetime": datetime(2026, 6, 5, 14, 20)}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("second_pre", [False, True])
+async def test_044_each_event_association_survives_typed_binding(second_pre: bool) -> None:
+    """逐次关联真正进入正式Evidence Session；未配齐时不发布整例合规。"""
+    records = [_transfusion_record(document_id=f"EVENT-{day}",
+        content=f"于2026-06-{day} 14:20开始输入红细胞，2026-06-{day} 16:10输血结束。",
+        record_time=f"2026-06-{day} 16:20:00") for day in ("05", "06")]
+    pre = [{"document_id": f"PRE-{day}", "document_title": "输血前评估",
+            "record_time": f"2026-06-{day} 10:00:00",
+            "record_content": "输血前评估：有输血指征，血红蛋白65g/L，已告知输血风险。"}
+           for day in (("05", "06") if second_pre else ("05",))]
+    execution, decision, session = await _execute_typed(rule_id="LX0609-07-01-02", rows_by_source={
+        "bloodtrans_record": records, "daily_course_record": pre})
+    assert decision.final_state.value == ("compliant" if second_pre else "non_compliant")
+    if second_pre:
+        refs = _coordinates(decision=decision, session=session)
+        assert refs is not None and {("daily_course_record", "PRE-05"), ("daily_course_record", "PRE-06"),
+                                     ("bloodtrans_record", "EVENT-05"), ("bloodtrans_record", "EVENT-06")} <= refs
+    else:
+        assert decision.reason_code == "requirement_violated"
+        refs = _coordinates(decision=decision, session=session)
+        assert refs is not None and ("bloodtrans_record", "EVENT-06") in refs
+        assert ("bloodtrans_record", "EVENT-05") not in refs
+        from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
+        from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
+        results = aggregate_luxian_0609_results(wrapper_rules=[_wrapper("LX0609-07-01-02")],
+            reduced_decisions=(decision,), execution_results=[], format_evidence=False,
+            customer_display_facts=execution.customer_display_facts,
+            audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials})
+        assert results[0]["status"] == "non_compliant"
+        assert results[0]["customer_display_facts"]["requirement"] == "pretransfusion_assessment"
+        envelope_item_from_rule_result(results[0], hmac_key="synthetic-missing-pre-save-validation")
 
 
 @pytest.mark.asyncio
@@ -312,12 +377,12 @@ async def test_047_selects_daily_evaluation_document_when_daily_record_supplies_
                 )
             ],
             "daily_course_record": [
-                {
+                {"document_title": "输血后评价记录",
                     "document_id": "DAILY-047-EVALUATION",
                     "record_content": "输血后复查血红蛋白改善，未见输血不良反应。",
                     "record_time": "2026-06-05 20:00:00",
                 },
-                {
+                {"document_title": "输血后评价记录",
                     "document_id": "DAILY-047-NOISE",
                     "record_content": "患者夜间睡眠可。",
                     "record_time": "2026-06-05 21:00:00",
@@ -334,11 +399,12 @@ async def test_047_selects_daily_evaluation_document_when_daily_record_supplies_
 
 
 @pytest.mark.asyncio
-async def test_047_selects_blood_record_when_it_supplies_evaluation() -> None:
-    """047 评价写在输血记录内时，不得额外选择无关日常病程。"""
+async def test_047_inline_effect_does_not_satisfy_dedicated_evaluation_requirement() -> None:
+    """输血记录内写有评价，仍须另有专门后评价；不借用普通病程。"""
 
     _execution, decision, session = await _execute_typed(
         rule_id="LX0609-07-03-01",
+        horizon_date="2026-09-06",
         rows_by_source={
             "mr_bloodtrans": _trigger(),
             "bloodtrans_record": [
@@ -351,7 +417,7 @@ async def test_047_selects_blood_record_when_it_supplies_evaluation() -> None:
                 )
             ],
             "daily_course_record": [
-                {
+                {"document_title": "日常病程记录",
                     "document_id": "DAILY-047-NOISE",
                     "record_content": "护理记录：病情平稳。",
                     "record_time": "2026-06-05 20:00:00",
@@ -360,7 +426,7 @@ async def test_047_selects_blood_record_when_it_supplies_evaluation() -> None:
         },
     )
 
-    assert decision.final_state.value == "compliant"
+    assert decision.final_state.value == "non_compliant"
     assert _coordinates(decision=decision, session=session) == {
         ("bloodtrans_record", "BLOOD-047-EVALUATION"),
     }
@@ -532,12 +598,12 @@ async def test_047_selects_earliest_qualified_daily_evaluation_only() -> None:
                 )
             ],
             "daily_course_record": [
-                {
+                {"document_title": "输血后评价记录",
                     "document_id": "DAILY-047-FIRST",
                     "record_content": "输血后复查血红蛋白改善，未见输血不良反应。",
                     "record_time": "2026-06-05 18:00:00",
                 },
-                {
+                {"document_title": "输血后评价记录",
                     "document_id": "DAILY-047-LATER",
                     "record_content": "输血后复查血红蛋白改善，未见输血不良反应。",
                     "record_time": "2026-06-05 20:00:00",

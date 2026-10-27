@@ -42,6 +42,20 @@ def local_data(monkeypatch):
     assert not current_view._pending
 
 
+def test_current_assembly_prefers_original_pg_and_removes_pdf_version(local_data, monkeypatch):
+    rows, _, _ = local_data
+    original = dict(doc_type="pdf_candidate", document_id="PDF-SYN", doc_key="pdf_candidate::PDF-SYN",
+                    doc_name="PDF候选", document_title="PDF候选", content="单独保留的PDF正文", has_content=True,
+                    _review_reference=dict(target_table="admission_record", target_document_id="TEST-D", original_title="PDF候选", differences=["body_version_difference"]))
+    monkeypatch.setattr(current_view, "material_review_documents", lambda **identity: [deepcopy(original)])
+    monkeypatch.setattr(current_view, "material_pg_preference_reviews", lambda **identity: {"PDF-SYN": {"decision": "remove_pdf_duplicate", "original_pg_ids": ["TEST-D"]}})
+    payload = current_view.load_current_documents(**IDENTITY)
+    assert not any(document["document_id"] == "PDF-SYN" for document in payload["documents"])
+    assert any(document["document_id"] == "TEST-D" for document in payload["documents"])
+    assert original["content"] == "单独保留的PDF正文"
+    assert rows["admission_record"][0]["chief_complaint"] == "测试正文甲"
+
+
 def test_current_body_changes_without_timestamp_or_saved_bundle_update(local_data):
     rows, reads, forbidden = local_data
     before = current_view.load_current_documents(**IDENTITY)

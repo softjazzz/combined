@@ -104,8 +104,8 @@ async def test_047_two_nonoverlapping_episodes_bind_their_own_daily_evaluations(
             {"document_id": "BT-2", "record_content": "2026-01-02 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {"document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
-            {"document_id": "DC-2", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-2", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
         ],
         horizon_date="2026-01-04",
     )
@@ -131,8 +131,8 @@ async def test_047_multi_episode_material_order_does_not_change_selected_coordin
         {"document_id": "BT-2", "record_content": "2026-01-02 16:00:00输血结束。"},
     ]
     daily_rows = [
-        {"document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
-        {"document_id": "DC-2", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
+        {"document_title": "输血后评价记录", "document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
+        {"document_title": "输血后评价记录", "document_id": "DC-2", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
     ]
     original = _session(
         bloodtrans_rows=bloodtrans_rows,
@@ -185,9 +185,9 @@ async def test_047_same_time_daily_tie_breaks_by_document_identity_not_input_ord
         {"document_id": "BT-2", "record_content": "2026-01-02 16:00:00输血结束。"},
     ]
     daily_rows = [
-        {"document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
-        {"document_id": "DC-Z", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
-        {"document_id": "DC-A", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
+        {"document_title": "输血后评价记录", "document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
+        {"document_title": "输血后评价记录", "document_id": "DC-Z", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
+        {"document_title": "输血后评价记录", "document_id": "DC-A", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
     ]
     original = _session(
         bloodtrans_rows=bloodtrans_rows,
@@ -279,7 +279,8 @@ async def test_047_pre_end_daily_anchor_is_a_time_gap_not_a_late_evaluation():
             {"document_id": "BT-2", "record_content": "2026-01-02 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {"document_id": "DC-EARLY", "record_time": "2026-01-01 09:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-EARLY", "record_time": "2026-01-01 09:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-2", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
         ],
         horizon_date="2026-01-04",
     )
@@ -302,7 +303,7 @@ async def test_047_unresolved_end_marker_makes_an_explicit_anchor_unreliable():
             {"document_id": "BT-2", "record_content": "2026-01-01 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {"document_id": "DC-MIXED", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束；另一次输血结束，复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-MIXED", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束；另一次输血结束，复查血红蛋白改善。"},
         ],
         horizon_date="2026-01-03",
     )
@@ -327,7 +328,7 @@ async def test_047_unresolved_end_marker_can_still_refer_to_an_unmet_episode():
             {"document_id": "BT-2", "record_content": "2026-01-01 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {"document_id": "DC-MIXED", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束；另一次输血结束，复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-MIXED", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束；另一次输血结束，复查血红蛋白改善。"},
         ],
         horizon_date="2026-01-03",
     )
@@ -348,7 +349,7 @@ async def test_047_multiple_explicit_end_anchors_cannot_be_time_window_filtered_
             {"document_id": "BT-2", "record_content": "2026-01-01 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {"document_id": "DC-MULTI", "record_time": "2026-01-01 17:00:00", "record_content": "2026-01-01 10:00:00输血结束；2026-01-01 16:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-MULTI", "record_time": "2026-01-01 17:00:00", "record_content": "2026-01-01 10:00:00输血结束；2026-01-01 16:00:00输血结束后复查血红蛋白改善。"},
         ],
         horizon_date="2026-01-03",
     )
@@ -378,7 +379,7 @@ async def test_047_future_daily_anchor_ambiguity_does_not_override_frozen_deadli
             {"document_id": "BT-2", "record_content": "2026-01-01 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {
+            {"document_title": "输血后评价记录",
                 "document_id": "DC-FUTURE",
                 "record_time": "2026-01-04 09:00:00",
                 "record_content": future_content,
@@ -405,9 +406,9 @@ async def test_047_unusable_daily_does_not_preempt_later_unique_episodes():
             {"document_id": "BT-2", "record_content": "2026-01-02 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {"document_id": "DC-UNUSABLE", "record_content": "输血后复查血红蛋白改善。"},
-            {"document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
-            {"document_id": "DC-2", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-UNUSABLE", "record_content": "输血后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-2", "record_time": "2026-01-02 17:00:00", "record_content": "2026-01-02 16:00:00输血结束后复查血红蛋白改善。"},
         ],
         horizon_date="2026-01-04",
     )
@@ -430,8 +431,8 @@ async def test_047_timely_daily_can_supersede_late_same_record_evaluation():
             {"document_id": "BT-2", "record_time": "2026-01-02 18:00:00", "record_content": "2026-01-01 16:00:00输血结束；输血后复查血红蛋白改善。"},
         ],
         daily_rows=[
-            {"document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
-            {"document_id": "DC-2", "record_time": "2026-01-01 17:00:00", "record_content": "2026-01-01 16:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-2", "record_time": "2026-01-01 17:00:00", "record_content": "2026-01-01 16:00:00输血结束后复查血红蛋白改善。"},
         ],
         horizon_date="2026-01-03",
     )
@@ -466,7 +467,7 @@ async def test_047_ambiguous_daily_evaluation_never_fans_out_to_multiple_episode
     session = _session(
         bloodtrans_rows=bloodtrans_rows,
         daily_rows=[
-            {"document_id": "DC-AMB", "record_time": "2026-01-01 17:00:00", "record_content": "输血后复查血红蛋白改善。"}
+            {"document_title": "输血后评价记录", "document_id": "DC-AMB", "record_time": "2026-01-01 17:00:00", "record_content": "输血后复查血红蛋白改善。"}
         ],
         horizon_date="2026-01-03",
     )
@@ -497,7 +498,7 @@ async def test_047_satisfied_episode_still_blocks_ambiguous_daily_for_remaining_
             {"document_id": "BT-2", "record_content": "2026-01-01 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {"document_id": "DC-AMB", "record_time": "2026-01-01 17:00:00", "record_content": "输血后复查血红蛋白改善。"}
+            {"document_title": "输血后评价记录", "document_id": "DC-AMB", "record_time": "2026-01-01 17:00:00", "record_content": "输血后复查血红蛋白改善。"}
         ],
         horizon_date="2026-01-03",
     )
@@ -518,8 +519,8 @@ async def test_047_two_explicit_end_anchors_bind_to_their_matching_episodes():
             {"document_id": "BT-2", "record_content": "2026-01-01 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {"document_id": "DC-1", "record_time": "2026-01-01 17:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
-            {"document_id": "DC-2", "record_time": "2026-01-01 18:00:00", "record_content": "2026-01-01 16:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-1", "record_time": "2026-01-01 17:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-2", "record_time": "2026-01-01 18:00:00", "record_content": "2026-01-01 16:00:00输血结束后复查血红蛋白改善。"},
         ],
         horizon_date="2026-01-03",
     )
@@ -552,7 +553,7 @@ async def test_047_missing_episode_keeps_existing_maturity_priority(
             },
             {"document_id": "BT-2", "record_content": "2026-01-02 16:00:00输血结束。"},
         ],
-        daily_rows=[],
+        daily_rows=[{"document_title": "输血后评价记录", "document_id": "DC-1", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束后复查血红蛋白改善。"}],
         horizon_date=horizon_date,
     )
 

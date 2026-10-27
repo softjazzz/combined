@@ -199,7 +199,7 @@ def test_047_datetime_horizon_uses_strictly_after_24_hours_boundary(
     ) == expected
 
 
-def test_047_explicit_missing_only_controls_its_own_unmatured_event():
+def test_047_inline_effect_does_not_satisfy_earlier_mature_event():
     assert transfusion._programmatic_047_status(
         {
             "bloodtrans_record": [
@@ -214,7 +214,7 @@ def test_047_explicit_missing_only_controls_its_own_unmatured_event():
             "daily_course_record": [],
             "__evaluation_horizon_rows__": [{"horizon_date": "2026-01-03"}],
         }
-    ) == ("not_applicable", "evaluation_window_not_mature")
+    ) == ("non_compliant", "posttransfusion_evaluation_missing")
 
 
 def test_047_future_record_evaluation_is_ignored_like_future_daily_course():
@@ -324,6 +324,7 @@ def _effect_session():
         horizon_date="2026-01-03",
         bloodtrans_rows=[{"document_id": "BT-1", "record_content": "2026-01-01 16:00:00输血结束。"}],
         daily_rows=[{
+            "document_title": "输血后评价记录",
             "document_id": "D-1",
             "record_time": "2026-01-02 08:00:00",
             "record_content": "今日查房，患者精神可。" + _UNMATCHED_EVALUATION,
@@ -367,7 +368,7 @@ async def test_047_loose_wording_without_clinical_or_lab_effect_is_not_auto_comp
     session = _session(
         horizon_date="2026-01-03",
         bloodtrans_rows=[{"document_id": "BT-1", "record_content": "2026-01-01 16:00:00输血结束。"}],
-        daily_rows=[{"document_id": "D-1", "record_time": "2026-01-02 08:00:00", "record_content": wording}],
+        daily_rows=[{"document_title": "输血后评价记录", "document_id": "D-1", "record_time": "2026-01-02 08:00:00", "record_content": wording}],
     )
     result, client = await _execute_with_effect_labels(session, {})
 

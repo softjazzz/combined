@@ -8,9 +8,24 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pdf_material_copy import apply_documents, clone_rows, identity_map, map_json, validate_column_lengths  # noqa: E402
+from pdf_material_copy import clone_pool_metadata  # noqa: E402
 
 BATCH = "125314b2-c213-42be-9894-85b433c8bf41"
 CASE = dict(institute_id="synthetic-hospital", patient_id="SYN-P", visit_id="SYN-V", sample="C01")
+
+
+@pytest.mark.parametrize("status", ["completed", "failed", "running"])
+def test_material_copy_does_not_inherit_source_pool_qc_task(status):
+    source = dict(id="source-pool", latest_job_id="old-job", latest_job_status=status,
+                  ready_items=27, total_items=27, scene="discharge")
+    before = copy.deepcopy(source)
+    copied = clone_pool_metadata(source)
+    assert copied["latest_job_id"] == ""
+    assert copied["latest_job_status"] == ""
+    assert copied["ready_items"] == 0
+    assert copied["total_items"] == 27
+    assert copied["scene"] == "discharge"
+    assert source == before
 
 
 def fixtures():

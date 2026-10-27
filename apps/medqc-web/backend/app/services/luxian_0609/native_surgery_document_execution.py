@@ -66,7 +66,7 @@ SURGERY_DOCUMENT_RULE_IDS = (
 )
 EXECUTOR_KEY = "surgery_document"
 _TYPED_DECISION_RULE_IDS = frozenset(SURGERY_DOCUMENT_RULE_IDS)
-_TYPED_EVALUATOR_VERSION = "surgery-document-ruledecision-shadow-v2"
+_TYPED_EVALUATOR_VERSION = "surgery-document-ruledecision-known-defects-v3"
 _TYPED_RULE_SOURCE_KEYS = {
     "LX0609-04-01-01": (
         "presurg_summary",
@@ -1281,15 +1281,17 @@ async def _typed_037_controlled_outcome(
     if extraction.state != "ready":
         return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", extraction.reason_code, "llm" if extraction.llm_call_count else "program"), *metrics
     states_by_ref = {doc.document_ref: {**reliable[doc.document_ref], **extraction.fields.get(doc.document_ref, {})} for doc in documents}
-    if any("unknown" in states.values() for states in states_by_ref.values()):
-        return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", "semantic_extraction_unresolved", "llm"), *metrics
+    has_unknown = any("unknown" in states.values() for states in states_by_ref.values())
     missing = {}
     for source, visit in sources:
         rows = [states_by_ref[doc.document_ref] for doc in documents if doc.source_type == source]
         # 不适用（如未插管时的拔管情况）视同已满足。
-        fields = [name for name in _VISIT_FIELDS[visit] if any(row.get(name) not in {"present", "not_applicable"} for row in rows)]
+        # 每份独立访视须自洽；另一文书的unknown不抹掉已确认的absent，也不充当缺项。
+        fields = [name for name in _VISIT_FIELDS[visit] if any(row.get(name) == "absent" for row in rows)]
         if fields:
             missing[visit] = fields
+    if not missing and has_unknown:
+        return _SurgeryDocumentOutcome(outcome.rule_id, "data_gap", "semantic_extraction_unresolved", "llm"), *metrics
     facts = ({"failure_kind": "anesthesia_visit_incomplete", "performed_anesthesia_confirmed": True, "missing_fields_by_visit": missing}
         if missing else {"verification_kind": "anesthesia_visits_complete", "performed_anesthesia_confirmed": True,
             "checked_sources": [source for source, _ in sources], "checked_fields_by_visit": {visit: list(_VISIT_FIELDS[visit]) for _, visit in sources}})

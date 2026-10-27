@@ -11,7 +11,7 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from app.services.bundles import assembly as bundle_assembly
-from app.services.validation_material_source import material_source_schema
+from app.services.validation_material_source import material_source_schema, material_document_sql_filter
 
 from .surgery_procedure_catalog import catalog_surgery_state
 
@@ -43,6 +43,20 @@ def _case_source_schema(*, institute_id: str, patient_id: str, visit_id: str, so
             visit_id=visit_id, strict=True)
     except ValueError:
         raise SourceEvidenceUnavailable() from None
+
+def _material_document_filter(
+    *, schema: str, table: str, columns: set[str], institute_id: str, patient_id: str, visit_id: str,
+) -> tuple[str, dict[str, Any]]:
+    if "document_id" not in columns:
+        return "", {}
+    try:
+        return material_document_sql_filter(source_schema=schema, source_table=table,
+            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+    except Exception:
+        # 复核决定读取失败不能退回双份材料或伪装成空来源。
+        raise SourceEvidenceQueryError() from None
+
+
 SURGERY_TIME_FIELDS = (
     "surgery_begin_time",
     "surgery_begin_datetime",
@@ -978,13 +992,17 @@ def read_luxian_0609_course_round_timeline(
             for field in order_fields
         )
         limit = _source_limit(source_key)
+        document_filter, document_params = _material_document_filter(
+            schema=trusted_schema, table=source_key, columns=columns,
+            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+        )
         sql = (
             f"SELECT {select_sql} "
             f"FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
             f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
             f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
             f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-            f"ORDER BY {order_sql} LIMIT :limit_rows"
+            f"{document_filter} ORDER BY {order_sql} LIMIT :limit_rows"
         )
         with engine.connect() as connection:
             rows = connection.execute(
@@ -993,6 +1011,7 @@ def read_luxian_0609_course_round_timeline(
                     "institute_id": institute_id,
                     "patient_id": patient_id,
                     "visit_id": visit_id,
+                    **document_params,
                     "limit_rows": limit + 1,
                 },
             ).mappings().all()
@@ -1613,12 +1632,16 @@ def read_luxian_0609_runtime_source_rows(
         order_sql = " ORDER BY " + ", ".join(
             f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST" for field in order_columns
         )
+    document_filter, document_params = _material_document_filter(
+        schema=trusted_schema, table=source_key, columns=columns,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+    )
     sql = (
         f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        f"{order_sql} LIMIT :limit_rows"
+        f"{document_filter}{order_sql} LIMIT :limit_rows"
     )
     with engine.connect() as connection:
         rows = connection.execute(
@@ -1627,6 +1650,7 @@ def read_luxian_0609_runtime_source_rows(
                 "institute_id": institute_id,
                 "patient_id": patient_id,
                 "visit_id": visit_id,
+                **document_params,
                 "limit_rows": _source_limit(source_key),
             },
         ).mappings().all()
@@ -1673,12 +1697,16 @@ def read_luxian_0609_native_source_rows(
         order_sql = " ORDER BY " + ", ".join(
             f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST" for field in order_columns
         )
+    document_filter, document_params = _material_document_filter(
+        schema=trusted_schema, table=source_key, columns=columns,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+    )
     sql = (
         f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        f"{order_sql} LIMIT :limit_rows"
+        f"{document_filter}{order_sql} LIMIT :limit_rows"
     )
     with engine.connect() as connection:
         rows = connection.execute(
@@ -1687,6 +1715,7 @@ def read_luxian_0609_native_source_rows(
                 "institute_id": institute_id,
                 "patient_id": patient_id,
                 "visit_id": visit_id,
+                **document_params,
                 "limit_rows": _source_limit(source_key),
             },
         ).mappings().all()
@@ -1825,13 +1854,17 @@ def read_luxian_0609_snapshot_source_rows(
         for field in order_columns
     )
     limit_rows = _source_limit(normalized_source)
+    document_filter, document_params = _material_document_filter(
+        schema=trusted_schema, table=normalized_source, columns=columns,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+    )
     sql = (
         f"SELECT {select_sql} "
         f"FROM {bundle_assembly._qualified_table(trusted_schema, normalized_source)} "
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        f"ORDER BY {order_sql} LIMIT :limit_rows"
+        f"{document_filter} ORDER BY {order_sql} LIMIT :limit_rows"
     )
     try:
         with engine.connect() as connection:
@@ -1841,6 +1874,7 @@ def read_luxian_0609_snapshot_source_rows(
                     "institute_id": institute_id,
                     "patient_id": patient_id,
                     "visit_id": visit_id,
+                    **document_params,
                     "limit_rows": limit_rows + 1,
                 },
             ).mappings().all()

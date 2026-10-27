@@ -5,7 +5,7 @@
   >
     <div class="readonly-medical-document-directory-head">
       <strong>文书目录</strong>
-      <span>{{ filteredDocuments.length }} / {{ documents.length }}</span>
+      <span>{{ filteredDocuments.length }} / {{ primaryDocuments.length }}</span>
     </div>
 
     <div
@@ -121,25 +121,43 @@
                 <em>{{ subgroup.items.length }}</em>
               </button>
               <template v-if="isGroupExpanded(subgroup.key)">
-                <button
+                <template
                   v-for="document in subgroup.items"
                   :key="document.key"
-                  type="button"
-                  class="readonly-medical-document-item record-document-item"
-                  :class="{
-                    'is-active': document.key === selectedKey,
-                    'is-empty': !medicalDocumentHasContent(document),
-                  }"
-                  :disabled="!medicalDocumentHasContent(document)"
-                  @click="emit('select', document.key)"
                 >
-                  <strong>{{ resolveMedicalDocumentTitle(document) }}</strong>
-                  <small
-                    class="readonly-medical-document-meta record-document-time"
-                    :class="{ 'is-missing': !resolveMedicalDocumentTime(document) }"
-                    :title="formatMedicalDocumentTime(resolveMedicalDocumentTime(document))"
-                  >{{ formatDocumentMeta(document) }}</small>
-                </button>
+                  <button
+                    type="button"
+                    class="readonly-medical-document-item record-document-item"
+                    :class="{
+                      'is-active': document.key === selectedKey,
+                      'is-empty': !medicalDocumentHasContent(document),
+                    }"
+                    :disabled="!medicalDocumentHasContent(document)"
+                    @click="emit('select', document.key)"
+                  >
+                    <span class="readonly-medical-document-title-row">
+                      <strong>{{ resolveMedicalDocumentTitle(document) }}</strong>
+                      <span
+                        v-if="document.pdf_source_file_id && document.document_type !== 'pdf_candidate'"
+                        class="readonly-medical-document-new"
+                        title="新增文书"
+                        aria-label="新增文书"
+                      >new</span>
+                    </span>
+                    <small
+                      class="readonly-medical-document-meta record-document-time"
+                      :class="{ 'is-missing': !resolveMedicalDocumentTime(document) }"
+                      :title="formatMedicalDocumentTime(resolveMedicalDocumentTime(document))"
+                    >{{ formatDocumentMeta(document) }}</small>
+                  </button>
+                  <ReadonlyPdfVersions
+                    :parent-key="document.key"
+                    :versions="versionsFor(document.key)"
+                    :selected-key="selectedKey"
+                    :force-open="Boolean(query.trim())"
+                    @select="emit('select', $event)"
+                  />
+                </template>
               </template>
             </section>
           </template>
@@ -158,27 +176,45 @@
             </button>
           </template>
           <template v-else-if="isGroupExpanded(group.key)">
-            <button
+            <template
               v-for="document in group.items"
               :key="document.key"
-              type="button"
-              class="readonly-medical-document-item record-document-item"
-              :class="{
-                'is-active': document.key === selectedKey,
-                'is-empty': !medicalDocumentHasContent(document),
-              }"
-              :disabled="!medicalDocumentHasContent(document)"
-              @click="emit('select', document.key)"
             >
-              <strong>{{ resolveMedicalDocumentTitle(document) }}</strong>
-              <small
-                class="readonly-medical-document-meta record-document-time"
-                :class="{ 'is-missing': !resolveMedicalDocumentTime(document) }"
-                :title="formatMedicalDocumentTime(resolveMedicalDocumentTime(document))"
+              <button
+                type="button"
+                class="readonly-medical-document-item record-document-item"
+                :class="{
+                  'is-active': document.key === selectedKey,
+                  'is-empty': !medicalDocumentHasContent(document),
+                }"
+                :disabled="!medicalDocumentHasContent(document)"
+                @click="emit('select', document.key)"
               >
-                {{ formatDocumentMeta(document) }}
-              </small>
-            </button>
+                <span class="readonly-medical-document-title-row">
+                  <strong>{{ resolveMedicalDocumentTitle(document) }}</strong>
+                  <span
+                    v-if="document.pdf_source_file_id && document.document_type !== 'pdf_candidate'"
+                    class="readonly-medical-document-new"
+                    title="新增文书"
+                    aria-label="新增文书"
+                  >new</span>
+                </span>
+                <small
+                  class="readonly-medical-document-meta record-document-time"
+                  :class="{ 'is-missing': !resolveMedicalDocumentTime(document) }"
+                  :title="formatMedicalDocumentTime(resolveMedicalDocumentTime(document))"
+                >
+                  {{ formatDocumentMeta(document) }}
+                </small>
+              </button>
+              <ReadonlyPdfVersions
+                :parent-key="document.key"
+                :versions="versionsFor(document.key)"
+                :selected-key="selectedKey"
+                :force-open="Boolean(query.trim())"
+                @select="emit('select', $event)"
+              />
+            </template>
           </template>
         </section>
       </div>
@@ -195,6 +231,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { EditableMedicalRecordDocument } from './types'
+import ReadonlyPdfVersions from './ReadonlyPdfVersions.vue'
+import { groupPdfDocumentVersions } from './pdfDocumentVersions'
 import {
   formatMedicalDocumentTime,
   isMedicalOrderDocument,
@@ -236,22 +274,34 @@ type DirectoryGroup = {
   subgroups?: DirectoryGroup[]
 }
 
+const pdfDirectory = computed(() => groupPdfDocumentVersions(props.documents))
+const versionsByParent = computed(() => pdfDirectory.value.versionsByParent)
+const primaryDocuments = computed(() => pdfDirectory.value.primaryDocuments)
+function versionsFor(key: string): EditableMedicalRecordDocument[] {
+  return versionsByParent.value.get(key) || []
+}
+function matchesQuery(document: EditableMedicalRecordDocument, keyword: string): boolean {
+  return [
+    resolveMedicalDocumentTitle(document),
+    document.title,
+    document.document_type,
+    document.content,
+    ...(document.sections || []).flatMap((section) => [section.label, section.text]),
+  ]
+    .join(' ')
+    .toLowerCase()
+    .includes(keyword)
+}
 const filteredDocuments = computed(() => {
   const keyword = query.value.trim().toLowerCase()
-  return props.documents.filter((document) => {
+  return primaryDocuments.value.filter((document) => {
     if (filter.value === 'content' && !medicalDocumentHasContent(document)) return false
     if (filter.value === 'orders' && !isMedicalOrderDocument(document)) return false
     if (!keyword) return true
-    return [
-      resolveMedicalDocumentTitle(document),
-      document.title,
-      document.document_type,
-      document.content,
-      ...(document.sections || []).flatMap((section) => [section.label, section.text]),
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(keyword)
+    return (
+      matchesQuery(document, keyword) ||
+      versionsFor(document.key).some((version) => matchesQuery(version, keyword))
+    )
   })
 })
 
@@ -303,6 +353,7 @@ const documentGroups = computed(() => {
     'exam_lab',
     'discharge',
     'handoff',
+    'pdf_review',
     'other',
     'orders',
   ]
@@ -312,6 +363,8 @@ const documentGroups = computed(() => {
 })
 
 function resolveGroupKey(document: EditableMedicalRecordDocument): string {
+  const parent = primaryDocuments.value.find((row) => row.key === document.pdf_review_parent_key)
+  if (parent) return resolveMedicalDocumentGroup(parent).key
   return resolveMedicalDocumentGroup(document).key
 }
 
@@ -375,9 +428,18 @@ watch(
 function formatDocumentMeta(document: EditableMedicalRecordDocument): string {
   const time = formatMedicalDocumentTime(resolveMedicalDocumentTime(document))
   const match = time.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
-  if (!match) return time
-  const monthDay = `${match[2].padStart(2, '0')}月${match[3].padStart(2, '0')}日`
-  return Number(match[1]) === new Date().getFullYear() ? monthDay : `${match[1]}年${monthDay}`
+  let label = time
+  if (match) {
+    const monthDay = `${match[2].padStart(2, '0')}月${match[3].padStart(2, '0')}日`
+    label = Number(match[1]) === new Date().getFullYear() ? monthDay : `${match[1]}年${monthDay}`
+  }
+  const pages = document.pdf_source_pages || []
+  if (document.pdf_source_file_id && pages.length) {
+    const first = pages[0]
+    const last = pages[pages.length - 1]
+    return `${label} · PDF第${first === last ? first : `${first}–${last}`}页`
+  }
+  return label
 }
 
 function isOrderGroupSelected(items: EditableMedicalRecordDocument[]): boolean {
@@ -594,6 +656,29 @@ function selectOrderGroup(items: EditableMedicalRecordDocument[]) {
   color: rgba(29, 29, 31, 0.86);
   font-size: 13px;
   line-height: 20px;
+}
+
+.readonly-medical-document-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.readonly-medical-document-title-row strong {
+  min-width: 0;
+}
+
+.readonly-medical-document-new {
+  flex: 0 0 auto;
+  border: 1px solid var(--mq-brand-200, #bcd6ff);
+  border-radius: 4px;
+  background: var(--mq-brand-50, #eaf2ff);
+  padding: 0 4px;
+  color: var(--mq-brand-700, #0a5fd6);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
 }
 
 .readonly-medical-document-meta {

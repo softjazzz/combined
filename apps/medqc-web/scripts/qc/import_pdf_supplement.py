@@ -17,7 +17,7 @@ from dotenv import dotenv_values
 from psycopg2 import sql
 from psycopg2.extras import Json, execute_values
 
-from pdf_material_copy import COORDINATES, apply_documents, clone_rows, digest, identity_map, new_id, validate_column_lengths
+from pdf_material_copy import COORDINATES, apply_documents, clone_pool_metadata, clone_rows, digest, identity_map, new_id, validate_column_lengths
 
 
 def fetch_catalog(cur):
@@ -170,13 +170,11 @@ def write_plan(conn, plan, archive, preview):
             cur.execute(sql.SQL("CREATE TABLE {}.{} (LIKE cdm.{} INCLUDING ALL EXCLUDING DEFAULTS EXCLUDING IDENTITY)").format(
                 sql.Identifier(schema),sql.Identifier(table),sql.Identifier(table)))
             insert_records(cur, schema, table, plan["rows"].get(table, []), plan["catalog"])
-        pool = dict(plan["source_pool"])
+        pool = clone_pool_metadata(plan["source_pool"])
         now = datetime.now(timezone.utc).isoformat()
         pool.update(id=plan["target_pool_id"], name=plan["target_name"], source_file="authorized-pdf-material-copy",
                     description="1022独立材料副本；PDF候选保留来源与待核对标记；未运行质控", created_by="pdf-material-import",
                     created_at=now,updated_at=now)
-        # 原池计数以复制的27行重新确定，不继承旧任务完成量。
-        pool["ready_items"] = 0
         cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema='qc' AND table_name='manual_problem_sample_pools' ORDER BY ordinal_position")
         cols = [row[0] for row in cur.fetchall()]
         cur.execute(sql.SQL("INSERT INTO qc.manual_problem_sample_pools ({}) VALUES ({})").format(

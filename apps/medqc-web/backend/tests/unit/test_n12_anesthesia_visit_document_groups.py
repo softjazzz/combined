@@ -82,6 +82,22 @@ async def test_any_unknown_document_blocks_definite_multi_document_judgment():
     assert execution.llm_call_count == len(client.calls) == 1
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unknown_field", ["precautions", "preoperative_orders"])
+async def test_known_missing_in_independent_visit_survives_other_visit_unknown(unknown_field):
+    from app.services.qc_workspace.canonical_result_store import envelope_item_from_rule_result
+
+    rows = _same_event_two_previsits()
+    rows["preane_surveil_record"][0]["record_content"] = rows["preane_surveil_record"][0]["record_content"].replace("防误吸", "")
+    client = FrozenPerDocumentFactClient(absent_by_index={0: {"precautions"}},
+                                        unknown_by_index={1: {unknown_field}})
+    final, execution = await _run(rows, client)
+    assert final["status"] == "non_compliant"
+    assert final["customer_display_facts"]["missing_fields_by_visit"] == {"preanesthesia_visit": ["precautions"]}
+    envelope_item_from_rule_result(final, hmac_key="synthetic-independent-visit-save-validation")
+    assert execution.llm_call_count == len(client.calls) == 1
+
+
 class FrozenWholeDocumentFactClient:
     """固定完整文书临床引文；错误拆成半份输入时给非法引用而非制造fixture异常。"""
     def __init__(self):

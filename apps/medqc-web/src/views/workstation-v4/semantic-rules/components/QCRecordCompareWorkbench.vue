@@ -4,7 +4,10 @@
     :class="{ 'is-document-only': documentOnly }"
     :data-mobile-tab="mobileTab"
   >
-    <header v-if="!documentOnly" class="record-compare-head">
+    <header
+      v-if="!documentOnly"
+      class="record-compare-head"
+    >
       <div>
         <strong>{{ documentOnly ? '病历文书' : '病历原文对照' }}</strong>
         <span>{{
@@ -76,8 +79,8 @@
             <time
               v-if="
                 selectedDocument &&
-                resolveMedicalDocumentTypeLabel(selectedDocument) === '出院记录' &&
-                dischargeTime
+                  resolveMedicalDocumentTypeLabel(selectedDocument) === '出院记录' &&
+                  dischargeTime
               "
               class="record-content-time"
               data-testid="record-discharge-time"
@@ -86,27 +89,69 @@
               <b>{{ formatDocumentTime(dischargeTime) }}</b>
             </time>
           </div>
-          <label v-if="documents.length" class="record-document-select">
+          <label
+            v-if="documents.length"
+            class="record-document-select"
+          >
             <span>选择文书</span>
-            <select :value="selectedDocumentKey" @change="handleDocumentSelect">
-              <option v-for="document in documents" :key="document.key" :value="document.key">
-                {{ resolveDocumentDisplayTitle(document) }}
-              </option>
+            <select
+              :value="selectedDocumentKey"
+              @change="handleDocumentSelect"
+            >
+              <template
+                v-for="document in pdfDocumentDirectory.primaryDocuments"
+                :key="document.key"
+              >
+                <option :value="document.key">
+                  {{ resolveDocumentDisplayTitle(document) }}
+                </option>
+                <optgroup
+                  v-if="pdfDocumentDirectory.versionsByParent.has(document.key)"
+                  :label="`${resolveDocumentDisplayTitle(document)} · PDF对照版本`"
+                >
+                  <option
+                    v-for="version in pdfDocumentDirectory.versionsByParent.get(document.key)"
+                    :key="version.key"
+                    :value="version.key"
+                  >
+                    {{
+                      version.pdf_review_relation === 'same_content'
+                        ? 'PDF文本（正文一致）'
+                        : 'PDF版本（待核对）'
+                    }}
+                    · {{ formatDocumentTime(resolveDocumentTime(version)) }}
+                  </option>
+                </optgroup>
+              </template>
             </select>
           </label>
-          <span v-if="!documentOnly" class="record-location-chip" :class="`is-${locationState}`">
+          <span
+            v-if="!documentOnly"
+            class="record-location-chip"
+            :class="`is-${locationState}`"
+          >
             {{ locationMessage }}
           </span>
         </div>
 
-        <div v-if="contentLoading" class="record-content-empty">
+        <div
+          v-if="contentLoading"
+          class="record-content-empty"
+        >
           <strong>正在读取当前文书</strong>
           <span>文书目录已经就绪，正文正在按需加载。</span>
         </div>
-        <div v-else-if="contentLoadError" class="record-content-empty">
+        <div
+          v-else-if="contentLoadError"
+          class="record-content-empty"
+        >
           <strong>当前文书读取失败</strong>
           <span>{{ contentLoadError }}</span>
-          <button type="button" class="record-content-retry" @click="retrySelectedDocument">
+          <button
+            type="button"
+            class="record-content-retry"
+            @click="retrySelectedDocument"
+          >
             重新读取
           </button>
         </div>
@@ -123,10 +168,15 @@
             @select="selectDocument"
           />
           <ReadonlyFrontpageContent
-            v-else-if="selectedDocument.document_type === 'mr' && selectedDocument.frontpage_display"
+            v-else-if="
+              selectedDocument.document_type === 'mr' && selectedDocument.frontpage_display
+            "
             :display="selectedDocument.frontpage_display"
           />
-          <div v-else-if="documentSectionViews.length" class="record-content-sections">
+          <div
+            v-else-if="documentSectionViews.length"
+            class="record-content-sections"
+          >
             <section
               v-for="section in documentSectionViews"
               :key="section.key"
@@ -138,20 +188,21 @@
                 {{ displaySectionLabel(section.label) }}
               </h3>
               <p class="record-content-section-text">
-                <span>{{ section.parts.before }}</span
-                ><mark
+                <span>{{ section.parts.before }}</span><mark
                   v-if="section.parts.match"
                   :ref="setHighlightElement"
                   class="record-evidence-highlight"
                   tabindex="0"
                   @click="emitSelectedIssue"
                   @keydown.enter="emitSelectedIssue"
-                  >{{ section.parts.match }}</mark
-                ><span>{{ section.parts.after }}</span>
+                >{{ section.parts.match }}</mark><span>{{ section.parts.after }}</span>
               </p>
             </section>
           </div>
-          <pre v-else class="record-content-text"><span>{{ documentTextParts.before }}</span><mark
+          <pre
+            v-else
+            class="record-content-text"
+          ><span>{{ documentTextParts.before }}</span><mark
                 v-if="documentTextParts.match"
                 :ref="setHighlightElement"
                 class="record-evidence-highlight"
@@ -160,7 +211,10 @@
                 @keydown.enter="emitSelectedIssue"
           >{{ documentTextParts.match }}</mark><span>{{ documentTextParts.after }}</span></pre>
         </div>
-        <div v-else class="record-content-empty">
+        <div
+          v-else
+          class="record-content-empty"
+        >
           <strong>{{ documentOnly ? '暂无病历文书' : '暂无可对照的病历原文' }}</strong>
           <span>{{
             documentOnly
@@ -170,7 +224,11 @@
         </div>
       </main>
 
-      <aside v-if="!documentOnly" class="record-result-column" aria-label="质控结果">
+      <aside
+        v-if="!documentOnly"
+        class="record-result-column"
+        aria-label="质控结果"
+      >
         <SingleRecordQcResultPanel
           v-if="hasSingleRecordResult"
           :items="singleRecordItems || []"
@@ -193,10 +251,16 @@
             </div>
             <span class="record-result-count">{{ sortedIssues.length }} 条</span>
           </div>
-          <div v-if="!sortedIssues.length" class="record-compare-state">
+          <div
+            v-if="!sortedIssues.length"
+            class="record-compare-state"
+          >
             当前没有可展示的质控结果
           </div>
-          <div v-else class="record-result-list">
+          <div
+            v-else
+            class="record-result-list"
+          >
             <article
               v-for="issue in sortedIssues"
               :key="issue.key"
@@ -222,7 +286,10 @@
                     </span>
                     <span class="record-result-code">{{ issue.rule_code }}</span>
                   </span>
-                  <span class="record-result-toggle" aria-hidden="true">
+                  <span
+                    class="record-result-toggle"
+                    aria-hidden="true"
+                  >
                     <ChevronDown
                       :size="15"
                       :class="{ 'is-open': issue.key === expandedIssueKey }"
@@ -230,15 +297,27 @@
                   </span>
                 </span>
                 <strong :title="issue.rule_name">{{ issue.rule_name }}</strong>
-                <small v-if="resolveIssueSummary(issue)" class="record-result-summary-line">
+                <small
+                  v-if="resolveIssueSummary(issue)"
+                  class="record-result-summary-line"
+                >
                   {{ resolveIssueSummary(issue) }}
                 </small>
               </button>
 
-              <div v-if="issue.key === expandedIssueKey" class="record-result-detail">
-                <section v-if="issue.detail" class="record-result-analysis">
+              <div
+                v-if="issue.key === expandedIssueKey"
+                class="record-result-detail"
+              >
+                <section
+                  v-if="issue.detail"
+                  class="record-result-analysis"
+                >
                   <div class="record-result-section-heading">
-                    <ClipboardCheck :size="15" aria-hidden="true" />
+                    <ClipboardCheck
+                      :size="15"
+                      aria-hidden="true"
+                    />
                     <span>完整判定说明</span>
                   </div>
                   <div class="record-result-narrative">
@@ -258,22 +337,34 @@
                 >
                   <section v-if="issue.actual_value">
                     <div class="record-result-section-heading">
-                      <Scale :size="15" aria-hidden="true" />
+                      <Scale
+                        :size="15"
+                        aria-hidden="true"
+                      />
                       <span>实际情况</span>
                     </div>
                     <p>{{ issue.actual_value }}</p>
                   </section>
                   <section v-if="issue.requirement">
                     <div class="record-result-section-heading">
-                      <Target :size="15" aria-hidden="true" />
+                      <Target
+                        :size="15"
+                        aria-hidden="true"
+                      />
                       <span>核对标准</span>
                     </div>
                     <p>{{ issue.requirement }}</p>
                   </section>
                 </div>
-                <section v-if="issue.evidences.length" class="record-result-evidence">
+                <section
+                  v-if="issue.evidences.length"
+                  class="record-result-evidence"
+                >
                   <div class="record-result-section-heading">
-                    <FileSearch :size="15" aria-hidden="true" />
+                    <FileSearch
+                      :size="15"
+                      aria-hidden="true"
+                    />
                     <span>关键证据</span>
                   </div>
                   <button
@@ -289,7 +380,10 @@
                     <time v-if="evidence.record_time">
                       记录时间 {{ formatDocumentTime(evidence.record_time) }}
                     </time>
-                    <small v-if="resolveEvidenceExcerpt(evidence)" class="record-evidence-excerpt">
+                    <small
+                      v-if="resolveEvidenceExcerpt(evidence)"
+                      class="record-evidence-excerpt"
+                    >
                       <span>{{ resolveEvidenceExcerpt(evidence)?.label }}</span>
                       {{ resolveEvidenceExcerpt(evidence)?.text }}
                     </small>
@@ -298,7 +392,10 @@
                 </section>
                 <section class="record-result-guidance">
                   <div class="record-result-section-heading">
-                    <Lightbulb :size="15" aria-hidden="true" />
+                    <Lightbulb
+                      :size="15"
+                      aria-hidden="true"
+                    />
                     <span>处理建议</span>
                   </div>
                   <p>{{ issue.suggestion || '请结合病历原文确认。' }}</p>
@@ -337,6 +434,7 @@ import {
 } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
 import { resolveSafeMedicalSectionLabel } from '@/utils/medicalFieldLabels'
 import type { EditableMedicalRecordDocument } from '@/views/workstation-v4/customer-sample-validation/types'
+import { groupPdfDocumentVersions } from '@/views/workstation-v4/customer-sample-validation/pdfDocumentVersions'
 import {
   buildSingleRecordQcResultItems,
   recommendationEvidenceForSingleRecord,
@@ -385,7 +483,7 @@ const emit = defineEmits<{
 }>()
 
 const qcFeedback = useQcResultFeedback(
-  () => props.feedbackAvailable ? props.jobId : undefined,
+  () => (props.feedbackAvailable ? props.jobId : undefined),
   () => props.recordRef,
 )
 const feedbackByRule = qcFeedback.feedbackByRule
@@ -402,6 +500,7 @@ function handleSubmitFeedback(ruleId: string, input: SaveQcResultFeedbackInput) 
 type LocationState = 'matched' | 'section' | 'document' | 'missing' | 'idle'
 
 const documents = ref<EditableMedicalRecordDocument[]>([])
+const pdfDocumentDirectory = computed(() => groupPdfDocumentVersions(documents.value))
 const loading = ref(false)
 const loadError = ref('')
 const contentLoadError = ref('')

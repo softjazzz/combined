@@ -2,6 +2,45 @@ import { describe, expect, it } from 'vitest'
 import { resolveMedicalDocumentGroup } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
 import { formatDiagnosisSection } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
 import { resolveMedicalDocumentTimeLabel } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
+import { resolveMedicalDocumentTitle } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
+
+it.each(['气管插管操作记录', '入ICU记录', '记录', '请会诊执行记录', '合成主治医师查房记录'])(
+  '已补入PDF保留原题名%s，不被临床承载表的通用名称覆盖',
+  (title) => {
+    expect(resolveMedicalDocumentTitle({ document_type: 'daily_course_record', title, pdf_source_file_id: 'SYN-PDF' })).toBe(title)
+    expect(resolveMedicalDocumentTitle({ doc_type: 'daily_course_record', document_title: title, source_file_id: 'SYN-PDF' })).toBe(title)
+  },
+)
+
+it.each(['输血前评估', '输血前评估记录', '输血后评价记录', '输血后效果评价', '输血后疗效评估记录'])(
+  '保留日常病程承载的%s原题名并归入输血目录',
+  (title) => {
+    const document = { document_type: 'daily_course_record', title, content: '合成评估正文' }
+    expect(resolveMedicalDocumentTitle(document)).toBe(title)
+    expect(resolveMedicalDocumentGroup(document)).toEqual({ key: 'transfusion', label: '输血相关' })
+  },
+)
+
+it('普通病程正文提到输血不能冒充独立输血评估文书', () => {
+  const document = {
+    document_type: 'daily_course_record',
+    title: '日常病程记录',
+    content: '拟完善输血前评估',
+  }
+  expect(resolveMedicalDocumentTitle(document)).toBe('日常病程记录')
+  expect(resolveMedicalDocumentGroup(document).key).toBe('course.other')
+})
+
+it('会诊显示标题统一为请会诊执行记录，不改动原始题名和正文', () => {
+  const document = {
+    document_type: 'consultation_record',
+    title: '会诊记录',
+    content: '合成会诊正文',
+  }
+  expect(resolveMedicalDocumentTitle(document)).toBe('请会诊执行记录')
+  expect(document.title).toBe('会诊记录')
+  expect(document.content).toBe('合成会诊正文')
+})
 
 it('提交时间回退明确标明来源，已有记录时间仍优先', () => {
   const doc = {

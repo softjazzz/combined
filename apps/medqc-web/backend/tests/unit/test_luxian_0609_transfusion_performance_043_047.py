@@ -237,7 +237,7 @@ async def test_short_actual_record_passes_gate_without_length_threshold() -> Non
 
 
 @pytest.mark.asyncio
-async def test_047_two_events_evaluated_in_their_own_records_is_compliant() -> None:
+async def test_047_inline_effects_in_two_transfusion_records_do_not_replace_dedicated_documents() -> None:
     result = await _run(
         RULE_047,
         {
@@ -251,9 +251,8 @@ async def test_047_two_events_evaluated_in_their_own_records_is_compliant() -> N
         horizon_date="2026-06-08",
     )
 
-    _assert_layers(result, "compliant", "requirement_satisfied")
+    _assert_layers(result, "non_compliant", "requirement_violated")
     assert result["facts"]["transfusion_end_time"] == "2026-06-05 19:00:00"
-    assert result["facts"]["evaluation_time"] == "2026-06-05 19:10:00"
     assert _evidence_ids(result["final"]) == {"BT-1", "BT-2"}
 
 
@@ -272,8 +271,8 @@ async def test_047_each_event_evaluated_by_anchored_daily_course_is_compliant() 
                  "record_time": "2026-06-05 19:10:00"},
             ],
             "daily_course_record": [
-                {"document_id": "DC-1", "record_content": first_daily, "record_time": "2026-06-05 18:00:00"},
-                {"document_id": "DC-2", "record_content": second_daily, "record_time": "2026-06-05 21:00:00"},
+                {"document_title": "输血后评价记录", "document_id": "DC-1", "record_content": first_daily, "record_time": "2026-06-05 18:00:00"},
+                {"document_title": "输血后评价记录", "document_id": "DC-2", "record_content": second_daily, "record_time": "2026-06-05 21:00:00"},
             ],
         },
         {FIRST_RECORD_NO_EVALUATION: "record", SECOND_RECORD_NO_EVALUATION: "record"},
@@ -315,6 +314,10 @@ async def test_047_unperformed_plan_neither_creates_obligation_nor_erases_actual
                 {"document_id": "BT-2", "record_content": SECOND_RECORD, "record_time": "2026-06-05 19:10:00"},
                 {"document_id": "PLAN-UNPERFORMED", "record_content": NEXT_DAY_PLAN,
                  "record_time": "2026-06-05 21:00:00"},
+            ],
+            "daily_course_record": [
+                {"document_title": "输血后评价记录", "document_id": "EVAL-1", "record_time": "2026-06-05 16:20:00", "record_content": "2026-06-05 16:10输血结束后复查血红蛋白较前改善。"},
+                {"document_title": "输血后评价记录", "document_id": "EVAL-2", "record_time": "2026-06-05 19:10:00", "record_content": "2026-06-05 19:00输血结束后复查凝血功能改善。"},
             ],
         },
         {FIRST_RECORD: "record", SECOND_RECORD: "record", NEXT_DAY_PLAN: "not_record"},
