@@ -2314,10 +2314,10 @@ def _postoperative_window_gate(
     horizon_rows: Sequence[Mapping[str, Any]],
     horizon_error: str,
 ) -> tuple[str, str, Mapping[str, Any]] | None:
-    """在逐台核对前确认术后三日观察窗口已经成熟。
+    """在逐台核对前确认至少有一台术后三日观察窗口已经成熟。
 
     评价终点必须来自同一冻结 Evidence Session。只有日期时按保守口径，
-    评价日期严格晚于每台手术结束日后的第三个自然日，避免在窗口当天提前
+    评价日期严格晚于对应手术结束日后的第三个自然日，避免在窗口当天提前
     把尚未发生的病程判为缺失。
     """
 
@@ -2366,9 +2366,9 @@ def _postoperative_window_gate(
         return unavailable("authoritative_time_conflict")
 
     mature = (
-        all(horizon_time.date() > deadline for deadline in deadlines)
+        any(horizon_time.date() > deadline for deadline in deadlines)
         if horizon_time is not None
-        else all(horizon_date > deadline for deadline in deadlines)
+        else any(horizon_date > deadline for deadline in deadlines)
     )
     if mature:
         return None
@@ -4828,6 +4828,9 @@ async def _execute_extended_document_group(
                     _physician_identity_is_masked(name)
                     for name in event.surgeon_names
                 )
+                and _postoperative_window_gate(
+                    surgery_events=(event,), horizon_rows=horizon_rows, horizon_error=horizon_error,
+                ) is None
                 for event in surgery_events
             ):
                 final_state, reason_code = "data_gap", "association_failed"
@@ -5009,6 +5012,7 @@ async def _execute_extended_document_group(
                 else:
                     event_facts = []
                     unmet_events = []
+                    pending_window_events = []
                     missing_surgeon_events = []
                     definite_missing_events: list[str] = []
                     empty_body_events = []
@@ -5024,6 +5028,21 @@ async def _execute_extended_document_group(
                             (event.surgery_end_time + timedelta(days=offset)).date()
                             for offset in (1, 2, 3)
                         }
+                        event_window = _postoperative_window_gate(
+                            surgery_events=(event,), horizon_rows=horizon_rows,
+                            horizon_error=horizon_error,
+                        )
+                        if event_window is not None:
+                            pending_window_events.append(event.document_id)
+                            event_facts.append({
+                                **_event_display_base(event),
+                                "required_postop_dates": sorted(value.isoformat() for value in required_dates),
+                                "covered_postop_dates": [],
+                                "surgeon_round_present": None,
+                                "preop_surgeon_round_present": None,
+                                "window_state": "evaluation_window_not_mature",
+                            })
+                            continue
                         dated_postop_rows = tuple(
                             row
                             for row in (*daily_rows, *senior_rows)
@@ -5184,6 +5203,8 @@ async def _execute_extended_document_group(
                             "data_gap",
                             "required_field_missing",
                         )
+                    elif not unmet_events and pending_window_events:
+                        final_state, reason_code = "not_applicable", "evaluation_window_not_mature"
                     else:
                         final_state = "compliant" if not unmet_events else "non_compliant"
                         reason_code = (

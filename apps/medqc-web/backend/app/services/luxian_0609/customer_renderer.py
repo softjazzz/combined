@@ -3816,6 +3816,11 @@ def customer_finding_from_controlled_facts(
                 f"共核对 {len(surgery_events)} 台手术，均从手术次日开始计算连续 3 天（术后当天不计入）。"
             ]
             for index, event in enumerate(surgery_events, start=1):
+                if event.get("window_state") == "evaluation_window_not_mature":
+                    event_findings.append(
+                        f"手术 {index}：{event.get('surgery_time')}，术后三日评价窗口尚未结束，本次暂不判定缺失。"
+                    )
+                    continue
                 required_dates = event.get("required_postop_dates")
                 covered_dates = event.get("covered_postop_dates")
                 required = "、".join(required_dates) if isinstance(required_dates, list) else "未返回"
