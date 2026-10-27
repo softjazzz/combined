@@ -19,6 +19,7 @@ class DeathRecordTimelinessOutcome:
     reason_code: str
     display_facts: Mapping[str, Any] | None = None
     document_refs: tuple[Mapping[str, str], ...] = ()
+    consumed_rows: tuple[tuple[str, Mapping[str, Any]], ...] = ()
 
 
 def _terminal_kind(row: Mapping[str, Any]) -> str:
@@ -47,10 +48,22 @@ def evaluate_death_record_timeliness(
     *, death_rows: Sequence[Mapping[str, Any]],
     discharge_rows: Sequence[Mapping[str, Any]] = (),
     registration_rows: Sequence[Mapping[str, Any]] = (), source_error: str = "",
+    frozen_at: Any = None,
 ) -> DeathRecordTimelinessOutcome:
     """只裁定本次冻结材料，不读取数据库或机器时间，不调用模型。"""
     if source_error:
         return DeathRecordTimelinessOutcome("data_gap", source_error)
+    if frozen_at is not None:
+        boundary = _clock(frozen_at)
+        if boundary is None:
+            return DeathRecordTimelinessOutcome("data_gap", "authoritative_time_missing")
+        # 先固定可见范围，再识别终末类型、死亡锚点及最后版本；未知时间不能当未来排除。
+        death_rows, discharge_rows = tuple(
+            tuple(row for row in rows
+                  if (clock := _clock(authoritative_document_time_value(row))) is None
+                  or clock <= boundary)
+            for rows in (death_rows, discharge_rows)
+        )
     records = tuple(
         (source, row)
         for source, rows in (("death_record", death_rows), ("discharge_record", discharge_rows))
@@ -104,4 +117,5 @@ def evaluate_death_record_timeliness(
          "death_time": death_clock.isoformat(sep=" "), "record_time": completed.isoformat(sep=" "),
          "threshold_hours": 24, "elapsed_seconds": seconds},
         ({"source_type": source, "source_document_id": document_id},),
+        ((source, selected),),
     )

@@ -4099,12 +4099,12 @@ async def _execute_extended_document_group(
                     document_rows={source: rows for source, (rows, _) in documents.items()},
                     horizon_rows=horizon_rows, source_error=source_error,
                 )
-                selected_refs = tuple(dict.fromkeys(
-                    reference for item in outcome.document_refs
-                    for reference, row in evidence_materials.document_rows(item["source_type"], snapshot=evidence_snapshot)
-                    if _clean(row.get("document_id") or row.get("id")) == item["source_document_id"]
-                ))
-                if outcome.document_refs and not selected_refs:
+                binding = bind_consumed_continuity_document_rows(
+                    snapshot=evidence_snapshot, materials=evidence_materials,
+                    consumed_rows=outcome.consumed_rows,
+                )
+                selected_refs = binding.document_refs
+                if binding.binding_failed:
                     raise EvidenceMaterialUnavailable("selected_stage_document_unavailable")
             except Exception:
                 decisions.append(_decision(rule_id=rule_id, snapshot=evidence_snapshot, source_keys=all_sources,
@@ -4125,17 +4125,15 @@ async def _execute_extended_document_group(
                     death_rows=death_rows, discharge_rows=discharge_rows,
                     registration_rows=registration_rows,
                     source_error=registration_error or death_error or discharge_error,
+                    frozen_at=evidence_snapshot.created_at,
                 )
-                # 按本次实际选中的来源与文书绑定，跨表同ID不能串到死亡表。
-                selected_refs = tuple(dict.fromkeys(
-                    reference
-                    for item in outcome.document_refs
-                    for reference, row in evidence_materials.document_rows(
-                        item["source_type"], snapshot=evidence_snapshot,
-                    )
-                    if _clean(row.get("document_id") or row.get("id")) == item["source_document_id"]
-                ))
-                if outcome.document_refs and not selected_refs:
+                # 只绑定执行器实际消费的原始行，避免同ID未来版本重新混入证据。
+                binding = bind_consumed_continuity_document_rows(
+                    snapshot=evidence_snapshot, materials=evidence_materials,
+                    consumed_rows=outcome.consumed_rows,
+                )
+                selected_refs = binding.document_refs
+                if binding.binding_failed:
                     raise EvidenceMaterialUnavailable("selected_death_document_unavailable")
             except Exception:
                 # 新规则意外故障只影响自身，不重新裁定相邻死亡/出院规则。

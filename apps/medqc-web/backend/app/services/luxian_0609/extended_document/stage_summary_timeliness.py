@@ -30,6 +30,7 @@ class StageSummaryOutcome:
     reason_code: str
     display_facts: Mapping[str, Any] | None = None
     document_refs: tuple[Mapping[str, str], ...] = ()
+    consumed_rows: tuple[tuple[str, Mapping[str, Any]], ...] = ()
 
 
 def _gap(reason: str) -> StageSummaryOutcome:
@@ -98,11 +99,17 @@ def evaluate_stage_summary_timeliness(
         lower = start
 
     events: list[tuple[datetime, str, str]] = []
+    consumed: dict[tuple[datetime, str, str], Mapping[str, Any]] = {}
     for source, titles in _TITLES.items():
-        rows = document_rows.get(source, ())
-        for row in rows:
-            if row.get("validation_material_state") in {"held", "version_review"}:
-                continue
+        # 已知未来材料不参与正文、版本冲突或替代判断；未知时刻仍须校验。
+        visible = tuple(
+            (row, clock) for row in document_rows.get(source, ())
+            if row.get("validation_material_state") not in {"held", "version_review"}
+            if (clock := parse_authoritative_datetime(authoritative_document_time_value(row))) is None
+            or clock <= upper
+        )
+        rows = tuple(row for row, _ in visible)
+        for row, clock in visible:
             title = re.sub(r"\s+", "", str(row.get("document_title") or ""))
             body = str(row.get("record_content") or "").strip()
             if not title and body:
@@ -111,13 +118,10 @@ def evaluate_stage_summary_timeliness(
                 continue
             if not body:
                 return _gap("required_field_missing")
-            clock = parse_authoritative_datetime(authoritative_document_time_value(row))
             if clock is None:
                 return _gap("authoritative_time_missing")
             if clock < start:
                 return _gap("authoritative_time_conflict")
-            if clock > upper:
-                continue
             document_id = str(row.get("document_id") or "").strip()
             if not document_id:
                 return _gap("required_field_missing")
@@ -125,6 +129,7 @@ def evaluate_stage_summary_timeliness(
                    for other in rows):
                 return _gap("authoritative_time_conflict")
             events.append((clock, source, document_id))
+            consumed[(clock, source, document_id)] = row
     events = sorted(set(events))
     if len(events) > 100:
         return _gap("candidate_scope_incomplete")
@@ -152,4 +157,5 @@ def evaluate_stage_summary_timeliness(
         "compliant": "requirement_satisfied", "non_compliant": "required_document_missing",
         "not_applicable": "trigger_absent_complete",
     }[status], facts, tuple({"source_type": source, "source_document_id": document_id}
-                           for _, source, document_id in events))
+                           for _, source, document_id in events),
+        tuple((event[1], consumed[event]) for event in events))
