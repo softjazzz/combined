@@ -127,7 +127,14 @@ def safe_continuity_customer_display_facts(
         return None
     kind_key = "verification_kind" if raw.get("verification_kind") else "failure_kind"
     kind = raw.get(kind_key)
-    if kind not in _KINDS_BY_RULE[rule_id] or not isinstance(kind, str):
+    if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"} and "event_checks" in raw:
+        base = {key: value for key, value in raw.items() if key not in {"event_checks", "transfer_order_count"}}
+        safe_base = safe_continuity_customer_display_facts(rule_id=rule_id, raw=base)
+        events = _safe_transfer_events(rule_id, raw)
+        if safe_base is None or events is None:
+            return None
+        return {**safe_base, "transfer_order_count": raw["transfer_order_count"], "event_checks": events}
+    if not isinstance(kind, str) or kind not in _KINDS_BY_RULE[rule_id]:
         return None
     if kind in {"physician_handoff_identity_missing", "physician_signature_timeline_incomplete"}:
         if set(raw) != {kind_key, "source_document_refs", *_fact_keys(kind, raw)}:
@@ -208,6 +215,13 @@ def validate_published_continuity_facts(
         return True, None
     if type(raw) is not dict:
         return False, None
+    if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"} and "event_checks" in raw:
+        base = {key: value for key, value in raw.items() if key not in {"event_checks", "transfer_order_count"}}
+        valid_base, _ = validate_published_continuity_facts(rule_id=rule_id, raw=base, status=status)
+        events = _safe_transfer_events(rule_id, raw)
+        if not valid_base or events is None or events != raw["event_checks"]:
+            return False, None
+        return True, dict(raw)
     kind_keys = {"verification_kind", "failure_kind"} & raw.keys()
     if len(kind_keys) != 1:
         return False, None
@@ -298,6 +312,40 @@ def validate_published_continuity_facts(
             rule_id=rule_id, status=status, safe_facts=raw,
         )
     return (True, dict(raw)) if valid else (False, None)
+
+
+def _safe_transfer_events(rule_id: str, raw: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+    """只搬运执行器逐次转科事实；拒绝嵌套事件、任意正文和额外字段。"""
+    events, count = raw.get("event_checks"), raw.get("transfer_order_count")
+    # 原非药品医嘱读取上限为5000；不能在发布层以更小上限丢弃已核对事件。
+    if (not isinstance(events, list) or not events or len(events) > 5000
+            or type(count) is not int or count < len(events)):
+        return None
+    allowed_reasons = {
+        "compliant": {"requirement_within_threshold", "requirement_satisfied"},
+        "non_compliant": {"threshold_exceeded", "required_document_missing"},
+        "not_applicable": {"evaluation_window_not_mature"},
+        "data_gap": {"source_unavailable", "source_truncated", "authoritative_time_missing",
+                     "authoritative_time_conflict", "association_failed"},
+    }
+    result = []
+    for event in events:
+        if not isinstance(event, dict) or "event_checks" in event or "transfer_order_count" in event:
+            return None
+        status, reason = event.get("status"), event.get("reason_code")
+        if type(status) is not str or type(reason) is not str or reason not in allowed_reasons.get(status, set()):
+            return None
+        facts = {key: value for key, value in event.items() if key not in {"status", "reason_code"}}
+        if not facts:
+            if status != "data_gap":
+                return None
+            result.append(dict(event))
+            continue
+        valid, copied = validate_published_continuity_facts(rule_id=rule_id, raw=facts, status=status)
+        if not valid or copied != facts:
+            return None
+        result.append(dict(event))
+    return result
 
 
 def _valid_invasive_procedure_facts(kind: str, raw: Mapping[str, Any]) -> bool:

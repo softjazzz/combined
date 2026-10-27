@@ -1950,10 +1950,10 @@ _ANESTHESIA_VISIT_FIELD_LABELS = {
 }
 
 
-def _course_007_duration_text(total_seconds: int | float) -> str:
-    """仅稳定病程按原始微秒展示，避免边界被舍成0秒或浮点尾数。"""
-    if type(total_seconds) is int:
-        return _duration_text(total_seconds)
+def _precise_duration_text(total_seconds: int | float) -> str:
+    """按原始微秒展示，整数秒沿用旧文案，避免边界被舍成0秒。"""
+    if type(total_seconds) is int or (type(total_seconds) is float and total_seconds.is_integer()):
+        return _duration_text(int(total_seconds))
     hours, remainder = divmod(round(total_seconds * 1_000_000), 3_600_000_000)
     minutes, micros = divmod(remainder, 60_000_000)
     seconds = f"{micros / 1_000_000:.6f}".rstrip("0").rstrip(".")
@@ -1981,28 +1981,28 @@ def _format_exact_elapsed_duration(
     started_at: Any,
     finished_at: Any,
     threshold_hours: Any,
+    preserve_microseconds: bool = False,
 ) -> str:
     """按权威时间展示精确间隔，避免边界超时被小时小数四舍五入掩盖。"""
 
     if not isinstance(started_at, str) or not isinstance(finished_at, str):
         return ""
     try:
-        elapsed_seconds = ceil(
-            (datetime.fromisoformat(finished_at) - datetime.fromisoformat(started_at))
-            .total_seconds()
-        )
+        elapsed = (datetime.fromisoformat(finished_at) - datetime.fromisoformat(started_at)).total_seconds()
+        elapsed_seconds = elapsed if preserve_microseconds else ceil(elapsed)
     except (TypeError, ValueError):
         return ""
     if elapsed_seconds < 0:
         return ""
-    duration = _duration_text(elapsed_seconds)
+    format_duration = _precise_duration_text if preserve_microseconds else _duration_text
+    duration = format_duration(elapsed_seconds)
     if (
         isinstance(threshold_hours, (int, float))
         and not isinstance(threshold_hours, bool)
     ):
         threshold_seconds = round(float(threshold_hours) * 3600)
         if elapsed_seconds > threshold_seconds:
-            overdue = _duration_text(elapsed_seconds - threshold_seconds)
+            overdue = format_duration(elapsed_seconds - threshold_seconds)
             duration = f"{duration}（超时{overdue}）"
     return duration
 
@@ -2440,8 +2440,8 @@ def customer_finding_from_controlled_facts(
             no_rounds = "；期间未见有效查房" if start_source in {"inpat_registration", "admission_record"} else ""
             return (
                 f"{start_label}（{start_time}）至评价截止时间（{facts['interval_end_time']}）间隔"
-                f"{_course_007_duration_text(facts['interval_seconds'])}，超过72小时要求"
-                f"{_course_007_duration_text(facts['overdue_seconds'])}{no_rounds}。"
+                f"{_precise_duration_text(facts['interval_seconds'])}，超过72小时要求"
+                f"{_precise_duration_text(facts['overdue_seconds'])}{no_rounds}。"
             )
         if (
             kind == "course_record_interval_over_72h"
@@ -2457,8 +2457,8 @@ def customer_finding_from_controlled_facts(
         ):
             return (
                 f"权威入院时间（{start_time}）至首次查房（{facts['interval_end_time']}）间隔"
-                f"{_course_007_duration_text(facts['interval_seconds'])}，超过72小时要求"
-                f"{_course_007_duration_text(facts['overdue_seconds'])}。"
+                f"{_precise_duration_text(facts['interval_seconds'])}，超过72小时要求"
+                f"{_precise_duration_text(facts['overdue_seconds'])}。"
             )
         start_position = facts.get("interval_start_position")
         end_position = facts.get("interval_end_position")
@@ -2490,8 +2490,8 @@ def customer_finding_from_controlled_facts(
             f"共识别{record_count}次有效查房记录；"
             f"第{start_position}次查房（{facts['interval_start_time']}）至"
             f"第{end_position}次查房（{facts['interval_end_time']}）间隔"
-            f"{_course_007_duration_text(interval_seconds)}，超过72小时要求"
-            f"{_course_007_duration_text(overdue_seconds)}。"
+            f"{_precise_duration_text(interval_seconds)}，超过72小时要求"
+            f"{_precise_duration_text(overdue_seconds)}。"
         )
 
     def labels(key: str, mapping: Mapping[str, str]) -> str:
@@ -4089,6 +4089,13 @@ def customer_finding_from_controlled_facts(
                 if isinstance(interval_hours, (int, float))
                 else "间隔无法计算"
             )
+            exact = _format_exact_elapsed_duration(
+                started_at=facts.get("transfer_order_time"), finished_at=record_time,
+                threshold_hours=24, preserve_microseconds=True,
+            )
+            # 小数小时可能将临界超时舍为24.0；展示既有权威时刻的精确间隔。
+            if exact and "超时" in exact:
+                interval_text = f"间隔 {exact}"
             return f"记录时间{time_text}，{interval_text}"
 
         return (

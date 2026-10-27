@@ -5778,6 +5778,13 @@ async def _execute_extended_document_group(
             continue
 
         if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"}:
+            transfer_visibility_date = None
+            transfer_visibility_error = None
+            if rule_id == "LX0609-10-02-01" and len(horizon_rows) == 1 and horizon_rows[0].get("basis") == "discharge_date":
+                try:
+                    transfer_visibility_date = date.fromisoformat(str(horizon_rows[0].get("task_frozen_date") or ""))
+                except ValueError:
+                    transfer_visibility_error = "authoritative_time_missing"
             outcome = evaluate_transfer_documentation(
                 rule_id=rule_id,
                 nondrug_order_error=nondrug_order_error,
@@ -5788,7 +5795,8 @@ async def _execute_extended_document_group(
                 transfer_out_rows=transfer_out_rows,
                 evaluation_horizon_date=transfer_horizon_date,
                 evaluation_horizon_datetime=transfer_horizon_datetime,
-                evaluation_horizon_error=transfer_horizon_error,
+                evaluation_horizon_error=transfer_horizon_error or transfer_visibility_error,
+                evaluation_visibility_date=transfer_visibility_date,
             )
             final_state, reason_code = outcome.final_state, outcome.reason_code
             if outcome.display_facts is not None:
@@ -5800,6 +5808,7 @@ async def _execute_extended_document_group(
                 transfer_in_rows=transfer_in_rows,
                 transfer_out_rows=transfer_out_rows,
                 display_facts=outcome.display_facts,
+                consumed_rows=outcome.consumed_rows,
             )
             decisions.append(
                 _decision(
