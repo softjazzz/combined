@@ -766,8 +766,10 @@ def _typed_basic_decisions(
             if safe_facts is not None:
                 customer_display_facts.append((rule_id, safe_facts))
 
-    def format_time(value: datetime | None) -> str:
-        return value.strftime("%Y-%m-%d %H:%M:%S") if value is not None else ""
+    def format_time(value: datetime | None, *, precise: bool = False) -> str:
+        if value is None:
+            return ""
+        return value.isoformat(sep=" ") if precise else value.strftime("%Y-%m-%d %H:%M:%S")
 
     def timeliness_fact(
         *,
@@ -790,11 +792,11 @@ def _typed_basic_decisions(
             "threshold_hours": threshold_hours,
         }
         if anchor is not None:
-            facts["anchor_time"] = format_time(anchor)
+            facts["anchor_time"] = format_time(anchor, precise=rule_id == "LX0609-09-01-01")
         elif anchor_date is not None:
             facts["anchor_date"] = anchor_date.isoformat()
         if observed is not None:
-            facts["observed_time"] = format_time(observed)
+            facts["observed_time"] = format_time(observed, precise=rule_id == "LX0609-09-01-01")
         if anchor is not None and observed is not None:
             elapsed_hours = (observed - anchor).total_seconds() / 3600
             facts["elapsed_hours"] = round(elapsed_hours, 2)
@@ -1050,9 +1052,9 @@ def _typed_basic_decisions(
                 if event.document.document_id:
                     event_fact["source_document_id"] = event.document.document_id
                 if rescue_end is not None:
-                    event_fact["rescue_end_time"] = format_time(rescue_end)
+                    event_fact["rescue_end_time"] = format_time(rescue_end, precise=True)
                 if record_time is not None:
-                    event_fact["document_completion_time"] = format_time(record_time)
+                    event_fact["document_completion_time"] = format_time(record_time, precise=True)
                 if rescue_end is None:
                     event_fact["event_state"] = "rescue_end_time_missing"
                     rescue_event_facts.append(event_fact)
