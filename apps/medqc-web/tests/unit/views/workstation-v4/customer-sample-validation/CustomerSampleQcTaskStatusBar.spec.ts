@@ -62,16 +62,28 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 describe('CustomerSampleQcTaskStatusBar', () => {
   it('C11 结算后的任务卡显示75项有效结果及1项失败，不再显示0条回写', () => {
     const job = buildJob({
-      status: 'failed', total_records: 1, customer_rule_count: 76, items: [],
+      status: 'failed',
+      total_records: 1,
+      customer_rule_count: 76,
+      items: [],
       progress: { processed_records: 1, total_records: 1, step_key: 'failed' },
     })
     Object.assign(job.summary!, {
-      total_records: 1, success_count: 0, failed_count: 1, progress_percent: 0,
-      execution_status: 'partial_failed', completed_rule_count: 75, failed_rule_count: 1,
-      display_status_counts: {}, status_breakdown: {},
+      total_records: 1,
+      success_count: 0,
+      failed_count: 1,
+      progress_percent: 0,
+      execution_status: 'partial_failed',
+      completed_rule_count: 75,
+      failed_rule_count: 1,
+      display_status_counts: {},
+      status_breakdown: {},
       automatic_failed_rule_retry: { status: 'not_retryable', should_retry: false },
     })
-    const wrapper = mount(CustomerSampleQcTaskStatusBar, { props: { task: job }, global: { stubs } })
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: { task: job },
+      global: { stubs },
+    })
     const text = wrapper.text()
     expect(text).toContain('部分执行失败')
     expect(text).toContain('病历进度：已处理 1 / 1 份（全部成功 0 份）')
@@ -200,6 +212,37 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(liveResult).toContain('正在核对病程质量（4 / 10）')
     expect(liveResult).not.toContain('合规')
     expect(liveResult).not.toContain('不合规')
+    expect(wrapper.text()).not.toContain('正在准备首份结果')
+  })
+
+  it('已有规则族结果但尚未完成病历时，不再提示准备首份结果', () => {
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: {
+        task: buildJob({
+          total_records: 20,
+          success_count: 0,
+          items: [],
+          summary: {
+            ...buildJob().summary!,
+            total_records: 20,
+            success_count: 0,
+            progress_percent: 0,
+            display_status_counts: { non_compliant: 2 },
+            progress: { processed_records: 0, total_records: 20 },
+            stream_state: {
+              kind: 'native_executor_phase',
+              event: 'published',
+              executor_key: 'basic_timeliness',
+              partial_item_count: 2,
+            },
+          },
+        }),
+      },
+      global: { stubs },
+    })
+    expect(wrapper.text()).toContain('已有 2 项有效结果')
+    expect(wrapper.text()).not.toContain('正在准备首份结果')
+    expect(wrapper.text()).toContain('已完成 0 / 20')
   })
 
   it('运行中放大进度并轮播服务端已回写的真实结果', async () => {

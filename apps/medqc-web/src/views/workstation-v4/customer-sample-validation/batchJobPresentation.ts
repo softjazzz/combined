@@ -283,6 +283,12 @@ function resolveLiveExecutionPhase(job: SichuanBatchJob): BatchJobExecutionPhase
   const completedBatches = numeric(streamState.completed_batches)
   const totalBatches = numeric(streamState.total_batches)
   const countText = totalBatches > 0 ? `（${completedBatches} / ${totalBatches}）` : ''
+  if (event === 'published') {
+    return {
+      label: '结果回写',
+      text: `已回写 ${numeric(streamState.partial_item_count)} 项已校验结果，其他规则继续执行`,
+    }
+  }
   if (event === 'started') {
     return { label: '执行动态', text: `正在核对${executorLabel}${countText}` }
   }

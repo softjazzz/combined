@@ -205,6 +205,7 @@ class Luxian0609ExecutionEngine:
         default_deadline_seconds: float,
         max_concurrency: int,
         trace_sink: SafeTraceSink | None = None,
+        outcome_sink: Callable[[FamilyExecutionOutcome], None] | None = None,
     ) -> Luxian0609EngineReport:
         batches = tuple(executor_batches)
         if not batches:
@@ -396,7 +397,14 @@ class Luxian0609ExecutionEngine:
         async def run(executor_key: str) -> FamilyExecutionOutcome:
             try:
                 with timing_labels(family=executor_key):
-                    return await run_family(executor_key)
+                    outcome = await run_family(executor_key)
+                    if outcome_sink is not None:
+                        try:
+                            # 已离开族并发槽；旁路异常不得重跑或改变执行结果。
+                            outcome_sink(outcome)
+                        except Exception:
+                            logger.exception("LX0609 规则族实时发布旁路失败: executor_key=%s", executor_key)
+                    return outcome
             except asyncio.CancelledError:
                 raise
             except Exception:

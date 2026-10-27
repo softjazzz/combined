@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping
@@ -31,6 +32,7 @@ from .evidence_snapshot_provider import (
     build_luxian_0609_evidence_snapshot,
 )
 from .engine import FamilyExecutionFailure, Luxian0609ExecutionEngine
+from .live_results import live_result_sink
 from .execution_contract import (
     FamilyUsageAttribution,
     build_family_technical_envelope,
@@ -105,6 +107,48 @@ from ..luxian_0609_trigger_gate import Luxian0609GateDecision
 
 
 logger = logging.getLogger(__name__)
+
+
+def _family_outcome_decisions(outcome, snapshot, typed_rule_ids):
+    decisions = list(outcome.envelope.decisions)
+    if isinstance(outcome, FamilyExecutionFailure) and outcome.failure_kind != "contract":
+        decisions.extend(
+            RuleDecision(
+                rule_id=rule_id, snapshot_hash=snapshot.snapshot_hash,
+                applicability=ApplicabilityState.ERROR, evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="executor_timeout" if outcome.failure_kind == "timeout" else "executor_exception",
+                fact_refs=(), evaluator_version="family-runtime-failure-v1", confidence=None,
+            )
+            for rule_id in outcome.selected_rule_ids if rule_id in typed_rule_ids
+        )
+    return decisions
+
+
+def _published_family_results(*, outcome, snapshot, materials, wrapper_rules, typed_rule_ids, delivery_mode):
+    """实时与最终汇总复用同一Binding/Finalizer，不从族原始输出另造结论。"""
+    rule_ids = outcome.selected_rule_ids
+    typed_ids = tuple(rule_id for rule_id in rule_ids if rule_id in typed_rule_ids)
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=tuple(d for d in _family_outcome_decisions(outcome, snapshot, typed_rule_ids)
+                        if d.rule_id in typed_ids),
+        expected_rule_ids=typed_ids, snapshot=snapshot, evidence_materials=materials,
+    ) if typed_ids else ()
+    envelope = outcome.envelope
+    context = Luxian0609ExecutionContext(
+        enabled=True, wrapper_rules=[r for r in wrapper_rules if r.get("rule_id") in rule_ids],
+        native_results=deepcopy([r for r in envelope.results if r.get("rule_id") not in typed_ids]),
+        evidence_snapshot=snapshot, evidence_materials=materials, reduced_decisions=reduced,
+        customer_display_facts=deepcopy(envelope.customer_display_facts),
+        native_usage_attributions=(_build_execution_usage_attribution(
+            executor_key=outcome.executor_key, rule_ids=rule_ids, execution=envelope,
+        ),), delivery_mode=delivery_mode,
+    )
+    published = aggregate_luxian_0609_orchestrated_results(
+        orchestrated={"results": []}, context=context, visit_id="", model_name="", evidence_payload=None,
+    )
+    return [row for row in published["results"]
+            if row.get("status") not in {"technical_error", "uncertain"}]
 
 
 @dataclass
@@ -472,6 +516,21 @@ async def prepare_luxian_0609_execution(
         contracts_by_id = {
             item.rule_id: item for item in load_luxian_0609_rule_contracts()
         }
+        sink = (live_result_sink()
+                if getattr(settings, "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", False) else None)
+
+        def publish_family(outcome):
+            if sink is not None:
+                rows = _published_family_results(
+                    outcome=outcome, snapshot=evidence_snapshot, materials=evidence_materials,
+                    wrapper_rules=wrapper_rules, typed_rule_ids=typed_decision_rule_ids,
+                    delivery_mode=(CANONICAL_RESULT_DELIVERY_MODE
+                        if getattr(settings, "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", False)
+                        else "legacy_compatible"),
+                )
+                if rows:
+                    sink(outcome.executor_key, rows)
+
         try:
             engine_report = await Luxian0609ExecutionEngine(
                 registry=build_luxian_0609_legacy_executor_registry(
@@ -495,6 +554,7 @@ async def prepare_luxian_0609_execution(
                     )
                 ),
                 trace_sink=trace_sink,
+                **({"outcome_sink": publish_family} if sink is not None else {}),
             )
         except Exception:
             # 开关开启后禁止重跑冻结旧链：引擎可能已调用过部分模型，回退会造成
@@ -529,28 +589,9 @@ async def prepare_luxian_0609_execution(
                     # 执行器已经进入运行但未返回成本信封；零仅是已观测下界。
                     native_usage_unknown_executor_keys.append(outcome.executor_key)
                 native_results.extend(envelope.results)
-                native_rule_decisions.extend(envelope.decisions)
-                if isinstance(outcome, FamilyExecutionFailure) and outcome.failure_kind != "contract":
-                    # deadline/取消等由引擎直接生成旧结果，执行器来不及返回 typed
-                    # 决策。只转换已确认的运行失败，不修补成功信封中的缺项。
-                    native_rule_decisions.extend(
-                        RuleDecision(
-                            rule_id=rule_id,
-                            snapshot_hash=evidence_snapshot.snapshot_hash,
-                            applicability=ApplicabilityState.ERROR,
-                            evidence_state=EvidenceState.TECHNICAL_ERROR,
-                            qc_direction=QcDirection.UNKNOWN,
-                            reason_code=(
-                                "executor_timeout" if outcome.failure_kind == "timeout"
-                                else "executor_exception"
-                            ),
-                            fact_refs=(),
-                            evaluator_version="family-runtime-failure-v1",
-                            confidence=None,
-                        )
-                        for rule_id in outcome.selected_rule_ids
-                        if rule_id in typed_decision_rule_ids
-                    )
+                native_rule_decisions.extend(_family_outcome_decisions(
+                    outcome, evidence_snapshot, typed_decision_rule_ids,
+                ))
                 native_customer_display_facts.extend(envelope.customer_display_facts)
                 if envelope.diagnostic_semantic_snapshot is not None:
                     native_diagnostic_semantic_snapshots.extend(

@@ -16,6 +16,8 @@ from fastapi import HTTPException
 from ..core.settings import get_settings
 from ..core.execution_timing import current_timing_snapshot, finish_current_timing, observe_worker_timing, timed
 from .luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
+from .luxian_0609.live_results import LiveResultBuffer, live_result_scope
+from .qc_workspace.canonical_result_store import validated_customer_explanation
 from .luxian_0609.privacy_identity_context import _Luxian0609IdentityCollector
 from .luxian_0609.privacy_request_scope import luxian_0609_case_identity_scope
 from .case_identity import CaseRef, case_refs_from_records, normalize_case_refs
@@ -1568,6 +1570,15 @@ async def run_sichuan_workspace_batch_job(
         total_processing_time = 0.0
         first_result_latency: Optional[float] = None
         first_result_source = ""
+        if is_failed_rule_retry and retry_base_summary.get("first_result_source") in {
+            "validated_family_write", "validated_record_write",
+        }:
+            prior_latency = float(retry_base_summary.get("first_result_latency") or 0.0)
+            if prior_latency > 0:
+                first_result_latency = prior_latency
+                first_result_source = retry_base_summary["first_result_source"]
+        live_buffer = LiveResultBuffer()
+        last_live_flush = {"result": 0.0, "phase": 0.0}
         executor_program = 0
         executor_llm = 0
         executor_native = 0
@@ -2039,6 +2050,62 @@ async def run_sichuan_workspace_batch_job(
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
+        def _live_items():
+            rows = live_buffer.combine(all_items)
+            if is_failed_rule_retry:
+                rows, _ = merge_failed_rule_retry_results(
+                    base_items=retry_base_items, base_failures=retry_base_failures,
+                    retry_items=rows, retry_failures=all_failed_records,
+                )
+            return rows
+
+        def _publish_family(record, executor_key, published):
+            nonlocal first_result_latency, first_result_source
+            if not enable_incremental_results or not native_direct_enabled:
+                return
+            record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
+            case = CaseRef(str(record.get("institute_id") or "").strip(),
+                str(record.get("patient_id") or "").strip(), str(record.get("visit_id") or record_id).strip())
+            allowed = set(record_rule_map.get(case.as_key()) or record_rule_map.get(case.visit_id)
+                or record_rule_map.get(record_id) or valid_rule_ids)
+            rows = []
+            for raw in published:
+                rule_id = raw.get("rule_id")
+                if (rule_id not in allowed or rule_id not in output_rule_states
+                        or raw.get("schema_version") != "lx0609-customer-result-v2"
+                        or raw.get("status") in {"technical_error", "uncertain"}):
+                    continue
+                validated_customer_explanation(raw, rule_id=rule_id, status=raw["status"])
+                rows.append({**deepcopy(raw), "record_id": record_id, "record_key": case.as_key(),
+                    "institute_id": case.institute_id, "patient_id": case.patient_id, "visit_id": case.visit_id,
+                    "patient_name": str(record.get("patient_name") or ""),
+                    "department": str(record.get("department") or ""),
+                    "rule_job_id": output_rule_states[rule_id]["rule_job_id"],
+                    "rule_code": rule_id,
+                    "target_document_type": _resolve_luxian_target_document_type(output_rule_states[rule_id]["rule"]),
+                })
+            if not rows:
+                return
+            live_buffer.add(rows)
+            now = time.perf_counter()
+            if last_live_flush["result"] and now - last_live_flush["result"] < 1.0:
+                return
+            preview = _live_items()
+            processed = int(completed_records_state["count"])
+            result = workspace.update_batch_job_progress(
+                job_id=job_id, **attempt_kwargs, step_key="run", rule_index=0,
+                rule_count=total_rules, processed_records=processed, total_records=total_records,
+                summary_patch={**_build_progress_patch(processed), "stream_state": {
+                    "enabled": True, "kind": "native_executor_phase", "event": "published",
+                    "executor_key": executor_key, "partial_item_count": len(preview),
+                }}, progress_patch=_record_runtime_progress(processed), items=preview,
+            )
+            if result is not None and result.get("status") != "canceled":
+                if first_result_latency is None and not is_failed_rule_retry:
+                    first_result_latency = max(0.0, time.perf_counter() - job_wall_started)
+                    first_result_source = "validated_family_write"
+                last_live_flush["result"] = now
+
         async def _evaluate_single_record_impl(record: Dict[str, Any]) -> Dict[str, Any]:
             _raise_if_cancelled()
             record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
@@ -2164,9 +2231,12 @@ async def run_sichuan_workspace_batch_job(
                             and len(trace_state["finished_executor_keys"])
                             >= trace_state["total_batches"]
                         )
-                        if not should_persist_terminal_state:
+                        now = time.perf_counter()
+                        phase_due = enable_incremental_results and now - last_live_flush["phase"] >= 1.0
+                        if not should_persist_terminal_state and not phase_due:
                             return
-                        trace_state["terminal_state_persisted"] = True
+                        trace_state["terminal_state_persisted"] = should_persist_terminal_state
+                        last_live_flush["phase"] = now
                         workspace.update_batch_job_progress(
                             job_id=job_id,
                             **attempt_kwargs,
@@ -3320,7 +3390,11 @@ async def run_sichuan_workspace_batch_job(
                         started_clock = time.perf_counter()
                         result = None
                         try:
-                            result = await _evaluate_single_record_impl(record)
+                            with live_result_scope(
+                                lambda key, rows: _publish_family(record, key, rows)
+                            ) if enable_incremental_results and native_direct_enabled else nullcontext():
+                                result = await _evaluate_single_record_impl(record)
+                            result["_live_case"] = (institute_id, patient_id, visit_id)
                             return result
                         finally:
                             record_timing_attempts.append({
@@ -3399,7 +3473,8 @@ async def run_sichuan_workspace_batch_job(
                 )
 
             record_first_result_latency = float(record_result.get("first_result_latency") or 0.0)
-            if record_first_result_latency > 0 and first_result_latency is None:
+            if (record_first_result_latency > 0 and first_result_latency is None
+                    and not (enable_incremental_results and native_direct_enabled)):
                 first_result_latency = record_first_result_latency
                 first_result_source = str(record_result.get("first_result_source") or "")
 
@@ -3470,10 +3545,11 @@ async def run_sichuan_workspace_batch_job(
                     state["failed_records"].append(failed)
                     all_failed_records.append(failed)
 
+            live_buffer.finish(record_result.get("_live_case", ()))
             summary_patch = _build_progress_patch(processed_records_count)
             update_kwargs: Dict[str, Any] = {}
             if enable_incremental_results:
-                progress_items = list(all_items)
+                progress_items = live_buffer.combine(all_items)
                 progress_failures = list(all_failed_records)
                 if is_failed_rule_retry:
                     progress_items, progress_failures = merge_failed_rule_retry_results(
@@ -3497,7 +3573,7 @@ async def run_sichuan_workspace_batch_job(
                     "failed_records": progress_failures,
                 }
 
-            workspace.update_batch_job_progress(
+            write_result = workspace.update_batch_job_progress(
                 job_id=job_id,
                 **attempt_kwargs,
                 step_key="run",
@@ -3509,6 +3585,11 @@ async def run_sichuan_workspace_batch_job(
                 progress_patch=_record_runtime_progress(processed_records_count),
                 **update_kwargs,
             )
+
+            if (enable_incremental_results and not is_failed_rule_retry and first_result_latency is None and all_items
+                    and write_result is not None and write_result.get("status") != "canceled"):
+                first_result_latency = max(0.0, time.perf_counter() - job_wall_started)
+                first_result_source = "validated_record_write"
 
         initial_progress_patch = _build_progress_patch(0)
         if enable_incremental_results:
