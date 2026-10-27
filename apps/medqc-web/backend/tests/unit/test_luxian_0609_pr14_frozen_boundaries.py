@@ -63,6 +63,35 @@ async def test_future_discharge_source_cannot_change_terminal_type():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('future_source', ['death_record', 'discharge_record'])
+@pytest.mark.parametrize('visible_discharge', [False, True])
+async def test_explicit_empty_death_selection_never_falls_back_to_future_evidence(
+    future_source, visible_discharge,
+):
+    """正式执行到保存读取均不能把已排除的未来正文重新投影出来。"""
+    marker = 'EXCLUDED_FUTURE_DEATH_BODY'
+    future = death_row(90000, document_id='FUTURE_ONLY', death_datetime=DEATH,
+                       record_content=marker)
+    deaths = [future] if future_source == 'death_record' else []
+    discharges = [future] if future_source == 'discharge_record' else []
+    if visible_discharge:
+        discharges.append({'document_id': 'VISIBLE_DISCHARGE', 'document_title': '出院记录',
+                           'record_content': '本次普通出院记录正文。',
+                           'record_time': '2026-01-01 09:00:00'})
+    result = await death_final(deaths, discharge_rows=discharges, created_at=FROZEN)
+    expected = ('not_applicable', 'trigger_absent_complete') if visible_discharge else ('data_gap', 'source_empty')
+    assert (result['status'], result['reason_code']) == expected
+    loaded = saved_roundtrip(result)
+    assert (loaded['status'], loaded['reason_code']) == expected
+    assert marker not in str(result.get('customer_evidence'))
+    assert marker not in str(loaded.get('evidence'))
+    assert loaded.get('customer_display_facts') == result.get('customer_display_facts')
+    if not visible_discharge:
+        assert not result.get('customer_evidence')
+        assert not loaded.get('evidence')
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("offset,selected", [(0, "AT_BOUNDARY"), (1, "D1")])
 async def test_death_exact_frozen_boundary_keeps_microsecond_precision(offset, selected):
     original = death_row(death_datetime=DEATH)

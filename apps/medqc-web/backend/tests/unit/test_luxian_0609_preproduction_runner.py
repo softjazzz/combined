@@ -330,6 +330,10 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         if item.source_contract_state == "typed_shadow_v1"
     }
     typed_source_only_rule_ids = {
+        "LX0609-04-02-09",
+        "LX0609-06-03-05",
+        "LX0609-06-03-06",
+        "LX0609-10-04-01",
         "LX0609-01-02-02",
         "LX0609-04-01-04",
         "LX0609-04-01-05",

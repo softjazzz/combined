@@ -186,8 +186,9 @@ def _sqlite_new_session_roundtrip(canonical, path):
     ({"death_time": "2026-07-01"}, [{"patient_status": "死亡"}], "data_gap", None),
     ({"death_time": "2026-07-01 03:45:00"},
      [{"death_datetime": "2026-07-01 04:45:00"}], "data_gap", None),
+    # 仅日期不能伪造成00:00并与登记时刻制造冲突；正文确缺时分仍为确定缺项。
     ({"death_time": "2026-07-01", "record_content": "死亡时间：2026-07-01。"},
-     [{"death_datetime": "2026-07-01 03:45:00"}], "data_gap", None),
+     [{"death_datetime": "2026-07-01 03:45:00"}], "non_compliant", "failed"),
 ])
 def test_time_precision_results_survive_formal_finalizer_and_sqlite_new_session(
     tmp_path, death_row, registration_rows, expected, criterion_state,

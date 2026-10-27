@@ -4149,7 +4149,8 @@ async def _execute_extended_document_group(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=("death_record", "discharge_record", "inpat_registration"),
                 final_state=outcome.final_state, reason_code=outcome.reason_code,
-                document_refs=selected_refs, exact_document_refs=bool(selected_refs),
+                # 空集合也是执行器的明确选择，不能退回整个来源重新带入未来文书。
+                document_refs=selected_refs, exact_document_refs=True,
             ))
             continue
 

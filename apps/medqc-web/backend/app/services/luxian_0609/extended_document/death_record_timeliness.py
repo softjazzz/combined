@@ -69,12 +69,19 @@ def evaluate_death_record_timeliness(
         for source, rows in (("death_record", death_rows), ("discharge_record", discharge_rows))
         for row in rows if _terminal_kind(row) == "death"
     )
-    ordinary = any(_terminal_kind(row) == "discharge" for row in (*death_rows, *discharge_rows))
+    ordinary = tuple(
+        (source, row)
+        for source, rows in (("death_record", death_rows), ("discharge_record", discharge_rows))
+        for row in rows if _terminal_kind(row) == "discharge"
+    )
     if records and ordinary:
         return DeathRecordTimelinessOutcome("data_gap", "authoritative_time_conflict")
     if not records:
         if ordinary:
-            return DeathRecordTimelinessOutcome("not_applicable", "trigger_absent_complete")
+            # 不适用也绑定实际用于分类的可见出院文书，不回退引用整个来源。
+            return DeathRecordTimelinessOutcome(
+                "not_applicable", "trigger_absent_complete", consumed_rows=ordinary,
+            )
         return DeathRecordTimelinessOutcome("data_gap", "source_empty")
     # 在精度丢失前核原值；旧死亡上下文会将纯日期解析成午夜，不能用于本规则。
     raw_death_times = [

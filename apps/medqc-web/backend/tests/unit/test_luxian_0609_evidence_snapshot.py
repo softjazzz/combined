@@ -304,7 +304,7 @@ def test_source_registry_covers_every_document_type_declared_by_registered_rules
         for contract in contracts
         for document_type in contract.applicable_documents
     }
-    assert len(contracts) == 86  # 截至 2026-10-15 规则目录共 86 条（新增 03-01-05）
+    assert len(contracts) == 90  # PR14新增4条仅验收规则，完整目录仍须逐项覆盖来源。
     assert set(registry) == declared_documents
     assert all(entry.binding_fields == EXACT_VISIT_BINDING_FIELDS for entry in registry.values())
     assert all(entry.default_completeness is SourceCompleteness.UNPROVEN for entry in registry.values())
