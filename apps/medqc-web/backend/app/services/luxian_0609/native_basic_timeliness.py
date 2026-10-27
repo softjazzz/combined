@@ -17,6 +17,7 @@ from .basic_timeliness_facts import (
     extract_document_events,
     extract_rescue_events,
     is_generic_upper_physician_round,
+    parse_authoritative_datetime,
 )
 from .basic_timeliness_customer_projection import (
     safe_basic_timeliness_customer_display_facts,
@@ -574,11 +575,48 @@ def _typed_basic_decisions(
             discharge_issue = ("snapshot_mismatch", True)
             discharge_rows = ()
 
+    horizon_datetime_for_filter: datetime | None = None
+    horizon_date_for_filter: date | None = None
+    horizon_filter_issue = "authoritative_time_missing"
+    try:
+        frozen_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
+        if len(frozen_rows) == 1:
+            frozen_row = frozen_rows[0]
+            if frozen_row.get("basis") == "discharge_date":
+                # 出院是临床观察终点，不是文书可见性截止：出院后补写但在任务冻结前
+                # 完成的记录仍须按原24/8/48/72小时合同判定。
+                horizon_date_for_filter = date.fromisoformat(str(frozen_row["task_frozen_date"]))
+            else:
+                horizon_datetime_for_filter = parse_authoritative_datetime(frozen_row.get("horizon_datetime"))
+                if frozen_row.get("horizon_date"):
+                    horizon_date_for_filter = date.fromisoformat(str(frozen_row["horizon_date"]))
+            if horizon_datetime_for_filter is not None or horizon_date_for_filter is not None:
+                horizon_filter_issue = ""
+            if frozen_row.get("basis") != "discharge_date" and frozen_row.get("horizon_datetime") and horizon_datetime_for_filter is None:
+                horizon_filter_issue = "authoritative_time_missing"
+            if (horizon_datetime_for_filter is not None and horizon_date_for_filter is not None
+                and horizon_datetime_for_filter.date() != horizon_date_for_filter):
+                horizon_filter_issue = "authoritative_time_conflict"
+    except EvidenceMaterialTruncated:
+        horizon_filter_issue = "source_truncated"
+    except EvidenceMaterialUnavailable:
+        horizon_filter_issue = "source_unavailable"
+    except (ValueError, TypeError, KeyError):
+        horizon_filter_issue = "authoritative_time_missing"
+
+    def within_frozen_horizon(value: datetime | None) -> bool:
+        if value is None:
+            return True  # 未知时刻仍参与资料缺口判断，不能当成未来记录丢弃。
+        if horizon_datetime_for_filter is not None:
+            return value <= horizon_datetime_for_filter
+        return horizon_date_for_filter is None or value.date() <= horizon_date_for_filter
+
     # 001 的合规解释必须能回到实际被选中的入院记录。时间计算仍只使用
     # 权威 record time；这里额外保留同一行的内部文书 ID，供安全聚合层生成
     # 不可逆引用。没有可靠 ID 时只展示时间事实，不猜测文书。
     substantive_admission_rows = tuple(
-        row for row in admission_rows if _is_substantive_admission_record(row)
+        event.row for event in extract_document_events(admission_rows)
+        if _is_substantive_admission_record(event.row) and within_frozen_horizon(event.observed_time)
     )
     admission_record_events = tuple(
         sorted(
@@ -777,6 +815,10 @@ def _typed_basic_decisions(
 
     decisions: list[RuleDecision] = []
     for rule_id in rule_ids:
+        if rule_id in {"LX0609-01-01-01", "LX0609-01-02-01", "LX0609-02-01-01", "LX0609-02-01-02"} and horizon_filter_issue:
+            # 已有目标文书也必须证明属于冻结范围，不能只在目标缺失时检查终点。
+            decisions.append(gap(rule_id, horizon_filter_issue))
+            continue
         if rule_id == "LX0609-01-02-01":
             anchor, _anchor_date, anchor_gap = admission_anchor(rule_id)
             if anchor_gap is not None or anchor is None:
@@ -802,6 +844,10 @@ def _typed_basic_decisions(
                 reason, technical = first_course_issue
                 decisions.append(gap(rule_id, reason, technical=technical))
                 continue
+            first_course_rows = tuple(
+                event.row for event in extract_document_events(first_course_rows)
+                if within_frozen_horizon(event.observed_time)
+            )
             if not first_course_rows:
                 missing_decision = missing_target_decision(
                     rule_id,
@@ -1378,43 +1424,9 @@ def _typed_basic_decisions(
         qualifying_events: list[tuple[datetime, str | None, str, Mapping[str, Any]]] = []
         qualifying_missing_time = False
         ambiguous_round = False
-        horizon_datetime_for_filter: datetime | None = None
-        horizon_date_for_filter: date | None = None
-        if rule_id == "LX0609-02-01-02":
-            try:
-                horizon_rows_for_filter = tuple(
-                    materials.rows(EVALUATION_HORIZON_SOURCE_KEY)
-                )
-                if len(horizon_rows_for_filter) == 1:
-                    horizon_row_for_filter = horizon_rows_for_filter[0]
-                    raw_horizon_datetime = horizon_row_for_filter.get(
-                        "horizon_datetime"
-                    )
-                    if raw_horizon_datetime:
-                        parsed_horizon = datetime.fromisoformat(
-                            str(raw_horizon_datetime)
-                        )
-                        if parsed_horizon.tzinfo is None:
-                            horizon_datetime_for_filter = parsed_horizon
-                    raw_horizon_date = horizon_row_for_filter.get("horizon_date")
-                    if raw_horizon_date:
-                        horizon_date_for_filter = date.fromisoformat(
-                            str(raw_horizon_date)
-                        )
-            except (EvidenceMaterialTruncated, TypeError, ValueError):
-                pass
         for source_key, event in course_events:
             event_time = event.observed_time
-            if (
-                event_time is not None
-                and horizon_datetime_for_filter is not None
-                and event_time > horizon_datetime_for_filter
-            ) or (
-                event_time is not None
-                and horizon_datetime_for_filter is None
-                and horizon_date_for_filter is not None
-                and event_time.date() > horizon_date_for_filter
-            ):
+            if not within_frozen_horizon(event_time):
                 continue
             role = classify_course_round_role(event.row, source_key=source_key)
             # 客户确认：标准上级医师查房文书已能证明本次查房身份，
