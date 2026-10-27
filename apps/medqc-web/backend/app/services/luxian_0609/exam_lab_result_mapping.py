@@ -32,6 +32,7 @@ from .exam_lab_fact_extraction import (
     events_for_family,
 )
 from .handbook_exam_lab import REPORT_RULES as HANDBOOK_REPORT_RULES, safe_handbook_display_facts
+from .routine_lab_presence import ROUTINE_RULES, safe_routine_lab_facts
 
 # 报告后病程时间的受控说明：仅有提交时间 / 记录时间与报告时间冲突。
 _RESPONSE_TIME_STATES = frozenset({"submit_only", "record_time_conflict"})
@@ -48,6 +49,7 @@ class ExamLabOutcome:
 EXAM_LAB_CUSTOMER_RULE_IDS = frozenset(
     {
         CT_CONSISTENCY_RULE,
+        *ROUTINE_RULES,
         "LX0609-06-01-02",
         "LX0609-06-01-03",
         "LX0609-06-01-04",
@@ -174,6 +176,8 @@ def safe_exam_lab_customer_display_facts(
     """
 
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id in ROUTINE_RULES:
+        return safe_routine_lab_facts(normalized_rule_id, raw)
     if normalized_rule_id == CT_CONSISTENCY_RULE:
         return validate_ct_display_facts(raw)
     if normalized_rule_id not in EXAM_LAB_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
@@ -660,6 +664,10 @@ def exam_lab_customer_fact_status_is_valid(
     """校验 2026 手册新增报告完整性事实与已裁决状态一致。"""
 
     normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id in ROUTINE_RULES:
+        return (safe_facts is None if status in {"data_gap", "technical_error"}
+                else status in {"compliant", "non_compliant", "not_applicable"}
+                and safe_routine_lab_facts(normalized_rule_id, safe_facts) is not None)
     if normalized_rule_id == CT_CONSISTENCY_RULE:
         return ct_display_status_matches(status, safe_facts)
     if normalized_rule_id not in HANDBOOK_REPORT_RULES:

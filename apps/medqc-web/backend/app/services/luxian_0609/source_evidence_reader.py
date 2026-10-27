@@ -55,6 +55,7 @@ CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY = "inpat_nondrug_order.exam_lab_order"
 CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY = "inpat_nondrug_order.rescue_order"
 CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
 EVALUATION_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
+ROUTINE_LAB_ITEM_SOURCE_KEY = "labtest_item_report.routine_panel"
 AUTHORITATIVE_DOCUMENT_TIME_FIELDS = (
     "record_time",
     "record_datetime",
@@ -767,6 +768,9 @@ _SNAPSHOT_SOURCE_FIELDS[EVALUATION_HORIZON_SOURCE_KEY] = (
     "record_scene",
     "row_ref",
 )
+_SNAPSHOT_SOURCE_FIELDS[ROUTINE_LAB_ITEM_SOURCE_KEY] = tuple(dict.fromkeys((
+    *_NATIVE_SOURCE_FIELDS["labtest_item_report"], "report_status", "document_status", "document_title",
+)))
 _SNAPSHOT_SOURCE_FIELDS["inpat_nondrug_order"] = (
     "order_id",
     "order_name",
@@ -1795,7 +1799,8 @@ def read_luxian_0609_snapshot_source_rows(
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
-    columns = set(bundle_assembly._get_table_columns(trusted_schema, normalized_source))
+    table_name = "labtest_item_report" if normalized_source == ROUTINE_LAB_ITEM_SOURCE_KEY else normalized_source
+    columns = set(bundle_assembly._get_table_columns(trusted_schema, table_name))
     required = {"institute_id", "patient_id", "visit_id"}
     if not required.issubset(columns):
         raise SourceEvidenceUnavailable()
@@ -1829,10 +1834,10 @@ def read_luxian_0609_snapshot_source_rows(
         f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST"
         for field in order_columns
     )
-    limit_rows = _source_limit(normalized_source)
+    limit_rows = _source_limit(table_name)
     sql = (
         f"SELECT {select_sql} "
-        f"FROM {bundle_assembly._qualified_table(trusted_schema, normalized_source)} "
+        f"FROM {bundle_assembly._qualified_table(trusted_schema, table_name)} "
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
@@ -1856,7 +1861,7 @@ def read_luxian_0609_snapshot_source_rows(
         source_key=normalized_source,
         rows=[
             _normalize_snapshot_source_row(
-                normalized_source,
+                table_name,
                 dict(row),
             )
             for row in raw_rows[:limit_rows]

@@ -208,6 +208,8 @@ def data_gap_customer_message(
 _CONSULTATION_023_BODY_EXTRACTION_NOTE = "会诊意见按会诊执行记录正文语义提取"
 
 _RULE_MISSING_ITEM_LABELS = {
+    "LX0609-06-03-05": ("同报告完整血常规结果、报告时刻或可核验门诊转抄",),
+    "LX0609-06-03-06": ("同报告完整尿常规结果、报告时刻或可核验门诊转抄",),
     "LX0609-10-04-01": ("真实入院时刻、冻结评价终点及阶段小结/交接班/转科记录",),
     "LX0609-01-01-01": ("入院时间或入院记录时间",),
     "LX0609-01-02-01": ("入院时间、首次病程记录时间或有效正文",),
@@ -289,6 +291,8 @@ _DISCHARGE_EVENT_LABELS = {
     "crisis_value_record": "危急值",
 }
 _RULE_DATA_GAP_MESSAGES = {
+    "LX0609-06-03-05": ("暂无法核对住院血常规结果", "入院/评价时钟、报告关联、完整项目结果或转抄证据不足。", "请核实同报告完整项目及实际结果，资料不足不等于医生漏查。"),
+    "LX0609-06-03-06": ("暂无法核对住院尿常规结果", "入院/评价时钟、报告关联、完整项目结果或转抄证据不足。", "请核实同报告十项结果及实际报告时刻。"),
     "LX0609-10-04-01": (
         "暂无法核对阶段小结30天周期",
         "入院或评价时钟、阶段小结或可替代记录的时间、正文或来源完整性不足。",
@@ -883,6 +887,8 @@ def _evaluation_window_gap_message(
         )
     return None
 _RULE_NON_COMPLIANT_MESSAGES = {
+    "LX0609-06-03-05": ("住院超过48小时未见完整血常规结果", "已核对完整来源，未见同报告血常规结果或有效门诊转抄。", "请复核检验及住院记录并规范记录，保留真实检验时间。"),
+    "LX0609-06-03-06": ("住院超过48小时未见完整尿常规结果", "已核对完整来源，未见同报告尿常规结果或有效门诊转抄。", "请复核检验及住院记录并规范记录，保留真实检验时间。"),
     "LX0609-10-04-01": (
         "住院存在超过30天未完成阶段小结或有效替代记录的周期",
         "已逐周期核对，后续迟到补记不消除已发生的周期缺口。",
@@ -1101,6 +1107,8 @@ _RULE_NON_COMPLIANT_MESSAGES = {
     ),
 }
 _RULE_NOT_APPLICABLE_MESSAGES = {
+    ("LX0609-06-03-05", "trigger_absent_complete"): ("住院尚未超过48小时", "未触发血常规结果的住院时长门槛。", "无需按本质控点处理。"),
+    ("LX0609-06-03-06", "trigger_absent_complete"): ("住院尚未超过48小时", "未触发尿常规结果的住院时长门槛。", "无需按本质控点处理。"),
     ("LX0609-10-04-01", "trigger_absent_complete"): (
         "本次住院尚未超过30天，不启动阶段小结周期要求",
         "按真实入院时刻与冻结评价终点核对，未超过30天。",
@@ -1599,6 +1607,8 @@ _RULE_UNCERTAIN_MESSAGES = {
 # 合规结果也必须回答“为什么合规”。这里仅使用规则目录身份和 reducer 已确认的
 # 终态生成受控短句，不读取病历原文，也不在展示层重新判断规则。
 _RULE_COMPLIANT_FINDINGS = {
+    "LX0609-06-03-05": "已找到完整血常规结果或可核验门诊转抄。",
+    "LX0609-06-03-06": "已找到完整尿常规结果或可核验门诊转抄。",
     "LX0609-10-04-01": "已逐周期核对阶段小结或真实交接/转科替代记录，未发现超过30天的缺口。",
     "LX0609-03-01-05": "已逐条核对正文所引会诊建议，本科室均具体记录了处理、安排或有原因的不采纳决定；本项不代表措施已经实际执行。",
     "LX0609-08-01-05": "已核对出院诊疗经过的具体措施、病情演变及疗效转归，未发现所核查重要事件遗漏。",
@@ -3627,6 +3637,13 @@ def customer_finding_from_controlled_facts(
         if facts.get("expert_support_present") is True:
             return f"已开立特殊级抗菌药物 {medicines} 计划，但专家支持记录缺少可核对的权威时间。"
         return f"已开立特殊级抗菌药物 {medicines} 计划，未找到可关联到该药计划的专家查房或会诊支持记录。"
+
+    if rule_id in {"LX0609-06-03-05", "LX0609-06-03-06"} and kind == "routine_lab_presence_check":
+        label = "血常规" if facts.get("panel") == "blood" else "尿常规"
+        source = {"inpatient_report":"本次住院完整检验报告", "outpatient_transcription":"住院记录中的可核验门诊转抄", "none":"未提供目标结果"}[facts["evidence_kind"]]
+        return (f"{label}：入院时刻{facts.get('admission_time')}，冻结评价终点"
+                f"{facts.get('evaluation_time') or facts.get('evaluation_date')}；依据：{source}；"
+                f"检验日期{facts.get('report_date') or '未取得'}。48小时为住院适用门槛。")
 
     if rule_id == "LX0609-10-04-01" and kind == "stage_summary_interval_check":
         end = facts.get("evaluation_time") or f"{facts.get('evaluation_date')}（仅日期）"

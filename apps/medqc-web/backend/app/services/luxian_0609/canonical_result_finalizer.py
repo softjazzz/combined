@@ -702,6 +702,16 @@ def validate_luxian_0609_published_customer_display_facts(
                 )):
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
+    if normalized_rule_id in {"LX0609-06-03-05", "LX0609-06-03-06"}:
+        from .routine_lab_presence import safe_routine_lab_facts
+        if raw is None or raw == {}:
+            if status in {"compliant", "non_compliant", "not_applicable"}:
+                raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+            return None
+        validated = safe_routine_lab_facts(normalized_rule_id, raw) if type(raw) is dict else None
+        if validated is None:
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
     if raw is None or not isinstance(raw, dict):
         return None
     validated = validate_luxian_0609_executor_customer_display_facts(

@@ -824,5 +824,69 @@
     "prompt_version": "none",
     "mapped_rule_ids": ["LX0609-10-04-01"],
     "primary_execution_rule_id": "LX0609-10-04-01"
+  },
+  {
+    "rule_id": "LX0609-06-03-05",
+    "rule_code": "LX0609-06-03-05",
+    "name": "血常规：住院超过48小时结果完整性",
+    "description": "完整同报告24项结果或可核验门诊转抄，不能跨报告拼接。",
+    "positive_example": "同份血常规报告24项代码、名称、结果与报告时间完整。",
+    "negative_example": "完整来源中住院超过48小时仍无血常规结果或有效转抄。",
+    "category": "检验结果",
+    "applicable_documents": [
+      "labtest_master",
+      "labtest_item_report",
+      "admission_record",
+      "first_course_record",
+      "daily_course_record",
+      "senior_course_record"
+    ],
+    "applicable_document_labels": [
+      "检验主记录",
+      "检验结果",
+      "入院记录",
+      "首次病程",
+      "日常病程",
+      "上级查房"
+    ],
+    "data_dependencies": ["真实入院时刻", "冻结终点", "同报告项目结果", "可核验门诊转抄"],
+    "dependency_type": "跨文书时限",
+    "executor_type": "program",
+    "rule_version": "2026-10-26",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-06-03-05"],
+    "primary_execution_rule_id": "LX0609-06-03-05"
+  },
+  {
+    "rule_id": "LX0609-06-03-06",
+    "rule_code": "LX0609-06-03-06",
+    "name": "尿常规：住院超过48小时结果完整性",
+    "description": "完整同报告尿常规十项结果或可核验门诊转抄。",
+    "positive_example": "同份尿常规十项代码、名称、结果与报告时间完整。",
+    "negative_example": "完整来源中住院超过48小时仍无尿常规结果或有效转抄。",
+    "category": "检验结果",
+    "applicable_documents": [
+      "labtest_master",
+      "labtest_item_report",
+      "admission_record",
+      "first_course_record",
+      "daily_course_record",
+      "senior_course_record"
+    ],
+    "applicable_document_labels": [
+      "检验主记录",
+      "检验结果",
+      "入院记录",
+      "首次病程",
+      "日常病程",
+      "上级查房"
+    ],
+    "data_dependencies": ["真实入院时刻", "冻结终点", "同报告项目结果", "可核验门诊转抄"],
+    "dependency_type": "跨文书时限",
+    "executor_type": "program",
+    "rule_version": "2026-10-26",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-06-03-06"],
+    "primary_execution_rule_id": "LX0609-06-03-06"
   }
 ]
