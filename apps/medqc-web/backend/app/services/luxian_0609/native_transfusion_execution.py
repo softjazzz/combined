@@ -1492,6 +1492,11 @@ def _programmatic_044_status(
     source_times = {value for row in _transfusion_event_rows(documents) for value in source_start_times(row)}
     pre_count = sum(len(_source_document_rows(documents, source)) for source in (
         "blood_application", "daily_course_record", "senior_course_record"))
+    if (len(records) <= 1 and len(source_times) <= 1 and pre_count == 1
+            and has_structured_pretransfusion_application(documents)):
+        # 唯一结构化申请单由原时序合同核对，保留晚于/同刻申请及缺时间的诊断事实。
+        # 该所有者不读取输血记录中的评估描述，不能恢复旧正文短路；有竞争候选仍逐次关联。
+        return evaluate_structured_pretransfusion_application(documents)
     # 有输血记录时，单次与多次都先关联专门前评估/申请单，再核对内容。
     # 不能因只有一条记录就跳过关联，让记录内的评估描述或晚写评估直接判合规。
     # 尚无输血记录的旧入口继续保留原申请单/缺失材料合同。
