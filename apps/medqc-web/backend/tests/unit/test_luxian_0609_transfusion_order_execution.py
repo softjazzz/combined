@@ -119,6 +119,26 @@ def test_missing_model_is_technical_error_not_no_order():
     assert {row["status"] for row in final.values()} == {"technical_error"}
 
 
+def test_single_embedded_pre_does_not_publish_compliance_after_binding_and_finalizer():
+    rows = order_rows()
+    rows["bloodtrans_record"] = [{
+        "document_id": "B-EMBEDDED-PRE", "record_time": "2026-06-05 13:00:00",
+        "record_content": (
+            "输血前评估：存在输血指征，血红蛋白65g/L，已告知输血风险。"
+            "2026-06-05 10:00开始输注红细胞2U，2026-06-05 12:00输血结束。"
+            "输血过程中生命体征平稳，未见输血不良反应。输血后复查血红蛋白改善。"
+        ),
+    }]
+    _, final = run_case(rows, client=FrozenOrderClient())
+    result = final["LX0609-07-01-02"]
+    assert result["status"] == "non_compliant"
+    assert result["customer_display_facts"]["failure_kind"] == "transfusion_requirement_not_documented"
+    refs = {(item["source_type"], item["source_document_id"]) for item in result["customer_evidence"]}
+    assert ("bloodtrans_record", "B-EMBEDDED-PRE") in refs
+    assert final["LX0609-07-02-01"]["status"] == "compliant"
+    assert final["LX0609-07-02-02"]["status"] == "compliant"
+
+
 def test_truncated_order_source_cannot_be_absence():
     _, final = run_case(order_rows(), truncated="inpat_nondrug_order")
     assert {row["status"] for row in final.values()} == {"data_gap"}

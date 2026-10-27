@@ -82,6 +82,7 @@ TRANSFUSION_RULE_IDS = (
 EXECUTOR_KEY = "transfusion"
 _TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-dedicated-post-batches-v7"
+_PRE_ASSESSMENT_EVALUATOR_VERSION = "transfusion-pre-assessment-associated-v8"
 
 # 049 仍缺少可受控关联的收费数量，因此旧的直接执行入口继续保守返回 DATA_GAP；
 # 新建客户任务会在任务入口明确暂停该规则，不会把此系统缺口交付为客户质控结论。
@@ -644,7 +645,10 @@ def _typed_decision_from_outcome(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=refs,
-        evaluator_version=_TYPED_EVALUATOR_VERSION,
+        evaluator_version=(
+            _PRE_ASSESSMENT_EVALUATOR_VERSION
+            if outcome.rule_id == "LX0609-07-01-02" else _TYPED_EVALUATOR_VERSION
+        ),
         confidence=None,
     )
 
@@ -1488,10 +1492,20 @@ def _programmatic_044_status(
     source_times = {value for row in _transfusion_event_rows(documents) for value in source_start_times(row)}
     pre_count = sum(len(_source_document_rows(documents, source)) for source in (
         "blood_application", "daily_course_record", "senior_course_record"))
-    if len(records) <= 1 and len(source_times) <= 1 and pre_count <= 1:
+    # 有输血记录时，单次与多次都先关联专门前评估/申请单，再核对内容。
+    # 不能因只有一条记录就跳过关联，让记录内的评估描述或晚写评估直接判合规。
+    # 尚无输血记录的旧入口继续保留原申请单/缺失材料合同。
+    if not records and len(source_times) <= 1 and pre_count <= 1:
         return _programmatic_044_single_status(documents)
     try:
         associations = build_transfusion_associations(documents, end_evidence=_transfusion_end_evidence)
+        if len(records) == 1 and len(source_times) == 1 and associations.events[0].start is None:
+            # 唯一结构化实际输血事件仍可为单份记录提供锚点；不使用记录/提交时间猜测。
+            associations = build_transfusion_associations(
+                {**documents, "bloodtrans_record": [
+                    {**records[0], "transfusion_start_time": next(iter(source_times))}]},
+                end_evidence=_transfusion_end_evidence,
+            )
     except ValueError:
         return "technical_error", "snapshot_mismatch"
     represented_times = {value for event in associations.events for value in event.start_times}
@@ -1501,16 +1515,16 @@ def _programmatic_044_status(
     pending = False
     semantic_pending = False
     unavailable = []
+    pre_links = [item for item in associations.documents if item.stage == "pre"]
     for event, record in zip(associations.events, records):
         selected = {item.document_ref for item in associations.documents
                     if item.stage == "pre" and item.state == "linked" and item.event_refs == (event.record_ref,)}
-        if event.start is None or event.time_unresolved:
+        if (event.start is None or event.time_unresolved) and pre_links:
             pending = True
             continue
         if not selected:
             # 不能把时间未知、候选冲突或读取失败解释成医院漏写；但完整来源中
             # 明确缺少这次评估时，应与单次输血一样判文书缺失，而非关联资料不足。
-            pre_links = [item for item in associations.documents if item.stage == "pre"]
             if any(item.document_time is None for item in pre_links):
                 unavailable.append(("data_gap", "authoritative_time_missing"))
                 continue
@@ -1533,13 +1547,16 @@ def _programmatic_044_status(
             continue
         scoped = dict(documents)
         scoped["bloodtrans_record"] = [record]
-        # 实际开始时间来自同份记录的原文/源字段，不使用记录或提交时间猜测。
+        # 使用同一证据会话已确认的实际开始时刻，不使用记录或提交时间猜测。
         scoped["mr_bloodtrans"] = [{"transfution_datetime": event.start.isoformat(sep=" ")}]
         for source in ("blood_application", "daily_course_record", "senior_course_record"):
             scoped[source] = [row for index, row in enumerate(_source_document_rows(documents, source))
                               if association_document_ref(source, row, index) in selected]
         outcome = _programmatic_044_single_status(scoped)
         if outcome is None:
+            if len(records) == 1 and len(source_times) <= 1 and pre_count <= 1:
+                # 单次申请单的受控理由补核继续由原执行入口处理。
+                return None
             semantic_pending = True
         elif outcome[0] not in {"compliant", "non_compliant"}:
             unavailable.append(outcome)
