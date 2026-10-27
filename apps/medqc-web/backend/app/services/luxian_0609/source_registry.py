@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v34"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v35"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -220,6 +220,7 @@ _REGISTRY_ENTRIES = (
     _entry("presurg_summary", access_mode=_BOUNDED),
     _entry("rescue_record", access_mode=_BOUNDED),
     _entry("senior_course_record", access_mode=_BOUNDED),
+    _entry("summary_record", access_mode=_BOUNDED),
     _entry(
         "surgery_record",
         "surgery_record",
@@ -692,6 +693,10 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     "LX0609-10-02-01": ("evaluation_context.horizon", "inpat_nondrug_order"),
     "LX0609-10-02-02": ("inpat_nondrug_order",),
+    "LX0609-10-04-01": (
+        "inpat_registration", "admission_record", "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
+    ),
     "LX0609-12-02-01": ("diagnosis", "admission_record_diagnosis"),
     # 075：医嘱触发（运行病历）＋病案首页编码触发（终末），操作记录核对病程与手术记录。
     "LX0609-10-03-01": (

@@ -133,6 +133,7 @@ RULE_FAMILY_DEFINITIONS: tuple[dict[str, Any], ...] = (
             "LX0609-10-03-01",
             "LX0609-04-02-08",
             "LX0609-04-02-09",
+            "LX0609-10-04-01",
         ),
     },
 )

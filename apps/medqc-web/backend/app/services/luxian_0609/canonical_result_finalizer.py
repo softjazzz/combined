@@ -188,6 +188,7 @@ _DEFAULT_DATA_GAP_EXPLANATION = {
 }
 
 _CUSTOMER_SOURCE_LABELS = {
+    "summary_record": "阶段小结",
     "labtest_item_report": "检验结果明细",
     "exam_item_report": "检查报告明细",
     "consultation_record": "会诊记录",

@@ -208,6 +208,7 @@ def data_gap_customer_message(
 _CONSULTATION_023_BODY_EXTRACTION_NOTE = "会诊意见按会诊执行记录正文语义提取"
 
 _RULE_MISSING_ITEM_LABELS = {
+    "LX0609-10-04-01": ("真实入院时刻、冻结评价终点及阶段小结/交接班/转科记录",),
     "LX0609-01-01-01": ("入院时间或入院记录时间",),
     "LX0609-01-02-01": ("入院时间、首次病程记录时间或有效正文",),
     "LX0609-09-01-01": ("抢救结束时间或抢救记录时间",),
@@ -288,6 +289,11 @@ _DISCHARGE_EVENT_LABELS = {
     "crisis_value_record": "危急值",
 }
 _RULE_DATA_GAP_MESSAGES = {
+    "LX0609-10-04-01": (
+        "暂无法核对阶段小结30天周期",
+        "入院或评价时钟、阶段小结或可替代记录的时间、正文或来源完整性不足。",
+        "请核实本次住院的阶段小结、交接班及转科资料，资料不足不等于医生漏写。",
+    ),
     "LX0609-08-01-05": (
         "暂无法完成出院诊疗经过与主要住院事件的内容核对",
         "出院记录、关联诊断或住院过程材料尚不足以形成可靠的内容核对事实。",
@@ -877,6 +883,11 @@ def _evaluation_window_gap_message(
         )
     return None
 _RULE_NON_COMPLIANT_MESSAGES = {
+    "LX0609-10-04-01": (
+        "住院存在超过30天未完成阶段小结或有效替代记录的周期",
+        "已逐周期核对，后续迟到补记不消除已发生的周期缺口。",
+        "请复核已缺失周期并按规范处理，保留真实文书完成时间。",
+    ),
     "LX0609-04-02-09": (
         "死亡记录未在实际死亡后24小时内完成",
         "已比较本次有效死亡记录的最后权威完成时间与实际死亡时刻，间隔超过24小时。",
@@ -1090,6 +1101,11 @@ _RULE_NON_COMPLIANT_MESSAGES = {
     ),
 }
 _RULE_NOT_APPLICABLE_MESSAGES = {
+    ("LX0609-10-04-01", "trigger_absent_complete"): (
+        "本次住院尚未超过30天，不启动阶段小结周期要求",
+        "按真实入院时刻与冻结评价终点核对，未超过30天。",
+        "无需按本质控点处理。",
+    ),
     ("LX0609-08-01-05", "eligibility_not_met"): (
         "尚无出院记录，不启动诊疗经过内容核对",
         "本项检查已形成出院记录的内容，不替代出院记录存在性及时效性检查。",
@@ -1583,6 +1599,7 @@ _RULE_UNCERTAIN_MESSAGES = {
 # 合规结果也必须回答“为什么合规”。这里仅使用规则目录身份和 reducer 已确认的
 # 终态生成受控短句，不读取病历原文，也不在展示层重新判断规则。
 _RULE_COMPLIANT_FINDINGS = {
+    "LX0609-10-04-01": "已逐周期核对阶段小结或真实交接/转科替代记录，未发现超过30天的缺口。",
     "LX0609-03-01-05": "已逐条核对正文所引会诊建议，本科室均具体记录了处理、安排或有原因的不采纳决定；本项不代表措施已经实际执行。",
     "LX0609-08-01-05": "已核对出院诊疗经过的具体措施、病情演变及疗效转归，未发现所核查重要事件遗漏。",
     "LX0609-01-01-01": "已确认入院记录在入院后 24 小时内完成。",
@@ -3610,6 +3627,15 @@ def customer_finding_from_controlled_facts(
         if facts.get("expert_support_present") is True:
             return f"已开立特殊级抗菌药物 {medicines} 计划，但专家支持记录缺少可核对的权威时间。"
         return f"已开立特殊级抗菌药物 {medicines} 计划，未找到可关联到该药计划的专家查房或会诊支持记录。"
+
+    if rule_id == "LX0609-10-04-01" and kind == "stage_summary_interval_check":
+        end = facts.get("evaluation_time") or f"{facts.get('evaluation_date')}（仅日期）"
+        missing = facts.get("overdue_deadlines") or []
+        return (
+            f"入院时刻：{facts.get('admission_time')}；冻结评价终点：{end}；"
+            f"阶段小结{len(facts.get('summary_times') or [])}份，交接/转科替代{len(facts.get('substitute_times') or [])}份。"
+            + ("已缺失周期的截止时刻：" + "、".join(missing) + "。" if missing else "未发现已超过30天的周期缺口。")
+        )
 
     if rule_id == "LX0609-04-02-09" and kind == "death_record_timeliness_check":
         seconds = facts.get("elapsed_seconds")

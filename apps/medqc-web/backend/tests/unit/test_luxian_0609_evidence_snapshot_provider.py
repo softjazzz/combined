@@ -2010,8 +2010,11 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
 
 
 def test_source_registry_keeps_confirmed_handbook_identity_version() -> None:
-    # ea5ed2b047 新增手册来源时已正式从 v33 升为 v34；此处保留全局冻结门禁。
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v34"
+    # v35只新增09299的summary_record来源；既有手册来源的query_version保持不变。
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v35"
+    entry = load_luxian_0609_source_registry()["summary_record"]
+    assert entry.query_version == "snapshot-provider-summary_record-v1"
+    assert entry.source_keys == ("summary_record",)
 
 
 def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:

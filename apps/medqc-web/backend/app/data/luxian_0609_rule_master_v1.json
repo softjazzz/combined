@@ -742,6 +742,15 @@
       "release_scope": "acceptance_only",
       "policy_sources": ["customer_confirmed", "hospital_local_extension"],
       "policy_summary": "客户09659（附件三第293行）。死亡记录承担死亡病例终末记录职责，按有效标题识别，不另要求出院记录；复用既有出院文书时钟和最后权威版本选择，起点为实际死亡时刻，精确比较24小时。存在性由04-02-06负责，不重复扣分。"
+    },
+    {
+      "rule_id": "LX0609-10-04-01",
+      "source_document": "阶段小结",
+      "qc_point": "住院超过30天缺阶段小结，交接班或转科记录可替代",
+      "implementation_status": "active",
+      "release_scope": "acceptance_only",
+      "policy_sources": ["customer_confirmed", "hospital_local_extension"],
+      "policy_summary": "客户09299（附件三第239行）。逐个30天周期核对阶段小结，真实交接班或转科记录可替代并重新起算；迟到补记不抹掉已缺失周期。用户2026-10-26确认不增加31天出院豁免，精确等于30天尚不触发超过条件。冻结住院终点不足以证明时限时保留资料不足。"
     }
   ]
 }

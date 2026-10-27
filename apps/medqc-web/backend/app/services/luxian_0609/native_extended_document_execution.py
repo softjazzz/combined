@@ -145,6 +145,7 @@ _LX0609_058_SUPPORT_WINDOW = timedelta(hours=24)
 
 EXECUTOR_KEY = "extended_document"
 EXTENDED_DOCUMENT_RULE_IDS = (
+    "LX0609-10-04-01",
     "LX0609-03-02-01",
     "LX0609-09-02-01",
     "LX0609-06-04-01",
@@ -2584,6 +2585,7 @@ async def _execute_extended_document_group(
             "LX0609-08-02-01",
             "LX0609-08-02-02",
             "LX0609-10-02-01",
+            "LX0609-10-04-01",
         }.intersection(selected)
         else ((), "")
     )
@@ -4070,6 +4072,39 @@ async def _execute_extended_document_group(
                 ),
                 final_state=final_state, reason_code=reason_code,
             ))
+            continue
+
+        if rule_id == "LX0609-10-04-01":
+            from .extended_document.stage_summary_timeliness import evaluate_stage_summary_timeliness
+
+            source_keys = ("summary_record", "handoff_record", "handover_record", "transfer_in_record", "transfer_out_record")
+            all_sources = (*source_keys, "inpat_registration", "admission_record", "evaluation_context.horizon")
+            try:
+                documents = {source: _source_rows(evidence_materials, source) for source in source_keys}
+                source_error = registration_error or admission_error or horizon_error or next(
+                    (error for _, error in documents.values() if error), "",
+                )
+                outcome = evaluate_stage_summary_timeliness(
+                    registration_rows=registration_rows, admission_rows=admission_rows,
+                    document_rows={source: rows for source, (rows, _) in documents.items()},
+                    horizon_rows=horizon_rows, source_error=source_error,
+                )
+                selected_refs = tuple(dict.fromkeys(
+                    reference for item in outcome.document_refs
+                    for reference, row in evidence_materials.document_rows(item["source_type"], snapshot=evidence_snapshot)
+                    if _clean(row.get("document_id") or row.get("id")) == item["source_document_id"]
+                ))
+                if outcome.document_refs and not selected_refs:
+                    raise EvidenceMaterialUnavailable("selected_stage_document_unavailable")
+            except Exception:
+                decisions.append(_decision(rule_id=rule_id, snapshot=evidence_snapshot, source_keys=all_sources,
+                    final_state="technical_error", reason_code="native_stage_summary_failure"))
+                continue
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
+            decisions.append(_decision(rule_id=rule_id, snapshot=evidence_snapshot, source_keys=all_sources,
+                final_state=outcome.final_state, reason_code=outcome.reason_code,
+                document_refs=selected_refs, exact_document_refs=bool(selected_refs)))
             continue
 
         if rule_id == "LX0609-04-02-09":

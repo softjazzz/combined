@@ -800,5 +800,29 @@
     "prompt_version": "consultation-disposition-record-v4",
     "mapped_rule_ids": ["LX0609-03-01-05"],
     "primary_execution_rule_id": "LX0609-03-01-05"
+  },
+  {
+    "rule_id": "LX0609-10-04-01",
+    "rule_code": "LX0609-10-04-01",
+    "name": "阶段小结：超过30天逐周期核对",
+    "description": "在冻结住院范围内逐周期核对阶段小结，交接班及转科记录可替代并重新起算，迟到补记不消除旧周期缺口。",
+    "positive_example": "长住院各30天周期均有阶段小结，或有真实交接班/转科记录重启下一周期。",
+    "negative_example": "住院超过30天仍无阶段小结或可替代记录，或长住院只写过早期一份。",
+    "category": "连续医疗记录",
+    "applicable_documents": [
+      "summary_record",
+      "handoff_record",
+      "handover_record",
+      "transfer_in_record",
+      "transfer_out_record"
+    ],
+    "applicable_document_labels": ["阶段小结", "交班记录", "接班记录", "转入记录", "转出记录"],
+    "data_dependencies": ["真实入院时刻", "冻结评价终点", "阶段小结及替代文书的正文与权威完成时间"],
+    "dependency_type": "跨文书时限",
+    "executor_type": "program",
+    "rule_version": "2026-10-26",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-10-04-01"],
+    "primary_execution_rule_id": "LX0609-10-04-01"
   }
 ]

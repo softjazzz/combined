@@ -484,6 +484,10 @@ _NATIVE_SOURCE_FIELDS = {
         "death_time",
         "record_content",
     ),
+    "summary_record": (
+        "document_id", "document_title", *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
+        "record_content",
+    ),
     "handoff_record": (
         "document_id",
         "document_title",
@@ -715,6 +719,7 @@ _SNAPSHOT_SOURCE_FIELDS = {
         "physician_change_event",
         "postsurg_firstcourse_record",
         "senior_course_record",
+        "summary_record",
         "transfer_in_record",
         "transfer_out_record",
         "inpat_nondrug_order",

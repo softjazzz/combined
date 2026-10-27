@@ -32,6 +32,7 @@ _CUSTOMER_EXCLUDED_IDS = frozenset(
 _ACCEPTANCE_ONLY_IDS = frozenset(
     {
         "LX0609-04-02-09",
+        "LX0609-10-04-01",
         "LX0609-06-01-03",
         "LX0609-06-03-02",
         "LX0609-06-02-01",
