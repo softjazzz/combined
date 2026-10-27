@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import View from '@/views/auth/RegisterView.vue'
 import type { RegistrationResult } from '@/api/accountRegistration'
 
-const api = vi.hoisted(() => ({ submit: vi.fn(), status: vi.fn(), own: vi.fn() }))
+const api = vi.hoisted(() => ({
+  submit: vi.fn(),
+  status: vi.fn(),
+  own: vi.fn(),
+  departments: vi.fn(),
+}))
 const actor = reactive({ user: { id: '' }, isAuthenticated: false })
 const route = reactive<{ query: { mode?: string } }>({ query: {} })
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => actor }))
@@ -13,6 +18,7 @@ vi.mock('@/api/accountRegistration', () => ({
   submitRegistration: api.submit,
   queryRegistrationStatus: api.status,
   getOwnRegistration: api.own,
+  getRegistrationDepartments: api.departments,
 }))
 const result: RegistrationResult = {
   user_id: 'request-id',
@@ -29,16 +35,15 @@ function make() {
   return mount(View, { global: { stubs: { RouterLink: { template: '<a><slot/></a>' } } } })
 }
 async function fill(wrapper: ReturnType<typeof make>) {
+  await flushPromises()
   for (const [label, value] of Object.entries({
     注册用户名: 'doctor1',
-    工作邮箱: 'synthetic@example.com',
     申请姓名: '申请医生',
-    申请机构: 'A',
-    申请科室: '内科',
     注册口令: 'synthetic-only-secret!',
     确认口令: 'synthetic-only-secret!',
   }))
     await wrapper.get(`input[aria-label="${label}"]`).setValue(value)
+  await wrapper.get('select[aria-label="申请科室"]').setValue('a'.repeat(64))
 }
 beforeEach(() => {
   vi.clearAllMocks()
@@ -48,6 +53,9 @@ beforeEach(() => {
   api.submit.mockResolvedValue(structuredClone(result))
   api.status.mockResolvedValue(structuredClone(result))
   api.own.mockResolvedValue({ ...result, status: 'approved', is_active: true })
+  api.departments.mockResolvedValue({
+    items: [{ key: 'a'.repeat(64), name: '内科', label: '内科' }],
+  })
 })
 describe('注册申请与登录外结果查询', () => {
   it('提交真实接口，不模拟成功、自动登录或承诺邮件', async () => {
@@ -57,16 +65,39 @@ describe('注册申请与登录外结果查询', () => {
     await flushPromises()
     expect(api.submit).toHaveBeenCalledWith({
       username: 'doctor1',
-      email: 'synthetic@example.com',
       display_name: '申请医生',
-      institute_id: 'A',
-      department: '内科',
+      department_key: 'a'.repeat(64),
       password: 'synthetic-only-secret!',
     })
     expect(wrapper.text()).toContain('待审批 · 尚未开通')
     expect(wrapper.text()).not.toContain('邮件')
+    expect(wrapper.find('[aria-label="工作邮箱"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="申请机构"]').exists()).toBe(false)
     expect(actor.isAuthenticated).toBe(false)
     expect((wrapper.get('input[aria-label="注册口令"]').element as HTMLInputElement).value).toBe('')
+    wrapper.unmount()
+  })
+  it('读取失败明确提示，禁止提交并允许重新读取真实科室', async () => {
+    api.departments.mockRejectedValueOnce(new Error('科室读取失败'))
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.text()).toContain('科室读取失败')
+    expect((wrapper.get('select').element as HTMLSelectElement).disabled).toBe(true)
+    await wrapper.get('form').trigger('submit')
+    expect(api.submit).not.toHaveBeenCalled()
+    await wrapper.get('button[type="button"].mq-btn').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('select').text()).toContain('内科')
+    expect((wrapper.get('select').element as HTMLSelectElement).disabled).toBe(false)
+    wrapper.unmount()
+  })
+  it('空目录不能伪造科室或提交申请', async () => {
+    api.departments.mockResolvedValueOnce({ items: [] })
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.text()).toContain('暂无可用科室')
+    await wrapper.get('form').trigger('submit')
+    expect(api.submit).not.toHaveBeenCalled()
     wrapper.unmount()
   })
   it('口令不一致不请求，服务失败不能显示成功', async () => {

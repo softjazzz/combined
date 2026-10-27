@@ -86,6 +86,10 @@ from .ct_order_course_consistency import (
     CtEvidenceBudgetExceeded,
 )
 from .native_execution import build_luxian_0609_native_result
+from .routine_lab_presence import (
+    ROUTINE_RULES, SOURCE_KEYS as ROUTINE_SOURCES, RoutineLabOutcome,
+    evaluate_routine_lab_presence, routine_lab_decision,
+)
 from .structured_output import structured_output_kwargs
 from .source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
@@ -108,6 +112,7 @@ EXAM_LAB_RULE_IDS = (
 # “全族运行”。新增规则只在目录明确选中后进入内部执行集合。
 EXECUTABLE_EXAM_LAB_RULE_IDS = (
     *EXAM_LAB_RULE_IDS,
+    *ROUTINE_RULES,
     CT_CONSISTENCY_RULE,
     "LX0609-06-01-03",
     "LX0609-06-03-02",
@@ -2493,6 +2498,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
     if len(normalized_decision_ids) != len(set(normalized_decision_ids)):
         raise ValueError("duplicate typed exam lab rule scope")
     typed_requested = set(normalized_decision_ids)
+    if (set(selected) & ROUTINE_RULES.keys()) - typed_requested:
+        raise ValueError("routine lab rules require typed evidence")
     if (
         not typed_requested.issubset(_TYPED_DECISION_RULE_IDS)
         or not typed_requested.issubset(set(selected))
@@ -2594,6 +2601,26 @@ async def execute_luxian_0609_native_exam_lab_rules(
     if typed_requested:
         assert evidence_snapshot is not None
         assert evidence_materials is not None
+        for routine_id in selected:
+            if routine_id not in ROUTINE_RULES:
+                continue
+            try:
+                routine_rows = {}
+                source_error = ""
+                for source in ROUTINE_SOURCES:
+                    try:
+                        routine_rows[source] = evidence_materials.document_rows(source, snapshot=evidence_snapshot)
+                    except EvidenceMaterialTruncated:
+                        source_error = source_error or "source_truncated"
+                    except EvidenceMaterialUnavailable:
+                        source_error = source_error or "source_unavailable"
+                outcome = evaluate_routine_lab_presence(rule_id=routine_id, sources=routine_rows, source_error=source_error)
+            except Exception:
+                outcome = RoutineLabOutcome("technical_error", "executor_exception")
+            decisions.append(routine_lab_decision(routine_id,outcome,evidence_snapshot))
+            if outcome.facts is not None:
+                customer_display_facts.append((routine_id,outcome.facts))
+            typed_processed.add(routine_id)
         handbook_report_ids = tuple(
             rule_id
             for rule_id in selected

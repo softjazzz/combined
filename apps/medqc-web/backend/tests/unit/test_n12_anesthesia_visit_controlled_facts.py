@@ -173,12 +173,12 @@ async def test_structured_visit_columns_are_sent_as_document_text():
 
 
 @pytest.mark.asyncio
-async def test_unknown_in_same_receipt_blocks_a_definite_missing_result():
+async def test_confirmed_missing_pre_visit_is_not_hidden_by_unknown_post_visit():
     client = FrozenFactClient(absent=(("preane_surveil_record", "precautions"),), unknown=(("postane_surveil_record", "consciousness_status"),))
     final, execution = await _run(_visits(), client)
-    assert final["status"] == "data_gap"
+    assert final["status"] == "non_compliant"
     assert execution.llm_call_count == 1
-    assert "missing_fields_by_visit" not in final.get("customer_display_facts", {})
+    assert final["customer_display_facts"]["missing_fields_by_visit"] == {"preanesthesia_visit": ["precautions"]}
 
 
 def test_final_compiled_prompt_version_and_definition_are_consistent():

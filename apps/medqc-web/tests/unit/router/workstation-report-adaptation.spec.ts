@@ -129,7 +129,8 @@ describe('业务线四报表定向适配', () => {
           (i) =>
             !i.key.startsWith('report-') &&
             i.key !== 'feedback-worklist' &&
-            i.key !== 'message-center',
+            i.key !== 'message-center' &&
+            i.key !== 'user-management',
         )
         .map((i) => i.key),
     ).toEqual(originalKeys)

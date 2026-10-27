@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user
+from ..services.doctor_case_scope import get_doctor_case_scope
 from ..services.workstation.worklist_service import default_workstation_aggregation_service
 from ..services.workstation.luxian_0609_result_analysis_service import (
     default_luxian_0609_result_analysis_service,
@@ -79,6 +80,7 @@ async def get_luxian_0609_home(
             department=department,
             keyword=keyword,
             priority_limit=priority_limit,
+            **({"case_scope": get_doctor_case_scope(request)} if get_doctor_case_scope(request) is not None else {}),
         )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:

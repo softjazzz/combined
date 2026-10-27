@@ -18,15 +18,25 @@ class RegistrationCreate(BaseModel):
     username: str = Field(
         min_length=3, max_length=50, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]+$"
     )
-    email: EmailStr = Field(max_length=100)
+    email: EmailStr | None = Field(default=None, max_length=100)
     display_name: str = Field(min_length=1, max_length=100)
-    institute_id: str = Field(min_length=1, max_length=128)
-    department: str = Field(min_length=1, max_length=100)
+    institute_id: str | None = Field(default=None, min_length=1, max_length=128)
+    department: str | None = Field(default=None, min_length=1, max_length=100)
+    department_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     phone: str | None = Field(None, pattern=r"^1[3-9]\d{9}$")
     password: Annotated[
         str, StringConstraints(strip_whitespace=False, min_length=12, max_length=72)
     ] = Field(repr=False)
     role: Literal["doctor"] = "doctor"
+
+    @model_validator(mode="after")
+    def department_selection(self):
+        if self.department_key:
+            if self.institute_id is not None or self.department is not None:
+                raise ValueError("科室选项不能同时指定机构或科室文本")
+        elif not (self.institute_id and self.department):
+            raise ValueError("请选择申请科室")
+        return self
 
     @field_validator("password")
     @classmethod

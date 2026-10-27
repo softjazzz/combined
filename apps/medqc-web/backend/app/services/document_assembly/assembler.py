@@ -187,7 +187,7 @@ def extract_document_identity_metadata(
 # 业务事实独立保留，不用于回填记录、提交、显示时间或实际停止时间。
 INDEPENDENT_DOCUMENT_FIELDS: dict[str, tuple[str, ...]] = {
     **{
-        table: ("planned_end_datetime", "reviewed_datetime", "carried_datetime", "canceled_datetime")
+        table: ("planned_start_datetime", "planned_end_datetime", "reviewed_datetime", "carried_datetime", "canceled_datetime")
         for table in ("inpat_drug_order", "inpat_nondrug_order")
     },
     "death_record": ("death_datetime", "admission_condition", "treatment_course", "death_reason"),
@@ -392,6 +392,7 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "route",
         "drug_apply_method",
         "start_time",
+        "planned_start_datetime",
         "planned_end_datetime",
         "stop_time",
         "status",
@@ -416,6 +417,7 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "frequency",
         "route",
         "start_time",
+        "planned_start_datetime",
         "planned_end_datetime",
         "stop_time",
         "status",

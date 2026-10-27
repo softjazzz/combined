@@ -18,6 +18,7 @@ PUBLIC_EXACT_PATHS = {
     "/api/v1/metrics/prometheus",
     "/api/v1/auth/login",
     "/api/v1/auth/register",
+    "/api/v1/auth/registration-departments",
     "/api/v1/auth/registration-status",
     "/api/v1/auth/refresh",
     "/api/v1/auth/forgot-password",
@@ -72,3 +73,6 @@ async def enforce_default_auth(
         )
 
     request.state.current_user = resolve_current_user_from_token(credentials.credentials)
+    from ..services.doctor_case_scope import enforce_doctor_case_access
+
+    await enforce_doctor_case_access(request, request.state.current_user)

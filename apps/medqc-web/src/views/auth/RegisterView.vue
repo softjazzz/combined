@@ -53,18 +53,6 @@
               :disabled="busy"
           /></label>
           <label class="mq-field"
-            ><span class="mq-field__label">工作邮箱</span
-            ><input
-              v-model="form.email"
-              class="mq-input"
-              aria-label="工作邮箱"
-              type="email"
-              required
-              maxlength="100"
-              autocomplete="email"
-              :disabled="busy"
-          /></label>
-          <label class="mq-field"
             ><span class="mq-field__label">姓名</span
             ><input
               v-model="form.display_name"
@@ -87,25 +75,38 @@
               :disabled="busy"
           /></label>
           <label class="mq-field"
-            ><span class="mq-field__label">申请机构 ID</span
-            ><input
-              v-model="form.institute_id"
-              class="mq-input"
-              aria-label="申请机构"
-              required
-              maxlength="128"
-              :disabled="busy"
-          /></label>
-          <label class="mq-field"
             ><span class="mq-field__label">申请科室</span
-            ><input
-              v-model="form.department"
-              class="mq-input"
+            ><select
+              v-model="form.department_key"
+              class="mq-input mq-select"
               aria-label="申请科室"
               required
-              maxlength="100"
-              :disabled="busy"
-          /></label>
+              :disabled="busy || departmentsLoading || departments.length === 0"
+            >
+              <option disabled value="">
+                {{ departmentsLoading ? '正在读取科室…' : '请选择科室' }}
+              </option>
+              <option
+                v-for="department in departments"
+                :key="department.key"
+                :value="department.key"
+              >
+                {{ department.label }}
+              </option>
+            </select>
+            <span v-if="departmentsError" class="registration-error" role="alert">{{
+              departmentsError
+            }}</span>
+            <button
+              v-if="departmentsError"
+              type="button"
+              class="mq-btn"
+              :disabled="departmentsLoading"
+              @click="loadDepartments"
+            >
+              重新读取科室
+            </button>
+          </label>
           <label class="mq-field"
             ><span class="mq-field__label">登录口令</span
             ><input
@@ -138,7 +139,11 @@
           申请角色：医生。机构、科室及最终权限由管理员核定；审批通过前无法登录业务系统。
         </p>
         <footer class="registration-actions">
-          <button type="submit" class="mq-btn mq-btn--primary" :disabled="busy">
+          <button
+            type="submit"
+            class="mq-btn mq-btn--primary"
+            :disabled="busy || departmentsLoading || !form.department_key"
+          >
             <Send :size="16" />{{ busy ? '提交中' : '提交申请' }}
           </button>
         </footer>
@@ -218,7 +223,7 @@
         </dl>
         <p v-if="result.status === 'pending'" class="mq-card__desc">申请已保存，等待管理员审批。</p>
         <p v-else-if="result.status === 'rejected'" class="mq-card__desc">
-          可修改申请信息后，使用原用户名、邮箱和口令重新提交。
+          可修改申请信息后，使用原用户名和口令重新提交。
         </p>
         <router-link
           v-else-if="result.is_active !== false"
@@ -232,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, LogIn, RefreshCw, Search, Send } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
@@ -240,6 +245,8 @@ import {
   getOwnRegistration,
   queryRegistrationStatus,
   submitRegistration,
+  getRegistrationDepartments,
+  type RegistrationDepartment,
   type RegistrationResult,
 } from '@/api/accountRegistration'
 
@@ -251,14 +258,35 @@ const busy = ref(false),
   confirmation = ref('')
 const form = reactive({
   username: '',
-  email: '',
   display_name: '',
-  institute_id: '',
-  department: '',
+  department_key: '',
   phone: '',
   password: '',
 })
 const lookup = reactive({ account: '', password: '' })
+const departments = ref<RegistrationDepartment[]>([])
+const departmentsLoading = ref(false)
+const departmentsError = ref('')
+let departmentsGeneration = 0
+async function loadDepartments() {
+  const token = ++departmentsGeneration
+  departmentsLoading.value = true
+  departmentsError.value = ''
+  form.department_key = ''
+  departments.value = []
+  try {
+    const data = await getRegistrationDepartments()
+    if (token !== departmentsGeneration) return
+    departments.value = data.items
+    if (!data.items.length) departmentsError.value = '暂无可用科室，请联系管理员同步科室数据'
+  } catch (err) {
+    if (token === departmentsGeneration)
+      departmentsError.value = err instanceof Error ? err.message : '科室读取失败，请重试'
+  } finally {
+    if (token === departmentsGeneration) departmentsLoading.value = false
+  }
+}
+onMounted(loadDepartments)
 const result = ref<RegistrationResult | null>(null)
 let generation = 0
 const statusLabel = computed(() =>
@@ -317,6 +345,13 @@ async function perform(action: () => Promise<RegistrationResult>) {
 }
 async function submit() {
   if (busy.value) return
+  if (
+    departmentsLoading.value ||
+    !departments.value.some((item) => item.key === form.department_key)
+  ) {
+    error.value = '请从已读取的科室列表中选择申请科室'
+    return
+  }
   if (form.password !== confirmation.value) {
     error.value = '两次口令不一致'
     return
@@ -329,10 +364,8 @@ async function submit() {
   await perform(() =>
     submitRegistration({
       username: form.username.trim(),
-      email: form.email.trim(),
       display_name: form.display_name.trim(),
-      institute_id: form.institute_id.trim(),
-      department: form.department.trim(),
+      department_key: form.department_key,
       ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
       password: form.password,
     }),
@@ -357,6 +390,7 @@ watch(
 )
 onBeforeUnmount(() => {
   generation++
+  departmentsGeneration++
   clearSecrets()
 })
 </script>

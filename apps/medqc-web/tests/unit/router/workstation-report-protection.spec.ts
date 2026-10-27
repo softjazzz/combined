@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 // 固定在两线适配前的产品提交；保留后续权限、轻量列表及正式首页，不退回旧快照。
 const baseline = 'b34cac343b3ef948d9a19ad72c4597aef58177c9'
+// PDF目录/版本及输血关联已由用户确认并保存；仅此文件升级保护快照，其余V7.1文件保持原基线。
+const pdfWorkbenchBaseline = 'f19f498b0'
 const prefix = 'apps/medqc-web/'
 const protectedFiles = [
   'src/components/layout/WorkstationLayout.vue',
@@ -32,13 +34,22 @@ const protectedFiles = [
 
 describe('V7.1与未推送产品成果保护集', () => {
   it.each(protectedFiles)('%s 与适配起点内容完全一致', (file) => {
-    const original = execFileSync('git', ['rev-parse', `${baseline}:${prefix}${file}`], {
+    const fileBaseline = file.endsWith('/QCRecordCompareWorkbench.vue') ? pdfWorkbenchBaseline : baseline
+    const original = execFileSync('git', ['rev-parse', `${fileBaseline}:${prefix}${file}`], {
       encoding: 'utf8',
     }).trim()
     // 本批用户明确要求统一医生消息入口：仅允许消息无病例打开及限制无病例页签。
     let actual: string
     if (file.endsWith('/WorkstationLayout.vue')) {
       let source = readFileSync(file, 'utf8')
+      // 注册不再要求邮箱：仅允许两处账号文案回退现有持久用户姓名。
+      for (const [current, previous] of [
+        ["authStore.user?.email || authStore.userName || ''", "authStore.user?.email || ''"],
+        ["authStore.user?.email || authStore.userName || '未登录'", "authStore.user?.email || '未登录'"],
+      ]) {
+        expect(source.split(current)).toHaveLength(2)
+        source = source.replace(current, previous)
+      }
       // 本轮用户要求主管独立入口；只允许这一段铃铛路由，医生弹出层与外壳样式不变。
       const managerEntry = [
         '            <a-tooltip v-if="useFullMessageCenter" title="消息中心" placement="right">',

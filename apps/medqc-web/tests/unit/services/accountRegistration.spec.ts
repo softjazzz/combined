@@ -3,6 +3,7 @@ import {
   queryRegistrationStatus,
   reviewRegistration,
   submitRegistration,
+  getRegistrationDepartments,
 } from '@/api/accountRegistration'
 
 const request = vi.hoisted(() => vi.fn())
@@ -11,6 +12,24 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 describe('注册审批API合同', () => {
+  it('未登录读取精简科室目录，申请无需邮箱和机构ID', async () => {
+    const options = { items: [{ key: 'a'.repeat(64), name: '内科', label: '内科' }] }
+    request.mockResolvedValueOnce({ data: { success: true, data: options } })
+    expect(await getRegistrationDepartments()).toEqual(options)
+    expect(request).toHaveBeenCalledWith({
+      url: '/api/v1/auth/registration-departments',
+      method: 'GET',
+    })
+    request.mockResolvedValueOnce({ data: { success: true, data: { status: 'pending' } } })
+    await submitRegistration({
+      username: 'doctor2',
+      display_name: '合成医生',
+      department_key: 'a'.repeat(64),
+      password: 'synthetic-only-secret!',
+    })
+    expect(request.mock.lastCall?.[0].data).not.toHaveProperty('email')
+    expect(request.mock.lastCall?.[0].data).not.toHaveProperty('institute_id')
+  })
   it('申请只发送正式字段，解开结果而不是把它当已登录用户', async () => {
     const result = { user_id: 'user', status: 'pending', version: 1 }
     request.mockResolvedValue({ data: { success: true, data: result } })

@@ -481,6 +481,9 @@ def _build_material_snapshot(
     visit_id: str,
     table_limits: dict[str, int],
 ) -> _MaterialSnapshot:
+    from ..validation_material_source import material_source_schema
+    source_schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=source_schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     snapshot = _MaterialSnapshot(
         key=(source_schema, institute_id, patient_id, visit_id),
     )
@@ -766,6 +769,9 @@ def _select_records(
     visit_id: str,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
+    from ..validation_material_source import material_source_schema
+    schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     columns = set(_get_table_columns(schema, table))
     if not columns:
         return []
@@ -834,12 +840,18 @@ def _select_records(
     else:
         return []
 
+    from ..validation_material_source import material_document_sql_filter
+    document_filter, document_params = material_document_sql_filter(
+        source_schema=schema, source_table=table, institute_id=institute_id,
+        patient_id=patient_id, visit_id=visit_id,
+    ) if "document_id" in columns else ("", {})
+    params.update(document_params)
     order_column = _pick_first(columns, _ORDER_COLUMNS_PRIORITY)
     order_sql = f" ORDER BY {_quote_ident(order_column)} DESC NULLS LAST" if order_column else ""
     sql = (
         f"SELECT {', '.join(_quote_ident(col) for col in selected)} "
         f"FROM {_qualified_table(schema, table)} "
-        f"WHERE {where_sql}{order_sql} LIMIT :limit_rows"
+        f"WHERE {where_sql}{document_filter}{order_sql} LIMIT :limit_rows"
     )
 
     with engine.connect() as conn:
@@ -2208,6 +2220,9 @@ def _assemble_scene_bundle(
     policy_version: str = "",
     material_snapshot: _MaterialSnapshot | None = None,
 ) -> dict[str, Any]:
+    from ..validation_material_source import material_source_schema
+    source_schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=source_schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; bundle assembly unavailable.")
     if scene not in _SCENE_DOC_PRIORITY:
@@ -2576,7 +2591,9 @@ def load_or_assemble_scene_bundle(
         raise ValueError(f"Unsupported scene bundle table: {scene}")
     ensure_scene_bundle_tables(schema=bundle_schema)
 
-    if not force_refresh:
+    from ..validation_material_source import is_material_copy
+    # 独立验证材料可补入/替换/撤回文书，新任务不能复用去重前的旧Bundle。
+    if not force_refresh and not is_material_copy(patient_id, visit_id):
         existing = _load_scene_bundle(
             scene=scene,
             institute_id=institute_id,
@@ -2636,7 +2653,9 @@ def assemble_domain_bundle(
     if execution_domain not in _DOMAIN_DOC_PRIORITY:
         raise ValueError(f"Unsupported execution domain: {execution_domain}")
 
-    effective_schema = source_schema or _default_source_schema()
+    from ..validation_material_source import material_source_schema
+    effective_schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=source_schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     priority = _DOMAIN_DOC_PRIORITY[execution_domain]
     docs: dict[str, list[dict[str, Any]]] = {}
     domain_projection_per_source: dict[str, dict[str, Any]] = {}
@@ -2853,6 +2872,7 @@ def load_domain_bundle_document_index(
                        'record_time', item -> 'record_time',
                        'submit_time', item -> 'submit_time',
                        'chief_physician_sign_datetime', item -> 'chief_physician_sign_datetime',
+                       'planned_start_datetime', item -> 'planned_start_datetime',
                        'planned_end_datetime', item -> 'planned_end_datetime',
                        'reviewed_datetime', item -> 'reviewed_datetime',
                        'carried_datetime', item -> 'carried_datetime',
@@ -3291,7 +3311,9 @@ def load_or_assemble_domain_bundle(
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     ensure_domain_bundle_tables(schema=bundle_schema)
-    if not force_refresh:
+    from ..validation_material_source import is_material_copy
+    # 仅改变副本的新任务取材；历史结果及显式历史Bundle读取仍保留。
+    if not force_refresh and not is_material_copy(patient_id, visit_id):
         existing = load_domain_bundle(
             execution_domain=execution_domain,
             institute_id=institute_id,

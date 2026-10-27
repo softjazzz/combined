@@ -86,7 +86,12 @@ def _safe_003(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             or any(item not in {"surgery_end_time", "record_time", "surgery_record_association"} for item in fields)
             or (not fields and reason != "authoritative_time_conflict")):
             return None
-        return {"failure_kind": kind, "gap_reason": reason, "missing_fields": list(dict.fromkeys(fields))}
+        result = {"failure_kind": kind, "gap_reason": reason, "missing_fields": list(dict.fromkeys(fields))}
+        if "conflicting_end_fields" in raw:
+            if raw["conflicting_end_fields"] is not True or reason != "authoritative_time_conflict":
+                return None
+            result["conflicting_end_fields"] = True
+        return result
     if kind == "surgery_record_missing":
         surgery_time = raw.get("surgery_time")
         if (
@@ -160,6 +165,8 @@ def surgery_timeliness_gap_display(facts: Any) -> tuple[list[str], str] | None:
     labels = {"surgery_end_time": "手术结束时间", "record_time": "手术记录权威完成时间",
               "surgery_record_association": "单台手术与手术记录的关联信息"}
     missing = [labels[key] for key in safe["missing_fields"]]
+    if safe.get("conflicting_end_fields") is True:
+        return missing, "手术结束时间字段存在冲突，暂时无法完成术后24小时时限核对。"
     message = ("手术记录时间早于手术结束时间，暂时无法完成时限核对。"
                if safe["gap_reason"] == "authoritative_time_conflict"
                else f"已找到手术记录，但缺少{'、'.join(missing)}，暂时无法判断是否在术后24小时内完成。")

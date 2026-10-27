@@ -15,7 +15,6 @@ from zoneinfo import ZoneInfo
 
 from .source_evidence_reader import (
     authoritative_document_time_value,
-    parse_luxian_0609_rescue_end_time,
 )
 
 
@@ -24,11 +23,12 @@ _AUTHORITATIVE_DATETIME_PATTERN = re.compile(
     r"(?:Z|[+-]\d{2}:?\d{2})?$"
 )
 _HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
-_INLINE_RESCUE_END_TIME_PATTERN = re.compile(
-    r"(?<![\w\u4e00-\u9fff])抢救结束时间\s*[:：]\s*(?P<value>"
-    r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
-    r"|\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}(?::\d{2})?"
-    r")"
+_RESCUE_END_LABEL_PATTERN = re.compile(r"(?<![\w\u4e00-\u9fff])抢救结束时间\s*[:：]")
+_RESCUE_END_VALUE_PATTERN = re.compile(
+    r"\s*(?P<value>(?:\d{4}-\d{2}-\d{2}[ T]+\d{2}:\d{2}"
+    r"|\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2})"
+    r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)"
+    r"(?![A-Za-z0-9_:+.\-])"
 )
 _ATTENDING_MARKERS = ("主治医师", "主治查房", "代主治医师", "代主治查房")
 _SENIOR_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房", "高级职称")
@@ -216,24 +216,30 @@ def extract_admission_anchor(
 
 
 def parse_rescue_end_time(value: Any) -> datetime | None:
-    parsed = parse_luxian_0609_rescue_end_time(value)
-    if parsed is not None or not isinstance(value, str):
-        return parsed
-    match = _INLINE_RESCUE_END_TIME_PATTERN.search(value)
-    if match is None:
+    """标签整值保留精度与时区；多标签必须可核实为同一结束时刻。"""
+    if not isinstance(value, str):
         return None
-    normalized = match.group("value").strip()
-    for date_format in (
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M",
-        "%Y年%m月%d日 %H:%M:%S",
-        "%Y年%m月%d日 %H:%M",
-    ):
-        try:
-            return datetime.strptime(normalized, date_format)
-        except ValueError:
-            continue
-    return None
+    candidates = set()
+    for label in _RESCUE_END_LABEL_PATTERN.finditer(value):
+        match = _RESCUE_END_VALUE_PATTERN.match(value, label.end())
+        if match is None:
+            return None
+        normalized = match.group("value").replace("年", "-").replace("月", "-").replace("日", "").replace("T", " ")
+        normalized = re.sub(r"([+-]\d{2})$", r"\1:00", normalized)
+        parsed = None
+        for date_format in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            for offset in ("%z", ""):
+                try:
+                    parsed = parse_authoritative_datetime(datetime.strptime(normalized, date_format + offset))
+                    break
+                except ValueError:
+                    continue
+            if parsed is not None:
+                break
+        if parsed is None:
+            return None
+        candidates.add(parsed)
+    return next(iter(candidates)) if len(candidates) == 1 else None
 
 
 def extract_rescue_events(rows: Sequence[Mapping[str, Any]]) -> tuple[RescueEvent, ...]:

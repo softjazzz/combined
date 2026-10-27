@@ -426,8 +426,11 @@ def create_app() -> FastAPI:
                 logger.warning("LLM 默认配置预热失败，将按需加载", exc_info=True)
 
             # 只重投尚未领取的 LX0609 叶任务；Worker 再校验冻结模型/构建身份。
-            qc_sichuan_router.resume_queued_luxian_0609_workspace_jobs()
-            qc_sichuan_router.start_luxian_0609_task_recovery_monitor()
+            if os.getenv("MEDQC_RESUME_QC_TASKS", "true").strip().lower() in {"1", "true", "yes"}:
+                qc_sichuan_router.resume_queued_luxian_0609_workspace_jobs()
+                qc_sichuan_router.start_luxian_0609_task_recovery_monitor()
+            else:
+                logger.info("历史质控任务自动恢复已关闭；正常启动与手动质控入口保留")
 
             # 生产可启用 SC 规则来源持续巡检（巡检接口等价 /rules/source）
             qc_sichuan_router.start_rule_source_monitor()

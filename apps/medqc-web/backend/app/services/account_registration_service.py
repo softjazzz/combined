@@ -121,6 +121,15 @@ class AccountRegistrationService(AccountManagementService):
         registration, events = registration_tables(users)
         return users, registration, events
 
+    def departments(self):
+        from .registration_departments import registration_departments
+
+        with self.sessions() as session:
+            return {"items": [
+                {key: option[key] for key in ("key", "name", "label")}
+                for option in registration_departments(session)
+            ]}
+
     def _recipients(self, session, users, institute):
         rows = session.execute(
             sa.select(users.c.id, users.c.role, users.c.roles_json, users.c.institute_id).where(
@@ -145,12 +154,23 @@ class AccountRegistrationService(AccountManagementService):
 
         data = RegistrationCreate.model_validate(data).model_dump()
         password = data["password"]
+        email = str(data["email"] or "").lower() or None
         try:
             with self.sessions() as session, session.begin():
+                if data["department_key"]:
+                    from .registration_departments import registration_departments
+
+                    selected = next((option for option in registration_departments(session)
+                                     if option["key"] == data["department_key"]), None)
+                    if selected is None:
+                        raise RectificationError("科室选项已失效，请刷新科室列表后重新选择", 409)
+                    data["institute_id"], data["department"] = selected["institute_id"], selected["name"]
                 self._write_lock(session)
                 users, registrations, events = self._tables(session)
                 recipients = self._recipients(session, users, data["institute_id"])
-                identifiers = [data["username"].lower(), data["email"].lower()]
+                identifiers = [data["username"].lower()]
+                if email:
+                    identifiers.append(email)
                 if data["phone"]:
                     identifiers.append(data["phone"])
                 matches = (
@@ -186,7 +206,7 @@ class AccountRegistrationService(AccountManagementService):
                         and request["status"] == "rejected"
                         and not old["is_active"]
                         and old["username"].lower() == data["username"].lower()
-                        and old["email"].lower() == data["email"].lower()
+                        and (not email or str(old["email"] or "").lower() == email)
                         and verify_password(password, old["password_hash"])
                     ):
                         raise RectificationError(
@@ -208,7 +228,7 @@ class AccountRegistrationService(AccountManagementService):
                         users.insert().values(
                             id=user_id,
                             username=data["username"],
-                            email=data["email"].lower(),
+                            email=email,
                             password_hash=get_password_hash(password),
                             display_name=data["display_name"],
                             phone=data["phone"],
@@ -329,7 +349,7 @@ class AccountRegistrationService(AccountManagementService):
             raise RectificationError("申请筛选无效")
         with self.sessions() as session, session.begin():
             users, registrations, _ = self._tables(session)
-            actor = self._admin(session, users, actor_id)
+            actor = self._admin(session, users, actor_id, for_update=False)
             statement = (
                 sa.select(
                     registrations, users.c.username, users.c.email, users.c.display_name
@@ -365,7 +385,7 @@ class AccountRegistrationService(AccountManagementService):
     def detail(self, actor_id, user_id):
         with self.sessions() as session, session.begin():
             users, registrations, events = self._tables(session)
-            actor = self._admin(session, users, actor_id)
+            actor = self._admin(session, users, actor_id, for_update=False)
             row = (
                 session.execute(
                     sa.select(

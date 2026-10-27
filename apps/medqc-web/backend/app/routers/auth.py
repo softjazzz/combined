@@ -108,8 +108,8 @@ async def login(request: Request, login_data: LoginRequest):
         user = updated_user
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    # 兼容迁移入口：当前仍保留 sub=email，后续可切换到 sub=user_id。
-    token_sub = str(user.get("email") or "")
+    # 旧账号沿用邮箱 subject；无邮箱注册账号使用已有持久 ID 解析链路。
+    token_sub = str(user.get("email") or user["id"])
     access_token = create_access_token(
         data={"sub": token_sub, "uid": user.get("id")},
         expires_delta=access_token_expires,
@@ -137,6 +137,13 @@ async def register(request: Request, user_data: RegistrationCreate):
     return _auth_shell(request, result, message="注册申请已保存，请等待管理员审批")
 
 
+@router.get("/registration-departments")
+async def registration_departments(request: Request):
+    enforce_rate_limit(request, bucket="registration_departments", max_requests=60, window_seconds=60)
+    result = await _registration_call("departments")
+    return _auth_shell(request, result)
+
+
 @router.post("/registration-status")
 async def registration_status(request: Request, query: RegistrationStatusQuery):
     enforce_rate_limit(request, bucket="registration_status", max_requests=10, window_seconds=60)
@@ -157,6 +164,13 @@ async def get_current_user_info(    request: Request,current_user: dict = Depend
 
 @router.put("/profile")
 async def update_profile(    request: Request,profile_data: UserUpdate, current_user: dict = Depends(get_current_user)):
+    if (
+        "doctor" in (current_user.get("roles") or [])
+        and not set(current_user.get("roles") or []) & {"admin", "qc_manager", "qc_staff", "sync_admin", "super_admin"}
+        and profile_data.display_name is not None
+        and profile_data.display_name.strip() != str(current_user.get("display_name") or "").strip()
+    ):
+        raise HTTPException(403, "医生姓名用于病历授权，仅可由系统管理员核定变更")
     if profile_data.department is not None and profile_data.department != current_user.get("department"):
         raise HTTPException(403, "账号科室授权仅可由系统管理员变更")
     try:

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Mapping, Sequence
 
+from ..basic_timeliness_facts import parse_authoritative_datetime
+from ..source_evidence_reader import authoritative_document_time_value
 from .shared import _clean, _parse_datetime, _row_time
 
 
@@ -52,7 +54,7 @@ def evaluate_death_discussion_timeliness(
     timed_discussions = tuple(
         (candidate, index, row)
         for index, row in enumerate(discussion_rows)
-        if (candidate := _row_time(row)) is not None
+        if (candidate := parse_authoritative_datetime(authoritative_document_time_value(row))) is not None
     )
     postdeath_discussions = tuple(
         candidate
@@ -97,7 +99,7 @@ def evaluate_death_discussion_timeliness(
         hours = (discussion_time - death_time).total_seconds() / 3600
         # 及时讨论足以证明七日内完成；仅晚讨论不能覆盖另一份真实正文的未知时间。
         if hours > 168 and any(
-            _row_time(row) is None
+            parse_authoritative_datetime(authoritative_document_time_value(row)) is None
             and isinstance(row.get("record_content"), str)
             and row["record_content"].strip()
             for row in discussion_rows

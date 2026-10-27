@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Callable, Optional
 
-from sqlalchemy import DateTime, String, and_, case, cast, exists, func, inspect as sa_inspect, or_, text
+from sqlalchemy import DateTime, String, and_, case, cast, exists, func, inspect as sa_inspect, or_, text, tuple_
 from sqlalchemy.orm import Session
 
 from ..clinical_read import clinical_query, clinical_read_schema
@@ -92,7 +92,22 @@ def list_medical_records(
     end_date: Optional[date] = None,
     page: int = 1,
     page_size: int = 20,
+    case_scope=None,
 ) -> dict[str, Any]:
+    if case_scope is not None:
+        with _session_factory() as session:
+            mr = MedicalRecordFrontpage
+            query = clinical_query(session, mr).filter(case_scope.predicate(mr))
+            if keyword:
+                query = query.filter(mr.name.contains(keyword))
+            if start_date:
+                query = query.filter(mr.admission_datetime >= datetime.combine(start_date, datetime.min.time()))
+            if end_date:
+                query = query.filter(mr.discharge_datetime <= datetime.combine(end_date, datetime.max.time()))
+            total = query.count()
+            rows = query.order_by(mr.admission_datetime.desc()).offset((page - 1) * page_size).limit(page_size).all()
+            return {"items": [{column.name: getattr(row, column.name) for column in mr.__table__.columns} for row in rows],
+                    "total": total, "page": page, "page_size": page_size}
     repo = get_repository()
     return repo.list_patients(
         dept=dept,
@@ -108,12 +123,30 @@ def get_stats(
     dept: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    case_scope=None,
 ) -> dict[str, Any]:
+    if case_scope is not None:
+        with _session_factory() as session:
+            mr = MedicalRecordFrontpage
+            query = clinical_query(session, mr).filter(case_scope.predicate(mr))
+            if start_date:
+                query = query.filter(mr.admission_datetime >= datetime.combine(start_date, datetime.min.time()))
+            if end_date:
+                query = query.filter(mr.discharge_datetime <= datetime.combine(end_date, datetime.max.time()))
+            refs = tuple(tuple(row) for row in query.with_entities(mr.institute_id, mr.patient_id, mr.visit_id).all())
+            count = len(refs)
+            issues = session.query(QCResult).filter(tuple_(QCResult.institute_id, QCResult.patient_id, QCResult.visit_id).in_(refs))
+            total = issues.count()
+            opened = issues.filter(QCResult.status == "open").count()
+            return {"total_records": count, "total_qc_issues": total,
+                    "open_qc_issues": opened, "resolved_qc_issues": total - opened}
     repo = get_repository()
     return repo.get_stats(dept=dept, start_date=start_date, end_date=end_date)
 
 
-def get_departments() -> list[str]:
+def get_departments(*, case_scope=None) -> list[str]:
+    if case_scope is not None:
+        return [case_scope.department]
     repo = get_repository()
     return repo.list_departments()
 
@@ -963,6 +996,7 @@ def get_workstation_data(
     analytics_rule_id: Optional[str] = None,
     analytics_result_status: Optional[str] = None,
     analytics_scope: Optional[str] = None,
+    case_scope=None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
@@ -1003,13 +1037,15 @@ def get_workstation_data(
     with session_factory() as session:
         settings, _ = settings_loader()
         hospitalization_projection_map = _load_hospitalization_projection_map(session)
-        indexed_registration_records = _load_indexed_registration_records(session)
+        indexed_registration_records = _load_indexed_registration_records(session) if case_scope is None else []
         real_total_count = (
-            clinical_query(session, func.count()).select_from(MedicalRecordFrontpage).scalar() or 0
+            clinical_query(session, func.count()).select_from(MedicalRecordFrontpage).filter(
+                case_scope.predicate(MedicalRecordFrontpage) if case_scope is not None else True
+            ).scalar() or 0
         ) + len(indexed_registration_records)
         demo_candidates = demo_records_builder()
         demo_filtered = demo_filter(demo_candidates, dept=dept, keyword=keyword)
-        include_demo = demo_policy(settings, int(real_total_count))
+        include_demo = case_scope is None and demo_policy(settings, int(real_total_count))
         visible_demos = demo_filtered if include_demo and not (start_date or end_date) else []
         if normalized_hospital_status != "all":
             visible_demos = [
@@ -1024,6 +1060,8 @@ def get_workstation_data(
         discharge_summary = _workstation_discharge_summary_subquery(session)
 
         base_query = clinical_query(session, MedicalRecordFrontpage)
+        if case_scope is not None:
+            base_query = base_query.filter(case_scope.predicate(MedicalRecordFrontpage))
         if discharge_summary is not None:
             base_query = base_query.outerjoin(
                 discharge_summary,
@@ -1252,6 +1290,8 @@ def get_workstation_data(
             dept_expr,
             func.count().label("total"),
         ).select_from(MedicalRecordFrontpage)
+        if case_scope is not None:
+            dept_stats_base_query = dept_stats_base_query.filter(case_scope.predicate(MedicalRecordFrontpage))
         if discharge_summary is not None:
             dept_stats_base_query = dept_stats_base_query.outerjoin(
                 discharge_summary,
@@ -1290,6 +1330,8 @@ def get_workstation_data(
         )
 
         dept_total_count = clinical_query(session, func.count()).select_from(MedicalRecordFrontpage)
+        if case_scope is not None:
+            dept_total_count = dept_total_count.filter(case_scope.predicate(MedicalRecordFrontpage))
         if discharge_summary is not None:
             dept_total_count = dept_total_count.outerjoin(
                 discharge_summary,
@@ -1319,6 +1361,8 @@ def get_workstation_data(
             doctor_name_expr,
             func.count().label("total"),
         ).select_from(MedicalRecordFrontpage)
+        if case_scope is not None:
+            doctor_stats_base_query = doctor_stats_base_query.filter(case_scope.predicate(MedicalRecordFrontpage))
         if discharge_summary is not None:
             doctor_stats_base_query = doctor_stats_base_query.outerjoin(
                 discharge_summary,

@@ -52,6 +52,20 @@ describe('Auth Store', () => {
     is_active: true,
   }
 
+  it('restores an approved account without email using its persistent profile and name', async () => {
+    vi.mocked(ApiService.isAuthenticated).mockReturnValue(true)
+    vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+      success: true,
+      data: { ...mockUser, email: '', display_name: '无邮箱验收医生', institute_id: 'A' },
+    })
+    const store = useAuthStore()
+    await store.initialize()
+    expect(store.isAuthenticated).toBe(true)
+    expect(store.userName).toBe('无邮箱验收医生')
+    expect(store.userRoles).toEqual(['doctor'])
+    expect(store.user?.institute_id).toBe('A')
+  })
+
   it('keeps auth identity fields without logging passwords or session tokens', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const password = 'synthetic-login-secret'

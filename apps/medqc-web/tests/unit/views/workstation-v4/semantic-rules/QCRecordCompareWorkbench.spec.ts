@@ -65,6 +65,63 @@ beforeEach(async () => {
 })
 
 describe('QCRecordCompareWorkbench', () => {
+  it('PDF正文版本按父文书展开，点击后能读到独立保留的PDF全文', async () => {
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'synthetic-version-visit',
+        issues: [],
+        documentOnly: true,
+        providedDocuments: [
+          {
+            key: 'original',
+            document_type: 'consultation_record',
+            title: '会诊记录',
+            content: '原PG会诊正文',
+          },
+          {
+            key: 'pdf-text',
+            document_type: 'pdf_candidate',
+            title: '请会诊执行记录（PDF待核对）',
+            content: '独立保留的PDF全文',
+            pdf_review_parent_key: 'original',
+            pdf_review_relation: 'version_difference',
+          },
+        ],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('.readonly-medical-document-directory-head span').text()).toBe('1 / 1')
+    await wrapper.get('[data-testid="pdf-versions-toggle-original"]').trigger('click')
+    await wrapper.get('[data-testid="pdf-version-pdf-text"]').trigger('click')
+    expect(wrapper.get('.record-content-scroll').text()).toContain('独立保留的PDF全文')
+    expect(wrapper.get('.record-content-scroll').text()).not.toContain('原PG会诊正文')
+    expect(wrapper.get('select').element.value).toBe('pdf-text')
+    expect(wrapper.get('optgroup').attributes('label')).toContain('PDF对照版本')
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['daily_course_record', '输血前评估', '输血前评估'],
+    ['daily_course_record', '输血后评价记录', '输血后评价记录'],
+    ['consultation_record', '会诊记录', '请会诊执行记录'],
+  ])('查看病历的目录和正文标题一致：%s/%s', async (documentType, title, expected) => {
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'synthetic-title-visit',
+        issues: [],
+        documentOnly: true,
+        providedDocuments: [
+          { key: 'synthetic-title', document_type: documentType, title, content: '合成正文' },
+        ],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('.record-document-nav').text()).toContain(expected)
+    expect(wrapper.get('.record-content-toolbar strong').text()).toBe(expected)
+    expect(wrapper.get('.record-content-column').text()).toContain('合成正文')
+    wrapper.unmount()
+  })
+
   it('查看病历实际阅读入口优先渲染系统首页表单而非普通分节正文', async () => {
     const wrapper = mount(QCRecordCompareWorkbench, {
       props: {

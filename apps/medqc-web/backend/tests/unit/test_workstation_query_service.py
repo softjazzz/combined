@@ -114,6 +114,9 @@ def _default_qc_projection_is_not_run_for_frontpage_only_fixture(monkeypatch):
 
 @pytest.fixture()
 def workstation_session_factory(monkeypatch):
+    # 此夹具只建SQLite默认schema，不继承开发机.env里的PG split/cdm配置。
+    monkeypatch.setattr(query_service_module, "clinical_read_schema", lambda: None)
+    monkeypatch.setattr("app.services.clinical_read.clinical_read_schema", lambda: None)
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(
         engine,
@@ -161,6 +164,8 @@ def workstation_session_factory(monkeypatch):
 
 @pytest.fixture()
 def workstation_session_factory_without_discharge_record(monkeypatch):
+    monkeypatch.setattr(query_service_module, "clinical_read_schema", lambda: None)
+    monkeypatch.setattr("app.services.clinical_read.clinical_read_schema", lambda: None)
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(
         engine,

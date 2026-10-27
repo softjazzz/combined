@@ -37,6 +37,121 @@ const documents: EditableMedicalRecordDocument[] = [
 ]
 
 describe('ReadonlyMedicalDocumentDirectory', () => {
+  it('活动PDF操作文书显示原题名、原日期和来源页码', () => {
+    const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
+      props: {
+        documents: [{ key: 'pdf-active', document_type: 'daily_course_record', title: '气管插管操作记录',
+          content: '合成操作原文', record_time: '2026-08-10T18:21+08:00',
+          pdf_source_file_id: 'SYN-PDF', pdf_source_pages: [4, 5] }],
+        selectedKey: 'pdf-active',
+      },
+    })
+    expect(wrapper.get('.record-document-item strong').text()).toBe('气管插管操作记录')
+    expect(wrapper.get('.readonly-medical-document-new').text()).toBe('new')
+    expect(wrapper.get('.readonly-medical-document-new').attributes('title')).toBe('新增文书')
+    expect(wrapper.get('.record-document-item small').text()).toContain('PDF第4–5页')
+    expect(wrapper.get('.record-document-item small').text()).toContain('08月10日')
+    wrapper.unmount()
+  })
+
+  it.each(['daily_course_record', 'consultation_record'])(
+    '%s仅正式补入文书显示new，原PG和候选不标记',
+    async (documentType) => {
+      const pgTitle = documentType === 'daily_course_record' ? '日常病程记录' : '请会诊执行记录'
+      const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
+        props: {
+          documents: [
+            { key: 'pg', document_type: documentType, title: pgTitle, content: '原PG正文' },
+            { key: 'added', document_type: documentType, title: '新增文书', content: '新增正文', pdf_source_file_id: 'SYN-PDF' },
+            { key: 'pending', document_type: 'pdf_candidate', title: '候选文书', content: '候选正文', pdf_source_file_id: 'SYN-PDF' },
+          ],
+          selectedKey: 'added',
+        },
+      })
+      expect(wrapper.findAll('.readonly-medical-document-new')).toHaveLength(1)
+      const pg = wrapper.findAll('.record-document-item').find((item) => item.get('strong').text() === pgTitle)
+      expect(pg).toBeDefined()
+      expect(pg!.find('.readonly-medical-document-new').exists()).toBe(false)
+      await wrapper.get('[data-testid="record-document-group-toggle-pdf_review"]').trigger('click')
+      expect(wrapper.text()).toContain('候选文书')
+      expect(wrapper.findAll('.readonly-medical-document-new')).toHaveLength(1)
+      await wrapper.findAll('.record-document-item').find((item) => item.text().includes('新增文书'))!.trigger('click')
+      expect(wrapper.emitted('select')).toEqual([['added']])
+      wrapper.unmount()
+    },
+  )
+
+  it('同一文书只占一项，PDF版本折叠在原文书下并可切换', async () => {
+    const original = {
+      key: 'original',
+      document_type: 'consultation_record',
+      title: '会诊记录',
+      content: '原文书正文',
+    }
+    const pdf: EditableMedicalRecordDocument = {
+      key: 'pdf',
+      document_type: 'pdf_candidate',
+      title: '请会诊执行记录（PDF待核对）',
+      content: 'PDF对照正文',
+      pdf_review_parent_key: 'original',
+      pdf_review_relation: 'same_content',
+      pdf_source_pages: [20, 20],
+    }
+    const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
+      props: { documents: [original, pdf], selectedKey: 'original' },
+    })
+    expect(wrapper.get('.readonly-medical-document-directory-head span').text()).toBe('1 / 1')
+    expect(wrapper.findAll('.record-document-item')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="pdf-version-pdf"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="pdf-versions-toggle-original"]').trigger('click')
+    expect(wrapper.get('[data-testid="pdf-version-pdf"]').text()).toContain('正文一致')
+    expect(wrapper.get('[data-testid="pdf-version-pdf"]').text()).toContain('第20页')
+    await wrapper.get('[data-testid="pdf-version-pdf"]').trigger('click')
+    expect(wrapper.emitted('select')).toEqual([['pdf']])
+    wrapper.unmount()
+  })
+
+  it('未对应或悬空关联的PDF单列待核对，搜索PDF正文仍能找到父文书', async () => {
+    const original = {
+      key: 'original',
+      document_type: 'consultation_record',
+      title: '会诊记录',
+      content: '原文书正文',
+    }
+    const linked: EditableMedicalRecordDocument = {
+      key: 'pdf-linked',
+      document_type: 'pdf_candidate',
+      title: 'PDF版本',
+      content: '候选独有检索词',
+      pdf_review_parent_key: 'original',
+      pdf_review_relation: 'version_difference',
+    }
+    const orphan: EditableMedicalRecordDocument = {
+      key: 'pdf-orphan',
+      document_type: 'pdf_candidate',
+      title: '未对应PDF',
+      content: '另一份正文',
+      pdf_review_parent_key: 'missing',
+      pdf_review_relation: 'unmatched',
+    }
+    const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
+      props: { documents: [original, linked, orphan], selectedKey: 'original' },
+    })
+    expect(wrapper.get('[data-testid="record-document-group-toggle-pdf_review"]').text()).toContain(
+      'PDF待核对',
+    )
+    expect(wrapper.get('.readonly-medical-document-directory-head span').text()).toBe('2 / 2')
+    await wrapper.get('[data-testid="record-document-search"]').setValue('候选独有检索词')
+    expect(wrapper.find('[data-testid="pdf-version-pdf-linked"]').exists()).toBe(true)
+    expect(wrapper.findAll('.record-document-item')).toHaveLength(1)
+    await wrapper.get('[data-testid="record-document-search"]').setValue('')
+    await wrapper.setProps({ selectedKey: 'pdf-linked' })
+    expect(
+      wrapper.get('[data-testid="pdf-versions-toggle-original"]').attributes('aria-expanded'),
+    ).toBe('true')
+    wrapper.unmount()
+  })
+
   it('入院记录与首次病程记录直接并列在一级目录下', () => {
     const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
       props: { documents, selectedKey: 'admission-1' },

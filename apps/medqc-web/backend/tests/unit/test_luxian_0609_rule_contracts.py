@@ -240,6 +240,9 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
     }
 
     assert program_only == {
+        "LX0609-06-03-05", "LX0609-06-03-06",
+        "LX0609-10-04-01",
+        "LX0609-04-02-09",
         "LX0609-02-01-02",
         "LX0609-01-01-01",
         "LX0609-01-02-01",
@@ -304,6 +307,9 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         course_contract = next(contract for contract in contracts if contract.rule_id == rule)
         assert (course_contract.contract_version, course_contract.decision_authority, course_contract.max_llm_calls_per_rule, course_contract.prompt_version) == ("v2", "program_then_optional_llm", 1, "lx0609-course-body-facts-v2")
     assert typed_shadow == {
+        "LX0609-06-03-05", "LX0609-06-03-06",
+        "LX0609-10-04-01",
+        "LX0609-04-02-09",
         "LX0609-06-01-01",
         "LX0609-01-01-01",
         "LX0609-01-02-01",

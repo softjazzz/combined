@@ -71,6 +71,8 @@ def _reject_customer_test_pool_source_write(pool_id: str) -> None:
     """自建测试病历创建后固定；源库匹配/同步会改写病例绑定，甚至绑定到真实患者。"""
     if _safe_text(pool_id) == CUSTOMER_TEST_POOL_ID:
         raise ValueError("客户自建测试病历创建后固定，不支持源库匹配或同步；如需修改请复制为新病例")
+    if _safe_text(pool_id).startswith("pdfset-"):
+        raise ValueError("PDF补全样本集是独立材料快照，不支持重新匹配或源库同步")
 
 
 def _matched_case_ref(item: Dict[str, Any]) -> CaseRef:
@@ -4830,6 +4832,11 @@ class CustomQCSamplePoolService:
                     row["department"] = _safe_text(display.get("department"))
                 if not _safe_text(row.get("mr_no")):
                     row["mr_no"] = _safe_text(display.get("mr_no"))
+                from .validation_material_source import is_material_copy
+                if is_material_copy(identity[1], identity[2]):
+                    for field in ("department", "admission_time", "discharge_time", "hospitalization_status"):
+                        if _safe_text(display.get(field)):
+                            row[field] = display[field]
 
             if pool_id == CUSTOMER_TEST_POOL_ID:
                 grouped_rows = sorted(
@@ -5023,6 +5030,11 @@ class CustomQCSamplePoolService:
             for field in ("patient_name", "patient_sex", "patient_age", "mr_no", "department"):
                 if not display[field]:
                     display[field] = _safe_text(row.get(field))
+        from .validation_material_source import is_material_copy, material_copy_display
+        for ref in identities:
+            if is_material_copy(ref[1], ref[2]):
+                display_map[ref] = material_copy_display(institute_id=ref[0],
+                    patient_id=ref[1], visit_id=ref[2])
         return display_map
 
     def _load_patient_display_map(

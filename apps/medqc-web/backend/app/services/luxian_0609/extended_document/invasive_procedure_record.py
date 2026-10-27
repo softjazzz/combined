@@ -29,6 +29,8 @@ import unicodedata
 from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import _json_response_object, _usage
+from ..source_evidence_reader import authoritative_document_time_value
+from ..basic_timeliness_facts import parse_authoritative_date, parse_authoritative_datetime
 
 CATALOG_VERSION = "luxian-invasive-procedure-2026-v1"
 MAPPING_SCHEMA_VERSION = "lx0609-invasive-order-mapping-v2"
@@ -49,7 +51,6 @@ _DATA_PATH = (
     Path(__file__).resolve().parents[3] / "data" / "luxian_0609_invasive_procedure_catalog_2026.csv"
 )
 _ORDER_TIME_FIELDS = ("planned_start_datetime", "prescribed_datetime")
-_RECORD_TIME_FIELDS = ("record_time", "record_datetime", "submit_datetime")
 
 
 @dataclass(frozen=True)
@@ -315,7 +316,7 @@ def window_records(
 
     selected: list[tuple[datetime, str]] = []
     for row in record_rows:
-        recorded = _first_time(row, _RECORD_TIME_FIELDS)
+        recorded = _record_time(row)
         text = _record_text(row)
         if recorded is None or not text:
             continue
@@ -326,6 +327,35 @@ def window_records(
         ):
             selected.append((recorded, text))
     return tuple(sorted(selected, key=lambda item: item[0]))
+
+
+def _record_time(row: Mapping[str, Any]) -> datetime | None:
+    """操作记录沿权威文书时间优先级，不能跳过无效主时钟借次级字段通过。"""
+    value = authoritative_document_time_value(row)
+    precise = parse_authoritative_datetime(value)
+    if precise is not None:
+        return precise
+    # 本规则按自然日核对，完整日期足以定位窗口；不接受带垃圾后缀的日期前缀。
+    day = parse_authoritative_date(value)
+    return datetime.combine(day, datetime.min.time()) if day is not None else None
+
+
+def _incomplete_candidate_issue(
+    triggers: Sequence[ProcedureTrigger], record_rows: Sequence[Mapping[str, Any]],
+) -> str:
+    missing_body = False
+    for row in record_rows:
+        moment = _record_time(row)
+        text = _record_text(row)
+        if moment is None and (text or row.get("document_id")):
+            return "authoritative_time_missing"
+        if moment is not None and not text and any(
+            trigger.anchor_date is not None
+            and trigger.anchor_date <= moment.date() < trigger.anchor_date + timedelta(days=RECORD_WINDOW_DAYS)
+            for trigger in triggers
+        ):
+            missing_body = True
+    return "required_field_missing" if missing_body else ""
 
 
 def _record_text(row: Mapping[str, Any]) -> str:
@@ -432,7 +462,10 @@ async def check_invasive_procedure_records(
 ) -> RecordDocumentationResult:
     triggers = tuple(triggers)
     records = window_records(triggers, record_rows)
+    candidate_issue = _incomplete_candidate_issue(triggers, record_rows)
     if not records:
+        if candidate_issue:
+            return RecordDocumentationResult("unresolved", candidate_issue)
         # 操作日起 3 天内没有任何病程或手术记录：确定未见操作记录，无需模型。
         return RecordDocumentationResult(
             "ready", states=tuple((item.procedure.code, "not_documented") for item in triggers)
@@ -450,4 +483,6 @@ async def check_invasive_procedure_records(
         states = _parse_records(response, triggers, records, texts)
     except (ValueError, TypeError, KeyError, IndexError, AttributeError):
         return RecordDocumentationResult("technical_error", "model_invalid_output", 1, *usage)
+    if candidate_issue and any(state != "documented" for _, state in states):
+        return RecordDocumentationResult("unresolved", candidate_issue, 1, *usage)
     return RecordDocumentationResult("ready", "", 1, *usage, states=states)

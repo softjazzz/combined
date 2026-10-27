@@ -101,6 +101,9 @@ def _controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
         covered_dates = _controlled_date_list(item.get("covered_postop_dates"))
         surgeon_round_present = item.get("surgeon_round_present")
         preop_surgeon_round_present = item.get("preop_surgeon_round_present")
+        window_state = item.get("window_state")
+        if window_state not in {None, "evaluation_window_not_mature"}:
+            return None
         if (
             preop_surgeon_round_present is not None
             and type(preop_surgeon_round_present) is not bool
@@ -115,7 +118,9 @@ def _controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
             or len(set(required_dates)) != 3
             or covered_dates is None
             or not set(covered_dates).issubset(required_dates)
-            or type(surgeon_round_present) is not bool
+            or (type(surgeon_round_present) is not bool and not (
+                window_state == "evaluation_window_not_mature" and surgeon_round_present is None
+            ))
         ):
             return None
         safe_event: dict[str, Any] = {
@@ -125,6 +130,8 @@ def _controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
             "covered_postop_dates": covered_dates,
             "surgeon_round_present": surgeon_round_present,
         }
+        if window_state is not None:
+            safe_event["window_state"] = window_state
         if preop_surgeon_round_present is not None:
             safe_event["preop_surgeon_round_present"] = preop_surgeon_round_present
         if "course_time_unresolved" in item:
@@ -354,9 +361,13 @@ def postoperative_customer_fact_status_is_valid(
             and safe_facts.get("preop_surgeon_round_present") is not False
         )
         if normalized_status == "compliant":
-            return complete
+            return complete and not any(event.get("window_state") == "evaluation_window_not_mature"
+                                        for event in safe_facts.get("surgery_events", ()))
         if normalized_status == "non_compliant":
             return not complete
+        if normalized_status == "not_applicable":
+            return any(event.get("window_state") == "evaluation_window_not_mature"
+                       for event in safe_facts.get("surgery_events", ()))
         return normalized_status == "data_gap"
     if kind == "postoperative_senior_round_check":
         # 旧安全形状有意不暴露逐台关联，非合规的汇总文本以“共…台手术”开头。

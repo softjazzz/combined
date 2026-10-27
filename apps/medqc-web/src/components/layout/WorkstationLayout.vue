@@ -88,7 +88,7 @@
                 <span class="ws-user__avatar" aria-hidden="true">{{ roleLabel.slice(0, 1) }}</span>
                 <span v-if="!collapsed" class="ws-user__meta">
                   <span class="ws-user__role">{{ roleLabel }}</span>
-                  <span class="ws-user__email">{{ authStore.user?.email || '' }}</span>
+                  <span class="ws-user__email">{{ authStore.user?.email || authStore.userName || '' }}</span>
                 </span>
               </button>
               <template #overlay>
@@ -96,7 +96,7 @@
                   <div class="ws-user-menu__who">
                     <div class="ws-user-menu__hint">当前账号</div>
                     <div class="ws-user-menu__email">
-                      {{ authStore.user?.email || '未登录' }}
+                      {{ authStore.user?.email || authStore.userName || '未登录' }}
                     </div>
                   </div>
                   <a-menu-divider />

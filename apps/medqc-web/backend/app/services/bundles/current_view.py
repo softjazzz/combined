@@ -9,6 +9,10 @@ from typing import Any
 from . import assembly, emr_view
 from .frontpage_view import load_frontpage_document
 from ..luxian_0609.basic_timeliness_facts import extract_admission_anchor
+from ..validation_material_source import (
+    material_pg_preference_reviews, material_original_document_ids, material_review_documents, material_source_schema,
+)
+from ..validation_material_display import attach_pdf_material_sources, prefer_pg_documents
 
 # 查看当前病历时医嘱逐条列出，质控 Bundle 的上限（药品700/非药品1500）会让医嘱多的病例
 # 静默少显示（1016 样本最多 788/2156 条）。只读展示路径单独放宽；仍超出时由
@@ -25,7 +29,7 @@ _pending_lock = Lock()
 
 def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, Any]:
     identity = dict(institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
-    source_schema = assembly._default_source_schema()
+    source_schema = material_source_schema(default_schema=assembly._default_source_schema(), **identity)
     limits = assembly._material_limits_for_variants(scenes=(), domains=emr_view._DOMAIN_LOAD_ORDER)
     limits["inpat_registration"] = 2
     for table_name, limit in CURRENT_VIEW_PROJECTION_LIMITS.items():
@@ -43,11 +47,22 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
         for domain in emr_view._DOMAIN_LOAD_ORDER
     }
     documents = emr_view.build_documents_from_domain_bundles(bundles)
+    pdf_candidates = material_review_documents(**identity)
     frontpage = load_frontpage_document(**identity) if snapshot.rows_by_table.get("mr") else None
     if frontpage is not None:
         # 仅替换当前查看的首页条目；历史 Bundle 和规则输入仍由原有 owner 读取。
         documents = [document for document in documents if document.get("doc_type") != "mr"]
         documents.append(frontpage)
+    original_document_ids = material_original_document_ids(**identity)
+    pg_reviews = material_pg_preference_reviews(**identity)
+    documents = attach_pdf_material_sources(
+        documents, original_document_ids=original_document_ids, reviews=pg_reviews,
+    )
+    # 活动文书已在共享取数入口按复核决定筛选；目录不再单独删行造成与规则不一致。
+    if pdf_candidates:
+        documents.extend(prefer_pg_documents(
+            pdf_candidates, documents, original_document_ids=original_document_ids, reviews=pg_reviews,
+        ))
     anchor = extract_admission_anchor(
         registration_rows=snapshot.rows_by_table.get("inpat_registration", []),
         admission_rows=snapshot.rows_by_table.get("admission_record", []),

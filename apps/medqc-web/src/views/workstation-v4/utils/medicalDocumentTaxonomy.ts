@@ -10,11 +10,14 @@ export type MedicalDocumentLike = {
   document_type?: string
   source_table?: string
   group_key?: string
+  source_file_id?: string
+  pdf_source_file_id?: string
   content?: string | null
   sections?: Array<{ text?: string }>
 }
 
 export type MedicalDocumentGroupKey =
+  | 'pdf_review'
   | 'frontpage'
   | 'admission'
   | 'admission.record'
@@ -53,6 +56,7 @@ export const MEDICAL_DOCUMENT_GROUP_ORDER: MedicalDocumentGroupKey[] = [
 ]
 
 export const MEDICAL_DOCUMENT_GROUP_LABELS: Record<MedicalDocumentGroupKey, string> = {
+  pdf_review: 'PDF待核对',
   frontpage: '病案首页',
   admission: '入院与首次病程',
   'admission.record': '入院记录',
@@ -83,7 +87,7 @@ const TYPE_LABELS: Record<string, string> = {
   course_record: '病程记录',
   rescue_record: '抢救记录',
   summary_record: '阶段小结',
-  consultation_record: '会诊记录',
+  consultation_record: '请会诊执行记录',
   diffcase_discussion_record: '疑难病例讨论记录',
   surgery_record: '手术记录',
   presurg_summary: '术前小结',
@@ -255,7 +259,28 @@ function isRound(identity: string): boolean {
   return hasAny(identity, /查房|round|ward[_ -]?round|course[_ -]?note/)
 }
 
+function transfusionCourseTitle(document: MedicalDocumentLike): string {
+  const types = [document.doc_type, document.document_type, document.type, document.source_table]
+  if (!types.some((value) => normalize(value) === 'daily_course_record')) return ''
+  // PDF的独立输血评估由日常病程表承载；只认显式题名，不从正文推断文书类型。
+  return (
+    [document.title, document.document_title, document.doc_name, document.label]
+      .map((value) => String(value || '').trim())
+      .find((title) =>
+        /^输血(?:前评估|后(?:(?:疗效|效果)?(?:评估|评价)))(?:记录)?$/u.test(title),
+      ) || ''
+  )
+}
+
 export function resolveMedicalDocumentGroup(document: MedicalDocumentLike): MedicalDocumentGroup {
+  if (
+    [document.doc_type, document.document_type, document.source_table].includes('pdf_candidate')
+  ) {
+    return { key: 'pdf_review', label: 'PDF待核对' }
+  }
+  if (transfusionCourseTitle(document)) {
+    return { key: 'transfusion', label: MEDICAL_DOCUMENT_GROUP_LABELS.transfusion }
+  }
   // 正文可能提及其他文书或诊疗事件，先用文书身份决定目录归属。
   const metadata = { ...document, content: undefined, sections: undefined }
   // 已知结构化类型优先于标题，避免“出院前查房”被“出院”关键词误分组。
@@ -404,6 +429,14 @@ export function resolveMedicalDocumentTypeLabel(
 }
 
 export function resolveMedicalDocumentTitle(document: MedicalDocumentLike): string {
+  if (document.pdf_source_file_id || document.source_file_id) {
+    const originalTitle = String(
+      document.title || document.document_title || document.doc_name || document.label || '',
+    ).trim()
+    if (originalTitle) return originalTitle
+  }
+  const transfusionTitle = transfusionCourseTitle(document)
+  if (transfusionTitle) return transfusionTitle
   const group = resolveMedicalDocumentGroup(document)
   if (group.key === 'course.senior') return MEDICAL_DOCUMENT_GROUP_LABELS['course.senior']
   if (group.key === 'course.ordinary') {

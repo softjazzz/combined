@@ -315,6 +315,23 @@ function normalizeEditableDocumentsResponse(
         source_document_aliases: sourceDocumentAliases,
         source_table: readStringField(row, ['source_table', 'table_name', 'doc_type']),
         document_type: documentType,
+        pdf_review_parent_key: readStringField(row, ['pdf_review_parent_key']),
+        pdf_review_relation:
+          row.pdf_review_relation === 'same_content' ||
+          row.pdf_review_relation === 'version_difference' ||
+          row.pdf_review_relation === 'unmatched'
+            ? row.pdf_review_relation
+            : undefined,
+        pdf_review_notes: Array.isArray(row.pdf_review_notes)
+          ? row.pdf_review_notes.filter((note): note is string => typeof note === 'string')
+          : undefined,
+        pdf_source_file_id: readStringField(row, ['source_file_id']),
+        pdf_source_pages: Array.isArray(row.source_pages)
+          ? row.source_pages.filter(
+              (page): page is number =>
+                typeof page === 'number' && Number.isInteger(page) && page > 0,
+            )
+          : undefined,
         execution_domain: readStringField(row, ['execution_domain']),
         projection_incomplete: row.projection_incomplete === true,
         projection_notice:
@@ -331,6 +348,7 @@ function normalizeEditableDocumentsResponse(
           (!rawRecordTime && !orderDisplayTime && submitTime ? 'source_submit_time' : ''),
         submit_time: submitTime,
         order_start_time: readStringField(row, [
+          'planned_start_datetime',
           'order_start_time',
           'start_time',
           'start_datetime',

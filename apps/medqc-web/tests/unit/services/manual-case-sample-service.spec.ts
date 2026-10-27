@@ -20,6 +20,33 @@ import {
 import { buildMedicalOrderRow } from '@/views/workstation-v4/customer-sample-validation/medicalOrderDisplay'
 
 describe('editable medical-record document normalization', () => {
+  it('保留当前查看的PDF版本关联、备注和来源页码', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_type: 'pdf_candidate',
+            document_id: 'PDF-1',
+            content: '保留的PDF提取正文',
+            pdf_review_parent_key: 'consultation_record::SYN-1',
+            pdf_review_relation: 'version_difference',
+            pdf_review_notes: ['时间差异待核对'],
+            source_file_id: 'F001',
+            source_pages: [2, 3],
+          },
+        ],
+      },
+    })
+    const result = await getEditableMedicalRecordDocuments('test-visit', { source_view: 'current' })
+    expect(result.data?.documents[0]).toMatchObject({
+      pdf_review_parent_key: 'consultation_record::SYN-1',
+      pdf_review_relation: 'version_difference',
+      pdf_review_notes: ['时间差异待核对'],
+      pdf_source_file_id: 'F001',
+      pdf_source_pages: [2, 3],
+      content: '保留的PDF提取正文',
+    })
+  })
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -98,6 +125,8 @@ describe('editable medical-record document normalization', () => {
             doc_key: 'inpat_drug_order::safe-order',
             doc_type: 'inpat_drug_order',
             content: '示例医嘱',
+            planned_start_datetime: '2026-09-20T00:30:12+00:00',
+            order_start_time: '2026-09-20 08:31:00',
             order_planned_end_time: '2026-09-22T14:00:00+00:00',
             order_stop_time: '2026-09-23 10:00:00',
           },
@@ -108,6 +137,7 @@ describe('editable medical-record document normalization', () => {
     const document = list.data?.documents[0]
     if (!document) throw new Error('缺少测试医嘱')
     expect(buildMedicalOrderRow(document)).toMatchObject({
+      startTime: '2026-09-20 08:30:12',
       plannedEndTime: '2026-09-22 22:00:00',
       stopTime: '2026-09-23 10:00:00',
     })

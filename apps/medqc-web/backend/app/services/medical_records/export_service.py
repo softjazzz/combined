@@ -162,12 +162,17 @@ def get_frontpage_sheet(
     patient_id: str,
     visit_id: str,
     session_factory: Callable[[], Any] | None = None,
+    *,
+    institute_id: str | None = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
 
     with session_factory() as session:
+        identity = {"patient_id": patient_id, "visit_id": visit_id}
+        if institute_id is not None:
+            identity["institute_id"] = institute_id
         fp = clinical_query(session, MedicalRecordFrontpage).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            **identity
         ).first()
         if not fp:
             raise MedicalRecordsNotFoundError("未找到病案首页数据")
@@ -179,7 +184,7 @@ def get_frontpage_sheet(
             basic["institute_county_desc"] = DEFAULT_HOSPITAL_NAME
 
         diag_rows = clinical_query(session, Diagnosis).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            **identity
         ).order_by(Diagnosis.diagnosis_type, Diagnosis.diagnosis_no).all()
         diagnoses = []
         main_diag_seen = False
@@ -193,6 +198,7 @@ def get_frontpage_sheet(
                 text(
                     f"SELECT * FROM {clinical_table_sql('mr_diagnosis')} "
                     "WHERE patient_id = :patient_id AND visit_id = :visit_id "
+                    + ("AND institute_id = :institute_id " if institute_id is not None else "") +
                     "AND diagnosis_type LIKE '%出院诊断%' "
                     "ORDER BY CASE WHEN diagnosis_main = '是' THEN 0 ELSE 1 END, "
                     "CASE "
@@ -200,7 +206,7 @@ def get_frontpage_sheet(
                     "THEN regexp_replace(COALESCE(diagnosis_no, ''), '^.*\\|\\|', '')::int "
                     "ELSE 999 END, diagnosis_id"
                 ),
-                {"patient_id": patient_id, "visit_id": visit_id},
+                identity,
             ).mappings().all()
             main_diag_seen = False
             for row in mr_diag_rows:
@@ -214,6 +220,7 @@ def get_frontpage_sheet(
                 text(
                     f"SELECT * FROM {clinical_table_sql('discharge_record_diagnosis')} "
                     "WHERE patient_id = :patient_id AND visit_id = :visit_id "
+                    + ("AND institute_id = :institute_id " if institute_id is not None else "") +
                     "AND diagnosis_type LIKE '%出院诊断%' "
                     "AND COALESCE(is_deleted, '0') <> '1' "
                     "ORDER BY CASE WHEN diagnosis_main = '是' THEN 0 ELSE 1 END, "
@@ -222,7 +229,7 @@ def get_frontpage_sheet(
                     "THEN regexp_replace(COALESCE(diagnosis_no, ''), '^.*\\|\\|', '')::int "
                     "ELSE 999 END, diagnosis_id"
                 ),
-                {"patient_id": patient_id, "visit_id": visit_id},
+                identity,
             ).mappings().all()
             main_diag_seen = False
             for row in record_diag_rows:
@@ -247,12 +254,13 @@ def get_frontpage_sheet(
                 text(
                     f"SELECT * FROM {clinical_table_sql('mr_diagnosis')} "
                     "WHERE patient_id = :patient_id AND visit_id = :visit_id "
+                    + ("AND institute_id = :institute_id " if institute_id is not None else "") +
                     "AND COALESCE(is_deleted, '0') <> '1' "
                     "AND (diagnosis_type LIKE '%病理%' OR diagnosis_code LIKE 'M%') "
                     "ORDER BY CASE WHEN diagnosis_type LIKE '%病理%' THEN 0 ELSE 1 END, diagnosis_id "
                     "LIMIT 1"
                 ),
-                {"patient_id": patient_id, "visit_id": visit_id},
+                identity,
             ).mappings().first()
             if mr_pathology_row:
                 row = dict(mr_pathology_row)
@@ -260,7 +268,7 @@ def get_frontpage_sheet(
                 pathology_info = _build_pathology_info(row)
 
         surg_rows = clinical_query(session, MrSurgery).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            **identity
         ).all()
         surgeries = []
         for surg in surg_rows:
@@ -280,7 +288,7 @@ def get_frontpage_sheet(
             })
 
         cost_row = clinical_query(session, MrCost).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            **identity
         ).first()
         cost_data = None
         if cost_row:

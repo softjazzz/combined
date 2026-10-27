@@ -4,7 +4,8 @@ from datetime import date, datetime
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from ..services.doctor_case_scope import get_doctor_case_scope
 
 from ..core.security import get_current_user
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
@@ -36,6 +37,7 @@ async def verify_workstation_hospitalization_status(
 
 @router.get("/list")
 async def list_medical_records_api(
+    request: Request,
     dept: Optional[str] = Query(None, description="科室筛选"),
     keyword: Optional[str] = Query(None, description="患者姓名/病案号搜索"),
     start_date: Optional[date] = Query(None, description="入院开始日期"),
@@ -51,6 +53,7 @@ async def list_medical_records_api(
             end_date=end_date,
             page=page,
             page_size=page_size,
+            case_scope=get_doctor_case_scope(request),
         )
     except Exception as exc:
         raise_medical_records_http_error(exc)
@@ -58,26 +61,28 @@ async def list_medical_records_api(
 
 @router.get("/stats")
 async def get_stats_api(
+    request: Request,
     dept: Optional[str] = Query(None, description="科室筛选"),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
 ):
     try:
-        return get_stats(dept=dept, start_date=start_date, end_date=end_date)
+        return get_stats(dept=dept, start_date=start_date, end_date=end_date, case_scope=get_doctor_case_scope(request))
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
 
 @router.get("/departments")
-async def get_departments_api():
+async def get_departments_api(request: Request):
     try:
-        return get_departments()
+        return get_departments(case_scope=get_doctor_case_scope(request))
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
 
 @router.get("/workstation")
 async def get_workstation_data_api(
+    request: Request,
     dept: Optional[str] = Query(None, description="科室筛选，不传则返回全部"),
     doctor: Optional[str] = Query(None, description="主管医师筛选，不传则返回全部"),
     keyword: Optional[str] = Query(None, description="搜索姓名/病案号"),
@@ -135,6 +140,7 @@ async def get_workstation_data_api(
             analytics_rule_id=analytics_rule_id,
             analytics_result_status=analytics_result_status,
             analytics_scope=analytics_scope,
+            case_scope=get_doctor_case_scope(request),
         )
     except Exception as exc:
         raise_medical_records_http_error(exc)

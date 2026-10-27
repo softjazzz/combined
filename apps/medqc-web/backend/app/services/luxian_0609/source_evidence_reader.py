@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from app.services.bundles import assembly as bundle_assembly
+from app.services.validation_material_source import material_source_schema, material_document_sql_filter
 
 from .surgery_procedure_catalog import catalog_surgery_state
 
@@ -33,6 +34,29 @@ _PERFORMED_TIME_OFFSETS: Mapping[str, timezone] = MappingProxyType(
     }
 )
 _HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
+
+
+def _case_source_schema(*, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None) -> str:
+    try:
+        return material_source_schema(default_schema=bundle_assembly._default_source_schema(),
+            requested_schema=source_schema, institute_id=institute_id, patient_id=patient_id,
+            visit_id=visit_id, strict=True)
+    except ValueError:
+        raise SourceEvidenceUnavailable() from None
+
+def _material_document_filter(
+    *, schema: str, table: str, columns: set[str], institute_id: str, patient_id: str, visit_id: str,
+) -> tuple[str, dict[str, Any]]:
+    if "document_id" not in columns:
+        return "", {}
+    try:
+        return material_document_sql_filter(source_schema=schema, source_table=table,
+            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+    except Exception:
+        # 复核决定读取失败不能退回双份材料或伪装成空来源。
+        raise SourceEvidenceQueryError() from None
+
+
 SURGERY_TIME_FIELDS = (
     "surgery_begin_time",
     "surgery_begin_datetime",
@@ -45,6 +69,7 @@ CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY = "inpat_nondrug_order.exam_lab_order"
 CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY = "inpat_nondrug_order.rescue_order"
 CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
 EVALUATION_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
+ROUTINE_LAB_ITEM_SOURCE_KEY = "labtest_item_report.routine_panel"
 AUTHORITATIVE_DOCUMENT_TIME_FIELDS = (
     "record_time",
     "record_datetime",
@@ -474,6 +499,10 @@ _NATIVE_SOURCE_FIELDS = {
         "death_time",
         "record_content",
     ),
+    "summary_record": (
+        "document_id", "document_title", *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
+        "record_content",
+    ),
     "handoff_record": (
         "document_id",
         "document_title",
@@ -705,6 +734,7 @@ _SNAPSHOT_SOURCE_FIELDS = {
         "physician_change_event",
         "postsurg_firstcourse_record",
         "senior_course_record",
+        "summary_record",
         "transfer_in_record",
         "transfer_out_record",
         "inpat_nondrug_order",
@@ -752,6 +782,9 @@ _SNAPSHOT_SOURCE_FIELDS[EVALUATION_HORIZON_SOURCE_KEY] = (
     "record_scene",
     "row_ref",
 )
+_SNAPSHOT_SOURCE_FIELDS[ROUTINE_LAB_ITEM_SOURCE_KEY] = tuple(dict.fromkeys((
+    *_NATIVE_SOURCE_FIELDS["labtest_item_report"], "report_status", "document_status", "document_title",
+)))
 _SNAPSHOT_SOURCE_FIELDS["inpat_nondrug_order"] = (
     "order_id",
     "order_name",
@@ -930,9 +963,8 @@ def read_luxian_0609_course_round_timeline(
     coordinates = (institute_id, patient_id, visit_id)
     if not all(isinstance(value, str) and value.strip() for value in coordinates):
         raise SourceEvidenceUnavailable()
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -969,13 +1001,17 @@ def read_luxian_0609_course_round_timeline(
             for field in order_fields
         )
         limit = _source_limit(source_key)
+        document_filter, document_params = _material_document_filter(
+            schema=trusted_schema, table=source_key, columns=columns,
+            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+        )
         sql = (
             f"SELECT {select_sql} "
             f"FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
             f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
             f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
             f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-            f"ORDER BY {order_sql} LIMIT :limit_rows"
+            f"{document_filter} ORDER BY {order_sql} LIMIT :limit_rows"
         )
         with engine.connect() as connection:
             rows = connection.execute(
@@ -984,6 +1020,7 @@ def read_luxian_0609_course_round_timeline(
                     "institute_id": institute_id,
                     "patient_id": patient_id,
                     "visit_id": visit_id,
+                    **document_params,
                     "limit_rows": limit + 1,
                 },
             ).mappings().all()
@@ -1116,9 +1153,8 @@ def has_luxian_0609_current_visit_unstable_order(
 ) -> bool:
     """判断本次就诊是否下达过病危或病重医嘱，不返回医嘱原文。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1165,9 +1201,8 @@ def read_luxian_0609_severity_order_rows(
 ) -> SnapshotSourceRows:
     """读取病重/病危医嘱类别及生命周期时间，不返回医嘱原文。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1320,9 +1355,8 @@ def read_luxian_0609_exam_lab_order_rows(
 ) -> SnapshotSourceRows:
     """只读取当前住院 CT/MRI/培养/药敏医嘱，避免被全量医嘱截断。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1397,9 +1431,8 @@ def read_luxian_0609_rescue_order_rows(
 ) -> SnapshotSourceRows:
     """数据库侧只读取明确抢救医嘱及最小状态，不受普通医嘱数量影响。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1493,9 +1526,8 @@ def read_luxian_0609_discharge_horizon_rows(
 ) -> SnapshotSourceRows:
     """读取本次住院的权威出院时间，登记表缺行或出院时间为空时回退病案首页。"""
 
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1581,9 +1613,8 @@ def read_luxian_0609_runtime_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:
     """显式、有界、参数化的读侧查询；调用时才访问数据库。"""
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1610,12 +1641,16 @@ def read_luxian_0609_runtime_source_rows(
         order_sql = " ORDER BY " + ", ".join(
             f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST" for field in order_columns
         )
+    document_filter, document_params = _material_document_filter(
+        schema=trusted_schema, table=source_key, columns=columns,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+    )
     sql = (
         f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        f"{order_sql} LIMIT :limit_rows"
+        f"{document_filter}{order_sql} LIMIT :limit_rows"
     )
     with engine.connect() as connection:
         rows = connection.execute(
@@ -1624,6 +1659,7 @@ def read_luxian_0609_runtime_source_rows(
                 "institute_id": institute_id,
                 "patient_id": patient_id,
                 "visit_id": visit_id,
+                **document_params,
                 "limit_rows": _source_limit(source_key),
             },
         ).mappings().all()
@@ -1637,9 +1673,8 @@ def read_luxian_0609_native_source_rows(
     approved_fields = _NATIVE_SOURCE_FIELDS.get(str(source_key or "").strip())
     if approved_fields is None:
         raise SourceEvidenceUnavailable()
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
@@ -1671,12 +1706,16 @@ def read_luxian_0609_native_source_rows(
         order_sql = " ORDER BY " + ", ".join(
             f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST" for field in order_columns
         )
+    document_filter, document_params = _material_document_filter(
+        schema=trusted_schema, table=source_key, columns=columns,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+    )
     sql = (
         f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        f"{order_sql} LIMIT :limit_rows"
+        f"{document_filter}{order_sql} LIMIT :limit_rows"
     )
     with engine.connect() as connection:
         rows = connection.execute(
@@ -1685,6 +1724,7 @@ def read_luxian_0609_native_source_rows(
                 "institute_id": institute_id,
                 "patient_id": patient_id,
                 "visit_id": visit_id,
+                **document_params,
                 "limit_rows": _source_limit(source_key),
             },
         ).mappings().all()
@@ -1783,13 +1823,13 @@ def read_luxian_0609_snapshot_source_rows(
     approved_fields = _SNAPSHOT_SOURCE_FIELDS.get(normalized_source)
     if approved_fields is None:
         raise SourceEvidenceUnavailable()
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise SourceEvidenceUnavailable()
+    trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
+        visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
-    columns = set(bundle_assembly._get_table_columns(trusted_schema, normalized_source))
+    table_name = "labtest_item_report" if normalized_source == ROUTINE_LAB_ITEM_SOURCE_KEY else normalized_source
+    columns = set(bundle_assembly._get_table_columns(trusted_schema, table_name))
     required = {"institute_id", "patient_id", "visit_id"}
     if not required.issubset(columns):
         raise SourceEvidenceUnavailable()
@@ -1823,14 +1863,18 @@ def read_luxian_0609_snapshot_source_rows(
         f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST"
         for field in order_columns
     )
-    limit_rows = _source_limit(normalized_source)
+    limit_rows = _source_limit(table_name)
+    document_filter, document_params = _material_document_filter(
+        schema=trusted_schema, table=table_name, columns=columns,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+    )
     sql = (
         f"SELECT {select_sql} "
-        f"FROM {bundle_assembly._qualified_table(trusted_schema, normalized_source)} "
+        f"FROM {bundle_assembly._qualified_table(trusted_schema, table_name)} "
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        f"ORDER BY {order_sql} LIMIT :limit_rows"
+        f"{document_filter} ORDER BY {order_sql} LIMIT :limit_rows"
     )
     try:
         with engine.connect() as connection:
@@ -1840,6 +1884,7 @@ def read_luxian_0609_snapshot_source_rows(
                     "institute_id": institute_id,
                     "patient_id": patient_id,
                     "visit_id": visit_id,
+                    **document_params,
                     "limit_rows": limit_rows + 1,
                 },
             ).mappings().all()
@@ -1850,7 +1895,7 @@ def read_luxian_0609_snapshot_source_rows(
         source_key=normalized_source,
         rows=[
             _normalize_snapshot_source_row(
-                normalized_source,
+                table_name,
                 dict(row),
             )
             for row in raw_rows[:limit_rows]

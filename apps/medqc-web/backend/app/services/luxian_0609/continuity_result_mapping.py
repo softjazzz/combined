@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import date, datetime
 from math import isfinite
 from typing import Any
 
@@ -12,6 +12,7 @@ CONTINUITY_CUSTOMER_RULE_IDS = frozenset(
     {
         "LX0609-04-02-07", "LX0609-10-01-01", "LX0609-10-02-01", "LX0609-10-02-02",
         "LX0609-12-02-01", "LX0609-10-03-01",
+        "LX0609-10-04-01",
     }
 )
 
@@ -86,17 +87,54 @@ def _fact_keys(kind: str, raw: Mapping[str, Any]) -> set[str]:
     return keys
 
 
+def _safe_stage_summary_facts(raw: Any) -> dict[str, Any] | None:
+    """只核白名单形状，不重新计算30天周期或缺失数量。"""
+    from .basic_timeliness_facts import parse_authoritative_datetime
+
+    keys = {"verification_kind", "admission_time", "evaluation_time", "evaluation_date", "threshold_days",
+            "summary_times", "substitute_times", "overdue_deadlines"}
+    if (not isinstance(raw, Mapping) or set(raw) != keys
+            or raw.get("verification_kind") != "stage_summary_interval_check"
+            or type(raw.get("threshold_days")) is not int or raw["threshold_days"] != 30
+            or type(raw.get("admission_time")) is not str
+            or parse_authoritative_datetime(raw.get("admission_time")) is None
+            or (raw.get("evaluation_time") is not None
+                and (type(raw.get("evaluation_time")) is not str
+                     or parse_authoritative_datetime(raw.get("evaluation_time")) is None))):
+        return None
+    try:
+        if type(raw["evaluation_date"]) is not str or date.fromisoformat(raw["evaluation_date"]).isoformat() != raw["evaluation_date"]:
+            return None
+    except ValueError:
+        return None
+    for key in ("summary_times", "substitute_times", "overdue_deadlines"):
+        values = raw[key]
+        if (type(values) is not list or len(values) > 100
+                or any(type(value) is not str or parse_authoritative_datetime(value) is None for value in values)):
+            return None
+    return {**raw, **{key: list(raw[key]) for key in ("summary_times", "substitute_times", "overdue_deadlines")}}
+
+
 def safe_continuity_customer_display_facts(
     *, rule_id: str, raw: Any
 ) -> dict[str, Any] | None:
     """逐形状复制旧 Aggregator 的连续性事实白名单与自洽校验。"""
 
     rule_id = str(rule_id or "").strip().upper()
+    if rule_id == "LX0609-10-04-01":
+        return _safe_stage_summary_facts(raw)
     if rule_id not in CONTINUITY_CUSTOMER_RULE_IDS or not isinstance(raw, Mapping):
         return None
     kind_key = "verification_kind" if raw.get("verification_kind") else "failure_kind"
     kind = raw.get(kind_key)
-    if kind not in _KINDS_BY_RULE[rule_id] or not isinstance(kind, str):
+    if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"} and "event_checks" in raw:
+        base = {key: value for key, value in raw.items() if key not in {"event_checks", "transfer_order_count"}}
+        safe_base = safe_continuity_customer_display_facts(rule_id=rule_id, raw=base)
+        events = _safe_transfer_events(rule_id, raw)
+        if safe_base is None or events is None:
+            return None
+        return {**safe_base, "transfer_order_count": raw["transfer_order_count"], "event_checks": events}
+    if not isinstance(kind, str) or kind not in _KINDS_BY_RULE[rule_id]:
         return None
     if kind in {"physician_handoff_identity_missing", "physician_signature_timeline_incomplete"}:
         if set(raw) != {kind_key, "source_document_refs", *_fact_keys(kind, raw)}:
@@ -161,12 +199,29 @@ def validate_published_continuity_facts(
     """只读校验已发布事实，不重新投影内部源字段或计算业务结果。"""
 
     rule_id = str(rule_id or "").strip().upper()
+    if rule_id == "LX0609-10-04-01":
+        if raw is None or raw == {}:
+            return (status not in {"compliant", "non_compliant", "not_applicable"}), None
+        if type(raw) is not dict:
+            return False, None
+        facts = _safe_stage_summary_facts(raw)
+        valid = facts is not None and (status is None or continuity_customer_fact_status_is_valid(
+            rule_id=rule_id, status=status, safe_facts=facts,
+        ))
+        return (True, facts) if valid else (False, None)
     if rule_id not in CONTINUITY_CUSTOMER_RULE_IDS:
         return False, None
     if raw is None or raw == {}:
         return True, None
     if type(raw) is not dict:
         return False, None
+    if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"} and "event_checks" in raw:
+        base = {key: value for key, value in raw.items() if key not in {"event_checks", "transfer_order_count"}}
+        valid_base, _ = validate_published_continuity_facts(rule_id=rule_id, raw=base, status=status)
+        events = _safe_transfer_events(rule_id, raw)
+        if not valid_base or events is None or events != raw["event_checks"]:
+            return False, None
+        return True, dict(raw)
     kind_keys = {"verification_kind", "failure_kind"} & raw.keys()
     if len(kind_keys) != 1:
         return False, None
@@ -259,6 +314,40 @@ def validate_published_continuity_facts(
     return (True, dict(raw)) if valid else (False, None)
 
 
+def _safe_transfer_events(rule_id: str, raw: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+    """只搬运执行器逐次转科事实；拒绝嵌套事件、任意正文和额外字段。"""
+    events, count = raw.get("event_checks"), raw.get("transfer_order_count")
+    # 原非药品医嘱读取上限为5000；不能在发布层以更小上限丢弃已核对事件。
+    if (not isinstance(events, list) or not events or len(events) > 5000
+            or type(count) is not int or count < len(events)):
+        return None
+    allowed_reasons = {
+        "compliant": {"requirement_within_threshold", "requirement_satisfied"},
+        "non_compliant": {"threshold_exceeded", "required_document_missing"},
+        "not_applicable": {"evaluation_window_not_mature"},
+        "data_gap": {"source_unavailable", "source_truncated", "authoritative_time_missing",
+                     "authoritative_time_conflict", "association_failed"},
+    }
+    result = []
+    for event in events:
+        if not isinstance(event, dict) or "event_checks" in event or "transfer_order_count" in event:
+            return None
+        status, reason = event.get("status"), event.get("reason_code")
+        if type(status) is not str or type(reason) is not str or reason not in allowed_reasons.get(status, set()):
+            return None
+        facts = {key: value for key, value in event.items() if key not in {"status", "reason_code"}}
+        if not facts:
+            if status != "data_gap":
+                return None
+            result.append(dict(event))
+            continue
+        valid, copied = validate_published_continuity_facts(rule_id=rule_id, raw=facts, status=status)
+        if not valid or copied != facts:
+            return None
+        result.append(dict(event))
+    return result
+
+
 def _valid_invasive_procedure_facts(kind: str, raw: Mapping[str, Any]) -> bool:
     """075 操作名称只能来自院方有创操作目录，不承载病历原文。"""
     from .extended_document.invasive_procedure_record import invasive_procedure_names
@@ -289,6 +378,11 @@ def continuity_customer_fact_status_is_valid(
     *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None,
 ) -> bool:
     """071 缺权威时间的受控事实仅能对应资料不足，不重判其他连续性事实。"""
+    if str(rule_id or "").strip().upper() == "LX0609-10-04-01":
+        if status in {"data_gap", "technical_error"}:
+            return safe_facts is None
+        return (status in {"compliant", "non_compliant", "not_applicable"}
+                and _safe_stage_summary_facts(safe_facts) is not None)
     if str(rule_id or "").strip().upper() == "LX0609-10-03-01" and isinstance(safe_facts, Mapping):
         kind = safe_facts.get("failure_kind") or safe_facts.get("verification_kind")
         expected = {

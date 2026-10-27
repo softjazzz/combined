@@ -25,7 +25,7 @@ router = APIRouter(
     prefix="/api/v1/emr",
     tags=["emr"],
     dependencies=[
-        Depends(require_roles("admin", "qc_manager", "sync_admin", "super_admin"))
+        Depends(require_roles("admin", "qc_manager", "sync_admin", "super_admin", "doctor"))
     ],
 )
 logger = logging.getLogger(__name__)
@@ -189,6 +189,9 @@ async def get_record_documents(
     ),
 ):
     """获取病历文书列表（BundleOnly）。"""
+    own_identity = getattr(request.state, "doctor_case_identity", None)
+    if own_identity:
+        institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
     if source_view == "current":
         if view != "full":
             raise HTTPException(status_code=422, detail="当前病历查看需使用完整文书视图")
@@ -239,6 +242,9 @@ async def render_document(
     execution_domain: str = Query("", description="目录返回的文书领域"),
 ):
     """获取文书内容 + 结构化渲染块 + 缺陷标注（BundleOnly）。"""
+    own_identity = getattr(request.state, "doctor_case_identity", None)
+    if own_identity:
+        institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
     if execution_domain:
         selected = await run_in_threadpool(
             _load_document_from_bundle,
