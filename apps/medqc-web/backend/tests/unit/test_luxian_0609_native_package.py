@@ -227,6 +227,7 @@ def test_dependency_inventory_covers_raw_active_catalog_and_preserves_frozen_dep
     assert tuple((item.rule_id, item.compatibility_rule_ids) for item in inventory if item.rule_id not in frozen_ids) == (
         ("LX0609-08-01-05", ("LX0609-08-01-05",)),
         ("LX0609-03-01-05", ("LX0609-03-01-05",)),
+        ("LX0609-04-02-09", ("LX0609-04-02-09",)),
     )
     assert all(item.applicable_documents for item in inventory)
     assert all(item.dependency_type for item in inventory)
@@ -290,6 +291,7 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-07-01-03",
         "LX0609-10-03-01",
         "LX0609-04-02-08",
+        "LX0609-04-02-09",
         "LX0609-01-02-02",
         "LX0609-04-01-04",
         "LX0609-04-01-05",

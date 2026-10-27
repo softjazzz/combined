@@ -172,6 +172,7 @@ EXTENDED_DOCUMENT_RULE_IDS = (
     "LX0609-12-02-01",
     "LX0609-10-03-01",
     "LX0609-04-02-08",
+    "LX0609-04-02-09",
     "LX0609-08-01-05",
 )
 
@@ -4068,6 +4069,44 @@ async def _execute_extended_document_group(
                     "mr_surgery",
                 ),
                 final_state=final_state, reason_code=reason_code,
+            ))
+            continue
+
+        if rule_id == "LX0609-04-02-09":
+            from .extended_document.death_record_timeliness import evaluate_death_record_timeliness
+
+            try:
+                outcome = evaluate_death_record_timeliness(
+                    death_rows=death_rows, discharge_rows=discharge_rows,
+                    registration_rows=registration_rows,
+                    source_error=registration_error or death_error or discharge_error,
+                )
+                # 按本次实际选中的来源与文书绑定，跨表同ID不能串到死亡表。
+                selected_refs = tuple(dict.fromkeys(
+                    reference
+                    for item in outcome.document_refs
+                    for reference, row in evidence_materials.document_rows(
+                        item["source_type"], snapshot=evidence_snapshot,
+                    )
+                    if _clean(row.get("document_id") or row.get("id")) == item["source_document_id"]
+                ))
+                if outcome.document_refs and not selected_refs:
+                    raise EvidenceMaterialUnavailable("selected_death_document_unavailable")
+            except Exception:
+                # 新规则意外故障只影响自身，不重新裁定相邻死亡/出院规则。
+                decisions.append(_decision(
+                    rule_id=rule_id, snapshot=evidence_snapshot,
+                    source_keys=("death_record", "discharge_record", "inpat_registration"),
+                    final_state="technical_error", reason_code="native_death_timeliness_failure",
+                ))
+                continue
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
+            decisions.append(_decision(
+                rule_id=rule_id, snapshot=evidence_snapshot,
+                source_keys=("death_record", "discharge_record", "inpat_registration"),
+                final_state=outcome.final_state, reason_code=outcome.reason_code,
+                document_refs=selected_refs, exact_document_refs=bool(selected_refs),
             ))
             continue
 

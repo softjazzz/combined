@@ -733,6 +733,15 @@
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed", "hospital_local_extension"],
       "policy_summary": "客户确认：从会诊执行记录正文引用的意见逐项核对本科室书面处置；仅写遵照执行不算。具体处理、明确安排或注明原因的不采纳可计入；不以医嘱或实际执行证据替代书写质量。"
+    },
+    {
+      "rule_id": "LX0609-04-02-09",
+      "source_document": "死亡记录",
+      "qc_point": "死亡记录未在患者死亡后24小时内完成",
+      "implementation_status": "active",
+      "release_scope": "acceptance_only",
+      "policy_sources": ["customer_confirmed", "hospital_local_extension"],
+      "policy_summary": "客户09659（附件三第293行）。死亡记录承担死亡病例终末记录职责，按有效标题识别，不另要求出院记录；复用既有出院文书时钟和最后权威版本选择，起点为实际死亡时刻，精确比较24小时。存在性由04-02-06负责，不重复扣分。"
     }
   ]
 }

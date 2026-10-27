@@ -670,6 +670,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     "LX0609-04-02-06": ("inpat_registration", "discharge_record"),
     "LX0609-04-02-08": ("inpat_registration", "discharge_record"),
+    "LX0609-04-02-09": ("inpat_registration",),
     "LX0609-08-01-01": (
         "evaluation_context.horizon",
         "inpat_registration",

@@ -1,5 +1,23 @@
 [
   {
+    "rule_id": "LX0609-04-02-09",
+    "rule_code": "LX0609-04-02-09",
+    "name": "死亡记录：死亡后24小时内完成",
+    "description": "按有效死亡记录标题识别终末文书，以死亡时刻与最后权威文书时间核对24小时；资料不足不推定临床超时。",
+    "positive_example": "死亡后24小时内完成死亡记录。",
+    "negative_example": "死亡记录完成时间超过死亡后24小时。",
+    "category": "死亡记录",
+    "applicable_documents": ["death_record", "discharge_record"],
+    "applicable_document_labels": ["死亡记录", "出院记录"],
+    "data_dependencies": ["死亡时刻", "死亡记录权威完成时间", "终末文书标题"],
+    "dependency_type": "跨文书时限",
+    "executor_type": "program",
+    "rule_version": "2026-10-26",
+    "prompt_version": "none",
+    "mapped_rule_ids": ["LX0609-04-02-09"],
+    "primary_execution_rule_id": "LX0609-04-02-09"
+  },
+  {
     "rule_id": "LX0609-09-02-01",
     "rule_code": "LX0609-09-02-01",
     "name": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
