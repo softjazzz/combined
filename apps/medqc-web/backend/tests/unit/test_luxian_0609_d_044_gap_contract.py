@@ -118,6 +118,15 @@ async def test_application_source_gap_single_and_multiple_events(source_state, e
         rows["mr_bloodtrans"].append({
             "document_id": "E2", "transfution_datetime": datetime(2026, 7, 18, 10),
         })
+        # 两次真实输血各有实际记录及明确起点，不能用记录时间冒充输注时刻。
+        rows["bloodtrans_record"][0]["record_content"] = rows["bloodtrans_record"][0]["record_content"].replace(
+            "开始时间10:00", "2026年07月16日10:00开始输血",
+        )
+        rows["bloodtrans_record"].append({
+            **rows["bloodtrans_record"][0],
+            "document_id": "D2", "record_time": "2026-07-18 12:10:00",
+            "record_content": rows["bloodtrans_record"][0]["record_content"].replace("07月16日", "07月18日"),
+        })
     options = {source_state: "blood_application"}
     final, _ = await formal(rows, **options)
     assert final["status"] == "data_gap"

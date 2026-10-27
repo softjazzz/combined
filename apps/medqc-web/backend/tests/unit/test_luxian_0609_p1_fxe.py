@@ -149,27 +149,37 @@ async def test_regular_pretransfusion_check_uses_explicit_start_in_dedicated_bod
 
 
 @pytest.mark.asyncio
-async def test_posttransfusion_effect_in_senior_course_keeps_24_hour_window():
+@pytest.mark.parametrize("title,expected", [("主治医师查房记录", "non_compliant"), ("输血后效果评价记录", "compliant")])
+async def test_posttransfusion_effect_in_senior_course_keeps_24_hour_window(title, expected):
     from test_luxian_0609_transfusion_performance_043_047 import _run, FIRST_RECORD_NO_EVALUATION
+    from transfusion_order_test_support import FrozenTransfusionProtocolClient
 
     result = await _run("LX0609-07-03-01", {
         "bloodtrans_record": [{"document_id": "synthetic-performed", "record_time": "2026-06-05 16:30:00", "record_content": FIRST_RECORD_NO_EVALUATION}],
-        "senior_course_record": [{"document_id": "synthetic-effect", "record_time": "2026-06-06 09:00:00",
+        "senior_course_record": [{"document_title": title, "document_id": "synthetic-effect", "record_time": "2026-06-06 09:00:00",
                                   "record_content": "输血后复查血红蛋白较前改善，输血有效。"}],
-    }, {FIRST_RECORD_NO_EVALUATION: "record"}, horizon_date="2026-06-07")
-    assert result["final"]["status"] == "compliant", result["final"]
+    }, {FIRST_RECORD_NO_EVALUATION: "record"}, horizon_date="2026-06-07", client=FrozenTransfusionProtocolClient(
+        course_labels={FIRST_RECORD_NO_EVALUATION: "record"},
+        effect_labels={"输血后复查血红蛋白较前改善，输血有效。": ("evaluated", "输血后复查血红蛋白较前改善，输血有效。")},
+    ))
+    assert result["final"]["status"] == expected, result["final"]
 
 
 @pytest.mark.asyncio
-async def test_posttransfusion_objective_lab_trend_in_senior_course_is_evaluation():
+@pytest.mark.parametrize("title,expected", [("主治医师查房记录", "non_compliant"), ("输血后效果评价记录", "compliant")])
+async def test_posttransfusion_objective_lab_trend_in_senior_course_is_evaluation(title, expected):
     from test_luxian_0609_transfusion_performance_043_047 import _run, FIRST_RECORD_NO_EVALUATION
+    from transfusion_order_test_support import FrozenTransfusionProtocolClient
 
     result = await _run("LX0609-07-03-01", {
         "bloodtrans_record": [{"document_id": "synthetic-performed", "record_time": "2026-06-05 16:30:00", "record_content": FIRST_RECORD_NO_EVALUATION}],
-        "senior_course_record": [{"document_id": "synthetic-lab-effect", "record_time": "2026-06-06 09:00:00",
+        "senior_course_record": [{"document_title": title, "document_id": "synthetic-lab-effect", "record_time": "2026-06-06 09:00:00",
                                   "record_content": "今日复查血常规示HGB 84g/L，较前明显上升，继续观察。"}],
-    }, {FIRST_RECORD_NO_EVALUATION: "record"}, horizon_date="2026-06-07")
-    assert result["final"]["status"] == "compliant", result["final"]
+    }, {FIRST_RECORD_NO_EVALUATION: "record"}, horizon_date="2026-06-07", client=FrozenTransfusionProtocolClient(
+        course_labels={FIRST_RECORD_NO_EVALUATION: "record"},
+        effect_labels={"今日复查血常规示HGB 84g/L，较前明显上升，继续观察。": ("evaluated", "今日复查血常规示HGB 84g/L，较前明显上升，继续观察。")},
+    ))
+    assert result["final"]["status"] == expected, result["final"]
 
 
 @pytest.mark.asyncio
@@ -183,7 +193,8 @@ async def test_nine_items_order_without_performance_is_unresolved():
 
 
 @pytest.mark.asyncio
-async def test_pretransfusion_assessment_reads_full_senior_course_body():
+@pytest.mark.parametrize("title,expected", [("主治医师查房记录", "non_compliant"), ("输血前评估", "compliant")])
+async def test_pretransfusion_assessment_reads_full_senior_course_body(title, expected):
     from transfusion_order_test_support import OPEN_TRANSFUSION_ORDER
     from test_luxian_0609_transfusion_performance_043_047 import _run, FIRST_RECORD
 
@@ -191,9 +202,9 @@ async def test_pretransfusion_assessment_reads_full_senior_course_body():
     result = await _run("LX0609-07-01-02", {
         "inpat_nondrug_order": [OPEN_TRANSFUSION_ORDER], "inpat_drug_order": [],
         "bloodtrans_record": [{"document_id": "synthetic-blood", "record_time": "2026-06-05 17:00:00", "record_content": FIRST_RECORD}],
-        "senior_course_record": [{"document_id": "synthetic-full-senior", "record_time": "2026-06-05 09:00:00", "record_content": assessment}],
+        "senior_course_record": [{"document_title": title, "document_id": "synthetic-full-senior", "record_time": "2026-06-05 09:00:00", "record_content": assessment}],
     }, {FIRST_RECORD: "record"})
-    assert result["final"]["status"] == "compliant", result["final"]
+    assert result["final"]["status"] == expected, result["final"]
 
 
 @pytest.mark.asyncio

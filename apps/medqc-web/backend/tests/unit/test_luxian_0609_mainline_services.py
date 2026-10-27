@@ -654,7 +654,8 @@ def _transfusion_044_047_evidence_session() -> Luxian0609EvidenceReadSession:
         "daily_course_record": [
             {
                 "document_id": "typed-daily-document",
-                "record_content": "输血后继续观察，生命体征平稳。",
+                "document_title": "输血后效果评价记录",
+                "record_content": "输血后复查血红蛋白较前改善，输血有效。",
                 "record_time": "2026-01-01 17:00:00",
             }
         ],
@@ -3345,7 +3346,10 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
         "consent_form": [{"content": "输血治疗知情同意书，已完成风险告知及签名。"}],
         "labtest_master": [{"content": "输血前常规检查资料。"}],
         "blood_application": [{"content": "输血前评估及申请资料。"}],
-        "daily_course_record": [{"content": "输血过程及输血后评价记录。"}],
+        "daily_course_record": [{"document_id": "BT-EVALUATION-1",
+                                 "document_title": "输血后效果评价记录",
+                                 "record_time": "2026-06-05 17:00:00",
+                                 "content": "输血后复查血红蛋白较前改善，输血有效。"}],
         "surgery_record": [{"content": "手术记录中的术中输血信息。"}],
         "anesthesia_record": [{"content": "麻醉记录中的术中输血信息。"}],
         "postsurg_firstcourse_record": [{"content": "术后首次病程中的输血信息。"}],
