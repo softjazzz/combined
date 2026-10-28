@@ -95,19 +95,25 @@ def _offline_execution_guards():
         database_used = True
         raise ReplayFixtureError("database access is forbidden during replay")
 
-    original_socket = socket.socket
+    # 保留 socket 类型本身，避免 Windows asyncio 的 isinstance 及 ssl 继承失效。
+    # 拦截已有连接对象也能调用的出站方法，而不只拦截新对象的构造。
+    socket_methods = ("connect", "connect_ex", "sendto")
+    original_socket_methods = {name: getattr(socket.socket, name) for name in socket_methods}
     original_create_connection = socket.create_connection
-    original_http = http.client.HTTPConnection
-    original_https = http.client.HTTPSConnection
+    original_getaddrinfo = socket.getaddrinfo
+    original_http_connect = http.client.HTTPConnection.connect
+    original_https_connect = http.client.HTTPSConnection.connect
     try:
         from sqlalchemy.engine import Engine
     except ImportError as exc:
         raise ReplayFixtureError("SQLAlchemy Engine guard is unavailable") from exc
     original_engine_connect = Engine.connect
-    socket.socket = block_network
+    for name in socket_methods:
+        setattr(socket.socket, name, block_network)
     socket.create_connection = block_network
-    http.client.HTTPConnection = block_network
-    http.client.HTTPSConnection = block_network
+    socket.getaddrinfo = block_network
+    http.client.HTTPConnection.connect = block_network
+    http.client.HTTPSConnection.connect = block_network
     Engine.connect = block_database
     def activity() -> dict[str, bool]:
         return {
@@ -117,10 +123,12 @@ def _offline_execution_guards():
     try:
         yield activity
     finally:
-        socket.socket = original_socket
+        for name, method in original_socket_methods.items():
+            setattr(socket.socket, name, method)
         socket.create_connection = original_create_connection
-        http.client.HTTPConnection = original_http
-        http.client.HTTPSConnection = original_https
+        socket.getaddrinfo = original_getaddrinfo
+        http.client.HTTPConnection.connect = original_http_connect
+        http.client.HTTPSConnection.connect = original_https_connect
         Engine.connect = original_engine_connect
 
 
@@ -446,17 +454,22 @@ def _isolated_opinion_freeze() -> Iterator[None]:
     否则同一 synthetic visit 的上轮事实会跳过本轮受控模型响应，破坏等价比较。
     """
 
-    freeze_env = "LUXIAN_0609_OPINION_FREEZE_DIR"
-    previous_freeze_dir = os.environ.get(freeze_env)
+    freeze_envs = (
+        "LUXIAN_0609_OPINION_FREEZE_DIR",
+        "LUXIAN_0609_CONSULTATION_RESPONSE_FREEZE_DIR",
+    )
+    previous_freeze_dirs = {key: os.environ.get(key) for key in freeze_envs}
     with TemporaryDirectory(prefix="lx0609-consultation-replay-") as freeze_dir:
-        os.environ[freeze_env] = freeze_dir
+        for key in freeze_envs:
+            os.environ[key] = str(Path(freeze_dir) / key.lower())
         try:
             yield
         finally:
-            if previous_freeze_dir is None:
-                os.environ.pop(freeze_env, None)
-            else:
-                os.environ[freeze_env] = previous_freeze_dir
+            for key, previous in previous_freeze_dirs.items():
+                if previous is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = previous
 
 async def run_replay(
     fixture_path: Path,

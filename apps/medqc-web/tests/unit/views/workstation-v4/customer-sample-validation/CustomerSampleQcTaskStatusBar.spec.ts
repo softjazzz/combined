@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
+import { UserRole, type User } from '@/types/auth'
 import CustomerSampleQcTaskStatusBar from '@/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.vue'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
 
@@ -299,9 +300,9 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     )
   })
 
-  it.each([
-    ['演示管理员', { id: 'demo-admin', roles: ['admin'], is_demo_account: true }],
-    ['普通非全量用户', { id: 'regular-user', roles: ['qc_user'] }],
+  it.each<[string, User]>([
+    ['演示管理员', { id: 'demo-admin', roles: [UserRole.ADMIN], is_demo_account: true }],
+    ['普通非全量用户', { id: 'regular-user', roles: [UserRole.QC_STAFF] }],
   ])('%s的实时栏只展示非内部确定问题', async (_name, user) => {
     setActivePinia(createPinia())
     vi.mocked(ApiService.getCurrentUser).mockResolvedValue({ success: true, data: user })
@@ -373,7 +374,7 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     setActivePinia(createPinia())
     vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
       success: true,
-      data: { id: 'demo-admin', roles: ['admin'], is_demo_account: true },
+      data: { id: 'demo-admin', roles: [UserRole.ADMIN], is_demo_account: true },
     })
     await useAuthStore().initialize()
     const wrapper = mount(CustomerSampleQcTaskStatusBar, {

@@ -265,7 +265,11 @@ def test_empty_issue_violation_keeps_original_coverage_reason():
 
 def test_analysis_split_event_is_absent_only_when_every_part_is_complete():
     # 2026-10-23：同一次检查拆到多批时，任一批核出分析即已分析；有分批未核完则不判未分析。
-    batches = [{1: ("报告", ("D1",))}, {1: ("报告", ("D2",))}]
+    projection = SimpleNamespace(course_candidates={"D1": ("病程一",), "D2": ("病程二",)})
+    batches = [
+        analysis._CheckJob(projection, {1: ("报告", (ref,))})
+        for ref in ("D1", "D2")
+    ]
 
     def part(ready, analysed=None, gaps=None):
         return analysis._BatchResult(ready, analysed or {}, gaps or {}, 1, 0, 0, 0, 0.0)

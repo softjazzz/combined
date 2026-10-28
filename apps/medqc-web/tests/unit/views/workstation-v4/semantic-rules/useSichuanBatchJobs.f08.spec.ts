@@ -210,12 +210,8 @@ describe('useSichuanBatchJobs F08 临时读取失败恢复', () => {
   })
 
   it('切换任务后旧响应不覆盖新任务，旧finally不关闭新请求loading', async () => {
-    const intervalCallbacks: Array<() => Promise<void>> = []
-    vi.spyOn(window, 'setInterval').mockImplementation((callback) => {
-      intervalCallbacks.push(callback as () => Promise<void>)
-      return intervalCallbacks.length
-    })
-    vi.spyOn(window, 'clearInterval').mockImplementation(() => undefined)
+    vi.useFakeTimers()
+    const intervalSpy = vi.spyOn(window, 'setInterval')
     const oldResponse = deferred<{ success: true; data: SichuanBatchJob }>()
     const newResponse = deferred<{ success: true; data: SichuanBatchJob }>()
     getBatchJobMock
@@ -230,7 +226,9 @@ describe('useSichuanBatchJobs F08 临时读取失败恢复', () => {
       stopBatchJobPolling,
     } = useSichuanBatchJobs()
     startBatchJobPolling('job-old')
-    const oldPoll = intervalCallbacks[0]?.()
+    const callback = intervalSpy.mock.calls[0]?.[0]
+    if (typeof callback !== 'function') throw new Error('未注册轮询回调')
+    const oldPoll = callback()
     const newFetch = fetchBatchJobDetail('job-new')
     startBatchJobPolling('job-new')
 
@@ -248,12 +246,8 @@ describe('useSichuanBatchJobs F08 临时读取失败恢复', () => {
   })
 
   it('轮询等待列表刷新时的新详情请求使旧轮询结果失效', async () => {
-    const intervalCallbacks: Array<() => Promise<void>> = []
-    vi.spyOn(window, 'setInterval').mockImplementation((callback) => {
-      intervalCallbacks.push(callback as () => Promise<void>)
-      return intervalCallbacks.length
-    })
-    vi.spyOn(window, 'clearInterval').mockImplementation(() => undefined)
+    vi.useFakeTimers()
+    const intervalSpy = vi.spyOn(window, 'setInterval')
     const listResponse = deferred<{
       success: true
       data: { items: SichuanBatchJob[]; total: number; page: number; page_size: number }
@@ -272,7 +266,9 @@ describe('useSichuanBatchJobs F08 临时读取失败恢复', () => {
       stopBatchJobPolling,
     } = useSichuanBatchJobs()
     startBatchJobPolling('job-old')
-    const oldPoll = intervalCallbacks[0]?.()
+    const callback = intervalSpy.mock.calls[0]?.[0]
+    if (typeof callback !== 'function') throw new Error('未注册轮询回调')
+    const oldPoll = callback()
     await flushPromises()
     expect(listBatchJobsMock).toHaveBeenCalledTimes(1)
 

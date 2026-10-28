@@ -2,7 +2,51 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+import os
 from pathlib import Path
+import socket
+
+import pytest
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_replay_isolates_both_freeze_stores_and_restores_environment(monkeypatch, tmp_path, fail):
+    from scripts import verify_consultation_family_acceptance as verify
+
+    keys = ("LUXIAN_0609_OPINION_FREEZE_DIR", "LUXIAN_0609_CONSULTATION_RESPONSE_FREEZE_DIR")
+    originals = {key: str(tmp_path / key) for key in keys}
+    for key, value in originals.items():
+        monkeypatch.setenv(key, value)
+    stores = []
+    try:
+        with verify._isolated_opinion_freeze():
+            stores = [Path(os.environ[key]) for key in keys]
+            assert len(set(stores)) == 2
+            for key, store in zip(keys, stores):
+                assert store != Path(originals[key])
+                store.mkdir(parents=True, exist_ok=True)
+                (store / "synthetic.json").write_text("{}", encoding="utf-8")
+            if fail:
+                raise RuntimeError("controlled failure")
+    except RuntimeError:
+        assert fail
+    assert {key: os.environ[key] for key in keys} == originals
+    assert all(not store.exists() for store in stores)
+    assert all(not Path(value).exists() for value in originals.values())
+
+
+def test_replay_network_guard_preserves_socket_type_and_blocks_existing_socket():
+    from scripts import verify_consultation_family_acceptance as verify
+
+    socket_type = socket.socket
+    with socket.socket() as connection:
+        with verify._offline_execution_guards() as activity:
+            # Windows asyncio 和 ssl 导入依赖 socket.socket 仍是类型。
+            assert socket.socket is socket_type
+            assert isinstance(connection, socket.socket)
+            with pytest.raises(verify.ReplayFixtureError, match="network access"):
+                connection.connect(("127.0.0.1", 1))
+            assert activity()["network_used"] is True
 
 
 def test_synthetic_replay_runs_formal_execution_reducer_and_aggregator() -> None:
