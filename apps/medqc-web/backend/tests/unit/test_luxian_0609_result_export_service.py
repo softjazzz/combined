@@ -119,6 +119,30 @@ def test_filtered_workbook_contains_summary_and_rule_details_without_internal_fi
     assert "reason_code" not in flattened
 
 
+def test_filtered_workbook_marks_latest_partial_generation_as_incomplete():
+    result = {
+        **_ready_result(),
+        "execution_status": "partial_failed",
+        "is_complete": False,
+        "failed_rule_count": 1,
+        "failed_rule_ids": ["LX0609-01-02-02"],
+    }
+    output = export_filtered_record_results_workbook(
+        records=[_record()],
+        results={("H-1", "P-1", "V-1"): result},
+        filters={"scope": "final"},
+    )
+
+    workbook = load_workbook(BytesIO(output.getvalue()), read_only=True)
+    summary_rows = list(workbook["病历汇总"].iter_rows(values_only=True))
+    intro_rows = list(workbook["导出说明"].iter_rows(values_only=True))
+    assert summary_rows[1][6] == "本轮未全部完成（1项失败）"
+    assert (
+        "导出口径",
+        "当前服务器筛选范围内病历的最新持久质控结果（含本轮部分成功与失败提示）",
+    ) in intro_rows
+
+
 def test_filtered_workbook_escapes_formula_like_customer_text():
     record = _record()
     record["patient_name"] = '=HYPERLINK("https://invalid.example", "患者")'
@@ -146,7 +170,10 @@ def test_selected_workbook_uses_selected_scope_description_without_technical_fil
 
     workbook = load_workbook(BytesIO(output.getvalue()), read_only=True)
     rows = list(workbook["导出说明"].iter_rows(values_only=True))
-    assert ("导出口径", "已勾选病历的最新 Canonical 质控结果") in rows
+    assert (
+        "导出口径",
+        "已勾选病历的最新持久质控结果（含本轮部分成功与失败提示）",
+    ) in rows
     assert all(row[0] != "筛选-export_mode" for row in rows)
 
 

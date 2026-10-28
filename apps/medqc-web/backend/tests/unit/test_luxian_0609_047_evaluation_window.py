@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import pytest
@@ -83,6 +83,326 @@ def _canonical_state(*, result: Any, session: Any) -> tuple[str, str]:
         evidence_materials=session.materials,
     )[0]
     return canonical.final_state.value, canonical.reason_code
+
+
+def _timed_evaluation_session(**time_fields: Any):
+    return _session(
+        horizon_date="2026-06-07",
+        bloodtrans_rows=[
+            {
+                "document_id": "BT-F07",
+                "record_content": "2026-06-05 10:00:00输血结束。",
+            }
+        ],
+        daily_rows=[
+            {
+                "document_title": "输血后评价记录",
+                "document_id": "EVAL-F07",
+                "record_content": "输血后复查血红蛋白较前改善。",
+                **time_fields,
+            }
+        ],
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "record_time",
+    (
+        "2026-06-06T03:00:00+00:00",
+        "2026-06-06T11:00:00+08:00",
+    ),
+)
+async def test_047_equivalent_aware_evaluation_times_are_both_late(record_time: str):
+    """同一时刻不得因偏移写法不同得到 17h/25h 两种结论。"""
+
+    session = _timed_evaluation_session(record_time=record_time)
+
+    result = await _execute(session)
+
+    assert _canonical_state(result=result, session=session) == (
+        "non_compliant",
+        "requirement_violated",
+    )
+    assert result.decisions[0].reason_code == "requirement_violated"
+    assert result.decisions[0].evaluator_version == (
+        "transfusion-ruledecision-post-time-precision-v8"
+    )
+
+
+@pytest.mark.asyncio
+async def test_047_date_only_evaluation_time_is_a_data_gap_not_midnight():
+    session = _timed_evaluation_session(record_time="2026-06-06")
+
+    result = await _execute(session)
+
+    assert _canonical_state(result=result, session=session)[0] == "data_gap"
+    assert result.decisions[0].reason_code == "authoritative_time_missing"
+    assert result.customer_display_facts == ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("record_time", "expected_state", "expected_reason"),
+    (
+        (
+            "2026-06-06T02:00:00+00:00",
+            "compliant",
+            "requirement_satisfied",
+        ),
+        (
+            "2026-06-06T02:00:00.000001+00:00",
+            "non_compliant",
+            "requirement_violated",
+        ),
+        (
+            "2026-06-06 10:00:00",
+            "compliant",
+            "requirement_satisfied",
+        ),
+    ),
+)
+async def test_047_aware_24_hour_boundary_preserves_microseconds_and_naive_local_time(
+    record_time: str,
+    expected_state: str,
+    expected_reason: str,
+):
+    session = _timed_evaluation_session(record_time=record_time)
+
+    result = await _execute(session)
+
+    assert _canonical_state(result=result, session=session)[0] == expected_state
+    assert result.decisions[0].reason_code == expected_reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field",
+    ("record_time", "record_datetime", "submit_time", "submit_datetime"),
+)
+async def test_047_uses_precise_authoritative_record_or_submission_time(field: str):
+    session = _timed_evaluation_session(
+        **{field: "2026-06-06T02:00:00+00:00"}
+    )
+
+    result = await _execute(session)
+
+    assert _canonical_state(result=result, session=session)[0] == "compliant"
+    assert result.decisions[0].reason_code == "requirement_satisfied"
+
+
+@pytest.mark.asyncio
+async def test_047_signature_time_cannot_replace_missing_document_time():
+    session = _timed_evaluation_session(
+        physician_sign_datetime="2026-06-06T02:00:00+00:00"
+    )
+
+    result = await _execute(session)
+
+    assert _canonical_state(result=result, session=session)[0] == "data_gap"
+    assert result.decisions[0].reason_code == "authoritative_time_missing"
+
+
+def test_047_confirmed_missing_event_survives_other_unresolved_end_marker():
+    assessment = transfusion._programmatic_047_assessment(
+        {
+            "bloodtrans_record": [
+                {
+                    "document_id": "MISSING-A",
+                    "record_content": "2026-06-01 10:00:00输血结束。",
+                },
+                {
+                    "document_id": "UNKNOWN-B",
+                    "record_content": "输血结束，输注过程顺利。",
+                },
+            ],
+            "daily_course_record": [],
+            "__evaluation_horizon_rows__": [
+                {"horizon_datetime": "2026-06-09 12:00:00"}
+            ],
+        }
+    )
+
+    assert (assessment.status, assessment.reason_code) == (
+        "non_compliant",
+        "posttransfusion_evaluation_missing",
+    )
+    assert assessment.selected_source_document_refs == (
+        ("bloodtrans_record", "MISSING-A"),
+    )
+
+
+@pytest.mark.parametrize(
+    "time_fields",
+    (
+        {"record_time": "2026-06-05"},
+        {"authored_at": "2026-06-05", "time_basis": "record_time"},
+        {"record_time": date(2026, 6, 5)},
+    ),
+    ids=("record-time", "authored-at-record-basis", "date-object"),
+)
+def test_047_date_only_evaluation_scope_does_not_cover_an_earlier_event(
+    time_fields: dict[str, Any],
+):
+    assessment = transfusion._programmatic_047_assessment(
+        {
+            "bloodtrans_record": [
+                {
+                    "document_id": "MISSING-A",
+                    "record_content": "2026-06-01 10:00:00输血结束。",
+                },
+                {
+                    "document_id": "POSSIBLE-B",
+                    "record_content": "2026-06-05 10:00:00输血结束。",
+                },
+            ],
+            "daily_course_record": [
+                {
+                    "document_title": "输血后评价记录",
+                    "document_id": "DATE-B",
+                    "record_content": "输血后复查血红蛋白较前改善。",
+                    **time_fields,
+                }
+            ],
+            "__evaluation_horizon_rows__": [
+                {"horizon_datetime": "2026-06-09 12:00:00"}
+            ],
+        }
+    )
+
+    assert (assessment.status, assessment.reason_code) == (
+        "non_compliant",
+        "posttransfusion_evaluation_missing",
+    )
+    assert assessment.selected_source_document_refs == (
+        ("bloodtrans_record", "MISSING-A"),
+    )
+
+
+def test_047_date_only_outside_every_window_does_not_expand_to_all_events():
+    assessment = transfusion._programmatic_047_assessment(
+        {
+            "bloodtrans_record": [
+                {
+                    "document_id": "MISSING-A",
+                    "record_content": "2026-06-01 10:00:00输血结束。",
+                }
+            ],
+            "daily_course_record": [
+                {
+                    "document_title": "输血后评价记录",
+                    "document_id": "UNRELATED-DATE",
+                    "record_time": "2026-06-05",
+                    "record_content": "输血后复查血红蛋白较前改善。",
+                }
+            ],
+            "__evaluation_horizon_rows__": [
+                {"horizon_datetime": "2026-06-09 12:00:00"}
+            ],
+        }
+    )
+
+    assert (assessment.status, assessment.reason_code) == (
+        "non_compliant",
+        "posttransfusion_evaluation_missing",
+    )
+    assert assessment.selected_source_document_refs == (
+        ("bloodtrans_record", "MISSING-A"),
+    )
+
+
+def test_047_another_unresolved_end_stays_on_the_explicit_anchor_date():
+    assessment = transfusion._programmatic_047_assessment(
+        {
+            "bloodtrans_record": [
+                {
+                    "document_id": "MISSING-A",
+                    "record_content": "2026-06-01 10:00:00输血结束。",
+                },
+                {
+                    "document_id": "AMBIGUOUS-B",
+                    "record_content": "2026-06-05 10:00:00输血结束。",
+                },
+                {
+                    "document_id": "AMBIGUOUS-C",
+                    "record_content": "2026-06-05 12:00:00输血结束。",
+                },
+            ],
+            "daily_course_record": [
+                {
+                    "document_title": "输血后评价记录",
+                    "document_id": "EVAL-BC",
+                    "record_time": "2026-06-05 13:00:00",
+                    "record_content": (
+                        "2026-06-05 10:00:00输血结束；"
+                        "另一次输血结束，复查血红蛋白较前改善。"
+                    ),
+                }
+            ],
+            "__evaluation_horizon_rows__": [
+                {"horizon_datetime": "2026-06-09 12:00:00"}
+            ],
+        }
+    )
+
+    assert (assessment.status, assessment.reason_code) == (
+        "non_compliant",
+        "posttransfusion_evaluation_missing",
+    )
+    assert assessment.selected_source_document_refs == (
+        ("bloodtrans_record", "MISSING-A"),
+    )
+
+
+@pytest.mark.parametrize(
+    "order",
+    (("MISSING-A", "ANCHORED-B", "UNKNOWN-C"),
+     ("UNKNOWN-C", "MISSING-A", "ANCHORED-B")),
+)
+def test_047_unknown_end_scope_does_not_depend_on_source_row_order(
+    order: tuple[str, ...],
+):
+    rows = {
+        "MISSING-A": {
+            "document_id": "MISSING-A",
+            "record_content": "2026-06-01 10:00:00输血结束。",
+        },
+        "ANCHORED-B": {
+            "document_id": "ANCHORED-B",
+            "record_content": "2026-06-05 10:00:00输血结束。",
+        },
+        "UNKNOWN-C": {
+            "document_id": "UNKNOWN-C",
+            "record_content": "输血结束，输注过程顺利。",
+        },
+    }
+    assessment = transfusion._programmatic_047_assessment(
+        {
+            "bloodtrans_record": [rows[key] for key in order],
+            "daily_course_record": [
+                {
+                    "document_title": "输血后评价记录",
+                    "document_id": "EVAL-BC",
+                    "record_time": "2026-06-05 13:00:00",
+                    "record_content": (
+                        "2026-06-05 10:00:00输血结束；"
+                        "另一次输血结束，复查血红蛋白较前改善。"
+                    ),
+                }
+            ],
+            "__evaluation_horizon_rows__": [
+                {"horizon_datetime": "2026-06-09 12:00:00"}
+            ],
+        }
+    )
+
+    assert (assessment.status, assessment.reason_code) == (
+        "non_compliant",
+        "posttransfusion_evaluation_missing",
+    )
+    assert assessment.selected_source_document_refs == (
+        ("bloodtrans_record", "MISSING-A"),
+    )
 
 
 @pytest.mark.asyncio
@@ -197,6 +517,90 @@ def test_047_datetime_horizon_uses_strictly_after_24_hours_boundary(
             ],
         }
     ) == expected
+
+
+@pytest.mark.parametrize(
+    "horizon_datetime",
+    (
+        "2026-01-02T03:00:00+00:00",
+        "2026-01-02T11:00:00+08:00",
+    ),
+)
+def test_047_equivalent_aware_horizons_use_the_same_hospital_time(
+    horizon_datetime: str,
+):
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {"record_content": "2026-01-01 10:00:00输血结束。"}
+            ],
+            "daily_course_record": [],
+            "__evaluation_horizon_rows__": [
+                {
+                    "horizon_date": "2026-01-02",
+                    "horizon_datetime": horizon_datetime,
+                }
+            ],
+        }
+    ) == ("non_compliant", "posttransfusion_evaluation_missing")
+
+
+@pytest.mark.parametrize(
+    ("horizon_date", "horizon_datetime"),
+    (
+        ("2026-01-02", "2026-01-02T20:00:00+00:00"),
+        ("2026-01-03", "2026-01-03T04:00:00+08:00"),
+    ),
+)
+def test_047_cross_date_aware_horizons_validate_before_hospital_normalization(
+    horizon_date: str,
+    horizon_datetime: str,
+):
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {"record_content": "2026-01-01 10:00:00输血结束。"}
+            ],
+            "daily_course_record": [],
+            "__evaluation_horizon_rows__": [
+                {
+                    "horizon_date": horizon_date,
+                    "horizon_datetime": horizon_datetime,
+                }
+            ],
+        }
+    ) == ("non_compliant", "posttransfusion_evaluation_missing")
+
+
+def test_047_horizon_date_still_rejects_a_true_raw_calendar_conflict():
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {"record_content": "2026-01-01 10:00:00输血结束。"}
+            ],
+            "daily_course_record": [],
+            "__evaluation_horizon_rows__": [
+                {
+                    "horizon_date": "2026-01-01",
+                    "horizon_datetime": "2026-01-02T20:00:00+00:00",
+                }
+            ],
+        }
+    ) == ("data_gap", "posttransfusion_evaluation_horizon_conflict")
+
+
+def test_047_date_only_horizon_datetime_keeps_date_precision():
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {"record_content": "2026-01-01 16:00:00输血结束。"}
+            ],
+            "daily_course_record": [],
+            "__evaluation_horizon_rows__": [
+                {"horizon_datetime": "2026-01-02"}
+            ],
+        }
+    ) == ("not_applicable", "evaluation_window_not_mature")
 
 
 def test_047_inline_effect_does_not_satisfy_earlier_mature_event():
@@ -317,6 +721,7 @@ async def _execute_with_effect_labels(session: Any, effect_labels: dict[str, tup
 
 
 _UNMATCHED_EVALUATION = "复查血红蛋白较前变化不大，考虑消耗所致，继续观察。"
+_DATE_ONLY_SEMANTIC_EVALUATION = "输血后症状明显改善，疗效满意。"
 
 
 def _effect_session():
@@ -329,6 +734,46 @@ def _effect_session():
             "record_time": "2026-01-02 08:00:00",
             "record_content": "今日查房，患者精神可。" + _UNMATCHED_EVALUATION,
         }],
+    )
+
+
+@pytest.mark.asyncio
+async def test_047_date_only_semantic_evaluation_is_reviewed_then_keeps_time_gap():
+    session = _session(
+        horizon_date="2026-06-07",
+        bloodtrans_rows=[
+            {
+                "document_id": "BT-DATE-SEMANTIC",
+                "record_content": "2026-06-05 10:00:00输血结束。",
+            }
+        ],
+        daily_rows=[
+            {
+                "document_title": "输血后评价记录",
+                "document_id": "DATE-SEMANTIC",
+                "record_time": "2026-06-06",
+                "record_content": _DATE_ONLY_SEMANTIC_EVALUATION,
+            }
+        ],
+    )
+
+    result, client = await _execute_with_effect_labels(
+        session,
+        {
+            _DATE_ONLY_SEMANTIC_EVALUATION: (
+                "evaluated",
+                "输血后症状明显改善",
+            )
+        },
+    )
+
+    assert _canonical_state(result=result, session=session) == (
+        "data_gap",
+        "authoritative_time_missing",
+    )
+    assert any(
+        "lx0609-posttransfusion-effect-v1" in prompt
+        for prompt in client.protocol_prompts
     )
 
 

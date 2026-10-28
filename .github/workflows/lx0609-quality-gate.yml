@@ -43,4 +43,5 @@ jobs:
       - name: LX0609 no-model quality gate
         env:
           PYTHONDONTWRITEBYTECODE: '1'
-        run: python scripts/run_luxian_0609_quality_gate.py --profile pr-no-model
+        # OS 层隔离覆盖 Python/native libpq 及子进程；门禁仍强制使用临时 SQLite。
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" scripts/run_luxian_0609_quality_gate.py --profile pr-no-model

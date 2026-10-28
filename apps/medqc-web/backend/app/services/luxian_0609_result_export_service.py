@@ -236,6 +236,9 @@ def _result_summary(result: Mapping[str, Any]) -> tuple[str, Counter[str]]:
         return ("未质控" if state == "not_found" else "结果校验异常", Counter())
     items = [item for item in result.get("items") or [] if isinstance(item, Mapping)]
     counts = _status_counts(items)
+    if result.get("execution_status") in {"partial_failed", "failed"}:
+        failed_count = max(0, int(result.get("failed_rule_count") or 0))
+        return f"本轮未全部完成（{failed_count}项失败）", counts
     if counts.get("non_compliant", 0):
         return "需优先复核", counts
     if counts.get("data_gap", 0):
@@ -276,9 +279,9 @@ def export_filtered_record_results_workbook(
         [
             "导出口径",
             (
-                "已勾选病历的最新 Canonical 质控结果"
+                "已勾选病历的最新持久质控结果（含本轮部分成功与失败提示）"
                 if export_mode == "selected"
-                else "当前服务器筛选范围内病历的最新 Canonical 质控结果"
+                else "当前服务器筛选范围内病历的最新持久质控结果（含本轮部分成功与失败提示）"
             ),
         ]
     )

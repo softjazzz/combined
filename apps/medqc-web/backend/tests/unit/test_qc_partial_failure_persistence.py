@@ -9,6 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 
 from app.services import custom_qc_workspace_service as workspace
+from app.services import sichuan_workspace_batch_worker as batch_worker
 from app.routers import qc_sichuan
 from app.services.case_identity import CaseRef
 from app.services.qc_workspace.partial_record_delivery import select_complete_record_items
@@ -66,7 +67,7 @@ def _payload():
             "max_attempts": 3,
             "completed_attempts": 0,
             "remaining_failure_count": 1,
-            "status": "queued",
+            "status": "planned",
             "should_retry": True,
             "next_attempt": 1,
             "delay_seconds": 0.0,
@@ -212,7 +213,7 @@ def test_failed_job_persists_valid_items_and_operational_failure(storage, all_fa
     assert safe["summary"]["failed_rule_count"] == len(failures)
     assert safe["summary"]["model_execution_stats"]["model_failure_rate"] == 0.5
     assert safe["summary"]["automatic_failed_rule_retry"] == {
-        "status": "queued",
+        "status": "planned",
         "max_attempts": 3,
         "completed_attempts": 0,
         "remaining_failure_count": 1,
@@ -220,6 +221,8 @@ def test_failed_job_persists_valid_items_and_operational_failure(storage, all_fa
         "next_attempt": 1,
         "delay_seconds": 0.0,
     }
+    # 进程若在 planned 与实际入队之间退出，不得向客户端伪报 retrying。
+    assert qc_sichuan._batch_job_status_for_header(job) == "failed"
     assert len(safe["items"]) == len(items)
     assert safe["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
 
@@ -475,6 +478,193 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
         row = dict(connection.execute(sa.select(table)).mappings().one())
     assert json.loads(row["items_json"]) == items
     assert json.loads(row["failed_records_json"])[0]["record_key"] == '["test-i","test-p","test-v"]'
+
+
+def test_automatic_retry_announces_queued_only_after_retry_cas_succeeds(storage):
+    service, engine, table = storage
+    summary, items, failures = _payload()
+    failures[0]["reason_code"] = "model_transport_error"
+    summary["rule_count"] = 2
+    service.complete_batch_job(
+        job_id="partial-job",
+        summary=summary,
+        items=items,
+        failed_records=failures,
+    )
+    with engine.connect() as connection:
+        expected_filters = connection.execute(
+            sa.select(table.c.filters_json).where(table.c.id == "partial-job")
+        ).scalar_one()
+
+    queued = batch_worker._enqueue_automatic_failed_rule_retry(
+        workspace=service,
+        job_id="partial-job",
+        created_by="tester",
+        expected_attempt_filters_json=expected_filters,
+    )
+
+    assert queued is not None and queued["status"] == "queued"
+    assert queued["summary"]["automatic_failed_rule_retry"]["status"] == "queued"
+    assert queued["summary"]["automatic_failed_rule_retry"]["should_retry"] is True
+    queued_items = list(queued["items"])
+    queued_failures = list(queued["failed_records"])
+    running_claim = service.mark_batch_job_running(job_id="partial-job")
+    assert isinstance(running_claim, str)
+    running = service.get_batch_job_for_processing(job_id="partial-job")
+    assert running["summary"]["automatic_failed_rule_retry"]["status"] == "running"
+    assert running["items"] == queued_items
+    assert running["failed_records"] == queued_failures
+
+    service.fail_batch_job(
+        job_id="partial-job",
+        attempt_filters_json=running_claim,
+        error_message="synthetic retry execution interruption",
+    )
+    interrupted = service.get_batch_job(job_id="partial-job", created_by="tester")
+    interrupted_plan = interrupted["summary"]["automatic_failed_rule_retry"]
+    assert interrupted["status"] == "failed"
+    assert interrupted_plan["status"] == "interrupted"
+    assert interrupted_plan["should_retry"] is False
+    assert interrupted_plan["reason_code"] == "retry_execution_interrupted"
+    assert interrupted["items"] == queued_items
+    assert interrupted["failed_records"] == queued_failures
+    safe_interrupted = workspace.project_customer_safe_batch_job(
+        interrupted,
+        hmac_key="synthetic-test-key",
+    )
+    assert safe_interrupted["summary"]["automatic_failed_rule_retry"] == {
+        "status": "interrupted",
+        "max_attempts": 3,
+        "completed_attempts": 0,
+        "remaining_failure_count": 1,
+        "should_retry": False,
+        "next_attempt": 1,
+        "delay_seconds": 0.0,
+        "reason_code": "retry_execution_interrupted",
+    }
+    assert qc_sichuan._batch_job_status_for_header(interrupted) == "failed"
+
+
+@pytest.mark.parametrize("late_after_claim", [False, True], ids=["queued-fails", "late-queued-cas"])
+def test_queued_auto_retry_failure_terminates_only_the_exact_queued_generation(
+    storage,
+    late_after_claim,
+):
+    service, engine, table = storage
+    summary, items, failures = _payload()
+    failures[0]["reason_code"] = "model_transport_error"
+    summary["rule_count"] = 2
+    service.complete_batch_job(
+        job_id="partial-job",
+        summary=summary,
+        items=items,
+        failed_records=failures,
+    )
+    with engine.connect() as connection:
+        completed_filters = connection.execute(
+            sa.select(table.c.filters_json).where(table.c.id == "partial-job")
+        ).scalar_one()
+    queued = batch_worker._enqueue_automatic_failed_rule_retry(
+        workspace=service,
+        job_id="partial-job",
+        created_by="tester",
+        expected_attempt_filters_json=completed_filters,
+    )
+    assert queued is not None and queued["status"] == "queued"
+    with engine.connect() as connection:
+        queued_filters = connection.execute(
+            sa.select(table.c.filters_json).where(table.c.id == "partial-job")
+        ).scalar_one()
+    queued_items = list(queued["items"])
+    queued_failures = list(queued["failed_records"])
+
+    running_claim = None
+    if late_after_claim:
+        running_claim = service.mark_batch_job_running(job_id="partial-job")
+        assert isinstance(running_claim, str)
+    service.fail_batch_job(
+        job_id="partial-job",
+        queued_only=True,
+        expected_queued_filters_json=queued_filters,
+        error_message="synthetic queued start failure",
+    )
+    current = service.get_batch_job(job_id="partial-job", created_by="tester")
+    assert current["items"] == queued_items
+    assert current["failed_records"] == queued_failures
+    if late_after_claim:
+        assert current["status"] == "running"
+        assert current["summary"]["automatic_failed_rule_retry"]["status"] == "running"
+        service.fail_batch_job(
+            job_id="partial-job",
+            attempt_filters_json=running_claim,
+            error_message="cleanup current generation",
+        )
+    else:
+        retry_plan = current["summary"]["automatic_failed_rule_retry"]
+        assert current["status"] == "failed"
+        assert retry_plan["status"] == "interrupted"
+        assert retry_plan["should_retry"] is False
+        assert retry_plan["reason_code"] == "retry_start_interrupted"
+        assert "luxian_0609_usage_observation_complete" not in current["summary"]
+        assert qc_sichuan._batch_job_status_for_header(current) == "failed"
+
+
+@pytest.mark.parametrize("failure_mode", ["return_none", "raise"])
+def test_automatic_retry_enqueue_failure_revokes_planned_without_erasing_results(
+    storage,
+    monkeypatch,
+    failure_mode,
+):
+    service, engine, table = storage
+    summary, items, failures = _payload()
+    failures[0]["reason_code"] = "model_transport_error"
+    summary["rule_count"] = 2
+    service.complete_batch_job(
+        job_id="partial-job",
+        summary=summary,
+        items=items,
+        failed_records=failures,
+    )
+    persisted_before_enqueue = service.get_batch_job(
+        job_id="partial-job",
+        created_by="tester",
+    )
+    with engine.connect() as connection:
+        expected_filters = connection.execute(
+            sa.select(table.c.filters_json).where(table.c.id == "partial-job")
+        ).scalar_one()
+
+    def _failed_enqueue(**_kwargs):
+        if failure_mode == "raise":
+            raise RuntimeError("synthetic enqueue failure")
+        return None
+
+    monkeypatch.setattr(service, "retry_batch_job", _failed_enqueue)
+    if failure_mode == "raise":
+        with pytest.raises(RuntimeError, match="synthetic enqueue failure"):
+            batch_worker._enqueue_automatic_failed_rule_retry(
+                workspace=service,
+                job_id="partial-job",
+                created_by="tester",
+                expected_attempt_filters_json=expected_filters,
+            )
+    else:
+        assert batch_worker._enqueue_automatic_failed_rule_retry(
+            workspace=service,
+            job_id="partial-job",
+            created_by="tester",
+            expected_attempt_filters_json=expected_filters,
+        ) is None
+
+    persisted = service.get_batch_job(job_id="partial-job", created_by="tester")
+    retry_plan = persisted["summary"]["automatic_failed_rule_retry"]
+    assert persisted["status"] == "failed"
+    assert retry_plan["status"] == "enqueue_failed"
+    assert retry_plan["should_retry"] is False
+    assert retry_plan["reason_code"] == "retry_enqueue_failed"
+    assert persisted["items"] == persisted_before_enqueue["items"]
+    assert persisted["failed_records"] == persisted_before_enqueue["failed_records"]
+    assert qc_sichuan._batch_job_status_for_header(persisted) == "failed"
 
 
 def test_output_format_failure_does_not_auto_retry_or_erase_valid_results(storage):
@@ -750,6 +940,326 @@ def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storag
     assert {item["display_status"] for item in export_items} == {"compliant"}
 
 
+def test_precise_retry_interruption_keeps_authoritative_success_items_readable(canonical_storage):
+    """补跑启动清空派生规则视图后，顶层成功项仍是同轮只读结果的权威来源。"""
+
+    service, engine, jobs, _ = canonical_storage
+    first_claim = service.mark_batch_job_running(job_id="rerun-job")
+    initial_items = [
+        _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+        _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+        _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
+    ]
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=first_claim,
+        summary={
+            **_partial_summary(
+                total_records=2,
+                delivered=len(initial_items),
+                failed_rules=[_RERUN_RULE_IDS[1]],
+            ),
+            "rule_results": [
+                {
+                    "rule_code": rule_id,
+                    "items": [item for item in initial_items if item["rule_id"] == rule_id],
+                }
+                for rule_id in _RERUN_RULE_IDS
+            ],
+        },
+        items=initial_items,
+        failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
+    ) is True
+
+    for interruption in range(2):
+        retried = service.retry_batch_job(job_id="rerun-job", created_by="tester")
+        assert retried is not None and retried["status"] == "queued"
+        retry_claim = service.mark_batch_job_running(job_id="rerun-job")
+        assert isinstance(retry_claim, str)
+        # 与 worker 补跑启动路径一致：只清空派生摘要副本，不改 items_json/失败清单。
+        service.update_batch_job_progress(
+            job_id="rerun-job",
+            attempt_filters_json=retry_claim,
+            step_key="run",
+            rule_index=0,
+            rule_count=1,
+            processed_records=0,
+            total_records=1,
+            summary_patch={"rule_results": []},
+        )
+        service.fail_batch_job(
+            job_id="rerun-job",
+            attempt_filters_json=retry_claim,
+            error_message=f"synthetic retry interruption {interruption + 1}",
+        )
+
+        latest = service.build_latest_single_record_result_dto(
+            institute_id=_RERUN_RECORD_B["institute_id"],
+            patient_id=_RERUN_RECORD_B["patient_id"],
+            visit_id=_RERUN_RECORD_B["visit_id"],
+            rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+            rule_set_version=workspace.RULE_SET_VERSION,
+        )
+        assert latest["state"] == "ready"
+        assert latest["data_origin"] == "saved_partial_task"
+        assert latest["execution_status"] == "partial_failed"
+        assert latest["is_complete"] is False
+        assert latest["failed_rule_ids"] == [_RERUN_RULE_IDS[1]]
+        assert [item["rule_id"] for item in latest["items"]] == [_RERUN_RULE_IDS[0]]
+        bulk = service.build_latest_luxian_0609_record_result_dtos(
+            record_refs=[_RERUN_RECORD_B],
+            rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+            rule_set_version=workspace.RULE_SET_VERSION,
+        )[tuple(CaseRef.from_mapping(_RERUN_RECORD_B))]
+        assert bulk["state"] == "ready"
+        assert bulk["data_origin"] == "saved_partial_task"
+        assert bulk["execution_status"] == "partial_failed"
+        assert bulk["failed_rule_ids"] == [_RERUN_RULE_IDS[1]]
+        assert [item["rule_id"] for item in bulk["items"]] == [_RERUN_RULE_IDS[0]]
+
+        persisted = _load_job(engine, jobs, job_id="rerun-job")
+        assert persisted["summary"]["rule_results"] == []
+        assert [item["rule_id"] for item in persisted["items"]] == [
+            _RERUN_RULE_IDS[0],
+            _RERUN_RULE_IDS[1],
+            _RERUN_RULE_IDS[0],
+        ]
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    ["duplicate", "success_failure_overlap", "wrong_coordinate", "out_of_scope", "bad_status"],
+)
+def test_saved_partial_reader_rejects_corrupt_authoritative_success_set(
+    canonical_storage,
+    corruption,
+):
+    service, engine, jobs, _ = canonical_storage
+    claim = service.mark_batch_job_running(job_id="rerun-job")
+    initial_items = [
+        _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+        _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+        _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
+    ]
+    failures = [_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])]
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=claim,
+        summary={
+            **_partial_summary(total_records=2, delivered=3, failed_rules=[_RERUN_RULE_IDS[1]]),
+            "rule_results": [],
+        },
+        items=initial_items,
+        failed_records=failures,
+    ) is True
+
+    corrupted_items = [dict(item) for item in initial_items]
+    corrupted_failures = [dict(item) for item in failures]
+    if corruption == "duplicate":
+        corrupted_items.append(dict(corrupted_items[-1]))
+    elif corruption == "success_failure_overlap":
+        corrupted_failures.append(_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]))
+    elif corruption == "wrong_coordinate":
+        corrupted_items = corrupted_items[:-1]
+    elif corruption == "out_of_scope":
+        corrupted_items[-1]["rule_id"] = "LX0609-06-01-06"
+    else:
+        corrupted_items[-1].update(
+            status="technical_error",
+            result_status="technical_error",
+            display_status="technical_error",
+            is_compliant=None,
+        )
+    with engine.begin() as connection:
+        connection.execute(
+            jobs.update().where(jobs.c.id == "rerun-job").values(
+                items_json=json.dumps(corrupted_items),
+                failed_records_json=json.dumps(corrupted_failures),
+            )
+        )
+
+    latest = service.build_latest_single_record_result_dto(
+        institute_id=_RERUN_RECORD_B["institute_id"],
+        patient_id=_RERUN_RECORD_B["patient_id"],
+        visit_id=_RERUN_RECORD_B["visit_id"],
+        rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version=workspace.RULE_SET_VERSION,
+    )
+    assert latest["state"] == "technical_error"
+    assert latest["reason_code"] == "saved_partial_result_invalid"
+    assert latest["items"] == []
+
+
+def test_canceled_precise_retry_rejects_late_failure_and_completion_callbacks(canonical_storage):
+    service, engine, jobs, _ = canonical_storage
+    claim = service.mark_batch_job_running(job_id="rerun-job")
+    baseline_items = [
+        _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+        _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+        _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
+    ]
+    baseline_failure = _rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=claim,
+        summary={
+            **_partial_summary(total_records=2, delivered=3, failed_rules=[_RERUN_RULE_IDS[1]]),
+            "rule_results": [],
+        },
+        items=baseline_items,
+        failed_records=[baseline_failure],
+    ) is True
+    retry_baseline = service.retry_batch_job(job_id="rerun-job", created_by="tester")
+    assert retry_baseline["status"] == "queued"
+    retry_claim = service.mark_batch_job_running(job_id="rerun-job")
+    canceled = service.cancel_batch_job(job_id="rerun-job", created_by="tester")
+    assert canceled["status"] == "canceled"
+
+    service.fail_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=retry_claim,
+        error_message="late failure",
+    )
+    assert service.complete_batch_job(
+        job_id="rerun-job",
+        attempt_filters_json=retry_claim,
+        summary=_completed_summary(total_records=2, delivered=4),
+        items=[
+            *baseline_items,
+            _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[1]),
+        ],
+        failed_records=[],
+    ) is False
+
+    persisted = _load_job(engine, jobs, job_id="rerun-job")
+    assert persisted["status"] == "canceled"
+    assert persisted["items"] == retry_baseline["items"]
+    assert persisted["failed_records"] == retry_baseline["failed_records"]
+
+
+def test_bulk_latest_uses_same_full_partial_generation_as_single_record(canonical_storage):
+    service, engine, jobs, _ = canonical_storage
+    _complete_full_run(service)
+    full_filters = {
+        "rule_set_key": workspace.LUXIAN_0609_RULE_SET_KEY,
+        "rule_set_version": workspace.RULE_SET_VERSION,
+        "rule_ids": list(_RERUN_RULE_IDS),
+        "selected_rule_ids": [],
+        "scoped_customer_rule_ids": list(_RERUN_RULE_IDS),
+        "record_refs": [_RERUN_RECORD_B],
+    }
+    with engine.begin() as connection:
+        connection.execute(jobs.insert().values(
+            id="new-partial-job",
+            draft_id="sichuan-rule-library",
+            created_by="tester",
+            status="queued",
+            rule_code="LX0609",
+            rule_name="新一轮全量失败任务",
+            scope="final",
+            created_at=datetime(2026, 9, 21, 10, 0),
+            updated_at=datetime(2026, 9, 21, 10, 0),
+            total_records=1,
+            record_ids_json=json.dumps([_RERUN_RECORD_B["visit_id"]]),
+            filters_json=json.dumps(full_filters),
+        ))
+    partial_claim = service.mark_batch_job_running(job_id="new-partial-job")
+    partial_item = _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0])
+    assert service.complete_batch_job(
+        job_id="new-partial-job",
+        attempt_filters_json=partial_claim,
+        summary={
+            **_partial_summary(total_records=1, delivered=1, failed_rules=[_RERUN_RULE_IDS[1]]),
+            "rule_results": [
+                {"rule_code": _RERUN_RULE_IDS[0], "items": [partial_item]},
+                {"rule_code": _RERUN_RULE_IDS[1], "items": []},
+            ],
+        },
+        items=[partial_item],
+        failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
+    ) is True
+
+    # 更晚的局部成功任务不能覆盖已有全量冻结范围。
+    targeted_filters = {
+        **full_filters,
+        "rule_ids": [_RERUN_RULE_IDS[0]],
+        "selected_rule_ids": [_RERUN_RULE_IDS[0]],
+        "scoped_customer_rule_ids": [_RERUN_RULE_IDS[0]],
+        "record_rule_map": {
+            CaseRef.from_mapping(_RERUN_RECORD_B).as_key(): [_RERUN_RULE_IDS[0]],
+        },
+    }
+    with engine.begin() as connection:
+        connection.execute(jobs.insert().values(
+            id="newer-targeted-job",
+            draft_id="sichuan-rule-library",
+            created_by="tester",
+            status="queued",
+            rule_code="LX0609",
+            rule_name="更晚局部任务",
+            scope="final",
+            created_at=datetime(2026, 9, 21, 11, 0),
+            updated_at=datetime(2026, 9, 21, 11, 0),
+            total_records=1,
+            record_ids_json=json.dumps([_RERUN_RECORD_B["visit_id"]]),
+            filters_json=json.dumps(targeted_filters),
+        ))
+    targeted_claim = service.mark_batch_job_running(job_id="newer-targeted-job")
+    assert service.complete_batch_job(
+        job_id="newer-targeted-job",
+        attempt_filters_json=targeted_claim,
+        summary=_completed_summary(total_records=1, delivered=1),
+        items=[partial_item],
+        failed_records=[],
+    ) is True
+
+    single = service.build_latest_single_record_result_dto(
+        institute_id=_RERUN_RECORD_B["institute_id"],
+        patient_id=_RERUN_RECORD_B["patient_id"],
+        visit_id=_RERUN_RECORD_B["visit_id"],
+        rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version=workspace.RULE_SET_VERSION,
+    )
+    bulk = service.build_latest_luxian_0609_record_result_dtos(
+        record_refs=[_RERUN_RECORD_B],
+        rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version=workspace.RULE_SET_VERSION,
+    )[tuple(CaseRef.from_mapping(_RERUN_RECORD_B))]
+
+    assert single["job_id"] == bulk["job_id"] == "new-partial-job"
+    assert single["data_origin"] == bulk["data_origin"] == "saved_partial_task"
+    assert single["expected_rule_count"] == bulk["expected_rule_count"] == 2
+    assert bulk["is_complete"] is False
+    assert bulk["failed_rule_ids"] == [_RERUN_RULE_IDS[1]]
+    assert [item["rule_id"] for item in bulk["items"]] == [_RERUN_RULE_IDS[0]]
+
+    # 更新的同 visit 完成任务若缺少三坐标 Envelope，partial 候选也不能绕过歧义护栏。
+    with engine.begin() as connection:
+        connection.execute(jobs.insert().values(
+            id="ambiguous-completed-job",
+            draft_id="sichuan-rule-library",
+            created_by="tester",
+            status="completed",
+            rule_code="LX0609",
+            rule_name="缺少Envelope的更新任务",
+            scope="final",
+            created_at=datetime(2027, 1, 22, 10, 0),
+            finished_at=datetime(2027, 1, 22, 10, 5),
+            updated_at=datetime(2027, 1, 22, 10, 5),
+            total_records=1,
+            record_ids_json=json.dumps([_RERUN_RECORD_B["visit_id"]]),
+            filters_json=json.dumps(full_filters),
+        ))
+    blocked = service.build_latest_luxian_0609_record_result_dtos(
+        record_refs=[_RERUN_RECORD_B],
+        rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version=workspace.RULE_SET_VERSION,
+    )[tuple(CaseRef.from_mapping(_RERUN_RECORD_B))]
+    assert blocked["state"] == "technical_error"
+    assert blocked["reason_code"] == "canonical_envelope_missing"
+    assert blocked["expected_rule_count"] == 2
+
+
 @pytest.mark.parametrize("complete_summary", [False, True])
 def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(canonical_storage, complete_summary):
     service, engine, jobs, envelopes = canonical_storage
@@ -801,6 +1311,19 @@ def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(cano
             # 损坏/不完整的历史摘要仍按读取合同失败关闭，不能伪装为没有质控。
             assert latest["state"] == "technical_error"
             assert latest["reason_code"] == "saved_partial_result_invalid"
+        bulk = service.build_latest_luxian_0609_record_result_dtos(
+            record_refs=[record],
+            rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+            rule_set_version=workspace.RULE_SET_VERSION,
+        )[tuple(CaseRef.from_mapping(record))]
+        if complete_summary:
+            assert bulk["state"] == "ready"
+            assert bulk["execution_status"] == "failed"
+            assert bulk["items"] == []
+            assert bulk["failed_rule_ids"] == list(_RERUN_RULE_IDS)
+        else:
+            assert bulk["state"] == "technical_error"
+            assert bulk["reason_code"] == "saved_partial_result_invalid"
     job = _load_job(engine, jobs, job_id="rerun-job")
     with pytest.raises(ValueError, match="尚未形成可导出"):
         service._load_batch_job_export_items(job=job)

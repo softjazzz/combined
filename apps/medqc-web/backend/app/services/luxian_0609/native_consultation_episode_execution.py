@@ -38,6 +38,7 @@ from .consultation_customer_projection import (
     safe_consultation_customer_display_facts,
 )
 from .decision_model import ApplicabilityState, EvidenceState, QcDirection, RuleDecision
+from .decision_reducer import reduce_luxian_0609_rule_decision
 from .evidence_material import (
     EvidenceMaterialTruncated,
     EvidenceMaterialUnavailable,
@@ -6288,6 +6289,45 @@ async def _execute_consultation_episode_rules(
 _DELIVERABLE_FREEZE_STATUSES = frozenset({"compliant", "non_compliant", "not_applicable", "data_gap"})
 
 
+def _consultation_response_freeze_is_complete(
+    result: NativeConsultationEpisodeExecutionResult,
+) -> bool:
+    """只作缓存提交门；typed 状态仍由唯一 reducer 归约，本层不发布或重判结论。"""
+    planned = tuple(result.planned_rule_ids)
+    if (
+        not planned
+        or any(not isinstance(rule_id, str) or not rule_id for rule_id in planned)
+        or len(planned) != len(set(planned))
+    ):
+        return False
+
+    delivered_rule_ids: list[str] = []
+    for item in result.results:
+        if not isinstance(item, Mapping):
+            return False
+        rule_id = item.get("rule_id")
+        if (
+            not isinstance(rule_id, str)
+            or item.get("status") not in _DELIVERABLE_FREEZE_STATUSES
+        ):
+            return False
+        delivered_rule_ids.append(rule_id)
+    for decision in result.decisions:
+        try:
+            final_state = reduce_luxian_0609_rule_decision(decision).final_state.value
+        except (TypeError, ValueError):
+            return False
+        if final_state not in _DELIVERABLE_FREEZE_STATUSES:
+            return False
+        delivered_rule_ids.append(decision.rule_id)
+
+    return (
+        len(delivered_rule_ids) == len(planned)
+        and len(delivered_rule_ids) == len(set(delivered_rule_ids))
+        and set(delivered_rule_ids) == set(planned)
+    )
+
+
 async def execute_luxian_0609_native_consultation_episode_rules(
     *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,
     source_schema: str | None, llm_client: ConsultationEpisodeLLMClient | None,
@@ -6311,7 +6351,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         evidence_snapshot=evidence_snapshot, decision_rule_ids=decision_rule_ids,
         opinion_freeze_dir=opinion_freeze_dir, opinion_freeze_rebuild=opinion_freeze_rebuild,
     )
-    if result.results and all(item.get("status") in _DELIVERABLE_FREEZE_STATUSES for item in result.results):
+    if _consultation_response_freeze_is_complete(result):
         # 只冻结全部结论可交付的运行；技术错误、无法判定的下次重新调用模型。
         frozen_client.commit()
     if frozen_client.reused_calls:

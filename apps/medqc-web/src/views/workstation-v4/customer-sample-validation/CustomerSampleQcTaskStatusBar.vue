@@ -141,7 +141,7 @@
               {{
                 presentation.liveResultLines.length
                   ? '已回写结果'
-                  : presentation.liveExecutionPhase?.label || '实时结果'
+                  : presentation.liveExecutionPhase?.label || '执行进度'
               }}
             </div>
             <div class="qc-task-status__live-result-content">
@@ -170,7 +170,12 @@
                     { 'is-stage': Boolean(presentation.liveExecutionPhase) },
                   ]"
                 >
-                  {{ presentation.liveExecutionPhase?.text || '等待首条质控结果回写…' }}
+                  {{
+                    presentation.liveExecutionPhase?.text ||
+                      (confirmedResultsOnly && presentation.resultCount > 0
+                        ? `质控执行中，已回写 ${presentation.resultCount} 条结果`
+                        : '等待首条质控结果回写…')
+                  }}
                 </div>
               </Transition>
             </div>
@@ -238,6 +243,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { buildBatchJobPresentation } from './batchJobPresentation'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
 
@@ -263,7 +269,14 @@ const emit = defineEmits<{
   'open-history': []
 }>()
 
-const presentation = computed(() => (props.task ? buildBatchJobPresentation(props.task) : null))
+const { confirmedResultsOnly } = useQcResultVisibility()
+const presentation = computed(() =>
+  props.task
+    ? buildBatchJobPresentation(props.task, {
+        confirmedResultsOnly: confirmedResultsOnly.value,
+      })
+    : null,
+)
 const attentionStatusKeys = new Set([
   'technical_error',
   'non_compliant',

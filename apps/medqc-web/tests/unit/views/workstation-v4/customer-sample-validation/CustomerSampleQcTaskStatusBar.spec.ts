@@ -1,6 +1,10 @@
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ApiService } from '@/services/apiService'
+import { useAuthStore } from '@/stores/auth'
+import { UserRole, type User } from '@/types/auth'
 import CustomerSampleQcTaskStatusBar from '@/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.vue'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
 
@@ -60,6 +64,17 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 }
 
 describe('CustomerSampleQcTaskStatusBar', () => {
+  // 原有完整视图用例固定为开发身份；演示和普通受限身份在专项用例中显式切换。
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    vi.spyOn(ApiService, 'isAuthenticated').mockReturnValue(true)
+    vi.spyOn(ApiService, 'getCurrentUser').mockResolvedValue({
+      success: true,
+      data: { id: 'test-developer', roles: ['sync_admin'], is_demo_account: true },
+    })
+    await useAuthStore().initialize()
+  })
+
   it('C11 结算后的任务卡显示75项有效结果及1项失败，不再显示0条回写', () => {
     const job = buildJob({
       status: 'failed',
@@ -96,6 +111,7 @@ describe('CustomerSampleQcTaskStatusBar', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   it('没有任务时不渲染状态条', () => {
@@ -282,6 +298,126 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain(
       '后续病程未记录会诊意见及执行情况。',
     )
+  })
+
+  it.each<[string, User]>([
+    ['演示管理员', { id: 'demo-admin', roles: [UserRole.ADMIN], is_demo_account: true }],
+    ['普通非全量用户', { id: 'regular-user', roles: [UserRole.QC_STAFF] }],
+  ])('%s的实时栏只展示非内部确定问题', async (_name, user) => {
+    setActivePinia(createPinia())
+    vi.mocked(ApiService.getCurrentUser).mockResolvedValue({ success: true, data: user })
+    await useAuthStore().initialize()
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: {
+        task: buildJob({
+          items: [
+            {
+              rule_id: 'LX0609-03-01-01',
+              rule_name: '会诊意见及执行情况',
+              status: 'non_compliant',
+              is_compliant: false,
+              conclusion: '应保留的确定问题。',
+            },
+            ...Array.from({ length: 6 }, (_, index) => ({
+              rule_id: `LX0609-09-01-0${index + 1}`,
+              rule_name: '非确定结论',
+              status: index % 2 === 0 ? 'compliant' : 'data_gap',
+              is_compliant: index % 2 === 0 ? true : null,
+              conclusion: `不应展示的最近结论${index + 1}`,
+            })),
+            {
+              rule_id: 'LX0609-12-01-01',
+              rule_name: '内部确定问题',
+              status: 'non_compliant',
+              is_compliant: false,
+              internal_only: true,
+              conclusion: '不应展示的内部问题。',
+            },
+          ],
+        }),
+      },
+      global: { stubs },
+    })
+
+    const liveResult = wrapper.get('[data-testid="qc-task-live-result"]').text()
+    expect(liveResult).toContain('应保留的确定问题。')
+    expect(liveResult).not.toContain('不应展示的最近结论')
+    expect(liveResult).not.toContain('不应展示的内部问题。')
+    wrapper.unmount()
+  })
+
+  it('带演示标记的sync_admin仍保留完整实时结论', () => {
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: {
+        task: buildJob({
+          items: [
+            {
+              rule_id: 'LX0609-07-02-01',
+              rule_name: '输血记录',
+              status: 'compliant',
+              is_compliant: true,
+              conclusion: '开发权限可见的合规结论。',
+            },
+          ],
+        }),
+      },
+      global: { stubs },
+    })
+
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain(
+      '开发权限可见的合规结论。',
+    )
+    wrapper.unmount()
+  })
+
+  it('受限账号没有确定问题时展示中性执行进度，不把隐藏项说成无问题', async () => {
+    setActivePinia(createPinia())
+    vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+      success: true,
+      data: { id: 'demo-admin', roles: [UserRole.ADMIN], is_demo_account: true },
+    })
+    await useAuthStore().initialize()
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: {
+        task: buildJob({
+          items: [
+            {
+              rule_id: 'LX0609-06-01-05',
+              rule_name: '检查检验',
+              status: 'technical_error',
+              is_compliant: null,
+              conclusion: '不应作为实时结论展示的技术失败。',
+            },
+            {
+              rule_id: 'LX0609-07-02-01',
+              rule_name: '输血记录',
+              status: 'compliant',
+              is_compliant: true,
+              conclusion: '不应展示的合规结论。',
+            },
+          ],
+          summary: {
+            ...buildJob().summary!,
+            completed_rule_count: 2,
+            failed_rule_count: 1,
+            diagnostic_rule_failure_count: 1,
+            display_status_counts: { technical_error: 1, compliant: 1 },
+          },
+        }),
+      },
+      global: { stubs },
+    })
+
+    const liveResult = wrapper.get('[data-testid="qc-task-live-result"]').text()
+    expect(liveResult).toContain('执行进度')
+    expect(liveResult).toContain('质控执行中，已回写 2 条结果')
+    expect(liveResult).not.toContain('不应作为实时结论展示的技术失败。')
+    expect(liveResult).not.toContain('不应展示的合规结论。')
+    expect(liveResult).not.toMatch(/无问题|全部通过/u)
+    expect(wrapper.get('[data-testid="qc-task-diagnostic-warning"]').text()).toContain(
+      '1 项规则未完成',
+    )
+    wrapper.unmount()
   })
 
   it('完成后保留查看、复核、导出和历史入口', async () => {

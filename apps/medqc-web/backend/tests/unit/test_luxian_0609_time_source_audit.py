@@ -1,6 +1,6 @@
 from datetime import date, datetime
 import pytest
-from app.services.etl_sync import _apply_sync_column_aliases
+from app.services import etl_sync
 from app.services.luxian_0609 import native_consultation_episode_execution as episode
 from app.services.luxian_0609.source_evidence_reader import (
     _SNAPSHOT_SOURCE_FIELDS,
@@ -19,28 +19,52 @@ from app.services.luxian_0609.decision_binding import (
 
 
 @pytest.mark.parametrize(
-    "field,stamp,expected",
+    "field,stamp,expected,expected_record_datetime",
     [
-        ("last_modified_time", "2026-10-03 08:00:00", "data_gap"),
-        ("last_modified_datetime", "2026-10-03 08:00:00", "data_gap"),
-        ("record_time", "2026-10-01 16:00:00", "compliant"),
-        ("record_datetime", "2026-10-01 16:00:01", "non_compliant"),
-        ("submit_time", "2026-10-01 09:00:00", "compliant"),
-        ("submit_datetime", "2026-10-03 08:00:00", "non_compliant"),
-        ("physician_sign_time", "2026-10-01 09:00:00", "compliant"),
+        ("last_modified_time", "2026-10-03 08:00:00", "data_gap", None),
+        ("last_modified_datetime", "2026-10-03 08:00:00", "data_gap", None),
+        (
+            "record_time",
+            "2026-10-01 16:00:00",
+            "compliant",
+            "2026-10-01 16:00:00",
+        ),
+        (
+            "record_datetime",
+            "2026-10-01 16:00:01",
+            "non_compliant",
+            "2026-10-01 16:00:01",
+        ),
+        (
+            "submit_time",
+            "2026-10-01 09:00:00",
+            "compliant",
+            "2026-10-01 09:00:00",
+        ),
+        (
+            "submit_datetime",
+            "2026-10-03 08:00:00",
+            "non_compliant",
+            "2026-10-03 08:00:00",
+        ),
+        ("physician_sign_time", "2026-10-01 09:00:00", "data_gap", None),
+        ("physician_sign_datetime", "2026-10-01 09:00:00", "data_gap", None),
     ],
 )
-def test_first_course_completion_source_through_formal_chain(field, stamp, expected):
+def test_first_course_completion_source_through_formal_chain(
+    field, stamp, expected, expected_record_datetime
+):
     row = {
         "document_id": "SYN-D",
         "record_content": "合成首程：病情稳定，已记录诊疗经过。",
         field: stamp,
     }
-    mapped = _apply_sync_column_aliases(
+    mapped = etl_sync._apply_sync_column_aliases(
         table_name="first_course_record",
         record=row,
-        existing_columns=set(row) | {"record_datetime"},
+        existing_columns=set(row) | {"record_datetime", "physician_sign_datetime"},
     )
+    assert mapped.get("record_datetime") == expected_record_datetime
     rows = {
         "inpat_registration": [{"admission_datetime": "2026-10-01 08:00:00"}],
         "first_course_record": [mapped],
@@ -88,6 +112,71 @@ def test_first_course_completion_source_through_formal_chain(field, stamp, expec
         evidence_materials=session.materials,
     )
     assert result[0].final_state.value == expected
+
+
+@pytest.mark.parametrize("field", ("physician_sign_datetime", "physician_sign_time"))
+def test_first_course_sign_time_is_preserved_without_becoming_record_time(field):
+    stamp = "2026-10-01 09:00:00"
+    mapped = etl_sync._apply_sync_column_aliases(
+        table_name="first_course_record",
+        record={"document_id": "SYN-SIGN", field: stamp},
+        existing_columns={
+            "document_id",
+            "record_datetime",
+            "physician_sign_datetime",
+        },
+    )
+
+    assert mapped.get("record_datetime") is None
+    assert mapped["physician_sign_datetime"] == stamp
+
+
+def test_first_course_upsert_keeps_sign_time_separate_from_record_time(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def execute(self, _stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "document_id",
+                "record_content",
+                "record_datetime",
+                "physician_sign_datetime",
+            ],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="first_course_record",
+        records=[
+            {
+                "institute_id": "SYN-I",
+                "patient_id": "SYN-P",
+                "visit_id": "SYN-V",
+                "document_id": "SYN-SIGN",
+                "record_content": "合成首次病程正文。",
+                "physician_sign_time": "2026-10-01 09:00:00",
+            }
+        ],
+        primary_keys=["institute_id", "patient_id", "visit_id", "document_id"],
+        session=_FakeSession(),
+    )
+
+    assert count == 1
+    assert len(executed_params) == 1
+    assert "record_datetime" not in executed_params[0]
+    assert executed_params[0]["physician_sign_datetime"] == "2026-10-01 09:00:00"
 
 
 @pytest.mark.parametrize(

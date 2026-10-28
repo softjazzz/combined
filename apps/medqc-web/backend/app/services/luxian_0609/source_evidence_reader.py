@@ -11,7 +11,12 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from app.services.bundles import assembly as bundle_assembly
-from app.services.validation_material_source import material_source_schema, material_document_sql_filter
+from app.services.validation_material_source import (
+    DOCUMENT_STATUS_TABLES,
+    material_document_sql_filter,
+    material_document_status_column,
+    material_source_schema,
+)
 
 from .surgery_procedure_catalog import catalog_surgery_state
 
@@ -47,14 +52,42 @@ def _case_source_schema(*, institute_id: str, patient_id: str, visit_id: str, so
 def _material_document_filter(
     *, schema: str, table: str, columns: set[str], institute_id: str, patient_id: str, visit_id: str,
 ) -> tuple[str, dict[str, Any]]:
-    if "document_id" not in columns:
-        return "", {}
     try:
         return material_document_sql_filter(source_schema=schema, source_table=table,
-            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+            source_columns=columns)
     except Exception:
         # 复核决定读取失败不能退回双份材料或伪装成空来源。
         raise SourceEvidenceQueryError() from None
+
+
+def _with_document_status_projection(
+    *, table: str, columns: set[str], selected: list[str],
+) -> tuple[list[str], str | None]:
+    """把文书状态以规范字段名投影；兼容物理别名 documentstatus。"""
+
+    status_column = material_document_status_column(
+        source_table=table,
+        source_columns=columns,
+    )
+    projected = list(selected)
+    if status_column and status_column not in projected:
+        projected.append(status_column)
+    return projected, status_column
+
+
+def _select_sql_with_document_status(
+    selected: list[str], status_column: str | None,
+) -> str:
+    return ", ".join(
+        (
+            f"{bundle_assembly._quote_ident(field)} AS "
+            f"{bundle_assembly._quote_ident('document_status')}"
+            if field == status_column and field != "document_status"
+            else bundle_assembly._quote_ident(field)
+        )
+        for field in selected
+    )
 
 
 SURGERY_TIME_FIELDS = (
@@ -703,6 +736,10 @@ for _source_key, _source_fields in tuple(_NATIVE_SOURCE_FIELDS.items()):
         _NATIVE_SOURCE_FIELDS[_source_key] = tuple(
             dict.fromkeys((*_source_fields, *AUTHORITATIVE_DOCUMENT_TIME_FIELDS))
         )
+    if _source_key in DOCUMENT_STATUS_TABLES:
+        _NATIVE_SOURCE_FIELDS[_source_key] = tuple(
+            dict.fromkeys((*_NATIVE_SOURCE_FIELDS[_source_key], "document_status"))
+        )
 
 _SNAPSHOT_SOURCE_FIELDS = {
     source_key: _NATIVE_SOURCE_FIELDS[source_key]
@@ -816,12 +853,14 @@ _SNAPSHOT_SOURCE_FIELDS.update({
         "document_id",
         "document_title",
         *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
+        "document_status",
         "record_content",
     ),
     "surgery_safecheck_record": (
         "document_id",
         "document_title",
         *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
+        "document_status",
         "record_content",
     ),
 })
@@ -990,9 +1029,12 @@ def read_luxian_0609_course_round_timeline(
         selected = ["document_title", *available_time_fields]
         if document_id_field:
             selected.append(document_id_field)
-        select_sql = ", ".join(
-            bundle_assembly._quote_ident(field) for field in selected
+        selected, document_status_column = _with_document_status_projection(
+            table=source_key,
+            columns=columns,
+            selected=selected,
         )
+        select_sql = _select_sql_with_document_status(selected, document_status_column)
         order_fields = list(available_time_fields)
         if document_id_field:
             order_fields.append(document_id_field)
@@ -1632,7 +1674,15 @@ def read_luxian_0609_runtime_source_rows(
         selected.extend(field for field in ("record_content", *AUTHORITATIVE_DOCUMENT_TIME_FIELDS) if field in columns)
     if source_key == "surgery_safecheck_record":
         selected.extend(field for field in ("record_content",) if field in columns)
-    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"
+    selected, document_status_column = _with_document_status_projection(
+        table=source_key,
+        columns=columns,
+        selected=selected,
+    )
+    select_sql = (
+        _select_sql_with_document_status(selected, document_status_column)
+        or "1 AS row_marker"
+    )
 
     order_candidates = (*getattr(bundle_assembly, "_ORDER_COLUMNS_PRIORITY", ()), "document_id", "id", *SURGERY_TIME_FIELDS)
     order_columns = [field for field in order_candidates if field in columns]
@@ -1684,13 +1734,21 @@ def read_luxian_0609_native_source_rows(
         raise SourceEvidenceUnavailable()
 
     selected = [field for field in approved_fields if field in columns]
+    selected, document_status_column = _with_document_status_projection(
+        table=source_key,
+        columns=columns,
+        selected=selected,
+    )
     if source_key == "mr_surgery" and not {"surgical_level", "surgery_begin_datetime"}.issubset(selected):
         raise SourceEvidenceUnavailable()
     if source_key == "mr_bloodtrans" and "transfution_datetime" not in selected:
         raise SourceEvidenceUnavailable()
     if source_key == "bloodtrans_record" and "record_content" not in selected:
         raise SourceEvidenceUnavailable()
-    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"
+    select_sql = (
+        _select_sql_with_document_status(selected, document_status_column)
+        or "1 AS row_marker"
+    )
     order_candidates = (
         *getattr(bundle_assembly, "_ORDER_COLUMNS_PRIORITY", ()),
         "document_id",
@@ -1834,6 +1892,11 @@ def read_luxian_0609_snapshot_source_rows(
     if not required.issubset(columns):
         raise SourceEvidenceUnavailable()
     selected = [field for field in approved_fields if field in columns]
+    selected, document_status_column = _with_document_status_projection(
+        table=table_name,
+        columns=columns,
+        selected=selected,
+    )
     if not selected:
         raise SourceEvidenceUnavailable()
     order_candidates = (
@@ -1858,7 +1921,7 @@ def read_luxian_0609_snapshot_source_rows(
     if not order_columns:
         raise SourceEvidenceUnavailable()
 
-    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected)
+    select_sql = _select_sql_with_document_status(selected, document_status_column)
     order_sql = ", ".join(
         f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST"
         for field in order_columns

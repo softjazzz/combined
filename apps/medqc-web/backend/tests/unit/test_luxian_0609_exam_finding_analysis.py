@@ -254,7 +254,7 @@ async def test_final_partial_coverage_decides_per_event_instead_of_failing_whole
     # 末次仍漏核且已核到的不算分析 → 该事件不固定，沿用主抽取。
     _reset_analysis_freeze()
     outcome = await check_exam_finding_analysis(projection, _Client([only(second, "none")] * 2))
-    assert outcome.state == "ready" and outcome.analysed_refs == {}
+    assert outcome.state == "partial" and outcome.analysed_refs == {}
 
 
 @pytest.mark.asyncio
@@ -327,7 +327,7 @@ async def test_final_attempt_unverifiable_quote_skips_only_that_course():
     ]}
     outcome = await check_exam_finding_analysis(projection, _Client([answer, answer]))
     # 该事件有一份病程未核到：不固定为“未分析”，沿用主抽取；整步不再失败。
-    assert outcome.state == "ready" and outcome.llm_call_count == 2 and outcome.analysed_refs == {}
+    assert outcome.state == "partial" and outcome.llm_call_count == 2 and outcome.analysed_refs == {}
 
 
 def _chest_projection(course_text):
@@ -428,7 +428,7 @@ async def test_failed_batch_leaves_only_its_events_to_main_extraction(monkeypatc
     single = max(len(module._prompt(projection, {position: target})) for position, target in targets.items())
     monkeypatch.setattr(module, "MAX_PROMPT_CHARS", single)
     outcome = await check_exam_finding_analysis(projection, _Client([chest, "不是JSON", "不是JSON"]))
-    assert outcome.state == "ready" and outcome.analysed_refs == {1: (first,)}
+    assert outcome.state == "partial" and outcome.analysed_refs == {1: (first,)}
     assert outcome.llm_call_count == 3
     # 单事件仍超限时不调用模型，整体沿用主抽取。
     monkeypatch.setattr(module, "MAX_PROMPT_CHARS", 10)

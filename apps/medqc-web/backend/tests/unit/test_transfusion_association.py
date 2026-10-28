@@ -113,6 +113,20 @@ def test_explicit_unknown_time_cannot_fall_back_to_nearby_event():
     assert not result.documents[0].event_refs
 
 
+def test_unmatched_end_anchor_keeps_narrow_possible_event_scope():
+    evaluation = post(extra="第2次输血；2026-06-05 12:30输血结束后复查。")
+    evaluation.pop("record_time")
+    result = associate(
+        [record("B1", day="01"), record("B2", day="05", ordinal=2)],
+        after=[evaluation],
+    )
+
+    link = result.documents[0]
+    assert link.state == "unmatched"
+    assert not link.event_refs
+    assert link.possible_event_refs == (("bloodtrans_record", "B2"),)
+
+
 def test_conflicting_strong_anchors_remain_ambiguous():
     result = associate([record("B1"), record("B2", day="06", ordinal=2)],
                        after=[post(day="06", extra="第1次输血，于2026-06-06 10:00输注红细胞。")])

@@ -109,6 +109,48 @@ from .qc_workspace.failed_rule_retry import (
 logger = logging.getLogger(__name__)
 
 
+def _enqueue_automatic_failed_rule_retry(
+    *,
+    workspace: CustomQCWorkspaceService,
+    job_id: str,
+    created_by: str,
+    expected_attempt_filters_json: str | None,
+) -> Optional[Dict[str, Any]]:
+    """实际入队成功后才发布 queued；失败用同代次 CAS 撤销 planned。"""
+
+    retry_method = getattr(workspace, "retry_batch_job", None)
+    mark_failed = getattr(workspace, "mark_failed_rule_auto_retry_enqueue_failed", None)
+
+    def _mark_failed() -> None:
+        if callable(mark_failed) and expected_attempt_filters_json is not None:
+            mark_failed(
+                job_id=job_id,
+                expected_attempt_filters_json=expected_attempt_filters_json,
+            )
+
+    if not created_by or not callable(retry_method):
+        _mark_failed()
+        return None
+    try:
+        retried_job = retry_method(
+            job_id=job_id,
+            created_by=created_by,
+            automatic=True,
+            **(
+                {"expected_attempt_filters_json": expected_attempt_filters_json}
+                if expected_attempt_filters_json is not None
+                else {}
+            ),
+        )
+    except Exception:
+        _mark_failed()
+        raise
+    if not retried_job or str(retried_job.get("status") or "") != "queued":
+        _mark_failed()
+        return None
+    return retried_job
+
+
 def _ordered_luxian_0609_customer_rule_ids(
     requested_rule_ids: List[str] | tuple[str, ...],
 ) -> tuple[str, ...]:
@@ -4099,23 +4141,18 @@ async def run_sichuan_workspace_batch_job(
             return
         if automatic_retry_plan.get("should_retry") is True:
             created_by = str(current.get("created_by") or "").strip()
-            retry_method = getattr(workspace, "retry_batch_job", None)
-            if not created_by or not callable(retry_method):
-                logger.error(
-                    "部分失败任务无法自动补跑: job_id=%s created_by_present=%s retry_method_present=%s",
-                    job_id,
-                    bool(created_by),
-                    callable(retry_method),
-                )
-                return
-            retried_job = retry_method(
+            retried_job = _enqueue_automatic_failed_rule_retry(
+                workspace=workspace,
                 job_id=job_id,
                 created_by=created_by,
-                automatic=True,
-                **({"expected_attempt_filters_json": attempt_filters_json} if attempt_filters_json is not None else {}),
+                expected_attempt_filters_json=attempt_filters_json,
             )
-            if not retried_job or str(retried_job.get("status") or "") != "queued":
-                logger.error("部分失败任务自动补跑入队失败: job_id=%s", job_id)
+            if not retried_job:
+                logger.error(
+                    "部分失败任务无法自动补跑: job_id=%s created_by_present=%s",
+                    job_id,
+                    bool(created_by),
+                )
                 return
             delay_seconds = max(
                 0.0,

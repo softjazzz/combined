@@ -7,9 +7,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
+from sqlalchemy.orm import Session
 
 from transfusion_order_test_support import FrozenTransfusionProtocolClient
 
@@ -345,3 +348,231 @@ async def test_047_unknown_record_classification_is_not_silently_dropped() -> No
     )
 
     _assert_layers(result, "data_gap", "required_field_missing")
+
+
+def _actual_record(document_id: str, day: str, *, end: str | None) -> dict[str, str]:
+    ending = f"2026-06-{day} {end}输血结束。" if end else ""
+    return {
+        "document_id": document_id,
+        "record_time": f"2026-06-{day} 12:00:00",
+        "record_content": (
+            f"2026-06-{day} 09:00开始输血，实际输注红细胞2U。{ending}"
+            "输注过程平稳，未见输血不良反应。"
+        ),
+    }
+
+
+def _post_evaluation(
+    document_id: str,
+    day: str,
+    *,
+    end: str,
+    explicit: bool,
+) -> dict[str, str]:
+    anchor = f"2026-06-{day} {end}输血结束后" if explicit else "输血后"
+    return {
+        "document_id": document_id,
+        "document_title": "输血后评价记录",
+        "record_time": f"2026-06-{day} 13:00:00",
+        "record_content": f"{anchor}复查血红蛋白较前改善。",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("explicit", [False, True], ids=["generic", "explicit"])
+@pytest.mark.parametrize("unknown_position", [0, 1, 2], ids=["first", "middle", "last"])
+async def test_047_unknown_end_event_keeps_identity_without_borrowing_other_evaluations(
+    explicit: bool,
+    unknown_position: int,
+) -> None:
+    """无结束时刻的实际输血不随排序消失，也不能借用其他时次的有效评价。"""
+
+    first = _actual_record("KNOWN-1", "01", end="10:00")
+    unknown = _actual_record("UNKNOWN-END", "03", end=None)
+    last = _actual_record("KNOWN-2", "05", end="10:00")
+    records = [first, last]
+    records.insert(unknown_position, unknown)
+    result = await _run(
+        RULE_047,
+        {
+            "mr_bloodtrans": STRUCTURED_EVENT,
+            "bloodtrans_record": records,
+            "daily_course_record": [
+                _post_evaluation("EVAL-1", "01", end="10:00", explicit=explicit),
+                _post_evaluation("EVAL-2", "05", end="10:00", explicit=explicit),
+            ],
+        },
+        {str(row["record_content"]): "record" for row in records},
+        horizon_date="2026-06-08",
+    )
+
+    _assert_layers(result, "data_gap", "required_field_missing")
+    assert _evidence_ids(result["final"]) == {"UNKNOWN-END"}
+
+
+@pytest.mark.asyncio
+async def test_047_ambiguous_bc_evaluation_does_not_erase_confirmed_missing_a_and_saves() -> None:
+    """B/C 间局部歧义不覆盖 A 的确定缺失，并穿过 Finalizer 与 SQLite 保存合同。"""
+
+    records = [
+        _actual_record("MISSING-A", "01", end="10:00"),
+        _actual_record("AMBIGUOUS-B", "05", end="10:00"),
+        _actual_record("AMBIGUOUS-C", "05", end="12:00"),
+    ]
+    result = await _run(
+        RULE_047,
+        {
+            "mr_bloodtrans": STRUCTURED_EVENT,
+            "bloodtrans_record": records,
+            "daily_course_record": [
+                {
+                    "document_id": "EVAL-BC",
+                    "document_title": "输血后评价记录",
+                    "record_time": "2026-06-05 13:00:00",
+                    "record_content": "输血后复查血红蛋白较前改善。",
+                }
+            ],
+        },
+        {str(row["record_content"]): "record" for row in records},
+        horizon_date="2026-06-09",
+    )
+
+    _assert_layers(result, "non_compliant", "requirement_violated")
+    assert result["facts"]["transfusion_end_time"] == "2026-06-01 10:00:00"
+    assert _evidence_ids(result["final"]) == {"MISSING-A"}
+
+    from app.services.qc_workspace.canonical_result_store import (
+        CanonicalResultStore,
+        envelope_item_from_rule_result,
+    )
+
+    table = sa.Table(
+        "luxian_0609_record_result_envelopes",
+        sa.MetaData(),
+        sa.Column("id", sa.String(36), primary_key=True),
+        *[
+            sa.Column(key, sa.String(128), nullable=False)
+            for key in (
+                "job_id", "root_job_id", "created_by", "record_id", "institute_id",
+                "patient_id", "visit_id", "rule_set_key", "rule_set_version",
+            )
+        ],
+        sa.Column("envelope_json", sa.Text, nullable=False),
+        sa.Column("result_count", sa.Integer, nullable=False),
+        sa.Column("created_at", sa.DateTime, nullable=False),
+        sa.Column("updated_at", sa.DateTime, nullable=False),
+    )
+    engine = sa.create_engine("sqlite:///:memory:")
+    table.metadata.create_all(engine)
+    item = {
+        **result["final"],
+        "record_id": "047-V",
+        "visit_id": "047-V",
+        "institute_id": "047-I",
+        "patient_id": "047-P",
+    }
+    key = "047-p1-regression-test-key"
+    try:
+        with Session(engine) as db:
+            CanonicalResultStore(table).replace_for_job(
+                db,
+                job_row={
+                    "id": "047-J",
+                    "created_by": "047-tester",
+                    "filters_json": json.dumps({
+                        "rule_set_key": "luxian_0609_qc_v1",
+                        "rule_set_version": "2026-06-09",
+                        "rule_ids": [RULE_047],
+                    }),
+                },
+                items=[item],
+                now=datetime(2026, 10, 28, 12),
+                projection_key=key,
+                projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key=key),
+            )
+            db.commit()
+        with Session(engine) as db:
+            saved = CanonicalResultStore(table).load_selected(
+                db,
+                root_job_id="047-J",
+                institute_id="047-I",
+                patient_id="047-P",
+                visit_id="047-V",
+                rule_set_key="luxian_0609_qc_v1",
+                rule_set_version="2026-06-09",
+            )["items"][0]
+    finally:
+        engine.dispose()
+    assert saved["status"] == item["status"] == "non_compliant"
+    assert saved["reason_code"] == item["reason_code"] == "requirement_violated"
+    assert saved["customer_display_facts"] == item["customer_display_facts"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "evaluation_content",
+    [
+        "于2026-06-01 09:00开始输血，本次输血后复查血红蛋白较前改善。",
+        "2026-06-01 10:30输血结束后复查血红蛋白较前改善。",
+    ],
+    ids=["matched-start", "unmatched-end-possible"],
+)
+async def test_047_untimed_evaluation_for_same_event_stays_data_gap(
+    evaluation_content: str,
+) -> None:
+    """同一事件已有专门评价但完成时间不明时，不能武断发布“缺评价”。"""
+
+    record = _actual_record("EVENT-A", "01", end="10:00")
+    result = await _run(
+        RULE_047,
+        {
+            "mr_bloodtrans": STRUCTURED_EVENT,
+            "bloodtrans_record": [record],
+            "daily_course_record": [
+                {
+                    "document_id": "UNTIMED-A",
+                    "document_title": "输血后评价记录",
+                    "record_content": evaluation_content,
+                }
+            ],
+        },
+        {str(record["record_content"]): "record"},
+        horizon_date="2026-06-05",
+    )
+
+    _assert_layers(result, "data_gap", "authoritative_time_missing")
+
+
+@pytest.mark.asyncio
+async def test_047_unmatched_untimed_anchor_stays_local_and_preserves_other_missing_event() -> None:
+    """精确锚点未命中时保留其窄候选；B 的不确定评价不能覆盖 A 的确定缺失。"""
+
+    missing = _actual_record("MISSING-A", "01", end="10:00")
+    missing["record_content"] = "第1次输血；" + missing["record_content"]
+    uncertain = _actual_record("UNCERTAIN-B", "05", end="10:00")
+    uncertain["record_content"] = "第2次输血；" + uncertain["record_content"]
+    result = await _run(
+        RULE_047,
+        {
+            "mr_bloodtrans": STRUCTURED_EVENT,
+            "bloodtrans_record": [missing, uncertain],
+            "daily_course_record": [
+                {
+                    "document_id": "UNTIMED-B",
+                    "document_title": "输血后评价记录",
+                    "record_content": (
+                        "第2次输血；2026-06-05 10:30输血结束后"
+                        "复查血红蛋白较前改善。"
+                    ),
+                }
+            ],
+        },
+        {
+            str(missing["record_content"]): "record",
+            str(uncertain["record_content"]): "record",
+        },
+        horizon_date="2026-06-09",
+    )
+
+    _assert_layers(result, "non_compliant", "requirement_violated")
+    assert _evidence_ids(result["final"]) == {"MISSING-A"}

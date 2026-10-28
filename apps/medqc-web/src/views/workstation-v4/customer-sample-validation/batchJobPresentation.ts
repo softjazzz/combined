@@ -57,6 +57,11 @@ export type BatchJobPresentation = {
   updatedText: string
 }
 
+export type BatchJobPresentationOptions = {
+  /** 仅收窄实时结论轮播，不改变任务统计、进度或持久结果。 */
+  confirmedResultsOnly?: boolean
+}
+
 const STATUS_META: Array<{
   key: string
   label: string
@@ -248,9 +253,17 @@ function resolveLiveResultText(item: SichuanBatchIssueItem, ruleId: string): str
   ).trim()
 }
 
-function resolveLiveResultLines(job: SichuanBatchJob): BatchJobLiveResult[] {
+function resolveLiveResultLines(
+  job: SichuanBatchJob,
+  options: BatchJobPresentationOptions,
+): BatchJobLiveResult[] {
   const items = Array.isArray(job.items) ? job.items : []
-  const lines = items
+  const visibleItems = options.confirmedResultsOnly
+    ? items.filter(
+        (item) => resolveIssueStatus(item) === 'non_compliant' && item.internal_only !== true,
+      )
+    : items
+  const lines = visibleItems
     .slice(-6)
     .reverse()
     .map((item, index) => {
@@ -359,7 +372,10 @@ export function formatBatchJobDateTime(value?: string | Date | null): string {
   return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
-export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresentation {
+export function buildBatchJobPresentation(
+  job: SichuanBatchJob,
+  options: BatchJobPresentationOptions = {},
+): BatchJobPresentation {
   const summary = asRecord(job.summary)
   const progress = asRecord(job.progress)
   const normalizedStatus = String(job.status || '')
@@ -522,7 +538,7 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
     statusCounts,
     statusChips,
     diagnosticRuleFailureCount,
-    liveResultLines: resolveLiveResultLines(job),
+    liveResultLines: resolveLiveResultLines(job, options),
     liveExecutionPhase: resolveLiveExecutionPhase(job),
     overviewText,
     issueSummaryText: resolveIssueSummaryText(job),

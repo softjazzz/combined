@@ -6,6 +6,8 @@ on:
     paths:
       - 'apps/medqc-web/src/views/workstation-v4/customer-sample-validation/**'
       - 'apps/medqc-web/src/views/workstation-v4/semantic-rules/types.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/semantic-rules/composables/useSichuanBatchJobs.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/semantic-rules/useSichuanBatchJobs.f08.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/customer-sample-validation/**'
       - 'apps/medqc-web/tsconfig*.json'
       - 'apps/medqc-web/package*.json'
@@ -15,6 +17,8 @@ on:
     paths:
       - 'apps/medqc-web/src/views/workstation-v4/customer-sample-validation/**'
       - 'apps/medqc-web/src/views/workstation-v4/semantic-rules/types.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/semantic-rules/composables/useSichuanBatchJobs.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/semantic-rules/useSichuanBatchJobs.f08.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/customer-sample-validation/**'
       - 'apps/medqc-web/tsconfig*.json'
       - 'apps/medqc-web/package*.json'
@@ -47,6 +51,7 @@ jobs:
       - name: Full type check
         run: npm run type-check
       - name: Focused task status and presentation tests
-        run: npx vitest run tests/unit/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.spec.ts tests/unit/views/workstation-v4/customer-sample-validation/batchJobPresentation.spec.ts --maxWorkers=1 --minWorkers=1
+        # 依赖已安装；测试及其子进程使用独立网络命名空间，不能访问模型或业务库。
+        run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" node_modules/vitest/vitest.mjs run tests/unit/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.spec.ts tests/unit/views/workstation-v4/customer-sample-validation/batchJobPresentation.spec.ts tests/unit/views/workstation-v4/semantic-rules/useSichuanBatchJobs.f08.spec.ts --maxWorkers=1 --minWorkers=1
       - name: Read-only lint of changed frontend scope
         run: npx eslint src/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.vue src/views/workstation-v4/customer-sample-validation/batchJobPresentation.ts src/views/workstation-v4/semantic-rules/types.ts

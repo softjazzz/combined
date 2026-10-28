@@ -769,7 +769,10 @@ def _select_records(
     visit_id: str,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
-    from ..validation_material_source import material_source_schema
+    from ..validation_material_source import (
+        material_document_status_column,
+        material_source_schema,
+    )
     schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=schema,
         institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     columns = set(_get_table_columns(schema, table))
@@ -815,6 +818,12 @@ def _select_records(
     select_columns.update(_TEXT_COLUMNS_PRIORITY)
     select_columns.update(build_document_select_columns(table, columns))
     select_columns.update(_FRONTPAGE_EXTRA_COLUMNS)
+    document_status_column = material_document_status_column(
+        source_table=table,
+        source_columns=columns,
+    )
+    if document_status_column:
+        select_columns.add(document_status_column)
     selected = [col for col in select_columns if col in columns]
     if not selected:
         return []
@@ -843,13 +852,21 @@ def _select_records(
     from ..validation_material_source import material_document_sql_filter
     document_filter, document_params = material_document_sql_filter(
         source_schema=schema, source_table=table, institute_id=institute_id,
-        patient_id=patient_id, visit_id=visit_id,
-    ) if "document_id" in columns else ("", {})
+        patient_id=patient_id, visit_id=visit_id, source_columns=columns,
+    )
     params.update(document_params)
     order_column = _pick_first(columns, _ORDER_COLUMNS_PRIORITY)
     order_sql = f" ORDER BY {_quote_ident(order_column)} DESC NULLS LAST" if order_column else ""
+    select_sql = ", ".join(
+        (
+            f"{_quote_ident(col)} AS {_quote_ident('document_status')}"
+            if col == document_status_column and col != "document_status"
+            else _quote_ident(col)
+        )
+        for col in selected
+    )
     sql = (
-        f"SELECT {', '.join(_quote_ident(col) for col in selected)} "
+        f"SELECT {select_sql} "
         f"FROM {_qualified_table(schema, table)} "
         f"WHERE {where_sql}{document_filter}{order_sql} LIMIT :limit_rows"
     )
@@ -1746,6 +1763,9 @@ def _inventory_entry(
         "signatures": identity_metadata["signatures"],
         "participants": identity_metadata["participants"],
     }
+    if row.get("document_status") is not None:
+        # 有效性来源只搬运、不在展示层重判；无效行已在统一取数入口排除。
+        entry["document_status"] = _json_safe(row["document_status"])
     if table_name == "discharge_record" and row.get("chief_physician_sign_datetime") is not None:
         # 即使未提供签署人姓名，也保留独立签署时钟；不参与record/submit/display选时。
         entry["chief_physician_sign_datetime"] = _json_safe(row["chief_physician_sign_datetime"])

@@ -21,14 +21,13 @@ ORDER_WINDOW_LOOKBACK_DAYS = 3
 
 _NORMALIZE_PATTERN = re.compile(r"[^一-鿿A-Za-z0-9]+")
 _OBJECT_LEADING_PATTERN = re.compile(r"^(?:考虑|行|做|进行|接受|该|此|上述|相关|进一步|再)+")
-_OBJECT_TRAILING_PATTERN = re.compile(r"(?:检查|治疗|操作|处理|手术治疗)+$")
+_GENERIC_MEASURE_PATTERN = re.compile(r"(?:检查|治疗|操作|处理|手术治疗)+")
 # 同一措施的常见异名；只收录在真实会诊记录中出现过的写法。
 _MEASURE_ALIASES = (
     (re.compile(r"纤维支气管镜|纤支镜|支纤镜|支气管镜|气管镜"), "支气管镜"),
     (re.compile(r"核磁共振|磁共振|核磁"), "MRI"),
 )
 _MIN_CORE_CHARS = 2
-_MIN_CORE_COVERAGE = 0.6
 
 
 def normalize_measure_text(text: str) -> str:
@@ -40,40 +39,24 @@ def normalize_measure_text(text: str) -> str:
 
 def _measure_core(text: str) -> str:
     value = normalize_measure_text(_OBJECT_LEADING_PATTERN.sub("", (text or "").strip()))
-    core = _OBJECT_TRAILING_PATTERN.sub("", value)
-    return core if len(core) >= _MIN_CORE_CHARS else ""
-
-
-def _longest_common_run(left: str, right: str) -> int:
-    best = 0
-    previous = [0] * (len(right) + 1)
-    for left_char in left:
-        current = [0] * (len(right) + 1)
-        for index, right_char in enumerate(right, start=1):
-            if left_char == right_char:
-                current[index] = previous[index - 1] + 1
-                best = max(best, current[index])
-        previous = current
-    return best
-
-
-def _core_matches(core: str, text: str) -> bool:
-    normalized = normalize_measure_text(text)
-    if not core or not normalized:
-        return False
-    if core in normalized:
-        return True
-    run = _longest_common_run(core, normalized)
-    return run >= _MIN_CORE_CHARS and run >= len(core) * _MIN_CORE_COVERAGE
+    if _GENERIC_MEASURE_PATTERN.fullmatch(value):
+        return ""
+    # 仅已确认的检查异名允许省略“检查”。泛化剥离会把“肝脏检查/肝脏治疗”同化，
+    # 或把“支气管镜检查/支气管镜治疗”当成同一操作。
+    for _, alias in _MEASURE_ALIASES:
+        if value == f"{alias.upper()}检查":
+            value = alias.upper()
+            break
+    return value if len(value) >= _MIN_CORE_CHARS else ""
 
 
 def measure_is_declined(measure: str, declined_objects: Sequence[str]) -> bool:
     """逐项核对返回的缺失措施是否正是会诊记录写明不执行的那一项。"""
 
-    return any(
-        (core := _measure_core(item)) and _core_matches(core, measure)
-        for item in declined_objects
-    )
+    # 公共子串不能证明是同一措施：左右肾穿刺、肝/肾活检和不同部位CT高度相似。
+    # 只折叠明确异名及引导语，其余完整核心必须相同；一侧缺部位/侧别也不扩大拒绝范围。
+    core = _measure_core(measure)
+    return bool(core) and any(core == _measure_core(item) for item in declined_objects)
 
 
 def order_window_start(opinion_day: date) -> date:

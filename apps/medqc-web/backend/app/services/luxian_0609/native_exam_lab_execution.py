@@ -2068,6 +2068,7 @@ def _result(rule_id: str, status: str, reason_code: str, *, executor_type: str) 
 class _ExamLabBatchResult:
     facts: tuple[ExamLabEventFact, ...] | None
     rule_failures: Mapping[str, str] = dataclass_field(default_factory=dict)
+    incomplete_specialty_rule_ids: frozenset[str] = frozenset()
     failure_reason: str = "exam_lab_llm_invalid_output"
     result_conflicts: Mapping[int, tuple[str, ...]] = dataclass_field(default_factory=dict)
     analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = dataclass_field(default_factory=dict)
@@ -2090,15 +2091,27 @@ def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Seque
     # 06-01-02/04/05 专项核验改为按输出量拆批、病程去重（2026-10-23）；核验结果随主抽取一并冻结，
     # 不含这三条规则的冻结结论不受影响。
     if {'LX0609-06-01-02', 'LX0609-06-01-04', 'LX0609-06-01-05'}.intersection(eligible_rule_ids):
-        prompt = OUTPUT_PROTOCOL_VERSION + '\x1e' + prompt
+        # v1 没有记录专项是否完成，失败回退也可能被永久复用。仅提升含专项规则的主冻结键；
+        # 旧文件保留但自然不再命中，非专项 main 及 analysis/relevance 冻结均不失效。
+        prompt = (
+            "exam-main-freeze-v2-specialty-completion"
+            + '\x1e'
+            + OUTPUT_PROTOCOL_VERSION
+            + '\x1e'
+            + prompt
+        )
     return freeze_key(prompt)
 
 
-def _load_frozen_exam_lab_batch(key: str) -> _ExamLabBatchResult | None:
+def _load_frozen_exam_lab_batch(
+    key: str, *, requires_specialty_completion: bool = False,
+) -> _ExamLabBatchResult | None:
     payload = load_payload("main", key)
     if payload is None:
         return None
     try:
+        if requires_specialty_completion and payload.get("specialty_checks_complete") is not True:
+            return None
         facts = tuple(
             ExamLabEventFact(
                 rule_id=str(item["rule_id"]), applicability=str(item["applicability"]),
@@ -2120,10 +2133,11 @@ def _load_frozen_exam_lab_batch(key: str) -> _ExamLabBatchResult | None:
 
 
 def _save_frozen_exam_lab_batch(key: str, result: _ExamLabBatchResult) -> None:
-    if result.facts is None or result.rule_failures:
-        # 只冻结全部规则均已核定的批次；有失败规则时下次重新抽取。
+    if result.facts is None or result.rule_failures or result.incomplete_specialty_rule_ids:
+        # 只冻结主抽取和专项核验均完整的批次；有失败规则或未完成专项时下次重新抽取/核验。
         return
     save_payload("main", key, {
+        "specialty_checks_complete": True,
         "facts": [
             {
                 "rule_id": fact.rule_id, "applicability": fact.applicability,
@@ -2146,7 +2160,14 @@ async def _extract_exam_lab_batch(
     """主抽取结论按病历版本冻结复用（用户决定 2026-10-22）：首次全部规则核定后固定，
     避免模型挑选证据病程、报告与病程关联逐次出入（C08、C02、C04）。"""
     key = _main_freeze_key(projection, eligible_rule_ids)
-    frozen = _load_frozen_exam_lab_batch(key)
+    frozen = _load_frozen_exam_lab_batch(
+        key,
+        requires_specialty_completion=bool(
+            {"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"}.intersection(
+                eligible_rule_ids
+            )
+        ),
+    )
     if frozen is not None:
         return frozen
     result = await _extract_exam_lab_batch_uncached(
@@ -2372,6 +2393,7 @@ async def _extract_exam_lab_batch_uncached(
                 text_facts = None
         result_conflicts: Mapping[int, tuple[str, ...]] = {}
         analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = {}
+        incomplete_specialty_rule_ids: set[str] = set()
         if text_facts is not None:
             # 用户口径（2026-10-12）：06-01-05 是否已分析由逐份病程的分析要素核对固定；
             # 06-01-02 检查前原因只看检查前窗口内病程单独核对（方案 A）；06-01-04 报告结果
@@ -2379,16 +2401,30 @@ async def _extract_exam_lab_batch_uncached(
             checks = []
             if ("LX0609-06-01-05" in eligible_rule_ids
                     and "LX0609-06-01-05" not in isolated_rule_failures):
-                checks.append((check_exam_finding_analysis(projection, llm_client), apply_finding_analysis))
+                checks.append((
+                    "LX0609-06-01-05",
+                    check_exam_finding_analysis(projection, llm_client),
+                    apply_finding_analysis,
+                ))
             if ("LX0609-06-01-02" in eligible_rule_ids
                     and "LX0609-06-01-02" not in isolated_rule_failures):
-                checks.append((check_exam_reason(projection, llm_client), apply_exam_reason))
+                checks.append((
+                    "LX0609-06-01-02",
+                    check_exam_reason(projection, llm_client),
+                    apply_exam_reason,
+                ))
             if ("LX0609-06-01-04" in eligible_rule_ids
                     and "LX0609-06-01-04" not in isolated_rule_failures):
-                checks.append((check_exam_result_record(projection, llm_client), apply_result_record))
+                checks.append((
+                    "LX0609-06-01-04",
+                    check_exam_result_record(projection, llm_client),
+                    apply_result_record,
+                ))
             if checks:
-                check_outcomes = await asyncio.gather(*(check for check, _ in checks))
-                for (_, apply), check_outcome in zip(checks, check_outcomes):
+                check_outcomes = await asyncio.gather(*(check for _, check, _ in checks))
+                for (rule_id, _, apply), check_outcome in zip(checks, check_outcomes):
+                    if check_outcome.state not in {"ready", "skipped"}:
+                        incomplete_specialty_rule_ids.add(rule_id)
                     if isinstance(check_outcome, ResultRecordOutcome) and check_outcome.state == "ready":
                         result_conflicts = check_outcome.conflict_refs
                     if isinstance(check_outcome, FindingAnalysisOutcome) and check_outcome.state == "ready":
@@ -2401,6 +2437,7 @@ async def _extract_exam_lab_batch_uncached(
                     text_facts = apply(text_facts, check_outcome)
     return _ExamLabBatchResult(
         facts=text_facts, rule_failures=isolated_rule_failures,
+        incomplete_specialty_rule_ids=frozenset(incomplete_specialty_rule_ids),
         result_conflicts=result_conflicts, analysis_gaps=analysis_gaps,
         llm_call_count=llm_call_count, prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time,
@@ -2422,6 +2459,7 @@ async def _extract_exam_lab_batches(
     failures: dict[str, str] = {}
     conflicts: dict[int, tuple[str, ...]] = {}
     gaps: dict[int, tuple[tuple[str, str], ...]] = {}
+    incomplete_specialty_rules: set[str] = set()
     transport_rules: set[str] = set()
     failure_kinds: list[str] = []
     counts = dict.fromkeys(("llm_call_count", "prompt_tokens", "completion_tokens", "total_tokens",
@@ -2454,6 +2492,7 @@ async def _extract_exam_lab_batches(
         failure_kinds.extend(result.parse_failure_kinds)
         transport_rules.update(result.transport_rule_ids)
         failures.update(result.rule_failures)
+        incomplete_specialty_rules.update(result.incomplete_specialty_rule_ids)
         if result.facts is None:
             failures.update({rule: "value" for rule in rules})
         for fact in result.facts or ():
@@ -2466,6 +2505,7 @@ async def _extract_exam_lab_batches(
             gaps[current.event_positions[("exam", local)]] = tuple(dict.fromkeys(refs))
     return _ExamLabBatchResult(
         facts=tuple(facts.values()), rule_failures=failures,
+        incomplete_specialty_rule_ids=frozenset(incomplete_specialty_rules),
         result_conflicts=conflicts, analysis_gaps=gaps,
         transport_rule_ids=frozenset(transport_rules), api_time=api_time,
         parse_failure_kinds=tuple(failure_kinds), **counts,

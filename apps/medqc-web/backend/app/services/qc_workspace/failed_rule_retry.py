@@ -91,7 +91,7 @@ def build_failed_rule_auto_retry_plan(
 
     return {
         **base,
-        "status": "queued",
+        "status": "planned",
         "should_retry": True,
         "next_attempt": current_attempt + 1,
         "delay_seconds": _FAILED_RULE_AUTO_RETRY_DELAYS_SECONDS[current_attempt],
