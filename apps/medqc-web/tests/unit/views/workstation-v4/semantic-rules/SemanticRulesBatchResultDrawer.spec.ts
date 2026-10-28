@@ -499,8 +499,28 @@ describe('SemanticRulesBatchResultDrawer', () => {
 
   it.each([
     { retry: undefined, expected: '后台未确认自动补跑计划' },
+    {
+      retry: { status: 'planned', should_retry: true },
+      expected: '补跑计划尚未进入执行队列',
+    },
     { retry: { status: 'queued', should_retry: true }, expected: '已排队等待自动补跑' },
     { retry: { status: 'running', should_retry: true }, expected: '正在自动补跑失败项' },
+    {
+      retry: {
+        status: 'enqueue_failed',
+        should_retry: false,
+        reason_code: 'retry_enqueue_failed',
+      },
+      expected: '自动补跑未能进入执行队列',
+    },
+    {
+      retry: {
+        status: 'interrupted',
+        should_retry: false,
+        reason_code: 'retry_execution_interrupted',
+      },
+      expected: '自动补跑已中断，已保存结果保留',
+    },
     { retry: { status: 'not_retryable', should_retry: false }, expected: '不适合自动补跑' },
     { retry: { status: 'exhausted', should_retry: false }, expected: '自动补跑次数已用尽' },
     { retry: { status: 'completed', should_retry: false }, expected: '自动补跑已结束' },
@@ -523,6 +543,49 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(notice.text()).toContain('2050')
     expect(notice.text()).toContain('2')
     expect(notice.text()).not.toContain('系统会自动重试')
+    wrapper.unmount()
+  })
+
+  it.each([
+    {
+      retry: { status: 'planned', should_retry: true },
+      expected: '补跑计划尚未进入执行队列',
+    },
+    {
+      retry: {
+        status: 'enqueue_failed',
+        should_retry: false,
+        reason_code: 'retry_enqueue_failed',
+      },
+      expected: '自动补跑未能进入执行队列',
+    },
+    {
+      retry: {
+        status: 'interrupted',
+        should_retry: false,
+        reason_code: 'retry_execution_interrupted',
+      },
+      expected: '自动补跑已中断，已保存结果保留',
+    },
+  ])('非LX0609任务Hero按$retry.status展示真实失败状态', ({ retry, expected }) => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'failed'
+    props.batchJobDetail.rule_set_key = 'custom_qc_v1'
+    Object.assign(props.batchJobDetail.summary!, {
+      execution_status: 'partial_failed',
+      completed_rule_count: 75,
+      failed_rule_count: 1,
+      automatic_failed_rule_retry: retry,
+    })
+    props.batchJobDetail.failed_records = [{ rule_id: 'CUSTOM-001', record_ref: 'safe-case' }]
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, { props, global: { stubs: drawerStubs } })
+    const description = wrapper.get('.status-hero-desc').text()
+    expect(description).toContain('已保留 75 项有效结果')
+    expect(description).toContain('另有 1 项模型执行失败')
+    expect(description).toContain(expected)
+    expect(description).not.toContain('已排队')
+    expect(description).not.toContain('系统会自动只重试失败项')
     wrapper.unmount()
   })
 

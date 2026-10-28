@@ -168,7 +168,7 @@ def test_auto_retry_plan_retries_contract_failures_until_limit() -> None:
         "max_attempts": 3,
         "completed_attempts": 0,
         "remaining_failure_count": 1,
-        "status": "queued",
+        "status": "planned",
         "should_retry": True,
         "next_attempt": 1,
         "delay_seconds": 0.0,

@@ -223,8 +223,18 @@ export interface SichuanBatchJobSummary {
     max_attempts?: number
     completed_attempts?: number
     remaining_failure_count?: number
-    status?: 'queued' | 'running' | 'completed' | 'exhausted' | 'not_retryable' | string
+    status?:
+      | 'planned'
+      | 'queued'
+      | 'running'
+      | 'completed'
+      | 'enqueue_failed'
+      | 'interrupted'
+      | 'exhausted'
+      | 'not_retryable'
+      | string
     should_retry?: boolean
+    reason_code?: string
     next_attempt?: number
     delay_seconds?: number
   }

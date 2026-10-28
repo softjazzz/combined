@@ -12,6 +12,105 @@ COPY_PATIENT_PREFIX = "pdfp_"
 COPY_VISIT_PREFIX = "pdfv_"
 MATERIAL_SCHEMA = re.compile(r"pdfmat_[0-9a-f]{12}")
 
+# 尚无院方完整状态字典；这里只冻结字面明确表示“该文书本身无效”的最小集合。
+# Save、空值、草稿/待确认及任何未知值都不是无效的同义词，必须继续保留。
+EXPLICITLY_INVALID_DOCUMENT_STATUSES = (
+    "作废",
+    "已作废",
+    "取消",
+    "已取消",
+    "撤销",
+    "已撤销",
+    "删除",
+    "已删除",
+)
+DOCUMENT_STATUS_COLUMN_ALIASES = ("document_status", "documentstatus")
+# 与 cdm.DocumentMixin 的真实 owner 表保持一致。非文书表即使碰巧有同名业务列，
+# 也不能套用文书有效性语义。
+DOCUMENT_STATUS_TABLES = frozenset(
+    {
+        "admission_record",
+        "anesthesia_record",
+        "bloodtrans_record",
+        "consultation_record",
+        "crisis_value_record",
+        "daily_admission_record",
+        "daily_course_record",
+        "daily_death_record",
+        "death_discussion",
+        "death_record",
+        "diffcase_discussion_record",
+        "discharge_record",
+        "docpat_commu_record",
+        "epidemic_record",
+        "exam_item_report",
+        "first_course_record",
+        "handoff_record",
+        "handover_record",
+        "labtest_item_report",
+        "newborn_record",
+        "nursing_record",
+        "outpat_record",
+        "postane_surveil_record",
+        "postsurg_firstcourse_record",
+        "preane_surveil_record",
+        "presurg_discussion",
+        "presurg_summary",
+        "rescue_record",
+        "senior_course_record",
+        "summary_record",
+        "surgery_inform_consent",
+        "surgery_inventory_record",
+        "surgery_record",
+        "surgery_risk_assessment",
+        "surgery_safecheck_record",
+        "transfer_in_record",
+        "transfer_out_record",
+    }
+)
+
+
+def is_explicitly_invalid_document_status(value: Any) -> bool:
+    """仅识别冻结的精确无效状态；不从保存/未知状态推断文书有效性。"""
+
+    return isinstance(value, str) and value.strip() in EXPLICITLY_INVALID_DOCUMENT_STATUSES
+
+
+def material_document_status_column(
+    *, source_table: str, source_columns: set[str] | None,
+) -> str | None:
+    """返回文书表实际状态列；兼容既有同步别名 documentstatus。"""
+
+    if source_table not in DOCUMENT_STATUS_TABLES or source_columns is None:
+        return None
+    return next(
+        (name for name in DOCUMENT_STATUS_COLUMN_ALIASES if name in source_columns),
+        None,
+    )
+
+
+def _document_validity_sql_filter(
+    *, source_table: str, source_columns: set[str] | None,
+) -> tuple[str, dict[str, Any]]:
+    """生成可选的明确无效文书过滤；缺列时保持旧库兼容。"""
+
+    status_column = material_document_status_column(
+        source_table=source_table,
+        source_columns=source_columns,
+    )
+    if status_column is None:
+        return "", {}
+    params = {
+        f"invalid_document_status_{index}": status
+        for index, status in enumerate(EXPLICITLY_INVALID_DOCUMENT_STATUSES)
+    }
+    placeholders = ", ".join(f":{name}" for name in params)
+    return (
+        f' AND ("{status_column}" IS NULL OR '
+        f'TRIM(CAST("{status_column}" AS TEXT)) NOT IN ({placeholders}))',
+        params,
+    )
+
 
 def is_material_copy(patient_id: str, visit_id: str) -> bool:
     return str(patient_id).startswith(COPY_PATIENT_PREFIX) or str(visit_id).startswith(COPY_VISIT_PREFIX)
@@ -69,10 +168,18 @@ def reviewed_pdf_document_exclusions(
 
 def material_document_sql_filter(
     *, source_schema: str, source_table: str, institute_id: str, patient_id: str, visit_id: str,
+    source_columns: set[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """在排序/条数限制前排除确认重复的活动PDF；原始行及审计登记不变。"""
+    """在LIMIT前统一排除明确无效文书及确认重复的活动PDF。"""
+    validity_filter, validity_params = _document_validity_sql_filter(
+        source_table=source_table,
+        source_columns=source_columns,
+    )
     if not is_material_copy(patient_id, visit_id):
-        return "", {}
+        return validity_filter, validity_params
+    # PDF复核按 document_id 精确关联；没有该列时只能应用文书有效性过滤。
+    if source_columns is not None and "document_id" not in source_columns:
+        return validity_filter, validity_params
     schema = material_source_schema(default_schema=source_schema, requested_schema=source_schema,
         institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     if not re.fullmatch(r"[a-z_][a-z0-9_]*", source_table):
@@ -90,25 +197,28 @@ def material_document_sql_filter(
             "AND d.provenance->'pg_preference_review'->>'decision'='remove_pdf_duplicate'"
         ), {**identity, "source_table": source_table}).mappings().all()
         if not rows:
-            return "", {}
+            return validity_filter, validity_params
         originals = set((rows[0]["identity_map"].get("entities") or {}).values())
         reviews = {row["candidate_id"]: {**row["review"], "pdf_document_id": row["target_document_id"]}
                    for row in rows}
         parents = sorted({parent for review in reviews.values() for parent in review.get("original_pg_ids", [])
                           if parent in originals})
         if not parents:
-            return "", {}
+            return validity_filter, validity_params
         available = set(connection.execute(text(
             f'SELECT document_id FROM "{schema}"."{source_table}" '
             "WHERE institute_id=:institute AND patient_id=:patient AND visit_id=:visit "
-            "AND document_id=ANY(:parent_ids)"
-        ), {**identity, "parent_ids": parents}).scalars().all())
+            f"AND document_id=ANY(:parent_ids){validity_filter}"
+        ), {**identity, **validity_params, "parent_ids": parents}).scalars().all())
     excluded = reviewed_pdf_document_exclusions(reviews=reviews, original_document_ids=originals,
                                                available_document_ids=available)
     if not excluded:
-        return "", {}
-    return (' AND ("document_id" IS NULL OR NOT ("document_id"=ANY(:material_excluded_ids)))',
-            {"material_excluded_ids": sorted(excluded)})
+        return validity_filter, validity_params
+    return (
+        validity_filter
+        + ' AND ("document_id" IS NULL OR NOT ("document_id"=ANY(:material_excluded_ids)))',
+        {**validity_params, "material_excluded_ids": sorted(excluded)},
+    )
 
 
 def material_original_document_ids(*, institute_id: str, patient_id: str, visit_id: str) -> set[str] | None:

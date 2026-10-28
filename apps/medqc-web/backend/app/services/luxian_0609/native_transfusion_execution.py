@@ -2365,48 +2365,6 @@ def _programmatic_047_assessment(
     """按输血结束后24小时窗口判定，评价正文必须有可用的完成时间。"""
 
     documents = _post_evaluation_documents(documents)
-    end_rows: list[tuple[datetime, bool, datetime | None, tuple[str, str] | None]] = []
-    unresolved_end_marker = False
-    for row in _source_document_rows(documents, "bloodtrans_record"):
-        events, row_unresolved = _transfusion_end_evidence(_row_text(row))
-        unresolved_end_marker = unresolved_end_marker or row_unresolved
-        if not events:
-            continue
-        last_end = max(event[0] for event in events)
-        # 输血记录仅提供本次实际结束时刻，正文评价或安全性观察不能代替专门后评价。
-        end_rows.append((last_end, False, None,
-            (str(row.get("__source_key__") or "bloodtrans_record"), document_id)
-            if (document_id := str(row.get("document_id") or row.get("id") or "").strip()) else None))
-
-    if unresolved_end_marker or not end_rows:
-        return _PosttransfusionEvaluationAssessment(
-            "data_gap", "transfusion_end_time_unavailable"
-        )
-    end_document_refs = tuple(
-        dict.fromkeys(ref for _, _, _, ref in end_rows if ref is not None)
-    )
-    latest_end = max(end_time for end_time, _, _, _ in end_rows)
-    horizon_datetime, horizon_date, horizon_error = _047_evaluation_horizon(documents)
-    if horizon_error == "authoritative_time_conflict":
-        return _PosttransfusionEvaluationAssessment(
-            "data_gap", "posttransfusion_evaluation_horizon_conflict"
-        )
-    if horizon_date is not None and any(
-        _047_window_is_mature(
-            end_time,
-            horizon_datetime=horizon_datetime,
-            horizon_date=horizon_date,
-        )[1]
-        for end_time, _, _, _ in end_rows
-    ):
-        return _PosttransfusionEvaluationAssessment(
-            "data_gap", "posttransfusion_evaluation_horizon_conflict"
-        )
-    pending_indices = list(range(len(end_rows)))
-    unusable_evaluation_time = False
-    late_evaluation_found = False
-    late_evaluation_indices: set[int] = set()
-
     post_refs = frozenset(association_document_ref(key, row, index)
         for key in ("daily_course_record", "senior_course_record")
         for index, row in enumerate(_source_document_rows(documents, key))
@@ -2420,9 +2378,61 @@ def _programmatic_047_assessment(
                   for source in ("daily_course_record", "senior_course_record")
                   for index, row in enumerate(_source_document_rows(documents, source))}
 
+    # 关联器保留每份已确认实际输血记录，即使记录没有可解析的结束时刻。047 以
+    # record_ref 作为事件主键，禁止把过滤后的结束时刻数组再与完整事件数组按位置对齐。
+    event_refs = tuple(event.record_ref for event in associations.events)
+    if not event_refs:
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap", "transfusion_end_time_unavailable"
+        )
+    if len(set(event_refs)) != len(event_refs):
+        return _PosttransfusionEvaluationAssessment("technical_error", "snapshot_mismatch")
+    events_by_ref = {event.record_ref: event for event in associations.events}
+    known_end_by_ref = {
+        ref: event.end
+        for ref, event in events_by_ref.items()
+        if event.end is not None and not event.time_unresolved
+    }
+    unknown_end_refs = set(event_refs).difference(known_end_by_ref)
+
+    def selected_event_refs(refs: set[tuple[str, str]]) -> tuple[tuple[str, str], ...]:
+        # @row 只用于同一快照内稳定关联，不可冒充对外可定位的文书编号。
+        return tuple(
+            ref for ref in event_refs
+            if ref in refs and ref[1] and not ref[1].startswith("@row:")
+        )
+
+    if not known_end_by_ref:
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap",
+            "transfusion_end_time_unavailable",
+            selected_source_document_refs=selected_event_refs(set(event_refs)),
+        )
+
+    end_document_refs = selected_event_refs(set(event_refs))
+    latest_end = max(known_end_by_ref.values())
+    horizon_datetime, horizon_date, horizon_error = _047_evaluation_horizon(documents)
+    if horizon_error == "authoritative_time_conflict":
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap", "posttransfusion_evaluation_horizon_conflict"
+        )
+    if horizon_date is not None and any(
+        _047_window_is_mature(
+            end_time,
+            horizon_datetime=horizon_datetime,
+            horizon_date=horizon_date,
+        )[1]
+        for end_time in known_end_by_ref.values()
+    ):
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap", "posttransfusion_evaluation_horizon_conflict"
+        )
+    unusable_evaluation_time = False
+    late_evaluation_found = False
+
     # 多份独立输血记录按结束事件关联专门后评价；任何笼统评价都不得扇出。
-    if len(end_rows) > 1:
-        pending = set(pending_indices)
+    if len(event_refs) > 1:
+        pending = set(event_refs)
         daily_state = _logical_source_state(documents, "daily_course_record")
         if pending and daily_state == "error":
             return _PosttransfusionEvaluationAssessment(
@@ -2432,12 +2442,13 @@ def _programmatic_047_assessment(
             return _PosttransfusionEvaluationAssessment(
                 "data_gap", "transfusion_source_unavailable"
             )
-        associated_daily: dict[int, tuple[datetime, tuple[str, str] | None]] = {}
-        ambiguous_pending_indices: set[int] = set()
+        associated_daily: dict[tuple[str, str], tuple[datetime, tuple[str, str] | None]] = {}
+        ambiguous_pending_refs: set[tuple[str, str]] = set()
         ambiguous_daily_refs: list[tuple[str, str]] = []
-        unusable_daily_indices: set[int] = set()
+        unusable_daily_event_refs: set[tuple[str, str]] = set()
         unusable_daily_refs: list[tuple[str, str]] = []
-        late_daily_refs: dict[int, list[tuple[str, str]]] = {}
+        late_evaluation_refs: set[tuple[str, str]] = set()
+        late_daily_refs: dict[tuple[str, str], list[tuple[str, str]]] = {}
         for source_key, row in ((key, row) for key in ("daily_course_record", "senior_course_record")
                                 for row in _source_document_rows(documents, key)):
             text = _row_text(row)
@@ -2456,106 +2467,132 @@ def _programmatic_047_assessment(
             ):
                 continue
             association = post_links.get((source_key, id(row)))
-            anchored_indices = {
-                index for index, event in enumerate(associations.events)
-                if association is not None and event.record_ref in association.event_refs
-            }
+            anchored_refs = set(association.event_refs).intersection(pending) if association else set()
+            possible_refs = (
+                set(association.possible_event_refs).intersection(pending)
+                if association else set()
+            )
+            affected_scope_refs = anchored_refs or possible_refs
             anchors = association is not None and (association.explicit or "blood_component" in association.basis)
             _, unresolved_anchor = _transfusion_end_evidence(text)
             unresolved_anchor = unresolved_anchor or bool(association and association.state == "ambiguous")
             if unresolved_anchor:
-                affected_indices = set(pending)
-                if affected_indices:
-                    ambiguous_pending_indices.update(affected_indices)
+                # 歧义只覆盖该文书真实候选事件；例如 B/C 间待定不能抹掉 A 的确定缺失。
+                affected_refs = set(affected_scope_refs)
+                if not affected_refs and not anchors:
+                    affected_refs = set(pending)
+                if affected_refs:
+                    ambiguous_pending_refs.update(affected_refs)
                     if daily_ref is not None:
                         ambiguous_daily_refs.append(daily_ref)
                 continue
-            if anchors and not anchored_indices:
-                continue
-            if record_time is None:
-                affected_indices = anchored_indices.intersection(pending)
-                if not anchors:
-                    affected_indices = set(pending)
-                if affected_indices:
-                    unusable_daily_indices.update(affected_indices)
+            if anchors and not anchored_refs:
+                if possible_refs:
+                    # 强锚点无法完成精确关联时，保留同一候选事件的不确定性；不得把该
+                    # 评价当作合格，也不得因此武断发布候选事件“缺评价”。
+                    unusable_daily_event_refs.update(possible_refs)
                     if daily_ref is not None:
                         unusable_daily_refs.append(daily_ref)
                 continue
-            candidate_indices = {
-                index
-                for index, (end_time, _, _, _) in enumerate(end_rows)
-                if (not anchors or index in anchored_indices)
+            if record_time is None:
+                affected_refs = set(affected_scope_refs)
+                if not anchors:
+                    # 无时间也无事件锚点的专门评价无法进一步缩小真实候选集合。
+                    affected_refs = affected_refs or set(pending)
+                if affected_refs:
+                    unusable_daily_event_refs.update(affected_refs)
+                    if daily_ref is not None:
+                        unusable_daily_refs.append(daily_ref)
+                continue
+            if anchors and anchored_refs.intersection(unknown_end_refs):
+                unusable_daily_event_refs.update(anchored_refs.intersection(unknown_end_refs))
+                if daily_ref is not None:
+                    unusable_daily_refs.append(daily_ref)
+            candidate_refs = {
+                ref
+                for ref, end_time in known_end_by_ref.items()
+                if (not anchors or ref in anchored_refs)
                 and 0 <= (record_time - end_time).total_seconds() <= 24 * 3600
             }
-            if not candidate_indices:
-                if anchored_indices.intersection(pending):
-                    anchored_pending = anchored_indices.intersection(pending)
+            if not candidate_refs:
+                if anchored_refs:
+                    anchored_known = anchored_refs.intersection(known_end_by_ref)
                     if any(
-                        record_time < end_rows[index][0]
-                        for index in anchored_pending
+                        record_time < known_end_by_ref[ref]
+                        for ref in anchored_known
                     ):
-                        unusable_daily_indices.update(anchored_pending)
+                        unusable_daily_event_refs.update(anchored_known)
                         if daily_ref is not None:
                             unusable_daily_refs.append(daily_ref)
                     else:
-                        late_evaluation_indices.update(anchored_pending)
+                        late_evaluation_refs.update(anchored_known)
                         if daily_ref is not None:
-                            for index in anchored_pending:
-                                late_daily_refs.setdefault(index, []).append(daily_ref)
+                            for ref in anchored_known:
+                                late_daily_refs.setdefault(ref, []).append(daily_ref)
                 continue
-            if len(candidate_indices) > 1 and candidate_indices.intersection(pending):
-                ambiguous_pending_indices.update(candidate_indices.intersection(pending))
+            if len(candidate_refs) > 1 and candidate_refs.intersection(pending):
+                ambiguous_pending_refs.update(candidate_refs.intersection(pending))
                 if daily_ref is not None:
                     ambiguous_daily_refs.append(daily_ref)
                 continue
-            candidate_index = next(iter(candidate_indices))
-            if candidate_index in pending:
-                previous = associated_daily.get(candidate_index)
+            candidate_ref = next(iter(candidate_refs))
+            if candidate_ref in pending:
+                previous = associated_daily.get(candidate_ref)
                 if previous is None or (record_time, daily_ref or ("", "")) < (
                     previous[0],
                     previous[1] or ("", ""),
                 ):
-                    associated_daily[candidate_index] = (record_time, daily_ref)
+                    associated_daily[candidate_ref] = (record_time, daily_ref)
         pending.difference_update(associated_daily)
         # 只从没有本次关联/时间歧义的事件形成确定问题；另一事件未知不抹掉它。
-        confirmed = pending - ambiguous_pending_indices - unusable_daily_indices
-        late = confirmed.intersection(late_evaluation_indices)
+        confirmed = pending - ambiguous_pending_refs - unusable_daily_event_refs - unknown_end_refs
+        late = confirmed.intersection(late_evaluation_refs)
         mature_missing = {
-            index for index in confirmed - late_evaluation_indices
+            ref for ref in confirmed - late_evaluation_refs
             if not horizon_error and horizon_date is not None
-            and _047_window_is_mature(end_rows[index][0], horizon_datetime=horizon_datetime,
+            and _047_window_is_mature(known_end_by_ref[ref], horizon_datetime=horizon_datetime,
                                      horizon_date=horizon_date)[0]
         }
         if late or mature_missing:
             selected = late or mature_missing
             refs = tuple(dict.fromkeys(
-                ref for index in sorted(selected)
-                for ref in (*((end_rows[index][3],) if end_rows[index][3] is not None else ()),
-                            *late_daily_refs.get(index, ()))
+                evidence_ref for event_ref in event_refs if event_ref in selected
+                for evidence_ref in (*selected_event_refs({event_ref}),
+                                     *late_daily_refs.get(event_ref, ()))
             ))
             return _PosttransfusionEvaluationAssessment(
                 "non_compliant",
                 "posttransfusion_evaluation_late" if late else "posttransfusion_evaluation_missing",
-                latest_end_time=max(end_rows[index][0] for index in selected),
+                latest_end_time=max(known_end_by_ref[ref] for ref in selected),
                 selected_source_document_refs=refs,
             )
-        if pending.intersection(ambiguous_pending_indices):
+        if pending.intersection(ambiguous_pending_refs):
+            affected = pending.intersection(ambiguous_pending_refs)
             return _PosttransfusionEvaluationAssessment(
                 "data_gap",
                 "association_failed",
                 selected_source_document_refs=tuple(
-                    dict.fromkeys((*end_document_refs, *ambiguous_daily_refs))
+                    dict.fromkeys((*selected_event_refs(affected), *ambiguous_daily_refs))
                 ),
             )
-        if pending.intersection(unusable_daily_indices):
+        if pending.intersection(unknown_end_refs):
+            return _PosttransfusionEvaluationAssessment(
+                "data_gap",
+                "transfusion_end_time_unavailable",
+                selected_source_document_refs=selected_event_refs(
+                    pending.intersection(unknown_end_refs)
+                ),
+            )
+        if pending.intersection(unusable_daily_event_refs):
+            affected = pending.intersection(unusable_daily_event_refs)
             return _PosttransfusionEvaluationAssessment(
                 "data_gap",
                 "posttransfusion_evaluation_time_unavailable",
                 selected_source_document_refs=tuple(
-                    dict.fromkeys((*end_document_refs, *unusable_daily_refs))
+                    dict.fromkeys((*selected_event_refs(affected), *unusable_daily_refs))
                 ),
             )
-        if pending.intersection(late_evaluation_indices):
+        if pending.intersection(late_evaluation_refs):
             return _PosttransfusionEvaluationAssessment(
                 "non_compliant",
                 "posttransfusion_evaluation_late",
@@ -2575,8 +2612,8 @@ def _programmatic_047_assessment(
                 latest_end_time=latest_end,
                 evaluation_time=min(
                     evaluation_time
-                    for index, (evaluation_time, _) in evaluations.items()
-                    if end_rows[index][0] == latest_end
+                    for ref, (evaluation_time, _) in evaluations.items()
+                    if known_end_by_ref[ref] == latest_end
                 ),
                 selected_source_document_refs=selected_refs,
             )
@@ -2587,18 +2624,17 @@ def _programmatic_047_assessment(
         assert horizon_date is not None
         if any(
             _047_window_is_mature(
-                end_time,
+                known_end_by_ref[ref],
                 horizon_datetime=horizon_datetime,
                 horizon_date=horizon_date,
             )[0]
-            for index in pending
-            for end_time in (end_rows[index][0],)
+            for ref in pending
         ):
             return _PosttransfusionEvaluationAssessment(
                 "non_compliant",
                 "posttransfusion_evaluation_missing",
-                latest_end_time=latest_end,
-                selected_source_document_refs=end_document_refs,
+                latest_end_time=max(known_end_by_ref[ref] for ref in pending),
+                selected_source_document_refs=selected_event_refs(pending),
             )
         return _PosttransfusionEvaluationAssessment(
             "not_applicable",
@@ -2607,6 +2643,7 @@ def _programmatic_047_assessment(
             selected_source_document_refs=end_document_refs,
         )
 
+    single_event_ref = event_refs[0]
     qualified_daily_evaluations: list[tuple[datetime, tuple[str, str] | None]] = []
     for source_key, row in ((key, row) for key in ("daily_course_record", "senior_course_record")
                                 for row in _source_document_rows(documents, key)):
@@ -2615,12 +2652,16 @@ def _programmatic_047_assessment(
         if not _course_effect_confirmed(documents, source_key, row, text):
             continue
         association = post_links.get((source_key, id(row)))
-        if association is not None and (association.explicit or "blood_component" in association.basis) and (
-            association.state in {"unmatched", "ambiguous"}
-            or associations.events[0].record_ref not in association.event_refs
-        ):
-            # 正文明确评价另一时次输血时，即使落在24小时内也不能借用。
-            continue
+        if association is not None and (association.explicit or "blood_component" in association.basis):
+            if single_event_ref not in association.event_refs:
+                if single_event_ref in association.possible_event_refs:
+                    unusable_evaluation_time = True
+                # 正文明确评价另一时次输血时，即使落在24小时内也不能借用；仍可能
+                # 属于本次时只保留资料不确定性，不能直接发布“缺评价”。
+                continue
+            if association.state == "ambiguous":
+                unusable_evaluation_time = True
+                continue
         if (
             record_time is not None
             and horizon_date is not None

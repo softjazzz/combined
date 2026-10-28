@@ -141,6 +141,7 @@ class TransfusionAssociation:
     event_refs: tuple[DocumentRef, ...]
     basis: tuple[str, ...]
     document_time: datetime | None
+    possible_event_refs: tuple[DocumentRef, ...] = ()
 
     @property
     def explicit(self) -> bool:
@@ -225,6 +226,12 @@ def _associate(source: str, row: Mapping[str, Any], index: int, stage: Literal["
         basis.append("transfusion_time")
     if constraints:
         candidates = set.intersection(*constraints)
+        nonempty_constraints = [constraint for constraint in constraints if constraint]
+        possible_candidates = (
+            set.intersection(*nonempty_constraints)
+            if nonempty_constraints
+            else set(range(len(events)))
+        )
         state = "linked" if len(candidates) == 1 else "ambiguous" if candidates else "unmatched"
         # 不同强证据各命中不同事件：明确保留冲突，而不是借其中一个强配。
         if not candidates and all(constraints):
@@ -236,6 +243,16 @@ def _associate(source: str, row: Mapping[str, Any], index: int, stage: Literal["
             (event.start is not None and 0 < (event.start - moment).total_seconds() <= PRE_SEARCH_HOURS * 3600
              and not any(other.start is not None and moment < other.start < event.start for other in events))
             if stage == "pre" else (event.end is not None and 0 <= (moment - event.end).total_seconds() <= 24 * 3600))}
+        possible_candidates = set(candidates)
+        if not possible_candidates:
+            possible_candidates = (
+                set(range(len(events)))
+                if moment is None
+                else {
+                    i for i, event in enumerate(events)
+                    if event.end is None or event.time_unresolved
+                }
+            )
         basis.append("time_window")
         state = "linked" if len(candidates) == 1 else "ambiguous" if candidates else "unmatched"
         if stage == "pre" and not candidates and moment is not None:
@@ -246,6 +263,11 @@ def _associate(source: str, row: Mapping[str, Any], index: int, stage: Literal["
                 state = "candidate"
                 basis.append("expanded_search")
     components = _components(text)
+    if components and possible_candidates:
+        possible_candidates = {
+            i for i in possible_candidates
+            if not events[i].components or components.intersection(events[i].components)
+        }
     if components and candidates:
         compatible = {i for i in candidates if not events[i].components or components.intersection(events[i].components)}
         if compatible != candidates:
@@ -256,6 +278,8 @@ def _associate(source: str, row: Mapping[str, Any], index: int, stage: Literal["
             else:
                 candidates = compatible
                 state = "unmatched" if not candidates else "candidate" if "expanded_search" in basis else "linked" if len(candidates) == 1 else "ambiguous"
+    if candidates:
+        possible_candidates = set(candidates)
     if state == "linked":
         event = events[next(iter(candidates))]
         boundary = event.start if stage == "pre" else event.end
@@ -263,8 +287,15 @@ def _associate(source: str, row: Mapping[str, Any], index: int, stage: Literal["
             state = "time_unavailable"
         elif (stage == "pre" and moment >= boundary) or (stage == "post" and moment < boundary):
             state = "time_conflict"
-    return TransfusionAssociation(document_ref(source, row, index), stage, state,
-        tuple(events[i].record_ref for i in sorted(candidates)), tuple(dict.fromkeys(basis)), moment)
+    return TransfusionAssociation(
+        document_ref(source, row, index),
+        stage,
+        state,
+        tuple(events[i].record_ref for i in sorted(candidates)),
+        tuple(dict.fromkeys(basis)),
+        moment,
+        tuple(events[i].record_ref for i in sorted(possible_candidates)),
+    )
 
 
 def build_transfusion_associations(

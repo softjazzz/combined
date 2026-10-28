@@ -31,27 +31,30 @@ def saved_record_rule_scope(filters: Mapping[str, Any], ref: CaseRef) -> list[st
 
 
 def read_saved_partial_record(
-    *, summary: Mapping[str, Any], failures: list[Any], ref: CaseRef,
+    *, summary: Mapping[str, Any], items: list[Any], failures: list[Any], ref: CaseRef,
     expected_rules: list[str], projection_key: str,
     projector: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
-    """校验同病例、同范围和每条保存合同；不重判、不拼接其他任务结果。"""
-    if (not isinstance(summary, Mapping) or not isinstance(failures, list)
-            or not isinstance(summary.get("rule_results"), list)):
+    """从顶层权威成功项校验同病例、同范围；不重判、不拼接其他轮次。"""
+    if (
+        not isinstance(summary, Mapping)
+        or not isinstance(summary.get("rule_results"), list)
+        or not isinstance(items, list)
+        or not isinstance(failures, list)
+    ):
         raise ValueError("saved_partial_result_invalid")
     rows: list[dict[str, Any]] = []
-    for rule in summary.get("rule_results", []):
-        if not isinstance(rule, Mapping) or not isinstance(rule.get("items", []), list):
+    for item in items:
+        if not isinstance(item, dict):
             raise ValueError("saved_partial_result_invalid")
-        for item in rule.get("items", []):
-            if not isinstance(item, dict):
+        item_ref = CaseRef.from_mapping(item)
+        if item_ref == ref:
+            rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+            if not all(item_ref) or not rule_id or rule_id not in expected_rules:
                 raise ValueError("saved_partial_result_invalid")
-            if CaseRef.from_mapping(item) == ref:
-                if item.get("rule_id") != rule.get("rule_code"):
-                    raise ValueError("saved_partial_result_invalid")
-                if item.get("schema_version") not in {"lx0609-customer-result-v2", "customer-qc-result-v1"}:
-                    raise ValueError("saved_partial_result_invalid")
-                rows.append(item)
+            if item.get("schema_version") not in {"lx0609-customer-result-v2", "customer-qc-result-v1"}:
+                raise ValueError("saved_partial_result_invalid")
+            rows.append(item)
     if not canonical_envelope_items_are_consistent(rows):
         raise ValueError("saved_partial_result_invalid")
     failed_rules: list[str] = []

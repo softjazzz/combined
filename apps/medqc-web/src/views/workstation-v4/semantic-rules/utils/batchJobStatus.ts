@@ -76,6 +76,15 @@ export function getBatchJobRetryMessage(job?: BatchJobPollingState | null): stri
       ? '失败项已排队等待自动补跑，已保存的结果不会被覆盖。'
       : '系统正在自动补跑失败项，已保存的结果不会被覆盖。'
   }
+  if (status === 'planned') {
+    return '失败项补跑计划尚未进入执行队列，任务仍为失败状态；已保存的结果不会被覆盖，请查看失败原因。'
+  }
+  if (status === 'enqueue_failed') {
+    return '失败项自动补跑未能进入执行队列，任务仍为失败状态；已保存的结果不会被覆盖，请查看失败原因。'
+  }
+  if (status === 'interrupted') {
+    return '自动补跑已中断，已保存结果保留；任务仍为失败状态，请查看失败原因。'
+  }
   if (status === 'exhausted') return '自动补跑次数已用尽，剩余失败项尚未恢复，请查看失败原因。'
   if (status === 'not_retryable') return '后台判定本次失败不适合自动补跑，请查看失败原因。'
   if (status === 'completed') return '自动补跑已结束，任务仍有失败项，请查看失败原因。'

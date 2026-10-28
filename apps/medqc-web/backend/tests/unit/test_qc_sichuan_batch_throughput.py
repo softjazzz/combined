@@ -4483,6 +4483,23 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
 
     workspace.retry_batch_job = _retry_batch_job  # type: ignore[attr-defined]
     service = _ServiceStub()
+    # 正式 worker 会先验证创建时冻结的配置与执行器身份；重试 fixture 走同一准入合同。
+    from app.core.settings import Settings
+    from app.services.luxian_0609.rule_decision_settings import (
+        capture_luxian_0609_task_runtime,
+        capture_luxian_0609_task_settings,
+        resolve_mainline_rule_decision_settings,
+    )
+
+    task_settings = Settings(
+        _env_file=None,
+        JWT_SECRET="synthetic-auto-retry-only",
+        **vars(_luxian_native_settings()),
+    )
+    workspace.job["filters"]["lx0609_task_settings"] = capture_luxian_0609_task_settings(
+        resolve_mainline_rule_decision_settings(task_settings)
+    )
+    workspace.job["filters"]["lx0609_task_runtime"] = capture_luxian_0609_task_runtime(service)
     model_calls: list[tuple[str, ...]] = []
 
     async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
@@ -4532,7 +4549,7 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
                     "result_status": "technical_error",
                     "display_status": "technical_error",
                     "is_compliant": None,
-                    "reason_code": "model_invalid_output",
+                    "reason_code": "model_transport_error",
                     "metadata": {
                         "executor_type": "program",
                         "technical_error_internal": True,
@@ -4560,7 +4577,7 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
         return service
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "get_settings", lambda: task_settings)
     async def _skip_retry_delay(_: float) -> None:
         return None
 

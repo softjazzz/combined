@@ -389,6 +389,114 @@ describe('batchJobPresentation', () => {
     ])
   })
 
+  it('受限视图先过滤再取最近六条，只保留非内部确定问题且不修改输入', () => {
+    const retainedIssue = Object.freeze({
+      rule_id: 'LX0609-03-01-01',
+      rule_name: '会诊意见及执行情况',
+      status: 'non_compliant',
+      is_compliant: false,
+      conclusion: '应保留的较早确定问题。',
+    })
+    const hiddenRecentItems = Array.from({ length: 6 }, (_, index) =>
+      Object.freeze({
+        rule_id: `LX0609-09-01-0${index + 1}`,
+        rule_name: '非确定结论',
+        status: index % 2 === 0 ? 'compliant' : 'data_gap',
+        is_compliant: index % 2 === 0 ? true : null,
+        conclusion: `最近隐藏结论${index + 1}`,
+      }),
+    )
+    const internalIssue = Object.freeze({
+      rule_id: 'LX0609-12-01-01',
+      rule_name: '内部确定问题',
+      status: 'non_compliant',
+      is_compliant: false,
+      internal_only: true,
+      conclusion: '仅内部可见。',
+    })
+    const items = Object.freeze([retainedIssue, ...hiddenRecentItems, internalIssue])
+    const job = buildJob({ items: items as unknown as SichuanBatchJob['items'] })
+
+    const model = buildBatchJobPresentation(job, { confirmedResultsOnly: true })
+
+    expect(model.liveResultLines).toEqual([
+      expect.objectContaining({
+        ruleId: 'LX0609-03-01-01',
+        statusLabel: '不合规',
+        text: '应保留的较早确定问题。',
+      }),
+    ])
+    expect(job.items).toBe(items)
+    expect(job.items).toEqual([retainedIssue, ...hiddenRecentItems, internalIssue])
+  })
+
+  it('完整权限保持最近六条实时结论的顺序和数量', () => {
+    const items = Array.from({ length: 8 }, (_, index) => ({
+      rule_id: `LX0609-09-01-0${index + 1}`,
+      rule_name: `规则${index + 1}`,
+      status: index % 2 === 0 ? 'compliant' : 'data_gap',
+      is_compliant: index % 2 === 0 ? true : null,
+      conclusion: `结论${index + 1}`,
+    }))
+    const model = buildBatchJobPresentation(buildJob({ items }))
+
+    expect(model.liveResultLines).toHaveLength(6)
+    expect(model.liveResultLines.map((item) => item.text)).toEqual([
+      '结论8',
+      '结论7',
+      '结论6',
+      '结论5',
+      '结论4',
+      '结论3',
+    ])
+  })
+
+  it('受限视图没有确定问题时不把技术失败当合规，保留真实失败阶段和任务统计', () => {
+    const job = buildJob({
+      status: 'running',
+      items: [
+        {
+          rule_id: 'LX0609-06-01-05',
+          rule_name: '检查检验',
+          status: 'technical_error',
+          is_compliant: null,
+          conclusion: '执行器暂时不可用。',
+        },
+        {
+          rule_id: 'LX0609-07-02-01',
+          rule_name: '输血记录',
+          status: 'compliant',
+          is_compliant: true,
+          conclusion: '已找到输血记录。',
+        },
+      ],
+      summary: {
+        ...buildJob().summary!,
+        completed_rule_count: 2,
+        failed_rule_count: 1,
+        diagnostic_rule_failure_count: 1,
+        display_status_counts: { technical_error: 1, compliant: 1 },
+        stream_state: {
+          kind: 'native_executor_phase',
+          event: 'failed',
+          executor_key: 'exam_lab',
+        },
+      },
+    })
+
+    const model = buildBatchJobPresentation(job, { confirmedResultsOnly: true })
+
+    expect(model.liveResultLines).toEqual([])
+    expect(model.liveExecutionPhase).toEqual({
+      label: '执行动态',
+      text: '检查检验未完成，正在安全处理本次任务',
+    })
+    expect(model.resultCount).toBe(2)
+    expect(model.diagnosticRuleFailureCount).toBe(1)
+    expect(model.statusCounts).toEqual({ technical_error: 1, compliant: 1 })
+    expect(model.liveExecutionPhase?.text).not.toMatch(/无问题|全部通过/u)
+  })
+
   it('无最终结果时只展示安全的规则族执行阶段', () => {
     const executorStreamState = {
       enabled: true,

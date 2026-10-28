@@ -54,6 +54,77 @@ describe('isBatchJobPollingActive', () => {
 })
 
 describe('后台终态与自动补跑说明', () => {
+  it.each([
+    {
+      retry: { status: 'planned', should_retry: true },
+      polling: false,
+      finished: true,
+      expected: '补跑计划尚未进入执行队列',
+    },
+    {
+      retry: {
+        status: 'enqueue_failed',
+        should_retry: false,
+        reason_code: 'retry_enqueue_failed',
+      },
+      polling: false,
+      finished: true,
+      expected: '自动补跑未能进入执行队列',
+    },
+    {
+      retry: { status: 'queued', should_retry: true },
+      polling: true,
+      finished: false,
+      expected: '已排队等待自动补跑',
+    },
+    {
+      retry: { status: 'running', should_retry: true },
+      polling: true,
+      finished: false,
+      expected: '正在自动补跑失败项',
+    },
+    {
+      retry: {
+        status: 'interrupted',
+        should_retry: false,
+        reason_code: 'retry_execution_interrupted',
+      },
+      polling: false,
+      finished: true,
+      expected: '自动补跑已中断，已保存结果保留',
+    },
+    {
+      retry: { status: 'exhausted', should_retry: false },
+      polling: false,
+      finished: true,
+      expected: '自动补跑次数已用尽',
+    },
+  ])('$retry.status 使用后端已发布的真实队列状态', ({ retry, polling, finished, expected }) => {
+    const job = {
+      status: 'failed',
+      summary: {
+        execution_status: 'partial_failed',
+        completed_rule_count: 75,
+        failed_rule_count: 1,
+        automatic_failed_rule_retry: retry,
+      },
+    }
+
+    expect(isBatchJobPollingActive(job)).toBe(polling)
+    expect(isBatchJobFinished(job)).toBe(finished)
+    const message = getBatchJobRetryMessage(job)
+    expect(message).toContain(expected)
+    expect(message).toContain('失败')
+    if (
+      retry.status === 'planned' ||
+      retry.status === 'enqueue_failed' ||
+      retry.status === 'interrupted'
+    ) {
+      expect(message).not.toContain('已排队')
+      expect(message).not.toContain('系统将自动重试')
+    }
+  })
+
   it.each(['queued', 'running'])('%s 且允许补跑时不视为终态', (status) => {
     const job = {
       status: 'failed',

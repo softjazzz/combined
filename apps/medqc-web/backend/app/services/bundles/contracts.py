@@ -4,11 +4,14 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 
-BUNDLE_SCHEMA_VERSION_CURRENT = "bundle-v6"
-BUNDLE_SCHEMA_VERSION_PREVIOUS = "bundle-v5"
+# v7 是材料选择协议升级：明确无效文书在排序/条数限制前排除，并保留
+# document_status 来源。持久表结构不变；旧缓存由加载入口按需重组后覆盖。
+BUNDLE_SCHEMA_VERSION_CURRENT = "bundle-v7"
+BUNDLE_SCHEMA_VERSION_PREVIOUS = "bundle-v6"
 BUNDLE_SCHEMA_COMPAT_READABLE_VERSIONS = {
     BUNDLE_SCHEMA_VERSION_CURRENT,
     BUNDLE_SCHEMA_VERSION_PREVIOUS,
+    "bundle-v5",
     "bundle-v4",
     "bundle-v3",
     "bundle-v2",

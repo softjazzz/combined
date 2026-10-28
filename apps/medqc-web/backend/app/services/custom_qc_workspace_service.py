@@ -1178,8 +1178,11 @@ def project_customer_safe_batch_job(
     )
     automatic_retry_status = _safe_text(raw_automatic_retry.get("status")).lower()
     if automatic_retry_status in {
+        "planned",
         "queued",
         "running",
+        "enqueue_failed",
+        "interrupted",
         "completed",
         "exhausted",
         "not_applicable",
@@ -1209,6 +1212,17 @@ def project_customer_safe_batch_job(
                 0.0,
                 _to_float(raw_automatic_retry.get("delay_seconds")),
             )
+        if (
+            automatic_retry_status == "enqueue_failed"
+            and raw_automatic_retry.get("reason_code") == "retry_enqueue_failed"
+        ):
+            safe_automatic_retry["reason_code"] = "retry_enqueue_failed"
+        if (
+            automatic_retry_status == "interrupted"
+            and raw_automatic_retry.get("reason_code")
+            in {"retry_start_interrupted", "retry_execution_interrupted"}
+        ):
+            safe_automatic_retry["reason_code"] = raw_automatic_retry["reason_code"]
         safe_summary["automatic_failed_rule_retry"] = safe_automatic_retry
     model_counts = _normalize_luxian_model_execution_stats(raw_summary.get("model_execution_stats"))
     if model_counts is not None:
@@ -3753,6 +3767,7 @@ class CustomQCWorkspaceService:
                 )
                 if not envelope and selected_job.get("saved_partial_attempt"):
                     saved = session.execute(select(
+                        self._batch_job_table.c.items_json,
                         self._batch_job_table.c.summary_json,
                         self._batch_job_table.c.failed_records_json,
                     ).where(and_(
@@ -3765,6 +3780,7 @@ class CustomQCWorkspaceService:
                     projection_key = customer_safe_projection_key()
                     partial_details = read_saved_partial_record(
                         summary=_safe_json_loads(saved["summary_json"], {}),
+                        items=_safe_json_loads(saved["items_json"], []),
                         failures=_safe_json_loads(saved["failed_records_json"], []),
                         ref=case_ref, expected_rules=selected_job["result_rule_scope"],
                         projection_key=projection_key,
@@ -3918,11 +3934,12 @@ class CustomQCWorkspaceService:
         session_factory: Optional[Callable[[], Session]] = None,
         include_items: bool = False,
         include_rule_set_context: bool = False,
+        include_latest_partial: bool = False,
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
         """批量读取病历池可展示的最新 Canonical 结果摘要。
 
-        只读取完成的根任务及其显式 Envelope。它不会读取 legacy items、Bundle
-        或 QCResult；无法以三坐标确认的结果不允许进入 ``ready`` 状态。
+        默认只读取完成的根任务及其显式 Envelope。批量最新结果导出可显式纳入
+        最新失败任务的同轮成功项；仍不读取 legacy Bundle/QCResult，也不跨轮拼接。
         """
 
         identities = {
@@ -4017,6 +4034,7 @@ class CustomQCWorkspaceService:
             # 会把同一批任务 JSON 反复解析数十万次，且不会增加任何判定事实。
             jobs_by_id: Dict[str, Dict[str, Any]] = {}
             current_jobs_by_visit: Dict[str, list[Dict[str, Any]]] = {}
+            failed_jobs_by_identity: Dict[tuple[str, str, str], list[Dict[str, Any]]] = {}
             requested_visit_ids = set(visit_ids)
             for raw_row in job_rows:
                 row = dict(raw_row)
@@ -4084,6 +4102,7 @@ class CustomQCWorkspaceService:
                     "finished_at": row.get("finished_at"),
                     "record_ids": record_ids if isinstance(record_ids, list) else [],
                     "filters": filters if isinstance(filters, dict) else {},
+                    "filters_json": row.get("filters_json"),
                     "summary": summary if isinstance(summary, dict) else None,
                 }
                 jobs_by_id[job_id] = job
@@ -4098,6 +4117,20 @@ class CustomQCWorkspaceService:
                         and _safe_text(job.get("status")).lower() == "completed"
                     ):
                         current_jobs_by_visit.setdefault(visit_id, []).append(job)
+                if include_latest_partial and _safe_text(job.get("status")).lower() == "failed":
+                    for raw_ref in filters_dict.get("record_refs") or []:
+                        if not isinstance(raw_ref, Mapping):
+                            continue
+                        exact_ref = CaseRef.from_mapping(raw_ref)
+                        identity = tuple(exact_ref)
+                        if (
+                            all(exact_ref)
+                            and identity in identities
+                            and exact_ref.visit_id in {
+                                _safe_text(value) for value in job["record_ids"]
+                            }
+                        ):
+                            failed_jobs_by_identity.setdefault(identity, []).append(job)
             if not jobs_by_id:
                 return {identity: {"status": "not_run"} for identity in identities}
 
@@ -4142,6 +4175,7 @@ class CustomQCWorkspaceService:
                 ]
 
             projections: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+            saved_partial_rows_by_job: Dict[str, Optional[Dict[str, Any]]] = {}
             for identity in identities:
                 _, _, visit_id = identity
                 exact_envelopes = envelopes_by_identity.get(identity, {})
@@ -4175,6 +4209,29 @@ class CustomQCWorkspaceService:
                                 key=lambda value: str(value),
                             )
                     ready_candidates.append(candidate)
+                if include_latest_partial:
+                    for job in failed_jobs_by_identity.get(identity, []):
+                        job_id = _safe_text(job.get("id"))
+                        if job_id in exact_envelopes:
+                            continue
+                        candidate = dict(job)
+                        filters = candidate.get("filters") or {}
+                        try:
+                            candidate["result_rule_scope"] = saved_record_rule_scope(
+                                filters,
+                                CaseRef(*identity),
+                            )
+                        except (ValueError, TypeError):
+                            continue
+                        candidate["result_scope_kind"] = (
+                            "targeted"
+                            if filters.get("selected_rule_ids") or filters.get("record_rule_map")
+                            else "full" if "selected_rule_ids" in filters else "unknown"
+                        )
+                        candidate["saved_partial_attempt"] = True
+                        candidate["saved_filters_json"] = candidate.get("filters_json")
+                        candidate["status"] = "completed"
+                        ready_candidates.append(candidate)
                 ready_selection = select_latest_authoritative_record_result_job(
                     ready_candidates,
                     record_id=visit_id,
@@ -4202,6 +4259,91 @@ class CustomQCWorkspaceService:
                         projections[identity] = {
                             "status": "technical_error",
                             "reason_code": "canonical_envelope_missing",
+                            **(
+                                {
+                                    "result_rule_scope": list(
+                                        ready_selection.job.get("result_rule_scope") or []
+                                    )
+                                }
+                                if include_latest_partial
+                                else {}
+                            ),
+                        }
+                        continue
+                    if ready_selection.job.get("saved_partial_attempt"):
+                        selected_job = ready_selection.job
+                        selected_job_id = _safe_text(selected_job.get("id"))
+                        if selected_job_id not in saved_partial_rows_by_job:
+                            saved_row = session.execute(select(
+                                self._batch_job_table.c.items_json,
+                                self._batch_job_table.c.summary_json,
+                                self._batch_job_table.c.failed_records_json,
+                            ).where(and_(
+                                self._batch_job_table.c.id == selected_job_id,
+                                self._batch_job_table.c.status == "failed",
+                                self._batch_job_table.c.filters_json
+                                == selected_job.get("saved_filters_json"),
+                            ))).mappings().one_or_none()
+                            saved_partial_rows_by_job[selected_job_id] = (
+                                dict(saved_row) if saved_row is not None else None
+                            )
+                        saved = saved_partial_rows_by_job[selected_job_id]
+                        if saved is None:
+                            projections[identity] = {
+                                "status": "technical_error",
+                                "reason_code": "saved_partial_task_changed",
+                                "result_rule_scope": list(
+                                    selected_job["result_rule_scope"]
+                                ),
+                            }
+                            continue
+                        projection_key = customer_safe_projection_key()
+                        try:
+                            partial = read_saved_partial_record(
+                                summary=_safe_json_loads(saved.get("summary_json"), {}),
+                                items=_safe_json_loads(saved.get("items_json"), []),
+                                failures=_safe_json_loads(
+                                    saved.get("failed_records_json"), []
+                                ),
+                                ref=CaseRef(*identity),
+                                expected_rules=selected_job["result_rule_scope"],
+                                projection_key=projection_key,
+                                projector=lambda item: self._envelope_item_from_rule_result(
+                                    item,
+                                    hmac_key=projection_key,
+                                ),
+                            )
+                        except ValueError as exc:
+                            if not str(exc).startswith("saved_partial_"):
+                                raise
+                            projections[identity] = {
+                                "status": "technical_error",
+                                "reason_code": "saved_partial_result_invalid",
+                                "result_rule_scope": list(
+                                    selected_job["result_rule_scope"]
+                                ),
+                            }
+                            continue
+                        status_counts: Dict[str, int] = {}
+                        for item in partial["items"]:
+                            item_status = _safe_text(item.get("status"), "unknown")
+                            status_counts[item_status] = status_counts.get(item_status, 0) + 1
+                        projections[identity] = {
+                            "status": "ready",
+                            "completed_at": (
+                                selected_job.get("finished_at").isoformat()
+                                if isinstance(selected_job.get("finished_at"), datetime)
+                                else _safe_text(selected_job.get("finished_at")) or None
+                            ),
+                            "total_rule_count": len(partial["items"]),
+                            "status_counts": dict(sorted(status_counts.items())),
+                            "data_origin": "saved_partial_task",
+                            "job_id": selected_job_id,
+                            "result_rule_scope": list(selected_job["result_rule_scope"]),
+                            "result_scope_kind": selected_job.get(
+                                "result_scope_kind", "unknown"
+                            ),
+                            **partial,
                         }
                         continue
                     selected_job_id = _safe_text(ready_selection.job.get("id"))
@@ -4225,6 +4367,12 @@ class CustomQCWorkspaceService:
                             "envelope_id": _safe_text(selected_envelopes[0].get("id")),
                             "rule_set_key": normalized_rule_set_key,
                             "rule_set_version": _rule_set_value(ready_selection.job, "rule_set_version"),
+                            "result_rule_scope": list(
+                                ready_selection.job.get("result_rule_scope") or []
+                            ),
+                            "result_scope_kind": ready_selection.job.get(
+                                "result_scope_kind", "unknown"
+                            ),
                         })
                     projections[identity] = summary
                     continue
@@ -4349,7 +4497,7 @@ class CustomQCWorkspaceService:
         rule_set_version: str = RULE_SET_VERSION,
         session_factory: Optional[Callable[[], Session]] = None,
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
-        """一次读取一组病历的最新 Canonical 完整结果，供服务端全量导出。"""
+        """按单病历同一选轮合同批量读取最新结果，供服务端全量导出。"""
 
         projections = self.build_luxian_0609_completed_record_result_summaries(
             record_refs=record_refs,
@@ -4357,6 +4505,8 @@ class CustomQCWorkspaceService:
             rule_set_version=rule_set_version,
             session_factory=session_factory,
             include_items=True,
+            include_rule_set_context=True,
+            include_latest_partial=True,
         )
         expected_rule_ids = [
             _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
@@ -4367,6 +4517,13 @@ class CustomQCWorkspaceService:
         ]
         results: Dict[tuple[str, str, str], Dict[str, Any]] = {}
         for identity, projection in projections.items():
+            selected_expected_rule_ids = [
+                _safe_text(rule_id).upper()
+                for rule_id in projection.get("result_rule_scope") or expected_rule_ids
+                if _safe_text(rule_id)
+                and _safe_text(rule_id).upper()
+                not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+            ]
             status = _safe_text(projection.get("status"))
             if status != "ready":
                 results[identity] = {
@@ -4375,7 +4532,7 @@ class CustomQCWorkspaceService:
                     "reason_code": _safe_text(projection.get("reason_code")),
                     "record_ref": "",
                     "items": [],
-                    "expected_rule_count": len(expected_rule_ids),
+                    "expected_rule_count": len(selected_expected_rule_ids),
                     "result_rule_count": 0,
                     "is_complete": False,
                 }
@@ -4393,20 +4550,43 @@ class CustomQCWorkspaceService:
                 if _safe_text(item.get("rule_id") or item.get("rule_code"))
             }
             missing_rule_ids = [
-                rule_id for rule_id in expected_rule_ids if rule_id not in delivered_rule_ids
+                rule_id
+                for rule_id in selected_expected_rule_ids
+                if rule_id not in delivered_rule_ids
             ]
+            is_partial = _safe_text(projection.get("data_origin")) == "saved_partial_task"
             results[identity] = {
                 "schema_version": "lx0609-single-record-result-v1",
                 "state": "ready",
-                "data_origin": "canonical_result_envelope",
+                "data_origin": (
+                    "saved_partial_task" if is_partial else "canonical_result_envelope"
+                ),
                 "record_ref": _safe_text(projection.get("record_ref")),
+                "job_id": _safe_text(
+                    projection.get("job_id") or projection.get("root_job_id")
+                ),
                 "rule_set_key": rule_set_key,
                 "rule_set_version": rule_set_version,
                 "items": items,
-                "expected_rule_count": len(expected_rule_ids),
+                "expected_rule_count": len(selected_expected_rule_ids),
                 "result_rule_count": len(items),
-                "is_complete": not missing_rule_ids,
+                "is_complete": not is_partial and not missing_rule_ids,
                 "missing_rule_ids": missing_rule_ids,
+                **(
+                    {
+                        key: projection[key]
+                        for key in (
+                            "execution_status",
+                            "failed_rule_ids",
+                            "failed_rule_count",
+                            "failed_rules",
+                            "completed_rule_count",
+                        )
+                        if key in projection
+                    }
+                    if is_partial
+                    else {}
+                ),
             }
         return results
 
@@ -4812,6 +4992,18 @@ class CustomQCWorkspaceService:
                     current_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
                 current_filters[FAILED_RULE_RETRY_FILTER_KEY] = retry_scope
                 current_summary = dict(current.get("summary") or {})
+                automatic_retry_plan = current_summary.get("automatic_failed_rule_retry")
+                if (
+                    automatic
+                    and isinstance(automatic_retry_plan, dict)
+                    and automatic_retry_plan.get("should_retry") is True
+                    and _safe_text(automatic_retry_plan.get("status")).lower() == "planned"
+                ):
+                    automatic_retry_plan = {
+                        **automatic_retry_plan,
+                        "status": "queued",
+                        "queued_at": now.isoformat(),
+                    }
                 retry_rule_count = len(retry_scope["rule_ids"])
                 retry_record_count = len(retry_scope["record_refs"])
                 reset_values = dict(
@@ -4822,6 +5014,11 @@ class CustomQCWorkspaceService:
                             **current_summary,
                             "retry_status": "queued",
                             "retry_trigger": "automatic" if automatic else "manual",
+                            **(
+                                {"automatic_failed_rule_retry": automatic_retry_plan}
+                                if automatic and isinstance(automatic_retry_plan, dict)
+                                else {}
+                            ),
                             "retry_attempt": retry_scope["attempt"],
                             "retry_pending_count": retry_scope["pending_count"],
                             "progress": {
@@ -5002,6 +5199,19 @@ class CustomQCWorkspaceService:
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
                 current_summary = {}
+            automatic_retry_plan = current_summary.get("automatic_failed_rule_retry")
+            if (
+                isinstance(automatic_retry_plan, dict)
+                and automatic_retry_plan.get("should_retry") is True
+                and _safe_text(automatic_retry_plan.get("status")).lower() == "queued"
+            ):
+                current_summary = {
+                    **current_summary,
+                    "automatic_failed_rule_retry": {
+                        **automatic_retry_plan,
+                        "status": "running",
+                    },
+                }
             progress_value = current_summary.get("progress")
             if not isinstance(progress_value, dict):
                 progress_value = {}
@@ -5047,6 +5257,68 @@ class CustomQCWorkspaceService:
                 return False
             session.commit()
             return next_filters_json if formal_0609 else True
+        finally:
+            session.close()
+
+    def mark_failed_rule_auto_retry_enqueue_failed(
+        self,
+        *,
+        job_id: str,
+        expected_attempt_filters_json: str,
+    ) -> bool:
+        """CAS 撤销未真正入队的自动补跑计划，不改动既有结果和尝试范围。"""
+
+        session = _session()
+        try:
+            row = session.execute(
+                select(
+                    self._batch_job_table.c.status,
+                    self._batch_job_table.c.filters_json,
+                    self._batch_job_table.c.summary_json,
+                ).where(self._batch_job_table.c.id == job_id)
+            ).mappings().first()
+            if (
+                row is None
+                or _safe_text(row.get("status")).lower() != "failed"
+                or row.get("filters_json") != expected_attempt_filters_json
+            ):
+                return False
+            summary = _safe_json_loads(row.get("summary_json"), {})
+            if not isinstance(summary, dict):
+                return False
+            retry_plan = summary.get("automatic_failed_rule_retry")
+            if (
+                not isinstance(retry_plan, dict)
+                or retry_plan.get("should_retry") is not True
+                or _safe_text(retry_plan.get("status")).lower() != "planned"
+            ):
+                return False
+            now = _now_utc()
+            updated_summary = {
+                **summary,
+                "automatic_failed_rule_retry": {
+                    **retry_plan,
+                    "status": "enqueue_failed",
+                    "should_retry": False,
+                    "reason_code": "retry_enqueue_failed",
+                },
+                "updated_at": now.isoformat(),
+            }
+            changed = session.execute(
+                update(self._batch_job_table)
+                .where(and_(
+                    self._batch_job_table.c.id == job_id,
+                    self._batch_job_table.c.status == "failed",
+                    self._batch_job_table.c.filters_json == expected_attempt_filters_json,
+                    self._batch_job_table.c.summary_json == row.get("summary_json"),
+                ))
+                .values(summary_json=_safe_json_dumps(updated_summary), updated_at=now)
+            )
+            if getattr(changed, "rowcount", 0) != 1:
+                session.rollback()
+                return False
+            session.commit()
+            return True
         finally:
             session.close()
 
@@ -5548,6 +5820,32 @@ class CustomQCWorkspaceService:
                 and (_safe_json_loads(row.get("filters_json"), {}) or {}).get("rule_set_key")
                 == LUXIAN_0609_RULE_SET_KEY
             )
+            failed_active_luxian_retry = (
+                row.get("status") in {"queued", "running"}
+                and (_safe_json_loads(row.get("filters_json"), {}) or {}).get("rule_set_key")
+                == LUXIAN_0609_RULE_SET_KEY
+            )
+            automatic_retry_plan = current_summary.get("automatic_failed_rule_retry")
+            if (
+                failed_active_luxian_retry
+                and isinstance(automatic_retry_plan, dict)
+                and automatic_retry_plan.get("should_retry") is True
+                and _safe_text(automatic_retry_plan.get("status")).lower()
+                in {"queued", "running"}
+            ):
+                current_summary = {
+                    **current_summary,
+                    "automatic_failed_rule_retry": {
+                        **automatic_retry_plan,
+                        "status": "interrupted",
+                        "should_retry": False,
+                        "reason_code": (
+                            "retry_execution_interrupted"
+                            if row.get("status") == "running"
+                            else "retry_start_interrupted"
+                        ),
+                    },
+                }
             now = _now_utc()
             failure_update = session.execute(
                 update(self._batch_job_table)
