@@ -509,6 +509,7 @@ async def test_044_nonstructured_daily_assessment_selects_matched_daily_and_bloo
             "daily_course_record": [
                 {
                     "document_id": "DAILY-044-MATCHED",
+                    "record_time": "2026-06-05 09:00:00",
                     "record_content": "输血前评估：有输血指征，血红蛋白65g/L，已告知输血风险。",
                 },
                 {
@@ -542,6 +543,7 @@ async def test_044_complete_text_without_document_id_keeps_clinical_status() -> 
             "blood_application": [],
             "daily_course_record": [
                 {
+                    "record_time": "2026-06-05 09:00:00",
                     "record_content": "输血前评估：有输血指征，血红蛋白65g/L，已告知输血风险。"
                 }
             ],

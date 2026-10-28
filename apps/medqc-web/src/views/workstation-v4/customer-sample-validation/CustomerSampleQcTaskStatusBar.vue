@@ -122,7 +122,9 @@
               {{
                 presentation.progressPercent > 0
                   ? `当前进度 ${presentation.progressPercent}%`
-                  : '正在准备首份结果'
+                  : presentation.resultCount > 0
+                    ? `已有 ${presentation.resultCount} 项有效结果`
+                    : presentation.liveExecutionPhase?.text || '正在准备首份结果'
               }}
             </strong>
             <span>{{ presentation.resultProgressText }}</span>

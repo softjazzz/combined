@@ -101,6 +101,8 @@ _EXTENDED_EXTRA_TEST_FILES = (
     "tests/unit/test_verify_consultation_family_acceptance.py",
     "tests/unit/test_qc_diagnostic_session_restore.py",
     "tests/unit/test_qc_diagnostic_session_redaction.py",
+    # 实时回写依赖失败项保留及最新轮读取，使用隔离SQLite验证，不访问业务库。
+    "tests/unit/test_qc_partial_failure_persistence.py",
 )
 _EXTENDED_EXTRA_TEST_GLOBS = ("test_n10_*.py", "test_qc_llm_client*.py")
 

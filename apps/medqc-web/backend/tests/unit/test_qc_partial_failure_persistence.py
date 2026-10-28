@@ -420,6 +420,8 @@ def test_partial_failure_is_not_a_bypass_for_invalid_delivery(storage, invalid):
 def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule(storage):
     service, engine, table = storage
     summary, items, failures = _payload()
+    # 输出格式错误按现行合同不自动重跑；此正例验证可恢复的传输故障。
+    failures[0]["reason_code"] = "model_transport_error"
     summary["rule_count"] = 2
     service.complete_batch_job(
         job_id="partial-job",
@@ -458,6 +460,8 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
     ]
     assert retry_scope["pending_count"] == 1
     assert retried["summary"]["execution_status"] == "partial_failed"
+
+
     assert retried["summary"]["retry_status"] == "queued"
     assert retried["summary"]["retry_trigger"] == "automatic"
     safe = workspace.project_customer_safe_batch_job(
@@ -471,6 +475,19 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
         row = dict(connection.execute(sa.select(table)).mappings().one())
     assert json.loads(row["items_json"]) == items
     assert json.loads(row["failed_records_json"])[0]["record_key"] == '["test-i","test-p","test-v"]'
+
+
+def test_output_format_failure_does_not_auto_retry_or_erase_valid_results(storage):
+    service, engine, table = storage
+    summary, items, failures = _payload()
+    service.complete_batch_job(job_id="partial-job", summary=summary, items=items, failed_records=failures)
+    with engine.connect() as connection:
+        before = dict(connection.execute(sa.select(table).where(table.c.id == "partial-job")).mappings().one())
+    assert service.retry_batch_job(job_id="partial-job", created_by="tester", automatic=True,
+                                   expected_attempt_filters_json=before["filters_json"]) is None
+    with engine.connect() as connection:
+        after = dict(connection.execute(sa.select(table).where(table.c.id == "partial-job")).mappings().one())
+    assert after == before
 
 
 def test_automatic_retry_skips_terminal_pair_without_losing_it_or_successful_items(storage):
@@ -691,14 +708,18 @@ def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storag
     assert service.retry_batch_job(job_id="rerun-job", created_by="tester")["status"] == "queued"
     rerun_claim = service.mark_batch_job_running(job_id="rerun-job")
     assert isinstance(rerun_claim, str) and rerun_claim != first_claim
+    current_items = [
+        _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
+        _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
+        _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
+    ]
     assert service.complete_batch_job(
         job_id="rerun-job",
         attempt_filters_json=rerun_claim,
-        summary=_partial_summary(total_records=2, delivered=2, failed_rules=[_RERUN_RULE_IDS[1]]),
-        items=[
-            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
-            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
-        ],
+        summary={**_partial_summary(total_records=2, delivered=3, failed_rules=[_RERUN_RULE_IDS[1]]),
+                 "rule_results": [{"rule_code": rule, "items": [item for item in current_items
+                                   if item["rule_id"] == rule]} for rule in _RERUN_RULE_IDS]},
+        items=current_items,
         failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
     ) is True
 
@@ -714,8 +735,14 @@ def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storag
         rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
         rule_set_version=workspace.RULE_SET_VERSION,
     )
-    assert stale["state"] == "not_found"
-    assert stale["items"] == []
+    # 同次失败任务的有效项仍可查看；不能取回上轮该病例的第二条合规结果。
+    assert stale["state"] == "ready"
+    assert stale["data_origin"] == "saved_partial_task"
+    assert stale["job_id"] == "rerun-job"
+    assert stale["is_complete"] is False
+    assert stale["completed_rule_count"] == 1
+    assert stale["failed_rule_ids"] == [_RERUN_RULE_IDS[1]]
+    assert [item["rule_id"] for item in stale["items"]] == [_RERUN_RULE_IDS[0]]
 
     export_items = service._load_batch_job_export_items(job=job)
     # 导出只包含本次实际交付的病历结果（客户投影不保留原三坐标字段）。
@@ -723,7 +750,8 @@ def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storag
     assert {item["display_status"] for item in export_items} == {"compliant"}
 
 
-def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(canonical_storage):
+@pytest.mark.parametrize("complete_summary", [False, True])
+def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(canonical_storage, complete_summary):
     service, engine, jobs, envelopes = canonical_storage
     _complete_full_run(service)
 
@@ -740,6 +768,7 @@ def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(cano
             "completed_rule_count": 0,
             "failed_rule_count": 4,
             "failed_rule_ids": list(_RERUN_RULE_IDS),
+            **({"rule_results": []} if complete_summary else {}),
         },
         items=[],
         failed_records=[
@@ -758,7 +787,20 @@ def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(cano
             rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
             rule_set_version=workspace.RULE_SET_VERSION,
         )
-        assert latest["state"] == "not_found"
+        assert latest["job_id"] == "rerun-job"
+        assert latest["data_origin"] == "saved_partial_task"
+        assert latest["items"] == []
+        assert latest["is_complete"] is False
+        if complete_summary:
+            assert latest["state"] == "ready"
+            assert latest["execution_status"] == "failed"
+            assert latest["completed_rule_count"] == 0
+            assert latest["failed_rule_count"] == 2
+            assert latest["failed_rule_ids"] == list(_RERUN_RULE_IDS)
+        else:
+            # 损坏/不完整的历史摘要仍按读取合同失败关闭，不能伪装为没有质控。
+            assert latest["state"] == "technical_error"
+            assert latest["reason_code"] == "saved_partial_result_invalid"
     job = _load_job(engine, jobs, job_id="rerun-job")
     with pytest.raises(ValueError, match="尚未形成可导出"):
         service._load_batch_job_export_items(job=job)

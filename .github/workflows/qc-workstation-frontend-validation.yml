@@ -1,0 +1,52 @@
+name: QC Workstation Frontend Validation
+
+on:
+  pull_request:
+    branches: [codex/business-agent-integration]
+    paths:
+      - 'apps/medqc-web/src/views/workstation-v4/customer-sample-validation/**'
+      - 'apps/medqc-web/src/views/workstation-v4/semantic-rules/types.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/customer-sample-validation/**'
+      - 'apps/medqc-web/tsconfig*.json'
+      - 'apps/medqc-web/package*.json'
+      - '.github/workflows/qc-workstation-frontend-validation.yml'
+  push:
+    branches: ['codex/**']
+    paths:
+      - 'apps/medqc-web/src/views/workstation-v4/customer-sample-validation/**'
+      - 'apps/medqc-web/src/views/workstation-v4/semantic-rules/types.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/customer-sample-validation/**'
+      - 'apps/medqc-web/tsconfig*.json'
+      - 'apps/medqc-web/package*.json'
+      - '.github/workflows/qc-workstation-frontend-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-type-and-focused-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+    defaults:
+      run:
+        working-directory: apps/medqc-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/medqc-web/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --legacy-peer-deps --no-audit --no-fund
+      - name: Full type check
+        run: npm run type-check
+      - name: Focused task status and presentation tests
+        run: npx vitest run tests/unit/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.spec.ts tests/unit/views/workstation-v4/customer-sample-validation/batchJobPresentation.spec.ts --maxWorkers=1 --minWorkers=1
+      - name: Read-only lint of changed frontend scope
+        run: npx eslint src/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.vue src/views/workstation-v4/customer-sample-validation/batchJobPresentation.ts src/views/workstation-v4/semantic-rules/types.ts

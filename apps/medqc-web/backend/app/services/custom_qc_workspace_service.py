@@ -888,6 +888,26 @@ def _safe_operational_progress(value: Any) -> Dict[str, Any]:
     return projected
 
 
+def _safe_live_execution_state(value: Any) -> Dict[str, Any]:
+    """只投影受控阶段和计数，不公开患者坐标、原始异常或任意trace字段。"""
+    if not isinstance(value, dict) or value.get("kind") != "native_executor_phase":
+        return {}
+    event = value.get("event")
+    if event not in {"started", "completed", "failed", "published"}:
+        return {}
+    from .luxian_0609.executor_registry import LEGACY_NATIVE_EXECUTION_ORDER
+    key = value.get("executor_key")
+    if key not in LEGACY_NATIVE_EXECUTION_ORDER:
+        return {}
+    return {
+        "kind": "native_executor_phase", "event": event, "executor_key": key,
+        **{name: max(0, _to_int(value.get(name))) for name in (
+            "completed_batches", "total_batches", "partial_item_count",
+            "current_rule_count", "completed_rule_count", "total_rule_count",
+        )},
+    }
+
+
 def _safe_review_report(
     value: Any,
     *,
@@ -1136,6 +1156,12 @@ def project_customer_safe_batch_job(
             if item.get("status") == "non_compliant"
         ][:6],
     }
+    live_state = _safe_live_execution_state(raw_summary.get("stream_state"))
+    if live_state:
+        safe_summary["stream_state"] = live_state
+    first_latency = raw_summary.get("first_result_latency")
+    if isinstance(first_latency, (float, int)) and not isinstance(first_latency, bool) and first_latency > 0:
+        safe_summary["first_result_latency"] = first_latency
     if raw_summary.get("execution_status") in {"completed", "partial_failed", "failed"}:
         safe_summary["execution_status"] = raw_summary["execution_status"]
         for count_key in ("completed_rule_count", "failed_rule_count"):

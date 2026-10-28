@@ -33,6 +33,34 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 }
 
 describe('batchJobPresentation', () => {
+  it('病历尚未完成时可显示已校验的规则族回写，并保持病历完成数为零', () => {
+    const job = buildJob({
+      status: 'running',
+      total_records: 20,
+      success_count: 0,
+      summary: {
+        ...buildJob().summary!,
+        total_records: 20,
+        success_count: 0,
+        result_count: 2,
+        display_status_counts: { non_compliant: 2 },
+        progress: { processed_records: 0, total_records: 20 },
+        stream_state: {
+          kind: 'native_executor_phase',
+          event: 'published',
+          executor_key: 'basic_timeliness',
+          partial_item_count: 2,
+        },
+      },
+    })
+    const model = buildBatchJobPresentation(job)
+    expect(model.resultCount).toBe(2)
+    expect(model.completedRecordCount).toBe(0)
+    expect(model.recordProgressText).toContain('0 / 20')
+    expect(model.liveExecutionPhase?.text).toContain('已回写 2 项已校验结果')
+    expect(model.liveExecutionPhase?.text).toContain('其他规则继续执行')
+  })
+
   it('C11 部分失败在空列表和空分布时保留75项有效回写与1项失败', () => {
     const job = buildJob({ status: 'failed', customer_rule_count: 76, items: [] })
     Object.assign(job.summary!, {
@@ -69,9 +97,13 @@ describe('batchJobPresentation', () => {
   it('多病历的已处理数使用持久进度，失败病历不冒充全部成功', () => {
     const job = buildJob({ status: 'failed', total_records: 27 })
     Object.assign(job.summary!, {
-      total_records: 27, success_count: 25, failed_count: 2,
+      total_records: 27,
+      success_count: 25,
+      failed_count: 2,
       progress: { processed_records: 27 },
-      execution_status: 'partial_failed', completed_rule_count: 2050, failed_rule_count: 2,
+      execution_status: 'partial_failed',
+      completed_rule_count: 2050,
+      failed_rule_count: 2,
     })
     const model = buildBatchJobPresentation(job)
     expect(model.recordProgressText).toBe('病历进度：已处理 27 / 27 份（全部成功 25 份）')
@@ -81,8 +113,10 @@ describe('batchJobPresentation', () => {
   it('缺少持久已处理数时不把失败规则数推算成处理病历数', () => {
     const job = buildJob({ status: 'failed' })
     Object.assign(job.summary!, {
-      success_count: 0, execution_status: 'partial_failed',
-      completed_rule_count: 75, failed_rule_count: 1,
+      success_count: 0,
+      execution_status: 'partial_failed',
+      completed_rule_count: 75,
+      failed_rule_count: 1,
     })
     expect(buildBatchJobPresentation(job).recordProgressText).toBe('病历进度：已完成 0 / 1 份')
   })

@@ -177,6 +177,7 @@ def _documents(**overrides: list[dict]) -> dict:
         "labtest_item_report": [],
         "blood_application": [{"content": "输血前评估及申请资料。"}],
         "daily_course_record": [{"content": "输血过程及输血后评价记录。"}],
+        "senior_course_record": [],
         "surgery_record": [{"content": "手术记录中的术中输血信息。"}],
         "anesthesia_record": [{"content": "麻醉记录中的术中输血信息。"}],
         "postsurg_firstcourse_record": [{"content": "术后首次病程中的输血信息。"}],
@@ -187,7 +188,9 @@ def _documents(**overrides: list[dict]) -> dict:
     documents.update(overrides)
     for index, row in enumerate(documents["bloodtrans_record"]):
         row.setdefault("document_id", f"fixture-course-{index}")
-    documents["__logical_source_states__"] = {key: "available" if documents[key] else "empty" for key in ("bloodtrans_record", "surgery_record", "anesthesia_record")}
+    documents["__logical_source_states__"] = {key: "available" if documents[key] else "empty" for key in (
+        "bloodtrans_record", "surgery_record", "anesthesia_record",
+        "blood_application", "daily_course_record", "senior_course_record")}
     return {"programmatic_timeline": {"documents": documents}}
 
 
@@ -676,7 +679,13 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
 async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
     monkeypatch,
 ):
-    session = _typed_decision_session(selected_rule_ids=("LX0609-07-01-02",))
+    session = _typed_decision_session(
+        selected_rule_ids=("LX0609-07-01-02",),
+        source_rows={"daily_course_record": [{
+            "document_id": "PRE-044", "document_title": "输血前评估",
+            "record_time": "2026-01-01 09:00:00",
+            "record_content": "输血前评估：有输血指征，血红蛋白65g/L，已告知输血风险。"}]},
+    )
     monkeypatch.setattr(
         transfusion,
         "read_luxian_0609_native_source_rows",
@@ -717,7 +726,13 @@ async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
 
 @pytest.mark.asyncio
 async def test_typed_044_material_change_changes_state_snapshot_and_refs(monkeypatch):
-    complete_session = _typed_decision_session(selected_rule_ids=("LX0609-07-01-02",))
+    complete_session = _typed_decision_session(
+        selected_rule_ids=("LX0609-07-01-02",),
+        source_rows={"daily_course_record": [{
+            "document_id": "PRE-044", "document_title": "输血前评估",
+            "record_time": "2026-01-01 09:00:00",
+            "record_content": "输血前评估：有输血指征，血红蛋白65g/L，已告知输血风险。"}]},
+    )
     missing_session = _typed_decision_session(
         selected_rule_ids=("LX0609-07-01-02",),
         bloodtrans_content="输血过程中患者生命体征平稳。",
@@ -861,11 +876,16 @@ async def test_typed_044_optional_llm_keeps_raw_call_token_and_state_semantics(
         selected_rule_ids=("LX0609-07-01-02",),
         bloodtrans_content=grey_content,
         daily_content="输血后继续观察。",
+        source_rows={"daily_course_record": [{
+            "document_id": "PRE-044", "document_title": "输血前评估",
+            "record_time": "2026-01-01 09:00:00", "record_content": grey_content}]},
     )
     payload = _documents(
         bloodtrans_record=[{"content": grey_content}],
+        mr_bloodtrans=[{"transfution_datetime": "2026-01-01 14:20:00"}],
         blood_application=[],
-        daily_course_record=[{"content": "输血后继续观察。"}],
+        daily_course_record=[{"document_id": "PRE-044", "document_title": "输血前评估",
+                              "record_time": "2026-01-01 09:00:00", "record_content": grey_content}],
     )
     monkeypatch.setattr(
         transfusion,
@@ -1446,6 +1466,9 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
         rule_ids=tuple(reversed(transfusion.TRANSFUSION_RULE_IDS)),
         wrapper_rules=[_wrapper(rule_id) for rule_id in transfusion.TRANSFUSION_RULE_IDS],
         evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
+            blood_application=[{"request_datetime": "2026-06-05 09:00:00",
+                                "content": "输血前评估：患者具有输血指征。"}],
             bloodtrans_record=[
                 {
                     "content": (
@@ -2311,13 +2334,10 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant"] * 3 + ["data_gap"]
+    # 输血记录中的前评估描述不能替代独立评估；045/046及后评价口径不变。
+    assert [item["status"] for item in result.results] == ["non_compliant", "compliant", "compliant", "data_gap"]
     display_facts = dict(result.customer_display_facts)
-    assert display_facts["LX0609-07-01-02"]["checked_fields"] == [
-        "application_reason",
-        "laboratory_indicator",
-    ]
-    assert display_facts["LX0609-07-01-02"]["missing_fields"] == []
+    assert display_facts["LX0609-07-01-02"]["failure_kind"] == "transfusion_requirement_not_documented"
     assert display_facts["LX0609-07-02-02"]["checked_fields"] == [
         "clinical_effect",
         "component",
@@ -3106,6 +3126,7 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[
                 {
                     "content": (
@@ -3132,10 +3153,12 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[{"content": "输血记录：按评估及医嘱完成输注。"}],
             blood_application=[
                 {
                     "document_title": "输血前评估记录",
+                    "request_datetime": "2026-06-05 09:00:00",
                     "content": (
                         "患者贫血，血红蛋白降低，具有输血指征及必要性；"
                         "既往无输血不良反应，已评估输血风险和生命体征。"
@@ -3160,6 +3183,7 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[{"content": "输血记录：已记录输血指征，输注过程平稳。"}],
             blood_application=[],
             daily_course_record=[{"content": "病程记录：患者贫血，拟输注红细胞。"}],
@@ -3182,8 +3206,9 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[{"content": "输血前评估：患者具有输血指征。"}],
-            blood_application=[{"content": "患者贫血，血红蛋白降低。"}],
+            blood_application=[{"request_datetime": "2026-06-05 09:00:00", "content": "患者贫血，血红蛋白降低。"}],
             daily_course_record=[{"content": "既往无输血不良反应，已说明风险。"}],
         ),
         institute_id="safe-institute",
@@ -3201,10 +3226,12 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[{"content": "输血记录：按医嘱完成输注。"}],
             blood_application=[
                 {
                     "document_title": "输血申请单",
+                    "request_datetime": "2026-06-05 09:00:00",
                     "content": (
                         "患者血红蛋白降低，拟输红细胞；既往无不良反应，生命体征平稳。"
                     ),
@@ -3237,6 +3264,7 @@ async def test_044_same_record_purpose_without_assessment_marker_is_non_complian
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[
                 {
                     "content": (
@@ -3276,6 +3304,7 @@ async def test_044_transfusion_purpose_without_preassessment_is_non_compliant_wi
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
+            mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[
                 {"content": "输血目的：纠正贫血；患者血红蛋白降低。"}
             ],
