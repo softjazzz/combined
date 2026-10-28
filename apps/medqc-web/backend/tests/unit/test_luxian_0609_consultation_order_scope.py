@@ -169,6 +169,17 @@ def test_确属同项拒绝仍从未执行措施中剔除() -> None:
     assert filtered.missing_measures == {"r1": ()}
 
 
+@pytest.mark.parametrize(("short", "long"), [
+    ("胃镜", "胃镜检查"), ("胸部CT", "胸部CT检查"),
+    ("右肾穿刺活检", "右肾穿刺活检术"),
+])
+def test_同项措施摘取边界不同仍可豁免(short, long):
+    for declined, pending in ((short, long), (long, short)):
+        assert measure_is_declined(pending, (declined,))
+        filtered, _, _ = _measure_refinement(declined, pending)
+        assert filtered.missing_measures == {"r1": ()}
+
+
 def test_条件句没有实际拒绝事实时不豁免缺失措施() -> None:
     text = "建议右肾穿刺活检。若家属拒绝右肾穿刺活检，再另议方案。"
     # 条件/实际拒绝语义仍由第一阶段判定；确定性匹配不能自行从条件句生成拒绝事实。

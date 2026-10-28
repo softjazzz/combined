@@ -84,7 +84,7 @@ TRANSFUSION_RULE_IDS = (
 )
 EXECUTOR_KEY = "transfusion"
 _TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
-_TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-post-time-precision-v8"
+_TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-post-association-scope-v9"
 _PRE_ASSESSMENT_EVALUATOR_VERSION = "transfusion-pre-assessment-associated-v8"
 
 # 049 仍缺少可受控关联的收费数量，因此旧的直接执行入口继续保守返回 DATA_GAP；
@@ -2433,19 +2433,31 @@ def _programmatic_047_assessment(
         *,
         anchored_refs: set[tuple[str, str]],
         record_date: date | None,
+        record_time: datetime | None,
     ) -> set[tuple[str, str]]:
-        """“另一次结束”只扩到有可证明同日范围的事件。"""
+        """按显式锚点日期及评价前24小时的可能范围限定“另一次”，不按数组位置猜测。"""
 
         if not anchored_refs or _ANOTHER_UNTIMED_END_PATTERN.search(text) is None:
             return set()
-        clue_dates = {record_date} if record_date is not None else {
+        clue_dates = {
             known_end_by_ref[ref].date()
             for ref in anchored_refs.intersection(known_end_by_ref)
         }
+        if record_date is not None:
+            # 日精度只能给可能范围；不能把前一天输血的次日评价误当作缺评价。
+            clue_dates.update((record_date, record_date - timedelta(days=1)))
         candidates = {
             ref
             for ref, end_time in known_end_by_ref.items()
-            if ref not in anchored_refs and end_time.date() in clue_dates
+            if ref not in anchored_refs
+            and (end_time.date() in clue_dates if record_time is None else (
+                # 同锚点日期但晚于评价的冲突仍属关联待核，不能变成确定缺评价。
+                end_time.date() in {
+                    known_end_by_ref[anchor].date()
+                    for anchor in anchored_refs.intersection(known_end_by_ref)
+                }
+                or timedelta(0) <= record_time - end_time <= timedelta(hours=24)
+            ))
         }
         return candidates
 
@@ -2534,6 +2546,7 @@ def _programmatic_047_assessment(
                         text,
                         anchored_refs=anchored_refs,
                         record_date=record_date,
+                        record_time=record_time,
                     )
                 )
                 if not affected_refs and not anchors:

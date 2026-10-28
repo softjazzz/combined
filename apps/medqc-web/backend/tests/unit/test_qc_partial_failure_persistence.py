@@ -886,6 +886,51 @@ def _complete_full_run(service) -> str:
     return claim
 
 
+@pytest.mark.parametrize("previous_full", [False, True])
+def test_pool_and_worklist_show_same_partial_round_as_detail_and_export(
+    canonical_storage, monkeypatch, previous_full,
+):
+    from app.services.medical_records import query_service
+    from app.services.workstation.worklist_service import WorkstationAggregationService
+
+    service, engine, jobs, _ = canonical_storage
+    if previous_full:
+        _complete_full_run(service)
+    with engine.begin() as connection:
+        template = dict(connection.execute(sa.select(jobs)).mappings().first())
+        template.update(id="new-partial", status="queued", summary_json=None, items_json=None,
+                        failed_records_json=None, finished_at=None,
+                        created_at=datetime(2026, 9, 22), updated_at=datetime(2026, 9, 22))
+        connection.execute(jobs.insert().values(**template))
+    claim = service.mark_batch_job_running(job_id="new-partial")
+    items = [_canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0])]
+    assert service.complete_batch_job(
+        job_id="new-partial", attempt_filters_json=claim,
+        summary={**_partial_summary(total_records=2, delivered=1, failed_rules=[_RERUN_RULE_IDS[1]]),
+                 "rule_results": [{"rule_code": _RERUN_RULE_IDS[0], "items": items}]},
+        items=items, failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
+    )
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(workspace, "CustomQCWorkspaceService", lambda: service)
+    owner = object.__new__(WorkstationAggregationService)
+    owner._session_factory = factory
+    identity = tuple(CaseRef.from_mapping(_RERUN_RECORD_B))
+    pool = query_service._load_latest_luxian_0609_qc_summaries(
+        [_RERUN_RECORD_B], session_factory=factory,
+    )[identity]
+    worklist = owner._load_luxian_0609_summaries([_RERUN_RECORD_B])[identity]
+    detail = service.build_latest_single_record_result_dto(**_RERUN_RECORD_B)
+    exported = service.build_luxian_0609_completed_record_result_summaries(
+        record_refs=[_RERUN_RECORD_B], include_latest_partial=True,
+        session_factory=factory,
+    )[identity]
+    assert pool == worklist == exported
+    assert pool["status"] == detail["state"] == "ready"
+    assert pool["job_id"] == detail["job_id"] == "new-partial"
+    assert pool["total_rule_count"] == detail["completed_rule_count"] == 1
+    assert pool["failed_rule_ids"] == detail["failed_rule_ids"] == [_RERUN_RULE_IDS[1]]
+
+
 def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storage):
     service, engine, jobs, envelopes = canonical_storage
     first_claim = _complete_full_run(service)

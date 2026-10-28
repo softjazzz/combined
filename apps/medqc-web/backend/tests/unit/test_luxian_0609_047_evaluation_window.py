@@ -126,7 +126,7 @@ async def test_047_equivalent_aware_evaluation_times_are_both_late(record_time: 
     )
     assert result.decisions[0].reason_code == "requirement_violated"
     assert result.decisions[0].evaluator_version == (
-        "transfusion-ruledecision-post-time-precision-v8"
+        "transfusion-ruledecision-post-association-scope-v9"
     )
 
 
@@ -311,7 +311,8 @@ def test_047_date_only_outside_every_window_does_not_expand_to_all_events():
     )
 
 
-def test_047_another_unresolved_end_stays_on_the_explicit_anchor_date():
+@pytest.mark.parametrize("evaluation_time", ["2026-06-05 13:00:00", "2026-06-06 07:00:00"])
+def test_047_another_unresolved_end_stays_on_the_explicit_anchor_date(evaluation_time):
     assessment = transfusion._programmatic_047_assessment(
         {
             "bloodtrans_record": [
@@ -332,7 +333,7 @@ def test_047_another_unresolved_end_stays_on_the_explicit_anchor_date():
                 {
                     "document_title": "输血后评价记录",
                     "document_id": "EVAL-BC",
-                    "record_time": "2026-06-05 13:00:00",
+                    "record_time": evaluation_time,
                     "record_content": (
                         "2026-06-05 10:00:00输血结束；"
                         "另一次输血结束，复查血红蛋白较前改善。"
@@ -352,6 +353,24 @@ def test_047_another_unresolved_end_stays_on_the_explicit_anchor_date():
     assert assessment.selected_source_document_refs == (
         ("bloodtrans_record", "MISSING-A"),
     )
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_047_cross_day_another_end_keeps_local_association_gap(reverse):
+    rows = [
+        {"document_id": "A", "record_content": "2026-01-01 08:00:00输血结束。"},
+        {"document_id": "C", "record_content": "2026-01-01 20:00:00输血结束。"},
+    ]
+    assessment = transfusion._programmatic_047_assessment({
+        "bloodtrans_record": list(reversed(rows)) if reverse else rows,
+        "daily_course_record": [{
+            "document_title": "输血后评价记录", "document_id": "EVAL",
+            "record_time": "2026-01-02 07:00:00",
+            "record_content": "2026-01-01 08:00:00输血结束；另一次输血结束，复查血红蛋白较前改善。",
+        }],
+        "__evaluation_horizon_rows__": [{"horizon_datetime": "2026-01-04 12:00:00"}],
+    })
+    assert (assessment.status, assessment.reason_code) == ("data_gap", "association_failed")
 
 
 @pytest.mark.parametrize(

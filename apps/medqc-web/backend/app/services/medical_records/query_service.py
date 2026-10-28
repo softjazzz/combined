@@ -504,13 +504,14 @@ def _load_latest_luxian_0609_qc_summaries(
     *,
     session_factory: Callable[[], Any],
 ) -> dict[tuple[str, str, str], dict[str, Any]]:
-    """病历池唯一允许读取的已完成 LX0609 结果投影。"""
+    """病历池读取与详情/导出同轮的已校验结果，保留部分失败提示。"""
 
     from ...services.custom_qc_workspace_service import CustomQCWorkspaceService
 
     return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
         record_refs=record_refs,
         session_factory=session_factory,
+        include_latest_partial=True,
     )
 
 

@@ -1104,13 +1104,14 @@ class WorkstationAggregationService:
         self,
         record_refs: List[Dict[str, str]],
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
-        """只复用 Task 2A 的已完成 Canonical 批量摘要入口。"""
+        """复用正式摘要入口，包含最新部分失败轮的已校验结果。"""
 
         from ..custom_qc_workspace_service import CustomQCWorkspaceService
 
         return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
             record_refs=record_refs,
             session_factory=self._session_factory,
+            include_latest_partial=True,
         )
 
     def get_home_hotspots(

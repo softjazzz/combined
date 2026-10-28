@@ -22,6 +22,32 @@ def isolated_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("LUXIAN_0609_EXAM_ANALYSIS_FREEZE_DIR", str(tmp_path))
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["ct", "diagnosis"])
+async def test_old_storage_schema_does_not_permanently_block_new_freeze(monkeypatch, tmp_path, kind):
+    from app.services.luxian_0609 import exam_analysis_freeze as store
+
+    client = identified(CtClient() if kind == "ct" else DiagnosisClient(_payload(_item())))
+
+    async def run():
+        if kind == "ct":
+            return await ct_execute(client)
+        return await diagnosis.extract_diagnosis_change_documentation((_document(),), client)
+
+    current_schema = store.FREEZE_SCHEMA_VERSION
+    monkeypatch.setattr(store, "FREEZE_SCHEMA_VERSION", "exam-finding-analysis-freeze-v1")
+    await run()
+    old_files = {p: p.read_bytes() for p in tmp_path.rglob("*.json")}
+    assert len(old_files) == 1
+    monkeypatch.setattr(store, "FREEZE_SCHEMA_VERSION", current_schema)
+    await run()
+    repeated = await run()
+    assert (client.calls if kind == "ct" else len(client.calls)) == 2
+    assert repeated.llm_call_count == repeated.total_tokens == 0
+    assert len(list(tmp_path.rglob("*.json"))) == 2
+    assert all(p.read_bytes() == data for p, data in old_files.items())
+
+
 async def ct_execute(client, rows=None):
     snapshot, material = _session(rows or _rows())
     return await ct.execute_luxian_0609_native_exam_lab_rules(
