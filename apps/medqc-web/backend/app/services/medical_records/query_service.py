@@ -524,13 +524,20 @@ def _build_qc_summary(
     ready_records = 0
     not_run_records = 0
     technical_error_records = 0
+    partial_failed_records = 0
+    failed_records = 0
     status_counts: dict[str, int] = {}
     for ref in record_refs:
         identity = (ref["institute_id"], ref["patient_id"], ref["visit_id"])
         summary = latest_qc_summary_map.get(identity) or {"status": "not_run"}
         status = str(summary.get("status") or "not_run").strip()
-        if status == "ready":
-            ready_records += 1
+        if status in {"ready", "failed"}:
+            if summary.get("execution_status") == "partial_failed":
+                partial_failed_records += 1
+            elif status == "failed" or summary.get("execution_status") == "failed":
+                failed_records += 1
+            else:
+                ready_records += 1
             for item_status, count in dict(summary.get("status_counts") or {}).items():
                 try:
                     normalized_count = int(count)
@@ -549,6 +556,8 @@ def _build_qc_summary(
         "ready_records": ready_records,
         "not_run_records": not_run_records,
         "technical_error_records": technical_error_records,
+        **({"partial_failed_records": partial_failed_records} if partial_failed_records else {}),
+        **({"failed_records": failed_records} if failed_records else {}),
         "status_counts": dict(sorted(status_counts.items())),
         "running_state": "unknown",
     }
@@ -571,7 +580,7 @@ def _normalize_latest_qc_summary_map(
         if not isinstance(identity, tuple) or len(identity) != 3 or not isinstance(raw_summary, dict):
             continue
         status = str(raw_summary.get("status") or "not_run").strip()
-        if status == "ready":
+        if status in {"ready", "failed"}:
             counts: dict[str, int] = {}
             for item_status, count in dict(raw_summary.get("status_counts") or {}).items():
                 try:
@@ -595,11 +604,18 @@ def _normalize_latest_qc_summary_map(
                 }
                 continue
             normalized[identity] = {
-                "status": "ready",
+                "status": status,
                 "completed_at": raw_summary.get("completed_at") or None,
                 "total_rule_count": total_rule_count,
                 "status_counts": dict(sorted(counts.items())),
             }
+            if raw_summary.get("execution_status") in {"partial_failed", "failed"}:
+                normalized[identity].update({
+                    "execution_status": raw_summary["execution_status"],
+                    "completed_rule_count": total_rule_count,
+                    "failed_rule_count": raw_summary.get("failed_rule_count", 0),
+                    "failed_rule_ids": list(raw_summary.get("failed_rule_ids") or []),
+                })
         elif status == "technical_error":
             normalized[identity] = {
                 "status": "technical_error",

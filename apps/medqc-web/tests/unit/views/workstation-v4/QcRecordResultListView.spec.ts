@@ -207,6 +207,25 @@ describe('QcRecordResultListView', () => {
     })
   })
 
+  it('归一化后的失败状态和未全部完成计数实际渲染到列表', async () => {
+    const payload = response()
+    const failed = payload.data.records[0]
+    Object.assign(failed.latest_qc_summary, {
+      status: 'failed', execution_status: 'failed', total_rule_count: 0,
+      failed_rule_count: 2, failed_rule_ids: ['LX0609-06-01-04', 'LX0609-06-01-05'],
+      status_counts: {},
+    })
+    Object.assign(payload.data, { qc_summary: {
+      total_records: 6, ready_records: 3, failed_records: 1,
+    } })
+    mocks.getRaw.mockResolvedValue(payload)
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    expect(wrapper.text()).toContain('执行失败')
+    expect(wrapper.text()).toContain('2 项失败')
+    expect(wrapper.get('.review-metric--failed').text()).toContain('未全部完成1份')
+  })
+
   it.each([
     ['/workstation-v5/records/running', false],
     ['/workstation-v4/records/running', true],

@@ -223,6 +223,8 @@ export interface ClinicalQcHomeProjection {
     records_total: number
     qc_pending_total: number
     qc_completed_total: number
+    qc_partial_failed_total?: number
+    qc_failed_total?: number
     high_risk_review_total: number
   }
   data_health: {

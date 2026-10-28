@@ -43,9 +43,9 @@ def _measure_core(text: str) -> str:
         return ""
     # 只在已有明确检查/操作身份后折叠摘取边界，不能把器官名当作操作身份。
     # “肝脏检查/肝脏治疗”及“支气管镜检查/支气管镜治疗”仍不同。
-    if re.fullmatch(r".+(?:镜|CT|MRI|超声|活检)检查", value):
+    if re.fullmatch(r"(?:.*(?:CT|MRI|超声|彩超|B超|心电图|X线)|.+(?:镜|活检))检查", value):
         value = value[:-2]
-    elif value.endswith("穿刺活检术"):
+    elif value.endswith(("穿刺活检术", "穿刺术")):
         value = value[:-1]
     for _, alias in _MEASURE_ALIASES:
         if value == f"{alias.upper()}检查":

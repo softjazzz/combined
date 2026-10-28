@@ -63,7 +63,7 @@
       >
         <span>{{ metric.key === 'priority' ? '确定问题' : metric.label }}</span>
         <strong>{{ metric.value }}</strong>
-        <span>{{ metric.key === 'records' || metric.key === 'completed' ? '份' : '项' }}</span>
+        <span>{{ metric.key === 'records' || metric.key === 'completed' || metric.key === 'failed' ? '份' : '项' }}</span>
         <MqIconTile
           class="review-metric__icon"
           :name="METRIC_ICONS[metric.key].name"
@@ -374,7 +374,7 @@ const departmentOptions = computed(() =>
   departments.value.map((item) => item.name).filter((name) => name && name !== '全部科室'),
 )
 
-type QcRecordMetricKey = 'records' | 'completed' | 'priority' | 'dataGap'
+type QcRecordMetricKey = 'records' | 'completed' | 'priority' | 'dataGap' | 'failed'
 
 interface QcRecordMetricItem {
   key: QcRecordMetricKey
@@ -388,11 +388,15 @@ const METRIC_ICONS: Record<string, { name: MqIconName; tone: MqIconTone }> = {
   completed: { name: 'fp_qc', tone: 'success' },
   priority: { name: 'issue', tone: 'danger' },
   dataGap: { name: 'data_gap', tone: 'warning' },
+  failed: { name: 'failed', tone: 'warning' },
 }
 
 const metricItems = computed<QcRecordMetricItem[]>(() => [
   { key: 'records', label: '纳入病历', value: qcSummary.value.totalRecords },
   { key: 'completed', label: '已完成质控', value: qcSummary.value.readyRecords },
+  ...(qcSummary.value.partialFailedRecords || qcSummary.value.failedRecords
+    ? [{ key: 'failed' as const, label: '未全部完成', value: (qcSummary.value.partialFailedRecords || 0) + (qcSummary.value.failedRecords || 0) }]
+    : []),
   {
     key: 'priority',
     label: '需优先复核',

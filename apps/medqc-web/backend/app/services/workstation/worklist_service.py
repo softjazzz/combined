@@ -823,6 +823,8 @@ class WorkstationAggregationService:
         technical_error_total = 0
         qc_completed_total = 0
         qc_pending_total = 0
+        qc_partial_failed_total = 0
+        qc_failed_total = 0
         high_risk_review_total = 0
         last_successful_qc_at: Optional[str] = None
         priority_items: List[Dict[str, Any]] = []
@@ -870,13 +872,22 @@ class WorkstationAggregationService:
             if summary_status == "technical_error":
                 technical_error_total += 1
                 continue
+            if summary_status == "failed" or summary.get("execution_status") == "failed":
+                qc_failed_total += 1
+                continue
             if summary_status != "ready":
                 qc_pending_total += 1
                 continue
 
-            qc_completed_total += 1
-            department_bucket["completed_record_total"] += 1
-            physician_bucket["completed_record_total"] += 1
+            is_partial = summary.get("execution_status") == "partial_failed"
+            if is_partial:
+                qc_partial_failed_total += 1
+                for bucket in (department_bucket, physician_bucket):
+                    bucket["partial_failed_record_total"] = bucket.get("partial_failed_record_total", 0) + 1
+            else:
+                qc_completed_total += 1
+                department_bucket["completed_record_total"] += 1
+                physician_bucket["completed_record_total"] += 1
             raw_counts = summary.get("status_counts")
             status_counts = raw_counts if isinstance(raw_counts, dict) else {}
             normalized_counts: Dict[str, int] = {}
@@ -891,7 +902,7 @@ class WorkstationAggregationService:
                     canonical_status_counts[status] = canonical_status_counts.get(status, 0) + count
 
             completed_at = _safe_text(summary.get("completed_at")).strip() or None
-            if completed_at and (
+            if not is_partial and completed_at and (
                 last_successful_qc_at is None
                 or _datetime_sort_number(completed_at) > _datetime_sort_number(last_successful_qc_at)
             ):
@@ -967,6 +978,8 @@ class WorkstationAggregationService:
                 "qc_pending_total": qc_pending_total,
                 "qc_completed_total": qc_completed_total,
                 "high_risk_review_total": high_risk_review_total,
+                **({"qc_partial_failed_total": qc_partial_failed_total} if qc_partial_failed_total else {}),
+                **({"qc_failed_total": qc_failed_total} if qc_failed_total else {}),
             },
             "data_health": {
                 "source_sync_status": "unknown",
@@ -984,10 +997,10 @@ class WorkstationAggregationService:
                     "department": name,
                     **counts,
                     "average_defect_count": round(
-                        counts["defect_total"] / counts["completed_record_total"],
+                        counts["defect_total"] / (counts["completed_record_total"] + counts.get("partial_failed_record_total", 0)),
                         2,
                     )
-                    if counts["completed_record_total"]
+                    if counts["completed_record_total"] + counts.get("partial_failed_record_total", 0)
                     else 0,
                 }
                 for name, counts in sorted(
@@ -1000,10 +1013,10 @@ class WorkstationAggregationService:
                     "physician": name,
                     **counts,
                     "average_defect_count": round(
-                        counts["defect_total"] / counts["completed_record_total"],
+                        counts["defect_total"] / (counts["completed_record_total"] + counts.get("partial_failed_record_total", 0)),
                         2,
                     )
-                    if counts["completed_record_total"]
+                    if counts["completed_record_total"] + counts.get("partial_failed_record_total", 0)
                     else 0,
                 }
                 for name, counts in sorted(
