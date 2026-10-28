@@ -44,10 +44,13 @@ from .posttransfusion_effect_extraction import (
     confirm_posttransfusion_effects,
 )
 from .transfusion_association import (
+    authoritative_posttransfusion_time_value,
     build_transfusion_associations,
     document_ref as association_document_ref,
     is_pre_assessment_document,
     is_post_evaluation_document,
+    parse_precise_transfusion_datetime,
+    parse_transfusion_document_date,
     source_start_times,
 )
 from .intraoperative_transfusion_facts import (
@@ -81,7 +84,7 @@ TRANSFUSION_RULE_IDS = (
 )
 EXECUTOR_KEY = "transfusion"
 _TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
-_TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-dedicated-post-batches-v7"
+_TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-post-time-precision-v8"
 _PRE_ASSESSMENT_EVALUATOR_VERSION = "transfusion-pre-assessment-associated-v8"
 
 # 049 仍缺少可受控关联的收费数量，因此旧的直接执行入口继续保守返回 DATA_GAP；
@@ -216,6 +219,10 @@ _TRANSFUSION_COURSE_INCOMPLETE_PATTERN = re.compile(
 
 _TRANSFUSION_END_PATTERN = re.compile(
     r"(?:输血|输注)(?:结束|完毕|完成)|输毕|结束(?:输血|输注)"
+)
+_ANOTHER_UNTIMED_END_PATTERN = re.compile(
+    r"(?:另|又|再)\s*(?:一|1)\s*次[^。；;\n]{0,12}"
+    r"(?:输血|输注)(?:结束|完毕|完成)"
 )
 _TRANSFUSION_CONTEXT_PATTERN = re.compile(r"输血|输注|输毕")
 _PLANNED_TIME_PREFIX_PATTERN = re.compile(r"预计|计划|拟于|拟在|预定|约于")
@@ -2275,12 +2282,19 @@ def _047_effect_candidates(documents: Mapping[str, Any]) -> tuple[Posttransfusio
     for source_key in ("daily_course_record", "senior_course_record"):
         for row in _source_document_rows(documents, source_key):
             text = _row_text(row)
-            record_time = _authoritative_record_time(row)
+            record_time = _authoritative_047_record_time(row)
+            record_date = _authoritative_047_record_date(row)
             document_id = str(row.get("document_id") or row.get("id") or "").strip()
             if (
-                not text.strip() or not document_id or record_time is None
+                not text.strip() or not document_id
                 or _course_has_strict_lab_effect(text)
-                or not any(0 <= (record_time - end).total_seconds() <= 24 * 3600 for end in end_times)
+                or not any(
+                    0 <= (record_time - end).total_seconds() <= 24 * 3600
+                    if record_time is not None
+                    else record_date is not None
+                    and _047_date_may_fall_in_window(record_date, end)
+                    for end in end_times
+                )
             ):
                 continue
             candidates.append(PosttransfusionEffectCandidate(source_key, document_id, text))
@@ -2309,7 +2323,9 @@ def _047_evaluation_horizon(
             documents.get("__evaluation_horizon_reason__") or "authoritative_time_missing"
         )
     row = rows[0]
-    horizon_datetime = _parse_document_datetime(row.get("horizon_datetime"))
+    raw_datetime = row.get("horizon_datetime")
+    raw_calendar_datetime = _parse_document_datetime(raw_datetime)
+    horizon_datetime = parse_precise_transfusion_datetime(raw_datetime)
     raw_date = _clean(row.get("horizon_date"))
     horizon_date: date | None = None
     if raw_date:
@@ -2317,11 +2333,21 @@ def _047_evaluation_horizon(
             horizon_date = date.fromisoformat(raw_date)
         except ValueError:
             return None, None, "authoritative_time_missing"
-    if horizon_datetime is not None and horizon_date is not None:
-        if horizon_datetime.date() != horizon_date:
-            return None, None, "authoritative_time_conflict"
-    elif horizon_datetime is not None:
+    if (
+        horizon_date is not None
+        and raw_calendar_datetime is not None
+        and horizon_date != raw_calendar_datetime.date()
+    ):
+        # provider 保留原始 aware 时间的日期；先在原始坐标中校验，
+        # 再与精确时刻一同换算为医院时区，避免 UTC 跨日伪冲突。
+        return None, None, "authoritative_time_conflict"
+    if horizon_datetime is not None:
         horizon_date = horizon_datetime.date()
+    elif raw_datetime:
+        # 上界只有日期时保留日精度；禁止补成 00:00 改变 24h 成熟判定。
+        if raw_calendar_datetime is None:
+            return None, None, "authoritative_time_missing"
+        horizon_date = raw_calendar_datetime.date()
     if horizon_date is None:
         return None, None, str(
             documents.get("__evaluation_horizon_reason__") or "authoritative_time_missing"
@@ -2402,6 +2428,27 @@ def _programmatic_047_assessment(
             if ref in refs and ref[1] and not ref[1].startswith("@row:")
         )
 
+    def unresolved_another_refs(
+        text: str,
+        *,
+        anchored_refs: set[tuple[str, str]],
+        record_date: date | None,
+    ) -> set[tuple[str, str]]:
+        """“另一次结束”只扩到有可证明同日范围的事件。"""
+
+        if not anchored_refs or _ANOTHER_UNTIMED_END_PATTERN.search(text) is None:
+            return set()
+        clue_dates = {record_date} if record_date is not None else {
+            known_end_by_ref[ref].date()
+            for ref in anchored_refs.intersection(known_end_by_ref)
+        }
+        candidates = {
+            ref
+            for ref, end_time in known_end_by_ref.items()
+            if ref not in anchored_refs and end_time.date() in clue_dates
+        }
+        return candidates
+
     if not known_end_by_ref:
         return _PosttransfusionEvaluationAssessment(
             "data_gap",
@@ -2454,7 +2501,8 @@ def _programmatic_047_assessment(
             text = _row_text(row)
             if not _course_effect_confirmed(documents, source_key, row, text):
                 continue
-            record_time = _authoritative_record_time(row)
+            record_time = _authoritative_047_record_time(row)
+            record_date = _authoritative_047_record_date(row)
             daily_ref = (
                 (source_key, document_id)
                 if (document_id := str(row.get("document_id") or row.get("id") or "").strip())
@@ -2474,11 +2522,20 @@ def _programmatic_047_assessment(
             )
             affected_scope_refs = anchored_refs or possible_refs
             anchors = association is not None and (association.explicit or "blood_component" in association.basis)
-            _, unresolved_anchor = _transfusion_end_evidence(text)
-            unresolved_anchor = unresolved_anchor or bool(association and association.state == "ambiguous")
-            if unresolved_anchor:
+            _, unresolved_end_marker = _transfusion_end_evidence(text)
+            association_ambiguous = bool(
+                association and association.state == "ambiguous"
+            )
+            if unresolved_end_marker or association_ambiguous:
                 # 歧义只覆盖该文书真实候选事件；例如 B/C 间待定不能抹掉 A 的确定缺失。
                 affected_refs = set(affected_scope_refs)
+                affected_refs.update(
+                    unresolved_another_refs(
+                        text,
+                        anchored_refs=anchored_refs,
+                        record_date=record_date,
+                    )
+                )
                 if not affected_refs and not anchors:
                     affected_refs = set(pending)
                 if affected_refs:
@@ -2496,8 +2553,9 @@ def _programmatic_047_assessment(
                 continue
             if record_time is None:
                 affected_refs = set(affected_scope_refs)
-                if not anchors:
-                    # 无时间也无事件锚点的专门评价无法进一步缩小真实候选集合。
+                if not anchors and record_date is None:
+                    # 完全无时间也无事件锚点时无法缩小真实候选；若已有日
+                    # 精度，possible_event_refs 的空集表示已排除全部事件，禁止再扩散。
                     affected_refs = affected_refs or set(pending)
                 if affected_refs:
                     unusable_daily_event_refs.update(affected_refs)
@@ -2647,7 +2705,8 @@ def _programmatic_047_assessment(
     qualified_daily_evaluations: list[tuple[datetime, tuple[str, str] | None]] = []
     for source_key, row in ((key, row) for key in ("daily_course_record", "senior_course_record")
                                 for row in _source_document_rows(documents, key)):
-        record_time = _authoritative_record_time(row)
+        record_time = _authoritative_047_record_time(row)
+        record_date = _authoritative_047_record_date(row)
         text = _row_text(row)
         if not _course_effect_confirmed(documents, source_key, row, text):
             continue
@@ -2672,7 +2731,17 @@ def _programmatic_047_assessment(
             )
         ):
             continue
-        if record_time is None or record_time < latest_end:
+        if record_time is None:
+            if (
+                record_date is not None
+                and association is not None
+                and single_event_ref not in association.possible_event_refs
+            ):
+                # 日精度已能排除本次输血时，该文书与本次无关，不能制造时间缺口。
+                continue
+            unusable_evaluation_time = True
+            continue
+        if record_time < latest_end:
             unusable_evaluation_time = True
             continue
         if (record_time - latest_end).total_seconds() <= 24 * 3600:
@@ -3171,6 +3240,29 @@ def _authoritative_record_time(row: Mapping[str, Any]) -> datetime | None:
     if str(row.get("time_basis") or "").strip() == "record_time":
         return _parse_document_datetime(row.get("authored_at"))
     return None
+
+
+def _authoritative_047_record_time(row: Mapping[str, Any]) -> datetime | None:
+    """047 小时级判定仅接受有时刻精度的权威记录/提交时间。"""
+
+    explicit_time = authoritative_posttransfusion_time_value(row)
+    if explicit_time:
+        return parse_precise_transfusion_datetime(explicit_time)
+    return None
+
+
+def _authoritative_047_record_date(row: Mapping[str, Any]) -> date | None:
+    """保留 047 权威文书时间的日精度，不构造小时级时刻。"""
+
+    return parse_transfusion_document_date(
+        authoritative_posttransfusion_time_value(row)
+    )
+
+
+def _047_date_may_fall_in_window(record_date: date, end_time: datetime) -> bool:
+    day_start = datetime.combine(record_date, datetime.min.time())
+    day_end = day_start + timedelta(days=1)
+    return day_end > end_time and day_start <= end_time + timedelta(hours=24)
 
 
 CoursePresenceClassifier = Callable[

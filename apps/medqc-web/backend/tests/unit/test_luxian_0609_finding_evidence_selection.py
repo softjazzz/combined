@@ -5,9 +5,17 @@ import json
 import pytest
 
 from finding_selection_test_support import prompt_events
-from app.services.luxian_0609.exam_finding_analysis import check_exam_finding_analysis
+from app.services.luxian_0609 import exam_analysis_freeze, native_exam_lab_execution
+from app.services.luxian_0609.exam_finding_analysis import (
+    RULE_ID,
+    apply_finding_analysis,
+    check_exam_finding_analysis,
+)
 from app.services.luxian_0609.exam_finding_relevance import apply_relevance_hints
-from app.services.luxian_0609.exam_lab_fact_extraction import build_exam_lab_text_projection
+from app.services.luxian_0609.exam_lab_fact_extraction import (
+    ExamLabEventFact,
+    build_exam_lab_text_projection,
+)
 from test_luxian_0609_exam_finding_analysis import LINKED, _projection, _report_ref
 
 
@@ -156,7 +164,10 @@ async def test_confirmed_causal_or_same_problem_evidence_is_accepted_without_ext
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("retry_fails", [False, True])
-async def test_retry_keeps_fully_checked_event_and_only_rechecks_unresolved_event(retry_fails):
+async def test_retry_keeps_fully_checked_event_and_only_rechecks_unresolved_event(
+    retry_fails, tmp_path, monkeypatch,
+):
+    monkeypatch.setenv(exam_analysis_freeze._ENV_STORE_DIR, str(tmp_path / "freeze"))
     projection = apply_relevance_hints(build_exam_lab_text_projection(rows_by_source={
         "exam_master": tuple({"exam_id": f"EX-{i}", "exam_name": name,
                               "report_time": "2026-08-18 13:30:00", "exam_conclusion": report}
@@ -191,7 +202,33 @@ async def test_retry_keeps_fully_checked_event_and_only_rechecks_unresolved_even
     result = await check_exam_finding_analysis(projection, client)
     # 末两项为判未分析事件的单独复核（用户决定 2026-10-19）；补核仍失败的事件 2 未定，不复核。
     assert client.events == [[1, 2], [2], [1]] + ([] if retry_fails else [[2]])
-    assert result.state == "ready"
+    assert result.state == ("partial" if retry_fails else "ready")
     assert result.analysed_refs == ({1: ()} if retry_fails else {1: (), 2: ()})
     # 重试虽只剩一次检查，共用病程仍对应两次检查；无报告片段时不能据此点名修改建议。
     assert result.gap_refs == {}
+
+    ref = _report_ref(projection)
+    facts = tuple(
+        ExamLabEventFact(
+            rule_id=RULE_ID,
+            applicability="applicable",
+            semantic_state="present",
+            positive_state="positive",
+            course_doc_refs=(ref,),
+            evidence_refs=(f"report-{position}", ref),
+            event_position=position,
+        )
+        for position in (1, 2)
+    )
+    applied = apply_finding_analysis(facts, result)
+    assert tuple(fact.semantic_state for fact in applied) == (
+        ("absent", "present") if retry_fails else ("absent", "absent")
+    )
+    if retry_fails:
+        batch = native_exam_lab_execution._ExamLabBatchResult(
+            facts=applied,
+            rule_failures={},
+            incomplete_specialty_rule_ids=frozenset({RULE_ID}),
+        )
+        native_exam_lab_execution._save_frozen_exam_lab_batch("partial-evidence-selection", batch)
+        assert exam_analysis_freeze.load_payload("main", "partial-evidence-selection") is None

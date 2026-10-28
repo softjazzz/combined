@@ -12,6 +12,7 @@ from datetime import date
 import pytest
 
 from app.services.luxian_0609 import native_consultation_episode_execution as episode
+from app.services.luxian_0609.consultation_measure_check import MeasureCheckOutcome
 from app.services.luxian_0609.consultation_order_scope import (
     measure_is_declined,
     order_window_start,
@@ -89,6 +90,94 @@ def test_措施名比对只免被拒绝的那一项() -> None:
     assert measure_is_declined("纤支镜检查", declined)
     assert not measure_is_declined("诱导痰XPERT检测", declined)
     assert not measure_is_declined("真菌G/GM试验", declined)
+
+
+@pytest.mark.parametrize(("declined", "pending"), [
+    ("右肾穿刺活检", "左肾穿刺活检"),
+    ("肝穿刺活检", "肾穿刺活检"),
+    ("肾穿刺活检", "左肾穿刺活检"),
+    ("左肾穿刺活检", "肾穿刺活检"),
+    ("胸部CT", "腹部CT"),
+    ("胸部CT", "胸部CT增强"),
+    ("支气管镜检查", "支气管镜下活检"),
+    ("肝脏检查", "肝脏治疗"),
+    ("支气管镜检查", "支气管镜治疗"),
+    ("检查", "肾穿刺活检"),
+    ("检查", "检查"),
+])
+def test_拒绝匹配不能丢失部位侧别或具体操作(declined, pending) -> None:
+    assert not measure_is_declined(pending, (declined,))
+
+
+@pytest.mark.parametrize(("declined", "pending"), [
+    ("右肾穿刺活检", "右肾穿刺活检"),
+    ("接受右肾穿刺活检", "行右肾穿刺活检"),
+    ("纤维支气管镜检查", "纤支镜"),
+    ("核磁共振检查", "MRI"),
+])
+def test_明确同一措施的拒绝保留别名与通用修饰匹配(declined, pending) -> None:
+    assert measure_is_declined(pending, (declined,))
+
+
+def _measure_refinement(declined: str, pending: str):
+    # 固定第一阶段事实须先经过真实原文绑定，再进入逐措施过滤和最终状态聚合。
+    quote = f"建议行{declined}及{pending}。"
+    rejection = f"患者拒绝{declined}。"
+    grounded = episode._recommendation_scope_fields(
+        {"decline_state": "partial", "declined_measures": [declined],
+         "decline_quote": rejection},
+        source_quote=quote, document_text=quote + rejection,
+    )
+    assert grounded[3:5] == ("partial", (declined,))
+    recommendation = episode._Recommendation(
+        "r1", "procedure", quote, quote, "consultation_record-1",
+        decline_state="partial", declined_measures=grounded[4],
+        decline_quote=grounded[5],
+    )
+    completed = episode._CompletedRecommendation(
+        "e1", recommendation, episode._ObservedTime(date(2026, 1, 1), None),
+        declined_objects=(declined,), declined_measures=grounded[4],
+    )
+    assessment = episode._ExecutionAssessment("r1", "absent", (), "high", ())
+    outcome = MeasureCheckOutcome("ready", {"r1": (pending,)})
+    initial = episode._execution_quality_outcome(
+        assessments=(assessment,), completed_recommendations=(completed,),
+        source_incomplete_keys=frozenset(),
+    )
+    filtered = episode._drop_conditional_missing_measures(outcome, (completed,))
+    result, excluded = episode._apply_order_measure_check(
+        initial, outcome, completed=(completed,), assessments=(assessment,),
+        already_excluded=frozenset(), source_incomplete_keys=frozenset(),
+    )
+    return filtered, result, excluded
+
+
+@pytest.mark.parametrize(("declined", "pending"), [
+    ("右肾穿刺活检", "左肾穿刺活检"),
+    ("肝穿刺活检", "肾穿刺活检"),
+    ("肾穿刺活检", "左肾穿刺活检"),
+])
+def test_其他部位的拒绝不能把确定未执行改成不适用(declined, pending) -> None:
+    filtered, result, excluded = _measure_refinement(declined, pending)
+    assert filtered.missing_measures == {"r1": (pending,)}
+    assert result == ("non_compliant", "requirement_violated")
+    assert not excluded
+
+
+def test_确属同项拒绝仍从未执行措施中剔除() -> None:
+    filtered, _, _ = _measure_refinement("纤维支气管镜检查", "纤支镜检查")
+    assert filtered.missing_measures == {"r1": ()}
+
+
+def test_条件句没有实际拒绝事实时不豁免缺失措施() -> None:
+    text = "建议右肾穿刺活检。若家属拒绝右肾穿刺活检，再另议方案。"
+    # 条件/实际拒绝语义仍由第一阶段判定；确定性匹配不能自行从条件句生成拒绝事实。
+    fields = episode._recommendation_scope_fields(
+        {"decline_state": "none", "declined_measures": [], "decline_quote": ""},
+        source_quote=text, document_text=text,
+    )
+    assert fields[3:5] == ("none", ())
+    assert not measure_is_declined("右肾穿刺活检", fields[4])
 
 
 def test_医嘱核对窗口固定从会诊记录前3天开始() -> None:

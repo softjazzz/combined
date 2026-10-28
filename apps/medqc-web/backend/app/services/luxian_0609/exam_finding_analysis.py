@@ -51,6 +51,8 @@ MIN_SPAN_SHARED = 2
 PROTOCOL_ATTEMPTS = 2
 MAX_REPORT_CHARS = 2000
 MAX_COURSE_CHARS = 6000
+# 长文书按重叠窗口完整核验；重叠须覆盖单条引文上限，避免依据跨窗口边界丢失。
+COURSE_WINDOW_OVERLAP = 512
 MAX_PROMPT_CHARS = 60000
 MAX_QUOTE_CHARS = 200
 # 2026-10-23：2048 在多检查时被开思考的输出挤满截断；按输出量拆批，截断时二分。
@@ -160,7 +162,7 @@ def _coverage_issue(index: int | None, position: Any, ref: Any, *, count: int = 
 
 @dataclass(frozen=True)
 class FindingAnalysisOutcome:
-    state: str  # ready / skipped / failed
+    state: str  # ready / partial / skipped / failed
     # 事件位置 -> 构成实质分析的病程引用（空元组表示已核对但未见分析）。
     analysed_refs: Mapping[int, tuple[str, ...]]
     llm_call_count: int = 0
@@ -228,7 +230,7 @@ def _selected_evidence(item: Mapping[str, Any], course: str, report: str) -> tup
     if (not isinstance(selected, list) or any(type(value) is not str for value in selected)
             or type(report_id) is not str):
         raise ValueError("invalid evidence selection")
-    courses = _fragments(course[:MAX_COURSE_CHARS], f"{ref}:C", 80)
+    courses = _fragments(course, f"{ref}:C", 80)
     reports = {part["id"]: part["text"] for part in _fragments(report, f"E{position}:R", MAX_SPAN_CHARS)}
     ids = [part["id"] for part in courses]
     if any(value not in ids for value in selected):
@@ -266,7 +268,7 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
         "events": events,
         "course_docs": [
             {"course_doc_ref": ref, "fragments": _fragments(
-                _course_text(projection, ref)[:MAX_COURSE_CHARS], f"{ref}:C", 80)}
+                _course_text(projection, ref), f"{ref}:C", 80)}
             for ref in course_refs
         ],
     }
@@ -528,7 +530,7 @@ def _parse(
         relation = item["basis_relation"]
         if relation not in {"same_finding", "different_finding", "uncertain", "none"}:
             raise ValueError("invalid basis relation")
-        courses = {part["id"] for part in _fragments(_course_text(projection, ref)[:MAX_COURSE_CHARS], f"{ref}:C", 80)}
+        courses = {part["id"] for part in _fragments(_course_text(projection, ref), f"{ref}:C", 80)}
         report_ids = {part["id"] for part in _fragments(reports[position], f"E{position}:R", MAX_SPAN_CHARS)}
         for field_name, values in (("course_fragment_ids", selected), ("basis_fragment_ids", basis)):
             invalid = [value for value in values if value not in courses]
@@ -650,6 +652,16 @@ class _BatchResult:
     truncated: bool = False
 
 
+@dataclass(frozen=True)
+class _CheckJob:
+    """一次实际模型核验；长病程窗口仍使用原文书 ref，但绑定到该窗口的投影视图。"""
+
+    projection: ExamLabTextProjection
+    targets: Mapping[int, tuple[str, tuple[str, ...]]]
+    # False 表示因单份全文超提示容量而形成的局部窗口：正证据可确定，局部否定不代表全文语义否定。
+    complete_context: bool = True
+
+
 def _analysis_output_kwargs(llm_client: Any) -> dict[str, Any]:
     """支持结构化输出的客户端在本调用点开思考并限定预算；测试替身等不附加参数。"""
     if not structured_output_kwargs(llm_client):
@@ -678,19 +690,82 @@ def _target_batches(
         return []
 
 
+def _course_windows(text: str) -> tuple[str, ...]:
+    """覆盖整份病程的稳定重叠窗口；短文保持单窗，不改变既有提示词。"""
+    if len(text) <= MAX_COURSE_CHARS:
+        return (text,)
+    step = MAX_COURSE_CHARS - COURSE_WINDOW_OVERLAP
+    windows = []
+    start = 0
+    while start < len(text):
+        windows.append(text[start:start + MAX_COURSE_CHARS])
+        if start + MAX_COURSE_CHARS >= len(text):
+            break
+        start += step
+    return tuple(windows)
+
+
+def _projection_for_course_window(
+    projection: ExamLabTextProjection, ref: str, text: str,
+) -> ExamLabTextProjection:
+    """只替换当前 ref 的模型可见正文，时间、事件和真实文书引用均保持不变。"""
+    candidates = dict(projection.course_candidates or {})
+    candidate = candidates.get(ref)
+    if candidate is None:
+        return projection
+    candidates[ref] = (text, candidate[1], candidate[2])
+    course_texts = dict(projection.course_texts or {})
+    course_texts[ref] = text
+    return replace(projection, course_candidates=candidates, course_texts=course_texts)
+
+
+def _analysis_jobs(
+    projection: ExamLabTextProjection,
+    targets: Mapping[int, tuple[str, tuple[str, ...]]],
+    *, thinking: bool = False,
+) -> list[_CheckJob]:
+    """优先全文核验；仅单份全文超提示容量时分窗，分窗只可形成正结论。"""
+    full_batches = _target_batches(projection, targets, thinking=thinking)
+    if full_batches:
+        return [_CheckJob(projection, batch) for batch in full_batches]
+
+    jobs: list[_CheckJob] = []
+    for position, (report, refs) in targets.items():
+        for ref in refs:
+            text = _course_text(projection, ref)
+            single_target = {position: (report, (ref,))}
+            single_batches = _target_batches(projection, single_target, thinking=thinking)
+            if single_batches:
+                jobs.extend(_CheckJob(projection, batch) for batch in single_batches)
+                continue
+            windows = _course_windows(text)
+            # 单窗仍无法装入提示时没有可安全缩小的语义单位，整步保持未完成。
+            if len(windows) == 1:
+                return []
+            for window in windows:
+                window_projection = _projection_for_course_window(projection, ref, window)
+                window_target = {position: (report, (ref,))}
+                batches = _target_batches(window_projection, window_target, thinking=thinking)
+                if not batches:
+                    return []
+                jobs.extend(_CheckJob(window_projection, batch, complete_context=False) for batch in batches)
+    return jobs
+
+
 def _merge_batch_results(
-    batches: Sequence[Mapping[int, tuple[str, tuple[str, ...]]]], results: Sequence[_BatchResult],
+    jobs: Sequence[_CheckJob], results: Sequence[_BatchResult],
 ) -> tuple[dict[int, tuple[str, ...]], dict[int, tuple[tuple[str, str], ...]]]:
-    """同一次检查可能拆到多批：任一批核出分析即已分析；全部分批都核完且均无分析才判未分析。"""
+    """任一窗口核出分析即已分析；全部批次/窗口都核完且均无分析才判未分析。"""
     analysed: dict[int, tuple[str, ...]] = {}
     gaps: dict[int, tuple[tuple[str, str], ...]] = {}
-    for position in dict.fromkeys(position for batch in batches for position in batch):
-        parts = [item for batch, item in zip(batches, results) if position in batch]
+    for position in dict.fromkeys(position for job in jobs for position in job.targets):
+        parts = [item for job, item in zip(jobs, results) if position in job.targets]
         decided = [item for item in parts if item.ready and position in item.analysed]
         refs = sorted({ref for item in decided for ref in item.analysed[position]})
         if refs:
             analysed[position] = tuple(refs)
-        elif decided and len(decided) == len(parts):
+        elif (decided and len(decided) == len(parts)
+              and all(job.complete_context for job in jobs if position in job.targets)):
             analysed[position] = ()
             notes = tuple(note for item in decided for note in item.gap_refs.get(position, ()))
             if notes:
@@ -770,32 +845,41 @@ def _pair_total(expected: Mapping[int, tuple[str, ...]]) -> int:
 
 
 async def _check_batches(
-    projection: ExamLabTextProjection, llm_client: Any,
-    batches: list[dict[int, tuple[str, tuple[str, ...]]]],
-) -> tuple[list[dict[int, tuple[str, tuple[str, ...]]]], list[_BatchResult]]:
+    llm_client: Any, jobs: Sequence[_CheckJob],
+) -> tuple[list[_CheckJob], list[_BatchResult], list[_BatchResult]]:
     """各批并发；被截断的批二分后再发，最多 MAX_TRUNCATION_ROUNDS 轮。返回实际核验过的批及结果。"""
-    done_batches: list[dict[int, tuple[str, tuple[str, ...]]]] = []
+    done_jobs: list[_CheckJob] = []
     done_results: list[_BatchResult] = []
-    pending = list(batches)
+    attempted_results: list[_BatchResult] = []
+    pending = list(jobs)
     for _ in range(MAX_TRUNCATION_ROUNDS):
         if not pending:
             break
         results = list(await asyncio.gather(*(
-            _check_batch(projection, llm_client, batch, {position: batch[position][1] for position in batch})
-            for batch in pending
+            _check_batch(job.projection, llm_client, job.targets,
+                         {position: job.targets[position][1] for position in job.targets})
+            for job in pending
         )))
-        retry: list[dict[int, tuple[str, tuple[str, ...]]]] = []
-        for batch, item in zip(pending, results):
-            done_batches.append(batch)
-            done_results.append(item)
+        attempted_results.extend(results)
+        retry: list[_CheckJob] = []
+        for job, item in zip(pending, results):
             if item.truncated:
-                retry.extend(bisect_targets(batch, refs=lambda target: target[1], subset=_subset))
+                children = bisect_targets(job.targets, refs=lambda target: target[1], subset=_subset)
+                if children:
+                    # 截断父批没有形成覆盖结论；只由恢复后的叶子批代表实际文书覆盖。
+                    retry.extend(
+                        _CheckJob(job.projection, child, complete_context=job.complete_context)
+                        for child in children
+                    )
+                    continue
+            done_jobs.append(job)
+            done_results.append(item)
         pending = retry
     # 未能在轮数内核验的配对：以未就绪批记录，合并时这些检查不判未分析。
-    for batch in pending:
-        done_batches.append(batch)
+    for job in pending:
+        done_jobs.append(job)
         done_results.append(_BatchResult(False, {}, {}, 0, 0, 0, 0, 0.0))
-    return done_batches, done_results
+    return done_jobs, done_results, attempted_results
 
 
 async def check_exam_finding_analysis(
@@ -816,53 +900,68 @@ async def check_exam_finding_analysis(
     model_targets = {position: target for position, target in targets.items() if expected[position]}
     model_expected = {position: expected[position] for position in model_targets}
     # 多事件病例整批提示词会超限：按事件分批核验，失败或单事件超限的批次只让其事件沿用主抽取。
-    batches = _target_batches(projection, model_targets, thinking=bool(_analysis_output_kwargs(llm_client)))
-    if not batches:
+    thinking = bool(_analysis_output_kwargs(llm_client))
+    jobs = _analysis_jobs(projection, model_targets, thinking=thinking)
+    if not jobs:
         return FindingAnalysisOutcome("failed", {})
     # 用户决定（2026-10-22）：同一份病历版本的分析核验结论（含单事件复核）首次完整确定后
     # 冻结复用，避免开思考的临界判断逐次翻转（C15、C26）。键覆盖全部批次提示词。
-    key = freeze_key("".join(_prompt(projection, batch) for batch in batches), model_expected)
+    key = freeze_key("".join(_prompt(job.projection, job.targets) for job in jobs), model_expected)
     frozen = load_analysis(key)
     if frozen is not None and set(model_expected) <= set(frozen[0]):
         return FindingAnalysisOutcome("ready", frozen[0], gap_refs=frozen[1])
     # 各批互不依赖，并发调用：耗时不再随批数累加（C02 三批串行开思考会超出执行时限）。
-    checked_batches, results = await _check_batches(projection, llm_client, batches)
-    calls = sum(item.calls for item in results)
-    usage = (sum(item.prompt_tokens for item in results), sum(item.completion_tokens for item in results),
-             sum(item.total_tokens for item in results), sum(item.api_time for item in results))
+    checked_jobs, results, attempted_results = await _check_batches(llm_client, jobs)
+    calls = sum(item.calls for item in attempted_results)
+    usage = (
+        sum(item.prompt_tokens for item in attempted_results),
+        sum(item.completion_tokens for item in attempted_results),
+        sum(item.total_tokens for item in attempted_results),
+        sum(item.api_time for item in attempted_results),
+    )
     if not any(item.ready for item in results):
         return FindingAnalysisOutcome("failed", {}, calls, *usage)
     # 无可读病程的事件已核对、未见分析；有病程的事件以解析结果为准（漏核未定的事件不在其中）。
     analysed_refs: dict[int, tuple[str, ...]] = {position: () for position in expected if position not in model_expected}
-    merged, gap_refs = _merge_batch_results(checked_batches, results)
+    merged, gap_refs = _merge_batch_results(checked_jobs, results)
     analysed_refs.update(merged)
     # 用户决定（2026-10-19）：多事件整批核对偶有漏看（C08、C04 约 1/5～1/9 误判未分析）。
     # 判为未分析的事件单独复核一次，只带本事件报告与病程；复核证实有分析才改判，否则维持未分析。
     negatives = [position for position in model_expected
                  if position in analysed_refs and not analysed_refs[position]]
-    rechecks = list(await asyncio.gather(*(
-        _check_batch(projection, llm_client, {position: model_targets[position]},
-                     {position: model_expected[position]})
+    recheck_jobs = [
+        _analysis_jobs(projection, {position: model_targets[position]}, thinking=thinking)
         for position in negatives
+    ]
+    rechecks = list(await asyncio.gather(*(
+        _check_batches(llm_client, event_jobs) for event_jobs in recheck_jobs
     )))
-    for position, item in zip(negatives, rechecks):
-        calls += item.calls
-        usage = (usage[0] + item.prompt_tokens, usage[1] + item.completion_tokens,
-                 usage[2] + item.total_tokens, usage[3] + item.api_time)
-        if item.ready and item.analysed.get(position):
-            analysed_refs[position] = item.analysed[position]
+    for position, (event_jobs, event_results, event_attempts) in zip(negatives, rechecks):
+        calls += sum(item.calls for item in event_attempts)
+        usage = (
+            usage[0] + sum(item.prompt_tokens for item in event_attempts),
+            usage[1] + sum(item.completion_tokens for item in event_attempts),
+            usage[2] + sum(item.total_tokens for item in event_attempts),
+            usage[3] + sum(item.api_time for item in event_attempts),
+        )
+        rechecked, _ = _merge_batch_results(event_jobs, event_results)
+        if rechecked.get(position):
+            analysed_refs[position] = rechecked[position]
             gap_refs.pop(position, None)
-    if set(model_expected) <= set(analysed_refs):
+    complete = set(model_expected) <= set(analysed_refs)
+    if complete:
         # 只冻结全部事件均已核定的结论；漏核事件沿用主抽取，下次仍重新判断。
         save_analysis(key, analysed_refs, gap_refs)
-    return FindingAnalysisOutcome("ready", analysed_refs, calls, *usage, gap_refs=gap_refs)
+    return FindingAnalysisOutcome(
+        "ready" if complete else "partial", analysed_refs, calls, *usage, gap_refs=gap_refs,
+    )
 
 
 def apply_finding_analysis(
     facts: Sequence[ExamLabEventFact], outcome: FindingAnalysisOutcome,
 ) -> tuple[ExamLabEventFact, ...]:
     """用要素核对结论固定 06-01-05 的病程事实；未覆盖的事实保持原样。"""
-    if outcome.state != "ready":
+    if outcome.state not in {"ready", "partial"}:
         return tuple(facts)
     result = []
     for fact in facts:

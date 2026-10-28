@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import re
 from typing import Any, Callable, Literal, Mapping, Sequence
 
@@ -26,6 +26,10 @@ _INLINE_BAG = re.compile(r"(?:输入|输注)\s*([0-9]{10,24})(?=[ABO](?:型|Rh))
 _KEYS = ("bloodtrans_id", "transfusion_id", "application_id", "order_id")
 _SCOPE = ("institute_id", "patient_id", "visit_id")
 PRE_SEARCH_HOURS = 48  # 检索首选范围，不是规范规定的评估有效期或超时判据。
+_HOSPITAL_TIMEZONE = timezone(timedelta(hours=8))
+_CLOCK_PRECISION = re.compile(
+    r"(?:[ T]\d{1,2}[:：]\d{2}|日\s*\d{1,2}(?::\d{2}|时\d{1,2}))"
+)
 
 
 def document_ref(source: str, row: Mapping[str, Any], index: int) -> DocumentRef:
@@ -51,13 +55,87 @@ def is_post_evaluation_document(row: Mapping[str, Any]) -> bool:
     return bool(re.fullmatch(r"输血后(?:效果|疗效)?评价(?:记录)?", title))
 
 
+def parse_precise_transfusion_datetime(value: Any) -> datetime | None:
+    """输血关联与 047 共用的精确文书时间。
+
+    有时区值先换算为医院 +08:00 时间；无时区值继续视为本地时间。
+    纯日期不能冒充当日 00:00 参与小时级时限判定。
+    """
+
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        candidate = value.strip()
+        if not candidate or _CLOCK_PRECISION.search(candidate) is None:
+            return None
+        try:
+            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+        except ValueError:
+            match = _DATE.fullmatch(candidate)
+            if match is None:
+                return None
+            try:
+                parsed = datetime(
+                    int(match["year"]),
+                    int(match["month"]),
+                    int(match["day"]),
+                    int(match["hour"]),
+                    int(match["minute"]),
+                    int(match["second"] or 0),
+                )
+            except (TypeError, ValueError):
+                return None
+    else:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
+    return parsed
+
+
+def parse_transfusion_document_date(value: Any) -> date | None:
+    """保留文书时间的日精度，仅用于排除不可能的关联。"""
+
+    precise = parse_precise_transfusion_datetime(value)
+    if precise is not None:
+        return precise.date()
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def authoritative_posttransfusion_time_value(row: Mapping[str, Any]) -> Any:
+    """047 与 post 关联共用的权威记录/提交时间原值。"""
+
+    explicit_time = authoritative_document_time_value(row)
+    if explicit_time:
+        return explicit_time
+    if str(row.get("time_basis") or "").strip() == "record_time":
+        return row.get("authored_at")
+    return None
+
+
+def _date_may_fall_in_post_window(value: date, event: TransfusionEvent) -> bool:
+    if event.end is None or event.time_unresolved:
+        return True
+    day_start = datetime.combine(value, datetime.min.time())
+    day_end = day_start + timedelta(days=1)
+    return day_end > event.end and day_start <= event.end + timedelta(hours=24)
+
+
 def _datetime(value: Any) -> datetime | None:
     try:
-        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        )
     except (ValueError, TypeError):
         return None
     if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(timezone(timedelta(hours=8))).replace(tzinfo=None)
+        parsed = parsed.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
     return parsed
 
 
@@ -205,7 +283,17 @@ def _latest_pre_assessments(events: Sequence[TransfusionEvent], links: Sequence[
 def _associate(source: str, row: Mapping[str, Any], index: int, stage: Literal["pre", "post"], events: Sequence[TransfusionEvent]) -> TransfusionAssociation:
     text = row_text(row)
     value = row.get("request_datetime") or row.get("request_time") if source == "blood_application" else None
-    moment = _datetime(value or authoritative_document_time_value(row))
+    raw_moment = value or (
+        authoritative_posttransfusion_time_value(row)
+        if stage == "post"
+        else authoritative_document_time_value(row)
+    )
+    document_date = parse_transfusion_document_date(raw_moment)
+    moment = (
+        parse_precise_transfusion_datetime(raw_moment)
+        if stage == "post"
+        else _datetime(raw_moment)
+    )
     constraints: list[set[int]] = []
     basis = []
     keys = {key: str(row[key]) for key in _KEYS if row.get(key) and any(key in dict(event.keys) for event in events)}
@@ -246,7 +334,13 @@ def _associate(source: str, row: Mapping[str, Any], index: int, stage: Literal["
         possible_candidates = set(candidates)
         if not possible_candidates:
             possible_candidates = (
-                set(range(len(events)))
+                {
+                    i
+                    for i, event in enumerate(events)
+                    if _date_may_fall_in_post_window(document_date, event)
+                }
+                if moment is None and stage == "post" and document_date is not None
+                else set(range(len(events)))
                 if moment is None
                 else {
                     i for i, event in enumerate(events)

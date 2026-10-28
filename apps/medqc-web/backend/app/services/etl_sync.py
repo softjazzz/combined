@@ -103,15 +103,13 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
     },
     "first_course_record": {
         # 泸县源库首程记录常以 submit_time 表示文书完成/记录时间，record_time 可能为空。
-        # 最后修改时间不能证明首次完成时间，不得提升为 record_datetime。
+        # 最后修改和医师签署时间都不能证明首次完成时间，不得提升为 record_datetime。
         "document_id": ("document_id", "sys_index_id", "id"),
         "record_datetime": (
             "record_datetime",
             "record_time",
             "submit_datetime",
             "submit_time",
-            "physician_sign_datetime",
-            "physician_sign_time",
         ),
         "physician_sign_datetime": ("physician_sign_datetime", "physician_sign_time"),
     },

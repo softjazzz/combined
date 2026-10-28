@@ -24,8 +24,9 @@ from typing import Any, Mapping
 
 logger = logging.getLogger(__name__)
 
-# 判定口径（自有内容门槛、套话剔除、归属核对）变化时提升版本，使旧冻结失效。
-FREEZE_SCHEMA_VERSION = "exam-finding-analysis-freeze-v1"
+# v2：分析核验改为覆盖完整长文书，并修正截断父批聚合。版本同时参与 analysis、relevance、
+# main 三个命名空间的 key，使可能含旧错误事实的主冻结自然失效；旧文件保留、不删除。
+FREEZE_SCHEMA_VERSION = "exam-finding-analysis-freeze-v2"
 _ENV_STORE_DIR = "LUXIAN_0609_EXAM_ANALYSIS_FREEZE_DIR"
 
 

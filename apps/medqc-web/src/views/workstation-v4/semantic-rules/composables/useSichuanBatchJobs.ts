@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue'
+import { computed, getCurrentInstance, onBeforeUnmount, reactive, ref } from 'vue'
 import type { Dayjs } from 'dayjs'
 import { message, notification } from 'ant-design-vue'
 import type { WorkspaceScope } from '@/types/custom-rule-workspace'
@@ -17,6 +17,10 @@ import {
   retrySichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
+import {
+  decidePollReadFailure,
+  pollReadFailureMessage,
+} from '@/views/workstation-v4/customer-sample-validation/batchJobPollReadPolicy'
 
 type DateRangeValue = [Dayjs, Dayjs] | null
 
@@ -30,9 +34,34 @@ interface BatchJobQueryState {
 }
 
 const BATCH_JOB_POLL_INTERVAL_MS = 3000
+const MAX_BATCH_JOB_POLL_INTERVAL_MS = 30000
 const DEBUG_SNAPSHOT_POLL_EVERY_N_TICKS = 3
 const HTML_EXPORT_MISMATCH_MESSAGE =
   '后端未返回 HTML 明细文件，请确认客户机后端已更新到支持 HTML 导出的版本。'
+
+type BatchJobDetailResponse = Awaited<ReturnType<typeof getSichuanWorkspaceBatchJob>>
+
+function errorHttpStatus(error: unknown): number | undefined {
+  const status = (error as { response?: { status?: unknown } } | null)?.response?.status
+  return typeof status === 'number' ? status : undefined
+}
+
+function errorJobStatus(error: unknown): string | undefined {
+  const value = (error as { response?: { headers?: Record<string, unknown> } } | null)?.response
+    ?.headers?.['x-batch-job-status']
+  return typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : undefined
+}
+
+function readFailureMessage(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : '获取任务详情失败'
+}
+
+function retryPollInterval(consecutiveFailures: number): number {
+  return Math.min(
+    MAX_BATCH_JOB_POLL_INTERVAL_MS,
+    BATCH_JOB_POLL_INTERVAL_MS * 2 ** Math.max(1, consecutiveFailures),
+  )
+}
 
 async function normalizeExportBlob(blob: Blob, format: 'xlsx' | 'csv' | 'html'): Promise<Blob> {
   if (format !== 'html') return blob
@@ -99,7 +128,14 @@ export function useSichuanBatchJobs() {
 
   let batchJobPollTimer: ReturnType<typeof setInterval> | number | null = null
   let batchJobPollTick = 0
-  let batchJobPollInFlight = false
+  let batchJobPollSession = 0
+  let batchJobPollInFlightSession: number | null = null
+  let batchJobPollReadFailures = 0
+  let batchJobPollIntervalMs = BATCH_JOB_POLL_INTERVAL_MS
+  let batchJobDetailRequestSequence = 0
+  let latestBatchJobDetailRequest = 0
+  let batchJobDebugRequestSequence = 0
+  let latestBatchJobDebugRequest = 0
   const lastObservedJobStatus = reactive<Record<string, string>>({})
 
   async function loadBatchJobs() {
@@ -149,40 +185,145 @@ export function useSichuanBatchJobs() {
   }
 
   function stopBatchJobPolling() {
+    batchJobPollSession += 1
     if (batchJobPollTimer !== null) {
       window.clearInterval(batchJobPollTimer)
       batchJobPollTimer = null
     }
     batchJobPollTick = 0
+    batchJobPollReadFailures = 0
+    batchJobPollIntervalMs = BATCH_JOB_POLL_INTERVAL_MS
   }
 
-  function startBatchJobPolling(jobId: string) {
-    stopBatchJobPolling()
-    batchJobPollTick = 0
+  function scheduleBatchJobPolling(jobId: string, session: number, intervalMs: number) {
+    if (session !== batchJobPollSession) return
+    if (batchJobPollTimer !== null) window.clearInterval(batchJobPollTimer)
+    batchJobPollIntervalMs = intervalMs
     batchJobPollTimer = window.setInterval(async () => {
-      if (batchJobPollInFlight) return
-      batchJobPollInFlight = true
+      if (session !== batchJobPollSession) return
+      if (batchJobPollInFlightSession === session) return
+      batchJobPollInFlightSession = session
       try {
         batchJobPollTick += 1
         const shouldRefreshDebugSnapshot =
           !batchJobDebugSnapshot.value || batchJobPollTick % DEBUG_SNAPSHOT_POLL_EVERY_N_TICKS === 0
-        const current = await fetchBatchJobDetail(jobId, {
-          includeDebugSnapshot: shouldRefreshDebugSnapshot,
-        })
+        const { response, requestId } = await requestBatchJobDetail(jobId)
+        if (
+          session !== batchJobPollSession ||
+          requestId !== latestBatchJobDetailRequest
+        ) {
+          return
+        }
         await loadBatchJobs()
-        if (!current || !isBatchJobPollingActive(current)) {
+        if (
+          session !== batchJobPollSession ||
+          requestId !== latestBatchJobDetailRequest
+        ) {
+          return
+        }
+
+        if (!response.success || !response.data) {
+          batchJobPollReadFailures += 1
+          const decision =
+            response.status === 401
+              ? 'stop_terminal'
+              : decidePollReadFailure(
+                  response.status,
+                  batchJobPollReadFailures,
+                  response.jobStatus,
+                )
+          if (decision === 'retry') {
+            scheduleBatchJobPolling(
+              jobId,
+              session,
+              retryPollInterval(batchJobPollReadFailures),
+            )
+            return
+          }
+          message.error({
+            key: `batch-job-read-${jobId}`,
+            content: pollReadFailureMessage(
+              decision,
+              String(response.message || '获取任务详情失败').trim(),
+            ),
+            duration: 8,
+          })
           stopBatchJobPolling()
+          return
+        }
+
+        batchJobPollReadFailures = 0
+        applyBatchJobDetail(response.data)
+        if (shouldRefreshDebugSnapshot) {
+          await fetchBatchJobDebugSnapshot(jobId, {
+            acceptResult: () => session === batchJobPollSession,
+          })
+        }
+        if (session !== batchJobPollSession) return
+        if (!isBatchJobPollingActive(response.data)) {
+          stopBatchJobPolling()
+        } else if (batchJobPollIntervalMs !== BATCH_JOB_POLL_INTERVAL_MS) {
+          scheduleBatchJobPolling(jobId, session, BATCH_JOB_POLL_INTERVAL_MS)
         }
       } finally {
-        batchJobPollInFlight = false
+        if (batchJobPollInFlightSession === session) {
+          batchJobPollInFlightSession = null
+        }
       }
-    }, BATCH_JOB_POLL_INTERVAL_MS)
+    }, intervalMs)
+  }
+
+  function startBatchJobPolling(jobId: string) {
+    stopBatchJobPolling()
+    const session = batchJobPollSession
+    scheduleBatchJobPolling(jobId, session, BATCH_JOB_POLL_INTERVAL_MS)
+  }
+
+  async function requestBatchJobDetail(jobId: string): Promise<{
+    response: BatchJobDetailResponse
+    requestId: number
+  }> {
+    const requestId = ++batchJobDetailRequestSequence
+    latestBatchJobDetailRequest = requestId
+    batchJobDetailLoading.value = true
+    try {
+      return {
+        response: await getSichuanWorkspaceBatchJob(jobId),
+        requestId,
+      }
+    } catch (error) {
+      return {
+        response: {
+          success: false,
+          message: readFailureMessage(error),
+          status: errorHttpStatus(error),
+          jobStatus: errorJobStatus(error),
+        },
+        requestId,
+      }
+    } finally {
+      if (requestId === latestBatchJobDetailRequest) {
+        batchJobDetailLoading.value = false
+      }
+    }
+  }
+
+  function applyBatchJobDetail(job: SichuanBatchJob) {
+    const previousStatus = lastObservedJobStatus[job.id] || batchJobDetail.value?.status || ''
+    batchJobDetail.value = job
+    lastObservedJobStatus[job.id] = job.status
+    maybeNotifyBatchJobTerminalStatus(job, previousStatus)
   }
 
   async function fetchBatchJobDebugSnapshot(
     jobId: string,
-    options?: { ruleJobId?: string; itemLimit?: number },
+    options?: { ruleJobId?: string; itemLimit?: number; acceptResult?: () => boolean },
   ) {
+    const requestId = ++batchJobDebugRequestSequence
+    latestBatchJobDebugRequest = requestId
+    const canAcceptResult = () =>
+      requestId === latestBatchJobDebugRequest &&
+      (!options?.acceptResult || options.acceptResult())
     batchJobDebugLoading.value = true
     try {
       const response = await getSichuanWorkspaceBatchJobDebugSnapshot(jobId, {
@@ -192,36 +333,36 @@ export function useSichuanBatchJobs() {
       if (!response.success || !response.data) {
         throw new Error(response.message || '获取任务调试快照失败')
       }
+      if (!canAcceptResult()) return null
       batchJobDebugSnapshot.value = response.data
       return response.data
     } catch (error: any) {
-      message.error(error?.message || '获取任务调试快照失败')
+      if (canAcceptResult()) {
+        message.error(error?.message || '获取任务调试快照失败')
+      }
       return null
     } finally {
-      batchJobDebugLoading.value = false
+      if (requestId === latestBatchJobDebugRequest) {
+        batchJobDebugLoading.value = false
+      }
     }
   }
 
   async function fetchBatchJobDetail(jobId: string, options?: { includeDebugSnapshot?: boolean }) {
-    batchJobDetailLoading.value = true
-    try {
-      const response = await getSichuanWorkspaceBatchJob(jobId)
-      if (!response.success || !response.data)
-        throw new Error(response.message || '获取任务详情失败')
-      const previousStatus = lastObservedJobStatus[jobId] || batchJobDetail.value?.status || ''
-      batchJobDetail.value = response.data
-      lastObservedJobStatus[jobId] = response.data.status
-      maybeNotifyBatchJobTerminalStatus(response.data, previousStatus)
-      if (options?.includeDebugSnapshot) {
-        await fetchBatchJobDebugSnapshot(jobId)
-      }
-      return response.data
-    } catch (error: any) {
-      message.error(error?.message || '获取任务详情失败')
+    const { response, requestId } = await requestBatchJobDetail(jobId)
+    if (requestId !== latestBatchJobDetailRequest) return null
+    if (!response.success || !response.data) {
+      message.error(response.message || '获取任务详情失败')
       return null
-    } finally {
-      batchJobDetailLoading.value = false
     }
+    applyBatchJobDetail(response.data)
+    if (options?.includeDebugSnapshot) {
+      await fetchBatchJobDebugSnapshot(jobId, {
+        acceptResult: () =>
+          requestId === latestBatchJobDetailRequest && batchJobDetail.value?.id === jobId,
+      })
+    }
+    return response.data
   }
 
   async function executeCancelBatchJob(jobId: string) {
@@ -304,6 +445,10 @@ export function useSichuanBatchJobs() {
   }
 
   function resetBatchJobs() {
+    latestBatchJobDetailRequest = ++batchJobDetailRequestSequence
+    latestBatchJobDebugRequest = ++batchJobDebugRequestSequence
+    batchJobDetailLoading.value = false
+    batchJobDebugLoading.value = false
     batchJobPagination.current = 1
     batchJobDetail.value = null
     batchJobDebugSnapshot.value = null
@@ -355,6 +500,10 @@ export function useSichuanBatchJobs() {
       duration: currentStatus === 'completed' ? 5.5 : 7,
       placement: 'topRight',
     })
+  }
+
+  if (getCurrentInstance()) {
+    onBeforeUnmount(resetBatchJobs)
   }
 
   return {
