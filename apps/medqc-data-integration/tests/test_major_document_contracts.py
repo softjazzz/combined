@@ -64,6 +64,7 @@ def test_committed_json_matches_module_contract_and_source_counts() -> None:
     committed = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
     assert committed == contract_export_document()
     assert committed["contains_phi"] is False
+    assert committed["contract_version"] == 2
     counts = {
         item["interface"]: item["source_column_count"]
         for item in committed["interfaces"]
@@ -216,6 +217,22 @@ def test_first_course_maps_existing_structured_location_fields() -> None:
         "bed_no": "bed-no",
         "age": "42",
     }
+
+
+def test_daily_record_time_is_projected_without_using_other_clocks() -> None:
+    raw = _raw_row("web.daily_course_record")
+    raw.update(
+        record_datetime="2026-10-26 09:00:00",
+        submit_datetime="2026-10-27 10:00:00",
+        physician_sign_datetime="2026-10-28 11:00:00+08:00",
+    )
+    spec = resolve_interface("web.daily_course_record")
+    projected = project_record(spec, raw, datetime(2026, 10, 29, tzinfo=timezone.utc))
+    assert projected["record_datetime"] == datetime(2026, 10, 26, 9)
+    assert projected["submit_datetime"] == datetime(2026, 10, 27, 10)
+    raw["record_datetime"] = ""
+    empty_record_time = project_record(spec, raw, datetime(2026, 10, 29, tzinfo=timezone.utc))
+    assert empty_record_time["record_datetime"] is None
 
 
 def test_standalone_catalog_preflight_allows_optional_051_gaps() -> None:

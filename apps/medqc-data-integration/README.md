@@ -43,6 +43,10 @@ rowcount 输出 `advanced` 或 `held`。
 目标类型、required 核心列和 raw-only 字段。可独立交付的 JSON、纯标准库转换模块及
 DSH 使用说明见 [DSH 主要文书映射桥接](docs/dsh-major-document-bridge.md)。
 
+合同 v2 增加日常病程同名 `record_datetime` 投影。应用迁移 `20261029_000056`
+提供可空、无默认值的独立记录时间列；旧目标缺列时仍明确报告 raw-only。
+既有 raw 无需重抽，后续部署获准后可定向重投影；不从提交或签署时间补值。
+
 运行配置来自环境变量，密码只从独立文件读取。详见 `.env.example`。迁移 DDL 在
 `migrations/`；它不会自动运行。
 

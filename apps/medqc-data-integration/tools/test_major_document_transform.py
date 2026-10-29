@@ -49,6 +49,29 @@ def _row(item: dict[str, Any]) -> dict[str, Any]:
 
 
 class MajorDocumentTransformTest(unittest.TestCase):
+    def test_record_time_v2_with_and_without_migrated_target(self) -> None:
+        self.assertEqual(2, CONTRACT["contract_version"])
+        item = get_interface(CONTRACT, "web.daily_course_record")
+        row = _row(item)
+        row["record_datetime"] = "2026-10-26 09:00:00"
+        row["submit_datetime"] = "2026-10-27 10:00:00"
+        catalog = _catalog(item)
+        preflight = preflight_target_catalog(
+            CONTRACT, item["interface"], catalog, item["target_primary_key"]
+        )
+        result = transform_row(CONTRACT, item["interface"], row, preflight.writable_target_columns)
+        self.assertEqual("2026-10-26 09:00:00", str(result["record_datetime"]))
+        self.assertNotEqual(result["record_datetime"], result["submit_datetime"])
+        row["record_datetime"] = ""
+        empty = transform_row(CONTRACT, item["interface"], row, preflight.writable_target_columns)
+        self.assertIsNone(empty["record_datetime"])
+        del catalog["record_datetime"]
+        old = preflight_target_catalog(
+            CONTRACT, item["interface"], catalog, item["target_primary_key"]
+        )
+        self.assertIn("record_datetime", old.unavailable_optional_targets)
+        self.assertIn("record_datetime", old.raw_only_source_columns)
+
     def test_raw_document_id_required_despite_three_column_target_key(self) -> None:
         for name in ("web.admission_record", "web.discharge_record"):
             with self.subTest(interface=name):

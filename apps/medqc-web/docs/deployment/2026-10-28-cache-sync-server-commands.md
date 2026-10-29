@@ -178,7 +178,7 @@ SQL
 
 必须满足：
 
-- `version_num=20261026_000055`；
+- `version_num=20261029_000056`（2026-10-29 更新后的正式初始化目标）；
 - POC 当前预期 `raw_rows=91`；
 - `cdm_mr_columns=78`；
 - owner 为 `medqc_owner`；

@@ -24,7 +24,7 @@ from sqlalchemy.engine import Engine, URL, make_url
 
 
 BACKEND = Path(__file__).resolve().parents[1]
-TARGET_REVISION = "20261026_000055"
+TARGET_REVISION = "20261029_000056"
 PRE_SYNC_REVISION = "20260810_000028"
 PRE_VISIT_REVISION = "20261003_000046"
 SEARCH_PATH = "qc,sys,cdm,public,legacy"

@@ -374,6 +374,7 @@ PUBLISH_CONTRACTS: Final[Mapping[str, PublishContractData]] = {
         ),
         "mappings": _UNDERSCORE
         + (
+            ("record_datetime", "record_datetime", "datetime"),
             ("age_year", "age_year", "text"),
             ("physician_sign", "physician_sign", "text"),
             (
@@ -481,7 +482,7 @@ def contract_export_document(interface: str | None = None) -> dict[str, object]:
             }
         )
     return {
-        "contract_version": 1,
+        "contract_version": 2,
         "contains_phi": False,
         "contains_raw_values": False,
         "evidence_zip_sha256": EVIDENCE_ZIP_SHA256,

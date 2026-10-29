@@ -7,6 +7,7 @@
 ```text
 psql --set ON_ERROR_STOP=1 --file migrations/001_ingest_contract.sql medqc_ingest
 psql --set ON_ERROR_STOP=1 --file migrations/002_major_document_contracts.sql medqc_ingest
+psql --set ON_ERROR_STOP=1 --file migrations/003_daily_record_datetime_contract.sql medqc_ingest
 ```
 
 脚本可重复执行，不删除数据。运行身份只需被授予 `cache_raw`、`sync_ops` 的必要
@@ -25,3 +26,6 @@ psql --set ON_ERROR_STOP=1 --file migrations/002_major_document_contracts.sql me
 `002` 注册 7 个已有证据的正式接口，并把证据版本写入抽取、发布批次。业务库 CDM 表
 继续由现有应用 Alembic 管理，本服务不会创建或修改它。发布前只读核对目标主键、
 required 核心列和实际类型；可选列不存在时保持 raw-only，不强迫升级业务迁移。
+
+`003` 仅登记日常病程 `record_datetime` 的源到目标映射；目标新增列由应用
+Alembic `20261029_000056` 管理。登记不执行应用迁移，不回填已有 raw/CDM，不推进断点。

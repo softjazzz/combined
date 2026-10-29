@@ -67,9 +67,11 @@ target_row = transform_row(
   带时区目标保留 `+08:00`，异常年份（例如 1840）阻断发布，原值仍在 raw；
 - 文本空串保持空串；日期空串转换为 SQL NULL，不当作格式异常。
 
-当前 `daily_course_record.record_datetime` 在 051 目标模型中可能没有对应列，因此会作为
-raw-only 明确报告；它是 bundle 事件时间语义缺口，不能用 `submit_datetime`、
-`last_modified_datetime` 或 `update_time` 代替。`physician_sign` 及其时间列若 051 缺失，
+合同 v2 已增加 `daily_course_record.record_datetime` 的同名投影；正式应用迁移
+`20261029_000056` 新增可空无默认值的记录时间列。客户 051 目标无此列时仍作为
+raw-only 明确报告，不能用 `submit_datetime`、`last_modified_datetime` 或 `update_time`
+代替。该合同不会自动升级客户库；升级和从既有 raw 重投影需按后续部署步骤执行。
+`physician_sign` 及其时间列若 051 缺失，
 同样作为可选 raw-only 报告，不影响全文验收，也不能据此宣称签署语义已齐全。
 
 ## 多文书与事务

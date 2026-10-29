@@ -538,6 +538,7 @@ class DailyCourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
     record_content = Column(Text, comment="非结构化全文")
+    record_datetime = Column(DateTime, comment="源文书记录时间，独立于提交、签署及修改时间")
     physician_sign = Column(Text, comment="医师签名（源值）")
     physician_sign_datetime = Column(DateTime(timezone=True), comment="医师签名时间")
 
