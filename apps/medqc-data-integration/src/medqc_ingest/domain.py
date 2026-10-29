@@ -384,6 +384,9 @@ def project_record(
                 raise IngestError(ErrorKind.PUBLISH_CONTRACT, "source_columns_missing")
             source_value = payload[mapping.source]
         projected[mapping.target] = _project_value(source_value, mapping.target_type)
+    for field in spec.key_fields:
+        if payload.get(field) in (None, ""):
+            raise IngestError(ErrorKind.PUBLISH_CONTRACT, "missing_source_key")
     for field in publish.primary_key:
         if projected.get(field) in (None, ""):
             raise IngestError(ErrorKind.PUBLISH_CONTRACT, f"missing_target_key:{field}")

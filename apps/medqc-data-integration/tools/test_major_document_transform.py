@@ -49,6 +49,18 @@ def _row(item: dict[str, Any]) -> dict[str, Any]:
 
 
 class MajorDocumentTransformTest(unittest.TestCase):
+    def test_raw_document_id_required_despite_three_column_target_key(self) -> None:
+        for name in ("web.admission_record", "web.discharge_record"):
+            with self.subTest(interface=name):
+                item = get_interface(CONTRACT, name)
+                row = _row(item)
+                row[item["raw_key_fields"][-1]] = ""
+                with self.assertRaisesRegex(ContractError, "source_key_missing"):
+                    transform_row(
+                        CONTRACT, name, row,
+                        [mapping["target"] for mapping in item["field_mappings"]],
+                    )
+
     def test_contract_and_schema_drift(self) -> None:
         mr = get_interface(CONTRACT, "web.mr")
         self.assertEqual(148, mr["source_column_count"])

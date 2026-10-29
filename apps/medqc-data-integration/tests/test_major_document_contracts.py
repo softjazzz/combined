@@ -182,6 +182,16 @@ def test_submit_is_not_promoted_to_signature() -> None:
     assert "physician_sign" not in projected
 
 
+@pytest.mark.parametrize("interface", ["web.admission_record", "web.discharge_record"])
+def test_document_id_required_even_when_target_key_has_only_case_fields(interface: str) -> None:
+    spec = resolve_interface(interface)
+    row = _raw_row(interface)
+    row[spec.key_fields[-1]] = ""
+    with pytest.raises(IngestError) as error:
+        project_record(spec, row, datetime(2026, 10, 28, tzinfo=timezone.utc))
+    assert error.value.location == "missing_source_key"
+
+
 def test_first_course_maps_existing_structured_location_fields() -> None:
     raw = _raw_row("web.first_course_record")
     raw.update(

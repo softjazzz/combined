@@ -121,6 +121,9 @@ def transform_row(
     completed_at: datetime | None = None,
 ) -> dict[str, Any]:
     item = get_interface(contract, interface)
+    for field in item["raw_key_fields"]:
+        if row.get(field) in (None, ""):
+            raise ContractError("source_key_missing")
     allowed = set(writable_target_columns)
     result: dict[str, Any] = {}
     for mapping in item["field_mappings"]:
