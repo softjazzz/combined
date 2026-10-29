@@ -1,0 +1,16 @@
+任务：在已通过迁移与263条补录的现有克隆库上，只读核对真实规则源读取。不重做迁移、补录或抽取。
+
+目标库只允许 medqc_bundle_time_clone_20261029180906。每个连接开启只读事务，校验current_database()与transaction_read_only=on；不连接Caché、medqc、medqc_cache_poc或其它旧克隆库。原验收库本轮也不再查询。
+
+1. 只读确认克隆仍为056、raw1803、抽取批次42个succeeded、daily263条记录时间与raw一致。checkpoint不存在就记absent；不要新建。
+
+2. 定位客户版实际生产质控路径使用的文书/证据只读入口，读取其真实函数签名、数据库绑定方式和时间字段规则，记录模块/函数/代码位置。不导入app.main、不启动后端、不恢复任务、不调用模型或完整规则引擎。
+
+3. 绑定现有克隆库、source_schema=cdm，用实际入口执行一次真实只读读取。优先复用上轮20例的本地样本清单，或读取全部有daily文书的本地病例；清单只留本机，不输出真实标识。逐文书核对读取到的record_datetime或正式record_time值与raw/CDM同一文书的记录时间相等，submit/签署/修改时间不混入。保留来源、查询条数上限与truncated/has_more标记。
+如果客户版入口不能脱离任务上下文读取，只报告blocked及模块/函数位置；不要构造模拟材料冒充真实源读取。直接跑只读函数不需要运行质控任务或模型。
+
+4. 纠正跨轮样本可比性：首次20例daily为42份，本轮20例为84份。只在本机比较两轮病例集合及文书ID集合，输出same_cohort=true/false/unknown、是否重复计数、各自raw/CDM数量，不导出键。集合不同可分别作为独立样本验证；若确为同一集合却出现数量差异，定向查读数或重复计数原因，不直接认定数据丢失。找不到上轮清单时如实记unknown，不能声称同20例完全可比。
+
+5. 只回传模块/函数位置、实际调用次数、病例数/文书数、时间一致与不一致计数、缺失与截断数，以及real_rule_source_executed和full_rule_engine_executed两个独立布尔值。后者应为false；前者只有真正调用正式只读源函数成功时才可为true。
+
+6. 再核对上述克隆保护计数及其它时间、正文的本地聚合指纹不变。导出rule-source-time-check.csv、cohort-comparison.csv、protection-check.csv、summary.md、manifest.json、CHECKSUMS.txt。不得包含正文、签署人、实际时间值、病例/文书键、凭据或连接串。报告ZIP大小与SHA256后停止。

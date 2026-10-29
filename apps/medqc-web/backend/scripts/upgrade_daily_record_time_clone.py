@@ -7,6 +7,7 @@ import getpass
 import json
 import os
 import re
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -36,10 +37,14 @@ def migration_environment():
         "DB_SEARCH_PATH": "public,qc,sys,cdm,legacy",
     }
     previous = {name: os.environ.get(name) for name in updates}
+    original_path = list(sys.path)
     os.environ.update(updates)
+    # ScriptDirectory读取迁移图时已导入版本文件，早于alembic/env.py的路径引导。
+    sys.path.insert(0, str(BACKEND))
     try:
         yield
     finally:
+        sys.path[:] = original_path
         for name, value in previous.items():
             if value is None:
                 os.environ.pop(name, None)
@@ -47,14 +52,51 @@ def migration_environment():
                 os.environ[name] = value
 
 
-def upgrade_clone(engine, database: str) -> None:
-    import sqlalchemy as sa
-    from alembic import command
+def package_config():
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
+    config = Config()
+    config.set_main_option("script_location", str(BACKEND / "alembic"))
+    if ScriptDirectory.from_config(config).get_heads() != [TARGET_REVISION]:
+        raise CloneValidationError("migration_graph_head_mismatch")
+    return config
+
+
+def require_deployment_ownership(connection) -> None:
+    """只读检查应用对象属主及schema权限，不自动授权或改属主。"""
+    import sqlalchemy as sa
+
+    failures = connection.execute(sa.text("""
+        SELECT 'schema', count(*)
+        FROM pg_catalog.pg_namespace n
+        WHERE n.nspname IN ('public','qc','sys','cdm')
+          AND (NOT has_schema_privilege(current_user, n.oid, 'CREATE')
+               OR NOT has_schema_privilege(current_user, n.oid, 'USAGE'))
+        UNION ALL
+        SELECT 'relation', count(*)
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname IN ('public','qc','sys','cdm')
+          AND c.relkind IN ('r','p','v','m','S')
+          AND NOT pg_has_role(current_user, c.relowner, 'USAGE')
+    """)).all()
+    if any(count for _kind, count in failures):
+        raise CloneValidationError("migration_owner_preflight_failed")
+
+
+def upgrade_clone(engine, database: str) -> None:
+    import sqlalchemy as sa
+    from alembic import command
+
     validate_database(database)
-    with migration_environment(), engine.begin() as connection:
+    with migration_environment():
+        config = package_config()
+        _upgrade_with_config(engine, database, config, sa, command)
+
+
+def _upgrade_with_config(engine, database: str, config, sa, command) -> None:
+    with engine.begin() as connection:
         actual = connection.execute(sa.text("SELECT current_database()")).scalar_one()
         if actual != database:
             raise CloneValidationError("connected_database_mismatch")
@@ -62,16 +104,13 @@ def upgrade_clone(engine, database: str) -> None:
         connection.execute(sa.text("SET LOCAL search_path TO public,qc,sys,cdm,legacy"))
         connection.execute(sa.text("SET LOCAL lock_timeout TO '10s'"))
         connection.execute(sa.text("SET LOCAL statement_timeout TO '120s'"))
+        require_deployment_ownership(connection)
         revisions = connection.execute(
             sa.text("SELECT version_num FROM public.alembic_version ORDER BY version_num")
         ).scalars().all()
         if revisions not in ([SOURCE_REVISION], [TARGET_REVISION]):
             raise CloneValidationError("clone_revision_not_supported")
-        config = Config()
-        config.set_main_option("script_location", str(BACKEND / "alembic"))
         config.attributes["connection"] = connection
-        if ScriptDirectory.from_config(config).get_heads() != [TARGET_REVISION]:
-            raise CloneValidationError("migration_graph_head_mismatch")
         command.upgrade(config, TARGET_REVISION)
         revision = connection.execute(
             sa.text("SELECT version_num FROM public.alembic_version")
@@ -92,12 +131,20 @@ def upgrade_clone(engine, database: str) -> None:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--database", required=True)
+    operation = parser.add_mutually_exclusive_group(required=True)
+    operation.add_argument("--database")
+    operation.add_argument("--check-package", action="store_true")
     parser.add_argument("--port", type=int, default=5432)
     args = parser.parse_args(argv)
     engine = None
     step = "scope"
     try:
+        if args.check_package:
+            step = "package"
+            with migration_environment():
+                package_config()
+            print(json.dumps({"event": "package_verified", "revision": TARGET_REVISION}))
+            return 0
         validate_database(args.database)
         if not 1 <= args.port <= 65535:
             raise CloneValidationError("invalid_port")
