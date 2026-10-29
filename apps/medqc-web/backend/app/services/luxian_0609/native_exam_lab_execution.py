@@ -574,11 +574,20 @@ def _typed_trigger_state(
         )
         for source_key in source_keys
     }
-    if any(source.state == "error" for source in loaded.values()):
+    # 检查报告可独立触发影像核查，HIS 医嘱的读取故障不污染 PACS 证据。
+    independent_exam_present = fact_kind == "exam" and any(
+        loaded[key].state == "present"
+        for key in _TYPED_TRIGGER_SOURCES["exam"] if key in loaded
+    )
+    required_sources = tuple(
+        source for key, source in loaded.items()
+        if not (independent_exam_present and key == _ORDER_SOURCE_KEY)
+    )
+    if any(source.state == "error" for source in required_sources):
         return "error", loaded
     if any(
         source.state in {"unavailable", "truncated", "missing"}
-        for source in loaded.values()
+        for source in required_sources
     ):
         source_gap = True
     else:
@@ -704,12 +713,11 @@ def _culture_orders_lack_report_material(
 def _order_exam_structure_outcome(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> _ExamLabOutcome | None:
-    """只校验010的结构化医嘱、检查与报告合同，语义交给受控LLM。
+    """校验010的检查事件身份，不要求 PACS 报告具有 HIS 医嘱外键。
 
-    ``order_id`` 与 ``exam_id`` 是唯一允许的关联键。客户源表的合并检查由
-    ``exam_id`` 显式枚举多个医嘱号；结构完整时返回 ``None``，让后续事实投影
-    按权威检查时间截取病程。关联不完整时失败关闭，模型不得猜测事件归属或
-    权威时间。
+    医嘱关联仅提供已验证的可选开立时间。跨系统编号未匹配不代表检查
+    未实施；后续投影使用检查自身的时间或既有报告时间回退，不猜测配对。
+    同一检查编号的冲突仍保留为资料缺口。
     """
 
     orders = _effective_target_orders(rows_by_source, fact_kind="exam")
@@ -737,6 +745,25 @@ def _order_exam_structure_outcome(
         for row in rows_by_source.get("exam_item_report", ())
         if isinstance(row, Mapping)
     )
+    if exam_rows or report_rows:
+        # 报告和检查主记录可独立证明事件。只保护检查身份，不把跨系统
+        # 医嘱号缺失或不同编码当成关联失败。检查内的主从关系仍由 exam_id
+        # 在事实投影中验证，时间缺失也继续由既有时序判定返回资料不足。
+        exam_ids = [_clean(row.get("exam_id")) for row in exam_rows if _clean(row.get("exam_id"))]
+        if len(exam_ids) != len(set(exam_ids)) or any(
+            _clean(row.get("order_id")) and not _clean(row.get("exam_id"))
+            for row in exam_rows
+        ):
+            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
+        if any(
+            not _parse_current_visit_time(row.get("report_time") or row.get("report_datetime"))
+            and not any(_clean(row.get(field)) for field in ("result", "description"))
+            and not any(_clean(report.get("exam_id")) == _clean(row.get("exam_id"))
+                        for report in report_rows)
+            for row in exam_rows
+        ):
+            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "required_field_missing")
+        return None
     if not orders and not course_rows and not exam_rows:
         return None
     if raw_target_orders and not orders:
@@ -763,67 +790,6 @@ def _order_exam_structure_outcome(
         # 不应因“医嘱无主表”提前产生资料缺口。
         return None
     if course_rows and not orders and not exam_rows:
-        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
-    if not orders:
-        # 正式检查行若声明了order_id，则完整医嘱集中找不到该键属于关联冲突；
-        # 只有检查来源本身不提供order_id时，才按院方“仅报告”能力继续核对。
-        if any(_clean(row.get("order_id")) for row in exam_rows):
-            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
-        return None
-
-    # 检查主表缺键时无法确认实际事件，仍须在核对报告前失败关闭。
-    if any(
-        not _clean(row.get("order_id")) or not _clean(row.get("exam_id"))
-        for row in exam_rows
-    ):
-        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
-
-    orders_by_id: dict[str, tuple[datetime | None, Mapping[str, Any]]] = {}
-    missing_order_id = False
-    for order_time, order in orders:
-        order_id = _clean(order.get("order_id"))
-        if not order_id:
-            missing_order_id = True
-            continue
-        if order_id in orders_by_id:
-            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
-        if order_time is None:
-            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "authoritative_order_time_missing")
-        orders_by_id[order_id] = (order_time, order)
-
-    exams_by_order: dict[str, list[Mapping[str, Any]]] = {}
-    for exam in exam_rows:
-        exam_id = _clean(exam.get("exam_id"))
-        linked_order_ids = resolve_exam_master_order_ids(
-            exam,
-            known_order_ids=tuple(orders_by_id),
-        )
-        if not exam_id or not linked_order_ids:
-            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
-        for order_id in linked_order_ids:
-            exams_by_order.setdefault(order_id, []).append(exam)
-    # exam_id 是检查主表的报告级唯一键。同一合并检查可显式枚举多个医嘱，
-    # 但同一个医嘱仍不能被多条检查主记录重复占用。
-    exam_ids = [_clean(exam.get("exam_id")) for exam in exam_rows]
-    if len(exam_ids) != len(set(exam_ids)):
-        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
-    # 只核对已形成检查主表的实际事件；仍处于待执行状态的医嘱不参与本轮。
-    if any(len(exams) != 1 for exams in exams_by_order.values()):
-        return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
-
-    executed = tuple(exam_rows)
-
-    for exam in executed:
-        exam_id = _clean(exam.get("exam_id"))
-        has_report = any(_clean(row.get("exam_id")) == exam_id for row in report_rows)
-        has_master_report_time = _parse_current_visit_time(
-            exam.get("report_time") or exam.get("report_datetime")
-        ) is not None
-        if not has_report and not has_master_report_time:
-            # 本点核对检查前原因；报告资料缺失不证明原因未书写。
-            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "required_field_missing")
-    # 未关联医嘱缺键不遮蔽完整实际事件已证明的缺报告；无确定缺陷时仍保留缺口。
-    if missing_order_id:
         return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
     return None
 
@@ -2746,6 +2712,11 @@ async def execute_luxian_0609_native_exam_lab_rules(
         eligible_rule_ids: list[str] = []
         for rule_id in text_fact_rule_ids:
             required = _TYPED_RULE_SOURCE_KEYS[rule_id]
+            if rule_id in {"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"} and any(
+                loaded_sources[key].state == "present"
+                for key in _TYPED_TRIGGER_SOURCES["exam"] if key in loaded_sources
+            ):
+                required = tuple(key for key in required if key != _ORDER_SOURCE_KEY)
             if any(loaded_sources[key].state == "error" for key in required):
                 emit_typed(rule_id, "technical_error", "source_query_error")
                 typed_processed.add(rule_id)
@@ -2785,8 +2756,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     rows_by_source[source_key] = material.rows
         if eligible_rule_ids:
             if "LX0609-06-01-02" in eligible_rule_ids:
-                # 医嘱—检查—报告关联先由结构化键完成；只有结构可靠时，
-                # 检查前原因才进入后续48小时病程语义抽取。
+                # 检查/报告按自身事件与病程核对；HIS/PACS 医嘱外键不是前提。
                 order_outcome = _order_exam_structure_outcome(rows_by_source)
                 if order_outcome is not None:
                     trigger_orders = _trigger_order_summaries(
