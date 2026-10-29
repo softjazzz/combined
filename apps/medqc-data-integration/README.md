@@ -47,6 +47,12 @@ DSH 使用说明见 [DSH 主要文书映射桥接](docs/dsh-major-document-bridg
 提供可空、无默认值的独立记录时间列；旧目标缺列时仍明确报告 raw-only。
 既有 raw 无需重抽，后续部署获准后可定向重投影；不从提交或签署时间补值。
 
+六个新增医嘱/检验/检查接口的独立验收合同在
+`contracts/orders-lab-exam-contracts.json`，纯转换工具为
+`tools/orders_lab_exam_transform.py`；详见
+[六接口验收合同](docs/orders-lab-exam-contract.md)。这组合同不自动扩大生产worker
+的七接口注册表，需先完成客户克隆库的schema补录、投影及真实bundle/源读取验收。
+
 运行配置来自环境变量，密码只从独立文件读取。详见 `.env.example`。迁移 DDL 在
 `migrations/`；它不会自动运行。
 
