@@ -84,7 +84,7 @@ TRANSFUSION_RULE_IDS = (
 )
 EXECUTOR_KEY = "transfusion"
 _TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
-_TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-post-association-scope-v9"
+_TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-post-semantic-scope-v10"
 _PRE_ASSESSMENT_EVALUATOR_VERSION = "transfusion-pre-assessment-associated-v8"
 
 # 049 仍缺少可受控关联的收费数量，因此旧的直接执行入口继续保守返回 DATA_GAP；
@@ -2387,6 +2387,8 @@ def _047_window_is_mature(
 
 def _programmatic_047_assessment(
     documents: Mapping[str, Any],
+    *,
+    unclear_effect_refs: frozenset[tuple[str, str]] = frozenset(),
 ) -> _PosttransfusionEvaluationAssessment:
     """按输血结束后24小时窗口判定，评价正文必须有可用的完成时间。"""
 
@@ -2508,11 +2510,11 @@ def _programmatic_047_assessment(
         unusable_daily_refs: list[tuple[str, str]] = []
         late_evaluation_refs: set[tuple[str, str]] = set()
         late_daily_refs: dict[tuple[str, str], list[tuple[str, str]]] = {}
+        unclear_event_refs: set[tuple[str, str]] = set()
+        unclear_daily_refs: list[tuple[str, str]] = []
         for source_key, row in ((key, row) for key in ("daily_course_record", "senior_course_record")
                                 for row in _source_document_rows(documents, key)):
             text = _row_text(row)
-            if not _course_effect_confirmed(documents, source_key, row, text):
-                continue
             record_time = _authoritative_047_record_time(row)
             record_date = _authoritative_047_record_date(row)
             daily_ref = (
@@ -2520,6 +2522,9 @@ def _programmatic_047_assessment(
                 if (document_id := str(row.get("document_id") or row.get("id") or "").strip())
                 else None
             )
+            unclear = daily_ref in unclear_effect_refs
+            if not unclear and not _course_effect_confirmed(documents, source_key, row, text):
+                continue
             if horizon_date is not None and record_time is not None and _047_evaluation_time_is_after_horizon(
                 record_time,
                 horizon_datetime=horizon_datetime,
@@ -2534,6 +2539,19 @@ def _programmatic_047_assessment(
             )
             affected_scope_refs = anchored_refs or possible_refs
             anchors = association is not None and (association.explicit or "blood_component" in association.basis)
+            if unclear:
+                # 语义无法确认仅阻断这份评价真实候选事件的缺失判断；不覆盖其他事件。
+                affected_refs = set(affected_scope_refs)
+                affected_refs.update(unresolved_another_refs(
+                    text, anchored_refs=anchored_refs,
+                    record_date=record_date, record_time=record_time,
+                ))
+                if not affected_refs and not anchors and record_date is None:
+                    affected_refs = set(pending)
+                unclear_event_refs.update(affected_refs)
+                if affected_refs and daily_ref is not None:
+                    unclear_daily_refs.append(daily_ref)
+                continue
             _, unresolved_end_marker = _transfusion_end_evidence(text)
             association_ambiguous = bool(
                 association and association.state == "ambiguous"
@@ -2549,7 +2567,7 @@ def _programmatic_047_assessment(
                         record_time=record_time,
                     )
                 )
-                if not affected_refs and not anchors:
+                if not affected_refs and not anchors and record_date is None:
                     affected_refs = set(pending)
                 if affected_refs:
                     ambiguous_pending_refs.update(affected_refs)
@@ -2616,7 +2634,7 @@ def _programmatic_047_assessment(
                     associated_daily[candidate_ref] = (record_time, daily_ref)
         pending.difference_update(associated_daily)
         # 只从没有本次关联/时间歧义的事件形成确定问题；另一事件未知不抹掉它。
-        confirmed = pending - ambiguous_pending_refs - unusable_daily_event_refs - unknown_end_refs
+        confirmed = pending - ambiguous_pending_refs - unusable_daily_event_refs - unknown_end_refs - unclear_event_refs
         late = confirmed.intersection(late_evaluation_refs)
         mature_missing = {
             ref for ref in confirmed - late_evaluation_refs
@@ -2636,6 +2654,14 @@ def _programmatic_047_assessment(
                 "posttransfusion_evaluation_late" if late else "posttransfusion_evaluation_missing",
                 latest_end_time=max(known_end_by_ref[ref] for ref in selected),
                 selected_source_document_refs=refs,
+            )
+        if pending.intersection(unclear_event_refs):
+            return _PosttransfusionEvaluationAssessment(
+                "data_gap", "semantic_extraction_unresolved",
+                selected_source_document_refs=tuple(dict.fromkeys((
+                    *selected_event_refs(pending.intersection(unclear_event_refs)),
+                    *unclear_daily_refs,
+                ))),
             )
         if pending.intersection(ambiguous_pending_refs):
             affected = pending.intersection(ambiguous_pending_refs)
@@ -2716,12 +2742,15 @@ def _programmatic_047_assessment(
 
     single_event_ref = event_refs[0]
     qualified_daily_evaluations: list[tuple[datetime, tuple[str, str] | None]] = []
+    unclear_evaluation = False
     for source_key, row in ((key, row) for key in ("daily_course_record", "senior_course_record")
                                 for row in _source_document_rows(documents, key)):
         record_time = _authoritative_047_record_time(row)
         record_date = _authoritative_047_record_date(row)
         text = _row_text(row)
-        if not _course_effect_confirmed(documents, source_key, row, text):
+        document_id = str(row.get("document_id") or row.get("id") or "").strip()
+        unclear = (source_key, document_id) in unclear_effect_refs
+        if not unclear and not _course_effect_confirmed(documents, source_key, row, text):
             continue
         association = post_links.get((source_key, id(row)))
         if association is not None and (association.explicit or "blood_component" in association.basis):
@@ -2758,7 +2787,9 @@ def _programmatic_047_assessment(
             unusable_evaluation_time = True
             continue
         if (record_time - latest_end).total_seconds() <= 24 * 3600:
-            document_id = str(row.get("document_id") or row.get("id") or "").strip()
+            if unclear:
+                unclear_evaluation = True
+                continue
             qualified_daily_evaluations.append(
                 (
                     record_time,
@@ -2786,6 +2817,11 @@ def _programmatic_047_assessment(
             latest_end_time=latest_end,
             evaluation_time=selected_daily_time,
             selected_source_document_refs=selected_refs,
+        )
+    if unclear_evaluation:
+        return _PosttransfusionEvaluationAssessment(
+            "data_gap", "semantic_extraction_unresolved",
+            selected_source_document_refs=end_document_refs,
         )
     if unusable_evaluation_time:
         return _PosttransfusionEvaluationAssessment(
@@ -4336,14 +4372,9 @@ async def execute_luxian_0609_native_transfusion_rules(
                     continue
                 executor_type = "llm"
                 documents = {**documents, _047_MODEL_CONFIRMED_EFFECTS_KEY: effects.confirmed}
-                assessment = _programmatic_047_assessment(documents)
-                if (
-                    assessment.status == "non_compliant"
-                    and assessment.reason_code == "posttransfusion_evaluation_missing"
-                    and effects.unclear
-                ):
-                    emit_outcome(rule_id, "data_gap", "semantic_extraction_unresolved", executor_type="llm")
-                    continue
+                assessment = _programmatic_047_assessment(
+                    documents, unclear_effect_refs=effects.unclear,
+                )
             status, reason_code = assessment.status, assessment.reason_code
             emit_outcome(
                 rule_id,

@@ -126,7 +126,7 @@ async def test_047_equivalent_aware_evaluation_times_are_both_late(record_time: 
     )
     assert result.decisions[0].reason_code == "requirement_violated"
     assert result.decisions[0].evaluator_version == (
-        "transfusion-ruledecision-post-association-scope-v9"
+        "transfusion-ruledecision-post-semantic-scope-v10"
     )
 
 
@@ -823,6 +823,53 @@ async def test_047_model_unclear_is_data_gap_not_defect():
 
     assert _canonical_state(result=result, session=session)[0] == "data_gap"
     assert result.decisions[0].reason_code == "semantic_extraction_unresolved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse", (False, True))
+@pytest.mark.parametrize("include_missing", (False, True))
+@pytest.mark.parametrize("label", ("unclear", "evaluated", "not_evaluated"))
+async def test_047_semantic_uncertainty_is_local_to_its_transfusion(
+    reverse: bool, include_missing: bool, label: str,
+):
+    records = [{"document_id": "B", "record_content": "2026-06-05 10:00:00输血结束。"}]
+    if include_missing:
+        records.insert(0, {"document_id": "MISSING-A", "record_content": "2026-06-01 10:00:00输血结束。"})
+    if reverse:
+        records.reverse()
+    text = "2026-06-05 10:00:00输血结束；复查血红蛋白较前变化不大。"
+    session = _session(
+        horizon_date="2026-06-09", bloodtrans_rows=records,
+        daily_rows=[{"document_id": "EVAL-B", "document_title": "输血后评价记录",
+                     "record_time": "2026-06-05 13:00:00", "record_content": text}],
+    )
+    result, _ = await _execute_with_effect_labels(
+        session, {text: (label, "复查血红蛋白较前变化不大" if label == "evaluated" else "")},
+    )
+    expected = (
+        "non_compliant" if include_missing or label == "not_evaluated"
+        else "compliant" if label == "evaluated" else "data_gap"
+    )
+    assert _canonical_state(result=result, session=session)[0] == expected
+    if include_missing and label != "not_evaluated":
+        assert dict(result.customer_display_facts)["LX0609-07-03-01"]["transfusion_end_time"] == "2026-06-01 10:00:00"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse", (False, True))
+@pytest.mark.parametrize("prefix", ("输血结束，", "输血后"))
+async def test_047_date_excluded_candidates_never_expand_to_all_events(reverse: bool, prefix: str):
+    records = [
+        {"document_id": "MISSING-A", "record_content": "2026-06-01 10:00:00输血结束。"},
+        {"document_id": "MISSING-B", "record_content": "2026-06-05 10:00:00输血结束。"},
+    ]
+    session = _session(
+        horizon_date="2026-06-09", bloodtrans_rows=list(reversed(records)) if reverse else records,
+        daily_rows=[{"document_id": "OUTSIDE", "document_title": "输血后评价记录",
+                     "record_time": "2026-06-08", "record_content": prefix + "复查血红蛋白较前改善。"}],
+    )
+    result = await _execute(session)
+    assert _canonical_state(result=result, session=session) == ("non_compliant", "requirement_violated")
 
 
 @pytest.mark.asyncio

@@ -676,7 +676,7 @@ function handleOpenResult(recordKey: string) {
     `住院号 ${record.visitId}`,
   ]
   if (row.latestQcTime && row.latestQcTime !== '—') {
-    labelParts.push(`质控完成 ${row.latestQcTime}`)
+    labelParts.push(`质控结束 ${row.latestQcTime}`)
   }
   selectedFocus.value = {
     visitId: record.visitId as string,

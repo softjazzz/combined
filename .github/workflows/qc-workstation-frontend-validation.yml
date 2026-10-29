@@ -12,6 +12,8 @@ on:
       - 'apps/medqc-web/src/views/workstation-v4/normalize.ts'
       - 'apps/medqc-web/src/views/workstation-v4/types.ts'
       - 'apps/medqc-web/src/views/workstation-v4/components/qc/latestQcSummaryPresentation.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/components/qc/QcRecordReviewPreview.vue'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/components/qc/QcRecordReviewPreview.spec.ts'
       - 'apps/medqc-web/src/views/workstation-v4/QcRecordResultListView.vue'
       - 'apps/medqc-web/src/views/workstation/QCOverviewView.vue'
       - 'apps/medqc-web/src/views/workstation-v2/types.ts'
@@ -33,6 +35,8 @@ on:
       - 'apps/medqc-web/src/views/workstation-v4/normalize.ts'
       - 'apps/medqc-web/src/views/workstation-v4/types.ts'
       - 'apps/medqc-web/src/views/workstation-v4/components/qc/latestQcSummaryPresentation.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/components/qc/QcRecordReviewPreview.vue'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/components/qc/QcRecordReviewPreview.spec.ts'
       - 'apps/medqc-web/src/views/workstation-v4/QcRecordResultListView.vue'
       - 'apps/medqc-web/src/views/workstation/QCOverviewView.vue'
       - 'apps/medqc-web/src/views/workstation-v2/types.ts'
@@ -72,6 +76,6 @@ jobs:
         run: npm run type-check
       - name: Focused task status and presentation tests
         # 依赖已安装；测试及其子进程使用独立网络命名空间，不能访问模型或业务库。
-        run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" node_modules/vitest/vitest.mjs run tests/unit/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.spec.ts tests/unit/views/workstation-v4/customer-sample-validation/batchJobPresentation.spec.ts tests/unit/views/workstation-v4/semantic-rules/useSichuanBatchJobs.f08.spec.ts tests/unit/views/workstation-v4/latestQcFailureSummary.spec.ts tests/unit/views/workstation-v4/QcRecordResultListView.spec.ts tests/unit/views/workstation-v4/usePatientRecords.spec.ts tests/unit/views/workstation/QCOverviewView.spec.ts --maxWorkers=1 --minWorkers=1
+        run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" node_modules/vitest/vitest.mjs run tests/unit/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.spec.ts tests/unit/views/workstation-v4/customer-sample-validation/batchJobPresentation.spec.ts tests/unit/views/workstation-v4/semantic-rules/useSichuanBatchJobs.f08.spec.ts tests/unit/views/workstation-v4/latestQcFailureSummary.spec.ts tests/unit/views/workstation-v4/QcRecordResultListView.spec.ts tests/unit/views/workstation-v4/components/qc/QcRecordReviewPreview.spec.ts tests/unit/views/workstation-v4/usePatientRecords.spec.ts tests/unit/views/workstation/QCOverviewView.spec.ts --maxWorkers=1 --minWorkers=1
       - name: Read-only lint of changed frontend scope
-        run: npx eslint src/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.vue src/views/workstation-v4/customer-sample-validation/batchJobPresentation.ts src/views/workstation-v4/semantic-rules/types.ts src/views/workstation-v4/normalize.ts src/views/workstation-v4/types.ts src/views/workstation-v4/components/qc/latestQcSummaryPresentation.ts src/views/workstation-v4/QcRecordResultListView.vue src/views/workstation/QCOverviewView.vue src/views/workstation-v2/types.ts
+        run: npx eslint src/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.vue src/views/workstation-v4/customer-sample-validation/batchJobPresentation.ts src/views/workstation-v4/semantic-rules/types.ts src/views/workstation-v4/normalize.ts src/views/workstation-v4/types.ts src/views/workstation-v4/components/qc/latestQcSummaryPresentation.ts src/views/workstation-v4/components/qc/QcRecordReviewPreview.vue src/views/workstation-v4/QcRecordResultListView.vue src/views/workstation/QCOverviewView.vue src/views/workstation-v2/types.ts

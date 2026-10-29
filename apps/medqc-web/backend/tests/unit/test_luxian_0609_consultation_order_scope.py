@@ -184,8 +184,10 @@ def test_确属同项拒绝仍从未执行措施中剔除() -> None:
 def test_同项措施摘取边界不同仍可豁免(short, long):
     for declined, pending in ((short, long), (long, short)):
         assert measure_is_declined(pending, (declined,))
-        filtered, _, _ = _measure_refinement(declined, pending)
+        filtered, result, excluded = _measure_refinement(declined, pending)
         assert filtered.missing_measures == {"r1": ()}
+        assert result == ("compliant", "requirement_satisfied")
+        assert excluded == frozenset({"r1"})
 
 
 def test_条件句没有实际拒绝事实时不豁免缺失措施() -> None:

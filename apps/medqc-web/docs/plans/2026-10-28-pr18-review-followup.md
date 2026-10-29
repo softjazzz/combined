@@ -35,7 +35,7 @@
 
 病历池、运行/终末病历结果列表、工作清单/首页的操作视图，以及最新详情和导出，可展示最新全量轮中的同轮有效项并标注失败。局部任务仍不替代全量轮，旧完整结果仍保存在历史任务中，不跨轮拼接。
 
-`core_system_report_service`、`record_quality_report_service`、`record_review_workflow_service`、`luxian_0609_result_analysis_service`、`feedback_result_source`、`qc_agent/business_reads`仍使用完成态Canonical默认入口。这些统计/审核/事实读取入口尚未接入部分执行失败合同，本批不自动扩大其统计或审核数据范围；它们可能继续展示更早完整轮。本批不宣称所有报表/审核入口已统一选轮，这一差异需要后续产品口径决定和单独适配。不能只批量开启参数而不检查消费层。
+`core_system_report_service`、`record_quality_report_service`、`record_review_workflow_service`、`luxian_0609_result_analysis_service`、`feedback_result_source`、`qc_agent/business_reads.department_analysis`仍使用完成态Canonical默认入口。这些统计/审核读取入口尚未接入部分执行失败合同，本批不自动扩大其统计或审核数据范围；它们可能继续展示更早完整轮。`business_reads.saved_record`则实际使用最新单条DTO，不能将整个模块概括为完成态入口。本批不宣称所有报表/审核入口已统一选轮，这一差异需要后续产品口径决定和单独适配。不能只批量开启参数而不检查消费层。
 
 ## 尚未纳入本批
 
