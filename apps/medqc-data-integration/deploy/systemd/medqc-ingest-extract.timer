@@ -1,0 +1,10 @@
+[Unit]
+Description=Run MedQC Caché extract daily
+
+[Timer]
+OnCalendar=*-*-* 01:00:00
+Persistent=true
+Unit=medqc-ingest-extract.service
+
+[Install]
+WantedBy=timers.target
