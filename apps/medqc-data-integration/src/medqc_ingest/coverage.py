@@ -34,7 +34,7 @@ class CoverageContract:
     evidence: str
 
 
-_BUNDLE_SOURCE_TYPES = (
+_COVERAGE_SOURCE_TYPES = (
     "admission_record",
     "admission_record_diagnosis",
     "first_course_record",
@@ -57,6 +57,7 @@ _BUNDLE_SOURCE_TYPES = (
     "exam_item",
     "exam_item_report",
     "labtest_master",
+    "labtest_item",
     "labtest_item_report",
     "pathology_exam_master",
     "pathology_exam_report",
@@ -109,12 +110,18 @@ _DIRECT_DOCUMENT_COUNTS = {
     "senior_course_record": 24,
     "consultation_record": 24,
     "discharge_record": 29,
+    "inpat_drug_order": 61,
+    "inpat_nondrug_order": 45,
+    "labtest_master": 48,
+    "labtest_item": 28,
+    "labtest_item_report": 37,
+    "exam_item_report": 43,
 }
 
 
 def build_coverage_contracts() -> tuple[CoverageContract, ...]:
     rows: list[CoverageContract] = []
-    for source_type in _BUNDLE_SOURCE_TYPES:
+    for source_type in _COVERAGE_SOURCE_TYPES:
         interface = f"web.{source_type}"
         if source_type in _DIRECT_DOCUMENT_COUNTS:
             count = _DIRECT_DOCUMENT_COUNTS[source_type]
@@ -128,11 +135,22 @@ def build_coverage_contracts() -> tuple[CoverageContract, ...]:
                     source_field=f"*:{count}-source-columns",
                     cdm_target=target,
                     bundle_usage=(
-                        "index_coding_settlement"
-                        if source_type == "mr"
+                        "index_coding_settlement" if source_type == "mr"
+                        else "not_registered" if source_type == "labtest_item"
+                        else "medical_orders" if source_type.startswith("inpat_")
+                        else "lab_tests" if source_type.startswith("labtest_")
+                        else "independent_exam_reports" if source_type == "exam_item_report"
                         else "major_documents"
                     ),
-                    qc_family=("frontpage" if source_type == "mr" else "document_content"),
+                    qc_family=(
+                        "frontpage" if source_type == "mr"
+                        else "not_registered" if source_type == "labtest_item"
+                        else "source_evidence" if source_type in {
+                            "inpat_drug_order", "inpat_nondrug_order", "labtest_master",
+                            "labtest_item_report", "exam_item_report",
+                        }
+                        else "document_content"
+                    ),
                     transform_authority="explicit_projection_contract",
                     status=CoverageStatus.DIRECT,
                     evidence="cache-field-study-20261026-20261028",
@@ -200,5 +218,5 @@ def write_coverage_report(
         raise
 
 
-if len(_BUNDLE_SOURCE_TYPES) != 53:  # pragma: no cover - import-time invariant
-    raise RuntimeError("bundle coverage catalog must contain 53 source types")
+if len(_COVERAGE_SOURCE_TYPES) != 54:  # pragma: no cover - import-time invariant
+    raise RuntimeError("coverage catalog must contain 53 bundle types plus labtest_item CDM")

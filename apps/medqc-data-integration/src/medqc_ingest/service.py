@@ -69,7 +69,8 @@ class ExtractService:
         if mode.writes_raw and self._repository is None:
             raise IngestError(ErrorKind.CONFIGURATION, "ingest_repository_required")
 
-        repository = self._repository
+        # dry 即使被调用方误传仓储，也不允许打开 PG 或建立批次。
+        repository = self._repository if mode.writes_raw else None
         source: SourceAdapter | None = None
         cursor = None
         batch_id: int | None = None
@@ -91,7 +92,9 @@ class ExtractService:
 
             source = self._source_factory()
             source.open()
-            cursor = source.query(spec, (source_date,))
+            if spec.argument_count not in (1, 2):
+                raise IngestError(ErrorKind.CONFIGURATION, "source_argument_count")
+            cursor = source.query(spec, (source_date,) * spec.argument_count)
             columns = validate_interface_columns(spec, cursor.columns)
             schema_hash, columns = schema_signature(columns)
 

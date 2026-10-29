@@ -7,22 +7,24 @@ schema 漂移处理，不能由名称匹配自动放行。
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Final, TypedDict
+from typing import Final
 
-FieldMappingData = tuple[str | None, str, str]
-
-
-class PublishContractData(TypedDict):
-    target: str
-    primary_key: tuple[str, ...]
-    required_columns: tuple[str, ...]
-    mappings: tuple[FieldMappingData, ...]
+from medqc_ingest.contract_types import FieldMappingData, PublishContractData
+from medqc_ingest.orders_lab_exam_contracts import (
+    MORE_ARGUMENT_COUNTS,
+    MORE_PUBLISH_CONTRACTS,
+    MORE_RAW_KEY_FIELDS,
+    MORE_SOURCE_COLUMNS,
+)
 
 EVIDENCE_ZIP_SHA256: Final = (
     "019be2d92c74bd8bce0b01c31098890e7fed1df16ba7392a1e2f63c34af08d71"
 )
 EVIDENCE_WINDOW: Final = "2026-10-26..2026-10-28"
 EVIDENCE_VERSION: Final = f"cache-field-study/{EVIDENCE_WINDOW}@sha256:{EVIDENCE_ZIP_SHA256}"
+PROJECTION_ACCEPTANCE_SHA256: Final = (
+    "e2f2b3079e8847b0c991f0b9a44bf25f1ca15e9256585207c0eb27be4fb2ce1b"
+)
 
 WEB_MR_SOURCE_COLUMNS: Final = (
     "institute_id",
@@ -224,6 +226,7 @@ SOURCE_COLUMN_CONTRACTS: Final[Mapping[str, tuple[str, ...]]] = {
         "submitter", "submitter_id", "submit_datetime", "record_content", "last_modifier",
         "last_modifier_id", "last_modified_datetime", "update_time",
     ),
+    **MORE_SOURCE_COLUMNS,
 }
 
 WEB_MR_TARGET_COLUMNS: Final = (
@@ -431,6 +434,7 @@ PUBLISH_CONTRACTS: Final[Mapping[str, PublishContractData]] = {
             ("inpatient_duration", "inpatient_duration", "text"),
         ),
     },
+    **MORE_PUBLISH_CONTRACTS,
 }
 
 RAW_KEY_FIELDS: Final[Mapping[str, tuple[str, ...]]] = {
@@ -441,14 +445,31 @@ RAW_KEY_FIELDS: Final[Mapping[str, tuple[str, ...]]] = {
     "web.senior_course_record": ("institute_id", "patient_id", "visit_id", "documentid"),
     "web.consultation_record": ("institute_id", "patient_id", "visit_id", "documentid"),
     "web.discharge_record": ("institute_id", "patient_id", "visit_id", "document_id"),
+    **MORE_RAW_KEY_FIELDS,
 }
 
+ARGUMENT_COUNTS: Final = {name: MORE_ARGUMENT_COUNTS.get(name, 1) for name in RAW_KEY_FIELDS}
+INTERFACE_EVIDENCE_VERSIONS: Final = {
+    name: EVIDENCE_VERSION + (
+        f";projection-acceptance@sha256:{PROJECTION_ACCEPTANCE_SHA256}"
+        if name in MORE_ARGUMENT_COUNTS else ""
+    )
+    for name in RAW_KEY_FIELDS
+}
+MAJOR_DOCUMENT_NAMES: Final = tuple(
+    name for name in RAW_KEY_FIELDS if name not in MORE_RAW_KEY_FIELDS
+)
 
-def contract_export_document(interface: str | None = None) -> dict[str, object]:
+
+def contract_export_document(
+    interface: str | None = None, *, include_all: bool = False
+) -> dict[str, object]:
     """生成可供 DSH 复制使用的非 PHI JSON 合同。"""
     if interface is not None and interface not in SOURCE_COLUMN_CONTRACTS:
         raise KeyError(interface)
-    names = (interface,) if interface is not None else tuple(SOURCE_COLUMN_CONTRACTS)
+    names = (interface,) if interface is not None else (
+        tuple(SOURCE_COLUMN_CONTRACTS) if include_all else MAJOR_DOCUMENT_NAMES
+    )
     interfaces: list[dict[str, object]] = []
     for name in names:
         publish = PUBLISH_CONTRACTS[name]
@@ -456,9 +477,11 @@ def contract_export_document(interface: str | None = None) -> dict[str, object]:
             {
                 "interface": name,
                 "procedure": name,
-                "argument_count": 1,
-                "date_semantics": "single_day",
-                "evidence_version": EVIDENCE_VERSION,
+                "argument_count": ARGUMENT_COUNTS[name],
+                "date_semantics": (
+                    "single_day" if ARGUMENT_COUNTS[name] == 1 else "single_day_pair"
+                ),
+                "evidence_version": INTERFACE_EVIDENCE_VERSIONS[name],
                 "source_column_count": len(SOURCE_COLUMN_CONTRACTS[name]),
                 "ordered_source_columns": list(SOURCE_COLUMN_CONTRACTS[name]),
                 "raw_key_fields": list(RAW_KEY_FIELDS[name]),
@@ -481,8 +504,14 @@ def contract_export_document(interface: str | None = None) -> dict[str, object]:
                 ],
             }
         )
+        if name == "web.exam_item_report":
+            interfaces[-1]["derived_document_id"] = {
+                "algorithm": "sha256-canonical-key-v1",
+                "fields": list(RAW_KEY_FIELDS[name]),
+                "prefix": "cache-exam-v1:",
+            }
     return {
-        "contract_version": 2,
+        "contract_version": 3 if any(name in MORE_ARGUMENT_COUNTS for name in names) else 2,
         "contains_phi": False,
         "contains_raw_values": False,
         "evidence_zip_sha256": EVIDENCE_ZIP_SHA256,

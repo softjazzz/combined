@@ -6,6 +6,7 @@ import importlib
 import json
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any
 
@@ -19,6 +20,7 @@ from medqc_ingest.domain import (
     PublishSpec,
     RawRecord,
     advisory_lock_key,
+    schema_signature,
 )
 from medqc_ingest.inspection import SnapshotRecord
 from medqc_ingest.profiling import ProfileSnapshotRow
@@ -76,9 +78,7 @@ class PostgresIngestRepository:
     def connect_control(self) -> None:
         if self._control is not None:
             return
-        self._control = _connect(
-            self._settings, ErrorKind.INGEST_CONNECT, "ingest_control_connect"
-        )
+        self._control = _connect(self._settings, ErrorKind.INGEST_CONNECT, "ingest_control_connect")
         self._control.autocommit = True
 
     def acquire_lock(self, scope: str) -> bool:
@@ -151,9 +151,7 @@ class PostgresIngestRepository:
             raise IngestError(ErrorKind.INGEST_WRITE, "mark_batch_failed") from None
 
     def begin_data(self) -> None:
-        self._data = _connect(
-            self._settings, ErrorKind.INGEST_CONNECT, "ingest_data_connect"
-        )
+        self._data = _connect(self._settings, ErrorKind.INGEST_CONNECT, "ingest_data_connect")
         self._data.autocommit = False
 
     def write_schema(self, interface: str, schema_hash: str, columns: Sequence[str]) -> None:
@@ -186,21 +184,35 @@ class PostgresIngestRepository:
             hashes = [record.source_key_hash for record in records]
             with self._data.cursor() as cursor:
                 cursor.execute(
-                    "SELECT source_key_hash,row_hash FROM cache_raw.source_record "
+                    "SELECT source_key_hash,row_hash,schema_hash FROM cache_raw.source_record "
                     "WHERE interface_name=%s AND source_key_hash = ANY(%s)",
                     (interface, hashes),
                 )
-                existing = {str(row[0]): str(row[1]) for row in cursor.fetchall()}
+                existing = {str(row[0]): (str(row[1]), str(row[2])) for row in cursor.fetchall()}
                 counts = {"inserted": 0, "updated": 0, "unchanged": 0}
                 values: list[tuple[Any, ...]] = []
+                versions: list[tuple[Any, ...]] = []
                 for record in records:
                     previous = existing.get(record.source_key_hash)
                     if previous is None:
                         counts["inserted"] += 1
-                    elif previous == record.row_hash:
+                    elif previous == (record.row_hash, schema_hash):
                         counts["unchanged"] += 1
                     else:
                         counts["updated"] += 1
+                    if previous != (record.row_hash, schema_hash):
+                        versions.append(
+                            (
+                                interface,
+                                record.source_key_hash,
+                                batch_id,
+                                schema_hash,
+                                "ordered-column-names-v1",
+                                record.row_hash,
+                                _json(record.source_key),
+                                _json(record.payload),
+                            )
+                        )
                     values.append(
                         (
                             interface,
@@ -217,7 +229,7 @@ class PostgresIngestRepository:
                         )
                     )
                 cursor.executemany(
-                    "INSERT INTO cache_raw.source_record "
+                    "INSERT INTO cache_raw.source_record AS raw_current "
                     "(interface_name,source_key_hash,source_key,payload,schema_hash,"
                     "schema_hash_version,row_hash,"
                     "source_window_start,source_window_end,first_batch_id,last_batch_id,"
@@ -231,9 +243,20 @@ class PostgresIngestRepository:
                     "source_window_start=EXCLUDED.source_window_start,"
                     "source_window_end=EXCLUDED.source_window_end,"
                     "last_batch_id=EXCLUDED.last_batch_id,last_seen_at=now(),"
-                    "local_sync_completed_at=now()",
+                    "local_sync_completed_at=CASE WHEN "
+                    "(raw_current.row_hash,raw_current.schema_hash) "
+                    "IS DISTINCT FROM (EXCLUDED.row_hash,EXCLUDED.schema_hash) "
+                    "THEN now() ELSE raw_current.local_sync_completed_at END",
                     values,
                 )
+                if versions:
+                    cursor.executemany(
+                        "INSERT INTO cache_raw.source_record_version "
+                        "(interface_name,source_key_hash,batch_id,schema_hash,"
+                        "schema_hash_version,row_hash,source_key,payload) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)",
+                        versions,
+                    )
                 return counts
         except Exception:
             raise IngestError(ErrorKind.INGEST_WRITE, "upsert_raw") from None
@@ -482,19 +505,15 @@ class PostgresIngestRepository:
         columns: Sequence[Mapping[str, Any]],
         relations: Sequence[Mapping[str, Any]],
     ) -> None:
-        connection = _connect(
-            self._settings, ErrorKind.INGEST_CONNECT, "profile_write_connect"
-        )
+        connection = _connect(self._settings, ErrorKind.INGEST_CONNECT, "profile_write_connect")
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "DELETE FROM sync_ops.source_column_profile "
-                    "WHERE inspection_batch_id=%s",
+                    "DELETE FROM sync_ops.source_column_profile WHERE inspection_batch_id=%s",
                     (batch_id,),
                 )
                 cursor.execute(
-                    "DELETE FROM sync_ops.source_relation_profile "
-                    "WHERE inspection_batch_id=%s",
+                    "DELETE FROM sync_ops.source_relation_profile WHERE inspection_batch_id=%s",
                     (batch_id,),
                 )
                 cursor.executemany(
@@ -576,6 +595,7 @@ class PostgresIngestRepository:
         )
         try:
             with self._publish_read.cursor() as metadata:
+                metadata.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
                 metadata.execute(
                     "SELECT DISTINCT schema_hash FROM cache_raw.source_record "
                     "WHERE interface_name=%s",
@@ -583,10 +603,10 @@ class PostgresIngestRepository:
                 )
                 hashes = [str(row[0]) for row in metadata.fetchall()]
                 if len(hashes) != 1:
-                    raise IngestError(
-                        ErrorKind.PUBLISH_CONTRACT, "raw_schema_hash_not_unique"
-                    )
+                    raise IngestError(ErrorKind.PUBLISH_CONTRACT, "raw_schema_hash_not_unique")
                 schema_hash = hashes[0]
+                if len(schema_hash) != 64 or any(c not in "0123456789abcdef" for c in schema_hash):
+                    raise IngestError(ErrorKind.PUBLISH_CONTRACT, "raw_schema_hash_invalid")
                 metadata.execute(
                     "SELECT column_names FROM sync_ops.source_schema "
                     "WHERE interface_name=%s AND schema_hash=%s",
@@ -596,6 +616,8 @@ class PostgresIngestRepository:
                 if row is None or not isinstance(row[0], list):
                     raise IngestError(ErrorKind.PUBLISH_CONTRACT, "raw_schema_missing")
                 columns = tuple(str(value) for value in row[0])
+                if schema_signature(columns)[0] != schema_hash:
+                    raise IngestError(ErrorKind.PUBLISH_CONTRACT, "raw_schema_hash_mismatch")
                 key_expressions = ",".join(
                     f"payload->>{_json_field(field)}" for field in target_key_fields
                 )
@@ -606,9 +628,7 @@ class PostgresIngestRepository:
                     (interface, schema_hash),
                 )
                 if metadata.fetchone() is not None:
-                    raise IngestError(
-                        ErrorKind.PUBLISH_CONTRACT, "target_key_not_unique"
-                    )
+                    raise IngestError(ErrorKind.PUBLISH_CONTRACT, "target_key_not_unique")
             cursor = self._publish_read.cursor(name="medqc_publish_stream")
             cursor.execute(
                 "SELECT payload,local_sync_completed_at,last_batch_id,"
@@ -630,9 +650,7 @@ class PostgresIngestRepository:
         )
         self._publish_data.autocommit = False
 
-    def write_publish_lineage(
-        self, publish_batch_id: int, rows: Sequence[PublishLineage]
-    ) -> None:
+    def write_publish_lineage(self, publish_batch_id: int, rows: Sequence[PublishLineage]) -> None:
         try:
             with self._publish_data.cursor() as cursor:
                 cursor.executemany(
@@ -774,11 +792,10 @@ class PostgresCdmRepository:
     def __init__(self, settings: PostgresSettings) -> None:
         self._settings = settings
         self._connection: Any = None
+        self._maximum_lengths: dict[str, int] = {}
 
     def begin(self) -> None:
-        self._connection = _connect(
-            self._settings, ErrorKind.CDM_CONNECT, "cdm_connect"
-        )
+        self._connection = _connect(self._settings, ErrorKind.CDM_CONNECT, "cdm_connect")
         self._connection.autocommit = False
 
     def prepare_target_contract(self, target: PublishSpec) -> PublishSpec:
@@ -794,25 +811,32 @@ class PostgresCdmRepository:
             mapping
             for mapping in target.mappings
             if mapping.target in columns
-            and columns[mapping.target]
-            in _TARGET_TYPE_COMPATIBILITY[mapping.target_type]
+            and columns[mapping.target] in _TARGET_TYPE_COMPATIBILITY[mapping.target_type]
         )
         compatible_names = {mapping.target for mapping in compatible}
         if set(target.required_columns) - compatible_names:
             raise IngestError(ErrorKind.PUBLISH_CONTRACT, "cdm_required_columns_missing")
-        return PublishSpec(
-            schema=target.schema,
-            table=target.table,
-            primary_key=target.primary_key,
-            required_columns=target.required_columns,
-            mappings=compatible,
-        )
+        try:
+            with self._connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT column_name,character_maximum_length "
+                    "FROM information_schema.columns WHERE table_schema=%s AND table_name=%s "
+                    "AND character_maximum_length IS NOT NULL",
+                    (target.schema, target.table),
+                )
+                self._maximum_lengths = {str(row[0]): int(row[1]) for row in cursor.fetchall()}
+        except Exception:
+            raise IngestError(ErrorKind.CDM_WRITE, "read_cdm_text_lengths") from None
+        return replace(target, mappings=compatible)
 
-    def upsert_target(
-        self, target: PublishSpec, rows: Sequence[Mapping[str, Any]]
-    ) -> int:
+    def upsert_target(self, target: PublishSpec, rows: Sequence[Mapping[str, Any]]) -> int:
         if not rows:
             return 0
+        for row in rows:
+            for name, maximum in self._maximum_lengths.items():
+                value = row.get(name)
+                if isinstance(value, str) and len(value) > maximum:
+                    raise IngestError(ErrorKind.PUBLISH_CONTRACT, "target_text_too_long")
         columns = target.target_columns
         keys = frozenset(target.primary_key)
         insert_columns = ",".join(_ident(column) for column in columns)
@@ -823,15 +847,19 @@ class PostgresCdmRepository:
             if column not in keys
         )
         conflict = ",".join(_ident(column) for column in target.primary_key)
+        changed_columns = [column for column in columns if column not in keys]
+        current_values = ",".join(f"cdm_row.{_ident(column)}" for column in changed_columns)
+        incoming_values = ",".join(f"EXCLUDED.{_ident(column)}" for column in changed_columns)
         sql = (
-            f"INSERT INTO {_ident(target.schema)}.{_ident(target.table)} "
+            f"INSERT INTO {_ident(target.schema)}.{_ident(target.table)} AS cdm_row "
             f"({insert_columns}) VALUES ({placeholders}) "
-            f"ON CONFLICT ({conflict}) DO UPDATE SET {update}"
+            f"ON CONFLICT ({conflict}) DO UPDATE SET {update} "
+            f"WHERE ROW({current_values}) IS DISTINCT FROM ROW({incoming_values})"
         )
         try:
             with self._connection.cursor() as cursor:
                 cursor.executemany(sql, [tuple(row[column] for column in columns) for row in rows])
-            return len(rows)
+                return int(cursor.rowcount)
         except Exception:
             raise IngestError(ErrorKind.CDM_WRITE, "upsert_cdm_target") from None
 
@@ -861,9 +889,7 @@ _TARGET_TYPE_COMPATIBILITY = {
 }
 
 
-def _read_cdm_contract(
-    connection: Any, target: PublishSpec
-) -> tuple[dict[str, str], list[str]]:
+def _read_cdm_contract(connection: Any, target: PublishSpec) -> tuple[dict[str, str], list[str]]:
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT column_name,data_type FROM information_schema.columns "
@@ -903,6 +929,7 @@ class PostgresCheckRepository:
             with connection.cursor() as cursor:
                 expected = (
                     "cache_raw.source_record",
+                    "cache_raw.source_record_version",
                     "cache_raw.source_snapshot",
                     "sync_ops.source_interface",
                     "sync_ops.source_schema",
@@ -978,9 +1005,7 @@ class PostgresCheckRepository:
         except Exception:
             raise IngestError(ErrorKind.INGEST_WRITE, "check_ingest_contract") from None
 
-    def check_cdm_contract(
-        self, targets: Sequence[PublishSpec]
-    ) -> Sequence[tuple[str, bool, str]]:
+    def check_cdm_contract(self, targets: Sequence[PublishSpec]) -> Sequence[tuple[str, bool, str]]:
         connection = _connect(
             self._cdm_settings,
             ErrorKind.CDM_CONNECT,

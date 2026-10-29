@@ -8,6 +8,7 @@
 psql --set ON_ERROR_STOP=1 --file migrations/001_ingest_contract.sql medqc_ingest
 psql --set ON_ERROR_STOP=1 --file migrations/002_major_document_contracts.sql medqc_ingest
 psql --set ON_ERROR_STOP=1 --file migrations/003_daily_record_datetime_contract.sql medqc_ingest
+psql --set ON_ERROR_STOP=1 --file migrations/004_orders_lab_exam_and_versions.sql medqc_ingest
 ```
 
 脚本可重复执行，不删除数据。运行身份只需被授予 `cache_raw`、`sync_ops` 的必要
@@ -29,3 +30,13 @@ required 核心列和实际类型；可选列不存在时保持 raw-only，不�
 
 `003` 仅登记日常病程 `record_datetime` 的源到目标映射；目标新增列由应用
 Alembic `20261029_000056` 管理。登记不执行应用迁移，不回填已有 raw/CDM，不推进断点。
+
+`004` 是 0.2.0 必需升级：登记六个已验收接口，并增加 raw 版本表。
+执行前停止该 ingest 库的工作进程，升级与授权核对完成后再启用 0.2.0 worker。
+schema、当前 raw、变化版本和断点由工作进程在同一个数据事务提交。升级已有正式库时，
+只保存升级时仍可见的快照版本；不会恢复已经丢失的旧版本，也不触碰 DSH 临时版本表。
+该脚本检查正式存储列 `column_names/source_window_start`，不满足即整体退出。
+
+DSH 现有验收库使用 `column_names_json` 等不同列合同，禁止在该库执行 001–004 试图
+自动兼容。当前验证只读。后续应在新建独立克隆上验证显式存储迁移，保留所有原始历史，
+确认成功后才讨论部署；本次未提供或执行该数据迁移。

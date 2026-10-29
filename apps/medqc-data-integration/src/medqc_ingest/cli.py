@@ -78,7 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
     profile.add_argument("--batch", required=True, type=int)
 
     contract_export = commands.add_parser(
-        "contract-export", help="导出主要文书非 PHI 字段与映射合同"
+        "contract-export", help="导出已注册接口的非 PHI 字段与映射合同"
     )
     contract_export.add_argument("--interface")
     contract_export.add_argument("--output", type=Path)
@@ -215,7 +215,7 @@ def _run_contract_export(args: argparse.Namespace) -> int:
     interface = str(args.interface) if args.interface is not None else None
     if interface is not None:
         resolve_interface(interface)
-    document = contract_export_document(interface)
+    document = contract_export_document(interface, include_all=True)
     serialized = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
     output: Path | None = args.output
     if output is None:

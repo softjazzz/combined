@@ -5,8 +5,9 @@
 - Caché 抽取器：流式调用已注册接口，把每个接口的完整 payload 写入 `cache_raw`；
 - CDM 发布器：将已验证的 raw 数据按显式合同投影到业务 CDM。
 
-正式注册表包含已通过非 PHI 三天字段研究验证的 `web.mr` 与六类主要文书接口。其他
-接口仍会在读取配置密码或建立网络连接前拒绝；在院接口尚未验证，不在注册表中。
+0.2.0 正式代码注册表包含 13 个已有证据的来源：`web.mr`、六类主要文书，以及
+药品医嘱、非药品医嘱、检验申请、检验项目、检验结果、检查报告。其他接口在读取配置
+密码或建立连接前拒绝。注册不代表已经部署；在院取数能力仍未验证。
 
 ## 安装与命令
 
@@ -39,7 +40,7 @@ rowcount 输出 `advanced` 或 `held`。
 客户机真实全接口字段探查由既有 DSH/v5-final 环境完成；其非 PHI 字段清单和画像用于
 复核候选目录与覆盖合同。候选清单本身不是生产调用授权。
 
-`contract-export` 不加载配置或驱动，可输出 7 个正式接口的完整有序源列、显式 alias、
+`contract-export` 不加载配置或驱动，可输出 13 个已注册接口的完整有序源列、显式 alias、
 目标类型、required 核心列和 raw-only 字段。可独立交付的 JSON、纯标准库转换模块及
 DSH 使用说明见 [DSH 主要文书映射桥接](docs/dsh-major-document-bridge.md)。
 
@@ -50,8 +51,9 @@ DSH 使用说明见 [DSH 主要文书映射桥接](docs/dsh-major-document-bridg
 六个新增医嘱/检验/检查接口的独立验收合同在
 `contracts/orders-lab-exam-contracts.json`，纯转换工具为
 `tools/orders_lab_exam_transform.py`；详见
-[六接口验收合同](docs/orders-lab-exam-contract.md)。这组合同不自动扩大生产worker
-的七接口注册表，需先完成客户克隆库的schema补录、投影及真实bundle/源读取验收。
+[六接口验收合同](docs/orders-lab-exam-contract.md)。完成客户克隆库投影和正式源读取验收后，
+这六接口已接入本服务。双日期接口只按 `(day, day)` 调用；保留 42,391 行检验结果的
+独立粒度，以及检查报告的稳定技术键，不建立 HIS/PACS 关联。
 
 运行配置来自环境变量，密码只从独立文件读取。详见 `.env.example`。迁移 DDL 在
 `migrations/`；它不会自动运行。
@@ -61,18 +63,26 @@ DSH 使用说明见 [DSH 主要文书映射桥接](docs/dsh-major-document-bridg
 - ingest DB 只承载 `cache_raw`、`sync_ops` 和发布血缘，抽取器只写这个库；
 - business DB `medqc` 只由发布器通过独立连接写现有 CDM 表，业务系统不读取 raw；
 - `running` 审计先通过控制连接独立提交，raw 分块、schema 与 checkpoint 在同一
-  数据事务中，任一块失败整批回滚；
+  数据事务中，新增/变化行的历史版本也在同一事务中，任一块失败整批回滚；
 - 发布器先验证 raw 单一 schema、目标主键、核心列与类型，只更新合同拥有且目标实际
   存在的列；核心列缺失时阻断，可选新列缺失时保持 raw-only；
 - 入院、出院 raw 使用病例三键加文档编号保留每份文书，但 CDM 仍是病例三键；发布前
   发现同病例多文书即整批拒绝。病程类表使用病例三键加文档编号发布；
 - CDM 提交后再提交 ingest 发布血缘；若第二次提交失败，重试仍按目标主键幂等；
+- raw 发布默认拒绝空哈希和错误哈希；历史验收库的事后补录不进入全局放行逻辑；
+- CDM 发布核对实际文本最大长度，超长拒绝且不截断；相同字段值不重复更新；
 - `replay` 按闭区间逐日建立批次和写 raw，但永远不推进 checkpoint；`dry` 不加载
   PostgreSQL 密码、不连接 PostgreSQL。
 
 初始化/升级方法见 [migrations/README.md](migrations/README.md)。该 DDL 与
 `apps/medqc-web` Alembic 完全独立。业务库 CDM 表仍由业务应用迁移维护；本服务不会
 要求客户为验收升级或手工补列。
+
+当前 DSH 验收库和正式 ingest 的存储表结构不同，禁止直接执行本服务的初始化 SQL
+覆盖验收库。客户现有 raw 可用 [只读核对工具](tools/verify_service_projection.py) 对照正式
+转换结果；它仅支持指定克隆库，不写 raw/CDM/审计/断点，不查询 Caché。具体步骤见
+[DSH 0.2 只读验证](docs/DSH_START-service-0.2-readonly.txt)。历史版本迁入正式存储需要
+另行提供显式迁移，不应从“当前快照相同”推断历史版本也已迁移。
 
 ## 调度示例
 

@@ -14,7 +14,8 @@ from enum import Enum
 from typing import Any
 
 from medqc_ingest.contracts import (
-    EVIDENCE_VERSION,
+    ARGUMENT_COUNTS,
+    INTERFACE_EVIDENCE_VERSIONS,
     PUBLISH_CONTRACTS,
     RAW_KEY_FIELDS,
     SOURCE_COLUMN_CONTRACTS,
@@ -100,12 +101,21 @@ class FieldMapping:
 
 
 @dataclass(frozen=True)
+class DerivedDocumentId:
+    """检查报告的稳定技术键；不表达医嘱关联或临床归并。"""
+
+    source_fields: tuple[str, ...]
+    prefix: str = "cache-exam-v1:"
+
+
+@dataclass(frozen=True)
 class PublishSpec:
     schema: str
     table: str
     primary_key: tuple[str, ...]
     required_columns: tuple[str, ...]
     mappings: tuple[FieldMapping, ...]
+    derived_document_id: DerivedDocumentId | None = None
 
     @property
     def qualified_name(self) -> str:
@@ -118,10 +128,16 @@ class PublishSpec:
     @property
     def source_key_fields(self) -> tuple[str, ...]:
         by_target = {mapping.target: mapping.source for mapping in self.mappings}
-        fields = tuple(by_target.get(field) for field in self.primary_key)
-        if any(field is None for field in fields):
-            raise IngestError(ErrorKind.PUBLISH_CONTRACT, "target_key_mapping_missing")
-        return tuple(str(field) for field in fields)
+        fields: list[str] = []
+        for target in self.primary_key:
+            source = by_target.get(target)
+            if source == "__derived_document_id" and self.derived_document_id is not None:
+                fields.extend(self.derived_document_id.source_fields)
+            elif source is None or source == "__derived_document_id":
+                raise IngestError(ErrorKind.PUBLISH_CONTRACT, "target_key_mapping_missing")
+            else:
+                fields.append(source)
+        return tuple(dict.fromkeys(fields))
 
 
 @dataclass(frozen=True)
@@ -145,6 +161,9 @@ def _publish_spec(name: str) -> PublishSpec:
         primary_key=contract["primary_key"],
         required_columns=contract["required_columns"],
         mappings=tuple(FieldMapping(*mapping) for mapping in contract["mappings"]),
+        derived_document_id=(
+            DerivedDocumentId(RAW_KEY_FIELDS[name]) if name == "web.exam_item_report" else None
+        ),
     )
 
 
@@ -152,11 +171,11 @@ INTERFACE_REGISTRY: Mapping[str, InterfaceSpec] = {
     name: InterfaceSpec(
         name=name,
         procedure=name,
-        argument_count=1,
+        argument_count=ARGUMENT_COUNTS[name],
         key_fields=RAW_KEY_FIELDS[name],
         publish_target=str(PUBLISH_CONTRACTS[name]["target"]),
         source_columns=columns,
-        evidence_version=EVIDENCE_VERSION,
+        evidence_version=INTERFACE_EVIDENCE_VERSIONS[name],
         publish=_publish_spec(name),
     )
     for name, columns in SOURCE_COLUMN_CONTRACTS.items()
@@ -284,7 +303,7 @@ def build_records(
         source_key: dict[str, Any] = {}
         for field in key_fields:
             value = payload.get(field)
-            if value is None or value == "":
+            if value is None or value == "" or (isinstance(value, str) and not value.strip()):
                 raise IngestError(ErrorKind.KEY, f"missing_key:{field}")
             source_key[field] = value
         records.append(
@@ -375,17 +394,27 @@ def project_record(
     publish = spec.publish
     if publish is None:
         raise IngestError(ErrorKind.PUBLISH_CONTRACT, "publish_contract_missing")
+    prepared = dict(payload)
+    derived = publish.derived_document_id
+    if derived is not None:
+        parts = [denormalize(payload.get(field)) for field in derived.source_fields]
+        if any(not isinstance(value, str) or not value.strip() for value in parts):
+            raise IngestError(ErrorKind.PUBLISH_CONTRACT, "derived_key_requires_text")
+        prepared["__derived_document_id"] = derived.prefix + sha256_hex(
+            canonical_json([spec.name, *parts])
+        )
     projected: dict[str, Any] = {}
     for mapping in publish.mappings:
         if mapping.source is None:
             source_value: Any = normalize(completed_at)
         else:
-            if mapping.source not in payload:
+            if mapping.source not in prepared:
                 raise IngestError(ErrorKind.PUBLISH_CONTRACT, "source_columns_missing")
-            source_value = payload[mapping.source]
+            source_value = prepared[mapping.source]
         projected[mapping.target] = _project_value(source_value, mapping.target_type)
     for field in spec.key_fields:
-        if payload.get(field) in (None, ""):
+        value = denormalize(payload.get(field))
+        if value is None or value == "" or (isinstance(value, str) and not value.strip()):
             raise IngestError(ErrorKind.PUBLISH_CONTRACT, "missing_source_key")
     for field in publish.primary_key:
         if projected.get(field) in (None, ""):

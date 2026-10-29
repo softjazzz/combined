@@ -213,9 +213,9 @@ def test_profile_counts_missing_duplicate_and_relation_without_values() -> None:
     assert "patient-value" not in serialized
 
 
-def test_coverage_has_53_requirements_and_name_match_stays_blocked() -> None:
+def test_coverage_includes_lab_item_cdm_without_claiming_rule_registration() -> None:
     contracts = build_coverage_contracts()
-    assert len(contracts) == 53
+    assert len(contracts) == 54
     assert {status.value for status in CoverageStatus} == {
         "direct",
         "derived",
@@ -223,7 +223,9 @@ def test_coverage_has_53_requirements_and_name_match_stays_blocked() -> None:
         "missing",
         "blocked",
     }
-    assert sum(row.status is CoverageStatus.DIRECT for row in contracts) == 7
+    assert sum(row.status is CoverageStatus.DIRECT for row in contracts) == 13
+    lab_item = next(row for row in contracts if row.source_type == "labtest_item")
+    assert lab_item.bundle_usage == lab_item.qc_family == "not_registered"
     diagnosis = next(row for row in contracts if row.source_type == "diagnosis")
     assert diagnosis.status is CoverageStatus.BLOCKED
     assert diagnosis.evidence == "name_match_only_not_field_verified"
