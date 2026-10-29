@@ -6,7 +6,13 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Protocol
 
-from medqc_ingest.domain import InterfaceSpec, PublishLineage, PublishRecord, RawRecord
+from medqc_ingest.domain import (
+    InterfaceSpec,
+    PublishLineage,
+    PublishRecord,
+    PublishSpec,
+    RawRecord,
+)
 
 
 class SourceCursor(Protocol):
@@ -36,7 +42,9 @@ class IngestRepository(Protocol):
 
     def release_lock(self, scope: str) -> None: ...
 
-    def start_batch(self, interface: str, start: datetime, end: datetime) -> int: ...
+    def start_batch(
+        self, interface: str, start: datetime, end: datetime, evidence_version: str
+    ) -> int: ...
 
     def mark_batch_succeeded(
         self, batch_id: int, counts: Mapping[str, int], checkpoint_state: str
@@ -90,9 +98,11 @@ class PublishAuditRepository(Protocol):
 
     def release_lock(self, scope: str) -> None: ...
 
-    def start_publish(self, interface: str) -> int: ...
+    def start_publish(self, interface: str, evidence_version: str) -> int: ...
 
-    def open_verified_raw(self, interface: str) -> RawPublishCursor: ...
+    def open_verified_raw(
+        self, interface: str, target_key_fields: Sequence[str]
+    ) -> RawPublishCursor: ...
 
     def begin_publish_data(self) -> None: ...
 
@@ -118,9 +128,11 @@ class PublishAuditRepository(Protocol):
 class CdmRepository(Protocol):
     def begin(self) -> None: ...
 
-    def assert_web_mr_contract(self, expected_columns: Sequence[str]) -> None: ...
+    def prepare_target_contract(self, target: PublishSpec) -> PublishSpec: ...
 
-    def upsert_web_mr(self, rows: Sequence[Mapping[str, Any]]) -> int: ...
+    def upsert_target(
+        self, target: PublishSpec, rows: Sequence[Mapping[str, Any]]
+    ) -> int: ...
 
     def commit(self) -> None: ...
 
@@ -133,7 +145,7 @@ class CheckRepository(Protocol):
     def check_ingest_contract(self, stale_minutes: int) -> Sequence[tuple[str, bool, str]]: ...
 
     def check_cdm_contract(
-        self, expected_columns: Sequence[str]
+        self, targets: Sequence[PublishSpec]
     ) -> Sequence[tuple[str, bool, str]]: ...
 
     def close(self) -> None: ...

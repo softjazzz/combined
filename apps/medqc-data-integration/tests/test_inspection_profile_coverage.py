@@ -223,7 +223,7 @@ def test_coverage_has_53_requirements_and_name_match_stays_blocked() -> None:
         "missing",
         "blocked",
     }
-    assert sum(row.status is CoverageStatus.DIRECT for row in contracts) == 1
+    assert sum(row.status is CoverageStatus.DIRECT for row in contracts) == 7
     diagnosis = next(row for row in contracts if row.source_type == "diagnosis")
     assert diagnosis.status is CoverageStatus.BLOCKED
     assert diagnosis.evidence == "name_match_only_not_field_verified"

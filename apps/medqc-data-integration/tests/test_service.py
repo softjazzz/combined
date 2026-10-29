@@ -69,7 +69,10 @@ class FakeIngestRepository:
     def release_lock(self, scope: str) -> None:
         self.calls.append(f"unlock:{scope}")
 
-    def start_batch(self, interface: str, start: datetime, end: datetime) -> int:
+    def start_batch(
+        self, interface: str, start: datetime, end: datetime, evidence_version: str
+    ) -> int:
+        assert evidence_version.startswith("cache-field-study/")
         self.calls.append("start_batch")
         return 9
 
@@ -203,10 +206,14 @@ class FakeAuditRepository:
     def release_lock(self, scope: str) -> None:
         self.calls.append("unlock")
 
-    def start_publish(self, interface: str) -> int:
+    def start_publish(self, interface: str, evidence_version: str) -> int:
+        assert evidence_version.startswith("cache-field-study/")
         return 12
 
-    def open_verified_raw(self, interface: str) -> FakePublishCursor:
+    def open_verified_raw(
+        self, interface: str, target_key_fields: Any
+    ) -> FakePublishCursor:
+        assert tuple(target_key_fields) == ("institute_id", "patient_id", "visit_id")
         return self.cursor
 
     def begin_publish_data(self) -> None:
@@ -242,11 +249,12 @@ class FakeCdmRepository:
     def begin(self) -> None:
         self.calls.append("begin")
 
-    def assert_web_mr_contract(self, expected_columns: Any) -> None:
+    def prepare_target_contract(self, target: Any) -> Any:
         if self.fail_contract:
             raise IngestError("publish_contract_error", "target_drift")
+        return target
 
-    def upsert_web_mr(self, rows: Any) -> int:
+    def upsert_target(self, target: Any, rows: Any) -> int:
         self.calls.append("upsert")
         return len(rows)
 
@@ -263,6 +271,15 @@ class FakeCdmRepository:
 def _publish_record() -> PublishRecord:
     payload = {column: f"value-{column}" for column in WEB_MR_SOURCE_COLUMNS}
     payload.update(institute_id="I", patient_id="P", visit_id="V")
+    spec = resolve_interface("web.mr")
+    assert spec.publish is not None
+    for mapping in spec.publish.mappings:
+        if mapping.source is None:
+            continue
+        if mapping.target_type == "date":
+            payload[mapping.source] = "2026-10-28"
+        elif mapping.target_type in {"datetime", "timestamptz"}:
+            payload[mapping.source] = "2026-10-28 09:30:00"
     return PublishRecord(
         payload=payload,
         completed_at=datetime(2026, 10, 28, tzinfo=timezone.utc),

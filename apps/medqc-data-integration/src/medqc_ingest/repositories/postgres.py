@@ -11,11 +11,12 @@ from typing import Any
 
 from medqc_ingest.config import PostgresSettings
 from medqc_ingest.domain import (
-    WEB_MR_TARGET_COLUMNS,
+    INTERFACE_REGISTRY,
     ErrorKind,
     IngestError,
     PublishLineage,
     PublishRecord,
+    PublishSpec,
     RawRecord,
     advisory_lock_key,
 )
@@ -57,6 +58,12 @@ def _ident(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
+def _json_field(name: str) -> str:
+    if not name or any(not (character.isalnum() or character == "_") for character in name):
+        raise IngestError(ErrorKind.PUBLISH_CONTRACT, "unsafe_contract_field")
+    return "'" + name + "'"
+
+
 class PostgresIngestRepository:
     def __init__(self, settings: PostgresSettings) -> None:
         self._settings = settings
@@ -92,14 +99,16 @@ class PostgresIngestRepository:
         except Exception:
             pass
 
-    def start_batch(self, interface: str, start: datetime, end: datetime) -> int:
+    def start_batch(
+        self, interface: str, start: datetime, end: datetime, evidence_version: str
+    ) -> int:
         try:
             with self._control.cursor() as cursor:
                 cursor.execute(
                     "INSERT INTO sync_ops.sync_batch "
-                    "(interface_name, window_start, window_end, status) "
-                    "VALUES (%s,%s,%s,'running') RETURNING batch_id",
-                    (interface, start, end),
+                    "(interface_name, window_start, window_end, evidence_version, status) "
+                    "VALUES (%s,%s,%s,%s,'running') RETURNING batch_id",
+                    (interface, start, end, evidence_version),
                 )
                 row = cursor.fetchone()
                 if row is None:
@@ -272,13 +281,14 @@ class PostgresIngestRepository:
     def drop_data(self) -> None:
         self._close_attr("_data")
 
-    def start_publish(self, interface: str) -> int:
+    def start_publish(self, interface: str, evidence_version: str) -> int:
         try:
             with self._control.cursor() as cursor:
                 cursor.execute(
-                    "INSERT INTO sync_ops.publish_batch (interface_name,status) "
-                    "VALUES (%s,'running') RETURNING publish_batch_id",
-                    (interface,),
+                    "INSERT INTO sync_ops.publish_batch "
+                    "(interface_name,evidence_version,status) "
+                    "VALUES (%s,%s,'running') RETURNING publish_batch_id",
+                    (interface, evidence_version),
                 )
                 row = cursor.fetchone()
                 if row is None:
@@ -558,7 +568,9 @@ class PostgresIngestRepository:
             with suppress(Exception):
                 connection.close()
 
-    def open_verified_raw(self, interface: str) -> PostgresRawPublishCursor:
+    def open_verified_raw(
+        self, interface: str, target_key_fields: Sequence[str]
+    ) -> PostgresRawPublishCursor:
         self._publish_read = _connect(
             self._settings, ErrorKind.INGEST_CONNECT, "publish_read_connect", readonly=True
         )
@@ -584,6 +596,19 @@ class PostgresIngestRepository:
                 if row is None or not isinstance(row[0], list):
                     raise IngestError(ErrorKind.PUBLISH_CONTRACT, "raw_schema_missing")
                 columns = tuple(str(value) for value in row[0])
+                key_expressions = ",".join(
+                    f"payload->>{_json_field(field)}" for field in target_key_fields
+                )
+                metadata.execute(
+                    "SELECT 1 FROM cache_raw.source_record "
+                    "WHERE interface_name=%s AND schema_hash=%s "
+                    f"GROUP BY {key_expressions} HAVING count(*)>1 LIMIT 1",
+                    (interface, schema_hash),
+                )
+                if metadata.fetchone() is not None:
+                    raise IngestError(
+                        ErrorKind.PUBLISH_CONTRACT, "target_key_not_unique"
+                    )
             cursor = self._publish_read.cursor(name="medqc_publish_stream")
             cursor.execute(
                 "SELECT payload,local_sync_completed_at,last_batch_id,"
@@ -756,21 +781,40 @@ class PostgresCdmRepository:
         )
         self._connection.autocommit = False
 
-    def assert_web_mr_contract(self, expected_columns: Sequence[str]) -> None:
+    def prepare_target_contract(self, target: PublishSpec) -> PublishSpec:
         try:
-            columns, primary_key = _read_cdm_contract(self._connection)
+            columns, primary_key = _read_cdm_contract(self._connection, target)
+        except IngestError:
+            raise
         except Exception:
             raise IngestError(ErrorKind.CDM_WRITE, "read_cdm_contract") from None
-        if tuple(columns) != tuple(expected_columns):
-            raise IngestError(ErrorKind.PUBLISH_CONTRACT, "cdm_columns_mismatch")
-        if tuple(primary_key) != ("institute_id", "patient_id", "visit_id"):
+        if tuple(primary_key) != target.primary_key:
             raise IngestError(ErrorKind.PUBLISH_CONTRACT, "cdm_primary_key_mismatch")
+        compatible = tuple(
+            mapping
+            for mapping in target.mappings
+            if mapping.target in columns
+            and columns[mapping.target]
+            in _TARGET_TYPE_COMPATIBILITY[mapping.target_type]
+        )
+        compatible_names = {mapping.target for mapping in compatible}
+        if set(target.required_columns) - compatible_names:
+            raise IngestError(ErrorKind.PUBLISH_CONTRACT, "cdm_required_columns_missing")
+        return PublishSpec(
+            schema=target.schema,
+            table=target.table,
+            primary_key=target.primary_key,
+            required_columns=target.required_columns,
+            mappings=compatible,
+        )
 
-    def upsert_web_mr(self, rows: Sequence[Mapping[str, Any]]) -> int:
+    def upsert_target(
+        self, target: PublishSpec, rows: Sequence[Mapping[str, Any]]
+    ) -> int:
         if not rows:
             return 0
-        columns = tuple(WEB_MR_TARGET_COLUMNS)
-        keys = {"institute_id", "patient_id", "visit_id"}
+        columns = target.target_columns
+        keys = frozenset(target.primary_key)
         insert_columns = ",".join(_ident(column) for column in columns)
         placeholders = ",".join("%s" for _ in columns)
         update = ",".join(
@@ -778,16 +822,18 @@ class PostgresCdmRepository:
             for column in columns
             if column not in keys
         )
+        conflict = ",".join(_ident(column) for column in target.primary_key)
         sql = (
-            f"INSERT INTO cdm.mr ({insert_columns}) VALUES ({placeholders}) "
-            f'ON CONFLICT ("institute_id","patient_id","visit_id") DO UPDATE SET {update}'
+            f"INSERT INTO {_ident(target.schema)}.{_ident(target.table)} "
+            f"({insert_columns}) VALUES ({placeholders}) "
+            f"ON CONFLICT ({conflict}) DO UPDATE SET {update}"
         )
         try:
             with self._connection.cursor() as cursor:
                 cursor.executemany(sql, [tuple(row[column] for column in columns) for row in rows])
             return len(rows)
         except Exception:
-            raise IngestError(ErrorKind.CDM_WRITE, "upsert_cdm_mr") from None
+            raise IngestError(ErrorKind.CDM_WRITE, "upsert_cdm_target") from None
 
     def commit(self) -> None:
         try:
@@ -807,21 +853,33 @@ class PostgresCdmRepository:
                 connection.close()
 
 
-def _read_cdm_contract(connection: Any) -> tuple[list[str], list[str]]:
+_TARGET_TYPE_COMPATIBILITY = {
+    "text": frozenset({"character varying", "character", "text"}),
+    "date": frozenset({"date"}),
+    "datetime": frozenset({"timestamp without time zone"}),
+    "timestamptz": frozenset({"timestamp with time zone"}),
+}
+
+
+def _read_cdm_contract(
+    connection: Any, target: PublishSpec
+) -> tuple[dict[str, str], list[str]]:
     with connection.cursor() as cursor:
         cursor.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_schema='cdm' AND table_name='mr' ORDER BY ordinal_position"
+            "SELECT column_name,data_type FROM information_schema.columns "
+            "WHERE table_schema=%s AND table_name=%s ORDER BY ordinal_position",
+            (target.schema, target.table),
         )
-        columns = [str(row[0]) for row in cursor.fetchall()]
+        columns = {str(row[0]): str(row[1]) for row in cursor.fetchall()}
         cursor.execute(
             "SELECT a.attname FROM pg_index i "
             "JOIN pg_class c ON c.oid=i.indrelid "
             "JOIN pg_namespace n ON n.oid=c.relnamespace "
             "JOIN unnest(i.indkey) WITH ORDINALITY AS k(attnum,ord) ON true "
             "JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum "
-            "WHERE n.nspname='cdm' AND c.relname='mr' AND i.indisprimary "
-            "ORDER BY k.ord"
+            "WHERE n.nspname=%s AND c.relname=%s AND i.indisprimary "
+            "ORDER BY k.ord",
+            (target.schema, target.table),
         )
         primary_key = [str(row[0]) for row in cursor.fetchall()]
     return columns, primary_key
@@ -873,16 +931,32 @@ class PostgresCheckRepository:
                         ("stale_running", False, "unavailable"),
                     )
                 cursor.execute(
-                    "SELECT procedure_name,argument_count,key_fields,publish_target,is_enabled "
-                    "FROM sync_ops.source_interface WHERE interface_name='web.mr'"
+                    "SELECT interface_name,procedure_name,argument_count,key_fields,"
+                    "publish_target,is_enabled FROM sync_ops.source_interface "
+                    "WHERE is_enabled=true"
                 )
-                registry = cursor.fetchone()
-                registry_ok = bool(
-                    registry
-                    and tuple(registry[:2]) == ("web.mr", 1)
-                    and registry[2] == ["institute_id", "patient_id", "visit_id"]
-                    and tuple(registry[3:]) == ("cdm.mr", True)
-                )
+                rows = cursor.fetchall()
+                actual = {
+                    str(row[0]): (
+                        str(row[1]),
+                        int(row[2]),
+                        tuple(str(value) for value in row[3]),
+                        str(row[4]),
+                        bool(row[5]),
+                    )
+                    for row in rows
+                }
+                expected_registry = {
+                    name: (
+                        spec.procedure,
+                        spec.argument_count,
+                        spec.key_fields,
+                        str(spec.publish_target),
+                        True,
+                    )
+                    for name, spec in INTERFACE_REGISTRY.items()
+                }
+                registry_ok = actual == expected_registry
                 cursor.execute(
                     "SELECT count(*) FROM sync_ops.sync_checkpoint WHERE interface_name='web.mr'"
                 )
@@ -905,7 +979,7 @@ class PostgresCheckRepository:
             raise IngestError(ErrorKind.INGEST_WRITE, "check_ingest_contract") from None
 
     def check_cdm_contract(
-        self, expected_columns: Sequence[str]
+        self, targets: Sequence[PublishSpec]
     ) -> Sequence[tuple[str, bool, str]]:
         connection = _connect(
             self._cdm_settings,
@@ -915,13 +989,33 @@ class PostgresCheckRepository:
         )
         self._connections.append(connection)
         try:
-            columns, primary_key = _read_cdm_contract(connection)
-            columns_ok = tuple(columns) == tuple(expected_columns)
-            key_ok = tuple(primary_key) == ("institute_id", "patient_id", "visit_id")
-            return (
-                ("cdm_mr_columns", columns_ok, f"count={len(columns)}"),
-                ("cdm_mr_primary_key", key_ok, "ok" if key_ok else "mismatch"),
-            )
+            results: list[tuple[str, bool, str]] = []
+            for target in targets:
+                columns, primary_key = _read_cdm_contract(connection, target)
+                expected_types = {
+                    mapping.target: mapping.target_type for mapping in target.mappings
+                }
+                compatible = {
+                    column
+                    for column, target_type in expected_types.items()
+                    if column in columns
+                    and columns[column] in _TARGET_TYPE_COMPATIBILITY[target_type]
+                }
+                columns_ok = not (set(target.required_columns) - compatible)
+                optional_raw_only = set(expected_types) - compatible
+                key_ok = tuple(primary_key) == target.primary_key
+                prefix = f"cdm_{target.table}"
+                results.extend(
+                    (
+                        (
+                            f"{prefix}_columns",
+                            columns_ok,
+                            f"owned={len(compatible)},raw_only={len(optional_raw_only)}",
+                        ),
+                        (f"{prefix}_primary_key", key_ok, "ok" if key_ok else "mismatch"),
+                    )
+                )
+            return tuple(results)
         except Exception:
             raise IngestError(ErrorKind.CDM_WRITE, "check_cdm_contract") from None
 

@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from medqc_ingest.adapters.cache import create_source_adapter
 from medqc_ingest.catalog import CANDIDATE_INTERFACE_CATALOG
 from medqc_ingest.config import Settings
+from medqc_ingest.contracts import contract_export_document
 from medqc_ingest.coverage import build_coverage_contracts, write_coverage_report
 from medqc_ingest.domain import (
     INTERFACE_REGISTRY,
@@ -75,6 +76,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     profile = commands.add_parser("profile", help="为隔离检查批次生成非 PHI 字段画像")
     profile.add_argument("--batch", required=True, type=int)
+
+    contract_export = commands.add_parser(
+        "contract-export", help="导出主要文书非 PHI 字段与映射合同"
+    )
+    contract_export.add_argument("--interface")
+    contract_export.add_argument("--output", type=Path)
     return parser
 
 
@@ -204,6 +211,24 @@ def _run_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_contract_export(args: argparse.Namespace) -> int:
+    interface = str(args.interface) if args.interface is not None else None
+    if interface is not None:
+        resolve_interface(interface)
+    document = contract_export_document(interface)
+    serialized = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+    output: Path | None = args.output
+    if output is None:
+        print(serialized, end="")
+    else:
+        try:
+            output.write_text(serialized, encoding="utf-8", newline="\n")
+        except OSError:
+            raise IngestError(ErrorKind.CONFIGURATION, "contract_output") from None
+        print(f"contract-export succeeded output={output.resolve()}")
+    return 0
+
+
 def _run_inspect(args: argparse.Namespace) -> int:
     if not args.inspect_all:
         raise IngestError(ErrorKind.CONFIGURATION, "inspect_requires_all")
@@ -258,6 +283,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_check()
         if args.command == "coverage":
             return _run_coverage(args)
+        if args.command == "contract-export":
+            return _run_contract_export(args)
         if args.command == "inspect":
             return _run_inspect(args)
         if args.command == "profile":

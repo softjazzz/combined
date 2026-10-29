@@ -86,11 +86,28 @@ _SINGLE_NAMES = (
     "web.inpat_registration",
 )
 
+_REGISTERED_NAMES = frozenset(
+    {
+        "web.mr",
+        "web.admission_record",
+        "web.first_course_record",
+        "web.daily_course_record",
+        "web.senior_course_record",
+        "web.consultation_record",
+        "web.discharge_record",
+    }
+)
+
 
 def _build_catalog() -> dict[str, CandidateInterface]:
     result: dict[str, CandidateInterface] = {}
     for name in (*_SINGLE_NAMES, *_RANGE_NAMES):
-        registered = name == "web.mr"
+        registered = name in _REGISTERED_NAMES
+        document_field = (
+            "document_id"
+            if name in {"web.daily_course_record", "web.discharge_record", "web.mr"}
+            else "documentid"
+        )
         result[name] = CandidateInterface(
             name=name,
             argument_count=1 if name in _SINGLE_NAMES else 2,
@@ -100,7 +117,13 @@ def _build_catalog() -> dict[str, CandidateInterface]:
                 else DateSemantics.RANGE_INCLUSIVE
             ),
             registration_status="registered" if registered else "candidate",
-            key_fields=("institute_id", "patient_id", "visit_id") if registered else (),
+            key_fields=(
+                ("institute_id", "patient_id", "visit_id")
+                if name == "web.mr"
+                else ("institute_id", "patient_id", "visit_id", document_field)
+                if registered
+                else ()
+            ),
             relation_keys=(
                 (("case", ("institute_id", "patient_id", "visit_id")),)
                 if registered

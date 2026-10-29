@@ -12,20 +12,15 @@ worker：Caché 抽取器与 CDM 发布器。核心层只依赖 Python 标准库
 ## 数据流
 
 ```text
-Caché web.mr
+Caché 已注册接口
   -> 流式 fetchmany / 类型规范化 / 键与 schema 校验
   -> ingest PostgreSQL: cache_raw.source_record + sync_ops
   -> 发布合同预检 / 幂等 upsert
-  -> CDM PostgreSQL: cdm.mr
+  -> CDM PostgreSQL: 现有 cdm.mr 与六类主要文书表
 ```
 
 raw 按 `interface_name + source_key_hash` 隔离，每个接口保留完整 payload，不在 raw
 层合并不同接口的重复字段。实体归一只在 CDM 发布层执行。
-
-字段验证使用独立观察平面 `cache_raw.source_snapshot`，按
-`inspection_batch + interface + window + ordinal` 保留隔离样本，不复用正式 raw 主键，
-因此不会跨接口去重。画像表只保存字段名、类型、计数、日期范围和显式关联键统计。
-候选接口目录不是生产注册表，未注册接口只记录 `blocked`，绝不建立源连接。
 
 字段验证使用独立观察平面 `cache_raw.source_snapshot`，按
 `inspection_batch + interface + window + ordinal` 保留隔离样本，不复用正式 raw 主键，
@@ -54,9 +49,11 @@ JDBC/JayDeBeApi 适配器边界；未安装可选驱动时返回受控错误而�
 
 ## 合同与 fail-closed
 
-`web.mr` 业务键固定为 `institute_id + patient_id + visit_id`。schema hash 使用
+`web.mr` 业务键固定为病例三键；六类文书 raw 键再加文档编号。schema hash 使用
 `ordered-column-names-v1`。空键、批内重复键（包括跨 fetch 块）、多个待发布 schema、
-源字段不足、目标 `cdm.mr` 78 列合同漂移、锁冲突或配置不完整都在写数据前失败。
+源字段不足、目标主键或 required 核心列漂移、锁冲突或配置不完整都在写数据前失败。
+目标缺少可选新列时该字段保持 raw-only；入院/出院同病例多文书因现有目标仅三键而整批
+拒绝，不能静默覆盖。
 
 ## 错误和日志
 

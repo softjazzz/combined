@@ -8,10 +8,28 @@ import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any
+
+from medqc_ingest.contracts import (
+    EVIDENCE_VERSION,
+    PUBLISH_CONTRACTS,
+    RAW_KEY_FIELDS,
+    SOURCE_COLUMN_CONTRACTS,
+    WEB_MR_SOURCE_COLUMNS,
+    WEB_MR_TARGET_COLUMNS,
+)
+
+__all__ = (
+    "INTERFACE_REGISTRY",
+    "WEB_MR_SOURCE_COLUMNS",
+    "WEB_MR_TARGET_COLUMNS",
+    "project_record",
+    "project_web_mr",
+    "resolve_interface",
+)
 
 SCHEMA_HASH_VERSION = "ordered-column-names-v1"
 
@@ -75,6 +93,38 @@ class RunMode(str, Enum):
 
 
 @dataclass(frozen=True)
+class FieldMapping:
+    source: str | None
+    target: str
+    target_type: str
+
+
+@dataclass(frozen=True)
+class PublishSpec:
+    schema: str
+    table: str
+    primary_key: tuple[str, ...]
+    required_columns: tuple[str, ...]
+    mappings: tuple[FieldMapping, ...]
+
+    @property
+    def qualified_name(self) -> str:
+        return f"{self.schema}.{self.table}"
+
+    @property
+    def target_columns(self) -> tuple[str, ...]:
+        return tuple(mapping.target for mapping in self.mappings)
+
+    @property
+    def source_key_fields(self) -> tuple[str, ...]:
+        by_target = {mapping.target: mapping.source for mapping in self.mappings}
+        fields = tuple(by_target.get(field) for field in self.primary_key)
+        if any(field is None for field in fields):
+            raise IngestError(ErrorKind.PUBLISH_CONTRACT, "target_key_mapping_missing")
+        return tuple(str(field) for field in fields)
+
+
+@dataclass(frozen=True)
 class InterfaceSpec:
     name: str
     procedure: str
@@ -82,102 +132,34 @@ class InterfaceSpec:
     key_fields: tuple[str, ...]
     publish_target: str | None
     source_columns: tuple[str, ...]
+    evidence_version: str
+    publish: PublishSpec | None
 
 
-WEB_MR_TARGET_COLUMNS = (
-    "last_modifier",
-    "last_modifier_id",
-    "last_modified_datetime",
-    "update_time",
-    "inpat_no",
-    "mr_no",
-    "name",
-    "sex",
-    "age_year",
-    "age_month",
-    "age",
-    "institute_id",
-    "patient_id",
-    "visit_id",
-    "visit_type",
-    "document_id",
-    "institute_code",
-    "institute_county_desc",
-    "medical_payment_method",
-    "insurance_type",
-    "insurance_no",
-    "visit_cnt",
-    "id_card_type",
-    "id_card_no",
-    "birthday",
-    "nationality",
-    "ethnicity",
-    "marital_status",
-    "occupation_category",
-    "nativeplace",
-    "currentaddress",
-    "contact_number",
-    "contact_name",
-    "contact_relationship",
-    "contact_address",
-    "contact_telephone",
-    "work_unit",
-    "admission_route",
-    "admission_datetime",
-    "admission_condition",
-    "admission_dept_name",
-    "admission_ward_name",
-    "diagnosis_date",
-    "transfer_dept_name",
-    "discharge_datetime",
-    "discharge_dept_name",
-    "discharge_ward_name",
-    "hospital_duration",
-    "pathology_id",
-    "allergy_sign",
-    "allergy_history",
-    "abo_blood_code",
-    "rh_blood_code",
-    "death_autopsy_sign",
-    "deptdirector_sign",
-    "chief_physician_sign",
-    "attending_physician_sign",
-    "resident_physician_sign",
-    "responsible_nurse_sign",
-    "coder_sign",
-    "QC_physician_sign",
-    "QC_nurse_sign",
-    "QC_date",
-    "medicalrecord_quality",
-    "leaving_hospital_way",
-    "planned_transder_to",
-    "rehospital_with_month",
-    "rehospital_with_month_purpose",
-    "rbc",
-    "platet_volume",
-    "plasma_volume",
-    "whole_blood_volume",
-    "autoblood_trans",
-    "clinical_pathway",
-    "archive_sign",
-    "mr_datetime",
-    "local_sync_completed_at",
-    "record_content",
-)
-WEB_MR_LOCAL_COLUMNS = frozenset({"local_sync_completed_at"})
-WEB_MR_SOURCE_COLUMNS = tuple(
-    column for column in WEB_MR_TARGET_COLUMNS if column not in WEB_MR_LOCAL_COLUMNS
-)
+def _publish_spec(name: str) -> PublishSpec:
+    contract = PUBLISH_CONTRACTS[name]
+    schema, table = contract["target"].split(".", maxsplit=1)
+    return PublishSpec(
+        schema=schema,
+        table=table,
+        primary_key=contract["primary_key"],
+        required_columns=contract["required_columns"],
+        mappings=tuple(FieldMapping(*mapping) for mapping in contract["mappings"]),
+    )
+
 
 INTERFACE_REGISTRY: Mapping[str, InterfaceSpec] = {
-    "web.mr": InterfaceSpec(
-        name="web.mr",
-        procedure="web.mr",
+    name: InterfaceSpec(
+        name=name,
+        procedure=name,
         argument_count=1,
-        key_fields=("institute_id", "patient_id", "visit_id"),
-        publish_target="cdm.mr",
-        source_columns=WEB_MR_SOURCE_COLUMNS,
+        key_fields=RAW_KEY_FIELDS[name],
+        publish_target=str(PUBLISH_CONTRACTS[name]["target"]),
+        source_columns=columns,
+        evidence_version=EVIDENCE_VERSION,
+        publish=_publish_spec(name),
     )
+    for name, columns in SOURCE_COLUMN_CONTRACTS.items()
 }
 
 
@@ -334,10 +316,80 @@ def advisory_lock_key(scope: str) -> int:
     return int.from_bytes(digest[:8], "big", signed=True)
 
 
-def project_web_mr(payload: Mapping[str, Any], completed_at: datetime) -> dict[str, Any]:
-    missing = [column for column in WEB_MR_SOURCE_COLUMNS if column not in payload]
-    if missing:
-        raise IngestError(ErrorKind.PUBLISH_CONTRACT, "source_columns_missing")
-    projected = {column: denormalize(payload[column]) for column in WEB_MR_SOURCE_COLUMNS}
-    projected["local_sync_completed_at"] = completed_at.isoformat()
+_SHANGHAI = timezone(timedelta(hours=8), name="Asia/Shanghai")
+_MIN_CLINICAL_YEAR = 1900
+_MAX_CLINICAL_YEAR = 2100
+
+
+def _temporal_source(value: Any, location: str) -> date | datetime | None:
+    decoded = denormalize(value)
+    if decoded is None:
+        return None
+    if isinstance(decoded, datetime):
+        parsed: date | datetime = decoded
+    elif isinstance(decoded, date):
+        parsed = decoded
+    elif isinstance(decoded, str):
+        text = decoded.strip()
+        if not text:
+            return None
+        try:
+            parsed = date.fromisoformat(text)
+        except ValueError:
+            try:
+                parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            except ValueError:
+                raise IngestError(ErrorKind.PUBLISH_CONTRACT, location) from None
+    else:
+        raise IngestError(ErrorKind.PUBLISH_CONTRACT, location)
+    if not _MIN_CLINICAL_YEAR <= parsed.year <= _MAX_CLINICAL_YEAR:
+        raise IngestError(ErrorKind.PUBLISH_CONTRACT, "abnormal_clinical_date")
+    return parsed
+
+
+def _project_value(value: Any, target_type: str) -> Any:
+    if target_type == "text":
+        return denormalize(value)
+    parsed = _temporal_source(value, f"invalid_{target_type}")
+    if parsed is None:
+        return None
+    if target_type == "date":
+        return parsed.date() if isinstance(parsed, datetime) else parsed
+    if isinstance(parsed, date) and not isinstance(parsed, datetime):
+        parsed = datetime.combine(parsed, time.min)
+    if parsed.tzinfo is None:
+        local = parsed.replace(tzinfo=_SHANGHAI)
+    else:
+        local = parsed.astimezone(_SHANGHAI)
+    if target_type == "datetime":
+        return local.replace(tzinfo=None)
+    if target_type == "timestamptz":
+        return local
+    raise IngestError(ErrorKind.PUBLISH_CONTRACT, "target_type_unknown")
+
+
+def project_record(
+    spec: InterfaceSpec, payload: Mapping[str, Any], completed_at: datetime
+) -> dict[str, Any]:
+    """按接口拥有字段投影；不从正文猜结构，也不把提交时间冒充签署时间。"""
+    publish = spec.publish
+    if publish is None:
+        raise IngestError(ErrorKind.PUBLISH_CONTRACT, "publish_contract_missing")
+    projected: dict[str, Any] = {}
+    for mapping in publish.mappings:
+        if mapping.source is None:
+            source_value: Any = normalize(completed_at)
+        else:
+            if mapping.source not in payload:
+                raise IngestError(ErrorKind.PUBLISH_CONTRACT, "source_columns_missing")
+            source_value = payload[mapping.source]
+        projected[mapping.target] = _project_value(source_value, mapping.target_type)
+    for field in publish.primary_key:
+        if projected.get(field) in (None, ""):
+            raise IngestError(ErrorKind.PUBLISH_CONTRACT, f"missing_target_key:{field}")
     return projected
+
+
+def project_web_mr(payload: Mapping[str, Any], completed_at: datetime) -> dict[str, Any]:
+    """保留旧调用入口；实际使用 148 列源合同中的 77 列显式投影。"""
+    return project_record(resolve_interface("web.mr"), payload, completed_at)

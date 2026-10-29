@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from medqc_ingest.domain import (
-    WEB_MR_TARGET_COLUMNS,
+    INTERFACE_REGISTRY,
     ErrorKind,
     IngestError,
     InterfaceSpec,
@@ -16,8 +16,10 @@ from medqc_ingest.domain import (
     PublishLineage,
     RunMode,
     build_records,
-    project_web_mr,
+    canonical_json,
+    project_record,
     schema_signature,
+    sha256_hex,
     validate_interface_columns,
 )
 from medqc_ingest.ports import (
@@ -83,7 +85,9 @@ class ExtractService:
                 if not repository.acquire_lock(f"extract:{spec.name}"):
                     raise IngestError(ErrorKind.LOCK, "extract_lock_busy")
                 locked = True
-                batch_id = repository.start_batch(spec.name, window_start, window_end)
+                batch_id = repository.start_batch(
+                    spec.name, window_start, window_end, spec.evidence_version
+                )
 
             source = self._source_factory()
             source.open()
@@ -174,7 +178,8 @@ class PublishService:
         self._chunk_size = chunk_size
 
     def run(self, spec: InterfaceSpec) -> PublishResult:
-        if spec.publish_target != "cdm.mr":
+        publish = spec.publish
+        if publish is None or spec.publish_target != publish.qualified_name:
             raise IngestError(ErrorKind.PUBLISH_CONTRACT, "unsupported_publish_target")
 
         publish_batch_id: int | None = None
@@ -191,8 +196,8 @@ class PublishService:
             if not self._audit.acquire_lock(f"publish:{spec.name}"):
                 raise IngestError(ErrorKind.LOCK, "publish_lock_busy")
             locked = True
-            publish_batch_id = self._audit.start_publish(spec.name)
-            cursor = self._audit.open_verified_raw(spec.name)
+            publish_batch_id = self._audit.start_publish(spec.name, spec.evidence_version)
+            cursor = self._audit.open_verified_raw(spec.name, publish.source_key_fields)
             schema_hash = cursor.schema_hash
             if tuple(cursor.source_columns) != spec.source_columns:
                 raise IngestError(ErrorKind.PUBLISH_CONTRACT, "raw_schema_mismatch")
@@ -201,15 +206,25 @@ class PublishService:
             audit_data_started = True
             self._cdm.begin()
             cdm_started = True
-            self._cdm.assert_web_mr_contract(WEB_MR_TARGET_COLUMNS)
+            effective_target = self._cdm.prepare_target_contract(publish)
+            target_keys = KeyTracker()
 
             while True:
                 records = cursor.fetchmany(self._chunk_size)
                 if not records:
                     break
                 projected = [
-                    project_web_mr(record.payload, record.completed_at) for record in records
+                    project_record(spec, record.payload, record.completed_at)
+                    for record in records
                 ]
+                target_keys.extend(
+                    sha256_hex(
+                        canonical_json(
+                            {field: row[field] for field in publish.primary_key}
+                        )
+                    )
+                    for row in projected
+                )
                 lineage = [
                     PublishLineage(
                         source_batch_id=record.source_batch_id,
@@ -219,7 +234,7 @@ class PublishService:
                     for record in records
                 ]
                 selected += len(records)
-                written += self._cdm.upsert_web_mr(projected)
+                written += self._cdm.upsert_target(effective_target, projected)
                 self._audit.write_publish_lineage(publish_batch_id, lineage)
 
             self._cdm.commit()
@@ -276,7 +291,12 @@ class CheckService:
     def run(self) -> Sequence[tuple[str, bool, str]]:
         try:
             ingest = self._repository.check_ingest_contract(self._stale_minutes)
-            cdm = self._repository.check_cdm_contract(WEB_MR_TARGET_COLUMNS)
+            targets = tuple(
+                spec.publish
+                for spec in INTERFACE_REGISTRY.values()
+                if spec.publish is not None
+            )
+            cdm = self._repository.check_cdm_contract(targets)
             return tuple(ingest) + tuple(cdm)
         finally:
             self._repository.close()

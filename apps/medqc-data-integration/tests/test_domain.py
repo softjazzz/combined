@@ -15,7 +15,7 @@ from medqc_ingest.domain import (
 )
 
 
-def test_only_web_mr_is_registered() -> None:
+def test_seven_evidence_backed_interfaces_are_registered() -> None:
     assert resolve_interface("web.mr").key_fields == (
         "institute_id",
         "patient_id",
@@ -24,12 +24,15 @@ def test_only_web_mr_is_registered() -> None:
     with pytest.raises(IngestError) as exc_info:
         resolve_interface("web.orders")
     assert exc_info.value.kind == "interface_not_registered"
+    assert resolve_interface("web.admission_record").key_fields[-1] == "documentid"
+    assert resolve_interface("web.discharge_record").key_fields[-1] == "document_id"
 
 
-def test_web_mr_contract_is_77_plus_one_columns() -> None:
-    assert len(WEB_MR_SOURCE_COLUMNS) == 77
+def test_web_mr_contract_separates_148_source_from_77_plus_one_projection() -> None:
+    assert len(WEB_MR_SOURCE_COLUMNS) == 148
     assert len(WEB_MR_TARGET_COLUMNS) == 78
     assert "local_sync_completed_at" not in WEB_MR_SOURCE_COLUMNS
+    assert tuple(resolve_interface("web.mr").publish.target_columns) == WEB_MR_TARGET_COLUMNS
 
 
 def test_schema_drift_is_rejected() -> None:

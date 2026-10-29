@@ -101,24 +101,41 @@ _DERIVATION_GAPS = frozenset(
     }
 )
 _MISSING_GAPS = frozenset({"consent_form", "medical_order"})
+_DIRECT_DOCUMENT_COUNTS = {
+    "mr": 148,
+    "admission_record": 25,
+    "first_course_record": 29,
+    "daily_course_record": 34,
+    "senior_course_record": 24,
+    "consultation_record": 24,
+    "discharge_record": 29,
+}
 
 
 def build_coverage_contracts() -> tuple[CoverageContract, ...]:
     rows: list[CoverageContract] = []
     for source_type in _BUNDLE_SOURCE_TYPES:
         interface = f"web.{source_type}"
-        if source_type == "mr":
+        if source_type in _DIRECT_DOCUMENT_COUNTS:
+            count = _DIRECT_DOCUMENT_COUNTS[source_type]
+            target = "cdm.mr:*:77-source+1-local" if source_type == "mr" else (
+                f"cdm.{source_type}:owned-fields"
+            )
             rows.append(
                 CoverageContract(
                     source_type=source_type,
-                    source_interface="web.mr",
-                    source_field="*:77-source-columns",
-                    cdm_target="cdm.mr:*:78-target-columns",
-                    bundle_usage="index_coding_settlement",
-                    qc_family="unverified",
+                    source_interface=interface,
+                    source_field=f"*:{count}-source-columns",
+                    cdm_target=target,
+                    bundle_usage=(
+                        "index_coding_settlement"
+                        if source_type == "mr"
+                        else "major_documents"
+                    ),
+                    qc_family=("frontpage" if source_type == "mr" else "document_content"),
                     transform_authority="explicit_projection_contract",
                     status=CoverageStatus.DIRECT,
-                    evidence="frozen_v5_contract_requires_export_recheck",
+                    evidence="cache-field-study-20261026-20261028",
                 )
             )
             continue
