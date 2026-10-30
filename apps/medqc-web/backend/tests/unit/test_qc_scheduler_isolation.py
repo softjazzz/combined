@@ -8,6 +8,7 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+from importlib.util import module_from_spec, spec_from_file_location
 
 import dotenv
 from fastapi import FastAPI
@@ -20,6 +21,15 @@ from tests.scheduler_support.isolation import (
     _guarded_restart_probe_run,
     _sanitized_environment,
 )
+
+
+def _load_runner_module():
+    runner_path = Path(__file__).resolve().parents[2] / "scripts" / "run_qc_scheduler_tests.py"
+    spec = spec_from_file_location("qc_scheduler_runner_for_test", runner_path)
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_offline_profile_does_not_expose_real_credentials_or_dotenv(tmp_path: Path):
@@ -58,6 +68,55 @@ def test_provider_and_gateway_environment_prefixes_are_scrubbed(monkeypatch):
 
     sanitized = _sanitized_environment()
     assert forbidden.keys().isdisjoint(sanitized)
+
+
+def test_m2_manifest_is_explicit_and_missing_files_remain_hard_failures(tmp_path: Path):
+    runner = _load_runner_module()
+
+    assert runner.SUITES["m2-outbox"] == (
+        "tests/unit/test_qc_dispatch_outbox.py",
+    )
+    assert runner.SUITES["m2-transport"] == (
+        "tests/unit/test_qc_rabbitmq_transport.py",
+        "tests/unit/test_qc_outbox_publisher.py",
+    )
+    assert runner.SUITES["m2-worker"] == (
+        "tests/unit/test_qc_batch_consumer.py",
+        "tests/unit/test_qc_worker_recovery.py",
+    )
+    assert runner.SUITES["m2-entrypoints"] == (
+        "tests/unit/test_qc_dispatch_entrypoints.py",
+    )
+    assert runner.SUITES["m2-release"][-1] == (
+        "tests/unit/test_qc_m2_fixed_flow.py"
+    )
+
+    missing = tmp_path / "missing_m2_test.py"
+    args = runner._parse_args([str(missing)])
+    with pytest.raises(SystemExit, match="尚不存在"):
+        runner._selected_tests(args)
+
+
+def test_m2_synthetic_profile_does_not_enable_infrastructure_or_raw_nodes():
+    runner = _load_runner_module()
+
+    args = runner._parse_args(
+        ["--profile", "m2-synthetic", "--suite", "m2-outbox"]
+    )
+    assert args.profile == "m2-synthetic"
+    assert args.suite == "m2-outbox"
+
+    raw_args = runner._parse_args(
+        ["--profile", "m2-synthetic", "tests/unit/test_qc_scheduler_isolation.py"]
+    )
+    with pytest.raises(SystemExit, match="只允许显式选择 M2 suite"):
+        runner._validate_profile(raw_args)
+
+    infra_args = runner._parse_args(
+        ["--profile", "isolated-infra", "--suite", "m2-release"]
+    )
+    with pytest.raises(SystemExit, match="尚未实施"):
+        runner._validate_profile(infra_args)
 
 
 @pytest.mark.parametrize(

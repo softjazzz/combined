@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     QC_SC_RULE_SOURCE_MONITOR_INTERVAL_SECONDS: int = 60
     QC_SC_RULE_SOURCE_ALERT_DEDUP_SECONDS: int = 300
 
+    # 质控任务调度默认保留 Web 进程内旧链；只有显式切换后，正式 LX0609
+    # 叶任务才会通过事务 Outbox 投递给独立 Worker。
+    QC_TASK_DISPATCH_MODE: Literal["legacy", "rabbitmq"] = "legacy"
+
     # ICD semantic retrieval fallback (exact match still first)
     ICD_SEMANTIC_ENABLED: bool = False
     ICD_SEMANTIC_TOP_K: int = 5

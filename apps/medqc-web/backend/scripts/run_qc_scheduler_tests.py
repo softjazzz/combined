@@ -1,4 +1,4 @@
-"""QC 调度器 M0/M1 测试入口；默认严格离线且不读取业务配置。"""
+"""QC 调度器 M0-M2 测试入口；默认严格离线且不读取业务配置。"""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from types import ModuleType
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 SUITES: dict[str, tuple[str, ...]] = {
@@ -42,7 +43,34 @@ SUITES: dict[str, tuple[str, ...]] = {
     "compatibility-restart": (
         "tests/unit/test_luxian_0609_task_restart_persistence.py",
     ),
+    "m2-outbox": (
+        "tests/unit/test_qc_dispatch_outbox.py",
+    ),
+    "m2-transport": (
+        "tests/unit/test_qc_rabbitmq_transport.py",
+        "tests/unit/test_qc_outbox_publisher.py",
+    ),
+    "m2-worker": (
+        "tests/unit/test_qc_batch_consumer.py",
+        "tests/unit/test_qc_worker_recovery.py",
+    ),
+    "m2-entrypoints": (
+        "tests/unit/test_qc_dispatch_entrypoints.py",
+    ),
+    "m2-release": (
+        "tests/unit/test_qc_dispatch_outbox.py",
+        "tests/unit/test_qc_rabbitmq_transport.py",
+        "tests/unit/test_qc_outbox_publisher.py",
+        "tests/unit/test_qc_batch_consumer.py",
+        "tests/unit/test_qc_worker_recovery.py",
+        "tests/unit/test_qc_dispatch_entrypoints.py",
+        "tests/unit/test_qc_m2_fixed_flow.py",
+    ),
 }
+
+M2_SUITES = frozenset(
+    {"m2-outbox", "m2-transport", "m2-worker", "m2-entrypoints", "m2-release"}
+)
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -50,8 +78,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         default="offline",
-        choices=("offline", "isolated-infra"),
-        help="isolated-infra 尚未实现，当前会明确拒绝",
+        choices=("offline", "m2-synthetic", "isolated-infra"),
+        help=(
+            "m2-synthetic 复用严格离线护栏并标记 FakeBroker/合成 SQLite 验收；"
+            "isolated-infra 尚未实现，当前会明确拒绝"
+        ),
     )
     parser.add_argument("--suite", choices=tuple(SUITES))
     parser.add_argument(
@@ -88,6 +119,15 @@ def _selected_tests(args: argparse.Namespace) -> list[str]:
     if missing:
         raise SystemExit("测试清单包含尚不存在的文件：" + ", ".join(missing))
     return selected
+
+
+def _validate_profile(args: argparse.Namespace) -> None:
+    if args.profile == "isolated-infra":
+        raise SystemExit(
+            "isolated-infra profile 尚未实施；拒绝连接本机 PG、RabbitMQ 或 Provider 端口"
+        )
+    if args.profile == "m2-synthetic" and args.suite not in M2_SUITES:
+        raise SystemExit("m2-synthetic profile 只允许显式选择 M2 suite")
 
 
 def _install_legacy_demo_db_seam(engine, sessions) -> None:
@@ -130,10 +170,7 @@ def _install_legacy_demo_db_seam(engine, sessions) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(list(sys.argv[1:] if argv is None else argv))
-    if args.profile != "offline":
-        raise SystemExit(
-            "isolated-infra profile 尚未实施；拒绝连接本机 PG、RabbitMQ 或 Provider 端口"
-        )
+    _validate_profile(args)
 
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
@@ -145,11 +182,21 @@ def main(argv: list[str] | None = None) -> int:
     with OfflineIsolation(
         allow_reviewed_restart_probe=args.allow_reviewed_restart_probe
     ):
+        os.environ["MEDQC_QC_SCHEDULER_TEST_PROFILE"] = args.profile
+        if args.profile == "m2-synthetic":
+            os.environ["MEDQC_QC_SCHEDULER_M2_SYNTHETIC"] = "1"
         # 某些旧 persistence 模块要求导入后存在 SessionLocal；这里只绑定无表的内存库。
         from app.database import connection
         import app.database as database_package
 
-        engine = create_engine("sqlite://")
+        # TestClient/async fixtures may import the legacy connection owner from a
+        # worker thread.  A single synthetic connection keeps the in-memory seam
+        # thread-safe and lets the runner dispose it without sqlite thread errors.
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
         synthetic_sessions = sessionmaker(
             autocommit=False,
             autoflush=False,

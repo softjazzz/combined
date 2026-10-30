@@ -1,7 +1,7 @@
 # ADR：QC 调度与模型 Gateway 边界
 
-- 状态：M0/M1 接受，M2 及以后待独立评审
-- 日期：2026-10-29
+- 状态：M0/M1 接受；M2 本地实现与合成验收，真实基础设施待验收
+- 日期：2026-10-29（M2 增补：2026-10-30）
 - 审查基线：`cedb9c10a017c30b767e7ed449b8c9b90e356a54`
 - 实施分支：`codex/qc-gateway-m0-m1-20261029`
 - 工作树：`C:/medqc-qc-gateway-m0-m1-20261029`
@@ -187,3 +187,90 @@ runner 以显式 pytest plugin 提供兼容保护集需要的 `client` fixture�
 3. 部署前验证 Gateway 服务身份、端点 allowlist、未知在途恢复和真实 Provider 合同；
 4. M2 在一次性 PG/Broker/FakeProvider 环境完成事务、confirm、ACK、fencing 和恢复矩阵；
 5. 真实 Strata 容量、取消和吞吐只在另行授权后验收。
+
+## M2 增补决定（2026-10-30）
+
+本节在用户明确授权 M2 本地开发后增补，取代上文“`M2 明确不在本轮范围`”对当前
+开发轮次的描述；上文仍保留为 M0/M1 当时的真实边界和历史记录。M2 代码存在不等于
+已迁移、已部署或已通过真实 RabbitMQ/PostgreSQL 验收。
+
+### 1. PG 状态权威与 Transactional Outbox
+
+任务的 dispatch mode、协议版本、generation 和可恢复状态保存在任务事务内；同一
+事务写 Outbox。RabbitMQ 只收到安全引用，不成为任务状态权威。事务回滚不能留下可
+发布消息；Broker 离线不能导致 API 静默回退到 Web detached task 或另一份内存队列。
+
+Outbox 记录以 `message_id` 唯一，并保留发布尝试、claim token/lease、可用时间、
+confirm 和失败码。publisher 必须先用短事务 claim，释放 DB 后等待 Broker confirm，
+再用原 claim token 条件回写。confirm 未知允许 lease 到期后重发；消息重复由
+generation、任务 CAS 和持久状态消除重复有效执行，不能声称模型 Exactly Once。
+
+### 2. M2 消息和日志最小化
+
+整批过渡消息只包含 schema version、message id、job id、dispatch generation 等不透明
+身份。患者姓名、院内三坐标原值、visit id、病历正文、引文、提示词、Provider 密钥、
+服务 token 和完整 DSN 均不进入 body/header/dead 事件或异常文本。
+
+无效/毒消息只记录固定 code 和安全引用。应用层不得为方便诊断把无法解析的原始 body
+原样再发布到 dead queue；真实 Broker 是否配置 DLX 及其保留策略必须在后续隔离环境
+单独验收。
+
+### 3. RabbitMQ 与整批 consumer
+
+首期要求 durable direct exchange/queue、persistent message、publisher confirms、
+mandatory routing、manual ACK 和显式 `prefetch=1`。一个 consumer 一次只执行一个整批
+任务，批内病历并发最多 4。该拓扑是 M2 过渡链，不是多批公平调度、HA 或病历级并行。
+
+consumer 必须使用正式任务 CAS/租约与 generation：
+
+- 已完成、已取消和旧 generation 消息安全 ACK，执行器调用为 0；
+- 结果已提交但 ACK 失败，重投只读取持久完成状态，不重新计算；
+- 持久化重试必须先提交新 generation 与 Outbox，再 ACK 当前消息；
+- DB/恢复登记失败不得 ACK；活跃重复没有持久恢复线索时保留交付给 Broker 重投，禁止
+  immediate requeue 忙循环；
+- 取消后不发新模型请求，失租/旧代次晚结果、进度和通知均由 fencing 拒绝。
+
+合法临床不合规或资料不足是正常结果，不 NACK、不转成技术重试。临床 executor 继续是
+状态、原因、事实与证据的唯一 owner。
+
+### 4. 恢复边界
+
+已提交成功范围必须保留。若 Worker 崩溃时尚未形成可证明的失败/检查点范围，M2 不得
+清空整批并自动重跑；安全结果是保留既有成功、把未知范围置为受控 failed，等待人工或
+后续明确范围的恢复。任意病历/规则缺项恢复、独立检查点与聚合属于 M3，不能从 M2
+整批链推断完成。
+
+### 5. 入口分流与兼容
+
+只有正式 LX0609 样本、运行和终末入口可依据持久化 mode 进入新链。新 MQ 任务只写
+Outbox，不提交 Web detached task；Web 启动扫描与租约巡检只处理 legacy。0916、
+自定义规则和其他后台调用继续走旧模式。现有任务与默认配置保持 legacy；没有迁移或
+运行配置修改时，生产行为不应变化。
+
+### 6. 容量与部署边界
+
+模型 Gateway 保持单活动资源 owner；Strata 初始共享容量为 2。MQ/Worker 数量不得把
+同一 Provider 预算复制为“每进程 40”；百炼 40 仍是共享且待校准的资源上限。M2 没有
+授权多 Worker、多 Gateway、HA 或真实 Strata 验收。
+
+### 7. 合成证据与发布阻断项
+
+`m2-synthetic` 复用 offline 的 dotenv、DNS/socket、非合成内存 SQLite 和普通子进程
+禁令，只为 FakeBroker/合成事务结果增加证据标签。它不开放 loopback、任意磁盘库或
+aio-pika 网络连接；`isolated-infra` 继续拒绝。清单缺文件时必须硬失败。
+
+当前 Docker daemon 不可用，主环境未安装 aio-pika；本轮不启动或安装它们。SQLite +
+FakeBroker 可以验收真实 repository/outbox serialization/publisher/consumer 状态机与固定
+执行器联调，但不能证明实际 PostgreSQL 锁语义、RabbitMQ confirm/ACK timeout、断线重连、
+独立进程 kill 或拓扑参数兼容。发布前必须在一次性 PG/RabbitMQ vhost 补齐这些证据，
+并核对当时 Alembic heads；不得使用业务库、stamp 或现有患者病历来补证。
+
+Outbox 当前只有发布所需的 due/job 索引，不包含自动保留/归档作业或容量告警。开发期
+全量保留。未来只能归档终态任务中已 confirmed 且无恢复标记的历史投递；pending、
+claimed、当前 queued/running 或仍有恢复标记的记录不得清理。该策略与作业实现是部署
+门槛，本轮不执行删除，也不据现有索引宣称生命周期治理完成。
+
+本地最终合成验收为 `m2-release: 92 passed, 3 warnings in 6.90s`；兼容集合加 M0/M1
+显式保护文件为 `251 passed, 72 warnings in 17.14s`。两组分别报告，不相加。迁移 head
+静态核对唯一为 `20261030_000056`，但未执行迁移；真实 PG/RabbitMQ、独立进程故障和
+本轮跨进程 restart 仍未验收。
