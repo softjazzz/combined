@@ -472,12 +472,12 @@ def _validate_semantic_response(
 
 
 def _opaque_ref(kind: str, index: int, raw_identity: str, request_salt: bytes) -> str:
-    """生成仅在本次请求内可关联、不能还原业务主键的不透明引用。"""
+    """生成请求内引用；字母编码避免随机数字被隐私层识别为电话等身份。"""
 
     digest = hashlib.sha256(
         request_salt + b"\0" + kind.encode("ascii") + b"\0"
         + str(index).encode("ascii") + b"\0" + raw_identity.encode("utf-8")
-    ).hexdigest()[:24]
+    ).hexdigest()[:24].translate(str.maketrans("0123456789abcdef", "abcdefghijklmnop"))
     return f"{kind}_{digest}"
 
 

@@ -42,6 +42,8 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_luxian_0609_execution_privacy_identity.py",
         "tests/unit/test_luxian_0609_privacy_request_scope.py",
         "tests/unit/test_luxian_0609_production_extension_boundary.py",
+        "tests/unit/test_luxian_0609_059_shadow_execution.py",
+        "tests/unit/test_luxian_0609_native_treatment_order_consistency.py",
     ),
     "compatibility-restart": (
         "tests/unit/test_luxian_0609_task_restart_persistence.py",
