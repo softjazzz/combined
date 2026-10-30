@@ -159,7 +159,8 @@ class LLMObservabilityRecorder:
         try:
             wall_ms = max(0, (time.perf_counter() - started_timestamp) * 1000)
             from .strata_observation import (
-                collect_strata_observation, describe_strata_request, parse_strata_metrics,
+                collect_strata_observation, describe_strata_request, expand_strata_cache_cost_events,
+                parse_strata_metrics,
             )
 
             context = current_llm_observation_context()
@@ -188,8 +189,9 @@ class LLMObservabilityRecorder:
                     gateway=gateway, transport=transport,
                 ),
             }
-            collect_strata_observation(event)
-            logger.info("strata_p0_attempt %s", json.dumps(event, sort_keys=True, allow_nan=False))
+            for cost_event in expand_strata_cache_cost_events(event, result, gateway=gateway):
+                collect_strata_observation(cost_event)
+                logger.info("strata_p0_attempt %s", json.dumps(cost_event, sort_keys=True, allow_nan=False))
         except Exception:
             logger.warning("strata_p0_observation_failed")
 

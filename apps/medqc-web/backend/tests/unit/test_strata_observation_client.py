@@ -254,10 +254,11 @@ async def test_concurrent_cases_keep_distinct_groups_and_scope_does_not_leak(mon
     assert len(observed.events) == 2
 
 
-def test_only_p0_modes_are_accepted_and_default_is_off():
+def test_prefix_mode_is_available_but_affinity_is_not_and_default_is_off():
     assert Settings(_env_file=None).STRATA_CASE_CACHE_MODE == "off"
+    assert Settings(_env_file=None, STRATA_CASE_CACHE_MODE="prefix").STRATA_CASE_CACHE_MODE == "prefix"
     with pytest.raises(ValueError):
-        Settings(_env_file=None, STRATA_CASE_CACHE_MODE="prefix")
+        Settings(_env_file=None, STRATA_CASE_CACHE_MODE="prefix_affinity")
 
 
 @pytest.mark.asyncio

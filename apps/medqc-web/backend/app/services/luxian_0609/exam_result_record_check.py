@@ -333,10 +333,13 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
                                        total_tokens, api_time or perf_counter() - started)
         calls += 1
         try:
-            response = await llm_client.generate(
-                attempt_prompt, max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
-                **structured_output_kwargs(llm_client),
-            )
+            from app.services.strata_case_context import exam_result_prefix_scope
+
+            with exam_result_prefix_scope():
+                response = await llm_client.generate(
+                    attempt_prompt, max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
+                    **structured_output_kwargs(llm_client),
+                )
         except Exception:
             return ResultRecordOutcome("failed", {}, calls, prompt_tokens, completion_tokens, total_tokens,
                                        api_time or perf_counter() - started)

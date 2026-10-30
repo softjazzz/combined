@@ -266,8 +266,8 @@ class Settings(BaseSettings):
     STRATA_API_ENDPOINT: Optional[AnyHttpUrl] = None
     STRATA_MODEL: Optional[str] = None
     STRATA_API_KEY: Optional[str] = None
-    # P0 仅旁路观测，不提供 Prime、Prefix 或亲和调度；默认请求行为不变。
-    STRATA_CASE_CACHE_MODE: Literal["off", "observe"] = "off"
+    # 默认关闭；observe仅观测，prefix仅供显式核验组经Gateway使用，亲和调度未实现。
+    STRATA_CASE_CACHE_MODE: Literal["off", "observe", "prefix"] = "off"
 
     # Backward compatibility aliases (deprecated, use LLM_* instead)
     @property

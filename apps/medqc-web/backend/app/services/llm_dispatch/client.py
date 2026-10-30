@@ -19,6 +19,8 @@ from .contracts import (
     GatewayErrorCode,
     GatewayErrorResponse,
     GatewayTiming,
+    GatewayCasePrefix,
+    GatewayCacheTrace,
 )
 from .provider_profiles import validate_gateway_profile
 
@@ -37,10 +39,13 @@ class GatewayDispatchError(RuntimeError):
 
     transport_retry_managed = True
 
-    def __init__(self, code: str, *, retryable: bool) -> None:
+    def __init__(self, code: str, *, retryable: bool, cache_trace: GatewayCacheTrace | None = None,
+                 cache_trace_invalid: bool = False) -> None:
         safe_code = code if code in _SAFE_GATEWAY_ERROR_CODES else "gateway_error"
         self.code = safe_code
         self.retryable = bool(retryable)
+        self.cache_trace = cache_trace.model_dump(mode="json") if cache_trace is not None else None
+        self.cache_trace_invalid = cache_trace_invalid
         super().__init__(safe_code)
 
 
@@ -93,6 +98,7 @@ class GatewayDispatchClient:
         expected_endpoint_sha256: str,
         payload: dict[str, Any],
         timeout_seconds: float,
+        case_prefix: GatewayCasePrefix | None = None,
     ) -> dict[str, Any]:
         normalized_profile = validate_gateway_profile(
             profile=profile, provider_code=provider_code
@@ -121,6 +127,7 @@ class GatewayDispatchClient:
                 deadline_at=deadline_at,
                 timeout_seconds=request_remaining,
                 payload=payload,
+                case_prefix=case_prefix,
             )
         except (ValidationError, ValueError, TypeError) as exc:
             raise GatewayDispatchError(
@@ -142,7 +149,7 @@ class GatewayDispatchClient:
                             "Authorization": f"Bearer {token}",
                             "Content-Type": "application/json",
                         },
-                        json=request.model_dump(mode="json"),
+                        json=self._request_body(request),
                     ),
                     timeout=request_remaining,
                 )
@@ -162,13 +169,22 @@ class GatewayDispatchClient:
                 "gateway_invalid_response", retryable=response.status_code >= 500
             ) from exc
         if response.status_code < 200 or response.status_code >= 300:
+            trace, trace_invalid = self._validated_cache_trace(
+                body.get("detail", {}).get("cache_trace")
+                if isinstance(body, dict) and isinstance(body.get("detail"), dict) else None,
+            )
             try:
-                error = GatewayErrorResponse.model_validate(body).detail
+                # 纯观测坏字段不覆盖原始安全错误码，也不能伪造失败的Prime费用。
+                safe_body = dict(body) if isinstance(body, dict) else body
+                if isinstance(safe_body, dict) and isinstance(safe_body.get("detail"), dict):
+                    safe_body["detail"] = {**safe_body["detail"], "cache_trace": trace}
+                error = GatewayErrorResponse.model_validate(safe_body).detail
             except (ValidationError, TypeError, ValueError):
                 raise GatewayDispatchError(
                     "gateway_error", retryable=response.status_code >= 500
                 ) from None
-            raise GatewayDispatchError(error.code, retryable=error.retryable)
+            raise GatewayDispatchError(error.code, retryable=error.retryable,
+                                       cache_trace=trace, cache_trace_invalid=trace_invalid)
         if not isinstance(body, dict):
             raise GatewayDispatchError("gateway_invalid_response", retryable=False)
         try:
@@ -177,7 +193,32 @@ class GatewayDispatchClient:
             raise GatewayDispatchError(
                 "gateway_invalid_response", retryable=False
             ) from exc
+        if "_strata_cache" in body:
+            trace, invalid = self._validated_cache_trace(body["_strata_cache"])
+            if invalid:
+                body.pop("_strata_cache", None)
+                body["_strata_cache_invalid"] = True
+            elif trace is not None:
+                body["_strata_cache"] = trace.model_dump(mode="json")
+        if case_prefix is not None:
+            body["_strata_cache_expected"] = True
         return body
+
+    @staticmethod
+    def _request_body(request: GatewayCompletionRequest) -> dict[str, Any]:
+        body = request.model_dump(mode="json")
+        if body.get("case_prefix") is None:
+            body.pop("case_prefix", None)
+        return body
+
+    @staticmethod
+    def _validated_cache_trace(value) -> tuple[GatewayCacheTrace | None, bool]:
+        if value is None:
+            return None, False
+        try:
+            return GatewayCacheTrace.model_validate(value), False
+        except (ValidationError, TypeError, ValueError):
+            return None, True
 
 
 __all__ = ["GatewayDispatchClient", "GatewayDispatchError"]

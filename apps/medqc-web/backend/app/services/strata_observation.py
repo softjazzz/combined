@@ -8,6 +8,7 @@ import json
 import math
 import time
 from typing import Mapping
+from uuid import uuid4
 
 
 _COLLECTOR = ContextVar("strata_observation_collector", default=None)
@@ -100,6 +101,75 @@ def parse_strata_metrics(result, *, wall_ms, transport=None, gateway=False):
     }
 
 
+def expand_strata_cache_cost_events(event, result, *, gateway):
+    """Prime 是独立费用阶段；未知投递不补零，不修改临床响应或原事件。"""
+    rule = deepcopy(event)
+    raw = _mapping(result)
+    if not gateway:
+        return [rule]
+    trace = None
+    state = "absent"
+    if "_strata_cache" in raw:
+        try:
+            from .llm_dispatch.contracts import GatewayCacheTrace
+
+            trace = GatewayCacheTrace.model_validate(raw["_strata_cache"]).model_dump()
+            state = "known"
+        except (ValueError, TypeError):
+            state = "invalid"
+    elif raw.get("_strata_cache_invalid") is True:
+        state = "invalid"
+    elif raw.get("_strata_cache_expected") is True:
+        state = "missing"
+    if state == "absent":
+        return [rule]
+    rule["cache_trace_state"] = state
+    metrics = rule["metrics"]
+    if trace is None:
+        metrics["model_requests_started"] = None
+        metrics["unknown_usage_request_count"] = None
+        metrics["transport_complete"] = None
+        metrics["issues"] = [*metrics.get("issues", ()), "cache_trace_unavailable"]
+        prime_requests = None
+        prime_metrics = None
+        prime_error = "cache_trace_unavailable"
+    else:
+        rule["cache_strategy"] = trace["strategy"]
+        requests = trace["rule_requests_started"]
+        metrics["model_requests_started"] = requests
+        known = int(metrics.get("nominal_input_tokens") is not None and metrics.get("output_tokens") is not None)
+        metrics["unknown_usage_request_count"] = max(0, requests - known) if requests is not None else None
+        if requests is None:
+            metrics["transport_complete"] = None
+        prime_requests = trace["prime_requests_started"]
+        prime_metrics = trace["prime_metrics"]
+        prime_error = trace["prime_error_code"]
+    if prime_requests == 0:
+        return [rule]
+    prime_metrics = _mapping(prime_metrics)
+    prime_usage_known = (prime_metrics.get("nominal_input_tokens") is not None
+                         and prime_metrics.get("output_tokens") is not None)
+    prime = {
+        **rule, "event_id": str(uuid4()), "parent_event_id": event["event_id"],
+        "purpose": "prime", "status": ("unknown" if prime_requests is None
+                                         else "success" if prime_error is None else "failed"),
+        "groups": {},
+        "metrics": {
+            **{field: _number(prime_metrics.get(field), integer=field.endswith("tokens"))
+               for field in _COST_FIELDS if field not in ("model_requests_started", "unknown_usage_request_count")},
+            "model_requests_started": prime_requests,
+            "unknown_usage_request_count": (max(0, prime_requests - int(prime_usage_known))
+                                            if prime_requests is not None else None),
+            "transport_complete": (prime_requests == 1 and prime_error is None
+                                   and prime_metrics.get("transport_ms") is not None),
+            "cache_state": "unknown", "cache_invalidation": "unknown",
+            "token_reuse_verified": False,
+            "issues": [prime_error] if prime_error else [],
+        },
+    }
+    return [prime, rule]
+
+
 def describe_strata_request(payload, *, scope_key, route_key, digest):
     """只对最终发送消息的精确内容分组，不改变/存储正文，不把字符当 Token。"""
     result = {"input_group_key": None, "leading_messages_key": None,
@@ -170,7 +240,9 @@ class StrataObservationCollector:
     def report(self):
         cost = {}
         for field in _COST_FIELDS:
-            values = [event.get("metrics", {}).get(field) for event in self.events]
+            # Rule 的 client wall 已含自己的Prime；Prime wall仅作分解，不重复计入。
+            values = [event.get("metrics", {}).get(field) for event in self.events
+                      if field != "wall_ms" or event.get("purpose") != "prime"]
             total = sum(value for value in values if value is not None)
             cost[field] = {"known_sum": _number(total),
                            "unknown_count": sum(value is None for value in values)}
@@ -193,11 +265,18 @@ class StrataObservationCollector:
             ]
         return {"schema_version": "strata_p0_report_v1", "complete": not self.dropped_events,
                 "scope": "observed_attempts_only",
+                "cost_scope": "observed_rule_and_prime_http_not_legacy_clinical_usage",
                 "collection_wall_ms": max(0, (time.perf_counter() - self.started_at) * 1000),
                 "cost_duration_semantics": "summed_attempt_wall_is_not_batch_wall",
                 "attempt_count": len(self.events),
+                "rule_attempt_count": sum(x.get("purpose") != "prime" for x in self.events),
+                "prime_attempt_count": sum(x.get("purpose") == "prime" for x in self.events),
                 "logical_call_count": len({x.get("logical_call_id") for x in self.events}),
                 "failed_attempts": sum(x.get("status") != "success" for x in self.events),
+                "failed_rule_attempts": sum(x.get("status") != "success" and x.get("purpose") != "prime"
+                                            for x in self.events),
+                "failed_prime_attempts": sum(x.get("status") != "success" and x.get("purpose") == "prime"
+                                             for x in self.events),
                 "cost_complete": bool(self.events) and not self.dropped_events and all(
                     item["known_sum"] is not None and item["unknown_count"] == 0
                     for item in cost.values()
@@ -205,7 +284,20 @@ class StrataObservationCollector:
                 "pending_transport_attempts": sum(
                     x.get("metrics", {}).get("transport_complete") is False for x in self.events
                 ),
-                "prime_requests_started": 0, "currency_cost": None,
+                "prime_requests_started": (
+                    None if any(x.get("metrics", {}).get("model_requests_started") is None
+                                for x in self.events if x.get("purpose") == "prime")
+                    else sum(x.get("metrics", {}).get("model_requests_started", 0)
+                             for x in self.events if x.get("purpose") == "prime")
+                ),
+                "prime_wall_ms": {
+                    "known_sum": _number(sum(x.get("metrics", {}).get("wall_ms") or 0
+                                             for x in self.events if x.get("purpose") == "prime")),
+                    "unknown_count": sum(x.get("metrics", {}).get("wall_ms") is None
+                                         for x in self.events if x.get("purpose") == "prime"),
+                    "semantics": "included_in_rule_wall_breakdown_not_additive",
+                },
+                "currency_cost": None,
                 "currency_cost_reason": "local_compute_price_not_configured",
                 "cost": cost, "groups": groups, "token_reuse_verified": False,
                 "dropped_events": self.dropped_events}

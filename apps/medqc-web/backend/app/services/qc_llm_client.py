@@ -210,6 +210,8 @@ class SichuanQCLLMClient:
             getattr(get_settings(), "STRATA_CASE_CACHE_MODE", "off")
             if self.provider_code == "strata" else "off"
         )
+        if self.strata_observation_mode == "prefix" and self.dispatch_mode != "gateway":
+            raise ProviderConfigurationError("Strata prefix mode requires the controlled Gateway")
         self.call_count = 0
         self.total_tokens = 0
         self.total_api_time = 0.0
@@ -452,6 +454,7 @@ class SichuanQCLLMClient:
         from .luxian_0609.privacy_request_scope import protect_current_payload
 
         payload = protect_current_payload(payload)
+        case_prefix = None
         event_id, started_timestamp = await self._observability_recorder.start_attempt(
             logical_call_id=logical_call_id,
             attempt_no=attempt_no,
@@ -468,13 +471,24 @@ class SichuanQCLLMClient:
 
             timeout_seconds = request_timeout(self.timeout_seconds)
             with http_attempt_observation_scope(
-                enabled=getattr(self, "strata_observation_mode", "off") == "observe",
+                enabled=getattr(self, "strata_observation_mode", "off") in {"observe", "prefix"},
             ) as transport_observation:
                 if self.dispatch_mode == "gateway":
                     if not self.gateway_profile:
                         raise ProviderConfigurationError(
                             "LLM gateway profile is unavailable"
                         )
+                    if self.provider_code == "strata" and getattr(self, "strata_observation_mode", "off") == "prefix":
+                        from .strata_case_context import (
+                            consume_exam_result_prefix_request, current_exam_result_prefix,
+                        )
+
+                        case_prefix = current_exam_result_prefix(payload, model_role=self.model_role)
+                        if case_prefix is not None:
+                            # 先校验完整元数据，再扣调用预算；两者间无await。
+                            protect_current_payload({"case_prefix": case_prefix.model_dump(mode="json")})
+                            consume_exam_result_prefix_request()
+                    prefix_kwargs = {"case_prefix": case_prefix} if case_prefix is not None else {}
                     result = await self._gateway_dispatch_client.complete(
                         provider_code=self.provider_code,
                         profile=self.gateway_profile,
@@ -483,6 +497,7 @@ class SichuanQCLLMClient:
                         ),
                         payload=payload,
                         timeout_seconds=timeout_seconds,
+                        **prefix_kwargs,
                     )
                 else:
                     result = await safe_post_json(
@@ -509,9 +524,16 @@ class SichuanQCLLMClient:
             return result, usage
         except BaseException as error:
             status, safe_error_kind = safe_status_for_exception(error)
+            failed_cache_observation = None
+            if case_prefix is not None:
+                failed_cache_observation = {"_strata_cache_expected": True}
+                if getattr(error, "cache_trace", None) is not None:
+                    failed_cache_observation["_strata_cache"] = error.cache_trace
+                if getattr(error, "cache_trace_invalid", False):
+                    failed_cache_observation["_strata_cache_invalid"] = True
             self._observe_strata_attempt(
                 event_id=event_id, logical_call_id=logical_call_id, attempt_no=attempt_no,
-                payload=payload, result=None, status=status,
+                payload=payload, result=failed_cache_observation, status=status,
                 started_timestamp=started_timestamp, transport_observation=transport_observation,
             )
             finish_diagnostic_attempt(diagnostic_attempt, error_kind=safe_error_kind or "unknown_error")
@@ -525,7 +547,7 @@ class SichuanQCLLMClient:
             raise
 
     def _observe_strata_attempt(self, *, transport_observation, **kwargs) -> None:
-        if getattr(self, "strata_observation_mode", "off") != "observe":
+        if getattr(self, "strata_observation_mode", "off") not in {"observe", "prefix"}:
             return
         try:
             self._observability_recorder.record_strata_attempt(

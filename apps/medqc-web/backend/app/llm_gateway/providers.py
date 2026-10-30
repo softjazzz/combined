@@ -87,12 +87,18 @@ class ProviderSender(Protocol):
     ) -> dict[str, Any]: ...
 
 
-def prepare_provider_payload(profile: ProfileConfig, raw_payload: dict[str, Any]) -> dict[str, Any]:
+def prepare_provider_payload(profile: ProfileConfig, raw_payload: dict[str, Any], *, allow_strata_prefix=False) -> dict[str, Any]:
     """只转发业务需要的 OpenAI 兼容字段，路由和凭据不在 payload 中。"""
 
-    if not isinstance(raw_payload, dict) or set(raw_payload) - _ALLOWED_PAYLOAD_FIELDS:
+    allowed = _ALLOWED_PAYLOAD_FIELDS | ({"strata_prefix"} if allow_strata_prefix and profile.provider_code == "strata" else set())
+    if not isinstance(raw_payload, dict) or set(raw_payload) - allowed:
         raise InvalidPayloadError()
     payload = deepcopy(raw_payload)
+    if "strata_prefix" in payload:
+        prefix = payload["strata_prefix"]
+        if (not isinstance(prefix, dict) or set(prefix) != {"tokens"}
+                or type(prefix["tokens"]) is not int or not 1 <= prefix["tokens"] <= 32768):
+            raise InvalidPayloadError()
     if payload.get("model") != profile.model:
         raise InvalidPayloadError()
     if payload.get("stream", False) is not False:

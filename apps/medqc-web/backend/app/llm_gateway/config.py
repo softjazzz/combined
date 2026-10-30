@@ -51,8 +51,21 @@ class GatewaySettings:
     state_dir: Path
     startup_isolation_seconds: float = 30.0
     shutdown_grace_seconds: float = 30.0
+    cache_enabled: bool = False
+    cache_deployment_version: str | None = None
+    cache_ttl_seconds: float = 60.0
+    cache_max_entries: int = 64
 
     def __post_init__(self) -> None:
+        if type(self.cache_enabled) is not bool:
+            raise GatewayConfigurationError("cache_enabled must be boolean")
+        if self.cache_enabled and (
+            not isinstance(self.cache_deployment_version, str)
+            or not _PROFILE_RE.fullmatch(self.cache_deployment_version)
+        ):
+            raise GatewayConfigurationError("cache deployment version is required")
+        _parse_bounded_float(self.cache_ttl_seconds, name="cache ttl", minimum=1, maximum=3600)
+        _positive_int(self.cache_max_entries, "cache_max_entries", 1024)
         if len(self.token) < 32 or self.token.strip() != self.token:
             raise GatewayConfigurationError("LLM Gateway token is not safely configured")
         if not self.resources or not self.profiles or not self.allowed_hosts:
@@ -112,7 +125,25 @@ class GatewaySettings:
             state_dir=state_dir,
             startup_isolation_seconds=startup_isolation_seconds,
             shutdown_grace_seconds=shutdown_grace_seconds,
+            cache_enabled=_parse_cache_enabled(env.get("STRATA_CASE_CACHE_ENABLED", "false")),
+            cache_deployment_version=env.get("STRATA_CASE_CACHE_DEPLOYMENT_VERSION"),
+            cache_ttl_seconds=_parse_bounded_float(env.get("STRATA_CASE_CACHE_TTL_SECONDS", "60"), name="cache ttl", minimum=1, maximum=3600),
+            cache_max_entries=_positive_int_env(env.get("STRATA_CASE_CACHE_MAX_ENTRIES", "64")),
         )
+
+
+def _parse_cache_enabled(raw):
+    if raw not in ("true", "false"):
+        raise GatewayConfigurationError("cache_enabled must be true or false")
+    return raw == "true"
+
+
+def _positive_int_env(raw):
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise GatewayConfigurationError("invalid cache capacity") from None
+    return _positive_int(value, "cache capacity", 1024)
 
 
 def _load_json(env: Mapping[str, str], name: str) -> Any:

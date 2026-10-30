@@ -30,6 +30,7 @@ from .admission import (
     GatewayShuttingDownError,
 )
 from .config import GatewaySettings, ProfileConfig
+from .case_cache import CasePrefixCache
 from .lifecycle import (
     LifecycleClosedError,
     RESTART_INFLIGHT_POLICY,
@@ -75,15 +76,37 @@ class GatewayRuntime:
         self.admission = AdmissionManager(settings.resources.values())
         self.lifecycle = RequestLifecycle()
         self.ready = True
+        self.case_cache = CasePrefixCache(settings)
         # 仅用于确定性验证 task-created/sender-started 窗口；生产为 None。
         self._provider_start_gate = provider_start_gate
         self._deadline_clock = deadline_clock
 
     async def complete(self, completion: GatewayCompletionRequest) -> dict[str, Any]:
+        if completion.case_prefix is None:
+            return await self._complete_uncached(completion)
         profile = self.settings.profiles.get(completion.profile)
         if profile is None:
             raise GatewayAPIError(GatewayErrorCode.INVALID_PROFILE.value, status_code=400, retryable=False)
-        payload = prepare_provider_payload(profile, completion.payload)
+        # 先校验完整原始 payload，缓存元数据不能放宽 Provider 白名单。
+        prepare_provider_payload(profile, completion.payload)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + min(float(completion.timeout_seconds), _seconds_until(completion.deadline_at))
+
+        async def invoke(payload):
+            remaining = min(deadline - loop.time(), _seconds_until(completion.deadline_at))
+            if remaining <= 0:
+                raise AdmissionDeadlineError()
+            request = completion.model_copy(update={"payload": payload, "case_prefix": None,
+                                                     "timeout_seconds": remaining})
+            return await self._complete_uncached(request, internal_prefix=True)
+
+        return await self.case_cache.run(completion, profile, invoke, deadline=deadline)
+
+    async def _complete_uncached(self, completion: GatewayCompletionRequest, *, internal_prefix=False) -> dict[str, Any]:
+        profile = self.settings.profiles.get(completion.profile)
+        if profile is None:
+            raise GatewayAPIError(GatewayErrorCode.INVALID_PROFILE.value, status_code=400, retryable=False)
+        payload = prepare_provider_payload(profile, completion.payload, allow_strata_prefix=internal_prefix)
 
         loop = asyncio.get_running_loop()
         absolute_remaining = _seconds_until(completion.deadline_at)
@@ -134,6 +157,10 @@ class GatewayRuntime:
                 await lease.release()
             raise
         result = dict(response)
+        # Provider 无权伪造 Gateway 成本边车。
+        result.pop("_strata_cache", None)
+        result.pop("_strata_cache_expected", None)
+        result.pop("_strata_cache_invalid", None)
         result["_gateway_timing"] = GatewayTiming(
             queue_seconds=lease.queue_seconds,
             http_seconds=http_seconds,
@@ -211,6 +238,7 @@ class GatewayRuntime:
     async def shutdown(self) -> bool:
         self.ready = False
         self.lifecycle.stop_accepting()
+        await self.case_cache.close()
         await self.admission.close()
         drained = await self.lifecycle.drain(self.settings.shutdown_grace_seconds)
         snapshots = await self.admission.snapshots()
@@ -282,15 +310,15 @@ def create_app(
 
     @app.exception_handler(GatewayAPIError)
     async def gateway_api_error(_request: Request, error: GatewayAPIError) -> JSONResponse:
-        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable)
+        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable, cache_trace=getattr(error, "cache_trace", None))
 
     @app.exception_handler(AdmissionError)
     async def admission_error(_request: Request, error: AdmissionError) -> JSONResponse:
-        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable)
+        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable, cache_trace=getattr(error, "cache_trace", None))
 
     @app.exception_handler(ProviderError)
     async def provider_error(_request: Request, error: ProviderError) -> JSONResponse:
-        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable)
+        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable, cache_trace=getattr(error, "cache_trace", None))
 
     @app.exception_handler(Exception)
     async def safe_unexpected_error(_request: Request, _error: Exception) -> JSONResponse:
@@ -362,10 +390,13 @@ async def _wait_for_disconnect(request: Request) -> None:
             return
 
 
-def _error_response(code: str, *, status_code: int, retryable: bool) -> JSONResponse:
+def _error_response(code: str, *, status_code: int, retryable: bool, cache_trace=None) -> JSONResponse:
+    detail = {"code": code, "retryable": retryable}
+    if cache_trace is not None:
+        detail["cache_trace"] = cache_trace.model_dump(mode="json")
     return JSONResponse(
         status_code=status_code,
-        content={"detail": {"code": code, "retryable": retryable}},
+        content={"detail": detail},
     )
 
 
