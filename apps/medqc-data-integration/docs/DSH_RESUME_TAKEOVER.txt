@@ -1,3 +1,6 @@
+续跑包0.3.1仅修正测试路径身份断言：使用samefile兼容Windows长路径/8.3别名。
+新增原生GetShortPathNameW回归，开发机已先复现失败再验证通过；误选runtime.pgpass仍不能通过。
+运行脚本与上一版续跑包逐位相同，原service-takeover-0.3也保持不变。
 本包处理已确认的42501：原部署脚本把运行账号medqc_sync用于读取旧克隆库，旧库未给该账号授权。
 选择方案2：一次性迁入沿用已完成源备份的部署身份，源连接仍强制只读；不向旧库补GRANT。
 默认部署账号postgres；若上轮实际使用其他部署账号，沿用原账号与既有deployment-admin.pgpass。
@@ -24,7 +27,7 @@ source = medqc_bundle_time_clone_20261029180906
 三、离线测试与一次续跑
 在同一个管理员PowerShell窗口执行，$python替换为已核实的现有解释器绝对路径：
 $base = 'D:\medqc\service-takeover-0.3'
-$fix = 'D:\medqc\takeover-resume-fix'
+$fix = 'D:\medqc\takeover-resume-fix-0.3.1'
 $runRoot = '<替换为上轮实际运行目录>'
 $env:PYTHONIOENCODING = 'utf-8'
 $env:PYTHONPATH = Join-Path $base 'src'

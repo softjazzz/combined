@@ -6,6 +6,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -65,6 +66,28 @@ class Connection:
 
 
 class TestTakeoverResume(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows 8.3路径专属回归")
+    def test_admin_source_observer_with_real_windows_short_path(self):
+        import ctypes
+        from ctypes import wintypes
+
+        short_name = ctypes.WinDLL("kernel32", use_last_error=True).GetShortPathNameW
+        short_name.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        short_name.restype = wintypes.DWORD
+        with tempfile.TemporaryDirectory(prefix="medqc-long-path-regression-") as folder:
+            size = short_name(folder, None, 0)
+            if not size:
+                raise ctypes.WinError(ctypes.get_last_error())
+            buffer = ctypes.create_unicode_buffer(size + 1)
+            if not short_name(folder, buffer, len(buffer)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            alias = buffer.value
+            if os.path.normcase(alias) == os.path.normcase(folder):
+                self.skipTest("当前卷未提供8.3别名；保留实际客户机用例")
+            # 给原用例一个实际存在的8.3临时目录，观察器resolve后会使用长路径。
+            with patch.object(tempfile, "tempdir", alias):
+                self.test_admin_source_observer_preserves_prior_diagnostic_and_selects_admin_passfile()
+
     def test_plan_rejects_original_business_and_aliased_databases(self):
         module = load_tool("takeover_resume_preflight")
         module.validate_plan(plan())
@@ -198,10 +221,10 @@ class TestTakeoverResume(unittest.TestCase):
             self.assertEqual(status, 0)
             arguments = frozen.main.call_args.args[0]
             self.assertEqual(arguments[arguments.index("--source-user") + 1], "postgres")
-            self.assertEqual(
-                arguments[arguments.index("--source-passfile") + 1],
-                str(run / "secrets/deployment-admin.pgpass"),
-            )
+            actual_passfile = Path(arguments[arguments.index("--source-passfile") + 1])
+            # samefile核对文件身份，兼容NTFS长/短路径；只改大小写无法展开8.3别名。
+            self.assertTrue(actual_passfile.samefile(run / "secrets/deployment-admin.pgpass"))
+            self.assertFalse(actual_passfile.samefile(run / "secrets/runtime.pgpass"))
             self.assertEqual(old.read_text(encoding="utf-8"), "prior-diagnostic")
             report = json.loads(
                 (run / "reports/takeover-import-deployment-source-diagnostic.json").read_text(
