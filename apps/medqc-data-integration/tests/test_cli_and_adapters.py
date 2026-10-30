@@ -52,7 +52,8 @@ def _settings(tmp_path: Path, adapter: str) -> SourceSettings:
 
 def test_odbc_adapter_uses_fake_driver(monkeypatch: Any, tmp_path: Path) -> None:
     def connect(connection_string: str, **kwargs: Any) -> FakeDriverConnection:
-        assert "HOST=unused-host;" in connection_string
+        assert "SERVER=unused-host;" in connection_string
+        assert "HOST=" not in connection_string
         assert "DATABASE=example;" in connection_string
         return FakeDriverConnection()
 

@@ -1,0 +1,48 @@
+0.3.2：修正InterSystems ODBC连接关键字为SERVER，仅从真实ODBC dry阶段继续。
+本包含完整0.3.2服务代码，必须解压到全新目录；原0.3冻结包和0.3.1续跑包保留不动。
+前序已成功提交，不重做import、两轮初始发布、故障注入或恢复，不重新建库/初始化。
+
+一、已有现场
+沿用原运行目录及其runtime.json、secrets、backups、reports，不复制或重生成凭据。
+ingest=medqc_ingest_takeover_20261030205035，CDM=medqc_cdm_takeover_20261030205035。
+两个restore库仍应为空，原先成功的导入/核对/发布/回滚报告必须保留。
+不连接原克隆库或正式业务库；只读检查既有4个目标库，再继续既定验收。
+运行身份为medqc_sync，部署管理员只用于恢复检查、备份和恢复；不改授权、属主或PG服务。
+
+二、校验与离线检查
+先校验外层SHA256及内部CHECKSUMS。本包manifest版本必须0.3.2。
+$python沿用已核实的Python3.10.11 64位绝对路径，不使用默认py，不安装任何依赖。
+在同一个前台管理员PowerShell执行：
+$release = 'D:\medqc\service-takeover-0.3.2'
+$original = 'D:\medqc\service-takeover-0.3'
+$runRoot = '<替换为既有运行目录>'
+$env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONPATH = Join-Path $release 'src'
+& $python -m unittest discover -s (Join-Path $release 'tests') -p test_source_validation_resume.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Source validation tests failed' }
+
+三、一次续跑
+& (Join-Path $release 'deploy\windows\resume-source-validation.ps1') `
+  -PythonPath $python -DataRoot $runRoot -OriginalPackageRoot $original `
+  -DeploymentUser postgres
+
+若上轮部署账号并非postgres，沿用原账号；现有deployment-admin.pgpass不改。
+不得运行prepare-takeover.ps1、resume-takeover.ps1或任何import命令。
+
+四、执行内容
+1. 核对新包校验值、原冻结包72项校验、已有成功报告、运行配置身份及实际4库状态。
+   全部预检连接只读；不重复导入和已完成的验收。runtime.json原样使用，不重新输入Caché口令。
+2. 正式ODBC适配器对2026-10-28的13接口执行dry，只使用SERVER，不同时发送HOST。
+   dry前后ingest全表及序列指纹必须一致，不能建批次、写raw或推进断点。
+3. 执行同一日期13接口replay+发布，然后正式发布两轮及逐字段核对。
+   第二轮发布零变化；源端迟到变化如实记录，不强求raw全部unchanged。
+4. 核对原成功报告、runtime配置、原始归档/接管标记/批次映射均未改，checkpoint未推进。
+5. 对最终ingest和CDM备份，分别恢复到已有两个空restore库，逐表与序列指纹完全一致。
+6. 生成默认禁用且未注册的日/周任务XML，入口指向0.3.2新目录。
+   不启用任务、不启动业务后端或规则引擎、不修改现有PG自启动。
+
+五、停止与回传
+任一步失败立即停止，保留所有库、报告和备份；不自动重复执行或清理现场。
+成功需deployment-result.json为accepted、service_version=0.3.2、completed_stages_repeated=false。
+仅回传reports中非PHI JSON、包/脚本哈希。秘密、运行配置、private-logs、dump、正文与真实键留本机。
+开发机测试是fake驱动；不冒充已完成客户机真实Caché读取。最终以本次实际运行结果验收。

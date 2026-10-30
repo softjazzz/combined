@@ -52,7 +52,7 @@ class OdbcSourceAdapter:
             raise IngestError(ErrorKind.CONFIGURATION, "odbc_driver_unavailable") from None
         connection_string = (
             f"DRIVER={{{self._settings.odbc_driver}}};"
-            f"HOST={self._settings.host};PORT={self._settings.port};"
+            f"SERVER={self._settings.host};PORT={self._settings.port};"
             f"DATABASE={self._settings.namespace};UID={self._settings.user};"
             f"PWD={self._settings.password()};"
         )

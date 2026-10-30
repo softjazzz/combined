@@ -2,7 +2,9 @@
 
 这是可独立安装和调度的 Python 模块化单体，包含两个 worker 角色：
 
-当前交付版本0.3.0；接口仍为13个。正式接管与部署验收从
+当前交付版本0.3.2；接口仍为13个。已完成接管、初始发布和回滚后，按
+[真实源阶段续跑说明](docs/DSH_SOURCE_VALIDATION_0.3.2.txt)从ODBC dry继续，使用SERVER关键字。
+原始接管流程仍从
 [DSH_START-takeover.txt](docs/DSH_START-takeover.txt) 开始：一条PowerShell命令在新库
 完成接管、发布、回滚恢复、单日实际源验证和备份恢复。详见
 [本版收口说明](docs/2026-10-30-takeover-release.md)。旧库不改，任务默认不启用。
