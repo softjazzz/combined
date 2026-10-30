@@ -1,2 +1,3 @@
 # M2 独立 QC Publisher/Worker 传输依赖；不并入 Web 应用依赖。
 aio-pika==9.5.8
+aiormq==6.9.4

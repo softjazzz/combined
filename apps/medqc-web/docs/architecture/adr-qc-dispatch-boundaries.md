@@ -1,5 +1,11 @@
 # ADR：QC 调度与模型 Gateway 边界
 
+> 更新：本文件保留各阶段决策与当时证据。M2 后续增加了 057 archive、容量监测及
+> owned disposable PG/RabbitMQ 验收，当前状态以
+> [M2 收口记录](../plans/2026-10-30-m2-infra-retention-plan.md) 为准。
+> 后文“isolated-infra 拒绝/归档未实现/真实基础设施未验收”是前一阶段状态，不代表
+> 当前入口；默认 offline 护栏未放宽，正式 MQ 仍未启用。
+
 - 状态：M0/M1 接受；M2 本地实现与合成验收，真实基础设施待验收
 - 日期：2026-10-29（M2 增补：2026-10-30）
 - 审查基线：`cedb9c10a017c30b767e7ed449b8c9b90e356a54`

@@ -19,6 +19,7 @@ from app.services.qc_dispatch.maintenance import CapacityMonitor, CapacityThresh
 async def run_publisher() -> None:
     """启动时只检查已迁移 schema，不导入 HTTP routes，不创建 DDL。"""
 
+    thresholds = CapacityThresholds.from_env()
     owner = os.environ.get("QC_OUTBOX_PUBLISHER_OWNER", "")
     publisher_settings = OutboxPublisherSettings(owner=owner)
     rabbitmq_settings = RabbitMQSettings.from_env()
@@ -29,7 +30,7 @@ async def run_publisher() -> None:
     stop = asyncio.Event()
     monitor_task = asyncio.create_task(
         CapacityMonitor(
-            OutboxMaintenance(repository), thresholds=CapacityThresholds.from_env(),
+            OutboxMaintenance(repository), thresholds=thresholds,
         ).run(stop),
         name="qc-outbox-capacity",
     )

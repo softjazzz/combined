@@ -1,5 +1,9 @@
 # QC RabbitMQ M2 本地开发与验收说明
 
+> 本文为首批交付历史记录。后续 057 archive、容量监测、isolated-infra 和真实 PG/RabbitMQ
+> 故障矩阵已继续实施，最新状态见 [M2 收口记录](2026-10-30-m2-infra-retention-plan.md)。
+> 下文未实现/未验收项应按阶段阅读，不能代替当前证据；默认仍为 legacy，未部署业务库。
+
 日期：2026-10-30
 
 ## 结论与证据等级

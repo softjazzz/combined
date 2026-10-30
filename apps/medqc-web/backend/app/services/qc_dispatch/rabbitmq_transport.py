@@ -240,7 +240,16 @@ class RabbitMQTransport:
             ) from None
         except Exception as exc:
             error_name = type(exc).__name__.lower()
-            if "delivery" in error_name or "return" in error_name or "unrout" in error_name:
+            errors = getattr(module, "exceptions", None)
+            returned = getattr(errors, "PublishError", None)
+            rejected = getattr(errors, "DeliveryError", None)
+            if isinstance(returned, type) and isinstance(exc, returned):
+                code = "unroutable"
+                message_text = "RabbitMQ message was not routable"
+            elif isinstance(rejected, type) and isinstance(exc, rejected):
+                code = "publish_nack"
+                message_text = "RabbitMQ rejected the published message"
+            elif any(part in error_name for part in ("publisherror", "delivery", "return", "unrout")):
                 code = "unroutable"
                 message_text = "RabbitMQ message was not routable"
             elif _is_closed(self._channel) or _is_closed(self._connection):

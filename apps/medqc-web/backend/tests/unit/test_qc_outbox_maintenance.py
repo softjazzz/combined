@@ -307,3 +307,14 @@ def test_cli_failure_output_never_contains_exception_or_dsn(monkeypatch, capsys)
     assert "outbox_maintenance_failed" in parse_failure.err
     assert "private-user" not in parse_failure.err
     assert "postgresql" not in parse_failure.err
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf", "0", "-1"])
+def test_cli_invalid_interval_is_rejected_before_database_access(value):
+    args = maintenance_cli.build_parser(environ={}).parse_args([f"--interval={value}"])
+
+    def must_not_connect():
+        raise AssertionError("invalid interval must not read a database")
+
+    with pytest.raises(ValueError, match="interval must be positive"):
+        asyncio.run(maintenance_cli.run(args, repository_factory=must_not_connect))

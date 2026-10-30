@@ -29,6 +29,10 @@ class DeliveryError(Exception):
     pass
 
 
+class PublishError(DeliveryError):
+    pass
+
+
 class FakeMessage:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
@@ -311,9 +315,10 @@ async def test_publish_requires_explicit_basic_ack(confirmation, expected_code):
 
 
 @pytest.mark.asyncio
-async def test_publish_maps_mandatory_return_without_leaking_original_error():
+@pytest.mark.parametrize("error_type", (DeliveryError, PublishError))
+async def test_publish_maps_mandatory_return_without_leaking_original_error(error_type):
     transport, _, _ = await _connected_transport()
-    transport._exchange.error = DeliveryError("amqp://user:secret@mq/ leaked")
+    transport._exchange.error = error_type("amqp://user:secret@mq/ leaked")
 
     with pytest.raises(RabbitMQTransportError) as exc_info:
         await transport.publish(
@@ -325,6 +330,18 @@ async def test_publish_maps_mandatory_return_without_leaking_original_error():
 
     assert exc_info.value.code == "unroutable"
     assert "secret" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_typed_delivery_rejection_is_nack_and_return_subclass_is_unroutable():
+    transport, _, _ = await _connected_transport()
+    transport._aio_pika.exceptions = SimpleNamespace(DeliveryError=DeliveryError, PublishError=PublishError)
+    envelope = BatchDispatchEnvelope.new(job_id="36effbd6-ace9-4ed9-ac4a-f41f98db5c47", generation=1)
+    for error, code in ((DeliveryError("synthetic"), "publish_nack"), (PublishError("synthetic"), "unroutable")):
+        transport._exchange.error = error
+        with pytest.raises(RabbitMQTransportError) as raised:
+            await transport.publish(envelope)
+        assert raised.value.code == code
 
 
 @pytest.mark.asyncio

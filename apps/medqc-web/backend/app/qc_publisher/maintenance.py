@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import signal
 import sys
 from typing import Callable, Sequence
@@ -70,7 +71,7 @@ async def run(
     repository_factory: Callable[[], object] | None = None,
     emit: Callable[[dict], None] | None = None,
 ) -> int:
-    if args.interval is not None and args.interval <= 0:
+    if args.interval is not None and (not math.isfinite(args.interval) or args.interval <= 0):
         raise ValueError("Outbox archive interval must be positive")
     if args.apply and args.interval is None:
         raise ValueError("Outbox writes require both --apply and --interval")

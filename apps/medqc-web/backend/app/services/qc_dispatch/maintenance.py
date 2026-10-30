@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 import json
 import logging
+import math
 import os
 from typing import Callable, Mapping
 
@@ -179,7 +180,7 @@ class OutboxMaintenance:
     ) -> None:
         """可取消的归档循环；默认预览，调用方必须显式传 ``apply=True``。"""
 
-        if interval <= 0:
+        if not math.isfinite(interval) or interval <= 0:
             raise ValueError("Outbox archive interval must be positive")
         while not stop.is_set():
             result = self.archive(policy=policy, apply=apply)
@@ -234,7 +235,7 @@ class CapacityMonitor:
         return event
 
     async def run(self, stop: asyncio.Event, *, interval: float = 30.0) -> None:
-        if interval <= 0:
+        if not math.isfinite(interval) or interval <= 0:
             raise ValueError("capacity monitor interval must be positive")
         while not stop.is_set():
             self.check()

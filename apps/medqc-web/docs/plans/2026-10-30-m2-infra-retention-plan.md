@@ -38,3 +38,25 @@
 
 不做多 Worker/HA/quorum、病历子任务或临床规则改造；不发送外部通知，不安装客户机
 服务，不启用正式 MQ，不写业务数据库，不删除原始病历或已有质控结果。
+
+## 本轮证据与剩余边界
+
+- 本机最终 `m2-synthetic --suite m2-release`：125 passed（25.68 秒）；
+  `offline --suite compatibility`：259 passed（49.13 秒）。分别报告，不相加。
+- 首轮真实基础设施 CI：
+  [41016625602](https://github.com/softjazzz/combined/actions/runs/41016625602)，
+  9 passed / 1 failed，50.23 秒。PG 16.15、RabbitMQ 4.1.8；两 owned 容器已清理。
+  唯一失败为 aiormq 6.9.4 的 PublishError 未识别为 unroutable，不是任务丢失。
+  已按实际异常继承关系修复，Basic.Nack 与 Basic.Return 分开；锁定传递依赖版本。
+  修复后真实矩阵以对应提交的 QC M2 Disposable Infrastructure CI 为最终依据。
+- 真实矩阵覆盖：single/split 056/057、Broker confirm/mandatory/unroutable、实际断连重建、
+  PG 并发 claim、confirm 后落库前 kill、Worker 提交前 kill、提交后 ACK 前 kill、
+  取消旧代晚写、归档身份保护及归档/重试锁竞争。固定应答沿 Workspace/Canonical 保存读取。
+- 进程故障探针使用真实 publisher/consumer/PG/AMQP，但注入固定执行 callback；未运行患者
+  质控，不宣称完整 HTTP→生产 Worker→真实模型联调或客户机服务安装验收。
+- 服务端自然 consumer_timeout、Broker 节点/磁盘故障、HA、多 Worker 公平性与全历史
+  001–055 迁移不在已验证范围；056/057 从最小合成 055 owner fixture 实际执行，不 stamp。
+- 容量告警为结构化日志，没有外部告警渠道。payload bytes 不等于磁盘/WAL；容量扫描
+  开销、生产阈值及归档保留期仍需按医院部署规模校准。archive 不做物理到期删除。
+- 本轮后端范围没有修改前端，未为此重复运行全量前端检查。正式启用仍需目标线依赖/
+  迁移整合、Gateway sentinel 与现场配置验收；不据隔离 CI 宣称可以立即生产开启。

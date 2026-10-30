@@ -191,7 +191,7 @@ async def test_real_publisher_confirm_and_mandatory_unroutable(real_infra_spec):
         envelope = BatchDispatchEnvelope.from_bytes(row["payload"])
         with pytest.raises(RabbitMQTransportError) as rejected:
             await transport.publish(envelope, target="main")
-        assert rejected.value.code == "unroutable"
+        assert rejected.value.code == "unroutable", type(rejected.value.__context__).__name__
     finally:
         await transport.close()
 

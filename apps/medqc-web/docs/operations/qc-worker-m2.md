@@ -4,9 +4,10 @@
 
 ## 当前状态
 
-这是 M2 代码评审与后续隔离环境验收入口，不是已部署声明。当前默认配置仍为
-`legacy`；未执行迁移、未安装 RabbitMQ/aio-pika、未启动 publisher/Worker、未修改
-`.env`，也没有连接真实 PG、Broker、Provider 或 Strata。
+当前默认仍为 `legacy`，未部署正式 MQ。已补 057 归档迁移、容量监测及 owned disposable
+基础设施验收；真实执行只发生在 GitHub 临时 runner 新建的 PG/RabbitMQ 容器内。
+本机/客户机库、业务 `.env`、Strata 和真实模型均未触碰。最新状态与证据见
+[M2 收口记录](../plans/2026-10-30-m2-infra-retention-plan.md)。
 
 ## 受支持的首期拓扑
 
@@ -35,10 +36,11 @@ MQ 首期只接单个 LX0609 叶任务；`family_parent` 在创建 parent 前受
 7. 配置 Outbox 容量告警，并评审保留期与可审计归档/清理作业；
 8. 备份业务 PG 并验证可读。没有以上证据时保持新模式关闭。
 
-M2 开发期 Outbox 全量保留，不自动删除。部署前的清理/归档只能选择终态任务中已
-`confirmed`、没有恢复标记的历史投递；`pending`、`claimed`、当前 queued/running 或
-仍带恢复标记的记录一律保留。当前只提供 due/job 查询索引，保留期作业和容量告警尚未
-实现，本轮也没有执行任何清理或业务库动作。
+归档默认关闭，CLI 默认只读预览。默认保留 30 天、每批 500 条；显式 `--apply` 和
+`--interval` 同时提供才周期搬移。只处理终态一致、已 confirmed、无恢复标记的投递；
+failed 还需有失败分类。复制与移出 active 同事务，不删除 archive、任务或结果。
+pending、claimed、queued/running 或带恢复标记的记录保留。057 的 archive 身份用于
+晚重投去重；禁止手工删除 archive 或 downgrade 丢弃审计历史。
 
 ## 启停顺序
 
@@ -83,6 +85,35 @@ M2 无法证明崩溃缺失范围时，标记安全失败并走受控恢复；�
 显示受控不可执行并保留数据，等待修复版本；禁止删除记录或修改 generation 逃过门禁。
 
 ## 验收入口
+
+以下原始 92/251 项记录保留为前一批合成证据；其中“尚未实现/尚未验收”描述的是当时
+状态，已被收口记录更新。最新真实隔离入口：
+
+```powershell
+cd apps/medqc-web/backend
+python -B scripts/run_qc_m2_infra.py --output-dir .tmp/m2-infra-results
+```
+
+需已有本地 Docker daemon；驱动不启动 Docker、不接触既有容器或手填 DSN，无宿主挂载。
+只连接本轮随机账号/库/vhost/端口；退出仅清理本轮标签和精确 ID。缺 verified manifest
+的 isolated-infra 仍拒绝执行。默认 offline 继续禁网络、dotenv 和普通子进程。
+
+保留期入口（目标库部署须另行授权，本轮不对业务库执行）：
+
+```powershell
+python -m app.qc_publisher.maintenance
+python -m app.qc_publisher.maintenance --interval 60
+# 显式允许周期搬移；前两条仍是只读
+python -m app.qc_publisher.maintenance --apply --interval 3600 --retention-days 30 --batch-limit 500
+```
+
+Publisher 自动只读监测容量。环境变量：`QC_OUTBOX_WARNING_ROWS` / `QC_OUTBOX_CRITICAL_ROWS`、
+`QC_OUTBOX_WARNING_BYTES` / `QC_OUTBOX_CRITICAL_BYTES`、`QC_OUTBOX_WARNING_DUE_SECONDS` /
+`QC_OUTBOX_CRITICAL_DUE_SECONDS`；默认 10万/100万行、32/256 MiB payload、300/1800 秒。
+仅等级变化或恢复时输出结构化日志；读失败为 unknown，不报零。不发送外部通知。
+payload bytes 不是表/索引磁盘占用或 WAL；生产扫描开销与阈值需现场校准。
+
+### 前一批合成记录（历史状态）
 
 离线合成入口：
 
