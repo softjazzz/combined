@@ -9,6 +9,7 @@ import pytest
 
 from app.core import http as http_module
 from app.services.llm_execution_concurrency import (
+    capture_llm_execution_concurrency,
     concurrency_from_custom_parameters,
     resolve_llm_execution_concurrency,
     with_execution_concurrency_defaults,
@@ -81,6 +82,25 @@ def test_llm_client_uses_saved_execution_concurrency():
     assert client.max_parallel_records == 12
     assert client.family_max_concurrency == 3
     assert client.http_max_concurrency == 24
+
+
+def test_captured_execution_concurrency_is_immutable_and_uses_legacy_defaults():
+    client = SimpleNamespace(
+        max_parallel_records=6,
+        family_max_concurrency=2,
+        http_max_concurrency=8,
+    )
+    frozen = capture_llm_execution_concurrency(client, settings=_settings())
+    client.family_max_concurrency = 4
+
+    assert frozen.as_dict() == {
+        "max_parallel_records": 6,
+        "family_max_concurrency": 2,
+        "http_max_concurrency": 8,
+    }
+    assert capture_llm_execution_concurrency(
+        object(), settings=_settings()
+    ).family_max_concurrency == 4
 
 
 @pytest.mark.asyncio
