@@ -67,6 +67,7 @@ def dispatch_runtime_fields(
     provider_code: Any,
     dispatch_mode: Any = None,
     gateway_profile: Any = None,
+    model_code: Any = None,
 ) -> dict[str, str | None]:
     mode = normalize_dispatch_mode(
         dispatch_mode
@@ -79,11 +80,25 @@ def dispatch_runtime_fields(
         profile=(
             gateway_profile
             if gateway_profile is not None
-            else getattr(settings, "LLM_GATEWAY_PROFILE", None)
+            else configured_gateway_profile(settings, provider_code, model_code)
         ),
         provider_code=provider_code,
     )
     return {"dispatch_mode": "gateway", "gateway_profile": profile}
+
+
+def configured_gateway_profile(settings: Any, provider_code: Any, model_code: Any = None) -> str | None:
+    """同一Gateway内各Provider各用自己的profile，不猜测或跨Provider回退。"""
+    code = validate_provider_code(provider_code)
+    profiles = getattr(settings, "LLM_GATEWAY_PROFILES", {}) or {}
+    if not isinstance(profiles, dict):
+        raise ProviderConfigurationError("LLM gateway profile map is invalid")
+    profile = profiles.get(code)
+    if isinstance(profile, dict):
+        profile = profile.get(str(model_code or ""))
+        if not profile:
+            raise ProviderConfigurationError("LLM model has no configured Gateway profile")
+    return profile or getattr(settings, "LLM_GATEWAY_PROFILE", None)
 
 
 __all__ = [
@@ -92,6 +107,7 @@ __all__ = [
     "ProviderConfigurationError",
     "SUPPORTED_PROVIDER_CODES",
     "dispatch_runtime_fields",
+    "configured_gateway_profile",
     "normalize_dispatch_mode",
     "strata_is_explicitly_configured",
     "validate_gateway_profile",

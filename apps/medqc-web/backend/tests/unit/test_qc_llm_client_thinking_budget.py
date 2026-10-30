@@ -210,14 +210,17 @@ async def test_reload_config_updates_and_clears_thinking_budget(
     monkeypatch.setattr(LLMConfigLoader, "load_config", staticmethod(fake_load_config))
 
     assert await LLMConfigLoader.reload_config_for_service(service) is True
-    assert client.thinking_budget == 512
-    assert client.max_parallel_records == 12
-    assert client.family_max_concurrency == 3
-    assert client.http_max_concurrency == 24
+    assert service.client is not client
+    assert client.thinking_budget == 256  # 在途调用持有的旧实例不被配置重载改写。
+    assert service.client.thinking_budget == 512
+    assert service.client.max_parallel_records == 12
+    assert service.client.family_max_concurrency == 3
+    assert service.client.http_max_concurrency == 24
     assert await LLMConfigLoader.reload_config_for_service(service) is True
-    assert client.thinking_budget == 1024
+    assert service.client.thinking_budget == 1024
     assert await LLMConfigLoader.reload_config_for_service(service) is True
-    assert client.thinking_budget is None
+    assert service.client.thinking_budget is None
+    assert client.thinking_budget == 256
 
 
 @pytest.mark.asyncio

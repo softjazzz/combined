@@ -62,6 +62,7 @@ def assert_new_qc_task_dispatch_ready(
         )
         and bool(
             str(getattr(effective_settings, "LLM_GATEWAY_PROFILE", "") or "").strip()
+            or getattr(effective_settings, "LLM_GATEWAY_PROFILES", {})
         )
     )
     if not gateway_ready:

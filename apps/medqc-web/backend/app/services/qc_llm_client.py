@@ -28,6 +28,7 @@ from .llm_execution_concurrency import concurrency_from_custom_parameters
 from .llm_dispatch.client import GatewayDispatchClient
 from .llm_dispatch.provider_profiles import (
     ProviderConfigurationError,
+    configured_gateway_profile,
     normalize_dispatch_mode,
     strata_is_explicitly_configured,
     validate_gateway_profile,
@@ -173,7 +174,7 @@ class SichuanQCLLMClient:
             self.gateway_profile = None
             if self.dispatch_mode == "gateway":
                 self.gateway_profile = validate_gateway_profile(
-                    profile=getattr(s, "LLM_GATEWAY_PROFILE", None),
+                    profile=configured_gateway_profile(s, self.provider_code, self.model),
                     provider_code=self.provider_code,
                 )
             self.max_parallel_records = int(
@@ -243,7 +244,7 @@ class SichuanQCLLMClient:
                     "LLM gateway dispatch is no longer enabled"
                 )
             current_profile = str(
-                getattr(settings, "LLM_GATEWAY_PROFILE", "") or ""
+                configured_gateway_profile(settings, self.provider_code, self.model) or ""
             ).strip()
             if current_profile != self.gateway_profile:
                 raise ProviderConfigurationError(

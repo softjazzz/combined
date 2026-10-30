@@ -22,7 +22,7 @@ from .contracts import (
     GatewayCasePrefix,
     GatewayCacheTrace,
 )
-from .provider_profiles import validate_gateway_profile
+from .provider_profiles import configured_gateway_profile, validate_gateway_profile
 
 
 _SAFE_GATEWAY_ERROR_CODES = frozenset(code.value for code in GatewayErrorCode) | {
@@ -57,13 +57,13 @@ class GatewayDispatchClient:
 
     @staticmethod
     def _connection_settings(
-        *, expected_profile: str, expected_endpoint_sha256: str
+        *, expected_profile: str, expected_endpoint_sha256: str, provider_code: str, model_code: str
     ) -> tuple[str, str]:
         settings = get_settings()
         if str(getattr(settings, "LLM_DISPATCH_MODE", "direct")) != "gateway":
             raise GatewayDispatchError("gateway_invalid_request", retryable=False)
         configured_profile = str(
-            getattr(settings, "LLM_GATEWAY_PROFILE", "") or ""
+            configured_gateway_profile(settings, provider_code, model_code) or ""
         ).strip()
         if configured_profile != expected_profile:
             raise GatewayDispatchError("gateway_invalid_request", retryable=False)
@@ -116,6 +116,8 @@ class GatewayDispatchClient:
         url, token = self._connection_settings(
             expected_profile=normalized_profile,
             expected_endpoint_sha256=expected_endpoint_sha256,
+            provider_code=provider_code,
+            model_code=payload.get("model"),
         )
         request_remaining = remaining - (loop.time() - budget_started)
         if request_remaining <= 0:

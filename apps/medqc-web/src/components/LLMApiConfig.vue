@@ -10,8 +10,8 @@
             模型配置治理
           </h2>
           <p class="ds-section-desc">
-            统一管理 MaaS 厂商、模型与高级参数。API 地址与密钥固定来自后端
-            env，前端仅维护模型选择与运行参数。
+            统一管理云端 API、本地推理与运行参数。服务地址和密钥由部署配置提供，
+            此处维护推理服务与模型选择。
           </p>
 
           <div class="ds-meta-list">
@@ -30,7 +30,7 @@
           </div>
 
           <div class="ds-aside-note">
-            推荐流程：先选厂商与模型，再调高级参数，最后做连接验证并统一保存。
+            推荐流程：先选推理服务与模型，再调高级参数，最后做连接验证并统一保存。
           </div>
         </div>
       </div>
@@ -40,8 +40,8 @@
           v-if="isReadonly"
           type="info"
           show-icon
-          message="当前为只读模式（qc_manager）"
-          description="仅 admin 可修改并保存模型配置。"
+          message="当前为只读模式"
+          description="仅系统配置管理员可修改并保存模型配置。"
           class="mb-3"
         />
 
@@ -69,27 +69,35 @@
           <div class="ds-card__body ds-divide">
             <div class="ds-group">
               <div class="ds-group__title">
-                厂商与模型
+                推理服务与模型
               </div>
 
               <div class="ds-row">
                 <div class="ds-row__left">
                   <div class="ds-row__label">
-                    MaaS 厂商
+                    推理服务
                   </div>
                   <div class="ds-row__hint">
-                    选择使用的模型厂商，接口地址与密钥继续由后端统一托管。
+                    可选择云端 API 或本地推理，地址与密钥由部署配置统一托管。
                   </div>
                 </div>
                 <a-select
                   v-model:value="draft.provider_code"
                   class="ds-select"
                   style="width: 260px"
-                  :disabled="isReadonly || loading"
+                  :disabled="isReadonly || loading || saving"
                   :options="providerOptions"
                   @change="handleProviderChange"
                 />
               </div>
+
+              <a-alert
+                v-if="draft.provider_code === 'strata'"
+                type="info"
+                show-icon
+                message="本地 Strata"
+                description="请选用已部署的模型名称；请求经统一网关控制容量。本地服务不可用时不会自动切到云端，前缀缓存默认关闭。"
+              />
 
               <div class="ds-row">
                 <div class="ds-row__left">
@@ -105,7 +113,7 @@
                   class="ds-select"
                   style="width: 360px"
                   :loading="loadingModels"
-                  :disabled="isReadonly || loadingModels || !models.length"
+                  :disabled="isReadonly || loadingModels || saving || !models.length"
                 >
                   <a-select-option
                     v-for="item in models"
@@ -308,7 +316,7 @@
                     全局模型 HTTP 槽位
                   </div>
                   <div class="ds-row__hint">
-                    所有质控集共享的模型请求上限；默认 40，降低时不会中断正在执行的请求。
+                    客户端 HTTP 请求上限；网关另按服务资源限流，本地 Strata 容量由部署配置控制。
                   </div>
                 </div>
                 <a-input-number
@@ -384,7 +392,7 @@
               <a-button
                 type="primary"
                 :loading="saving"
-                :disabled="isReadonly || loading || !dirty"
+                :disabled="isReadonly || loading || loadingModels || !draft.model_code || !dirty"
                 @click="saveDraft"
               >
                 保存配置
@@ -398,7 +406,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 
 import { useAuthStore } from '@/stores/auth'
@@ -428,6 +436,7 @@ const addingModel = ref(false)
 const deletingModelCode = ref('')
 const newModelCode = ref('')
 const source = ref('unknown')
+let modelRequestVersion = 0
 
 const providers = ref<LLMProvider[]>([])
 const models = ref<LLMModel[]>([])
@@ -455,7 +464,7 @@ const providerOptions = computed(() =>
   })),
 )
 const customModels = computed(() => models.value.filter((item) => item.is_custom))
-const canTest = computed(() => Boolean(draft.provider_code && draft.model_code))
+const canTest = computed(() => !loadingModels.value && Boolean(draft.provider_code && draft.model_code))
 const dirty = computed(() => {
   const snap = serverSnapshot.value
   if (!snap) return false
@@ -507,20 +516,27 @@ async function loadProviders() {
 }
 
 async function loadModelsByProvider(providerCode: string, preferredModelCode?: string) {
+  const requestVersion = ++modelRequestVersion
+  const requestedModel = preferredModelCode || draft.model_code
   loadingModels.value = true
+  models.value = []
+  draft.model_code = ''
   try {
-    models.value = await llmConfigService.getModelsByProvider(providerCode)
+    const loaded = await llmConfigService.getModelsByProvider(providerCode)
+    if (requestVersion !== modelRequestVersion || draft.provider_code !== providerCode) return
+    models.value = loaded
     if (!models.value.length) {
       draft.model_code = ''
       return
     }
     const next =
-      models.value.find((item) => item.model_code === preferredModelCode)?.model_code ||
-      models.value.find((item) => item.model_code === draft.model_code)?.model_code ||
+      models.value.find((item) => item.model_code === requestedModel)?.model_code ||
       models.value[0].model_code
     draft.model_code = String(next || '')
+  } catch (error) {
+    if (requestVersion === modelRequestVersion && draft.provider_code === providerCode) throw error
   } finally {
-    loadingModels.value = false
+    if (requestVersion === modelRequestVersion) loadingModels.value = false
   }
 }
 
@@ -548,7 +564,12 @@ async function reloadAll() {
 
 async function handleProviderChange(value: string) {
   draft.provider_code = value
-  await loadModelsByProvider(value)
+  testResult.value = null
+  try {
+    await loadModelsByProvider(value)
+  } catch {
+    message.error('加载模型列表失败，请重试')
+  }
 }
 
 async function addCustomModel() {
@@ -616,7 +637,7 @@ async function testConnection() {
 }
 
 async function saveDraft() {
-  if (!dirty.value) return
+  if (isReadonly.value || loadingModels.value || !canTest.value || !dirty.value) return
   saving.value = true
   try {
     const payload: LLMConfigInput = {
@@ -684,6 +705,7 @@ async function resetDefault() {
 onMounted(() => {
   void reloadAll()
 })
+onBeforeUnmount(() => { ++modelRequestVersion })
 </script>
 
 <style scoped>
