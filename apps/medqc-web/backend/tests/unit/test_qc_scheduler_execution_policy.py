@@ -189,4 +189,3 @@ async def test_gateway_managed_transport_error_is_not_retried_by_privacy_wrapper
     ):
         await client.generate("synthetic prompt")
     assert delegate.calls == 1
-
