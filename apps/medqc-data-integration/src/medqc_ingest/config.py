@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta, timezone, tzinfo
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -39,6 +40,16 @@ def read_secret(path: Path, location: str) -> str:
     return value
 
 
+def source_zone(name: str) -> tzinfo:
+    if name == "Asia/Shanghai":
+        # 当前医院取数窗口使用 UTC+8，与既有字段转换合同一致；Windows 无需另装 tzdata。
+        return timezone(timedelta(hours=8), name=name)
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        raise IngestError(ErrorKind.CONFIGURATION, "source_timezone") from None
+
+
 @dataclass(frozen=True)
 class PostgresSettings:
     host: str
@@ -54,6 +65,25 @@ class PostgresSettings:
             "dbname": self.database,
             "user": self.user,
             "password": read_secret(self.password_file, "postgres_password_file"),
+            "connect_timeout": 10,
+        }
+
+
+@dataclass(frozen=True)
+class PassfilePostgresSettings(PostgresSettings):
+    """password_file 在此为受保护的 libpq passfile，口令不进入连接参数。"""
+
+    def connection_kwargs(self) -> dict[str, object]:
+        if os.environ.get("PGPASSWORD"):
+            raise IngestError(ErrorKind.CONFIGURATION, "pgpassword_overrides_passfile")
+        if not self.password_file.is_absolute() or not self.password_file.is_file():
+            raise IngestError(ErrorKind.CONFIGURATION, "postgres_passfile")
+        return {
+            "host": self.host,
+            "port": self.port,
+            "dbname": self.database,
+            "user": self.user,
+            "passfile": str(self.password_file),
             "connect_timeout": 10,
         }
 
@@ -100,10 +130,7 @@ class Settings:
         source_timezone = values.get("MEDQC_SOURCE_TIMEZONE", "Asia/Shanghai").strip()
         if not source_timezone:
             source_timezone = "Asia/Shanghai"
-        try:
-            ZoneInfo(source_timezone)
-        except ZoneInfoNotFoundError:
-            raise IngestError(ErrorKind.CONFIGURATION, "invalid:MEDQC_SOURCE_TIMEZONE") from None
+        source_zone(source_timezone)
         return cls(
             source=source,
             ingest=ingest,
@@ -146,10 +173,12 @@ def _source_settings(env: Mapping[str, str]) -> SourceSettings:
 
 def _pg_settings(env: Mapping[str, str], prefix: str) -> PostgresSettings:
     base = f"MEDQC_{prefix}_PG_"
-    return PostgresSettings(
+    passfile = env.get("MEDQC_PG_PASSFILE", "").strip()
+    setting_type = PassfilePostgresSettings if passfile else PostgresSettings
+    return setting_type(
         host=_required(env, f"{base}HOST"),
         port=_positive_int(env, f"{base}PORT", 5432),
         database=_required(env, f"{base}DATABASE"),
         user=_required(env, f"{base}USER"),
-        password_file=Path(_required(env, f"{base}PASSWORD_FILE")),
+        password_file=Path(passfile or _required(env, f"{base}PASSWORD_FILE")),
     )

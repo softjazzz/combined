@@ -9,6 +9,7 @@ psql --set ON_ERROR_STOP=1 --file migrations/001_ingest_contract.sql medqc_inges
 psql --set ON_ERROR_STOP=1 --file migrations/002_major_document_contracts.sql medqc_ingest
 psql --set ON_ERROR_STOP=1 --file migrations/003_daily_record_datetime_contract.sql medqc_ingest
 psql --set ON_ERROR_STOP=1 --file migrations/004_orders_lab_exam_and_versions.sql medqc_ingest
+psql --set ON_ERROR_STOP=1 --file migrations/005_takeover_audit.sql medqc_ingest
 ```
 
 脚本可重复执行，不删除数据。运行身份只需被授予 `cache_raw`、`sync_ops` 的必要
@@ -39,4 +40,9 @@ schema、当前 raw、变化版本和断点由工作进程在同一个数据事�
 
 DSH 现有验收库使用 `column_names_json` 等不同列合同，禁止在该库执行 001–004 试图
 自动兼容。当前验证只读。后续应在新建独立克隆上验证显式存储迁移，保留所有原始历史，
-确认成功后才讨论部署；本次未提供或执行该数据迁移。
+确认成功后才讨论部署；0.2.0时没有提供该迁移，0.3.0采用下述新库迁入工具。
+
+0.3.0提供显式迁入工具，见docs/DSH_START-takeover.txt。005创建归档与接管审计，不改
+业务CDM、不触碰旧库。新库初始化工具把001–005放在单事务中，由新库属主创建对象；
+运行身份只有指定表DML、历史追加和归档读取权限，不取得DDL或归档修改权限。
+上文004单独升级说明针对正式旧版ingest；客户临时表结构应走新库迁入而非原地改造。

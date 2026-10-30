@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import replace
@@ -27,8 +28,11 @@ from medqc_ingest.profiling import ProfileSnapshotRow
 
 
 def _psycopg() -> Any:
+    driver = os.environ.get("MEDQC_PG_DRIVER", "psycopg")
+    if driver not in {"psycopg", "psycopg2"}:
+        raise IngestError(ErrorKind.CONFIGURATION, "postgres_driver_invalid")
     try:
-        return importlib.import_module("psycopg")
+        return importlib.import_module(driver)
     except ImportError:
         raise IngestError(ErrorKind.CONFIGURATION, "psycopg_not_installed") from None
 

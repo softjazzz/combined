@@ -2,6 +2,11 @@
 
 这是可独立安装和调度的 Python 模块化单体，包含两个 worker 角色：
 
+当前交付版本0.3.0；接口仍为13个。正式接管与部署验收从
+[DSH_START-takeover.txt](docs/DSH_START-takeover.txt) 开始：一条PowerShell命令在新库
+完成接管、发布、回滚恢复、单日实际源验证和备份恢复。详见
+[本版收口说明](docs/2026-10-30-takeover-release.md)。旧库不改，任务默认不启用。
+
 - Caché 抽取器：流式调用已注册接口，把每个接口的完整 payload 写入 `cache_raw`；
 - CDM 发布器：将已验证的 raw 数据按显式合同投影到业务 CDM。
 

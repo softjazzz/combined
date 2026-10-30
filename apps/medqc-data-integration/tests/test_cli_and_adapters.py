@@ -51,7 +51,12 @@ def _settings(tmp_path: Path, adapter: str) -> SourceSettings:
 
 
 def test_odbc_adapter_uses_fake_driver(monkeypatch: Any, tmp_path: Path) -> None:
-    module = SimpleNamespace(connect=lambda *args, **kwargs: FakeDriverConnection())
+    def connect(connection_string: str, **kwargs: Any) -> FakeDriverConnection:
+        assert "HOST=unused-host;" in connection_string
+        assert "DATABASE=example;" in connection_string
+        return FakeDriverConnection()
+
+    module = SimpleNamespace(connect=connect)
     monkeypatch.setitem(sys.modules, "pyodbc", module)
     adapter = OdbcSourceAdapter(_settings(tmp_path, "odbc"))
     adapter.open()
@@ -70,9 +75,7 @@ def test_jdbc_adapter_uses_fake_driver(monkeypatch: Any, tmp_path: Path) -> None
     adapter.close()
 
 
-def test_driver_error_does_not_expose_original_text(
-    monkeypatch: Any, tmp_path: Path
-) -> None:
+def test_driver_error_does_not_expose_original_text(monkeypatch: Any, tmp_path: Path) -> None:
     def fail(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("password=secret patient=someone")
 
@@ -88,16 +91,12 @@ def test_driver_error_does_not_expose_original_text(
         raise AssertionError("expected controlled error")
 
 
-def test_unregistered_interface_fails_before_settings_load(
-    monkeypatch: Any, capsys: Any
-) -> None:
+def test_unregistered_interface_fails_before_settings_load(monkeypatch: Any, capsys: Any) -> None:
     def forbidden(*args: Any, **kwargs: Any) -> None:
         raise AssertionError("configuration must not be read")
 
     monkeypatch.setattr(cli.Settings, "load", forbidden)
-    exit_code = cli.main(
-        ["extract", "--interface", "web.unknown", "--date", "2026-10-28"]
-    )
+    exit_code = cli.main(["extract", "--interface", "web.unknown", "--date", "2026-10-28"])
     captured = capsys.readouterr()
     assert exit_code == 1
     assert "interface_not_registered" in captured.err

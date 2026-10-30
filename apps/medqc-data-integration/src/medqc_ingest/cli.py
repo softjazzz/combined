@@ -8,11 +8,10 @@ import sys
 from collections.abc import Callable, Sequence
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from medqc_ingest.adapters.cache import create_source_adapter
 from medqc_ingest.catalog import CANDIDATE_INTERFACE_CATALOG
-from medqc_ingest.config import Settings
+from medqc_ingest.config import Settings, source_zone
 from medqc_ingest.contracts import contract_export_document
 from medqc_ingest.coverage import build_coverage_contracts, write_coverage_report
 from medqc_ingest.domain import (
@@ -63,6 +62,10 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument("--interface", required=True)
 
     commands.add_parser("check", help="只读检查配置与数据库合同")
+    daily = commands.add_parser("daily", help="固定十三来源的日任务，按断点补齐到医院最近完整日")
+    daily.add_argument("--start", type=_date)
+    daily.add_argument("--end", type=_date)
+    daily.add_argument("--replay", action="store_true")
 
     coverage = commands.add_parser("coverage", help="输出源到目标的非 PHI 覆盖合同")
     coverage.add_argument("--target", required=True)
@@ -86,10 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _window(day: date, timezone_name: str) -> tuple[datetime, datetime]:
-    try:
-        timezone = ZoneInfo(timezone_name)
-    except ZoneInfoNotFoundError:
-        raise IngestError(ErrorKind.CONFIGURATION, "source_timezone") from None
+    timezone = source_zone(timezone_name)
     start = datetime.combine(day, time.min, timezone)
     return start, start + timedelta(days=1)
 
@@ -281,6 +281,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_publish(args)
         if args.command == "check":
             return _run_check()
+        if args.command == "daily":
+            from medqc_ingest.daily import run_daily
+
+            settings = Settings.load(need_source=True, need_ingest=True, need_cdm=True)
+            results = run_daily(settings, args.start, args.end, args.replay)
+            print(json.dumps({"status": "succeeded", "interfaces": results}, ensure_ascii=False))
+            return 0
         if args.command == "coverage":
             return _run_coverage(args)
         if args.command == "contract-export":
