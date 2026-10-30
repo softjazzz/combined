@@ -64,14 +64,16 @@ class QCDispatchRepository:
         tables = qc_dispatch_tables(schema=schema)
         self.dispatch_table = tables.dispatch
         self.outbox_table = tables.outbox
+        self.archive_table = tables.archive
         self.schema = schema
 
     def assert_ready(self, session: Session) -> None:
-        """在插入业务任务前验证两张迁移表，缺失时失败关闭。"""
+        """在插入业务任务前验证最新调度迁移表，缺失时失败关闭。"""
 
         try:
             session.execute(select(self.dispatch_table.c.job_id).limit(1)).first()
             session.execute(select(self.outbox_table.c.id).limit(1)).first()
+            session.execute(select(self.archive_table.c.id).limit(1)).first()
         except SQLAlchemyError as exc:
             raise QCDispatchSchemaUnavailable("QC dispatch schema is unavailable") from exc
 
@@ -206,6 +208,12 @@ class QCDispatchRepository:
             row = active.execute(
                 select(self.outbox_table).where(self.outbox_table.c.message_id == message_id)
             ).mappings().first()
+            if row is None:
+                row = active.execute(
+                    select(self.archive_table).where(
+                        self.archive_table.c.message_id == message_id
+                    )
+                ).mappings().first()
             return _as_outbox(row) if row else None
         finally:
             if own:
@@ -223,6 +231,14 @@ class QCDispatchRepository:
                 )
             )
         ).mappings().first()
+        if row is None:
+            row = session.execute(
+                select(self.archive_table).where(and_(
+                    self.archive_table.c.job_id == job_id,
+                    self.archive_table.c.generation == generation,
+                    self.archive_table.c.target == target,
+                ))
+            ).mappings().first()
         return _as_outbox(row) if row else None
 
     def ensure_due_delivery(
@@ -254,6 +270,13 @@ class QCDispatchRepository:
                     and dispatch.recovery_kind in {"delivery", "failed_scope", "unstarted"}
                     and dispatch.recovery_registered_at is not None
                 ):
+                    active_id = active.execute(
+                        select(self.outbox_table.c.id).where(
+                            self.outbox_table.c.id == existing.id
+                        )
+                    ).scalar_one_or_none()
+                    if active_id is None:
+                        raise ValueError("archived terminal delivery cannot be reopened")
                     active.execute(
                         update(self.outbox_table)
                         .where(

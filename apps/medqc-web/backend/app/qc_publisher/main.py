@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import suppress
 
 from app.services.qc_dispatch.config import RabbitMQSettings
 from app.services.qc_dispatch.publisher import (
@@ -12,6 +13,7 @@ from app.services.qc_dispatch.publisher import (
 )
 from app.services.qc_dispatch.rabbitmq_transport import RabbitMQTransport
 from app.services.qc_dispatch.repository import create_qc_dispatch_repository
+from app.services.qc_dispatch.maintenance import CapacityMonitor, CapacityThresholds, OutboxMaintenance
 
 
 async def run_publisher() -> None:
@@ -24,10 +26,21 @@ async def run_publisher() -> None:
     repository.assert_schema_ready()
     transport = RabbitMQTransport(rabbitmq_settings)
     await transport.connect()
+    stop = asyncio.Event()
+    monitor_task = asyncio.create_task(
+        CapacityMonitor(
+            OutboxMaintenance(repository), thresholds=CapacityThresholds.from_env(),
+        ).run(stop),
+        name="qc-outbox-capacity",
+    )
     try:
         publisher = OutboxPublisher(repository, transport, publisher_settings)
-        await publisher.run_forever(asyncio.Event())
+        await publisher.run_forever(stop)
     finally:
+        stop.set()
+        monitor_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await monitor_task
         await transport.close()
 
 

@@ -16,8 +16,10 @@ from sqlalchemy.pool import StaticPool
 
 
 SUITES: dict[str, tuple[str, ...]] = {
+    "m2-infra": ("tests/infra/test_qc_m2_real_infra.py",),
     "m0-isolation": (
         "tests/unit/test_qc_scheduler_isolation.py",
+        "tests/unit/test_qc_infra_isolation.py",
     ),
     "m1-admission": (
         "tests/unit/test_llm_gateway_admission.py",
@@ -63,6 +65,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_qc_dispatch_entrypoints.py",
     ),
     "m2-release": (
+        "tests/unit/test_qc_outbox_maintenance.py",
         "tests/unit/test_qc_dispatch_outbox.py",
         "tests/unit/test_qc_rabbitmq_transport.py",
         "tests/unit/test_qc_outbox_publisher.py",
@@ -90,6 +93,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--suite", choices=tuple(SUITES))
+    parser.add_argument("--infra-manifest", help="仅接受驱动新建容器后生成的 owner manifest")
     parser.add_argument(
         "--allow-reviewed-restart-probe",
         action="store_true",
@@ -128,9 +132,12 @@ def _selected_tests(args: argparse.Namespace) -> list[str]:
 
 def _validate_profile(args: argparse.Namespace) -> None:
     if args.profile == "isolated-infra":
-        raise SystemExit(
-            "isolated-infra profile 尚未实施；拒绝连接本机 PG、RabbitMQ 或 Provider 端口"
-        )
+        if args.suite != "m2-infra" or not args.infra_manifest or args.tests:
+            raise SystemExit("isolated-infra requires m2-infra and an owned manifest")
+    elif args.infra_manifest:
+        raise SystemExit("infra manifest is forbidden outside isolated-infra")
+    if args.suite == "m2-infra" and args.profile != "isolated-infra":
+        raise SystemExit("m2-infra requires explicit isolated-infra profile")
     if args.profile == "m2-synthetic" and args.suite not in M2_SUITES:
         raise SystemExit("m2-synthetic profile 只允许显式选择 M2 suite")
 
@@ -180,6 +187,10 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
     sys.path.insert(0, str(root))
+
+    if args.profile == "isolated-infra":
+        from tests.scheduler_support.infra_runner import main as run_infra
+        return run_infra(args.infra_manifest)
 
     from tests.scheduler_support import OfflineIsolation
 

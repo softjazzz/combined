@@ -1,0 +1,48 @@
+name: QC M2 Disposable Infrastructure
+
+on:
+  push:
+    branches: ['codex/qc-gateway-*']
+    paths:
+      - 'apps/medqc-web/backend/**'
+      - '.github/workflows/qc-m2-real-infrastructure.yml'
+  pull_request:
+    branches: [codex/business-agent-integration]
+    paths:
+      - 'apps/medqc-web/backend/**'
+      - '.github/workflows/qc-m2-real-infrastructure.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-pg-rabbitmq:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/medqc-web/backend
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      DATABASE_URL: ''
+      REMOTE_DB_URL: ''
+      MEDQC_ALLOW_REAL_LLM: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install locked application and AMQP dependencies
+        run: python -m pip install -r requirements.txt -r requirements-qc-worker.txt
+      - name: Verify default isolation and retention guards
+        run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite m0-isolation tests/unit/test_qc_outbox_maintenance.py
+      - name: Create disposable owners and run PG-RabbitMQ fault matrix
+        run: python -B scripts/run_qc_m2_infra.py --output-dir '${{ runner.temp }}/qc-m2-results'
+      - name: Upload safe infrastructure result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qc-m2-infra-${{ github.run_id }}
+          path: ${{ runner.temp }}/qc-m2-results/m2-infra-result.json
+          if-no-files-found: error

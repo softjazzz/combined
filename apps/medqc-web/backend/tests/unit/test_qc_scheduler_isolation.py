@@ -115,8 +115,12 @@ def test_m2_synthetic_profile_does_not_enable_infrastructure_or_raw_nodes():
     infra_args = runner._parse_args(
         ["--profile", "isolated-infra", "--suite", "m2-release"]
     )
-    with pytest.raises(SystemExit, match="尚未实施"):
+    with pytest.raises(SystemExit, match="owned manifest"):
         runner._validate_profile(infra_args)
+
+    missing_manifest = runner._parse_args(["--profile", "isolated-infra", "--suite", "m2-infra"])
+    with pytest.raises(SystemExit, match="owned manifest"):
+        runner._validate_profile(missing_manifest)
 
 
 @pytest.mark.parametrize(

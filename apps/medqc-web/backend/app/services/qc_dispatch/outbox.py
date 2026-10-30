@@ -9,12 +9,14 @@ from sqlalchemy import MetaData, Table
 
 DISPATCH_TABLE_NAME = "qc_batch_dispatches"
 OUTBOX_TABLE_NAME = "qc_dispatch_outbox"
+ARCHIVE_TABLE_NAME = "qc_dispatch_outbox_archive"
 
 
 @dataclass(frozen=True, slots=True)
 class QCDispatchTables:
     dispatch: Table
     outbox: Table
+    archive: Table
 
 
 def qc_dispatch_tables(*, schema: str | None = None) -> QCDispatchTables:
@@ -63,7 +65,24 @@ def qc_dispatch_tables(*, schema: str | None = None) -> QCDispatchTables:
         ),
         schema=schema,
     )
-    return QCDispatchTables(dispatch=dispatch, outbox=outbox)
+    archive = Table(
+        ARCHIVE_TABLE_NAME,
+        metadata,
+        *(
+            sa.Column(
+                column.name, column.type,
+                primary_key=column.primary_key, nullable=column.nullable,
+            )
+            for column in outbox.columns
+        ),
+        sa.Column("archived_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint("message_id", name="uq_qc_outbox_archive_message"),
+        sa.UniqueConstraint(
+            "job_id", "generation", "target", name="uq_qc_outbox_archive_delivery"
+        ),
+        schema=schema,
+    )
+    return QCDispatchTables(dispatch=dispatch, outbox=outbox, archive=archive)
 
 
 def batch_job_identity_table(*, schema: str | None = None) -> Table:
