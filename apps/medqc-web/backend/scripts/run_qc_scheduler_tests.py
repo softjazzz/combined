@@ -16,6 +16,13 @@ from sqlalchemy.pool import StaticPool
 
 
 SUITES: dict[str, tuple[str, ...]] = {
+    "strata-p0": (
+        "tests/unit/test_strata_observation.py",
+        "tests/unit/test_strata_observation_client.py",
+        "tests/unit/test_strata_request_inventory.py",
+        "tests/unit/test_llm_observability.py",
+        "tests/unit/test_llm_dispatch_routing.py",
+    ),
     "m2-infra": ("tests/infra/test_qc_m2_real_infra.py",),
     "m0-isolation": (
         "tests/unit/test_qc_scheduler_isolation.py",

@@ -11,6 +11,7 @@ import httpx
 
 from .settings import get_settings
 from .execution_timing import measure_stage, record_stage_duration, track_http_future
+from .http_attempt_observation import current_http_attempt_observation
 
 
 T = TypeVar("T")
@@ -114,12 +115,22 @@ async def run_shared_http_call(
     selected_resources = resources or _get_or_create_shared_resources()
     submitted = perf_counter()
     context = copy_context()
+    observation = current_http_attempt_observation()
+    if observation is not None:
+        observation.submitted()
 
     def observed_operation():
         # 包含线程池和共享槽位等待；请求计时从真正取得槽位后开始。
-        record_stage_duration("http_wait", perf_counter() - submitted)
-        with measure_stage("http_request"):
-            return operation()
+        started = perf_counter()
+        record_stage_duration("http_wait", started - submitted)
+        if observation is not None:
+            observation.started(started - submitted)
+        try:
+            with measure_stage("http_request"):
+                return operation()
+        finally:
+            if observation is not None:
+                observation.finished(perf_counter() - started)
 
     future = selected_resources.executor.submit(
         context.run,
@@ -191,25 +202,30 @@ def _post_json(
     payload: Dict[str, Any],
     timeout_seconds: int,
 ) -> Dict[str, Any]:
-    try:
-        resp = client.post(
+    observation = current_http_attempt_observation()
+
+    def send_once():
+        if observation is not None:
+            observation.sending()
+        response = client.post(
             url,
             headers=headers,
             json=payload,
             timeout=timeout_seconds,
         )
+        if observation is not None:
+            observation.received()
+        return response
+
+    try:
+        resp = send_once()
     except httpx.RemoteProtocolError as error:
         # 只对“服务端未返回任何响应即断开”重试一次：多为连接池复用了已被对端关闭的
         # 空闲连接，或并发突增时上游直接断开，请求未得到处理。收到部分响应后断开、
         # 超时、连接失败等其他异常仍原样抛出，不重试。
         if not _is_disconnected_without_response(error):
             raise
-        resp = client.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=timeout_seconds,
-        )
+        resp = send_once()
     # 不直接 raise，尽量返回上游的 JSON 错误体，供调用方包装。
     try:
         body = resp.json() if resp.text else {}

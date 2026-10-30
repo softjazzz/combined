@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import hmac
+import json
 import logging
 import os
 import re
@@ -149,6 +150,48 @@ class NullLLMCallEventStore:
 class LLMObservabilityRecorder:
     def __init__(self, *, store: Optional[LLMCallEventStore] = None) -> None:
         self._store = store or PostgresLLMCallEventStore()
+
+    def record_strata_attempt(
+        self, *, event_id, logical_call_id, attempt_no, model, model_role,
+        payload, result, status, started_timestamp, gateway, route_key, transport,
+    ) -> None:
+        """P0 安全旁路日志，不扩业务表、不改响应；故障不影响医学执行。"""
+        try:
+            wall_ms = max(0, (time.perf_counter() - started_timestamp) * 1000)
+            from .strata_observation import (
+                collect_strata_observation, describe_strata_request, parse_strata_metrics,
+            )
+
+            context = current_llm_observation_context()
+            scope = json.dumps([context.record_key_hash, context.root_job_id,
+                                context.rule_set_key, context.rule_set_version])
+            try:
+                groups = describe_strata_request(
+                    payload, scope_key=scope if context.record_key_hash else None,
+                    route_key=route_key,
+                    digest=lambda value: opaque_observation_id("strata_p0_group", value),
+                )
+            except Exception:
+                # 分组失败仅失去候选信息；仍保留已知 Token 和耗时。
+                groups = {"current_prefix_state": "inventory_unavailable"}
+            event = {
+                "schema_version": "strata_p0_attempt_v1", "event_id": event_id,
+                "logical_call_id": logical_call_id, "attempt_no": attempt_no,
+                "record_key_hash": context.record_key_hash,
+                "root_job_id": _safe_metadata_label(context.root_job_id, max_length=128, fallback=None),
+                "executor_key": _safe_metadata_label(context.executor_key, max_length=128, fallback="unknown"),
+                "model": _safe_metadata_label(model, max_length=128, fallback="unknown"),
+                "model_role": _safe_metadata_label(model_role, max_length=64, fallback="unknown"),
+                "status": status, "purpose": "rule", "groups": groups,
+                "metrics": parse_strata_metrics(
+                    result, wall_ms=wall_ms,
+                    gateway=gateway, transport=transport,
+                ),
+            }
+            collect_strata_observation(event)
+            logger.info("strata_p0_attempt %s", json.dumps(event, sort_keys=True, allow_nan=False))
+        except Exception:
+            logger.warning("strata_p0_observation_failed")
 
     async def start_attempt(
         self,
