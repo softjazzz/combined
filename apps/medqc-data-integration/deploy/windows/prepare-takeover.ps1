@@ -103,7 +103,7 @@ Write-ProtectedText (Join-Path $Reports 'database-plan.json') (@{
     source=$SourceDatabase; state='prepared'; source_writes=$false
 } | ConvertTo-Json)
 
-$admin = Get-Credential -UserName 'postgres' -Message 'Deployment administrator; used only for new databases and backups'
+$admin = Get-Credential -UserName 'postgres' -Message 'Deployment administrator; new databases, backups and one-time read-only source migration'
 $runtimePassword = $null
 if ($ExistingRuntimePasswordFile) {
     $oldAcl = Get-Acl -LiteralPath $ExistingRuntimePasswordFile
@@ -155,7 +155,8 @@ try {
     Run-Tool 'run_takeover.py' @('init','--database',$Ingest,'--user',$admin.UserName,'--passfile',$AdminPass,'--port',[string]$Port)
     Invoke-Checked (Join-Path $PgBin 'pg_restore.exe') ($pgArgs + @('--dbname',$Cdm,'--no-owner','--no-acl','--role','medqc_owner','--exit-on-error',$sourceBackup))
     Run-Tool 'run_takeover.py' @('grant-cdm','--database',$Cdm,'--user',$admin.UserName,'--passfile',$AdminPass,'--port',[string]$Port)
-    Run-Tool 'run_takeover.py' @('import','--database',$Ingest,'--user',$admin.UserName,'--passfile',$AdminPass,'--source-passfile',$RuntimePass,'--port',[string]$Port,'--output',(Join-Path $Reports 'takeover-import.json'))
+    # 旧克隆库的只读迁入沿用部署身份；不假定运行账号拥有旧库权限，不给源库补授权。
+    Run-Tool 'run_takeover.py' @('import','--database',$Ingest,'--user',$admin.UserName,'--passfile',$AdminPass,'--source-user',$admin.UserName,'--source-passfile',$AdminPass,'--port',[string]$Port,'--output',(Join-Path $Reports 'takeover-import.json'))
     Run-Tool 'run_takeover.py' @('verify','--database',$Ingest,'--user','medqc_sync','--passfile',$RuntimePass,'--port',[string]$Port,'--output',(Join-Path $Reports 'takeover-verify.json'))
     Run-Tool 'accept_takeover.py' @('accept','--ingest-db',$Ingest,'--cdm-db',$Cdm,'--user','medqc_sync','--passfile',$RuntimePass,'--port',[string]$Port,'--output',(Join-Path $Reports 'service-acceptance.json'))
     Run-Tool 'run_takeover.py' @('verify','--database',$Ingest,'--user','medqc_sync','--passfile',$RuntimePass,'--port',[string]$Port,'--output',(Join-Path $Reports 'takeover-verify-after.json'))

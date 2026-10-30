@@ -87,11 +87,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--user", default="postgres")
     parser.add_argument("--port", type=int, default=5432)
+    parser.add_argument(
+        "--deployment-source",
+        action="store_true",
+        help="明确使用既有部署身份只读读取源库，不授予运行账号旧库权限",
+    )
     args = parser.parse_args(argv)
     root, run = args.package_root.resolve(), args.run_root.resolve()
     previous = {key: os.environ.get(key) for key in ("PGPASSWORD", "MEDQC_PG_DRIVER")}
     report: dict[str, Any] = {
-        "diagnostic_version": "takeover-import-observer-1",
+        "diagnostic_version": "takeover-import-observer-2",
         "base_commit": BASE_COMMIT,
         "source_writes": False,
         "creates_databases": False,
@@ -100,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         "import_succeeded": False,
         "contains_phi": False,
         "contains_raw_values": False,
+        "source_authentication": "deployment_readonly" if args.deployment_source else "runtime",
     }
     try:
         verify_frozen_package(root)
@@ -115,7 +121,12 @@ def main(argv: list[str] | None = None) -> int:
         runtime = run / "secrets/runtime.pgpass"
         if not admin.is_file() or not runtime.is_file():
             raise RuntimeError("existing_passfiles_required")
-        output = run / "reports/takeover-import-diagnostic.json"
+        diagnostic_name = (
+            "takeover-import-deployment-source-diagnostic.json"
+            if args.deployment_source
+            else "takeover-import-diagnostic.json"
+        )
+        output = run / "reports" / diagnostic_name
         imported = run / "reports/takeover-import.json"
         if imported.exists():
             raise RuntimeError("existing_import_report_verify_only")
@@ -140,8 +151,10 @@ def main(argv: list[str] | None = None) -> int:
                         args.user,
                         "--passfile",
                         str(admin),
+                        "--source-user",
+                        args.user if args.deployment_source else "medqc_sync",
                         "--source-passfile",
-                        str(runtime),
+                        str(admin if args.deployment_source else runtime),
                         "--port",
                         str(args.port),
                         "--output",
@@ -154,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
                 report["exit_code"] = 1
             finally:
                 destination.write(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-        print("DIAGNOSTIC_WRITTEN: reports/takeover-import-diagnostic.json")
+        print(f"DIAGNOSTIC_WRITTEN: reports/{diagnostic_name}")
         return int(report["exit_code"])
     except Exception as error:
         print("diagnostic_setup_failed", file=sys.stderr)
