@@ -54,6 +54,7 @@ def test_execution_concurrency_uses_tested_defaults_and_keeps_nested_contract():
         {"max_parallel_records": 0},
         {"max_parallel_records": 33},
         {"family_max_concurrency": 5},
+        {"family_max_concurrency": 40},
         {"http_max_concurrency": 65},
         {"http_max_concurrency": True},
         {"http_max_concurrency": 4.5},

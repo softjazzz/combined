@@ -24,6 +24,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_llm_gateway_cancellation.py",
         "tests/unit/test_llm_gateway_api.py",
         "tests/unit/test_qc_scheduler_execution_policy.py",
+        "tests/unit/test_llm_execution_concurrency.py",
         "tests/unit/test_llm_dispatch_routing.py",
         "tests/unit/test_llm_dispatch_runtime_identity.py",
     ),
@@ -39,6 +40,8 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_record_execution_timing.py",
         "tests/unit/test_luxian_0609_canonical_result_finalizer.py",
         "tests/unit/test_luxian_0609_execution_privacy_identity.py",
+        "tests/unit/test_luxian_0609_privacy_request_scope.py",
+        "tests/unit/test_luxian_0609_production_extension_boundary.py",
     ),
     "compatibility-restart": (
         "tests/unit/test_luxian_0609_task_restart_persistence.py",

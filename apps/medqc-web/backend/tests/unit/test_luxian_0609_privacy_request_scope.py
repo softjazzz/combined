@@ -123,15 +123,21 @@ async def test_safe_request_reaches_mock_transport_with_schema_numbers(monkeypat
     from types import SimpleNamespace
     import app.services.qc_llm_client as client_module
 
-    client = object.__new__(client_module.SichuanQCLLMClient)
-    client._observability_recorder = SimpleNamespace(
-        start_attempt=AsyncMock(return_value=(None, 0)), finish_attempt=AsyncMock()
+    # 正例使用真实构造流程，避免绕过新增调度身份的初始化。
+    # 上方隐私拒绝反例仍故意不初始化，以证明发送前就拦截身份泄漏。
+    client = client_module.SichuanQCLLMClient(
+        {
+            "provider_code": "alibaba",
+            "model": "synthetic",
+            "model_role": "first_pass",
+            "api_endpoint": "https://offline.invalid",
+            "timeout_seconds": 1,
+            "dispatch_mode": "direct",
+        },
+        observability_recorder=SimpleNamespace(
+            start_attempt=AsyncMock(return_value=(None, 0)), finish_attempt=AsyncMock()
+        ),
     )
-    client.provider_code = "synthetic"
-    client.model = "synthetic"
-    client.model_role = "first_pass"
-    client.api_endpoint = "https://offline.invalid"
-    client.timeout_seconds = 1
     transport = AsyncMock(return_value={"choices": []})
     monkeypatch.setattr(client_module, "safe_post_json", transport)
     monkeypatch.setattr(
@@ -157,6 +163,7 @@ async def test_safe_request_reaches_mock_transport_with_schema_numbers(monkeypat
         )
 
     await run(rule_set_key="luxian_0609_qc_v1")
+    assert client.dispatch_mode == "direct"
     transport.assert_awaited_once()
     assert transport.call_args.kwargs["payload"] == payload
 
