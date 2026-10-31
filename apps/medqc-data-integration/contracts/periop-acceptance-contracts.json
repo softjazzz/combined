@@ -1,0 +1,6181 @@
+{
+  "contract_version": 1,
+  "contract_kind": "periop-mapping-preflight",
+  "scope": "second_batch_readonly_preflight",
+  "source_database": "medqc_periop_acceptance_20261031104123",
+  "source_evidence_sha256": "738d5ccdbc44e69ebb7a8ff8e16dfa010f996894f642f4ce888e83b18aae1843",
+  "target_evidence_level": "offline_orm_only_actual_catalog_not_verified",
+  "contains_phi": false,
+  "contains_raw_values": false,
+  "expected_first_round_rows": 9365,
+  "interfaces": [
+    {
+      "interface": "web.mr_surgery",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 77
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 71
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 61
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "surgery_id",
+        "surgery_name",
+        "surgery_code",
+        "surgical_level",
+        "surgial_incision_level",
+        "surgical_incisionheal_level",
+        "anesthesia_method",
+        "anesthesia_level",
+        "surgery_begin_datetime",
+        "surgery_end_datetime",
+        "surgery_duration",
+        "surgeon",
+        "surgeon_physician_code",
+        "first_assistant",
+        "second_assistant",
+        "anesthesiology_begin_datetime",
+        "anesthesiology_end_datetime",
+        "anesthesiologist",
+        "anesthesiologist_code",
+        "main_surgery_sign",
+        "unplanned_reoperation",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "e91d50ce52383cf5c459fb03d6ba89914c9dcfa5e6d85dc876d8d35314f5073e",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "surgery_id"
+      ],
+      "publish_target": "cdm.mr_surgery",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "surgery_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_code",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgical_level",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgial_incision_level",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgical_incisionheal_level",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "anesthesia_method",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "anesthesia_level",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_begin_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_end_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_duration",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgeon",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgeon_physician_code",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "first_assistant",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "second_assistant",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "anesthesiologist",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "anesthesiologist_code",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "main_surgery_sign",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "unplanned_reoperation",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "surgery_id",
+          "target": "surgery_id",
+          "target_type": "text"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "surgery_name",
+          "target": "surgery_name",
+          "target_type": "text"
+        },
+        {
+          "source": "surgery_code",
+          "target": "surgery_code",
+          "target_type": "text"
+        },
+        {
+          "source": "surgical_level",
+          "target": "surgical_level",
+          "target_type": "text"
+        },
+        {
+          "source": "surgial_incision_level",
+          "target": "surgial_incision_level",
+          "target_type": "text"
+        },
+        {
+          "source": "surgical_incisionheal_level",
+          "target": "surgical_incisionheal_level",
+          "target_type": "text"
+        },
+        {
+          "source": "anesthesia_method",
+          "target": "anesthesia_method",
+          "target_type": "text"
+        },
+        {
+          "source": "anesthesia_level",
+          "target": "anesthesia_level",
+          "target_type": "text"
+        },
+        {
+          "source": "surgery_begin_datetime",
+          "target": "surgery_begin_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "surgery_end_datetime",
+          "target": "surgery_end_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "surgery_duration",
+          "target": "surgery_duration",
+          "target_type": "text"
+        },
+        {
+          "source": "surgeon",
+          "target": "surgeon",
+          "target_type": "text"
+        },
+        {
+          "source": "surgeon_physician_code",
+          "target": "surgeon_physician_code",
+          "target_type": "text"
+        },
+        {
+          "source": "first_assistant",
+          "target": "first_assistant",
+          "target_type": "text"
+        },
+        {
+          "source": "second_assistant",
+          "target": "second_assistant",
+          "target_type": "text"
+        },
+        {
+          "source": "anesthesiologist",
+          "target": "anesthesiologist",
+          "target_type": "text"
+        },
+        {
+          "source": "anesthesiologist_code",
+          "target": "anesthesiologist_code",
+          "target_type": "text"
+        },
+        {
+          "source": "main_surgery_sign",
+          "target": "main_surgery_sign",
+          "target_type": "text"
+        },
+        {
+          "source": "unplanned_reoperation",
+          "target": "unplanned_reoperation",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        }
+      ],
+      "raw_only_source_columns": [
+        "name",
+        "sex",
+        "age_year",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "anesthesiology_begin_datetime",
+        "anesthesiology_end_datetime"
+      ],
+      "unmapped_target_columns": [],
+      "derived_document_id": null,
+      "expected_first_round_rows": 209
+    },
+    {
+      "interface": "web.surgery_application",
+      "argument_count": 1,
+      "source_state": "partial_source",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "failed",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-27",
+          "status": "failed",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 22
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "application_id",
+        "order_id",
+        "request_datetime",
+        "record_datetime",
+        "record_content",
+        "remark",
+        "request_physician",
+        "request_dept",
+        "request_surgery_datetime",
+        "surgeon",
+        "surgery_name",
+        "surgery_code",
+        "surgery_level",
+        "surgery_history",
+        "anesthesia_method",
+        "anesthesiologist",
+        "certain_status",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "5e7d345fb6a7bd7d2aeb2e313079178a6e50462c55f53537330a7e84cfa7cf07",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "application_id"
+      ],
+      "publish_target": "cdm.surgery_application",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "application_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "application_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "order_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "dept_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_code",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_level",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "anesthesia_method",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgeon",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "request_physician",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "request_surgery_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "application_id",
+          "target": "application_id",
+          "target_type": "text"
+        },
+        {
+          "source": "order_id",
+          "target": "order_id",
+          "target_type": "text"
+        },
+        {
+          "source": "dept_name",
+          "target": "dept_name",
+          "target_type": "text"
+        },
+        {
+          "source": "surgery_name",
+          "target": "surgery_name",
+          "target_type": "text"
+        },
+        {
+          "source": "surgery_code",
+          "target": "surgery_code",
+          "target_type": "text"
+        },
+        {
+          "source": "surgery_level",
+          "target": "surgery_level",
+          "target_type": "text"
+        },
+        {
+          "source": "anesthesia_method",
+          "target": "anesthesia_method",
+          "target_type": "text"
+        },
+        {
+          "source": "surgeon",
+          "target": "surgeon",
+          "target_type": "text"
+        },
+        {
+          "source": "request_physician",
+          "target": "request_physician",
+          "target_type": "text"
+        },
+        {
+          "source": "request_surgery_datetime",
+          "target": "request_surgery_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "request_datetime",
+        "record_datetime",
+        "remark",
+        "request_dept",
+        "surgery_history",
+        "anesthesiologist",
+        "certain_status"
+      ],
+      "unmapped_target_columns": [
+        "age_year",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 22
+    },
+    {
+      "interface": "web.surgery_record",
+      "argument_count": 1,
+      "source_state": "vendor_blocked",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "failed",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-27",
+          "status": "failed",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-28",
+          "status": "failed",
+          "rows": 0
+        }
+      ],
+      "ordered_source_columns": null,
+      "schema_hash": null,
+      "raw_key_fields": null,
+      "publish_target": "cdm.surgery_record",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "dept_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "ward_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgeon_sign",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "presurg_summary",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_name",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_code",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_level",
+          "type": "VARCHAR(50)",
+          "nullable": true,
+          "max_length": 50
+        },
+        {
+          "name": "surgical_level",
+          "type": "VARCHAR(50)",
+          "nullable": true,
+          "max_length": 50
+        },
+        {
+          "name": "surgeon",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "first_assistant",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "second_assistant",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "anesthesiologist",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "anesthesia_method",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "preoperative_diagnosis",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "intraoperative_diagnosis",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "postoperative_diagnosis",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_process",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgical_incisionheal_level",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_begin_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_end_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "blood_loss",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "other_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [],
+      "raw_only_source_columns": [],
+      "unmapped_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "dept_name",
+        "ward_name",
+        "submitter",
+        "surgeon_sign",
+        "presurg_summary",
+        "surgery_name",
+        "surgery_code",
+        "surgery_level",
+        "surgical_level",
+        "surgeon",
+        "first_assistant",
+        "second_assistant",
+        "anesthesiologist",
+        "anesthesia_method",
+        "preoperative_diagnosis",
+        "intraoperative_diagnosis",
+        "postoperative_diagnosis",
+        "surgery_process",
+        "surgical_incisionheal_level",
+        "surgery_begin_time",
+        "surgery_end_time",
+        "blood_loss",
+        "other_content",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "age_year",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 0
+    },
+    {
+      "interface": "web.surgery_risk_assessment",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 30
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 23
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 22
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "application_id",
+        "surgeon",
+        "surgery_name",
+        "surgery_code",
+        "anesthesiologist",
+        "surg_risk_assessment",
+        "surgery_type",
+        "nmis_level",
+        "surgeon_assess_date",
+        "anesthesiologist_assess_date",
+        "emergency_sign",
+        "surgery_level",
+        "ASA_level",
+        "surgial_incision_level",
+        "surgery_duration",
+        "record_content",
+        "assessment_datetime",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "b12828ec6768c923e0718debe55ba73a7a1a2176156e6a2af13aada0bb335401",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "application_id"
+      ],
+      "publish_target": "cdm.surgery_risk_assessment",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "__derived_document_id",
+          "target": "document_id",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "application_id",
+        "surgeon",
+        "surgery_name",
+        "surgery_code",
+        "anesthesiologist",
+        "surg_risk_assessment",
+        "surgery_type",
+        "nmis_level",
+        "surgeon_assess_date",
+        "anesthesiologist_assess_date",
+        "emergency_sign",
+        "surgery_level",
+        "ASA_level",
+        "surgial_incision_level",
+        "surgery_duration",
+        "assessment_datetime"
+      ],
+      "unmapped_target_columns": [
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "age_year",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": {
+        "algorithm": "sha256-canonical-key-v1",
+        "prefix": "cache-risk-v1:",
+        "fields": [
+          "institute_id",
+          "patient_id",
+          "visit_id",
+          "application_id"
+        ]
+      },
+      "expected_first_round_rows": 75
+    },
+    {
+      "interface": "web.postsurg_firstcourse_record",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 22
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 14
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 11
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "36e4b7bdf629fe0e79117895cc5fc540c8f59a1f9045c401a6daf20ab3a65703",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.postsurg_firstcourse_record",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "physician_sign",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "physician_sign_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgeon_sign",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration"
+      ],
+      "unmapped_target_columns": [
+        "physician_sign",
+        "physician_sign_datetime",
+        "surgeon_sign",
+        "age_year",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 47
+    },
+    {
+      "interface": "web.presurg_discussion",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 19
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 16
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 15
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "documentid",
+        "documenttitle",
+        "documentstatus",
+        "submitter",
+        "submitterid",
+        "submitdatetime",
+        "recordcontent",
+        "lastmodifier",
+        "lastmodifierid",
+        "lastmodifieddatetime",
+        "updatetime"
+      ],
+      "schema_hash": "a1894da03160b57d5ddec0a4d3f246a051eb269c5e4aa6e3f4cca45115f56444",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "documentid"
+      ],
+      "publish_target": "cdm.presurg_discussion",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "documentid",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "recordcontent",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "lastmodifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "lastmodifierid",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "lastmodifieddatetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "updatetime",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "documenttitle",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "documentstatus",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitterid",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submitdatetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration"
+      ],
+      "unmapped_target_columns": [
+        "age_year",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 50
+    },
+    {
+      "interface": "web.presurg_summary",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 22
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 14
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 12
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "tcm_diagnosis_summary",
+        "record_content",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "7adbc82186c02354ae45a0b8dea01e734bf307b29dcf38e2b080d78557592c2a",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.presurg_summary",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "age_year",
+          "target": "age_year",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "tcm_diagnosis_summary",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime"
+      ],
+      "unmapped_target_columns": [
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 48
+    },
+    {
+      "interface": "web.surgery_inform_consent",
+      "argument_count": 1,
+      "source_state": "await_nonempty_sample",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success_zero_rows",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success_zero_rows",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success_zero_rows",
+          "rows": 0
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "tcm_diagnosis_summary",
+        "record_content",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "7adbc82186c02354ae45a0b8dea01e734bf307b29dcf38e2b080d78557592c2a",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.surgery_inform_consent",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "dept_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "planned_operation_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "planned_operation_code",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "planned_anesthesia_method",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_risk_description",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "patient_sign",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgeon_sign",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "dept_name",
+          "target": "dept_name",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "age_year",
+          "target": "age_year",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "tcm_diagnosis_summary",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime"
+      ],
+      "unmapped_target_columns": [
+        "planned_operation_name",
+        "planned_operation_code",
+        "planned_anesthesia_method",
+        "surgery_risk_description",
+        "patient_sign",
+        "surgeon_sign",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 0
+    },
+    {
+      "interface": "web.surgery_safecheck_record",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 27
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 23
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 20
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "surgery_method",
+        "surgeon",
+        "anesthesia_method",
+        "anesthesiologist",
+        "surgery_nurse",
+        "surgeon_statement",
+        "anesthesiologist_statement",
+        "surg_nurse_statement",
+        "record_content",
+        "record_datetime",
+        "surgery_begin_datetime",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "e43073b424b3f27b02774de78e61ce44e312d0d293f319905a2ec435bc0c6eed",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.surgery_safecheck_record",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "age_year",
+          "target": "age_year",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "surgery_method",
+        "surgeon",
+        "anesthesia_method",
+        "anesthesiologist",
+        "surgery_nurse",
+        "surgeon_statement",
+        "anesthesiologist_statement",
+        "surg_nurse_statement",
+        "record_datetime",
+        "surgery_begin_datetime"
+      ],
+      "unmapped_target_columns": [
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 70
+    },
+    {
+      "interface": "web.surgery_inventory_record",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success_zero_rows",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 1
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 2
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "surgery_room_name",
+        "surgery_date",
+        "surgery_name",
+        "surgery_room_enter_time",
+        "surgery_room_leave_time",
+        "allergy",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "bfe000c62de7c7d10bf16233533d3eb8904d31f311d1526216be495e3db0a040",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.surgery_inventory_record",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "dept_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_room_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_date",
+          "type": "DATE",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "dept_name",
+          "target": "dept_name",
+          "target_type": "text"
+        },
+        {
+          "source": "surgery_room_name",
+          "target": "surgery_room_name",
+          "target_type": "text"
+        },
+        {
+          "source": "surgery_date",
+          "target": "surgery_date",
+          "target_type": "date"
+        },
+        {
+          "source": "surgery_name",
+          "target": "surgery_name",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "age_year",
+          "target": "age_year",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "surgery_room_enter_time",
+        "surgery_room_leave_time",
+        "allergy"
+      ],
+      "unmapped_target_columns": [
+        "record_content",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 3
+    },
+    {
+      "interface": "web.preane_surveil_record",
+      "argument_count": 1,
+      "source_state": "await_nonempty_sample",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success_zero_rows",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success_zero_rows",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success_zero_rows",
+          "rows": 0
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "tcm_diagnosis_summary",
+        "record_content",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "7adbc82186c02354ae45a0b8dea01e734bf307b29dcf38e2b080d78557592c2a",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.preane_surveil_record",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "dept_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "condition_summary",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "planned_anesthesia_method",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "ASA_level",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "anesthetist_sign",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "dept_name",
+          "target": "dept_name",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "age_year",
+          "target": "age_year",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "tcm_diagnosis_summary",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime"
+      ],
+      "unmapped_target_columns": [
+        "condition_summary",
+        "planned_anesthesia_method",
+        "ASA_level",
+        "anesthetist_sign",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 0
+    },
+    {
+      "interface": "web.postane_surveil_record",
+      "argument_count": 1,
+      "source_state": "await_nonempty_sample",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success_zero_rows",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success_zero_rows",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success_zero_rows",
+          "rows": 0
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "tcm_diagnosis_summary",
+        "record_content",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "7adbc82186c02354ae45a0b8dea01e734bf307b29dcf38e2b080d78557592c2a",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.postane_surveil_record",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "dept_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "surgery_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "anesthesia_method",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "resume_descirption",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "anesthetist_sign",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "dept_name",
+          "target": "dept_name",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "age_year",
+          "target": "age_year",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "tcm_diagnosis_summary",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime"
+      ],
+      "unmapped_target_columns": [
+        "surgery_name",
+        "anesthesia_method",
+        "resume_descirption",
+        "anesthetist_sign",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 0
+    },
+    {
+      "interface": "web.anesthesia_record",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 23
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 18
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 16
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "ethnicity",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "application_id",
+        "height",
+        "weight",
+        "abo_blood_code",
+        "rh_blood_code",
+        "surgery_name",
+        "surgery_code",
+        "surgery_bodypost",
+        "anesthesia_method",
+        "trachea_intubate_type",
+        "brand_name",
+        "drug_code",
+        "generic_name",
+        "cfda_id",
+        "single_dose",
+        "single_dose_unit",
+        "quantity",
+        "dose_form",
+        "drug_apply_method",
+        "dosage",
+        "dosage_unit",
+        "anesthesia_bodypost",
+        "breath_type",
+        "anesthesia_description",
+        "anesthesia_complication_sign",
+        "treatment_course",
+        "puncture_process",
+        "preanes_medication",
+        "preanes_sbp",
+        "preanes_dbp",
+        "preanes_temperature",
+        "preanes_hr",
+        "preanes_pr",
+        "preanes_rr",
+        "ASA_level",
+        "surgery_begin_datetime",
+        "surgery_end_datetime",
+        "anesthesia_begin_datetime",
+        "anesthesia_end_datetime",
+        "leave_operateroom_datetime",
+        "urine_volume",
+        "bleed_volume",
+        "conscious_status",
+        "Steward_score",
+        "anesthesia_effect",
+        "anesthesia_summary",
+        "patient_whereabout",
+        "record_content",
+        "anesthetist_sign",
+        "anesthetist_sign_datetime",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "097d40e0b3ca15fa7aae1379b810ca55a16ea1e2b3d1615e3acdf6eb0de799ba",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.anesthesia_record",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "age_year",
+          "target": "age_year",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "ethnicity",
+        "application_id",
+        "height",
+        "weight",
+        "abo_blood_code",
+        "rh_blood_code",
+        "surgery_name",
+        "surgery_code",
+        "surgery_bodypost",
+        "anesthesia_method",
+        "trachea_intubate_type",
+        "brand_name",
+        "drug_code",
+        "generic_name",
+        "cfda_id",
+        "single_dose",
+        "single_dose_unit",
+        "quantity",
+        "dose_form",
+        "drug_apply_method",
+        "dosage",
+        "dosage_unit",
+        "anesthesia_bodypost",
+        "breath_type",
+        "anesthesia_description",
+        "anesthesia_complication_sign",
+        "treatment_course",
+        "puncture_process",
+        "preanes_medication",
+        "preanes_sbp",
+        "preanes_dbp",
+        "preanes_temperature",
+        "preanes_hr",
+        "preanes_pr",
+        "preanes_rr",
+        "ASA_level",
+        "surgery_begin_datetime",
+        "surgery_end_datetime",
+        "anesthesia_begin_datetime",
+        "anesthesia_end_datetime",
+        "leave_operateroom_datetime",
+        "urine_volume",
+        "bleed_volume",
+        "conscious_status",
+        "Steward_score",
+        "anesthesia_effect",
+        "anesthesia_summary",
+        "patient_whereabout",
+        "anesthetist_sign",
+        "anesthetist_sign_datetime"
+      ],
+      "unmapped_target_columns": [
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 57
+    },
+    {
+      "interface": "web.mr_bloodtrans",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 4
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 6
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 11
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "bloodtrans_id",
+        "transfuse_variety",
+        "bloodbag_id",
+        "blood_transfusion_volume",
+        "blood_transfusion_unit",
+        "transblood_reaction_sign",
+        "transblood_reaction_type",
+        "transfution_datetime",
+        "transfusion_reason",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "1299e20ce7fe81ae34903019e24afe8b9c1acb62c003608326986a2b1e403f00",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "bloodtrans_id",
+        "bloodbag_id"
+      ],
+      "publish_target": "cdm.mr_bloodtrans",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "bloodtrans_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "bloodtrans_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "transfuse_variety",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "bloodbag_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "blood_transfusion_volume",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "blood_transfusion_unit",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "transblood_reaction_sign",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "transblood_reaction_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "transfution_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "transfusion_reason",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "bloodtrans_id",
+          "target": "bloodtrans_id",
+          "target_type": "text"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "transfuse_variety",
+          "target": "transfuse_variety",
+          "target_type": "text"
+        },
+        {
+          "source": "bloodbag_id",
+          "target": "bloodbag_id",
+          "target_type": "text"
+        },
+        {
+          "source": "blood_transfusion_volume",
+          "target": "blood_transfusion_volume",
+          "target_type": "text"
+        },
+        {
+          "source": "blood_transfusion_unit",
+          "target": "blood_transfusion_unit",
+          "target_type": "text"
+        },
+        {
+          "source": "transblood_reaction_sign",
+          "target": "transblood_reaction_sign",
+          "target_type": "text"
+        },
+        {
+          "source": "transblood_reaction_type",
+          "target": "transblood_reaction_type",
+          "target_type": "text"
+        },
+        {
+          "source": "transfution_datetime",
+          "target": "transfution_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "transfusion_reason",
+          "target": "transfusion_reason",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        }
+      ],
+      "raw_only_source_columns": [
+        "name",
+        "sex",
+        "age_year",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration"
+      ],
+      "unmapped_target_columns": [],
+      "derived_document_id": null,
+      "expected_first_round_rows": 21
+    },
+    {
+      "interface": "web.blood_application",
+      "argument_count": 1,
+      "source_state": "partial_source",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 3
+        },
+        {
+          "date": "2026-10-27",
+          "status": "failed",
+          "rows": 0
+        },
+        {
+          "date": "2026-10-28",
+          "status": "failed",
+          "rows": 0
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "application_id",
+        "order_id",
+        "patient_bloodtype_abo",
+        "patient_bloodtype_rhd",
+        "reason_for_blood",
+        "blood_transfusion_attr",
+        "blood_transfusion_method",
+        "blood_transfusion_history",
+        "pregnancy_history",
+        "production_history",
+        "transplant_history",
+        "blood_transfusion_reaction",
+        "allergy_history",
+        "intra_plasma_substitute_sign",
+        "intra_plasma_substitute_name",
+        "transfution_datetime",
+        "bloodtrans_application_status",
+        "request_datetime",
+        "recordcontent",
+        "physician_name",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "hemoglobin",
+        "hematocrit",
+        "RBC",
+        "prothrombin_time",
+        "partial_thromboplastin_time",
+        "fibrinogen",
+        "albumin",
+        "TEG",
+        "platelet_antibody",
+        "RBC_antibody",
+        "HBsAg",
+        "anti_HBe",
+        "anti_HBc",
+        "anti_HCV",
+        "anti_half_HIV",
+        "syphilis",
+        "ALT",
+        "blood_transfusion_target",
+        "transfuse_variety",
+        "transfuse_volume",
+        "transfuse_volume_unit",
+        "transfuse_bloodtype_abo",
+        "transfuse_bloodtype_rhd",
+        "special_handling"
+      ],
+      "schema_hash": "f597f30d61f1d1d7adf4d6d0ec236fc0963564c8c6aa2370044df2b7f544ac85",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "application_id"
+      ],
+      "publish_target": "cdm.blood_application",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "application_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "application_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "dept_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "patient_bloodtype_abo",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "patient_bloodtype_rhd",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "transfuse_variety",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "transfuse_volume",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "transfuse_volume_unit",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "request_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "physician_name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "reason_for_blood",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "hemoglobin",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "hematocrit",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "rbc",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "prothrombin_time",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "partial_thromboplastin_time",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "fibrinogen",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "albumin",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "teg",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "platelet_antibody",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "rbc_antibody",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "application_id",
+          "target": "application_id",
+          "target_type": "text"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "dept_name",
+          "target": "dept_name",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "age_year",
+          "target": "age_year",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_bloodtype_abo",
+          "target": "patient_bloodtype_abo",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_bloodtype_rhd",
+          "target": "patient_bloodtype_rhd",
+          "target_type": "text"
+        },
+        {
+          "source": "transfuse_variety",
+          "target": "transfuse_variety",
+          "target_type": "text"
+        },
+        {
+          "source": "transfuse_volume",
+          "target": "transfuse_volume",
+          "target_type": "text"
+        },
+        {
+          "source": "transfuse_volume_unit",
+          "target": "transfuse_volume_unit",
+          "target_type": "text"
+        },
+        {
+          "source": "request_datetime",
+          "target": "request_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "physician_name",
+          "target": "physician_name",
+          "target_type": "text"
+        },
+        {
+          "source": "reason_for_blood",
+          "target": "reason_for_blood",
+          "target_type": "text"
+        },
+        {
+          "source": "hemoglobin",
+          "target": "hemoglobin",
+          "target_type": "text"
+        },
+        {
+          "source": "hematocrit",
+          "target": "hematocrit",
+          "target_type": "text"
+        },
+        {
+          "source": "RBC",
+          "target": "rbc",
+          "target_type": "text"
+        },
+        {
+          "source": "prothrombin_time",
+          "target": "prothrombin_time",
+          "target_type": "text"
+        },
+        {
+          "source": "partial_thromboplastin_time",
+          "target": "partial_thromboplastin_time",
+          "target_type": "text"
+        },
+        {
+          "source": "fibrinogen",
+          "target": "fibrinogen",
+          "target_type": "text"
+        },
+        {
+          "source": "albumin",
+          "target": "albumin",
+          "target_type": "text"
+        },
+        {
+          "source": "TEG",
+          "target": "teg",
+          "target_type": "text"
+        },
+        {
+          "source": "platelet_antibody",
+          "target": "platelet_antibody",
+          "target_type": "text"
+        },
+        {
+          "source": "RBC_antibody",
+          "target": "rbc_antibody",
+          "target_type": "text"
+        },
+        {
+          "source": "recordcontent",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        }
+      ],
+      "raw_only_source_columns": [
+        "mrno",
+        "admission_date",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "order_id",
+        "blood_transfusion_attr",
+        "blood_transfusion_method",
+        "blood_transfusion_history",
+        "pregnancy_history",
+        "production_history",
+        "transplant_history",
+        "blood_transfusion_reaction",
+        "allergy_history",
+        "intra_plasma_substitute_sign",
+        "intra_plasma_substitute_name",
+        "transfution_datetime",
+        "bloodtrans_application_status",
+        "HBsAg",
+        "anti_HBe",
+        "anti_HBc",
+        "anti_HCV",
+        "anti_half_HIV",
+        "syphilis",
+        "ALT",
+        "blood_transfusion_target",
+        "transfuse_bloodtype_abo",
+        "transfuse_bloodtype_rhd",
+        "special_handling"
+      ],
+      "unmapped_target_columns": [],
+      "derived_document_id": null,
+      "expected_first_round_rows": 3
+    },
+    {
+      "interface": "web.bloodtrans_record",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 4
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 6
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 8
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "age_year",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "tcm_diagnosis_summary",
+        "record_content",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "7adbc82186c02354ae45a0b8dea01e734bf307b29dcf38e2b080d78557592c2a",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.bloodtrans_record",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        },
+        {
+          "source": "age_year",
+          "target": "age_year",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "dept_name",
+        "ward_name",
+        "ward_no",
+        "bed_no",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "tcm_diagnosis_summary",
+        "note",
+        "record_datetime",
+        "physician_sign",
+        "physician_sign_datetime"
+      ],
+      "unmapped_target_columns": [
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 18
+    },
+    {
+      "interface": "web.nursing_record",
+      "argument_count": 1,
+      "source_state": "observed_nonempty",
+      "source_window_status": [
+        {
+          "date": "2026-10-26",
+          "status": "success",
+          "rows": 3383
+        },
+        {
+          "date": "2026-10-27",
+          "status": "success",
+          "rows": 2669
+        },
+        {
+          "date": "2026-10-28",
+          "status": "success",
+          "rows": 2690
+        }
+      ],
+      "ordered_source_columns": [
+        "institute_id",
+        "patient_id",
+        "name",
+        "sex",
+        "inpatno",
+        "mrno",
+        "visit_id",
+        "visit_type",
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "document_id",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "condition_summary",
+        "nursing_observation_item",
+        "nursing_observation_result",
+        "record_content",
+        "nurse_sign",
+        "nurse_sign_datetime",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "schema_hash": "f6b17baf9f2bd70b6dcaf036a17bc669a5077eed7f3052b08e24628365bf1ea3",
+      "raw_key_fields": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "publish_target": "cdm.nursing_record",
+      "target_primary_key": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id"
+      ],
+      "target_columns": [
+        {
+          "name": "institute_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "patient_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "document_id",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "max_length": 100
+        },
+        {
+          "name": "visit_type",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "record_content",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "last_modifier",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modifier_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "last_modified_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "update_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "document_title",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "document_status",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submitter_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "submit_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "inpat_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "mr_no",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "sex",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_year",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age_month",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "age",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        }
+      ],
+      "field_mappings": [
+        {
+          "source": "institute_id",
+          "target": "institute_id",
+          "target_type": "text"
+        },
+        {
+          "source": "patient_id",
+          "target": "patient_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_id",
+          "target": "visit_id",
+          "target_type": "text"
+        },
+        {
+          "source": "document_id",
+          "target": "document_id",
+          "target_type": "text"
+        },
+        {
+          "source": "visit_type",
+          "target": "visit_type",
+          "target_type": "text"
+        },
+        {
+          "source": "record_content",
+          "target": "record_content",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier",
+          "target": "last_modifier",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modifier_id",
+          "target": "last_modifier_id",
+          "target_type": "text"
+        },
+        {
+          "source": "last_modified_datetime",
+          "target": "last_modified_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "update_time",
+          "target": "update_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "document_title",
+          "target": "document_title",
+          "target_type": "text"
+        },
+        {
+          "source": "document_status",
+          "target": "document_status",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter",
+          "target": "submitter",
+          "target_type": "text"
+        },
+        {
+          "source": "submitter_id",
+          "target": "submitter_id",
+          "target_type": "text"
+        },
+        {
+          "source": "submit_datetime",
+          "target": "submit_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "inpatno",
+          "target": "inpat_no",
+          "target_type": "text"
+        },
+        {
+          "source": "mrno",
+          "target": "mr_no",
+          "target_type": "text"
+        },
+        {
+          "source": "name",
+          "target": "name",
+          "target_type": "text"
+        },
+        {
+          "source": "sex",
+          "target": "sex",
+          "target_type": "text"
+        }
+      ],
+      "raw_only_source_columns": [
+        "admission_date",
+        "id_card_type",
+        "id_card_no",
+        "discharge_date",
+        "inpatient_duration",
+        "condition_summary",
+        "nursing_observation_item",
+        "nursing_observation_result",
+        "nurse_sign",
+        "nurse_sign_datetime"
+      ],
+      "unmapped_target_columns": [
+        "age_year",
+        "age_month",
+        "age"
+      ],
+      "derived_document_id": null,
+      "expected_first_round_rows": 8742
+    }
+  ]
+}

@@ -1,5 +1,9 @@
 # MedQC 数据接入服务
 
+第二批17接口的独立候选合同与只读预检见
+[第二批证据复核](docs/2026-10-31-periop-evidence-review.md)和
+[DSH只读预检说明](docs/DSH_PERIOP_PREFLIGHT.txt)。它们不修改已验收13接口的生产注册表。
+
 这是可独立安装和调度的 Python 模块化单体，包含两个 worker 角色：
 
 当前交付版本0.3.2；接口仍为13个。已完成接管、初始发布和回滚后，按
