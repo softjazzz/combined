@@ -497,6 +497,12 @@ class SichuanQCLLMClient:
                         if case_key is not None:
                             protect_current_payload({"case_key": case_key})
                             prefix_kwargs["case_key"] = case_key
+                            from .strata_scheduling import current_strata_package_key
+
+                            package_key = current_strata_package_key()
+                            if package_key is not None:
+                                protect_current_payload({"package_key": package_key})
+                                prefix_kwargs["package_key"] = package_key
                     result = await self._gateway_dispatch_client.complete(
                         provider_code=self.provider_code,
                         profile=self.gateway_profile,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -43,6 +43,30 @@ class ProfileConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class CaseContinuationConfig:
+    enabled: bool = True
+    burst_requests: int = 4
+    turn_seconds: float = 30.0
+    fair_wait_seconds: float = 30.0
+    idle_grace_seconds: float = 0.05
+
+    def __post_init__(self):
+        if type(self.enabled) is not bool:
+            raise GatewayConfigurationError("case continuation enabled must be boolean")
+        _positive_int(self.burst_requests, "case burst", 64)
+        for name, value, maximum in (("turn_seconds", self.turn_seconds, 300),
+                                     ("fair_wait_seconds", self.fair_wait_seconds, 300),
+                                     ("idle_grace_seconds", self.idle_grace_seconds, 1)):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise GatewayConfigurationError("case continuation duration must be numeric")
+            normalized = _parse_bounded_float(value, name=name,
+                minimum=0 if name == "idle_grace_seconds" else 0.01, maximum=maximum)
+            object.__setattr__(self, name, normalized)
+        if self.idle_grace_seconds > min(self.turn_seconds, self.fair_wait_seconds):
+            raise GatewayConfigurationError("case idle grace exceeds fairness budget")
+
+
+@dataclass(frozen=True, slots=True)
 class GatewaySettings:
     token: str
     resources: dict[str, ResourceConfig]
@@ -56,8 +80,11 @@ class GatewaySettings:
     cache_ttl_seconds: float = 60.0
     cache_max_entries: int = 64
     strata_case_sequential: bool = True
+    continuation: CaseContinuationConfig = field(default_factory=CaseContinuationConfig)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.continuation, CaseContinuationConfig):
+            raise GatewayConfigurationError("invalid case continuation configuration")
         if type(self.strata_case_sequential) is not bool:
             raise GatewayConfigurationError("strata_case_sequential must be boolean")
         if type(self.cache_enabled) is not bool:
@@ -136,6 +163,13 @@ class GatewaySettings:
             cache_ttl_seconds=_parse_bounded_float(env.get("STRATA_CASE_CACHE_TTL_SECONDS", "60"), name="cache ttl", minimum=1, maximum=3600),
             cache_max_entries=_positive_int_env(env.get("STRATA_CASE_CACHE_MAX_ENTRIES", "64")),
             strata_case_sequential=_parse_case_sequential(env.get("STRATA_CASE_MODEL_SEQUENTIAL", "true")),
+            continuation=CaseContinuationConfig(
+                enabled=_parse_case_sequential(env.get("STRATA_CASE_CONTINUATION_ENABLED", "true")),
+                burst_requests=_positive_int_env(env.get("STRATA_CASE_BURST_REQUESTS", "4")),
+                turn_seconds=_parse_bounded_float(env.get("STRATA_CASE_TURN_SECONDS", "30"), name="case turn", minimum=.01, maximum=300),
+                fair_wait_seconds=_parse_bounded_float(env.get("STRATA_CASE_FAIR_WAIT_SECONDS", "30"), name="case fair wait", minimum=.01, maximum=300),
+                idle_grace_seconds=_parse_bounded_float(env.get("STRATA_CASE_IDLE_GRACE_SECONDS", ".05"), name="case idle grace", minimum=0, maximum=1),
+            ),
         )
 
 

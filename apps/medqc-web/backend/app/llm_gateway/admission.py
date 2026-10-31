@@ -6,11 +6,12 @@ import asyncio
 from collections import deque
 from dataclasses import dataclass
 import time
-from typing import Iterable
+from typing import Callable, Iterable
 
 from app.services.llm_dispatch.contracts import GatewayErrorCode
 
-from .config import ResourceConfig
+from .config import ResourceConfig, CaseContinuationConfig
+from .continuation import CaseContinuationPolicy
 
 
 class AdmissionError(RuntimeError):
@@ -46,6 +47,7 @@ class _Waiter:
     future: asyncio.Future[None]
     queued_at: float
     case_key: str | None = None
+    package_key: str | None = None
     granted: bool = False
     claimed: bool = False
 
@@ -75,7 +77,8 @@ class AdmissionLease:
 
 
 class ResourceAdmissionPool:
-    def __init__(self, config: ResourceConfig) -> None:
+    def __init__(self, config: ResourceConfig, *, continuation: CaseContinuationConfig | None = None,
+                 clock: Callable[[], float] = time.monotonic) -> None:
         self.resource_id = config.resource_id
         self.max_inflight = config.max_inflight
         self._effective_max_inflight = config.max_inflight
@@ -86,10 +89,15 @@ class ResourceAdmissionPool:
         self._quarantined = False
         self._lock = asyncio.Lock()
         self._active_cases: set[str] = set()
+        self._clock = clock
+        self._continuation = CaseContinuationPolicy(continuation) if continuation and continuation.enabled else None
+        self._wake_handle: asyncio.TimerHandle | None = None
+        self._wake_task: asyncio.Task | None = None
 
-    async def acquire(self, *, monotonic_deadline: float, case_key: str | None = None) -> AdmissionLease:
+    async def acquire(self, *, monotonic_deadline: float, case_key: str | None = None,
+                      package_key: str | None = None) -> AdmissionLease:
         loop = asyncio.get_running_loop()
-        queued_at = time.monotonic()
+        queued_at = self._clock()
         async with self._lock:
             if not self._accepting:
                 if self._quarantined:
@@ -97,15 +105,19 @@ class ResourceAdmissionPool:
                 raise GatewayShuttingDownError()
             if monotonic_deadline <= loop.time():
                 raise AdmissionDeadlineError()
-            # 先服务最早可执行者；同病例阻塞的队首不应闲置另一物理槽。
-            self._grant_waiters_locked()
-            if self._inflight < self._effective_max_inflight and self._case_available(case_key):
-                self._occupy(case_key)
-                return AdmissionLease(self, 0.0, case_key)
-            if len(self._waiters) >= self.max_queue:
-                raise QueueFullError()
-            waiter = _Waiter(future=loop.create_future(), queued_at=queued_at, case_key=case_key)
+            # 新请求与旧等待者一起选择，不能绕过短间隙或老化保护。
+            waiter = _Waiter(future=loop.create_future(), queued_at=queued_at,
+                             case_key=case_key, package_key=package_key)
             self._waiters.append(waiter)
+            self._grant_waiters_locked()
+            if waiter.granted:
+                waiter.claimed = True
+                return AdmissionLease(self, max(0, self._clock() - queued_at), case_key)
+            if len(self._waiters) > self.max_queue:
+                self._waiters.remove(waiter)
+                waiter.future.cancel()
+                self._grant_waiters_locked()
+                raise QueueFullError()
 
         remaining = monotonic_deadline - loop.time()
         try:
@@ -119,7 +131,7 @@ class ResourceAdmissionPool:
                 raise asyncio.TimeoutError()
             # await 与这次同步赋值之间没有新的 await，取消无法插入。
             waiter.claimed = True
-            return AdmissionLease(self, time.monotonic() - queued_at, case_key)
+            return AdmissionLease(self, self._clock() - queued_at, case_key)
         except asyncio.TimeoutError:
             await self._withdraw(waiter)
             raise AdmissionDeadlineError() from None
@@ -136,6 +148,8 @@ class ResourceAdmissionPool:
                     pass
                 if not waiter.future.done():
                     waiter.future.cancel()
+                if self._continuation and waiter.case_key not in self._active_cases:
+                    self._continuation.forget(waiter.case_key)
                 self._grant_waiters_locked()
                 return
             if not waiter.claimed:
@@ -143,6 +157,8 @@ class ResourceAdmissionPool:
                 self._inflight -= 1
                 if waiter.case_key is not None:
                     self._active_cases.discard(waiter.case_key)
+                if self._continuation:
+                    self._continuation.forget(waiter.case_key)
                 self._grant_waiters_locked()
 
     async def _release(self, case_key: str | None = None) -> None:
@@ -152,18 +168,48 @@ class ResourceAdmissionPool:
             self._inflight -= 1
             if case_key is not None:
                 self._active_cases.discard(case_key)
+            if self._continuation:
+                self._continuation.released(case_key, self._clock())
             self._grant_waiters_locked()
 
     def _grant_waiters_locked(self) -> None:
+        self._cancel_wakeup_locked()
         while self._accepting and self._inflight < self._effective_max_inflight and self._waiters:
             self._waiters = deque(waiter for waiter in self._waiters if not waiter.future.done())
-            waiter = next((item for item in self._waiters if self._case_available(item.case_key)), None)
+            eligible = [item for item in self._waiters if self._case_available(item.case_key)]
+            if self._continuation:
+                waiter, wake_at = self._continuation.choose(eligible, self._active_cases, self._clock(),
+                                                           capacity=self._effective_max_inflight)
+                if waiter is None and wake_at is not None:
+                    self._wake_handle = asyncio.get_running_loop().call_later(
+                        max(0, wake_at - self._clock()), self._schedule_wakeup)
+            else:
+                waiter = eligible[0] if eligible else None
             if waiter is None:
                 break
             self._waiters.remove(waiter)
             waiter.granted = True
             self._occupy(waiter.case_key)
+            if self._continuation:
+                self._continuation.granted(waiter.case_key, waiter.package_key, self._clock(),
+                                           capacity=self._effective_max_inflight)
             waiter.future.set_result(None)
+
+    def _cancel_wakeup_locked(self):
+        if self._wake_handle is not None:
+            self._wake_handle.cancel()
+            self._wake_handle = None
+
+    def _schedule_wakeup(self):
+        self._wake_handle = None
+        self._wake_task = asyncio.create_task(self._wake())
+
+    async def _wake(self):
+        try:
+            async with self._lock:
+                self._grant_waiters_locked()
+        finally:
+            self._wake_task = None
 
     def _case_available(self, case_key: str | None) -> bool:
         return case_key is None or case_key not in self._active_cases
@@ -179,21 +225,33 @@ class ResourceAdmissionPool:
             raise ValueError("invalid effective resource capacity")
         async with self._lock:
             self._effective_max_inflight = capacity
+            if self._continuation:
+                self._continuation.clear()
             # 不清理关闭/远端未知隔离状态，调容量不能当作恢复GPU的证据。
             self._grant_waiters_locked()
 
     async def close(self) -> None:
         async with self._lock:
             self._accepting = False
+            self._cancel_wakeup_locked()
+            if self._continuation:
+                self._continuation.clear()
             while self._waiters:
                 waiter = self._waiters.popleft()
                 if not waiter.future.done():
                     waiter.future.set_exception(GatewayShuttingDownError())
+            wake_task = self._wake_task
+        if wake_task is not None:
+            wake_task.cancel()
+            await asyncio.gather(wake_task, return_exceptions=True)
 
     async def quarantine(self) -> None:
         async with self._lock:
             self._accepting = False
             self._quarantined = True
+            self._cancel_wakeup_locked()
+            if self._continuation:
+                self._continuation.clear()
             while self._waiters:
                 waiter = self._waiters.popleft()
                 if not waiter.future.done():
@@ -209,21 +267,28 @@ class ResourceAdmissionPool:
                 "inflight": self._inflight,
                 "queued": len(self._waiters),
                 "active_cases": len(self._active_cases),
+                "continuation_enabled": self._continuation is not None,
+                "continuation_cases": self._continuation.case_count if self._continuation else 0,
+                "continuation_wakeup_pending": self._wake_handle is not None,
                 "accepting": self._accepting,
                 "unknown_inflight": self._quarantined,
             }
 
 
 class AdmissionManager:
-    def __init__(self, resources: Iterable[ResourceConfig]) -> None:
-        self._pools = {item.resource_id: ResourceAdmissionPool(item) for item in resources}
+    def __init__(self, resources: Iterable[ResourceConfig], *, continuation_resources: set[str] | None = None,
+                 continuation: CaseContinuationConfig | None = None) -> None:
+        self._pools = {item.resource_id: ResourceAdmissionPool(item,
+            continuation=continuation if item.resource_id in (continuation_resources or set()) else None)
+            for item in resources}
 
-    async def acquire(self, resource_id: str, *, monotonic_deadline: float, case_key: str | None = None) -> AdmissionLease:
+    async def acquire(self, resource_id: str, *, monotonic_deadline: float, case_key: str | None = None,
+                      package_key: str | None = None) -> AdmissionLease:
         # profile 在启动时已检查引用，运行期不接受任意 resource_id。
         pool = self._pools.get(resource_id)
         if pool is None:
             raise GatewayShuttingDownError()
-        return await pool.acquire(monotonic_deadline=monotonic_deadline, case_key=case_key)
+        return await pool.acquire(monotonic_deadline=monotonic_deadline, case_key=case_key, package_key=package_key)
 
     async def set_capacity(self, resource_id: str, capacity: int) -> None:
         pool = self._pools.get(resource_id)

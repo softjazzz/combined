@@ -31,7 +31,7 @@ from .copy_content_similarity import (
     split_sentences,
 )
 from .unified_rule_engine import UnifiedRuleEngine
-from .strata_scheduling import strata_case_execution_scope
+from .strata_scheduling import strata_case_execution_scope, strata_rule_package_scope
 from .llm_config_loader import LLMConfigLoader, build_adjudicator_runtime_config
 from ..core.http import configure_shared_http_max_concurrency
 from .qc_llm_client_runtime import SichuanQCLLMClient  # 拆分出的 LLM 客户端（runtime 源码版）
@@ -1278,7 +1278,9 @@ class SichuanQCService:
         llm_concurrency = 4
 
         async def _llm_evaluate(rule: Dict[str, Any], medical_record: Dict[str, Any]) -> Dict[str, Any]:
-            return await self.rule_engine.evaluate(rule, medical_record=medical_record)
+            rule_key = str(rule.get("rule_id") or rule.get("id") or "")
+            with strata_rule_package_scope("rule:" + rule_key if rule_key else None):
+                return await self.rule_engine.evaluate(rule, medical_record=medical_record)
 
         medical_record: Dict[str, Any] = {
             "id": document_id,
@@ -1393,19 +1395,20 @@ class SichuanQCService:
         enriched_record["doc_scope"] = str(options.get("doc_scope") or enriched_record.get("doc_scope") or "")
         enriched_record["quality_profile"] = str(options.get("quality_profile") or enriched_record.get("quality_profile") or "")
         enriched_record["model_version"] = str(options.get("model_version") or self.client.model or "")
-        return await self.rule_engine.evaluate_batch_compact(
-            rules=rules,
-            medical_record=enriched_record,
-            pack_id=str(options.get("pack_id") or ""),
-            pack_size=int(options.get("pack_size") or len(rules)),
-            low_confidence_threshold=float(options.get("low_confidence_threshold") or 0.45),
-            context_token_budget=8600 if normalize_quality_profile(options.get("quality_profile")) == QUALITY_PROFILE_EFFECT_PRIORITY else 7000,
-            quality_profile=normalize_quality_profile(options.get("quality_profile")),
-            batch_output_mode=normalize_batch_output_mode(
-                options.get("batch_output_mode"),
+        with strata_rule_package_scope(options.get("pack_id")):
+            return await self.rule_engine.evaluate_batch_compact(
+                rules=rules,
+                medical_record=enriched_record,
+                pack_id=str(options.get("pack_id") or ""),
+                pack_size=int(options.get("pack_size") or len(rules)),
+                low_confidence_threshold=float(options.get("low_confidence_threshold") or 0.45),
+                context_token_budget=8600 if normalize_quality_profile(options.get("quality_profile")) == QUALITY_PROFILE_EFFECT_PRIORITY else 7000,
                 quality_profile=normalize_quality_profile(options.get("quality_profile")),
-            ),
-        )
+                batch_output_mode=normalize_batch_output_mode(
+                    options.get("batch_output_mode"),
+                    quality_profile=normalize_quality_profile(options.get("quality_profile")),
+                ),
+            )
 
     async def _apply_selective_refine(
         self,

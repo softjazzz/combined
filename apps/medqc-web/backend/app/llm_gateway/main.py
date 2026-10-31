@@ -73,7 +73,10 @@ class GatewayRuntime:
     ) -> None:
         self.settings = settings
         self.sender = sender
-        self.admission = AdmissionManager(settings.resources.values())
+        self.admission = AdmissionManager(settings.resources.values(),
+            continuation_resources={profile.resource_id for profile in settings.profiles.values()
+                if profile.provider_code == "strata" and settings.strata_case_sequential},
+            continuation=settings.continuation)
         self.lifecycle = RequestLifecycle()
         self.ready = True
         self.case_cache = CasePrefixCache(settings)
@@ -120,6 +123,7 @@ class GatewayRuntime:
             # 旧客户端无匿名病例键时共享保守通道，不能靠省略身份突破串行。
             case_key=(completion.case_key or "0" * 64)
             if profile.provider_code == "strata" and self.settings.strata_case_sequential else None,
+            package_key=completion.package_key if profile.provider_code == "strata" else None,
         )
 
         task: asyncio.Task[tuple[dict[str, Any], float]] | None = None

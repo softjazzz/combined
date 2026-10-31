@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 SUITES: dict[str, tuple[str, ...]] = {
     "strata-admission": (
+        "tests/unit/test_strata_package_continuation.py",
         "tests/unit/test_strata_case_admission.py",
         "tests/unit/test_strata_client_binding.py",
         "tests/unit/test_llm_gateway_admission.py",

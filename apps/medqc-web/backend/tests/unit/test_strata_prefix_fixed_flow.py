@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from app.core.settings import Settings
-from app.llm_gateway.config import GatewaySettings, ProfileConfig, ResourceConfig
+from app.llm_gateway.config import CaseContinuationConfig, GatewaySettings, ProfileConfig, ResourceConfig
 from app.llm_gateway.main import create_app
 from app.services import llm_observability, qc_llm_client
 from app.services.llm_dispatch import client as dispatch_module
@@ -61,7 +61,7 @@ def identity(*, patient="synthetic-patient-a", version="v1"):
         yield
 
 
-def harness(monkeypatch, tmp_path, handler, *, mode="prefix"):
+def harness(monkeypatch, tmp_path, handler, *, mode="prefix", continuation=True):
     settings = Settings(
         _env_file=None, JWT_SECRET="synthetic-observation-secret", STRATA_CASE_CACHE_MODE=mode,
         LLM_DISPATCH_MODE="gateway", LLM_GATEWAY_URL="http://gateway.test",
@@ -75,6 +75,7 @@ def harness(monkeypatch, tmp_path, handler, *, mode="prefix"):
         token="test-gateway-token-at-least-32-chars", resources={"gpu": ResourceConfig("gpu", 2, 8)},
         profiles={profile.name: profile}, allowed_hosts=frozenset({"strata.test"}), state_dir=tmp_path,
         startup_isolation_seconds=0, cache_enabled=True, cache_deployment_version="synthetic-deploy-v1",
+        continuation=CaseContinuationConfig(enabled=continuation),
     ), http_transport=httpx.MockTransport(handler), enforce_single_instance=False)
     dispatch = GatewayDispatchClient(transport=httpx.ASGITransport(app=app))
     client = qc_llm_client.SichuanQCLLMClient(
@@ -369,3 +370,45 @@ async def test_fixed_response_facts_survive_formal_binding_finalizer_and_sqlite_
         assert compared[0] == compared[1]
     finally:
         engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_old_prompt_three_cases_real_dispatch_continuation_matches_fifo(monkeypatch, tmp_path):
+    from app.services.strata_scheduling import strata_rule_package_scope
+
+    async def run(enabled):
+        seen, active_cases = [], set()
+        max_active = 0
+        async def fixed(request):
+            nonlocal max_active
+            body = json.loads(request.content)
+            case_name, pack = body["messages"][0]["content"].split(":")
+            assert case_name not in active_cases
+            active_cases.add(case_name)
+            max_active = max(max_active, len(active_cases))
+            assert set(body) == {"model", "messages", "temperature", "top_p", "max_tokens", "stream", "chat_template_kwargs"}
+            assert "package_key" not in body and len(body["messages"]) == 1
+            seen.append(body)
+            await asyncio.sleep(0)
+            active_cases.remove(case_name)
+            return httpx.Response(200, json=response(content=json.dumps({
+                "rule_id": pack, "event_id": case_name + pack,
+                "evidence_ids": [case_name], "status": "compliant"})))
+
+        app, client = harness(monkeypatch, tmp_path, fixed, mode="off", continuation=enabled)
+        async def visit(case_name):
+            result = []
+            with identity(patient=case_name):
+                for pack in ("original", "recheck", "next"):
+                    with strata_rule_package_scope(pack):
+                        value = await client.generate(case_name + ":" + pack)
+                        result.append(value["choices"][0]["message"]["content"])
+            return result
+        results = await asyncio.gather(*(visit(case_name) for case_name in ("a", "b", "c")))
+        assert max_active == 2 and len(seen) == 9
+        assert await app.state.gateway_runtime.shutdown()
+        return results, sorted(json.dumps(body, sort_keys=True) for body in seen)
+
+    baseline = await run(False)
+    priority = await run(True)
+    assert baseline == priority

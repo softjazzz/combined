@@ -135,8 +135,8 @@ async def test_off_and_observe_only_add_scheduling_identity_not_prefix_or_budget
     with case(), exam_result_prefix_scope(expected_requests=2):
         await make_client(handler).generate(build_requests()[0][2])
         assert current_exam_result_prefix(payload(build_requests()[0][2])).expected_requests == 2
-    assert set(calls[0]) == {"request_id", "profile", "deadline_at", "timeout_seconds", "payload", "case_key"}
-    assert len(calls[0]["case_key"]) == 64
+    assert set(calls[0]) == {"request_id", "profile", "deadline_at", "timeout_seconds", "payload", "case_key", "package_key"}
+    assert len(calls[0]["case_key"]) == len(calls[0]["package_key"]) == 64
 
 
 def test_direct_prefix_is_rejected_without_routing_to_another_provider(monkeypatch):

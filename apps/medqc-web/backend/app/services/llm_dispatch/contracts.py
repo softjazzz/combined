@@ -87,6 +87,13 @@ class GatewayCompletionRequest(BaseModel):
     payload: dict[str, Any]
     case_prefix: GatewayCasePrefix | None = None
     case_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    package_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def require_package_case(self):
+        if self.package_key is not None and self.case_key is None:
+            raise ValueError("package identity requires case identity")
+        return self
 
     @field_validator("deadline_at")
     @classmethod
