@@ -4,6 +4,8 @@
 
 当前交付版本0.3.2；接口仍为13个。已完成接管、初始发布和回滚后，按
 [真实源阶段续跑说明](docs/DSH_SOURCE_VALIDATION_0.3.2.txt)从ODBC dry继续，使用SERVER关键字。
+客户机真实接管与部署验收已回传通过，状态为**已验收、待启用**，详见
+[十三接口客户机验收收口记录](docs/2026-10-30-thirteen-interface-customer-acceptance.md)。
 原始接管流程仍从
 [DSH_START-takeover.txt](docs/DSH_START-takeover.txt) 开始：一条PowerShell命令在新库
 完成接管、发布、回滚恢复、单日实际源验证和备份恢复。详见
