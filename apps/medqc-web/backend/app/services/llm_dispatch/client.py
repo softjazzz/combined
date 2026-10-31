@@ -99,6 +99,7 @@ class GatewayDispatchClient:
         payload: dict[str, Any],
         timeout_seconds: float,
         case_prefix: GatewayCasePrefix | None = None,
+        case_key: str | None = None,
     ) -> dict[str, Any]:
         normalized_profile = validate_gateway_profile(
             profile=profile, provider_code=provider_code
@@ -130,6 +131,7 @@ class GatewayDispatchClient:
                 timeout_seconds=request_remaining,
                 payload=payload,
                 case_prefix=case_prefix,
+                case_key=case_key,
             )
         except (ValidationError, ValueError, TypeError) as exc:
             raise GatewayDispatchError(
@@ -211,6 +213,8 @@ class GatewayDispatchClient:
         body = request.model_dump(mode="json")
         if body.get("case_prefix") is None:
             body.pop("case_prefix", None)
+        if body.get("case_key") is None:
+            body.pop("case_key", None)
         return body
 
     @staticmethod

@@ -117,6 +117,9 @@ class GatewayRuntime:
         lease = await self.admission.acquire(
             profile.resource_id,
             monotonic_deadline=monotonic_deadline,
+            # 旧客户端无匿名病例键时共享保守通道，不能靠省略身份突破串行。
+            case_key=(completion.case_key or "0" * 64)
+            if profile.provider_code == "strata" and self.settings.strata_case_sequential else None,
         )
 
         task: asyncio.Task[tuple[dict[str, Any], float]] | None = None
@@ -235,6 +238,10 @@ class GatewayRuntime:
     async def resource_counts(self) -> list[dict[str, int | bool | str]]:
         return await self.admission.snapshots()
 
+    async def set_resource_capacity(self, resource_id: str, capacity: int) -> None:
+        """内部容量控制入口；本轮仅Mock调用，不探测或猜测Replica接口。"""
+        await self.admission.set_capacity(resource_id, capacity)
+
     async def shutdown(self) -> bool:
         self.ready = False
         self.lifecycle.stop_accepting()
@@ -329,6 +336,8 @@ def create_app(
         if not runtime.ready:
             return JSONResponse(status_code=503, content={"status": "unavailable"})
         if runtime.lifecycle.remote_inflight_unknown:
+            return JSONResponse(status_code=503, content={"status": "degraded"})
+        if any(item["effective_max_inflight"] < item["max_inflight"] for item in await runtime.resource_counts()):
             return JSONResponse(status_code=503, content={"status": "degraded"})
         return JSONResponse(content={"status": "ok"})
 

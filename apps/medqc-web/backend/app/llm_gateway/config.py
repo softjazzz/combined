@@ -55,8 +55,11 @@ class GatewaySettings:
     cache_deployment_version: str | None = None
     cache_ttl_seconds: float = 60.0
     cache_max_entries: int = 64
+    strata_case_sequential: bool = True
 
     def __post_init__(self) -> None:
+        if type(self.strata_case_sequential) is not bool:
+            raise GatewayConfigurationError("strata_case_sequential must be boolean")
         if type(self.cache_enabled) is not bool:
             raise GatewayConfigurationError("cache_enabled must be boolean")
         if self.cache_enabled and (
@@ -70,6 +73,9 @@ class GatewaySettings:
             raise GatewayConfigurationError("LLM Gateway token is not safely configured")
         if not self.resources or not self.profiles or not self.allowed_hosts:
             raise GatewayConfigurationError("LLM Gateway configuration is incomplete")
+        local_profiles = [profile for profile in self.profiles.values() if profile.provider_code == "strata"]
+        if len({profile.resource_id for profile in local_profiles}) > 1 or len({profile.api_endpoint for profile in local_profiles}) > 1:
+            raise GatewayConfigurationError("Strata profiles must share one physical resource and API endpoint")
         for name, profile in self.profiles.items():
             if name != profile.name or not _PROFILE_RE.fullmatch(name):
                 raise GatewayConfigurationError("profile configuration has an invalid name")
@@ -129,7 +135,14 @@ class GatewaySettings:
             cache_deployment_version=env.get("STRATA_CASE_CACHE_DEPLOYMENT_VERSION"),
             cache_ttl_seconds=_parse_bounded_float(env.get("STRATA_CASE_CACHE_TTL_SECONDS", "60"), name="cache ttl", minimum=1, maximum=3600),
             cache_max_entries=_positive_int_env(env.get("STRATA_CASE_CACHE_MAX_ENTRIES", "64")),
+            strata_case_sequential=_parse_case_sequential(env.get("STRATA_CASE_MODEL_SEQUENTIAL", "true")),
         )
+
+
+def _parse_case_sequential(raw):
+    if raw not in ("true", "false"):
+        raise GatewayConfigurationError("strata_case_sequential must be true or false")
+    return raw == "true"
 
 
 def _parse_cache_enabled(raw):

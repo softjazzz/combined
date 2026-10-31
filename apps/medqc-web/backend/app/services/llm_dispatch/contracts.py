@@ -86,6 +86,7 @@ class GatewayCompletionRequest(BaseModel):
     timeout_seconds: float = Field(gt=0, le=3600)
     payload: dict[str, Any]
     case_prefix: GatewayCasePrefix | None = None
+    case_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
     @field_validator("deadline_at")
     @classmethod

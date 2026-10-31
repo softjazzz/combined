@@ -124,7 +124,7 @@ async def test_wire_original_prompt_and_remaining_budget_are_exact(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["off", "observe"])
-async def test_off_and_observe_do_not_add_metadata_or_consume_budget(monkeypatch, mode):
+async def test_off_and_observe_only_add_scheduling_identity_not_prefix_or_budget(monkeypatch, mode):
     configure(monkeypatch, mode=mode)
     calls = []
 
@@ -135,7 +135,8 @@ async def test_off_and_observe_do_not_add_metadata_or_consume_budget(monkeypatch
     with case(), exam_result_prefix_scope(expected_requests=2):
         await make_client(handler).generate(build_requests()[0][2])
         assert current_exam_result_prefix(payload(build_requests()[0][2])).expected_requests == 2
-    assert set(calls[0]) == {"request_id", "profile", "deadline_at", "timeout_seconds", "payload"}
+    assert set(calls[0]) == {"request_id", "profile", "deadline_at", "timeout_seconds", "payload", "case_key"}
+    assert len(calls[0]["case_key"]) == 64
 
 
 def test_direct_prefix_is_rejected_without_routing_to_another_provider(monkeypatch):

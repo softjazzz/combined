@@ -123,7 +123,7 @@ def test_running_luxian_job_keeps_accepted_clients_after_global_config_reload():
     assert running is not shared
     assert running.client is not shared.client
     assert running.adjudicator_client is not shared.adjudicator_client
-    assert running.rule_engine._llm_generate.__self__ is running.client
+    assert running.rule_engine._llm_generate.__self__ is running
 
     # 重载接口原地修改全局客户端；固定的运行实例必须保留接纳时的密钥、模型和参数。
     shared.client.api_endpoint = "https://example.invalid/llm-b"
@@ -231,7 +231,7 @@ def test_single_record_family_budget_only_tightens_accepted_policy(
     assert batch.adjudicator_client.family_max_concurrency == 4
     assert single.client.http_max_concurrency == batch.client.http_max_concurrency == 40
     assert single.client.max_parallel_records == batch.client.max_parallel_records == 16
-    assert single.rule_engine._llm_generate.__self__ is single.client
+    assert single.rule_engine._llm_generate.__self__ is single
 
 
 def test_isolated_runtime_keeps_non_sensitive_gateway_routing(monkeypatch):

@@ -447,6 +447,27 @@ def current_llm_observation_context() -> LLMObservationContext:
     return _OBSERVATION_CONTEXT.get()
 
 
+@contextmanager
+def llm_record_identity_context(record_identity: tuple[str, str, str]) -> Iterator[None]:
+    """只补有完整坐标的匿名病例身份，保留既有任务/规则族观测上下文。"""
+    from dataclasses import replace
+
+    current = _OBSERVATION_CONTEXT.get()
+    identity = _record_identity_hash(record_identity)
+    if current.record_key_hash is not None and identity is not None and current.record_key_hash != identity:
+        from .llm_dispatch.provider_profiles import ProviderConfigurationError
+
+        raise ProviderConfigurationError("llm_case_identity_conflict")
+    if current.record_key_hash is not None or identity is None:
+        yield
+        return
+    token = _OBSERVATION_CONTEXT.set(replace(current, record_key_hash=identity))
+    try:
+        yield
+    finally:
+        _OBSERVATION_CONTEXT.reset(token)
+
+
 def _record_identity_hash(record_identity: Optional[tuple[str, str, str]]) -> Optional[str]:
     if not record_identity:
         return None

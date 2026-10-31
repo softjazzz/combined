@@ -32,6 +32,7 @@ def request(*, case="a", expected=2, context="v1", prefix=None, timeout=2):
     suffix = "Use only supplied evidence and return the existing schema."
     return GatewayCompletionRequest(
         request_id=uuid4(), profile="strata_first_pass",
+        case_key=case * 64,
         deadline_at=datetime.now(timezone.utc) + timedelta(seconds=timeout), timeout_seconds=timeout,
         payload={"model": "synthetic-model", "messages": [{"role": "user", "content": suffix + prefix}],
                  "max_tokens": 100, "stream": False, "temperature": 0.2,
@@ -380,7 +381,8 @@ async def test_singleflight_waiters_bound_across_keys_and_cancel_restores_capaci
                 await self.release.wait()
             return await super().send(profile, payload, timeout_seconds=timeout_seconds)
     sender = Block()
-    configured = replace(settings(), resources={"gpu": ResourceConfig("gpu", 2, 0)})
+    # 本测试单独核对cache singleflight配额；病例串行/零排队拒绝由admission保护集覆盖。
+    configured = replace(settings(), resources={"gpu": ResourceConfig("gpu", 2, 0)}, strata_case_sequential=False)
     runtime = GatewayRuntime(configured, sender)
     first = asyncio.create_task(runtime.complete(request()))
     await sender.started.wait()

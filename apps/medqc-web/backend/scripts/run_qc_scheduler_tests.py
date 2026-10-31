@@ -16,6 +16,20 @@ from sqlalchemy.pool import StaticPool
 
 
 SUITES: dict[str, tuple[str, ...]] = {
+    "strata-admission": (
+        "tests/unit/test_strata_case_admission.py",
+        "tests/unit/test_strata_client_binding.py",
+        "tests/unit/test_llm_gateway_admission.py",
+        "tests/unit/test_llm_gateway_cancellation.py",
+        "tests/unit/test_llm_gateway_api.py",
+        "tests/unit/test_llm_dispatch_routing.py",
+        "tests/unit/test_llm_dispatch_runtime_identity.py",
+        "tests/unit/test_strata_admin_configuration.py",
+        "tests/unit/test_strata_prefix_adapter.py",
+        "tests/unit/test_strata_prefix_fixed_flow.py",
+        "tests/unit/test_strata_cache_cost.py",
+        "tests/unit/test_strata_case_cache_gateway.py",
+    ),
     "strata-prefix": (
         "tests/unit/test_strata_case_cache_gateway.py",
         "tests/unit/test_strata_prefix_adapter.py",

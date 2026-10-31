@@ -490,6 +490,13 @@ class SichuanQCLLMClient:
                             protect_current_payload({"case_prefix": case_prefix.model_dump(mode="json")})
                             consume_exam_result_prefix_request()
                     prefix_kwargs = {"case_prefix": case_prefix} if case_prefix is not None else {}
+                    if self.provider_code == "strata":
+                        from .llm_observability import current_llm_observation_context
+
+                        case_key = current_llm_observation_context().record_key_hash
+                        if case_key is not None:
+                            protect_current_payload({"case_key": case_key})
+                            prefix_kwargs["case_key"] = case_key
                     result = await self._gateway_dispatch_client.complete(
                         provider_code=self.provider_code,
                         profile=self.gateway_profile,
