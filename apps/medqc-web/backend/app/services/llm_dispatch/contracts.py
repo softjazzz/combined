@@ -12,6 +12,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ..llm_request_observation import GatewayRequestObservation
+
 
 GATEWAY_COMPLETIONS_PATH = "/v1/llm/completions"
 GATEWAY_RESOURCES_PATH = "/v1/llm/resources"
@@ -86,6 +88,7 @@ class GatewayCompletionRequest(BaseModel):
     timeout_seconds: float = Field(gt=0, le=3600)
     payload: dict[str, Any]
     case_prefix: GatewayCasePrefix | None = None
+    observe_request: bool = Field(default=False, strict=True)
     case_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     package_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
@@ -120,6 +123,7 @@ class GatewayErrorDetail(BaseModel):
     code: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
     retryable: bool
     cache_trace: GatewayCacheTrace | None = None
+    request_observation: GatewayRequestObservation | None = None
 
 
 class GatewayErrorResponse(BaseModel):

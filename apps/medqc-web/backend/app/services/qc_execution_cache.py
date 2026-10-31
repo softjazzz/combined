@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Optional
 
+from .llm_experiment import current_llm_experiment_namespace
+
 
 @dataclass
 class _CacheEntry:
@@ -53,32 +55,41 @@ def build_execution_cache_key(
 class QCExecutionCache:
     def __init__(self, default_ttl_seconds: int = 1800) -> None:
         self._default_ttl_seconds = max(60, int(default_ttl_seconds))
-        self._entries: dict[str, _CacheEntry] = {}
+        self._entries: dict[str | tuple[str, str], _CacheEntry] = {}
         self._lock = Lock()
 
     def get(self, key: str) -> Optional[dict[str, Any]]:
         if not key:
             return None
+        namespace = current_llm_experiment_namespace()
+        storage_key = (namespace, key) if namespace is not None else key
         now = time.time()
         with self._lock:
-            entry = self._entries.get(key)
+            entry = self._entries.get(storage_key)
             if entry is None:
                 return None
             if entry.expires_at <= now:
-                self._entries.pop(key, None)
+                self._entries.pop(storage_key, None)
                 return None
             return copy.deepcopy(entry.value)
 
     def set(self, key: str, value: dict[str, Any], ttl_seconds: Optional[int] = None) -> None:
         if not key:
             return
+        namespace = current_llm_experiment_namespace()
+        storage_key = (namespace, key) if namespace is not None else key
         ttl = max(60, int(ttl_seconds or self._default_ttl_seconds))
         with self._lock:
-            self._entries[key] = _CacheEntry(
+            self._entries[storage_key] = _CacheEntry(
                 value=copy.deepcopy(value),
                 expires_at=time.time() + ttl,
             )
 
     def clear(self) -> None:
+        namespace = current_llm_experiment_namespace()
         with self._lock:
-            self._entries.clear()
+            for key in list(self._entries):
+                is_baseline = namespace is None and isinstance(key, str)
+                is_experiment = isinstance(key, tuple) and key[0] == namespace
+                if is_baseline or is_experiment:
+                    self._entries.pop(key, None)

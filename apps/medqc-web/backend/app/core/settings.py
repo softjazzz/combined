@@ -271,6 +271,8 @@ class Settings(BaseSettings):
     STRATA_API_KEY: Optional[str] = None
     # 默认关闭；observe仅观测，prefix仅供显式核验组经Gateway使用，亲和调度未实现。
     STRATA_CASE_CACHE_MODE: Literal["off", "observe", "prefix"] = "off"
+    # 独立请求观测开关：不启用缓存、不改变模型参数，也不保存正文。
+    LLM_REQUEST_OBSERVATION_ENABLED: bool = False
 
     # Backward compatibility aliases (deprecated, use LLM_* instead)
     @property

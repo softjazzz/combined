@@ -263,7 +263,26 @@ class StrataObservationCollector:
                  "executors": sorted({x.get("executor_key", "unknown") for x in items})}
                 for key, items in sorted(buckets.items()) if len(items) > 1
             ]
+        attribution = defaultdict(list)
+        for event in self.events:
+            key = tuple(event.get(field) for field in ("provider_code", "executor_key", "model_role", "experiment_namespace"))
+            attribution[key].append(event)
+        attribution_rows = []
+        for key, items in attribution.items():
+            values_by_metric = {field: [item.get("metrics", {}).get(field) for item in items]
+                                for field in ("model_requests_started", "nominal_input_tokens", "output_tokens", "decode_ms")}
+            attribution_rows.append({
+                **dict(zip(("provider_code", "executor_key", "model_role", "experiment_namespace"), key)),
+                "logical_call_count": len({item.get("logical_call_id") for item in items}),
+                "attempt_count": sum(item.get("purpose") != "prime" for item in items),
+                "prime_attempt_count": sum(item.get("purpose") == "prime" for item in items),
+                "cost": {field: {"known_sum": _number(sum(value for value in values if value is not None)),
+                                  "unknown_count": sum(value is None for value in values)}
+                         for field, values in values_by_metric.items()},
+            })
         return {"schema_version": "strata_p0_report_v1", "complete": not self.dropped_events,
+                "request_attribution": attribution_rows,
+
                 "scope": "observed_attempts_only",
                 "cost_scope": "observed_rule_and_prime_http_not_legacy_clinical_usage",
                 "collection_wall_ms": max(0, (time.perf_counter() - self.started_at) * 1000),

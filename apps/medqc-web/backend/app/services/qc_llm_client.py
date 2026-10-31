@@ -207,6 +207,7 @@ class SichuanQCLLMClient:
                 self.allow_mock_when_unconfigured,
             )
 
+        self.request_observation_enabled = getattr(get_settings(), "LLM_REQUEST_OBSERVATION_ENABLED", False) is True
         self.strata_observation_mode = (
             getattr(get_settings(), "STRATA_CASE_CACHE_MODE", "off")
             if self.provider_code == "strata" else "off"
@@ -472,7 +473,8 @@ class SichuanQCLLMClient:
 
             timeout_seconds = request_timeout(self.timeout_seconds)
             with http_attempt_observation_scope(
-                enabled=getattr(self, "strata_observation_mode", "off") in {"observe", "prefix"},
+                enabled=(getattr(self, "strata_observation_mode", "off") in {"observe", "prefix"}
+                         or getattr(self, "request_observation_enabled", False)),
             ) as transport_observation:
                 if self.dispatch_mode == "gateway":
                     if not self.gateway_profile:
@@ -490,6 +492,8 @@ class SichuanQCLLMClient:
                             protect_current_payload({"case_prefix": case_prefix.model_dump(mode="json")})
                             consume_exam_result_prefix_request()
                     prefix_kwargs = {"case_prefix": case_prefix} if case_prefix is not None else {}
+                    if getattr(self, "request_observation_enabled", False):
+                        prefix_kwargs["observe_request"] = True
                     if self.provider_code == "strata":
                         from .llm_observability import current_llm_observation_context
 
@@ -545,6 +549,12 @@ class SichuanQCLLMClient:
                     failed_cache_observation["_strata_cache"] = error.cache_trace
                 if getattr(error, "cache_trace_invalid", False):
                     failed_cache_observation["_strata_cache_invalid"] = True
+            if getattr(error, "request_observation", None) is not None:
+                failed_cache_observation = dict(failed_cache_observation or {})
+                failed_cache_observation["_gateway_request_observation"] = error.request_observation
+            if getattr(error, "request_observation_invalid", False):
+                failed_cache_observation = dict(failed_cache_observation or {})
+                failed_cache_observation["_gateway_request_observation_invalid"] = True
             self._observe_strata_attempt(
                 event_id=event_id, logical_call_id=logical_call_id, attempt_no=attempt_no,
                 payload=payload, result=failed_cache_observation, status=status,
@@ -561,11 +571,12 @@ class SichuanQCLLMClient:
             raise
 
     def _observe_strata_attempt(self, *, transport_observation, **kwargs) -> None:
-        if getattr(self, "strata_observation_mode", "off") not in {"observe", "prefix"}:
+        if (getattr(self, "strata_observation_mode", "off") not in {"observe", "prefix"}
+                and not getattr(self, "request_observation_enabled", False)):
             return
         try:
             self._observability_recorder.record_strata_attempt(
-                **kwargs, model=self.model, model_role=self.model_role,
+                **kwargs, model=self.model, model_role=self.model_role, provider_code=self.provider_code,
                 gateway=self.dispatch_mode == "gateway",
                 route_key=[self.dispatch_mode, self.gateway_profile, self.api_endpoint, self.model_role],
                 transport=transport_observation.snapshot() if transport_observation else None,

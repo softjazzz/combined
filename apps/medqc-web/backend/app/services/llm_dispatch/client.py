@@ -40,12 +40,15 @@ class GatewayDispatchError(RuntimeError):
     transport_retry_managed = True
 
     def __init__(self, code: str, *, retryable: bool, cache_trace: GatewayCacheTrace | None = None,
-                 cache_trace_invalid: bool = False) -> None:
+                 cache_trace_invalid: bool = False, request_observation=None,
+                 request_observation_invalid: bool = False) -> None:
         safe_code = code if code in _SAFE_GATEWAY_ERROR_CODES else "gateway_error"
         self.code = safe_code
         self.retryable = bool(retryable)
         self.cache_trace = cache_trace.model_dump(mode="json") if cache_trace is not None else None
         self.cache_trace_invalid = cache_trace_invalid
+        self.request_observation = request_observation
+        self.request_observation_invalid = request_observation_invalid
         super().__init__(safe_code)
 
 
@@ -101,6 +104,7 @@ class GatewayDispatchClient:
         case_prefix: GatewayCasePrefix | None = None,
         case_key: str | None = None,
         package_key: str | None = None,
+        observe_request: bool = False,
     ) -> dict[str, Any]:
         normalized_profile = validate_gateway_profile(
             profile=profile, provider_code=provider_code
@@ -134,6 +138,7 @@ class GatewayDispatchClient:
                 case_prefix=case_prefix,
                 case_key=case_key,
                 package_key=package_key,
+                observe_request=observe_request,
             )
         except (ValidationError, ValueError, TypeError) as exc:
             raise GatewayDispatchError(
@@ -179,18 +184,25 @@ class GatewayDispatchClient:
                 body.get("detail", {}).get("cache_trace")
                 if isinstance(body, dict) and isinstance(body.get("detail"), dict) else None,
             )
+            receipt, receipt_invalid = self._validated_request_observation(
+                body.get("detail", {}).get("request_observation")
+                if observe_request and isinstance(body, dict) and isinstance(body.get("detail"), dict) else None,
+                request.request_id,
+            )
             try:
                 # 纯观测坏字段不覆盖原始安全错误码，也不能伪造失败的Prime费用。
                 safe_body = dict(body) if isinstance(body, dict) else body
                 if isinstance(safe_body, dict) and isinstance(safe_body.get("detail"), dict):
                     safe_body["detail"] = {**safe_body["detail"], "cache_trace": trace}
+                    safe_body["detail"].pop("request_observation", None)
                 error = GatewayErrorResponse.model_validate(safe_body).detail
             except (ValidationError, TypeError, ValueError):
                 raise GatewayDispatchError(
                     "gateway_error", retryable=response.status_code >= 500
                 ) from None
             raise GatewayDispatchError(error.code, retryable=error.retryable,
-                                       cache_trace=trace, cache_trace_invalid=trace_invalid)
+                                       cache_trace=trace, cache_trace_invalid=trace_invalid,
+                                       request_observation=receipt, request_observation_invalid=receipt_invalid)
         if not isinstance(body, dict):
             raise GatewayDispatchError("gateway_invalid_response", retryable=False)
         try:
@@ -199,6 +211,13 @@ class GatewayDispatchClient:
             raise GatewayDispatchError(
                 "gateway_invalid_response", retryable=False
             ) from exc
+        # 收据必须来自当前Gateway请求；坏观测不改变已成功的医学响应。
+        receipt = body.pop("_gateway_request_observation", None)
+        parsed, invalid = self._validated_request_observation(receipt if observe_request else None, request.request_id)
+        if invalid:
+            body["_gateway_request_observation_invalid"] = True
+        elif parsed is not None:
+            body["_gateway_request_observation"] = parsed
         if "_strata_cache" in body:
             trace, invalid = self._validated_cache_trace(body["_strata_cache"])
             if invalid:
@@ -211,8 +230,23 @@ class GatewayDispatchClient:
         return body
 
     @staticmethod
+    def _validated_request_observation(value, request_id):
+        if value is None:
+            return None, False
+        from ..llm_request_observation import GatewayRequestObservation
+        try:
+            parsed = GatewayRequestObservation.model_validate(value)
+            if parsed.request_id != request_id:
+                raise ValueError("request observation mismatch")
+        except (ValidationError, ValueError, TypeError):
+            return None, True
+        return parsed.model_dump(mode="json"), False
+
+    @staticmethod
     def _request_body(request: GatewayCompletionRequest) -> dict[str, Any]:
         body = request.model_dump(mode="json")
+        if not body.get("observe_request"):
+            body.pop("observe_request", None)
         if body.get("case_prefix") is None:
             body.pop("case_prefix", None)
         if body.get("case_key") is None:

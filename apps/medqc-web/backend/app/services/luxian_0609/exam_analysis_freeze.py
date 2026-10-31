@@ -22,6 +22,8 @@ import os
 from pathlib import Path
 from typing import Any, Mapping
 
+from ..llm_experiment import experiment_store_dir
+
 logger = logging.getLogger(__name__)
 
 # 判定口径（自有内容门槛、套话剔除、归属核对）变化时提升版本，使旧冻结失效。
@@ -48,7 +50,7 @@ def freeze_key(prompt: str, expected: Mapping[int, tuple[str, ...]] | None = Non
 
 
 def load_payload(namespace: str, key: str) -> Mapping[str, Any] | None:
-    path = default_store_dir() / namespace / f"{key}.json"
+    path = experiment_store_dir(default_store_dir()) / namespace / f"{key}.json"
     if not path.is_file():
         return None
     try:
@@ -64,7 +66,7 @@ def load_payload(namespace: str, key: str) -> Mapping[str, Any] | None:
 
 def save_payload(namespace: str, key: str, payload: Mapping[str, Any]) -> None:
     """首次写入者赢：已有同键冻结时不覆盖。"""
-    directory = default_store_dir() / namespace
+    directory = experiment_store_dir(default_store_dir()) / namespace
     path = directory / f"{key}.json"
     if path.is_file():
         return

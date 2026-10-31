@@ -153,7 +153,7 @@ class LLMObservabilityRecorder:
 
     def record_strata_attempt(
         self, *, event_id, logical_call_id, attempt_no, model, model_role,
-        payload, result, status, started_timestamp, gateway, route_key, transport,
+        payload, result, status, started_timestamp, gateway, route_key, transport, provider_code="strata",
     ) -> None:
         """P0 安全旁路日志，不扩业务表、不改响应；故障不影响医学执行。"""
         try:
@@ -163,7 +163,23 @@ class LLMObservabilityRecorder:
                 parse_strata_metrics,
             )
 
+            from .llm_request_observation import request_parameters, response_observation, known_request_purpose
+            from .llm_experiment import current_llm_experiment_namespace
+            from .strata_scheduling import current_strata_package_key
+
             context = current_llm_observation_context()
+            try:
+                package_key = current_strata_package_key()
+            except Exception:
+                package_key = None
+            raw = result if isinstance(result, Mapping) else {}
+            receipt = raw.get("_gateway_request_observation") if gateway else None
+            receipt = receipt if isinstance(receipt, Mapping) else {}
+            trace = raw.get("_strata_cache")
+            if (raw.get("_strata_cache_expected") or raw.get("_strata_cache_invalid") or trace is not None):
+                # Prime失败时收据可能来自Prime；只有已确认规则HTTP启动才归给规则。
+                if not isinstance(trace, Mapping) or trace.get("rule_requests_started") != 1:
+                    receipt = {}
             scope = json.dumps([context.record_key_hash, context.root_job_id,
                                 context.rule_set_key, context.rule_set_version])
             try:
@@ -184,12 +200,34 @@ class LLMObservabilityRecorder:
                 "model": _safe_metadata_label(model, max_length=128, fallback="unknown"),
                 "model_role": _safe_metadata_label(model_role, max_length=64, fallback="unknown"),
                 "status": status, "purpose": "rule", "groups": groups,
+                "provider_code": _safe_metadata_label(provider_code, max_length=64, fallback="unknown"),
+                "package_key": package_key,
+                "experiment_namespace": current_llm_experiment_namespace(),
+                "request_purpose": known_request_purpose(groups),
+                "request_parameters": {
+                    "client_payload": request_parameters(payload),
+                    "gateway_prepared": receipt.get("parameters"),
+                    "gateway_request_id": receipt.get("request_id"),
+                    "source": "gateway_prepared_only" if receipt else "client_payload_only",
+                    "gateway_receipt_invalid": gateway and raw.get("_gateway_request_observation_invalid") is True,
+                    "server_effect_verified": False,
+                },
+                "response_observation": response_observation(result),
                 "metrics": parse_strata_metrics(
                     result, wall_ms=wall_ms,
                     gateway=gateway, transport=transport,
                 ),
             }
             for cost_event in expand_strata_cache_cost_events(event, result, gateway=gateway):
+                if cost_event.get("purpose") == "prime":
+                    # 缓存trace只证明费用；不能把规则请求的预算/响应移给Prime。
+                    cost_event["request_purpose"] = "prime"
+                    cost_event["request_parameters"] = {
+                        "client_payload": None, "gateway_prepared": None, "gateway_request_id": None,
+                        "source": "prime_parameters_unknown", "gateway_receipt_invalid": False,
+                        "server_effect_verified": False,
+                    }
+                    cost_event["response_observation"] = response_observation(None)
                 collect_strata_observation(cost_event)
                 logger.info("strata_p0_attempt %s", json.dumps(cost_event, sort_keys=True, allow_nan=False))
         except Exception:

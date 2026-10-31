@@ -26,6 +26,8 @@ from pathlib import Path
 import re
 from typing import Any, Mapping, Sequence
 
+from ..llm_experiment import experiment_store_dir
+
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +82,7 @@ def documents_fingerprint(documents: Sequence[Mapping[str, Any]]) -> str:
 
 def _freeze_path(*, visit_id: str, store_dir: Path | None) -> Path:
     safe = _SAFE_NAME.sub("_", str(visit_id)).strip("_") or "unknown"
-    return (store_dir or default_store_dir()) / f"{safe}.json"
+    return experiment_store_dir(store_dir or default_store_dir()) / f"{safe}.json"
 
 
 def _coerce_store_dir(store_dir: Path | str | None) -> Path | None:
@@ -143,8 +145,8 @@ def save_opinion_payload(
     if existing is not None:
         # 首次写入者赢：同一文书版本的并发执行不得互相覆盖（否则冻结等于没冻结）。
         return existing
-    directory.mkdir(parents=True, exist_ok=True)
     path = _freeze_path(visit_id=visit_id, store_dir=directory)
+    path.parent.mkdir(parents=True, exist_ok=True)
     replaced = path.is_file()
     fingerprint = documents_fingerprint(documents)
     stamp = created_at or datetime.now().astimezone().isoformat(timespec="seconds")

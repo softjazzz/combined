@@ -110,7 +110,25 @@ class GatewayRuntime:
         if profile is None:
             raise GatewayAPIError(GatewayErrorCode.INVALID_PROFILE.value, status_code=400, retryable=False)
         payload = prepare_provider_payload(profile, completion.payload, allow_strata_prefix=internal_prefix)
+        try:
+            return await self._complete_prepared(completion, profile, payload)
+        except (AdmissionError, ProviderError, GatewayAPIError) as error:
+            if completion.observe_request:
+                error.request_observation = self._request_receipt(completion, payload)
+            raise
 
+    @staticmethod
+    def _request_receipt(completion, payload):
+        try:
+            from app.services.llm_request_observation import GatewayRequestObservation, request_parameters
+            return GatewayRequestObservation(
+                request_id=completion.request_id, parameters=request_parameters(payload),
+            ).model_dump(mode="json")
+        except Exception:
+            # 观测失败不能改变原有响应、错误码或重试。
+            return None
+
+    async def _complete_prepared(self, completion, profile, payload):
         loop = asyncio.get_running_loop()
         absolute_remaining = _seconds_until(completion.deadline_at)
         initial_remaining = min(float(completion.timeout_seconds), absolute_remaining)
@@ -164,6 +182,13 @@ class GatewayRuntime:
                 await lease.release()
             raise
         result = dict(response)
+        # 模型返回的同名字段不具有网关控制面权限。
+        result.pop("_gateway_request_observation", None)
+        result.pop("_gateway_request_observation_invalid", None)
+        if completion.observe_request:
+            receipt = self._request_receipt(completion, payload)
+            if receipt is not None:
+                result["_gateway_request_observation"] = receipt
         # Provider 无权伪造 Gateway 成本边车。
         result.pop("_strata_cache", None)
         result.pop("_strata_cache_expected", None)
@@ -321,15 +346,15 @@ def create_app(
 
     @app.exception_handler(GatewayAPIError)
     async def gateway_api_error(_request: Request, error: GatewayAPIError) -> JSONResponse:
-        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable, cache_trace=getattr(error, "cache_trace", None))
+        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable, cache_trace=getattr(error, "cache_trace", None), request_observation=getattr(error, "request_observation", None))
 
     @app.exception_handler(AdmissionError)
     async def admission_error(_request: Request, error: AdmissionError) -> JSONResponse:
-        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable, cache_trace=getattr(error, "cache_trace", None))
+        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable, cache_trace=getattr(error, "cache_trace", None), request_observation=getattr(error, "request_observation", None))
 
     @app.exception_handler(ProviderError)
     async def provider_error(_request: Request, error: ProviderError) -> JSONResponse:
-        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable, cache_trace=getattr(error, "cache_trace", None))
+        return _error_response(error.code, status_code=error.status_code, retryable=error.retryable, cache_trace=getattr(error, "cache_trace", None), request_observation=getattr(error, "request_observation", None))
 
     @app.exception_handler(Exception)
     async def safe_unexpected_error(_request: Request, _error: Exception) -> JSONResponse:
@@ -403,8 +428,10 @@ async def _wait_for_disconnect(request: Request) -> None:
             return
 
 
-def _error_response(code: str, *, status_code: int, retryable: bool, cache_trace=None) -> JSONResponse:
+def _error_response(code: str, *, status_code: int, retryable: bool, cache_trace=None, request_observation=None) -> JSONResponse:
     detail = {"code": code, "retryable": retryable}
+    if request_observation is not None:
+        detail["request_observation"] = request_observation
     if cache_trace is not None:
         detail["cache_trace"] = cache_trace.model_dump(mode="json")
     return JSONResponse(

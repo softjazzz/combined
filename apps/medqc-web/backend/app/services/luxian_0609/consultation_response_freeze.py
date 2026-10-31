@@ -24,6 +24,10 @@ from pathlib import Path
 import re
 from typing import Any, Mapping
 
+from ..llm_experiment import (
+    LLMExperimentConfigurationError, current_llm_experiment_namespace, experiment_store_dir,
+)
+
 logger = logging.getLogger(__name__)
 
 FREEZE_SCHEMA_VERSION = "consultation-response-freeze-v1"
@@ -41,7 +45,7 @@ def default_store_dir() -> Path:
 
 def _path(visit_id: str) -> Path:
     safe = _SAFE_NAME.sub("_", str(visit_id)).strip("_") or "unknown"
-    return default_store_dir() / f"{safe}.json"
+    return experiment_store_dir(default_store_dir()) / f"{safe}.json"
 
 
 def _key(prompt: str, kwargs: Mapping[str, Any]) -> str:
@@ -77,7 +81,9 @@ class FrozenResponseClient:
         self._served: dict[str, int] = defaultdict(int)
         self._recorded: dict[str, list[Any]] = defaultdict(list)
         self.reused_calls = 0
-        path = _path(visit_id)
+        self._experiment_namespace = current_llm_experiment_namespace()
+        self._store_path = _path(visit_id)
+        path = self._store_path
         if path.is_file():
             try:
                 artifact = json.loads(path.read_text(encoding="utf-8"))
@@ -92,7 +98,12 @@ class FrozenResponseClient:
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
 
+    def _require_same_experiment(self) -> None:
+        if current_llm_experiment_namespace() != self._experiment_namespace:
+            raise LLMExperimentConfigurationError("frozen response client experiment changed")
+
     async def generate(self, prompt: str, **kwargs: Any) -> Any:
+        self._require_same_experiment()
         key = _key(prompt, kwargs)
         index = self._served[key]
         self._served[key] += 1
@@ -112,10 +123,11 @@ class FrozenResponseClient:
 
     def commit(self) -> None:
         """整次运行可交付时落盘：已有提示词的记录不覆盖（首次写入者赢），只补入新提示词。"""
+        self._require_same_experiment()
         new_keys = [key for key in self._recorded if key not in self._stored]
         if not new_keys:
             return
-        path = _path(self._visit_id)
+        path = self._store_path
         path.parent.mkdir(parents=True, exist_ok=True)
         artifact = {
             "schema_version": FREEZE_SCHEMA_VERSION,
