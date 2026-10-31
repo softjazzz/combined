@@ -14,16 +14,33 @@ REPO = ROOT.parents[1]
 BACKEND = REPO / "apps/medqc-web/backend"
 
 
-def build(output):
+def build(output, baseline_zip):
     if output.exists():
         raise RuntimeError("refuse_existing_package")
+    expected_baseline = "170691116e5275bbd2f46afb67e0ad1654aa0d35abfa775afbdbbcf39f793483"
+    if hashlib.sha256(baseline_zip.read_bytes()).hexdigest() != expected_baseline:
+        raise RuntimeError("baseline_result_zip_mismatch")
     data = {}
+    with zipfile.ZipFile(baseline_zip) as source:
+        for filename in [
+            "field-visibility.json",
+            "source-registration.json",
+            "time-equality.json",
+            "manifest.json",
+        ]:
+            data["baseline/" + filename] = source.read(filename)
     for name in [
         "contracts/periop-acceptance-contracts.json",
         "tools/audit_periop_readers.py",
         "tools/periop_transform.py",
         "tools/major_document_transform.py",
         "tests/test_periop_reader_audit.py",
+        "tests/test_periop_metadata.py",
+        "tests/test_periop_reader_regression.py",
+        "contracts/periop-reader-metadata-fix.json",
+        "tools/periop_reader_regression.py",
+        "docs/periop-reader-gap-disposition.csv",
+        "docs/periop-reader-source-limitations.csv",
     ]:
         data[name] = (ROOT / name).read_bytes()
     data["DSH_START.txt"] = (ROOT / "docs/DSH_PERIOP_READER_AUDIT.txt").read_bytes()
@@ -56,7 +73,7 @@ def build(output):
     data["manifest.json"] = (
         json.dumps(
             {
-                "package_kind": "periop-reader-readonly-v1",
+                "package_kind": "periop-reader-readonly-v2",
                 "base_commit": subprocess.check_output(
                     ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
                 ).strip(),
@@ -69,6 +86,10 @@ def build(output):
                 "official_modules_copied_verbatim": True,
                 "creates_databases": False,
                 "modifies_registration": False,
+                "baseline_result_zip_sha256": expected_baseline,
+                "bundle_metadata_fields_added": 14,
+                "required_nonempty_field_repairs": 12,
+                "production_code_change": "document_assembly.assembler.INDEPENDENT_DOCUMENT_FIELDS",
             },
             indent=2,
         )
@@ -95,4 +116,6 @@ def build(output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    build(parser.parse_args().output)
+    parser.add_argument("--baseline-zip", type=Path, required=True)
+    args = parser.parse_args()
+    build(args.output, args.baseline_zip)

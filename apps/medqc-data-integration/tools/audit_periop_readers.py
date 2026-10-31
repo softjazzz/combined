@@ -16,6 +16,11 @@ from unittest.mock import patch
 
 import dotenv
 import sqlalchemy as sa
+from periop_reader_regression import (
+    ReaderRegressionError,
+    compare_baseline,
+    verify_directory_metadata,
+)
 from sqlalchemy.engine import URL, Engine
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -247,6 +252,9 @@ def audit(args):
         "required_alembic_revision"
     ) != REVISION:
         raise AuditError("contract_scope")
+    spec_path = getattr(args, "fix_spec", ROOT / "contracts/periop-reader-metadata-fix.json")
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    metadata_stats = Counter()
     with official_readers(args) as (engine, bundle, reader):
         args.phase = "fingerprint_and_cohort"
         with engine.connect() as c:
@@ -341,6 +349,10 @@ def audit(args):
                     if len(inventory) != len(actual):
                         raise AuditError("inventory_count_mismatch")
                     for entry, row in zip(inventory, actual, strict=True):
+                        for field in verify_directory_metadata(
+                            entry, row, spec["metadata_fields"].get(table, ())
+                        ):
+                            metadata_stats[(table, field)] += 1
                         if row.get("record_datetime") is not None:
                             time_stats["bundle_record_datetime_nonempty"] += 1
                             if entry["record_time"] != str(row["record_datetime"]).strip():
@@ -414,8 +426,38 @@ def audit(args):
         report(args.output, "time-equality.json", dict(time_stats))
         gaps = [p for p in profiles if p["cdm_nonempty"] and not p["observed_selected"]]
         report(args.output, "reader-gaps.json", gaps)
+        report(
+            args.output,
+            "independent-metadata.json",
+            [
+                {"table": table, "field": field, "directory_values_equal": count}
+                for (table, field), count in sorted(metadata_stats.items())
+            ],
+        )
+        baseline_root = getattr(args, "baseline", None)
+        regression = None
+        if baseline_root is not None:
+            baseline = json.loads(
+                (baseline_root / "field-visibility.json").read_text(encoding="utf-8")
+            )
+            regression = compare_baseline(baseline, profiles, spec)
+            for filename, value in [
+                ("source-registration.json", registrations),
+                ("time-equality.json", dict(time_stats)),
+            ]:
+                if json.loads((baseline_root / filename).read_text(encoding="utf-8")) != value:
+                    raise ReaderRegressionError("registrations_or_record_times_changed")
+            original = json.loads((baseline_root / "manifest.json").read_text(encoding="utf-8"))
+            if original["sampled_rows_by_channel"] != dict(totals) or original[
+                "cohort_cases"
+            ] != len(cohort):
+                raise ReaderRegressionError("cohort_aggregate_or_call_counts_changed")
+            report(args.output, "metadata-regression.json", regression)
         summary = {
-            "status": "READONLY_READER_AUDIT_COMPLETE_WITH_COVERAGE_REPORT",
+            "status": "PERIOP_METADATA_READER_REGRESSION_PASS"
+            if regression is not None
+            else "READONLY_READER_AUDIT_COMPLETE_WITH_COVERAGE_REPORT",
+            "metadata_regression_verified": regression is not None,
             "database": DATABASE,
             "cohort_cases": len(cohort),
             "interfaces": 17,
@@ -457,6 +499,12 @@ def main(argv=None):
         "--contract", type=Path, default=ROOT / "contracts/periop-acceptance-contracts.json"
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--baseline", type=Path, default=ROOT / "baseline" if (ROOT / "baseline").is_dir() else None
+    )
+    parser.add_argument(
+        "--fix-spec", type=Path, default=ROOT / "contracts/periop-reader-metadata-fix.json"
+    )
     args = parser.parse_args(argv)
     try:
         audit(args)
@@ -470,7 +518,7 @@ def main(argv=None):
                     "type": type(error).__name__,
                     "sqlstate": getattr(original, "pgcode", None),
                     "location": str(error)
-                    if isinstance(error, AuditError)
+                    if isinstance(error, (AuditError, ReaderRegressionError))
                     else getattr(args, "phase", "reader_audit"),
                     "missing_module": error.name
                     if isinstance(error, ModuleNotFoundError)

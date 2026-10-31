@@ -92,6 +92,8 @@ class TestPeriopPostgres(unittest.TestCase):
                     position = item["ordered_source_columns"].index(field)
                     if mapping["target_type"] in {"datetime", "timestamptz"}:
                         values[position] = "2026-10-26 08:00:00"
+                    if mapping["target_type"] == "date":
+                        values[position] = "2026-10-26"
                     if field in {"nurse_sign", "anesthetist_sign"}:
                         values[position] = "虚构签署" * 100
                     if field in {"record_content", "recordcontent"}:
