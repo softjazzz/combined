@@ -26,7 +26,7 @@ def payload(name):
 class TestPeriopTransform(unittest.TestCase):
     def test_contract_scope_and_schema_evidence(self):
         self.assertEqual(len(CONTRACT["interfaces"]), 17)
-        self.assertEqual(sum(len(i["target_columns"]) for i in CONTRACT["interfaces"]), 441)
+        self.assertEqual(sum(len(i["target_columns"]) for i in CONTRACT["interfaces"]), 463)
         for item in CONTRACT["interfaces"]:
             if item["ordered_source_columns"] is not None:
                 self.assertEqual(
@@ -106,7 +106,7 @@ class TestPeriopTransform(unittest.TestCase):
         source["record_datetime"] = "2026-10-26 08:00:00"
         source["submit_datetime"] = "2026-10-27 09:00:00"
         projected = transform.project_row(CONTRACT, name, source)
-        self.assertNotIn("record_datetime", projected)
+        self.assertEqual(projected["record_datetime"].day, 26)
         self.assertEqual(projected["submit_datetime"].day, 27)
 
     def test_date_conversion_and_length_gate(self):

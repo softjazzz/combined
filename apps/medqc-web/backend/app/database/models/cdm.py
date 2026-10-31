@@ -879,6 +879,12 @@ class PresurgSummary(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """术前小结（presurg_summary）"""
     __tablename__ = "presurg_summary"
 
+    # 保留源事件时间与签署事实，独立于提交/修改时间；不设默认值。
+    record_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 record_datetime，独立保留原始语义",
+    )
+
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
@@ -903,6 +909,16 @@ class SurgerySafecheckRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base)
     """手术安全核查记录（surgery_safecheck_record）"""
     __tablename__ = "surgery_safecheck_record"
 
+    # 保留源事件时间与签署事实，独立于提交/修改时间；不设默认值。
+    record_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 record_datetime，独立保留原始语义",
+    )
+    surgery_begin_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 surgery_begin_datetime，独立保留原始语义",
+    )
+
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
@@ -915,6 +931,24 @@ class SurgeryRiskAssessment(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """手术风险评估（surgery_risk_assessment）"""
     __tablename__ = "surgery_risk_assessment"
 
+    # 保留源事件时间与签署事实，独立于提交/修改时间；不设默认值。
+    application_id = Column(
+        String(100), nullable=True,
+        comment="Caché源字段 application_id，独立保留原始语义",
+    )
+    assessment_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 assessment_datetime，独立保留原始语义",
+    )
+    surgeon_assess_date = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 surgeon_assess_date，独立保留原始语义",
+    )
+    anesthesiologist_assess_date = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 anesthesiologist_assess_date，独立保留原始语义",
+    )
+
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
@@ -926,6 +960,36 @@ class SurgeryRiskAssessment(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
 class AnesthesiaRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """麻醉记录（anesthesia_record）"""
     __tablename__ = "anesthesia_record"
+
+    # 保留源事件时间与签署事实，独立于提交/修改时间；不设默认值。
+    surgery_begin_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 surgery_begin_datetime，独立保留原始语义",
+    )
+    surgery_end_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 surgery_end_datetime，独立保留原始语义",
+    )
+    anesthesia_begin_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 anesthesia_begin_datetime，独立保留原始语义",
+    )
+    anesthesia_end_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 anesthesia_end_datetime，独立保留原始语义",
+    )
+    leave_operateroom_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 leave_operateroom_datetime，独立保留原始语义",
+    )
+    anesthetist_sign = Column(
+        Text, nullable=True,
+        comment="源麻醉签署原值，不从提交人推断",
+    )
+    anesthetist_sign_datetime = Column(
+        DateTime(timezone=True), nullable=True,
+        comment="Caché源字段 anesthetist_sign_datetime，独立保留原始语义",
+    )
 
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
@@ -951,6 +1015,12 @@ class BloodtransRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """输血记录（bloodtrans_record）"""
     __tablename__ = "bloodtrans_record"
 
+    # 保留源事件时间与签署事实，独立于提交/修改时间；不设默认值。
+    record_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 record_datetime，独立保留原始语义",
+    )
+
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
@@ -962,6 +1032,16 @@ class BloodtransRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
 class NursingRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """护理记录（nursing_record）"""
     __tablename__ = "nursing_record"
+
+    # 保留源事件时间与签署事实，独立于提交/修改时间；不设默认值。
+    nurse_sign = Column(
+        Text, nullable=True,
+        comment="源护理签署原值，不从提交人推断",
+    )
+    nurse_sign_datetime = Column(
+        DateTime(timezone=True), nullable=True,
+        comment="Caché源字段 nurse_sign_datetime，独立保留原始语义",
+    )
 
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
@@ -1490,6 +1570,16 @@ class SurgeryApplication(AuditMixin, PatientBasicMixin, Base):
     """手术申请单（surgery_application）"""
     __tablename__ = "surgery_application"
 
+    # 保留源事件时间与签署事实，独立于提交/修改时间；不设默认值。
+    request_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 request_datetime，独立保留原始语义",
+    )
+    record_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 record_datetime，独立保留原始语义",
+    )
+
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
@@ -1641,6 +1731,12 @@ class BloodApplication(AuditMixin, Base):
     """输血申请单（blood_application）"""
     __tablename__ = "blood_application"
 
+    # 保留源事件时间与签署事实，独立于提交/修改时间；不设默认值。
+    transfution_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="源输血申请接口字段，语义待确认；不能作为实际输血执行证据",
+    )
+
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
@@ -1676,6 +1772,16 @@ class BloodApplication(AuditMixin, Base):
 class SurgeryInventoryRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """手术清点记录（surgery_inventory_record）"""
     __tablename__ = "surgery_inventory_record"
+
+    # 保留源事件时间与签署事实，独立于提交/修改时间；不设默认值。
+    surgery_room_enter_time = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 surgery_room_enter_time，独立保留原始语义",
+    )
+    surgery_room_leave_time = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 surgery_room_leave_time，独立保留原始语义",
+    )
 
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")

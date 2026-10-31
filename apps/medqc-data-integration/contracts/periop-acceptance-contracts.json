@@ -1,10 +1,10 @@
 {
-  "contract_version": 1,
-  "contract_kind": "periop-mapping-preflight",
-  "scope": "second_batch_readonly_preflight",
+  "contract_version": "periop-projection-v2",
+  "contract_kind": "periop-projection-acceptance",
+  "scope": "second_batch_isolated_projection",
   "source_database": "medqc_periop_acceptance_20261031104123",
   "source_evidence_sha256": "738d5ccdbc44e69ebb7a8ff8e16dfa010f996894f642f4ce888e83b18aae1843",
-  "target_evidence_level": "offline_orm_only_actual_catalog_not_verified",
+  "target_evidence_level": "official_migration_required_actual_catalog_must_be_verified",
   "contains_phi": false,
   "contains_raw_values": false,
   "expected_first_round_rows": 9365,
@@ -443,7 +443,40 @@
       ],
       "unmapped_target_columns": [],
       "derived_document_id": null,
-      "expected_first_round_rows": 209
+      "expected_first_round_rows": 209,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "visit_type",
+        "document_id",
+        "surgery_id",
+        "inpat_no",
+        "mr_no",
+        "surgery_name",
+        "surgery_code",
+        "surgical_level",
+        "surgial_incision_level",
+        "surgical_incisionheal_level",
+        "anesthesia_method",
+        "anesthesia_level",
+        "surgery_begin_datetime",
+        "surgery_end_datetime",
+        "surgery_duration",
+        "surgeon",
+        "surgeon_physician_code",
+        "first_assistant",
+        "second_assistant",
+        "anesthesiologist",
+        "anesthesiologist_code",
+        "main_surgery_sign",
+        "unplanned_reoperation",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.surgery_application",
@@ -676,6 +709,18 @@
           "type": "VARCHAR(100)",
           "nullable": true,
           "max_length": 100
+        },
+        {
+          "name": "request_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "record_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
         }
       ],
       "field_mappings": [
@@ -793,6 +838,16 @@
           "source": "sex",
           "target": "sex",
           "target_type": "text"
+        },
+        {
+          "source": "request_datetime",
+          "target": "request_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "record_datetime",
+          "target": "record_datetime",
+          "target_type": "datetime"
         }
       ],
       "raw_only_source_columns": [
@@ -804,8 +859,6 @@
         "id_card_no",
         "discharge_date",
         "inpatient_duration",
-        "request_datetime",
-        "record_datetime",
         "remark",
         "request_dept",
         "surgery_history",
@@ -818,7 +871,35 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 22
+      "expected_first_round_rows": 22,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "visit_type",
+        "application_id",
+        "order_id",
+        "dept_name",
+        "surgery_name",
+        "surgery_code",
+        "surgery_level",
+        "anesthesia_method",
+        "surgeon",
+        "request_physician",
+        "request_surgery_datetime",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "request_datetime",
+        "record_datetime"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.surgery_record",
@@ -998,13 +1079,13 @@
         },
         {
           "name": "surgery_begin_time",
-          "type": "DATETIME",
+          "type": "TIMESTAMP WITH TIME ZONE",
           "nullable": true,
           "max_length": null
         },
         {
           "name": "surgery_end_time",
-          "type": "DATETIME",
+          "type": "TIMESTAMP WITH TIME ZONE",
           "nullable": true,
           "max_length": null
         },
@@ -1166,7 +1247,9 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 0
+      "expected_first_round_rows": 0,
+      "required_target_columns": [],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.surgery_risk_assessment",
@@ -1375,6 +1458,30 @@
           "type": "VARCHAR(100)",
           "nullable": true,
           "max_length": 100
+        },
+        {
+          "name": "application_id",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "max_length": 100
+        },
+        {
+          "name": "assessment_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgeon_assess_date",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "anesthesiologist_assess_date",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
         }
       ],
       "field_mappings": [
@@ -1447,6 +1554,26 @@
           "source": "__derived_document_id",
           "target": "document_id",
           "target_type": "text"
+        },
+        {
+          "source": "application_id",
+          "target": "application_id",
+          "target_type": "text"
+        },
+        {
+          "source": "assessment_datetime",
+          "target": "assessment_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "surgeon_assess_date",
+          "target": "surgeon_assess_date",
+          "target_type": "datetime"
+        },
+        {
+          "source": "anesthesiologist_assess_date",
+          "target": "anesthesiologist_assess_date",
+          "target_type": "datetime"
         }
       ],
       "raw_only_source_columns": [
@@ -1459,7 +1586,6 @@
         "id_card_no",
         "discharge_date",
         "inpatient_duration",
-        "application_id",
         "surgeon",
         "surgery_name",
         "surgery_code",
@@ -1467,14 +1593,11 @@
         "surg_risk_assessment",
         "surgery_type",
         "nmis_level",
-        "surgeon_assess_date",
-        "anesthesiologist_assess_date",
         "emergency_sign",
         "surgery_level",
         "ASA_level",
         "surgial_incision_level",
-        "surgery_duration",
-        "assessment_datetime"
+        "surgery_duration"
       ],
       "unmapped_target_columns": [
         "document_title",
@@ -1496,7 +1619,28 @@
           "application_id"
         ]
       },
-      "expected_first_round_rows": 75
+      "expected_first_round_rows": 75,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "visit_type",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "document_id",
+        "application_id",
+        "assessment_datetime",
+        "surgeon_assess_date",
+        "anesthesiologist_assess_date"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.postsurg_firstcourse_record",
@@ -1604,7 +1748,7 @@
         },
         {
           "name": "physician_sign_datetime",
-          "type": "DATETIME",
+          "type": "TIMESTAMP WITH TIME ZONE",
           "nullable": true,
           "max_length": null
         },
@@ -1824,7 +1968,29 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 47
+      "expected_first_round_rows": 47,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.presurg_discussion",
@@ -2131,7 +2297,29 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 50
+      "expected_first_round_rows": 50,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.presurg_summary",
@@ -2336,6 +2524,12 @@
           "type": "VARCHAR(100)",
           "nullable": true,
           "max_length": 100
+        },
+        {
+          "name": "record_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
         }
       ],
       "field_mappings": [
@@ -2438,6 +2632,11 @@
           "source": "age_year",
           "target": "age_year",
           "target_type": "text"
+        },
+        {
+          "source": "record_datetime",
+          "target": "record_datetime",
+          "target_type": "datetime"
         }
       ],
       "raw_only_source_columns": [
@@ -2452,7 +2651,6 @@
         "inpatient_duration",
         "tcm_diagnosis_summary",
         "note",
-        "record_datetime",
         "physician_sign",
         "physician_sign_datetime"
       ],
@@ -2461,7 +2659,31 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 48
+      "expected_first_round_rows": 48,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "age_year",
+        "record_datetime"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.surgery_inform_consent",
@@ -2843,7 +3065,31 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 0
+      "expected_first_round_rows": 0,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "dept_name",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "age_year"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.surgery_safecheck_record",
@@ -3053,6 +3299,18 @@
           "type": "VARCHAR(100)",
           "nullable": true,
           "max_length": 100
+        },
+        {
+          "name": "record_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_begin_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
         }
       ],
       "field_mappings": [
@@ -3155,6 +3413,16 @@
           "source": "age_year",
           "target": "age_year",
           "target_type": "text"
+        },
+        {
+          "source": "record_datetime",
+          "target": "record_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "surgery_begin_datetime",
+          "target": "surgery_begin_datetime",
+          "target_type": "datetime"
         }
       ],
       "raw_only_source_columns": [
@@ -3174,16 +3442,39 @@
         "surgery_nurse",
         "surgeon_statement",
         "anesthesiologist_statement",
-        "surg_nurse_statement",
-        "record_datetime",
-        "surgery_begin_datetime"
+        "surg_nurse_statement"
       ],
       "unmapped_target_columns": [
         "age_month",
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 70
+      "expected_first_round_rows": 70,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "age_year",
+        "record_datetime",
+        "surgery_begin_datetime"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.surgery_inventory_record",
@@ -3412,6 +3703,18 @@
           "type": "VARCHAR(100)",
           "nullable": true,
           "max_length": 100
+        },
+        {
+          "name": "surgery_room_enter_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_room_leave_time",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
         }
       ],
       "field_mappings": [
@@ -3529,6 +3832,16 @@
           "source": "age_year",
           "target": "age_year",
           "target_type": "text"
+        },
+        {
+          "source": "surgery_room_enter_time",
+          "target": "surgery_room_enter_time",
+          "target_type": "datetime"
+        },
+        {
+          "source": "surgery_room_leave_time",
+          "target": "surgery_room_leave_time",
+          "target_type": "datetime"
         }
       ],
       "raw_only_source_columns": [
@@ -3540,8 +3853,6 @@
         "id_card_no",
         "discharge_date",
         "inpatient_duration",
-        "surgery_room_enter_time",
-        "surgery_room_leave_time",
         "allergy"
       ],
       "unmapped_target_columns": [
@@ -3550,7 +3861,35 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 3
+      "expected_first_round_rows": 3,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "dept_name",
+        "surgery_room_name",
+        "surgery_date",
+        "surgery_name",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "age_year",
+        "surgery_room_enter_time",
+        "surgery_room_leave_time"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.preane_surveil_record",
@@ -3918,7 +4257,31 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 0
+      "expected_first_round_rows": 0,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "dept_name",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "age_year"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.postane_surveil_record",
@@ -4286,7 +4649,31 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 0
+      "expected_first_round_rows": 0,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "dept_name",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "age_year"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.anesthesia_record",
@@ -4536,6 +4923,48 @@
           "type": "VARCHAR(100)",
           "nullable": true,
           "max_length": 100
+        },
+        {
+          "name": "surgery_begin_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "surgery_end_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "anesthesia_begin_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "anesthesia_end_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "leave_operateroom_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "anesthetist_sign",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "anesthetist_sign_datetime",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "max_length": null
         }
       ],
       "field_mappings": [
@@ -4638,6 +5067,41 @@
           "source": "age_year",
           "target": "age_year",
           "target_type": "text"
+        },
+        {
+          "source": "surgery_begin_datetime",
+          "target": "surgery_begin_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "surgery_end_datetime",
+          "target": "surgery_end_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "anesthesia_begin_datetime",
+          "target": "anesthesia_begin_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "anesthesia_end_datetime",
+          "target": "anesthesia_end_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "leave_operateroom_datetime",
+          "target": "leave_operateroom_datetime",
+          "target_type": "datetime"
+        },
+        {
+          "source": "anesthetist_sign",
+          "target": "anesthetist_sign",
+          "target_type": "text"
+        },
+        {
+          "source": "anesthetist_sign_datetime",
+          "target": "anesthetist_sign_datetime",
+          "target_type": "timestamptz"
         }
       ],
       "raw_only_source_columns": [
@@ -4686,27 +5150,50 @@
         "preanes_pr",
         "preanes_rr",
         "ASA_level",
-        "surgery_begin_datetime",
-        "surgery_end_datetime",
-        "anesthesia_begin_datetime",
-        "anesthesia_end_datetime",
-        "leave_operateroom_datetime",
         "urine_volume",
         "bleed_volume",
         "conscious_status",
         "Steward_score",
         "anesthesia_effect",
         "anesthesia_summary",
-        "patient_whereabout",
-        "anesthetist_sign",
-        "anesthetist_sign_datetime"
+        "patient_whereabout"
       ],
       "unmapped_target_columns": [
         "age_month",
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 57
+      "expected_first_round_rows": 57,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "age_year",
+        "surgery_begin_datetime",
+        "surgery_end_datetime",
+        "anesthesia_begin_datetime",
+        "anesthesia_end_datetime",
+        "leave_operateroom_datetime",
+        "anesthetist_sign",
+        "anesthetist_sign_datetime"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.mr_bloodtrans",
@@ -5019,7 +5506,30 @@
       ],
       "unmapped_target_columns": [],
       "derived_document_id": null,
-      "expected_first_round_rows": 21
+      "expected_first_round_rows": 21,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "visit_type",
+        "document_id",
+        "bloodtrans_id",
+        "inpat_no",
+        "mr_no",
+        "transfuse_variety",
+        "bloodbag_id",
+        "blood_transfusion_volume",
+        "blood_transfusion_unit",
+        "transblood_reaction_sign",
+        "transblood_reaction_type",
+        "transfution_datetime",
+        "transfusion_reason",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.blood_application",
@@ -5322,6 +5832,12 @@
           "type": "DATETIME",
           "nullable": true,
           "max_length": null
+        },
+        {
+          "name": "transfution_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
         }
       ],
       "field_mappings": [
@@ -5489,6 +6005,11 @@
           "source": "update_time",
           "target": "update_time",
           "target_type": "datetime"
+        },
+        {
+          "source": "transfution_datetime",
+          "target": "transfution_datetime",
+          "target_type": "datetime"
         }
       ],
       "raw_only_source_columns": [
@@ -5512,7 +6033,6 @@
         "allergy_history",
         "intra_plasma_substitute_sign",
         "intra_plasma_substitute_name",
-        "transfution_datetime",
         "bloodtrans_application_status",
         "HBsAg",
         "anti_HBe",
@@ -5528,7 +6048,44 @@
       ],
       "unmapped_target_columns": [],
       "derived_document_id": null,
-      "expected_first_round_rows": 3
+      "expected_first_round_rows": 3,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "visit_type",
+        "application_id",
+        "inpat_no",
+        "dept_name",
+        "name",
+        "sex",
+        "age_year",
+        "patient_bloodtype_abo",
+        "patient_bloodtype_rhd",
+        "transfuse_variety",
+        "transfuse_volume",
+        "transfuse_volume_unit",
+        "request_datetime",
+        "physician_name",
+        "reason_for_blood",
+        "hemoglobin",
+        "hematocrit",
+        "rbc",
+        "prothrombin_time",
+        "partial_thromboplastin_time",
+        "fibrinogen",
+        "albumin",
+        "teg",
+        "platelet_antibody",
+        "rbc_antibody",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "transfution_datetime"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.bloodtrans_record",
@@ -5733,6 +6290,12 @@
           "type": "VARCHAR(100)",
           "nullable": true,
           "max_length": 100
+        },
+        {
+          "name": "record_datetime",
+          "type": "DATETIME",
+          "nullable": true,
+          "max_length": null
         }
       ],
       "field_mappings": [
@@ -5835,6 +6398,11 @@
           "source": "age_year",
           "target": "age_year",
           "target_type": "text"
+        },
+        {
+          "source": "record_datetime",
+          "target": "record_datetime",
+          "target_type": "datetime"
         }
       ],
       "raw_only_source_columns": [
@@ -5849,7 +6417,6 @@
         "inpatient_duration",
         "tcm_diagnosis_summary",
         "note",
-        "record_datetime",
         "physician_sign",
         "physician_sign_datetime"
       ],
@@ -5858,7 +6425,31 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 18
+      "expected_first_round_rows": 18,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "age_year",
+        "record_datetime"
+      ],
+      "target_catalog_verified": false
     },
     {
       "interface": "web.nursing_record",
@@ -6058,6 +6649,18 @@
           "type": "VARCHAR(100)",
           "nullable": true,
           "max_length": 100
+        },
+        {
+          "name": "nurse_sign",
+          "type": "TEXT",
+          "nullable": true,
+          "max_length": null
+        },
+        {
+          "name": "nurse_sign_datetime",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "max_length": null
         }
       ],
       "field_mappings": [
@@ -6155,6 +6758,16 @@
           "source": "sex",
           "target": "sex",
           "target_type": "text"
+        },
+        {
+          "source": "nurse_sign",
+          "target": "nurse_sign",
+          "target_type": "text"
+        },
+        {
+          "source": "nurse_sign_datetime",
+          "target": "nurse_sign_datetime",
+          "target_type": "timestamptz"
         }
       ],
       "raw_only_source_columns": [
@@ -6165,9 +6778,7 @@
         "inpatient_duration",
         "condition_summary",
         "nursing_observation_item",
-        "nursing_observation_result",
-        "nurse_sign",
-        "nurse_sign_datetime"
+        "nursing_observation_result"
       ],
       "unmapped_target_columns": [
         "age_year",
@@ -6175,7 +6786,32 @@
         "age"
       ],
       "derived_document_id": null,
-      "expected_first_round_rows": 8742
+      "expected_first_round_rows": 8742,
+      "required_target_columns": [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "visit_type",
+        "record_content",
+        "last_modifier",
+        "last_modifier_id",
+        "last_modified_datetime",
+        "update_time",
+        "document_title",
+        "document_status",
+        "submitter",
+        "submitter_id",
+        "submit_datetime",
+        "inpat_no",
+        "mr_no",
+        "name",
+        "sex",
+        "nurse_sign",
+        "nurse_sign_datetime"
+      ],
+      "target_catalog_verified": false
     }
-  ]
+  ],
+  "required_alembic_revision": "20261031_000057"
 }

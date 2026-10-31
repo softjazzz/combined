@@ -89,13 +89,13 @@ def test_empty_database_upgrades_to_release_head(
     assert bootstrap.initialize(
         raw_pg.url.database,
         owner_role="medqc_owner",
-    )[-1] == "20261029_000056"
+    )[-1] == "20261031_000057"
 
     with raw_pg.connect() as connection:
         inspector = sa.inspect(connection)
         assert connection.exec_driver_sql(
             "SELECT version_num FROM public.alembic_version"
-        ).scalar_one() == "20261029_000056"
+        ).scalar_one() == "20261031_000057"
         assert len(inspector.get_columns("mr", schema="cdm")) == 78
         assert inspector.get_pk_constraint("mr", schema="cdm")[
             "constrained_columns"
@@ -124,7 +124,7 @@ def test_poc_database_upgrades_to_release_head_without_changing_raw_data(
     with raw_pg.connect() as connection:
         assert connection.exec_driver_sql(
             "SELECT version_num FROM public.alembic_version"
-        ).scalar_one() == "20261029_000056"
+        ).scalar_one() == "20261031_000057"
         assert connection.exec_driver_sql(
             "SELECT jsonb_agg(payload ORDER BY source_key) "
             "FROM cache_raw.source_record"

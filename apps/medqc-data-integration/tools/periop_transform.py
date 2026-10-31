@@ -47,8 +47,8 @@ def ordered_hash(value: Any) -> str:
 
 def interface_contract(contract: dict, interface: str) -> dict:
     if (
-        contract.get("contract_kind") != "periop-mapping-preflight"
-        or contract.get("scope") != "second_batch_readonly_preflight"
+        contract.get("contract_kind") != "periop-projection-acceptance"
+        or contract.get("scope") != "second_batch_isolated_projection"
         or interface not in ALLOWED
     ):
         raise ContractError("periop_contract_scope")

@@ -1,0 +1,55 @@
+第二批17接口：实际CDM投影验收（使用已有快照，不重抽）
+
+一、已授权范围
+只读源：medqc_periop_acceptance_20261031104123。
+允许创建2个全新库：medqc_periop_cdm_acceptance_14位时间戳、medqc_periop_restore_同一时间戳。
+部署管理员只对postgres系统目录和这2个新库执行创建/初始化/授权/备份恢复。
+读取源始终使用medqc_sync，default_transaction_read_only=on；不得给源补授权。
+不连接Caché，不访问原13接口库、业务库、旧克隆或其他验收库；不改0.3.2/runtime/计划/PG服务。
+不执行原始raw包里的抽取脚本，不扩大接口或日期，不运行规则、模型、业务后端。
+
+二、准备与离线测试
+校验外层ZIP SHA256和内部CHECKSUMS，解压到全新目录，例如D:\medqc\periop-projection-v2。
+不得覆盖periop-mapping-preflight、0.3.2、冻结同步器或客户R26.5。
+沿用已安装Python3.10 64位、psycopg2、SQLAlchemy、Alembic、python-dotenv与PG16工具；缺依赖即报告，不联网/安装。
+不读取.env、不解析或输出口令；仅引用既有受保护的deployment-admin.pgpass与runtime.pgpass。
+本包已经包含最小正式backend及57条迁移，不拷贝整套开发机代码。
+
+三、单入口执行
+在已有管理员PowerShell中执行（无需注册任务或修改执行策略）：
+
+$python = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python310\python.exe'
+$root = 'D:\medqc\periop-projection-v2'
+$run = 'D:\medqc\periop-projection-run-' + (Get-Date -Format yyyyMMddHHmmss)
+& (Join-Path $root 'deploy\windows\accept-periop-projection.ps1') `
+    -PythonPath $python -PackageRoot $root -RunRoot $run
+
+只有在已核实PG端口/路径不同的情况下，显式传-Port与-PgBin，不修改服务器配置。
+不要用-ExecutionPolicy Bypass，不改系统执行策略；若现有策略阻止本地脚本，报告阻断。
+
+脚本先校验包/凭据ACL/Python/离线21项测试/PG16工具，再执行：
+1. 核验源95批次、88结果集、16schema、18,730快照及两轮多重集，重新检查源/目标键。
+2. 固定17接口；13个有数据接口共9,365行，3个零样本、1个厂商阻断保持原状态。
+3. 创建全新目标和恢复库，使用仓库正式bootstrap+完整Alembic链到20261031_000057；不stamp、不反推DDL。
+4. 核验实际17表catalog（463列）、有序主键、类型/长度/可空/属主和运行权限；22个新增字段必须存在。
+5. medqc_sync只获本次17表DML和验收审计所需权限，不是owner、不获CREATE；授权不进Alembic。
+6. 按接口事务连续投影两轮；逐字段相等，正文原样，第二轮changed=0。
+7. 新旧源全表及序列指纹相同；不创建checkpoint。
+8. 目标库pg_dump -Fc，恢复到本次全新恢复库，逐表/序列指纹相同。
+
+任意一步失败即停止：保留现场，不重试/删库/清表/手工修补/改包/绕过闸门。
+不得仅为让预检通过而忽略类型差异或改变主键。缺权限只报受控SQLSTATE，不换管理员读源。
+本包首轮目标为空；如果发现任一同名库或运行目录已存在，会拒绝复用。
+
+四、输出与口径
+成功标记：PERIOP_PROJECTION_ACCEPTED_WITH_SOURCE_LIMITATIONS。
+主报告：$run\acceptance\reports\acceptance.json。
+只回传reports目录中的JSON，并生成CHECKSUMS与ZIP SHA256；不要回传dump、private日志、passfile或真实行值。
+失败时只回传failure.json及此前已生成的非PHI报告，不粘贴原始异常消息。
+
+必须如实保留：2个接口的源失败窗口；3个接口无非空样本；surgery_record无源结构。
+17表结构核验不等于17接口完整接入；本次仅13个有数据接口投影，不宣布生产服务已扩到30接口。
+日期语义仍unverified，不开增量checkpoint。护理/麻醉签署为源原值，空值不能推断未签。
+输血申请transfution_datetime仅独立存储源字段，不作为实际输血执行证据。
+未调用bundle/LX0609/规则引擎，本次不声称质控结论已验证。
+完成后保留2个新库，用于后续正式源读取验收；不要清理旧库或原快照。
