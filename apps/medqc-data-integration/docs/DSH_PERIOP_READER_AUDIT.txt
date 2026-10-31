@@ -1,0 +1,64 @@
+第二批bundle/LX0609正式读取入口只读验收
+
+一、范围
+本轮不迁移、不建库、不授权、不投影、不重抽、不刷新持久化bundle、不创建任务。
+唯一允许连接的数据库：medqc_periop_cdm_acceptance_20261031212605（000057，9365行）。
+不得连接原raw库、恢复库、原13接口库、业务库、Caché或其他数据库。
+沿用部署管理员passfile，以只读身份读本次新验收库；这是为了读取领域内其他空表，
+不向运行账号补权限。每条SQLAlchemy连接均锁定库名/用户名/端口/read-only参数；
+每次新建物理连接复核transaction_read_only=on，SQL层只允许SELECT/SHOW/WITH。
+
+二、准备
+校验外层SHA256与内部CHECKSUMS，解压到全新D:\medqc\periop-reader-audit-v1。
+不覆盖任何旧包、R26.5或服务目录。缺依赖即报告，不联网/安装、不读.env或任何口令内容。
+本包原样包含正式assemble_domain_bundle和read_luxian_0609_snapshot_source_rows及依赖，
+不使用手工拼装bundle、伪造RuleExecutionInput、修改注册白名单或以模拟入口替代。
+
+三、直接执行Python（不运行.ps1，不使用脚本块绕过执行策略）
+在已有管理员PowerShell中执行。先自行校验外层ZIP及包内CHECKSUMS；所有命令失败即停。
+
+$python = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python310\python.exe'
+$root = 'D:\medqc\periop-reader-audit-v1'
+$passfile = 'D:\medqc\service-takeover-run-20261030205035\secrets\deployment-admin.pgpass'
+$out = 'D:\medqc\periop-reader-audit-report-' + (Get-Date -Format yyyyMMddHHmmss)
+
+# 只查现有凭据文件ACL，不读取其内容，不修改它。
+$acl = Get-Acl -LiteralPath $passfile
+if (-not $acl.AreAccessRulesProtected -or $acl.Access.Count -ne 2) { throw 'Passfile ACL mismatch' }
+$seen = @()
+foreach ($e in $acl.Access) {
+    $sid = $e.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+    if (@('S-1-5-18','S-1-5-32-544') -notcontains $sid -or $e.IsInherited -or
+        $e.AccessControlType -ne 'Allow' -or [int]$e.FileSystemRights -ne 2032127) { throw 'Passfile ACL mismatch' }
+    $seen += $sid
+}
+if (($seen | Select-Object -Unique).Count -ne 2) { throw 'Passfile ACL principal missing' }
+
+& $python -c 'import sys,struct,psycopg2,sqlalchemy,dotenv; from zoneinfo import ZoneInfo; assert sys.version_info[:2]==(3,10) and struct.calcsize(chr(80))==8; ZoneInfo(sys.argv[1])' 'Asia/Shanghai'
+if ($LASTEXITCODE -ne 0) { throw 'Interpreter/dependency check failed' }
+& $python -m unittest discover -s (Join-Path $root 'tests') -p test_periop_reader_audit.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Offline tests failed' }
+
+if ($env:PGPASSWORD) { throw 'PGPASSWORD must be cleared in this process before execution; do not print it' }
+& $python (Join-Path $root 'tools\audit_periop_readers.py') `
+    --database medqc_periop_cdm_acceptance_20261031212605 `
+    --user postgres --passfile $passfile --port 5432 --pg-major 16 --output $out
+if ($LASTEXITCODE -ne 0) { throw 'Reader audit failed; preserve existing reports, no retries or patches' }
+
+四、验收内容
+自动选择最多20例，优先覆盖全部13个有数据来源；病例键只在内存，不导出清单。
+正式bundle按既有领域装配，仅内存返回；LX0609只调用现有已注册来源，未注册单列。
+对照CDM比较当前入口返回的字段值和行多重度、原正文、记录时间；记录每个字段的
+CDM非空数/返回非空数/是否被选择，签署字段独立观察，不将空/未暴露推断为未签。
+目录content是正式装配文本，不冒充raw原文；原文相等检查使用documents.record_content。
+显式报告截断，不调大上限；原3个零样本、2个部分失败、1个厂商阻断限制保留。
+读取前后全部表和序列指纹一致；不运行规则引擎或模型，不改来源注册或生产服务。
+
+五、输出
+成功标记READONLY_READER_AUDIT_COMPLETE_WITH_COVERAGE_REPORT仅代表只读核查完成，
+不代表所有来源都已被质控消费；not_exposed/not_registered不是数据落库失败，也不自动等于缺陷。
+逐表JSON、field-visibility.json、source-registration.json、time-equality.json、
+reader-gaps.json、manifest.json、CHECKSUMS.txt均为非PHI汇总。
+只打包本次$out中的JSON与CHECKSUMS，附ZIP路径/大小/SHA256；不回传正文、真实键、
+逐行hash、凭据、私有日志、dump或任何其他目录。失败只报类型/SQLSTATE/受控位置码。
+任何失败保留现场，不换库/改包/补权限/重抽/绕过闸门。完成即停。
