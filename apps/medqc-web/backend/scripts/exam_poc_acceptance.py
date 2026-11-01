@@ -38,7 +38,7 @@ CASES = (
     SyntheticCase("external_prior_exam", "外院既往胸部CT曾见右肺下叶结节，本次检查结果尚待回报。", "other_exam"),
 )
 MODELS = ("qwen3.8-flash", "qwen3.6-35b-a3b")
-REPORT_VERSION = "exam-poc-acceptance-v1"
+REPORT_VERSION = "exam-poc-acceptance-v2"
 
 
 def inspect_completion(projection, completion: Mapping[str, Any], *, expected_kinds=None, source_rows=None) -> dict:
@@ -46,10 +46,8 @@ def inspect_completion(projection, completion: Mapping[str, Any], *, expected_ki
     targets = check._targets(projection)
     expected = {position: refs for position, (_, refs) in targets.items() if refs}
     reports = {position: report for position, (report, _) in targets.items() if expected.get(position)}
-    input_complete = not projection.course_projection_truncated and all(
-        len(report) < check.MAX_REPORT_CHARS
-        and all(len(check._course_text(projection, ref)) <= check.MAX_COURSE_CHARS for ref in refs)
-        for report, refs in targets.values())
+    input_complete = all(check._input_complete_for_event(projection, position, refs)
+                         for position, (_, refs) in targets.items())
     try:
         recorded, conflicts = check._parse(completion, projection, expected, reports)
     except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
@@ -57,6 +55,7 @@ def inspect_completion(projection, completion: Mapping[str, Any], *, expected_ki
                 "validation_details": [issue.reason for issue in getattr(error, "issues", ())],
                 "pairs": [], "recorded_refs": {}, "conflict_refs": {}, "coverage_complete": False,
                 "input_projection_complete": input_complete}
+    recorded, conflicts, incomplete = check._accept_complete_input(projection, expected, recorded, conflicts)
     raw = check._json_response_object(check._response_content(completion))
     events = events_for_family(projection, "exam")
     source_rows = source_rows or {}
@@ -81,7 +80,8 @@ def inspect_completion(projection, completion: Mapping[str, Any], *, expected_ki
     return {"protocol_valid": True, "validation_reason": None, "validation_details": [],
             "pairs": pairs, "recorded_refs": recorded, "conflict_refs": conflicts,
             "expected_pairs": sum(map(len, expected.values())), "covered_pairs": len(pairs),
-            "coverage_complete": set(recorded) == set(expected), "input_projection_complete": input_complete}
+            "coverage_complete": set(recorded) == set(expected), "input_projection_complete": input_complete,
+            "incomplete_event_positions": sorted(incomplete)}
 
 
 def compare_arms(reference: dict, candidate: dict) -> dict:

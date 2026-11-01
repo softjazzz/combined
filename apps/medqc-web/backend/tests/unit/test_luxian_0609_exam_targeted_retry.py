@@ -1,6 +1,7 @@
 """检查子核验的定向补核合同；全部使用合成文本与替身应答。"""
 
 from copy import deepcopy
+from dataclasses import replace
 import json
 from types import SimpleNamespace
 
@@ -12,6 +13,7 @@ from app.services.luxian_0609 import (
     exam_reason_check as reason,
     exam_result_record_check as record,
 )
+from app.services.luxian_0609.exam_lab_fact_extraction import build_exam_lab_text_projection
 
 
 class Client:
@@ -32,11 +34,21 @@ class Client:
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
 
 
+def _record_projection(candidates):
+    # 输入完整性需要真实事件目录；协议重试仍使用本测试指定的 D1/D2 编号。
+    typed = build_exam_lab_text_projection(rows_by_source={"exam_master": ({
+        "exam_id": "RETRY-EX-1", "exam_name": "胸部CT", "report_time": "2026-08-18 10:00:00",
+        "exam_conclusion": "肺部感染。"},)})
+    return replace(typed, course_candidates=candidates)
+
+
 @pytest.fixture(params=[reason, record, analysis, relevance], ids=["reason", "record", "analysis", "relevance"])
 def site(request, monkeypatch):
     module = request.param
     text = "完善胸部CT了解肺部情况。胸部CT提示肺部感染，与发热咳嗽相符，故继续抗感染治疗。"
     projection = SimpleNamespace(course_candidates={"D1": (text,), "D2": (text,)})
+    if module is record:
+        projection = _record_projection(projection.course_candidates)
     if module is reason:
         targets = {1: reason._Target(("D1", "D2"), ("胸部CT",), "2026-08-18 10:00:00", "肺部感染。")}
         function = reason.check_exam_reason
@@ -165,7 +177,7 @@ async def test_coverage_retry_names_each_missing_document(site):
 
 @pytest.mark.asyncio
 async def test_record_collects_quote_and_span_failure_in_same_doc(monkeypatch):
-    projection = SimpleNamespace(course_candidates={"D1": ("胸部CT提示肺部感染。",)})
+    projection = _record_projection({"D1": ("胸部CT提示肺部感染。",)})
     monkeypatch.setattr(record, "_targets", lambda _: {1: ("肺部感染。", ("D1",))})
     bad = {"schema_version": record.SCHEMA_VERSION, "docs": [{"event_position": 1,
            "course_doc_ref": "D1", "quote_type": "result_recorded", "quote": "虚构引文", "report_span": "虚构报告"}]}

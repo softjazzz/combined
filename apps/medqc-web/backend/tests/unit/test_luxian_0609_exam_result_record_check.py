@@ -1,6 +1,7 @@
 """011 报告结果记录核对（用户口径 2026-10-12）：逐份病程单句归类，引文须出自病程并与本次报告对得上。"""
 
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -88,6 +89,10 @@ async def test_batch_failure_preserves_other_complete_events_and_never_fixes_inc
     from app.services.luxian_0609 import exam_result_record_check as module
 
     projection = _projection(RECORDED, RECORDED)
+    # 两个目标必须在投影事件目录中都存在，不能只在 _targets 替身中虚构第二个。
+    event = projection.imaging_events[0]
+    projection = replace(projection, imaging_event=None,
+                         imaging_events=(event, replace(event, document_refs=("SYN-EVENT-2",))))
     first, second = _post_report_refs(projection)
     # 输出上限只容得下一个配对（预留 256 + 每对估算 150），每批一对。
     monkeypatch.setattr(module, 'MAX_COMPLETION_TOKENS', 406)

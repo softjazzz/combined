@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import socket
 import asyncio
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -55,7 +56,8 @@ def synthetic_recording():
             "results": results, "requests": requests}
 
 
-async def formal_replay(monkeypatch, tmp_path, *, case, recordings, arm, mature):
+async def formal_replay(monkeypatch, tmp_path, *, case, recordings, arm, mature,
+                        allow_incomplete=False, specialty_targets=None, main_payload=None):
     monkeypatch.setenv("LUXIAN_0609_EXAM_ANALYSIS_FREEZE_DIR", str(tmp_path / "f"))
     rows = case.rows()
     horizon = ({"discharge_datetime": "2026-01-05 12:00:00"},) if mature else ()
@@ -79,11 +81,13 @@ async def formal_replay(monkeypatch, tmp_path, *, case, recordings, arm, mature)
         sent.append({"host": request.url.host, "specialty": specialty})
         if not specialty:
             # 原 POC 未录制主抽取；显式固定“已记录”以检验专项负面核验能否纠正。
-            return httpx.Response(200, json=response(_fact_response((check.RULE_ID,))))
+            return httpx.Response(200, json=response(main_payload or _fact_response((check.RULE_ID,))))
         assert remaining, "recorded response exhausted; no network fallback"
         item = remaining.pop(0)
-        assert request.url.host == ("candidate.test" if arm == "cascade" and not any(
-            s["specialty"] for s in sent[:-1]) else "reference.test")
+        attempt = sum(s["specialty"] for s in sent) - 1
+        expected_host = (specialty_targets[attempt] if specialty_targets else
+                         "candidate.test" if arm == "cascade" and attempt == 0 else "reference.test")
+        assert request.url.host == expected_host
         return httpx.Response(200, json=item["completion"])
 
     _, app, client = harness(monkeypatch, tmp_path, fixed, cloud=True,
@@ -92,7 +96,8 @@ async def formal_replay(monkeypatch, tmp_path, *, case, recordings, arm, mature)
     try:
         batch = await native._extract_exam_lab_batch(projection=p, eligible_rule_ids=[check.RULE_ID], llm_client=client)
         assert not remaining and batch.facts and not batch.rule_failures
-        assert not batch.incomplete_specialty_rule_ids
+        if not allow_incomplete:
+            assert not batch.incomplete_specialty_rule_ids
         outcome = native._text_fact_outcome(rule_id=check.RULE_ID, facts=batch.facts, projection=p)
         decision = native._decision_from_outcome(outcome=outcome, snapshot=snapshot)
         [reduced] = bind_and_reduce_luxian_0609_rule_decisions(decisions=(decision,),
@@ -138,9 +143,11 @@ async def formal_replay(monkeypatch, tmp_path, *, case, recordings, arm, mature)
         assert batch.llm_call_count == len(sent) == len(recordings) + 1
         # 相同输入的热冻结必须不再取应答；分区/上界均由原正式键负责。
         count = len(sent)
-        hot = await native._extract_exam_lab_batch(projection=p, eligible_rule_ids=[check.RULE_ID], llm_client=client)
-        assert hot.facts == batch.facts and hot.result_conflicts == batch.result_conflicts and not hot.llm_call_count
-        assert len(sent) == count
+        hot = None
+        if not allow_incomplete:
+            hot = await native._extract_exam_lab_batch(projection=p, eligible_rule_ids=[check.RULE_ID], llm_client=client)
+            assert hot.facts == batch.facts and hot.result_conflicts == batch.result_conflicts and not hot.llm_call_count
+            assert len(sent) == count
         return {"case": case.name, "arm": arm, "context": "explicit_synthetic_mature_horizon" if mature else "original_no_horizon",
                 "main_extraction": "fixed_present_fixture_not_recorded_live", "specialty": "reused_recording",
                 "facts": [asdict(fact) for fact in batch.facts], "conflict_refs": batch.result_conflicts,
@@ -149,7 +156,9 @@ async def formal_replay(monkeypatch, tmp_path, *, case, recordings, arm, mature)
                 "final": final, "saved": {key: saved.get(key) for key in
                     ("rule_id", "status", "reason_code", "customer_display_facts", "evidence", "conclusion")},
                 "logical_calls": batch.llm_call_count, "new_model_calls": 0,
-                "hot_freeze_calls": hot.llm_call_count, "route_events": traces}
+                "hot_freeze_calls": hot.llm_call_count if hot is not None else None, "route_events": traces,
+                "incomplete_specialty_rule_ids": sorted(batch.incomplete_specialty_rule_ids),
+                "frozen_files": [str(path.relative_to(tmp_path / "f")) for path in (tmp_path / "f").rglob("*.json")]}
     finally:
         if engine is not None:
             engine.dispose()
@@ -271,7 +280,8 @@ def test_network_and_business_database_guards_remain_active():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("name,course,kind", [
     ("conflict", "本次胸部CT未见右肺下叶结节。", "result_conflicting"),
-    ("laterality", "本次胸部CT提示左肺下叶小结节。", "other_exam"),
+    ("same-exam-laterality", "本次胸部CT提示左肺下叶小结节。", "result_conflicting"),
+    ("another-exam", "另一次头颅MRI（SYN-OTHER）提示左额叶小结节。", "other_exam"),
     ("mention", "胸部CT结果已回报，详见报告。", "mention_only"),
 ])
 async def test_hard_categories_and_conflicts_survive_formal_save(monkeypatch, tmp_path, name, course, kind):
@@ -291,28 +301,33 @@ async def test_hard_categories_and_conflicts_survive_formal_save(monkeypatch, tm
         assert row["saved"]["customer_display_facts"]["result_conflict_record_times"] == ["2026-01-02 15:00:00"]
     else:
         assert not row["conflict_refs"]
+        if kind == "other_exam":
+            assert row["facts"][0]["course_doc_refs"] == ()
 
 
 @pytest.mark.asyncio
-async def test_repeated_exam_pairs_keep_event_and_source_identity(monkeypatch, tmp_path):
+@pytest.mark.parametrize("conflicting", [False, True])
+async def test_repeated_exam_pairs_keep_event_and_source_identity(monkeypatch, tmp_path, conflicting):
     rows = CASES[0].rows()
     first = rows["exam_master"][0]
     rows["exam_master"] = (first, {**first, "exam_id": "SYN-EX-2", "report_time": "2026-01-02 16:00:00",
                                   "exam_conclusion": "左肺上叶新发斑片影，考虑炎症。"})
+    second_course = "复查胸部CT未见左肺上叶斑片影。" if conflicting else "复查胸部CT左肺上叶斑片状渗出。"
     rows["daily_course_record"] += ({"document_id": "SYN-DOC-2", "record_time": "2026-01-02 18:00:00",
-                                      "record_content": "复查胸部CT左肺上叶斑片状渗出。"},)
+                                      "record_content": second_course},)
     p = build_exam_lab_text_projection(rows_by_source=rows)
     value = answer(p)
     for item in value["docs"]:
         if item["event_position"] == 1 and item["course_doc_ref"] == "D06-01":
             item.update(quote_type="result_recorded", quote=CASES[0].course, report_span="右肺下叶见8mm结节影")
         elif item["event_position"] == 2:
-            item.update(quote_type="result_recorded", quote="复查胸部CT左肺上叶斑片状渗出。", report_span="左肺上叶新发斑片影")
+            item.update(quote_type="result_conflicting" if conflicting else "result_recorded",
+                        quote=second_course, report_span="左肺上叶新发斑片影")
         else:
             item["quote_type"] = "other_exam"
     inspected = inspect_completion(p, response(value), source_rows=rows)
     assert inspected["protocol_valid"] and inspected["coverage_complete"]
-    assert inspected["recorded_refs"] == {1: ("D06-01",), 2: ("D06-02",)}
+    assert inspected["recorded_refs"] == {1: ("D06-01",), 2: () if conflicting else ("D06-02",)}
     assert len({tuple(pair["event_refs"]) for pair in inspected["pairs"]}) == 2
     assert {pair["event_position"]: pair["event_sources"][0]["exam_id"] for pair in inspected["pairs"]} == {
         1: "SYN-EX-1", 2: "SYN-EX-2"}
@@ -324,6 +339,22 @@ async def test_repeated_exam_pairs_keep_event_and_source_identity(monkeypatch, t
         assert result.recorded_refs == inspected["recorded_refs"]
     finally:
         assert await app.state.gateway_runtime.shutdown()
+    main_payload = {"schema_version": "lx0609-exam-lab-text-facts-v4", "facts": [
+        {**_fact_response((check.RULE_ID,))["facts"][0], "event_position": position,
+         "course_doc_positions": [position]} for position in (1, 2)]}
+    row = await formal_replay(monkeypatch, tmp_path / "s",
+        case=SimpleNamespace(name="two-events", rows=lambda: rows), recordings=[{"completion": response(value)}],
+        arm="cascade", mature=True, main_payload=main_payload)
+    assert row["saved"]["status"] == ("non_compliant" if conflicting else "compliant")
+    assert [(f["event_position"], f["course_doc_refs"]) for f in row["facts"]] == [
+        (1, ("D06-01",)), (2, () if conflicting else ("D06-02",))]
+    assert [item["event_position"] for item in row["saved"]["customer_display_facts"]["event_results"]] == [1, 2]
+    if conflicting:
+        assert row["conflict_refs"] == {2: ("D06-02",)}
+        events = row["saved"]["customer_display_facts"]["event_results"]
+        assert not events[0].get("result_conflict_record_times")
+        assert events[1]["result_conflict_record_times"] == ["2026-01-02 18:00:00"]
+    assert len({ref for fact in row["facts"] for ref in fact["evidence_refs"] if ref.startswith("E01-")}) == 2
 
 
 @pytest.mark.asyncio
@@ -370,6 +401,41 @@ async def test_long_tail_cannot_be_claimed_as_complete_candidate_validation(monk
         assert inspected["pairs"][0]["category_matches_expectation"] is False
     finally:
         assert await app.state.gateway_runtime.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("arm", ["reference", "cascade"])
+async def test_long_negative_cannot_override_correct_main_or_freeze(monkeypatch, tmp_path, arm):
+    case = SyntheticCase("tail-full-chain", "观察。" * 2200 + CASES[0].course, "result_recorded")
+    partial_negative = completion_for(case.projection(), "none")
+    row = await formal_replay(monkeypatch, tmp_path, case=case, recordings=[{"completion": partial_negative}],
+        arm=arm, mature=True, allow_incomplete=True, specialty_targets=["reference.test"])
+    assert row["saved"]["status"] == "compliant"
+    assert row["facts"][0]["semantic_state"] == "present"
+    assert row["incomplete_specialty_rule_ids"] == [check.RULE_ID]
+    assert row["frozen_files"] == []
+
+
+@pytest.mark.asyncio
+async def test_complete_other_event_still_applies_when_one_document_is_partial(monkeypatch, tmp_path):
+    rows = CASES[0].rows()
+    rows["exam_master"] += ({**rows["exam_master"][0], "exam_id": "SYN-EX-2",
+                              "report_time": "2026-01-03 11:00:00"},)
+    rows["daily_course_record"] = (
+        {**rows["daily_course_record"][0], "record_content": "观察。" * 2200 + CASES[0].course},
+        {"document_id": "SYN-DOC-2", "record_time": "2026-01-03 15:00:00", "record_content": CASES[1].course},
+    )
+    p = build_exam_lab_text_projection(rows_by_source=rows)
+    main_payload = {"schema_version": "lx0609-exam-lab-text-facts-v4", "facts": [
+        {**_fact_response((check.RULE_ID,))["facts"][0], "event_position": position,
+         "course_doc_positions": [position]} for position in (1, 2)]}
+    row = await formal_replay(monkeypatch, tmp_path,
+        case=SimpleNamespace(name="partial-mixed-events", rows=lambda: rows),
+        recordings=[{"completion": completion_for(p, "none")}], arm="cascade", mature=True,
+        allow_incomplete=True, specialty_targets=["reference.test"], main_payload=main_payload)
+    assert row["saved"]["status"] == "non_compliant"
+    assert [(f["event_position"], f["semantic_state"]) for f in row["facts"]] == [(1, "present"), (2, "absent")]
+    assert row["incomplete_specialty_rule_ids"] == [check.RULE_ID] and not row["frozen_files"]
 
 
 @pytest.mark.asyncio

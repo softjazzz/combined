@@ -2086,6 +2086,7 @@ class _ExamLabBatchResult:
 
 def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str]) -> str:
     from .exam_output_batching import OUTPUT_PROTOCOL_VERSION
+    from .exam_result_record_check import RESULT_RECORD_VALIDATION_VERSION
 
     prompt = build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection)
     # 06-01-02/04/05 专项核验改为按输出量拆批、病程去重（2026-10-23）；核验结果随主抽取一并冻结，
@@ -2100,6 +2101,9 @@ def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Seque
             + '\x1e'
             + prompt
         )
+    if "LX0609-06-01-04" in eligible_rule_ids:
+        # 旧核验可能将截断输入的 none 冻结为完整否定，仅使该规则的主冻结自然失效。
+        prompt = RESULT_RECORD_VALIDATION_VERSION + '\x1e' + prompt
     return freeze_key(prompt)
 
 
@@ -2445,7 +2449,8 @@ async def _extract_exam_lab_batch_uncached(
             if checks:
                 check_outcomes = await asyncio.gather(*(check for _, check, _ in checks))
                 for (rule_id, _, apply), check_outcome in zip(checks, check_outcomes):
-                    if check_outcome.state not in {"ready", "skipped"}:
+                    if (check_outcome.state not in {"ready", "skipped"}
+                            or isinstance(check_outcome, ResultRecordOutcome) and check_outcome.incomplete_event_positions):
                         incomplete_specialty_rule_ids.add(rule_id)
                     if isinstance(check_outcome, ResultRecordOutcome) and check_outcome.state == "ready":
                         result_conflicts = check_outcome.conflict_refs

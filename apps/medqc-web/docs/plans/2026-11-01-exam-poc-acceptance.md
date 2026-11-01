@@ -1,5 +1,7 @@
 # 06-01-04 POC 验收补齐 Implementation Plan
 
+本文件的完成证据固定于首轮 `09156d9dd`。后续已修复局部否定接纳、澄清左右侧期望并扩充双事件保存验证，当前说明见[局部否定与事件身份收口](2026-11-01-exam-partial-negative-fix.md)。首轮原始产物保留，不覆盖。
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** 复用既有六份合成应答，分别验收分类、事件引用、冲突、覆盖和升级，并经原正式结果链离线保存读取。

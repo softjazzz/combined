@@ -152,6 +152,8 @@ class ResultRecordOutcome:
     api_time: float = 0.0
     # 事件位置 -> 描述本次结果但与报告实质矛盾的病程引用（只作核实提示）。
     conflict_refs: Mapping[int, tuple[str, ...]] = field(default_factory=dict)
+    # 协议覆盖不代表读到了完整输入；这些事件保留主抽取，且禁止整族冻结。
+    incomplete_event_positions: frozenset[int] = frozenset()
 
 
 def _normalize(text: str) -> str:
@@ -161,6 +163,34 @@ def _normalize(text: str) -> str:
 def _course_text(projection: ExamLabTextProjection, ref: str) -> str:
     candidate = (projection.course_candidates or {}).get(ref)
     return str(candidate[0] if candidate else "")
+
+
+# 仅参与主冻结键，不改变 JSON 协议或发送的 Prompt。
+RESULT_RECORD_VALIDATION_VERSION = "exam-record-input-completeness-v2"
+
+
+def _input_complete_for_event(projection: ExamLabTextProjection, position: int, refs: Sequence[str]) -> bool:
+    events = events_for_family(projection, "exam")
+    if not 1 <= position <= len(events) or projection.course_projection_truncated:
+        return False
+    full_report = "\n".join(dict.fromkeys(text for text in events[position - 1].result_texts if text))
+    return (len(full_report) <= MAX_REPORT_CHARS
+            and all(len(_course_text(projection, ref)) <= MAX_COURSE_CHARS for ref in refs))
+
+
+def _accept_complete_input(
+    projection: ExamLabTextProjection, expected: Mapping[int, tuple[str, ...]],
+    recorded: Mapping[int, tuple[str, ...]], conflicts: Mapping[int, tuple[str, ...]],
+) -> tuple[dict[int, tuple[str, ...]], dict[int, tuple[str, ...]], frozenset[int]]:
+    """正面引文仍可证明存在；局部否定不能证明整份文书没有记录。
+
+    一次检查拆批后仍由原聚合器要求所有候选配对核完，不用部分成功制造完整否定。
+    """
+    incomplete = frozenset(position for position, refs in expected.items() if any(
+        ref not in recorded.get(position, ()) and not _input_complete_for_event(projection, position, (ref,))
+        for ref in refs))
+    return ({position: refs for position, refs in recorded.items() if position not in incomplete},
+            {position: refs for position, refs in conflicts.items() if position not in incomplete}, incomplete)
 
 
 def _targets(projection: ExamLabTextProjection) -> dict[int, tuple[str, tuple[str, ...]]]:
@@ -330,11 +360,8 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
     from ..exam_result_model_route import current_route
 
     route = current_route()
-    input_complete = route is None or all(
-        len(report) < MAX_REPORT_CHARS
-        and all(len(_course_text(projection, ref)) <= MAX_COURSE_CHARS for ref in refs)
-        for report, refs in model_targets.values()
-    )
+    input_complete = all(_input_complete_for_event(projection, position, refs)
+                         for position, (_, refs) in model_targets.items())
     for attempt in range(PROTOCOL_ATTEMPTS):
         if len(attempt_prompt) > MAX_PROMPT_CHARS or not budget.take():
             return ResultRecordOutcome('failed', {}, calls, prompt_tokens, completion_tokens,
@@ -370,8 +397,10 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
             api_time += usage[3]
             recorded, conflicts = _parse(response, projection, expected, reports,
                                          allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS)
+            recorded, conflicts, incomplete = _accept_complete_input(projection, expected, recorded, conflicts)
             if route is not None:
-                route.observe("request_finished", target=target, state="ready", logical_calls=1,
+                route.observe("request_finished", target=target, state="partial" if incomplete else "ready",
+                              reason="input_projection_incomplete" if incomplete else "accepted", logical_calls=1,
                               recorded_pairs=sum(len(refs) for refs in recorded.values()),
                               covered_pairs=sum(len(expected[position]) for position in recorded),
                               prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
@@ -398,7 +427,8 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
             attempt_prompt = _retry_prompt(prompt, error, response)
     recorded_refs.update(recorded)
     return ResultRecordOutcome("ready", recorded_refs, calls, prompt_tokens, completion_tokens, total_tokens,
-                               api_time or perf_counter() - started, conflict_refs=conflicts)
+                               api_time or perf_counter() - started, conflict_refs=conflicts,
+                               incomplete_event_positions=incomplete)
 
 
 def _report_clauses(report: str) -> tuple[str, ...]:
@@ -495,6 +525,7 @@ async def _check_exam_result_record_in_route_scope(projection: ExamLabTextProjec
         sum(item.completion_tokens for item in pieces), sum(item.total_tokens for item in pieces),
         sum(item.api_time for item in pieces),
         conflict_refs={position: tuple(sorted(values)) for position, values in conflicts.items() if position in complete},
+        incomplete_event_positions=frozenset(set(all_refs) - complete),
     )
 
 
