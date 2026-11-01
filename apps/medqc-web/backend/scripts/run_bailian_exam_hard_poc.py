@@ -34,6 +34,17 @@ def summarize(report):
     return result
 
 
+def execution_summary(report):
+    """全部组已尝试不等于请求全部成功；连接失败不能显示执行完整。"""
+    requests, results = report["requests"], report["results"]
+    successful = sum(r["status"] == "success" and r.get("http_status") == 200 for r in requests)
+    attempted = len(results) == 26
+    return {"all_arms_attempted": attempted, "http_calls": len(requests),
+            "successful_http_calls": successful, "failed_http_calls": len(requests) - successful,
+            "complete": attempted and successful == len(requests) and all(r["state"] == "ready" for r in results)
+                        and report["gateway_clean_shutdown"] is True}
+
+
 def audit_requests(case, projection, requests):
     from scripts.exam_hard_cases import score_attempt
     from scripts.exam_poc_acceptance import inspect_completion
@@ -123,8 +134,7 @@ async def run(args):
                 break
     finally:
         report["gateway_clean_shutdown"] = await gateway.state.gateway_runtime.shutdown()
-        report["complete"] = len(report["results"]) == 26
-        report["http_calls"] = len(sender.requests)
+        report.update(execution_summary(report))
         report["first_pass_by_model"] = summarize(report)
         report["quality_requires_review"] = any(any(value for key, value in metrics.items() if key != "runs")
                                                for metrics in report["first_pass_by_model"].values())

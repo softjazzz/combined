@@ -11,7 +11,7 @@ import pytest
 from app.services.luxian_0609 import exam_result_record_check as check
 from scripts.exam_hard_cases import hard_cases, planned_runs, score_attempt
 from scripts.exam_poc_acceptance import inspect_completion
-from scripts.run_bailian_exam_hard_poc import main, summarize
+from scripts.run_bailian_exam_hard_poc import execution_summary, main, summarize
 from scripts.run_bailian_exam_poc import BailianPocTransport, MODELS
 from tests.unit.test_exam_result_model_route import response
 from tests.unit.test_exam_poc_acceptance import formal_replay
@@ -92,6 +92,19 @@ def test_reference_recovery_does_not_hide_candidate_failure_or_count_guard_as_ca
     result = summarize(report)
     assert result[MODELS[1]]["runs"] == 1 and result[MODELS[1]]["protocol_failures"] == 1
     assert result[MODELS[0]]["runs"] == 0
+
+
+def test_failed_last_guard_does_not_report_execution_complete():
+    report = {"results": [{"state": "ready"} for _ in range(26)],
+              "requests": [{"status": "success", "http_status": 200} for _ in range(26)],
+              "gateway_clean_shutdown": True}
+    assert execution_summary(report)["complete"] is True
+    report["requests"][-1] = {"status": "failed", "error_type": "ConnectError"}
+    report["results"][-1]["state"] = "failed"
+    report["gateway_clean_shutdown"] = False
+    result = execution_summary(report)
+    assert result["all_arms_attempted"] is True and result["complete"] is False
+    assert result["successful_http_calls"] == 25 and result["failed_http_calls"] == 1
 
 
 @pytest.mark.asyncio
