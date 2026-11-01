@@ -177,8 +177,34 @@ def _report_catalog(projection):
     return events_for_family(projection, 'exam')
 
 
+def _explicit_current_exam_quote(quote, current, catalog, course):
+    """只认原引文中明确的当前检查编号；不把较前片、名称或相似结果当身份。"""
+    matches = set()
+    for event in catalog:
+        for identifier in event.source_exam_ids:
+            if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{2,127}', identifier):
+                continue
+            pattern = (r'本次(?:检查|CT|MRI)\s*[（(]?\s*' + re.escape(identifier)
+                       + r'(?![A-Za-z0-9._-])\s*[）)]?\s*(?:的)?\s*(?:结果|提示|显示|见)')
+            if not re.match(pattern, quote.strip()):
+                continue
+            # 身份锚点须在源文书的独立肯定语句起始；不能摘掉“并非”后伪装成肯定。
+            for statement in re.split(r'[。；;！？\n]', course):
+                statement = statement.strip()
+                if (re.match(pattern, statement) and quote.strip().rstrip('。；;！？') in statement
+                        and not re.search(r'上次|前次|既往|另一次|另次|其他检查|并非|不是本次|不属于', statement)):
+                    matches.add(identifier)
+    return (len(matches) == 1 and matches <= set(current.source_exam_ids)
+            and sum(bool(matches & set(event.source_exam_ids)) for event in catalog) == 1)
+
+
+def validation_identity(projection):
+    # 只进入冻结摘要，不把新增的原始检查号外发到既有实验Prompt。
+    return [(event.document_refs, event.source_exam_ids) for event in _report_catalog(projection)]
+
+
 # 仅参与主冻结键，不改变 JSON 协议或发送的 Prompt。
-RESULT_RECORD_VALIDATION_VERSION = "exam-record-partial-timing-v4"
+RESULT_RECORD_VALIDATION_VERSION = "exam-record-cross-report-span-types-v5"
 
 
 def _input_complete_for_event(projection: ExamLabTextProjection, position: int, refs: Sequence[str]) -> bool:
@@ -341,9 +367,9 @@ def _parse(
                                          + (f"；该片段出现在其他事件{other_positions}的报告，须重新核对当前事件" if other_positions else "")))
         if len(issues) != before:
             continue
-        # 重复检查中，明确摘入另一份报告独有的结果句时要求重新定位，
-        # 不把另一事件的结果借共同部位/诊断自动挂到当前事件，也不据此判未记录。
-        if kind == "result_recorded":
+        # 记录与矛盾都必须先确认当前事件归属；不能把另一次检查伪装成本次矛盾。
+        # 明确摘入另一报告独有句时要求重新定位，不据此判未记录或制造冲突事实。
+        if kind in SPAN_TYPES:
             catalog = _report_catalog(projection)
             full_reports = [_normalize("\n".join(event.result_texts)) for event in catalog]
             current = events_for_family(projection, 'exam')[position - 1]
@@ -353,7 +379,9 @@ def _parse(
                                if event.document_refs != current.document_refs and any(clause in normalized_quote
                                    and sum(clause in candidate for candidate in full_reports) == 1
                                    for clause in _report_clauses(report))]
-            if other_positions and not any(clause in normalized_quote for clause in own_unique):
+            explicit_conflict = kind == 'result_conflicting' and _explicit_current_exam_quote(
+                quote, current, catalog, _course_text(projection, ref))
+            if other_positions and not any(clause in normalized_quote for clause in own_unique) and not explicit_conflict:
                 issues.append(_RetryIssue("quote matches other report", location, "quote", "",
                     f"引句匹配其他报告独有结果，事件位置{other_positions}；须重新核对当前事件，不得用后次结果替代"))
                 continue

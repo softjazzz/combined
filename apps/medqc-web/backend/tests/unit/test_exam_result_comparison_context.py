@@ -58,12 +58,110 @@ def test_batch_preserves_comparison_identity_without_answering_other_events(conf
     assert all(e['comparison_only'] for e in value['comparison_events'])
 
 
-def test_batch_validation_uses_stable_identity_not_local_position(configured):
+@pytest.mark.parametrize('kind', ['result_recorded', 'result_conflicting'])
+def test_batch_validation_uses_stable_identity_not_local_position(configured, kind):
     p = select_exam_lab_projection_batch(projection(), [('exam', 2)]).projection
-    value = reply([item(1, 'result_recorded', '与第3次前片相比积血无明显变化。', '右侧脑出血伴脑室积血。')])
+    value = reply([item(1, kind, '与第3次前片相比积血无明显变化。', '右侧脑出血伴脑室积血。')])
     with pytest.raises(check._RetryViolation) as error:
         check._parse(response(value), p, {1: ('D06-01',)}, {1: check._targets(p)[1][0]})
     assert error.value.issues[0].reason == 'quote matches other report'
+
+
+@pytest.mark.asyncio
+async def test_other_event_cannot_survive_as_conflict_or_freeze_in_formal_save(monkeypatch, tmp_path):
+    from tests.unit.test_luxian_0609_native_exam_lab_execution import _fact_response
+    enable_formal(monkeypatch)
+    rows = {'exam_master': tuple({'exam_id': f'EX{i}', 'exam_name': '头颅CT',
+        'report_time': f'2026-01-0{i} 10:00:00',
+        'exam_conclusion': f'右侧脑出血伴脑室积血。与第{i}次前片相比积血无明显变化。'} for i in (1, 2, 3)),
+        'daily_course_record': ({'document_id': 'LATER-CT', 'record_time': '2026-01-04 10:00:00',
+            'record_content': '复查头颅CT：右侧脑出血伴脑室积血。与第3次前片相比积血无明显变化。'},)}
+    bad = item(2, 'result_conflicting', '与第3次前片相比积血无明显变化。', '右侧脑出血伴脑室积血。')
+    main = {'schema_version': 'lx0609-exam-lab-text-facts-v4', 'facts': [
+        {**_fact_response((check.RULE_ID,))['facts'][0], 'event_position': pos,
+         'course_doc_positions': [1]} for pos in (1, 2, 3)]}
+    row = await formal.formal_replay(monkeypatch, tmp_path,
+        case=SimpleNamespace(name='cross-event-false-conflict', rows=lambda: rows),
+        recordings=[{'completion': response(reply([item(1), bad]))},
+                    {'completion': response(reply([bad]))}],
+        arm='reference', mature=True, allow_incomplete=True, main_payload=main)
+    assert row['native_status'] == row['saved']['status'] == 'non_compliant'
+    assert row['facts'][2]['course_doc_refs'] == ('D06-01',)  # 后次的真实正面证据保留。
+    assert row['incomplete_specialty_rule_ids'] == [check.RULE_ID] and not row['frozen_files']
+    assert not row['conflict_refs']
+    assert all(not event.get('result_conflict_record_times')
+               for event in row['saved']['customer_display_facts']['event_results'])
+
+
+def test_span_identity_validation_upgrade_invalidates_old_freeze(configured, monkeypatch):
+    p = projection()
+    current = native._main_freeze_key(p, [check.RULE_ID])
+    monkeypatch.setattr(check, 'RESULT_RECORD_VALIDATION_VERSION', 'exam-record-partial-timing-v4')
+    assert native._main_freeze_key(p, [check.RULE_ID]) != current
+
+
+@pytest.mark.parametrize('anchor,accepted', [
+    ('本次检查（EX-CURRENT）的结果为', True),
+    ('较EX-CURRENT片，另次检查结果为', False),
+    ('本次检查（EX-CURRENT-LONG）的结果为', False),
+    ('并非本次检查（EX-CURRENT）的结果，实际为既往检查：', False),
+    ('本次检查（EX-CURRENT）的结果不是本次，实际为既往检查：', False),
+])
+def test_explicit_same_exam_conflict_not_rejected_for_matching_another_report(configured, anchor, accepted):
+    course = anchor + '左肺下叶结节直径12毫米。'
+    rows = {'exam_master': (
+        {'exam_id': 'EX-OTHER', 'exam_name': '胸部CT', 'report_time': '2026-01-01 10:00:00',
+         'exam_conclusion': '左肺下叶结节直径12毫米。'},
+        {'exam_id': 'EX-CURRENT', 'exam_name': '胸部CT', 'report_time': '2026-01-02 10:00:00',
+         'exam_conclusion': '右肺下叶结节直径8毫米。'}),
+        'daily_course_record': ({'document_id': 'EXPLICIT', 'record_time': '2026-01-02 15:00:00',
+                                 'record_content': course},)}
+    p = build_exam_lab_text_projection(rows_by_source=rows)
+    assert p.imaging_events[1].source_exam_ids == ('EX-CURRENT',)
+    raw = item(2, 'result_conflicting', course, '右肺下叶结节直径8毫米。')
+    if not accepted:
+        with pytest.raises(check._RetryViolation, match='quote matches other report'):
+            check._parse(response(reply([raw])), p, {2: ('D06-01',)}, {2: check._targets(p)[2][0]})
+    else:
+        recorded, conflicts = check._parse(response(reply([raw])), p, {2: ('D06-01',)}, {2: check._targets(p)[2][0]})
+        assert recorded == {2: ()} and conflicts == {2: ('D06-01',)}
+    first = native._main_freeze_key(p, [check.RULE_ID])
+    modified = replace(p.imaging_events[1], source_exam_ids=('EX-CHANGED',))
+    assert native._main_freeze_key(replace(p, imaging_events=(p.imaging_events[0], modified)), [check.RULE_ID]) != first
+
+
+def test_explicit_identity_cannot_clip_source_negation_or_use_shared_identifier(configured):
+    quote = '本次检查（EX-CURRENT）的结果为左肺下叶结节直径12毫米。'
+    p = projection()
+    current = replace(p.imaging_events[0], source_exam_ids=('EX-CURRENT',))
+    other = replace(p.imaging_events[1], source_exam_ids=('EX-OTHER',))
+    assert check._explicit_current_exam_quote(quote, current, (current, other), quote)
+    assert not check._explicit_current_exam_quote(quote, current, (current, other), '这并非' + quote)
+    shared = replace(other, source_exam_ids=('EX-CURRENT',))
+    assert not check._explicit_current_exam_quote(quote, current, (current, shared), quote)
+
+
+@pytest.mark.asyncio
+async def test_explicit_same_event_conflict_survives_formal_save_with_other_report_present(monkeypatch, tmp_path):
+    enable_formal(monkeypatch)
+    quote = '本次检查（EX-CURRENT）的结果为左肺下叶结节直径12毫米。'
+    rows = {'exam_master': (
+        {'exam_id': 'EX-OTHER', 'exam_name': '胸部CT', 'report_time': '2026-01-01 10:00:00',
+         'exam_conclusion': '左肺下叶结节直径12毫米。'},
+        {'exam_id': 'EX-CURRENT', 'exam_name': '胸部CT', 'report_time': '2026-01-02 10:00:00',
+         'exam_conclusion': '右肺下叶结节直径8毫米。'}),
+        'daily_course_record': ({'document_id': 'EXPLICIT', 'record_time': '2026-01-02 15:00:00',
+                                 'record_content': quote},)}
+    p = select_exam_lab_projection_batch(build_exam_lab_text_projection(rows_by_source=rows), [('exam', 2)]).projection
+    p = replace(p, precise_horizon=datetime(2026, 1, 5, 12), horizon_date=datetime(2026, 1, 5).date())
+    monkeypatch.setattr(formal, 'build_exam_lab_text_projection', lambda **kw: p)
+    row = await formal.formal_replay(monkeypatch, tmp_path,
+        case=SimpleNamespace(name='explicit-current-conflict', rows=lambda: rows),
+        recordings=[{'completion': response(reply([item(1, 'result_conflicting', quote, '右肺下叶结节直径8毫米。')]))}],
+        arm='reference', mature=True)
+    assert row['saved']['status'] == 'non_compliant' and row['conflict_refs'] == {1: ('D06-01',)}
+    assert row['saved']['customer_display_facts']['result_conflict_record_times'] == ['2026-01-02 15:00:00']
+    assert not row['incomplete_specialty_rule_ids'] and row['frozen_files']
 
 
 def test_one_document_can_record_both_distinct_checks(configured):

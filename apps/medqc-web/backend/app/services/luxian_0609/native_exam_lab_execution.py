@@ -2104,6 +2104,8 @@ def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Seque
     if "LX0609-06-01-04" in eligible_rule_ids:
         # 旧核验可能将截断输入的 none 冻结为完整否定，仅使该规则的主冻结自然失效。
         prompt = RESULT_RECORD_VALIDATION_VERSION + '\x1e' + prompt
+        from .exam_result_record_check import validation_identity
+        prompt += '\x1e' + json.dumps(validation_identity(projection), ensure_ascii=False, separators=(',', ':'))
         from .exam_result_context import protocol
         if protocol() == 'comparison_v1':
             from .exam_result_record_check import _prompt, _targets
