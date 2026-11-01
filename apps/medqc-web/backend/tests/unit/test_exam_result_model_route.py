@@ -149,7 +149,11 @@ async def test_upgrade_uses_original_input_and_preserves_shared_budget(monkeypat
     assert result.state == "ready" and result.llm_call_count == 2
     assert result.total_tokens == 104
     assert [host for host, _ in sent] == ["candidate.test", "reference.test"]
-    assert sent[0][1]["messages"] == sent[1][1]["messages"]
+    first, retry = [item[1]["messages"][0]["content"] for item in sent]
+    assert json.loads(first.split("EVENTS_JSON=", 1)[1]) == json.loads(retry.split("EVENTS_JSON=", 1)[1])
+    if failure in {"coverage", "quote", "event", "ref"}:
+        assert "校验错误" in retry
+    assert "PREVIOUS_OUTPUT=" not in retry
     assert "伪造引文" not in sent[1][1]["messages"][0]["content"]
     assert result.recorded_refs == {1: ()}
     assert await app.state.gateway_runtime.shutdown()

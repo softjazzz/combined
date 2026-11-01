@@ -75,10 +75,13 @@ class _RetryIssue:
 class _RetryViolation(ValueError):
     """收集同份应答的可修正项，异常字符串仍为首个失败原因。"""
 
-    def __init__(self, issues: Sequence[_RetryIssue]) -> None:
+    def __init__(self, issues: Sequence[_RetryIssue], *, valid_pairs=(), recorded=None, conflicts=None) -> None:
         # 失败项为空（如目标无候选病程且应答为空）时沿用原覆盖失败原因。
         super().__init__(issues[0].reason if issues else "invalid doc coverage")
         self.issues = tuple(issues)
+        self.valid_pairs = frozenset(valid_pairs)
+        self.recorded = recorded or {}
+        self.conflicts = conflicts or {}
 
 
 class _TruncatedResponse(ValueError):
@@ -154,6 +157,8 @@ class ResultRecordOutcome:
     conflict_refs: Mapping[int, tuple[str, ...]] = field(default_factory=dict)
     # 协议覆盖不代表读到了完整输入；这些事件保留主抽取，且禁止整族冻结。
     incomplete_event_positions: frozenset[int] = frozenset()
+    # 仅表示独立通过协议、引文和输入完整性校验的配对，不代表整事件核完。
+    covered_pairs: frozenset[tuple[int, str]] = frozenset()
 
 
 def _normalize(text: str) -> str:
@@ -166,7 +171,7 @@ def _course_text(projection: ExamLabTextProjection, ref: str) -> str:
 
 
 # 仅参与主冻结键，不改变 JSON 协议或发送的 Prompt。
-RESULT_RECORD_VALIDATION_VERSION = "exam-record-input-completeness-v2"
+RESULT_RECORD_VALIDATION_VERSION = "exam-record-pair-recovery-v3"
 
 
 def _input_complete_for_event(projection: ExamLabTextProjection, position: int, refs: Sequence[str]) -> bool:
@@ -271,6 +276,7 @@ def _parse(
             or payload["schema_version"] != SCHEMA_VERSION or not isinstance(payload["docs"], list)):
         raise ValueError("invalid response schema")
     seen: set[tuple[int, str]] = set()
+    valid_pairs: set[tuple[int, str]] = set()
     issues: list[_RetryIssue] = []
     recorded: dict[int, list[str]] = {position: [] for position in expected}
     conflicting: dict[int, list[str]] = {position: [] for position in expected}
@@ -293,35 +299,64 @@ def _parse(
         before = len(issues)
         if kind not in SPAN_TYPES:
             # 其余类别只说明未记录，下游不用其引文；模型多给了也不核、不重试（2026-10-23 输出精简）。
+            valid_pairs.add(key)
             continue
         normalized_quote = _normalize(quote)
-        if not normalized_quote or len(quote) > MAX_QUOTE_CHARS:
+        if not normalized_quote:
             issues.append(_RetryIssue("missing quote", location, "quote", quote, _RETRY_HINTS["missing quote"]))
+        elif len(quote) > MAX_QUOTE_CHARS:
+            issues.append(_RetryIssue("quote too long", location, "quote", quote, "quote超过200字；重新摘录连续短引句，不得程序裁剪"))
         elif normalized_quote not in _normalize(_course_text(projection, ref)):
             issues.append(_RetryIssue("quote not in course", location, "quote", quote,
                                      _RETRY_HINTS["quote not in course"]
                                      + "；须逐字复制单个连续片段，不得删去中间文字后拼接"))
         if kind in SPAN_TYPES:
             normalized_span = _normalize(span)
-            if not normalized_span or len(span) > MAX_SPAN_CHARS:
+            if not normalized_span:
                 issues.append(_RetryIssue("missing report span", location, "report_span", span,
                                          _RETRY_HINTS["missing report span"]))
+            elif len(span) > MAX_SPAN_CHARS:
+                issues.append(_RetryIssue("report span too long", location, "report_span", span,
+                                         "report_span超过200字；重新摘录本事件报告中的连续短片段，不得程序裁剪"))
             elif normalized_span not in _normalize(reports[position]):
+                other_positions = [other for other, event in enumerate(events_for_family(projection, "exam"), 1)
+                                   if other != position and normalized_span in _normalize("\n".join(event.result_texts))]
                 issues.append(_RetryIssue("span not in report", location, "report_span", span,
                                          _RETRY_HINTS["span not in report"]
-                                         + "；须逐字复制单个连续片段，不得删去中间文字后拼接"))
+                                         + "；须逐字复制单个连续片段，不得删去中间文字后拼接"
+                                         + (f"；该片段出现在其他事件{other_positions}的报告，须重新核对当前事件" if other_positions else "")))
         if len(issues) != before:
             continue
+        # 重复检查中，明确摘入另一份报告独有的结果句时要求重新定位，
+        # 不把另一事件的结果借共同部位/诊断自动挂到当前事件，也不据此判未记录。
+        if kind == "result_recorded":
+            full_reports = [_normalize("\n".join(event.result_texts))
+                            for event in events_for_family(projection, "exam")]
+            own_unique = [clause for clause in _report_clauses(reports[position])
+                          if sum(clause in report for report in full_reports) == 1]
+            other_positions = [other for other, report in enumerate(full_reports, 1)
+                               if other != position and any(clause in normalized_quote
+                                   and sum(clause in candidate for candidate in full_reports) == 1
+                                   for clause in _report_clauses(report))]
+            if other_positions and not any(clause in normalized_quote for clause in own_unique):
+                issues.append(_RetryIssue("quote matches other report", location, "quote", "",
+                    f"引句匹配其他报告独有结果，事件位置{other_positions}；须重新核对当前事件，不得用后次结果替代"))
+                continue
         # 所记结果仍须与本次报告片段对得上。
         if kind in SPAN_TYPES and _shares_finding(span, quote):
             (recorded if kind in RECORDED_TYPES else conflicting)[position].append(ref)
+        valid_pairs.add(key)
     evidence_failed = bool(issues)
     for position, refs in expected.items():
         for ref in refs:
             if (position, ref) not in seen:
                 issues.append(_coverage_issue(None, position, ref))
     if evidence_failed or not seen or (issues and not allow_partial):
-        raise _RetryViolation(issues)
+        # 重复编号、错误编号也必须剔除，不能保留同一编号的第一个答案。
+        valid_pairs = {key for key in valid_pairs if _pair_count(payload["docs"], key) == 1}
+        raise _RetryViolation(issues, valid_pairs=valid_pairs,
+            recorded={p: tuple(ref for ref in refs if (p, ref) in valid_pairs) for p, refs in recorded.items()},
+            conflicts={p: tuple(ref for ref in refs if (p, ref) in valid_pairs) for p, refs in conflicting.items()})
     complete = {position for position, refs in expected.items() if all((position, ref) in seen for ref in refs)}
     return (
         {position: tuple(refs) for position, refs in recorded.items() if refs or position in complete},
@@ -341,94 +376,104 @@ _RETRY_HINTS = {
 async def _check_result_batch(projection, llm_client, targets, budget: CallBudget) -> ResultRecordOutcome:
     if not targets or llm_client is None:
         return ResultRecordOutcome("skipped", {})
-    # 报告后没有可读病程的事件：已核对、未见记录，无需调用。
-    recorded_refs: dict[int, tuple[str, ...]] = {
-        position: () for position, (_, refs) in targets.items() if not refs
-    }
-    model_targets = {position: target for position, target in targets.items() if target[1]}
-    if not model_targets:
-        return ResultRecordOutcome("ready", recorded_refs)
-    prompt = _prompt(projection, model_targets)
-    if len(prompt) > MAX_PROMPT_CHARS:
-        return ResultRecordOutcome("failed", {})
-    expected = {position: refs for position, (_, refs) in model_targets.items()}
-    reports = {position: report for position, (report, _) in model_targets.items()}
+    original = {position: target for position, target in targets.items() if target[1]}
+    empty = {position: () for position, (_, refs) in targets.items() if not refs}
+    if not original:
+        return ResultRecordOutcome("ready", empty)
+    pending = dict(original)
+    covered, accepted, conflicting = set(), {}, {}
     calls = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
-    attempt_prompt = prompt
-    started = perf_counter()
+    state = "failed"
     from ..exam_result_model_route import current_route
 
     route = current_route()
-    input_complete = all(_input_complete_for_event(projection, position, refs)
-                         for position, (_, refs) in model_targets.items())
+    feedback = ()
     for attempt in range(PROTOCOL_ATTEMPTS):
-        if len(attempt_prompt) > MAX_PROMPT_CHARS or not budget.take():
-            return ResultRecordOutcome('failed', {}, calls, prompt_tokens, completion_tokens,
-                                       total_tokens, api_time or perf_counter() - started)
+        if not pending:
+            break
+        prompt = _prompt(projection, pending)
+        if feedback:
+            # 只传客观定位错误，不回显候选模型结论、引文或PREVIOUS_OUTPUT。
+            details = "；".join(f"{i.location} {i.field}: {i.reason}。{i.hint}" for i in feedback[:8])
+            details = redact_luxian_0609_patient_privacy(details)
+            prompt = prompt.replace("\nEVENTS_JSON=", "\n上一次输出未通过校验：仅补核尚未通过的配对；已通过配对保持原判。校验错误："
+                                    + details + "\nEVENTS_JSON=", 1)
+        if len(prompt) > MAX_PROMPT_CHARS or not budget.take():
+            break
+        expected = {position: refs for position, (_, refs) in pending.items()}
+        reports = {position: report for position, (report, _) in pending.items()}
+        input_complete = all(_input_complete_for_event(projection, position, refs)
+                             for position, refs in expected.items())
         selected, target = route.selected(input_complete=input_complete) if route is not None else (llm_client, "reference")
         calls += 1
-        request_started = perf_counter()
+        started = perf_counter()
         if route is not None:
             route.observe("request_started", target=target, budget_used=budget.used,
-                          input_complete=input_complete,
-                          reason="allowlisted" if input_complete else "input_projection_limit",
-                          expected_pairs=sum(len(refs) for refs in expected.values()))
+                          input_complete=input_complete, reason="input_projection_limit" if not input_complete
+                          else "targeted_recovery" if feedback else "allowlisted",
+                          expected_pairs=sum(map(len, expected.values())))
         try:
             from app.services.strata_case_context import exam_result_prefix_scope
-
             with exam_result_prefix_scope():
-                response = await selected.generate(
-                    attempt_prompt, max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
-                    **structured_output_kwargs(selected),
-                )
+                response = await selected.generate(prompt, max_completion_tokens=MAX_COMPLETION_TOKENS,
+                    allow_length_retry=False, **structured_output_kwargs(selected))
         except Exception:
             if route is not None:
-                route.observe("request_finished", target=target, reason="technical_failure",
-                              state="failed", logical_calls=1,
-                              elapsed_seconds=perf_counter() - request_started)
-            return ResultRecordOutcome("failed", {}, calls, prompt_tokens, completion_tokens, total_tokens,
-                                       api_time or perf_counter() - started)
-        try:
-            usage = _usage(response)
-            prompt_tokens += usage[0]
-            completion_tokens += usage[1]
-            total_tokens += usage[2]
-            api_time += usage[3]
-            recorded, conflicts = _parse(response, projection, expected, reports,
-                                         allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS)
-            recorded, conflicts, incomplete = _accept_complete_input(projection, expected, recorded, conflicts)
-            if route is not None:
-                route.observe("request_finished", target=target, state="partial" if incomplete else "ready",
-                              reason="input_projection_incomplete" if incomplete else "accepted", logical_calls=1,
-                              recorded_pairs=sum(len(refs) for refs in recorded.values()),
-                              covered_pairs=sum(len(expected[position]) for position in recorded),
-                              prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
-                              elapsed_seconds=perf_counter() - request_started)
+                route.observe("request_finished", target=target, reason="technical_failure", state="failed",
+                              logical_calls=1, elapsed_seconds=perf_counter() - started)
             break
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
-            if route is not None:
-                route.observe("request_finished", target=target, state="rejected", logical_calls=1,
-                              reason="truncated" if isinstance(error, _TruncatedResponse) else "protocol_validation",
-                              prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
-                              elapsed_seconds=perf_counter() - request_started)
-            if target == "candidate" and route is not None and route.upgrade():
-                route.observe("upgraded", reason="truncated" if isinstance(error, _TruncatedResponse)
-                              else "protocol_validation", budget_used=budget.used)
-                # 升级不携带候选答案；仍受同一个批次次数和总CallBudget约束。
-                attempt_prompt = prompt
-                continue
-            if isinstance(error, _TruncatedResponse):
-                return ResultRecordOutcome('truncated', {}, calls, prompt_tokens, completion_tokens,
-                                           total_tokens, api_time or perf_counter() - started)
-            if attempt + 1 == PROTOCOL_ATTEMPTS:
-                return ResultRecordOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
-                                           total_tokens, api_time or perf_counter() - started)
-            attempt_prompt = _retry_prompt(prompt, error, response)
-    recorded_refs.update(recorded)
-    return ResultRecordOutcome("ready", recorded_refs, calls, prompt_tokens, completion_tokens, total_tokens,
-                               api_time or perf_counter() - started, conflict_refs=conflicts,
-                               incomplete_event_positions=incomplete)
+        usage = _usage(response)
+        prompt_tokens += usage[0]
+        completion_tokens += usage[1]
+        total_tokens += usage[2]
+        api_time += usage[3] or perf_counter() - started
+        error = None
+        try:
+            recorded, conflicts = _parse(response, projection, expected, reports)
+            valid = {(position, ref) for position, refs in expected.items() for ref in refs}
+        except _RetryViolation as exc:
+            error = exc
+            valid, recorded, conflicts = exc.valid_pairs, exc.recorded, exc.conflicts
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
+            error = exc
+            valid, recorded, conflicts = set(), {}, {}
+        for position, ref in valid:
+            # 完整输入的局部否定才能计入覆盖；正面引文仍可单独证明存在。
+            if ref in recorded.get(position, ()) or _input_complete_for_event(projection, position, (ref,)):
+                covered.add((position, ref))
+                if ref in recorded.get(position, ()):
+                    accepted.setdefault(position, set()).add(ref)
+                if ref in conflicts.get(position, ()):
+                    conflicting.setdefault(position, set()).add(ref)
+        if route is not None:
+            route.observe("request_finished", target=target, logical_calls=1,
+                state="rejected" if error else "ready" if input_complete else "partial",
+                reason=("truncated" if isinstance(error, _TruncatedResponse) else "protocol_validation") if error
+                       else "accepted" if input_complete else "input_projection_incomplete",
+                prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
+                elapsed_seconds=perf_counter() - started)
+        if error is None:
+            state = "ready"
+            break
+        # 已通过的配对不再发送。失败事件的其余独立成功配对也能保留，
+        # 但整个事件只有全覆盖后才能形成否定或进入冻结。
+        pending = {position: (report, remaining) for position, (report, refs) in original.items()
+                   if (remaining := tuple(ref for ref in refs if (position, ref) not in covered))}
+        feedback = tuple(getattr(error, "issues", ()))
+        if target == "candidate" and route is not None and route.upgrade():
+            route.observe("upgraded", reason="truncated" if isinstance(error, _TruncatedResponse)
+                          else "protocol_validation", budget_used=budget.used)
+        elif isinstance(error, _TruncatedResponse):
+            state = "truncated"
+            break
+    complete = {position for position, (_, refs) in original.items()
+                if all((position, ref) in covered for ref in refs)}
+    empty.update({position: tuple(sorted(accepted.get(position, ()))) for position in set(complete) | set(accepted)})
+    return ResultRecordOutcome("ready" if covered or empty or state == "ready" else state, empty,
+        calls, prompt_tokens, completion_tokens, total_tokens, api_time,
+        conflict_refs={position: tuple(sorted(refs)) for position, refs in conflicting.items() if position in complete},
+        incomplete_event_positions=frozenset(set(original) - complete), covered_pairs=frozenset(covered))
 
 
 def _report_clauses(report: str) -> tuple[str, ...]:
@@ -509,15 +554,18 @@ async def _check_exam_result_record_in_route_scope(projection: ExamLabTextProjec
         if outcome.state == 'truncated':
             pending[:0] = bisect_targets(batch, refs=lambda target: target[1], subset=subset)
         elif outcome.state == 'ready':
+            covered.update(outcome.covered_pairs)
             for position, values in outcome.recorded_refs.items():
                 accepted.setdefault(position, set()).update(values)
-                covered.update((position, ref) for ref in batch[position][1])
             for position, values in outcome.conflict_refs.items():
                 conflicts.setdefault(position, set()).update(values)
     # 一个事件拆成多批后必须核完整，未核完的事件不固定“未记录”。
     complete = {position for position, refs in all_refs.items()
                 if all((position, ref) in covered for ref in refs)}
     recorded.update({position: tuple(sorted(accepted.get(position, ()))) for position in complete})
+    # 已绑定的正面引文可证明存在；未核全的候选只禁止完整否定及冻结，
+    # 不抹掉已经验证的正面证据。
+    recorded.update({position: tuple(sorted(refs)) for position, refs in accepted.items() if refs})
     ready = bool(recorded) or bool(confirmed) or any(item.state == 'ready' for item in pieces)
     return ResultRecordOutcome(
         'ready' if ready else 'failed', recorded,

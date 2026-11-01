@@ -101,13 +101,19 @@ async def test_targeted_retry_contains_all_locations_previous_output_and_usage(s
     assert result.state == "ready" and result.llm_call_count == 2
     assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (20, 10, 30)
     prompt = client.prompts[1]
-    assert "PREVIOUS_OUTPUT=" in prompt and "上次输出仅作修正参考，不是原文资料" in prompt
+    if site.module is record:
+        assert "PREVIOUS_OUTPUT=" not in prompt and "校验错误" in prompt
+    else:
+        assert "PREVIOUS_OUTPUT=" in prompt and "上次输出仅作修正参考，不是原文资料" in prompt
     if site.module is relevance:
         assert "event_position=1" in prompt and "event_position=2" in prompt and "relevance" in prompt
         assert result.hints == {1: "positive", 2: "positive"}
     else:
         assert "event_position=1" in prompt and "course_doc_ref=D1" in prompt and "course_doc_ref=D2" in prompt
-        assert ("不存在的片段" if site.module is analysis else "不存在的引文") in prompt
+        if site.module is record:
+            assert "quote not in course" in prompt and "不存在的引文" not in prompt
+        else:
+            assert ("不存在的片段" if site.module is analysis else "不存在的引文") in prompt
         refs = getattr(result, "reason_refs", getattr(result, "recorded_refs", getattr(result, "analysed_refs", {})))
         assert refs == {1: ("D1", "D2")}
 
@@ -130,7 +136,7 @@ async def test_unicode_identity_is_decoded_before_previous_output_redaction(site
         bad["docs"][0]["quote"] = "住院号：ZY123456"
     client = Client([bad, site.good])
     await site.function(site.projection, client)
-    assert "PREVIOUS_OUTPUT=" in client.prompts[1]
+    assert ("PREVIOUS_OUTPUT=" in client.prompts[1]) == (site.module is not record)
     assert "ZY123456" not in client.prompts[1]
     assert "\\u4f4f" not in client.prompts[1]
 
@@ -172,7 +178,7 @@ async def test_coverage_retry_names_each_missing_document(site):
     result = await site.function(site.projection, client)
     assert result.state == "ready"
     assert ("event_position=2" if site.module is relevance else "course_doc_ref=D2") in client.prompts[1]
-    assert "PREVIOUS_OUTPUT=" in client.prompts[1]
+    assert ("PREVIOUS_OUTPUT=" in client.prompts[1]) == (site.module is not record)
 
 
 @pytest.mark.asyncio
@@ -183,7 +189,8 @@ async def test_record_collects_quote_and_span_failure_in_same_doc(monkeypatch):
            "course_doc_ref": "D1", "quote_type": "result_recorded", "quote": "虚构引文", "report_span": "虚构报告"}]}
     client = Client([bad, bad])
     await record.check_exam_result_record(projection, client)
-    assert "quote「虚构引文」" in client.prompts[1] and "report_span「虚构报告」" in client.prompts[1]
+    assert "quote not in course" in client.prompts[1] and "span not in report" in client.prompts[1]
+    assert "虚构引文" not in client.prompts[1] and "虚构报告" not in client.prompts[1]
 
 
 @pytest.mark.asyncio
