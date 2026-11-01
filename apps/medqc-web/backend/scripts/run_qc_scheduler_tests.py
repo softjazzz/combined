@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 SUITES: dict[str, tuple[str, ...]] = {
     "dual-model-exam": (
+        "tests/unit/test_exam_hard_poc.py",
         "tests/unit/test_exam_poc_acceptance.py",
         "tests/unit/test_exam_result_input_completeness.py",
         "tests/unit/test_bailian_exam_poc.py",

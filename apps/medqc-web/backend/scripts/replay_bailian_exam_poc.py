@@ -12,6 +12,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
+    parser.add_argument("--hard", action="store_true", help="重放固定难例目录，仍禁止真实模型调用")
     args = parser.parse_args(argv)
     artifact, report = args.artifact.resolve(), args.report.resolve()
     if artifact == report or artifact.suffix != ".json" or report.suffix != ".json":
@@ -23,8 +24,9 @@ def main(argv=None):
     previous = {key: os.environ.get(key) for key in keys}
     os.environ.update(keys)
     try:
-        return run_offline(["--profile", "offline",
-                            "tests/unit/test_exam_poc_acceptance.py::test_existing_recording_full_offline_chain"])
+        test = ("tests/unit/test_exam_hard_poc.py::test_existing_hard_recording_formal_chain" if args.hard else
+                "tests/unit/test_exam_poc_acceptance.py::test_existing_recording_full_offline_chain")
+        return run_offline(["--profile", "offline", test])
     finally:
         for key, value in previous.items():
             if value is None:

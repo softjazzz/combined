@@ -21,16 +21,18 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 
 class BailianPocTransport(httpx.AsyncBaseTransport):
-    """只放行显式选定的百炼文本接口、两个模型和最多12个实际HTTP请求。"""
+    """只放行显式百炼文本接口及两个模型；默认12次，显式难例任务最多32次。"""
 
-    def __init__(self, endpoint: str, *, inner=None):
+    def __init__(self, endpoint: str, *, inner=None, max_requests: int = 12):
         parsed = urlsplit(endpoint)
         if (parsed.scheme != "https" or parsed.hostname not in {
                 "dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com"}
                 or parsed.port not in (None, 443) or parsed.username or parsed.password
                 or parsed.query or parsed.fragment or parsed.path != "/compatible-mode/v1/chat/completions"):
             raise ValueError("unsupported explicit Bailian endpoint")
-        self.endpoint, self.inner = endpoint, inner
+        if type(max_requests) is not int or not 1 <= max_requests <= 32:
+            raise ValueError("invalid POC request bound")
+        self.endpoint, self.inner, self.max_requests = endpoint, inner, max_requests
         self.requests: list[dict] = []
         self.fatal = False
 
@@ -41,7 +43,7 @@ class BailianPocTransport(httpx.AsyncBaseTransport):
                 or body.get("enable_thinking") is not False
                 or body.get("max_tokens", 0) > 4096 or len(request.content) > 512_000
                 or set(body) & {"tools", "strata_prefix", "chat_template_kwargs"}
-                or len(self.requests) >= 12):
+                or len(self.requests) >= self.max_requests):
             raise RuntimeError("POC request outside the authorized bound")
         item = {"model": body["model"], "status": "started", "enable_thinking_sent": False,
                 "max_tokens_sent": body.get("max_tokens")}
@@ -103,11 +105,8 @@ def cases():
         yield case.name, case.projection(), case.expected_kind == "result_recorded"
 
 
-async def run(args) -> int:
-    if not args.run_real:
-        print(json.dumps({"mode": "preview", "models": MODELS, "synthetic_cases": args.cases,
-                          "planned_arms": ["reference", "cascade"], "http_calls": 0, "database_writes": 0}))
-        return 0
+def prepare_runtime(args, *, max_requests: int = 12):
+    """仅显式真实入口调用：读部署凭据、封锁DB、构造原客户端和单槽Gateway。"""
     from dotenv import dotenv_values
 
     values = dotenv_values(Path(args.env_file).resolve())
@@ -116,7 +115,7 @@ async def run(args) -> int:
     base = str(values.get("DASHSCOPE_BASE_URL") or (values.get("LLM_API_ENDPOINT") if is_bailian_default else "") or "").rstrip("/")
     if not key or not base:
         raise ValueError("explicit Bailian deployment credentials are unavailable")
-    sender = BailianPocTransport(base + "/chat/completions")
+    sender = BailianPocTransport(base + "/chat/completions", max_requests=max_requests)
     # 仅此进程使用最小环境；不继承业务DSN、不加载项目.env，也不修改任何.env文件。
     keep = {k: v for k, v in os.environ.items() if k.upper() in {
         "PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA"}}
@@ -138,7 +137,6 @@ async def run(args) -> int:
     from app.services import exam_result_model_route as route, qc_llm_client
     from app.services.llm_dispatch.client import GatewayDispatchClient
     from app.services.llm_observability import LLMObservabilityRecorder, NullLLMCallEventStore
-    from app.services.luxian_0609 import exam_result_record_check as check
 
     route.get_settings = lambda: settings
     gateway = create_app(GatewaySettings(token=token,
@@ -153,6 +151,17 @@ async def run(args) -> int:
         "timeout_seconds": 120, "custom_parameters": {"temperature": 0.0, "top_p": 0.9, "max_tokens": 4096}},
         gateway_dispatch_client=GatewayDispatchClient(transport=httpx.ASGITransport(app=gateway)),
         observability_recorder=LLMObservabilityRecorder(store=NullLLMCallEventStore()))
+    return settings, gateway, reference, sender
+
+
+async def run(args) -> int:
+    if not args.run_real:
+        print(json.dumps({"mode": "preview", "models": MODELS, "synthetic_cases": args.cases,
+                          "planned_arms": ["reference", "cascade"], "http_calls": 0, "database_writes": 0}))
+        return 0
+    settings, gateway, reference, sender = prepare_runtime(args)
+    from app.services.luxian_0609 import exam_result_record_check as check
+
     experiment = "A1-bailian-" + secrets.token_hex(6)
     results = []
     print(json.dumps({"event": "scope", "models": MODELS, "cases": args.cases,
