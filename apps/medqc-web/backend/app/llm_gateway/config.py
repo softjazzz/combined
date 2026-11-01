@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -43,6 +43,30 @@ class ProfileConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class CaseContinuationConfig:
+    enabled: bool = True
+    burst_requests: int = 4
+    turn_seconds: float = 30.0
+    fair_wait_seconds: float = 30.0
+    idle_grace_seconds: float = 0.05
+
+    def __post_init__(self):
+        if type(self.enabled) is not bool:
+            raise GatewayConfigurationError("case continuation enabled must be boolean")
+        _positive_int(self.burst_requests, "case burst", 64)
+        for name, value, maximum in (("turn_seconds", self.turn_seconds, 300),
+                                     ("fair_wait_seconds", self.fair_wait_seconds, 300),
+                                     ("idle_grace_seconds", self.idle_grace_seconds, 1)):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise GatewayConfigurationError("case continuation duration must be numeric")
+            normalized = _parse_bounded_float(value, name=name,
+                minimum=0 if name == "idle_grace_seconds" else 0.01, maximum=maximum)
+            object.__setattr__(self, name, normalized)
+        if self.idle_grace_seconds > min(self.turn_seconds, self.fair_wait_seconds):
+            raise GatewayConfigurationError("case idle grace exceeds fairness budget")
+
+
+@dataclass(frozen=True, slots=True)
 class GatewaySettings:
     token: str
     resources: dict[str, ResourceConfig]
@@ -51,12 +75,34 @@ class GatewaySettings:
     state_dir: Path
     startup_isolation_seconds: float = 30.0
     shutdown_grace_seconds: float = 30.0
+    cache_enabled: bool = False
+    cache_deployment_version: str | None = None
+    cache_ttl_seconds: float = 60.0
+    cache_max_entries: int = 64
+    strata_case_sequential: bool = True
+    continuation: CaseContinuationConfig = field(default_factory=CaseContinuationConfig)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.continuation, CaseContinuationConfig):
+            raise GatewayConfigurationError("invalid case continuation configuration")
+        if type(self.strata_case_sequential) is not bool:
+            raise GatewayConfigurationError("strata_case_sequential must be boolean")
+        if type(self.cache_enabled) is not bool:
+            raise GatewayConfigurationError("cache_enabled must be boolean")
+        if self.cache_enabled and (
+            not isinstance(self.cache_deployment_version, str)
+            or not _PROFILE_RE.fullmatch(self.cache_deployment_version)
+        ):
+            raise GatewayConfigurationError("cache deployment version is required")
+        _parse_bounded_float(self.cache_ttl_seconds, name="cache ttl", minimum=1, maximum=3600)
+        _positive_int(self.cache_max_entries, "cache_max_entries", 1024)
         if len(self.token) < 32 or self.token.strip() != self.token:
             raise GatewayConfigurationError("LLM Gateway token is not safely configured")
         if not self.resources or not self.profiles or not self.allowed_hosts:
             raise GatewayConfigurationError("LLM Gateway configuration is incomplete")
+        local_profiles = [profile for profile in self.profiles.values() if profile.provider_code == "strata"]
+        if len({profile.resource_id for profile in local_profiles}) > 1 or len({profile.api_endpoint for profile in local_profiles}) > 1:
+            raise GatewayConfigurationError("Strata profiles must share one physical resource and API endpoint")
         for name, profile in self.profiles.items():
             if name != profile.name or not _PROFILE_RE.fullmatch(name):
                 raise GatewayConfigurationError("profile configuration has an invalid name")
@@ -112,7 +158,39 @@ class GatewaySettings:
             state_dir=state_dir,
             startup_isolation_seconds=startup_isolation_seconds,
             shutdown_grace_seconds=shutdown_grace_seconds,
+            cache_enabled=_parse_cache_enabled(env.get("STRATA_CASE_CACHE_ENABLED", "false")),
+            cache_deployment_version=env.get("STRATA_CASE_CACHE_DEPLOYMENT_VERSION"),
+            cache_ttl_seconds=_parse_bounded_float(env.get("STRATA_CASE_CACHE_TTL_SECONDS", "60"), name="cache ttl", minimum=1, maximum=3600),
+            cache_max_entries=_positive_int_env(env.get("STRATA_CASE_CACHE_MAX_ENTRIES", "64")),
+            strata_case_sequential=_parse_case_sequential(env.get("STRATA_CASE_MODEL_SEQUENTIAL", "true")),
+            continuation=CaseContinuationConfig(
+                enabled=_parse_case_sequential(env.get("STRATA_CASE_CONTINUATION_ENABLED", "true")),
+                burst_requests=_positive_int_env(env.get("STRATA_CASE_BURST_REQUESTS", "4")),
+                turn_seconds=_parse_bounded_float(env.get("STRATA_CASE_TURN_SECONDS", "30"), name="case turn", minimum=.01, maximum=300),
+                fair_wait_seconds=_parse_bounded_float(env.get("STRATA_CASE_FAIR_WAIT_SECONDS", "30"), name="case fair wait", minimum=.01, maximum=300),
+                idle_grace_seconds=_parse_bounded_float(env.get("STRATA_CASE_IDLE_GRACE_SECONDS", ".05"), name="case idle grace", minimum=0, maximum=1),
+            ),
         )
+
+
+def _parse_case_sequential(raw):
+    if raw not in ("true", "false"):
+        raise GatewayConfigurationError("strata_case_sequential must be true or false")
+    return raw == "true"
+
+
+def _parse_cache_enabled(raw):
+    if raw not in ("true", "false"):
+        raise GatewayConfigurationError("cache_enabled must be true or false")
+    return raw == "true"
+
+
+def _positive_int_env(raw):
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise GatewayConfigurationError("invalid cache capacity") from None
+    return _positive_int(value, "cache capacity", 1024)
 
 
 def _load_json(env: Mapping[str, str], name: str) -> Any:

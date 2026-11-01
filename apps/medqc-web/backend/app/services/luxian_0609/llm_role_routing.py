@@ -62,7 +62,9 @@ def build_role_delegate(role: str) -> Any | None:
         model_code=model,
         custom_parameters=params,
         dispatch_mode=adjudicator.get("dispatch_mode"),
-        gateway_profile=adjudicator.get("gateway_profile"),
+        gateway_profile=(adjudicator.get("gateway_profile")
+                         if provider == adjudicator.get("provider_code") and model == adjudicator.get("model")
+                         else None),
     )
     if runtime.get("provider_code") != provider:
         raise ProviderConfigurationError("role provider override mismatch")

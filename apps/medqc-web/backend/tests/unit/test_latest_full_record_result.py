@@ -55,6 +55,7 @@ def saved_jobs(monkeypatch):
                "filters_json": json.dumps(filters, ensure_ascii=False),
                "record_ids_json": json.dumps([identity["visit_id"]]),
                "summary_json": json.dumps(summary, ensure_ascii=False),
+               "items_json": json.dumps(raw_items, ensure_ascii=False),
                "failed_records_json": json.dumps(failures, ensure_ascii=False),
                "created_by": "tester", "created_at": now, "updated_at": now, "finished_at": now}
         with Session(engine) as session:
@@ -122,6 +123,22 @@ def test_corrupt_partial_results_fail_closed_without_returning_older_results(sav
     result = read(service)
     assert result["state"] == "technical_error"
     assert result["job_id"] == "failed-bad"
+    assert result["items"] == []
+
+
+def test_partial_summary_without_authoritative_items_does_not_restore_old_results(saved_jobs):
+    service, add, engine, jobs = saved_jobs
+    add("full", 10, RULES)
+    add("failed-summary-only", 13, RULES, failed=True)
+    with Session(engine) as session:
+        session.execute(
+            jobs.update().where(jobs.c.id == "failed-summary-only").values(items_json=None)
+        )
+        session.commit()
+    result = read(service)
+    assert result["state"] == "technical_error"
+    assert result["reason_code"] == "saved_partial_result_invalid"
+    assert result["job_id"] == "failed-summary-only"
     assert result["items"] == []
 
 

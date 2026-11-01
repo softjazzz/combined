@@ -68,6 +68,8 @@ def _settings(tmp_path: Path, *, max_inflight: int = 2, max_queue: int = 4) -> G
 def _request(profile: str = "strata_first_pass", timeout: float = 5) -> GatewayCompletionRequest:
     return GatewayCompletionRequest(
         request_id=uuid4(),
+        # 本文件的各请求代表不同合成病例；同病例串行另有专门保护。
+        case_key=uuid4().hex * 2,
         profile=profile,
         deadline_at=datetime.now(timezone.utc) + timedelta(seconds=timeout),
         timeout_seconds=timeout,

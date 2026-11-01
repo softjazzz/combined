@@ -7,10 +7,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from ..llm_request_observation import GatewayRequestObservation
 
 
 GATEWAY_COMPLETIONS_PATH = "/v1/llm/completions"
@@ -35,6 +37,46 @@ class GatewayErrorCode(str, Enum):
     INTERNAL_ERROR = "gateway_internal_error"
 
 
+class GatewayCasePrefix(BaseModel):
+    """最终脱敏单消息的非重复分段描述，不允许指定路由。"""
+    model_config = ConfigDict(extra="forbid")
+    case_key: str = Field(pattern=r"^[a-f0-9]{64}$")
+    evidence_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    context_version: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    prefix_start: int = Field(gt=0, le=262144, strict=True)
+    expected_requests: int = Field(ge=1, le=16, strict=True)
+
+
+class GatewayPrimeMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nominal_input_tokens: int | None = Field(default=None, ge=0, strict=True)
+    cached_tokens: int | None = Field(default=None, ge=0, strict=True)
+    prefill_tokens: int | None = Field(default=None, ge=0, strict=True)
+    output_tokens: int | None = Field(default=None, ge=0, strict=True)
+    prefill_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
+    decode_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
+    queue_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
+    transport_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
+    wall_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False, strict=True)
+
+
+class GatewayCacheTrace(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    strategy: Literal["disabled", "cold", "primed", "reused", "prime_failed", "capacity_bypass"]
+    prime_requests_started: int | None = Field(ge=0, le=1, strict=True)
+    rule_requests_started: int | None = Field(ge=0, le=1, strict=True)
+    prime_metrics: GatewayPrimeMetrics | None = None
+    prime_error_code: str | None = Field(default=None, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+
+    @model_validator(mode="after")
+    def require_consistent_counts(self):
+        if self.strategy == "primed" and self.prime_requests_started != 1:
+            raise ValueError("primed trace requires one Prime")
+        if self.strategy in {"disabled", "cold", "reused", "capacity_bypass"} and self.prime_requests_started != 0:
+            raise ValueError("trace strategy cannot conceal a Prime")
+        return self
+
+
 class GatewayCompletionRequest(BaseModel):
     """一次受截止时间约束的 Provider 调用。"""
 
@@ -45,6 +87,16 @@ class GatewayCompletionRequest(BaseModel):
     deadline_at: datetime
     timeout_seconds: float = Field(gt=0, le=3600)
     payload: dict[str, Any]
+    case_prefix: GatewayCasePrefix | None = None
+    observe_request: bool = Field(default=False, strict=True)
+    case_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    package_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def require_package_case(self):
+        if self.package_key is not None and self.case_key is None:
+            raise ValueError("package identity requires case identity")
+        return self
 
     @field_validator("deadline_at")
     @classmethod
@@ -70,6 +122,8 @@ class GatewayErrorDetail(BaseModel):
 
     code: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
     retryable: bool
+    cache_trace: GatewayCacheTrace | None = None
+    request_observation: GatewayRequestObservation | None = None
 
 
 class GatewayErrorResponse(BaseModel):
@@ -93,4 +147,7 @@ __all__ = [
     "GatewayErrorDetail",
     "GatewayErrorResponse",
     "GatewayTiming",
+    "GatewayCasePrefix",
+    "GatewayCacheTrace",
+    "GatewayPrimeMetrics",
 ]

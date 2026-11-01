@@ -22,6 +22,8 @@ import os
 from pathlib import Path
 from typing import Any, Mapping
 
+from ..llm_experiment import experiment_store_dir
+
 logger = logging.getLogger(__name__)
 
 # v2：分析核验改为覆盖完整长文书，并修正截断父批聚合。版本同时参与 analysis、relevance、
@@ -49,7 +51,7 @@ def freeze_key(prompt: str, expected: Mapping[int, tuple[str, ...]] | None = Non
 
 
 def load_payload(namespace: str, key: str) -> Mapping[str, Any] | None:
-    path = default_store_dir() / namespace / f"{key}.json"
+    path = experiment_store_dir(default_store_dir()) / namespace / f"{key}.json"
     if not path.is_file():
         return None
     try:
@@ -65,7 +67,7 @@ def load_payload(namespace: str, key: str) -> Mapping[str, Any] | None:
 
 def save_payload(namespace: str, key: str, payload: Mapping[str, Any]) -> None:
     """首次写入者赢：已有同键冻结时不覆盖。"""
-    directory = default_store_dir() / namespace
+    directory = experiment_store_dir(default_store_dir()) / namespace
     path = directory / f"{key}.json"
     if path.is_file():
         return

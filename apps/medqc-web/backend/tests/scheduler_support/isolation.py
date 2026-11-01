@@ -10,6 +10,7 @@ import re
 import socket
 import subprocess
 import sys
+import sysconfig
 import tempfile
 from types import TracebackType
 from typing import Callable, Mapping
@@ -32,6 +33,7 @@ _REAL_SOCKET_ACCEPT = socket.socket.accept
 _REAL_SUBPROCESS_POPEN = subprocess.Popen
 _SOCKETPAIR_CODE = getattr(socket.socketpair, "__code__", None)
 _RESTART_PROBE_SHA256 = "4abc57f603bbc79a38ed851a684de9785f7c03349ccd3519404217912e4488f0"
+_COLD_START_PROBE_SHA256 = "4d81e240ee4f2ea71ddd0c20befef637d9264e5be8a4162c8d786ad74d91885c"
 _RESTART_PROBE_MODES = frozenset(
     {"create", "create-full", "run", "finish", "recover", "recover-full", "heartbeat"}
 )
@@ -365,3 +367,51 @@ class OfflineIsolation:
             event.remove(Engine, "do_connect", self._sqlite_listener)
             self._sqlalchemy_listener_installed = False
         return self._stack.__exit__(exc_type, exc, traceback)
+
+
+def run_preproduction_cold_start_probe() -> subprocess.CompletedProcess:
+    """只执行校验过的固定探针；不为普通subprocess.run开放任何例外。"""
+    backend_root = Path(__file__).resolve().parents[2]
+    probe_path = Path(__file__).with_name("preproduction_cold_start_probe.py")
+    source_bytes = probe_path.read_bytes()
+    if hashlib.sha256(source_bytes).hexdigest() != _COLD_START_PROBE_SHA256:
+        raise OfflineIsolationError("cold start probe source does not match reviewed digest")
+    source = source_bytes.decode("utf-8")
+    # -I/-S忽略PYTHONPATH及site启动项。部分开发机依赖装在user site，仅显式带入
+    # 已加载隔离依赖的site-packages目录，不执行其.pth，不复制任意sys.path。
+    dependencies = set()
+    for kind in ("purelib", "platlib"):
+        path = Path(sysconfig.get_path(kind)).resolve()
+        if path.name == "site-packages" and path.is_dir():
+            dependencies.add(str(path))
+    for name in ("dotenv", "sqlalchemy", "pydantic_settings"):
+        module = sys.modules.get(name)
+        path = Path(str(getattr(module, "__file__", ""))).resolve().parent.parent
+        if path.name != "site-packages" or not path.is_dir():
+            raise OfflineIsolationError("cold start dependency root is not trusted")
+        dependencies.add(str(path))
+    roots = [str(backend_root), *sorted(dependencies)]
+    wrapper = (
+        "import sys\n"
+        f"sys.path[:0] = {roots!r}\n"
+        "from tests.scheduler_support.isolation import OfflineIsolation\n"
+        "with OfflineIsolation():\n"
+        f"    exec(compile({source!r}, '<reviewed-cold-start-probe>', 'exec'), "
+        "{'__name__': '__main__'})\n"
+    )
+    command = [sys.executable, "-I", "-S", "-B", "-X", "utf8", "-c", wrapper]
+    with _REAL_SUBPROCESS_POPEN(
+        command, cwd=str(backend_root), env={
+            **{key: value for key, value in _sanitized_environment().items()
+               if key.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP", "TMPDIR"}},
+            **_SYNTHETIC_ENV,
+        }, shell=False,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+    ) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+            raise subprocess.TimeoutExpired(command, 30, output=stdout, stderr=stderr) from None
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)

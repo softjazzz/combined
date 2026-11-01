@@ -96,6 +96,10 @@ def build_provider_runtime_config(
         raise ProviderConfigurationError("explicit LLM provider is not enabled")
 
     if code == "strata":
+        from .luxian_0609.llm_role_routing import parse_role_models
+
+        if any(provider != code for provider, _model in parse_role_models(getattr(settings, "LLM_ROLE_MODELS", None)).values()):
+            raise ProviderConfigurationError("local_provider_role_override_mismatch")
         if not strata_is_explicitly_configured(settings):
             raise ProviderConfigurationError("Strata provider is not fully configured")
         endpoint = str(settings.STRATA_API_ENDPOINT or "").strip()
@@ -181,6 +185,7 @@ def build_provider_runtime_config(
             provider_code=code,
             dispatch_mode=dispatch_mode,
             gateway_profile=gateway_profile,
+            model_code=model,
         )
     )
     return runtime
@@ -197,14 +202,20 @@ def build_adjudicator_runtime_config(
     settings = get_settings()
     base = dict(base_config or build_provider_runtime_config(get_default_provider_code()))
     provider_code = str(base.get("provider_code") or get_default_provider_code()).strip().lower()
-    adjudicator_model = str(settings.LLM_ADJUDICATOR_MODEL or "").strip()
+    # 本地模型不沿用历史云端裁决模型名；未单独配置时使用后台选定模型。
+    if provider_code == "strata":
+        adjudicator_model = str(getattr(settings, "STRATA_ADJUDICATOR_MODEL", None) or "").strip()
+    elif provider_code == "ollama":
+        adjudicator_model = ""
+    else:
+        adjudicator_model = str(settings.LLM_ADJUDICATOR_MODEL or "").strip()
     model_code = adjudicator_model or str(base.get("model") or settings.LLM_MODEL or "qwen3.5-35b-a3b").strip()
     runtime = build_provider_runtime_config(
         provider_code=provider_code,
         model_code=model_code,
         custom_parameters=base.get("custom_parameters", {}) or {},
         dispatch_mode=base.get("dispatch_mode"),
-        gateway_profile=base.get("gateway_profile"),
+        gateway_profile=base.get("gateway_profile") if model_code == base.get("model") else None,
     )
     source = "env_adjudicator_model" if adjudicator_model else "fallback_first_pass_model"
     runtime.update(
@@ -457,6 +468,16 @@ class LLMConfigLoader:
                 return False
 
             if hasattr(service, "client"):
+                from .qc_llm_client import SichuanQCLLMClient
+
+                if isinstance(service.client, SichuanQCLLMClient):
+                    # 先构造并校验双方，避免切换失败留下半更新的在用客户端。
+                    candidate = SichuanQCLLMClient(config)
+                    adjudicator = SichuanQCLLMClient(build_adjudicator_runtime_config(config))
+                    service.client = candidate
+                    if hasattr(service, "adjudicator_client"):
+                        service.adjudicator_client = adjudicator
+                    return True
                 client = service.client
                 client.api_endpoint = config.get("api_endpoint")
                 client.api_key = config.get("api_key")

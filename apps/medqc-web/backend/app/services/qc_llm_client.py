@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from ..core.http import safe_post_json
+from ..core.http_attempt_observation import http_attempt_observation_scope
 from ..core.settings import get_settings
 from .llm_observability import (
     LLMObservabilityRecorder,
@@ -27,6 +28,7 @@ from .llm_execution_concurrency import concurrency_from_custom_parameters
 from .llm_dispatch.client import GatewayDispatchClient
 from .llm_dispatch.provider_profiles import (
     ProviderConfigurationError,
+    configured_gateway_profile,
     normalize_dispatch_mode,
     strata_is_explicitly_configured,
     validate_gateway_profile,
@@ -172,7 +174,7 @@ class SichuanQCLLMClient:
             self.gateway_profile = None
             if self.dispatch_mode == "gateway":
                 self.gateway_profile = validate_gateway_profile(
-                    profile=getattr(s, "LLM_GATEWAY_PROFILE", None),
+                    profile=configured_gateway_profile(s, self.provider_code, self.model),
                     provider_code=self.provider_code,
                 )
             self.max_parallel_records = int(
@@ -205,6 +207,13 @@ class SichuanQCLLMClient:
                 self.allow_mock_when_unconfigured,
             )
 
+        self.request_observation_enabled = getattr(get_settings(), "LLM_REQUEST_OBSERVATION_ENABLED", False) is True
+        self.strata_observation_mode = (
+            getattr(get_settings(), "STRATA_CASE_CACHE_MODE", "off")
+            if self.provider_code == "strata" else "off"
+        )
+        if self.strata_observation_mode == "prefix" and self.dispatch_mode != "gateway":
+            raise ProviderConfigurationError("Strata prefix mode requires the controlled Gateway")
         self.call_count = 0
         self.total_tokens = 0
         self.total_api_time = 0.0
@@ -236,7 +245,7 @@ class SichuanQCLLMClient:
                     "LLM gateway dispatch is no longer enabled"
                 )
             current_profile = str(
-                getattr(settings, "LLM_GATEWAY_PROFILE", "") or ""
+                configured_gateway_profile(settings, self.provider_code, self.model) or ""
             ).strip()
             if current_profile != self.gateway_profile:
                 raise ProviderConfigurationError(
@@ -447,6 +456,7 @@ class SichuanQCLLMClient:
         from .luxian_0609.privacy_request_scope import protect_current_payload
 
         payload = protect_current_payload(payload)
+        case_prefix = None
         event_id, started_timestamp = await self._observability_recorder.start_attempt(
             logical_call_id=logical_call_id,
             attempt_no=attempt_no,
@@ -457,34 +467,71 @@ class SichuanQCLLMClient:
         diagnostic_attempt = begin_diagnostic_attempt(
             logical_call_id=logical_call_id, attempt_no=attempt_no, payload=payload,
         )
+        transport_observation = None
         try:
             from .luxian_0609.execution_time_budget import request_timeout
 
             timeout_seconds = request_timeout(self.timeout_seconds)
-            if self.dispatch_mode == "gateway":
-                if not self.gateway_profile:
-                    raise ProviderConfigurationError(
-                        "LLM gateway profile is unavailable"
+            with http_attempt_observation_scope(
+                enabled=(getattr(self, "strata_observation_mode", "off") in {"observe", "prefix"}
+                         or getattr(self, "request_observation_enabled", False)),
+            ) as transport_observation:
+                if self.dispatch_mode == "gateway":
+                    if not self.gateway_profile:
+                        raise ProviderConfigurationError(
+                            "LLM gateway profile is unavailable"
+                        )
+                    if self.provider_code == "strata" and getattr(self, "strata_observation_mode", "off") == "prefix":
+                        from .strata_case_context import (
+                            consume_exam_result_prefix_request, current_exam_result_prefix,
+                        )
+
+                        case_prefix = current_exam_result_prefix(payload, model_role=self.model_role)
+                        if case_prefix is not None:
+                            # 先校验完整元数据，再扣调用预算；两者间无await。
+                            protect_current_payload({"case_prefix": case_prefix.model_dump(mode="json")})
+                            consume_exam_result_prefix_request()
+                    prefix_kwargs = {"case_prefix": case_prefix} if case_prefix is not None else {}
+                    if getattr(self, "request_observation_enabled", False):
+                        prefix_kwargs["observe_request"] = True
+                    if self.provider_code == "strata":
+                        from .llm_observability import current_llm_observation_context
+
+                        case_key = current_llm_observation_context().record_key_hash
+                        if case_key is not None:
+                            protect_current_payload({"case_key": case_key})
+                            prefix_kwargs["case_key"] = case_key
+                            from .strata_scheduling import current_strata_package_key
+
+                            package_key = current_strata_package_key()
+                            if package_key is not None:
+                                protect_current_payload({"package_key": package_key})
+                                prefix_kwargs["package_key"] = package_key
+                    result = await self._gateway_dispatch_client.complete(
+                        provider_code=self.provider_code,
+                        profile=self.gateway_profile,
+                        expected_endpoint_sha256=str(
+                            self.gateway_endpoint_sha256 or ""
+                        ),
+                        payload=payload,
+                        timeout_seconds=timeout_seconds,
+                        **prefix_kwargs,
                     )
-                result = await self._gateway_dispatch_client.complete(
-                    provider_code=self.provider_code,
-                    profile=self.gateway_profile,
-                    expected_endpoint_sha256=str(
-                        self.gateway_endpoint_sha256 or ""
-                    ),
-                    payload=payload,
-                    timeout_seconds=timeout_seconds,
-                )
-            else:
-                result = await safe_post_json(
-                    url=f"{self.api_endpoint}/chat/completions",
-                    headers=headers,
-                    payload=payload,
-                    timeout_seconds=timeout_seconds,
-                )
+                else:
+                    result = await safe_post_json(
+                        url=f"{self.api_endpoint}/chat/completions",
+                        headers=headers,
+                        payload=payload,
+                        timeout_seconds=timeout_seconds,
+                    )
             finish_diagnostic_attempt(diagnostic_attempt, result=result)
             usage = observed_usage(result)
             status, safe_error_kind = safe_status_for_http_result(result)
+            self._observe_strata_attempt(
+                event_id=event_id, logical_call_id=logical_call_id, attempt_no=attempt_no,
+                payload=payload, result=result, status=status,
+                started_timestamp=started_timestamp, transport_observation=transport_observation,
+            )
             await self._observability_recorder.finish_attempt(
                 event_id=event_id,
                 started_timestamp=started_timestamp,
@@ -495,6 +542,24 @@ class SichuanQCLLMClient:
             return result, usage
         except BaseException as error:
             status, safe_error_kind = safe_status_for_exception(error)
+            failed_cache_observation = None
+            if case_prefix is not None:
+                failed_cache_observation = {"_strata_cache_expected": True}
+                if getattr(error, "cache_trace", None) is not None:
+                    failed_cache_observation["_strata_cache"] = error.cache_trace
+                if getattr(error, "cache_trace_invalid", False):
+                    failed_cache_observation["_strata_cache_invalid"] = True
+            if getattr(error, "request_observation", None) is not None:
+                failed_cache_observation = dict(failed_cache_observation or {})
+                failed_cache_observation["_gateway_request_observation"] = error.request_observation
+            if getattr(error, "request_observation_invalid", False):
+                failed_cache_observation = dict(failed_cache_observation or {})
+                failed_cache_observation["_gateway_request_observation_invalid"] = True
+            self._observe_strata_attempt(
+                event_id=event_id, logical_call_id=logical_call_id, attempt_no=attempt_no,
+                payload=payload, result=failed_cache_observation, status=status,
+                started_timestamp=started_timestamp, transport_observation=transport_observation,
+            )
             finish_diagnostic_attempt(diagnostic_attempt, error_kind=safe_error_kind or "unknown_error")
             await self._observability_recorder.finish_attempt(
                 event_id=event_id,
@@ -504,6 +569,21 @@ class SichuanQCLLMClient:
                 usage=None,
             )
             raise
+
+    def _observe_strata_attempt(self, *, transport_observation, **kwargs) -> None:
+        if (getattr(self, "strata_observation_mode", "off") not in {"observe", "prefix"}
+                and not getattr(self, "request_observation_enabled", False)):
+            return
+        try:
+            self._observability_recorder.record_strata_attempt(
+                **kwargs, model=self.model, model_role=self.model_role, provider_code=self.provider_code,
+                gateway=self.dispatch_mode == "gateway",
+                route_key=[self.dispatch_mode, self.gateway_profile, self.api_endpoint, self.model_role],
+                transport=transport_observation.snapshot() if transport_observation else None,
+            )
+        except Exception:
+            # 包含自定义 recorder；旁路失败不能触发医学请求重试或回退。
+            logger.warning("strata_p0_observation_failed")
 
     @staticmethod
     def _aggregate_attempt_usages(

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from app.core.settings import Settings
 
 from app.routers import qc_sichuan
 from app.services import sichuan_workspace_batch_worker as batch_worker
@@ -4422,9 +4423,11 @@ async def test_workspace_batch_long_text_fallback_preserves_native_source_coordi
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("recover_on_call", [2, None], ids=["recovers", "exhausted"])
+@pytest.mark.parametrize("dispatch_mode", ["legacy", "rabbitmq"])
 async def test_formal_customer_sample_model_failure_automatically_retries_failed_rule(
     monkeypatch: pytest.MonkeyPatch,
     recover_on_call: int | None,
+    dispatch_mode: str,
 ) -> None:
     workspace = _WorkspaceStub()
     workspace.job["created_by"] = "tester"
@@ -4447,6 +4450,8 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
     }
+    if dispatch_mode == "rabbitmq":
+        workspace.job["filters"]["qc_dispatch"] = {"schema_version": 1, "mode": "rabbitmq"}
     original_update_progress = workspace.update_batch_job_progress
 
     def _update_incremental_progress(**kwargs: Any) -> None:
@@ -4466,6 +4471,7 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
         job_id: str,
         created_by: str,
         automatic: bool = False,
+        retry_delay_seconds: float | None = None,
     ) -> Dict[str, Any] | None:
         assert job_id == workspace.job["id"]
         assert created_by == "tester"
@@ -4478,28 +4484,15 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
         }
         workspace.job["failed_records"] = normalized_failures
         workspace.job["status"] = "queued"
-        retry_calls.append({"automatic": automatic, "scope": retry_scope})
+        retry_calls.append({
+            "automatic": automatic, "scope": retry_scope,
+            "retry_delay_seconds": retry_delay_seconds,
+        })
         return dict(workspace.job)
 
     workspace.retry_batch_job = _retry_batch_job  # type: ignore[attr-defined]
     service = _ServiceStub()
-    # 正式 worker 会先验证创建时冻结的配置与执行器身份；重试 fixture 走同一准入合同。
-    from app.core.settings import Settings
-    from app.services.luxian_0609.rule_decision_settings import (
-        capture_luxian_0609_task_runtime,
-        capture_luxian_0609_task_settings,
-        resolve_mainline_rule_decision_settings,
-    )
-
-    task_settings = Settings(
-        _env_file=None,
-        JWT_SECRET="synthetic-auto-retry-only",
-        **vars(_luxian_native_settings()),
-    )
-    workspace.job["filters"]["lx0609_task_settings"] = capture_luxian_0609_task_settings(
-        resolve_mainline_rule_decision_settings(task_settings)
-    )
-    workspace.job["filters"]["lx0609_task_runtime"] = capture_luxian_0609_task_runtime(service)
+    task_settings = _freeze_formal_customer_batch_fixture_runtime(workspace, service)
     model_calls: list[tuple[str, ...]] = []
 
     async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
@@ -4591,7 +4584,15 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
     assert workspace.summary is not None
-    if recover_on_call is not None:
+    if dispatch_mode == "rabbitmq":
+        # 正式 Worker 只登记下一代投递后返回，不在当前 delivery 递归补跑。
+        assert workspace.job["status"] == "queued"
+        assert model_calls == [("LX0609-06-01-04", "LX0609-06-01-05")]
+        assert len(retry_calls) == 1
+        assert retry_calls[0]["retry_delay_seconds"] == 0.0
+        assert [item["rule_id"] for item in workspace.items] == ["LX0609-06-01-04"]
+        assert [item["rule_id"] for item in workspace.failed_records] == ["LX0609-06-01-05"]
+    elif recover_on_call is not None:
         assert workspace.job["status"] == "completed"
         assert workspace.summary["execution_status"] == "completed"
         assert workspace.summary["failed_rule_count"] == 0
@@ -4615,6 +4616,28 @@ async def test_formal_customer_sample_model_failure_automatically_retries_failed
         assert [item["rule_id"] for item in workspace.failed_records] == ["LX0609-06-01-05"]
     assert all(call["automatic"] is True for call in retry_calls)
     assert all(call["scope"]["pending_count"] == 1 for call in retry_calls)
+
+
+def _freeze_formal_customer_batch_fixture_runtime(
+    workspace: _WorkspaceStub, service: _ServiceStub,
+) -> Settings:
+    # 正式 worker 验证创建时冻结的配置和执行器身份；夹具也遵循该准入合同。
+    from app.services.luxian_0609.rule_decision_settings import (
+        capture_luxian_0609_task_runtime,
+        capture_luxian_0609_task_settings,
+        resolve_mainline_rule_decision_settings,
+    )
+
+    task_settings = Settings(
+        _env_file=None,
+        JWT_SECRET="synthetic-auto-retry-only",
+        **vars(_luxian_native_settings()),
+    )
+    workspace.job["filters"]["lx0609_task_settings"] = capture_luxian_0609_task_settings(
+        resolve_mainline_rule_decision_settings(task_settings)
+    )
+    workspace.job["filters"]["lx0609_task_runtime"] = capture_luxian_0609_task_runtime(service)
+    return task_settings
 
 
 def _configure_formal_customer_sample_batch_fixture(
@@ -4693,6 +4716,8 @@ async def _run_formal_customer_sample_batch_fixture(
     workspace.update_batch_job_progress = _update_incremental_progress  # type: ignore[method-assign]
     service = _ServiceStub()
 
+    task_settings = _freeze_formal_customer_batch_fixture_runtime(workspace, service)
+
     async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
         visit_id = str(kwargs["bundle"]["visit_id"])
         return {
@@ -4712,7 +4737,7 @@ async def _run_formal_customer_sample_batch_fixture(
         return service
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(batch_worker, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(batch_worker, "get_settings", lambda: task_settings)
     monkeypatch.setattr(
         batch_worker,
         "load_luxian_0609_rules",

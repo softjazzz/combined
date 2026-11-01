@@ -12,10 +12,12 @@ from ..services.llm_config_loader import (
     SUPPORTED_PROVIDER_CODES,
     LLMConfigLoader,
     build_provider_runtime_config,
+    build_adjudicator_runtime_config,
     get_default_provider_code,
     get_enabled_provider_codes,
 )
 from ..services.qc_llm_client import SichuanQCLLMClient
+from ..services.llm_dispatch.provider_profiles import ProviderConfigurationError
 from ..services.llm_observability import llm_observation_context
 from ..services.llm_execution_concurrency import (
     EXECUTION_CONCURRENCY_KEY,
@@ -80,6 +82,9 @@ def _resolve_provider(provider_code: str) -> Dict[str, Any]:
             "base_endpoint": "http://127.0.0.1:11434/v1",
             "request_format": "openai",
         }
+    if code == "strata":
+        return {"id": "strata", "provider_code": "strata", "provider_name": "本地 Strata",
+                "base_endpoint": "", "request_format": "openai"}
     # fallback custom
     return {
         "id": code or "custom",
@@ -170,8 +175,8 @@ def _resolve_model(model_code: str) -> Dict[str, Any]:
             "description": "DeepSeek V4 Pro 模型",
         }
     return {
-        "id": code or "unknown",
-        "model_code": code or "unknown",
+        "id": (model_code or "").strip() or "unknown",
+        "model_code": (model_code or "").strip() or "unknown",
         "model_name": model_code or "Unknown",
         "description": "",
     }
@@ -182,9 +187,22 @@ def _extract_provider_and_model_codes(payload: Dict[str, Any]) -> tuple[str, str
     enabled_provider_codes = set(get_enabled_provider_codes())
     provider_code = str(payload.get("provider_code") or payload.get("provider_id") or default_provider_code).strip().lower()
     if provider_code not in SUPPORTED_PROVIDER_CODES or provider_code not in enabled_provider_codes:
-        provider_code = default_provider_code
+        raise HTTPException(status_code=422, detail="llm_provider_not_enabled")
     model_code = str(payload.get("model_code") or payload.get("model_id") or "").strip()
     return provider_code, model_code
+
+
+def _validate_strata_selection(model_code: str, custom_parameters=None) -> Dict[str, Any]:
+    """后台本地选项必须使用统一准入，不把40个HTTP槽当成本地容量。"""
+    try:
+        runtime = build_provider_runtime_config("strata", model_code=model_code or None,
+                                                custom_parameters=custom_parameters)
+        if runtime.get("dispatch_mode") != "gateway":
+            raise ProviderConfigurationError("strata_requires_gateway")
+        build_adjudicator_runtime_config(runtime)
+        return runtime
+    except ProviderConfigurationError as exc:
+        raise HTTPException(status_code=422, detail="strata_configuration_unavailable") from exc
 
 
 def _extract_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
@@ -240,11 +258,19 @@ def _project_config_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
-    supabase = get_supabase()
     provider_code, model_code = _extract_provider_and_model_codes(payload)
-    if not model_code:
-        runtime = build_provider_runtime_config(provider_code)
-        model_code = str(runtime.get("model") or "").strip()
+    if provider_code == "strata":
+        runtime = _validate_strata_selection(model_code, payload.get("custom_parameters"))
+        model_code = model_code or str(runtime["model"])
+    else:
+        try:
+            runtime = build_provider_runtime_config(provider_code, model_code=model_code or None,
+                                                     custom_parameters=payload.get("custom_parameters"))
+            build_adjudicator_runtime_config(runtime)
+            model_code = model_code or str(runtime["model"])
+        except ProviderConfigurationError as exc:
+            raise HTTPException(status_code=422, detail="llm_configuration_unavailable") from exc
+    supabase = get_supabase()
     cfg_name = payload.get("config_name") or "custom"
 
     custom_parameters = dict(payload.get("custom_parameters") or {})
@@ -536,6 +562,8 @@ async def test_config(
     del system_config_user
     try:
         provider_code, model_code = _extract_provider_and_model_codes(payload)
+        if provider_code == "strata":
+            _validate_strata_selection(model_code, payload.get("custom_parameters"))
         runtime = build_provider_runtime_config(
             provider_code=provider_code,
             model_code=model_code or None,
@@ -553,7 +581,7 @@ async def test_config(
                 status_code=StatusCode.BAD_REQUEST,
                 detail="llm_connection_test_not_configured",
             )
-        if provider_code in ("alibaba", "deepseek", "siliconflow") and not client.api_key:
+        if client.dispatch_mode == "direct" and provider_code in ("alibaba", "deepseek", "siliconflow") and not client.api_key:
             raise HTTPException(
                 status_code=StatusCode.BAD_REQUEST,
                 detail="llm_connection_test_not_configured",

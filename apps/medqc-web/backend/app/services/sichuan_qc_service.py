@@ -31,6 +31,7 @@ from .copy_content_similarity import (
     split_sentences,
 )
 from .unified_rule_engine import UnifiedRuleEngine
+from .strata_scheduling import strata_case_execution_scope, strata_rule_package_scope
 from .llm_config_loader import LLMConfigLoader, build_adjudicator_runtime_config
 from ..core.http import configure_shared_http_max_concurrency
 from .qc_llm_client_runtime import SichuanQCLLMClient  # 拆分出的 LLM 客户端（runtime 源码版）
@@ -349,17 +350,18 @@ def _build_luxian_0609_033_live_source_decisions(
 
 
 class SichuanQCService:
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: Optional[Dict[str, Any]] = None, *, adjudicator_config: Optional[Dict[str, Any]] = None) -> None:
         """
         初始化四川质控服务
 
         Args:
             config: LLM 配置字典，如果为 None 则从 .env 文件加载
+            adjudicator_config: 已接纳任务隔离时复制的二审配置；不重新从环境推导模型
         """
         # LLM 客户端（config 为 None 时，SichuanQCLLMClient 自动从 .env 加载）
         self.client = SichuanQCLLMClient(config)
         self.adjudicator_client = SichuanQCLLMClient(
-            build_adjudicator_runtime_config(
+            adjudicator_config if adjudicator_config is not None else build_adjudicator_runtime_config(
                 config
                 or {
                     "provider_code": self.client.provider_code,
@@ -411,7 +413,7 @@ class SichuanQCService:
         self._last_source_alert_at: float = 0.0
 
         # 统一规则引擎 (用于串行模式)
-        self.rule_engine = UnifiedRuleEngine(self.client.generate)
+        self.rule_engine = UnifiedRuleEngine(self._generate_with_current_client)
         self.rule_orchestrator = QCRuleOrchestrator()
         self.execution_cache = QCExecutionCache(default_ttl_seconds=1800)
 
@@ -429,6 +431,10 @@ class SichuanQCService:
             enable_truncate=self.enable_truncate,
             max_content_length=self.max_content_length,
         )
+
+    async def _generate_with_current_client(self, prompt: str) -> Dict[str, Any]:
+        """绑定服务而非旧客户端；独立任务runtime仍委派其自己的客户端。"""
+        return await self.client.generate(prompt)
 
     @staticmethod
     def _client_runtime_config(client: SichuanQCLLMClient) -> Dict[str, Any]:
@@ -475,9 +481,9 @@ class SichuanQCService:
     def isolated_luxian_0609_runtime(self, *, single_record: bool = False) -> "SichuanQCService":
         """为已领取的原始0609任务保留独立客户端，避免全局热重载串改在途模型。"""
 
-        runtime = SichuanQCService(self._client_runtime_config(self.client))
-        runtime.adjudicator_client = SichuanQCLLMClient(
-            self._client_runtime_config(self.adjudicator_client)
+        runtime = SichuanQCService(
+            self._client_runtime_config(self.client),
+            adjudicator_config=self._client_runtime_config(self.adjudicator_client),
         )
         runtime.client._stats_parent = self.client
         runtime.adjudicator_client._stats_parent = self.adjudicator_client
@@ -1228,6 +1234,7 @@ class SichuanQCService:
 
 
     @luxian_0609_privacy_scope
+    @strata_case_execution_scope
     async def _evaluate_rules_orchestrated(
         self,
         *,
@@ -1271,7 +1278,9 @@ class SichuanQCService:
         llm_concurrency = 4
 
         async def _llm_evaluate(rule: Dict[str, Any], medical_record: Dict[str, Any]) -> Dict[str, Any]:
-            return await self.rule_engine.evaluate(rule, medical_record=medical_record)
+            rule_key = str(rule.get("rule_id") or rule.get("id") or "")
+            with strata_rule_package_scope("rule:" + rule_key if rule_key else None):
+                return await self.rule_engine.evaluate(rule, medical_record=medical_record)
 
         medical_record: Dict[str, Any] = {
             "id": document_id,
@@ -1386,19 +1395,20 @@ class SichuanQCService:
         enriched_record["doc_scope"] = str(options.get("doc_scope") or enriched_record.get("doc_scope") or "")
         enriched_record["quality_profile"] = str(options.get("quality_profile") or enriched_record.get("quality_profile") or "")
         enriched_record["model_version"] = str(options.get("model_version") or self.client.model or "")
-        return await self.rule_engine.evaluate_batch_compact(
-            rules=rules,
-            medical_record=enriched_record,
-            pack_id=str(options.get("pack_id") or ""),
-            pack_size=int(options.get("pack_size") or len(rules)),
-            low_confidence_threshold=float(options.get("low_confidence_threshold") or 0.45),
-            context_token_budget=8600 if normalize_quality_profile(options.get("quality_profile")) == QUALITY_PROFILE_EFFECT_PRIORITY else 7000,
-            quality_profile=normalize_quality_profile(options.get("quality_profile")),
-            batch_output_mode=normalize_batch_output_mode(
-                options.get("batch_output_mode"),
+        with strata_rule_package_scope(options.get("pack_id")):
+            return await self.rule_engine.evaluate_batch_compact(
+                rules=rules,
+                medical_record=enriched_record,
+                pack_id=str(options.get("pack_id") or ""),
+                pack_size=int(options.get("pack_size") or len(rules)),
+                low_confidence_threshold=float(options.get("low_confidence_threshold") or 0.45),
+                context_token_budget=8600 if normalize_quality_profile(options.get("quality_profile")) == QUALITY_PROFILE_EFFECT_PRIORITY else 7000,
                 quality_profile=normalize_quality_profile(options.get("quality_profile")),
-            ),
-        )
+                batch_output_mode=normalize_batch_output_mode(
+                    options.get("batch_output_mode"),
+                    quality_profile=normalize_quality_profile(options.get("quality_profile")),
+                ),
+            )
 
     async def _apply_selective_refine(
         self,

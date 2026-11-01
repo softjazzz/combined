@@ -23,9 +23,11 @@ def validate_worker_settings(settings: Any) -> None:
         )
     if str(getattr(settings, "LLM_DISPATCH_MODE", "direct")) != "gateway":
         raise WorkerConfigurationError("QC Worker requires LLM_DISPATCH_MODE=gateway")
-    for field in ("LLM_GATEWAY_URL", "LLM_GATEWAY_TOKEN", "LLM_GATEWAY_PROFILE"):
+    for field in ("LLM_GATEWAY_URL", "LLM_GATEWAY_TOKEN"):
         if not str(getattr(settings, field, "") or "").strip():
             raise WorkerConfigurationError("QC Worker Gateway configuration is incomplete")
+    if not (getattr(settings, "LLM_GATEWAY_PROFILE", None) or getattr(settings, "LLM_GATEWAY_PROFILES", None)):
+        raise WorkerConfigurationError("QC Worker Gateway configuration is incomplete")
 
 
 def create_workspace() -> CustomQCWorkspaceService:
@@ -35,18 +37,15 @@ def create_workspace() -> CustomQCWorkspaceService:
 
 
 def create_qc_service_provider() -> Callable[[], Awaitable[SichuanQCService]]:
-    """创建进程内单例 provider；配置读取错误失败关闭，不回退其他 Provider。"""
+    """每批读取配置；同配置复用实例，切换时不修改在途任务持有的旧实例。"""
 
     service: SichuanQCService | None = None
+    selected_config: dict | None = None
     lock = asyncio.Lock()
 
     async def provide() -> SichuanQCService:
-        nonlocal service
-        if service is not None:
-            return service
+        nonlocal service, selected_config
         async with lock:
-            if service is not None:
-                return service
             config = await LLMConfigLoader.load_config(
                 config_name="default",
                 user_id=None,
@@ -55,7 +54,11 @@ def create_qc_service_provider() -> Callable[[], Awaitable[SichuanQCService]]:
                 raise ProviderConfigurationError(
                     "default LLM configuration is unavailable"
                 )
-            service = SichuanQCService(config)
+            if service is None or config != selected_config:
+                from copy import deepcopy
+
+                candidate = SichuanQCService(config)
+                service, selected_config = candidate, deepcopy(config)
             return service
 
     return provide

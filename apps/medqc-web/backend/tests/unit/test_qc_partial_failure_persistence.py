@@ -1,8 +1,9 @@
 """执行失败与临床结果分离：真实 SQLite 事务及客户 DTO。"""
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
+import uuid
 
 import pytest
 import sqlalchemy as sa
@@ -13,6 +14,7 @@ from app.services import sichuan_workspace_batch_worker as batch_worker
 from app.routers import qc_sichuan
 from app.services.case_identity import CaseRef
 from app.services.qc_workspace.partial_record_delivery import select_complete_record_items
+from app.services.qc_dispatch.repository import QCDispatchRepository
 
 pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
 
@@ -478,6 +480,86 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
         row = dict(connection.execute(sa.select(table)).mappings().one())
     assert json.loads(row["items_json"]) == items
     assert json.loads(row["failed_records_json"])[0]["record_key"] == '["test-i","test-p","test-v"]'
+
+
+@pytest.mark.parametrize("enqueue_outcome", ["queued", "none", "raise"])
+def test_mq_auto_retry_preserves_success_and_delays_only_one_next_generation(
+    storage, monkeypatch, enqueue_outcome,
+):
+    """业务线失败提示与 MQ 延迟投递使用同一个真实事务 owner。"""
+    service, engine, table = storage
+    sessions = sessionmaker(bind=engine)
+    repository = QCDispatchRepository(sessions, table, schema=None)
+    repository.dispatch_table.metadata.create_all(engine)
+    service._qc_dispatch = repository
+    job_id = str(uuid.uuid4())
+    now = datetime(2026, 10, 31, 12, 0, 0)
+    monkeypatch.setattr(workspace, "_now_utc", lambda: now)
+    with sessions.begin() as session:
+        filters = json.loads(session.execute(sa.select(table.c.filters_json)).scalar_one())
+        filters["qc_dispatch"] = {"schema_version": 1, "mode": "rabbitmq"}
+        session.execute(table.update().values(id=job_id, filters_json=json.dumps(filters)))
+        repository.add_dispatch(session, job_id=job_id, mode="rabbitmq", enqueue_leaf=True)
+
+    summary, items, failures = _payload()
+    failures[0]["reason_code"] = "model_transport_error"
+    summary["rule_count"] = 2
+    service.complete_batch_job(
+        job_id=job_id, summary=summary, items=items, failed_records=failures,
+    )
+    before = service.get_batch_job_for_processing(job_id=job_id)
+    with sessions() as session:
+        expected_filters = session.execute(sa.select(table.c.filters_json)).scalar_one()
+    original_retry = service.retry_batch_job
+    calls = []
+
+    def enqueue_once(**kwargs):
+        calls.append(kwargs)
+        if enqueue_outcome == "raise":
+            raise RuntimeError("synthetic MQ enqueue failure")
+        if enqueue_outcome == "none":
+            return None
+        return original_retry(**kwargs)
+
+    monkeypatch.setattr(service, "retry_batch_job", enqueue_once)
+    kwargs = dict(
+        workspace=service, job_id=job_id, created_by="tester",
+        expected_attempt_filters_json=expected_filters, retry_delay_seconds=17.0,
+    )
+    if enqueue_outcome == "raise":
+        with pytest.raises(RuntimeError, match="synthetic MQ enqueue failure"):
+            batch_worker._enqueue_automatic_failed_rule_retry(**kwargs)
+    else:
+        result = batch_worker._enqueue_automatic_failed_rule_retry(**kwargs)
+        assert (result is not None) == (enqueue_outcome == "queued")
+
+    assert len(calls) == 1
+    assert calls[0]["retry_delay_seconds"] == 17.0
+    assert calls[0]["expected_attempt_filters_json"] == expected_filters
+    after = service.get_batch_job_for_processing(job_id=job_id)
+    assert after["items"] == before["items"]
+    assert len(after["failed_records"]) == len(before["failed_records"]) == 1
+    assert all(
+        after["failed_records"][0][key] == value
+        for key, value in before["failed_records"][0].items()
+    )
+    with sessions() as session:
+        outbox = session.execute(sa.select(repository.outbox_table)).mappings().all()
+    dispatch = repository.get_dispatch(job_id)
+    if enqueue_outcome == "queued":
+        assert after["status"] == "queued"
+        assert after["summary"]["automatic_failed_rule_retry"]["status"] == "queued"
+        assert dispatch.generation == 2
+        assert len(outbox) == 2
+        next_delivery = next(row for row in outbox if row["generation"] == 2)
+        assert next_delivery["available_at"] == now + timedelta(seconds=17)
+    else:
+        assert after["status"] == "failed"
+        plan = after["summary"]["automatic_failed_rule_retry"]
+        assert plan["status"] == "enqueue_failed"
+        assert plan["should_retry"] is False
+        assert dispatch.generation == 1
+        assert len(outbox) == 1
 
 
 def test_automatic_retry_announces_queued_only_after_retry_cas_succeeds(storage):
