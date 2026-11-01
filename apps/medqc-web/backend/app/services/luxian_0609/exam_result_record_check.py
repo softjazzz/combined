@@ -327,20 +327,39 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
     api_time = 0.0
     attempt_prompt = prompt
     started = perf_counter()
+    from ..exam_result_model_route import current_route
+
+    route = current_route()
+    input_complete = route is None or all(
+        len(report) < MAX_REPORT_CHARS
+        and all(len(_course_text(projection, ref)) <= MAX_COURSE_CHARS for ref in refs)
+        for report, refs in model_targets.values()
+    )
     for attempt in range(PROTOCOL_ATTEMPTS):
         if len(attempt_prompt) > MAX_PROMPT_CHARS or not budget.take():
             return ResultRecordOutcome('failed', {}, calls, prompt_tokens, completion_tokens,
                                        total_tokens, api_time or perf_counter() - started)
+        selected, target = route.selected(input_complete=input_complete) if route is not None else (llm_client, "reference")
         calls += 1
+        request_started = perf_counter()
+        if route is not None:
+            route.observe("request_started", target=target, budget_used=budget.used,
+                          input_complete=input_complete,
+                          reason="allowlisted" if input_complete else "input_projection_limit",
+                          expected_pairs=sum(len(refs) for refs in expected.values()))
         try:
             from app.services.strata_case_context import exam_result_prefix_scope
 
             with exam_result_prefix_scope():
-                response = await llm_client.generate(
+                response = await selected.generate(
                     attempt_prompt, max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
-                    **structured_output_kwargs(llm_client),
+                    **structured_output_kwargs(selected),
                 )
         except Exception:
+            if route is not None:
+                route.observe("request_finished", target=target, reason="technical_failure",
+                              state="failed", logical_calls=1,
+                              elapsed_seconds=perf_counter() - request_started)
             return ResultRecordOutcome("failed", {}, calls, prompt_tokens, completion_tokens, total_tokens,
                                        api_time or perf_counter() - started)
         try:
@@ -351,8 +370,25 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
             api_time += usage[3]
             recorded, conflicts = _parse(response, projection, expected, reports,
                                          allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS)
+            if route is not None:
+                route.observe("request_finished", target=target, state="ready", logical_calls=1,
+                              recorded_pairs=sum(len(refs) for refs in recorded.values()),
+                              covered_pairs=sum(len(expected[position]) for position in recorded),
+                              prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
+                              elapsed_seconds=perf_counter() - request_started)
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
+            if route is not None:
+                route.observe("request_finished", target=target, state="rejected", logical_calls=1,
+                              reason="truncated" if isinstance(error, _TruncatedResponse) else "protocol_validation",
+                              prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
+                              elapsed_seconds=perf_counter() - request_started)
+            if target == "candidate" and route is not None and route.upgrade():
+                route.observe("upgraded", reason="truncated" if isinstance(error, _TruncatedResponse)
+                              else "protocol_validation", budget_used=budget.used)
+                # 升级不携带候选答案；仍受同一个批次次数和总CallBudget约束。
+                attempt_prompt = prompt
+                continue
             if isinstance(error, _TruncatedResponse):
                 return ResultRecordOutcome('truncated', {}, calls, prompt_tokens, completion_tokens,
                                            total_tokens, api_time or perf_counter() - started)
@@ -398,6 +434,13 @@ def _verbatim_confirmed(
 
 
 async def check_exam_result_record(projection: ExamLabTextProjection, llm_client: Any) -> ResultRecordOutcome:
+    from ..exam_result_model_route import exam_result_route_scope
+
+    with exam_result_route_scope(llm_client):
+        return await _check_exam_result_record_in_route_scope(projection, llm_client)
+
+
+async def _check_exam_result_record_in_route_scope(projection: ExamLabTextProjection, llm_client: Any) -> ResultRecordOutcome:
     targets = _targets(projection)
     if not targets or llm_client is None:
         return ResultRecordOutcome('skipped', {})
@@ -417,7 +460,8 @@ async def check_exam_result_record(projection: ExamLabTextProjection, llm_client
     accepted = {}
     for position, ref in confirmed:
         accepted.setdefault(position, set()).add(ref)
-    subset = lambda target, refs: (target[0], refs)
+    def subset(target, refs):
+        return target[0], refs
     try:
         pending = partition_targets(model_targets, refs=lambda target: target[1], subset=subset,
                                     prompt=lambda batch: _prompt(projection, batch),

@@ -226,6 +226,8 @@ class SichuanQCLLMClient:
         self._gateway_dispatch_client = (
             gateway_dispatch_client or GatewayDispatchClient()
         )
+        if self.provider_code == "local_openai" and self.dispatch_mode != "gateway":
+            raise ProviderConfigurationError("local_openai requires the controlled Gateway")
         self.refresh_dispatch_identity()
 
     def refresh_dispatch_identity(self) -> None:
@@ -694,6 +696,9 @@ class SichuanQCLLMClient:
         resolved_thinking_budget = (
             self.thinking_budget if thinking_budget is None else thinking_budget
         )
+        if self.provider_code == "local_openai":
+            # 通用本地服务只使用已确认的OpenAI字段，Thinking能力保持未知。
+            return {}
         if self._is_deepseek_provider():
             if self.model == "deepseek-reasoner" or resolved_enable_thinking:
                 extra: Dict[str, Any] = {"thinking": {"type": "enabled"}}

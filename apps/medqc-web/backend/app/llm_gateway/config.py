@@ -14,7 +14,7 @@ from urllib.parse import urlsplit, urlunsplit
 _PROFILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _RESOURCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _SUPPORTED_PROVIDERS = frozenset(
-    {"strata", "alibaba", "bailian", "deepseek", "siliconflow", "ollama", "openai_compatible"}
+    {"strata", "alibaba", "bailian", "deepseek", "siliconflow", "ollama", "openai_compatible", "local_openai"}
 )
 
 
@@ -113,10 +113,17 @@ class GatewaySettings:
                 raise GatewayConfigurationError("profile has an unsupported provider")
             if not _profile_matches_provider(profile.name, profile.provider_code):
                 raise GatewayConfigurationError("profile name and provider do not match")
-            if profile.provider_code not in {"strata", "ollama"} and not profile.api_key:
+            if profile.provider_code not in {"strata", "ollama", "local_openai"} and not profile.api_key:
                 raise GatewayConfigurationError("cloud profile API key is required")
             if profile.provider_code == "strata" and resource.max_inflight > 2:
                 raise GatewayConfigurationError("Strata resource capacity exceeds the M1 limit")
+            if profile.provider_code == "local_openai" and resource.max_inflight != 1:
+                raise GatewayConfigurationError("local_openai experimental resource requires one slot")
+            if profile.provider_code == "local_openai" and any(
+                other.resource_id == profile.resource_id and other.provider_code != "local_openai"
+                for other in self.profiles.values()
+            ):
+                raise GatewayConfigurationError("local_openai requires its own registered resource")
             if _validated_endpoint(profile.api_endpoint, self.allowed_hosts) != profile.api_endpoint:
                 raise GatewayConfigurationError("profile endpoint must be normalized")
 
@@ -234,9 +241,9 @@ def _parse_resources(value: Any) -> dict[str, ResourceConfig]:
             raise GatewayConfigurationError("resource configuration has duplicate identifiers")
 
         capacity_class = str(item.get("capacity_class") or "strata").strip().lower()
-        if capacity_class not in {"strata", "bailian"}:
+        if capacity_class not in {"strata", "bailian", "local_openai"}:
             raise GatewayConfigurationError("resource configuration has an invalid capacity class")
-        default_inflight = 40 if capacity_class == "bailian" else 2
+        default_inflight = 40 if capacity_class == "bailian" else 1 if capacity_class == "local_openai" else 2
         max_inflight = _positive_int(item.get("max_inflight", default_inflight), "max_inflight", 1000)
         max_queue = _nonnegative_int(item.get("max_queue", 4), "max_queue", 10000)
         result[resource_id] = ResourceConfig(
@@ -294,7 +301,7 @@ def _parse_profiles(
             raise GatewayConfigurationError("profile has an invalid model")
         if api_key is not None and (not isinstance(api_key, str) or not api_key.strip()):
             raise GatewayConfigurationError("profile has an invalid API key")
-        if normalized_provider not in {"strata", "ollama"} and not api_key:
+        if normalized_provider not in {"strata", "ollama", "local_openai"} and not api_key:
             raise GatewayConfigurationError("cloud profile API key is required")
         if normalized_provider == "strata" and resources[resource_id].max_inflight > 2:
             raise GatewayConfigurationError("Strata resource capacity exceeds the M1 limit")

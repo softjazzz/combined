@@ -2157,6 +2157,18 @@ def _save_frozen_exam_lab_batch(key: str, result: _ExamLabBatchResult) -> None:
 async def _extract_exam_lab_batch(
     *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
 ) -> _ExamLabBatchResult:
+    from ..exam_result_model_route import exam_result_route_scope
+
+    # 实验必须先分区，再读取整族冻结；不能只隔离内部的一次模型请求。
+    with exam_result_route_scope(llm_client, eligible_rule_ids):
+        return await _extract_exam_lab_batch_in_route_scope(
+            projection=projection, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
+        )
+
+
+async def _extract_exam_lab_batch_in_route_scope(
+    *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
+) -> _ExamLabBatchResult:
     """主抽取结论按病历版本冻结复用（用户决定 2026-10-22）：首次全部规则核定后固定，
     避免模型挑选证据病程、报告与病程关联逐次出入（C08、C02、C04）。"""
     key = _main_freeze_key(projection, eligible_rule_ids)
@@ -2169,7 +2181,17 @@ async def _extract_exam_lab_batch(
         ),
     )
     if frozen is not None:
+        from ..exam_result_model_route import current_route
+
+        route = current_route()
+        if route is not None:
+            route.observe("family_freeze", freeze_hit=True, logical_calls=0)
         return frozen
+    from ..exam_result_model_route import current_route
+
+    route = current_route()
+    if route is not None:
+        route.observe("family_freeze", freeze_hit=False)
     result = await _extract_exam_lab_batch_uncached(
         projection=projection, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
     )

@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
 from pydantic import AnyHttpUrl, AliasChoices, Field, field_validator, model_validator
 from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 import os
 import logging
 import re
@@ -273,6 +273,8 @@ class Settings(BaseSettings):
     STRATA_CASE_CACHE_MODE: Literal["off", "observe", "prefix"] = "off"
     # 独立请求观测开关：不启用缓存、不改变模型参数，也不保存正文。
     LLM_REQUEST_OBSERVATION_ENABLED: bool = False
+    # 只用于06-01-04应用层实验；空对象保持原路径，端点／凭据仅在Gateway注册。
+    LLM_EXAM_RESULT_ROUTING: dict[str, Any] = Field(default_factory=dict)
 
     # Backward compatibility aliases (deprecated, use LLM_* instead)
     @property

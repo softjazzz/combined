@@ -90,6 +90,8 @@ def build_provider_runtime_config(
     enabled = get_enabled_provider_codes()
     requested_code = (provider_code or get_default_provider_code()).strip().lower()
     code = validate_provider_code(requested_code)
+    if code == "local_openai":
+        raise ProviderConfigurationError("local_openai requires the controlled call-point policy")
     params = with_execution_concurrency_defaults(custom_parameters, settings=settings)
 
     if code not in enabled:

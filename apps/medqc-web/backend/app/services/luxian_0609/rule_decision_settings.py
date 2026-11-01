@@ -128,6 +128,11 @@ def capture_luxian_0609_task_runtime(qc_service: Any) -> dict[str, Any]:
         if build.get("available") is True
         else {"kind": "process", "id": _UNVERSIONED_PROCESS_ID}
     )
+    from ..exam_result_model_route import route_configuration_identity
+
+    route_identity = route_configuration_identity()
+    if route_identity is not None:
+        implementation = {**implementation, "exam_result_route": route_identity}
     snapshot = {
         "schema_version": _LX0609_TASK_RUNTIME_VERSION,
         "implementation": implementation,
