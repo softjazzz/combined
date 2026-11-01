@@ -45,21 +45,27 @@ def response(payload, *, finish="stop"):
             "usage": {"prompt_tokens": 40, "completion_tokens": 12, "total_tokens": 52}}
 
 
-def harness(monkeypatch, tmp_path, handler, *, mode="cascade", config=None):
+def harness(monkeypatch, tmp_path, handler, *, mode="cascade", config=None, cloud=False):
+    reference_profile = "alibaba_reference" if cloud else "strata_reference"
+    candidate_profile = "alibaba_exam" if cloud else "local_openai_exam"
+    selected_policy = policy(mode) if config is None else config
+    if cloud:
+        selected_policy = {**selected_policy, "candidate_provider": "alibaba", "candidate_profile": candidate_profile}
     settings = Settings(
         _env_file=None, JWT_SECRET="synthetic-route-key", LLM_DISPATCH_MODE="gateway",
         LLM_GATEWAY_URL="http://gateway.test", LLM_GATEWAY_TOKEN="synthetic-gateway-token-at-least-32-characters",
-        LLM_GATEWAY_PROFILES={"strata": "strata_reference", "local_openai": "local_openai_exam"},
-        LLM_EXAM_RESULT_ROUTING=policy(mode) if config is None else config,
+        LLM_GATEWAY_PROFILES=({"alibaba": {"synthetic-flash": reference_profile, "synthetic-35b": candidate_profile}}
+                              if cloud else {"strata": reference_profile, "local_openai": candidate_profile}),
+        LLM_EXAM_RESULT_ROUTING=selected_policy,
         LLM_REQUEST_OBSERVATION_ENABLED=True,
     )
     for module in (route, qc_llm_client, dispatch_module, llm_observability):
         monkeypatch.setattr(module, "get_settings", lambda: settings)
     profiles = {
-        "strata_reference": ProfileConfig("strata_reference", "reference", "strata", "synthetic-flash",
-                                           "http://reference.test/v1/chat/completions"),
-        "local_openai_exam": ProfileConfig("local_openai_exam", "candidate", "local_openai", "synthetic-35b",
-                                           "http://candidate.test/v1/chat/completions"),
+        reference_profile: ProfileConfig(reference_profile, "reference", "alibaba" if cloud else "strata", "synthetic-flash",
+                                         "http://reference.test/v1/chat/completions", "synthetic-key" if cloud else None),
+        candidate_profile: ProfileConfig(candidate_profile, "candidate", "alibaba" if cloud else "local_openai", "synthetic-35b",
+                                         "http://candidate.test/v1/chat/completions", "synthetic-key" if cloud else None),
     }
     gateway_settings = GatewaySettings(
         token=settings.LLM_GATEWAY_TOKEN, resources={"reference": ResourceConfig("reference", 2, 2),
@@ -69,8 +75,8 @@ def harness(monkeypatch, tmp_path, handler, *, mode="cascade", config=None):
     )
     app = create_app(gateway_settings, http_transport=httpx.MockTransport(handler), enforce_single_instance=False)
     client = qc_llm_client.SichuanQCLLMClient(
-        {"provider_code": "strata", "model": "synthetic-flash", "api_endpoint": "http://reference.test/v1",
-         "dispatch_mode": "gateway", "gateway_profile": "strata_reference"},
+        {"provider_code": "alibaba" if cloud else "strata", "model": "synthetic-flash", "api_endpoint": "http://reference.test/v1",
+         "dispatch_mode": "gateway", "gateway_profile": reference_profile},
         gateway_dispatch_client=GatewayDispatchClient(transport=httpx.ASGITransport(app=app)),
         observability_recorder=LLMObservabilityRecorder(store=NullLLMCallEventStore()),
     )
@@ -564,4 +570,34 @@ async def test_known_input_projection_limit_keeps_reference_and_records_ineligib
     assert [host for host, _ in sent] == ["reference.test"]
     assert sent[0][1]["messages"] == [{"role": "user", "content": check._prompt(p, check._targets(p))}]
     assert "input_projection_limit" in caplog.text and '"input_complete": false' in caplog.text
+    assert await app.state.gateway_runtime.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_candidate", [False, True])
+async def test_explicit_bailian_pair_preserves_original_upgrade_contract(monkeypatch, tmp_path, bad_candidate):
+    p, sent = projection(), []
+
+    def fixed(request):
+        value = json.loads(request.content)
+        sent.append((request.url.host, value))
+        out = {"docs": []} if bad_candidate and request.url.host == "candidate.test" else answer(p)
+        return httpx.Response(200, json=response(out))
+
+    _, app, client = harness(monkeypatch, tmp_path, fixed, cloud=True)
+    result = await check.check_exam_result_record(p, client)
+    assert result.state == "ready" and result.recorded_refs == {1: ()}
+    assert [host for host, _ in sent] == (["candidate.test", "reference.test"] if bad_candidate else ["candidate.test"])
+    assert all("chat_template_kwargs" not in payload and "strata_prefix" not in payload for _, payload in sent)
+    if bad_candidate:
+        assert sent[0][1]["messages"] == sent[1][1]["messages"]
+    assert await app.state.gateway_runtime.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_cloud_pair_must_be_explicit_and_never_falls_back_from_local(monkeypatch, tmp_path):
+    settings, app, client = harness(monkeypatch, tmp_path, lambda _: pytest.fail("mixed providers must not send"))
+    settings.LLM_EXAM_RESULT_ROUTING = policy(candidate_provider="alibaba", candidate_profile="alibaba_exam")
+    with pytest.raises(ProviderConfigurationError, match="provider pair"):
+        await check.check_exam_result_record(projection(), client)
     assert await app.state.gateway_runtime.shutdown()

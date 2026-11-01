@@ -22,7 +22,7 @@ from .llm_observability import current_llm_observation_context
 
 logger = logging.getLogger(__name__)
 RULE_ID = "LX0609-06-01-04"
-ROUTE_VERSION = "exam-result-local-cascade-v1"
+ROUTE_VERSION = "exam-result-model-cascade-v2"
 _LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z")
 
 
@@ -34,6 +34,7 @@ class RoutePolicy:
     candidate_model: str
     candidate_revision: str
     reference_revision: str
+    candidate_provider: str = "local_openai"
     candidate_parameters: dict[str, float] = field(default_factory=dict)
 
 
@@ -51,13 +52,16 @@ def route_policy() -> RoutePolicy | None:
         raise ProviderConfigurationError("dual-model experiment requires the legacy Prompt")
     required = {"mode", "experiment", "candidate_profile", "candidate_model",
                 "candidate_revision", "reference_revision"}
-    if mode not in {"shadow", "cascade"} or set(raw) - required - {"candidate_parameters"} or required - set(raw):
+    if mode not in {"shadow", "cascade"} or set(raw) - required - {"candidate_parameters", "candidate_provider"} or required - set(raw):
         raise ProviderConfigurationError("invalid exam-result route configuration")
     for key in required - {"mode", "experiment"}:
         if not isinstance(raw[key], str) or not _LABEL.fullmatch(raw[key]):
             raise ProviderConfigurationError("invalid exam-result route identity")
     experiment = _validated_namespace(raw["experiment"])
-    validate_gateway_profile(profile=raw["candidate_profile"], provider_code="local_openai")
+    provider = raw.get("candidate_provider", "local_openai")
+    if not isinstance(provider, str) or provider not in {"local_openai", "alibaba"}:
+        raise ProviderConfigurationError("unsupported explicit candidate provider")
+    validate_gateway_profile(profile=raw["candidate_profile"], provider_code=provider)
     params = raw.get("candidate_parameters", {})
     if not isinstance(params, dict) or set(params) - {"temperature", "top_p"}:
         raise ProviderConfigurationError("unsupported candidate parameters")
@@ -126,6 +130,7 @@ class RouteSession:
             payload.update(event=event, rule_id=RULE_ID, route_version=ROUTE_VERSION,
                            mode=self.policy.mode, record_key_hash=record, partition=self.partition,
                            candidate_model=self.policy.candidate_model,
+                           candidate_provider=self.policy.candidate_provider,
                            reference_model=(self.identity["model"] if _LABEL.fullmatch(self.identity["model"])
                                             else "unclassified"),
                            planned_target="candidate", experiment=self.policy.experiment)
@@ -159,11 +164,12 @@ def exam_result_route_scope(reference: Any, rule_ids: Any = (RULE_ID,)) -> Itera
     from .luxian_0609.rule_decision_settings import _luxian_0609_model_identity
 
     identity = _luxian_0609_model_identity(raw)
-    if policy.mode == "cascade" and (identity["provider"] != "strata" or identity["dispatch_mode"] != "gateway"):
-        raise ProviderConfigurationError("cascade reference requires an explicit local Strata Gateway profile")
+    expected_reference = "alibaba" if policy.candidate_provider == "alibaba" else "strata"
+    if policy.mode == "cascade" and (identity["provider"] != expected_reference or identity["dispatch_mode"] != "gateway"):
+        raise ProviderConfigurationError("cascade requires the explicitly configured provider pair through Gateway")
     if policy.mode == "cascade":
         settings = get_settings()
-        if configured_gateway_profile(settings, "local_openai", policy.candidate_model) != policy.candidate_profile:
+        if configured_gateway_profile(settings, policy.candidate_provider, policy.candidate_model) != policy.candidate_profile:
             raise ProviderConfigurationError("candidate Gateway mapping does not match the route policy")
     partition = _digest({"version": ROUTE_VERSION, "policy": asdict(policy), "reference": identity,
                          "outer_experiment": current_llm_experiment_namespace()})
@@ -180,13 +186,14 @@ def exam_result_route_scope(reference: Any, rule_ids: Any = (RULE_ID,)) -> Itera
 
 
 def build_candidate(reference: Any, policy: RoutePolicy) -> Any:
-    """复用正式客户端、Gateway、隐私包装和观测；不会构建直连或云端出口。"""
+    """复用正式客户端、Gateway与隐私；云端组合必须显式选择，不能隐式回退。"""
     from .qc_llm_client import SichuanQCLLMClient
     from .luxian_0609.llm_prompt_privacy import _Luxian0609PrivacyRedactingLLMClient
 
     raw, wrappers = _unwrap(reference)
     candidate = SichuanQCLLMClient(
-        {"provider_code": "local_openai", "model": policy.candidate_model,
+        {"provider_code": policy.candidate_provider, "model": policy.candidate_model,
+         "api_endpoint": getattr(raw, "api_endpoint", None) if policy.candidate_provider == "alibaba" else None,
          "dispatch_mode": "gateway", "gateway_profile": policy.candidate_profile,
          "model_role": "adjudicator", "allow_mock_when_unconfigured": False,
          "timeout_seconds": getattr(raw, "timeout_seconds", 120),

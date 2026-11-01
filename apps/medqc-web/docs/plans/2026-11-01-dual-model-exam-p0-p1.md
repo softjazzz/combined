@@ -2,7 +2,7 @@
 
 **基线：** PR22 Head `86315b7467df14aaa856fb1e0feaeca124339301`。工作树 `C:/medqc-dual-model-exam-20261101`，分支 `codex/dual-model-exam-p0-p1-20261101`。
 
-**已确认设计：** 只改应用层，指定检查结果记录核验调用点；原 Prompt、候选、事件／证据 ID、解析、临床映射、保存和 MQ 协议不变。不改 PR22 或集成分支，不写业务库、连接模型服务、调用真实模型或运行患者质控。
+**首轮隔离开发边界：** 只改应用层，指定检查结果记录核验调用点；原 Prompt、候选、事件／证据 ID、解析、临床映射、保存和 MQ 协议不变。不改 PR22 或集成分支，不写业务库或运行患者质控。首轮没有连接模型服务；后续用户明确授权的百炼合成POC见文末。
 
 ## 实施顺序
 
@@ -87,8 +87,46 @@ LLM_EXAM_RESULT_ROUTING={"mode":"shadow","experiment":"A1-exam-run01","candidate
 
 没有前端产品代码变化，未重复跑全量前端类型／单测。没有运行全仓回归或真实基础设施；远端CI尚未执行，本轮未推送。编码、AST及最终diff在本地提交前检查。
 
-### 验证限制
+### 首轮P0／P1验证限制（后续授权见下一节）
 
 没有访问客户机、连接任一模型服务、调用真实模型、运行患者质控或重跑27例；只执行合成材料固定应答测试，Canonical写入仅存在于一次性内存SQLite。
 
 没有医学金标准或两模型真实应答对照，不能据此接纳35B医学质量、服务端Thinking控制、缓存性能或实际吞吐。后台仍默认关闭；P2真实质量对照及启用另行授权。没有修改集成分支、PR22、MQ协议、前端页面、数据库迁移或正式结果合同。
+
+## 后续授权：百炼双模型合成POC
+
+用户明确要求“现在先用阿里云百炼的api调用这2个模型”。本次仅授权实际调用百炼两个模型，不修改正式运行配置，不发送现有患者材料。
+
+### 显式Provider组合
+
+- 新增可选 `candidate_provider="alibaba"`，参考和候选必须都为百炼Gateway客户端；默认仍为原 local_openai＋Strata，不把本地错误隐式回退云端。
+- 百炼两个模型各有明确profile与model映射。调用点、Prompt、解析、升级次数、预算、冻结与任务身份合同沿用；路由版本升为v2，使旧实验分区不串用。
+- 当前使用 `qwen3.6-35b-a3b` 和 `qwen3.8-flash`。模型名称分别核对[百炼35B文档](https://help.aliyun.com/zh/model-studio/qwen3-6-35b-a3b)、[Flash文档](https://help.aliyun.com/zh/model-studio/qwen3-8-flash)，并在真实响应中得到相同model标识。
+
+### 独立执行入口
+
+`backend/scripts/run_bailian_exam_poc.py` 默认只预览；必须显式 `--run-real` 才读取指定backend/.env中的百炼凭据。脚本进程清空业务DSN并阻止数据库连接，使用Null观测存储和进程内ASGI Gateway，不启动Web服务、不创建质控任务、不写业务库。
+
+实际网络出口只允许显式百炼HTTPS文本接口与这两个model，最多12次HTTP，禁止工具／流式／Strata扩展，固定发送enable_thinking=false且输出上限4096。代理与重定向关闭；401／403后停止继续发送。记录合成答案以供复用，不记录headers、凭据或reasoning_content。
+
+复现入口（需另有真实模型调用授权；正常隔离测试不运行此命令）：
+
+```powershell
+py -3.10 scripts/run_bailian_exam_poc.py --run-real --env-file '<现有backend/.env绝对路径>' --cases 3
+```
+
+当前执行只发送三条无患者身份的合成场景，各运行Flash参考和35B按需升级两组：
+
+| 合成场景 | Flash | 35B路径 |
+| --- | --- | --- |
+| 本次报告结果的语义转述 | 已记录，符合预期 | 已记录，符合预期 |
+| 只写拟完善检查 | 未记录，符合预期 | 未记录，符合预期 |
+| 仅引用外院既往检查，本次待回报 | 未记录，符合预期 | 未记录，符合预期 |
+
+真实请求共6次（每模型3次），全部HTTP200及协议ready，6/6符合合成预期，无升级或传输重试。Flash合计2000 Token，35B合计1964 Token，总计3964 Token。不能由三条合成短文推算真实病历质量、费用节省或稳定提速。
+
+报告及可复用合成应答位于本机 `.tmp/bailian-exam-poc/bailian-exam-poc-20261101T071228Z-private.json`，不提交。请求均实际发送enable_thinking=false，但响应没有统一明确的reasoning_tokens，不能据此声称已独立证明服务端Thinking行为。
+
+本轮真实调用未触发升级，真实服务上的升级路径仍只具备固定应答证明；真实病例医学质量、长文、多事件和完整病历吞吐尚未验收。无已有患者资料上传、业务库写入、整例质控或27例重跑。
+
+新增百炼显式组合、本地到云端混用拒绝、预览零调用、offline不能被real标志绕过、精确出口及12次预算等隔离测试。原offline护栏不修改；`test_bailian_exam_poc.py`加入现有双模型CI套件，不会在CI调用真实API。
