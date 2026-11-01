@@ -1,5 +1,6 @@
 
 from typing import Callable, Dict, Any, List, Optional, Tuple
+from dataclasses import replace
 import json
 import hashlib
 import logging
@@ -33,6 +34,10 @@ from .unified_rule_engine import UnifiedRuleEngine
 from .llm_config_loader import LLMConfigLoader, build_adjudicator_runtime_config
 from ..core.http import configure_shared_http_max_concurrency
 from .qc_llm_client_runtime import SichuanQCLLMClient  # 拆分出的 LLM 客户端（runtime 源码版）
+from .llm_execution_concurrency import (
+    LLMExecutionConcurrency,
+    capture_llm_execution_concurrency,
+)
 from .qc_prompt_builder import QCPromptBuilder  # 拆分出的 Prompt 构建器
 from .bundles import load_or_assemble_domain_bundle
 from .sichuan_qc import (
@@ -364,6 +369,8 @@ class SichuanQCService:
                     "timeout_seconds": self.client.timeout_seconds,
                     "allow_mock_when_unconfigured": self.client.allow_mock_when_unconfigured,
                     "source": self.client.config_source,
+                    "dispatch_mode": getattr(self.client, "dispatch_mode", "direct"),
+                    "gateway_profile": getattr(self.client, "gateway_profile", None),
                     "custom_parameters": {
                         "temperature": self.client.temperature,
                         "top_p": self.client.top_p,
@@ -371,9 +378,18 @@ class SichuanQCService:
                         "enable_thinking": self.client.enable_thinking,
                         "thinking_budget": self.client.thinking_budget,
                         "reasoning_effort": self.client.reasoning_effort,
+                        "execution_concurrency": {
+                            "max_parallel_records": self.client.max_parallel_records,
+                            "family_max_concurrency": self.client.family_max_concurrency,
+                            "http_max_concurrency": self.client.http_max_concurrency,
+                        },
                     },
                 }
             )
+        )
+        # 族并发属于任务级执行策略，不属于一审/二审客户端装饰器能力。
+        self.luxian_0609_execution_concurrency = capture_llm_execution_concurrency(
+            self.client
         )
         configure_shared_http_max_concurrency(self.client.http_max_concurrency)
 
@@ -428,6 +444,8 @@ class SichuanQCService:
             "source": client.config_source,
             "model_role": client.model_role,
             "adjudicator_model_source": client.adjudicator_model_source,
+            "dispatch_mode": getattr(client, "dispatch_mode", "direct"),
+            "gateway_profile": getattr(client, "gateway_profile", None),
             "custom_parameters": {
                 "temperature": client.temperature,
                 "top_p": client.top_p,
@@ -443,6 +461,17 @@ class SichuanQCService:
             },
         }
 
+    def _luxian_0609_execution_policy(self) -> LLMExecutionConcurrency:
+        """返回接纳时策略；兼容旧适配器绕过 ``__init__`` 的构造方式。"""
+
+        frozen = getattr(self, "luxian_0609_execution_concurrency", None)
+        if isinstance(frozen, LLMExecutionConcurrency):
+            return frozen
+        return capture_llm_execution_concurrency(
+            getattr(self, "adjudicator_client", None)
+            or getattr(self, "client", None)
+        )
+
     def isolated_luxian_0609_runtime(self, *, single_record: bool = False) -> "SichuanQCService":
         """为已领取的原始0609任务保留独立客户端，避免全局热重载串改在途模型。"""
 
@@ -453,8 +482,26 @@ class SichuanQCService:
         runtime.client._stats_parent = self.client
         runtime.adjudicator_client._stats_parent = self.adjudicator_client
         if single_record:
-            runtime.client.family_max_concurrency = (
-                get_settings().LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY
+            # 旧单病例参数只可收紧已接纳策略。历史默认 8 从未真正进入
+            # 正式二审 Engine，本阶段先按已验收上限 4 生效，不能借修复放大。
+            runtime.luxian_0609_execution_concurrency = replace(
+                runtime.luxian_0609_execution_concurrency,
+                family_max_concurrency=min(
+                    runtime.luxian_0609_execution_concurrency.family_max_concurrency,
+                    int(
+                        get_settings().LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY
+                    ),
+                ),
+            )
+        for client in (runtime.client, runtime.adjudicator_client):
+            client.max_parallel_records = (
+                runtime.luxian_0609_execution_concurrency.max_parallel_records
+            )
+            client.family_max_concurrency = (
+                runtime.luxian_0609_execution_concurrency.family_max_concurrency
+            )
+            client.http_max_concurrency = (
+                runtime.luxian_0609_execution_concurrency.http_max_concurrency
             )
         return runtime
 
@@ -588,6 +635,8 @@ class SichuanQCService:
                 "timeout_seconds": self.client.timeout_seconds,
                 "allow_mock_when_unconfigured": self.client.allow_mock_when_unconfigured,
                 "source": self.client.config_source,
+                "dispatch_mode": getattr(self.client, "dispatch_mode", "direct"),
+                "gateway_profile": getattr(self.client, "gateway_profile", None),
                 "custom_parameters": {
                     "temperature": self.client.temperature,
                     "top_p": self.client.top_p,
@@ -595,9 +644,17 @@ class SichuanQCService:
                     "enable_thinking": self.client.enable_thinking,
                     "thinking_budget": self.client.thinking_budget,
                     "reasoning_effort": self.client.reasoning_effort,
+                    "execution_concurrency": {
+                        "max_parallel_records": self.client.max_parallel_records,
+                        "family_max_concurrency": self.client.family_max_concurrency,
+                        "http_max_concurrency": self.client.http_max_concurrency,
+                    },
                 },
             }
             self.adjudicator_client = SichuanQCLLMClient(build_adjudicator_runtime_config(first_pass_config))
+            self.luxian_0609_execution_concurrency = (
+                capture_llm_execution_concurrency(self.client)
+            )
             configure_shared_http_max_concurrency(
                 self.client.http_max_concurrency,
             )
@@ -1233,6 +1290,7 @@ class SichuanQCService:
             evidence_payload=evidence_payload,
             llm_client=self.adjudicator_client,
             settings=settings,
+            execution_concurrency=self._luxian_0609_execution_policy(),
             institute_id=str(source_institute_id or ""),
             patient_id=str(source_patient_id or ""),
             source_schema=source_schema,
@@ -4617,6 +4675,7 @@ class SichuanQCService:
             evaluation_horizon_unavailable_reason=evaluation_horizon_unavailable_reason,
             cancellation_check=cancellation_check,
             execution_trace_sink=execution_trace_sink,
+            execution_concurrency=self._luxian_0609_execution_policy(),
             **({"task_settings": task_settings} if task_settings is not None else {}),
         )
 

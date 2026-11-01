@@ -12,6 +12,9 @@ from ..core.settings import Settings, get_settings
 
 
 EXECUTION_CONCURRENCY_KEY = "execution_concurrency"
+_LEGACY_MAX_PARALLEL_RECORDS = 16
+_LEGACY_FAMILY_MAX_CONCURRENCY = 4
+_LEGACY_HTTP_MAX_CONCURRENCY = 40
 
 
 @dataclass(frozen=True)
@@ -37,9 +40,57 @@ def default_llm_execution_concurrency(
 ) -> LLMExecutionConcurrency:
     current = settings or get_settings()
     return LLMExecutionConcurrency(
-        max_parallel_records=int(current.QC_BATCH_RECORD_MAX_CONCURRENCY),
-        family_max_concurrency=int(current.LUXIAN_0609_FAMILY_MAX_CONCURRENCY),
-        http_max_concurrency=int(current.LLM_HTTP_MAX_CONCURRENCY),
+        max_parallel_records=int(
+            getattr(
+                current,
+                "QC_BATCH_RECORD_MAX_CONCURRENCY",
+                _LEGACY_MAX_PARALLEL_RECORDS,
+            )
+        ),
+        family_max_concurrency=int(
+            getattr(
+                current,
+                "LUXIAN_0609_FAMILY_MAX_CONCURRENCY",
+                _LEGACY_FAMILY_MAX_CONCURRENCY,
+            )
+        ),
+        http_max_concurrency=int(
+            getattr(
+                current,
+                "LLM_HTTP_MAX_CONCURRENCY",
+                _LEGACY_HTTP_MAX_CONCURRENCY,
+            )
+        ),
+    )
+
+
+def capture_llm_execution_concurrency(
+    client: Any,
+    *,
+    settings: Settings | None = None,
+) -> LLMExecutionConcurrency:
+    """从未包装客户端冻结一次执行策略；旧客户端缺字段时保持原默认。"""
+
+    defaults = default_llm_execution_concurrency(settings)
+    return resolve_llm_execution_concurrency(
+        {
+            "max_parallel_records": getattr(
+                client,
+                "max_parallel_records",
+                defaults.max_parallel_records,
+            ),
+            "family_max_concurrency": getattr(
+                client,
+                "family_max_concurrency",
+                defaults.family_max_concurrency,
+            ),
+            "http_max_concurrency": getattr(
+                client,
+                "http_max_concurrency",
+                defaults.http_max_concurrency,
+            ),
+        },
+        settings=settings,
     )
 
 

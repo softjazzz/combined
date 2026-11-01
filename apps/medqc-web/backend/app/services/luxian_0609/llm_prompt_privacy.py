@@ -585,6 +585,9 @@ class _Luxian0609PrivacyRedactingLLMClient:
             try:
                 return await self.delegate.generate(redacted, **kwargs)
             except Exception as error:
+                if getattr(error, "transport_retry_managed", False) is True:
+                    # Gateway 已拥有传输重试预算；包装层不得再次乘算同一错误。
+                    raise
                 if not _is_transient_transport_error(error):
                     raise
                 from .execution_time_budget import model_timeout_seconds, retry_fits

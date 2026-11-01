@@ -72,6 +72,7 @@ from .luxian_0609.shadow_audit_summary import (
 )
 from .qc_cancellation import QCJobCancelled, raise_if_cancelled
 from .qc_llm_client_runtime import SichuanQCLLMClient
+from .llm_dispatch.provider_profiles import ProviderConfigurationError
 from .qc_input_adapters import evaluate_running_final_bundle
 from .qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
 from .qc_result_adjudicator import adjudicate_postprocessed_qc_results
@@ -105,6 +106,7 @@ from .qc_workspace.failed_rule_retry import (
     merge_failed_rule_retry_results,
     merge_failed_rule_retry_rule_results,
 )
+from .qc_dispatch.contracts import qc_dispatch_mode_from_filters
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +117,7 @@ def _enqueue_automatic_failed_rule_retry(
     job_id: str,
     created_by: str,
     expected_attempt_filters_json: str | None,
+    retry_delay_seconds: float | None = None,
 ) -> Optional[Dict[str, Any]]:
     """实际入队成功后才发布 queued；失败用同代次 CAS 撤销 planned。"""
 
@@ -139,6 +142,11 @@ def _enqueue_automatic_failed_rule_retry(
             **(
                 {"expected_attempt_filters_json": expected_attempt_filters_json}
                 if expected_attempt_filters_json is not None
+                else {}
+            ),
+            **(
+                {"retry_delay_seconds": retry_delay_seconds}
+                if retry_delay_seconds is not None
                 else {}
             ),
         )
@@ -1303,6 +1311,15 @@ def _result_diagnostic_trace(
 LX0609_LEASE_HEARTBEAT_SECONDS = 30
 
 
+async def _cancel_pending_batch_tasks(tasks: List[asyncio.Task[Any]]) -> None:
+    """取消并回收批内病例任务，避免父协程退出后继续发起模型调用。"""
+
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
 def _renew_luxian_0609_lease_until_stopped(
     *, workspace: CustomQCWorkspaceService, job_id: str,
     attempt_filters_json: str, stopped: threading.Event,
@@ -1327,6 +1344,9 @@ async def run_sichuan_workspace_batch_job(
     workspace: CustomQCWorkspaceService,
     qc_service_provider: Callable[[], Awaitable[SichuanQCService]],
     diagnostic_capture: DiagnosticJobCapture | None = None,
+    record_concurrency_limit: int | None = None,
+    external_cancellation_check: Callable[[], bool] | None = None,
+    expected_dispatch_generation: int | None = None,
 ) -> None:
     job_wall_started = time.perf_counter()
     job = workspace.get_batch_job_for_processing(job_id=job_id)
@@ -1346,7 +1366,14 @@ async def run_sichuan_workspace_batch_job(
         # HTTP 门禁之外在所有实际质控 Worker 入口统一验签，阻止旧队列或内部调用绕过授权。
         # 不存在的任务及父任务已在上方返回，不触发授权检查。
         get_product_activation_service().enforce()
-        claim = workspace.mark_batch_job_running(job_id=job_id)
+        claim = workspace.mark_batch_job_running(
+            job_id=job_id,
+            **(
+                {"expected_dispatch_generation": expected_dispatch_generation}
+                if expected_dispatch_generation is not None
+                else {}
+            ),
+        )
         if not claim:
             return
         if isinstance(claim, str):
@@ -1365,7 +1392,9 @@ async def run_sichuan_workspace_batch_job(
                     name="lx0609-task-lease",
                     daemon=True,
                 ).start()
+        raise_if_cancelled(external_cancellation_check)
         qc_service = await qc_service_provider()
+        raise_if_cancelled(external_cancellation_check)
         if attempt_filters_json is not None and workspace.is_batch_job_canceled_or_missing(
             job_id=job_id, **attempt_kwargs
         ):
@@ -1541,6 +1570,11 @@ async def run_sichuan_workspace_batch_job(
                 ),
             ),
         )
+        if record_concurrency_limit is not None:
+            max_parallel_records = min(
+                max_parallel_records,
+                max(1, int(record_concurrency_limit)),
+            )
         if compatibility_rule_ids:
             _enforce_sc_source_guard(
                 qc_service,
@@ -1848,6 +1882,10 @@ async def run_sichuan_workspace_batch_job(
             }
 
         def _is_cancelled() -> bool:
+            if external_cancellation_check is not None and bool(
+                external_cancellation_check()
+            ):
+                return True
             lightweight_check = getattr(
                 workspace,
                 "is_batch_job_canceled_or_missing",
@@ -3714,12 +3752,15 @@ async def run_sichuan_workspace_batch_job(
                     completed_count += 1
                     _merge_record_result(record_result, completed_count)
             except QCJobCancelled:
-                for task in tasks:
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
+                await _cancel_pending_batch_tasks(tasks)
                 logger.info("四川批量任务 %s 已取消，停止执行", job_id)
                 return
+            except asyncio.CancelledError:
+                # 独立 consumer 断连、恢复 owner 失败或进程关闭时，不能在父协程
+                # 已取消后由 finally 等待其余病例继续发起模型调用。先取消全部子任务
+                # 并回收，再把取消传播给进程生命周期 owner。
+                await _cancel_pending_batch_tasks(tasks)
+                raise
             finally:
                 await asyncio.gather(*tasks, return_exceptions=True)
         else:
@@ -4141,23 +4182,27 @@ async def run_sichuan_workspace_batch_job(
             return
         if automatic_retry_plan.get("should_retry") is True:
             created_by = str(current.get("created_by") or "").strip()
+            delay_seconds = max(
+                0.0,
+                float(automatic_retry_plan.get("delay_seconds") or 0.0),
+            )
+            is_rabbitmq_dispatch = (
+                qc_dispatch_mode_from_filters(filters) == "rabbitmq"
+            )
             retried_job = _enqueue_automatic_failed_rule_retry(
                 workspace=workspace,
                 job_id=job_id,
                 created_by=created_by,
                 expected_attempt_filters_json=attempt_filters_json,
+                retry_delay_seconds=(delay_seconds if is_rabbitmq_dispatch else None),
             )
-            if not retried_job:
+            if not retried_job or str(retried_job.get("status") or "") != "queued":
                 logger.error(
                     "部分失败任务无法自动补跑: job_id=%s created_by_present=%s",
                     job_id,
                     bool(created_by),
                 )
                 return
-            delay_seconds = max(
-                0.0,
-                float(automatic_retry_plan.get("delay_seconds") or 0.0),
-            )
             logger.warning(
                 "部分失败任务自动补跑: job_id=%s attempt=%s/%s failed_items=%s delay_seconds=%.1f",
                 job_id,
@@ -4169,15 +4214,27 @@ async def run_sichuan_workspace_batch_job(
             if identity_collector is not None:
                 identity_collector.close()
             finish_current_timing()
+            # RabbitMQ 任务的下一代消息已由 retry_batch_job 与状态更新同事务写入
+            # Outbox。当前 delivery 只需返回给 consumer 复核新代次后 ACK，不能在
+            # 进程内 sleep/递归占住唯一批任务槽位，也不能另开第二事务补 Outbox。
+            if is_rabbitmq_dispatch:
+                return
             if delay_seconds:
                 await asyncio.sleep(delay_seconds)
             await run_sichuan_workspace_batch_job(
                 job_id,
                 workspace=workspace,
                 qc_service_provider=qc_service_provider,
+                record_concurrency_limit=record_concurrency_limit,
+                external_cancellation_check=external_cancellation_check,
+                expected_dispatch_generation=expected_dispatch_generation,
             )
     except QCJobCancelled:
         logger.info("四川规则批量任务 %s 已取消，后台执行已停止", job_id)
+    except ProviderConfigurationError:
+        # Provider/Gateway 身份损坏必须让独立进程失败关闭；不能吞成普通任务
+        # 失败后继续消费，也不能回退另一个云 Provider。
+        raise
     except Exception as exc:
         logger.exception("四川规则批量任务执行失败: %s", exc)
         workspace.fail_batch_job(

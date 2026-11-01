@@ -1,0 +1,47 @@
+name: QC Scheduler Isolation - medqc-web
+
+on:
+  pull_request:
+    branches: [master, push-fix-clean, codex/business-agent-integration]
+    paths:
+      - 'apps/medqc-web/backend/**'
+      - '.github/workflows/qc-scheduler-isolation.yml'
+  push:
+    branches: [master, push-fix-clean, 'codex/**']
+    paths:
+      - 'apps/medqc-web/backend/**'
+      - '.github/workflows/qc-scheduler-isolation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qc-scheduler-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/medqc-web/backend
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      # 测试本身还会剥离凭据、禁 dotenv/socket，并拒绝非合成内存 SQLite。
+      DATABASE_URL: ''
+      REMOTE_DB_URL: ''
+      MEDQC_ALLOW_REAL_LLM: '0'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install locked application and Worker dependencies
+        run: python -m pip install -r requirements.txt -r requirements-qc-worker.txt
+      - name: M0 isolation and M1 Gateway admission
+        run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite m1-admission tests/unit/test_qc_scheduler_isolation.py
+      - name: Result, cancellation, retry and privacy compatibility
+        run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite compatibility
+      - name: M2 synthetic Outbox and Worker delivery
+        run: python -B scripts/run_qc_scheduler_tests.py --profile m2-synthetic --suite m2-release

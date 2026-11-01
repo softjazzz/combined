@@ -25,6 +25,12 @@ from ..services.fast_screen_qc import (
     normalize_execution_strategy,
 )
 from ..services.detached_task_runner import submit_detached_task
+from ..services.qc_dispatch.dispatcher import (
+    QCDispatchEntrypointError,
+    assert_new_qc_task_dispatch_ready,
+    should_submit_detached_qc_task,
+)
+from ..services.qc_dispatch.repository import QCDispatchSchemaUnavailable
 from ..services.qc_rule_sets import get_sichuan_rule_set, list_sichuan_rule_sets
 from ..services.luxian_0609 import (
     LUXIAN_0609_RULE_SET_KEY,
@@ -348,14 +354,15 @@ async def stop_rule_source_monitor() -> None:
 async def init_qc_service():
     """初始化质控服务，从数据库加载配置"""
     global service
-    try:
-        # 尝试从数据库加载配置
-        config = await LLMConfigLoader.load_config(config_name="default", user_id=None)
-        service = SichuanQCService(config)
-        logger.info(f"✅ 四川质控服务初始化成功: model={service.client.model}, source={service.client.config_source}")
-    except Exception as exc:
-        logger.warning(f"从数据库加载配置失败: {exc}，使用 .env 配置初始化")
-        service = SichuanQCService()
+    # Loader 本身只在明确没有持久配置时选择 env；身份损坏或读取失败必须原样
+    # 失败关闭，不能在 HTTP/Worker 外层再次吞错并悄悄切到另一 Provider。
+    config = await LLMConfigLoader.load_config(config_name="default", user_id=None)
+    service = SichuanQCService(config)
+    logger.info(
+        "✅ 四川质控服务初始化成功: model=%s, source=%s",
+        service.client.model,
+        service.client.config_source,
+    )
 
 async def get_qc_service() -> SichuanQCService:
     """
@@ -2206,88 +2213,101 @@ async def create_workspace_batch_job(
                     trace_id=get_trace_id(request),
                 )
 
+    try:
+        assert_new_qc_task_dispatch_ready(
+            eligible_for_rabbitmq=rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+            task_runtime_snapshot=task_runtime_snapshot,
+            settings=get_settings(),
+        )
+    except QCDispatchEntrypointError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     pseudo_draft = {
         "id": "sichuan-rule-library",
         "rule_code": "SC-BATCH",
         "name": f"{rule_set_name or '四川规则库'}批量任务({len(rule_ids)}条规则)",
         "scene": "running" if normalized_scope == "running" else "final",
     }
-    job = workspace.create_batch_job(
-        draft=pseudo_draft,
-        created_by=created_by,
-        scope=normalized_scope,
-        filters={
-            "department": payload.department,
-            "doctor": payload.doctor,
-            **(
-                {"sync_scope": payload.sync_scope}
-                if payload.sync_scope == "today_inpatient"
-                else {}
-            ),
-            "date_field": _normalize_date_field(payload.date_field),
-            "start_date": payload.start_date,
-            "end_date": payload.end_date,
-            "keyword": payload.keyword,
-            "record_refs": effective_record_ref_payload,
-            "query_scope": normalized_scope,
-            "rule_ids": rule_ids,
-            "paused_customer_rule_ids": list(pending_customer_rule_ids),
-            "rule_set_key": rule_set_key,
-            **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
-            **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
-            "rule_set_name": rule_set_name,
-            "rule_set_version": rule_set_version,
-            "execution_strategy": execution_strategy,
-            "quality_profile": quality_profile,
-            "bucket_strategy": bucket_strategy,
-            "batch_output_mode": batch_output_mode,
-            "enable_selective_refine": enable_selective_refine,
-            "refine_confidence_threshold": refine_confidence_threshold,
-            "max_refine_candidates": max_refine_candidates,
-            "source": "sichuan_rule_workspace",
-            **({"diagnostic_capture": True} if payload.diagnostic_capture else {}),
-            "run_mode": run_mode,
-            **({"task_frozen_date": task_frozen_date} if task_frozen_date else {}),
-            "idempotency_key": idempotency_key,
-            "idempotency_payload": idempotency_payload,
-            "record_scene_snapshot": record_scene_snapshot,
-            **(
-                {"record_evaluation_snapshot": record_evaluation_snapshot}
-                if record_evaluation_snapshot
-                else {}
-            ),
-            **(
-                {
-                    "selected_rule_ids": list(direct_native_rule_ids),
-                    "scoped_customer_rule_ids": list(direct_native_rule_ids),
-                    "active_customer_rule_ids": list(active_customer_rule_ids),
-                    "pending_customer_rule_ids": list(pending_customer_rule_ids),
-                    "record_rule_map": {
-                        ref.as_key(): list(direct_native_rule_ids)
-                        for ref in effective_record_refs
-                    },
-                    "validation_mode": "programmatic",
-                    "customer_rule_count": len(direct_native_rule_ids),
-                    "execution_rule_count": len(active_customer_rule_ids),
-                    "pending_rule_count": len(pending_customer_rule_ids),
-                }
-                if is_direct_native_selection
-                else {}
-            ),
-        },
-        record_ids=effective_record_ids,
-        total_records=len(records),
-        record_refs=effective_record_refs,
-        draft_ids=rule_ids,
-        execution_mode="multi",
-        run_mode=run_mode,
-        rule_count=len(rule_ids),
-    )
-    submit_detached_task(
-        "sichuan_workspace_batch_job",
-        _run_sichuan_workspace_batch_job,
-        job["id"],
-    )
+    try:
+        job = workspace.create_batch_job(
+            draft=pseudo_draft,
+            created_by=created_by,
+            scope=normalized_scope,
+            filters={
+                "department": payload.department,
+                "doctor": payload.doctor,
+                **(
+                    {"sync_scope": payload.sync_scope}
+                    if payload.sync_scope == "today_inpatient"
+                    else {}
+                ),
+                "date_field": _normalize_date_field(payload.date_field),
+                "start_date": payload.start_date,
+                "end_date": payload.end_date,
+                "keyword": payload.keyword,
+                "record_refs": effective_record_ref_payload,
+                "query_scope": normalized_scope,
+                "rule_ids": rule_ids,
+                "paused_customer_rule_ids": list(pending_customer_rule_ids),
+                "rule_set_key": rule_set_key,
+                **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
+                **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
+                "rule_set_name": rule_set_name,
+                "rule_set_version": rule_set_version,
+                "execution_strategy": execution_strategy,
+                "quality_profile": quality_profile,
+                "bucket_strategy": bucket_strategy,
+                "batch_output_mode": batch_output_mode,
+                "enable_selective_refine": enable_selective_refine,
+                "refine_confidence_threshold": refine_confidence_threshold,
+                "max_refine_candidates": max_refine_candidates,
+                "source": "sichuan_rule_workspace",
+                **({"diagnostic_capture": True} if payload.diagnostic_capture else {}),
+                "run_mode": run_mode,
+                **({"task_frozen_date": task_frozen_date} if task_frozen_date else {}),
+                "idempotency_key": idempotency_key,
+                "idempotency_payload": idempotency_payload,
+                "record_scene_snapshot": record_scene_snapshot,
+                **(
+                    {"record_evaluation_snapshot": record_evaluation_snapshot}
+                    if record_evaluation_snapshot
+                    else {}
+                ),
+                **(
+                    {
+                        "selected_rule_ids": list(direct_native_rule_ids),
+                        "scoped_customer_rule_ids": list(direct_native_rule_ids),
+                        "active_customer_rule_ids": list(active_customer_rule_ids),
+                        "pending_customer_rule_ids": list(pending_customer_rule_ids),
+                        "record_rule_map": {
+                            ref.as_key(): list(direct_native_rule_ids)
+                            for ref in effective_record_refs
+                        },
+                        "validation_mode": "programmatic",
+                        "customer_rule_count": len(direct_native_rule_ids),
+                        "execution_rule_count": len(active_customer_rule_ids),
+                        "pending_rule_count": len(pending_customer_rule_ids),
+                    }
+                    if is_direct_native_selection
+                    else {}
+                ),
+            },
+            record_ids=effective_record_ids,
+            total_records=len(records),
+            record_refs=effective_record_refs,
+            draft_ids=rule_ids,
+            execution_mode="multi",
+            run_mode=run_mode,
+            rule_count=len(rule_ids),
+        )
+    except QCDispatchSchemaUnavailable as exc:
+        raise HTTPException(status_code=503, detail="质控任务调度存储尚未就绪") from exc
+    if should_submit_detached_qc_task(job):
+        submit_detached_task(
+            "sichuan_workspace_batch_job",
+            _run_sichuan_workspace_batch_job,
+            job["id"],
+        )
     return success_response(
         data={
             **job,
@@ -2986,6 +3006,8 @@ async def retry_workspace_batch_job(
     workspace = _sichuan_workspace_service()
     try:
         job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    except QCDispatchSchemaUnavailable as exc:
+        raise HTTPException(status_code=503, detail="质控任务调度存储尚未就绪") from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not _is_workspace_batch_job(job):
@@ -2995,10 +3017,13 @@ async def retry_workspace_batch_job(
         ):
             raise HTTPException(status_code=409, detail="任务已在排队或执行中，不能重复入队")
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
-    if str(job.get("job_kind") or "").strip().lower() == "parent":
+    submit_legacy = should_submit_detached_qc_task(job)
+    if submit_legacy and str(job.get("job_kind") or "").strip().lower() == "parent":
         child_jobs = list(job.get("child_jobs") or job.get("children") or [])
         if not child_jobs:
             child_jobs = workspace.get_child_batch_jobs(parent_job_id=job_id, created_by=_current_user_id(current_user))
+        if not all(should_submit_detached_qc_task(child_job) for child_job in child_jobs):
+            raise HTTPException(status_code=503, detail="父子任务调度身份不一致")
         for child_job in child_jobs:
             child_job_id = str(child_job.get("id") or "").strip()
             if child_job_id:
@@ -3007,7 +3032,7 @@ async def retry_workspace_batch_job(
                     _run_sichuan_workspace_batch_job,
                     child_job_id,
                 )
-    else:
+    elif submit_legacy:
         submit_detached_task(
             "sichuan_workspace_batch_job_retry",
             _run_sichuan_workspace_batch_job,

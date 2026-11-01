@@ -1,9 +1,10 @@
 from pydantic_settings import BaseSettings
 from pydantic import AnyHttpUrl, AliasChoices, Field, field_validator, model_validator
 from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource
-from typing import List, Optional
+from typing import List, Literal, Optional
 import os
 import logging
+import re
 
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,10 @@ class Settings(BaseSettings):
     QC_SC_RULE_SOURCE_MONITOR_ENABLED: bool = False
     QC_SC_RULE_SOURCE_MONITOR_INTERVAL_SECONDS: int = 60
     QC_SC_RULE_SOURCE_ALERT_DEDUP_SECONDS: int = 300
+
+    # 质控任务调度默认保留 Web 进程内旧链；只有显式切换后，正式 LX0609
+    # 叶任务才会通过事务 Outbox 投递给独立 Worker。
+    QC_TASK_DISPATCH_MODE: Literal["legacy", "rabbitmq"] = "legacy"
 
     # ICD semantic retrieval fallback (exact match still first)
     ICD_SEMANTIC_ENABLED: bool = False
@@ -243,6 +248,11 @@ class Settings(BaseSettings):
     )
     LLM_DEFAULT_PROVIDER: Optional[str] = "alibaba"
     LLM_VISIBLE_PROVIDERS: List[str] = Field(default_factory=list)
+    # 模型出口默认保持现有 direct；只有完整配置 Gateway 服务身份时才可切换。
+    LLM_DISPATCH_MODE: Literal["direct", "gateway"] = "direct"
+    LLM_GATEWAY_URL: Optional[AnyHttpUrl] = None
+    LLM_GATEWAY_TOKEN: Optional[str] = None
+    LLM_GATEWAY_PROFILE: Optional[str] = None
     DEEPSEEK_API_ENDPOINT: str = "https://api.deepseek.com"
     DEEPSEEK_API_KEY: Optional[str] = None
     DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -252,6 +262,10 @@ class Settings(BaseSettings):
     OLLAMA_API_ENDPOINT: str = "http://127.0.0.1:11434/v1"
     OLLAMA_API_KEY: Optional[str] = None
     OLLAMA_MODEL: str = "qwen2.5:7b-instruct"
+    # Strata 必须显式配置 endpoint/model 后才可用；内网服务密钥可选，不提供云端回退。
+    STRATA_API_ENDPOINT: Optional[AnyHttpUrl] = None
+    STRATA_MODEL: Optional[str] = None
+    STRATA_API_KEY: Optional[str] = None
 
     # Backward compatibility aliases (deprecated, use LLM_* instead)
     @property
@@ -300,6 +314,34 @@ class Settings(BaseSettings):
                 "Conflicting LLM env vars detected: "
                 + ", ".join(conflicts)
                 + ". Keep only LLM_* or make sure values are identical."
+            )
+        gateway_url = self.LLM_GATEWAY_URL
+        raw_gateway_token = str(self.LLM_GATEWAY_TOKEN or "")
+        gateway_token = raw_gateway_token.strip()
+        raw_gateway_profile = str(self.LLM_GATEWAY_PROFILE or "")
+        gateway_profile = raw_gateway_profile.strip()
+        if gateway_url is not None:
+            if gateway_url.username or gateway_url.password:
+                raise ValueError("LLM_GATEWAY_URL must not contain user information")
+            if gateway_url.query or gateway_url.fragment:
+                raise ValueError("LLM_GATEWAY_URL must not contain query or fragment")
+        if gateway_token and (
+            len(gateway_token) < 32 or gateway_token != raw_gateway_token
+        ):
+            raise ValueError("LLM_GATEWAY_TOKEN is not safely configured")
+        if gateway_profile and (
+            gateway_profile != raw_gateway_profile
+            or not re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", gateway_profile
+            )
+        ):
+            raise ValueError("LLM_GATEWAY_PROFILE has an invalid format")
+        if self.LLM_DISPATCH_MODE == "gateway" and not (
+            gateway_url is not None and gateway_token and gateway_profile
+        ):
+            raise ValueError(
+                "gateway dispatch requires LLM_GATEWAY_URL, "
+                "LLM_GATEWAY_TOKEN and LLM_GATEWAY_PROFILE"
             )
         return self
 

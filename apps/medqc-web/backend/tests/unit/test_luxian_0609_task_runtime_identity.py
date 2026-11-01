@@ -88,7 +88,7 @@ def test_runtime_identity_rejects_missing_or_corrupt_snapshot(monkeypatch):
     monkeypatch.setattr(identity, "_PROCESS_RUNTIME_BUILD", {"available": False})
     service = _service()
     frozen = identity.capture_luxian_0609_task_runtime(service)
-    for damaged in (None, {}, {**frozen, "schema_version": 2}, {**frozen, "schema_version": True}, {**frozen, "first_pass": float("nan")}):
+    for damaged in (None, {}, {**frozen, "schema_version": 3}, {**frozen, "schema_version": True}, {**frozen, "first_pass": float("nan")}):
         with pytest.raises(ValueError, match="快照缺失或非法"):
             identity.assert_luxian_0609_task_runtime_match(damaged, service)
     changed = deepcopy(frozen)
@@ -142,7 +142,7 @@ def test_running_luxian_job_keeps_accepted_clients_after_global_config_reload():
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("record_count", "sample_pool", "child", "expected_limit"), [
     (0, False, False, 4),
-    (1, True, False, 8),
+    (1, True, False, 4),
     (2, True, False, 4),
     (1, True, True, 4),
     (1, False, False, 4),
@@ -196,12 +196,19 @@ async def test_formal_worker_isolates_real_service_before_reading_records(
     assert len(isolated) == 1
     assert isolated[0].client is not shared.client
     assert isolated[0].client.family_max_concurrency == expected_limit
+    assert isolated[0].adjudicator_client.family_max_concurrency == expected_limit
+    assert (
+        isolated[0].luxian_0609_execution_concurrency.family_max_concurrency
+        == expected_limit
+    )
     assert shared.client.family_max_concurrency == 4
     assert workspace.job["status"] == "failed"
 
 
-@pytest.mark.parametrize("single_limit", [6, 8])
-def test_single_record_family_budget_does_not_change_batch_or_shared_client(monkeypatch, single_limit):
+@pytest.mark.parametrize(("single_limit", "expected_limit"), [(1, 1), (6, 4), (8, 4)])
+def test_single_record_family_budget_only_tightens_accepted_policy(
+    monkeypatch, single_limit, expected_limit,
+):
     from app.core.settings import Settings
     from app.services import sichuan_qc_service as service_module
 
@@ -217,11 +224,52 @@ def test_single_record_family_budget_does_not_change_batch_or_shared_client(monk
     })
     single = shared.isolated_luxian_0609_runtime(single_record=True)
     batch = shared.isolated_luxian_0609_runtime(single_record=False)
-    assert single.client.family_max_concurrency == single_limit
+    assert single.client.family_max_concurrency == expected_limit
+    assert single.adjudicator_client.family_max_concurrency == expected_limit
+    assert single.luxian_0609_execution_concurrency.family_max_concurrency == expected_limit
     assert batch.client.family_max_concurrency == shared.client.family_max_concurrency == 4
+    assert batch.adjudicator_client.family_max_concurrency == 4
     assert single.client.http_max_concurrency == batch.client.http_max_concurrency == 40
     assert single.client.max_parallel_records == batch.client.max_parallel_records == 16
     assert single.rule_engine._llm_generate.__self__ is single.client
+
+
+def test_isolated_runtime_keeps_non_sensitive_gateway_routing(monkeypatch):
+    """隔离任务复制模式/profile，不复制 Gateway URL 或 token。"""
+
+    from app.services import qc_llm_client as client_module
+
+    monkeypatch.setattr(
+        client_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            LLM_DISPATCH_MODE="gateway",
+            LLM_GATEWAY_PROFILE="alibaba-qc",
+            LLM_GATEWAY_URL="https://gateway.example.invalid",
+        ),
+    )
+
+    shared = SichuanQCService({
+        "provider_code": "alibaba", "api_endpoint": "https://example.invalid/llm",
+        "api_key": "test-secret", "model": "model-a", "source": "test",
+    })
+    for client in (shared.client, shared.adjudicator_client):
+        client.dispatch_mode = "gateway"
+        client.gateway_profile = "alibaba-qc"
+        client.refresh_dispatch_identity()
+        client.gateway_url = "https://gateway.example.invalid/private"
+        client.gateway_token = "gateway-private-token"
+
+    running = shared.isolated_luxian_0609_runtime()
+
+    for client in (running.client, running.adjudicator_client):
+        runtime_config = SichuanQCService._client_runtime_config(client)
+        assert client.dispatch_mode == runtime_config["dispatch_mode"] == "gateway"
+        assert client.gateway_profile == runtime_config["gateway_profile"] == "alibaba-qc"
+        assert "gateway_url" not in runtime_config
+        assert "gateway_token" not in runtime_config
+        assert not hasattr(client, "gateway_url")
+        assert not hasattr(client, "gateway_token")
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ from ..luxian_0609 import LUXIAN_0609_RULE_SET_KEY
 from ..luxian_0609.privacy_request_scope import luxian_0609_privacy_scope
 from ..luxian_0609.rule_decision_settings import ReadOnlySettingsOverlay
 from ..luxian_0609.native_package import Luxian0609PackagePlan
+from ..llm_execution_concurrency import LLMExecutionConcurrency
 
 
 def _resolve_facade_module(host: Any) -> Any:
@@ -57,6 +58,7 @@ async def evaluate_running_final_bundle_input(
     task_settings: Settings | ReadOnlySettingsOverlay | None = None,
     cancellation_check: Optional[Callable[[], bool]] = None,
     execution_trace_sink: Optional[Callable[[Dict[str, Any]], None]] = None,
+    execution_concurrency: LLMExecutionConcurrency | None = None,
 ) -> Dict[str, Any]:
     """
     通过 running/final bundle 输入复用旧规则链入口（evaluate_document）。
@@ -194,6 +196,7 @@ async def evaluate_running_final_bundle_input(
             evidence_payload=evidence_payload,
             llm_client=host.adjudicator_client,
             settings=settings,
+            execution_concurrency=execution_concurrency,
             source_gate_decisions=source_gate_decisions,
             institute_id=str((bundle or {}).get("institute_id") or ""),
             patient_id=str((bundle or {}).get("patient_id") or ""),

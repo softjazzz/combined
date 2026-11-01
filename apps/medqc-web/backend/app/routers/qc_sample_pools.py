@@ -37,6 +37,12 @@ from ..services.customer_rule_sets import (
     get_customer_luxian_rule_set,
 )
 from ..services.detached_task_runner import submit_detached_task
+from ..services.qc_dispatch.dispatcher import (
+    QCDispatchEntrypointError,
+    assert_new_qc_task_dispatch_ready,
+    should_submit_detached_qc_task,
+)
+from ..services.qc_dispatch.repository import QCDispatchSchemaUnavailable
 from ..services.luxian_0609 import (
     build_family_scopes as _build_luxian_0609_family_scopes,
     normalize_customer_rule_ids as _normalize_rule_id_list,
@@ -1633,6 +1639,16 @@ async def run_sample_pool_intrinsic_validation(
     job_filters["operation_ref"] = operation_ref
     job_filters["execution_scope_hash"] = execution_scope_hash
 
+    try:
+        assert_new_qc_task_dispatch_ready(
+            eligible_for_rabbitmq=rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY,
+            family_parent=len(luxian_family_scopes) > 1,
+            task_runtime_snapshot=task_runtime_snapshot,
+            settings=get_settings(),
+        )
+    except QCDispatchEntrypointError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     if len(luxian_family_scopes) > 1:
         parent_filters = {
             **job_filters,
@@ -1763,12 +1779,13 @@ async def run_sample_pool_intrinsic_validation(
             },
         ) or parent_job
         service.update_pool_latest_job(pool_id=pool_id, job_id=parent_job_id, job_status="queued")
-        for child_job_id in child_job_ids:
-            submit_detached_task(
-                "sample_pool_luxian_family_child_batch_job",
-                _run_sichuan_workspace_batch_job,
-                child_job_id,
-            )
+        if all(should_submit_detached_qc_task(child_job) for child_job in child_jobs):
+            for child_job_id in child_job_ids:
+                submit_detached_task(
+                    "sample_pool_luxian_family_child_batch_job",
+                    _run_sichuan_workspace_batch_job,
+                    child_job_id,
+                )
         return success_response(
             data={
                 "pool_id": pool_id,
@@ -1802,28 +1819,32 @@ async def run_sample_pool_intrinsic_validation(
             trace_id=get_trace_id(request),
         )
 
-    job = workspace.create_batch_job(
-        draft=pseudo_draft,
-        created_by=_current_user_id(current_user),
-        scope=effective_scope,
-        filters=job_filters,
-        record_ids=record_ids,
-        total_records=record_count,
-        record_refs=record_refs,
-        draft_ids=rule_ids,
-        execution_mode="multi",
-        run_mode="parallel",
-        rule_count=len(rule_ids),
-    )
+    try:
+        job = workspace.create_batch_job(
+            draft=pseudo_draft,
+            created_by=_current_user_id(current_user),
+            scope=effective_scope,
+            filters=job_filters,
+            record_ids=record_ids,
+            total_records=record_count,
+            record_refs=record_refs,
+            draft_ids=rule_ids,
+            execution_mode="multi",
+            run_mode="parallel",
+            rule_count=len(rule_ids),
+        )
+    except QCDispatchSchemaUnavailable as exc:
+        raise HTTPException(status_code=503, detail="质控任务调度存储尚未就绪") from exc
     if validation_ref is not None:
         from ..services.rule_validation import RuleValidationService
         RuleValidationService().bind_run(validation_ref["run_id"], job["id"], job_filters)
     service.update_pool_latest_job(pool_id=pool_id, job_id=job["id"], job_status="queued")
-    submit_detached_task(
-        "sample_pool_sichuan_workspace_batch_job",
-        _run_sichuan_workspace_batch_job,
-        job["id"],
-    )
+    if should_submit_detached_qc_task(job):
+        submit_detached_task(
+            "sample_pool_sichuan_workspace_batch_job",
+            _run_sichuan_workspace_batch_job,
+            job["id"],
+        )
     return success_response(
         data={
             "pool_id": pool_id,

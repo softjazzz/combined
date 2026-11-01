@@ -425,7 +425,8 @@ def create_app() -> FastAPI:
             except Exception:
                 logger.warning("LLM 默认配置预热失败，将按需加载", exc_info=True)
 
-            # 只重投尚未领取的 LX0609 叶任务；Worker 再校验冻结模型/构建身份。
+            # Web 只恢复持久化 legacy 的 LX0609 叶任务；MQ 任务由独立
+            # publisher/Worker 恢复，不在主应用 lifespan 中启动这些角色。
             if os.getenv("MEDQC_RESUME_QC_TASKS", "true").strip().lower() in {"1", "true", "yes"}:
                 qc_sichuan_router.resume_queued_luxian_0609_workspace_jobs()
                 qc_sichuan_router.start_luxian_0609_task_recovery_monitor()
