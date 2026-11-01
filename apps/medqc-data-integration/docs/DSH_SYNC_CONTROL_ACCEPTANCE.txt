@@ -1,0 +1,108 @@
+MedQC v0.4控制服务集中验收说明。一次固定环境、失败即停；不改原13接口/正式业务库，不启用任何任务。
+
+一、先核对交付范围
+本包增加独立任务控制层，复用既有引擎。不要运行旧接管prepare脚本、不要重抽全部接口、不要覆盖旧配置。
+source profile core13为既有第一批；periop13默认disabled/ready=false，只有明确真实源验收批准文件才能开放。
+新控制库只允许medqc_sync_control_acceptance_<14位时间戳>。本阶段不使用生产控制库medqc_sync_control。
+数据面目标绑定必须是部署清单批准的新验收ingest/CDM，不能绑定medqc、medqc_cache_poc、旧bundle库或原13现场写库。
+
+二、包与环境
+按交付消息核验外层SHA256，解压全新D:\medqc\sync-control-0.4，逐项验证CHECKSUMS。
+沿用已确认Python3.10 x64绝对路径，不用默认py；不修改执行策略、不执行Bypass/动态PowerShell脚本块。
+不联网安装、不改防火墙/PG自启动、不注册或启用Windows任务。
+源码包与CPython3.10/Windows x64依赖附件分开交付；依赖附件含运行锁和可选测试/build锁。
+
+$python = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python310\python.exe'
+$release = 'D:\medqc\sync-control-0.4'
+$env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONPATH = Join-Path $release 'src'
+Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+
+若现有环境缺依赖，先校验并解压独立依赖附件到全新D:\medqc\sync-control-deps-0.4。
+不要向已有全局Python或既有同步器venv安装；以下只创建本候选包的新venv：
+$deps = 'D:\medqc\sync-control-deps-0.4'
+$venv = 'D:\medqc\sync-control-venv-0.4'
+if (Test-Path -LiteralPath $venv) { throw 'Choose a new candidate venv' }
+& $python -m venv $venv
+if ($LASTEXITCODE -ne 0) { throw 'Candidate venv creation failed' }
+$python = Join-Path $venv 'Scripts\python.exe'
+& $python -m pip install --no-index --require-hashes --find-links (Join-Path $deps 'wheelhouse') `
+  -r (Join-Path $deps 'requirements-sync-control.lock')
+if ($LASTEXITCODE -ne 0) { throw 'Offline locked installation failed' }
+& $python -m pip check
+if ($LASTEXITCODE -ne 0) { throw 'Dependency consistency failed' }
+不需要在客户机安装build/hatchling/ruff；unittest和集中验收不依赖pytest。
+
+& $python -c "import sys,struct,psycopg2; assert sys.version_info[:2]==(3,10); assert struct.calcsize('P')==8; print('BASE_ENV_OK')"
+if ($LASTEXITCODE -ne 0) { throw 'Base environment check failed' }
+& $python -c "import fastapi,uvicorn,httpx; print('API_IMPORTS_OK')"
+if ($LASTEXITCODE -ne 0) { throw 'API dependencies missing; request complete offline bundle, do not install online' }
+
+若manifest.offline_dependency_closure_verified=false，不能把包内存在wheel等同为离线安装已验证。
+缺依赖时先报告名称；仅使用已提供并校验的锁定依赖离线包，不临时更换版本。
+
+三、离线自检（不访问任何数据库/源）
+先建立一个全新的受保护验收父目录，只对新空目录设置SYSTEM/Administrators权限；不要改旧目录ACL。
+$parent = 'D:\medqc\sync-control-acceptance-runs-v1'
+if (Test-Path -LiteralPath $parent) { throw 'Choose a new protected acceptance parent' }
+New-Item -ItemType Directory -Path $parent -ErrorAction Stop | Out-Null
+icacls $parent /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'
+if ($LASTEXITCODE -ne 0) { throw 'Acceptance directory ACL failed' }
+& $python -m unittest discover -s (Join-Path $release 'tests') -p test_control_deployment.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Deployment self-tests failed' }
+& $python (Join-Path $release 'tools\accept_sync_control.py') --mode fake --http-test --output (Join-Path $parent 'fake-control')
+if ($LASTEXITCODE -ne 0) { throw 'Fake control acceptance failed' }
+
+该阶段应为SYNC_CONTROL_FAKE_ACCEPTANCE_PASS：提交幂等、3日任务、发布依赖、失败重试发布、取消、源限制、恢复隔离、计划重复tick唯一、API401/403/202及脱敏。
+该PASS仅是控制流程fake/进程内API证据，不能声明真实Caché/数据面或生产部署通过。
+
+四、一次固定控制环境准备（仅新控制库及必要角色，不碰数据面）
+使用已核实的部署身份passfile；口令不回显，不读.env。prepare工具创建一个全新验收控制库，
+只在--create-missing-roles显式允许时创建缺失的medqc_job_api/medqc_job_worker两个非超级用户角色，
+随机口令/token只保存在新受保护运行目录；运行配置不使用postgres。
+已有角色一律不重设密码，需通过--api-passfile/--worker-passfile提供其现有受保护文件，缺失即停。
+不要给源/业务库补权限，不将examples占位符随意改成旧库。不要手工执行初始化器再重复prepare。
+
+$adminPassfile = 'D:\medqc\service-takeover-run-20261030205035\secrets\deployment-admin.pgpass'
+$runtimeRoot = Join-Path $parent 'runtime'
+& $python (Join-Path $release 'tools\prepare_sync_control_acceptance.py') `
+  --output $runtimeRoot --admin-passfile $adminPassfile --port 5432 --pg-major 16 --create-missing-roles
+if ($LASTEXITCODE -ne 0) { throw 'Control environment preparation stopped; preserve all state' }
+$workerConfig = Join-Path $runtimeRoot 'worker.json'
+$apiConfig = Join-Path $runtimeRoot 'api.json'
+
+若现场部署用户并非postgres，沿用工具明确支持的已验证部署用户名参数，不能猜密码。
+部署用户名参数为--admin-user；只有现有角色确需复用时，给出--api-passfile和--worker-passfile。
+准备工具只执行新控制环境授权，初始化器本身不创建全局角色；两者职责不同。
+prepare.json应明确source_bindings_configured=false、worker_ready=false；worker.json的bindings_file为null。
+这是可进行FakeExecutor控制验收的配置，尚不能启动真实Caché抽取worker，不得直接照模板启动worker。
+已有库/目录/任务不重建、不清表；保留prepare报告与所有角色/配置，不自行重跑prepare。
+
+五、控制PG集中验收（只写虚构控制任务，不访问Caché/raw/CDM）
+验收期间该控制库不能同时运行其他worker/API写入者。
+& $python (Join-Path $release 'tools\accept_sync_control.py') `
+  --mode postgres --config $workerConfig --api-config $apiConfig --allow-control-writes --http-test `
+  --output (Join-Path $parent 'postgres-control')
+if ($LASTEXITCODE -ne 0) { throw 'Control PG acceptance stopped; preserve all state' }
+
+应为SYNC_CONTROL_POSTGRES_ACCEPTANCE_PASS；必须核对control_postgres_accessed=true、fake_executor=true、
+cache_accessed=false、ingest_or_cdm_accessed=false、schedules_disabled_on_exit=true。
+该阶段会留下虚构作业/故障审计，不删除或重跑；同一非空控制库不再运行本工具。
+HTTP是进程内应用测试，不等于真实listener或系统守护已通过。
+计划场景只在这个停止其他worker的新控制库内短暂测试验收计划的enabled状态，退出恢复disabled；
+它不启用现场业务计划或Windows任务，且执行器为纯虚构数据。
+
+六、常驻/数据面验收边界
+只有在部署清单明确给出经过核验的数据面绑定、允许的接口/日期和真实源执行范围时，
+才另行补齐并核验worker.bindings_file，再使用tools/run_sync_control.py --config $workerConfig worker
+以及人工job submit继续已授权的真实链路。当前prepare产物尚不具备该前置条件。
+原13已验收和第二批真实源的证据不得由fake PASS替代；未就绪profile不许强行ready=true。
+本交付工具不自动启动守护、抽取真实源、备份数据面或注册任务；这些项目以主协调集中验收清单为准。
+若真实listener、常驻进程重启、备份恢复尚无实测，报告not_executed，不能出完整部署PASS。
+
+七、退出与回传
+两Windows XML的两个Enabled均须false，systemd仅为Linux迁移模板；不调用schtasks/systemctl启用。
+任何非预期错误立即停止，不重跑全包、不清库/清表/删历史失败、不放宽保护。
+只打包本次输出目录里的非PHI JSON，加manifest和CHECKSUMS后报告SHA256/大小。
+runtime/API/worker配置、bindings、token、passfile、日志原文、dump、正文和真实键留客户机。
+区分开发fake、控制PG、真实源、正式启用四层证据；未执行项保持false/not_executed。

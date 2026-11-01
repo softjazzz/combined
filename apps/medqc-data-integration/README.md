@@ -1,3 +1,11 @@
+# v0.4 独立任务控制服务
+
+现有抽取器与CDM发布器之上已增加人工CLI/HTTP受理、PostgreSQL持久队列、独立worker、任务重试/取消/恢复及每日/每周计划。原`medqc-ingest`入口和第一批13接口注册表保持兼容，新入口为`medqc-sync`。本期不增加前端。
+
+运行方式、权限和边界见[控制服务运行说明](docs/sync-control-operations.md)，客户集中验收见[DSH执行说明](docs/DSH_SYNC_CONTROL_ACCEPTANCE.txt)。源码部署也可使用`tools/run_sync_control.py`，无需安装本项目wheel。
+
+默认仅开放第一批profile；第二批仍须真实源验收证据才能启用，4个受限来源保持禁用。计划默认禁用，交付不会注册系统任务或切换业务数据源。配置、令牌、凭据和数据面绑定均留在现场受保护目录。
+
 # MedQC 数据接入服务
 
 第二批17接口的独立候选合同与只读预检见
@@ -122,4 +130,4 @@ python -m mypy src
 python -m build
 ```
 
-测试使用 fake 端口，不连接真实 Caché 或 PostgreSQL。
+常规测试不访问真实 Caché；真实 PostgreSQL 合成集成测试需显式 opt-in，并核验独立集群标记。

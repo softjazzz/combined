@@ -1,6 +1,6 @@
 # MedQC独立数据同步服务开发计划 v0.4
 
-状态：开发计划，尚未实施。编制日期：2026-11-01（用户时区America/Chicago）。
+状态：五路并行开发已实施，正在统一集成验收；客户环境部署及正式启用未执行。编制日期：2026-11-01（用户时区America/Chicago）。
 
 **目标：** 把现有Caché抽取器和CDM发布器升级为可持续运行、可定时执行、可人工发起和可追踪恢复的独立后端服务。
 
@@ -58,7 +58,7 @@
 
 ## 3. 任务合同：人工和定时共用
 
-人工提交示例（合同示意，命令/API尚未实现）：
+人工提交示例（CLI/API已实现；执行仍需批准的数据面绑定）：
 
 ```json
 {
@@ -128,7 +128,7 @@
 第一版CLI新增独立命令组`medqc-sync`，保留原`medqc-ingest`：
 
 ```text
-medqc-sync job submit --profile core13 --interface web.mr --start 2026-10-26 --end 2026-10-28 --mode replay --publish
+medqc-sync job submit --profile core13 --interface web.mr --start 2026-10-26 --end 2026-10-28 --mode replay --publish --idempotency-key operator-request-001
 medqc-sync job list
 medqc-sync job show <job-id>
 medqc-sync job retry <job-id>
