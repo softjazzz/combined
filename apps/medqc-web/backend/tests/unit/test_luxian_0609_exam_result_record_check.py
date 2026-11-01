@@ -233,7 +233,8 @@ async def test_verbatim_confirmation_is_positive_only_and_skips_shared_report_se
 
     report = "右肺下叶占位，考虑恶性可能；主动脉壁钙化。"
     monkeypatch.setattr(module, "_targets", lambda _: {1: (report, (verbatim,)), 2: (report, (verbatim,))})
-    same_reports = [SimpleNamespace(result_texts=(report,))] * 2
+    same_reports = [SimpleNamespace(result_texts=(report,), document_refs=(f'E01-{position:02d}',))
+                    for position in (1, 2)]
     monkeypatch.setattr(module, "events_for_family", lambda projection, family: same_reports)
     shared = _Client([_answer(*[{**_doc(verbatim, "result_recorded", "右肺下叶占位，考虑恶性可能", "右肺下叶占位"),
                                  "event_position": position} for position in (1, 2)])])

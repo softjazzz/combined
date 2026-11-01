@@ -275,6 +275,7 @@ class Settings(BaseSettings):
     LLM_REQUEST_OBSERVATION_ENABLED: bool = False
     # 只用于06-01-04应用层实验；空对象保持原路径，端点／凭据仅在Gateway注册。
     LLM_EXAM_RESULT_ROUTING: dict[str, Any] = Field(default_factory=dict)
+    LLM_EXAM_RESULT_CONTEXT_PROTOCOL: Literal['legacy', 'comparison_v1'] = 'legacy'
 
     # Backward compatibility aliases (deprecated, use LLM_* instead)
     @property

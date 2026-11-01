@@ -75,6 +75,11 @@ def route_policy() -> RoutePolicy | None:
 def route_configuration_identity() -> str | None:
     """在任务接纳阶段绑定配置；off时不改变已有任务身份形状。"""
     policy = route_policy()
+    from .luxian_0609.exam_result_context import protocol, COMPARISON_VERSION
+    context = protocol(get_settings())
+    if context != 'legacy':
+        return _digest({'policy': asdict(policy) if policy else None, 'version': ROUTE_VERSION,
+                        'context': COMPARISON_VERSION})
     return _digest({"policy": asdict(policy), "version": ROUTE_VERSION}) if policy else None
 
 
@@ -157,8 +162,22 @@ def exam_result_route_scope(reference: Any, rule_ids: Any = (RULE_ID,)) -> Itera
         yield active
         return
     policy = route_policy()
-    if policy is None or reference is None:
+    from .luxian_0609.exam_result_context import protocol, COMPARISON_VERSION
+    context_protocol = protocol(get_settings())
+    if reference is None:
         yield None
+        return
+    if policy is None:
+        if context_protocol != 'legacy':
+            from .luxian_0609.rule_decision_settings import _luxian_0609_model_identity
+            raw, _ = _unwrap(reference)
+            identity = _luxian_0609_model_identity(raw)
+            partition = _digest({'context': COMPARISON_VERSION, 'reference': identity,
+                                 'outer_experiment': current_llm_experiment_namespace()})
+            with llm_experiment_scope('A0-cmp-' + partition[:24]):
+                yield None
+        else:
+            yield None
         return
     raw, _ = _unwrap(reference)
     from .luxian_0609.rule_decision_settings import _luxian_0609_model_identity
@@ -172,7 +191,8 @@ def exam_result_route_scope(reference: Any, rule_ids: Any = (RULE_ID,)) -> Itera
         if configured_gateway_profile(settings, policy.candidate_provider, policy.candidate_model) != policy.candidate_profile:
             raise ProviderConfigurationError("candidate Gateway mapping does not match the route policy")
     partition = _digest({"version": ROUTE_VERSION, "policy": asdict(policy), "reference": identity,
-                         "outer_experiment": current_llm_experiment_namespace()})
+                         "outer_experiment": current_llm_experiment_namespace(),
+                         **({'context': COMPARISON_VERSION} if context_protocol != 'legacy' else {})})
     # 控制目录长度，兼容客户机Windows路径；完整指纹仍保存在任务身份与观测中。
     namespace = policy.experiment[:2] + "-r-" + partition[:24]
     session = RouteSession(policy, reference, identity, partition)

@@ -154,6 +154,10 @@ class ExamLabTextProjection:
     course_candidates: Mapping[
         str, tuple[str, datetime | None, datetime | None]
     ] | None = None
+    # 只读比较目录；按事件分批时保留原报告身份，不参与当前待答事件计数。
+    comparison_events: tuple[ExamLabSingleEvent, ...] | None = None
+    # 实验材料外发允许目录；不缩小程序校验/报告独有性比较。None沿用来源授权范围。
+    comparison_context_refs: frozenset[tuple[str, ...]] | None = None
 
     def __repr__(self) -> str:
         return (
