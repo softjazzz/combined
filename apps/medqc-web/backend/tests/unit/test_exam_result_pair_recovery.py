@@ -8,6 +8,9 @@ from app.services.luxian_0609 import exam_result_record_check as check
 from app.services.luxian_0609.exam_lab_fact_extraction import build_exam_lab_text_projection
 from tests.unit.test_luxian_0609_exam_targeted_retry import Client
 from tests.unit.test_exam_result_model_route import harness, response
+from tests.unit.test_exam_poc_acceptance import formal_replay
+from tests.unit.test_luxian_0609_native_exam_lab_execution import _fact_response
+from types import SimpleNamespace
 
 
 def projection():
@@ -103,3 +106,60 @@ async def test_candidate_upgrade_only_sends_unvalidated_pairs(monkeypatch, tmp_p
         assert outcome.llm_call_count == 2 and not outcome.incomplete_event_positions
     finally:
         assert await app.state.gateway_runtime.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failed', [None, 'early', 'late', 'early_none'])
+async def test_partial_positive_cannot_manufacture_late_first_record(monkeypatch, tmp_path, failed):
+    rows = {
+        'exam_master': ({'exam_id': 'EX-TIME', 'exam_name': '胸部CT',
+            'report_time': '2026-01-02 11:00:00', 'exam_conclusion': '右肺下叶结节影。'},),
+        'daily_course_record': (
+            {'document_id': 'EARLY', 'record_time': '2026-01-02 13:00:00',
+             'record_content': '本次胸部CT在右肺下叶发现小结节，继续观察。'},
+            {'document_id': 'LATE', 'record_time': '2026-01-03 17:00:00',
+             'record_content': '复述昨日胸部CT：右肺下叶发现小结节。'},
+        )}
+    if failed == 'early_none':
+        rows['daily_course_record'] = (
+            {**rows['daily_course_record'][0], 'record_content': '计划复查胸部CT，继续观察。'},
+            rows['daily_course_record'][1],
+        )
+    monkeypatch.setattr(check, '_verbatim_confirmed', lambda *a: set())
+    first = reply([{'event_position': 1, 'course_doc_ref': ref, 'quote_type': 'result_recorded',
+        'quote': '右肺下叶发现小结节', 'report_span': '右肺下叶结节影'} for ref in ('D06-01', 'D06-02')])
+    recordings = []
+    incomplete = failed in {'early', 'late'}
+    if incomplete:
+        index = 0 if failed == 'early' else 1
+        first['docs'][index]['quote'] = '文书中不存在的引文'
+        recordings = [{'completion': response(first)},
+                      {'completion': response(reply([first['docs'][index]]))}]
+    else:
+        if failed == 'early_none':
+            first['docs'][0].update(quote_type='none', quote='', report_span='')
+        recordings = [{'completion': response(first)}]
+    main = _fact_response((check.RULE_ID,))
+    if failed == 'late':
+        main['facts'][0]['course_doc_positions'] = [2]
+    row = await formal_replay(monkeypatch, tmp_path,
+        case=SimpleNamespace(name='partial-first-record-time', rows=lambda: rows),
+        recordings=recordings, arm='reference', mature=True, allow_incomplete=incomplete,
+        main_payload=main)
+    assert row['saved']['status'] == ('non_compliant' if failed == 'early_none' else 'compliant')
+    if incomplete:
+        assert row['incomplete_specialty_rule_ids'] == [check.RULE_ID]
+        assert not row['frozen_files']
+    if failed == 'early':
+        # 只核实晚期记录不能替换原来2小时的引用，制造30小时超时。
+        assert row['facts'][0]['course_doc_refs'] == ('D06-01',)
+
+
+def test_partial_late_evidence_remains_available_without_replacing_original_fact():
+    from app.services.luxian_0609.exam_lab_fact_extraction import ExamLabEventFact
+
+    original = ExamLabEventFact(rule_id=check.RULE_ID, applicability='applicable', semantic_state='present',
+        positive_state='not_relevant', course_doc_refs=('early',), evidence_refs=('event', 'early'))
+    outcome = check.ResultRecordOutcome('ready', {1: ('late',)}, incomplete_event_positions=frozenset({1}))
+    assert check.apply_result_record((original,), outcome) == (original,)
+    assert outcome.recorded_refs == {1: ('late',)}

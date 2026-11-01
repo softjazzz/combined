@@ -2461,7 +2461,25 @@ async def _extract_exam_lab_batch_uncached(
                     completion_tokens += check_outcome.completion_tokens
                     total_tokens += check_outcome.total_tokens
                     api_time += check_outcome.api_time
-                    text_facts = apply(text_facts, check_outcome)
+                    if isinstance(check_outcome, ResultRecordOutcome):
+                        # 时间口径仍由执行器及既有时间owner负责。局部核验仅在
+                        # 有可靠窗口内正面证据时足以更新事实；晚期成功不证明首次超时。
+                        events = (events_for_family(projection, "exam")
+                                  if check_outcome.incomplete_event_positions else ())
+                        partial_in_window = frozenset(
+                            position for position in check_outcome.incomplete_event_positions
+                            if 1 <= position <= len(events) and any(
+                                response.kind == "in_window" for response in assess_fact_responses(
+                                    projection=projection, event=events[position - 1],
+                                    refs=check_outcome.recorded_refs.get(position, ()),
+                                    carries_result=event_result_carried_by_course,
+                                )
+                            )
+                        )
+                        text_facts = apply(text_facts, check_outcome,
+                                           partial_in_window_positions=partial_in_window)
+                    else:
+                        text_facts = apply(text_facts, check_outcome)
     return _ExamLabBatchResult(
         facts=text_facts, rule_failures=isolated_rule_failures,
         incomplete_specialty_rule_ids=frozenset(incomplete_specialty_rule_ids),

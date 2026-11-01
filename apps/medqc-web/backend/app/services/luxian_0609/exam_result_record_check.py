@@ -171,7 +171,7 @@ def _course_text(projection: ExamLabTextProjection, ref: str) -> str:
 
 
 # 仅参与主冻结键，不改变 JSON 协议或发送的 Prompt。
-RESULT_RECORD_VALIDATION_VERSION = "exam-record-pair-recovery-v3"
+RESULT_RECORD_VALIDATION_VERSION = "exam-record-partial-timing-v4"
 
 
 def _input_complete_for_event(projection: ExamLabTextProjection, position: int, refs: Sequence[str]) -> bool:
@@ -579,6 +579,7 @@ async def _check_exam_result_record_in_route_scope(projection: ExamLabTextProjec
 
 def apply_result_record(
     facts: Sequence[ExamLabEventFact], outcome: ResultRecordOutcome,
+    *, partial_in_window_positions: frozenset[int] = frozenset(),
 ) -> tuple[ExamLabEventFact, ...]:
     """用逐份核对结论固定 06-01-04 的病程事实；未覆盖的事实保持原样。"""
     if outcome.state != "ready":
@@ -587,6 +588,12 @@ def apply_result_record(
     for fact in facts:
         refs = outcome.recorded_refs.get(fact.event_position)
         if fact.rule_id != RULE_ID or refs is None:
+            result.append(fact)
+            continue
+        if (fact.event_position in outcome.incomplete_event_positions
+                and fact.event_position not in partial_in_window_positions):
+            # 只核实“写过”不能证明“首次写于超时后”。成功证据仍在outcome，
+            # 但未知/仅晚期证据沿用既有主事实回退，不替换其早期引用。
             result.append(fact)
             continue
         event_refs = tuple(ref for ref in fact.evidence_refs if ref not in fact.course_doc_refs)
