@@ -97,21 +97,10 @@ def forbid_databases() -> None:
 
 
 def cases():
-    from app.services.luxian_0609.exam_lab_fact_extraction import build_exam_lab_text_projection
+    from scripts.exam_poc_acceptance import CASES
 
-    for name, course, expected in (
-        ("result_paraphrase", "已阅本次胸部CT：右肺下叶小结节，倾向炎性，继续观察。", True),
-        ("plan_only", "拟完善胸部CT检查，进一步了解病变情况。", False),
-        ("external_prior_exam", "外院既往胸部CT曾见右肺下叶结节，本次检查结果尚待回报。", False),
-    ):
-        projection = build_exam_lab_text_projection(rows_by_source={
-            "exam_master": ({"exam_id": "SYN-EX-1", "exam_name": "胸部CT平扫",
-                             "exam_time": "2026-01-02 10:00:00", "report_time": "2026-01-02 11:00:00",
-                             "exam_conclusion": "右肺下叶见8mm结节影，考虑炎性结节；建议随访。"},),
-            "daily_course_record": ({"document_id": "SYN-DOC-1", "record_time": "2026-01-02 15:00:00",
-                                     "record_content": course},),
-        })
-        yield name, projection, expected
+    for case in CASES:
+        yield case.name, case.projection(), case.expected_kind == "result_recorded"
 
 
 async def run(args) -> int:
@@ -179,13 +168,34 @@ async def run(args) -> int:
                     "candidate_parameters": {"temperature": 0.0, "top_p": 0.9}}
                 before = len(sender.requests)
                 checked = await check.check_exam_result_record(projection, reference)
+                from scripts.exam_poc_acceptance import CASES, inspect_completion
+
+                case = next(case for case in CASES if case.name == name)
+                expected_kinds = {(position, ref): case.expected_kind
+                                  for position, (_, refs) in check._targets(projection).items() for ref in refs}
+                attempts = []
+                for attempt, request in enumerate(sender.requests[before:], 1):
+                    request.update(case=name, arm=arm, attempt=attempt)
+                    if "completion" in request:
+                        attempts.append(inspect_completion(projection, request["completion"],
+                                                           expected_kinds=expected_kinds, source_rows=case.rows()))
                 recorded = bool(checked.recorded_refs.get(1)) if checked.state == "ready" else None
                 item = {"event": "case", "case": name, "arm": arm, "state": checked.state,
                         "expected_recorded": expected, "recorded": recorded,
                         "matches_synthetic_expectation": recorded is expected,
                         "http_calls": len(sender.requests) - before, "logical_calls": checked.llm_call_count,
                         "prompt_tokens": checked.prompt_tokens, "completion_tokens": checked.completion_tokens,
-                        "total_tokens": checked.total_tokens, "elapsed_seconds": checked.api_time}
+                        "total_tokens": checked.total_tokens, "elapsed_seconds": checked.api_time,
+                        "attempt_acceptance": attempts,
+                        "recorded_refs": checked.recorded_refs, "conflict_refs": checked.conflict_refs,
+                        "category_review_required": any(pair["category_matches_expectation"] is False
+                                                        for a in attempts for pair in a["pairs"])}
+                item["acceptance_status"] = ("protocol_failed" if checked.state != "ready" else
+                                             "semantic_review_required" if item["category_review_required"] else
+                                             "basic_expectations_met")
+                item["recovery_reasons"] = [{"after_attempt": i + 1, "reason": value["validation_reason"],
+                                            "details": value["validation_details"]}
+                                           for i, value in enumerate(attempts[:-1]) if not value["protocol_valid"]]
                 results.append(item)
                 print(json.dumps(item), flush=True)
                 if sender.fatal:
@@ -199,7 +209,8 @@ async def run(args) -> int:
             "results": results, "requests": sender.requests}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"event": "report", "path": str(report), "http_calls": len(sender.requests),
                           "database_writes": 0}), flush=True)
-    return 0 if all(item["matches_synthetic_expectation"] for item in results) else 3
+    return 0 if all(item["matches_synthetic_expectation"] and item["acceptance_status"] == "basic_expectations_met"
+                    for item in results) else 3
 
 
 def main(argv=None) -> int:
