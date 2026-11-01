@@ -4,10 +4,6 @@ from tests.luxian_0609_identity_test_support import published_rule_ids
 
 from dataclasses import dataclass
 import hashlib
-from pathlib import Path
-import os
-import subprocess
-import sys
 from types import SimpleNamespace
 
 import pytest
@@ -853,70 +849,20 @@ def test_preproduction_runner_does_not_depend_on_router_or_sichuan_service():
 
 
 def test_preproduction_runner_cold_process_does_not_load_sichuan_service():
-    backend_dir = Path(__file__).resolve().parents[2]
-    script = r'''
-import asyncio
-import sys
-from types import SimpleNamespace
+    import json
+    from tests.scheduler_support.isolation import run_preproduction_cold_start_probe
 
-from app.services.luxian_0609 import preproduction_runner as runner
-from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
-
-RULE_IDS = tuple(entry.rule_id for entry in load_luxian_0609_rule_master()[:49])
-
-assert "app.services.sichuan_qc_service" not in sys.modules
-
-class Context:
-    native_llm_call_count = 0
-    native_prompt_tokens = 0
-    native_completion_tokens = 0
-    native_total_tokens = 0
-    native_api_time = 0.0
-
-async def prepare(**_):
-    return [], Context()
-
-def aggregate(*, orchestrated, **_):
-    orchestrated["results"] = [
-        {
-            "rule_id": rule_id,
-            "rule_code": rule_id,
-            "status": "not_applicable",
-            "is_compliant": True,
-        }
-        for rule_id in RULE_IDS
-    ]
-    return orchestrated
-
-runner.prepare_luxian_0609_execution = prepare
-runner.aggregate_luxian_0609_orchestrated_results = aggregate
-
-async def main():
-    result = await runner.run_luxian_0609_preproduction(
-        bundle={"scene": "running"},
-        selected_customer_rule_ids=RULE_IDS,
-        evaluation_as_of_date="2026-07-17",
-        llm_client=object(),
-        base_settings=SimpleNamespace(),
-        model_name="model",
-    )
-    assert len(result["results"]) == 49
-    assert "app.services.sichuan_qc_service" not in sys.modules
-
-asyncio.run(main())
-'''
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(backend_dir)
-    completed = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=backend_dir,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=30,
-        check=False,
-    )
+    completed = run_preproduction_cold_start_probe()
     assert completed.returncode == 0, completed.stderr
+    marker = "COLD_START_PROBE_OK "
+    rows = [line[len(marker):] for line in completed.stdout.splitlines() if line.startswith(marker)]
+    assert len(rows) == 1
+    assert json.loads(rows[0]) == {
+        "rule_results": 49, "service_loaded": False,
+        "socket_denied": True, "dns_denied": True,
+        "database_denied": True, "process_denied": True, "dotenv_denied": True,
+        "model_calls": 0, "database_writes": 0,
+    }
 
 
 def test_safe_string_allows_controlled_text_quoting_body_datetimes() -> None:

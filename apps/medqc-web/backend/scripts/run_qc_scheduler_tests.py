@@ -17,6 +17,8 @@ from sqlalchemy.pool import StaticPool
 
 SUITES: dict[str, tuple[str, ...]] = {
     "llm-request-audit": (
+        "tests/unit/test_qc_cold_start_probe.py",
+        "tests/unit/test_luxian_0609_preproduction_runner.py::test_preproduction_runner_cold_process_does_not_load_sichuan_service",
         "tests/unit/test_llm_request_observation.py",
         "tests/unit/test_llm_experiment_freeze.py",
         "tests/unit/test_strata_observation.py",
