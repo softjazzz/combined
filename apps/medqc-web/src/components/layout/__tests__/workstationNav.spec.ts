@@ -22,6 +22,7 @@ describe('workstationNav 选中项', () => {
     [route(B, { record_id: 'r1' }), 'worklist'],
     [route(`${B}/worklist`, { stage: 'frontpage_generate' }), 'stage-frontpage-generate'],
     [route(B, { stage: 'frontpage_qc' }), 'stage-frontpage-qc'],
+    [route(`${B}/frontpage-qc`), 'frontpage-qc-v2'],
     [route(`${B}/worklist`, { stage: 'settlement_qc' }), 'stage-settlement-qc'],
     [route(`${B}/rules`, { tab: 'semantic', ruleSetKey: 'luxian_0609_qc_v1' }), 'rules'],
     [route(`${B}/rules/custom-workspace`), 'custom-rules'],
@@ -137,9 +138,10 @@ describe('workstationNav 可见性', () => {
         resolvePermission,
       }),
     )
-    // 原入口保留，新增独立消息中心。
-    expect(visible).toHaveLength(25)
+    // 保留业务线全部入口，并接入独立首页质控入口。
+    expect(visible).toHaveLength(27)
     expect(visible).toContain('feedback-worklist')
+    expect(visible).toContain('frontpage-qc-v2')
     expect(visible).toContain('rule-validation')
   })
 })

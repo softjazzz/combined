@@ -1,0 +1,64 @@
+任务：核对正式数据接入服务 0.2.0 的六接口字段转换，全部只读，不重抽。
+
+一、范围
+1. 使用本包的独立新目录 D:\medqc\service-0.2-readonly-review，不覆盖冻结同步目录、
+   R26.5 或此前字段合同目录。核对外层 ZIP SHA256 与 CHECKSUMS.txt 每一项。
+2. 只连接本机 PostgreSQL 的 medqc_bundle_time_clone_20261029180906。
+3. 不连接 Caché，不读后端 .env，不连接 medqc、medqc_cache_poc 或 051 验收库。
+4. 不执行 migrations 中任何 SQL，不运行 extract/replay/publish/inspect，不创建库、
+   角色、表、授权、任务、批次或断点，不更新任何行，不改属主，不清理现存数据。
+5. 使用已有、已获授权且能 SELECT raw 和六张 CDM 表的非超级用户登录身份。
+   若权限不够，报告缺权限并停止；不要改用 postgres、读超级用户口令或自动授权。
+
+二、解释器与离线自检
+使用已有、成功运行过客户同步脚本的 Python 3.10，不安装依赖、不联网。
+只读工具兼容现有 psycopg2 或 psycopg3；先用 import 测试确认其中一个可用。
+下面以 py -3.10 表示解释器，若包在原 venv 中，则将其换成该 venv 的 python.exe。
+
+Set-Location 'D:\medqc\service-0.2-readonly-review'
+$env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONPATH = (Join-Path (Get-Location).Path 'src')
+py -3.10 -m unittest discover -s tests -p test_orders_lab_exam_service.py -v
+if ($LASTEXITCODE -ne 0) { throw '正式服务离线测试失败，停止' }
+py -3.10 -m medqc_ingest.cli contract-export --output service-contracts.json
+if ($LASTEXITCODE -ne 0) { throw '合同导出失败，停止' }
+
+预期：24 个新测试通过；导出的合同包含 13 个来源。这里没有驱动连接或数据库写入。
+
+三、只读核对
+下面的 medqc_sync 必须先确认就是已有授权的查询身份；没有权限就停止，不自行授权。
+口令由 getpass 交互输入，不进脚本、命令参数或日志。
+
+py -3.10 tools\verify_service_projection.py `
+  --database medqc_bundle_time_clone_20261029180906 `
+  --user medqc_sync `
+  --output service-0.2-readonly-result.json
+if ($LASTEXITCODE -ne 0) { throw '只读核对未通过，请报告受控错误码和统计后停止' }
+
+工具在读取前确认实际库名、非超级用户、transaction_read_only=on，并使用
+REPEATABLE READ 快照。它逐块读取已有 raw、校验内容哈希和字段集合，再调用正式
+project_record 转换，并按正式主键查询 CDM。六接口没有本地生成时间映射。
+
+预期行数（本轮不重抽；若实际变化，如实报告并停止，不凑数）：
+web.inpat_drug_order      8622
+web.inpat_nondrug_order  24616
+web.labtest_master        3269
+web.labtest_item          5601
+web.labtest_item_report  42391
+web.exam_item_report       899
+合计                    85398
+
+逐接口：rows_all_fields_equal=rows_compared；missing/mismatched/extra 全为 0；
+各字段 field_mismatch_counts 全为 0。空 schema 哈希仍会如实计数，不补修，
+legacy_blank_hash_publish_authorized 必须是 false。
+
+本工具只核对转换与已有 CDM 一致性，不表示运行了正式发布事务、版本写入或规则引擎。
+正式发布入口仍拒绝历史空哈希。禁止借只读核对结果改成全局允许空哈希。
+
+四、回传与停止
+仅回传 service-0.2-readonly-result.json、离线测试数量、包哈希及受控失败码。
+不回传正文、病例键、原始值、凭据、dump 或真实 SQL 参数。输出只含字段名和计数。
+如需 ZIP，另写 manifest 与 CHECKSUMS，记录工具脚本哈希、实际库名、只读状态和
+未执行事项。不要把 src/tests/migrations 中的代码修改后当成本包原版本。
+
+完成即停止。下一阶段是显式的存储兼容迁移设计与真实事务验收；本轮不做。

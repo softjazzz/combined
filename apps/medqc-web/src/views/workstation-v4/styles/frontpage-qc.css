@@ -1,0 +1,385 @@
+/* 首页质控（新）· 列表 + 预览型页面（v7.1，参照运行/终末病历质控 RunningV71） */
+
+/* 页头 */
+.fpqc-page__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.fpqc-page__scope {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+  font-family: var(--mq-font-family);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* 指标卡：一张玻璃卡四格，图标 + 标题 / 数值 + 单位 */
+.fpqc-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.fpqc-metrics__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 12px;
+  min-width: 0;
+  padding: 18px 22px;
+}
+
+.fpqc-metrics__item + .fpqc-metrics__item {
+  border-left: 0.5px solid var(--mq-border);
+}
+
+.fpqc-metrics__label {
+  flex: 1 1 calc(100% - 50px);
+  min-width: 0;
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+
+.fpqc-metrics__value {
+  font-family: var(--mq-font-display);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.fpqc-metrics__unit {
+  align-self: flex-end;
+  margin-left: -6px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-14);
+  font-weight: 500;
+}
+
+/* 筛选行：不套卡片，控件本身为玻璃胶囊 */
+.fpqc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fpqc-toolbar__filters,
+.fpqc-toolbar__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 导出与刷新换行时靠右，与筛选项区分 */
+.fpqc-toolbar__tools {
+  margin-left: auto;
+}
+
+.fpqc-toolbar__control {
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: var(--mq-radius-control);
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 1px 3px rgba(10, 55, 115, 0.06);
+  color: var(--mq-text-primary);
+  font: inherit;
+  font-size: var(--mq-font-13);
+}
+
+select.fpqc-toolbar__control {
+  width: 128px;
+}
+
+.fpqc-toolbar__search {
+  width: 200px;
+  padding: 0 14px;
+}
+
+.fpqc-toolbar__control:focus,
+.fpqc-toolbar__dates:focus-within {
+  border-color: var(--mq-brand-400);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.12);
+}
+
+.fpqc-toolbar__dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  color: var(--mq-text-tertiary);
+}
+
+.fpqc-toolbar__dates input {
+  width: 124px;
+  height: 30px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--mq-text-primary);
+  font: inherit;
+  font-size: var(--mq-font-13);
+}
+
+/* 结果分析下钻带来的规则筛选 */
+.fpqc-toolbar__rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 360px;
+  height: 32px;
+  padding: 0 6px 0 12px;
+  border-radius: 999px;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fpqc-toolbar__rule-clear {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fpqc-toolbar__rule-clear:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 1px;
+}
+
+.fpqc-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 2px 8px rgba(10, 55, 115, 0.08);
+  color: var(--mq-text-primary);
+  font: inherit;
+  font-size: var(--mq-font-13);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fpqc-toolbar__btn:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.fpqc-toolbar__btn--primary,
+.fpqc-toolbar__btn--primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
+  box-shadow: var(--mq-brand-shadow);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.fpqc-toolbar__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fpqc-toolbar__btn:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+.fpqc-page__notice {
+  margin: -8px 4px 0;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+
+/* 左列表 + 右预览 */
+.fpqc-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  align-items: start;
+  gap: 16px;
+}
+
+.fpqc-list {
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px 12px 8px;
+}
+
+.fpqc-list__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+
+.fpqc-list__head h2 {
+  margin: 0;
+  font-family: var(--mq-font-display);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.fpqc-list__head > span {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-13);
+}
+
+.fpqc-list__head > .fpqc-list__selected {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
+}
+
+.fpqc-list__clear {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mq-brand-600);
+  font: inherit;
+  font-size: var(--mq-font-12);
+  cursor: pointer;
+}
+
+.fpqc-list__pager {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 10px 6px;
+}
+
+/* 执行前确认弹窗（结构同系统配置的执行前确认） */
+.fpqc-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.fpqc-confirm__copy h2 {
+  margin: 0;
+  font-family: var(--mq-font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.fpqc-confirm__copy p {
+  margin: 6px 0 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-14);
+  line-height: 22px;
+}
+
+.fpqc-confirm__copy b {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+}
+
+.fpqc-confirm__summary {
+  margin: 0;
+  padding: 4px 16px;
+}
+
+.fpqc-confirm__summary > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  font-size: var(--mq-font-13);
+}
+
+.fpqc-confirm__summary > div + div {
+  border-top: 0.5px solid var(--mq-border);
+}
+
+.fpqc-confirm__summary dt {
+  color: var(--mq-text-tertiary);
+}
+
+.fpqc-confirm__summary dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.fpqc-confirm__actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.fpqc-confirm__actions .mq-btn {
+  flex: 1 1 0;
+  height: 44px;
+}
+
+@media (max-width: 1280px) {
+  .fpqc-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fpqc-metrics__item:nth-child(3) {
+    border-left: 0;
+  }
+
+  .fpqc-metrics__item:nth-child(n + 3) {
+    border-top: 0.5px solid var(--mq-border);
+  }
+
+  .fpqc-split {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .fpqc-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .fpqc-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fpqc-metrics__item + .fpqc-metrics__item {
+    border-top: 0.5px solid var(--mq-border);
+    border-left: 0;
+  }
+}

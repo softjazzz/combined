@@ -3,7 +3,7 @@
 ## 目的与边界
 
 `backend/scripts/bootstrap_cache_sync_database.py` 用于把以下两类 PostgreSQL
-数据库初始化到 MedQC Alembic `20261026_000055`：
+数据库初始化到 MedQC Alembic `20261031_000057`：
 
 1. 全新空库；
 2. 仅含 POC 原始层的库：`cache_raw.source_record`、五张 `sync_ops` 表和空的
@@ -41,7 +41,7 @@
 - `medqc_owner` 对目标数据库有 `CREATE`，对 `public` 有 `CREATE, USAGE`；
 - Python 3.10 环境包含项目要求版本的 SQLAlchemy、Alembic、
   python-dotenv 和 psycopg2；
-- 项目包中的 Alembic 单 head 必须是 `20261026_000055`。
+- 项目包中的 Alembic 单 head 必须是 `20261031_000057`（2026-10-31 更新，保留日常病程记录时间并补齐第二批22个源字段）。
 
 ## 正式执行顺序
 

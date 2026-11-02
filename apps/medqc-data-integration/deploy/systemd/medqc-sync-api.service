@@ -1,0 +1,23 @@
+[Unit]
+Description=MedQC v0.4 sync admission API (template; not enabled by delivery)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/medqc-sync/api.json
+
+[Service]
+Type=simple
+User=medqc-sync-api
+Group=medqc-sync-api
+WorkingDirectory=/opt/medqc-sync/current
+ExecStart=/opt/medqc-sync/venv/bin/python /opt/medqc-sync/current/tools/run_sync_control.py --config /etc/medqc-sync/api.json api
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

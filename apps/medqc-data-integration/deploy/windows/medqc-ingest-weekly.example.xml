@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo><Description>MedQC 首页60日滚动重取；不推进断点；默认禁用</Description></RegistrationInfo>
+  <Triggers><CalendarTrigger>
+    <StartBoundary>2026-11-01T03:00:00+08:00</StartBoundary><Enabled>false</Enabled>
+    <ScheduleByWeek><WeeksInterval>1</WeeksInterval><DaysOfWeek><Sunday/></DaysOfWeek></ScheduleByWeek>
+  </CalendarTrigger></Triggers>
+  <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
+  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><StartWhenAvailable>true</StartWhenAvailable><ExecutionTimeLimit>PT2H</ExecutionTimeLimit><Enabled>false</Enabled><RestartOnFailure><Interval>PT15M</Interval><Count>3</Count></RestartOnFailure></Settings>
+  <Actions Context="Author"><Exec>
+    <Command>替换为已验证的Python3.10可执行文件</Command>
+    <Arguments>"C:\Program Files\MedQC\ingest\tools\run_configured_daily.py" --config "D:\medqc\service-runtime\runtime.json" --mr-replay</Arguments>
+    <WorkingDirectory>C:\Program Files\MedQC\ingest</WorkingDirectory>
+  </Exec></Actions>
+</Task>

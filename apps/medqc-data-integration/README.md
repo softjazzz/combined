@@ -1,0 +1,133 @@
+# v0.4 独立任务控制服务
+
+现有抽取器与CDM发布器之上已增加人工CLI/HTTP受理、PostgreSQL持久队列、独立worker、任务重试/取消/恢复及每日/每周计划。原`medqc-ingest`入口和第一批13接口注册表保持兼容，新入口为`medqc-sync`。本期不增加前端。
+
+运行方式、权限和边界见[控制服务运行说明](docs/sync-control-operations.md)，客户集中验收见[DSH执行说明](docs/DSH_SYNC_CONTROL_ACCEPTANCE.txt)。源码部署也可使用`tools/run_sync_control.py`，无需安装本项目wheel。
+
+默认仅开放第一批profile；第二批仍须真实源验收证据才能启用，4个受限来源保持禁用。计划默认禁用，交付不会注册系统任务或切换业务数据源。配置、令牌、凭据和数据面绑定均留在现场受保护目录。
+
+# MedQC 数据接入服务
+
+第二批17接口的独立候选合同与只读预检见
+[第二批证据复核](docs/2026-10-31-periop-evidence-review.md)和
+[DSH只读预检说明](docs/DSH_PERIOP_PREFLIGHT.txt)。它们不修改已验收13接口的生产注册表。
+
+这是可独立安装和调度的 Python 模块化单体，包含两个 worker 角色：
+
+当前交付版本0.3.2；接口仍为13个。已完成接管、初始发布和回滚后，按
+[真实源阶段续跑说明](docs/DSH_SOURCE_VALIDATION_0.3.2.txt)从ODBC dry继续，使用SERVER关键字。
+客户机真实接管与部署验收已回传通过，状态为**已验收、待启用**，详见
+[十三接口客户机验收收口记录](docs/2026-10-30-thirteen-interface-customer-acceptance.md)。
+原始接管流程仍从
+[DSH_START-takeover.txt](docs/DSH_START-takeover.txt) 开始：一条PowerShell命令在新库
+完成接管、发布、回滚恢复、单日实际源验证和备份恢复。详见
+[本版收口说明](docs/2026-10-30-takeover-release.md)。旧库不改，任务默认不启用。
+
+0.3首次接管的源库42501权限问题使用[独立续跑入口](docs/DSH_RESUME_TAKEOVER.txt)：
+一次性迁入沿用部署身份的只读连接，复用原4库，不向源库补授权；运行任务仍为medqc_sync。
+
+- Caché 抽取器：流式调用已注册接口，把每个接口的完整 payload 写入 `cache_raw`；
+- CDM 发布器：将已验证的 raw 数据按显式合同投影到业务 CDM。
+
+0.2.0 正式代码注册表包含 13 个已有证据的来源：`web.mr`、六类主要文书，以及
+药品医嘱、非药品医嘱、检验申请、检验项目、检验结果、检查报告。其他接口在读取配置
+密码或建立连接前拒绝。注册不代表已经部署；在院取数能力仍未验证。
+
+## 安装与命令
+
+```text
+python -m pip install ".[postgres,odbc]"
+medqc-ingest extract --interface web.mr --date 2026-09-17 --mode dry
+medqc-ingest extract --interface web.mr --date 2026-09-17 --mode incremental
+medqc-ingest replay --interface web.mr --start 2026-09-01 --end 2026-09-17
+medqc-ingest publish --interface web.mr
+medqc-ingest extract --interface web.admission_record --date 2026-09-17 --mode incremental
+medqc-ingest publish --interface web.admission_record
+medqc-ingest check
+medqc-ingest inspect --all --start 2026-09-15 --end 2026-09-17
+medqc-ingest profile --batch 123
+medqc-ingest coverage --target cdm,bundle,qc
+medqc-ingest contract-export --output major-document-contracts.json
+```
+
+`dry` 不连接 PostgreSQL，不建批次。`replay` 写 raw 和批次审计但不推进 checkpoint。
+`incremental` 只在新窗口结束时间更晚时单调推进 checkpoint，日志使用实际
+rowcount 输出 `advanced` 或 `held`。
+
+`inspect` 是独立观察平面：只把正式注册接口的样本写入
+`cache_raw.source_snapshot`，不写正式 `source_record`、不推进 checkpoint、也不连接
+业务库。`--all` 会把未注册候选接口记为 `blocked`，不会调用它们。
+单日接口逐日调用；双日期接口只有显式声明 `range_inclusive` 后才可调用，未知语义一律
+`blocked/unverified_date_semantics`。`profile` 只持久化字段名、类型和计数；
+`coverage` 的状态只允许 `direct/derived/partial/missing/blocked`，名称相同仍默认阻断。
+
+客户机真实全接口字段探查由既有 DSH/v5-final 环境完成；其非 PHI 字段清单和画像用于
+复核候选目录与覆盖合同。候选清单本身不是生产调用授权。
+
+`contract-export` 不加载配置或驱动，可输出 13 个已注册接口的完整有序源列、显式 alias、
+目标类型、required 核心列和 raw-only 字段。可独立交付的 JSON、纯标准库转换模块及
+DSH 使用说明见 [DSH 主要文书映射桥接](docs/dsh-major-document-bridge.md)。
+
+合同 v2 增加日常病程同名 `record_datetime` 投影。应用迁移 `20261029_000056`
+提供可空、无默认值的独立记录时间列；旧目标缺列时仍明确报告 raw-only。
+既有 raw 无需重抽，后续部署获准后可定向重投影；不从提交或签署时间补值。
+
+六个新增医嘱/检验/检查接口的独立验收合同在
+`contracts/orders-lab-exam-contracts.json`，纯转换工具为
+`tools/orders_lab_exam_transform.py`；详见
+[六接口验收合同](docs/orders-lab-exam-contract.md)。完成客户克隆库投影和正式源读取验收后，
+这六接口已接入本服务。双日期接口只按 `(day, day)` 调用；保留 42,391 行检验结果的
+独立粒度，以及检查报告的稳定技术键，不建立 HIS/PACS 关联。
+
+运行配置来自环境变量，密码只从独立文件读取。详见 `.env.example`。迁移 DDL 在
+`migrations/`；它不会自动运行。
+
+## 数据库与事务边界
+
+- ingest DB 只承载 `cache_raw`、`sync_ops` 和发布血缘，抽取器只写这个库；
+- business DB `medqc` 只由发布器通过独立连接写现有 CDM 表，业务系统不读取 raw；
+- `running` 审计先通过控制连接独立提交，raw 分块、schema 与 checkpoint 在同一
+  数据事务中，新增/变化行的历史版本也在同一事务中，任一块失败整批回滚；
+- 发布器先验证 raw 单一 schema、目标主键、核心列与类型，只更新合同拥有且目标实际
+  存在的列；核心列缺失时阻断，可选新列缺失时保持 raw-only；
+- 入院、出院 raw 使用病例三键加文档编号保留每份文书，但 CDM 仍是病例三键；发布前
+  发现同病例多文书即整批拒绝。病程类表使用病例三键加文档编号发布；
+- CDM 提交后再提交 ingest 发布血缘；若第二次提交失败，重试仍按目标主键幂等；
+- raw 发布默认拒绝空哈希和错误哈希；历史验收库的事后补录不进入全局放行逻辑；
+- CDM 发布核对实际文本最大长度，超长拒绝且不截断；相同字段值不重复更新；
+- `replay` 按闭区间逐日建立批次和写 raw，但永远不推进 checkpoint；`dry` 不加载
+  PostgreSQL 密码、不连接 PostgreSQL。
+
+初始化/升级方法见 [migrations/README.md](migrations/README.md)。该 DDL 与
+`apps/medqc-web` Alembic 完全独立。业务库 CDM 表仍由业务应用迁移维护；本服务不会
+要求客户为验收升级或手工补列。
+
+当前 DSH 验收库和正式 ingest 的存储表结构不同，禁止直接执行本服务的初始化 SQL
+覆盖验收库。客户现有 raw 可用 [只读核对工具](tools/verify_service_projection.py) 对照正式
+转换结果；它仅支持指定克隆库，不写 raw/CDM/审计/断点，不查询 Caché。具体步骤见
+[DSH 0.2 只读验证](docs/DSH_START-service-0.2-readonly.txt)。历史版本迁入正式存储需要
+另行提供显式迁移，不应从“当前快照相同”推断历史版本也已迁移。
+
+## 调度示例
+
+- Windows：`deploy/windows/run-daily.ps1` 与任务计划 XML 示例；导入前替换服务账号；
+- Linux：`deploy/systemd` 中的 oneshot service/timer 示例；systemd unit 运行时计算
+  当天日期且不保存密码；
+- `check` 只读核对 ingest 关系、checkpoint 数量、陈旧 running 批次以及全部已注册
+  目标表的核心列、类型与主键合同。任何 failed 检查均返回非零退出码。
+
+## 设计与覆盖边界
+
+- [ADR-0001](docs/ADR-0001-data-integration-service.md)
+- [Caché 接口到 bundle/CDM/质控来源覆盖矩阵](docs/cache-interface-coverage-matrix.md)
+
+## 开发校验
+
+```text
+python -m pytest
+python -m ruff check .
+python -m mypy src
+python -m build
+```
+
+常规测试不访问真实 Caché；真实 PostgreSQL 合成集成测试需显式 opt-in，并核验独立集群标记。
