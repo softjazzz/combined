@@ -107,4 +107,3 @@ py -3.10 scripts/run_qc_scheduler_tests.py --profile offline --suite compatibili
 必要交叉验收：`run_qc_scheduler_tests.py --profile m2-synthetic --suite m2-release tests/unit/test_qc_partial_failure_persistence.py tests/unit/test_luxian_0609_remaining_fact_freeze.py`，233项通过，3项既有告警。实际验证内存事务、失败结果读取、MQ补跑与冻结协议；不连接模型或业务库。当前提交的远端CI需重新核对，旧86315b746的绿灯不冒充新Head验收。
 
 本机integration工作树的3个未推送同步工具提交及6组未跟踪资料已在私有临时目录备份，原工作树保持不动，不混入这次PR。默认开关、迁移代码、V7.1页面以及现场部署边界保持原约束。
-
