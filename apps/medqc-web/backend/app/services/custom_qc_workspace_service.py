@@ -6,9 +6,10 @@ import re
 import uuid
 
 from ..core.execution_timing import project_stage_timing, timed
+from ..core.settings import get_settings
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO, StringIO
 from functools import lru_cache, partial
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
@@ -31,6 +32,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import Session
 from .luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
 from .qc_diagnostics.capture import capture_committed_results, diagnostic_capture_enabled
+from .qc_dispatch.contracts import (
+    DISPATCH_FILTER_KEY,
+    dispatch_filter_payload,
+    qc_dispatch_mode_from_filters,
+)
+from .qc_dispatch.repository import QCDispatchRepository
 
 from .document_domain_alignment import (
     align_document_domain_fields,
@@ -2308,6 +2315,39 @@ class CustomQCWorkspaceService:
         self._draft_table = _drafts_table(readonly=True) if readonly else _drafts_table()
         self._batch_job_table = _batch_jobs_table(readonly=True) if readonly else _batch_jobs_table()
         self._record_result_envelope_table = _record_result_envelopes_table()
+        # 这里只构造表定义，不访问或创建迁移表；legacy 路径不会调用 repository。
+        self._qc_dispatch = QCDispatchRepository(
+            _session, self._batch_job_table, _draft_schema()
+        )
+
+    def _sync_mq_dispatch_status(
+        self,
+        session: Session,
+        *,
+        job_id: str,
+        filters: Mapping[str, Any],
+        to_status: str,
+        from_statuses: Sequence[str],
+    ) -> None:
+        """与业务任务同事务同步 MQ 轻量状态；legacy 不访问新表。"""
+
+        if DISPATCH_FILTER_KEY not in filters:
+            return
+        if qc_dispatch_mode_from_filters(filters) != "rabbitmq":
+            return
+        dispatch = self._qc_dispatch.get_dispatch(job_id, session=session)
+        if dispatch is None:
+            raise RuntimeError("MQ任务缺少持久调度身份")
+        if dispatch.status == to_status:
+            return
+        if not self._qc_dispatch.transition_dispatch(
+            job_id=job_id,
+            generation=dispatch.generation,
+            from_statuses=from_statuses,
+            to_status=to_status,
+            session=session,
+        ):
+            raise RuntimeError("MQ任务状态与业务任务状态不同步")
 
     @staticmethod
     def _aggregate_child_input_profiles(child_profiles: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3090,6 +3130,21 @@ class CustomQCWorkspaceService:
             if normalized_execution_mode == "single" and len(normalized_draft_ids) > 1:
                 normalized_execution_mode = "multi"
             normalized_run_mode = _normalize_run_mode(run_mode)
+            normalized_job_kind = _safe_text(job_kind, "leaf").lower() or "leaf"
+            base_filters = dict(filters or {})
+            if DISPATCH_FILTER_KEY in base_filters:
+                raise ValueError("qc_dispatch 由任务服务冻结，调用方不得注入")
+            formal_0609 = base_filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            dispatch_mode = (
+                str(getattr(get_settings(), "QC_TASK_DISPATCH_MODE", "legacy")).strip().lower()
+                if formal_0609
+                else "legacy"
+            )
+            if dispatch_mode not in {"legacy", "rabbitmq"}:
+                raise ValueError("QC_TASK_DISPATCH_MODE 配置无效")
+            if dispatch_mode == "rabbitmq":
+                # 必须在业务任务 insert 前确认迁移完整；不能先创建任务再补 Outbox。
+                self._qc_dispatch.assert_ready(session)
             normalized_record_refs = (
                 normalize_case_refs(record_refs)
                 if record_refs
@@ -3103,10 +3158,15 @@ class CustomQCWorkspaceService:
                 else list(record_ids)
             )
             filters_payload = {
-                **(filters or {}),
+                **base_filters,
                 "draft_ids": normalized_draft_ids,
                 "execution_mode": normalized_execution_mode,
                 "run_mode": normalized_run_mode,
+                **(
+                    {DISPATCH_FILTER_KEY: dispatch_filter_payload("rabbitmq")}
+                    if dispatch_mode == "rabbitmq"
+                    else {}
+                ),
                 **(
                     {"record_refs": [ref.as_dict() for ref in normalized_record_refs]}
                     if normalized_record_refs
@@ -3151,7 +3211,7 @@ class CustomQCWorkspaceService:
                 "compliant_records": 0,
                 "total_tokens": 0,
                 "total_processing_time": 0.0,
-                "job_kind": _safe_text(job_kind, "leaf") or "leaf",
+                "job_kind": normalized_job_kind,
                 "parent_job_id": _safe_text(parent_job_id) or None,
                 "child_job_ids_json": _safe_json_dumps(list(child_job_ids or [])),
                 "child_summary_json": _safe_json_dumps(child_summary or {}),
@@ -3159,6 +3219,13 @@ class CustomQCWorkspaceService:
                 "family_name": _safe_text(family_name) or None,
             }
             session.execute(self._batch_job_table.insert().values(**row_payload))
+            if dispatch_mode == "rabbitmq":
+                self._qc_dispatch.add_dispatch(
+                    session,
+                    job_id=job_id,
+                    mode="rabbitmq",
+                    enqueue_leaf=normalized_job_kind != "parent",
+                )
             session.commit()
             return self.get_batch_job(job_id=job_id, created_by=created_by) or _row_to_batch_job(row_payload)
         finally:
@@ -3257,8 +3324,13 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def list_queued_luxian_0609_batch_job_ids(self) -> tuple[str, ...]:
-        """重启后只恢复尚未领取的正式 LX0609 叶任务；领取仍由 Worker CAS 完成。"""
+    def list_queued_luxian_0609_batch_job_ids(
+        self, *, dispatch_mode: str = "legacy"
+    ) -> tuple[str, ...]:
+        """按冻结调度身份列出正式 LX0609 执行任务。"""
+
+        if dispatch_mode not in {"legacy", "rabbitmq"}:
+            raise ValueError("invalid qc dispatch mode")
 
         session = _session()
         try:
@@ -3271,13 +3343,16 @@ class CustomQCWorkspaceService:
                 .where(self._batch_job_table.c.status == "queued")
                 .order_by(asc(self._batch_job_table.c.created_at))
             ).mappings().all()
-            return tuple(
-                str(row["id"])
-                for row in rows
-                if _safe_text(row.get("job_kind")).lower() != "parent"
-                and isinstance((filters := _safe_json_loads(row.get("filters_json"), {})), dict)
-                and filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
-            )
+            job_ids: list[str] = []
+            for row in rows:
+                if _safe_text(row.get("job_kind")).lower() == "parent":
+                    continue
+                filters = _safe_json_loads(row.get("filters_json"), {})
+                if not isinstance(filters, dict) or filters.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY:
+                    continue
+                if qc_dispatch_mode_from_filters(filters) == dispatch_mode:
+                    job_ids.append(str(row["id"]))
+            return tuple(job_ids)
         finally:
             session.close()
 
@@ -4892,6 +4967,13 @@ class CustomQCWorkspaceService:
             if getattr(cancellation_update, "rowcount", 0) != 1:
                 session.rollback()
                 return self.get_batch_job(job_id=job_id, created_by=created_by)
+            self._sync_mq_dispatch_status(
+                session,
+                job_id=job_id,
+                filters=current.get("filters") or {},
+                to_status="canceled",
+                from_statuses=("queued", "running"),
+            )
             if str(current.get("job_kind") or "").strip().lower() == "parent":
                 child_ids = [
                     str(item or "").strip()
@@ -4920,7 +5002,7 @@ class CustomQCWorkspaceService:
                         child_summary = _safe_json_loads(child_row.get("summary_json"), {})
                         if not isinstance(child_summary, dict):
                             child_summary = {}
-                        session.execute(
+                        child_cancelled = session.execute(
                             update(self._batch_job_table)
                             .where(and_(
                                 self._batch_job_table.c.id == child_row["id"],
@@ -4935,6 +5017,15 @@ class CustomQCWorkspaceService:
                                 }),
                             )
                         )
+                        if getattr(child_cancelled, "rowcount", 0) == 1:
+                            child_filters = _safe_json_loads(child_row.get("filters_json"), {})
+                            self._sync_mq_dispatch_status(
+                                session,
+                                job_id=str(child_row["id"]),
+                                filters=(child_filters if isinstance(child_filters, dict) else {}),
+                                to_status="canceled",
+                                from_statuses=("queued", "running"),
+                            )
                 else:
                     session.execute(
                         update(self._batch_job_table)
@@ -4953,7 +5044,10 @@ class CustomQCWorkspaceService:
         created_by: str,
         automatic: bool = False,
         expected_attempt_filters_json: str | None = None,
+        retry_delay_seconds: float = 0.0,
     ) -> Optional[Dict[str, Any]]:
+        if retry_delay_seconds < 0:
+            raise ValueError("retry_delay_seconds must not be negative")
         session = _session()
         try:
             row = session.execute(
@@ -4963,8 +5057,33 @@ class CustomQCWorkspaceService:
             ).mappings().first()
             if not row:
                 return None
+            raw_filters = _safe_json_loads(row.get("filters_json"), None)
+            if not isinstance(raw_filters, dict):
+                raise ValueError("任务调度身份不可读，禁止按legacy重试")
+            persisted_mode = qc_dispatch_mode_from_filters(raw_filters)
+            if persisted_mode == "rabbitmq" and (
+                raw_filters.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY
+            ):
+                raise ValueError("MQ任务缺少正式LX0609规则集身份")
+            if (
+                DISPATCH_FILTER_KEY not in raw_filters
+                and self._qc_dispatch.schema_is_available(session=session)
+            ):
+                linked_dispatch = self._qc_dispatch.get_dispatch(job_id, session=session)
+                if linked_dispatch is not None:
+                    raise ValueError("MQ任务持久调度身份损坏，禁止回退legacy重试")
             current = _row_to_batch_job(dict(row))
             formal_0609 = (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            dispatch_mode = (
+                persisted_mode
+                if formal_0609
+                else "legacy"
+            )
+            dispatch_record = None
+            if dispatch_mode == "rabbitmq":
+                dispatch_record = self._qc_dispatch.get_dispatch(job_id, session=session)
+                if dispatch_record is None:
+                    raise RuntimeError("MQ任务缺少持久调度身份")
             original_filters_json = row.get("filters_json")
             if formal_0609 and (
                 current.get("status") not in {"canceled", "completed", "failed"}
@@ -4982,6 +5101,213 @@ class CustomQCWorkspaceService:
                 retry_scope_result = build_failed_rule_retry_scope(current, automatic_only=True)
                 if retry_scope_result is None:
                     return None
+            if (
+                dispatch_record is not None
+                and str(current.get("job_kind") or "").strip().lower() != "parent"
+                and retry_scope_result is None
+                and (
+                    bool(current.get("items"))
+                    or int(current.get("success_count") or 0) > 0
+                    or bool((current.get("summary") or {}).get("rule_results"))
+                )
+            ):
+                # M3 检查点前，没有明确失败 scope 时不能清空已有成功结果全量重跑。
+                self._qc_dispatch.register_recovery(
+                    job_id,
+                    dispatch_record.generation,
+                    recovery_kind="manual_scope_required",
+                    reason_code="manual_scope_required",
+                    session=session,
+                )
+                session.commit()
+                return None
+            if (
+                dispatch_record is not None
+                and str(current.get("job_kind") or "").strip().lower() == "parent"
+            ):
+                child_ids = [
+                    str(item or "").strip()
+                    for item in list(current.get("child_job_ids") or [])
+                    if str(item or "").strip()
+                ]
+                child_where = self._batch_job_table.c.parent_job_id == job_id
+                if child_ids:
+                    child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
+                child_rows = session.execute(
+                    select(self._batch_job_table).where(and_(
+                        child_where,
+                        self._batch_job_table.c.created_by == created_by,
+                    ))
+                ).mappings().all()
+                retryable_children = 0
+                manual_scope_children = 0
+                due_at = now + timedelta(seconds=retry_delay_seconds)
+                for child_row in child_rows:
+                    child = _row_to_batch_job(dict(child_row))
+                    if child.get("status") == "completed":
+                        # 已成功的子任务及其结果保持原样。
+                        continue
+                    if child.get("status") not in {"failed", "canceled"}:
+                        session.rollback()
+                        return None
+                    child_filters = dict(child.get("filters") or {})
+                    if qc_dispatch_mode_from_filters(child_filters) != "rabbitmq":
+                        raise RuntimeError("父子任务调度身份不一致")
+                    child_dispatch = self._qc_dispatch.get_dispatch(
+                        str(child["id"]), session=session
+                    )
+                    if child_dispatch is None:
+                        raise RuntimeError("MQ子任务缺少持久调度身份")
+                    child_scope_result = build_failed_rule_retry_scope(child)
+                    if automatic and child_scope_result is not None:
+                        child_scope_result = build_failed_rule_retry_scope(
+                            child, automatic_only=True
+                        )
+                    if child_scope_result is None and (
+                        bool(child.get("items"))
+                        or int(child.get("success_count") or 0) > 0
+                        or bool((child.get("summary") or {}).get("rule_results"))
+                    ):
+                        self._qc_dispatch.register_recovery(
+                            str(child["id"]),
+                            child_dispatch.generation,
+                            recovery_kind="manual_scope_required",
+                            reason_code="manual_scope_required",
+                            session=session,
+                        )
+                        manual_scope_children += 1
+                        continue
+
+                    child_filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+                    child_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
+                    child_summary = dict(child.get("summary") or {})
+                    if child_scope_result is not None:
+                        child_retry_scope, child_failures = child_scope_result
+                        if not set(child_retry_scope["rule_ids"]).issubset(
+                            frozen_luxian_0609_delivery_scope(child_filters)
+                        ):
+                            raise ValueError("失败规则超出原任务冻结范围，请新建质控任务")
+                        child_filters[FAILED_RULE_RETRY_FILTER_KEY] = child_retry_scope
+                        child_rule_count = len(child_retry_scope["rule_ids"])
+                        child_record_count = len(child_retry_scope["record_refs"])
+                        child_values = dict(
+                            status="queued",
+                            filters_json=_safe_json_dumps(child_filters),
+                            summary_json=_safe_json_dumps({
+                                **child_summary,
+                                "retry_status": "queued",
+                                "retry_trigger": "automatic" if automatic else "manual",
+                                "retry_attempt": child_retry_scope["attempt"],
+                                "retry_pending_count": child_retry_scope["pending_count"],
+                                "progress": {
+                                    "step_key": "queued",
+                                    "rule_index": 0,
+                                    "rule_count": child_rule_count,
+                                    "processed_records": 0,
+                                    "total_records": child_record_count,
+                                },
+                                "updated_at": now.isoformat(),
+                            }),
+                            failed_records_json=_safe_json_dumps(child_failures),
+                            error_message=None,
+                            started_at=None,
+                            finished_at=None,
+                            updated_at=now,
+                        )
+                    else:
+                        # 仅“完全未产出任何结果”的子任务允许有限全量重排。
+                        child_filters.pop(FAILED_RULE_RETRY_FILTER_KEY, None)
+                        child_values = dict(
+                            status="queued",
+                            filters_json=_safe_json_dumps(child_filters),
+                            summary_json=_safe_json_dumps({
+                                "rule_count": max(1, int(child.get("rule_count") or 1)),
+                                "progress": {
+                                    "step_key": "queued",
+                                    "rule_index": 0,
+                                    "rule_count": max(1, int(child.get("rule_count") or 1)),
+                                    "processed_records": 0,
+                                    "total_records": int(child.get("total_records") or 0),
+                                },
+                                "updated_at": now.isoformat(),
+                            }),
+                            items_json=None,
+                            failed_records_json=None,
+                            error_message=None,
+                            started_at=None,
+                            finished_at=None,
+                            updated_at=now,
+                            success_count=0,
+                            failed_count=0,
+                            issue_records=0,
+                            compliant_records=0,
+                            total_tokens=0,
+                            total_processing_time=0.0,
+                        )
+                    changed = session.execute(
+                        update(self._batch_job_table)
+                        .where(and_(
+                            self._batch_job_table.c.id == child["id"],
+                            self._batch_job_table.c.status == child_row["status"],
+                            self._batch_job_table.c.filters_json == child_row["filters_json"],
+                        ))
+                        .values(**child_values)
+                    )
+                    if getattr(changed, "rowcount", 0) != 1:
+                        session.rollback()
+                        return None
+                    self._qc_dispatch.advance_generation(
+                        session,
+                        job_id=str(child["id"]),
+                        expected_generation=child_dispatch.generation,
+                        available_at=due_at,
+                    )
+                    retryable_children += 1
+
+                if retryable_children == 0:
+                    if manual_scope_children:
+                        session.commit()
+                    return None
+                parent_filters = dict(current.get("filters") or {})
+                parent_filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
+                parent_filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
+                parent_summary = dict(current.get("summary") or {})
+                parent_changed = session.execute(
+                    update(self._batch_job_table)
+                    .where(and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.status == current.get("status"),
+                        self._batch_job_table.c.filters_json == original_filters_json,
+                    ))
+                    .values(
+                        status="queued",
+                        filters_json=_safe_json_dumps(parent_filters),
+                        summary_json=_safe_json_dumps({
+                            **parent_summary,
+                            "retry_status": "queued",
+                            "retry_trigger": "automatic" if automatic else "manual",
+                            "retry_pending_count": retryable_children,
+                            "updated_at": now.isoformat(),
+                        }),
+                        error_message=None,
+                        started_at=None,
+                        finished_at=None,
+                        updated_at=now,
+                    )
+                )
+                if getattr(parent_changed, "rowcount", 0) != 1:
+                    session.rollback()
+                    return None
+                self._qc_dispatch.advance_generation(
+                    session,
+                    job_id=job_id,
+                    expected_generation=dispatch_record.generation,
+                    available_at=due_at,
+                    enqueue=False,
+                )
+                session.commit()
+                self.refresh_parent_batch_job(parent_job_id=job_id)
+                return self.get_batch_job(job_id=job_id, created_by=created_by)
             if retry_scope_result is not None:
                 retry_scope, normalized_failures = retry_scope_result
                 if formal_0609 and not set(retry_scope["rule_ids"]).issubset(
@@ -5092,6 +5418,16 @@ class CustomQCWorkspaceService:
             if formal_0609 and getattr(retry_update, "rowcount", 0) != 1:
                 session.rollback()
                 return None
+            if (
+                dispatch_record is not None
+                and str(current.get("job_kind") or "").strip().lower() != "parent"
+            ):
+                self._qc_dispatch.advance_generation(
+                    session,
+                    job_id=job_id,
+                    expected_generation=dispatch_record.generation,
+                    available_at=now + timedelta(seconds=retry_delay_seconds),
+                )
             # 子任务单独重试也会废弃父聚合的旧读取快照；与父刷新争用同一父行。
             if formal_0609 and parent_job_id:
                 parent_row = session.execute(
@@ -5183,7 +5519,9 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def mark_batch_job_running(self, *, job_id: str) -> bool | str:
+    def mark_batch_job_running(
+        self, *, job_id: str, expected_dispatch_generation: int | None = None
+    ) -> bool | str:
         session = _session()
         try:
             row = session.execute(
@@ -5194,6 +5532,18 @@ class CustomQCWorkspaceService:
             current = _row_to_batch_job(dict(row))
             current_filters = current.get("filters") or {}
             formal_0609 = current_filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            dispatch_mode = qc_dispatch_mode_from_filters(current_filters) if formal_0609 else "legacy"
+            dispatch_record = None
+            if dispatch_mode == "rabbitmq":
+                dispatch_record = self._qc_dispatch.get_dispatch(job_id, session=session)
+                if dispatch_record is None or dispatch_record.status != "queued":
+                    raise RuntimeError("MQ任务缺少可领取的持久调度身份")
+                if (
+                    expected_dispatch_generation is not None
+                    and dispatch_record.generation != expected_dispatch_generation
+                ):
+                    session.rollback()
+                    return False
             if current.get("status") in {"canceled", "completed", "failed"}:
                 return False
             if formal_0609 and current.get("status") != "queued":
@@ -5255,6 +5605,15 @@ class CustomQCWorkspaceService:
                 )
             )
             if formal_0609 and getattr(running_update, "rowcount", 0) != 1:
+                session.rollback()
+                return False
+            if dispatch_record is not None and not self._qc_dispatch.transition_dispatch(
+                job_id=job_id,
+                generation=dispatch_record.generation,
+                from_statuses=("queued",),
+                to_status="running",
+                session=session,
+            ):
                 session.rollback()
                 return False
             session.commit()
@@ -5353,8 +5712,13 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def fail_stale_luxian_0609_running_jobs(self, *, stale_before: datetime) -> tuple[str, ...]:
+    def fail_stale_luxian_0609_running_jobs(
+        self, *, stale_before: datetime, dispatch_mode: str = "legacy"
+    ) -> tuple[str, ...]:
         """仅将续约协议内、超过期限的执行尝试受控失败；不重跑医学判断。"""
+
+        if dispatch_mode not in {"legacy", "rabbitmq"}:
+            raise ValueError("invalid qc dispatch mode")
 
         session = _session()
         failed_ids: list[str] = []
@@ -5375,9 +5739,12 @@ class CustomQCWorkspaceService:
             ).mappings().all()
             for row in rows:
                 filters = _safe_json_loads(row.get("filters_json"), {})
-                if not isinstance(filters, dict) or (
-                    filters.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY
-                    or _safe_text(row.get("job_kind")).lower() == "parent"
+                if not isinstance(filters, dict) or filters.get("rule_set_key") != LUXIAN_0609_RULE_SET_KEY:
+                    continue
+                if qc_dispatch_mode_from_filters(filters) != dispatch_mode:
+                    continue
+                if (
+                    _safe_text(row.get("job_kind")).lower() == "parent"
                     or type(filters.get(LX0609_LEASE_FILTER_KEY)) is not int
                     or filters.get(LX0609_LEASE_FILTER_KEY) != 1
                 ):
@@ -5410,6 +5777,16 @@ class CustomQCWorkspaceService:
                     )
                 )
                 if getattr(expired, "rowcount", 0) == 1:
+                    if dispatch_mode == "rabbitmq":
+                        dispatch = self._qc_dispatch.get_dispatch(str(row["id"]), session=session)
+                        if dispatch is None or not self._qc_dispatch.transition_dispatch(
+                            job_id=str(row["id"]),
+                            generation=dispatch.generation,
+                            from_statuses=("running",),
+                            to_status="failed",
+                            session=session,
+                        ):
+                            raise RuntimeError("MQ失联任务的调度身份无法同步失败")
                     failed_ids.append(str(row["id"]))
                     parent_id = _safe_text(row.get("parent_job_id"))
                     if parent_id:
@@ -5648,6 +6025,13 @@ class CustomQCWorkspaceService:
                 if attempt_filters_json is None and rule_set_key != LUXIAN_0609_RULE_SET_KEY:
                     self.refresh_parent_batch_job(parent_job_id=parent_job_id)
                 return False if attempt_filters_json is not None else None
+            self._sync_mq_dispatch_status(
+                session,
+                job_id=job_id,
+                filters=filters,
+                to_status="failed" if execution_failed else "completed",
+                from_statuses=("queued", "running", "failed"),
+            )
             # 原始 0609 叶子根任务没有父任务刷新兜底：本次尝试的正式结果必须整体替换
             # 该 root 的旧 Canonical，否则上一代已交付、本次未交付（含本次零交付）的病历
             # 仍会被读取为当前交付。父任务 root 的整体替换由 refresh_parent_batch_job
@@ -5814,6 +6198,8 @@ class CustomQCWorkspaceService:
             ):
                 return
             parent_job_id = _safe_text(row.get("parent_job_id"))
+            row_filters = _safe_json_loads(row.get("filters_json"), {})
+            row_filters = row_filters if isinstance(row_filters, dict) else {}
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
                 current_summary = {}
@@ -5886,6 +6272,13 @@ class CustomQCWorkspaceService:
                 ):
                     self.refresh_parent_batch_job(parent_job_id=parent_job_id)
                 return
+            self._sync_mq_dispatch_status(
+                session,
+                job_id=job_id,
+                filters=row_filters,
+                to_status="failed",
+                from_statuses=("queued", "running"),
+            )
             session.commit()
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
         finally:

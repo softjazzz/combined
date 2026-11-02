@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import hmac
+import json
 import logging
 import os
 import re
@@ -149,6 +150,88 @@ class NullLLMCallEventStore:
 class LLMObservabilityRecorder:
     def __init__(self, *, store: Optional[LLMCallEventStore] = None) -> None:
         self._store = store or PostgresLLMCallEventStore()
+
+    def record_strata_attempt(
+        self, *, event_id, logical_call_id, attempt_no, model, model_role,
+        payload, result, status, started_timestamp, gateway, route_key, transport, provider_code="strata",
+    ) -> None:
+        """P0 安全旁路日志，不扩业务表、不改响应；故障不影响医学执行。"""
+        try:
+            wall_ms = max(0, (time.perf_counter() - started_timestamp) * 1000)
+            from .strata_observation import (
+                collect_strata_observation, describe_strata_request, expand_strata_cache_cost_events,
+                parse_strata_metrics,
+            )
+
+            from .llm_request_observation import request_parameters, response_observation, known_request_purpose
+            from .llm_experiment import current_llm_experiment_namespace
+            from .strata_scheduling import current_strata_package_key
+
+            context = current_llm_observation_context()
+            try:
+                package_key = current_strata_package_key()
+            except Exception:
+                package_key = None
+            raw = result if isinstance(result, Mapping) else {}
+            receipt = raw.get("_gateway_request_observation") if gateway else None
+            receipt = receipt if isinstance(receipt, Mapping) else {}
+            trace = raw.get("_strata_cache")
+            if (raw.get("_strata_cache_expected") or raw.get("_strata_cache_invalid") or trace is not None):
+                # Prime失败时收据可能来自Prime；只有已确认规则HTTP启动才归给规则。
+                if not isinstance(trace, Mapping) or trace.get("rule_requests_started") != 1:
+                    receipt = {}
+            scope = json.dumps([context.record_key_hash, context.root_job_id,
+                                context.rule_set_key, context.rule_set_version])
+            try:
+                groups = describe_strata_request(
+                    payload, scope_key=scope if context.record_key_hash else None,
+                    route_key=route_key,
+                    digest=lambda value: opaque_observation_id("strata_p0_group", value),
+                )
+            except Exception:
+                # 分组失败仅失去候选信息；仍保留已知 Token 和耗时。
+                groups = {"current_prefix_state": "inventory_unavailable"}
+            event = {
+                "schema_version": "strata_p0_attempt_v1", "event_id": event_id,
+                "logical_call_id": logical_call_id, "attempt_no": attempt_no,
+                "record_key_hash": context.record_key_hash,
+                "root_job_id": _safe_metadata_label(context.root_job_id, max_length=128, fallback=None),
+                "executor_key": _safe_metadata_label(context.executor_key, max_length=128, fallback="unknown"),
+                "model": _safe_metadata_label(model, max_length=128, fallback="unknown"),
+                "model_role": _safe_metadata_label(model_role, max_length=64, fallback="unknown"),
+                "status": status, "purpose": "rule", "groups": groups,
+                "provider_code": _safe_metadata_label(provider_code, max_length=64, fallback="unknown"),
+                "package_key": package_key,
+                "experiment_namespace": current_llm_experiment_namespace(),
+                "request_purpose": known_request_purpose(groups),
+                "request_parameters": {
+                    "client_payload": request_parameters(payload),
+                    "gateway_prepared": receipt.get("parameters"),
+                    "gateway_request_id": receipt.get("request_id"),
+                    "source": "gateway_prepared_only" if receipt else "client_payload_only",
+                    "gateway_receipt_invalid": gateway and raw.get("_gateway_request_observation_invalid") is True,
+                    "server_effect_verified": False,
+                },
+                "response_observation": response_observation(result),
+                "metrics": parse_strata_metrics(
+                    result, wall_ms=wall_ms,
+                    gateway=gateway, transport=transport,
+                ),
+            }
+            for cost_event in expand_strata_cache_cost_events(event, result, gateway=gateway):
+                if cost_event.get("purpose") == "prime":
+                    # 缓存trace只证明费用；不能把规则请求的预算/响应移给Prime。
+                    cost_event["request_purpose"] = "prime"
+                    cost_event["request_parameters"] = {
+                        "client_payload": None, "gateway_prepared": None, "gateway_request_id": None,
+                        "source": "prime_parameters_unknown", "gateway_receipt_invalid": False,
+                        "server_effect_verified": False,
+                    }
+                    cost_event["response_observation"] = response_observation(None)
+                collect_strata_observation(cost_event)
+                logger.info("strata_p0_attempt %s", json.dumps(cost_event, sort_keys=True, allow_nan=False))
+        except Exception:
+            logger.warning("strata_p0_observation_failed")
 
     async def start_attempt(
         self,
@@ -400,6 +483,27 @@ def current_llm_observation_context() -> LLMObservationContext:
     """返回当前任务的脱敏观测上下文，供其它模型客户端复用。"""
 
     return _OBSERVATION_CONTEXT.get()
+
+
+@contextmanager
+def llm_record_identity_context(record_identity: tuple[str, str, str]) -> Iterator[None]:
+    """只补有完整坐标的匿名病例身份，保留既有任务/规则族观测上下文。"""
+    from dataclasses import replace
+
+    current = _OBSERVATION_CONTEXT.get()
+    identity = _record_identity_hash(record_identity)
+    if current.record_key_hash is not None and identity is not None and current.record_key_hash != identity:
+        from .llm_dispatch.provider_profiles import ProviderConfigurationError
+
+        raise ProviderConfigurationError("llm_case_identity_conflict")
+    if current.record_key_hash is not None or identity is None:
+        yield
+        return
+    token = _OBSERVATION_CONTEXT.set(replace(current, record_key_hash=identity))
+    try:
+        yield
+    finally:
+        _OBSERVATION_CONTEXT.reset(token)
 
 
 def _record_identity_hash(record_identity: Optional[tuple[str, str, str]]) -> Optional[str]:

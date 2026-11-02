@@ -14,24 +14,46 @@ from .llm_execution_concurrency import (
     concurrency_from_custom_parameters,
     with_execution_concurrency_defaults,
 )
+from .llm_dispatch.provider_profiles import (
+    ProviderConfigurationError,
+    SUPPORTED_PROVIDER_CODES,
+    dispatch_runtime_fields,
+    strata_is_explicitly_configured,
+    validate_provider_code,
+)
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_PROVIDER_CODES = ("alibaba", "deepseek", "siliconflow", "ollama")
 _USER_LLM_CONFIGS_TABLE_UNAVAILABLE = False
 
 
 def get_enabled_provider_codes() -> tuple[str, ...]:
     """返回当前环境允许暴露和使用的 provider 列表。"""
     settings = get_settings()
-    visible = tuple(code for code in settings.LLM_VISIBLE_PROVIDERS if code in SUPPORTED_PROVIDER_CODES)
+    configured_visible = tuple(
+        str(code or "").strip().lower()
+        for code in settings.LLM_VISIBLE_PROVIDERS
+        if str(code or "").strip()
+    )
+    unsupported = tuple(
+        code for code in configured_visible if code not in SUPPORTED_PROVIDER_CODES
+    )
+    if unsupported:
+        raise ProviderConfigurationError("LLM visible provider list is invalid")
+    visible = tuple(dict.fromkeys(configured_visible))
     if visible:
         return visible
 
     env_name = str(settings.ENV or os.getenv("ENV") or "development").strip().lower()
     if env_name == "production":
-        return ("alibaba", "deepseek", "ollama")
-    return SUPPORTED_PROVIDER_CODES
+        production = ("alibaba", "deepseek", "ollama")
+        if strata_is_explicitly_configured(settings):
+            return (*production, "strata")
+        return production
+    legacy = tuple(code for code in SUPPORTED_PROVIDER_CODES if code != "strata")
+    if strata_is_explicitly_configured(settings):
+        return (*legacy, "strata")
+    return legacy
 
 
 def get_default_provider_code() -> str:
@@ -39,6 +61,10 @@ def get_default_provider_code() -> str:
     settings = get_settings()
     enabled = get_enabled_provider_codes()
     default_code = str(settings.LLM_DEFAULT_PROVIDER or "").strip().lower()
+    if default_code and default_code not in SUPPORTED_PROVIDER_CODES:
+        raise ProviderConfigurationError("unsupported default LLM provider")
+    if default_code and default_code not in enabled:
+        raise ProviderConfigurationError("default LLM provider is not enabled")
     if default_code in enabled:
         return default_code
     env_name = str(settings.ENV or os.getenv("ENV") or "development").strip().lower()
@@ -55,19 +81,34 @@ def build_provider_runtime_config(
     provider_code: str,
     model_code: Optional[str] = None,
     custom_parameters: Optional[Dict[str, Any]] = None,
+    *,
+    dispatch_mode: Optional[str] = None,
+    gateway_profile: Optional[str] = None,
 ) -> Dict[str, Any]:
     """根据 provider/model 组合生成实际运行时配置。"""
     settings = get_settings()
     enabled = get_enabled_provider_codes()
-    code = (provider_code or get_default_provider_code()).strip().lower()
+    requested_code = (provider_code or get_default_provider_code()).strip().lower()
+    code = validate_provider_code(requested_code)
     params = with_execution_concurrency_defaults(custom_parameters, settings=settings)
 
     if code not in enabled:
-        fallback = get_default_provider_code()
-        logger.warning("provider_code=%s 当前环境未启用，回退 %s", code, fallback)
-        code = fallback
+        raise ProviderConfigurationError("explicit LLM provider is not enabled")
 
-    if code == "deepseek":
+    if code == "strata":
+        from .luxian_0609.llm_role_routing import parse_role_models
+
+        if any(provider != code for provider, _model in parse_role_models(getattr(settings, "LLM_ROLE_MODELS", None)).values()):
+            raise ProviderConfigurationError("local_provider_role_override_mismatch")
+        if not strata_is_explicitly_configured(settings):
+            raise ProviderConfigurationError("Strata provider is not fully configured")
+        endpoint = str(settings.STRATA_API_ENDPOINT or "").strip()
+        api_key = str(settings.STRATA_API_KEY or "").strip() or None
+        model = str(model_code or settings.STRATA_MODEL or "").strip()
+        if not model:
+            raise ProviderConfigurationError("Strata model is not configured")
+        provider_name = "本地 Strata"
+    elif code == "deepseek":
         endpoint = str(
             settings.DEEPSEEK_API_ENDPOINT
             or (
@@ -103,8 +144,7 @@ def build_provider_runtime_config(
         api_key = str(settings.OLLAMA_API_KEY or "").strip() or None
         model = str(model_code or settings.OLLAMA_MODEL or "qwen2.5:7b-instruct").strip()
         provider_name = "内部 Ollama"
-    else:
-        code = "alibaba"
+    elif code == "alibaba":
         endpoint = str(
             settings.DASHSCOPE_BASE_URL
             or (
@@ -125,8 +165,11 @@ def build_provider_runtime_config(
         ).strip() or None
         model = str(model_code or settings.LLM_MODEL or "qwen3.5-35b-a3b").strip()
         provider_name = "阿里云百炼"
+    else:
+        # validate_provider_code 已拦截未知值；这里禁止未来新增值意外落到云端。
+        raise ProviderConfigurationError("LLM provider adapter is unavailable")
 
-    return {
+    runtime = {
         "api_endpoint": endpoint or None,
         "api_key": api_key,
         "model": model,
@@ -136,6 +179,16 @@ def build_provider_runtime_config(
         "allow_mock_when_unconfigured": settings.LLM_ALLOW_MOCK_WHEN_UNCONFIGURED,
         "custom_parameters": params,
     }
+    runtime.update(
+        dispatch_runtime_fields(
+            settings,
+            provider_code=code,
+            dispatch_mode=dispatch_mode,
+            gateway_profile=gateway_profile,
+            model_code=model,
+        )
+    )
+    return runtime
 
 
 def build_adjudicator_runtime_config(
@@ -149,12 +202,20 @@ def build_adjudicator_runtime_config(
     settings = get_settings()
     base = dict(base_config or build_provider_runtime_config(get_default_provider_code()))
     provider_code = str(base.get("provider_code") or get_default_provider_code()).strip().lower()
-    adjudicator_model = str(settings.LLM_ADJUDICATOR_MODEL or "").strip()
+    # 本地模型不沿用历史云端裁决模型名；未单独配置时使用后台选定模型。
+    if provider_code == "strata":
+        adjudicator_model = str(getattr(settings, "STRATA_ADJUDICATOR_MODEL", None) or "").strip()
+    elif provider_code == "ollama":
+        adjudicator_model = ""
+    else:
+        adjudicator_model = str(settings.LLM_ADJUDICATOR_MODEL or "").strip()
     model_code = adjudicator_model or str(base.get("model") or settings.LLM_MODEL or "qwen3.5-35b-a3b").strip()
     runtime = build_provider_runtime_config(
         provider_code=provider_code,
         model_code=model_code,
         custom_parameters=base.get("custom_parameters", {}) or {},
+        dispatch_mode=base.get("dispatch_mode"),
+        gateway_profile=base.get("gateway_profile") if model_code == base.get("model") else None,
     )
     source = "env_adjudicator_model" if adjudicator_model else "fallback_first_pass_model"
     runtime.update(
@@ -200,6 +261,8 @@ class LLMConfigLoader:
                     )
                     return config
             except Exception as exc:
+                if isinstance(exc, ProviderConfigurationError):
+                    raise
                 message = str(exc)
                 if (
                     "user_llm_configs" in message
@@ -215,7 +278,10 @@ class LLMConfigLoader:
                         "user_llm_configs 表不可用，本进程后续跳过数据库 LLM 配置查询，直接回退 env"
                     )
                 else:
-                    logger.warning("llm_config_database_load_failed fallback=env")
+                    logger.error("llm_config_database_load_failed fail_closed=true")
+                    raise ProviderConfigurationError(
+                        "database LLM configuration read failed"
+                    ) from None
 
         memory_config = LLMConfigLoader._load_from_memory(config_name=config_name, user_id=user_id)
         if memory_config:
@@ -265,12 +331,16 @@ class LLMConfigLoader:
             provider_code = str(
                 db_config.get("provider_code")
                 or db_config.get("provider_id")
-                or "alibaba"
+                or ""
             ).strip().lower()
+            if not provider_code:
+                raise ProviderConfigurationError(
+                    "database LLM provider identity is missing"
+                )
             if provider_code not in SUPPORTED_PROVIDER_CODES:
-                fallback = get_default_provider_code()
-                logger.warning("配置中的 provider_code=%s 不受支持，回退 %s", provider_code, fallback)
-                provider_code = fallback
+                raise ProviderConfigurationError(
+                    "database LLM provider is unsupported"
+                )
 
             runtime = build_provider_runtime_config(
                 provider_code=provider_code,
@@ -324,10 +394,12 @@ class LLMConfigLoader:
                 if isinstance(memory_config.get("provider"), dict)
                 else memory_config.get("provider")
             )
-            or "alibaba"
+            or ""
         ).strip().lower()
+        if not provider_code:
+            raise ProviderConfigurationError("memory LLM provider identity is missing")
         if provider_code not in SUPPORTED_PROVIDER_CODES:
-            provider_code = get_default_provider_code()
+            raise ProviderConfigurationError("memory LLM provider is unsupported")
 
         model_code = str(
             memory_config.get("model_code")
@@ -396,6 +468,16 @@ class LLMConfigLoader:
                 return False
 
             if hasattr(service, "client"):
+                from .qc_llm_client import SichuanQCLLMClient
+
+                if isinstance(service.client, SichuanQCLLMClient):
+                    # 先构造并校验双方，避免切换失败留下半更新的在用客户端。
+                    candidate = SichuanQCLLMClient(config)
+                    adjudicator = SichuanQCLLMClient(build_adjudicator_runtime_config(config))
+                    service.client = candidate
+                    if hasattr(service, "adjudicator_client"):
+                        service.adjudicator_client = adjudicator
+                    return True
                 client = service.client
                 client.api_endpoint = config.get("api_endpoint")
                 client.api_key = config.get("api_key")
@@ -407,6 +489,10 @@ class LLMConfigLoader:
                 client.config_source = str(config.get("source") or "unknown")
                 if hasattr(client, "provider_code"):
                     client.provider_code = str(config.get("provider_code") or "").strip().lower()
+                if hasattr(client, "dispatch_mode"):
+                    client.dispatch_mode = str(config.get("dispatch_mode") or "direct")
+                if hasattr(client, "gateway_profile"):
+                    client.gateway_profile = config.get("gateway_profile")
 
                 custom_params = config.get("custom_parameters", {}) or {}
                 execution_concurrency = concurrency_from_custom_parameters(custom_params)
@@ -425,6 +511,8 @@ class LLMConfigLoader:
                     client.thinking_budget = custom_params.get("thinking_budget")
                 if hasattr(client, "reasoning_effort"):
                     client.reasoning_effort = str(custom_params.get("reasoning_effort") or "").strip().lower()
+                if hasattr(client, "refresh_dispatch_identity"):
+                    client.refresh_dispatch_identity()
 
                 logger.info(
                     "✅ 成功为服务重新加载配置: provider=%s model=%s source=%s",
@@ -435,6 +523,8 @@ class LLMConfigLoader:
                 return True
 
             return False
+        except ProviderConfigurationError:
+            raise
         except Exception:
             logger.error("llm_config_reload_failed")
             return False

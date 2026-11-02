@@ -1,5 +1,6 @@
 
 from typing import Callable, Dict, Any, List, Optional, Tuple
+from dataclasses import replace
 import json
 import hashlib
 import logging
@@ -30,9 +31,14 @@ from .copy_content_similarity import (
     split_sentences,
 )
 from .unified_rule_engine import UnifiedRuleEngine
+from .strata_scheduling import strata_case_execution_scope, strata_rule_package_scope
 from .llm_config_loader import LLMConfigLoader, build_adjudicator_runtime_config
 from ..core.http import configure_shared_http_max_concurrency
 from .qc_llm_client_runtime import SichuanQCLLMClient  # 拆分出的 LLM 客户端（runtime 源码版）
+from .llm_execution_concurrency import (
+    LLMExecutionConcurrency,
+    capture_llm_execution_concurrency,
+)
 from .qc_prompt_builder import QCPromptBuilder  # 拆分出的 Prompt 构建器
 from .bundles import load_or_assemble_domain_bundle
 from .sichuan_qc import (
@@ -344,17 +350,18 @@ def _build_luxian_0609_033_live_source_decisions(
 
 
 class SichuanQCService:
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: Optional[Dict[str, Any]] = None, *, adjudicator_config: Optional[Dict[str, Any]] = None) -> None:
         """
         初始化四川质控服务
 
         Args:
             config: LLM 配置字典，如果为 None 则从 .env 文件加载
+            adjudicator_config: 已接纳任务隔离时复制的二审配置；不重新从环境推导模型
         """
         # LLM 客户端（config 为 None 时，SichuanQCLLMClient 自动从 .env 加载）
         self.client = SichuanQCLLMClient(config)
         self.adjudicator_client = SichuanQCLLMClient(
-            build_adjudicator_runtime_config(
+            adjudicator_config if adjudicator_config is not None else build_adjudicator_runtime_config(
                 config
                 or {
                     "provider_code": self.client.provider_code,
@@ -364,6 +371,8 @@ class SichuanQCService:
                     "timeout_seconds": self.client.timeout_seconds,
                     "allow_mock_when_unconfigured": self.client.allow_mock_when_unconfigured,
                     "source": self.client.config_source,
+                    "dispatch_mode": getattr(self.client, "dispatch_mode", "direct"),
+                    "gateway_profile": getattr(self.client, "gateway_profile", None),
                     "custom_parameters": {
                         "temperature": self.client.temperature,
                         "top_p": self.client.top_p,
@@ -371,9 +380,18 @@ class SichuanQCService:
                         "enable_thinking": self.client.enable_thinking,
                         "thinking_budget": self.client.thinking_budget,
                         "reasoning_effort": self.client.reasoning_effort,
+                        "execution_concurrency": {
+                            "max_parallel_records": self.client.max_parallel_records,
+                            "family_max_concurrency": self.client.family_max_concurrency,
+                            "http_max_concurrency": self.client.http_max_concurrency,
+                        },
                     },
                 }
             )
+        )
+        # 族并发属于任务级执行策略，不属于一审/二审客户端装饰器能力。
+        self.luxian_0609_execution_concurrency = capture_llm_execution_concurrency(
+            self.client
         )
         configure_shared_http_max_concurrency(self.client.http_max_concurrency)
 
@@ -395,7 +413,7 @@ class SichuanQCService:
         self._last_source_alert_at: float = 0.0
 
         # 统一规则引擎 (用于串行模式)
-        self.rule_engine = UnifiedRuleEngine(self.client.generate)
+        self.rule_engine = UnifiedRuleEngine(self._generate_with_current_client)
         self.rule_orchestrator = QCRuleOrchestrator()
         self.execution_cache = QCExecutionCache(default_ttl_seconds=1800)
 
@@ -414,6 +432,10 @@ class SichuanQCService:
             max_content_length=self.max_content_length,
         )
 
+    async def _generate_with_current_client(self, prompt: str) -> Dict[str, Any]:
+        """绑定服务而非旧客户端；独立任务runtime仍委派其自己的客户端。"""
+        return await self.client.generate(prompt)
+
     @staticmethod
     def _client_runtime_config(client: SichuanQCLLMClient) -> Dict[str, Any]:
         """从当前客户端复制运行参数；凭据只留在进程内，不进入任务快照。"""
@@ -428,6 +450,8 @@ class SichuanQCService:
             "source": client.config_source,
             "model_role": client.model_role,
             "adjudicator_model_source": client.adjudicator_model_source,
+            "dispatch_mode": getattr(client, "dispatch_mode", "direct"),
+            "gateway_profile": getattr(client, "gateway_profile", None),
             "custom_parameters": {
                 "temperature": client.temperature,
                 "top_p": client.top_p,
@@ -443,18 +467,47 @@ class SichuanQCService:
             },
         }
 
+    def _luxian_0609_execution_policy(self) -> LLMExecutionConcurrency:
+        """返回接纳时策略；兼容旧适配器绕过 ``__init__`` 的构造方式。"""
+
+        frozen = getattr(self, "luxian_0609_execution_concurrency", None)
+        if isinstance(frozen, LLMExecutionConcurrency):
+            return frozen
+        return capture_llm_execution_concurrency(
+            getattr(self, "adjudicator_client", None)
+            or getattr(self, "client", None)
+        )
+
     def isolated_luxian_0609_runtime(self, *, single_record: bool = False) -> "SichuanQCService":
         """为已领取的原始0609任务保留独立客户端，避免全局热重载串改在途模型。"""
 
-        runtime = SichuanQCService(self._client_runtime_config(self.client))
-        runtime.adjudicator_client = SichuanQCLLMClient(
-            self._client_runtime_config(self.adjudicator_client)
+        runtime = SichuanQCService(
+            self._client_runtime_config(self.client),
+            adjudicator_config=self._client_runtime_config(self.adjudicator_client),
         )
         runtime.client._stats_parent = self.client
         runtime.adjudicator_client._stats_parent = self.adjudicator_client
         if single_record:
-            runtime.client.family_max_concurrency = (
-                get_settings().LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY
+            # 旧单病例参数只可收紧已接纳策略。历史默认 8 从未真正进入
+            # 正式二审 Engine，本阶段先按已验收上限 4 生效，不能借修复放大。
+            runtime.luxian_0609_execution_concurrency = replace(
+                runtime.luxian_0609_execution_concurrency,
+                family_max_concurrency=min(
+                    runtime.luxian_0609_execution_concurrency.family_max_concurrency,
+                    int(
+                        get_settings().LUXIAN_0609_SINGLE_RECORD_FAMILY_MAX_CONCURRENCY
+                    ),
+                ),
+            )
+        for client in (runtime.client, runtime.adjudicator_client):
+            client.max_parallel_records = (
+                runtime.luxian_0609_execution_concurrency.max_parallel_records
+            )
+            client.family_max_concurrency = (
+                runtime.luxian_0609_execution_concurrency.family_max_concurrency
+            )
+            client.http_max_concurrency = (
+                runtime.luxian_0609_execution_concurrency.http_max_concurrency
             )
         return runtime
 
@@ -588,6 +641,8 @@ class SichuanQCService:
                 "timeout_seconds": self.client.timeout_seconds,
                 "allow_mock_when_unconfigured": self.client.allow_mock_when_unconfigured,
                 "source": self.client.config_source,
+                "dispatch_mode": getattr(self.client, "dispatch_mode", "direct"),
+                "gateway_profile": getattr(self.client, "gateway_profile", None),
                 "custom_parameters": {
                     "temperature": self.client.temperature,
                     "top_p": self.client.top_p,
@@ -595,9 +650,17 @@ class SichuanQCService:
                     "enable_thinking": self.client.enable_thinking,
                     "thinking_budget": self.client.thinking_budget,
                     "reasoning_effort": self.client.reasoning_effort,
+                    "execution_concurrency": {
+                        "max_parallel_records": self.client.max_parallel_records,
+                        "family_max_concurrency": self.client.family_max_concurrency,
+                        "http_max_concurrency": self.client.http_max_concurrency,
+                    },
                 },
             }
             self.adjudicator_client = SichuanQCLLMClient(build_adjudicator_runtime_config(first_pass_config))
+            self.luxian_0609_execution_concurrency = (
+                capture_llm_execution_concurrency(self.client)
+            )
             configure_shared_http_max_concurrency(
                 self.client.http_max_concurrency,
             )
@@ -1171,6 +1234,7 @@ class SichuanQCService:
 
 
     @luxian_0609_privacy_scope
+    @strata_case_execution_scope
     async def _evaluate_rules_orchestrated(
         self,
         *,
@@ -1214,7 +1278,9 @@ class SichuanQCService:
         llm_concurrency = 4
 
         async def _llm_evaluate(rule: Dict[str, Any], medical_record: Dict[str, Any]) -> Dict[str, Any]:
-            return await self.rule_engine.evaluate(rule, medical_record=medical_record)
+            rule_key = str(rule.get("rule_id") or rule.get("id") or "")
+            with strata_rule_package_scope("rule:" + rule_key if rule_key else None):
+                return await self.rule_engine.evaluate(rule, medical_record=medical_record)
 
         medical_record: Dict[str, Any] = {
             "id": document_id,
@@ -1233,6 +1299,7 @@ class SichuanQCService:
             evidence_payload=evidence_payload,
             llm_client=self.adjudicator_client,
             settings=settings,
+            execution_concurrency=self._luxian_0609_execution_policy(),
             institute_id=str(source_institute_id or ""),
             patient_id=str(source_patient_id or ""),
             source_schema=source_schema,
@@ -1328,19 +1395,20 @@ class SichuanQCService:
         enriched_record["doc_scope"] = str(options.get("doc_scope") or enriched_record.get("doc_scope") or "")
         enriched_record["quality_profile"] = str(options.get("quality_profile") or enriched_record.get("quality_profile") or "")
         enriched_record["model_version"] = str(options.get("model_version") or self.client.model or "")
-        return await self.rule_engine.evaluate_batch_compact(
-            rules=rules,
-            medical_record=enriched_record,
-            pack_id=str(options.get("pack_id") or ""),
-            pack_size=int(options.get("pack_size") or len(rules)),
-            low_confidence_threshold=float(options.get("low_confidence_threshold") or 0.45),
-            context_token_budget=8600 if normalize_quality_profile(options.get("quality_profile")) == QUALITY_PROFILE_EFFECT_PRIORITY else 7000,
-            quality_profile=normalize_quality_profile(options.get("quality_profile")),
-            batch_output_mode=normalize_batch_output_mode(
-                options.get("batch_output_mode"),
+        with strata_rule_package_scope(options.get("pack_id")):
+            return await self.rule_engine.evaluate_batch_compact(
+                rules=rules,
+                medical_record=enriched_record,
+                pack_id=str(options.get("pack_id") or ""),
+                pack_size=int(options.get("pack_size") or len(rules)),
+                low_confidence_threshold=float(options.get("low_confidence_threshold") or 0.45),
+                context_token_budget=8600 if normalize_quality_profile(options.get("quality_profile")) == QUALITY_PROFILE_EFFECT_PRIORITY else 7000,
                 quality_profile=normalize_quality_profile(options.get("quality_profile")),
-            ),
-        )
+                batch_output_mode=normalize_batch_output_mode(
+                    options.get("batch_output_mode"),
+                    quality_profile=normalize_quality_profile(options.get("quality_profile")),
+                ),
+            )
 
     async def _apply_selective_refine(
         self,
@@ -4617,6 +4685,7 @@ class SichuanQCService:
             evaluation_horizon_unavailable_reason=evaluation_horizon_unavailable_reason,
             cancellation_check=cancellation_check,
             execution_trace_sink=execution_trace_sink,
+            execution_concurrency=self._luxian_0609_execution_policy(),
             **({"task_settings": task_settings} if task_settings is not None else {}),
         )
 

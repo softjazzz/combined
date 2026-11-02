@@ -14,7 +14,7 @@ from ..qc_diagnostics.runtime_build import load_runtime_build
 LX0609_TASK_SETTINGS_FILTER_KEY = "lx0609_task_settings"
 LX0609_TASK_RUNTIME_FILTER_KEY = "lx0609_task_runtime"
 _LX0609_TASK_SETTINGS_VERSION = 1
-_LX0609_TASK_RUNTIME_VERSION = 1
+_LX0609_TASK_RUNTIME_VERSION = 2
 _UNVERSIONED_PROCESS_ID = uuid4().hex
 # 旧进程即使安装目录被覆盖，也不能把磁盘上的新构建号冒认为自身代码身份。
 _PROCESS_RUNTIME_BUILD = load_runtime_build()
@@ -86,6 +86,20 @@ def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
     if not provider or not model:
         raise ValueError("LX0609任务模型配置不可用")
     endpoint = str(getattr(client, "api_endpoint", "") or "").strip()
+    dispatch_mode = str(
+        getattr(client, "dispatch_mode", "direct") or "direct"
+    ).strip().lower()
+    if dispatch_mode not in {"direct", "gateway"}:
+        raise ValueError("LX0609任务模型调度配置不可用")
+    gateway_profile = getattr(client, "gateway_profile", None)
+    gateway_endpoint_sha256 = getattr(client, "gateway_endpoint_sha256", None)
+    if dispatch_mode == "gateway" and not (
+        isinstance(gateway_profile, str)
+        and gateway_profile.strip()
+        and isinstance(gateway_endpoint_sha256, str)
+        and len(gateway_endpoint_sha256) == 64
+    ):
+        raise ValueError("LX0609任务Gateway配置不可用")
     return {
         "provider": provider,
         "model": model,
@@ -97,6 +111,11 @@ def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
         "thinking_budget": getattr(client, "thinking_budget", None),
         "reasoning_effort": str(getattr(client, "reasoning_effort", "") or "").strip(),
         "allow_mock_when_unconfigured": getattr(client, "allow_mock_when_unconfigured", None),
+        "dispatch_mode": dispatch_mode,
+        "gateway_profile": gateway_profile if dispatch_mode == "gateway" else None,
+        "gateway_endpoint_sha256": (
+            gateway_endpoint_sha256 if dispatch_mode == "gateway" else None
+        ),
     }
 
 
@@ -127,13 +146,38 @@ def assert_luxian_0609_task_runtime_match(frozen: Any, qc_service: Any) -> None:
 
     if type(frozen) is not dict or set(frozen) != {
         "schema_version", "implementation", "first_pass", "adjudicator"
-    } or type(frozen.get("schema_version")) is not int or frozen["schema_version"] != _LX0609_TASK_RUNTIME_VERSION:
+    } or type(frozen.get("schema_version")) is not int or frozen["schema_version"] not in {1, _LX0609_TASK_RUNTIME_VERSION}:
         raise ValueError("LX0609任务运行身份快照缺失或非法，请重新发起任务")
     try:
         serialized = json.dumps(frozen, ensure_ascii=False, sort_keys=True, allow_nan=False)
     except (TypeError, ValueError) as exc:
         raise ValueError("LX0609任务运行身份快照缺失或非法，请重新发起任务") from exc
     current = capture_luxian_0609_task_runtime(qc_service)
+    if frozen["schema_version"] == 1:
+        # v1 尚无出口身份，只允许继续执行 direct；Gateway 必须由 v2 明确冻结。
+        if any(
+            current[role].get("dispatch_mode") != "direct"
+            for role in ("first_pass", "adjudicator")
+        ):
+            raise ValueError("LX0609旧任务缺少Gateway运行身份，请重新发起任务")
+        current = {
+            **current,
+            "schema_version": 1,
+            "first_pass": {
+                key: value
+                for key, value in current["first_pass"].items()
+                if key not in {
+                    "dispatch_mode", "gateway_profile", "gateway_endpoint_sha256"
+                }
+            },
+            "adjudicator": {
+                key: value
+                for key, value in current["adjudicator"].items()
+                if key not in {
+                    "dispatch_mode", "gateway_profile", "gateway_endpoint_sha256"
+                }
+            },
+        }
     if serialized != json.dumps(current, ensure_ascii=False, sort_keys=True, allow_nan=False):
         raise ValueError("LX0609任务模型或实现版本已变化，请重新发起任务")
 

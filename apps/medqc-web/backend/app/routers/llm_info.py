@@ -9,17 +9,18 @@ from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
 from ..core.security import require_roles
-from ..services.llm_config_loader import get_enabled_provider_codes
+from ..services.llm_config_loader import get_enabled_provider_codes, SUPPORTED_PROVIDER_CODES
+from ..core.settings import get_settings
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-info"])
 
 _SYSTEM_CONFIG_ROLES = ("admin", "sync_admin", "super_admin")
-SUPPORTED_PROVIDERS = ("alibaba", "deepseek", "siliconflow", "ollama")
+SUPPORTED_PROVIDERS = SUPPORTED_PROVIDER_CODES
 CUSTOM_MODELS_FILE = Path(__file__).resolve().parents[2] / "data" / "llm_custom_models.json"
 
 
 class CustomModelPayload(BaseModel):
-    provider_code: str = Field(..., description="厂商编码：alibaba/deepseek/siliconflow/ollama")
+    provider_code: str = Field(..., description="服务商编码：alibaba/deepseek/siliconflow/ollama/strata")
     model_code: str = Field(..., description="模型编码（也是模型名称）")
     model_name: str | None = Field(default=None, description="模型展示名，默认同 model_code")
 
@@ -29,7 +30,7 @@ def _normalize_provider_code(provider_code: str | None) -> str:
 
 
 def _base_models() -> list[dict[str, Any]]:
-    return [
+    models = [
         {"provider": "alibaba", "id": "qwen-plus", "model_code": "qwen-plus", "model_name": "Qwen-Plus", "is_custom": False},
         {"provider": "alibaba", "id": "qwen3.7-flash", "model_code": "qwen3.7-flash", "model_name": "Qwen3.7 Flash", "is_custom": False},
         {"provider": "alibaba", "id": "qwen3.8-flash", "model_code": "qwen3.8-flash", "model_name": "Qwen3.8 Flash", "is_custom": False},
@@ -43,6 +44,20 @@ def _base_models() -> list[dict[str, Any]]:
         {"provider": "siliconflow", "id": "Qwen/Qwen3.5-4B", "model_code": "Qwen/Qwen3.5-4B", "model_name": "Qwen/Qwen3.5-4B", "is_custom": False},
         {"provider": "ollama", "id": "qwen2.5:7b-instruct", "model_code": "qwen2.5:7b-instruct", "model_name": "qwen2.5:7b-instruct", "is_custom": False},
     ]
+    # 本地模型ID取部署真实值，不猜测量化模型的API名称。
+    model = str(get_settings().STRATA_MODEL or "").strip()
+    if model:
+        models.append({"provider": "strata", "id": model, "model_code": model,
+                       "model_name": model, "is_custom": False})
+    # 多模型Gateway部署可显式登记每个模型自己的profile，模型名称原样展示。
+    existing = {(row["provider"], row["model_code"]) for row in models}
+    for provider, profiles in get_settings().LLM_GATEWAY_PROFILES.items():
+        if isinstance(profiles, dict):
+            for name in profiles:
+                if (provider, name) not in existing:
+                    models.append({"provider": provider, "id": name, "model_code": name,
+                                   "model_name": name, "is_custom": False})
+    return models
 
 
 def _load_custom_models() -> dict[str, list[dict[str, Any]]]:
@@ -97,6 +112,7 @@ async def providers(request: Request):
         {"id": "deepseek", "provider_name": "DeepSeek 官方 API", "provider_code": "deepseek"},
         {"id": "siliconflow", "provider_name": "SiliconFlow", "provider_code": "siliconflow"},
         {"id": "ollama", "provider_name": "内部 Ollama", "provider_code": "ollama"},
+        {"id": "strata", "provider_name": "本地 Strata", "provider_code": "strata"},
     ]
     provider_items = [
         item

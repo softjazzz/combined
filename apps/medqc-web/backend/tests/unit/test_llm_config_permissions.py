@@ -460,6 +460,12 @@ def test_qc_manager_cannot_manage_llm_but_can_manage_frontpage_settings(client, 
 
 def test_llm_connection_failure_does_not_leak_endpoint_or_exception(client, monkeypatch, caplog):
     _override_user(client, ["sync_admin"])
+    # 隔离环境无真实密钥；提供合成配置，确保确实走到被测的应答失败分支。
+    from app.core.settings import Settings
+    monkeypatch.setattr(
+        "app.services.llm_config_loader.get_settings",
+        lambda: Settings(_env_file=None, JWT_SECRET="test-only", DASHSCOPE_API_KEY="synthetic-probe-key"),
+    )
 
     async def _fail_generate(*_args, **_kwargs):
         from app.services.llm_observability import current_llm_observation_context

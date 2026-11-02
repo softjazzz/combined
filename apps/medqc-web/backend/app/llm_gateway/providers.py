@@ -1,0 +1,256 @@
+"""受控 Provider payload 适配与单次 HTTP 发送。"""
+
+from __future__ import annotations
+
+from copy import deepcopy
+import json
+from typing import Any, Protocol
+
+import httpx
+
+from app.services.llm_dispatch.contracts import GatewayErrorCode
+
+from .config import ProfileConfig
+
+
+NETWORK_RETRY_COUNT = 0
+MAX_PROVIDER_RESPONSE_BYTES = 16 * 1024 * 1024
+_ALLOWED_PAYLOAD_FIELDS = frozenset(
+    {
+        "model",
+        "messages",
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "max_completion_tokens",
+        "stream",
+        "stop",
+        "seed",
+        "frequency_penalty",
+        "presence_penalty",
+        "response_format",
+        "enable_thinking",
+        "thinking_budget",
+        "thinking",
+        "reasoning_effort",
+        "chat_template_kwargs",
+        "n",
+    }
+)
+
+
+class ProviderError(RuntimeError):
+    code = GatewayErrorCode.PROVIDER_UNAVAILABLE.value
+    status_code = 502
+    retryable = False
+
+
+class InvalidPayloadError(ProviderError):
+    code = GatewayErrorCode.INVALID_PROVIDER_PAYLOAD.value
+    status_code = 400
+
+
+class ProviderHTTPError(ProviderError):
+    code = GatewayErrorCode.PROVIDER_REJECTED.value
+
+    def __init__(self, upstream_status: int) -> None:
+        super().__init__(self.code)
+        self.upstream_status = upstream_status
+        self.retryable = upstream_status == 429 or upstream_status >= 500
+        self.status_code = 503 if self.retryable else 502
+
+
+class ProviderTimeoutError(ProviderError):
+    code = GatewayErrorCode.PROVIDER_TIMEOUT.value
+    status_code = 504
+    retryable = True
+
+
+class ProviderTransportError(ProviderError):
+    code = GatewayErrorCode.PROVIDER_UNAVAILABLE.value
+    status_code = 503
+    retryable = True
+
+
+class InvalidProviderResponseError(ProviderError):
+    code = GatewayErrorCode.INVALID_PROVIDER_RESPONSE.value
+    status_code = 502
+
+
+class ProviderSender(Protocol):
+    async def send(
+        self,
+        profile: ProfileConfig,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float,
+    ) -> dict[str, Any]: ...
+
+
+def prepare_provider_payload(profile: ProfileConfig, raw_payload: dict[str, Any], *, allow_strata_prefix=False) -> dict[str, Any]:
+    """只转发业务需要的 OpenAI 兼容字段，路由和凭据不在 payload 中。"""
+
+    allowed = _ALLOWED_PAYLOAD_FIELDS | ({"strata_prefix"} if allow_strata_prefix and profile.provider_code == "strata" else set())
+    if not isinstance(raw_payload, dict) or set(raw_payload) - allowed:
+        raise InvalidPayloadError()
+    payload = deepcopy(raw_payload)
+    if "strata_prefix" in payload:
+        prefix = payload["strata_prefix"]
+        if (not isinstance(prefix, dict) or set(prefix) != {"tokens"}
+                or type(prefix["tokens"]) is not int or not 1 <= prefix["tokens"] <= 32768):
+            raise InvalidPayloadError()
+    if payload.get("model") != profile.model:
+        raise InvalidPayloadError()
+    if payload.get("stream", False) is not False:
+        raise InvalidPayloadError()
+    payload["stream"] = False
+    if payload.get("n", 1) != 1:
+        raise InvalidPayloadError()
+
+    _validate_messages(payload.get("messages"))
+    _validate_optional_numbers(payload)
+    _validate_response_format(payload.get("response_format"))
+    _validate_thinking(payload)
+
+    if profile.provider_code == "strata":
+        _map_strata_thinking(payload)
+    elif "chat_template_kwargs" in payload:
+        raise InvalidPayloadError()
+    return payload
+
+
+def _validate_messages(value: Any) -> None:
+    if not isinstance(value, list) or not value:
+        raise InvalidPayloadError()
+    for message in value:
+        if not isinstance(message, dict) or set(message) - {"role", "content", "name"}:
+            raise InvalidPayloadError()
+        if message.get("role") not in {"system", "developer", "user", "assistant"}:
+            raise InvalidPayloadError()
+        if not isinstance(message.get("content"), str):
+            # 首期禁止 image_url/file 等使 Provider 主动取回外部资源的形状。
+            raise InvalidPayloadError()
+        if "name" in message and not isinstance(message["name"], str):
+            raise InvalidPayloadError()
+
+
+def _validate_optional_numbers(payload: dict[str, Any]) -> None:
+    for key in ("temperature", "top_p", "frequency_penalty", "presence_penalty"):
+        if key in payload and (
+            isinstance(payload[key], bool) or not isinstance(payload[key], (int, float))
+        ):
+            raise InvalidPayloadError()
+    for key in ("max_tokens", "max_completion_tokens"):
+        if key in payload and (
+            isinstance(payload[key], bool)
+            or not isinstance(payload[key], int)
+            or not 1 <= payload[key] <= 131072
+        ):
+            raise InvalidPayloadError()
+    if "seed" in payload and (
+        isinstance(payload["seed"], bool) or not isinstance(payload["seed"], int)
+    ):
+        raise InvalidPayloadError()
+
+
+def _validate_response_format(value: Any) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or value.get("type") not in {"json_object", "json_schema"}:
+        raise InvalidPayloadError()
+
+
+def _validate_thinking(payload: dict[str, Any]) -> None:
+    if "enable_thinking" in payload and not isinstance(payload["enable_thinking"], bool):
+        raise InvalidPayloadError()
+    if "thinking_budget" in payload and (
+        isinstance(payload["thinking_budget"], bool)
+        or not isinstance(payload["thinking_budget"], int)
+        or payload["thinking_budget"] <= 0
+    ):
+        raise InvalidPayloadError()
+    if "thinking" in payload:
+        thinking = payload["thinking"]
+        if not isinstance(thinking, dict) or thinking.get("type") not in {"enabled", "disabled"}:
+            raise InvalidPayloadError()
+    if "reasoning_effort" in payload and payload["reasoning_effort"] not in {
+        "low",
+        "medium",
+        "high",
+        "max",
+    }:
+        raise InvalidPayloadError()
+    if "chat_template_kwargs" in payload:
+        nested = payload["chat_template_kwargs"]
+        if not isinstance(nested, dict) or set(nested) - {"enable_thinking", "thinking_budget"}:
+            raise InvalidPayloadError()
+        nested_probe = dict(nested)
+        _validate_thinking(nested_probe)
+
+
+def _map_strata_thinking(payload: dict[str, Any]) -> None:
+    nested = dict(payload.get("chat_template_kwargs") or {})
+    for key in ("enable_thinking", "thinking_budget"):
+        if key not in payload:
+            continue
+        if key in nested and nested[key] != payload[key]:
+            raise InvalidPayloadError()
+        nested[key] = payload.pop(key)
+    if nested:
+        payload["chat_template_kwargs"] = nested
+
+
+class HttpxProviderSender:
+    """不跟随重定向、不读取系统代理、首期不自动重试。"""
+
+    def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self._transport = transport
+
+    async def send(
+        self,
+        profile: ProfileConfig,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float,
+    ) -> dict[str, Any]:
+        headers = {"Content-Type": "application/json"}
+        if profile.api_key:
+            headers["Authorization"] = f"Bearer {profile.api_key}"
+        try:
+            async with httpx.AsyncClient(
+                transport=self._transport,
+                follow_redirects=False,
+                trust_env=False,
+                timeout=httpx.Timeout(timeout_seconds),
+            ) as client:
+                response = await client.post(profile.api_endpoint, headers=headers, json=payload)
+        except httpx.TimeoutException:
+            raise ProviderTimeoutError() from None
+        except httpx.HTTPError:
+            raise ProviderTransportError() from None
+
+        if not 200 <= response.status_code < 300:
+            raise ProviderHTTPError(response.status_code)
+        if len(response.content) > MAX_PROVIDER_RESPONSE_BYTES:
+            raise InvalidProviderResponseError()
+        try:
+            decoded = response.json()
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            raise InvalidProviderResponseError() from None
+        if not isinstance(decoded, dict):
+            raise InvalidProviderResponseError()
+        return decoded
+
+
+__all__ = [
+    "HttpxProviderSender",
+    "InvalidPayloadError",
+    "InvalidProviderResponseError",
+    "NETWORK_RETRY_COUNT",
+    "ProviderError",
+    "ProviderHTTPError",
+    "ProviderSender",
+    "ProviderTimeoutError",
+    "ProviderTransportError",
+    "prepare_provider_payload",
+]

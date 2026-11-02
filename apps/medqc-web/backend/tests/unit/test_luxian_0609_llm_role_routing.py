@@ -1,4 +1,4 @@
-"""按调用点切换裁决模型（LLM_ROLE_MODELS，2026-10-19）：未配置不变、脱敏不变、配置错误回退。"""
+"""按调用点切换裁决模型：未配置不变，显式身份错误失败关闭，脱敏不变。"""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import json
 import pytest
 
 from app.services.luxian_0609 import llm_role_routing as routing
+from app.services.llm_dispatch.provider_profiles import ProviderConfigurationError
 from app.services.luxian_0609.exam_finding_analysis import SCHEMA_VERSION, check_exam_finding_analysis
 from app.services.luxian_0609.exam_finding_relevance import apply_relevance_hints
 from app.services.luxian_0609.exam_lab_fact_extraction import build_exam_lab_text_projection
@@ -25,11 +26,27 @@ class _Capture:
                 "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}}
 
 
-def test_parse_role_models_keeps_known_roles_and_ignores_invalid_items():
+def test_parse_role_models_keeps_valid_known_roles_and_ignores_unknown_items():
     parsed = routing.parse_role_models(
-        " exam_finding_analysis = DeepSeek/deepseek-flash , unknown_role=deepseek/x, broken, exam_finding_analysis=")
+        " exam_finding_analysis = DeepSeek/deepseek-flash , unknown_role=deepseek/x, broken")
     assert parsed == {"exam_finding_analysis": ("deepseek", "deepseek-flash")}
     assert routing.parse_role_models(None) == {} and routing.parse_role_models("") == {}
+
+
+@pytest.mark.parametrize(
+    "raw",
+    (
+        "exam_finding_analysis",
+        "exam_finding_analysis=",
+        "exam_finding_analysis=/qwen",
+        "exam_finding_analysis=deepseek",
+    ),
+)
+def test_parse_role_models_rejects_malformed_explicit_known_role(raw):
+    """已知 role 一旦显式出现便失败关闭；这不同于整个配置未设置。"""
+
+    with pytest.raises(ProviderConfigurationError):
+        routing.parse_role_models(raw)
 
 
 def test_unconfigured_role_returns_the_same_client(monkeypatch):
@@ -40,11 +57,12 @@ def test_unconfigured_role_returns_the_same_client(monkeypatch):
     assert routing.client_for_role(plain, "exam_finding_analysis") is plain
 
 
-def test_unavailable_provider_falls_back_and_available_provider_builds_role_client(monkeypatch):
+def test_explicit_cloud_role_without_key_fails_and_valid_key_builds_client(monkeypatch):
     monkeypatch.setenv("LLM_ROLE_MODELS", "exam_finding_analysis=deepseek/deepseek-flash")
     monkeypatch.setenv("LLM_VISIBLE_PROVIDERS", '["alibaba","deepseek"]')
     monkeypatch.setenv("DEEPSEEK_API_KEY", "")
-    assert routing.build_role_delegate("exam_finding_analysis") is None
+    with pytest.raises(ProviderConfigurationError):
+        routing.build_role_delegate("exam_finding_analysis")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-key")
     delegate = routing.build_role_delegate("exam_finding_analysis")
     assert delegate is not None
@@ -69,6 +87,17 @@ def test_role_switch_failure_never_interrupts_qc():
 
     broken = _Broken()
     assert routing.client_for_role(broken, "exam_finding_analysis") is broken
+
+
+def test_role_configuration_error_is_not_swallowed_by_client_selector():
+    class _BrokenConfiguration:
+        def for_role(self, role):
+            raise ProviderConfigurationError(f"invalid role: {role}")
+
+    with pytest.raises(ProviderConfigurationError):
+        routing.client_for_role(
+            _BrokenConfiguration(), "exam_finding_analysis"
+        )
 
 
 @pytest.mark.asyncio

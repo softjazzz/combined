@@ -35,9 +35,11 @@ class FakeLLM:
     def __init__(self, *, fail: bool = False) -> None:
         self.calls = 0
         self.fail = fail
+        self.prompts: list[str] = []
 
     async def generate(self, prompt: str, **_: Any) -> dict[str, Any]:
         self.calls += 1
+        self.prompts.append(prompt)
         if self.fail:
             raise RuntimeError("PRIVATE-LLM-FAILURE")
         event_refs = re.findall(r'"event_ref":"([^"]+)"', prompt)
@@ -197,9 +199,18 @@ def test_missing_evidence_session_does_not_attach_shadow_metadata(monkeypatch: p
     assert "luxian_0609_059_shadow" not in attach(context)
 
 
+@pytest.mark.parametrize(
+    "request_salt", (0, 667, 72, 897),
+    ids=("ordinary-reference", "phone-like-event", "phone-like-order", "phone-like-course"),
+)
 def test_enabled_shadow_calls_llm_once_attaches_safe_summary_and_keeps_formal_totals(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, request_salt: int,
 ) -> None:
+    # 三个固定盐分别让旧 evt/ord/course 引用呈手机号形态，稳定复现隐私过滤改写。
+    monkeypatch.setattr(
+        "app.services.luxian_0609.native_treatment_order_consistency.secrets.token_bytes",
+        lambda _size: request_salt.to_bytes(32, "big"),
+    )
     llm = FakeLLM()
     executable_rules, context = prepare(
         monkeypatch, config=settings(), selected_rule_ids=("LX0609-03-02-01", RULE_ID),
@@ -208,6 +219,7 @@ def test_enabled_shadow_calls_llm_once_attaches_safe_summary_and_keeps_formal_to
     shadow = attach(context)["luxian_0609_059_shadow"]
     assert [item["rule_id"] for item in executable_rules] == ["LX0609-03-02-01"]
     assert llm.calls == 1
+    assert "[手机号已脱敏]" not in llm.prompts[0]
     assert shadow == {
         "shadow_only": True, "release_eligible": False,
         "status": "compliant", "reason_code": "requirement_satisfied",

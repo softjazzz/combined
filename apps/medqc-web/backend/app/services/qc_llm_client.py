@@ -6,6 +6,7 @@ Wraps network calls to LLM API and keeps stats for QC workflows.
 
 from collections.abc import Mapping
 from copy import deepcopy
+import hashlib
 import logging
 import re
 import time
@@ -14,6 +15,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from ..core.http import safe_post_json
+from ..core.http_attempt_observation import http_attempt_observation_scope
 from ..core.settings import get_settings
 from .llm_observability import (
     LLMObservabilityRecorder,
@@ -23,6 +25,15 @@ from .llm_observability import (
     safe_status_for_http_result,
 )
 from .llm_execution_concurrency import concurrency_from_custom_parameters
+from .llm_dispatch.client import GatewayDispatchClient
+from .llm_dispatch.provider_profiles import (
+    ProviderConfigurationError,
+    configured_gateway_profile,
+    normalize_dispatch_mode,
+    strata_is_explicitly_configured,
+    validate_gateway_profile,
+    validate_provider_code,
+)
 from .qc_diagnostics.capture import (
     begin_attempt as begin_diagnostic_attempt,
     finish_attempt as finish_diagnostic_attempt,
@@ -43,6 +54,7 @@ class SichuanQCLLMClient:
         config: Optional[Dict[str, Any]] = None,
         *,
         observability_recorder: Optional[LLMObservabilityRecorder] = None,
+        gateway_dispatch_client: Optional[GatewayDispatchClient] = None,
     ) -> None:
         if config:
             self.api_endpoint: Optional[str] = config.get("api_endpoint")
@@ -56,6 +68,23 @@ class SichuanQCLLMClient:
             self.provider_code: str = (
                 str(config.get("provider_code") or "").strip().lower()
             )
+            if self.provider_code:
+                validate_provider_code(self.provider_code)
+            self.dispatch_mode = normalize_dispatch_mode(
+                config.get("dispatch_mode", "direct")
+            )
+            self.gateway_profile: str | None = None
+            if self.dispatch_mode == "gateway":
+                self.gateway_profile = validate_gateway_profile(
+                    profile=config.get("gateway_profile"),
+                    provider_code=self.provider_code,
+                )
+            if self.provider_code == "strata" and (
+                not self.api_endpoint or not self.model
+            ):
+                raise ProviderConfigurationError(
+                    "Strata provider is not fully configured"
+                )
             self.model_role: str = (
                 str(config.get("model_role") or "first_pass").strip() or "first_pass"
             )
@@ -93,7 +122,7 @@ class SichuanQCLLMClient:
             )
         else:
             s = get_settings()
-            provider_code = str(s.LLM_DEFAULT_PROVIDER or "").strip().lower()
+            provider_code = validate_provider_code(s.LLM_DEFAULT_PROVIDER or "alibaba")
             if provider_code == "alibaba":
                 self.api_endpoint = (
                     str(s.DASHSCOPE_BASE_URL or s.LLM_API_ENDPOINT or "").strip()
@@ -118,16 +147,36 @@ class SichuanQCLLMClient:
                     or None
                 )
                 self.api_key = s.OLLAMA_API_KEY or s.LLM_API_KEY
+            elif provider_code == "strata":
+                if not strata_is_explicitly_configured(s):
+                    raise ProviderConfigurationError(
+                        "Strata provider is not fully configured"
+                    )
+                self.api_endpoint = str(s.STRATA_API_ENDPOINT).strip()
+                self.api_key = s.STRATA_API_KEY
             else:
                 self.api_endpoint = (
                     str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
                 )
                 self.api_key = s.LLM_API_KEY
-            self.model = s.LLM_MODEL
+            self.model = (
+                str(s.STRATA_MODEL)
+                if provider_code == "strata"
+                else s.LLM_MODEL
+            )
             self.timeout_seconds = s.LLM_TIMEOUT_SECONDS
             self.allow_mock_when_unconfigured = s.LLM_ALLOW_MOCK_WHEN_UNCONFIGURED
             self.config_source = "env"
             self.provider_code = provider_code
+            self.dispatch_mode = normalize_dispatch_mode(
+                getattr(s, "LLM_DISPATCH_MODE", "direct")
+            )
+            self.gateway_profile = None
+            if self.dispatch_mode == "gateway":
+                self.gateway_profile = validate_gateway_profile(
+                    profile=configured_gateway_profile(s, self.provider_code, self.model),
+                    provider_code=self.provider_code,
+                )
             self.max_parallel_records = int(
                 getattr(s, "QC_BATCH_RECORD_MAX_CONCURRENCY", 16)
             )
@@ -158,6 +207,13 @@ class SichuanQCLLMClient:
                 self.allow_mock_when_unconfigured,
             )
 
+        self.request_observation_enabled = getattr(get_settings(), "LLM_REQUEST_OBSERVATION_ENABLED", False) is True
+        self.strata_observation_mode = (
+            getattr(get_settings(), "STRATA_CASE_CACHE_MODE", "off")
+            if self.provider_code == "strata" else "off"
+        )
+        if self.strata_observation_mode == "prefix" and self.dispatch_mode != "gateway":
+            raise ProviderConfigurationError("Strata prefix mode requires the controlled Gateway")
         self.call_count = 0
         self.total_tokens = 0
         self.total_api_time = 0.0
@@ -167,6 +223,42 @@ class SichuanQCLLMClient:
         self._observability_recorder = (
             observability_recorder or get_llm_observability_recorder()
         )
+        self._gateway_dispatch_client = (
+            gateway_dispatch_client or GatewayDispatchClient()
+        )
+        self.refresh_dispatch_identity()
+
+    def refresh_dispatch_identity(self) -> None:
+        """从当前受控 Settings 刷新非敏感 Gateway 地址身份。"""
+
+        self.gateway_endpoint_sha256: str | None = None
+        if self.dispatch_mode == "gateway":
+            settings = get_settings()
+            self.gateway_profile = validate_gateway_profile(
+                profile=self.gateway_profile,
+                provider_code=self.provider_code,
+            )
+            if normalize_dispatch_mode(
+                getattr(settings, "LLM_DISPATCH_MODE", "direct")
+            ) != "gateway":
+                raise ProviderConfigurationError(
+                    "LLM gateway dispatch is no longer enabled"
+                )
+            current_profile = str(
+                configured_gateway_profile(settings, self.provider_code, self.model) or ""
+            ).strip()
+            if current_profile != self.gateway_profile:
+                raise ProviderConfigurationError(
+                    "LLM gateway profile changed after runtime selection"
+                )
+            gateway_url = str(
+                getattr(settings, "LLM_GATEWAY_URL", "") or ""
+            ).strip().rstrip("/")
+            if not gateway_url:
+                raise ProviderConfigurationError("LLM gateway URL is unavailable")
+            self.gateway_endpoint_sha256 = hashlib.sha256(
+                gateway_url.encode("utf-8")
+            ).hexdigest()
 
     def _record_stats_delta(
         self, *, calls: int = 0, successes: int = 0, errors: int = 0,
@@ -221,7 +313,7 @@ class SichuanQCLLMClient:
         attempt_no = 0
         attempt_usages: list[dict[str, int]] = []
 
-        if not self.api_endpoint:
+        if self.dispatch_mode == "direct" and not self.api_endpoint:
             if self.allow_mock_when_unconfigured:
                 api_time = time.time() - api_start
                 self._record_stats_delta(successes=1)
@@ -364,6 +456,7 @@ class SichuanQCLLMClient:
         from .luxian_0609.privacy_request_scope import protect_current_payload
 
         payload = protect_current_payload(payload)
+        case_prefix = None
         event_id, started_timestamp = await self._observability_recorder.start_attempt(
             logical_call_id=logical_call_id,
             attempt_no=attempt_no,
@@ -374,18 +467,71 @@ class SichuanQCLLMClient:
         diagnostic_attempt = begin_diagnostic_attempt(
             logical_call_id=logical_call_id, attempt_no=attempt_no, payload=payload,
         )
+        transport_observation = None
         try:
             from .luxian_0609.execution_time_budget import request_timeout
 
-            result = await safe_post_json(
-                url=f"{self.api_endpoint}/chat/completions",
-                headers=headers,
-                payload=payload,
-                timeout_seconds=request_timeout(self.timeout_seconds),
-            )
+            timeout_seconds = request_timeout(self.timeout_seconds)
+            with http_attempt_observation_scope(
+                enabled=(getattr(self, "strata_observation_mode", "off") in {"observe", "prefix"}
+                         or getattr(self, "request_observation_enabled", False)),
+            ) as transport_observation:
+                if self.dispatch_mode == "gateway":
+                    if not self.gateway_profile:
+                        raise ProviderConfigurationError(
+                            "LLM gateway profile is unavailable"
+                        )
+                    if self.provider_code == "strata" and getattr(self, "strata_observation_mode", "off") == "prefix":
+                        from .strata_case_context import (
+                            consume_exam_result_prefix_request, current_exam_result_prefix,
+                        )
+
+                        case_prefix = current_exam_result_prefix(payload, model_role=self.model_role)
+                        if case_prefix is not None:
+                            # 先校验完整元数据，再扣调用预算；两者间无await。
+                            protect_current_payload({"case_prefix": case_prefix.model_dump(mode="json")})
+                            consume_exam_result_prefix_request()
+                    prefix_kwargs = {"case_prefix": case_prefix} if case_prefix is not None else {}
+                    if getattr(self, "request_observation_enabled", False):
+                        prefix_kwargs["observe_request"] = True
+                    if self.provider_code == "strata":
+                        from .llm_observability import current_llm_observation_context
+
+                        case_key = current_llm_observation_context().record_key_hash
+                        if case_key is not None:
+                            protect_current_payload({"case_key": case_key})
+                            prefix_kwargs["case_key"] = case_key
+                            from .strata_scheduling import current_strata_package_key
+
+                            package_key = current_strata_package_key()
+                            if package_key is not None:
+                                protect_current_payload({"package_key": package_key})
+                                prefix_kwargs["package_key"] = package_key
+                    result = await self._gateway_dispatch_client.complete(
+                        provider_code=self.provider_code,
+                        profile=self.gateway_profile,
+                        expected_endpoint_sha256=str(
+                            self.gateway_endpoint_sha256 or ""
+                        ),
+                        payload=payload,
+                        timeout_seconds=timeout_seconds,
+                        **prefix_kwargs,
+                    )
+                else:
+                    result = await safe_post_json(
+                        url=f"{self.api_endpoint}/chat/completions",
+                        headers=headers,
+                        payload=payload,
+                        timeout_seconds=timeout_seconds,
+                    )
             finish_diagnostic_attempt(diagnostic_attempt, result=result)
             usage = observed_usage(result)
             status, safe_error_kind = safe_status_for_http_result(result)
+            self._observe_strata_attempt(
+                event_id=event_id, logical_call_id=logical_call_id, attempt_no=attempt_no,
+                payload=payload, result=result, status=status,
+                started_timestamp=started_timestamp, transport_observation=transport_observation,
+            )
             await self._observability_recorder.finish_attempt(
                 event_id=event_id,
                 started_timestamp=started_timestamp,
@@ -396,6 +542,24 @@ class SichuanQCLLMClient:
             return result, usage
         except BaseException as error:
             status, safe_error_kind = safe_status_for_exception(error)
+            failed_cache_observation = None
+            if case_prefix is not None:
+                failed_cache_observation = {"_strata_cache_expected": True}
+                if getattr(error, "cache_trace", None) is not None:
+                    failed_cache_observation["_strata_cache"] = error.cache_trace
+                if getattr(error, "cache_trace_invalid", False):
+                    failed_cache_observation["_strata_cache_invalid"] = True
+            if getattr(error, "request_observation", None) is not None:
+                failed_cache_observation = dict(failed_cache_observation or {})
+                failed_cache_observation["_gateway_request_observation"] = error.request_observation
+            if getattr(error, "request_observation_invalid", False):
+                failed_cache_observation = dict(failed_cache_observation or {})
+                failed_cache_observation["_gateway_request_observation_invalid"] = True
+            self._observe_strata_attempt(
+                event_id=event_id, logical_call_id=logical_call_id, attempt_no=attempt_no,
+                payload=payload, result=failed_cache_observation, status=status,
+                started_timestamp=started_timestamp, transport_observation=transport_observation,
+            )
             finish_diagnostic_attempt(diagnostic_attempt, error_kind=safe_error_kind or "unknown_error")
             await self._observability_recorder.finish_attempt(
                 event_id=event_id,
@@ -405,6 +569,21 @@ class SichuanQCLLMClient:
                 usage=None,
             )
             raise
+
+    def _observe_strata_attempt(self, *, transport_observation, **kwargs) -> None:
+        if (getattr(self, "strata_observation_mode", "off") not in {"observe", "prefix"}
+                and not getattr(self, "request_observation_enabled", False)):
+            return
+        try:
+            self._observability_recorder.record_strata_attempt(
+                **kwargs, model=self.model, model_role=self.model_role, provider_code=self.provider_code,
+                gateway=self.dispatch_mode == "gateway",
+                route_key=[self.dispatch_mode, self.gateway_profile, self.api_endpoint, self.model_role],
+                transport=transport_observation.snapshot() if transport_observation else None,
+            )
+        except Exception:
+            # 包含自定义 recorder；旁路失败不能触发医学请求重试或回退。
+            logger.warning("strata_p0_observation_failed")
 
     @staticmethod
     def _aggregate_attempt_usages(
@@ -522,6 +701,19 @@ class SichuanQCLLMClient:
                     extra["reasoning_effort"] = self.reasoning_effort
                 return extra
             return {"thinking": {"type": "disabled"}}
+        if self.provider_code == "strata":
+            chat_template_kwargs: Dict[str, Any] = {
+                "enable_thinking": bool(resolved_enable_thinking)
+            }
+            if resolved_enable_thinking and resolved_thinking_budget is not None:
+                if (
+                    isinstance(resolved_thinking_budget, bool)
+                    or not isinstance(resolved_thinking_budget, int)
+                    or resolved_thinking_budget <= 0
+                ):
+                    raise ValueError("thinking_budget must be a positive integer")
+                chat_template_kwargs["thinking_budget"] = resolved_thinking_budget
+            return {"chat_template_kwargs": chat_template_kwargs}
         if (
             (self.model or "").lower().startswith("qwen3")
             and (
@@ -618,12 +810,21 @@ class SichuanQCLLMClient:
         )
         has_reasoning_content = bool(reasoning_content)
         thinking = payload.get("thinking")
+        chat_template_kwargs = payload.get("chat_template_kwargs")
         requested_enable_thinking = bool(
             payload.get("enable_thinking") is True
             or (isinstance(thinking, dict) and thinking.get("type") == "enabled")
+            or (
+                isinstance(chat_template_kwargs, dict)
+                and chat_template_kwargs.get("enable_thinking") is True
+            )
         )
         requested_disable_thinking = bool(
-            isinstance(thinking, dict) and thinking.get("type") == "disabled"
+            (isinstance(thinking, dict) and thinking.get("type") == "disabled")
+            or (
+                isinstance(chat_template_kwargs, dict)
+                and chat_template_kwargs.get("enable_thinking") is False
+            )
         )
         cot_mode = "disabled"
         if requested_enable_thinking:
@@ -650,6 +851,9 @@ class SichuanQCLLMClient:
 
     def _resolve_max_tokens(self, prompt: str) -> int:
         max_tokens = int(self.max_tokens or self.DEFAULT_MAX_TOKENS)
+        if max_tokens <= 0:
+            raise ValueError("max_tokens must be a positive integer")
+        max_tokens = min(max_tokens, self.MAX_TOKENS_HARD_CAP)
         if not self._is_thinking_model():
             return max_tokens
 

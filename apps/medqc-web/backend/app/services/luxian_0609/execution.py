@@ -18,6 +18,10 @@ from .customer_rule_package import (
 )
 from .input_builder import build_luxian_0609_input_profile
 from .llm_prompt_privacy import wrap_luxian_0609_llm_client
+from ..llm_execution_concurrency import (
+    LLMExecutionConcurrency,
+    capture_llm_execution_concurrency,
+)
 from .privacy_identity_context import build_luxian_0609_identity_provider
 from .privacy_request_scope import bind_luxian_0609_identity_provider
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
@@ -252,6 +256,7 @@ async def prepare_luxian_0609_execution(
     evidence_payload: dict[str, Any] | None,
     llm_client: Any,
     settings: Any,
+    execution_concurrency: LLMExecutionConcurrency | None = None,
     source_gate_decisions: Mapping[str, Luxian0609GateDecision] | None = None,
     institute_id: str = "",
     patient_id: str = "",
@@ -276,6 +281,14 @@ async def prepare_luxian_0609_execution(
             prepared_rule_count=len(prepared_rules),
             executable_rule_count=len(prepared_rules),
         )
+    # 必须在隐私/角色包装前冻结；包装对象有意不承载调度策略。
+    frozen_execution_concurrency = (
+        execution_concurrency
+        if execution_concurrency is not None
+        else capture_llm_execution_concurrency(llm_client, settings=settings)
+    )
+    if not isinstance(frozen_execution_concurrency, LLMExecutionConcurrency):
+        raise TypeError("execution_concurrency must be LLMExecutionConcurrency")
     capture_execution_context(
         medical_text=medical_text, evidence_payload=evidence_payload, prepared_rules=prepared_rules,
         settings=settings, source_schema=source_schema,
@@ -547,11 +560,7 @@ async def prepare_luxian_0609_execution(
                 ),
                 default_deadline_seconds=300.0,
                 max_concurrency=int(
-                    getattr(
-                        llm_client,
-                        "family_max_concurrency",
-                        settings.LUXIAN_0609_FAMILY_MAX_CONCURRENCY,
-                    )
+                    frozen_execution_concurrency.family_max_concurrency
                 ),
                 trace_sink=trace_sink,
                 **({"outcome_sink": publish_family} if sink is not None else {}),
