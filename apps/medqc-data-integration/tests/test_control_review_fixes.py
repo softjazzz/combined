@@ -228,7 +228,10 @@ def test_application_merge_validates_both_parents_and_physical_columns(schema):
 
     root = Path(__file__).resolve().parents[2] / "medqc-web/backend/alembic"
     script = ScriptDirectory(str(root))
-    assert script.get_heads() == ["20261102_000060"]
+    assert script.get_heads() == ["20261102_000062"]
+    assert set(script.get_revision("20261102_000062").down_revision) == {
+        "20261102_000060", "20261102_000061"
+    }
     ancestors = {r.revision for r in script.walk_revisions()}
     assert {"20261101_000058", "20261030_000057"} <= ancestors
     spec = importlib.util.spec_from_file_location(
