@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import os
 from contextlib import suppress
+from app.core.settings import get_settings
+from app.services.qc_dispatch.status import report_service_status
 
 from app.services.qc_dispatch.config import RabbitMQSettings
 from app.services.qc_dispatch.publisher import (
@@ -34,11 +36,17 @@ async def run_publisher() -> None:
         ).run(stop),
         name="qc-outbox-capacity",
     )
+    status_task = asyncio.create_task(report_service_status(
+        get_settings(), role="publisher", broker=rabbitmq_settings,
+        is_ready=lambda: transport.connected and not monitor_task.done(),
+    ), name="qc-publisher-status")
     try:
         publisher = OutboxPublisher(repository, transport, publisher_settings)
         await publisher.run_forever(stop)
     finally:
         stop.set()
+        status_task.cancel()
+        await asyncio.gather(status_task, return_exceptions=True)
         monitor_task.cancel()
         with suppress(asyncio.CancelledError):
             await monitor_task

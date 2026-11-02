@@ -43,6 +43,7 @@ from .routers import department_qc_rules as department_qc_rules_router
 from .routers import demo as demo_router
 from .routers import frontpage as frontpage_router
 from .routers import frontpage_settings as frontpage_settings_router
+from .routers import qc_runtime_settings as qc_runtime_settings_router
 from .routers import drg as drg_router
 from .routers import smart_upload as smart_upload_router
 from .routers import dip as dip_router
@@ -302,6 +303,7 @@ def create_app() -> FastAPI:
     app.include_router(frontpage_router.router)
     # Front page extraction settings
     app.include_router(frontpage_settings_router.router)
+    app.include_router(qc_runtime_settings_router.router)
     # DRG/DIP demo APIs (to support DRG pages in web)
     app.include_router(case_front_page_router.router)
     app.include_router(drg_router.router)

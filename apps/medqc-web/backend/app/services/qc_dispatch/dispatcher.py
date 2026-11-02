@@ -10,6 +10,7 @@ from typing import Any, Literal, Mapping
 
 from ...core.settings import Settings, get_settings
 from .contracts import qc_dispatch_mode_from_filters
+from .control import DispatchControlError, effective_dispatch_mode
 
 
 QCDispatchMode = Literal["legacy", "rabbitmq"]
@@ -25,6 +26,7 @@ def assert_new_qc_task_dispatch_ready(
     family_parent: bool = False,
     task_runtime_snapshot: Mapping[str, Any] | None = None,
     settings: Settings | Any | None = None,
+    resolved_mode: QCDispatchMode | None = None,
 ) -> QCDispatchMode:
     """校验新任务的入口配置并返回将持久化的调度模式。
 
@@ -36,11 +38,10 @@ def assert_new_qc_task_dispatch_ready(
         return "legacy"
 
     effective_settings = settings or get_settings()
-    mode = (
-        str(getattr(effective_settings, "QC_TASK_DISPATCH_MODE", "legacy") or "")
-        .strip()
-        .lower()
-    )
+    try:
+        mode = resolved_mode if resolved_mode is not None else effective_dispatch_mode(effective_settings)
+    except DispatchControlError as exc:
+        raise QCDispatchEntrypointError(str(exc)) from None
     if mode not in {"legacy", "rabbitmq"}:
         raise QCDispatchEntrypointError("质控任务调度模式无效")
     if mode == "legacy":

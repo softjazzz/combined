@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 from types import ModuleType
+from tempfile import TemporaryDirectory
 
 import pytest
 from sqlalchemy import create_engine
@@ -129,6 +130,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_qc_dispatch_entrypoints.py",
     ),
     "m2-release": (
+        "tests/unit/test_qc_runtime_settings.py",
         "tests/unit/test_qc_partial_failure_persistence.py",
         "tests/unit/test_qc_sichuan_batch_throughput.py::test_formal_customer_sample_model_failure_automatically_retries_failed_rule",
         "tests/unit/test_qc_sichuan_batch_throughput.py::test_partial_failed_retry_executes_only_failed_pairs_and_merges_to_completed",
@@ -264,7 +266,9 @@ def main(argv: list[str] | None = None) -> int:
     selected = _selected_tests(args)
     with OfflineIsolation(
         allow_reviewed_restart_probe=args.allow_reviewed_restart_probe
-    ):
+    ), TemporaryDirectory(prefix='medqc-qc-dispatch-test-') as control_dir:
+        # 后台运行开关及服务心跳始终使用一次性目录，不能继承部署中的模式文件。
+        os.environ['QC_DISPATCH_STATE_DIR'] = control_dir
         os.environ["MEDQC_QC_SCHEDULER_TEST_PROFILE"] = args.profile
         if args.profile == "m2-synthetic":
             os.environ["MEDQC_QC_SCHEDULER_M2_SYNTHETIC"] = "1"

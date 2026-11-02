@@ -38,6 +38,9 @@ from .qc_dispatch.contracts import (
     qc_dispatch_mode_from_filters,
 )
 from .qc_dispatch.repository import QCDispatchRepository
+from .qc_dispatch.control import DispatchControlError, effective_dispatch_mode
+from .qc_dispatch.dispatcher import QCDispatchEntrypointError, assert_new_qc_task_dispatch_ready
+from .luxian_0609.rule_decision_settings import LX0609_TASK_RUNTIME_FILTER_KEY
 
 from .document_domain_alignment import (
     align_document_domain_fields,
@@ -3135,14 +3138,19 @@ class CustomQCWorkspaceService:
             if DISPATCH_FILTER_KEY in base_filters:
                 raise ValueError("qc_dispatch 由任务服务冻结，调用方不得注入")
             formal_0609 = base_filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
-            dispatch_mode = (
-                str(getattr(get_settings(), "QC_TASK_DISPATCH_MODE", "legacy")).strip().lower()
-                if formal_0609
-                else "legacy"
-            )
-            if dispatch_mode not in {"legacy", "rabbitmq"}:
-                raise ValueError("QC_TASK_DISPATCH_MODE 配置无效")
+            settings = get_settings()
+            try:
+                dispatch_mode = effective_dispatch_mode(settings) if formal_0609 else "legacy"
+            except DispatchControlError as exc:
+                raise QCDispatchEntrypointError(str(exc)) from None
             if dispatch_mode == "rabbitmq":
+                # 创建阶段重新读取开关并验证实际模型身份，防止入口检查后热切换漏校验。
+                assert_new_qc_task_dispatch_ready(
+                    eligible_for_rabbitmq=True,
+                    family_parent=normalized_job_kind == "parent",
+                    task_runtime_snapshot=base_filters.get(LX0609_TASK_RUNTIME_FILTER_KEY),
+                    settings=settings, resolved_mode=dispatch_mode,
+                )
                 # 必须在业务任务 insert 前确认迁移完整；不能先创建任务再补 Outbox。
                 self._qc_dispatch.assert_ready(session)
             normalized_record_refs = (

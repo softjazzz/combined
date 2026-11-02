@@ -115,12 +115,33 @@ function mountPage() {
         LLMApiConfig: { template: '<div />' },
         LlmPerformanceObservabilityPanel: { template: '<div />' },
         AccountManagementPanel: { template: '<div data-testid="real-accounts-panel" />' },
+        QcRuntimeSettingsPanel: { template: '<div data-testid="qc-runtime-panel" />' },
       },
     },
   })
 }
 
 describe('DataSyncConfigPage visit progress', () => {
+  it('系统管理员可直接进入质控运行设置', async () => {
+    mockUserRoles = ['sync_admin']
+    mockRoute.query = { tab: 'qcRuntime' }
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="qc-runtime-tab"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="qc-runtime-panel"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('演示账号不能通过链接进入质控运行设置', async () => {
+    mockUserRoles = ['admin']
+    mockAuthStore.user.is_demo_account = true
+    mockRoute.query = { tab: 'qcRuntime' }
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="qc-runtime-tab"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="qc-runtime-panel"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('管理员可在V5系统配置进入真实账号管理，不跳旧版页面', async () => {
     mockUserRoles = ['admin']
     mockRoute.query = { tab: 'accounts' }
