@@ -19,6 +19,7 @@ from ..services.llm_config_loader import (
     QC_USE_SELECTED_MODEL_KEY,
 )
 from ..services.qc_llm_client import SichuanQCLLMClient
+from ..services.llm_task_roles import TASK_ROLES_KEY, normalize_task_roles, build_task_role_runtimes
 from ..services.llm_dispatch.provider_profiles import ProviderConfigurationError
 from ..services.llm_observability import llm_observation_context
 from ..services.llm_execution_concurrency import (
@@ -280,6 +281,13 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
             model_code = model_code or str(runtime["model"])
         except ProviderConfigurationError as exc:
             raise HTTPException(status_code=422, detail="llm_configuration_unavailable") from exc
+    try:
+        if TASK_ROLES_KEY in custom_parameters:
+            custom_parameters[TASK_ROLES_KEY] = normalize_task_roles(custom_parameters[TASK_ROLES_KEY])
+        build_task_role_runtimes(runtime)
+        build_task_role_runtimes(build_adjudicator_runtime_config(runtime))
+    except ProviderConfigurationError as exc:
+        raise HTTPException(status_code=422, detail="llm_task_role_configuration_unavailable") from exc
     supabase = get_supabase()
     cfg_name = payload.get("config_name") or "custom"
 
@@ -511,6 +519,7 @@ async def get_default_summary(
                 "enable_thinking": bool(custom_params.get("enable_thinking", False)),
                 "thinking_budget": custom_params.get("thinking_budget"),
                 "reasoning_effort": str(custom_params.get("reasoning_effort") or ""),
+                TASK_ROLES_KEY: normalize_task_roles(custom_params.get(TASK_ROLES_KEY)),
             },
             "execution_concurrency": execution_concurrency.as_dict(),
             "source": source,

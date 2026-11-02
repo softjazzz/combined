@@ -16,6 +16,7 @@ v4 让模型选择本份病程和本次报告的原文片段编号，不再自�
 from __future__ import annotations
 
 import asyncio
+from ..llm_task_roles import task_role_call
 from dataclasses import dataclass, field, replace
 import json
 import re
@@ -886,6 +887,7 @@ async def _check_batches(
     return done_jobs, done_results, attempted_results
 
 
+@task_role_call("specialty_verification")
 async def check_exam_finding_analysis(
     projection: ExamLabTextProjection, llm_client: Any,
 ) -> FindingAnalysisOutcome:

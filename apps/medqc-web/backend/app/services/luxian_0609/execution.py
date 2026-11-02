@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from ..llm_task_roles import task_role_call
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -249,6 +250,7 @@ def is_luxian_0609_customer_package_enabled(*, rule_set_key: str, settings: Any)
     )
 
 
+@task_role_call("judgment_analysis")
 async def prepare_luxian_0609_execution(
     *,
     rule_set_key: str,

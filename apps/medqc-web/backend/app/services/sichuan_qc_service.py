@@ -2,6 +2,7 @@ from . import case_material_snapshot as case_material
 
 from typing import Callable, Dict, Any, List, Optional, Tuple
 from dataclasses import replace
+from copy import deepcopy
 import json
 import hashlib
 import logging
@@ -453,6 +454,9 @@ class SichuanQCService:
             "adjudicator_model_source": client.adjudicator_model_source,
             "dispatch_mode": getattr(client, "dispatch_mode", "direct"),
             "gateway_profile": getattr(client, "gateway_profile", None),
+            "task_role_runtimes": deepcopy(getattr(client, "_task_role_runtimes", {})),
+            "task_role_selections": deepcopy(getattr(client, "task_role_selections", {})),
+            "task_role_identity": deepcopy(getattr(client, "task_role_identity", None)),
             "custom_parameters": {
                 "temperature": client.temperature,
                 "top_p": client.top_p,

@@ -7,6 +7,7 @@ from .exam_token_budget import active as token_split_active, exam_recovery_execu
 
 import asyncio
 
+from ..llm_task_roles import task_role_call
 from collections import Counter
 from dataclasses import dataclass, field as dataclass_field, replace
 from datetime import datetime, timedelta
@@ -1326,6 +1327,7 @@ def _exam_lab_retry_hint(
     return hint
 
 
+@task_role_call("fact_extraction")
 async def _generate_exam_lab_fact_response(
     *,
     llm_client: ExamLabLLMClient,
@@ -2193,6 +2195,7 @@ def _save_frozen_exam_lab_batch(key: str, result: _ExamLabBatchResult) -> None:
     })
 
 
+@task_role_call("judgment_analysis")
 async def _extract_exam_lab_batch(
     *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
 ) -> _ExamLabBatchResult:
@@ -2653,6 +2656,7 @@ async def _extract_exam_lab_batches_legacy(
     ), requested_rule_count
 
 
+@task_role_call("judgment_analysis")
 @budget_guarded_executor
 @exam_recovery_executor
 async def execute_luxian_0609_native_exam_lab_rules(

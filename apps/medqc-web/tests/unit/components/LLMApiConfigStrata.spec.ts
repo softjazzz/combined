@@ -88,6 +88,65 @@ beforeEach(() => {
 })
 
 describe('后台云端与Strata选择', () => {
+  it('用途默认继承，单独选型进入保存载荷且不测试模型', async () => {
+    const wrapper = await render()
+    expect(wrapper.findAll('[data-testid^="task-role-provider-"]').length).toBe(3)
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="task-role-provider-fact_extraction"]').element.value).toBe('inherit')
+    await wrapper.get<HTMLSelectElement>('[data-testid="task-role-provider-fact_extraction"]').setValue('alibaba')
+    await flushPromises()
+    await wrapper.get<HTMLSelectElement>('[data-testid="task-role-model-fact_extraction"]').setValue('cloud-model')
+    await flushPromises()
+    await wrapper.findAll('button').find((item) => item.text() === '保存配置')?.trigger('click')
+    await flushPromises()
+    expect(service.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ custom_parameters: expect.objectContaining({
+      task_role_models: { fact_extraction: { provider_code: 'alibaba', model_code: 'cloud-model' },
+        judgment_analysis: null, specialty_verification: null },
+    }) }))
+    expect(service.testConfig).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('已有用途回显，重新继承后保存null', async () => {
+    service.getDefaultSummary.mockResolvedValue({ provider_code: 'alibaba', model_code: 'cloud-model',
+      custom_parameters: { task_role_models: { fact_extraction: null, judgment_analysis: null,
+        specialty_verification: { provider_code: 'strata', model_code: 'Local/OtherModel' } } },
+      readonly: false, source: 'database+env' })
+    const wrapper = await render()
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="task-role-model-specialty_verification"]').element.value).toBe('Local/OtherModel')
+    await wrapper.get<HTMLSelectElement>('[data-testid="task-role-provider-specialty_verification"]').setValue('inherit')
+    await flushPromises()
+    await wrapper.findAll('button').find((item) => item.text() === '保存配置')?.trigger('click')
+    await flushPromises()
+    expect(service.saveConfig.mock.calls[0][0].custom_parameters.task_role_models.specialty_verification).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('用途未选模型不能保存，目录失败不修改其他用途', async () => {
+    const wrapper = await render()
+    service.getModelsByProvider.mockRejectedValueOnce(new Error('synthetic'))
+    await wrapper.get<HTMLSelectElement>('[data-testid="task-role-provider-fact_extraction"]').setValue('alibaba')
+    await flushPromises()
+    expect(wrapper.text()).toContain('模型目录读取失败')
+    expect(wrapper.findAll('button').find((item) => item.text() === '保存配置')?.element.disabled).toBe(true)
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="task-role-provider-judgment_analysis"]').element.value).toBe('inherit')
+    expect(service.saveConfig).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('用途目录迟到响应不改变已选本地模型', async () => {
+    const wrapper = await render()
+    let finish: ((items: Array<{ model_code: string; model_name: string }>) => void) | undefined
+    service.getModelsByProvider.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    await wrapper.get<HTMLSelectElement>('[data-testid="task-role-provider-fact_extraction"]').setValue('alibaba')
+    await wrapper.get<HTMLSelectElement>('[data-testid="task-role-provider-fact_extraction"]').setValue('strata')
+    await flushPromises()
+    await wrapper.get<HTMLSelectElement>('[data-testid="task-role-model-fact_extraction"]').setValue('Local/OtherModel')
+    finish?.([{ model_code: 'late-cloud', model_name: 'Late Cloud' }])
+    await flushPromises()
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="task-role-model-fact_extraction"]').element.value).toBe('Local/OtherModel')
+    wrapper.unmount()
+  })
+
   it('保留百炼/Ollama并显示Strata部署模型和本地提示', async () => {
     const wrapper = await render()
     expect(wrapper.findAll('select')[0].text()).toContain('阿里云百炼')

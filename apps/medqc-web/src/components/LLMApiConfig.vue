@@ -69,7 +69,7 @@
           <div class="ds-card__body ds-divide">
             <div class="ds-group">
               <div class="ds-group__title">
-                推理服务与模型
+                默认推理服务与模型
               </div>
 
               <div class="ds-row">
@@ -120,7 +120,7 @@
               <div class="ds-row">
                 <div class="ds-row__left">
                   <div class="ds-row__label">
-                    模型
+                    默认模型
                   </div>
                   <div class="ds-row__hint">
                     内置模型不可删除，自定义模型支持增删。
@@ -214,6 +214,20 @@
                 </div>
               </div>
             </div>
+
+            <LLMTaskRoleSettings
+              v-model:value="taskRoles"
+              :providers="providers"
+              :local-providers="localProviders"
+              :default-provider="draft.provider_code"
+              :disabled="isReadonly || loading || saving"
+            />
+            <a-alert
+              v-if="rolesIncomplete"
+              type="warning"
+              show-icon
+              message="请补齐角色模型选择，并确认本地部署配置已就绪。"
+            />
 
             <div class="ds-group">
               <div class="ds-group__title">
@@ -443,7 +457,9 @@ import {
   type LLMModel,
   type LLMProvider,
   type LLMLocalProvider,
+  type LLMTaskRoleModels,
 } from '@/services/llmConfigService'
+import LLMTaskRoleSettings from './LLMTaskRoleSettings.vue'
 import { authFetch } from '@/utils/auth-fetch'
 
 const emit = defineEmits<{
@@ -477,6 +493,21 @@ const serverSnapshot = ref<LLMConfigSummary | null>(null)
 const backendReadonly = ref(false)
 const testResult = ref<{ success: boolean; message: string; description: string } | null>(null)
 
+const inheritedRoles = (): LLMTaskRoleModels => ({ fact_extraction: null, judgment_analysis: null, specialty_verification: null })
+const cloneRoles = (value: LLMTaskRoleModels = inheritedRoles()): LLMTaskRoleModels => ({
+  fact_extraction: value.fact_extraction ? { ...value.fact_extraction } : null,
+  judgment_analysis: value.judgment_analysis ? { ...value.judgment_analysis } : null,
+  specialty_verification: value.specialty_verification ? { ...value.specialty_verification } : null,
+})
+const taskRoles = ref<LLMTaskRoleModels>(inheritedRoles())
+const rolesIncomplete = computed(() => Object.values(taskRoles.value).some((spec) => {
+  if (!spec) return false
+  if (!spec.provider_code || !spec.model_code) return true
+  if (isLocalProvider(draft.provider_code) && !isLocalProvider(spec.provider_code)) return true
+  if (!isLocalProvider(spec.provider_code)) return false
+  return localProviders.value.find((item) => item.provider_code === spec.provider_code)?.models
+    .find((item) => item.model_code === spec.model_code)?.configuration_ready !== true
+}))
 const draft = reactive({
   provider_code: '',
   model_code: '',
@@ -508,11 +539,12 @@ const localSelectionDescription = computed(() => {
   if (selectionUnavailable.value) return `所选模型的 API 地址或运行配置尚未齐备，请联系实施人员。模型名称已保留，当前生效配置不受影响。${failureNote}`
   return `可选择并保存此本地模型；API 地址和密钥沿用部署配置。连接状态尚未验证，测试连接会实际请求模型服务。${failureNote}`
 })
-const canTest = computed(() => !isReadonly.value && !loading.value && !saving.value && !addingModel.value && !deletingModelCode.value && !loadingModels.value && !selectionUnavailable.value && Boolean(draft.provider_code && draft.model_code))
+const canTest = computed(() => !isReadonly.value && !loading.value && !saving.value && !addingModel.value && !deletingModelCode.value && !loadingModels.value && !selectionUnavailable.value && !rolesIncomplete.value && Boolean(draft.provider_code && draft.model_code))
 const dirty = computed(() => {
   const snap = serverSnapshot.value
   if (!snap) return false
   return (
+    JSON.stringify(taskRoles.value) !== JSON.stringify(snap.custom_parameters?.task_role_models || inheritedRoles()) ||
     draft.provider_code !== snap.provider_code ||
     draft.model_code !== snap.model_code ||
     Number(draft.temperature) !== Number(snap.custom_parameters?.temperature ?? 0.2) ||
@@ -528,6 +560,7 @@ const dirty = computed(() => {
 })
 
 function patchDraftFromSummary(summary: LLMConfigSummary) {
+  taskRoles.value = cloneRoles(summary.custom_parameters?.task_role_models)
   draft.provider_code = summary.provider_code
   inferenceMode.value = isLocalProvider(summary.provider_code) ? 'local' : 'cloud'
   draft.model_code = summary.model_code
@@ -542,6 +575,7 @@ function patchDraftFromSummary(summary: LLMConfigSummary) {
 function buildCustomParameters() {
   return {
     ...(serverSnapshot.value?.custom_parameters || {}),
+    task_role_models: cloneRoles(taskRoles.value),
     temperature: Number(draft.temperature),
     top_p: Number(draft.top_p),
     max_tokens: Number(draft.max_tokens),

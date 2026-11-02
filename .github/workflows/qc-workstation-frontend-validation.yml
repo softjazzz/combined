@@ -5,6 +5,7 @@ on:
     branches: [codex/business-agent-integration]
     paths:
       - 'apps/medqc-web/src/components/LLMApiConfig.vue'
+      - 'apps/medqc-web/src/components/LLMTaskRoleSettings.vue'
       - 'apps/medqc-web/src/services/llmConfigService.ts'
       - 'apps/medqc-web/src/utils/systemConfigAccess.ts'
       - 'apps/medqc-web/src/views/workstation-v4/DataSyncConfigPage.vue'
@@ -68,6 +69,7 @@ on:
     branches: ['codex/**']
     paths:
       - 'apps/medqc-web/src/components/LLMApiConfig.vue'
+      - 'apps/medqc-web/src/components/LLMTaskRoleSettings.vue'
       - 'apps/medqc-web/src/services/llmConfigService.ts'
       - 'apps/medqc-web/src/utils/systemConfigAccess.ts'
       - 'apps/medqc-web/src/views/workstation-v4/DataSyncConfigPage.vue'
@@ -166,7 +168,7 @@ jobs:
       - name: Local model settings and navigation compatibility (isolated)
         run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" --require ./scripts/frontpage-v2-no-network.cjs node_modules/vitest/vitest.mjs run tests/unit/components/LLMApiConfigStrata.spec.ts tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts tests/unit/router/workstation-report-adaptation.spec.ts --maxWorkers=1 --minWorkers=1
       - name: Read-only local model settings lint
-        run: node node_modules/eslint/bin/eslint.js src/components/LLMApiConfig.vue src/services/llmConfigService.ts --no-fix --max-warnings 0
+        run: node node_modules/eslint/bin/eslint.js src/components/LLMApiConfig.vue src/components/LLMTaskRoleSettings.vue src/services/llmConfigService.ts --no-fix --max-warnings 0
       - name: Page initialization and silent source departments (isolated)
         # 保留OS网络隔离，并叠加固定应答入口的HTTP/socket阻断。
         run: >-

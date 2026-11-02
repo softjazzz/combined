@@ -77,3 +77,6 @@ jobs:
           tests/unit/test_sync_router.py::TestSyncRouter::test_departments_value_error_maps_422
           tests/unit/test_sync_router.py::TestSyncRouter::test_read_permission_matrix
           tests/unit/test_sync_router.py::TestSyncRouter::test_write_permission_matrix
+
+      - name: Task role selection, effective requests and freeze partition (offline)
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_llm_task_roles.py
