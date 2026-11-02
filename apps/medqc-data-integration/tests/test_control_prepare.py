@@ -398,15 +398,33 @@ def test_acl_failure_stops_before_database_role_or_schema_mutation(tmp_path: Pat
     state["major"] = 16
     with (
         fake_pg(state),
+        # 只替换工具模块的平台边界，不改全局os/pathlib；Linux也必须真正走到ACL失败。
+        patch.object(tool, "os", SimpleNamespace(name="nt", environ=tool.os.environ)),
         patch.object(tool, "check_acl"),
         patch.object(tool, "protect", side_effect=ControlError("acl_failed", "fictional_acl")),
-        pytest.raises(ControlError),
+        pytest.raises(ControlError) as caught,
     ):
         tool.prepare(args)
+    assert caught.value.location == "fictional_acl"
     assert args.output.exists()  # 空现场保留，不自动删除。
     assert not any(
         "CREATE ROLE" in text or "CREATE DATABASE" in text for text, _ in state["statements"]
     )
+
+
+def test_customer_prepare_rejects_posix_before_any_database_or_output(tmp_path: Path) -> None:
+    args, state = args_for(tmp_path), state_for()
+    args.synthetic = False
+    args.pg_major = 16
+    with (
+        fake_pg(state),
+        patch.object(tool, "os", SimpleNamespace(name="posix", environ=tool.os.environ)),
+        pytest.raises(ControlError) as caught,
+    ):
+        tool.prepare(args)
+    assert caught.value.location == "prepare_customer_platform"
+    assert not args.output.exists()
+    assert not state["connections"]
 
 
 def test_cli_failure_never_echoes_driver_secret_message(tmp_path: Path) -> None:
