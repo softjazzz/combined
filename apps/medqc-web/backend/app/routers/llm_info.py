@@ -9,13 +9,17 @@ from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
 from ..core.security import require_roles
-from ..services.llm_config_loader import get_enabled_provider_codes, SUPPORTED_PROVIDER_CODES
+from ..services.llm_config_loader import (
+    get_enabled_provider_codes, SUPPORTED_PROVIDER_CODES, build_local_model_runtime_config,
+)
+from ..services.llm_dispatch.provider_profiles import ProviderConfigurationError
 from ..core.settings import get_settings
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-info"])
 
 _SYSTEM_CONFIG_ROLES = ("admin", "sync_admin", "super_admin")
 SUPPORTED_PROVIDERS = SUPPORTED_PROVIDER_CODES
+LOCAL_CATALOG_PROVIDERS = {"strata": "本地 Strata", "ollama": "本地 Ollama"}
 CUSTOM_MODELS_FILE = Path(__file__).resolve().parents[2] / "data" / "llm_custom_models.json"
 
 
@@ -169,6 +173,40 @@ async def models(request: Request, provider_id: str | None = Query(default=None)
     )
 
 
+@router.get("/local-options")
+async def local_model_options(
+    request: Request,
+    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+):
+    """管理端本地目录含未配置服务；目录维护不等于启用推理。"""
+    del admin_user
+    enabled = set(get_enabled_provider_codes())
+    base = _base_models()
+    custom = _load_custom_models()
+    providers = []
+    for code, name in LOCAL_CATALOG_PROVIDERS.items():
+        items = {row["model_code"]: dict(row) for row in base if row["provider"] == code}
+        for row in custom.get(code, []):
+            items.setdefault(row["model_code"], dict(row))
+        for row in items.values():
+            reason = ""
+            if code not in enabled:
+                reason = "provider_not_enabled"
+            else:
+                try:
+                    build_local_model_runtime_config(code, row["model_code"])
+                except ProviderConfigurationError:
+                    reason = "model_configuration_incomplete"
+            row.update(configuration_ready=not reason, unavailable_reason=reason)
+        providers.append({
+            "provider_code": code, "provider_name": name,
+            "enabled": code in enabled, "models": list(items.values()),
+        })
+    return success_response(
+        data=providers, message="获取本地模型选项成功", trace_id=get_trace_id(request),
+    )
+
+
 @router.post("/models/custom")
 async def add_custom_model(
     request: Request,
@@ -179,7 +217,8 @@ async def add_custom_model(
     provider_code = _normalize_provider_code(payload.provider_code)
     if provider_code not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=400, detail=f"不支持的 provider_code: {provider_code}")
-    if provider_code not in set(get_enabled_provider_codes()):
+    if (provider_code not in set(get_enabled_provider_codes())
+            and provider_code not in LOCAL_CATALOG_PROVIDERS):
         raise HTTPException(status_code=400, detail=f"当前环境未启用 provider: {provider_code}")
 
     model_code = str(payload.model_code or "").strip()

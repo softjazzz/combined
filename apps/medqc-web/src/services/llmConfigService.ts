@@ -47,6 +47,18 @@ export interface LLMModel {
   is_custom?: boolean
 }
 
+export interface LLMLocalModel extends LLMModel {
+  configuration_ready: boolean
+  unavailable_reason: '' | 'provider_not_enabled' | 'model_configuration_incomplete'
+}
+
+export interface LLMLocalProvider {
+  provider_code: string
+  provider_name: string
+  enabled: boolean
+  models: LLMLocalModel[]
+}
+
 export interface UserLLMConfig {
   id: string
   user_id: string | null
@@ -188,6 +200,11 @@ class LLMConfigService {
       console.error('获取LLM模型失败:', error)
       throw new Error(`获取LLM模型失败: ${error instanceof Error ? error.message : String(error)}`)
     }
+  }
+
+  async getLocalModelOptions(): Promise<LLMLocalProvider[]> {
+    const response = await apiClient.get(`${LLM_API_PREFIX}/local-options`)
+    return response.data?.data || []
   }
 
   async getDefaultSummary(): Promise<LLMConfigSummary> {

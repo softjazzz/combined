@@ -13,6 +13,7 @@ from ..services.llm_config_loader import (
     LLMConfigLoader,
     build_provider_runtime_config,
     build_adjudicator_runtime_config,
+    build_local_model_runtime_config,
     get_default_provider_code,
     get_enabled_provider_codes,
     QC_USE_SELECTED_MODEL_KEY,
@@ -96,7 +97,11 @@ def _resolve_provider(provider_code: str) -> Dict[str, Any]:
     }
 
 
-def _resolve_model(model_code: str) -> Dict[str, Any]:
+def _resolve_model(model_code: str, provider_code: str = "") -> Dict[str, Any]:
+    if provider_code in {"strata", "ollama"}:
+        # 本地API的模型ID区分大小写，不套用云端别名目录。
+        name = str(model_code or "").strip()
+        return {"id": name, "model_code": name, "model_name": name, "description": ""}
     code = (model_code or "").lower()
     if code == "qwen3.6-35b-a3b":
         return {
@@ -201,12 +206,7 @@ def _extract_provider_and_model_codes(payload: Dict[str, Any]) -> tuple[str, str
 def _validate_strata_selection(model_code: str, custom_parameters=None) -> Dict[str, Any]:
     """后台本地选项必须使用统一准入，不把40个HTTP槽当成本地容量。"""
     try:
-        runtime = build_provider_runtime_config("strata", model_code=model_code or None,
-                                                custom_parameters=custom_parameters)
-        if runtime.get("dispatch_mode") != "gateway":
-            raise ProviderConfigurationError("strata_requires_gateway")
-        build_adjudicator_runtime_config(runtime)
-        return runtime
+        return build_local_model_runtime_config("strata", model_code, custom_parameters)
     except ProviderConfigurationError as exc:
         raise HTTPException(status_code=422, detail="strata_configuration_unavailable") from exc
 
@@ -227,7 +227,7 @@ def _normalize_config_row(row: Dict[str, Any]) -> Dict[str, Any]:
     provider_code = str(row.get("provider_code") or row.get("provider_id") or "").strip().lower()
     model_code = str(row.get("model_code") or row.get("model_id") or "").strip()
     row["provider"] = _resolve_provider(provider_code)
-    row["model"] = _resolve_model(model_code)
+    row["model"] = _resolve_model(model_code, provider_code)
     row["provider_code"] = row["provider"]["provider_code"]
     row["model_code"] = row["model"]["model_code"]
     return row
@@ -302,7 +302,7 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
     custom_parameters[EXECUTION_CONCURRENCY_KEY] = execution_concurrency.as_dict()
 
     provider = _resolve_provider(provider_code)
-    model = _resolve_model(model_code)
+    model = _resolve_model(model_code, provider_code)
     now = _now_iso()
 
     def _save_in_memory() -> Dict[str, Any]:

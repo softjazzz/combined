@@ -239,6 +239,27 @@ def build_adjudicator_runtime_config(
     return runtime
 
 
+def build_local_model_runtime_config(
+    provider_code: str, model_code: str, custom_parameters=None,
+) -> Dict[str, Any]:
+    """本地选型共用的配置校验；不连接模型、不改变服务商启用状态。"""
+    if provider_code not in {"strata", "ollama"}:
+        raise ProviderConfigurationError("unsupported local provider")
+    runtime = build_provider_runtime_config(
+        provider_code, model_code=model_code, custom_parameters=custom_parameters,
+    )
+    if not runtime.get("api_endpoint") or not runtime.get("model"):
+        raise ProviderConfigurationError("local provider configuration incomplete")
+    if provider_code == "strata":
+        settings = get_settings()
+        if runtime.get("dispatch_mode") != "gateway":
+            raise ProviderConfigurationError("strata_requires_gateway")
+        if not settings.LLM_GATEWAY_URL or not settings.LLM_GATEWAY_TOKEN:
+            raise ProviderConfigurationError("local gateway configuration incomplete")
+    build_adjudicator_runtime_config(runtime)
+    return runtime
+
+
 class LLMConfigLoader:
     """LLM 配置加载器，支持数据库配置 + env 注入敏感参数。"""
 
