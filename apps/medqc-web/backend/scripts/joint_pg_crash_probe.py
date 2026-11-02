@@ -38,6 +38,7 @@ def main():
         passfile.write_text(
             "127.0.0.1:62997:*:medqc_job_worker:synthetic-unused\n", encoding="utf-8"
         )
+        passfile.chmod(0o600)
         settings = PassfilePostgresSettings(
             "127.0.0.1", 62997, args.database, "medqc_job_worker", passfile
         )

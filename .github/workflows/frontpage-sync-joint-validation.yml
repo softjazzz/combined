@@ -1,0 +1,81 @@
+name: Frontpage V2 and Sync Joint Validation
+
+on:
+  pull_request:
+    branches: [codex/business-agent-integration]
+    paths:
+      - 'apps/medqc-data-integration/**'
+      - 'apps/medqc-web/backend/app/services/frontpage_qc_v2/**'
+      - 'apps/medqc-web/backend/app/routers/frontpage_qc_v2.py'
+      - 'apps/medqc-web/backend/alembic/**'
+      - 'apps/medqc-web/backend/tests/unit/test_frontpage_qc_v2_*'
+      - 'apps/medqc-web/backend/tests/integration/*joint_pg*'
+      - 'apps/medqc-web/backend/scripts/*frontpage*'
+      - 'apps/medqc-web/backend/scripts/joint_pg_crash_probe.py'
+      - '.github/workflows/frontpage-sync-joint-validation.yml'
+  push:
+    branches: ['codex/frontpage-sync-joint-*']
+    paths:
+      - 'apps/medqc-data-integration/**'
+      - 'apps/medqc-web/backend/**'
+      - '.github/workflows/frontpage-sync-joint-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  DATABASE_URL: ''
+  REMOTE_DB_URL: ''
+  MEDQC_ALLOW_REAL_LLM: '0'
+
+jobs:
+  frontpage-backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install application test dependencies
+        run: python -m pip install -r apps/medqc-web/backend/requirements.txt
+      - name: Frontpage owner, scoring, persistence and complete migration graph
+        working-directory: apps/medqc-web/backend
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_frontpage_v2_tests.py
+
+  sync-control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install declared control dependencies in independent job
+        run: python -m pip install -e 'apps/medqc-data-integration[control,dev]' SQLAlchemy==2.0.23 alembic==1.13.1 python-dotenv pydantic-settings httpx==0.28.1
+      - name: Binding, durable retry, temporal precision, API and migration preconditions
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B apps/medqc-data-integration/tools/run_control_offline_tests.py
+      - name: Cold import in isolated OS namespace
+        working-directory: apps/medqc-data-integration
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -m pytest -q --confcutdir=tests tests/test_control_runtime.py -k clean_cli_bootstrap_import_does_not_read_secrets_or_change_environment
+
+  joint-postgres16:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install application test dependencies
+        run: python -m pip install -r apps/medqc-web/backend/requirements.txt
+      - name: PG16 disposable migrations, scopes, concurrency and crash recovery
+        shell: bash
+        run: |
+          export JOINT_PYTHON="$(command -v python)"
+          sudo --preserve-env=JOINT_PYTHON,GITHUB_WORKSPACE unshare --net bash -euo pipefail <<'ISOLATED'
+          ip link set lo up
+          runuser -u "$SUDO_USER" -- env JOINT_PYTHON="$JOINT_PYTHON" bash "$GITHUB_WORKSPACE/apps/medqc-web/backend/scripts/run_frontpage_sync_pg_ci.sh"
+          ISOLATED
