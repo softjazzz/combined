@@ -265,6 +265,39 @@ def critical_field_audit(environment, contract, outcomes):
     }
 
 
+def contract_field_gaps(contract):
+    def fields(value, name):
+        return [
+            dict(item)
+            if isinstance(item, dict)
+            else {
+                name: item,
+                "reason": "not_in_approved_projection",
+            }
+            for item in (value or [])
+        ]
+
+    rows = []
+    for item in contract["interfaces"]:
+        raw = item.get("raw_only_fields", item.get("raw_only_source_columns"))
+        target = item.get("target_missing_fields", item.get("unmapped_target_columns"))
+        rows.append(
+            {
+                "interface": item["interface"],
+                "raw_only": fields(raw, "source"),
+                "target_unmapped": fields(target, "target"),
+                "interpretation": "unmapped_or_unprovided_is_not_a_clinical_absence",
+            }
+        )
+    return {
+        "report_version": "field-contract-gaps-v2",
+        "population": "static_contract_all_42_interfaces_not_observed_clinical_missing",
+        "interfaces": rows,
+        "target_unmapped_does_not_mean_database_column_missing": True,
+        "production_reader_registration_changed": False,
+    }
+
+
 def coverage(report, contract):
     by_name = {item["interface"]: item for item in report["interfaces"]}
     rows = []
@@ -412,18 +445,7 @@ def main(argv=None):
         )
         write_json(
             args.output / "reports/field-contract-gaps.json",
-            {
-                "interfaces": [
-                    {
-                        "interface": item["interface"],
-                        "raw_only": item.get("raw_only", []),
-                        "target_missing": item.get("target_missing", []),
-                        "interpretation": "unmapped_or_unprovided_is_not_a_clinical_absence",
-                    }
-                    for item in contract["interfaces"]
-                ],
-                "production_reader_registration_changed": False,
-            },
+            contract_field_gaps(contract),
         )
         output = package_reports(args)
         print(

@@ -676,3 +676,38 @@ def test_critical_field_audit_accepts_unknown_source_schema_without_inventing_fi
         [],
     )
     assert result["fields"] == [] and result["values_exported"] is False
+
+
+def test_contract_gap_report_reads_remaining_and_periop_contract_fields():
+    contract = {
+        "interfaces": [
+            {
+                "interface": "web.summary_record",
+                "raw_only_fields": [
+                    {"source": "ward_name", "reason": "no_explicit_target_mapping"}
+                ],
+                "target_missing_fields": [
+                    {"target": "age_month", "reason": "source_column_not_provided"}
+                ],
+            },
+            {
+                "interface": "web.anesthesia_record",
+                "raw_only_source_columns": ["bed_no"],
+                "unmapped_target_columns": ["physician_sign"],
+            },
+        ]
+    }
+    rows = entry.contract_field_gaps(contract)["interfaces"]
+    assert rows[0]["raw_only"] == contract["interfaces"][0]["raw_only_fields"]
+    assert rows[1]["raw_only"][0]["source"] == "bed_no"
+    assert rows[0]["target_unmapped"][0]["target"] == "age_month"
+    assert rows[1]["target_unmapped"][0]["target"] == "physician_sign"
+    assert "target_missing" not in rows[0]
+
+
+def test_combined_contract_gap_report_cannot_silently_report_zero():
+    contract, _ = environment_tool.load_combined_profile()
+    report = entry.contract_field_gaps(contract)
+    assert sum(len(item["raw_only"]) for item in report["interfaces"]) > 0
+    assert sum(len(item["target_unmapped"]) for item in report["interfaces"]) > 0
+    assert report["population"] == "static_contract_all_42_interfaces_not_observed_clinical_missing"
