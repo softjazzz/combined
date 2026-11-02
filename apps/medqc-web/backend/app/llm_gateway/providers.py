@@ -112,6 +112,13 @@ def prepare_provider_payload(profile: ProfileConfig, raw_payload: dict[str, Any]
     _validate_response_format(payload.get("response_format"))
     _validate_thinking(payload)
 
+    if profile.provider_code == "local_openai" and any(
+        key in payload for key in ("strata_prefix", "chat_template_kwargs", "enable_thinking",
+                                   "thinking_budget", "thinking", "reasoning_effort")
+    ):
+        # 首期只接纳通用OpenAI字段，不能猜测本地服务的Thinking扩展。
+        raise InvalidPayloadError()
+
     if profile.provider_code == "strata":
         _map_strata_thinking(payload)
     elif "chat_template_kwargs" in payload:

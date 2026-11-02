@@ -102,6 +102,8 @@ def select_exam_lab_projection_batch(
             else None,
             imaging_events=tuple(selected["exam"]),
             culture_events=tuple(selected["culture"]),
+            comparison_events=(projection.comparison_events if projection.comparison_events is not None
+                               else events_for_family(projection, 'exam')),
             event_course_refs=event_course_refs,
             safe_refs=subset(projection.safe_refs),
             course_texts=subset(projection.course_texts),

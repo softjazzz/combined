@@ -115,6 +115,8 @@ class ExamLabSingleEvent:
     order_names: tuple[str, ...] = ()
     # 客户展示优先使用报告结论/印象/异常征象；这些字段缺失时才退回结果/描述。
     report_result_texts: tuple[str, ...] = ()
+    # 仅作检查引用身份校验，不以检查名称或诊断推断编号。
+    source_exam_ids: tuple[str, ...] = ()
 
     def __repr__(self) -> str:
         return (
@@ -154,6 +156,10 @@ class ExamLabTextProjection:
     course_candidates: Mapping[
         str, tuple[str, datetime | None, datetime | None]
     ] | None = None
+    # 只读比较目录；按事件分批时保留原报告身份，不参与当前待答事件计数。
+    comparison_events: tuple[ExamLabSingleEvent, ...] | None = None
+    # 实验材料外发允许目录；不缩小程序校验/报告独有性比较。None沿用来源授权范围。
+    comparison_context_refs: frozenset[tuple[str, ...]] | None = None
 
     def __repr__(self) -> str:
         return (
@@ -972,6 +978,11 @@ def build_exam_lab_text_projection(
             result_texts=tuple(_clean(row.get(field)) for row in rows
                                for field in result_fields if _clean(row.get(field))),
             report_result_texts=preferred_report_results or fallback_report_results,
+            source_exam_ids=tuple(dict.fromkeys(
+                str(row[key]).strip() for row in rows for key in ('exam_id', 'exam_no')
+                if isinstance(row.get(key), (str, int)) and not isinstance(row.get(key), bool)
+                and str(row[key]).strip()
+            )) if family == 'exam' else (),
             guidance_only=(
                 family == "exam"
                 and not identity_conflict

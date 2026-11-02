@@ -7,7 +7,7 @@ from typing import Any
 
 
 LEGACY_CLOUD_PROVIDER_CODES = frozenset({"alibaba", "deepseek", "siliconflow"})
-LOCAL_PROVIDER_CODES = frozenset({"ollama", "strata"})
+LOCAL_PROVIDER_CODES = frozenset({"ollama", "strata", "local_openai"})
 SUPPORTED_PROVIDER_CODES = tuple(
     sorted(LEGACY_CLOUD_PROVIDER_CODES | LOCAL_PROVIDER_CODES)
 )

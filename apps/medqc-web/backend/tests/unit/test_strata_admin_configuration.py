@@ -65,6 +65,55 @@ def test_catalog_uses_deployed_strata_name_and_keeps_cloud_and_ollama(client, se
     assert "strata.test" not in json.dumps(providers + models)
 
 
+def test_bailian_catalog_includes_35b_without_removing_flash(client, setup):
+    models = client.get('/api/v1/llm/models', params={'provider_id': 'alibaba'}).json()['data']
+    assert sum(m['model_code'] == 'qwen3.6-35b-a3b' for m in models) == 1
+    assert any(m['model_code'] == 'qwen3.8-flash' for m in models)
+    assert all(m['provider'] == 'alibaba' for m in models)
+
+
+@pytest.mark.asyncio
+async def test_saved_35b_selection_reaches_formal_qc_and_can_switch_back(client, setup, monkeypatch, tmp_path):
+    cfg, _ = setup
+    models = ('qwen3.6-35b-a3b', 'qwen3.8-flash')
+    cfg.LLM_GATEWAY_PROFILES['alibaba'] = dict(zip(models, ('alibaba_35b', 'alibaba_flash')))
+    calls = []
+    def fixed(request):
+        body = json.loads(request.content)
+        calls.append(body)
+        return httpx.Response(200, json={'choices': [{'finish_reason': 'stop', 'message': {'content': 'OK'}}],
+                                         'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}})
+    gateway = create_app(GatewaySettings(token=cfg.LLM_GATEWAY_TOKEN,
+        resources={'cloud': ResourceConfig('cloud', 40, 40)},
+        profiles={profile: ProfileConfig(profile, 'cloud', 'alibaba', model,
+            'https://cloud.test/v1/chat/completions', 'test-only')
+            for model, profile in cfg.LLM_GATEWAY_PROFILES['alibaba'].items()},
+        allowed_hosts=('cloud.test',), state_dir=tmp_path, startup_isolation_seconds=0),
+        http_transport=httpx.MockTransport(fixed), enforce_single_instance=False)
+    monkeypatch.setattr(qc_llm_client, 'GatewayDispatchClient',
+        lambda: dispatch.GatewayDispatchClient(transport=httpx.ASGITransport(app=gateway)))
+    initial = qc_llm_client.SichuanQCLLMClient(loader.build_provider_runtime_config('alibaba', model_code=models[1]))
+    service = SimpleNamespace(client=initial, adjudicator_client=initial)
+    try:
+        for model in models:
+            saved = client.post('/api/v1/llm/configs', json=selection('alibaba', model))
+            assert saved.status_code == 200, saved.text
+            assert saved.json()['data']['model']['model_code'] == model
+            assert await loader.LLMConfigLoader.reload_config_for_service(service)
+            assert service.client.model == service.adjudicator_client.model == model
+            assert service.adjudicator_client.adjudicator_model_source == 'backend_selected_model'
+            result = await service.adjudicator_client.generate('合成配置验证', max_completion_tokens=20)
+            assert result['choices'][0]['message']['content'] == 'OK'
+            assert calls[-1]['model'] == model and calls[-1]['enable_thinking'] is False
+            assert loader.QC_USE_SELECTED_MODEL_KEY not in calls[-1]
+            summary = client.get('/api/v1/llm/configs/default/summary').json()['data']
+            assert summary['model_code'] == model
+        assert len(calls) == 2
+        assert cfg.LLM_ADJUDICATOR_MODEL == 'qwen3.8-flash'  # 未改部署环境或默认值。
+    finally:
+        await gateway.state.gateway_runtime.shutdown()
+
+
 @pytest.mark.asyncio
 async def test_admin_save_reload_and_real_gateway_fixed_transport_switch_both_ways(client, setup, monkeypatch, tmp_path):
     cfg, _ = setup

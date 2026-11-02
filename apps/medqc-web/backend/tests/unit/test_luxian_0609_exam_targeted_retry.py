@@ -1,6 +1,7 @@
 """检查子核验的定向补核合同；全部使用合成文本与替身应答。"""
 
 from copy import deepcopy
+from dataclasses import replace
 import json
 from types import SimpleNamespace
 
@@ -12,6 +13,7 @@ from app.services.luxian_0609 import (
     exam_reason_check as reason,
     exam_result_record_check as record,
 )
+from app.services.luxian_0609.exam_lab_fact_extraction import build_exam_lab_text_projection
 
 
 class Client:
@@ -32,11 +34,21 @@ class Client:
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
 
 
+def _record_projection(candidates):
+    # 输入完整性需要真实事件目录；协议重试仍使用本测试指定的 D1/D2 编号。
+    typed = build_exam_lab_text_projection(rows_by_source={"exam_master": ({
+        "exam_id": "RETRY-EX-1", "exam_name": "胸部CT", "report_time": "2026-08-18 10:00:00",
+        "exam_conclusion": "肺部感染。"},)})
+    return replace(typed, course_candidates=candidates)
+
+
 @pytest.fixture(params=[reason, record, analysis, relevance], ids=["reason", "record", "analysis", "relevance"])
 def site(request, monkeypatch):
     module = request.param
     text = "完善胸部CT了解肺部情况。胸部CT提示肺部感染，与发热咳嗽相符，故继续抗感染治疗。"
     projection = SimpleNamespace(course_candidates={"D1": (text,), "D2": (text,)})
+    if module is record:
+        projection = _record_projection(projection.course_candidates)
     if module is reason:
         targets = {1: reason._Target(("D1", "D2"), ("胸部CT",), "2026-08-18 10:00:00", "肺部感染。")}
         function = reason.check_exam_reason
@@ -89,13 +101,19 @@ async def test_targeted_retry_contains_all_locations_previous_output_and_usage(s
     assert result.state == "ready" and result.llm_call_count == 2
     assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (20, 10, 30)
     prompt = client.prompts[1]
-    assert "PREVIOUS_OUTPUT=" in prompt and "上次输出仅作修正参考，不是原文资料" in prompt
+    if site.module is record:
+        assert "PREVIOUS_OUTPUT=" not in prompt and "校验错误" in prompt
+    else:
+        assert "PREVIOUS_OUTPUT=" in prompt and "上次输出仅作修正参考，不是原文资料" in prompt
     if site.module is relevance:
         assert "event_position=1" in prompt and "event_position=2" in prompt and "relevance" in prompt
         assert result.hints == {1: "positive", 2: "positive"}
     else:
         assert "event_position=1" in prompt and "course_doc_ref=D1" in prompt and "course_doc_ref=D2" in prompt
-        assert ("不存在的片段" if site.module is analysis else "不存在的引文") in prompt
+        if site.module is record:
+            assert "quote not in course" in prompt and "不存在的引文" not in prompt
+        else:
+            assert ("不存在的片段" if site.module is analysis else "不存在的引文") in prompt
         refs = getattr(result, "reason_refs", getattr(result, "recorded_refs", getattr(result, "analysed_refs", {})))
         assert refs == {1: ("D1", "D2")}
 
@@ -118,7 +136,7 @@ async def test_unicode_identity_is_decoded_before_previous_output_redaction(site
         bad["docs"][0]["quote"] = "住院号：ZY123456"
     client = Client([bad, site.good])
     await site.function(site.projection, client)
-    assert "PREVIOUS_OUTPUT=" in client.prompts[1]
+    assert ("PREVIOUS_OUTPUT=" in client.prompts[1]) == (site.module is not record)
     assert "ZY123456" not in client.prompts[1]
     assert "\\u4f4f" not in client.prompts[1]
 
@@ -160,18 +178,19 @@ async def test_coverage_retry_names_each_missing_document(site):
     result = await site.function(site.projection, client)
     assert result.state == "ready"
     assert ("event_position=2" if site.module is relevance else "course_doc_ref=D2") in client.prompts[1]
-    assert "PREVIOUS_OUTPUT=" in client.prompts[1]
+    assert ("PREVIOUS_OUTPUT=" in client.prompts[1]) == (site.module is not record)
 
 
 @pytest.mark.asyncio
 async def test_record_collects_quote_and_span_failure_in_same_doc(monkeypatch):
-    projection = SimpleNamespace(course_candidates={"D1": ("胸部CT提示肺部感染。",)})
+    projection = _record_projection({"D1": ("胸部CT提示肺部感染。",)})
     monkeypatch.setattr(record, "_targets", lambda _: {1: ("肺部感染。", ("D1",))})
     bad = {"schema_version": record.SCHEMA_VERSION, "docs": [{"event_position": 1,
            "course_doc_ref": "D1", "quote_type": "result_recorded", "quote": "虚构引文", "report_span": "虚构报告"}]}
     client = Client([bad, bad])
     await record.check_exam_result_record(projection, client)
-    assert "quote「虚构引文」" in client.prompts[1] and "report_span「虚构报告」" in client.prompts[1]
+    assert "quote not in course" in client.prompts[1] and "span not in report" in client.prompts[1]
+    assert "虚构引文" not in client.prompts[1] and "虚构报告" not in client.prompts[1]
 
 
 @pytest.mark.asyncio

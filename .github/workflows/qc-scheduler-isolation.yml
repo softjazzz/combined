@@ -43,6 +43,8 @@ jobs:
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite m1-admission tests/unit/test_qc_scheduler_isolation.py
       - name: Request attribution and A0-A1 freeze isolation (offline)
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite llm-request-audit
+      - name: Allowlisted dual-model exam route and outer freeze (offline)
+        run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite dual-model-exam
       - name: Result, cancellation, retry and privacy compatibility
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite compatibility
       - name: M2 synthetic Outbox and Worker delivery

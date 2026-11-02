@@ -2086,6 +2086,7 @@ class _ExamLabBatchResult:
 
 def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str]) -> str:
     from .exam_output_batching import OUTPUT_PROTOCOL_VERSION
+    from .exam_result_record_check import RESULT_RECORD_VALIDATION_VERSION
 
     prompt = build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection)
     # 06-01-02/04/05 专项核验改为按输出量拆批、病程去重（2026-10-23）；核验结果随主抽取一并冻结，
@@ -2100,6 +2101,16 @@ def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Seque
             + '\x1e'
             + prompt
         )
+    if "LX0609-06-01-04" in eligible_rule_ids:
+        # 旧核验可能将截断输入的 none 冻结为完整否定，仅使该规则的主冻结自然失效。
+        prompt = RESULT_RECORD_VALIDATION_VERSION + '\x1e' + prompt
+        from .exam_result_record_check import validation_identity
+        prompt += '\x1e' + json.dumps(validation_identity(projection), ensure_ascii=False, separators=(',', ':'))
+        from .exam_result_context import protocol
+        if protocol() == 'comparison_v1':
+            from .exam_result_record_check import _prompt, _targets
+            # 专项完整输入（包括只读比较目录和时间）必须参与冻结，不只冻结主抽取Prompt。
+            prompt += '\x1e' + _prompt(projection, _targets(projection))
     return freeze_key(prompt)
 
 
@@ -2157,6 +2168,18 @@ def _save_frozen_exam_lab_batch(key: str, result: _ExamLabBatchResult) -> None:
 async def _extract_exam_lab_batch(
     *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
 ) -> _ExamLabBatchResult:
+    from ..exam_result_model_route import exam_result_route_scope
+
+    # 实验必须先分区，再读取整族冻结；不能只隔离内部的一次模型请求。
+    with exam_result_route_scope(llm_client, eligible_rule_ids):
+        return await _extract_exam_lab_batch_in_route_scope(
+            projection=projection, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
+        )
+
+
+async def _extract_exam_lab_batch_in_route_scope(
+    *, projection: ExamLabTextProjection, eligible_rule_ids: Sequence[str], llm_client: Any,
+) -> _ExamLabBatchResult:
     """主抽取结论按病历版本冻结复用（用户决定 2026-10-22）：首次全部规则核定后固定，
     避免模型挑选证据病程、报告与病程关联逐次出入（C08、C02、C04）。"""
     key = _main_freeze_key(projection, eligible_rule_ids)
@@ -2169,7 +2192,17 @@ async def _extract_exam_lab_batch(
         ),
     )
     if frozen is not None:
+        from ..exam_result_model_route import current_route
+
+        route = current_route()
+        if route is not None:
+            route.observe("family_freeze", freeze_hit=True, logical_calls=0)
         return frozen
+    from ..exam_result_model_route import current_route
+
+    route = current_route()
+    if route is not None:
+        route.observe("family_freeze", freeze_hit=False)
     result = await _extract_exam_lab_batch_uncached(
         projection=projection, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
     )
@@ -2423,7 +2456,8 @@ async def _extract_exam_lab_batch_uncached(
             if checks:
                 check_outcomes = await asyncio.gather(*(check for _, check, _ in checks))
                 for (rule_id, _, apply), check_outcome in zip(checks, check_outcomes):
-                    if check_outcome.state not in {"ready", "skipped"}:
+                    if (check_outcome.state not in {"ready", "skipped"}
+                            or isinstance(check_outcome, ResultRecordOutcome) and check_outcome.incomplete_event_positions):
                         incomplete_specialty_rule_ids.add(rule_id)
                     if isinstance(check_outcome, ResultRecordOutcome) and check_outcome.state == "ready":
                         result_conflicts = check_outcome.conflict_refs
@@ -2434,7 +2468,25 @@ async def _extract_exam_lab_batch_uncached(
                     completion_tokens += check_outcome.completion_tokens
                     total_tokens += check_outcome.total_tokens
                     api_time += check_outcome.api_time
-                    text_facts = apply(text_facts, check_outcome)
+                    if isinstance(check_outcome, ResultRecordOutcome):
+                        # 时间口径仍由执行器及既有时间owner负责。局部核验仅在
+                        # 有可靠窗口内正面证据时足以更新事实；晚期成功不证明首次超时。
+                        events = (events_for_family(projection, "exam")
+                                  if check_outcome.incomplete_event_positions else ())
+                        partial_in_window = frozenset(
+                            position for position in check_outcome.incomplete_event_positions
+                            if 1 <= position <= len(events) and any(
+                                response.kind == "in_window" for response in assess_fact_responses(
+                                    projection=projection, event=events[position - 1],
+                                    refs=check_outcome.recorded_refs.get(position, ()),
+                                    carries_result=event_result_carried_by_course,
+                                )
+                            )
+                        )
+                        text_facts = apply(text_facts, check_outcome,
+                                           partial_in_window_positions=partial_in_window)
+                    else:
+                        text_facts = apply(text_facts, check_outcome)
     return _ExamLabBatchResult(
         facts=text_facts, rule_failures=isolated_rule_failures,
         incomplete_specialty_rule_ids=frozenset(incomplete_specialty_rule_ids),

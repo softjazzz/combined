@@ -1,6 +1,7 @@
 """011 报告结果记录核对（用户口径 2026-10-12）：逐份病程单句归类，引文须出自病程并与本次报告对得上。"""
 
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -88,6 +89,10 @@ async def test_batch_failure_preserves_other_complete_events_and_never_fixes_inc
     from app.services.luxian_0609 import exam_result_record_check as module
 
     projection = _projection(RECORDED, RECORDED)
+    # 两个目标必须在投影事件目录中都存在，不能只在 _targets 替身中虚构第二个。
+    event = projection.imaging_events[0]
+    projection = replace(projection, imaging_event=None,
+                         imaging_events=(event, replace(event, document_refs=("SYN-EVENT-2",))))
     first, second = _post_report_refs(projection)
     # 输出上限只容得下一个配对（预留 256 + 每对估算 150），每批一对。
     monkeypatch.setattr(module, 'MAX_COMPLETION_TOKENS', 406)
@@ -228,7 +233,8 @@ async def test_verbatim_confirmation_is_positive_only_and_skips_shared_report_se
 
     report = "右肺下叶占位，考虑恶性可能；主动脉壁钙化。"
     monkeypatch.setattr(module, "_targets", lambda _: {1: (report, (verbatim,)), 2: (report, (verbatim,))})
-    same_reports = [SimpleNamespace(result_texts=(report,))] * 2
+    same_reports = [SimpleNamespace(result_texts=(report,), document_refs=(f'E01-{position:02d}',))
+                    for position in (1, 2)]
     monkeypatch.setattr(module, "events_for_family", lambda projection, family: same_reports)
     shared = _Client([_answer(*[{**_doc(verbatim, "result_recorded", "右肺下叶占位，考虑恶性可能", "右肺下叶占位"),
                                  "event_position": position} for position in (1, 2)])])

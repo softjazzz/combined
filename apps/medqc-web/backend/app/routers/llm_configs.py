@@ -15,6 +15,7 @@ from ..services.llm_config_loader import (
     build_adjudicator_runtime_config,
     get_default_provider_code,
     get_enabled_provider_codes,
+    QC_USE_SELECTED_MODEL_KEY,
 )
 from ..services.qc_llm_client import SichuanQCLLMClient
 from ..services.llm_dispatch.provider_profiles import ProviderConfigurationError
@@ -97,6 +98,11 @@ def _resolve_provider(provider_code: str) -> Dict[str, Any]:
 
 def _resolve_model(model_code: str) -> Dict[str, Any]:
     code = (model_code or "").lower()
+    if code == "qwen3.6-35b-a3b":
+        return {
+            "id": code, "model_code": code, "model_name": "Qwen3.6-35B-A3B",
+            "description": "Qwen3.6 35B A3B 模型",
+        }
     if code in ("qwen3.8-flash",):
         return {
             "id": "qwen3.8-flash",
@@ -259,13 +265,17 @@ def _project_config_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
 async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
     provider_code, model_code = _extract_provider_and_model_codes(payload)
+    custom_parameters = dict(payload.get("custom_parameters") or {})
+    if provider_code == "alibaba":
+        # 新保存的后台选型同时控制正式质控；旧配置不补写，保留原环境裁决覆盖。
+        custom_parameters[QC_USE_SELECTED_MODEL_KEY] = True
     if provider_code == "strata":
-        runtime = _validate_strata_selection(model_code, payload.get("custom_parameters"))
+        runtime = _validate_strata_selection(model_code, custom_parameters)
         model_code = model_code or str(runtime["model"])
     else:
         try:
             runtime = build_provider_runtime_config(provider_code, model_code=model_code or None,
-                                                     custom_parameters=payload.get("custom_parameters"))
+                                                     custom_parameters=custom_parameters)
             build_adjudicator_runtime_config(runtime)
             model_code = model_code or str(runtime["model"])
         except ProviderConfigurationError as exc:
@@ -273,7 +283,6 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
     supabase = get_supabase()
     cfg_name = payload.get("config_name") or "custom"
 
-    custom_parameters = dict(payload.get("custom_parameters") or {})
     requested_concurrency = payload.get("execution_concurrency")
     if requested_concurrency is None:
         requested_concurrency = custom_parameters.get(EXECUTION_CONCURRENCY_KEY)
