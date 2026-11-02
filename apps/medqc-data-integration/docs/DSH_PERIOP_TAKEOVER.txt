@@ -1,0 +1,76 @@
+任务：第二批独立归档服务接管验收，一次完成；不重抽Caché，不动原13接口和业务库。
+
+一、固定范围
+只读源raw库：medqc_periop_acceptance_20261031104123。
+只读源CDM库：medqc_periop_cdm_acceptance_20261031212605（000057）。
+创建四个全新库：medqc_periop_{ingest/cdm/restore_ingest/restore_cdm}_takeover_<14位时间戳>。
+不使用、迁移、补权、删除任何既有库；不访问medqc、medqc_cache_poc、原13接口四个库或旧克隆库。
+不执行原0.3.2入口，不改其runtime.json、任务XML、代码和全局注册表。
+不调用Caché/规则/模型，不创建checkpoint、任务或修改服务/防火墙/执行策略。
+
+二、包验收和离线测试
+从交付说明取得外层SHA256，先核验；解压到全新D:\medqc\periop-archive-takeover-v1。
+逐项验证内部CHECKSUMS，差一项即停，不覆盖任何原包。
+沿用已核实Python3.10.11 64位绝对路径，不使用默认py，不安装依赖。
+下文$python是该解释器路径。先做python版本/位数和import psycopg2检查；失败即停。
+以下均是普通PowerShell命令与直接Python调用，不执行.ps1、不用Bypass或动态脚本块：
+
+$python = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python310\python.exe'
+$release = 'D:\medqc\periop-archive-takeover-v1'
+$env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONPATH = Join-Path $release 'src'
+Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+& $python -m unittest discover -s (Join-Path $release 'tests') -p test_periop_takeover.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Periop offline tests failed' }
+
+应有18项通过。不要运行任何其他PG集成测试或--synthetic选项。
+
+三、保护性准备
+仅在管理员前台PowerShell操作，沿用已有libpq passfile，不打印/重生成口令、不读.env。
+管理员文件：D:\medqc\service-takeover-run-20261030205035\secrets\deployment-admin.pgpass
+运行身份文件：D:\medqc\service-takeover-run-20261030205035\secrets\runtime.pgpass
+仅引用这两个文件；不打开该目录的runtime.json，也不执行旧服务。
+若部署管理员原来并非postgres，--admin-user沿用实际身份；不猜密码。
+两个passfile必须已支持127.0.0.1:5432及新数据库匹配（通常库名为*）；禁止自行改写凭据或授权。
+只检查规则是否匹配，不回显行/口令；不匹配则报受控阻断，保留现场。
+
+新建一个保护目录（若同名已存在，改用新的唯一名称，不重置已有目录ACL）：
+$parent = 'D:\medqc\periop-archive-takeover-runs-v1'
+if (Test-Path -LiteralPath $parent) { throw 'Choose a new protected parent directory' }
+New-Item -ItemType Directory -Path $parent -ErrorAction Stop | Out-Null
+icacls $parent /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'
+if ($LASTEXITCODE -ne 0) { throw 'New directory ACL failed' }
+
+如新目录仍有第三主体ACE，不继续；只允许在这个新空目录上修正ACL。
+工具会只读核验父目录与两个既有passfile：protected、仅SYSTEM/Administrators SID、非继承FullControl。
+PG16应已运行；若未运行先报告，不修改启动方式，不运行initdb。
+
+四、一次执行
+$runRoot = Join-Path $parent ('run-' + (Get-Date -Format 'yyyyMMddHHmmss'))
+& $python (Join-Path $release 'tools\prepare_periop_takeover.py') `
+  --output $runRoot `
+  --admin-passfile 'D:\medqc\service-takeover-run-20261030205035\secrets\deployment-admin.pgpass' `
+  --runtime-passfile 'D:\medqc\service-takeover-run-20261030205035\secrets\runtime.pgpass' `
+  --pg-bin 'C:\Program Files\PostgreSQL\16\bin' `
+  --admin-user postgres --port 5432 --pg-major 16
+if ($LASTEXITCODE -ne 0) { throw 'Periop takeover stopped; preserve all databases and reports' }
+
+程序会依次完成：源只读核查/保护指纹→四新库→复制CDM与独立授权→完整归档8表→
+正式抽取器重放74个活动来源历史批次→两轮正式发布/逐字段比对→分块故障回滚/恢复→
+两个新库备份恢复指纹→源保护性复核→生成独立runtime.json（仅路径，无口令）。
+原95批次都归档；不伪造未成功的厂商窗口。17接口中仅13个有数据来源启用归档replay。
+
+五、验收口径
+成功出口：PERIOP_ARCHIVE_TAKEOVER_ACCEPTED。
+raw/history各9365；70个历史窗口成功+4个历史源失败；故障注入另留1个failed；恢复成功。
+两轮发布各9365行，changed=0；13接口逐字段全等；checkpoint空；源全表和序列不变；恢复指纹相同。
+3零样本+1厂商阻断禁用；两接口部分源窗口失败继续标记；日期语义unverified。
+不是30接口正式启用，不是Caché重抽，不是日期增量或完整规则引擎验收。
+
+六、失败和回传
+任何非预期错误立即停止，不绕门禁、不重跑prepare、不改SQL/授权/属主、不清表/删库。
+预期4历史源失败和1注入失败由工具内部显式识别；其他错误都会使整个命令失败并停止。
+failure.json保留类型/受控位置/SQLSTATE异常链，不回显原始错误正文。
+成功或失败都只打包$runRoot\reports内JSON，补manifest和CHECKSUMS，输出ZIP哈希与计数。
+runtime.json、passfile、private-logs、backups、真实键、正文、dump一律留客户机，不进包。
+源及新四库均保留，不启用任何任务。完成后停止。

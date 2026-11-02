@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "medqc-data-integration"
+version = "0.4.0"
+description = "MedQC Caché 抽取与 CDM 发布工作程序"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "MedQC" }]
+dependencies = []
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1,<4"]
+postgres-legacy = ["psycopg2-binary>=2.9,<3"]
+odbc = ["pyodbc>=5,<6; platform_system == 'Windows'"]
+jdbc = ["JayDeBeApi>=1.2,<2", "JPype1>=1.5,<2"]
+control = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "psycopg2-binary>=2.9,<3"]
+dev = [
+  "build>=1.2,<2",
+  "mypy>=1.11,<2",
+  "pytest>=8,<9",
+  "ruff>=0.7,<1",
+]
+
+[project.scripts]
+medqc-ingest = "medqc_ingest.cli:main"
+medqc-sync = "medqc_ingest.control.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/medqc_ingest"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"contracts/periop-acceptance-contracts.json" = "medqc_ingest/control/contracts/periop-acceptance-contracts.json"
+"control_migrations/001_job_control.sql" = "medqc_ingest/control/migrations/001_job_control.sql"
+"control_migrations/002_execution_identity_retry.sql" = "medqc_ingest/control/migrations/002_execution_identity_retry.sql"
+"contracts/remaining-interface-contracts.json" = "medqc_ingest/control/contracts/remaining-interface-contracts.json"
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+packages = ["medqc_ingest"]

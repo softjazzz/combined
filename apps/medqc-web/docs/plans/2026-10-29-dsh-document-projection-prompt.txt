@@ -1,0 +1,33 @@
+继续第二、三阶段：按开发机交付的正式合同投影主要文书，并调用现有 bundle 装配代码验收。
+
+范围：仅允许读写 medqc_bundle_acceptance。不要连接 medqc 或 medqc_cache_poc，不重跑已完成的42个Caché抽取批次，不运行质控、启动业务后端或修改任务计划。
+
+一、接收与离线检查
+1. 将 cache-major-document-contracts-20261029.zip 解压到新的 D:\medqc\document-projection-contracts\，不要覆盖冻结的 cache-sync-win。
+2. 校验ZIP外部SHA256和内部CHECKSUMS.txt。在解压根目录运行：py -3.10 -m unittest discover -s tools -p test_major_document_transform.py -v。应为4项通过；不要安装依赖。
+3. 核对正式合同的七接口与已有raw一致：mr169、admission201、first201、daily263、senior791、consultation1、discharge177，合计1803。核对42个既有批次仍全部succeeded。日志只记接口、计数和受控错误位置。
+
+二、目标结构与预检
+1. 先备份独立验收库，保护备份ACL，核对归档可读；不要把dump放进回传包。
+2. CDM结构只使用客户应用当前正式初始化/迁移链，目标revision为20261022_000051，不复制开发机055代码覆盖客户应用。迁移若缺依赖表或失败，保留错误位置并停止；不要反推DDL、手工补表或stamp。
+3. 每个数据连接打开后检查current_database()必须为medqc_bundle_acceptance；不符立即关闭并停止。
+4. 用information_schema.columns和pg_catalog读取实际类型与主键，调用工具preflight_target_catalog。核心列缺失/类型不符/主键不符阻断对应接口；可选列缺失列入raw_only，不临时加列。权限由部署步骤处理，不写入Alembic，不授予同步身份属主权限。
+5. 有序源字段从已有source_schema/第一阶段列元数据核对，不能使用JSONB对象键顺序。合同不符先报接口及差异列名，不猜alias。
+
+三、raw到CDM投影
+1. 使用包内transform_row及JSON显式映射，沿用现有psycopg2。不得复制病例正文到开发机、日志、CSV或脚本。
+2. 先完成全部原始键、目标键及转换预检，再逐接口单事务写入；失败回滚整个对应接口。admission/discharge现有目标主键只有病例三键，先检查同一病例多份文书；有冲突时保留raw并报告，禁止最后一条覆盖、任取一条或拼接正文。
+3. 日期按工具合同转换。1840等占位日期不得作为真实事件日期；原值留raw。提交、记录、修改与签署时间不能互相补值。源文书状态不转换为“已签署”。正文原样保存，不能截断或解析后替换全文。
+4. 仅更新合同拥有的目标列，保留其它业务列；跨接口相同字段不是重复行，不跨接口去重。不以mr的169个病例范围过滤其它文书接口。
+5. 两轮发布：每轮记录目标总行数、唯一键数、原始全文与目标全文的本地哈希比较、空正文/空提交时间计数、受控转换失败数及raw_only列。第二轮应幂等；不要预设具体updated数，也不要改42个原始抽取批次或同步checkpoint。
+
+四、正式bundle验收
+1. 仅绑定验收库，使用客户应用现有app/services/bundles/assembly.py及其正式入口，不自行拼JSON模拟bundle。先读客户版本函数签名；明确source_schema='cdm'。所有模块/全局engine均须指向验收库，导入前设置连接环境，口令不进入日志/argv。
+2. 从七接口病例并集中取最多20个本地样本，优先覆盖六类文书及唯一的会诊样本；不把“只有首页的病例”当作全部样本。每例逐接口核对raw、CDM、bundle的文书ID、条目数、全文哈希；只回传计数和错误码。
+3. 检查领域bundle与页面/场景摘要的区别。正式装配可能存在条数或字符投影上限，应报告projection_limit/has_more或等价字段，不能将摘要截短直接当成raw正文丢失；也不能把截短正文宣称为全文验收通过。
+4. daily_course源record_datetime当前无正式目标列，必须报告为事件时间语义缺口；不能用submit_datetime/last_modified_datetime代替。051若缺可选签署列，也报告对应缺口。全文通过不等于全部质控事实就绪。
+5. 三天接口返回的数据不证明全住院期间文书完整，也不证明在院病例已可取数。本轮不做检查报告与HIS医嘱的编号或语义关联。
+
+五、回传
+输出phase2_projection_stats.csv、target_contract_check.csv、phase3_bundle_stats.csv、summary.md、manifest.json和CHECKSUMS.txt。记录合同/脚本哈希、应用及Alembic版本、各阶段通过/阻断、正文哈希一致的计数、语义缺口及投影上限；不输出真实键、正文、姓名、凭据、连接串或本地病例清单。失败只报受控错误类别和代码位置，不打印数据库异常原始文本。
+打包到D:\medqc\exports\，报告ZIP路径、大小和SHA256后停止，不扩展其他接口。

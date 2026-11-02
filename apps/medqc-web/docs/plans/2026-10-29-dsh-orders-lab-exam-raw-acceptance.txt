@@ -1,0 +1,45 @@
+任务：接入住院医嘱、检验、检查报告的六个接口。先完成独立验收库raw两轮落库与CDM合同预检，不改正式业务库，不猜字段投影。
+
+一、目标与保护
+仅使用已通过056验证的 medqc_bundle_time_clone_20261029180906 作为本轮独立验收库。所有连接检查current_database()，不符立即停止。
+不连接或改动medqc、medqc_cache_poc及原051的medqc_bundle_acceptance；不重跑已验收七接口、不修改冻结cache-sync-win、不创建计划任务、不运行质控或调用模型。不要再次运行迁移/属主归一脚本。
+先对当前056验收克隆做逻辑备份，检查退出码、归档和SHA256；文件ACL仅SYSTEM/Administrators。记录既有七接口raw1803、原42个批次和既有七CDM表的聚合内容指纹，后续必须保持不变。新接口会增加raw和批次总数，不能再要求总raw始终等于1803。
+
+二、仅允许以下六接口，日期2026-10-26、27、28逐日调用
+双日期接口每次传同一天的两个参数(d,d)，不要默认都只有一个参数。
+
+接口                           参数个数  raw候选键（每项前置institute_id,patient_id,visit_id）
+web.inpat_drug_order             2        order_id
+web.inpat_nondrug_order          2        order_id
+web.labtest_master               1        test_id
+web.labtest_item                 1        test_id,test_item_id
+web.labtest_item_report          1        test_id,print_order_id
+web.exam_item_report            2        exam_id,exam_item_id
+
+沿用本机已验证的ODBC35/pyodbc与psycopg2；不安装软件、不改驱动/服务配置。Caché账号通过交互或已批准凭据机制提供，禁止硬编码、argv传密码或日志输出凭据。
+新代码放D:\medqc\orders-lab-exam-acceptance\，通过显式六接口白名单调用；不能直接运行旧etl_sync.py，其参数个数/键和部分alias不符合此次源合同。
+先用fake测试确认参数个数、跨chunk重复检测、检验同项目多结果不丢行、整批回滚和幂等版本行为；不要求扩展为全接口框架。
+
+三、dry与raw两轮
+1. 每个接口先dry，返回完整字段元数据、行数、键缺失数、批内重复键数及同键异内容数。源完整列数历史参照为drug61、nondrug45、labmaster48、labitem28、labreport37、examreport43；按本轮实际元数据核对，不以参照行数强制通过。
+2. 键缺失或同批同键异内容则停止该接口写入并报告；不要加行号/正文哈希凑主键、覆盖取最后一条或丢弃结果。检验报告的test_id+test_item_id已证实不唯一，不能用它作为结果行键。print_order_id仅作报告行标识，不当HIS医嘱号。
+3. 复用验收库已验证的cache_raw/source_record_version和sync_ops批次结构，逐接口逐日串行，完成第一轮后再进行第二轮，预期6×3×2=36个新增成功抽取批次（dry不建批次）。某接口失败保留真实失败审计，其他接口可继续；不能为了凑36个成功忽略错误。
+4. 每批fetchmany流式读取、数据单事务；running审计独立记录，失败回滚本批数据再登记受控失败码。复用既有schema_hash、row_hash及类型规范化合同，不改算法或旧接口数据。
+5. 保存全部源字段和完整正文/结果，不截断，不改字段名，不合并跨接口数据。inpatno与inpat_no是不同源列，不能自动统一丢掉一个；mage_id等源拼写原样保留。阴性/阳性、<或>数值、单位、异常标志、参考上下限及状态均保留源值。
+6. 原样保留开立、计划开始/结束、审核、执行、撤销、申请/采样/接收/检验/报告和修改时间；不把计划/开立时间当实际执行时间。原始占位日期留raw并计数，不在raw阶段伪造或修正为当前日期。
+7. 第二轮按实际统计inserted/updated/unchanged；同键新内容应追加版本，源未变才应unchanged，不强求零更新。跨日出现同键需报告是否内容一致或版本变化，不能把逐日抓取行数直接当唯一raw总数。
+8. 本轮是replay/验收模式，不推进或新建checkpoint；本库本来无sync_checkpoint则继续记absent。不要访问POC库核对断点。
+
+四、病例范围、基数和目标合同预检（只读，不写CDM）
+1. 不以首页169例、既有20例或已出院病例筛选新接口；保留三天接口实际返回的全部病例及行。不同日期参数可能代表出院日或报告/修改日，不把同三天窗口当作整住院资料完整。
+2. 当前数据重新验证labtest_item→labtest_master和labtest_item_report→labtest_master的三键+test_id关联，行数与唯一键两个分母分别报告。未匹配可能受窗口影响，列window_limited，不能补造申请主记录或据此断言未开检验。
+3. 检查报告不做HIS医嘱编号、名称或时间关联，不重跑之前6报告匹配POC，不用关联不上阻断报告落库。医嘱、检验、检查分别验证本身病例归属。
+4. 从实际056库读取目标表catalog：inpat_drug_order、inpat_nondrug_order、labtest_master、labtest_item、labtest_item_report、exam_master、exam_item_report（存在则加exam_item），输出列名、类型、主键顺序及nullable。
+5. 输出候选源→目标字段清单：同名、明确alias、需派生或待确认分别列出，记录源列存在/非空计数与目标字段类型。不自行写CDM；不能把report_datetime写成submit_datetime、把print_order_id当order_id，或把取消状态改成执行。
+6. 特别列出lab报告document_id的技术标识方案及print_order_id来源、test_item_id与目标item_id的语义；检查报告源没有document_id，需明确exam_id/exam_item_id到目标文书标识的规则。exam_master/项目拆分也必须有正式派生合同。此轮只形成候选清单，不用猜出的键或伪造检查时间发布。
+
+五、保护与回传
+结束后确认既有七接口1803行及其版本/内容指纹、原42个批次、原七CDM表和记录时间补录结果均不变；单列新增六接口raw、版本、批次统计。本轮不改CDM、不刷新bundle、不运行模型。
+导出interface-results.csv、source-columns.csv、raw-acceptance.csv、key-validation.csv、relation-validation.csv、target-catalog.csv、mapping-candidates.csv、protection-check.csv、summary.md、manifest.json、CHECKSUMS.txt。
+manifest记录脚本哈希、实际时间窗口/参数个数、目标库和revision、阶段状态及限制；只含字段名、类型、计数和受控错误码。病例/文书/医嘱标识、正文、结果值、凭据、连接串、raw和dump不进回传包。代码可打包审查，但不含secrets、日志或数据样本。
+报告ZIP路径、大小与SHA256后停止。开发机据此冻结六接口正式CDM映射，再继续投影、bundle及LX0609只读源验收；不要将“raw接入通过”写成全链路通过。

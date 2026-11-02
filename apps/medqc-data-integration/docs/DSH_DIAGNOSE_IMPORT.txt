@@ -1,0 +1,45 @@
+本轮只定向诊断失败的0.3导入，不是0.3.1修复包；客户根因尚待本轮异常类型/SQLSTATE确认。
+
+一、保留现场
+保留原4个新库、运行目录和备份，不删库、不清表、不重跑prepare-takeover.ps1。
+不改原始冻结包、不安装依赖、不读取后端.env、不重置账号、不补表、不改任何权限。
+本轮不连接Caché、不发布CDM、不运行规则、不生成/注册任务。
+
+二、准备
+把本诊断包解压到单独的新目录，例如D:\medqc\takeover-import-diagnostic。
+核对本包SHA256及CHECKSUMS.txt。原包保持在D:\medqc\service-takeover-0.3。
+诊断器会重新验证原包72个校验项及其固定commit，任何不一致立即停止。
+它调用原run_takeover.py的import入口，仅观察异常，原来的空库检查/回滚规则不变。
+raise ... from None只隐藏显示，不删除__context__；因此无需修改旧包即可提取底层异常。
+只输出异常类名、5位SQLSTATE、原包内文件/函数/行号；不读取异常消息、SQL、args、diag或locals。
+
+三、一次执行
+在已有管理员PowerShell窗口执行；$python替换为已核实的已有Python3.10.11解释器路径。
+$runRoot必须来自上轮实际运行目录（其下有reports/database-plan.json），不要凭库名猜目录。
+确认该plan的ingest为medqc_ingest_takeover_20261030205035，source为原克隆库。
+使用原有secrets/deployment-admin.pgpass与runtime.pgpass，不要求再次输入口令。
+若上轮部署用户名并非postgres，把下面--user改成原来的部署用户名；不能换账号绕过错误。
+
+$base = 'D:\medqc\service-takeover-0.3'
+$diagnostic = 'D:\medqc\takeover-import-diagnostic'
+$runRoot = '<替换为上轮实际运行目录>'
+$env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONPATH = Join-Path $base 'src'
+& $python -m unittest discover -s (Join-Path $diagnostic 'tests') -p test_takeover_diagnostics.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Diagnostic tests failed' }
+& $python (Join-Path $diagnostic 'tools\diagnose_takeover_import.py') `
+  --package-root $base --run-root $runRoot --user postgres --port 5432
+$diagnosticExit = $LASTEXITCODE
+Write-Host "Diagnostic exit: $diagnosticExit"
+
+四、停止与回传
+只执行一次；无论失败或成功，都停在这里，不自动进入发布/prepare或再次重试。
+失败时原import自身会回滚，诊断器不会额外commit或修改事务规则。
+成功时会留下原工具的takeover-import.json，表示真实导入已提交，不得再重复import。
+本诊断不预先保证导入结果，也不把例外观察冒充客户环境修复。
+
+回传原运行目录reports/takeover-import-diagnostic.json的完整内容。
+可回传takeover-import.json中的统计，但不打包secrets、备份、private-logs或运行配置。
+已有同名诊断文件立即停止，不覆盖、不删除；先回报已有文件。
+如果导入未被调用（import_called=false），一并回报工具输出的受控错误码。
+不要用traceback.print_exc或打印str(底层异常)补信息，避免病历值进入日志。

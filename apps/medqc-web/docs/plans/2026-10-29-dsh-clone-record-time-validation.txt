@@ -1,0 +1,39 @@
+任务：只在新建的克隆库验证051→056完整正式迁移，并用已有raw补入日常病程记录时间。不要重抽Caché，不改原验收库或业务库。
+
+一、准备
+1. 将验证包解压到新目录 D:\medqc\daily-record-time-validation\。核对ZIP哈希及包内CHECKSUMS。不要覆盖R26.5、冻结同步目录或上一版字段合同目录。包内backend是迁移依赖闭包，不是可部署业务后端，不启动它。
+2. 用现有Python3.10环境运行标准库测试：py -3.10 -m unittest discover -s tools -p test_major_document_transform.py -v，应为5项通过。使用现有SQLAlchemy/Alembic/psycopg2/python-dotenv，不安装或升级包。
+   再运行：py -3.10 backend\scripts\upgrade_daily_record_time_clone.py --check-package。它只检验本地迁移包，不连接数据库、不询问凭据，不需要PYTHONPATH。包校验失败先停止。
+3. 只读核对源验收库medqc_bundle_acceptance仍为051：raw1803、42个抽取批次全部succeeded、日常病程raw263、正文不变。验收库不存在sync_checkpoint，记录absent，不创建它，不跨库查询POC的checkpoint。
+
+二、备份恢复到新克隆库
+1. 对medqc_bundle_acceptance做新逻辑备份，检查命令退出码、归档可读及SHA256；备份文件及目录ACL仅SYSTEM/Administrators。备份仅留客户机，不打包回传。
+2. 新建唯一库名 medqc_bundle_time_clone_YYYYMMDDHHMMSS（14位当前时间戳），owner medqc_owner。若同名库已存在，停止，不能覆盖或删除。
+3. 将备份恢复到该新库，恢复必须exit=0；核对版本051、raw1803及42个批次。不要通过CREATE DATABASE TEMPLATE锁住原库；不执行DROP或stamp。
+4. 在克隆库内，先保存各已有表的行数与排序稳定的聚合内容指纹，明确排除即将新增的daily_course_record.record_datetime。重点保护cache_raw、sync_ops、七张CDM表、所有已有正文及提交/签署/修改/本地同步时间。指纹仅作本地比较，不导出逐行标识。
+
+三、执行正式迁移
+在包解压根目录执行（替换为本次真实新库名）：
+py -3.10 backend\scripts\upgrade_daily_record_time_clone.py --database medqc_bundle_time_clone_YYYYMMDDHHMMSS
+脚本会交互询问部署数据库用户名和口令，凭据不要写进argv、脚本或日志。该身份须能SET ROLE medqc_owner；脚本只连接127.0.0.1，校验current_database并用medqc_owner执行同一事务。
+脚本会在执行迁移前只读检查应用schema权限和对象归属；migration_owner_preflight_failed时停止，产出只读属主清单供部署评审。不要临时统一改所有schema/table/view/sequence的属主，也不要自动授权或换回超级用户绕过。直接使用交互入口，不通过读取后端.env或替换input/getpass绕过凭据入口。
+包内是完整原始Alembic迁移图及冻结报表合同；051→056会包含报表/账号/材料等父链迁移。任何父链漂移或缺依赖均应停止并回滚，禁止绕过、手工补表或复制单条056直接运行。
+成功应输出migration_verified、revision=20261029_000056。核对新增列为可空timestamp without time zone、无默认值、现存263行初始均NULL；其它已有CDM业务字段及raw/抽取批次保持原指纹。记录父链新增表和列，但不因此授权接入新接口。
+
+四、只补记录时间，不重跑全量发布器
+1. 仅从新克隆库读取web.daily_course_record的现有raw，确认263条，病例三键+document_id唯一。用合同v2及独立转换器解析源record_datetime；先在内存完成所有日期与一对一键预检，不能匹配到唯一CDM行时停止。
+2. 原始263行应均非空；若发现空、异常、占位或不可解析日期，按真实情况报告，不猜值、不强求263。不要用submit_datetime、last_modified_datetime或正文中的时间代替。
+3. 在同一个事务中，只UPDATE cdm.daily_course_record.record_datetime，不更新其它字段，不调用会刷新update_time或local_sync_completed_at的ORM/完整发布器。参数化值、Identifier引用标识符。第一次应补齐实际可验证的263条；第二次用IS DISTINCT FROM守卫，预期零变化。
+4. 复核263条按UTC+08解释的源→目标记录时间完全一致，六类文书正文、所有其它时间字段、raw1803与42个抽取批次保持基线指纹。checkpoint继续是absent。失败回滚本次事务。
+
+五、bundle与规则源验证
+1. 用客户应用现有正式assembly代码连接克隆库；导入前设置目标连接，核对所有engine/current_database，source_schema='cdm'，不启动业务后端、不创建质控任务、不调用模型。
+2. 在已验收的20例中选择包含daily文书的样本，额外优先选record_datetime与submit_datetime不同的文书。新鲜调用assemble_domain_bundle，不直接读取旧缓存；记录raw/CDM/bundle记录时间相等数、目录record_time/display_time采用记录时间的计数，以及提交/签署时间仍独立的计数。若无不同时间样本，如实报告限制。
+3. 只读调用正式规则证据入口或其既有读取工具，确认record_datetime进入规则源；若客户版入口不支持，明确blocked并指出代码位置，不用模拟对象冒充正式规则源，不自行修改客户应用。
+4. 文书数量和正文哈希应与既有验收一致；报告条数/字符上限，不以摘要作为全文证据。
+
+六、收尾与报告
+只读复核原medqc_bundle_acceptance仍为051、无record_datetime新增列、raw1803和42批次状态不变；不连接medqc或medqc_cache_poc。
+首页口径统一为“record_content列存在，源169行全部NULL”，不能再写没有正文列。签署核查保持“源未提供/源值为空”，不能推成医生未签署；consultation_record无独立签署字段应单列，不写目标缺列总数为零而不说明范围。
+仅导出字段名、计数、版本与受控错误码：clone-migration-stats.csv、daily-time-projection-stats.csv、bundle-time-check.csv、protection-check.csv、summary.md、manifest.json、CHECKSUMS.txt。标注真实PG迁移及真实规则源是否完成，不使用模拟结果顶替。
+禁止导出病历正文、真实键、签署人/时间值、连接串、凭据、raw或dump。回传ZIP路径、大小与SHA256后停止。保留克隆库，暂不升级原验收库或业务库。

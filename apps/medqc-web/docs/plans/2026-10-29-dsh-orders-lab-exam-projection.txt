@@ -1,0 +1,39 @@
+任务：按开发机交付的六接口正式验收合同，补schema元数据并从已有raw投影CDM；不重抽数据，不动正式库。
+
+一、接收与保护
+1. 解压cache-orders-lab-exam-projection-contracts-20261029.zip到新的D:\medqc\orders-lab-exam-projection\；核对外部SHA256与CHECKSUMS。不要覆盖冻结目录或前一版合同。
+2. 在包根目录运行：py -3.10 -m unittest discover -s tools -p test_orders_lab_exam_transform.py -v，应为13项通过。不安装依赖。转换器只用标准库；连接沿用客户机已有psycopg2。
+3. 只连接medqc_bundle_time_clone_20261029180906，每次连接校验current_database。先做当前87201行raw状态的新逻辑备份并保护ACL，校验归档和哈希。不要连接Caché、medqc、medqc_cache_poc或原051验收库。不再运行迁移或属主归一脚本。
+4. 记录原七接口raw1803、原42批次、原七CDM表与日常病程263条时间的聚合内容指纹。全库raw应为87201、抽取批次78，checkpoint为absent；本轮这些对象与数量均不得变化。
+
+二、先补schema元数据，不猜历史算法
+1. 只读检查六接口raw中的schema_hash、schema_hash_version和已有sync_ops.source_schema实际结构；读取本轮原始抽取脚本及其哈希、字段列表/hash生成方法，以及本机保留的dry元数据。不要输出凭据、payload或真实键。
+2. 对照contract中ordered_source_columns、source_column_count和tools/orders_lab_exam_transform.py的ordered_schema_hash函数。必须证明实际raw哈希使用同一算法且有序源字段一致，才按已有七接口的元数据结构INSERT缺失记录。已有冲突记录不能覆盖。JSONB键只用于核对字段集合，不能当作ODBC原始顺序。
+3. 不修改任何raw、source_record_version或抽取批次的hash、payload、状态、时间。若原始算法不同、hash未记录、元数据缺失无法核实或需要改表结构，停止CDM写入，只回传实际抽取代码（去除凭据）、字段/哈希元数据和受控差异码；不要重抽或手工补一套DDL。
+
+三、CDM预检与dry投影
+1. 从实际056 catalog取得六张目标表字段类型、主键顺序、nullable及character_maximum_length；不要仅照列名猜映射。
+2. 工具用法：from major_document_transform import load_contract；from orders_lab_exam_transform import validate_database, preflight_target_catalog, transform_row, validate_target_keys, validate_text_lengths。每次打开真实连接先把current_database()返回值交给validate_database；load_contract读取contracts/orders-lab-exam-contracts.json；用preflight结果允许列调用transform_row。
+3. 每接口先全量转换dry，所有源字段必须满足合同集合、raw键完整；按目标主键检查整批重复，按实际最大字符长度检查全部目标文本，日期转换错误输出受控码及字段/代码位置，原值留raw不输出。检查通过后才允许写该接口；不截断或选最后一条。
+4. 检验报告document_id取print_order_id，item_id取test_item_id。保留42391条结果粒度；同一申请和项目多结果不得合并。print_order_id不是HIS医嘱号。若目标四键碰撞，停止，不临时改算法。
+5. 检查报告document_id由工具的cache-exam-v1技术键算法产生；exam_id和item_id仍保存原exam_id/exam_item_id。只保存报告自身，不派生exam_master/exam_item，不做HIS编号/名称/时间关联，不从PCT等名称推断检查类型，不把报告时间当检查执行时间。
+6. report_datetime只映射report_time，不写submit_datetime。结果/单位/不等号/异常标志/参考上下限保持原字符串；referencevalue_max中的参考文本不强转数值，不合成reference_range。空record_content仍保留NULL，完整保存检查description和impression，不编造正文或签署值。
+
+四、两轮写入
+1. 逐接口单事务，用参数化值和Identifier引用标识符。只更新合同拥有的目标列，保护未映射列及源窗口外已有目标行，不TRUNCATE、不DELETE。先记录目标基线行数，不能在目标原本非空时要求总数盲等于raw。
+   使用既有获授权的发布身份；不读取后端.env的超级用户口令。权限不足先报告，不通过全库授权或改属主让脚本运行。
+2. 两轮投影分别统计inserted/updated/unchanged、匹配raw键数、目标唯一键数和字段级一致计数；第二轮用IS DISTINCT FROM或等价真实比较避免无意义更新，不刷新源update_time或本地同步时间。按本轮源未变化的已知证据预期第二轮全部不变，若不同须如实解释。
+3. 预期匹配源行：药品8622、非药品24616、检验申请3269、项目5601、检验结果42391、检查报告899。来源字段一致比较应覆盖本次全部映射字段；比较报告只输出计数，不导出字段值/时间值。
+4. 投影不是抽取，不新增或更改78个抽取批次，也不推进或新建checkpoint。用已有发布审计或独立非PHI报告记录本轮结果；不要为记录审计手工新建表。
+5. 所有数据库异常只输出异常类型、SQLSTATE及代码位置；不打印原始异常文本、SQL参数、连接串或完整traceback，防止约束错误详情带出病例键或字段值。
+
+五、正式bundle及LX0609只读源
+1. 使用客户现有R26.5/backend的真实assembly及source_evidence_reader；仅绑定上述056克隆、DB_SCHEMA_MODE=split、source_schema=cdm。导入前设置目标并保证每个真实连接校验库名；读取阶段default_transaction_read_only=on。不启动app.main、服务任务或模型。
+2. 从六接口病例并集中选最多20个本机样本，覆盖医嘱、检验多结果和检查报告；不受首页169例或之前20例限制。记录本地样本选择规则，不回传标识。
+3. 调用实际支持的领域装配（通常course），核对CDM字段与bundle内容。检验可按test_id组装多条结果为一张报告：分别报告结果行数和报告张数，并检查同项目多结果未丢失。检查报告所见/印象需完整可见；空源正文不等于没有报告内容。
+4. 实际调用read_luxian_0609_snapshot_source_rows对客户已批准的相关source_key读取；医嘱若使用专用exam_lab_order等来源，按客户真实注册表调用，不编造key。不构造SichuanQCService，不运行完整引擎。无法覆盖的来源逐项说明，不能用bundle调用冒充规则源读取。
+5. 报告所有limit_rows、truncated/has_more、投影上限和缺失。不同接口的日期语义/病例范围可能不同，缺少主申请时保留window_limited，不补造主记录，不据此认定未开立/未执行。
+
+六、收尾
+保护原七接口raw1803及42批次、原七CDM表/记录时间不变；总raw87201、总抽取批次78、checkpoint absent。schema元数据补录是允许的唯一raw侧元数据变化，逐项列出新增记录，不改变临床raw。
+回传schema-metadata-repair.csv、target-preflight.csv、projection-stats.csv、field-equality.csv、bundle-source-check.csv、protection-check.csv、summary.md、manifest.json和CHECKSUMS.txt；如有元数据阻断，额外带去凭据后的本轮原抽取器代码供审查。禁止正文、结果值、病例/文书/医嘱键、凭据、连接串、raw与dump。报告ZIP路径、大小、SHA256后停止。

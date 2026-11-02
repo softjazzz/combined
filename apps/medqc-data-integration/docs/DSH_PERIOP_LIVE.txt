@@ -1,0 +1,102 @@
+任务：第二批真实Caché显式日期读取和发布验证。只执行本包一次，不扩接口、不启用任务。
+
+一、固定隔离范围
+只读基线：
+  medqc_periop_ingest_takeover_20261101043319
+  medqc_periop_cdm_takeover_20261101043319
+工具创建四个全新库（后缀14位时间戳，不复用旧库）：
+  medqc_periop_live_ingest_<timestamp>
+  medqc_periop_live_cdm_<timestamp>
+  medqc_periop_live_restore_ingest_<timestamp>
+  medqc_periop_live_restore_cdm_<timestamp>
+本轮显式日期：2026-10-28。禁止默认今天/昨天，不扩日期。
+活动来源为第二批13个有数据接口；surgery_record、preane、postane、surgery_inform_consent继续禁用。
+不连接原13接口的PG库、medqc、medqc_cache_poc、旧克隆库或051库。
+只读原0.3.2 runtime.json中的Caché连接字段和口令文件引用；忽略全部旧PG配置。
+不运行旧入口、不修改其配置/凭据/任务XML，不迁移、不补表/授权、不修改既有库属主。
+
+二、完整性与环境
+先核验外层SHA256（以开发机交付消息为准），再解压到全新目录：
+  D:\medqc\periop-live-validation-v1
+逐项核对CHECKSUMS。任一不一致立即停止，不覆盖旧包。
+使用管理员前台PowerShell，沿用现有Python3.10.11 64位、psycopg2、pyodbc和ODBC35。
+不安装依赖、不修改PowerShell执行策略，不执行.ps1、Bypass或动态脚本块。
+
+$python = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python310\python.exe'
+$release = 'D:\medqc\periop-live-validation-v1'
+$env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONPATH = Join-Path $release 'src'
+Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+& $python -c "import sys,struct,psycopg2,pyodbc; assert sys.version_info[:2]==(3,10); assert struct.calcsize('P')==8; assert 'InterSystems ODBC35' in pyodbc.drivers(); print('ENV_OK')"
+if ($LASTEXITCODE -ne 0) { throw 'Existing environment check failed; do not install' }
+& $python -m unittest discover -s (Join-Path $release 'tests') -p test_periop_live.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Live validation offline tests failed' }
+
+应有16项通过。不要运行其他PG集成测试；客户入口没有合成来源开关。
+若PG16未运行，先报告，不执行initdb或修改PG服务、自启动、防火墙。
+
+三、现有凭据与新保护目录
+仅引用以下现有文件，不打印内容、不重设/复制密码、不读取.env：
+  D:\medqc\service-takeover-run-20261030205035\secrets\deployment-admin.pgpass
+  D:\medqc\service-takeover-run-20261030205035\secrets\runtime.pgpass
+  D:\medqc\service-takeover-run-20261030205035\runtime.json
+runtime.json只作为Caché连接信息的只读输入；不是本轮PG目标配置。
+工具还会检查runtime.json内引用的既有Caché口令文件ACL，不回显任何值。
+passfile应已支持127.0.0.1:5432及新库（既有prepare生成的库名匹配为*）；若不匹配则停，不自行改文件。
+
+新建空保护父目录。若同名已存在，换一个全新名称，不重置任何已有目录的ACL：
+$parent = 'D:\medqc\periop-live-validation-runs-v1'
+if (Test-Path -LiteralPath $parent) { throw 'Choose a new protected parent directory' }
+New-Item -ItemType Directory -Path $parent -ErrorAction Stop | Out-Null
+icacls $parent /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'
+if ($LASTEXITCODE -ne 0) { throw 'New directory ACL failed' }
+工具要求父目录及既有凭据/源配置文件protected、仅SYSTEM/Administrators SID、非继承FullControl。
+若既有文件不符，报告后停止；只允许修正这个新空父目录，不改旧文件。
+
+四、一次执行
+$runRoot = Join-Path $parent ('run-' + (Get-Date -Format 'yyyyMMddHHmmss'))
+& $python (Join-Path $release 'tools\validate_periop_live.py') `
+  --date 2026-10-28 `
+  --output $runRoot `
+  --source-config 'D:\medqc\service-takeover-run-20261030205035\runtime.json' `
+  --admin-passfile 'D:\medqc\service-takeover-run-20261030205035\secrets\deployment-admin.pgpass' `
+  --runtime-passfile 'D:\medqc\service-takeover-run-20261030205035\secrets\runtime.pgpass' `
+  --pg-bin 'C:\Program Files\PostgreSQL\16\bin' `
+  --admin-user postgres --port 5432 --pg-major 16
+if ($LASTEXITCODE -ne 0) { throw 'Live validation stopped; preserve all databases and reports' }
+若部署管理员实际不是postgres，沿用先前已验证身份，不猜密码。
+
+执行内容：
+1. 只读核验已接受基线及其计数/标记，保存全表和序列指纹。
+2. 创建四新库；备份基线并恢复到新ingest/CDM，比较指纹；核验13个实际目标合同。
+3. ODBC35通过SERVER=连接，13活动接口仅查询2026-10-28一次dry；dry前后两新库全表/序列必须不变。
+4. dry成功的接口同日replay，按实际新增/修改写入新raw、history、审计，然后发布到新CDM。
+5. 两轮全量发布验证幂等；13接口逐字段比较raw投影与CDM。旧数据与本日新鲜读取状态分开报告。
+6. 对两个新库备份，恢复至两个新恢复库，逐表/序列指纹相等。
+7. 只读复核两个基线、源配置、原始归档/标记/映射及checkpoint不变。停止，不注册任务。
+
+五、源端失败的严格口径
+合同已知部分失败：surgery_application(10-26/10-27)、blood_application(10-27/10-28)。
+本轮10-28可能遇到blood_application失败。工具仅在接口+日期在白名单、odbc_call查询阶段、
+实际SQLSTATE=HY000且native=400同时满足时，记known_source_failure继续其余已授权接口。
+dry遇此失败，不执行该接口replay、不伪造空结果、不覆盖其旧数据，也不自行重试。
+若dry成功但replay遇此已知失败，整批回滚且保留failed审计，不执行该接口的新数据发布。
+其他错误（连接、权限417、字段/类型漂移、缺键/重复键、发布、备份等）全部立即停止。
+不要自行“按已知HY000”扩大白名单，不跳门禁、不改SQL/合同、不要重跑整个prepare或删除库。
+源端变化允许dry和replay行数不同；inserted/updated/unchanged均按实测，不强求9365或零更新。
+不得用旧CDM的发布成功，冒充失败接口已完成本日真实读取。
+
+六、验收与回传
+成功出口之一：
+  PERIOP_LIVE_SOURCE_VALIDATION_ACCEPTED
+  PERIOP_LIVE_SOURCE_VALIDATION_ACCEPTED_WITH_SOURCE_LIMITATIONS
+后者必须列明not_refreshed_due_to_source_failure；若blood申请仍失败，不能宣称13接口全部刷新。
+要求：customer synthetic=false、cache_accessed=true、PG16；dry不写库；第二轮发布写0；
+13接口字段一致；备份恢复相同；基线/归档/配置/断点保护通过；automatic_incremental=false；
+scheduled_task_created=false、production_enabled=false。这不是完整规则引擎验收。
+4个历史源失败、1个旧故障注入及本轮新失败审计原样保留，不要求failed总数=0。
+
+只打包$runRoot\reports里的JSON，补manifest和CHECKSUMS并报告大小/SHA256；成功或失败都保留现场。
+不要打包runtime.json、任何凭据/源配置、backups、private-logs、dump、正文、真实病例键。
+失败报告保留静态阶段/位置、异常类型链和受控ODBC错误码，无原始异常正文。
+源两库、旧恢复库、新四库均保留；不得启动业务后端/规则/模型或自动增量任务。

@@ -1,0 +1,25 @@
+[Unit]
+Description=MedQC v0.4 sync worker (template; not enabled by delivery)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/medqc-sync/worker.json
+
+[Service]
+Type=simple
+User=medqc-sync
+Group=medqc-sync
+WorkingDirectory=/opt/medqc-sync/current
+ExecStart=/opt/medqc-sync/venv/bin/python /opt/medqc-sync/current/tools/run_sync_control.py --config /etc/medqc-sync/worker.json worker
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=180
+KillMode=mixed
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/medqc-sync
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

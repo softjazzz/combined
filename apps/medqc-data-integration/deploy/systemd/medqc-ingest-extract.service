@@ -1,0 +1,16 @@
+[Unit]
+Description=MedQC Caché incremental extract
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=medqc-ingest
+Group=medqc-ingest
+EnvironmentFile=/etc/medqc-ingest/medqc-ingest.env
+ExecStart=/bin/sh -c 'exec /opt/medqc-ingest/bin/medqc-ingest extract --interface web.mr --date "$$(date +%%F)" --mode incremental'
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/medqc-ingest

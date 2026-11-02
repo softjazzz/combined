@@ -1,0 +1,124 @@
+任务：一次完成其余25来源、围术期17来源未完项及关键字段核查，集中回传55来源矩阵。
+在以下已授权范围内直接执行，不要每个小步骤再询问。源/样本限制分流；局部工具bug只修本包受影响部分并保留diff。
+
+一、固定范围与一次环境
+原13接口只复用既有通过证据，不重新调用、不访问其旧ingest/CDM四库。正式业务medqc、
+medqc_cache_poc、原bundle/051库、旧克隆库均不访问。冻结0.3.2/v5-final目录、配置、任务XML不改。
+仅本轮固定run manifest内登记的4个新验收库允许写入；同一现场只准备一次，失败保留后续--resume。
+不因局部失败重新生成时间戳/新建4库、不清库、不stamp、不反推DDL、不删除历史失败审计。
+正式CDM由包内backend/scripts/bootstrap_cache_sync_database.py及完整Alembic链初始化。
+本包正式head为20261101_000058，已先补入确认的23项关键字段及对应ORM/映射；
+新库直接从空库迁移到该head，不停在057后再要求客户补第二轮迁移。
+禁止自动增量、checkpoint推进、注册/启用任务、业务源切换、修改PG服务/防火墙/全局环境。
+不运行完整质控或模型；bundle/LX0609未消费来源单列not_registered/not_exposed，不当作落库失败。
+
+执行日期固定2026-10-26、27、28。仅三天均正常零行的接口，允许一次向前2026-10-19..25补样；
+发现非空即停止扩日期。仍无样本写await_nonempty_sample；不能猜字段、把无样本当数据完整。
+全失败/缺schema接口只做合同允许的只读探测，记vendor_blocked/source_failed，不自行猜隐藏过程名。
+
+二、包与依赖（统一独立venv，一次离线准备）
+按交付消息核对外层SHA256，解压全新D:\medqc\remaining-acceptance-v1，逐项校验CHECKSUMS.txt。
+默认使用已核实Python3.10 x64，不用默认py，不运行旧启动器，不读后端.env，不联网安装。
+
+$python = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python310\python.exe'
+$release = 'D:\medqc\remaining-acceptance-v1'
+$env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONPATH = Join-Path $release 'src'
+Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+& $python -c "import sys,struct,pyodbc,psycopg2,sqlalchemy,alembic,dotenv,pytest; from zoneinfo import ZoneInfo; assert sys.version_info[:2]==(3,10); assert struct.calcsize('P')==8; ZoneInfo('Asia/Shanghai'); assert 'InterSystems ODBC35' in pyodbc.drivers(); print('ENVIRONMENT_OK')"
+if ($LASTEXITCODE -ne 0) { Write-Output '使用下一段离线补缺后继续；不得临时联网' }
+
+最终完整包内已包含33个锁定wheel，manifest中standalone_offline_dependency_closure_verified=true。
+无论全局环境是否已有依赖，本轮真实执行统一使用本包专用venv和完整锁，避免继承旧依赖差异。
+直接使用本包$release\wheelhouse，不需要组合旧附件；已经是本轮完成锁定安装的venv则复用。
+创建本包专用全新venv，不向全局Python或旧同步器venv安装。如下路径已存在时不得覆盖；
+若是本轮已创建并记录在run manifest的venv则直接复用其python，不重复创建。
+
+$venv = 'D:\medqc\remaining-acceptance-venv-v1'
+if (Test-Path -LiteralPath $venv) { throw '仅复用本轮已记录venv；不得覆盖其他环境' }
+& $python -m venv $venv
+if ($LASTEXITCODE -ne 0) { throw 'New venv failed' }
+$python = Join-Path $venv 'Scripts\python.exe'
+& $python -m pip install --no-index --require-hashes `
+  --find-links (Join-Path $release 'wheelhouse') `
+  -r (Join-Path $release 'requirements-remaining-acceptance.lock')
+if ($LASTEXITCODE -ne 0) { throw 'Offline locked dependencies failed; preserve environment' }
+& $python -m pip check
+if ($LASTEXITCODE -ne 0) { throw 'Dependency check failed' }
+然后重做一次上面的ENVIRONMENT_OK检查。缺ODBC驱动、错误位数、PG16不可用或凭据不通不能靠pip修复，
+保留静态环境报告并停止相关真实连接，其他可完成的离线检查照常汇总；不要临时修改基础设施。
+requirements-cache-bootstrap.txt中的psycopg2为2.9.11，本次完整锁已按该版本整合；
+不得把旧v0.4锁(2.9.10)和新锁同时-r安装。只用本包完整锁与wheelhouse，避免来回复制多个附件。
+
+三、离线测试与正式模块预检
+$testFiles = @(Get-ChildItem (Join-Path $release 'tests') -Filter 'test_remaining*.py' -File | ForEach-Object { $_.FullName })
+if ($testFiles.Count -eq 0) { throw 'Remaining tests absent' }
+& $python -m pytest @testFiles -q
+if ($LASTEXITCODE -ne 0) { throw 'Local tests failed; repair only affected package code and retain diff' }
+检查包内正式initializer、ORM、完整Alembic链存在且head与initializer合同一致。
+不要直接启动业务后端；本轮入口会只对指定新库运行正式迁移。不得手工补表。
+
+四、一次固定运行（日期在工具内固定）
+父目录必须是本轮全新空目录，首次仅对其设置SYSTEM/Administrators ACL；续跑不重置旧目录权限。
+$parent = 'D:\medqc\remaining-acceptance-runs-v1'
+if (-not (Test-Path -LiteralPath $parent)) {
+  New-Item -ItemType Directory -Path $parent -ErrorAction Stop | Out-Null
+  icacls $parent /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'
+  if ($LASTEXITCODE -ne 0) { throw 'New run parent ACL failed' }
+}
+$run = Join-Path $parent 'run-fixed'
+$source = 'D:\medqc\service-takeover-run-20261030205035\runtime.json'
+$adminPassfile = 'D:\medqc\service-takeover-run-20261030205035\secrets\deployment-admin.pgpass'
+$runtimePassfile = 'D:\medqc\service-takeover-run-20261030205035\secrets\runtime.pgpass'
+$cohort = 'D:\medqc\secrets\cohort\inpatient-cohort.local.csv'
+$arguments = @(
+  (Join-Path $release 'tools\run_remaining_acceptance.py'),
+  '--run-dir', $run, '--source-config', $source,
+  '--admin-passfile', $adminPassfile, '--runtime-passfile', $runtimePassfile,
+  '--pg-bin', 'C:\Program Files\PostgreSQL\16\bin',
+  '--backend', (Join-Path $release 'backend'), '--admin-user', 'postgres', '--port', '5432', '--pg-major', '16'
+)
+if (Test-Path -LiteralPath $cohort) { $arguments += @('--cohort-file', $cohort) }
+& $python @arguments
+$runExit = $LASTEXITCODE
+
+源配置仅提取Caché连接字段与既有受保护口令文件引用，忽略旧PG配置，不执行旧服务。
+若现场部署管理员不是postgres，使用已核实的实际用户名，不猜密码。
+现场全部新库名、阶段状态、schema/hash、工具哈希和已完成单元必须登记到同一个run manifest。
+不得将旧失败脚本的动态时间戳命名误当作本次恢复入口。
+
+五、连续推进和局部修复（不再逐项询问）
+按合同执行：一次源读取并完整快照（不另跑dry重读）→ 从快照回放raw/历史/受控审计 → 实际target catalog/正式字段转换 →
+两轮CDM投影/第二轮幂等/逐字段一致 → 关键正文/事件时间/签署画像 → 备份与恢复指纹 → 55来源总矩阵。
+主键碰撞、缺键、转换失败不得覆写为成功；源HY000/零样本/厂商阻断按接口和窗口保留状态，
+其余允许接口继续，不能为了一个源故障全局反复停跑。不要把任何HY000一概当已知失败放行。
+
+明确允许修正本次新解压包的局部软件bug（路径/Windows适配/受控诊断/包遗漏等），修复前后保存SHA256及diff，
+先运行受影响的fake测试，再以同一组arguments追加--resume续跑；不得重做已提交成功单元。
+修复不能修改业务字段语义/主键合同、放宽库名/日期/源失败白名单、绕过数据一致性或安全门禁。
+若必须改变上述合同/权限或基础设施，记录blocked及原因；继续无依赖的授权项，集中回报所需决定。
+绝不改冻结目录、旧脚本、原13注册表、正式业务库、旧库属主或客户凭据；不使用ExecutionPolicy Bypass。
+
+续跑命令：确认run manifest属于本轮且新库登记与现场一致后执行（不要新建run）：
+& $python @arguments --resume
+$runExit = $LASTEXITCODE
+
+六、在院对照与关键字段口径
+本机已有经授权的inpatient-cohort.local.csv时可读，仅用于本机匹配，不导出真实键/内容。
+清单不存在或不含确认仍在院的有效对照时，直接列blocked_missing_confirmed_inpatient_cohort；
+不要空跑接口、不能用出院日期空/1840占位日期当作仍在院证据，不要求临时上传病例或全文。
+正文、签署、事件时间分别报告：source_column_absent / source_value_empty / mapped_and_equal /
+target_column_missing / reader_not_exposed / unavailable_without_sample，不能由空签署推断医生未签。
+不再查HIS/PACS编号/语义关联，不以未注册LX0609来源否定其已落库，不为追求全绿扩大规则范围。
+
+七、集中收口与一次回传
+无论成功、带源限制或软件阻断，最终都交付逐55来源矩阵：原13复用证据；剩25与periop17各自
+列查询/样本/schema/键/raw/投影/字段一致/幂等/正文时间签署/源限制/读取器覆盖/最终状态。
+两类业务别名另列复用关系，不充数。所有计数必须来自实际执行，零样本和未执行保持明确状态。
+矩阵中要区分：accepted、accepted_with_source_limitations、await_nonempty_sample、vendor_blocked、
+blocked_missing_cohort、mapping_or_target_gap、software_blocked；不能只给总PASS。
+报告实际Caché访问、PG版本、全表/序列保护与恢复指纹；未执行完整规则引擎保持false。
+原13/业务库accessed=false，automatic_incremental=false，scheduled_task_created=false。
+只打包本run的非PHI reports、逐55矩阵、局部脱敏diff、manifest与CHECKSUMS，报告大小和SHA256。
+不得打包源配置/runtime、passfile、cohort、原始日志/异常文本、dump、raw、姓名、正文或真实键。
+四个新库与现场保留，不删库/历史失败，不再为每个小步骤新建一批库。完成后停止，不启用任务。

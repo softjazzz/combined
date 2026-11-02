@@ -1,0 +1,10 @@
+[Unit]
+Description=Run MedQC CDM publisher daily
+
+[Timer]
+OnCalendar=*-*-* 01:30:00
+Persistent=true
+Unit=medqc-ingest-publish.service
+
+[Install]
+WantedBy=timers.target
