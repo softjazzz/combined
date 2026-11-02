@@ -14,6 +14,7 @@ import re
 from typing import Any, Mapping, Protocol, Sequence, cast
 
 from .decision_model import RuleDecision
+from .basic_timeliness_facts import parse_authoritative_datetime
 from .evidence_material import (
     EvidenceMaterialTruncated,
     EvidenceMaterialUnavailable,
@@ -710,6 +711,47 @@ def _culture_orders_lack_report_material(
     )
 
 
+def _independent_exam_times_complete(
+    exam_rows: Sequence[Mapping[str, Any]],
+    report_rows: Sequence[Mapping[str, Any]],
+) -> bool:
+    """缺键HIS不能证明事件范围；仅接受PACS自身同ID的唯一精确时刻。"""
+    by_id: dict[str, list[Mapping[str, Any]]] = {}
+    for row in exam_rows:
+        exam_id = _clean(row.get("exam_id"))
+        if not exam_id:
+            return False
+        by_id.setdefault(exam_id, []).append(row)
+    for row in report_rows:
+        exam_id = _clean(row.get("exam_id"))
+        if exam_id not in by_id and not _is_exam_master_target(row):
+            continue
+        if not exam_id:
+            return False
+        by_id.setdefault(exam_id, []).append(row)
+    if not by_id:
+        return False
+    for rows in by_id.values():
+        roles = []
+        for fields in (("exam_time", "exam_datetime"), ("report_time", "report_datetime")):
+            values = set()
+            for row in rows:
+                for field in fields:
+                    raw = row.get(field)
+                    if not _clean(raw):
+                        continue
+                    parsed = parse_authoritative_datetime(raw)
+                    if parsed is None:
+                        return False
+                    values.add(parsed)
+            if len(values) > 1:
+                return False
+            roles.append(values)
+        if not any(roles):
+            return False
+    return True
+
+
 def _order_exam_structure_outcome(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> _ExamLabOutcome | None:
@@ -763,6 +805,12 @@ def _order_exam_structure_outcome(
             for row in exam_rows
         ):
             return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "required_field_missing")
+        if any(not _clean(row.get("order_id")) for _time, row in orders) and not (
+            _independent_exam_times_complete(exam_rows, report_rows)
+        ):
+            # 有报告行不等于身份/时间完整。缺键医嘱且PACS不能独立定位时，
+            # 先保留关联缺口，不能让“检查前无病程”直接变成确定问题。
+            return _ExamLabOutcome("LX0609-06-01-02", "data_gap", "association_failed")
         return None
     if not orders and not course_rows and not exam_rows:
         return None
