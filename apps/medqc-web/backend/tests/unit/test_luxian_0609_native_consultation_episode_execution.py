@@ -4948,6 +4948,61 @@ async def test_023_recommendation_only_declined_in_record_is_compliant_and_liste
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("declined", (True, False))
+async def test_023_measure_refinement_distinguishes_declined_from_unmet_condition(monkeypatch, declined):
+    """公开执行器保留全部拒绝的合规闭环，纯条件未成立仍不适用。"""
+    from app.services.luxian_0609.consultation_measure_check import MeasureCheckOutcome
+
+    quote = "建议胃镜检查，必要时活检" if declined else "若病情允许则行胃镜检查"
+    rejection = "患者拒绝胃镜"
+    rows = _declined_bronchoscopy_rows(orders=[])
+    rows["consultation_record"][0]["record_content"] = (
+        "请消化内科会诊。会诊意见:" + quote + "。" + (rejection + "。" if declined else "")
+    )
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: rows[source_key])
+
+    async def measure_check(*, completed, **_):
+        return MeasureCheckOutcome(
+            "ready", {completed[0].recommendation.recommendation_ref: ("胃镜检查", "活检")},
+            conditional_measures={completed[0].recommendation.recommendation_ref: ("活检",)},
+        )
+
+    monkeypatch.setattr(episode, "check_consultation_measures", measure_check)
+    client = _EvidenceBoundStageClient(
+        _single_recommendation_payload(
+            action_type="procedure", source_quote=quote, has_conditional_measures=declined,
+            execution_scope="in_stay" if declined else "conditional",
+            scope_quote="" if declined else "若病情允许",
+            decline_state="partial" if declined else "none",
+            declined_measures=["胃镜"] if declined else [], decline_quote=rejection if declined else "",
+        ), candidate_ref="inpat_nondrug_order-1", candidate_text="不存在的医嘱",
+    )
+    session = _window_session(rows_by_source=rows)
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",), institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-03-01-04",),
+    )
+    facts = dict(result.customer_display_facts)["LX0609-03-01-04"]
+    assert facts["missing_execution_count"] == 0
+    assert facts["recommendation_evidence"] == []
+    if declined:
+        assert facts["excluded_recommendations"][0]["exclusion_reason"] == "declined_in_record"
+    from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+
+    decision = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=("LX0609-03-01-04",),
+        snapshot=session.snapshot, evidence_materials=session.materials,
+    )[0]
+    final = finalize_luxian_0609_reduced_customer_result(
+        decision=decision, raw_customer_display_facts=facts,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    assert final["status"] == decision.final_state.value == ("compliant" if declined else "not_applicable")
+
+
+@pytest.mark.asyncio
 async def test_023_post_consultation_order_after_source_limit_reaches_stage_two(
     monkeypatch,
 ):

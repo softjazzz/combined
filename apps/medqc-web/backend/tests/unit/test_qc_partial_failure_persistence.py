@@ -886,6 +886,74 @@ def _complete_full_run(service) -> str:
     return claim
 
 
+@pytest.mark.parametrize("previous_full", [False, True])
+@pytest.mark.parametrize("delivered", [0, 1])
+def test_pool_and_worklist_show_same_partial_round_as_detail_and_export(
+    canonical_storage, monkeypatch, previous_full, delivered,
+):
+    from app.services.medical_records import query_service
+    from app.services.workstation.worklist_service import WorkstationAggregationService
+
+    service, engine, jobs, _ = canonical_storage
+    if previous_full:
+        _complete_full_run(service)
+    with engine.begin() as connection:
+        template = dict(connection.execute(sa.select(jobs)).mappings().first())
+        template.update(id="new-partial", status="queued", summary_json=None, items_json=None,
+                        failed_records_json=None, finished_at=None,
+                        created_at=datetime(2026, 9, 22), updated_at=datetime(2026, 9, 22))
+        connection.execute(jobs.insert().values(**template))
+    claim = service.mark_batch_job_running(job_id="new-partial")
+    items = [_canonical_item(_RERUN_RECORD_A, rule) for rule in _RERUN_RULE_IDS]
+    items += [_canonical_item(_RERUN_RECORD_B, rule) for rule in _RERUN_RULE_IDS[:delivered]]
+    failed_rules = list(_RERUN_RULE_IDS[delivered:])
+    assert service.complete_batch_job(
+        job_id="new-partial", attempt_filters_json=claim,
+        summary={**_partial_summary(total_records=2, delivered=len(items), failed_rules=failed_rules),
+                 "rule_results": [{"rule_code": rule, "items": [x for x in items if x["rule_id"] == rule]}
+                                  for rule in _RERUN_RULE_IDS]},
+        items=items, failed_records=[_rule_failure(_RERUN_RECORD_B, rule) for rule in failed_rules],
+    )
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(workspace, "CustomQCWorkspaceService", lambda: service)
+    owner = object.__new__(WorkstationAggregationService)
+    owner._session_factory = factory
+    identity = tuple(CaseRef.from_mapping(_RERUN_RECORD_B))
+    pool = query_service._load_latest_luxian_0609_qc_summaries(
+        [_RERUN_RECORD_B], session_factory=factory,
+    )[identity]
+    worklist = owner._load_luxian_0609_summaries([_RERUN_RECORD_B])[identity]
+    detail = service.build_latest_single_record_result_dto(**_RERUN_RECORD_B)
+    exported = service.build_luxian_0609_completed_record_result_summaries(
+        record_refs=[_RERUN_RECORD_B], include_latest_partial=True,
+        session_factory=factory,
+    )[identity]
+    assert pool == worklist == exported
+    assert detail["state"] == "ready"
+    assert pool["status"] == ("ready" if delivered else "failed")
+    assert pool["job_id"] == detail["job_id"] == "new-partial"
+    assert pool["total_rule_count"] == detail["completed_rule_count"] == delivered
+    assert pool["failed_rule_ids"] == detail["failed_rule_ids"] == failed_rules
+    bulk = service.build_latest_luxian_0609_record_result_dtos(record_refs=[_RERUN_RECORD_B])[identity]
+    assert bulk["state"] == "ready"
+    assert bulk["execution_status"] == detail["execution_status"]
+    assert bulk["failed_rule_ids"] == failed_rules
+    normalized = query_service._normalize_latest_qc_summary_map({identity: pool})
+    assert normalized[identity]["execution_status"] == detail["execution_status"]
+    assert normalized[identity]["failed_rule_ids"] == failed_rules
+    counts = query_service._build_qc_summary([_RERUN_RECORD_B], normalized)
+    assert counts["ready_records"] == counts["not_run_records"] == 0
+    assert counts["partial_failed_records" if delivered else "failed_records"] == 1
+    monkeypatch.setattr(owner, "_load_luxian_home_records", lambda *_args, **_kwargs: [
+        {**ref, "department": "合成科室"} for ref in (_RERUN_RECORD_A, _RERUN_RECORD_B)
+    ])
+    home = owner._build_luxian_0609_home_projection(
+        None, department=None, keyword=None, priority_limit=10,
+    )
+    assert home["kpis"]["qc_completed_total"] == 1
+    assert home["kpis"]["qc_partial_failed_total" if delivered else "qc_failed_total"] == 1
+
+
 def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storage):
     service, engine, jobs, envelopes = canonical_storage
     first_claim = _complete_full_run(service)

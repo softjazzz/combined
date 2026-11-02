@@ -7,6 +7,7 @@ from dataclasses import fields, is_dataclass
 from collections.abc import Mapping
 
 from .exam_analysis_freeze import load_payload, save_payload
+from . import exam_analysis_freeze
 from .rule_decision_settings import _luxian_0609_model_identity
 
 
@@ -37,7 +38,8 @@ def fact_freeze_key(*, protocol, prompt, client, materials, scope=None):
     else:
         # 未知配置不能共享其他模型或测试替身的应答。
         return None
-    data = {"version": "validated-facts-v1", "protocol": protocol, "prompt": prompt,
+    data = {"version": "validated-facts-v1", "storage_schema": exam_analysis_freeze.FREEZE_SCHEMA_VERSION,
+            "protocol": protocol, "prompt": prompt,
             "model": identity, "materials": _material_value(materials), "scope": scope}
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False, default=str, allow_nan=False).encode()).hexdigest()
 

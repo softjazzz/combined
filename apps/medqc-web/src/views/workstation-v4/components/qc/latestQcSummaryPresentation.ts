@@ -40,6 +40,13 @@ export function formatQcCompletedAt(value?: string | null): string {
 export function resolveResultPresentation(
   summary?: RecordLatestQcSummary,
 ): Pick<QcRecordResultRow, 'resultStatus' | 'resultLabel' | 'issueSummary' | 'latestQcTime'> {
+  if (summary?.status === 'failed' || summary?.executionStatus === 'failed') {
+    return {
+      resultStatus: 'technical-error', resultLabel: '执行失败',
+      issueSummary: `执行失败 · ${summary.failedRuleCount || 0} 项失败，尚无有效结果`,
+      latestQcTime: formatQcCompletedAt(summary.completedAt),
+    }
+  }
   if (summary?.status === 'technical_error') {
     return {
       resultStatus: 'technical-error',
@@ -61,6 +68,20 @@ export function resolveResultPresentation(
   const nonCompliant = statusCount(statusCounts, 'non_compliant')
   const dataGap = statusCount(statusCounts, 'data_gap')
   const uncertain = statusCount(statusCounts, 'uncertain')
+  if (summary.executionStatus === 'partial_failed') {
+    return {
+      resultStatus: 'technical-error', resultLabel: '部分执行失败',
+      issueSummary: [
+        '部分执行失败',
+        `${summary.totalRuleCount || 0} 项有效结果`,
+        `${summary.failedRuleCount || 0} 项失败`,
+        nonCompliant ? `确定问题 ${nonCompliant}` : '',
+        dataGap ? `待核实 ${dataGap}` : '',
+        uncertain ? `待判断 ${uncertain}` : '',
+      ].filter(Boolean).join(' · '),
+      latestQcTime: formatQcCompletedAt(summary.completedAt),
+    }
+  }
   const issueSummary =
     [
       nonCompliant > 0 ? `确定问题 ${nonCompliant}` : '',
