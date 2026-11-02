@@ -344,6 +344,9 @@ class Diagnosis(AuditMixin, Base):
     """诊断表（diagnosis）- 每条诊断一行记录"""
     __tablename__ = "diagnosis"
 
+    # Caché原始事实独立保存，不补写事件/签署，不解释厂商代码。
+    main_diag_flag = Column(Text, nullable=True, comment="Caché源 MainDiag_Flag 厂商代码原值，不解释真假")
+
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
@@ -595,6 +598,17 @@ class ConsultationRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
 class RescueRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """抢救记录（rescue_record）"""
     __tablename__ = "rescue_record"
+
+    # Caché原始事实独立保存，不补写事件/签署，不解释厂商代码。
+    record_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 record_datetime，原值语义保留",
+    )
+    physician_sign = Column(Text, nullable=True, comment="Caché源字段 physician_sign，原值语义保留")
+    physician_sign_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 physician_sign_datetime，原值语义保留",
+    )
 
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
@@ -867,6 +881,17 @@ class SummaryRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """阶段小结（summary_record）"""
     __tablename__ = "summary_record"
 
+    # Caché原始事实独立保存，不补写事件/签署，不解释厂商代码。
+    record_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 record_datetime，原值语义保留",
+    )
+    physician_sign = Column(Text, nullable=True, comment="Caché源字段 physician_sign，原值语义保留")
+    physician_sign_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 physician_sign_datetime，原值语义保留",
+    )
+
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
@@ -1002,6 +1027,18 @@ class AnesthesiaRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
 class NewbornRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """新生儿记录（newborn_record）"""
     __tablename__ = "newborn_record"
+
+    # Caché原始事实独立保存，不补写事件/签署，不解释厂商代码。
+    record_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 record_datetime，原值语义保留",
+    )
+    pregnant_weeks = Column(Text, nullable=True, comment="Caché源字段 pregnant_weeks，原值语义保留")
+    delivery_method = Column(Text, nullable=True, comment="Caché源字段 delivery_method，原值语义保留")
+    infant_sex = Column(Text, nullable=True, comment="Caché源字段 infant_sex，原值语义保留")
+    birthday = Column(Text, nullable=True, comment="Caché源字段 birthday，原值语义保留")
+    birthweight = Column(Text, nullable=True, comment="Caché源字段 birthweight，原值语义保留")
+    birthheight = Column(Text, nullable=True, comment="Caché源字段 birthheight，原值语义保留")
 
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
@@ -1480,6 +1517,20 @@ class PathologyExamMaster(AuditMixin, Base):
     """病理检查申请单（pathology_exam_master）"""
     __tablename__ = "pathology_exam_master"
 
+    # Caché原始事实独立保存，不补写事件/签署，不解释厂商代码。
+    specimen_invitro_time = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 specimen_invitro_time，原值语义保留",
+    )
+    specimen_fixation_time = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 specimen_fixation_time，原值语义保留",
+    )
+    specimen_received_time = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 specimen_received_time，原值语义保留",
+    )
+
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
     visit_id = Column(String(100), primary_key=True, comment="就诊号")
@@ -1503,6 +1554,15 @@ class PathologyExamMaster(AuditMixin, Base):
 class PathologyExamReport(AuditMixin, Base):
     """病理检查报告（pathology_exam_report）"""
     __tablename__ = "pathology_exam_report"
+
+    # Caché原始事实独立保存，不补写事件/签署，不解释厂商代码。
+    specimen_received_time = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 specimen_received_time，原值语义保留",
+    )
+    ihc_result = Column(Text, nullable=True, comment="Caché源字段 ihc_result，原值语义保留")
+    material_type = Column(Text, nullable=True, comment="Caché源字段 material_type，原值语义保留")
+    remark = Column(Text, nullable=True, comment="Caché源字段 remark，原值语义保留")
 
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")
@@ -1715,6 +1775,13 @@ class SurgeryInformConsent(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
 class CrisisValueRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     """危急值记录（crisis_value_record）"""
     __tablename__ = "crisis_value_record"
+
+    # Caché原始事实独立保存，不补写事件/签署，不解释厂商代码。
+    physician_sign = Column(Text, nullable=True, comment="Caché源字段 physician_sign，原值语义保留")
+    physician_sign_datetime = Column(
+        DateTime(timezone=False), nullable=True,
+        comment="Caché源字段 physician_sign_datetime，原值语义保留",
+    )
 
     institute_id = Column(String(100), primary_key=True, comment="机构号")
     patient_id = Column(String(100), primary_key=True, comment="患者号")

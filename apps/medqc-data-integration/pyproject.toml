@@ -35,6 +35,7 @@ packages = ["src/medqc_ingest"]
 [tool.hatch.build.targets.wheel.force-include]
 "contracts/periop-acceptance-contracts.json" = "medqc_ingest/control/contracts/periop-acceptance-contracts.json"
 "control_migrations/001_job_control.sql" = "medqc_ingest/control/migrations/001_job_control.sql"
+"contracts/remaining-interface-contracts.json" = "medqc_ingest/control/contracts/remaining-interface-contracts.json"
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-markers"
