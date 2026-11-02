@@ -46,7 +46,11 @@ export interface RecordSourceState {
 }
 
 export interface RecordLatestQcSummary {
-  status: 'ready' | 'not_run' | 'technical_error'
+  status: 'ready' | 'not_run' | 'technical_error' | 'failed'
+  executionStatus?: 'partial_failed' | 'failed'
+  completedRuleCount?: number
+  failedRuleCount?: number
+  failedRuleIds?: string[]
   completedAt?: string | null
   totalRuleCount?: number
   statusCounts?: Record<string, number>
@@ -58,6 +62,8 @@ export interface RecordPoolQcSummary {
   readyRecords: number
   notRunRecords: number
   technicalErrorRecords: number
+  partialFailedRecords?: number
+  failedRecords?: number
   statusCounts: Record<string, number>
   runningState: 'unknown' | string
 }

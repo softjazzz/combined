@@ -470,7 +470,7 @@
                   >
                     结论结构
                   </h2>
-                  <p>已完成病历中的规则结论。</p>
+                  <p>{{ clinicalQc.kpis.qc_partial_failed_total ? '已回写的有效规则结论，含未全部完成病历。' : '已完成病历中的规则结论。' }}</p>
                 </div>
               </header>
               <div
@@ -490,7 +490,7 @@
                 </div>
                 <ul
                   class="qc-home-conclusion__legend"
-                  aria-label="已完成病历中的规则结论图例"
+                  :aria-label="clinicalQc.kpis.qc_partial_failed_total ? '已回写有效规则结论图例' : '已完成病历中的规则结论图例'"
                 >
                   <li
                     v-for="segment in conclusionSegments"
@@ -565,6 +565,18 @@
                   />
                   <dt>最近成功质控</dt>
                   <dd>{{ formatDateTime(clinicalQc.data_health.last_successful_qc_at) }}</dd>
+                </div>
+                <div
+                  v-if="clinicalQc.kpis.qc_partial_failed_total || clinicalQc.kpis.qc_failed_total"
+                  data-testid="qc-execution-failures"
+                >
+                  <MqIconTile
+                    name="failed"
+                    tone="warning"
+                    :size="34"
+                  />
+                  <dt>未全部完成</dt>
+                  <dd>部分失败 {{ clinicalQc.kpis.qc_partial_failed_total || 0 }} 份、执行失败 {{ clinicalQc.kpis.qc_failed_total || 0 }} 份</dd>
                 </div>
               </dl>
             </section>
@@ -739,14 +751,14 @@ function formatRate(value: number): string {
 const rates = computed(() => ({
   pending: ratio(kpiByKey.value.pending.value, recordsTotal.value),
   completion: ratio(kpiByKey.value.completed.value, recordsTotal.value),
-  issue: ratio(kpiByKey.value.risk.value, kpiByKey.value.completed.value),
+  issue: ratio(kpiByKey.value.risk.value, kpiByKey.value.completed.value + (clinicalQc.value?.kpis.qc_partial_failed_total || 0)),
 }))
 
 const metricCards = computed<MetricCard[]>(() => [
   {
     ...kpiByKey.value.risk,
     rate: rates.value.issue,
-    rateLabel: `占已完成 ${formatRate(rates.value.issue)}%`,
+    rateLabel: `占${clinicalQc.value?.kpis.qc_partial_failed_total ? '有结果病历' : '已完成'} ${formatRate(rates.value.issue)}%`,
   },
   {
     ...kpiByKey.value.completed,

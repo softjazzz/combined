@@ -250,12 +250,24 @@ function normalizeStatusCounts(raw: unknown): Record<string, number> {
 function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
   const source = (raw || {}) as LooseRecord
   const status = pickString(source, ['status'])
-  if (status === 'ready') {
+  if (status === 'ready' || status === 'failed') {
+    const executionStatus = pickString(source, ['executionStatus', 'execution_status'])
+    const failedIds = source.failedRuleIds ?? source.failed_rule_ids
     return {
-      status: 'ready',
+      status,
       completedAt: pickString(source, ['completedAt', 'completed_at']) || null,
       totalRuleCount: asNumber(source.totalRuleCount ?? source.total_rule_count),
       statusCounts: normalizeStatusCounts(source.statusCounts ?? source.status_counts),
+      ...(executionStatus === 'partial_failed' || executionStatus === 'failed'
+        ? {
+            executionStatus,
+            completedRuleCount: asNumber(source.completedRuleCount ?? source.completed_rule_count),
+            failedRuleCount: asNumber(source.failedRuleCount ?? source.failed_rule_count),
+            failedRuleIds: Array.isArray(failedIds)
+              ? failedIds.filter((value): value is string => typeof value === 'string')
+              : [],
+          }
+        : {}),
     }
   }
   if (status === 'technical_error') {
@@ -274,6 +286,12 @@ export function normalizeRecordPoolQcSummary(raw: unknown): RecordPoolQcSummary 
     readyRecords: asNumber(source.readyRecords ?? source.ready_records),
     notRunRecords: asNumber(source.notRunRecords ?? source.not_run_records),
     technicalErrorRecords: asNumber(source.technicalErrorRecords ?? source.technical_error_records),
+    ...(source.partialFailedRecords !== undefined || source.partial_failed_records !== undefined
+      ? { partialFailedRecords: asNumber(source.partialFailedRecords ?? source.partial_failed_records) }
+      : {}),
+    ...(source.failedRecords !== undefined || source.failed_records !== undefined
+      ? { failedRecords: asNumber(source.failedRecords ?? source.failed_records) }
+      : {}),
     statusCounts: normalizeStatusCounts(source.statusCounts ?? source.status_counts),
     runningState: pickString(source, ['runningState', 'running_state']) || 'unknown',
   }

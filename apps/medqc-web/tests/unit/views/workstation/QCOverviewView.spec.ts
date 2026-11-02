@@ -193,6 +193,20 @@ describe('QCOverviewView', () => {
     expect(wrapper.find('[data-testid="home-trend"]').exists()).toBe(false)
   })
 
+  it('明确显示部分失败与全部失败份数，不归入完成数量', async () => {
+    apiGet.mockResolvedValue({ success: true, data: {
+      ...clinicalQcPayload,
+      clinical_qc: { ...clinicalQcPayload.clinical_qc,
+        kpis: { ...clinicalQcPayload.clinical_qc.kpis,
+          qc_completed_total: 11, qc_partial_failed_total: 1, qc_failed_total: 1,
+        },
+      },
+    } })
+    const wrapper = mountView()
+    await flushHomeLoad()
+    expect(wrapper.text()).toContain('部分失败 1 份、执行失败 1 份')
+  })
+
   it('移除搜索栏后在范围行保留科室筛选和刷新', async () => {
     const wrapper = mountView()
     await flushHomeLoad()

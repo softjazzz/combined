@@ -100,3 +100,11 @@ py -3.10 scripts/run_qc_scheduler_tests.py --profile offline --suite compatibili
 - 没有重新执行一次性真实 PG／RabbitMQ、全历史迁移、完整 HTTP→生产Worker→Gateway 联调或现场模型验收。PR20 曾有的真实隔离基础设施记录仅为历史证据。
 - 没有真实模型或 Strata 连接、患者质控、27例重跑、部署、打包或业务库写入；不声称完整病历吞吐或医学质量验收完成。
 - 两项跨进程回放尚未在保持等价隔离的受控入口验收；不能据本次合成宣称所有扩大回归全绿。正式发布仍需目标适配分支 CI、真实隔离基础设施与部署配置验收。
+# 2026-11-01 合并前同步PR19
+
+用户授权按PR19、PR22、PR23顺序合入业务线。PR19已由GitHub合并为`d6d0fa5151571d8b7e2e54de24c64b8459459240`；本适配分支同步该最新业务提交，无文本冲突。PR19的30个差异文件中28个与来源提交完全一致，仅`custom_qc_workspace_service.py`及`test_qc_partial_failure_persistence.py`同时保留MQ生命周期和最新失败轮次保护；没有用整文件覆盖任一方。
+
+必要交叉验收：`run_qc_scheduler_tests.py --profile m2-synthetic --suite m2-release tests/unit/test_qc_partial_failure_persistence.py tests/unit/test_luxian_0609_remaining_fact_freeze.py`，233项通过，3项既有告警。实际验证内存事务、失败结果读取、MQ补跑与冻结协议；不连接模型或业务库。当前提交的远端CI需重新核对，旧86315b746的绿灯不冒充新Head验收。
+
+本机integration工作树的3个未推送同步工具提交及6组未跟踪资料已在私有临时目录备份，原工作树保持不动，不混入这次PR。默认开关、迁移代码、V7.1页面以及现场部署边界保持原约束。
+
