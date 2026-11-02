@@ -292,7 +292,7 @@ _EMBEDDED_DECISION_DEFER_PATTERN = re.compile(
     r"(?:患者|家属).{0,16}(?:拒绝|不同意|暂不|暂缓|放弃|决定不|要求不)"
 )
 _TEXT_NORMALIZE_PATTERN = re.compile(r"[^\u4e00-\u9fffA-Za-z0-9]+")
-_EVALUATOR_VERSION = "consultation-episode-v2"
+_EVALUATOR_VERSION = "consultation-episode-v3"
 _SIGNATURE_LABEL = (
     r"(?:(?:患者|家属|会诊(?:医师|医生)?|申请(?:医师|医生)?|"
     r"记录(?:医师|医生)?|上级医师|医师|医生)?(?:电子)?签(?:名|字))"
@@ -4243,6 +4243,8 @@ def _declined_by_record_semantics(
 def _order_execution_view(
     completed: Sequence["_CompletedRecommendation"],
     assessments: Sequence["_ExecutionAssessment"] | None,
+    *,
+    excluded_refs: frozenset[str] = frozenset(),
 ) -> tuple[tuple["_CompletedRecommendation", ...], tuple["_ExecutionAssessment", ...] | None]:
     """023 只按医嘱核对：剔除非医嘱类建议，并把病程痕迹从执行证据中去掉。
 
@@ -4255,6 +4257,7 @@ def _order_execution_view(
     in_scope = tuple(
         item for item in completed
         if _is_order_recommendation(item.recommendation) and not item.fully_declined
+        and item.recommendation.recommendation_ref not in excluded_refs
     )
     if assessments is None:
         return in_scope, None
@@ -4502,6 +4505,19 @@ def _apply_order_measure_check(
         for item in order_assessments or ()
         if item.recommendation_ref not in excluded
     )
+    if not kept_completed and any(
+        _is_order_recommendation(item.recommendation)
+        and (
+            _order_scope_exclusion_reason(item) == "declined_in_record"
+            or (
+                item.recommendation.recommendation_ref in excluded
+                and item.declined_measures
+            )
+        )
+        for item in completed
+    ):
+        # 逐措施剔除后仍保留明确拒绝的闭环；纯条件未成立不走这条合规分支。
+        return ("compliant", "requirement_satisfied"), frozenset(excluded)
     return _execution_quality_outcome(
         assessments=kept_assessments,
         completed_recommendations=kept_completed,
@@ -5309,6 +5325,7 @@ async def _execute_consultation_episode_rules(
     excluded_conditional_recommendations: tuple[_CompletedRecommendation, ...] = ()
     # 023 逐项核对查出的“当日未开立医嘱”措施，供客户展示逐条说明原因。
     measure_missing_by_ref: dict[str, tuple[str, ...]] = {}
+    measure_excluded_refs: frozenset[str] = frozenset()
     embedded_decision_refs: frozenset[str] = frozenset()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
@@ -6038,7 +6055,6 @@ async def _execute_consultation_episode_rules(
                         item for item in measure_scope
                         if _needs_measure_scope_refinement(item)
                     )
-                measure_excluded_refs = frozenset()
                 # 用户口径（2026-10-22）：手术/转科建议无结构化执行证据时，病程写明患方同意
                 # 或拒绝由逐项核对模型判断，只给这类建议另带病程候选；其余建议仍只核对医嘱。
                 stay_measure_scope = tuple(
@@ -6128,7 +6144,10 @@ async def _execute_consultation_episode_rules(
                 continue
             try:
                 rule_completed, rule_assessments = (
-                    _order_execution_view(completed_recommendations, order_assessments)
+                    _order_execution_view(
+                        completed_recommendations, order_assessments,
+                        excluded_refs=measure_excluded_refs,
+                    )
                     if rule_id == "LX0609-03-01-04"
                     else (completed_recommendations, execution_assessments)
                 )
@@ -6191,7 +6210,10 @@ async def _execute_consultation_episode_rules(
         if rule_id not in selected or rule_id not in statuses:
             continue
         rule_completed, rule_assessments = (
-            _order_execution_view(completed_recommendations, order_assessments)
+            _order_execution_view(
+                completed_recommendations, order_assessments,
+                excluded_refs=measure_excluded_refs,
+            )
             if rule_id == "LX0609-03-01-04"
             else (completed_recommendations, execution_assessments)
         )

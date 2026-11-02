@@ -296,14 +296,15 @@ async def test_047_pre_end_daily_anchor_is_a_time_gap_not_a_late_evaluation():
 
 
 @pytest.mark.asyncio
-async def test_047_unresolved_end_marker_makes_an_explicit_anchor_unreliable():
+@pytest.mark.parametrize("evaluation_time", ["2026-01-01 11:00:00", "2026-01-02 07:00:00"])
+async def test_047_unresolved_end_marker_makes_an_explicit_anchor_unreliable(evaluation_time):
     session = _session(
         bloodtrans_rows=[
             {"document_id": "BT-1", "record_content": "2026-01-01 10:00:00输血结束。"},
             {"document_id": "BT-2", "record_content": "2026-01-01 16:00:00输血结束。"},
         ],
         daily_rows=[
-            {"document_title": "输血后评价记录", "document_id": "DC-MIXED", "record_time": "2026-01-01 11:00:00", "record_content": "2026-01-01 10:00:00输血结束；另一次输血结束，复查血红蛋白改善。"},
+            {"document_title": "输血后评价记录", "document_id": "DC-MIXED", "record_time": evaluation_time, "record_content": "2026-01-01 10:00:00输血结束；另一次输血结束，复查血红蛋白改善。"},
         ],
         horizon_date="2026-01-03",
     )

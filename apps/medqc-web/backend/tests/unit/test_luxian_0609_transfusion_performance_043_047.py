@@ -411,7 +411,9 @@ async def test_047_unknown_end_event_keeps_identity_without_borrowing_other_eval
 
 
 @pytest.mark.asyncio
-async def test_047_ambiguous_bc_evaluation_does_not_erase_confirmed_missing_a_and_saves() -> None:
+@pytest.mark.parametrize("case", ("ambiguous-bc", "semantic-unclear-b", "semantic-unclear-b-unknown-c", "date-outside"))
+@pytest.mark.parametrize("reverse", (False, True))
+async def test_047_ambiguous_bc_evaluation_does_not_erase_confirmed_missing_a_and_saves(case, reverse) -> None:
     """B/C 间局部歧义不覆盖 A 的确定缺失，并穿过 Finalizer 与 SQLite 保存合同。"""
 
     records = [
@@ -419,27 +421,44 @@ async def test_047_ambiguous_bc_evaluation_does_not_erase_confirmed_missing_a_an
         _actual_record("AMBIGUOUS-B", "05", end="10:00"),
         _actual_record("AMBIGUOUS-C", "05", end="12:00"),
     ]
+    evaluations = [{
+        "document_id": "EVAL-BC", "document_title": "输血后评价记录",
+        "record_time": "2026-06-05 13:00:00", "record_content": "输血后复查血红蛋白较前改善。",
+    }]
+    client = None
+    if case != "ambiguous-bc":
+        records.pop()
+        if case.startswith("semantic-unclear-b"):
+            text = "2026-06-05 10:00:00输血结束；复查血红蛋白较前变化不大。"
+            evaluations[0]["record_content"] = text
+            client = FrozenTransfusionProtocolClient(
+                default_course_label="record", effect_labels={text: ("unclear", "")},
+            )
+            if case.endswith("unknown-c"):
+                records.append({"document_id": "UNKNOWN-C", "record_content": "输血结束，输注过程顺利。"})
+        else:
+            evaluations[0].update(record_time="2026-06-08", record_content="输血结束，复查血红蛋白较前改善。")
+    if reverse:
+        records.reverse()
     result = await _run(
         RULE_047,
         {
             "mr_bloodtrans": STRUCTURED_EVENT,
             "bloodtrans_record": records,
-            "daily_course_record": [
-                {
-                    "document_id": "EVAL-BC",
-                    "document_title": "输血后评价记录",
-                    "record_time": "2026-06-05 13:00:00",
-                    "record_content": "输血后复查血红蛋白较前改善。",
-                }
-            ],
+            "daily_course_record": evaluations,
         },
         {str(row["record_content"]): "record" for row in records},
         horizon_date="2026-06-09",
+        client=client,
     )
 
     _assert_layers(result, "non_compliant", "requirement_violated")
-    assert result["facts"]["transfusion_end_time"] == "2026-06-01 10:00:00"
-    assert _evidence_ids(result["final"]) == {"MISSING-A"}
+    assert result["facts"]["transfusion_end_time"] == (
+        "2026-06-05 10:00:00" if case == "date-outside" else "2026-06-01 10:00:00"
+    )
+    assert _evidence_ids(result["final"]) == (
+        {"MISSING-A", "AMBIGUOUS-B"} if case == "date-outside" else {"MISSING-A"}
+    )
 
     from app.services.qc_workspace.canonical_result_store import (
         CanonicalResultStore,

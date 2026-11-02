@@ -144,6 +144,21 @@ def test_home_clinical_qc_keeps_technical_errors_out_of_medical_risk(monkeypatch
     assert {item["visit_id"] for item in payload["priority_items"]} == {"visit-1", "visit-2", "visit-3"}
 
 
+def test_partial_failure_keeps_confirmed_issues_without_counting_as_completed(monkeypatch):
+    records = [_record(1), _record(2), _record(3)]
+    partial = {**_ready(non_compliant=2), "execution_status": "partial_failed", "failed_rule_count": 1}
+    summaries = {
+        ("hospital-a", "patient-1", "visit-1"): _ready(),
+        ("hospital-a", "patient-2", "visit-2"): partial,
+        ("hospital-a", "patient-3", "visit-3"): {"status": "failed", "execution_status": "failed"},
+    }
+    payload = _service(monkeypatch, records, summaries).get_home()["clinical_qc"]
+    assert payload["kpis"]["qc_completed_total"] == 1
+    assert payload["kpis"]["qc_partial_failed_total"] == payload["kpis"]["qc_failed_total"] == 1
+    assert payload["canonical_status_counts"]["non_compliant"] == 2
+    assert payload["department_distribution"][0]["average_defect_count"] == 1
+
+
 def test_home_clinical_qc_has_explicit_scope_and_no_synthetic_trend(monkeypatch):
     records = [_record(1)]
     summaries = {("hospital-a", "patient-1", "visit-1"): _ready(non_compliant=1)}

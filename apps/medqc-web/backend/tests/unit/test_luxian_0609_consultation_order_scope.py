@@ -104,6 +104,9 @@ def test_措施名比对只免被拒绝的那一项() -> None:
     ("支气管镜检查", "支气管镜治疗"),
     ("检查", "肾穿刺活检"),
     ("检查", "检查"),
+    ("CT", "胸部CT检查"), ("左肾彩超", "右肾彩超检查"),
+    ("心电图", "动态心电图检查"), ("骨髓穿刺", "骨髓穿刺活检术"),
+    ("胸腔穿刺", "胸腔穿刺引流术"),
 ])
 def test_拒绝匹配不能丢失部位侧别或具体操作(declined, pending) -> None:
     assert not measure_is_declined(pending, (declined,))
@@ -167,6 +170,24 @@ def test_其他部位的拒绝不能把确定未执行改成不适用(declined, 
 def test_确属同项拒绝仍从未执行措施中剔除() -> None:
     filtered, _, _ = _measure_refinement("纤维支气管镜检查", "纤支镜检查")
     assert filtered.missing_measures == {"r1": ()}
+
+
+@pytest.mark.parametrize(("short", "long"), [
+    ("胃镜", "胃镜检查"), ("胸部CT", "胸部CT检查"),
+    ("右肾穿刺活检", "右肾穿刺活检术"),
+    ("彩超", "彩超检查"), ("B超", "B超检查"),
+    ("心电图", "心电图检查"), ("胸部X线", "胸部X线检查"),
+    ("CT", "CT检查"), ("超声", "超声检查"),
+    ("腰椎穿刺", "腰椎穿刺术"), ("骨髓穿刺", "骨髓穿刺术"),
+    ("胸腔穿刺", "胸腔穿刺术"),
+])
+def test_同项措施摘取边界不同仍可豁免(short, long):
+    for declined, pending in ((short, long), (long, short)):
+        assert measure_is_declined(pending, (declined,))
+        filtered, result, excluded = _measure_refinement(declined, pending)
+        assert filtered.missing_measures == {"r1": ()}
+        assert result == ("compliant", "requirement_satisfied")
+        assert excluded == frozenset({"r1"})
 
 
 def test_条件句没有实际拒绝事实时不豁免缺失措施() -> None:

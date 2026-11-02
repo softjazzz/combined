@@ -4404,7 +4404,7 @@ class CustomQCWorkspaceService:
                             item_status = _safe_text(item.get("status"), "unknown")
                             status_counts[item_status] = status_counts.get(item_status, 0) + 1
                         projections[identity] = {
-                            "status": "ready",
+                            "status": "ready" if partial["items"] else "failed",
                             "completed_at": (
                                 selected_job.get("finished_at").isoformat()
                                 if isinstance(selected_job.get("finished_at"), datetime)
@@ -4600,7 +4600,9 @@ class CustomQCWorkspaceService:
                 not in LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
             ]
             status = _safe_text(projection.get("status"))
-            if status != "ready":
+            if status != "ready" and not (
+                status == "failed" and projection.get("data_origin") == "saved_partial_task"
+            ):
                 results[identity] = {
                     "schema_version": "lx0609-single-record-result-v1",
                     "state": "not_found" if status == "not_run" else "technical_error",

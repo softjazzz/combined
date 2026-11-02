@@ -62,6 +62,35 @@ function deferred() {
 }
 
 describe('QcRecordReviewPreview', () => {
+  it.each(['failed', 'partial_failed'] as const)(
+    '读取成功但执行 %s 时保留有效项并展示真实失败范围', async (executionStatus) => {
+      const data = payload({
+        execution_status: executionStatus, failed_rule_count: 2,
+        failed_rule_ids: ['LX0609-07-03-01', 'LX0609-03-01-04'], is_complete: false,
+        items: executionStatus === 'failed' ? [] : payload().items,
+        result_rule_count: executionStatus === 'failed' ? 0 : 1,
+      })
+      getLatestResult.mockResolvedValue({ success: true, data })
+      const wrapper = mount(QcRecordReviewPreview, { props: { row } })
+      await flushPromises()
+      const notice = wrapper.get('[role="alert"]')
+      expect(notice.text()).toContain(`已保留 ${data.result_rule_count} 项有效结果`)
+      expect(notice.text()).toContain('2 项执行失败')
+      expect(notice.text()).toContain('LX0609-07-03-01')
+      expect(notice.text()).toContain('LX0609-03-01-04')
+      expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(data.items.length)
+      expect(wrapper.find('.full-result-button').exists()).toBe(true)
+      if (executionStatus === 'failed') expect(wrapper.text()).not.toContain('该状态暂无质控项')
+      else expect(wrapper.text()).toContain('后端已保存的结论')
+      // 刷新为正常成功轮后不残留旧失败提示。
+      getLatestResult.mockResolvedValue({ success: true, data: payload() })
+      await wrapper.setProps({ refreshKey: 1 })
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      expect(wrapper.text()).toContain('后端已保存的结论')
+      wrapper.unmount()
+    },
+  )
   it('病历沟通只传递当前已保存结果及精确三坐标，不改变原预览', async () => {
     const wrapper = mount(QcRecordReviewPreview, { props: { row, carePhase: 'discharged' } })
     await flushPromises()

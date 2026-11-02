@@ -207,6 +207,25 @@ describe('QcRecordResultListView', () => {
     })
   })
 
+  it('归一化后的失败状态和未全部完成计数实际渲染到列表', async () => {
+    const payload = response()
+    const failed = payload.data.records[0]
+    Object.assign(failed.latest_qc_summary, {
+      status: 'failed', execution_status: 'failed', total_rule_count: 0,
+      failed_rule_count: 2, failed_rule_ids: ['LX0609-06-01-04', 'LX0609-06-01-05'],
+      status_counts: {},
+    })
+    Object.assign(payload.data, { qc_summary: {
+      total_records: 6, ready_records: 3, failed_records: 1,
+    } })
+    mocks.getRaw.mockResolvedValue(payload)
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    expect(wrapper.text()).toContain('执行失败')
+    expect(wrapper.text()).toContain('2 项失败')
+    expect(wrapper.get('.review-metric--failed').text()).toContain('未全部完成1份')
+  })
+
   it.each([
     ['/workstation-v5/records/running', false],
     ['/workstation-v4/records/running', true],
@@ -586,6 +605,23 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
   })
+
+  it.each(['failed', 'partial_failed'] as const)(
+    '失败轮 %s 打开详情时不得标记为质控完成', async (executionStatus) => {
+      const data = response()
+      Object.assign(data.data.records[0].latest_qc_summary, {
+        status: executionStatus === 'failed' ? 'failed' : 'ready',
+        execution_status: executionStatus, failed_rule_count: 2,
+      })
+      mocks.getRaw.mockResolvedValue(data)
+      const wrapper = mountView('discharged')
+      await flushPromises()
+      await wrapper.get('tr[data-record-key*="V-priority"] .qc-record-result-table__view-button').trigger('click')
+      const focus = wrapper.getComponent(ResultDrawerStub).props('focus') as { label: string }
+      expect(focus.label).toContain('质控结束')
+      expect(focus.label).not.toContain('质控完成')
+    },
+  )
 
   it.each(['inpatient', 'discharged'] as const)(
     '%s 任务终态刷新列表和预览，不重复订阅成功事件',
