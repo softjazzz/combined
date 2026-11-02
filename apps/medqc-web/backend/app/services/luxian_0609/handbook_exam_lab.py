@@ -258,7 +258,10 @@ class HandbookLedger:
     overflow: frozenset[str]
 
     def complete(self, rule_id: str) -> bool:
-        return REPORT_RULES[rule_id] not in self.overflow and all(self.sources[key].complete for key in RULE_SOURCES[rule_id])
+        family = REPORT_RULES[rule_id]
+        # 影像报告完整性以 PACS 检查与报告为依据，HIS 医嘱不是必需来源。
+        required = FAMILY_SOURCES[family] if family == "exam" else RULE_SOURCES[rule_id]
+        return family not in self.overflow and all(self.sources[key].complete for key in required)
 
 
 @dataclass(frozen=True)
@@ -314,7 +317,7 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
                 order_id = clean(row.get("order_id"))
                 ids = (order_id,) if order_id and order_id in orders else ()
             linked_ids.update(ids)
-            if clean(row.get("order_id")) and not ids:
+            if family != "exam" and clean(row.get("order_id")) and not ids:
                 unresolved = True
         linked = tuple(item for order_id in sorted(linked_ids) for item in orders[order_id])
         all_rows = (*master_rows, *report_rows, *linked)
@@ -330,7 +333,7 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
         # 一个业务键可以有多条明细和重复导入；不同检查仍由业务键分开。
         # 多个不相同的原始医嘱号不能被静默合并，显式 ^ 合并键由既有函数验证。
         raw_order_ids = {clean(row.get("order_id")) for _, row in master_rows if clean(row.get("order_id"))}
-        if len(raw_order_ids) > 1 and "^" not in key:
+        if family != "exam" and len(raw_order_ids) > 1 and "^" not in key:
             unresolved = True
         if any(len({_names(row) for _, row in orders[oid]}) > 1 for oid in linked_ids):
             unresolved = True
@@ -352,6 +355,10 @@ def _build_family_events(family: str, sources: Mapping[str, SourceRows]) -> tupl
             not key.startswith("missing:") and not unresolved,
         ))
     for order_id in sorted(set(orders) - used_orders):
+        if family == "exam" and (masters or reports):
+            # 两套系统没有已验证外键时，不把未配对医嘱制造成额外的缺报告事件。
+            # 医嘱与病程一致性另行核查，不能据此声称这些医嘱已执行。
+            continue
         rows = tuple(orders[order_id])
         performed = any(_performed(row) for _, row in rows)
         excluded = all(_EXCLUDED.search(_status(row)) for _, row in rows) and not performed

@@ -1,0 +1,11 @@
+interface,date,status,reason
+web.surgery_application,2026-10-26,vendor_failed_window,source_procedure_failed_no_substitute
+web.surgery_application,2026-10-27,vendor_failed_window,source_procedure_failed_no_substitute
+web.surgery_record,2026-10-26,vendor_failed_window,source_procedure_failed_no_substitute
+web.surgery_record,2026-10-27,vendor_failed_window,source_procedure_failed_no_substitute
+web.surgery_record,2026-10-28,vendor_failed_window,source_procedure_failed_no_substitute
+web.surgery_inform_consent,2026-10-26..2026-10-28,await_nonempty_sample,zero_rows_not_proven_vendor_fault
+web.preane_surveil_record,2026-10-26..2026-10-28,await_nonempty_sample,zero_rows_not_proven_vendor_fault
+web.postane_surveil_record,2026-10-26..2026-10-28,await_nonempty_sample,zero_rows_not_proven_vendor_fault
+web.blood_application,2026-10-27,vendor_failed_window,source_procedure_failed_no_substitute
+web.blood_application,2026-10-28,vendor_failed_window,source_procedure_failed_no_substitute

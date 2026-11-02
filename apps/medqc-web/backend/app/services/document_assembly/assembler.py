@@ -190,6 +190,18 @@ INDEPENDENT_DOCUMENT_FIELDS: dict[str, tuple[str, ...]] = {
         table: ("planned_start_datetime", "planned_end_datetime", "reviewed_datetime", "carried_datetime", "canceled_datetime")
         for table in ("inpat_drug_order", "inpat_nondrug_order")
     },
+    # 围手术期源事实只作为独立元数据搬运；不拼进正文，不替代记录/提交/显示时间。
+    "anesthesia_record": (
+        "surgery_begin_datetime", "surgery_end_datetime",
+        "anesthesia_begin_datetime", "anesthesia_end_datetime",
+        "leave_operateroom_datetime", "anesthetist_sign", "anesthetist_sign_datetime",
+    ),
+    "surgery_risk_assessment": (
+        "application_id", "assessment_datetime", "surgeon_assess_date", "anesthesiologist_assess_date",
+    ),
+    "surgery_inventory_record": (
+        "surgery_date", "surgery_room_enter_time", "surgery_room_leave_time",
+    ),
     "death_record": ("death_datetime", "admission_condition", "treatment_course", "death_reason"),
     # 分节展示不等于完整原文/二级结构化；独立保存，禁止把签署时间提升为文书时钟。
     "discharge_record": ("record_content", "admission_condition", "treatment_course", "discharge_order", "chief_physician_sign_datetime", "v2_schema"),

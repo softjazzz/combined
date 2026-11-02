@@ -1,0 +1,84 @@
+目标：就现有13接口完成一次正式接管与部署验收，不扩接口、不再做字段探查。
+
+一、不可变范围
+源只读：medqc_bundle_time_clone_20261029180906。
+源固定数据：2026-10-26..2026-10-28，raw=87201，历史版本应完整保留，78个批次均succeeded。
+不连接 medqc、medqc_cache_poc 或旧051验收库，不改应用.env、不启动规则引擎。
+不改既有PostgreSQL服务，不重启数据库或客户机，不注册/启用计划任务，不删除任何库。
+可以创建4个全新验收库：ingest、CDM克隆、ingest恢复、CDM恢复，均有14位时间戳。
+所有新库由脚本创建；名称已存在立即停止，不复用、更不DROP/覆盖。
+
+二、开工前
+核对外层ZIP和内部CHECKSUMS。解压到全新代码目录，例如 D:\medqc\service-takeover-0.3。
+代码目录保持不变；运行数据使用另外的全新目录 D:\medqc\service-takeover-run-时间戳。
+沿用已有Python 3.10 64位解释器和现有pyodbc/psycopg2；不联网、不安装依赖。
+先查明解释器真实路径，不能用默认py（它可能指向3.12）。
+PostgreSQL必须已在线，使用已有16版createdb/pg_dump/pg_restore；不要另行初始化集群。
+在管理员PowerShell中执行；脚本会先验证权限，再创建受保护文件。
+
+离线自检（$python请替换为已核实的已有解释器路径）：
+Set-Location 'D:\medqc\service-takeover-0.3'
+$env:PYTHONIOENCODING='utf-8'
+$env:PYTHONPATH=(Join-Path (Get-Location).Path 'src')
+& $python -m unittest discover -s tests -p test_takeover.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Takeover unit tests failed' }
+& $python -m unittest discover -s tests -p test_deployment_acceptance.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Deployment unit tests failed' }
+
+三、一次执行
+使用同一个前台管理员PowerShell，不在后台反复弹出密码窗口。
+本机已有的medqc_sync专用口令文件可用 -ExistingRuntimePasswordFile 指定；先验证它
+仅SYSTEM/Administrators完全控制。该参数接收单个纯口令文件，不是.pgpass或后端.env。
+部署管理员口令与Caché口令通过Get-Credential输入，不写命令行，不在聊天或日志展示。
+可用既有已知的CacheHost/CacheNamespace参数传入非敏感连接配置，避免重复询问。
+
+& .\deploy\windows\prepare-takeover.ps1 `
+  -PythonPath $python `
+  -DataRoot ('D:\medqc\service-takeover-run-' + (Get-Date -Format yyyyMMddHHmmss))
+
+不要使用 -SkipLiveSourceCheck 作为最终收口结果。它仅供诊断，跳过后不算Caché真实运行验收。
+如果现有源库权限不足，先报告具体权限问题；禁止重置旧角色口令、修改源库或改用后端.env。
+
+脚本顺序：
+1. 源库逻辑备份，受保护目录与文件先设ACL后写入；原库只读。
+2. 新建正式ingest库，原子初始化001..005；CDM另建新库并恢复源验收库副本。
+3. 原表结构元数据、每一行批次/版本/raw完整归档；批次ID映射另存。
+   在新库重新验证字段/键/内容哈希并建立正确schema指针；旧空哈希保留在归档里。
+   转换、归档和完成标记一次提交；失败整批回滚。禁止人工补表或改脚本绕过闸门。
+4. 核对87201条当前记录、全部历史版本与归档指纹；不创建/推进增量断点。
+5. 正式抽取事务的提交前故障注入：schema/raw/版本/断点全部回滚，失败审计保留；
+   再用原有单日首页数据恢复执行，replay成功且无内容变化。虚构探针数据不得落库。
+6. 正式发布器对13来源各跑两轮；第二轮零变更；逐字段与当前raw核对，不能只比行数。
+7. 正式ODBC适配器对2026-10-28做13来源dry，再做单日replay+发布。
+   这是新库的实际源验证，不覆盖旧验收库/旧POC断点。源可能有迟到修改，updated如实记录。
+   再核对当前raw投影和发布幂等；不强制要求源端两次读数完全相同。
+8. 对最终ingest/CDM分别备份、恢复到另外两个新库，比较全部相关表内容与序列指纹。
+9. 生成runtime.json和两个默认禁用的任务XML：13接口日任务、首页60日滚动replay。
+
+四、失败与恢复
+任一步失败即停止，保留新库和本机private-logs检查；不继续下一步，不删除原库。
+database-plan.json记录新库名。不要直接重跑会新建库的准备脚本来覆盖失败现场。
+已成功接管的库只运行 run_takeover.py verify；重复import会拒绝覆盖。
+正常日任务按每接口断点恢复；显式跳过未处理日期会被拒绝；回放不推进断点。
+
+五、验收出口
+deployment-result.json必须是accepted，interfaces=13，archive_preserved、rollback_recovery、
+backup_restore和cache_accessed均true；原业务访问/服务修改/任务注册均false。
+service-acceptance.json：13来源两轮发布，第二轮changed全部0；字段一致行数与选择数一致。
+takeover-verify*.json：原始归档完整，当前和历史逐行一致；probe后重新核对仍通过。
+live-publish-check.json：实际源重读后的正式字段一致、发布第二轮零变更。
+ingest/cdm-before-backup与after-restore指纹必须逐项相同，含identity序列状态。
+不得把本机开发测试（PostgreSQL18.3、虚构39行）冒充客户PostgreSQL16真实数据验收。
+
+仅回传reports目录中的非PHI JSON统计、包/脚本哈希和受控错误码。
+严禁打包secrets、backups、private-logs、runtime.json、PGPASS文件、正文或真实病例键。
+只回传最后一轮结果，无需新做画像、编号关联或扩接口。
+
+六、交付后运行说明
+日任务只处理医院时区最近完整日，逐来源补齐断点，失败即停。
+首页每周60天replay按已确认的出院日语义重取，起点不早于本服务接管起始日2026-10-26。
+其余来源不擅自套用修改时间语义或扩大滚动窗口。
+两个XML默认禁用且不自动注册；它们使用SYSTEM读取受保护运行文件，数据库身份仍为
+medqc_sync而非postgres。本轮不据此宣称已完成生产最小OS权限或开机自启验证。
+客户机PG曾为手工启动，原Windows服务配置问题仍应由部署运维明确解决；本脚本不改
+共享PG实例以免影响旧业务。启用调度与PG开机保障放在验收通过后的同一次上线操作中。

@@ -1,0 +1,93 @@
+{
+  "schema_version": "periop-reader-metadata-fix-v1",
+  "baseline_zip_sha256": "170691116e5275bbd2f46afb67e0ad1654aa0d35abfa775afbdbbcf39f793483",
+  "database": "medqc_periop_cdm_acceptance_20261031212605",
+  "metadata_fields": {
+    "anesthesia_record": [
+      "surgery_begin_datetime",
+      "surgery_end_datetime",
+      "anesthesia_begin_datetime",
+      "anesthesia_end_datetime",
+      "leave_operateroom_datetime",
+      "anesthetist_sign",
+      "anesthetist_sign_datetime"
+    ],
+    "surgery_risk_assessment": [
+      "application_id",
+      "assessment_datetime",
+      "surgeon_assess_date",
+      "anesthesiologist_assess_date"
+    ],
+    "surgery_inventory_record": [
+      "surgery_date",
+      "surgery_room_enter_time",
+      "surgery_room_leave_time"
+    ]
+  },
+  "required_repairs": [
+    {
+      "table": "surgery_risk_assessment",
+      "channel": "bundle",
+      "field": "application_id"
+    },
+    {
+      "table": "surgery_risk_assessment",
+      "channel": "bundle",
+      "field": "assessment_datetime"
+    },
+    {
+      "table": "surgery_risk_assessment",
+      "channel": "bundle",
+      "field": "surgeon_assess_date"
+    },
+    {
+      "table": "surgery_risk_assessment",
+      "channel": "bundle",
+      "field": "anesthesiologist_assess_date"
+    },
+    {
+      "table": "surgery_inventory_record",
+      "channel": "bundle",
+      "field": "surgery_date"
+    },
+    {
+      "table": "surgery_inventory_record",
+      "channel": "bundle",
+      "field": "surgery_room_enter_time"
+    },
+    {
+      "table": "surgery_inventory_record",
+      "channel": "bundle",
+      "field": "surgery_room_leave_time"
+    },
+    {
+      "table": "anesthesia_record",
+      "channel": "bundle",
+      "field": "surgery_end_datetime"
+    },
+    {
+      "table": "anesthesia_record",
+      "channel": "bundle",
+      "field": "anesthesia_begin_datetime"
+    },
+    {
+      "table": "anesthesia_record",
+      "channel": "bundle",
+      "field": "anesthesia_end_datetime"
+    },
+    {
+      "table": "anesthesia_record",
+      "channel": "bundle",
+      "field": "leave_operateroom_datetime"
+    },
+    {
+      "table": "anesthesia_record",
+      "channel": "bundle",
+      "field": "anesthetist_sign_datetime"
+    }
+  ],
+  "expected_original_gaps": 307,
+  "expected_remaining_gaps": 295,
+  "modifies_lx0609_projection": false,
+  "modifies_rule_semantics": false
+}

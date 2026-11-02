@@ -2279,8 +2279,8 @@ async def test_010_course_after_report_is_outside_pre_exam_window(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_010_orphan_exam_order_id_fails_before_llm(monkeypatch):
-    """检查行声明的医嘱号不在完整医嘱集中时，不能绕过关联门。"""
+async def test_010_pacs_order_id_need_not_exist_in_his_orders(monkeypatch):
+    """PACS/HIS 编号不同，完整检查事件仍核对自身时间之前的病程。"""
 
     result, decision, canonical, client = await _run_010_public_native(
         monkeypatch,
@@ -2299,16 +2299,14 @@ async def test_010_orphan_exam_order_id_fails_before_llm(monkeypatch):
                 "record_content": "因头痛拟行头颅CT明确有无颅内出血。",
             },
         ),
+        llm_outputs=(_fact_response(("LX0609-06-01-02",)),),
     )
 
-    assert result.llm_call_count == 0
-    assert client.prompts == []
-    assert decision.final_state.value == "data_gap"
-    assert decision.reason_code == "association_failed"
-    assert canonical["status"] == "data_gap"
-    assert result.customer_display_facts == ()
-    assert "customer_display_facts" not in canonical
-    assert "customer_evidence" not in canonical
+    assert result.llm_call_count == 2
+    assert len(client.prompts) == 2
+    assert decision.final_state.value == "compliant"
+    assert decision.reason_code == "requirement_satisfied"
+    assert canonical["status"] == "compliant"
 
 
 @pytest.mark.asyncio
@@ -2706,8 +2704,8 @@ async def test_010_multiple_exams_use_unique_name_and_pre_exam_time_when_course_
 
 
 @pytest.mark.asyncio
-async def test_010_ambiguous_order_exam_linkage_stays_data_gap(monkeypatch):
-    """一个医嘱关联多条正式检查，不能猜测为一致或不一致。"""
+async def test_010_repeated_exam_without_reports_preserves_missing_report_gap(monkeypatch):
+    """编号不同不阻断，但缺少报告仍保留来源缺口。"""
 
     result, decision, canonical, client = await _run_010_public_native(
         monkeypatch,
@@ -2741,16 +2739,11 @@ async def test_010_ambiguous_order_exam_linkage_stays_data_gap(monkeypatch):
         ),
     )
 
-    assert decision.reason_code == "association_failed"
+    assert decision.reason_code == "required_field_missing"
     assert canonical["status"] == "data_gap"
-    assert canonical["reason_code"] == "association_failed"
+    assert canonical["reason_code"] == "required_field_missing"
     facts = dict(result.customer_display_facts)["LX0609-06-01-02"]
-    assert facts["failure_kind"] == "exam_order_exam_association_failed"
-    assert facts["order_count"] == 1
-    assert facts["exam_master_count"] == 2
-    assert facts["uniquely_linked_order_count"] == 0
-    assert facts["unmatched_or_ambiguous_order_count"] == 1
-    assert facts["association_issue_kind"] == "ambiguous_exam_master_linkage"
+    assert facts["failure_kind"] == "exam_order_contract_data_gap"
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
@@ -2881,8 +2874,8 @@ def test_composite_exam_id_ignores_same_visit_non_exam_component():
         {"exam_id": "VISIT||44^VISIT||43", "order_id": "VISIT||44+VISIT||44"}, known_order_ids=("VISIT||43",)) == ()
 
 
-def test_010_composite_exam_id_with_unknown_component_stays_data_gap():
-    """复合检查只要有一个组件不属于本次就诊医嘱，就不能猜测关联。"""
+def test_010_composite_pacs_id_does_not_require_his_component_membership():
+    """不把 PACS 内部复合编号的组成强行解释成 HIS 医嘱号。"""
 
     outcome = exam_lab._order_exam_structure_outcome(
         {
@@ -2908,9 +2901,7 @@ def test_010_composite_exam_id_with_unknown_component_stays_data_gap():
         }
     )
 
-    assert outcome is not None
-    assert outcome.status == "data_gap"
-    assert outcome.reason_code == "association_failed"
+    assert outcome is None
 
 
 @pytest.mark.parametrize(

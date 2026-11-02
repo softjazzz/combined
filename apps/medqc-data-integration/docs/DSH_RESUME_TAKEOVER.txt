@@ -1,0 +1,58 @@
+续跑包0.3.1仅修正测试路径身份断言：使用samefile兼容Windows长路径/8.3别名。
+新增原生GetShortPathNameW回归，开发机已先复现失败再验证通过；误选runtime.pgpass仍不能通过。
+运行脚本与上一版续跑包逐位相同，原service-takeover-0.3也保持不变。
+本包处理已确认的42501：原部署脚本把运行账号medqc_sync用于读取旧克隆库，旧库未给该账号授权。
+选择方案2：一次性迁入沿用已完成源备份的部署身份，源连接仍强制只读；不向旧库补GRANT。
+默认部署账号postgres；若上轮实际使用其他部署账号，沿用原账号与既有deployment-admin.pgpass。
+正式worker、发布与验收的运行账号仍为medqc_sync，不把管理员凭据写入runtime.json。
+
+一、边界
+原service-takeover-0.3冻结包保持不动，本包解压到全新目录。
+保留既有4个库、备份、诊断文件和运行目录，不新建库、不重新初始化、不清表、不删库。
+不修改任何旧库的权限、属主、数据或结构，不读取后端.env，不重置口令。
+仅继续现有13接口的既定部署验收，不扩接口，不运行规则/模型，不改PG服务或启用计划任务。
+
+二、开工前
+核对本包SHA256和内部CHECKSUMS，原包72项校验也必须通过。
+复用既有Python3.10.11 64位、psycopg2/pyodbc与PG16工具，不安装软件。
+$runRoot取自上轮真实目录，不能按库名猜目录。
+其reports/database-plan.json应指向：
+ingest = medqc_ingest_takeover_20261030205035
+cdm = medqc_cdm_takeover_20261030205035
+restore_ingest = medqc_restore_takeover_20261030205035
+restore_cdm = medqc_restore_takeover_20261030205036
+source = medqc_bundle_time_clone_20261029180906
+使用现有secrets/deployment-admin.pgpass和runtime.pgpass，不另生成或改写口令。
+
+三、离线测试与一次续跑
+在同一个管理员PowerShell窗口执行，$python替换为已核实的现有解释器绝对路径：
+$base = 'D:\medqc\service-takeover-0.3'
+$fix = 'D:\medqc\takeover-resume-fix-0.3.1'
+$runRoot = '<替换为上轮实际运行目录>'
+$env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONPATH = Join-Path $base 'src'
+& $python -m unittest discover -s (Join-Path $fix 'tests') -p test_takeover_resume.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Resume tests failed' }
+& $python -m unittest discover -s (Join-Path $fix 'tests') -p test_takeover_diagnostics.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Diagnostic tests failed' }
+& (Join-Path $fix 'deploy\windows\resume-takeover.ps1') `
+  -PythonPath $python -DataRoot $runRoot -PackageRoot $base `
+  -DeploymentUser postgres -CacheHost '192.168.140.4' -CacheNamespace 'dhc-app'
+
+四、脚本步骤
+1. 核对原包、旧运行ACL与数据库计划；5条数据库连接全部只读，预检源87201/78、
+   目标ingest操作表为空、CDM为原恢复副本、两个restore库为空。发现已有导入或续跑记录即停。
+2. 用原run_takeover.py的--source-user和--source-passfile显式选择部署身份只读取源。
+   原空库守卫、事务回滚和所有数据合同原样执行。保留原诊断文件，新尝试用独立诊断文件名。
+3. 导入成功后用medqc_sync核对、进行正式发布两轮、回滚故障注入及恢复、逐字段比对。
+4. 用正式ODBC做13来源2026-10-28的dry、replay和发布幂等校验。迟到修改如实记录。
+5. 对最终ingest/CDM分别备份并恢复到已有的两个空restore库，逐表及序列指纹一致才放行。
+6. 生成默认禁用且未注册的任务XML与deployment-result.json，不启用任务或改PG自启动。
+Caché密码仅在同一前台交互输入一次；本地配置使用medqc_sync口令文件而非管理员口令。
+
+五、结果
+任一步失败即停，保留现场，不重跑prepare、不再次自动import、不绕过合同。
+新的安全异常记录为reports/takeover-import-deployment-source-diagnostic.json。
+成功须deployment-result.json为accepted，13接口、归档/回滚恢复/真实源/备份恢复均通过。
+只回传reports中的非PHI JSON、包和脚本哈希，不回传secret、runtime.json、private-logs、dump或正文。
+本包本地测试使用fake，未连接客户数据库；客户机真实验收仍以本次运行结果为准。

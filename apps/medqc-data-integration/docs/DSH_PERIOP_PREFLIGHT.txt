@@ -1,0 +1,52 @@
+第二批映射只读预检：使用已有快照，不重新抽取、不写CDM。
+
+一、边界
+唯一允许连接的数据库：medqc_periop_acceptance_20261031104123。
+固定17接口；以medqc_sync、default_transaction_read_only=on连接，仅SELECT和事务设置。
+不连接Caché，不调用已通过13接口，不连接旧ingest/CDM/restore或正式业务库。
+不建库/建表/迁移/授权，不运行规则、模型或任务，不改原raw/current/version/审计。
+本包不是新的生产服务版本，不覆盖0.3.2或第二批原抽取目录。
+
+二、准备
+校验外层ZIP SHA256与内部CHECKSUMS，解压到全新目录，例如：
+D:\medqc\periop-mapping-preflight
+沿用已有Python3.10 64位解释器及psycopg2，不安装依赖、不联网。
+可只读引用原受保护runtime.pgpass，不读取或输出其内容；不手工解析口令。
+不要运行原证据包中的periop_db/ingest/diag/report脚本。
+
+三、执行
+在已有管理员PowerShell中，$python替换为已核实的Python3.10绝对路径：
+$root = 'D:\medqc\periop-mapping-preflight'
+$env:PYTHONIOENCODING = 'utf-8'
+& $python -m unittest discover -s (Join-Path $root 'tests') -p test_periop_transform.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Transform tests failed' }
+& $python -m unittest discover -s (Join-Path $root 'tests') -p test_periop_preflight.py -v
+if ($LASTEXITCODE -ne 0) { throw 'Preflight tests failed' }
+$out = Join-Path $root ('reports-' + (Get-Date -Format yyyyMMddHHmmss))
+$oldPgPassword = $env:PGPASSWORD
+try {
+  $env:PGPASSWORD = $null
+  & $python (Join-Path $root 'tools\preflight_periop_projection.py') `
+    --database medqc_periop_acceptance_20261031104123 `
+    --passfile 'D:\medqc\service-takeover-run-20261030205035\secrets\runtime.pgpass' `
+    --port 5432 --output $out
+  $preflightExit = $LASTEXITCODE
+} finally { $env:PGPASSWORD = $oldPgPassword }
+if ($preflightExit -ne 0) { throw 'Readonly preflight failed; preserve the controlled error' }
+
+四、结果含义
+工具会核验95个批次、88个结果集、16个schema及18,730行完整快照，重比两轮多重集。
+对第一轮9,365行只在内存中转换，检查三日全局源键和目标键、文本长度及日期格式。
+风险评估技术document_id只在内存中生成，不写入数据库。
+candidate_ready仅表示候选转换通过，不表示CDM已写入或实际目标catalog已核验。
+candidate_ready_partial_source必须保留源窗口缺失；3个零样本和手术记录不能改判为全面通过。
+发现目标主键碰撞时报告受影响接口及计数，不合并、不覆盖、不自行修改主键。
+raw-only时间/签署字段会统计非空率，不推断医生未签署，不用其他时间补值。
+日期语义仍为unverified，不建立checkpoint。
+
+五、回传并停止
+仅打包新输出目录中的projection-preflight.csv、source-field-completeness.csv、
+date-observations.csv、audit-review.json、manifest.json，计算ZIP SHA256并回传。
+输出只有字段、计数与受控原因码，不含正文、真实键或逐行哈希。
+不能连接时报告异常类/SQLSTATE/位置码，不打印原始异常消息，不换管理员身份绕过。
+完成后停止；无论哪些接口candidate_ready，本轮都不进入实际CDM投影。
