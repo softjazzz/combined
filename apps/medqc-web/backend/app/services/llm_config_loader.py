@@ -25,6 +25,7 @@ from .llm_dispatch.provider_profiles import (
 logger = logging.getLogger(__name__)
 
 _USER_LLM_CONFIGS_TABLE_UNAVAILABLE = False
+QC_USE_SELECTED_MODEL_KEY = "qc_use_selected_model"
 
 
 def get_enabled_provider_codes() -> tuple[str, ...]:
@@ -199,13 +200,18 @@ def build_adjudicator_runtime_config(
     """生成正式质控二审运行时配置。
 
     二审默认可通过 LLM_ADJUDICATOR_MODEL 指向更稳的裁决模型；未配置时回退一审模型，
-    保持既有部署兼容。
+    保持既有部署兼容。新保存的百炼后台配置显式让正式质控跟随所选模型，
+    不被旧环境裁决模型静默覆盖；未重新保存的历史配置沿用原行为。
     """
     settings = get_settings()
     base = dict(base_config or build_provider_runtime_config(get_default_provider_code()))
     provider_code = str(base.get("provider_code") or get_default_provider_code()).strip().lower()
+    selected_model_for_qc = (provider_code == "alibaba"
+                             and (base.get("custom_parameters") or {}).get(QC_USE_SELECTED_MODEL_KEY) is True)
     # 本地模型不沿用历史云端裁决模型名；未单独配置时使用后台选定模型。
-    if provider_code == "strata":
+    if selected_model_for_qc:
+        adjudicator_model = ""
+    elif provider_code == "strata":
         adjudicator_model = str(getattr(settings, "STRATA_ADJUDICATOR_MODEL", None) or "").strip()
     elif provider_code == "ollama":
         adjudicator_model = ""
@@ -219,7 +225,8 @@ def build_adjudicator_runtime_config(
         dispatch_mode=base.get("dispatch_mode"),
         gateway_profile=base.get("gateway_profile") if model_code == base.get("model") else None,
     )
-    source = "env_adjudicator_model" if adjudicator_model else "fallback_first_pass_model"
+    source = ("backend_selected_model" if selected_model_for_qc else
+              "env_adjudicator_model" if adjudicator_model else "fallback_first_pass_model")
     runtime.update(
         {
             "source": source,
