@@ -173,6 +173,47 @@ def test_cloud_model_alias_normalization_is_unchanged(client, setup):
     assert saved.json()['data']['model_code'] == 'qwen3.6-35b-a3b'
 
 
+def test_ollama_missing_endpoint_cannot_be_saved_or_tested(client, setup, monkeypatch):
+    cfg, _user = setup
+    cfg.LLM_DISPATCH_MODE = 'direct'
+    cfg.OLLAMA_API_ENDPOINT = ''
+    before = dict(llm_configs)
+    row = next(row for row in client.get('/api/v1/llm/local-options').json()['data']
+               if row['provider_code'] == 'ollama')
+    assert not row['models'][0]['configuration_ready']
+    saved = client.post('/api/v1/llm/configs', json=selection('ollama', 'Local/Ollama'))
+    assert saved.status_code == 422
+    def no_client(*args, **kwargs):
+        pytest.fail('incomplete local settings must fail before creating an LLM client')
+    monkeypatch.setattr(config_api, 'SichuanQCLLMClient', no_client)
+    assert client.post('/api/v1/llm/test', json=selection('ollama', 'Local/Ollama')).status_code == 422
+    assert llm_configs == before
+
+
+@pytest.mark.parametrize('token', ['short', ' ' * 40])
+def test_strata_invalid_gateway_token_is_not_reported_ready(client, setup, token):
+    cfg, _user = setup
+    cfg.LLM_GATEWAY_TOKEN = token
+    row = next(row for row in client.get('/api/v1/llm/local-options').json()['data']
+               if row['provider_code'] == 'strata')
+    assert not row['models'][0]['configuration_ready']
+    assert client.post('/api/v1/llm/configs', json=selection()).status_code == 422
+
+
+def test_configured_direct_ollama_remains_available_without_gateway(client, setup):
+    cfg, _user = setup
+    cfg.LLM_DISPATCH_MODE = 'direct'
+    cfg.OLLAMA_API_ENDPOINT = 'http://ollama.test/v1'
+    cfg.LLM_GATEWAY_URL = None
+    cfg.LLM_GATEWAY_TOKEN = None
+    row = next(row for row in client.get('/api/v1/llm/local-options').json()['data']
+               if row['provider_code'] == 'ollama')
+    assert row['models'][0]['configuration_ready']
+    response = client.post('/api/v1/llm/configs', json=selection('ollama', 'Local/ExactModel'))
+    assert response.status_code == 200
+    assert response.json()['data']['model_code'] == 'Local/ExactModel'
+
+
 def test_bailian_catalog_includes_35b_without_removing_flash(client, setup):
     models = client.get('/api/v1/llm/models', params={'provider_id': 'alibaba'}).json()['data']
     assert sum(m['model_code'] == 'qwen3.6-35b-a3b' for m in models) == 1

@@ -203,12 +203,12 @@ def _extract_provider_and_model_codes(payload: Dict[str, Any]) -> tuple[str, str
     return provider_code, model_code
 
 
-def _validate_strata_selection(model_code: str, custom_parameters=None) -> Dict[str, Any]:
-    """后台本地选项必须使用统一准入，不把40个HTTP槽当成本地容量。"""
+def _validate_local_selection(provider_code: str, model_code: str, custom_parameters=None) -> Dict[str, Any]:
+    """目录、保存和测试共用本地运行校验，不用页面状态代替后端约束。"""
     try:
-        return build_local_model_runtime_config("strata", model_code, custom_parameters)
+        return build_local_model_runtime_config(provider_code, model_code, custom_parameters)
     except ProviderConfigurationError as exc:
-        raise HTTPException(status_code=422, detail="strata_configuration_unavailable") from exc
+        raise HTTPException(status_code=422, detail=f"{provider_code}_configuration_unavailable") from exc
 
 
 def _extract_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
@@ -269,8 +269,8 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
     if provider_code == "alibaba":
         # 新保存的后台选型同时控制正式质控；旧配置不补写，保留原环境裁决覆盖。
         custom_parameters[QC_USE_SELECTED_MODEL_KEY] = True
-    if provider_code == "strata":
-        runtime = _validate_strata_selection(model_code, custom_parameters)
+    if provider_code in {"strata", "ollama"}:
+        runtime = _validate_local_selection(provider_code, model_code, custom_parameters)
         model_code = model_code or str(runtime["model"])
     else:
         try:
@@ -571,13 +571,14 @@ async def test_config(
     del system_config_user
     try:
         provider_code, model_code = _extract_provider_and_model_codes(payload)
-        if provider_code == "strata":
-            _validate_strata_selection(model_code, payload.get("custom_parameters"))
-        runtime = build_provider_runtime_config(
-            provider_code=provider_code,
-            model_code=model_code or None,
-            custom_parameters=payload.get("custom_parameters") or {},
-        )
+        if provider_code in {"strata", "ollama"}:
+            runtime = _validate_local_selection(provider_code, model_code, payload.get("custom_parameters"))
+        else:
+            runtime = build_provider_runtime_config(
+                provider_code=provider_code,
+                model_code=model_code or None,
+                custom_parameters=payload.get("custom_parameters") or {},
+            )
         client = SichuanQCLLMClient(
             {
                 **runtime,

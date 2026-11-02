@@ -100,8 +100,8 @@ describe('业务线四报表定向适配', () => {
     ).toHaveLength(4)
   })
 
-  it('保留19个旧入口、手术目录、规则验收及全部DRG页内地址', () => {
-    const originalKeys = [
+  it('保留19个旧入口并接入首页V2、手术目录、规则验收及全部DRG页内地址', () => {
+    const expectedKeys = [
       'home',
       'worklist',
       'records-running',
@@ -110,6 +110,7 @@ describe('业务线四报表定向适配', () => {
       'qc-feedback-demo',
       'stage-frontpage-generate',
       'stage-frontpage-qc',
+      'frontpage-qc-v2',
       'stage-settlement-qc',
       'rules',
       'custom-rules',
@@ -133,7 +134,9 @@ describe('业务线四报表定向适配', () => {
             i.key !== 'user-management',
         )
         .map((i) => i.key),
-    ).toEqual(originalKeys)
+    ).toEqual(expectedKeys)
+    expect(items.find((item) => item.key === 'frontpage-qc-v2')?.to.path).toBe(`${B}/frontpage-qc`)
+    expect(router.resolve(`${B}/frontpage-qc`).name).toBe('WorkstationV5FrontpageQc')
     expect(items.find((item) => item.key === 'message-center')?.to.path).toBe(`${B}/messages`)
     expect(DRG_SECTION_TABS.map((tab) => tab.path)).toEqual(
       ['drg/pre', 'drg/mid', 'drg/payment', 'drg/post', 'grouper'].map((p) => `${B}/${p}`),

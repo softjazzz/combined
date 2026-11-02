@@ -4,6 +4,7 @@ LLM 配置加载服务
 敏感信息（endpoint / key）统一由 backend/.env 注入。
 """
 from typing import Dict, Any, Optional
+import hashlib
 import logging
 import os
 
@@ -251,12 +252,23 @@ def build_local_model_runtime_config(
     if not runtime.get("api_endpoint") or not runtime.get("model"):
         raise ProviderConfigurationError("local provider configuration incomplete")
     if provider_code == "strata":
-        settings = get_settings()
         if runtime.get("dispatch_mode") != "gateway":
             raise ProviderConfigurationError("strata_requires_gateway")
-        if not settings.LLM_GATEWAY_URL or not settings.LLM_GATEWAY_TOKEN:
-            raise ProviderConfigurationError("local gateway configuration incomplete")
     build_adjudicator_runtime_config(runtime)
+    if runtime.get("dispatch_mode") == "gateway":
+        # 复用实际出口的纯配置校验，覆盖URL、令牌长度和profile身份；不发HTTP。
+        from .llm_dispatch.client import GatewayDispatchClient, GatewayDispatchError
+
+        settings = get_settings()
+        root = str(settings.LLM_GATEWAY_URL or "").strip().rstrip("/")
+        try:
+            GatewayDispatchClient._connection_settings(
+                expected_profile=runtime["gateway_profile"],
+                expected_endpoint_sha256=hashlib.sha256(root.encode("utf-8")).hexdigest(),
+                provider_code=provider_code, model_code=runtime["model"],
+            )
+        except GatewayDispatchError as exc:
+            raise ProviderConfigurationError("local gateway configuration incomplete") from exc
     return runtime
 
 

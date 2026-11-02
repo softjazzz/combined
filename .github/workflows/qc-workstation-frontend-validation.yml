@@ -4,6 +4,16 @@ on:
   pull_request:
     branches: [codex/business-agent-integration]
     paths:
+      - 'apps/medqc-web/src/components/LLMApiConfig.vue'
+      - 'apps/medqc-web/src/services/llmConfigService.ts'
+      - 'apps/medqc-web/src/utils/systemConfigAccess.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/DataSyncConfigPage.vue'
+      - 'apps/medqc-web/tests/unit/components/LLMApiConfigStrata.spec.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts'
+      - 'apps/medqc-web/tests/unit/router/workstation-report-adaptation.spec.ts'
+      - 'apps/medqc-web/backend/app/routers/llm_info.py'
+      - 'apps/medqc-web/backend/app/routers/llm_configs.py'
+      - 'apps/medqc-web/backend/app/services/llm_config_loader.py'
       - 'apps/medqc-web/src/views/workstation-v4/frontpage-qc/**'
       - 'apps/medqc-web/src/views/workstation-v4/styles/frontpage-qc*.css'
       - 'apps/medqc-web/src/services/frontpage-qc-v2-service.ts'
@@ -32,6 +42,16 @@ on:
   push:
     branches: ['codex/**']
     paths:
+      - 'apps/medqc-web/src/components/LLMApiConfig.vue'
+      - 'apps/medqc-web/src/services/llmConfigService.ts'
+      - 'apps/medqc-web/src/utils/systemConfigAccess.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/DataSyncConfigPage.vue'
+      - 'apps/medqc-web/tests/unit/components/LLMApiConfigStrata.spec.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts'
+      - 'apps/medqc-web/tests/unit/router/workstation-report-adaptation.spec.ts'
+      - 'apps/medqc-web/backend/app/routers/llm_info.py'
+      - 'apps/medqc-web/backend/app/routers/llm_configs.py'
+      - 'apps/medqc-web/backend/app/services/llm_config_loader.py'
       - 'apps/medqc-web/src/views/workstation-v4/frontpage-qc/**'
       - 'apps/medqc-web/src/views/workstation-v4/styles/frontpage-qc*.css'
       - 'apps/medqc-web/src/services/frontpage-qc-v2-service.ts'
@@ -93,3 +113,7 @@ jobs:
         run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" node_modules/vitest/vitest.mjs run src/views/workstation-v4/frontpage-qc/__tests__ src/components/layout/__tests__/workstationNav.spec.ts --maxWorkers=1 --minWorkers=1
       - name: Read-only frontpage lint
         run: node node_modules/eslint/bin/eslint.js src/views/workstation-v4/frontpage-qc src/services/frontpage-qc-v2-service.ts src/components/layout/workstationNav.ts src/components/layout/__tests__/workstationNav.spec.ts --quiet
+      - name: Local model settings and navigation compatibility (isolated)
+        run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" --require ./scripts/frontpage-v2-no-network.cjs node_modules/vitest/vitest.mjs run tests/unit/components/LLMApiConfigStrata.spec.ts tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts tests/unit/router/workstation-report-adaptation.spec.ts --maxWorkers=1 --minWorkers=1
+      - name: Read-only local model settings lint
+        run: node node_modules/eslint/bin/eslint.js src/components/LLMApiConfig.vue src/services/llmConfigService.ts --no-fix --max-warnings 0
