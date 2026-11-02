@@ -49,6 +49,7 @@ _SENSITIVE_ENV_PATTERN = re.compile(
 
 _SYNTHETIC_ENV = {
     "MEDQC_CLINICAL_SOURCE_MODE": "legacy_compat",
+    "QC_DAILY_SCHEDULER_ENABLED": "false",
     "DATABASE_URL": "",
     "REMOTE_DB_URL": "",
     "MEDQC_ALLOW_REAL_LLM": "0",

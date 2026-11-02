@@ -132,6 +132,7 @@ function mountPage() {
           },
           template: '<div data-testid="pipeline-settings-panel"><button data-testid="choose-independent" @click="$emit(\'selection\', \'independent_cdm\')">独立链路</button><button data-testid="pipeline-load-failed" @click="$emit(\'ready\', false)">配置失败</button></div>',
         },
+        DailyQcSchedulePanel: { template: '<div data-testid="daily-schedule-panel" />' },
       },
     },
   })
@@ -170,6 +171,22 @@ describe('DataSyncConfigPage visit progress', () => {
     await wrapper.get('[data-testid="pipeline-load-failed"]').trigger('click')
     expect(wrapper.text()).not.toContain('病历数据同步设置')
     wrapper.unmount()
+  })
+
+  it('每日质控页签可直达且不初始化数据同步，非管理员不能直达', async () => {
+    mockInitialize.mockClear()
+    mockUserRoles = ['sync_admin']
+    mockRoute.query = { tab: 'dailyQc' }
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="daily-schedule-panel"]').exists()).toBe(true)
+    expect(mockInitialize).not.toHaveBeenCalled()
+    wrapper.unmount()
+    mockUserRoles = ['doctor']
+    const denied = mountPage()
+    await flushPromises()
+    expect(denied.find('[data-testid="daily-schedule-panel"]').exists()).toBe(false)
+    denied.unmount()
   })
   it('管理员可在V5系统配置进入真实账号管理，不跳旧版页面', async () => {
     mockUserRoles = ['admin']

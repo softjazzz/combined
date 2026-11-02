@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: [codex/business-agent-integration]
     paths:
+      - 'apps/medqc-web/src/views/workstation-v4/components/system-config/DailyQcSchedulePanel.vue'
+      - 'apps/medqc-web/src/services/dailyQcScheduleService.ts'
+      - 'apps/medqc-web/tests/unit/components/DailyQcSchedulePanel.spec.ts'
       - 'apps/medqc-web/src/components/LLMApiConfig.vue'
       - 'apps/medqc-web/src/components/LLMTaskRoleSettings.vue'
       - 'apps/medqc-web/src/services/llmConfigService.ts'
@@ -68,6 +71,9 @@ on:
   push:
     branches: ['codex/**']
     paths:
+      - 'apps/medqc-web/src/views/workstation-v4/components/system-config/DailyQcSchedulePanel.vue'
+      - 'apps/medqc-web/src/services/dailyQcScheduleService.ts'
+      - 'apps/medqc-web/tests/unit/components/DailyQcSchedulePanel.spec.ts'
       - 'apps/medqc-web/src/components/LLMApiConfig.vue'
       - 'apps/medqc-web/src/components/LLMTaskRoleSettings.vue'
       - 'apps/medqc-web/src/services/llmConfigService.ts'
@@ -204,3 +210,8 @@ jobs:
           src/views/workstation-v4/components/system-config/ClinicalSourceSettingsPanel.vue
           src/views/workstation-v4/composables/usePatientRecords.ts
           src/views/workstation-v4/components/qc/QcRunSelectedControl.vue
+
+      - name: Daily QC settings and tab isolation (offline)
+        run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" --require ./scripts/frontpage-v2-no-network.cjs node_modules/vitest/vitest.mjs run tests/unit/components/DailyQcSchedulePanel.spec.ts tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts --maxWorkers=1 --minWorkers=1
+      - name: Read-only daily QC settings lint
+        run: node node_modules/eslint/bin/eslint.js src/views/workstation-v4/components/system-config/DailyQcSchedulePanel.vue src/services/dailyQcScheduleService.ts --no-fix --max-warnings 0

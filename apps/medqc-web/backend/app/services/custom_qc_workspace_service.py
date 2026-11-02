@@ -3031,6 +3031,7 @@ class CustomQCWorkspaceService:
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
         sync_scope: Optional[str] = None,
+        institute_id: Optional[str] = None,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
         return self._record_repository().collect_records(
@@ -3044,6 +3045,7 @@ class CustomQCWorkspaceService:
             record_ids=record_ids,
             record_refs=record_refs,
             sync_scope=sync_scope,
+            **({"institute_id": institute_id} if institute_id is not None else {}),
             **({"_private_identity_collector": _private_identity_collector} if _private_identity_collector is not None else {}),
         )
 
@@ -3119,11 +3121,23 @@ class CustomQCWorkspaceService:
         child_summary: Optional[Dict[str, Any]] = None,
         family_key: Optional[str] = None,
         family_name: Optional[str] = None,
+        scheduled_run_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         session = _session()
         try:
             now = _now_utc()
             job_id = str(uuid.uuid4())
+            if scheduled_run_id is not None:
+                from .daily_qc.contracts import job_identity
+
+                if (filters.get("daily_schedule") or {}).get("run_id") != scheduled_run_id:
+                    raise ValueError("scheduled_job_identity_mismatch")
+                job_id = job_identity(scheduled_run_id)
+                existing = self.get_scheduled_batch_job(scheduled_run_id=scheduled_run_id)
+                if existing:
+                    if existing["created_by"] != created_by:
+                        raise ValueError("scheduled_job_owner_mismatch")
+                    return {**existing, "schedule_submission_reused": True}
             normalized_draft_ids = [item for item in _normalize_string_list(list(draft_ids or [])) if item]
             if not normalized_draft_ids:
                 current_draft_id = _safe_text(draft.get("id"))
@@ -3240,8 +3254,30 @@ class CustomQCWorkspaceService:
                 )
             session.commit()
             return self.get_batch_job(job_id=job_id, created_by=created_by) or _row_to_batch_job(row_payload)
+        except sa.exc.IntegrityError:
+            session.rollback()
+            if scheduled_run_id is not None:
+                existing = self.get_scheduled_batch_job(scheduled_run_id=scheduled_run_id)
+                if existing and existing["created_by"] == created_by:
+                    return {**existing, "schedule_submission_reused": True}
+            raise
         finally:
             session.close()
+
+    def get_scheduled_batch_job(self, *, scheduled_run_id: str) -> Optional[Dict[str, Any]]:
+        """恢复只读任务身份和状态，不载入结果大JSON。"""
+        from .daily_qc.contracts import job_identity
+
+        with _session() as session:
+            row = session.execute(select(self._batch_job_table.c.id, self._batch_job_table.c.status,
+                self._batch_job_table.c.created_by, self._batch_job_table.c.filters_json).where(
+                self._batch_job_table.c.id == job_identity(scheduled_run_id))).mappings().first()
+            if not row:
+                return None
+            filters = _safe_json_loads(row["filters_json"], {})
+            if (filters.get("daily_schedule") or {}).get("run_id") != scheduled_run_id:
+                raise ValueError("scheduled_job_identity_mismatch")
+            return {"id": row["id"], "status": row["status"], "created_by": row["created_by"], "filters": filters}
 
     def update_parent_child_jobs(
         self,

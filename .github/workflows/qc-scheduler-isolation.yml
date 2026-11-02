@@ -80,3 +80,6 @@ jobs:
 
       - name: Task role selection, effective requests and freeze partition (offline)
         run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_llm_task_roles.py
+
+      - name: Daily QC plans, admission, crash recovery and Outbox (offline)
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_daily_qc_schedules.py tests/unit/test_qc_dispatch_entrypoints.py
