@@ -119,6 +119,14 @@ function mountPage() {
         LlmPerformanceObservabilityPanel: { template: '<div />' },
         AccountManagementPanel: { template: '<div data-testid="real-accounts-panel" />' },
         QcRuntimeSettingsPanel: { template: '<div data-testid="qc-runtime-panel" />' },
+        DataPipelineSettingsPanel: {
+          emits: ['selection', 'ready'],
+          mounted() {
+            this.$emit('selection', 'legacy_pg')
+            this.$emit('ready', true)
+          },
+          template: '<div data-testid="pipeline-settings-panel"><button data-testid="choose-independent" @click="$emit(\'selection\', \'independent_cdm\')">独立链路</button><button data-testid="pipeline-load-failed" @click="$emit(\'ready\', false)">配置失败</button></div>',
+        },
       },
     },
   })
@@ -145,10 +153,24 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.find('[data-testid="qc-runtime-panel"]').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('独立链路隐藏旧PG执行与诊断入口，配置失败也不误显示旧默认', async () => {
+    mockUserRoles = ['sync_admin']
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.text()).toContain('高级设置与运行记录')
+    await wrapper.get('[data-testid="choose-independent"]').trigger('click')
+    expect(wrapper.find('[data-testid="check-record-scope-action"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('高级设置与运行记录')
+    await wrapper.get('[data-testid="pipeline-load-failed"]').trigger('click')
+    expect(wrapper.text()).not.toContain('病历数据同步设置')
+    wrapper.unmount()
+  })
   it('管理员可在V5系统配置进入真实账号管理，不跳旧版页面', async () => {
     mockUserRoles = ['admin']
     mockRoute.query = { tab: 'accounts' }
     const wrapper = mountPage()
+    await flushPromises()
     await flushPromises()
     expect(wrapper.find('[data-testid="account-management-tab"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="real-accounts-panel"]').exists()).toBe(true)
@@ -159,6 +181,7 @@ describe('DataSyncConfigPage visit progress', () => {
     mockUserRoles = ['qc_manager']
     mockRoute.query = { tab: 'accounts' }
     const wrapper = mountPage()
+    await flushPromises()
     await flushPromises()
     expect(wrapper.find('[data-testid="account-management-tab"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="real-accounts-panel"]').exists()).toBe(false)
@@ -202,6 +225,7 @@ describe('DataSyncConfigPage visit progress', () => {
 
   it('重新打开页面时不把上一次同步结果当作本次进度', async () => {
     const wrapper = mountPage()
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('可进入病历池')
@@ -240,6 +264,7 @@ describe('DataSyncConfigPage visit progress', () => {
     mockState.preflightResult = null
 
     const wrapper = mountPage()
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('本次候选')
@@ -247,7 +272,7 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.text()).not.toContain('3 / 20 份')
   })
 
-  it('高级账号将表名和行数收纳在默认折叠的同步详情中', () => {
+  it('高级账号将表名和行数收纳在默认折叠的同步详情中', async () => {
     mockUserRoles = ['sync_admin']
     mockState.pgSyncState = {
       is_running: false,
@@ -264,6 +289,7 @@ describe('DataSyncConfigPage visit progress', () => {
     }
 
     const wrapper = mountPage()
+    await flushPromises()
 
     const details = wrapper.get('[data-testid="sync-technical-details"]')
     expect(details.attributes('open')).toBeUndefined()
@@ -288,6 +314,7 @@ describe('DataSyncConfigPage visit progress', () => {
       },
     }
     const wrapper = mountPage()
+    await flushPromises()
     expect(wrapper.text()).toContain('正在确定病历范围')
     expect(wrapper.text()).not.toContain('正在同步数据：mr')
 
@@ -304,8 +331,9 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.text()).toContain('7 / 20 份')
   })
 
-  it('按用户任务顺序展示三步单页同步引导', () => {
+  it('按用户任务顺序展示三步单页同步引导', async () => {
     const wrapper = mountPage()
+    await flushPromises()
 
     expect(wrapper.text()).toContain('选择病历类型')
     expect(wrapper.text()).toContain('设置同步范围')
@@ -325,6 +353,7 @@ describe('DataSyncConfigPage visit progress', () => {
     mockState.policyForm.scope = 'running'
 
     const wrapper = mountPage()
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('当前在院统计时间')
@@ -342,6 +371,7 @@ describe('DataSyncConfigPage visit progress', () => {
     mockState.policyForm.scope = 'both'
 
     const wrapper = mountPage()
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('当前在院 + 期间出院病历')
@@ -357,6 +387,7 @@ describe('DataSyncConfigPage visit progress', () => {
 
   it('点击病历类型卡片直接更新同步范围', async () => {
     const wrapper = mountPage()
+    await flushPromises()
 
     await wrapper.get('[data-testid="sync-scene-running"]').trigger('click')
 
@@ -373,6 +404,7 @@ describe('DataSyncConfigPage visit progress', () => {
       warnings: [],
     }
     const wrapper = mountPage()
+    await flushPromises()
     expect(wrapper.text()).not.toContain('我已确认同步 12 份病历')
 
     mockState.preflightResult.executable = true
@@ -393,6 +425,7 @@ describe('DataSyncConfigPage visit progress', () => {
       warnings: [],
     }
     const wrapper = mountPage()
+    await flushPromises()
     expect(wrapper.find('.sync-confirm').exists()).toBe(false)
 
     await wrapper.get('.sync-actions__confirm input').setValue(true)
@@ -414,11 +447,12 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.find('.sync-confirm').exists()).toBe(false)
   })
 
-  it('演示账号只看到简化同步向导并隐藏实施诊断信息', () => {
+  it('演示账号只看到简化同步向导并隐藏实施诊断信息', async () => {
     mockUserRoles = ['admin', 'qc_manager']
     mockState.preflightResult = null
 
     const wrapper = mountPage()
+    await flushPromises()
     const text = wrapper.text()
 
     expect(text).toContain('病历数据同步设置')
@@ -437,6 +471,7 @@ describe('DataSyncConfigPage visit progress', () => {
     mockUserRoles = ['sync_admin']
 
     const wrapper = mountPage()
+    await flushPromises()
     expect(wrapper.text()).toContain('高级设置与运行记录')
     expect(wrapper.text()).not.toContain('clinical_data')
 
@@ -452,30 +487,33 @@ describe('DataSyncConfigPage visit progress', () => {
     { role: 'sync_admin', frontpage: true, llm: true, observability: true },
     { role: 'super_admin', frontpage: true, llm: true, observability: true },
     { role: 'doctor', frontpage: false, llm: false, observability: false },
-  ])('按 $role 的后端角色合同展示系统配置页签', ({ role, frontpage, llm, observability }) => {
+  ])('按 $role 的后端角色合同展示系统配置页签', async ({ role, frontpage, llm, observability }) => {
     mockUserRoles = [role]
 
     const wrapper = mountPage()
+    await flushPromises()
 
     expect(wrapper.find('[data-testid="frontpage-config-tab"]').exists()).toBe(frontpage)
     expect(wrapper.find('[data-testid="llm-config-tab"]').exists()).toBe(llm)
     expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(observability)
   })
 
-  it('演示账号不显示模型性能页签', () => {
+  it('演示账号不显示模型性能页签', async () => {
     mockUserRoles = ['admin']
     mockAuthStore.user.is_demo_account = true
 
     const wrapper = mountPage()
+    await flushPromises()
 
     expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(false)
   })
 
-  it('内置同步管理员即使带演示标记仍显示模型性能页签', () => {
+  it('内置同步管理员即使带演示标记仍显示模型性能页签', async () => {
     mockUserRoles = ['sync_admin']
     mockAuthStore.user.is_demo_account = true
 
     const wrapper = mountPage()
+    await flushPromises()
 
     expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(true)
   })
@@ -485,6 +523,7 @@ describe('DataSyncConfigPage visit progress', () => {
     mockRoute.query = { tab: 'llmObservability' }
 
     const wrapper = mountPage()
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe(
@@ -492,7 +531,7 @@ describe('DataSyncConfigPage visit progress', () => {
     )
   })
 
-  it('0 条候选病历时展示客户化 warning 口径', () => {
+  it('0 条候选病历时展示客户化 warning 口径', async () => {
     mockUserRoles = ['admin', 'qc_manager']
     mockState.preflightResult = {
       estimated_impact: 0,
@@ -502,6 +541,7 @@ describe('DataSyncConfigPage visit progress', () => {
     }
 
     const wrapper = mountPage()
+    await flushPromises()
 
     expect(wrapper.text()).toContain('没有找到符合条件的已出院病历，请检查科室名称或出院日期范围。')
     expect(wrapper.text()).not.toContain('预检通过')
@@ -516,6 +556,7 @@ describe('DataSyncConfigPage visit progress', () => {
     })
 
     const wrapper = mountPage()
+    await flushPromises()
     await wrapper.get('[data-testid="check-record-scope-action"]').trigger('click')
 
     expect(mockMessageWarning).toHaveBeenCalledWith(

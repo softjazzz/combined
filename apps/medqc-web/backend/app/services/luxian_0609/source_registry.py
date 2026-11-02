@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v36"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v38"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -181,8 +181,11 @@ _REGISTRY_ENTRIES = (
     _entry("death_record", access_mode=_BOUNDED),
     _entry("diagnosis", access_mode=_BOUNDED),
     _entry("diffcase_discussion_record", access_mode=_BOUNDED),
-    _entry("discharge_record", access_mode=_BOUNDED),
-    _entry("discharge_record_diagnosis", access_mode=_BOUNDED),
+    _entry("discharge_record", access_mode=_BOUNDED,
+           query_version="snapshot-provider-discharge_record-v2"),
+    _entry("discharge_record_diagnosis", "discharge_record_diagnosis", access_mode=_BOUNDED,
+           derived_from_source_keys=("discharge_record", "diagnosis"),
+           query_version="snapshot-provider-discharge_record_diagnosis-v2"),
     _entry(
         "exam_attention_report",
         access_mode=_DERIVED,
@@ -191,7 +194,9 @@ _REGISTRY_ENTRIES = (
     _entry("exam_master", access_mode=_BOUNDED),
     _entry("exam_item_report", access_mode=_BOUNDED),
     _entry("first_course_record", access_mode=_BOUNDED),
-    _entry("first_course_record_diagnosis", access_mode=_BOUNDED),
+    _entry("first_course_record_diagnosis", "first_course_record_diagnosis", access_mode=_BOUNDED,
+           derived_from_source_keys=("first_course_record", "diagnosis"),
+           query_version="snapshot-provider-first_course_record_diagnosis-v2"),
     _entry("handoff_record", access_mode=_BOUNDED),
     _entry("handover_record", access_mode=_BOUNDED),
     _entry(
@@ -245,7 +250,12 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("inpat_bill_item", access_mode=_BOUNDED),
     _entry("physician_change_event", access_mode=_BOUNDED),
     _entry("evaluation_context.horizon", access_mode=_BOUNDED),
-    _entry("inpat_registration", access_mode=_BOUNDED),
+    # 登记资料优先；仅缺行/缺表时允许首页提供唯一住院时间上下文。
+    # 首页不证明登记全集完整，不提供住院/死亡状态；空首页仍为UNPROVEN。
+    _entry(
+        "inpat_registration", "inpat_registration", "mr", access_mode=_BOUNDED,
+        query_version="snapshot-provider-inpat_registration-v2",
+    ),
     _entry("inpat_registration.discharge_horizon", access_mode=_BOUNDED),
     _entry(
         "inpat_nondrug_order.severity_order",
@@ -263,10 +273,14 @@ _INTERNAL_SOURCE_ENTRIES = (
         query_version="snapshot-provider-inpat_nondrug_order.rescue_order-v1",
     ),
     _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
-    _entry("admission_record_diagnosis", access_mode=_BOUNDED),
+    _entry("admission_record_diagnosis", "admission_record_diagnosis", access_mode=_BOUNDED,
+           derived_from_source_keys=("admission_record", "diagnosis"),
+           query_version="snapshot-provider-admission_record_diagnosis-v2"),
     # 063 的病案首页诊断是内部决策支持来源；客户适用文书仍由规则合同声明，
     # 不把该来源提升为第二个同名客户事实所有者。
-    _entry("mr_diagnosis", access_mode=_BOUNDED),
+    _entry("mr_diagnosis", "mr_diagnosis", access_mode=_BOUNDED,
+           derived_from_source_keys=("diagnosis",),
+           query_version="snapshot-provider-mr_diagnosis-v2"),
     _entry("surgery_application", access_mode=_BOUNDED),
     _entry("preane_surveil_record", access_mode=_BOUNDED),
     _entry("postane_surveil_record", access_mode=_BOUNDED),

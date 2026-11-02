@@ -2012,8 +2012,8 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
 
 
 def test_source_registry_keeps_confirmed_handbook_identity_version() -> None:
-    # v36新增血尿常规专用明细投影；既有来源query_version不变。
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v36"
+    # v38补同次文书诊断和出院栏目适配；阶段小结等其他来源query_version不变。
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v38"
     entry = load_luxian_0609_source_registry()["summary_record"]
     assert entry.query_version == "snapshot-provider-summary_record-v1"
     assert entry.source_keys == ("summary_record",)
@@ -2729,7 +2729,8 @@ def test_snapshot_reader_converts_only_database_failure_to_controlled_query_erro
 
 
 def test_every_bounded_snapshot_source_uses_only_allowlisted_columns_and_bound_coordinates(monkeypatch) -> None:
-    connection = _FakeConnection([])
+    # 此处逐项检查主来源投影；登记空源的首页回退由专用测试覆盖。
+    connection = _FakeConnection([{"row_marker": True}])
     monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _FakeEngine(connection))
     monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "cdm")
     monkeypatch.setattr(source_evidence_reader, "_source_limit", lambda _source: 7)

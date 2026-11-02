@@ -76,11 +76,13 @@ def _session(
         "mr_bloodtrans"
     ).query_version
     query_versions = {
-        "inpat_registration": "snapshot-provider-inpat_registration-v1",
+        "inpat_registration": resolve_luxian_0609_physical_source_entry(
+            "inpat_registration"
+        ).query_version,
         "admission_record": "snapshot-provider-admission_record-v1",
         "death_record": "snapshot-provider-death_record-v1",
         "death_discussion": "snapshot-provider-death_discussion-v1",
-        "discharge_record": "snapshot-provider-discharge_record-v1",
+        "discharge_record": resolve_luxian_0609_physical_source_entry("discharge_record").query_version,
         "first_course_record": "snapshot-provider-first_course_record-v1",
         "daily_course_record": "snapshot-provider-daily_course_record-v1",
         "senior_course_record": "snapshot-provider-senior_course_record-v1",
@@ -101,7 +103,7 @@ def _session(
         # 063 的病案首页出院/死亡诊断决策支持来源；保持与旧 diagnosis
         # 兼容夹具独立，避免两份来源在测试中被隐式合并。
         **(
-            {"mr_diagnosis": "snapshot-provider-mr_diagnosis-v1"}
+            {"mr_diagnosis": resolve_luxian_0609_physical_source_entry("mr_diagnosis").query_version}
             if "mr_diagnosis" in rows_by_source
             else {}
         ),
@@ -110,7 +112,9 @@ def _session(
         "labtest_item_report": "snapshot-provider-labtest_item_report-v1",
         "labtest_master": "snapshot-provider-labtest_master-v1",
         "inpat_drug_order": "snapshot-provider-inpat_drug_order-v2",
-        "discharge_record_diagnosis": "snapshot-provider-discharge_record_diagnosis-v1",
+        "discharge_record_diagnosis": resolve_luxian_0609_physical_source_entry(
+            "discharge_record_diagnosis"
+        ).query_version,
         "mr_bloodtrans": bloodtrans_query_version,
         "bloodtrans_record": bloodtrans_query_version,
         "evaluation_context.horizon": "snapshot-provider-evaluation_context.horizon-v1",
@@ -119,9 +123,9 @@ def _session(
         "rescue_record": resolve_luxian_0609_physical_source_entry("rescue_record").query_version,
         # 074 的结构化变更声明来源是同一 Evidence Session 的决策支撑来源；
         # 夹具默认保持可读且为空，只有显式列入 unavailable_sources 才不可用。
-        "admission_record_diagnosis": (
-            "snapshot-provider-admission_record_diagnosis-v1"
-        ),
+        "admission_record_diagnosis": resolve_luxian_0609_physical_source_entry(
+            "admission_record_diagnosis"
+        ).query_version,
     }
     observations = []
     sources = {}

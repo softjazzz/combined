@@ -55,6 +55,17 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_luxian_0609_exam_targeted_retry.py",
         "tests/unit/test_exam_result_input_completeness.py",
     ),
+    "data-pipelines": (
+        "tests/unit/test_data_pipelines.py",
+        "tests/unit/test_independent_cdm_connection.py",
+        "tests/unit/test_cache_visit_time_source.py",
+        "tests/unit/test_cache_rule_input_adapters.py",
+        "tests/unit/test_luxian_0609_evidence_snapshot_provider.py",
+        "tests/unit/test_luxian_0609_independent_pacs_reports.py",
+        "tests/unit/test_validation_material_selection.py",
+        "tests/unit/test_frontpage_qc_v2_loader.py",
+        "tests/unit/test_luxian_0609_native_extended_document_execution.py",
+    ),
     "dual-model-exam": (
         "tests/unit/test_exam_result_comparison_context.py",
         "tests/unit/test_exam_result_pair_recovery.py",

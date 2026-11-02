@@ -62,6 +62,7 @@ from .routers import account_management as account_management_router
 from .routers import settlement as settlement_router
 from .routers import scoring_config as scoring_config_router
 from .routers import sync as sync_router
+from .routers import data_pipelines as data_pipelines_router
 from .routers import workstation as workstation_router
 from .routers import custom_qc as custom_qc_router
 from .routers import qc_sample_pools as qc_sample_pools_router
@@ -339,6 +340,7 @@ def create_app() -> FastAPI:
     app.include_router(scoring_config_router.router)
     # 数据同步（PG 同步链路）
     app.include_router(sync_router.router)
+    app.include_router(data_pipelines_router.router)
     # Workstation V4 聚合工作台
     app.include_router(workstation_router.router)
     # 自定义质控点体验中心

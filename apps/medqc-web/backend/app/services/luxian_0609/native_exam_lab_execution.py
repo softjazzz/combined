@@ -586,6 +586,11 @@ def _typed_trigger_state(
     required_sources = tuple(
         source for key, source in loaded.items()
         if not (independent_exam_present and key == _ORDER_SOURCE_KEY)
+        and not (fact_kind == "exam" and key == "exam_master"
+                 and "exam_item_report" in loaded
+                 and loaded["exam_item_report"].state == "present"
+                 and _controlled_trigger_from_rows(
+                     fact_kind="exam", sources=(loaded["exam_item_report"],)))
     )
     if any(source.state == "error" for source in required_sources):
         return "error", loaded
@@ -2929,6 +2934,12 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 for key in _TYPED_TRIGGER_SOURCES["exam"] if key in loaded_sources
             ):
                 required = tuple(key for key in required if key != _ORDER_SOURCE_KEY)
+            if (rule_id in _EXECUTABLE_EXAM_RULE_IDS
+                and "exam_item_report" in loaded_sources
+                and loaded_sources["exam_item_report"].state == "present"
+                and _controlled_trigger_from_rows(
+                    fact_kind="exam", sources=(loaded_sources["exam_item_report"],))):
+                required = tuple(key for key in required if key != "exam_master")
             if any(loaded_sources[key].state == "error" for key in required):
                 emit_typed(rule_id, "technical_error", "source_query_error")
                 typed_processed.add(rule_id)

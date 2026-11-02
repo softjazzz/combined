@@ -12,13 +12,14 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 from sqlalchemy import inspect, text
 
 from ...database.connection import DB_SCHEMA_MODE, engine
+from ...database import clinical_connection
 from ..document_assembly import (
     assemble_document,
     build_document_select_columns,
     extract_document_identity_metadata,
 )
 from ..document_assembly.assembler import INDEPENDENT_DOCUMENT_FIELDS
-from .contracts import BUNDLE_DOMAINS, BUNDLE_SCHEMA_VERSION_CURRENT
+from .contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 from .factory import (
     build_coding_bundle,
     build_final_record_bundle,
@@ -482,7 +483,7 @@ def _build_material_snapshot(
     table_limits: dict[str, int],
 ) -> _MaterialSnapshot:
     from ..validation_material_source import material_source_schema
-    source_schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=source_schema,
+    source_schema = material_source_schema(strict=clinical_connection.configured(), default_schema=_default_source_schema(), requested_schema=source_schema,
         institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     snapshot = _MaterialSnapshot(
         key=(source_schema, institute_id, patient_id, visit_id),
@@ -535,7 +536,35 @@ def _material_rows(
 
 
 def _default_source_schema() -> str:
+    if clinical_connection.configured():
+        return "cdm"
     return "cdm" if str(DB_SCHEMA_MODE or "").strip().lower() == "split" else "public"
+
+
+def _source_engine(schema: str):
+    """临床资料和PDF验证副本分流，持久化Bundle始终使用业务engine。"""
+    if clinical_connection.configured():
+        from ..validation_material_source import MATERIAL_SCHEMA
+        if schema == "cdm":
+            return clinical_connection.get_engine()
+        if not MATERIAL_SCHEMA.fullmatch(schema):
+            raise ValueError("untrusted_independent_cdm_schema")
+    return engine
+
+
+def _cache_binding(patient_id: str, visit_id: str) -> str:
+    from ..validation_material_source import is_material_copy
+    return "" if is_material_copy(patient_id, visit_id) else clinical_connection.source_binding()
+
+
+def _cache_source_matches(context: Any, patient_id: str, visit_id: str) -> bool:
+    if isinstance(context, str):
+        try:
+            context = json.loads(context)
+        except (TypeError, ValueError):
+            context = {}
+    stored = context.get("clinical_source_binding", "") if isinstance(context, dict) else ""
+    return stored == _cache_binding(patient_id, visit_id)
 
 
 def _pg_required_in_current_env() -> bool:
@@ -583,14 +612,22 @@ def _table_exists(schema: str, table_name: str) -> bool:
     return bool(exists)
 
 
-@lru_cache(maxsize=256)
 def _get_table_columns(schema: str, table: str) -> tuple[str, ...]:
-    if engine is None:
+    read_engine = _source_engine(schema)
+    if read_engine is None:
         return ()
-    inspector = inspect(engine)
+    return _columns_for_engine(read_engine, schema, table)
+
+
+@lru_cache(maxsize=256)
+def _columns_for_engine(read_engine, schema: str, table: str) -> tuple[str, ...]:
+    inspector = inspect(read_engine)
     if not inspector.has_table(table_name=table, schema=schema):
         return ()
     return tuple(str(col.get("name") or "").strip() for col in inspector.get_columns(table_name=table, schema=schema))
+
+
+_get_table_columns.cache_clear = _columns_for_engine.cache_clear
 
 
 def _pick_first(columns: set[str], candidates: Iterable[str]) -> str:
@@ -773,8 +810,9 @@ def _select_records(
         material_document_status_column,
         material_source_schema,
     )
-    schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=schema,
+    schema = material_source_schema(strict=clinical_connection.configured(), default_schema=_default_source_schema(), requested_schema=schema,
         institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+    read_engine = _source_engine(schema)
     columns = set(_get_table_columns(schema, table))
     if not columns:
         return []
@@ -841,6 +879,8 @@ def _select_records(
             "limit_rows": max(1, int(limit)),
         }
     elif "visit_id" in columns:
+        if clinical_connection.configured() and schema == "cdm":
+            raise ValueError("independent_cdm_visit_keys_missing")
         where_sql = f"{_quote_ident('visit_id')} = :visit_id"
         params = {
             "visit_id": visit_id,
@@ -871,7 +911,7 @@ def _select_records(
         f"WHERE {where_sql}{document_filter}{order_sql} LIMIT :limit_rows"
     )
 
-    with engine.connect() as conn:
+    with read_engine.connect() as conn:
         rows = conn.execute(text(sql), params).mappings().all()
     return [{**dict(row), "__document_type": table} for row in rows]
 
@@ -971,7 +1011,7 @@ def _build_structured_context(
     summary_docs: dict[str, list[dict[str, Any]]] = {}
     text_available_tables: list[str] = []
     for table_name, rows in docs.items():
-        columns = set(_get_table_columns(schema, table_name))
+        _columns = set(_get_table_columns(schema, table_name))
         summary_docs[table_name] = []
         for row in rows[:3]:
             assembled = assemble_document(table_name, row)
@@ -1334,9 +1374,9 @@ def _build_assembly_coverage(
                 partial_count += 1
             if assembled.assembly_status == "empty_document":
                 empty_count += 1
-            for field in assembled.source_fields:
-                if field.used and field.source_field:
-                    used_fields.add(field.source_field)
+            for source_field in assembled.source_fields:
+                if source_field.used and source_field.source_field:
+                    used_fields.add(source_field.source_field)
             flags.update(assembled.data_quality_flags)
         status = "missing"
         if rows and assembled_count == len(rows):
@@ -2195,12 +2235,12 @@ def _build_timeline_facts_from_docs(docs: dict[str, list[dict[str, Any]]]) -> li
     seen: set[tuple[str, str, str]] = set()
     for table_name, rows in docs.items():
         for row in rows or []:
-            for field in timeline_fields:
-                value = row.get(field)
+            for timeline_field in timeline_fields:
+                value = row.get(timeline_field)
                 normalized = str(value or "").strip()
                 if not normalized:
                     continue
-                key = (table_name, field, normalized)
+                key = (table_name, timeline_field, normalized)
                 if key in seen:
                     continue
                 seen.add(key)
@@ -2208,7 +2248,7 @@ def _build_timeline_facts_from_docs(docs: dict[str, list[dict[str, Any]]]) -> li
                     {
                         "source_table": table_name,
                         "document_type": table_name,
-                        "field": field,
+                        "field": timeline_field,
                         "value": normalized,
                     }
                 )
@@ -2241,9 +2281,9 @@ def _assemble_scene_bundle(
     material_snapshot: _MaterialSnapshot | None = None,
 ) -> dict[str, Any]:
     from ..validation_material_source import material_source_schema
-    source_schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=source_schema,
+    source_schema = material_source_schema(strict=clinical_connection.configured(), default_schema=_default_source_schema(), requested_schema=source_schema,
         institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
-    if engine is None:
+    if _source_engine(source_schema) is None:
         raise RuntimeError("DATABASE_URL is not configured; bundle assembly unavailable.")
     if scene not in _SCENE_DOC_PRIORITY:
         raise ValueError(f"Unsupported scene for bundle assembly: {scene}")
@@ -2404,6 +2444,9 @@ def _assemble_scene_bundle(
     }
     bundle["structured_context"]["source_table_coverage"] = source_table_coverage
     bundle["structured_context"]["assembly_coverage"] = assembly_coverage
+    binding = _cache_binding(patient_id, visit_id)
+    if binding:
+        bundle["structured_context"]["clinical_source_binding"] = binding
     if scene in {"frontpage", "coding"}:
         bundle["structured_context"]["frontpage_coding"] = _build_frontpage_coding_context(
             docs=docs,
@@ -2571,6 +2614,11 @@ def _load_scene_bundle(
                 payload[field_name] = {} if field_name in {"structured_context", "document_hits"} else []
         candidates.append(payload)
 
+    candidates = [payload for payload in candidates
+                  if _cache_source_matches(payload.get("structured_context"), patient_id, visit_id)]
+    if not candidates:
+        return None
+
     if prefer_usable_content:
         for payload in candidates:
             if _scene_bundle_has_usable_content(payload):
@@ -2668,14 +2716,14 @@ def assemble_domain_bundle(
     projection_limits: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     """projection_limits 仅供只读展示路径覆盖个别表的展示上限；质控 Bundle 不传，保持既有上限。"""
-    if engine is None:
-        raise RuntimeError("DATABASE_URL is not configured; domain bundle assembly unavailable.")
     if execution_domain not in _DOMAIN_DOC_PRIORITY:
         raise ValueError(f"Unsupported execution domain: {execution_domain}")
 
     from ..validation_material_source import material_source_schema
-    effective_schema = material_source_schema(default_schema=_default_source_schema(), requested_schema=source_schema,
+    effective_schema = material_source_schema(strict=clinical_connection.configured(), default_schema=_default_source_schema(), requested_schema=source_schema,
         institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+    if _source_engine(effective_schema) is None:
+        raise RuntimeError("DATABASE_URL is not configured; domain bundle assembly unavailable.")
     priority = _DOMAIN_DOC_PRIORITY[execution_domain]
     docs: dict[str, list[dict[str, Any]]] = {}
     domain_projection_per_source: dict[str, dict[str, Any]] = {}
@@ -2744,6 +2792,8 @@ def assemble_domain_bundle(
         "timeline_facts": timeline_facts,
         "source_documents": source_documents,
         "structured_context": {
+            **({"clinical_source_binding": _cache_binding(patient_id, visit_id)}
+               if _cache_binding(patient_id, visit_id) else {}),
             "documents": docs,
             "document_priority": list(priority),
             "document_inventory": source_documents,
@@ -2859,6 +2909,8 @@ def load_domain_bundle(
                 payload[field_name] = json.loads(value)
             except Exception:
                 payload[field_name] = {} if field_name in {"document_hits", "structured_context"} else []
+    if not _cache_source_matches(payload.get("structured_context"), patient_id, visit_id):
+        return None
     return payload
 
 
@@ -2879,6 +2931,7 @@ def load_domain_bundle_document_index(
     sql = text(
         f"""
         SELECT institute_id, patient_id, visit_id, execution_domain,
+               COALESCE(structured_context->>'clinical_source_binding', '') AS clinical_source_binding,
                bundle_schema_version, bundle_updated_at,
                COALESCE(
                  (
@@ -2936,6 +2989,8 @@ def load_domain_bundle_document_index(
     if not row:
         return None
     payload = dict(row)
+    if str(payload.pop("clinical_source_binding", "") or "") != _cache_binding(patient_id, visit_id):
+        return None
     for field_name in ("source_documents", "structured_context"):
         value = payload.get(field_name)
         if isinstance(value, str):
@@ -2976,6 +3031,7 @@ def load_domain_bundle_for_emr_render(
     sql = text(
         f"""
         SELECT institute_id, patient_id, visit_id, execution_domain,
+               COALESCE(structured_context->>'clinical_source_binding', '') AS clinical_source_binding,
                bundle_schema_version, bundle_updated_at,
                COALESCE(
                  (
@@ -3028,6 +3084,8 @@ def load_domain_bundle_for_emr_render(
     if not row:
         return None
     payload = dict(row)
+    if str(payload.pop("clinical_source_binding", "") or "") != _cache_binding(patient_id, visit_id):
+        return None
     value = payload.get("source_documents")
     if isinstance(value, str):
         try:
@@ -3589,7 +3647,7 @@ def load_frontpage_payload_from_bundle(
             context = json.loads(context)
         except Exception:
             context = {}
-    if not isinstance(context, dict):
+    if not isinstance(context, dict) or not _cache_source_matches(context, patient_id, visit_id):
         return None
     payload = context.get("frontpage_coding")
     if not isinstance(payload, dict):
@@ -3649,7 +3707,7 @@ def load_coding_payload_from_bundle(
             context = json.loads(context)
         except Exception:
             context = {}
-    if not isinstance(context, dict):
+    if not isinstance(context, dict) or not _cache_source_matches(context, patient_id, visit_id):
         return None
     payload = context.get("frontpage_coding")
     if not isinstance(payload, dict):
@@ -3709,7 +3767,7 @@ def load_settlement_payload_from_bundle(
             context = json.loads(context)
         except Exception:
             context = {}
-    if not isinstance(context, dict):
+    if not isinstance(context, dict) or not _cache_source_matches(context, patient_id, visit_id):
         return None
     payload = context.get("settlement_payload")
     if isinstance(payload, dict):

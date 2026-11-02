@@ -1004,7 +1004,7 @@ def read_luxian_0609_course_round_timeline(
         raise SourceEvidenceUnavailable()
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
-    engine = bundle_assembly.engine
+    engine = bundle_assembly._source_engine(trusted_schema)
     if engine is None:
         raise SourceEvidenceUnavailable()
 
@@ -1197,7 +1197,7 @@ def has_luxian_0609_current_visit_unstable_order(
 
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
-    engine = bundle_assembly.engine
+    engine = bundle_assembly._source_engine(trusted_schema)
     if engine is None:
         raise SourceEvidenceUnavailable()
     source_key = "inpat_nondrug_order"
@@ -1245,7 +1245,7 @@ def read_luxian_0609_severity_order_rows(
 
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
-    engine = bundle_assembly.engine
+    engine = bundle_assembly._source_engine(trusted_schema)
     if engine is None:
         raise SourceEvidenceUnavailable()
     source_key = "inpat_nondrug_order"
@@ -1399,7 +1399,7 @@ def read_luxian_0609_exam_lab_order_rows(
 
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
-    engine = bundle_assembly.engine
+    engine = bundle_assembly._source_engine(trusted_schema)
     if engine is None:
         raise SourceEvidenceUnavailable()
     table = "inpat_nondrug_order"
@@ -1475,7 +1475,7 @@ def read_luxian_0609_rescue_order_rows(
 
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
-    engine = bundle_assembly.engine
+    engine = bundle_assembly._source_engine(trusted_schema)
     if engine is None:
         raise SourceEvidenceUnavailable()
     table = "inpat_nondrug_order"
@@ -1570,7 +1570,7 @@ def read_luxian_0609_discharge_horizon_rows(
 
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
-    engine = bundle_assembly.engine
+    engine = bundle_assembly._source_engine(trusted_schema)
     if engine is None:
         raise SourceEvidenceUnavailable()
     required = {
@@ -1657,7 +1657,7 @@ def read_luxian_0609_runtime_source_rows(
     """显式、有界、参数化的读侧查询；调用时才访问数据库。"""
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
-    engine = bundle_assembly.engine
+    engine = bundle_assembly._source_engine(trusted_schema)
     if engine is None:
         raise SourceEvidenceUnavailable()
     columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
@@ -1725,7 +1725,7 @@ def read_luxian_0609_native_source_rows(
         raise SourceEvidenceUnavailable()
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
-    engine = bundle_assembly.engine
+    engine = bundle_assembly._source_engine(trusted_schema)
     if engine is None:
         raise SourceEvidenceUnavailable()
     columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
@@ -1802,6 +1802,9 @@ def _normalize_snapshot_source_row(
     """
 
     normalized = dict(row)
+    if source_key == "discharge_record":
+        from .cache_document_source_adapter import enrich_discharge_document
+        return enrich_discharge_document(row)
     if source_key != "labtest_item_report":
         return normalized
     document_id = str(normalized.get("document_id") or "").strip()
@@ -1817,6 +1820,86 @@ def _normalize_snapshot_source_row(
     if fallback_id:
         normalized["document_id"] = fallback_id
     return normalized
+
+
+def _read_cache_diagnosis_source(
+    *, source_key: str, institute_id: str, patient_id: str, visit_id: str,
+    source_schema: str | None,
+) -> SnapshotSourceRows:
+    """从同一就诊已同步文书/诊断补读侧资料，不写诊断子表或伪造首页来源。"""
+    from .cache_document_source_adapter import (
+        DIAGNOSIS_PARENTS, document_diagnoses, homepage_diagnoses,
+    )
+    coordinates = dict(institute_id=institute_id, patient_id=patient_id,
+                       visit_id=visit_id, source_schema=source_schema)
+    if source_key == "mr_diagnosis":
+        generic = read_luxian_0609_snapshot_source_rows(source_key="diagnosis", **coordinates)
+        if generic.truncated:
+            raise SourceEvidenceUnavailable()
+        rows = homepage_diagnoses(generic.rows)
+        if not rows:
+            raise SourceEvidenceUnavailable()
+    else:
+        parent = read_luxian_0609_snapshot_source_rows(
+            source_key=DIAGNOSIS_PARENTS[source_key][0], **coordinates,
+        )
+        if parent.truncated or not parent.rows:
+            raise SourceEvidenceUnavailable()
+        try:
+            generic = read_luxian_0609_snapshot_source_rows(source_key="diagnosis", **coordinates)
+        except SourceEvidenceUnavailable:
+            generic = None
+        if generic is not None and generic.truncated:
+            raise SourceEvidenceUnavailable()
+        try:
+            rows = document_diagnoses(source_key, parent.rows, generic.rows if generic else ())
+        except ValueError:
+            raise SourceEvidenceUnavailable() from None
+        if not rows:
+            # 没有可识别诊断栏目，不等于临床未写诊断或完整空子表。
+            raise SourceEvidenceUnavailable()
+    limit = _source_limit(source_key)
+    return SnapshotSourceRows.create(
+        source_key=source_key, rows=rows[:limit], truncated=len(rows) > limit, limit_rows=limit,
+    )
+
+
+def _read_mr_visit_time_context(
+    *, trusted_schema: str, institute_id: str, patient_id: str, visit_id: str,
+) -> SnapshotSourceRows:
+    """登记源缺行/缺表时仅读首页时间，不合并登记行、不替代状态或死亡字段。"""
+    from .cache_visit_time_source import project_mr_visit_times
+
+    columns = set(bundle_assembly._get_table_columns(trusted_schema, "mr"))
+    if not {"institute_id", "patient_id", "visit_id", "admission_datetime"}.issubset(columns):
+        raise SourceEvidenceUnavailable()
+    selected = [field for field in ("admission_datetime", "discharge_datetime") if field in columns]
+    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected)
+    sql = (
+        f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, 'mr')} "
+        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id LIMIT :limit_rows"
+    )
+    try:
+        with bundle_assembly._source_engine(trusted_schema).connect() as connection:
+            raw_rows = connection.execute(bundle_assembly.text(sql), {
+                "institute_id": institute_id, "patient_id": patient_id,
+                "visit_id": visit_id, "limit_rows": 2,
+            }).mappings().all()
+    except Exception:
+        raise SourceEvidenceQueryError() from None
+    projected = project_mr_visit_times(raw_rows)
+    if projected is None:
+        # 首页按出院窗口取得。没有首页不证明没有住院登记，不将其标为完整空源。
+        raise SourceEvidenceUnavailable()
+    return SnapshotSourceRows.create(
+        source_key="inpat_registration", rows=({
+            **projected,
+            "source_table": "mr",
+            "row_ref": digest_source_evidence(("mr-visit-time-context-v1", projected)),
+        },), truncated=False, limit_rows=1,
+    )
 
 
 def read_luxian_0609_snapshot_source_rows(
@@ -1883,13 +1966,26 @@ def read_luxian_0609_snapshot_source_rows(
         raise SourceEvidenceUnavailable()
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
-    engine = bundle_assembly.engine
+    engine = bundle_assembly._source_engine(trusted_schema)
     if engine is None:
         raise SourceEvidenceUnavailable()
     table_name = "labtest_item_report" if normalized_source == ROUTINE_LAB_ITEM_SOURCE_KEY else normalized_source
     columns = set(bundle_assembly._get_table_columns(trusted_schema, table_name))
     required = {"institute_id", "patient_id", "visit_id"}
     if not required.issubset(columns):
+        if normalized_source in {
+            "admission_record_diagnosis", "first_course_record_diagnosis",
+            "discharge_record_diagnosis", "mr_diagnosis",
+        }:
+            return _read_cache_diagnosis_source(
+                source_key=normalized_source, institute_id=institute_id,
+                patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
+            )
+        if normalized_source == "inpat_registration":
+            return _read_mr_visit_time_context(
+                trusted_schema=trusted_schema, institute_id=institute_id,
+                patient_id=patient_id, visit_id=visit_id,
+            )
         raise SourceEvidenceUnavailable()
     selected = [field for field in approved_fields if field in columns]
     selected, document_status_column = _with_document_status_projection(
@@ -1951,8 +2047,31 @@ def read_luxian_0609_snapshot_source_rows(
                     "limit_rows": limit_rows + 1,
                 },
             ).mappings().all()
-    except Exception:
+    except Exception as error:
+        # 仅未授权/未建的兼容子表可改读已授权父源；超时等真实故障仍保留错误。
+        original = getattr(error, "orig", error)
+        if (normalized_source in {
+            "admission_record_diagnosis", "first_course_record_diagnosis",
+            "discharge_record_diagnosis", "mr_diagnosis",
+        } and getattr(original, "pgcode", None) in {"42P01", "42501"}):
+            return _read_cache_diagnosis_source(
+                source_key=normalized_source, institute_id=institute_id,
+                patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
+            )
         raise SourceEvidenceQueryError() from None
+    if not raw_rows and normalized_source in {
+        "admission_record_diagnosis", "first_course_record_diagnosis",
+        "discharge_record_diagnosis", "mr_diagnosis",
+    }:
+        return _read_cache_diagnosis_source(
+            source_key=normalized_source, institute_id=institute_id,
+            patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
+        )
+    if normalized_source == "inpat_registration" and not raw_rows:
+        return _read_mr_visit_time_context(
+            trusted_schema=trusted_schema, institute_id=institute_id,
+            patient_id=patient_id, visit_id=visit_id,
+        )
     truncated = len(raw_rows) > limit_rows
     return SnapshotSourceRows.create(
         source_key=normalized_source,
