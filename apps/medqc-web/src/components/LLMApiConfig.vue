@@ -75,6 +75,23 @@
               <div class="ds-row">
                 <div class="ds-row__left">
                   <div class="ds-row__label">
+                    推理方式
+                  </div>
+                  <div class="ds-row__hint">
+                    选择云端 API 或院内部署的本地模型。
+                  </div>
+                </div>
+                <a-segmented
+                  :value="inferenceMode"
+                  :options="inferenceModeOptions"
+                  :disabled="isReadonly || loading || saving"
+                  @change="handleInferenceModeChange"
+                />
+              </div>
+
+              <div class="ds-row">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
                     推理服务
                   </div>
                   <div class="ds-row__hint">
@@ -92,11 +109,12 @@
               </div>
 
               <a-alert
-                v-if="draft.provider_code === 'strata'"
-                type="info"
+                v-if="inferenceMode === 'local'"
+                data-testid="local-model-status"
+                :type="selectionUnavailable ? 'warning' : 'info'"
                 show-icon
-                message="本地 Strata"
-                description="请选用已部署的模型名称；请求经统一网关控制容量。本地服务不可用时不会自动切到云端，前缀缓存默认关闭。"
+                :message="selectionUnavailable ? '本地模型尚未就绪' : '本地模型配置已就绪'"
+                :description="localSelectionDescription"
               />
 
               <div class="ds-row">
@@ -110,7 +128,10 @@
                 </div>
                 <a-select
                   v-model:value="draft.model_code"
+                  show-search
+                  option-filter-prop="label"
                   class="ds-select"
+                  :placeholder="inferenceMode === 'local' ? '选择已登记的本地模型' : '选择模型'"
                   style="width: 360px"
                   :loading="loadingModels"
                   :disabled="isReadonly || loadingModels || saving || !models.length"
@@ -119,6 +140,7 @@
                     v-for="item in models"
                     :key="item.model_code"
                     :value="item.model_code"
+                    :label="item.model_name"
                   >
                     {{ item.model_name }}
                     <a-tag
@@ -135,10 +157,12 @@
               <div class="ds-row ds-row--top">
                 <div class="ds-row__left">
                   <div class="ds-row__label">
-                    自定义模型
+                    {{ inferenceMode === 'local' ? '本地模型管理' : '自定义模型' }}
                   </div>
                   <div class="ds-row__hint">
-                    仅新增/删除模型名称，不变更 endpoint 与 key。
+                    {{ inferenceMode === 'local'
+                      ? '填写服务实际接受的模型 ID，保留大小写；可登记多个模型，添加后仍需保存才能切换。'
+                      : '仅新增/删除模型名称，不变更 API 地址与密钥。' }}
                   </div>
                 </div>
                 <div class="custom-model-panel">
@@ -146,12 +170,12 @@
                     <a-input
                       v-model:value="newModelCode"
                       class="ds-input"
-                      :disabled="isReadonly || loading"
-                      placeholder="输入模型名，如 Qwen/Qwen3.5-14B"
+                      :disabled="isReadonly || loading || saving || addingModel || Boolean(deletingModelCode)"
+                      :placeholder="inferenceMode === 'local' ? '输入本地服务实际模型 ID' : '输入模型名，如 Qwen/Qwen3.5-14B'"
                       @press-enter="addCustomModel"
                     />
                     <a-button
-                      :disabled="isReadonly || loading || !newModelCode.trim()"
+                      :disabled="isReadonly || loading || saving || addingModel || Boolean(deletingModelCode) || !newModelCode.trim()"
                       :loading="addingModel"
                       @click="addCustomModel"
                     >
@@ -173,7 +197,7 @@
                         type="link"
                         size="small"
                         danger
-                        :disabled="isReadonly || loading"
+                        :disabled="isReadonly || loading || saving || addingModel || Boolean(deletingModelCode)"
                         :loading="deletingModelCode === item.model_code"
                         @click="removeCustomModel(item)"
                       >
@@ -185,7 +209,7 @@
                     v-else
                     class="custom-model-empty"
                   >
-                    当前厂商暂无自定义模型
+                    {{ inferenceMode === 'local' ? '尚未登记其他本地模型，可在上方添加。' : '当前厂商暂无自定义模型' }}
                   </div>
                 </div>
               </div>
@@ -392,7 +416,7 @@
               <a-button
                 type="primary"
                 :loading="saving"
-                :disabled="isReadonly || loading || loadingModels || !draft.model_code || !dirty"
+                :disabled="isReadonly || loading || !canTest || !dirty"
                 @click="saveDraft"
               >
                 保存配置
@@ -418,6 +442,7 @@ import {
   type LLMExecutionConcurrency,
   type LLMModel,
   type LLMProvider,
+  type LLMLocalProvider,
 } from '@/services/llmConfigService'
 import { authFetch } from '@/utils/auth-fetch'
 
@@ -438,7 +463,15 @@ const newModelCode = ref('')
 const source = ref('unknown')
 let modelRequestVersion = 0
 
-const providers = ref<LLMProvider[]>([])
+const providers = ref<Array<Pick<LLMProvider, 'provider_code' | 'provider_name'>>>([])
+const localProviders = ref<LLMLocalProvider[]>([])
+const localOptionsError = ref('')
+const inferenceMode = ref<'cloud' | 'local'>('cloud')
+const inferenceModeOptions = [
+  { label: '云端 API', value: 'cloud' },
+  { label: '本地推理', value: 'local' },
+]
+const isLocalProvider = (code: string) => code === 'strata' || code === 'ollama'
 const models = ref<LLMModel[]>([])
 const serverSnapshot = ref<LLMConfigSummary | null>(null)
 const backendReadonly = ref(false)
@@ -458,13 +491,24 @@ const draft = reactive({
 const isAdmin = computed(() => canManageSystemConfig(authStore.userRoles))
 const isReadonly = computed(() => backendReadonly.value || !isAdmin.value)
 const providerOptions = computed(() =>
-  providers.value.map((item) => ({
+  providers.value.filter((item) => isLocalProvider(item.provider_code) === (inferenceMode.value === 'local')).map((item) => ({
     label: item.provider_name || item.provider_code,
     value: item.provider_code,
   })),
 )
 const customModels = computed(() => models.value.filter((item) => item.is_custom))
-const canTest = computed(() => !loadingModels.value && Boolean(draft.provider_code && draft.model_code))
+const selectedLocalProvider = computed(() => localProviders.value.find((item) => item.provider_code === draft.provider_code))
+const selectedLocalModel = computed(() => selectedLocalProvider.value?.models.find((item) => item.model_code === draft.model_code))
+const selectionUnavailable = computed(() => isLocalProvider(draft.provider_code) && selectedLocalModel.value?.configuration_ready !== true)
+const localSelectionDescription = computed(() => {
+  const failureNote = '本地服务不可用时不会自动切到云端。'
+  if (localOptionsError.value) return localOptionsError.value
+  if (!selectedLocalProvider.value?.enabled) return `该本地推理服务尚未在部署配置中启用。可以先登记模型名称；启用前不能保存为当前推理服务或测试连接。${failureNote}`
+  if (!models.value.length) return `尚无本地模型，请添加服务实际接受的模型 ID。添加名称不会下载模型或启动服务。${failureNote}`
+  if (selectionUnavailable.value) return `所选模型的 API 地址或运行配置尚未齐备，请联系实施人员。模型名称已保留，当前生效配置不受影响。${failureNote}`
+  return `可选择并保存此本地模型；API 地址和密钥沿用部署配置。连接状态尚未验证，测试连接会实际请求模型服务。${failureNote}`
+})
+const canTest = computed(() => !isReadonly.value && !loading.value && !saving.value && !addingModel.value && !deletingModelCode.value && !loadingModels.value && !selectionUnavailable.value && Boolean(draft.provider_code && draft.model_code))
 const dirty = computed(() => {
   const snap = serverSnapshot.value
   if (!snap) return false
@@ -485,6 +529,7 @@ const dirty = computed(() => {
 
 function patchDraftFromSummary(summary: LLMConfigSummary) {
   draft.provider_code = summary.provider_code
+  inferenceMode.value = isLocalProvider(summary.provider_code) ? 'local' : 'cloud'
   draft.model_code = summary.model_code
   draft.temperature = Number(summary.custom_parameters?.temperature ?? 0.2)
   draft.top_p = Number(summary.custom_parameters?.top_p ?? 0.9)
@@ -513,6 +558,23 @@ function buildExecutionConcurrency(): LLMExecutionConcurrency {
 
 async function loadProviders() {
   providers.value = await llmConfigService.getProviders()
+  // 本地目录包含未启用的服务，但不改变服务端的运行准入。
+  try {
+    await refreshLocalProviders()
+  } catch {
+    localProviders.value = []
+    localOptionsError.value = '本地模型选项读取失败，请刷新重试。云端配置仍可使用。'
+  }
+  for (const item of localProviders.value) {
+    if (!providers.value.some((provider) => provider.provider_code === item.provider_code)) {
+      providers.value.push({ provider_code: item.provider_code, provider_name: item.provider_name })
+    }
+  }
+}
+
+async function refreshLocalProviders() {
+  localProviders.value = await llmConfigService.getLocalModelOptions()
+  localOptionsError.value = ''
 }
 
 async function loadModelsByProvider(providerCode: string, preferredModelCode?: string) {
@@ -522,7 +584,9 @@ async function loadModelsByProvider(providerCode: string, preferredModelCode?: s
   models.value = []
   draft.model_code = ''
   try {
-    const loaded = await llmConfigService.getModelsByProvider(providerCode)
+    const loaded = isLocalProvider(providerCode)
+      ? localProviders.value.find((item) => item.provider_code === providerCode)?.models || []
+      : await llmConfigService.getModelsByProvider(providerCode)
     if (requestVersion !== modelRequestVersion || draft.provider_code !== providerCode) return
     models.value = loaded
     if (!models.value.length) {
@@ -564,23 +628,38 @@ async function reloadAll() {
 
 async function handleProviderChange(value: string) {
   draft.provider_code = value
+  inferenceMode.value = isLocalProvider(value) ? 'local' : 'cloud'
   testResult.value = null
   try {
-    await loadModelsByProvider(value)
+    const savedModel = serverSnapshot.value?.provider_code === value ? serverSnapshot.value.model_code : undefined
+    await loadModelsByProvider(value, savedModel)
   } catch {
     message.error('加载模型列表失败，请重试')
   }
 }
 
+async function handleInferenceModeChange(value: string | number) {
+  if (value !== 'cloud' && value !== 'local') return
+  inferenceMode.value = value
+  const saved = serverSnapshot.value?.provider_code
+  const next = providerOptions.value.find((item) => item.value === saved)?.value || providerOptions.value[0]?.value || ''
+  await handleProviderChange(next)
+  // 目录请求失败时没有可选服务，仍保留用户选择的模式与错误提示。
+  inferenceMode.value = value
+}
+
 async function addCustomModel() {
   const providerCode = draft.provider_code
   const modelCode = newModelCode.value.trim()
-  if (!providerCode || !modelCode) return
+  if (isReadonly.value || addingModel.value || deletingModelCode.value || !providerCode || !modelCode) return
   addingModel.value = true
   try {
     await llmConfigService.addCustomModel(providerCode, modelCode, modelCode)
-    await loadModelsByProvider(providerCode, modelCode)
-    newModelCode.value = ''
+    if (isLocalProvider(providerCode)) await refreshLocalProviders()
+    if (draft.provider_code === providerCode) {
+      await loadModelsByProvider(providerCode, modelCode)
+      newModelCode.value = ''
+    }
     message.success('自定义模型添加成功')
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error)
@@ -593,12 +672,15 @@ async function addCustomModel() {
 async function removeCustomModel(model: LLMModel) {
   const providerCode = draft.provider_code
   const modelCode = String(model.model_code || '').trim()
-  if (!providerCode || !modelCode) return
+  if (isReadonly.value || addingModel.value || deletingModelCode.value || !providerCode || !modelCode) return
   deletingModelCode.value = modelCode
   try {
     await llmConfigService.deleteCustomModel(providerCode, modelCode)
-    const preferred = draft.model_code === modelCode ? '' : draft.model_code
-    await loadModelsByProvider(providerCode, preferred)
+    if (isLocalProvider(providerCode)) await refreshLocalProviders()
+    if (draft.provider_code === providerCode) {
+      const preferred = draft.model_code === modelCode ? '' : draft.model_code
+      await loadModelsByProvider(providerCode, preferred)
+    }
     message.success('自定义模型已删除')
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error)

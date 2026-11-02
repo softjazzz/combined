@@ -47,5 +47,7 @@ jobs:
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite dual-model-exam
       - name: Result, cancellation, retry and privacy compatibility
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite compatibility
+      - name: Local model catalog, selection and permissions (offline)
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_strata_admin_configuration.py tests/unit/test_llm_config_permissions.py tests/unit/test_llm_config_loader.py
       - name: M2 synthetic Outbox and Worker delivery
         run: python -B scripts/run_qc_scheduler_tests.py --profile m2-synthetic --suite m2-release

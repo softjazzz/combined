@@ -65,6 +65,155 @@ def test_catalog_uses_deployed_strata_name_and_keeps_cloud_and_ollama(client, se
     assert "strata.test" not in json.dumps(providers + models)
 
 
+def test_local_catalog_exposes_unconfigured_services_without_enabling_them(client, setup):
+    cfg, _user = setup
+    cfg.LLM_VISIBLE_PROVIDERS = ["alibaba"]
+    cfg.STRATA_API_ENDPOINT = None
+    cfg.STRATA_MODEL = None
+    before = dict(llm_configs)
+    response = client.get('/api/v1/llm/local-options')
+    assert response.status_code == 200
+    rows = {row['provider_code']: row for row in response.json()['data']}
+    assert set(rows) == {'strata', 'ollama'}
+    assert not rows['strata']['enabled'] and rows['strata']['models'] == []
+    assert all(not row['configuration_ready'] for row in rows['ollama']['models'])
+    assert {p['provider_code'] for p in client.get('/api/v1/llm/providers').json()['data']} == {'alibaba'}
+    assert client.get('/api/v1/llm/models?provider_id=strata').json()['data'] == []
+    assert client.post('/api/v1/llm/configs', json=selection()).status_code == 422
+    assert llm_configs == before
+
+
+def test_unconfigured_local_model_names_are_case_sensitive_and_separate_from_active_config(client, setup):
+    cfg, _user = setup
+    cfg.LLM_VISIBLE_PROVIDERS = ['alibaba']
+    cfg.STRATA_API_ENDPOINT = None
+    cfg.STRATA_MODEL = None
+    before = dict(llm_configs)
+    for name in ('Local/Qwen-Flash', 'Local/Qwen-35B'):
+        payload = {'provider_code': 'strata', 'model_code': name}
+        assert client.post('/api/v1/llm/models/custom', json=payload).status_code == 200
+        assert client.post('/api/v1/llm/models/custom', json=payload).status_code == 409
+    rows = client.get('/api/v1/llm/local-options').json()['data']
+    models = next(row for row in rows if row['provider_code'] == 'strata')['models']
+    assert [row['model_code'] for row in models] == ['Local/Qwen-Flash', 'Local/Qwen-35B']
+    assert all(row['unavailable_reason'] == 'provider_not_enabled' for row in models)
+    assert client.delete('/api/v1/llm/models/custom', params={'provider_code': 'strata', 'model_code': 'Local/Qwen-35B'}).status_code == 200
+    assert client.post('/api/v1/llm/models/custom', json={'provider_code': 'siliconflow', 'model_code': 'Synthetic/Cloud'}).status_code == 400
+    assert llm_configs == before
+
+
+def test_local_catalog_uses_per_model_runtime_validation_and_preserves_both_choices(client, setup):
+    cfg, _user = setup
+    for name in ('Local/Flash', 'Local/Qwen-35B', 'Local/Unmapped'):
+        assert client.post('/api/v1/llm/models/custom', json={'provider_code': 'strata', 'model_code': name}).status_code == 200
+    cfg.LLM_GATEWAY_PROFILES = {'alibaba': 'alibaba_main', 'strata': {
+        'Local/Flash': 'strata_flash', 'Local/Qwen-35B': 'strata_35b',
+    }}
+    rows = client.get('/api/v1/llm/local-options').json()['data']
+    models = {row['model_code']: row for row in rows[0]['models']}
+    assert models['Local/Flash']['configuration_ready']
+    assert models['Local/Qwen-35B']['configuration_ready']
+    assert not models['Local/Unmapped']['configuration_ready']
+    for name in ('Local/Flash', 'Local/Qwen-35B'):
+        saved = client.post('/api/v1/llm/configs', json=selection(model=name))
+        assert saved.status_code == 200
+        assert saved.json()['data']['model_code'] == name
+    assert client.post('/api/v1/llm/configs', json=selection(model='Local/Unmapped')).status_code == 422
+    serialized = json.dumps(rows)
+    assert 'strata.test' not in serialized and 'test-only' not in serialized
+    assert 'strata_flash' not in serialized and 'strata_35b' not in serialized
+
+
+@pytest.mark.parametrize('failure', ['missing_endpoint', 'direct_strata', 'role_override', 'missing_gateway_url', 'missing_gateway_token'])
+def test_local_catalog_never_claims_incomplete_configuration_ready(client, setup, failure):
+    cfg, _user = setup
+    if failure == 'missing_endpoint':
+        cfg.STRATA_API_ENDPOINT = None
+    elif failure == 'direct_strata':
+        cfg.LLM_DISPATCH_MODE = 'direct'
+    elif failure == 'missing_gateway_url':
+        cfg.LLM_GATEWAY_URL = None
+    elif failure == 'missing_gateway_token':
+        cfg.LLM_GATEWAY_TOKEN = None
+    else:
+        cfg.LLM_ROLE_MODELS = 'exam_finding_analysis=alibaba/qwen3.8-flash'
+    rows = client.get('/api/v1/llm/local-options').json()['data']
+    assert all(not row['configuration_ready'] for row in rows[0]['models'])
+    assert client.post('/api/v1/llm/configs', json=selection()).status_code == 422
+
+
+def test_local_model_catalog_is_admin_only(client, setup):
+    _cfg, user = setup
+    user['roles'] = ['doctor']
+    assert client.get('/api/v1/llm/local-options').status_code == 403
+    assert client.post('/api/v1/llm/models/custom', json={'provider_code': 'strata', 'model_code': 'Local/Forbidden'}).status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider', ['strata', 'ollama'])
+async def test_local_model_matching_cloud_alias_keeps_exact_id_through_save_read_load(client, setup, provider):
+    cfg, _user = setup
+    cfg.LLM_GATEWAY_PROFILES = {'alibaba': 'alibaba_main', 'strata': 'strata_main', 'ollama': 'ollama_main'}
+    name = 'Qwen3.6-35B-A3B'
+    assert client.post('/api/v1/llm/models/custom', json={'provider_code': provider, 'model_code': name}).status_code == 200
+    saved = client.post('/api/v1/llm/configs', json=selection(provider, name))
+    assert saved.status_code == 200
+    assert saved.json()['data']['model_code'] == name
+    readback = client.get('/api/v1/llm/configs/default')
+    assert readback.status_code == 200
+    assert readback.json()['data']['model']['model_code'] == name
+    runtime = await loader.LLMConfigLoader.load_config('default', user_id=None)
+    assert runtime['model'] == name and runtime['provider_code'] == provider
+    assert client.get('/api/v1/llm/configs/default/summary').json()['data']['model_code'] == name
+
+
+def test_cloud_model_alias_normalization_is_unchanged(client, setup):
+    saved = client.post('/api/v1/llm/configs', json=selection('alibaba', 'Qwen3.6-35B-A3B'))
+    assert saved.status_code == 200
+    assert saved.json()['data']['model_code'] == 'qwen3.6-35b-a3b'
+
+
+def test_ollama_missing_endpoint_cannot_be_saved_or_tested(client, setup, monkeypatch):
+    cfg, _user = setup
+    cfg.LLM_DISPATCH_MODE = 'direct'
+    cfg.OLLAMA_API_ENDPOINT = ''
+    before = dict(llm_configs)
+    row = next(row for row in client.get('/api/v1/llm/local-options').json()['data']
+               if row['provider_code'] == 'ollama')
+    assert not row['models'][0]['configuration_ready']
+    saved = client.post('/api/v1/llm/configs', json=selection('ollama', 'Local/Ollama'))
+    assert saved.status_code == 422
+    def no_client(*args, **kwargs):
+        pytest.fail('incomplete local settings must fail before creating an LLM client')
+    monkeypatch.setattr(config_api, 'SichuanQCLLMClient', no_client)
+    assert client.post('/api/v1/llm/test', json=selection('ollama', 'Local/Ollama')).status_code == 422
+    assert llm_configs == before
+
+
+@pytest.mark.parametrize('token', ['short', ' ' * 40])
+def test_strata_invalid_gateway_token_is_not_reported_ready(client, setup, token):
+    cfg, _user = setup
+    cfg.LLM_GATEWAY_TOKEN = token
+    row = next(row for row in client.get('/api/v1/llm/local-options').json()['data']
+               if row['provider_code'] == 'strata')
+    assert not row['models'][0]['configuration_ready']
+    assert client.post('/api/v1/llm/configs', json=selection()).status_code == 422
+
+
+def test_configured_direct_ollama_remains_available_without_gateway(client, setup):
+    cfg, _user = setup
+    cfg.LLM_DISPATCH_MODE = 'direct'
+    cfg.OLLAMA_API_ENDPOINT = 'http://ollama.test/v1'
+    cfg.LLM_GATEWAY_URL = None
+    cfg.LLM_GATEWAY_TOKEN = None
+    row = next(row for row in client.get('/api/v1/llm/local-options').json()['data']
+               if row['provider_code'] == 'ollama')
+    assert row['models'][0]['configuration_ready']
+    response = client.post('/api/v1/llm/configs', json=selection('ollama', 'Local/ExactModel'))
+    assert response.status_code == 200
+    assert response.json()['data']['model_code'] == 'Local/ExactModel'
+
+
 def test_bailian_catalog_includes_35b_without_removing_flash(client, setup):
     models = client.get('/api/v1/llm/models', params={'provider_id': 'alibaba'}).json()['data']
     assert sum(m['model_code'] == 'qwen3.6-35b-a3b' for m in models) == 1
