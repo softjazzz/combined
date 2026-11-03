@@ -132,4 +132,6 @@ $env:P9D_ISOLATED_DATABASE_URL = 'postgresql://postgres:' + [Uri]::EscapeDataStr
 
 包内固定应答自检使用当版完整可选目录90项（含扩展范围），故意返回无效模型协议：58项可交付结果经Canonical保存读取一致、32项保留技术未完成，真实模型请求0次。此自检不是90项医学验收，也不代表所有49条正式规则都调用了模型。打包源码必须保留`app/services/qc_diagnostics`，仅排除`app/storage/qc_diagnostics`运行资料；包白名单回归覆盖这个区别。
 
+最终包范围进一步收紧：`app/storage`只携带Python代码，排除已被Git追踪的历史`qc_results`/`demo_qc_results`和其他JSON；其他app/config非代码文件仅接纳明确静态定义，新增未知运行JSON默认排除。相关白名单22项通过。被拦截的候选目录和ZIP均以`INVALID-`标记，不交付、不使用。
+
 全量前端单测、业务PG迁移、真实API压力测试及真实病历质控未执行。DSH现场通过前不自动启用Qwen3.6，不覆盖正式部署。

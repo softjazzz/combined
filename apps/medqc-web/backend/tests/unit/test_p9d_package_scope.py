@@ -15,7 +15,9 @@ SPEC.loader.exec_module(packager)
     'app/data/sessions/old.db-journal', 'app/data/mongo_sync_config.json',
     'app/data/sync_run_history.json', 'data/manual_qc_runs/old.json',
     'app/data/luxian_0609_rules_v1.json.backup', 'config/.env', 'config/private.pem',
-    'data/synthetic_qc/templates/old.json', '.env', 'app/storage/qc_diagnostics/old.json'])
+    'data/synthetic_qc/templates/old.json', '.env', 'app/storage/qc_diagnostics/old.json',
+    'app/storage/demo_qc_results/tracked.json', 'app/storage/qc_results/tracked.json',
+    'app/other/new_runtime_state.json', 'config/new_private_settings.json'])
 def test_only_code_and_reviewed_static_assets_are_packaged(path):
     assert not packager.allowed_backend(path)
 

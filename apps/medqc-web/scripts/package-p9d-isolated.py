@@ -37,9 +37,16 @@ def allowed_backend(relative):
                 'sc146_intrinsic_', 'custom_rules_', 'surgery_procedure_', 'coding_rules', 'department_rules_',
                 'drg_weights', 'luzhou_dip_')) and path.suffix in {'.json', '.csv'}
                 or path.name == 'product_activation_public_key.pem')
+    if path.parts[0] == 'app':
+        # storage既包含实现，也包含已被Git跟踪的历史结果。只携带代码及明确的静态定义。
+        return path.suffix == '.py' or relative in {
+            'app/services/resources/medical_core_systems_2018.json',
+            'app/services/skills/field_mapper.yaml',
+        }
     if path.parts[0] == 'data':
         return path.name.startswith('icd') and path.suffix == '.json'
-    return (path.parts[0] in {'app', 'alembic', 'config'} and path.suffix in {'.py', '.json', '.csv', '.yaml', '.yml', '.ini', '.txt'}
+    return (path.parts[0] == 'alembic' and path.suffix == '.py'
+            or relative in {'config/classification_config.json', 'config/strata-qwen36-p9c-approved.json'}
             or relative in {'requirements.txt', 'alembic.ini', '.env.example'}
             or relative in {'services/__init__.py', 'services/pdf_parser.py'}
             or relative == 'scripts/p9d_isolated_smoke.py')
@@ -86,6 +93,11 @@ def main():
         relative = file.removeprefix('apps/medqc-web/backend/')
         if allowed_backend(relative):
             copy(REPO / file, out / 'backend' / relative)
+    if (out / 'backend/.env').exists():
+        raise SystemExit('禁止复制开发配置')
+    storage = out / 'backend/app/storage'
+    if storage.exists() and any(p.is_file() and p.suffix != '.py' for p in storage.rglob('*')):
+        raise SystemExit('禁止携带被Git追踪的历史运行结果')
     for relative in manifest['files']:
         copy(handoff / relative, out / 'provider-handoff' / relative)
     shutil.copytree(runtime, out / 'runtime', ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '*.pyo'))
