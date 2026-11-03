@@ -122,7 +122,7 @@ class Sender:
         await self.started.put(payload["messages"][0]["content"])
         try:
             await release.wait()
-            return {"choices": [{"message": {"content": "fixed"}, "finish_reason": "stop"}], "usage": {}}
+            return {"model": "local-model", "choices": [{"message": {"content": "fixed"}, "finish_reason": "stop"}], "usage": {}}
         finally:
             self.active -= 1
 
@@ -161,7 +161,8 @@ async def test_three_cases_and_same_case_roles_share_two_requests_and_keep_old_p
     results = await asyncio.gather(a, a2, b, c)
     assert sender.peak == 2
     assert all(item["choices"][0]["message"]["content"] == "fixed" for item in results)
-    assert all(set(payload) == {"model", "messages", "stream"} for payload in sender.payloads)
+    assert all(set(payload) == {"model", "messages", "stream", "temperature", "top_p", "top_k",
+                                 "presence_penalty", "frequency_penalty", "repetition_penalty", "chat_template_kwargs"} for payload in sender.payloads)
     assert all(len(payload["messages"]) == 1 for payload in sender.payloads)
     assert await runtime.shutdown()
 
@@ -342,3 +343,10 @@ async def test_cancelled_caller_does_not_release_same_case_before_provider_finis
         (await sender.releases.get()).set()
     await asyncio.gather(a2, b)
     assert await runtime.shutdown()
+
+
+@pytest.fixture(autouse=True)
+def p9b_mock_deployment_contracts(monkeypatch):
+    import sys
+    from tests.scheduler_support.strata_p9b import configure_mock_profile_factory
+    configure_mock_profile_factory(monkeypatch, sys.modules[__name__], model='local-model', profile='strata_first')

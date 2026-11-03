@@ -61,6 +61,7 @@ async def test_generate_gateway_keeps_payload_usage_and_safe_protocol(monkeypatc
             200,
             json={
                 "id": "fixed",
+                "model": "local-qwen",
                 "choices": [
                     {"finish_reason": "stop", "message": {"content": "{\"ok\":true}"}}
                 ],
@@ -93,14 +94,15 @@ async def test_generate_gateway_keeps_payload_usage_and_safe_protocol(monkeypatc
     assert captured["url"] == "http://127.0.0.1:8765/gateway/v1/llm/completions"
     assert captured["authorization"] == "Bearer gateway-test-token-0123456789abcdef"
     assert set(captured["body"]) == {
-        "request_id", "profile", "deadline_at", "timeout_seconds", "payload"
+        "request_id", "profile", "deadline_at", "timeout_seconds", "payload", "context_budget_required"
     }
     assert captured["body"]["profile"] == "strata_first_pass"
     assert captured["body"]["payload"] == {
         "model": "local-qwen",
         "messages": [{"role": "user", "content": "固定输入"}],
-        "temperature": 0.2,
-        "top_p": 0.9,
+        "temperature": 0,
+        "top_p": 1,
+        "top_k": 1, "frequency_penalty": 0, "presence_penalty": 0, "repetition_penalty": 1,
         "max_tokens": 512,
         "stream": False,
         "chat_template_kwargs": {"enable_thinking": False},
@@ -165,6 +167,7 @@ async def test_real_gateway_asgi_and_generate_share_success_contract(
                 timeout_seconds=timeout_seconds,
             )
             return {
+                "model": "local-qwen",
                 "choices": [
                     {"finish_reason": "stop", "message": {"content": "ASGI success"}}
                 ],
@@ -320,13 +323,14 @@ async def test_strata_without_key_is_explicitly_available(monkeypatch):
     async def fixed_response(**kwargs):
         calls.append(kwargs)
         return {
+            "model": "local-qwen",
             "choices": [{"finish_reason": "stop", "message": {"content": "local"}}],
             "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
         }
 
     monkeypatch.setattr(qc_llm_client, "safe_post_json", fixed_response)
     runtime = llm_config_loader.build_provider_runtime_config(
-        "strata", custom_parameters={"enable_thinking": False, "max_tokens": 99999}
+        "strata", custom_parameters={"enable_thinking": False, "max_tokens": 1024}
     )
     assert runtime["api_key"] is None
     client = qc_llm_client.SichuanQCLLMClient(runtime)
@@ -336,7 +340,7 @@ async def test_strata_without_key_is_explicitly_available(monkeypatch):
     assert calls[0]["payload"]["chat_template_kwargs"] == {
         "enable_thinking": False
     }
-    assert calls[0]["payload"]["max_tokens"] == 32768
+    assert calls[0]["payload"]["max_tokens"] == 1024
 
 
 def test_unknown_provider_fails_closed(monkeypatch):
@@ -561,3 +565,10 @@ def test_gateway_error_is_safe_and_marks_retry_owner():
     assert str(error) == "gateway_error"
     assert error.retryable is True
     assert error.transport_retry_managed is True
+
+
+@pytest.fixture(autouse=True)
+def p9b_mock_deployment_contracts(monkeypatch):
+    import sys
+    from tests.scheduler_support.strata_p9b import configure_mock_profile_factory
+    configure_mock_profile_factory(monkeypatch, sys.modules[__name__], model='local-qwen', endpoint='http://127.0.0.1:9000/v1/chat/completions')

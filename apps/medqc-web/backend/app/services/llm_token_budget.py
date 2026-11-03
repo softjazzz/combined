@@ -107,12 +107,12 @@ class _BudgetFailures(list):
 
 
 def freeze_identity(client) -> str | None:
-    if client is None or not (strict_enabled() or split_enabled()):
+    if client is None:
         return None
     from .exam_result_model_route import _unwrap
     base, _ = _unwrap(client)
     provider = getattr(base, "provider_code", "")
-    if provider not in LOCAL or not (strict_enabled() or split_enabled()):
+    if provider not in LOCAL or not (strict_enabled() or split_enabled() or provider == "strata"):
         return None
     model = str(getattr(base, "model", ""))
     profile, cap = deployed_capability(provider, model, getattr(base, "gateway_profile", None), getattr(base, "api_endpoint", None),
@@ -134,9 +134,15 @@ def freeze_identity(client) -> str | None:
                     route_capabilities.append(candidate_cap.model_dump())
         except (ValueError, TypeError, KeyError, AttributeError):
             route_capabilities = ["unverified"]
-    return json.dumps({"protocol": PROTOCOL, "provider": provider, "model": model, "profile": profile,
+    transport = {}
+    if provider == 'strata':
+        from .strata_protocol import PROTOCOL_VERSION, deployed_identity
+        identity = deployed_identity(provider, model, profile, getattr(base, 'api_endpoint', None))
+        transport = {'strata_transport_protocol': PROTOCOL_VERSION,
+                     'model_identity': identity.model_dump() if identity else None}
+    return json.dumps({**transport, "protocol": PROTOCOL, "provider": provider, "model": model, "profile": profile,
         "route_capabilities": route_capabilities,
-        "capability": cap.model_dump() if cap else None, "strict": strict_enabled(), "split": split_enabled()}, sort_keys=True)
+        "capability": cap.model_dump() if cap else None, "strict": strict_enabled() or provider == "strata", "split": split_enabled()}, sort_keys=True)
 
 
 @contextmanager

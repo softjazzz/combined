@@ -90,6 +90,7 @@ def parse_strata_metrics(result, *, wall_ms, transport=None, gateway=False):
         "nominal_input_tokens": nominal, "cache_tokens_usage": cached_usage,
         "cache_tokens_timing": cached_timing, "cached_tokens": cached,
         "prefill_tokens": read, "output_tokens": observed_output,
+        "draft_n": _number(timings.get("draft_n"), integer=True),
         "usage_output_tokens": output, "timing_output_tokens": predicted,
         "prefill_ms": _number(timings.get("prompt_ms")),
         "decode_ms": _number(timings.get("predicted_ms")),

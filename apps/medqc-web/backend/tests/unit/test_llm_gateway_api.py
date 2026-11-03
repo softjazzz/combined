@@ -110,6 +110,7 @@ def _body(**updates: Any) -> dict[str, Any]:
             "model": "Qwen/Qwen3.5-35B",
             "messages": [{"role": "user", "content": "synthetic prompt"}],
             "stream": False,
+            "max_tokens": 1024,
             "response_format": {"type": "json_object"},
             "enable_thinking": False,
         },
@@ -374,3 +375,10 @@ def test_profile_provider_key_and_strata_capacity_fail_closed(tmp_path: Path, ca
     }
     with pytest.raises(GatewayConfigurationError):
         GatewaySettings.from_env(env)
+
+
+@pytest.fixture(autouse=True)
+def p9b_mock_deployment_contracts(monkeypatch):
+    import sys
+    from tests.scheduler_support.strata_p9b import configure_mock_profile_factory
+    configure_mock_profile_factory(monkeypatch, sys.modules[__name__], model='Qwen/Qwen3.5-35B', endpoint='http://127.0.0.1:18000/v1/chat/completions')
