@@ -36,10 +36,16 @@ Counter、模型、Tokenizer和模板版本严格匹配；所有资源先核验�
 使用新的目录，例如`D:\DSH\P9D`，不要解压覆盖现有部署。先核对开发交付的ZIP SHA256，再展开；以下将`$pkg`指向解包后的包根。
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath 'D:\DSH\P9D.zip'
-Expand-Archive -LiteralPath 'D:\DSH\P9D.zip' -DestinationPath 'D:\DSH\P9D-new'
-# 修改为实际解包后的包根，要求存在build-info.json。
-$pkg = 'D:\DSH\P9D-new\实际包目录名'
+$archive = Read-Host '输入收到的P9D ZIP完整路径'
+if(-not (Test-Path -LiteralPath $archive -PathType Leaf)){ throw 'ZIP不存在' }
+Get-FileHash -Algorithm SHA256 -LiteralPath $archive
+$destination = Read-Host '输入全新解包目录，例如D:\DSH\P9D-new'
+if(Test-Path -LiteralPath $destination){ throw '目标已存在，请选择新目录，不覆盖' }
+Expand-Archive -LiteralPath $archive -DestinationPath $destination
+$roots = @(Get-ChildItem -LiteralPath $destination -Directory |
+  Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'build-info.json') })
+if($roots.Count -ne 1){ throw '包根目录数量异常' }
+$pkg = $roots[0].FullName
 Get-Content -LiteralPath "$pkg\build-info.json"
 & "$pkg\runtime\python.exe" -c "import sys; print(sys.executable); print(sys.path)"
 & "$pkg\tools\p9d-isolated.ps1" -Mode Verify
@@ -50,7 +56,9 @@ Verify不连接API，验证包内真实资源与17项消息计量。失败则停
 DSH另开一个PowerShell窗口建立既有SSH隧道，替换SSH账号和服务器名；本机18084必须未被占用：
 
 ```powershell
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18084:127.0.0.1:18083 'DSH账号@GPU服务器'
+$sshTarget = Read-Host '输入DSH已确认的SSH目标，格式user@host'
+if([string]::IsNullOrWhiteSpace($sshTarget)){ throw '未提供SSH目标' }
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18084:127.0.0.1:18083 $sshTarget
 ```
 
 回到验收窗口，口令只放当前进程，不写配置文件：
