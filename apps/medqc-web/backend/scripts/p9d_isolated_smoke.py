@@ -57,15 +57,13 @@ def configure(root, state, endpoint):
         LLM_GATEWAY_PROFILES_JSON=json.dumps({'p9d_qwen36': {'provider_code': 'strata',
             'resource_id': 'p9d_local', 'model': 'qwen3.6-35b-a3b',
             'api_endpoint': endpoint.rstrip('/') + '/chat/completions'}}))
-    from app.core.settings import Settings, get_settings
-    get_settings.cache_clear()
+    from app.core.settings import Settings
     settings = Settings(_env_file=None)
     # 所有已注册的冻结目录都定向到本次新目录，拒绝继承现场业务冻结。
     for field in type(settings).model_fields:
         if 'FREEZE' in field and field.endswith('_DIR'):
             setattr(settings, field, str(state / 'freezes' / field.lower()))
             os.environ[field] = str(state / 'freezes' / field.lower())
-    get_settings.cache_clear()
     return settings
 
 

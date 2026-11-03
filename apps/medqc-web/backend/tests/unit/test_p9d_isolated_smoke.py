@@ -1,5 +1,6 @@
 """虚构病例全目录经过真实执行及保存；模型仅固定协议失败，不声称质量验收。"""
 import json
+import os
 
 import pytest
 
@@ -42,3 +43,15 @@ def test_source_is_fixed_synthetic_and_does_not_accept_external_material():
     assert rows['exam_master'][0]['exam_id'] == 'exam-synthetic'
     with pytest.raises(ValueError, match='loopback'):
         smoke.configure('unused', None, 'http://example.com/v1')
+
+
+def test_cli_configuration_uses_current_environment_snapshot_not_removed_lru_api(tmp_path, monkeypatch):
+    from app.core.settings import get_settings
+    with monkeypatch.context() as scope:
+        scope.setattr(os, 'environ', dict(os.environ))
+        os.environ['JWT_SECRET'] = 'synthetic-previous-snapshot'
+        assert get_settings().JWT_SECRET == 'synthetic-previous-snapshot'
+        settings = smoke.configure(tmp_path, tmp_path, 'http://127.0.0.1:18084/v1')
+        assert settings.JWT_SECRET == get_settings().JWT_SECRET == 'p9d-fictional-isolated-not-production'
+        assert os.environ['DATABASE_URL'] == ''
+        assert os.environ['LX0609_TOKEN_SPLIT_ENABLED'] == 'true'

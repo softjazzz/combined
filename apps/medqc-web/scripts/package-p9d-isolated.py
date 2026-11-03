@@ -108,12 +108,18 @@ socket.create_connection=deny
 from app.services.strata_handoff import runtime_for,close_runtimes
 r=runtime_for(sys.argv[1]); r.ensure_counter()
 assert r._counter.validated_vectors==17
-assert sys.flags.isolated==1 and sys.flags.no_user_site==1
+assert sys.flags.isolated==1 and sys.flags.no_site==1
+package_root=Path(sys.executable).resolve().parents[1]
+assert all(package_root==Path(p).resolve() or package_root in Path(p).resolve().parents for p in sys.path)
 print(json.dumps({'offline_package_vectors':17,'isolated_runtime':True,'python':sys.version}))
 close_runtimes()
 """
     subprocess.run([str(out / 'runtime/python.exe'), '-B', '-c', check, str(out / 'provider-handoff')],
                    cwd=out / 'backend', check=True)
+    lock = subprocess.check_output([str(out / 'runtime/python.exe'), '-B', '-c',
+        "import importlib.metadata as m; print('\\n'.join(sorted(d.metadata['Name']+'=='+d.version for d in m.distributions())))"],
+        cwd=out / 'backend', text=True, encoding='utf-8')
+    (out / 'requirements-runtime-lock.txt').write_text(lock, encoding='utf-8')
     files = {p.relative_to(out).as_posix(): digest_file(p)
              for p in out.rglob('*') if p.is_file()}
     (out / 'MANIFEST-SHA256.json').write_text(json.dumps(files, indent=2) + '\n', encoding='utf-8')

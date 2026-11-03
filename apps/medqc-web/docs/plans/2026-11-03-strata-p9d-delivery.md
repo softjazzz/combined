@@ -120,4 +120,6 @@ $env:P9D_ISOLATED_DATABASE_URL = 'postgresql://postgres:' + [Uri]::EscapeDataStr
 
 最终P9-D聚焦集139项通过、0跳过，包含真实交付17项向量、完整客户端与虚构全目录的内存保存闭环、打包白名单；与上述扩大集重叠，不相加。
 
+首次包内启动检查拦截了隔离入口对旧`get_settings.cache_clear()`接口的误用，已改为当前环境快照机制，补启动回归20项通过。独立Python关闭自动site加载，包内验证要求所有模块搜索路径都留在包目录；不继承开发机用户包或执行`.pth`文件。实际依赖版本保存在`requirements-runtime-lock.txt`。首次失败的试装目录不作为交付包。
+
 全量前端单测、业务PG迁移、真实API压力测试及真实病历质控未执行。DSH现场通过前不自动启用Qwen3.6，不覆盖正式部署。
