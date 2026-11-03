@@ -175,3 +175,10 @@ python scripts/run_qc_scheduler_tests.py --profile offline --suite llm-request-a
 最终P5-B离线入口：`python scripts/run_qc_scheduler_tests.py --profile offline --suite context-budget-p5b`，**428通过、0失败、0跳过**。包括四类预算原因经Engine/Binding/Finalizer透传、其他族成功保留及不自动补跑。两项扩大回归问题仍按上文分别保留，不把428通过写成全量CI绿。
 
 计量扩展点目前为同步本地callback；真实适配器还须验证分词耗时上界和资源开销，未提供跨进程计量RPC或慢计量器取消验收。默认关闭且缺失DSH能力时失败关闭，不能据Mock时延承诺生产期限。
+
+
+## 本地交付提交
+
+- 实现与验收说明提交：`fa9e69e47217c0e28c3454b72a8522530b6ac5e3`。
+- 实现差异：40个文件，1678行新增、106行删除（含保护测试和本报告，不是新增临床规则数）。
+- 本节后的文档提交仅记录交付SHA；代码、医学合同和配置默认值不变。没有推送或远端CI结果。
