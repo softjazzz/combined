@@ -117,7 +117,8 @@ def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
             gateway_endpoint_sha256 if dispatch_mode == "gateway" else None
         ),
     }
-    if provider == 'strata':
+    from ..strata_protocol import is_p9_client
+    if is_p9_client(client):
         from ..strata_protocol import GREEDY, PROTOCOL_VERSION
         from ..llm_token_budget import freeze_identity
         identity['context_capability'] = freeze_identity(client)

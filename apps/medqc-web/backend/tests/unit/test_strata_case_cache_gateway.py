@@ -18,7 +18,7 @@ from app.services.llm_dispatch.contracts import GatewayCasePrefix, GatewayComple
 
 def settings(*, enabled=True, capacity=64):
     profile = ProfileConfig("strata_first_pass", "gpu", "strata", "synthetic-model",
-                            "http://provider.test/v1/chat/completions")
+                            "http://provider.test/v1/chat/completions", strata_protocol="strata-p9b-v1")
     return GatewaySettings(
         token="synthetic-gateway-token-at-least-32-chars", resources={"gpu": ResourceConfig("gpu", 2, 4)},
         profiles={profile.name: profile}, allowed_hosts=frozenset({"provider.test"}),

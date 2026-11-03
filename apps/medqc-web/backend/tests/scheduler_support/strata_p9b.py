@@ -5,7 +5,7 @@ import json
 import os
 
 from app.services import llm_token_budget as budget
-from app.services.strata_protocol import StrataModelIdentity, endpoint_identity
+from app.services.strata_protocol import StrataModelIdentity, endpoint_identity, PROTOCOL_VERSION
 from tests.unit.test_context_token_budget import capability, identity
 
 
@@ -25,9 +25,9 @@ def install_mock_profile(monkeypatch, profile):
     records = json.loads(os.getenv('LLM_GATEWAY_PROFILES_JSON', '[]'))
     records = [item for item in records if item['profile'] != profile.name]
     records.append(dict(profile=profile.name, provider_code='strata', model=profile.model,
-        api_endpoint=profile.api_endpoint, context_budget=cap.model_dump(mode='json'), model_identity=attestation.model_dump()))
+        api_endpoint=profile.api_endpoint, context_budget=cap.model_dump(mode='json'), model_identity=attestation.model_dump(), strata_protocol=PROTOCOL_VERSION))
     monkeypatch.setenv('LLM_GATEWAY_PROFILES_JSON', json.dumps(records))
-    return replace(profile, context_budget=cap, model_identity=attestation)
+    return replace(profile, context_budget=cap, model_identity=attestation, strata_protocol=PROTOCOL_VERSION)
 
 
 def configure_mock_profile_factory(monkeypatch, module, *, model='synthetic-model',

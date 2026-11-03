@@ -29,7 +29,7 @@ def verified_mock_deployment(monkeypatch):
     monkeypatch.setenv('LLM_LOCAL_TOKEN_BUDGET_ENABLED', 'false')
     monkeypatch.setenv('LLM_GATEWAY_PROFILES_JSON', json.dumps([dict(profile=cap.profile, provider_code='strata',
         model=MODEL, api_endpoint='http://strata.test/v1/chat/completions',
-        context_budget=cap.model_dump(mode='json'), model_identity=attestation.model_dump())]))
+        context_budget=cap.model_dump(mode='json'), model_identity=attestation.model_dump(), strata_protocol='strata-p9b-v1')]))
     with counter_scope('fixture', '1', identity(cap), lambda _: 100):
         yield cap, attestation
 
@@ -42,7 +42,7 @@ def answer(model=MODEL, finish='stop', draft=0):
 def make_client(**overrides):
     config = dict(provider_code='strata', model=MODEL, api_endpoint='http://strata.test/v1',
                   custom_parameters=dict(temperature=.8, top_p=.3, enable_thinking=True, max_tokens=4096),
-                  allowed_model_ids=[MODEL])
+                  allowed_model_ids=[MODEL], strata_protocol='strata-p9b-v1')
     config.update(overrides)
     return module.SichuanQCLLMClient(config, observability_recorder=LLMObservabilityRecorder(store=NullLLMCallEventStore()))
 
@@ -55,7 +55,7 @@ async def test_final_http_is_full_greedy_and_thinking_off(monkeypatch, tmp_path,
     resources = None
     if gateway:
         profile = ProfileConfig('strata_p9b', 'local', 'strata', MODEL, 'http://strata.test/v1/chat/completions',
-                                context_budget=verified_mock_deployment[0], model_identity=verified_mock_deployment[1])
+                                context_budget=verified_mock_deployment[0], model_identity=verified_mock_deployment[1], strata_protocol='strata-p9b-v1')
         def fixed(request):
             sent.append(json.loads(request.content))
             return httpx.Response(200, json=answer())
@@ -97,7 +97,7 @@ async def test_final_http_is_full_greedy_and_thinking_off(monkeypatch, tmp_path,
 
 
 def test_gateway_accepts_local_greedy_but_not_cloud_extensions():
-    profile = ProfileConfig('strata_p9b', 'local', 'strata', MODEL, 'http://strata.test/v1/chat/completions')
+    profile = ProfileConfig('strata_p9b', 'local', 'strata', MODEL, 'http://strata.test/v1/chat/completions', strata_protocol='strata-p9b-v1')
     raw = dict(model=MODEL, messages=[{'role': 'user', 'content': '固定原文'}], max_tokens=512, **GREEDY)
     assert prepare_provider_payload(profile, raw)['top_k'] == 1
     cloud = ProfileConfig('alibaba_main', 'cloud', 'alibaba', MODEL, 'https://cloud.test/v1/chat/completions', 'synthetic')
@@ -263,7 +263,7 @@ async def test_real_gateway_http_error_and_recovery_paths(monkeypatch, tmp_path,
     from app.services.llm_token_budget import budget_failure_scope
     cap, attestation = verified_mock_deployment
     profile = ProfileConfig(cap.profile, 'local', 'strata', MODEL, 'http://strata.test/v1/chat/completions',
-                            context_budget=cap, model_identity=attestation)
+                            context_budget=cap, model_identity=attestation, strata_protocol='strata-p9b-v1')
     sent = []
     def fixed(request):
         sent.append(json.loads(request.content))

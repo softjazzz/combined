@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .llm_dispatch.provider_profiles import ProviderConfigurationError
 
 PROTOCOL_VERSION = 'strata-p9b-v1'
+P9_MODEL = 'qwen3.6-35b-a3b'
 GREEDY = {'temperature': 0, 'top_k': 1, 'top_p': 1, 'presence_penalty': 0,
           'frequency_penalty': 0, 'repetition_penalty': 1}
 SAFE_ERROR_CODES = frozenset({'llm_context_over_budget', 'strata_output_truncated',
@@ -66,6 +67,8 @@ def upstream_error(status, body):
         return None
     nested = body.get('error')
     code = (nested.get('code') or nested.get('type')) if isinstance(nested, dict) else body.get('code')
+    if not isinstance(code, str):
+        return None
     if code in {'context_length_exceeded', 'context_window_exceeded', 'context_limit_exceeded'}:
         return StrataProtocolError('llm_context_over_budget')
     if status == 502 and code == 'structured_output_failed':
@@ -144,6 +147,41 @@ def deployed_identity(provider, model, profile, endpoint):
         matches = [item for item in entries if item.get('provider_code') == provider
                    and item.get('model') == model and item.get('profile') == profile
                    and (endpoint is None or endpoint_identity(item.get('api_endpoint')) == endpoint_identity(endpoint))]
-        return StrataModelIdentity.model_validate(matches[0]['model_identity']) if len(matches) == 1 else None
+        if len(matches) != 1:
+            return None
+        if provider == 'strata' and model == P9_MODEL:
+            from .strata_handoff import configured_root, load_handoff
+            root = configured_root()
+            if root:
+                value = load_handoff(root).model_identity(endpoint or matches[0]['api_endpoint'])
+                if matches[0].get('model_identity') and StrataModelIdentity.model_validate(matches[0]['model_identity']) != value:
+                    return None
+                return value
+        return StrataModelIdentity.model_validate(matches[0]['model_identity']) if matches[0].get('model_identity') else None
     except (ValueError, TypeError, KeyError, AttributeError):
+        return None
+
+
+def p9_enabled(model, protocol=None):
+    """Qwen3.6不能以legacy绕过保护；其他Profile保持原行为，除非部署者明确启用。"""
+    if protocol is not None and (not isinstance(protocol, str) or protocol not in {'legacy', PROTOCOL_VERSION}):
+        raise ProviderConfigurationError('strata_protocol_invalid')
+    return model == P9_MODEL or protocol == PROTOCOL_VERSION
+
+
+def is_p9_client(client):
+    return (getattr(client, 'provider_code', None) == 'strata'
+            and p9_enabled(getattr(client, 'model', None), getattr(client, 'strata_protocol', None)))
+
+
+def deployed_protocol(provider, model, profile, endpoint):
+    try:
+        entries = json.loads(os.getenv('LLM_GATEWAY_PROFILES_JSON', '[]'))
+        if isinstance(entries, dict):
+            entries = [{'profile': key, **value} for key, value in entries.items()]
+        matches = [item for item in entries if item.get('provider_code') == provider
+                   and item.get('model') == model and (profile is None or item.get('profile') == profile)
+                   and (endpoint is None or endpoint_identity(item.get('api_endpoint')) == endpoint_identity(endpoint))]
+        return matches[0].get('strata_protocol') if len(matches) == 1 else None
+    except (ValueError, TypeError, AttributeError):
         return None

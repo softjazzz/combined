@@ -16,6 +16,17 @@ from sqlalchemy.pool import StaticPool
 
 
 SUITES: dict[str, tuple[str, ...]] = {
+    "strata-p9d": (
+        "tests/unit/test_p9d_package_scope.py",
+        "tests/unit/test_p9d_isolated_smoke.py",
+        "tests/unit/test_llm_counter_installation.py",
+        "tests/unit/test_strata_handoff.py",
+        "tests/unit/test_strata_p9d.py",
+        "tests/unit/test_strata_p9b.py",
+        "tests/unit/test_context_token_budget.py",
+        "tests/unit/test_context_budget_review_regressions.py",
+        "tests/unit/test_gateway_context_budget.py",
+    ),
     "strata-p9b": (
         "tests/unit/test_strata_p9b.py",
         "tests/unit/test_strata_admin_configuration.py",
@@ -58,6 +69,11 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_luxian_0609_task_runtime_identity.py",
     ),
     "llm-request-audit": (
+        "tests/unit/test_p9d_package_scope.py",
+        "tests/unit/test_p9d_isolated_smoke.py",
+        "tests/unit/test_llm_counter_installation.py",
+        "tests/unit/test_strata_handoff.py",
+        "tests/unit/test_strata_p9d.py",
         "tests/unit/test_strata_p9b.py",
         "tests/unit/test_qc_cold_start_probe.py",
         "tests/unit/test_luxian_0609_preproduction_runner.py::test_preproduction_runner_cold_process_does_not_load_sichuan_service",
