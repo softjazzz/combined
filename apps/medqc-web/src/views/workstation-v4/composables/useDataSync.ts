@@ -187,6 +187,7 @@ function createInitialState() {
     templatesLoading: false,
     templateApplying: false,
     departmentsLoading: false,
+    departmentsError: null as string | null,
 
     syncTemplates: [] as SyncTemplate[],
     selectedTemplateId: 'hospital_standard' as SyncTemplate['id'],
@@ -205,6 +206,9 @@ function createInitialState() {
 
 const globalSyncState = reactive(createInitialState())
 let pollingTimer: ReturnType<typeof setInterval> | null = null
+let departmentsRequest: { controller: AbortController; promise: Promise<void> } | null = null
+let departmentsRequestSequence = 0
+let syncStateGeneration = 0
 
 function pushLog(level: SyncRuntimeLogItem['level'], text: string) {
   globalSyncState.currentRunLog.unshift({
@@ -411,22 +415,40 @@ async function loadTemplates() {
   }
 }
 
-async function loadDepartments() {
+function cancelDepartmentsRequest() {
+  ++departmentsRequestSequence
+  departmentsRequest?.controller.abort()
+  departmentsRequest = null
+  globalSyncState.departmentsLoading = false
+  globalSyncState.departmentsError = null
+  globalSyncState.availableDepartments = []
+}
+
+function loadDepartments(): Promise<void> {
+  if (departmentsRequest) return departmentsRequest.promise
+  const sequence = ++departmentsRequestSequence
+  const controller = new AbortController()
   globalSyncState.departmentsLoading = true
-  try {
-    globalSyncState.availableDepartments = await syncApi.getDepartments()
-  } catch (error) {
-    console.error('加载科室列表失败:', error)
-    const detail =
-      (error as any)?.response?.data?.detail ||
-      (error as any)?.response?.data?.error ||
-      (error as any)?.message ||
-      '未知错误'
-    message.warning(`加载科室列表失败：${detail}`)
-    globalSyncState.availableDepartments = []
-  } finally {
-    globalSyncState.departmentsLoading = false
-  }
+  globalSyncState.departmentsError = null
+  const promise = Promise.resolve()
+    .then(() => syncApi.getDepartments(controller.signal))
+    .then((items) => {
+      if (sequence !== departmentsRequestSequence) return
+      globalSyncState.availableDepartments = items
+    })
+    .catch(() => {
+      if (sequence !== departmentsRequestSequence) return
+      // 只在科室字段旁提示，不弹窗，也不改变已保存的同步范围。
+      globalSyncState.departmentsError = '未能读取服务器科室，请确认连接后重试。'
+      globalSyncState.availableDepartments = []
+    })
+    .finally(() => {
+      if (sequence !== departmentsRequestSequence) return
+      globalSyncState.departmentsLoading = false
+      departmentsRequest = null
+    })
+  departmentsRequest = { controller, promise }
+  return promise
 }
 
 async function loadRunHistory() {
@@ -496,6 +518,7 @@ async function testActiveConnection() {
 }
 
 async function savePgConnection() {
+  const generation = syncStateGeneration
   globalSyncState.isSavingPgConnection = true
   try {
     const defaultInstituteId = globalSyncState.pgConnectionForm.default_institute_id.trim()
@@ -513,7 +536,10 @@ async function savePgConnection() {
       remote_password: globalSyncState.pgConnectionForm.remote_password,
     }
     const resp = await syncApi.updatePgConfig(payload)
+    if (generation !== syncStateGeneration) return resp
     patchPgForms(resp.config)
+    cancelDepartmentsRequest()
+    void loadDepartments()
     pushLog('success', 'PG 连接配置已保存')
     return resp
   } catch (error: any) {
@@ -521,7 +547,7 @@ async function savePgConnection() {
     pushLog('error', `保存 PG 连接配置失败：${errMsg}`)
     throw error
   } finally {
-    globalSyncState.isSavingPgConnection = false
+    if (generation === syncStateGeneration) globalSyncState.isSavingPgConnection = false
   }
 }
 
@@ -849,6 +875,8 @@ async function initialize() {
   globalSyncState.loadErrors.connection = null
   globalSyncState.loadErrors.policy = null
   globalSyncState.loadErrors.history = null
+  // 科室依赖源服务器；独立后台加载，不占用页面初始化等待链。
+  void loadDepartments()
   try {
     const tasks: Array<{
       section: SyncLoadSection
@@ -863,7 +891,6 @@ async function initialize() {
             loadPgConfig(),
             loadPgSyncTables(),
             loadPgSyncTableGroups(),
-            loadDepartments(),
             loadStatusAndStats(),
           ]),
       },
@@ -918,6 +945,8 @@ async function initialize() {
 }
 
 function resetState() {
+  ++syncStateGeneration
+  cancelDepartmentsRequest()
   stopPolling()
   Object.assign(globalSyncState, createInitialState())
 }

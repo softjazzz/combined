@@ -1,5 +1,6 @@
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, h, onMounted, onUnmounted, ref } from 'vue'
+import { deferredComponent } from './deferredComponent'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { UploadFile, UploadProps } from 'ant-design-vue'
@@ -40,12 +41,12 @@ import {
   getSichuanWorkspaceBatchJobDebugSnapshot,
   reviewSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
-import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
-import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
+const QCReviewDrawer = deferredComponent(() => import('@/components/qc/QCReviewDrawer.vue'), 'QCReviewDrawer')
+const SemanticRulesBatchResultDrawer = deferredComponent(() => import('@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'), 'SemanticRulesBatchResultDrawer')
 import CustomerSampleQcTaskStatusBar from './CustomerSampleQcTaskStatusBar.vue'
 import LuxianRuleScopePanel from './LuxianRuleScopePanel.vue'
-import QCRecordResultComparisonDrawer from './QCRecordResultComparisonDrawer.vue'
-import ReadonlyMedicalDocumentContent from './ReadonlyMedicalDocumentContent.vue'
+const QCRecordResultComparisonDrawer = deferredComponent(() => import('./QCRecordResultComparisonDrawer.vue'), 'QCRecordResultComparisonDrawer')
+const ReadonlyMedicalDocumentContent = deferredComponent(() => import('./ReadonlyMedicalDocumentContent.vue'), 'ReadonlyMedicalDocumentContent')
 import {
   CUSTOMER_TEST_POOL_ID,
   formatRecordDateTime,
@@ -145,6 +146,11 @@ export function useCustomerSampleValidationController() {
   const itemLoading = ref(false)
   const matchLoading = ref(false)
   const runLoading = ref(false)
+  const initialConfigLoading = ref(true)
+  const initialConfigFailed = ref(false)
+  let pageDisposed = false
+  let recordsRequestSequence = 0
+  let syncRequestSequence = 0
   const syncLoading = ref(false)
   const importingPool = ref(false)
   const selectedRowKeys = ref<string[]>([])
@@ -823,7 +829,7 @@ export function useCustomerSampleValidationController() {
   )
 
   const runButtonDisabled = computed(
-    () => runLoading.value || !selectedPoolId.value || !selectedPool.value?.total_items,
+    () => initialConfigLoading.value || initialConfigFailed.value || runLoading.value || !selectedPoolId.value || !selectedPool.value?.total_items,
   )
 
   const runButtonActionText = computed(() =>
@@ -837,7 +843,7 @@ export function useCustomerSampleValidationController() {
   )
 
   const runButtonText = computed(() =>
-    runLoading.value
+    initialConfigLoading.value ? '正在加载配置…' : initialConfigFailed.value ? '配置加载失败，请刷新' : runLoading.value
       ? '正在创建…'
       : isFormalFastScreenMode.value
         ? selectedRecordStats.value.selectedCount > 0
@@ -1493,6 +1499,7 @@ export function useCustomerSampleValidationController() {
     const { refreshSyncJob = true, loadRecords: shouldLoadRecords = true } = options
     poolLoading.value = true
     const result = await listManualSamplePools({ page: 1, page_size: 100 })
+    if (pageDisposed) return
     poolLoading.value = false
     if (!result.success || !result.data) {
       message.error(result.message || '获取样本池失败')
@@ -1511,24 +1518,28 @@ export function useCustomerSampleValidationController() {
     }
     selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
     if (selectedPoolId.value) {
-      if (refreshSyncJob) {
-        await loadLatestSyncJob()
-      }
-      if (shouldLoadRecords) {
-        await loadRecords()
-      }
+      const reads = await Promise.allSettled([
+        refreshSyncJob ? loadLatestSyncJob() : Promise.resolve(),
+        shouldLoadRecords ? loadRecords() : Promise.resolve(),
+      ])
+      if (pageDisposed) return
+      if (reads[0].status === 'rejected') message.error('获取同步状态失败，可刷新重试')
+      if (reads[1].status === 'rejected') message.error('获取样本明细失败，可刷新重试')
       await openInitialQueryJob()
     }
   }
 
   async function loadRecords() {
-    if (!selectedPoolId.value) {
+    const requestSequence = ++recordsRequestSequence
+    const poolId = selectedPoolId.value
+    if (!poolId) {
+      itemLoading.value = false
       records.value = []
       pagination.value.total = 0
       return
     }
     itemLoading.value = true
-    const result = await getManualSamplePoolRecords(selectedPoolId.value, {
+    const result = await getManualSamplePoolRecords(poolId, {
       coverage_type: filters.value.coverageType,
       match_status: filters.value.matchStatus,
       include_in_batch_1: isSyncedOnlyValidationMode.value
@@ -1537,8 +1548,10 @@ export function useCustomerSampleValidationController() {
       q: filters.value.query || undefined,
       page: pagination.value.page,
       page_size: pagination.value.pageSize,
+    }).finally(() => {
+      if (!pageDisposed && requestSequence === recordsRequestSequence) itemLoading.value = false
     })
-    itemLoading.value = false
+    if (pageDisposed || requestSequence !== recordsRequestSequence || poolId !== selectedPoolId.value) return
     if (!result.success || !result.data) {
       message.error(result.message || '获取样本明细失败')
       return
@@ -2073,6 +2086,7 @@ export function useCustomerSampleValidationController() {
   }
 
   async function handleRunPool() {
+    if (initialConfigLoading.value || initialConfigFailed.value) return
     if (runLoading.value) return
     if (!selectedPoolId.value) return
     const {
@@ -2783,12 +2797,15 @@ export function useCustomerSampleValidationController() {
   }
 
   async function loadLatestSyncJob() {
-    if (!selectedPoolId.value) {
+    const requestSequence = ++syncRequestSequence
+    const poolId = selectedPoolId.value
+    if (!poolId) {
       syncJobDetail.value = undefined
       stopSyncJobPolling()
       return
     }
-    const result = await getLatestManualSamplePoolSyncJob(selectedPoolId.value)
+    const result = await getLatestManualSamplePoolSyncJob(poolId)
+    if (pageDisposed || requestSequence !== syncRequestSequence || poolId !== selectedPoolId.value) return
     if (!result.success) return
     syncJobDetail.value = result.data || undefined
     if (syncJobDetail.value && isSyncJobRunning(syncJobDetail.value.status)) {
@@ -3194,18 +3211,32 @@ export function useCustomerSampleValidationController() {
     await reviewBatchJob(String(batchJobDetail.value?.id || ''))
   }
 
-  onMounted(async () => {
+  onMounted(() => {
     window.addEventListener('resize', updateCustomerSampleTourCardPosition)
     window.addEventListener('scroll', updateCustomerSampleTourCardPosition, true)
-    await loadExecutionConcurrencyDefault()
-    await loadRuleSets()
-    await loadLuxian0609RuleCatalog()
-    await loadPools()
-    await restoreCurrentQcTaskForSelectedPool()
-    openInitialCustomerSampleGuide()
+    const defaults = loadExecutionConcurrencyDefault()
+    const directory = loadRuleSets()
+    const catalog = loadLuxian0609RuleCatalog()
+    void Promise.allSettled([defaults, directory, catalog]).then((results) => {
+      if (pageDisposed) return
+      initialConfigFailed.value = results.some((result) => result.status === 'rejected')
+      initialConfigLoading.value = false
+      if (initialConfigFailed.value) message.error('配置加载失败，请刷新页面后再启动质控')
+    })
+    // 规则集目录决定筛选口径，必须先完成；并发参数和完整规则说明不阻挡列表。
+    void directory.then(async () => {
+      if (pageDisposed) return
+      await loadPools()
+      if (pageDisposed) return
+      await restoreCurrentQcTaskForSelectedPool()
+      if (!pageDisposed) openInitialCustomerSampleGuide()
+    }).catch(() => {
+      if (!pageDisposed) message.error('加载样本列表失败，请刷新重试')
+    })
   })
 
   onUnmounted(() => {
+    pageDisposed = true
     window.removeEventListener('resize', updateCustomerSampleTourCardPosition)
     window.removeEventListener('scroll', updateCustomerSampleTourCardPosition, true)
     stopCustomerSampleGuidePositionTimer()
@@ -3217,6 +3248,7 @@ export function useCustomerSampleValidationController() {
   })
 
   return {
+    initialConfigLoading,
     activeRecord,
     addEditableCopyDocument,
     addEditableCopyOrderDocument,

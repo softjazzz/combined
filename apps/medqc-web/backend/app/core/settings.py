@@ -5,6 +5,8 @@ from typing import Any, List, Literal, Optional
 import os
 import logging
 import re
+from pathlib import Path
+from threading import RLock
 
 
 logger = logging.getLogger(__name__)
@@ -438,6 +440,35 @@ class Settings(BaseSettings):
         )
 
 
+_settings_snapshot_lock = RLock()
+_settings_snapshot_key = None
+_settings_snapshot = None
+
+
+def clear_settings_snapshot() -> None:
+    """显式失效入口；不缓存数据库模型选择、用户身份或授权。"""
+    global _settings_snapshot_key, _settings_snapshot
+    with _settings_snapshot_lock:
+        _settings_snapshot_key = _settings_snapshot = None
+
+
+def _settings_source_key():
+    files = Settings.model_config.get('env_file') or ()
+    if isinstance(files, (str, Path)):
+        files = (files,)
+    identities = []
+    for name in files:
+        path = Path(name).expanduser().absolute()
+        try:
+            stat = path.stat()
+            identity = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+        except FileNotFoundError:
+            identity = None
+        identities.append((str(path), identity))
+    # 使用精确输入身份，不记录环境值。动态环境和工作目录变化不能复用旧配置。
+    return Settings, str(Path.cwd()), tuple(sorted(os.environ.items())), tuple(identities)
+
+
 def get_settings() -> Settings:
     # Allow fallback to VITE_* env for Supabase compatibility with legacy configs
     if not os.getenv("SUPABASE_URL") and os.getenv("VITE_SUPABASE_URL"):
@@ -445,7 +476,22 @@ def get_settings() -> Settings:
     if not os.getenv("SUPABASE_ANON_KEY") and os.getenv("VITE_SUPABASE_ANON_KEY"):
         os.environ["SUPABASE_ANON_KEY"] = os.getenv("VITE_SUPABASE_ANON_KEY", "")
 
-    settings = Settings()  # type: ignore[call-arg]
+    global _settings_snapshot_key, _settings_snapshot
+    with _settings_snapshot_lock:
+        key = _settings_source_key()
+        # 当前没有文件密钥目录；将来启用该来源时先保持逐次读取，避免凭据轮换被缓存。
+        cacheable = not Settings.model_config.get('secrets_dir')
+        if cacheable and key == _settings_snapshot_key and _settings_snapshot is not None:
+            return _settings_snapshot.model_copy(deep=True)
+        settings = Settings()  # type: ignore[call-arg]
+        _validate_settings_security(settings)
+        if cacheable and key == _settings_source_key():
+            _settings_snapshot_key, _settings_snapshot = key, settings
+        # 调用方可变字段必须隔离，不能污染后续请求。
+        return settings.model_copy(deep=True)
+
+
+def _validate_settings_security(settings: Settings) -> None:
 
     global _legacy_llm_env_warned
     if (not _legacy_llm_env_warned) and settings.llm_env_source() in {"SICHUAN_*", "mixed"}:
@@ -461,4 +507,3 @@ def get_settings() -> Settings:
         secret = settings.JWT_SECRET.strip().lower()
         if secret in {"dev-secret", "secret", "changeme", "change-me", "your-secret-key"} or secret.startswith(("replace-", "your-jwt-")):
             raise RuntimeError("Customer JWT_SECRET must not be a development or placeholder value")
-    return settings

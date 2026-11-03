@@ -886,7 +886,8 @@ async def get_departments(request: Request, _: dict = Depends(require_sync_read_
     """获取科室列表（仅源 PG 口径）。"""
     try:
         from ..services.etl_sync import list_remote_departments
-        result = list_remote_departments(limit=500)
+        # 源PG连接超时不能阻塞Web事件循环；来源、权限和错误语义保持不变。
+        result = await run_in_threadpool(list_remote_departments, limit=500)
         items = list(result.get("items") or [])
         return _ok(
             request,

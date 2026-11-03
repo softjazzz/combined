@@ -287,7 +287,9 @@ class LLMConfigLoader:
         1. 数据库中的用户/全局配置（provider/model/custom_parameters）
         2. .env 文件默认配置（阿里云）
         """
-        supabase = get_supabase()
+        from starlette.concurrency import run_in_threadpool
+
+        supabase = await run_in_threadpool(get_supabase)
 
         global _USER_LLM_CONFIGS_TABLE_UNAVAILABLE
         if supabase is not None and not _USER_LLM_CONFIGS_TABLE_UNAVAILABLE:
@@ -336,7 +338,7 @@ class LLMConfigLoader:
             )
             return memory_config
 
-        config = LLMConfigLoader._load_from_env()
+        config = await run_in_threadpool(LLMConfigLoader._load_from_env)
         logger.info(
             "✅ 从 .env 文件加载 LLM 配置: provider=%s model=%s",
             config.get("provider_code"),
@@ -350,6 +352,15 @@ class LLMConfigLoader:
         config_name: str,
         user_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
+        """仍逐次读取持久配置，完整同步读取链不阻塞Web事件循环。"""
+        from starlette.concurrency import run_in_threadpool
+
+        return await run_in_threadpool(
+            LLMConfigLoader._read_database_config, supabase, config_name, user_id,
+        )
+
+    @staticmethod
+    def _read_database_config(supabase, config_name: str, user_id: Optional[str] = None):
         """从数据库加载 provider/model/custom_parameters，再由 env 注入敏感参数。"""
         try:
             q = (

@@ -30,6 +30,7 @@ vi.mock('@/api/sync', async (importOriginal) => {
       triggerSync: mockTriggerSync,
       updatePgConfig: mockUpdatePgConfig,
       updateSyncPolicy: mockUpdateSyncPolicy,
+      getDepartments: vi.fn().mockResolvedValue([]),
     },
   }
 })

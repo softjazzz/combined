@@ -120,6 +120,23 @@
                     placeholder="默认全院"
                     @change="handlePolicyDepartmentChange"
                   />
+                  <span
+                    v-if="state.departmentsLoading"
+                    class="mq-field__hint"
+                    role="status"
+                    data-testid="departments-background-loading"
+                  >正在后台读取服务器科室，可继续使用其他设置。</span>
+                  <span
+                    v-else-if="state.departmentsError"
+                    class="mq-field__hint"
+                    role="status"
+                    data-testid="departments-background-error"
+                  >
+                    {{ state.departmentsError }}
+                    <button type="button" class="mq-btn mq-btn--ghost mq-btn--sm" @click="loadDepartments()">
+                      重试
+                    </button>
+                  </span>
                 </label>
                 <div
                   v-if="state.policyForm.scope === 'running'"
@@ -521,6 +538,7 @@ const {
   isReadonly,
   hasPreflightPass,
   initialize,
+  loadDepartments,
   resetState,
   testAllConnections,
   runPreflight,
@@ -1040,6 +1058,7 @@ async function handleExecuteSync() {
 }
 
 onMounted(async () => {
+  void loadDepartments()
   const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   const canOpenRequestedTab =
     (requestedTab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||

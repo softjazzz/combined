@@ -8,6 +8,18 @@ on:
       - 'apps/medqc-web/src/services/llmConfigService.ts'
       - 'apps/medqc-web/src/utils/systemConfigAccess.ts'
       - 'apps/medqc-web/src/views/workstation-v4/DataSyncConfigPage.vue'
+      - 'apps/medqc-web/src/api/sync.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/composables/useDataSync.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/CustomerSampleValidationView.vue'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/CustomerSampleValidationView.spec.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/useDataSync*.spec.ts'
+      - 'apps/medqc-web/tests/unit/services/sync-departments.spec.ts'
+      - 'apps/medqc-web/tests/unit/services/llm-config-service.spec.ts'
+      - 'apps/medqc-web/tests/unit/router/customer-sample-validation-permissions.spec.ts'
+      - 'apps/medqc-web/tests/unit/vite-manual-chunks.spec.ts'
+      - 'apps/medqc-web/vite.config.mjs'
+      - 'apps/medqc-web/vitest.page-load.config.ts'
+      - 'apps/medqc-web/tests/page-load-offline-setup.ts'
       - 'apps/medqc-web/tests/unit/components/LLMApiConfigStrata.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts'
       - 'apps/medqc-web/tests/unit/router/workstation-report-adaptation.spec.ts'
@@ -46,6 +58,18 @@ on:
       - 'apps/medqc-web/src/services/llmConfigService.ts'
       - 'apps/medqc-web/src/utils/systemConfigAccess.ts'
       - 'apps/medqc-web/src/views/workstation-v4/DataSyncConfigPage.vue'
+      - 'apps/medqc-web/src/api/sync.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/composables/useDataSync.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/CustomerSampleValidationView.vue'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/CustomerSampleValidationView.spec.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/useDataSync*.spec.ts'
+      - 'apps/medqc-web/tests/unit/services/sync-departments.spec.ts'
+      - 'apps/medqc-web/tests/unit/services/llm-config-service.spec.ts'
+      - 'apps/medqc-web/tests/unit/router/customer-sample-validation-permissions.spec.ts'
+      - 'apps/medqc-web/tests/unit/vite-manual-chunks.spec.ts'
+      - 'apps/medqc-web/vite.config.mjs'
+      - 'apps/medqc-web/vitest.page-load.config.ts'
+      - 'apps/medqc-web/tests/page-load-offline-setup.ts'
       - 'apps/medqc-web/tests/unit/components/LLMApiConfigStrata.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts'
       - 'apps/medqc-web/tests/unit/router/workstation-report-adaptation.spec.ts'
@@ -117,3 +141,26 @@ jobs:
         run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" --require ./scripts/frontpage-v2-no-network.cjs node_modules/vitest/vitest.mjs run tests/unit/components/LLMApiConfigStrata.spec.ts tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts tests/unit/router/workstation-report-adaptation.spec.ts --maxWorkers=1 --minWorkers=1
       - name: Read-only local model settings lint
         run: node node_modules/eslint/bin/eslint.js src/components/LLMApiConfig.vue src/services/llmConfigService.ts --no-fix --max-warnings 0
+      - name: Page initialization and silent source departments (isolated)
+        # 保留OS网络隔离，并叠加固定应答入口的HTTP/socket阻断。
+        run: >-
+          sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)"
+          --require ./scripts/frontpage-v2-no-network.cjs node_modules/vitest/vitest.mjs run
+          --config vitest.page-load.config.ts
+          tests/unit/views/workstation-v4/CustomerSampleValidationView.spec.ts
+          tests/unit/views/workstation-v4/customer-sample-validation/deferredComponent.spec.ts
+          tests/unit/router/customer-sample-validation-permissions.spec.ts
+          tests/unit/services/llm-config-service.spec.ts tests/unit/vite-manual-chunks.spec.ts
+          tests/unit/views/workstation-v4/useDataSync.background.spec.ts
+          tests/unit/views/workstation-v4/useDataSync.spec.ts
+          tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts
+          tests/unit/services/sync-departments.spec.ts
+          tests/unit/views/workstation-v4/components/qc/QcSyncAndRunControl.spec.ts
+      - name: Read-only page loading and background lookup lint
+        run: >-
+          node node_modules/eslint/bin/eslint.js --no-fix --quiet
+          src/api/sync.ts src/views/workstation-v4/composables/useDataSync.ts
+          src/views/workstation-v4/DataSyncConfigPage.vue src/views/workstation-v4/CustomerSampleValidationView.vue
+          src/views/workstation-v4/customer-sample-validation/deferredComponent.ts
+          src/views/workstation-v4/customer-sample-validation/useCustomerSampleValidationController.ts
+          tests/page-load-offline-setup.ts vitest.page-load.config.ts vite.config.mjs

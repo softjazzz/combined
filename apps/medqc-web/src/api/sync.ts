@@ -353,8 +353,8 @@ export const syncApi = {
     return unwrapSyncResponse<{ template_id: string; policy: SyncPolicyConfig }>(response.data)
   },
 
-  async getDepartments(): Promise<string[]> {
-    const response = await http.get('/api/v1/sync/departments')
+  async getDepartments(signal?: AbortSignal): Promise<string[]> {
+    const response = await http.get('/api/v1/sync/departments', { signal })
     const payload = unwrapSyncResponse<{ items?: string[] }>(response.data)
     return Array.isArray(payload?.items) ? payload.items : []
   },

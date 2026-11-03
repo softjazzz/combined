@@ -290,7 +290,7 @@ export default defineConfig(async ({ command }) => {
     optimizeDeps: {
       entries: ['index.html'],
       // 仅保留核心依赖预构建，避免 dev 首个请求前做过量依赖优化
-      include: ['vue', 'vue-router', 'pinia'],
+      include: ['vue', 'vue-router', 'pinia', 'ant-design-vue/es', 'ant-design-vue/es/date-picker/dayjs'],
     },
     worker: {
       format: 'es',
