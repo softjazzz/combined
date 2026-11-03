@@ -3,9 +3,10 @@ import { computed, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataSyncConfigPage from '@/views/workstation-v4/DataSyncConfigPage.vue'
 
-const { mockRunPreflight, mockMessageWarning } = vi.hoisted(() => ({
+const { mockRunPreflight, mockMessageWarning, mockLoadDepartments } = vi.hoisted(() => ({
   mockRunPreflight: vi.fn(),
   mockMessageWarning: vi.fn(),
+  mockLoadDepartments: vi.fn(),
 }))
 
 const mockState = reactive({
@@ -16,6 +17,7 @@ const mockState = reactive({
   isPreflighting: false,
   isSavingPolicy: false,
   departmentsLoading: false,
+  departmentsError: null as string | null,
   availableDepartments: ['神经内科', '普通外科'],
   stats: { connectedCount: 0, lastSyncTime: '' },
   pgSyncTables: [],
@@ -69,6 +71,7 @@ vi.mock('@/views/workstation-v4/composables/useDataSync', () => ({
     isReadonly: ref(false),
     hasPreflightPass: computed(() => Boolean(mockState.preflightResult?.executable)),
     initialize: vi.fn().mockResolvedValue(undefined),
+    loadDepartments: mockLoadDepartments,
     resetState: vi.fn(),
     testAllConnections: vi.fn(),
     runPreflight: mockRunPreflight,
@@ -143,6 +146,9 @@ describe('DataSyncConfigPage visit progress', () => {
   beforeEach(() => {
     mockRunPreflight.mockReset()
     mockMessageWarning.mockReset()
+    mockLoadDepartments.mockReset()
+    mockState.departmentsLoading = false
+    mockState.departmentsError = null
     mockUserRoles = ['admin', 'qc_manager']
     mockAuthStore.user.is_demo_account = false
     mockRoute.query = {}
@@ -185,6 +191,28 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.get('[data-testid="sync-progress-status"]').classes()).not.toContain(
       'mq-status--warning',
     )
+  })
+
+  it('科室仍在后台加载时可以切到模型设置', async () => {
+    mockState.departmentsLoading = true
+    const wrapper = mountPage()
+    expect(wrapper.get('[data-testid="departments-background-loading"]').text()).toContain('后台')
+    const tab = wrapper.findAll('[role="tab"]').find((item) => item.text() === '模型配置')
+    expect(tab).toBeDefined()
+    await tab!.trigger('click')
+    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe('llmConfig')
+    expect(mockMessageWarning).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('源科室失败仅在字段旁提示并允许只读重试', async () => {
+    mockState.departmentsError = '未能读取服务器科室，请确认连接后重试。'
+    const wrapper = mountPage()
+    const hint = wrapper.get('[data-testid="departments-background-error"]')
+    await hint.get('button').trigger('click')
+    expect(mockLoadDepartments).toHaveBeenCalledTimes(2)
+    expect(mockMessageWarning).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('未重新检查范围时本次同步计数全部从零开始', async () => {

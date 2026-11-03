@@ -107,3 +107,21 @@ node node_modules/vitest/vitest.mjs run --config vitest.page-load.config.ts test
 最小修复仅把源科室读取放到已有Starlette线程池，保留来源元数据、权限、500条上限、503/422语义，不新增重试、缓存或数据库写入。新增固定应答反例已在旧代码得到1失败/2通过，准确复现事件循环阻塞。源PG可达性仍需部署网络/连接配置恢复，应用改动不能使不可达的源库自行恢复；本轮不更改连接配置、不主动重试源PG、不重启服务加载这项后续修复。
 
 修复后隔离命令：`python -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_sync_departments_async.py tests/unit/test_sync_router.py::TestSyncRouter::test_departments_value_error_maps_422 tests/unit/test_sync_router.py::TestSyncRouter::test_read_permission_matrix tests/unit/test_sync_router.py::TestSyncRouter::test_write_permission_matrix`。6项通过、0跳过；涵盖独立请求可继续执行、元数据、无重复重试、源失败保持503及配置错误422、原读写权限矩阵。Ruff通过，编码及diff检查通过；本次仅Python一处调用修改，沿用上一提交已通过的全量前端lint/类型和90项隔离前端结果，不重复运行未改动的前端。未执行全量后端、真实源库恢复或新版本浏览器耗时验收。
+
+## 源科室静默后台加载
+
+用户确认科室仍必须连接原服务器，本次只改变读取时机和等待方式。在同一独立分支以e51639753为基线实施，沿用工作台字段提示和按钮，不更换导航、布局、模型或医学合同。
+
+选择独立异步任务，不采用本地旧表回退、永续轮询或持久科室缓存：打开系统设置即发起读取，科室Promise不再进入控制台初始化等待链；同页重复读取合并为一次请求。保留原源PG接口、权限和服务端503/422，客户端沿用原30秒HTTP超时。读取中/失败仅在科室字段旁显示轻提示和手动重试，不弹窗，不改变已选科室或扩大为全院。
+
+离开页面时通过AbortSignal结束前端HTTP等待，并失效旧结果和finally；这不承诺强行中止服务端已在进行的PG连接，它仍受原有连接超时限制。保存新连接成功后失效旧科室请求并后台刷新；页面已离开时，旧保存响应不会再启动科室读取。默认系统设置页和直接进入模型等页签均启动后台读取，但不阻止其他页签使用。
+
+先在原实现运行新增固定应答保护：4项均失败，分别证明初始化阻塞、重复读取、失败弹窗、卸载后旧响应污染。实现后最终隔离命令：
+
+```text
+node node_modules/vitest/vitest.mjs run --config vitest.page-load.config.ts tests/unit/views/workstation-v4/useDataSync.background.spec.ts tests/unit/views/workstation-v4/useDataSync.spec.ts tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts tests/unit/services/sync-departments.spec.ts tests/unit/views/workstation-v4/components/qc/QcSyncAndRunControl.spec.ts
+```
+
+5文件82项通过，0跳过。包含真实composable初始化与固定网络应答、字段重试、慢科室时切换模型设置、AbortSignal适配、源错误不转换为空成功、原同步权限/范围及既有同步控件。完整vue-tsc、全量src只读ESLint、改动测试定向ESLint、编码和diff检查通过；未执行全量单元集或新版本真实浏览器源连接验收。本次测试主动阻断网络，不访问业务数据库、源PG或模型，没有真实同步或质控任务。
+
+未重启前后端。运行后端仍是5750b8c48，需后续重启加载e51639753的配套线程池修复，才能消除源连接超时对后端其他请求的阻塞；前端开发服务器会按Vite机制热更新源文件。未改集成分支及其未提交材料，未推送、合并或部署。
