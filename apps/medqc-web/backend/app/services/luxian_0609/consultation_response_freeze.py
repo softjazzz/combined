@@ -123,6 +123,9 @@ class FrozenResponseClient:
 
     def commit(self) -> None:
         """整次运行可交付时落盘：已有提示词的记录不覆盖（首次写入者赢），只补入新提示词。"""
+        from ..llm_token_budget import context_budget_failed
+        if context_budget_failed():
+            return
         self._require_same_experiment()
         new_keys = [key for key in self._recorded if key not in self._stored]
         if not new_keys:

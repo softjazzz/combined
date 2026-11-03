@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..llm_token_budget import budget_guarded_executor
+
 from dataclasses import dataclass, replace
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -643,6 +645,7 @@ def _admission_material_ready(
     return (complaint_fact or complaint_text) and (diagnosis_fact or diagnosis_text)
 
 
+@budget_guarded_executor
 async def execute_luxian_0609_native_course_quality_rules(
     *,
     rule_ids: Sequence[str],

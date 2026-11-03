@@ -220,6 +220,15 @@ class HttpxProviderSender:
         *,
         timeout_seconds: float,
     ) -> dict[str, Any]:
+        from app.services.llm_token_budget import BudgetError, guard_payload, strict_enabled
+        try:
+            guard_payload(profile.provider_code, profile.name, payload, profile.context_budget,
+                          enabled=strict_enabled(), phase="provider_http_boundary")
+        except BudgetError as error:
+            # 直接使用sender时也不绕过；通常排队前已经完成同一准入。
+            rejected = InvalidPayloadError()
+            rejected.code = error.code
+            raise rejected from None
         headers = {"Content-Type": "application/json"}
         if profile.api_key:
             headers["Authorization"] = f"Bearer {profile.api_key}"

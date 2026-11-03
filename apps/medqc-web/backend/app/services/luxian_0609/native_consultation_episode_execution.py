@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from ..llm_token_budget import budget_guarded_executor
+
 import asyncio
 from dataclasses import dataclass, replace
 from datetime import date, datetime
@@ -6350,6 +6352,7 @@ def _consultation_response_freeze_is_complete(
     )
 
 
+@budget_guarded_executor
 async def execute_luxian_0609_native_consultation_episode_rules(
     *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,
     source_schema: str | None, llm_client: ConsultationEpisodeLLMClient | None,

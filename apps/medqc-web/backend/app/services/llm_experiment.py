@@ -51,6 +51,10 @@ def llm_experiment_scope(namespace: str) -> Iterator[None]:
 def experiment_store_dir(base: Path) -> Path:
     """在真实存储owner最终IO路径处调用一次，不能对已隔离目录重复调用。"""
     namespace = current_llm_experiment_namespace()
+    from .llm_token_budget import freeze_namespace
+    context_namespace = freeze_namespace()
+    if context_namespace is not None:
+        base = base / "context-budget" / context_namespace
     if namespace is None:
         return base
     target = base / "experiments" / namespace

@@ -45,6 +45,7 @@ from .providers import (
     ProviderTransportError,
     prepare_provider_payload,
 )
+from app.services.llm_token_budget import BudgetError, guard_payload, strict_enabled
 
 
 class GatewayAPIError(RuntimeError):
@@ -111,6 +112,11 @@ class GatewayRuntime:
             raise GatewayAPIError(GatewayErrorCode.INVALID_PROFILE.value, status_code=400, retryable=False)
         payload = prepare_provider_payload(profile, completion.payload, allow_strata_prefix=internal_prefix)
         try:
+            guard_payload(profile.provider_code, profile.name, payload, profile.context_budget,
+                          enabled=strict_enabled() or completion.context_budget_required, phase="gateway_before_queue", attribution={"request_id": str(completion.request_id)})
+        except BudgetError as error:
+            raise GatewayAPIError(error.code, status_code=400, retryable=False) from None
+        try:
             return await self._complete_prepared(completion, profile, payload)
         except (AdmissionError, ProviderError, GatewayAPIError) as error:
             if completion.observe_request:
@@ -160,6 +166,7 @@ class GatewayRuntime:
                     payload=payload,
                     monotonic_deadline=monotonic_deadline,
                     dispatch_state=dispatch_state,
+                    context_budget_required=completion.context_budget_required,
                 )
             )
         except (AdmissionDeadlineError, LifecycleClosedError):
@@ -207,6 +214,7 @@ class GatewayRuntime:
         payload: dict[str, Any],
         monotonic_deadline: float,
         dispatch_state: ProviderDispatchState,
+        context_budget_required: bool = False,
     ) -> tuple[dict[str, Any], float]:
         started = time.monotonic()
         try:
@@ -221,6 +229,12 @@ class GatewayRuntime:
                 latest_remaining = monotonic_deadline - self._deadline_now()
                 if latest_remaining <= 0:
                     raise AdmissionDeadlineError()
+                # 排队期间若payload发生变化，最终发送前重新计量；不能复用旧计数。
+                try:
+                    guard_payload(profile.provider_code, profile.name, payload, profile.context_budget,
+                                  enabled=strict_enabled() or context_budget_required, phase="gateway_final_send")
+                except BudgetError as error:
+                    raise GatewayAPIError(error.code, status_code=400, retryable=False) from None
                 # 这段在 wait_for 创建的 task 真正被调度后才执行。
                 # 置位后直接 await coroutine，中间无任务切换点，sender 函数体立即进入。
                 dispatch_state.started = True
@@ -244,7 +258,7 @@ class GatewayRuntime:
             except (ProviderTimeoutError, ProviderTransportError):
                 await self._quarantine_unknown_remote(profile.resource_id)
                 raise
-            except ProviderError:
+            except (ProviderError, GatewayAPIError):
                 raise
             except Exception:
                 # 注入 sender 的未知异常也不可回显文本。

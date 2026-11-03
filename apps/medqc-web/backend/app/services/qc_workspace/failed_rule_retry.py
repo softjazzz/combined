@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ..case_identity import CaseRef
+from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
 
 
 FAILED_RULE_RETRY_FILTER_KEY = "failed_rule_retry"
@@ -16,6 +17,7 @@ _FAILED_RULE_AUTO_RETRY_PHASES = frozenset({"result_status", "result_missing"})
 # 同样输入重跑仍会得到同样失败的确定性原因：隐私护栏拦截、程序缺陷、单条交付合同
 # 不满足，以及执行器输出缺失/重复等结构问题。不自动补跑，避免空耗模型调用。
 _DETERMINISTIC_FAILURE_REASON_CODES = frozenset({
+    *CONTEXT_FAILURE_REASON_CODES,
     "privacy_guard_blocked",
     "execution_program_error",
     "customer_result_contract_violation",

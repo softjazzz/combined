@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from ..llm_token_budget import budget_guarded_executor
+from .exam_token_budget import active as token_split_active, exam_recovery_executor
+
 import asyncio
 
 from collections import Counter
@@ -1332,28 +1335,32 @@ async def _generate_exam_lab_fact_response(
         selected_rule_ids=selected_rule_ids,
         projection=projection,
     )
+    from .exam_token_budget import active
+    if retry_hint and active(llm_client):
+        retry_hint = retry_hint.split("上次输出仅作修正参考", 1)[0]
     if retry_hint:
         # 补核说明放在不可信材料之前；首次提示词不变。
         prompt = prompt.replace(_EXAM_LAB_RETRY_MARKER, retry_hint + "\n" + _EXAM_LAB_RETRY_MARKER, 1)
+    from .exam_token_budget import generate as token_generate
     if not _supports_strict_json_schema(llm_client):
         if enable_thinking is not None:
-            return await llm_client.generate(
-                prompt,
+            return await token_generate(llm_client,
+                prompt, recovery=bool(retry_hint),
                 enable_thinking=enable_thinking,
             )
-        return await llm_client.generate(prompt)
+        return await token_generate(llm_client, prompt, recovery=bool(retry_hint))
     strict_client = cast(_StrictJsonSchemaExamLabClient, llm_client)
     if enable_thinking is not None:
-        return await strict_client.generate(
-            prompt,
+        return await token_generate(strict_client,
+            prompt, recovery=bool(retry_hint),
             response_format=build_exam_lab_fact_response_format(
                 selected_rule_ids=selected_rule_ids,
                 projection=projection,
             ),
             enable_thinking=enable_thinking,
         )
-    return await strict_client.generate(
-        prompt,
+    return await token_generate(strict_client,
+        prompt, recovery=bool(retry_hint),
         response_format=build_exam_lab_fact_response_format(
             selected_rule_ids=selected_rule_ids,
             projection=projection,
@@ -2084,6 +2091,7 @@ class _ExamLabBatchResult:
     rule_failures: Mapping[str, str] = dataclass_field(default_factory=dict)
     incomplete_specialty_rule_ids: frozenset[str] = frozenset()
     failure_reason: str = "exam_lab_llm_invalid_output"
+    budget_rule_failures: Mapping[str, str] = dataclass_field(default_factory=dict)
     result_conflicts: Mapping[int, tuple[str, ...]] = dataclass_field(default_factory=dict)
     analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = dataclass_field(default_factory=dict)
     llm_call_count: int = 0
@@ -2121,7 +2129,8 @@ def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Seque
         from .exam_result_record_check import validation_identity
         prompt += '\x1e' + json.dumps(validation_identity(projection), ensure_ascii=False, separators=(',', ':'))
         from .exam_result_context import protocol
-        if protocol() == 'comparison_v1':
+        from .exam_token_budget import full_evidence_mode
+        if protocol() == 'comparison_v1' or full_evidence_mode():
             from .exam_result_record_check import _prompt, _targets
             # 专项完整输入（包括只读比较目录和时间）必须参与冻结，不只冻结主抽取Prompt。
             prompt += '\x1e' + _prompt(projection, _targets(projection))
@@ -2185,10 +2194,15 @@ async def _extract_exam_lab_batch(
     from ..exam_result_model_route import exam_result_route_scope
 
     # 实验必须先分区，再读取整族冻结；不能只隔离内部的一次模型请求。
-    with exam_result_route_scope(llm_client, eligible_rule_ids):
-        return await _extract_exam_lab_batch_in_route_scope(
+    from ..llm_token_budget import token_freeze_scope, budget_failure_scope
+    with exam_result_route_scope(llm_client, eligible_rule_ids), token_freeze_scope(llm_client), budget_failure_scope() as failures:
+        result = await _extract_exam_lab_batch_in_route_scope(
             projection=projection, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
         )
+        if failures:
+            return replace(result, rule_failures={**result.rule_failures, **dict.fromkeys(eligible_rule_ids, "value")},
+                budget_rule_failures={**result.budget_rule_failures, **dict.fromkeys(eligible_rule_ids, failures[0].code)})
+        return result
 
 
 async def _extract_exam_lab_batch_in_route_scope(
@@ -2232,6 +2246,7 @@ async def _extract_exam_lab_batch_uncached(
     first_success_count = retried_rule_count = recovered_rule_count = 0
     api_time = 0.0
     parse_failure_kinds: list[str] = []
+    budget_rule_failures = {}
     llm_call_count += 1
     try:
         response = await _generate_exam_lab_fact_response(
@@ -2239,11 +2254,16 @@ async def _extract_exam_lab_batch_uncached(
             selected_rule_ids=eligible_rule_ids,
             projection=projection,
         )
-    except Exception:
+    except Exception as error:
+        from ..llm_token_budget import is_budget_error
+        if is_budget_error(error):
+            budget_rule_failures = dict.fromkeys(eligible_rule_ids, error.code)
+            llm_call_count -= int(not getattr(error, "request_started", False))
         response = None
     if response is None:
         return _ExamLabBatchResult(
             facts=None, failure_reason="exam_lab_llm_failure", llm_call_count=llm_call_count,
+            budget_rule_failures=budget_rule_failures,
             transport_rule_ids=frozenset(eligible_rule_ids),
         )
     else:
@@ -2468,8 +2488,32 @@ async def _extract_exam_lab_batch_uncached(
                     apply_result_record,
                 ))
             if checks:
-                check_outcomes = await asyncio.gather(*(check for _, check, _ in checks))
-                for (rule_id, _, apply), check_outcome in zip(checks, check_outcomes):
+                async def guarded_check(check):
+                    from ..llm_token_budget import budget_failure_scope
+                    from ..llm_token_budget import is_budget_error
+                    with budget_failure_scope() as failures:
+                        try:
+                            outcome = await check
+                        except Exception as error:
+                            if not is_budget_error(error):
+                                raise
+                            return None, [error]
+                        return outcome, failures
+                check_outcomes = await asyncio.gather(*(guarded_check(check) for _, check, _ in checks))
+                for (rule_id, _, apply), (check_outcome, failures) in zip(checks, check_outcomes):
+                    if check_outcome is not None:
+                        llm_call_count += check_outcome.llm_call_count
+                        prompt_tokens += check_outcome.prompt_tokens
+                        completion_tokens += check_outcome.completion_tokens
+                        total_tokens += check_outcome.total_tokens
+                        api_time += check_outcome.api_time
+                    budget_reason = getattr(check_outcome, "budget_failure_reason", None)
+                    if failures or budget_reason:
+                        budget_rule_failures[rule_id] = budget_reason or failures[0].code
+                        isolated_rule_failures[rule_id] = "value"
+                        incomplete_specialty_rule_ids.add(rule_id)
+                        # 能力失败不能采用主抽取回退形成临床结论；其他规则继续。
+                        continue
                     if (check_outcome.state not in {"ready", "skipped"}
                             or isinstance(check_outcome, ResultRecordOutcome) and check_outcome.incomplete_event_positions):
                         incomplete_specialty_rule_ids.add(rule_id)
@@ -2477,11 +2521,6 @@ async def _extract_exam_lab_batch_uncached(
                         result_conflicts = check_outcome.conflict_refs
                     if isinstance(check_outcome, FindingAnalysisOutcome) and check_outcome.state == "ready":
                         analysis_gaps = check_outcome.gap_refs
-                    llm_call_count += check_outcome.llm_call_count
-                    prompt_tokens += check_outcome.prompt_tokens
-                    completion_tokens += check_outcome.completion_tokens
-                    total_tokens += check_outcome.total_tokens
-                    api_time += check_outcome.api_time
                     if isinstance(check_outcome, ResultRecordOutcome):
                         # 时间口径仍由执行器及既有时间owner负责。局部核验仅在
                         # 有可靠窗口内正面证据时足以更新事实；晚期成功不证明首次超时。
@@ -2503,6 +2542,7 @@ async def _extract_exam_lab_batch_uncached(
                         text_facts = apply(text_facts, check_outcome)
     return _ExamLabBatchResult(
         facts=text_facts, rule_failures=isolated_rule_failures,
+        budget_rule_failures=budget_rule_failures,
         incomplete_specialty_rule_ids=frozenset(incomplete_specialty_rule_ids),
         result_conflicts=result_conflicts, analysis_gaps=analysis_gaps,
         llm_call_count=llm_call_count, prompt_tokens=prompt_tokens,
@@ -2517,12 +2557,36 @@ async def _extract_exam_lab_batches(
     eligible_rule_ids: Sequence[str], llm_client: Any,
 ) -> tuple[_ExamLabBatchResult, int]:
     """完整核验各批并归并全局事实，失败规则在全批结束后统一闭合。"""
+    from .exam_token_budget import active, plan_events, recovery_scope
+    if active(llm_client):
+        with recovery_scope():
+            families = tuple(family for family in ("exam", "culture")
+                if any(("exam" if rule in EXAM_RULE_IDS else "culture") == family for rule in eligible_rule_ids))
+            keys = tuple((family, i) for family in families
+                         for i in range(1, len(events_for_family(projection, family)) + 1))
+            accepted, rejected = plan_events(projection, keys, eligible_rule_ids, llm_client,
+                lambda current, rules: build_exam_lab_fact_prompt(selected_rule_ids=rules, projection=current))
+            # 复用原批次归并；被拒绝单元由受控客户端返回技术失败，绝不发HTTP。
+            all_batches = tuple(accepted) + tuple(batch for batch, _ in rejected)
+            return await _extract_exam_lab_batches_legacy(
+                projection=projection, batches=all_batches, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
+                preflight_rejections={tuple(sorted(batch.event_positions.items())): reason
+                                      for batch, reason in rejected})
+    return await _extract_exam_lab_batches_legacy(projection=projection, batches=batches,
+        eligible_rule_ids=eligible_rule_ids, llm_client=llm_client)
+
+
+async def _extract_exam_lab_batches_legacy(
+    *, projection: ExamLabTextProjection, batches: Sequence[ExamLabProjectionBatch],
+    eligible_rule_ids: Sequence[str], llm_client: Any, preflight_rejections: Mapping | None = None,
+) -> tuple[_ExamLabBatchResult, int]:
     if not batches:
         return await _extract_exam_lab_batch(
             projection=projection, eligible_rule_ids=eligible_rule_ids, llm_client=llm_client,
         ), len(eligible_rule_ids)
     facts: dict[tuple[str, int], ExamLabEventFact] = {}
     failures: dict[str, str] = {}
+    budget_failures: dict[str, str] = {}
     conflicts: dict[int, tuple[str, ...]] = {}
     gaps: dict[int, tuple[tuple[str, str], ...]] = {}
     incomplete_specialty_rules: set[str] = set()
@@ -2547,10 +2611,14 @@ async def _extract_exam_lab_batches(
         selected_batches.append((current, rules))
     # 各批只读同一全局投影、互不依赖：并发抽取，耗时不随批数累加（C02 多批串行接近执行时限）；
     # 结果仍按批次原顺序归并，归并结论与串行一致。
-    batch_results = await asyncio.gather(*(
-        _extract_exam_lab_batch(projection=current.projection, eligible_rule_ids=rules, llm_client=llm_client)
-        for current, rules in selected_batches
-    ))
+    async def run_batch(current, rules):
+        from ..llm_token_budget import BudgetError
+        rejection = (preflight_rejections or {}).get(tuple(sorted(current.event_positions.items())))
+        if rejection is not None:
+            return _ExamLabBatchResult(facts=None, transport_rule_ids=frozenset(rules),
+                budget_rule_failures=dict.fromkeys(rules, BudgetError(rejection).code))
+        return await _extract_exam_lab_batch(projection=current.projection, eligible_rule_ids=rules, llm_client=llm_client)
+    batch_results = await asyncio.gather(*(run_batch(current, rules) for current, rules in selected_batches))
     for (current, rules), result in zip(selected_batches, batch_results):
         for key in counts:
             counts[key] += getattr(result, key)
@@ -2558,6 +2626,7 @@ async def _extract_exam_lab_batches(
         failure_kinds.extend(result.parse_failure_kinds)
         transport_rules.update(result.transport_rule_ids)
         failures.update(result.rule_failures)
+        budget_failures.update(result.budget_rule_failures)
         incomplete_specialty_rules.update(result.incomplete_specialty_rule_ids)
         if result.facts is None:
             failures.update({rule: "value" for rule in rules})
@@ -2571,6 +2640,7 @@ async def _extract_exam_lab_batches(
             gaps[current.event_positions[("exam", local)]] = tuple(dict.fromkeys(refs))
     return _ExamLabBatchResult(
         facts=tuple(facts.values()), rule_failures=failures,
+        budget_rule_failures=budget_failures,
         incomplete_specialty_rule_ids=frozenset(incomplete_specialty_rules),
         result_conflicts=conflicts, analysis_gaps=gaps,
         transport_rule_ids=frozenset(transport_rules), api_time=api_time,
@@ -2578,6 +2648,8 @@ async def _extract_exam_lab_batches(
     ), requested_rule_count
 
 
+@budget_guarded_executor
+@exam_recovery_executor
 async def execute_luxian_0609_native_exam_lab_rules(
     *,
     rule_ids: Sequence[str],
@@ -2944,6 +3016,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     # 不逐行裁剪：首次查房的诊断依据常在长文中段，裁掉后模型只能
                     # 凭残文判“未分析”。总上下文超限时改走完整事件分批。
                     max_row_chars=None,
+                    **({"max_course_rows": None, "max_context_chars": None}
+                       if token_split_active(llm_client) else {}),
                     horizon_unavailable_reason=(
                         horizon_observation.reason_code
                         if horizon_observation is not None
@@ -3276,8 +3350,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     outcome = (
                         _ExamLabOutcome(
                             rule_id, "technical_error",
-                            "exam_lab_llm_failure" if rule_id in batch_result.transport_rule_ids
-                            else "exam_lab_llm_invalid_output",
+                            batch_result.budget_rule_failures.get(rule_id) or (
+                                "exam_lab_llm_failure" if rule_id in batch_result.transport_rule_ids
+                                else "exam_lab_llm_invalid_output"),
                         )
                         if text_facts is None or rule_id in isolated_rule_failures
                         else _text_fact_outcome(

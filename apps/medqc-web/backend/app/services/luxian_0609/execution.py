@@ -114,6 +114,7 @@ logger = logging.getLogger(__name__)
 
 
 def _family_outcome_decisions(outcome, snapshot, typed_rule_ids):
+    from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
     decisions = list(outcome.envelope.decisions)
     if isinstance(outcome, FamilyExecutionFailure) and outcome.failure_kind != "contract":
         decisions.extend(
@@ -121,7 +122,8 @@ def _family_outcome_decisions(outcome, snapshot, typed_rule_ids):
                 rule_id=rule_id, snapshot_hash=snapshot.snapshot_hash,
                 applicability=ApplicabilityState.ERROR, evidence_state=EvidenceState.TECHNICAL_ERROR,
                 qc_direction=QcDirection.UNKNOWN,
-                reason_code="executor_timeout" if outcome.failure_kind == "timeout" else "executor_exception",
+                reason_code=(outcome.reason_code if outcome.reason_code in CONTEXT_FAILURE_REASON_CODES else
+                    "executor_timeout" if outcome.failure_kind == "timeout" else "executor_exception"),
                 fact_refs=(), evaluator_version="family-runtime-failure-v1", confidence=None,
             )
             for rule_id in outcome.selected_rule_ids if rule_id in typed_rule_ids

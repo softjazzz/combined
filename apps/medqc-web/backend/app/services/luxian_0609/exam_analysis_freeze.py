@@ -67,6 +67,9 @@ def load_payload(namespace: str, key: str) -> Mapping[str, Any] | None:
 
 def save_payload(namespace: str, key: str, payload: Mapping[str, Any]) -> None:
     """首次写入者赢：已有同键冻结时不覆盖。"""
+    from ..llm_token_budget import context_budget_failed
+    if context_budget_failed():
+        return
     directory = experiment_store_dir(default_store_dir()) / namespace
     path = directory / f"{key}.json"
     if path.is_file():

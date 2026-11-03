@@ -45,6 +45,8 @@ jobs:
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite llm-request-audit
       - name: Allowlisted dual-model exam route and outer freeze (offline)
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite dual-model-exam
+      - name: P5-B final context admission and safe exam batches (offline)
+        run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite context-budget-p5b
       - name: Result, cancellation, retry and privacy compatibility
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite compatibility
       - name: Local model catalog, selection and permissions (offline)

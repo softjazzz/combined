@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..llm_token_budget import budget_guarded_executor
+
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -1839,6 +1841,7 @@ def _typed_discharge_plan_outcome(
     )
 
 
+@budget_guarded_executor
 async def execute_luxian_0609_native_tumor_pathology_rules(
     *,
     rule_ids: Sequence[str],

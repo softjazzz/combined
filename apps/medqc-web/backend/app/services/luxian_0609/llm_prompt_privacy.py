@@ -563,7 +563,7 @@ class _Luxian0609PrivacyRedactingLLMClient:
         default=(), repr=False
     )
 
-    async def generate(self, prompt: str, **kwargs: Any) -> Any:
+    def _prepare_request(self, prompt, kwargs):
         try:
             identities = set(self.identity_values)
             for provider in self.identity_providers:
@@ -581,24 +581,35 @@ class _Luxian0609PrivacyRedactingLLMClient:
             raise
         if "temperature" not in kwargs and _accepts_temperature(self.delegate):
             kwargs = {**kwargs, "temperature": EXTRACTION_TEMPERATURE}
-        for _ in range(TRANSPORT_RETRY_ATTEMPTS):
-            try:
-                return await self.delegate.generate(redacted, **kwargs)
-            except Exception as error:
-                if getattr(error, "transport_retry_managed", False) is True:
-                    # Gateway 已拥有传输重试预算；包装层不得再次乘算同一错误。
-                    raise
-                if not _is_transient_transport_error(error):
-                    raise
-                from .execution_time_budget import model_timeout_seconds, retry_fits
+        return redacted, kwargs
 
-                if not retry_fits(
-                    delay_seconds=TRANSPORT_RETRY_DELAY_SECONDS,
-                    attempt_seconds=model_timeout_seconds(self.delegate),
-                ):
-                    raise
-            await asyncio.sleep(TRANSPORT_RETRY_DELAY_SECONDS)
-        return await self.delegate.generate(redacted, **kwargs)
+    def probe_context_budget(self, prompt: str, **kwargs: Any):
+        redacted, kwargs = self._prepare_request(prompt, kwargs)
+        probe = getattr(self.delegate, "probe_context_budget", None)
+        return probe(redacted, **kwargs) if callable(probe) else None
+
+    async def generate(self, prompt: str, **kwargs: Any) -> Any:
+        redacted, kwargs = self._prepare_request(prompt, kwargs)
+        from .exam_token_budget import model_call_scope
+        with model_call_scope():
+            for _ in range(TRANSPORT_RETRY_ATTEMPTS):
+                try:
+                    return await self.delegate.generate(redacted, **kwargs)
+                except Exception as error:
+                    if getattr(error, "transport_retry_managed", False) is True:
+                        # Gateway 已拥有传输重试预算；包装层不得再次乘算同一错误。
+                        raise
+                    if not _is_transient_transport_error(error):
+                        raise
+                    from .execution_time_budget import model_timeout_seconds, retry_fits
+
+                    if not retry_fits(
+                        delay_seconds=TRANSPORT_RETRY_DELAY_SECONDS,
+                        attempt_seconds=model_timeout_seconds(self.delegate),
+                    ):
+                        raise
+                await asyncio.sleep(TRANSPORT_RETRY_DELAY_SECONDS)
+            return await self.delegate.generate(redacted, **kwargs)
 
     def for_role(self, role: str) -> Any:
         """按调用点换用 LLM_ROLE_MODELS 配置的模型；身份脱敏与护栏不变。"""

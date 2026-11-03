@@ -14,6 +14,7 @@ import math
 import re
 from types import MappingProxyType
 from typing import Any
+from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
 
 
 # 规则是否已注册由目录、来源注册和 Binding 共同校验；值对象只约束稳定格式。
@@ -138,6 +139,7 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
     ),
     "technical_error": frozenset(
         {
+            *CONTEXT_FAILURE_REASON_CODES,
             "source_query_error",
             "model_transport_error",
             "model_timeout",

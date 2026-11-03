@@ -794,11 +794,15 @@ async def _check_batch(
     for attempt in range(PROTOCOL_ATTEMPTS):
         calls += 1
         try:
-            response = await llm_client.generate(
-                attempt_prompt, max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
+            from .exam_token_budget import generate as token_generate
+            response = await token_generate(llm_client,
+                attempt_prompt, recovery=bool(attempt), max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
                 **_analysis_output_kwargs(llm_client),
             )
-        except Exception:
+        except Exception as error:
+            from ..llm_token_budget import is_budget_error
+            if is_budget_error(error):
+                raise
             if analysed:
                 break
             return result(False)

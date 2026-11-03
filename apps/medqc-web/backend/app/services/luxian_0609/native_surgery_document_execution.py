@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..llm_token_budget import budget_guarded_executor
+
 from dataclasses import dataclass, replace
 from datetime import datetime
 import json
@@ -2615,6 +2617,7 @@ def _context_groups(rule_id: str) -> tuple[tuple[str, ...], ...]:
     return (("surgery_record",), ("presurg_discussion",))
 
 
+@budget_guarded_executor
 async def execute_luxian_0609_native_surgery_document_rules(
     *,
     rule_ids: Sequence[str],

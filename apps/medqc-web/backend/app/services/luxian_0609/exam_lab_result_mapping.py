@@ -289,7 +289,6 @@ def safe_exam_lab_customer_display_facts(
             if any(type(value) is not int or value < 0 for value in counts.values()):
                 return None
             order_count = counts["order_count"]
-            master_count = counts["exam_master_count"]
             uniquely_linked = counts["uniquely_linked_order_count"]
             unmatched = counts["unmatched_or_ambiguous_order_count"]
             # 合并检查的一条主记录可显式覆盖多条医嘱，唯一关联医嘱数可以超过
@@ -774,7 +773,9 @@ def build_exam_lab_rule_decision(
             "semantic_output_unknown",
         )
     elif outcome.status == "technical_error":
+        from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
         reason_code = (
+            outcome.reason_code if outcome.reason_code in CONTEXT_FAILURE_REASON_CODES else
             "source_query_error"
             if outcome.reason_code == "source_query_error"
             else "model_invalid_output"
