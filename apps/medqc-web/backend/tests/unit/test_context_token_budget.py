@@ -13,14 +13,15 @@ def capability(**changes):
         "profile": "strata_test", "provider": "strata", "model": "synthetic-model", "model_revision": "fixture-v1",
         "context_tokens": 4196, "safety_margin": 0, "tokenizer_id": "fixture-tokenizer", "tokenizer_revision": "1",
         "chat_template_id": "fixture-chat", "chat_template_revision": "1", "counter_id": "fixture", "counter_revision": "1",
-        "verified": True, "thinking_semantics": "included_in_max_output", **changes,
+        "verified": True, "thinking_semantics": "included_in_max_output",
+        "verified_message_shapes": ("user",), **changes,
     })
 
 
 def identity(cap):
     return CounterIdentity(model=cap.model, model_revision=cap.model_revision, tokenizer_id=cap.tokenizer_id,
         tokenizer_revision=cap.tokenizer_revision, chat_template_id=cap.chat_template_id,
-        chat_template_revision=cap.chat_template_revision)
+        chat_template_revision=cap.chat_template_revision, verified_message_shapes=cap.verified_message_shapes)
 
 
 def payload():
@@ -51,6 +52,48 @@ def test_cloud_compatibility_does_not_apply_local_16k_limits_or_modify_payload()
     assert original == saved
 
 
+def test_single_user_verification_does_not_authorize_multi_message():
+    cap = capability()
+    messages = [{"role": "user", "content": "synthetic prefix"},
+                {"role": "user", "content": "synthetic rule"}]
+    calls = []
+    with counter_scope('fixture', '1', identity(cap), lambda p: calls.append(p) or 100):
+        result = assess_payload('strata', cap.profile, {**payload(), 'messages': messages}, cap, enabled=True)
+    assert result.status == 'CAPABILITY_UNVERIFIED'
+    assert result.reason == 'message_shape_unverified'
+    assert not calls
+
+
+def test_verified_message_role_sequences_are_exact_and_counter_bound():
+    cap = capability(verified_message_shapes=('user|user',))
+    two_users = {**payload(), 'messages': [{'role': 'user', 'content': 'prefix'},
+                                         {'role': 'user', 'content': 'rule'}]}
+    with counter_scope('fixture', '1', identity(cap), lambda _: 100):
+        assert assess_payload('strata', cap.profile, two_users, cap, enabled=True).status == 'ACCEPT'
+        different_roles = {**two_users, 'messages': [{'role': 'system', 'content': 'system'},
+                                                    {'role': 'user', 'content': 'rule'}]}
+        assert assess_payload('strata', cap.profile, different_roles, cap, enabled=True).status == 'CAPABILITY_UNVERIFIED'
+    with counter_scope('fixture', '1', identity(capability()), lambda _: 100):
+        assert assess_payload('strata', cap.profile, two_users, cap, enabled=True).reason == 'counter_model_template_mismatch'
+    # JSON部署配置能往返；verified=true本身不代表任何消息形态已验证。
+    import json
+    assert BudgetCapability.model_validate(json.loads(cap.model_dump_json())) == cap
+    assert assess_payload('strata', cap.profile, payload(), capability(verified_message_shapes=()),
+                          enabled=True).reason == 'message_shape_unverified'
+
+
+@pytest.mark.parametrize('messages', [
+    [{'role': 'user', 'content': [{'type': 'text', 'text': 'synthetic'}]}],
+    [{'role': 'user', 'content': 'synthetic', 'name': 'unsupported'}],
+    [{'role': 'tool', 'content': 'synthetic'}],
+])
+def test_unverified_rich_or_tool_message_is_not_counted_as_plain_user(messages):
+    cap = capability()
+    with counter_scope('fixture', '1', identity(cap), lambda _: pytest.fail('unsupported shape reached counter')):
+        assert assess_payload('strata', cap.profile, {**payload(), 'messages': messages}, cap,
+                              enabled=True).reason == 'message_shape_unverified'
+
+
 @pytest.mark.parametrize('changes', [
     {'max_tokens': 4097}, {'max_completion_tokens': 4095},
     {'chat_template_kwargs': {'thinking_budget': 4097}},
@@ -72,11 +115,12 @@ def test_actual_model_template_counter_identity_and_profile_are_bound():
 
 
 @pytest.mark.asyncio
-async def test_direct_client_refuses_before_observability_or_http_without_retry(monkeypatch):
+async def test_direct_client_refuses_before_observability_or_http_without_retry(monkeypatch, caplog):
     import json
     import app.services.qc_llm_client as module
     from app.services.llm_observability import LLMObservabilityRecorder, NullLLMCallEventStore
     cap = capability(profile='ollama_first_pass', provider='ollama')
+    caplog.set_level('INFO', logger='app.services.llm_observability')
     monkeypatch.setenv('LLM_LOCAL_TOKEN_BUDGET_ENABLED', 'true')
     monkeypatch.setenv('LLM_GATEWAY_PROFILES_JSON', json.dumps([{
         'profile': cap.profile, 'provider_code': cap.provider, 'model': cap.model,
@@ -89,18 +133,29 @@ async def test_direct_client_refuses_before_observability_or_http_without_retry(
 
     async def fixed(**kw):
         sent.append(kw['payload'])
-        return {'choices': [{'finish_reason': 'stop', 'message': {'content': '{}'}}]}
+        return {'choices': [{'finish_reason': 'stop', 'message': {'content': 'ONLY_IN_RESPONSE_DO_NOT_LOG'}}],
+                'usage': {'prompt_tokens': 100, 'completion_tokens': 7, 'total_tokens': 107}}
 
     monkeypatch.setattr(module, 'safe_post_json', fixed)
     client = module.SichuanQCLLMClient(config={'provider_code': cap.provider, 'model': cap.model,
         'api_endpoint': 'http://local.test/v1', 'custom_parameters': {'enable_thinking': False}},
         observability_recorder=LLMObservabilityRecorder(store=Store()))
     with counter_scope('fixture', '1', identity(cap), lambda _: 100):
-        await client.generate('synthetic', max_completion_tokens=4096)
+        await client.generate('ONLY_IN_PROMPT_DO_NOT_LOG', max_completion_tokens=4096)
         assert len(sent) == len(events) == 1
         assert sent[0]['max_tokens'] == 4096
+        assert client.request_observation_enabled
+        receipts = [r.getMessage() for r in caplog.records if r.getMessage().startswith('strata_p0_attempt ')]
+        observed = json.loads(receipts[-1].split(' ', 1)[1])
+        assert observed['response_observation']['finish_reason'] == 'stop'
+        assert observed['metrics']['usage_output_tokens'] == 7
+        assert 'ONLY_IN_PROMPT_DO_NOT_LOG' not in caplog.text
+        assert 'ONLY_IN_RESPONSE_DO_NOT_LOG' not in caplog.text
         with pytest.raises(BudgetError):
             await client.generate('synthetic', max_completion_tokens=4097)
+        with pytest.raises(BudgetError) as inherited:
+            await client.generate('synthetic')
+        assert inherited.value.verdict.output_reserve == client.DEFAULT_MAX_TOKENS == 16384
         assert len(sent) == len(events) == 1
 
 

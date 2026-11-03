@@ -73,6 +73,26 @@ def test_full_evidence_mode_does_not_clip_long_course_or_report(strict):
         assert check._input_complete_for_event(p, 1, (ref,))
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reserve', [None, 512, 600, 1024, 4096])
+async def test_budget_wrapper_preserves_existing_output_reserve(strict, reserve):
+    from app.services.luxian_0609.exam_token_budget import generate
+
+    class Client:
+        provider_code = 'strata'
+        model = 'mock'
+
+        def probe_context_budget(self, prompt, **kwargs):
+            assert kwargs.get('max_completion_tokens') == reserve
+            return BudgetVerdict('ACCEPT', 'mock', 'mock', self.model)
+
+        async def generate(self, prompt, **kwargs):
+            assert kwargs.get('max_completion_tokens') == reserve
+            return {'content': '{}'}
+
+    await generate(Client(), 'synthetic', **({} if reserve is None else {'max_completion_tokens': reserve}))
+
+
 def test_main_event_planner_keeps_global_ids_and_comparison_catalog(strict):
     from app.services.luxian_0609.exam_token_budget import plan_events, recovery_scope
     from app.services.luxian_0609.exam_lab_fact_extraction import events_for_family
@@ -234,3 +254,90 @@ def test_budget_technical_direction_and_reason_survive_binding_finalizer(monkeyp
         raw_customer_display_facts=None, evidence_snapshot=snapshot, evidence_materials=materials)
     assert result['status'] == 'technical_error'
     assert result['reason_code'] == reason
+
+
+@pytest.mark.asyncio
+async def test_local_client_configured_600_keeps_guard_through_formal_save_read(strict, monkeypatch, tmp_path_factory):
+    """真实客户端/正式链，只有Token计量与HTTP应答为Mock；不宣称模型质量。"""
+    import httpx
+    from types import SimpleNamespace
+    from app.services import qc_llm_client as client_module
+    from app.services.llm_observability import LLMObservabilityRecorder, NullLLMCallEventStore
+    from app.services.llm_token_budget import counter_scope
+    from app.services.luxian_0609.exam_token_budget import recovery_scope
+    from tests.unit import test_exam_poc_acceptance as acceptance
+    from tests.unit.test_context_token_budget import capability, identity
+    from tests.unit.test_exam_result_model_route import response
+    cap = capability(profile='ollama_first_pass', provider='ollama', model='synthetic-flash', context_tokens=16384)
+    monkeypatch.setenv('LLM_GATEWAY_PROFILES_JSON', json.dumps([{'profile': cap.profile,
+        'provider_code': cap.provider, 'model': cap.model, 'api_endpoint': 'http://reference.test/v1/chat/completions',
+        'context_budget': cap.model_dump()}]))
+    original_harness = acceptance.harness
+    actual_limits = []
+    # Windows普通路径长度有限；仍用独立临时存储，短目录避免测试名称挤占存储路径。
+    tmp_path = tmp_path_factory.mktemp('p5')
+
+    def local_harness(monkeypatch, tmp, fixed, **kwargs):
+        cfg, app, _ = original_harness(monkeypatch, tmp, fixed, **kwargs)
+
+        async def fixed_http(**request):
+            actual_limits.append(request['payload']['max_tokens'])
+            return fixed(httpx.Request('POST', request['url'], json=request['payload'])).json()
+
+        monkeypatch.setattr(client_module, 'safe_post_json', fixed_http)
+        local = client_module.SichuanQCLLMClient(config={'provider_code': cap.provider, 'model': cap.model,
+            'dispatch_mode': 'direct', 'api_endpoint': 'http://reference.test/v1',
+            'custom_parameters': {'max_tokens': 600, 'enable_thinking': False}},
+            observability_recorder=LLMObservabilityRecorder(store=NullLLMCallEventStore()))
+        return cfg, app, local
+
+    monkeypatch.setattr(acceptance, 'harness', local_harness)
+    rows = {'exam_master': ({'exam_id': 'EX', 'exam_name': '胸部CT',
+        'report_time': '2026-01-02 11:00:00', 'exam_conclusion': '右肺下叶小结节。'},),
+        'daily_course_record': ({'document_id': 'D1', 'record_time': '2026-01-02 13:00:00',
+                                 'record_content': '计划复查胸部CT，继续观察。'},)}
+    recorded = response({'schema_version': check.SCHEMA_VERSION, 'docs': [
+        {'event_position': 1, 'course_doc_ref': 'D06-01', 'quote_type': 'plan_only', 'quote': '', 'report_span': ''}]})
+    with counter_scope('fixture', '1', identity(cap), lambda _: 100), recovery_scope():
+        result = await acceptance.formal_replay(monkeypatch, tmp_path,
+            case=SimpleNamespace(name='p5b-local-600', rows=lambda: rows),
+            recordings=[{'completion': recorded}], arm='reference', mature=True)
+    assert actual_limits == [600, 600]  # 共享抽取与专项均使用最终客户端上限，无4096注入。
+    assert result['saved']['status'] == 'non_compliant'
+    assert result['hot_freeze_calls'] == 0
+
+
+@pytest.mark.asyncio
+async def test_real_client_recovery_is_recounted_before_http_and_keeps_successful_pairs(strict, monkeypatch):
+    from app.services import qc_llm_client as client_module
+    from app.services.llm_observability import LLMObservabilityRecorder, NullLLMCallEventStore
+    from app.services.llm_token_budget import counter_scope
+    from tests.unit.test_context_token_budget import capability, identity
+    from tests.unit.test_exam_result_pair_recovery import item, reply
+    cap = capability(profile='ollama_first_pass', provider='ollama', context_tokens=16384)
+    monkeypatch.setenv('LLM_GATEWAY_PROFILES_JSON', json.dumps([{'profile': cap.profile,
+        'provider_code': cap.provider, 'model': cap.model, 'api_endpoint': 'http://local.test/v1/chat/completions',
+        'context_budget': cap.model_dump()}]))
+    sent = []
+    first = reply([item(1), item(2, 'result_recorded', '不存在的引文', '不存在的报告片段'), item(3)])
+
+    async def fixed_http(**request):
+        sent.append(request['payload'])
+        return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(first)}}],
+                'usage': {'prompt_tokens': 100, 'completion_tokens': 7, 'total_tokens': 107}}
+
+    monkeypatch.setattr(client_module, 'safe_post_json', fixed_http)
+    client = client_module.SichuanQCLLMClient(config={'provider_code': cap.provider, 'model': cap.model,
+        'api_endpoint': 'http://local.test/v1', 'custom_parameters': {'max_tokens': 4096, 'enable_thinking': False}},
+        observability_recorder=LLMObservabilityRecorder(store=NullLLMCallEventStore()))
+
+    def fixed_counter(payload):
+        # 固定阶段计量，不是字符估算：补核的最终Prompt必须重新准入。
+        return 20000 if '上一次输出未通过校验' in payload['messages'][0]['content'] else 100
+
+    with counter_scope('fixture', '1', identity(cap), fixed_counter):
+        result = await check.check_exam_result_record(projection(), client)
+    assert len(sent) == result.llm_call_count == 1
+    assert result.recorded_refs == {1: (), 3: ()}
+    assert result.incomplete_event_positions == frozenset({2})
+    assert result.budget_failure_reason == 'llm_context_over_budget'

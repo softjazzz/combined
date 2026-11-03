@@ -207,7 +207,11 @@ class SichuanQCLLMClient:
                 self.allow_mock_when_unconfigured,
             )
 
-        self.request_observation_enabled = getattr(get_settings(), "LLM_REQUEST_OBSERVATION_ENABLED", False) is True
+        from .llm_token_budget import LOCAL, strict_enabled
+        self.request_observation_enabled = (
+            getattr(get_settings(), "LLM_REQUEST_OBSERVATION_ENABLED", False) is True
+            or self.provider_code in LOCAL and strict_enabled()
+        )
         self.strata_observation_mode = (
             getattr(get_settings(), "STRATA_CASE_CACHE_MODE", "off")
             if self.provider_code == "strata" else "off"

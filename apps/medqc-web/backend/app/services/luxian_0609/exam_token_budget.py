@@ -114,7 +114,7 @@ async def generate(client, prompt, *, recovery=False, **kwargs):
     if getattr(base, "strata_observation_mode", "off") == "prefix":
         # Gateway远程Prime不能共享进程内子请求预算；未有协议前不假装已受同一上限保护。
         refuse(BudgetVerdict("CAPABILITY_UNVERIFIED", "split_prefix_budget_not_supported", "exam", str(base.model)))
-    kwargs.setdefault("max_completion_tokens", 4096)
+    # 不补默认输出上限：未指定时沿用实际客户端配置，超限就明确拒绝。
     kwargs["allow_length_retry"] = False
     verdict = client_probe(client, prompt, **kwargs)
     if verdict is None or verdict.status != "ACCEPT":
@@ -144,7 +144,7 @@ def plan_events(projection, event_keys, rule_ids, client, prompt_builder):
             planned_nodes += 1
             current = select_exam_lab_projection_batch(projection, keys)
             scoped_rules = tuple(rule for rule in rule_ids if events_for_family(current.projection, "exam" if rule in EXAM_RULE_IDS else "culture"))
-            kwargs = {"max_completion_tokens": 4096}
+            kwargs = {}
             supports = getattr(client, "supports_strict_json_schema", None)
             if callable(supports) and supports() is True:
                 kwargs["response_format"] = build_exam_lab_fact_response_format(selected_rule_ids=scoped_rules, projection=current.projection)

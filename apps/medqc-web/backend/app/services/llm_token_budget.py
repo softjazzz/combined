@@ -13,14 +13,14 @@ import time
 from functools import wraps
 from typing import Callable, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .llm_dispatch.provider_profiles import ProviderConfigurationError
 from .llm_context_contract import CONTEXT_REASON_CODES, CONTEXT_FAILURE_REASON_CODES
 
 logger = logging.getLogger(__name__)
 LOCAL = frozenset({"strata", "ollama", "local_openai"})
-PROTOCOL = "lx0609-token-batches-p5b-v1"
+PROTOCOL = "lx0609-token-batches-p5b-v2"
 
 
 class BudgetCapability(BaseModel):
@@ -37,8 +37,21 @@ class BudgetCapability(BaseModel):
     chat_template_revision: str = Field(min_length=1)
     counter_id: str = Field(min_length=1)
     counter_revision: str = Field(min_length=1)
+    verified_message_shapes: tuple[str, ...] = ()
     verified: bool = False
     thinking_semantics: Literal["unknown", "included_in_max_output"] = "unknown"
+
+    @field_validator('verified_message_shapes', mode='before')
+    @classmethod
+    def require_explicit_role_sequences(cls, value):
+        # JSON列表显式转为不可变合同；例如user与system|user是不同验证形态。
+        if not isinstance(value, (list, tuple)) or len(value) > 16:
+            raise ValueError('invalid verified message shapes')
+        for shape in value:
+            if (not isinstance(shape, str) or len(shape) > 127
+                    or any(role not in {'system', 'user', 'assistant'} for role in shape.split('|'))):
+                raise ValueError('invalid verified message shape')
+        return tuple(dict.fromkeys(value))
 
 
 @dataclass(frozen=True)
@@ -49,6 +62,7 @@ class CounterIdentity:
     tokenizer_revision: str
     chat_template_id: str
     chat_template_revision: str
+    verified_message_shapes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -63,6 +77,7 @@ class BudgetVerdict:
     safety_margin: int | None = None
     counter: str | None = None
     counting_seconds: float = 0
+    message_shape: str | None = None
 
 
 class BudgetError(ProviderConfigurationError):
@@ -223,6 +238,18 @@ def assess_payload(provider: str, profile: str, payload: dict, capability: Budge
         return verdict("CAPABILITY_UNVERIFIED", "output_reserve_not_explicit", **metadata)
     reserve = values[0]
     metadata["output_reserve"] = reserve
+    messages = payload.get('messages')
+    # 首期仅承认明确验证过的纯文本角色序列，不顺带放行工具或富媒体协议。
+    if (not isinstance(messages, list) or not messages or payload.get('tools') or payload.get('tool_choice')
+            or any(not isinstance(item, dict) or set(item) != {'role', 'content'}
+                   or not isinstance(item.get('role'), str)
+                   or item['role'] not in {'system', 'user', 'assistant'}
+                   or not isinstance(item.get('content'), str) for item in messages)):
+        return verdict('CAPABILITY_UNVERIFIED', 'message_shape_unverified', **metadata)
+    shape = '|'.join(item['role'] for item in messages)
+    metadata['message_shape'] = shape
+    if shape not in cap.verified_message_shapes:
+        return verdict('CAPABILITY_UNVERIFIED', 'message_shape_unverified', **metadata)
     thinking_values = [value for value in (payload.get("thinking_budget"),
         (payload.get("chat_template_kwargs") or {}).get("thinking_budget")) if value is not None]
     if any(type(thinking) is not int or thinking < 0 or thinking > reserve for thinking in thinking_values):

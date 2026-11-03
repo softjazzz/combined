@@ -11,9 +11,9 @@ from tests.unit.test_context_token_budget import capability, identity
 from tests.unit.test_llm_gateway_api import _settings, _body, RecordingSender
 
 
-def configure(settings, *, context=4196):
+def configure(settings, *, context=4196, shapes=('user',)):
     profile = settings.profiles['strata_first_pass']
-    cap = capability(profile=profile.name, model=profile.model, context_tokens=context)
+    cap = capability(profile=profile.name, model=profile.model, context_tokens=context, verified_message_shapes=shapes)
     return replace(settings, profiles={profile.name: replace(profile, context_budget=cap)}), cap
 
 
@@ -71,7 +71,7 @@ async def test_recounts_after_wait_and_does_not_quarantine_unsent_request(monkey
 async def test_prime_is_individually_admitted_and_rule_template_cannot_bypass(monkeypatch):
     from tests.unit.test_strata_case_cache_gateway import settings, request as prefix_request, Sender
     monkeypatch.setenv('LLM_LOCAL_TOKEN_BUDGET_ENABLED', 'true')
-    configured, cap = configure(settings(), context=200)
+    configured, cap = configure(settings(), context=200, shapes=('user', 'user|user'))
     sender = Sender()
     runtime = GatewayRuntime(configured, sender)
     seen = []
@@ -82,10 +82,26 @@ async def test_prime_is_individually_admitted_and_rule_template_cannot_bypass(mo
         return 100 if payload['max_tokens'] == 1 else 101
 
     with counter_scope('fixture', '1', identity(cap), count):
-        with pytest.raises(GatewayAPIError):
+        with pytest.raises(GatewayAPIError) as error:
             await runtime.complete(prefix_request())
+    assert error.value.code == 'llm_context_over_budget'
     assert 1 in seen and len(sender.payloads) == 1
     assert sender.payloads[0]['max_tokens'] == 1
+    assert await runtime.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_prime_single_user_success_does_not_authorize_multi_message_rule(monkeypatch):
+    from tests.unit.test_strata_case_cache_gateway import settings, request as prefix_request, Sender
+    monkeypatch.setenv('LLM_LOCAL_TOKEN_BUDGET_ENABLED', 'true')
+    configured, cap = configure(settings(), context=200)
+    sender = Sender()
+    runtime = GatewayRuntime(configured, sender)
+    with counter_scope('fixture', '1', identity(cap), lambda _: 100):
+        with pytest.raises(GatewayAPIError) as error:
+            await runtime.complete(prefix_request())
+    assert error.value.code == 'llm_context_capability_unverified'
+    assert len(sender.payloads) == 1 and sender.payloads[0]['max_tokens'] == 1
     assert await runtime.shutdown()
 
 
