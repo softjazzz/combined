@@ -23,6 +23,6 @@ def test_only_code_and_reviewed_static_assets_are_packaged(path):
 @pytest.mark.parametrize('path', ['app/services/strata_handoff.py',
     'app/data/luxian_0609_rules_v1.json', 'app/data/product_activation_public_key.pem',
     'config/strata-qwen36-p9c-approved.json', 'scripts/p9d_isolated_smoke.py', 'alembic/env.py',
-    'services/pdf_parser.py'])
+    'services/pdf_parser.py', 'app/services/qc_diagnostics/capture.py'])
 def test_counter_and_formal_runtime_dependencies_are_kept(path):
     assert packager.allowed_backend(path)

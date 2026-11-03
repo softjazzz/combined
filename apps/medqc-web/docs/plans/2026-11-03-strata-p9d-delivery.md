@@ -130,4 +130,6 @@ $env:P9D_ISOLATED_DATABASE_URL = 'postgresql://postgres:' + [Uri]::EscapeDataStr
 
 首次包内启动检查拦截了隔离入口对旧`get_settings.cache_clear()`接口的误用，已改为当前环境快照机制，补启动回归20项通过。独立Python关闭自动site加载，包内验证要求所有模块搜索路径都留在包目录；不继承开发机用户包或执行`.pth`文件。实际依赖版本保存在`requirements-runtime-lock.txt`。首次失败的试装目录不作为交付包。
 
+包内固定应答自检使用当版完整可选目录90项（含扩展范围），故意返回无效模型协议：58项可交付结果经Canonical保存读取一致、32项保留技术未完成，真实模型请求0次。此自检不是90项医学验收，也不代表所有49条正式规则都调用了模型。打包源码必须保留`app/services/qc_diagnostics`，仅排除`app/storage/qc_diagnostics`运行资料；包白名单回归覆盖这个区别。
+
 全量前端单测、业务PG迁移、真实API压力测试及真实病历质控未执行。DSH现场通过前不自动启用Qwen3.6，不覆盖正式部署。

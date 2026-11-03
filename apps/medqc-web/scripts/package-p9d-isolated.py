@@ -25,8 +25,10 @@ def digest_file(path):
 
 def allowed_backend(relative):
     path = Path(relative)
-    if any(p in {'__pycache__', 'sessions', 'uploads', 'manual_qc_runs', 'qc_diagnostics',
+    if any(p in {'__pycache__', 'sessions', 'uploads', 'manual_qc_runs',
                  'sample_pool_uploads', 'vector', 'logs'} for p in path.parts):
+        return False
+    if path.parts[:3] == ('app', 'storage', 'qc_diagnostics'):
         return False
     if '.backup' in path.name or path.name.startswith(('tmp_', 'debug_')):
         return False
@@ -88,7 +90,7 @@ def main():
         copy(handoff / relative, out / 'provider-handoff' / relative)
     shutil.copytree(runtime, out / 'runtime', ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '*.pyo'))
     shutil.copytree(APP / 'dist', out / 'frontend/dist')
-    for name in ('serve_dist_spa.py', 'p9d-isolated.ps1'):
+    for name in ('serve_dist_spa.py', 'p9d-isolated.ps1', 'p9d-runtime-selftest.py'):
         copy(APP / 'scripts' / name, out / 'tools' / name)
     copy(APP / 'docs/plans/2026-11-03-strata-p9d-delivery.md', out / 'DSH-GUIDE.md')
     (out / 'build-info.json').write_text(json.dumps({'commit': commit, 'build_id': build_id,
@@ -116,6 +118,8 @@ close_runtimes()
 """
     subprocess.run([str(out / 'runtime/python.exe'), '-B', '-c', check, str(out / 'provider-handoff')],
                    cwd=out / 'backend', check=True)
+    subprocess.run([str(out / 'runtime/python.exe'), '-B', str(out / 'tools/p9d-runtime-selftest.py'),
+        str(out.parent / (out.name + '-formal-validation'))], cwd=out / 'backend', check=True)
     lock = subprocess.check_output([str(out / 'runtime/python.exe'), '-B', '-c',
         "import importlib.metadata as m; print('\\n'.join(sorted(d.metadata['Name']+'=='+d.version for d in m.distributions())))"],
         cwd=out / 'backend', text=True, encoding='utf-8')
