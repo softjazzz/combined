@@ -201,6 +201,7 @@ def _post_json(
     headers: Dict[str, str],
     payload: Dict[str, Any],
     timeout_seconds: int,
+    *, allow_disconnect_retry: bool = True,
 ) -> Dict[str, Any]:
     observation = current_http_attempt_observation()
 
@@ -223,7 +224,7 @@ def _post_json(
         # 只对“服务端未返回任何响应即断开”重试一次：多为连接池复用了已被对端关闭的
         # 空闲连接，或并发突增时上游直接断开，请求未得到处理。收到部分响应后断开、
         # 超时、连接失败等其他异常仍原样抛出，不重试。
-        if not _is_disconnected_without_response(error):
+        if not allow_disconnect_retry or not _is_disconnected_without_response(error):
             raise
         resp = send_once()
     # 不直接 raise，尽量返回上游的 JSON 错误体，供调用方包装。
@@ -241,6 +242,7 @@ async def safe_post_json(
     headers: Dict[str, str],
     payload: Dict[str, Any],
     timeout_seconds: int,
+    *, allow_disconnect_retry: bool = True,
 ) -> Dict[str, Any]:
     # Basic safety checks
     if not (url.startswith("https://") or url.startswith("http://")):
@@ -264,6 +266,7 @@ async def safe_post_json(
             headers,
             payload,
             timeout_seconds,
+            allow_disconnect_retry=allow_disconnect_retry,
         ),
         resources=resources,
     )

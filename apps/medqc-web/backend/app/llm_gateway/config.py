@@ -10,6 +10,7 @@ import re
 from typing import Any, Mapping
 from urllib.parse import urlsplit, urlunsplit
 from app.services.llm_token_budget import BudgetCapability
+from app.services.strata_protocol import StrataModelIdentity
 
 
 _PROFILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
@@ -42,6 +43,7 @@ class ProfileConfig:
     api_endpoint: str
     api_key: str | None = None
     context_budget: BudgetCapability | None = None
+    model_identity: StrataModelIdentity | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,7 +281,7 @@ def _parse_profiles(
 ) -> dict[str, ProfileConfig]:
     result: dict[str, ProfileConfig] = {}
     for item in _named_entries(value, id_field="profile", config_name="profile configuration"):
-        allowed = {"profile", "resource_id", "provider_code", "model", "api_endpoint", "api_key", "context_budget"}
+        allowed = {"profile", "resource_id", "provider_code", "model", "api_endpoint", "api_key", "context_budget", "model_identity"}
         if set(item) - allowed:
             raise GatewayConfigurationError("profile configuration has unsupported fields")
         name = item.get("profile")
@@ -310,6 +312,7 @@ def _parse_profiles(
         normalized_endpoint = _validated_endpoint(endpoint, allowed_hosts)
         try:
             budget = BudgetCapability.model_validate(item["context_budget"]) if item.get("context_budget") else None
+            model_identity = StrataModelIdentity.model_validate(item["model_identity"]) if item.get("model_identity") else None
         except ValueError:
             raise GatewayConfigurationError("invalid profile context capability") from None
         result[name] = ProfileConfig(
@@ -320,6 +323,7 @@ def _parse_profiles(
             api_endpoint=normalized_endpoint,
             api_key=api_key.strip() if api_key is not None else None,
             context_budget=budget,
+            model_identity=model_identity,
         )
     if not result:
         raise GatewayConfigurationError("at least one profile must be explicitly configured")

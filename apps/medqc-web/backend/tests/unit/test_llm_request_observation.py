@@ -24,6 +24,7 @@ from app.services.strata_observation import capture_strata_observations
 
 def answer(finish="stop"):
     return {
+        "model": "synthetic-model",
         "choices": [
             {
                 "finish_reason": finish,
@@ -471,12 +472,9 @@ async def test_gateway_receipt_captures_top_level_to_template_mapping(
     info = value["_gateway_request_observation"]["parameters"]
     assert "enable_thinking" not in sent[0]
     assert info["top_level_enable_thinking"] is None
-    assert info["template_enable_thinking"] is True
-    assert info["template_thinking_budget"] == 1536
-    assert sent[0]["chat_template_kwargs"] == {
-        "enable_thinking": True,
-        "thinking_budget": 1536,
-    }
+    assert info["template_enable_thinking"] is False
+    assert info["template_thinking_budget"] is None
+    assert sent[0]["chat_template_kwargs"] == {"enable_thinking": False}
     assert await app.state.gateway_runtime.shutdown()
 
 
@@ -601,3 +599,10 @@ async def test_failed_prime_receipt_is_not_misattributed_to_unsent_rule(monkeypa
     assert prime["request_parameters"]["source"] == "prime_parameters_unknown"
     assert prime["request_parameters"]["client_payload"] is None
     assert prime["request_parameters"]["gateway_prepared"] is None
+
+
+@pytest.fixture(autouse=True)
+def p9b_mock_deployment_contracts(monkeypatch):
+    import sys
+    from tests.scheduler_support.strata_p9b import configure_mock_profile_factory
+    configure_mock_profile_factory(monkeypatch, sys.modules[__name__], profile='strata_main')

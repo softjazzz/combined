@@ -274,7 +274,7 @@ async def test_admin_save_reload_and_real_gateway_fixed_transport_switch_both_wa
         calls.append((request.url.host, payload))
         if reject_local and request.url.host == "strata.test":
             return httpx.Response(503, json={"error": "synthetic_unavailable"})
-        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": "OK"}}],
+        return httpx.Response(200, json={"model": payload["model"], "choices": [{"finish_reason": "stop", "message": {"content": "OK"}}],
                                          "usage": {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11}})
 
     gateway = create_app(GatewaySettings(
@@ -468,3 +468,10 @@ def test_mq_startup_accepts_per_provider_profile_map_without_legacy_profile(setu
         eligible_for_rabbitmq=True, settings=cfg,
         task_runtime_snapshot={"first_pass": identity, "adjudicator": identity},
     ) == "rabbitmq"
+
+
+@pytest.fixture(autouse=True)
+def p9b_mock_deployment_contracts(monkeypatch):
+    import sys
+    from tests.scheduler_support.strata_p9b import configure_mock_profile_factory
+    configure_mock_profile_factory(monkeypatch, sys.modules[__name__], model='Local/CaseModel', profile='strata_main')

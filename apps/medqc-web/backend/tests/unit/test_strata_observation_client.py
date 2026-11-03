@@ -19,7 +19,7 @@ from app.services.strata_observation import capture_strata_observations
 
 
 def answer(*, cached=800, finish="stop"):
-    return {"choices": [{"finish_reason": finish, "message": {"content": '{"ok":true}'}}],
+    return {"model": "synthetic-model", "choices": [{"finish_reason": finish, "message": {"content": '{"ok":true}'}}],
             "usage": {"prompt_tokens": 1000, "completion_tokens": 20, "total_tokens": 1020,
                       "prompt_tokens_details": {"cached_tokens": cached}},
             "timings": {"cache_n": cached, "prompt_n": 1000 - cached,
@@ -187,7 +187,7 @@ async def test_actual_gateway_passes_timings_without_extra_metadata_in_provider_
     with capture_strata_observations() as observed:
         result = await client(gateway=True, dispatch=dispatch).generate("synthetic")
     assert len(sent) == 1
-    assert set(sent[0]) == {"model", "messages", "temperature", "top_p", "max_tokens", "stream", "chat_template_kwargs"}
+    assert set(sent[0]) == {"model", "messages", "temperature", "top_p", "max_tokens", "stream", "chat_template_kwargs", "top_k", "presence_penalty", "frequency_penalty", "repetition_penalty"}
     assert result["choices"][0]["message"]["content"] == '{"ok":true}'
     metrics = observed.events[0]["metrics"]
     assert metrics["queue_ms"] >= 0
@@ -198,7 +198,7 @@ async def test_actual_gateway_passes_timings_without_extra_metadata_in_provider_
 
 
 @pytest.mark.asyncio
-async def test_direct_internal_disconnect_retry_reports_two_sends_and_unknown_first_cost(monkeypatch):
+async def test_strata_disconnect_has_one_send_and_unknown_cost(monkeypatch):
     settings(monkeypatch)
     sent = []
 
@@ -215,11 +215,11 @@ async def test_direct_internal_disconnect_retry_reports_two_sends_and_unknown_fi
     monkeypatch.setattr(core_http, "_is_allowed_host", lambda host: True)
     try:
         with capture_strata_observations() as observed:
-            result = await client().generate("synthetic")
-        assert len(sent) == 2 and sent[0] == sent[1]
-        assert result["_usage_breakdown"]["total_tokens"] == 1020
+            with pytest.raises(httpx.RemoteProtocolError):
+                await client().generate("synthetic")
+        assert len(sent) == 1
         metrics = observed.events[0]["metrics"]
-        assert metrics["model_requests_started"] == 2
+        assert metrics["model_requests_started"] == 1
         assert metrics["unknown_usage_request_count"] == 1
         assert metrics["queue_ms"] >= 0
         assert metrics["transport_ms"] >= 0
@@ -262,21 +262,21 @@ def test_prefix_mode_is_available_but_affinity_is_not_and_default_is_off():
 
 
 @pytest.mark.asyncio
-async def test_length_retry_cost_covers_both_observed_attempts(monkeypatch):
+async def test_strata_length_is_terminal_and_observed_once(monkeypatch):
     settings(monkeypatch)
-    outputs = [answer(finish="length"), answer()]
+    outputs = [answer(finish="length")]
 
     async def fixed(**kwargs):
         return outputs.pop(0)
 
     monkeypatch.setattr(qc_llm_client, "safe_post_json", fixed)
     with capture_strata_observations() as observed:
-        result = await client(model="deepseek-reasoner").generate("synthetic")
+        with pytest.raises(ValueError, match="strata_output_truncated"):
+            await client().generate("synthetic")
     assert not outputs
-    assert observed.report()["attempt_count"] == 2
+    assert observed.report()["attempt_count"] == 1
     assert observed.report()["logical_call_count"] == 1
-    assert observed.report()["cost"]["nominal_input_tokens"]["known_sum"] == 2000
-    assert result["_usage_breakdown"]["total_tokens"] == 2040
+    assert observed.report()["cost"]["nominal_input_tokens"]["known_sum"] == 1000
 
 
 @pytest.mark.asyncio
@@ -313,3 +313,10 @@ async def test_direct_queue_and_cancellation_keep_inflight_cost_explicit(monkeyp
         resources.executor.shutdown(wait=True)
         resources.client.close()
     assert resources._active_count == 0
+
+
+@pytest.fixture(autouse=True)
+def p9b_mock_deployment_contracts(monkeypatch):
+    import sys
+    from tests.scheduler_support.strata_p9b import configure_mock_profile_factory
+    configure_mock_profile_factory(monkeypatch, sys.modules[__name__])

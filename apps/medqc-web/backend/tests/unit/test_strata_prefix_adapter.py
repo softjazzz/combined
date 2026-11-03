@@ -50,7 +50,7 @@ def make_client(handler, *, gateway=True, provider="strata"):
 
 
 def success(**updates):
-    body = {"choices": [{"finish_reason": "stop", "message": {"content": '{"ok":true}'}}],
+    body = {"model": "synthetic", "choices": [{"finish_reason": "stop", "message": {"content": '{"ok":true}'}}],
             "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105},
             "_gateway_timing": {"queue_seconds": 0, "http_seconds": .1}}
     body.update(updates)
@@ -135,7 +135,7 @@ async def test_off_and_observe_only_add_scheduling_identity_not_prefix_or_budget
     with case(), exam_result_prefix_scope(expected_requests=2):
         await make_client(handler).generate(build_requests()[0][2])
         assert current_exam_result_prefix(payload(build_requests()[0][2])).expected_requests == 2
-    assert set(calls[0]) == {"request_id", "profile", "deadline_at", "timeout_seconds", "payload", "case_key", "package_key"}
+    assert set(calls[0]) == {"request_id", "profile", "deadline_at", "timeout_seconds", "payload", "case_key", "context_budget_required", "package_key"}
     assert len(calls[0]["case_key"]) == len(calls[0]["package_key"]) == 64
 
 
@@ -234,3 +234,10 @@ async def test_missing_case_and_metadata_privacy_failure_do_not_consume_budget(m
             await c.generate(original["messages"][0]["content"])
         assert current_exam_result_prefix(original).expected_requests == 2
     assert sent == []
+
+
+@pytest.fixture(autouse=True)
+def p9b_mock_deployment_contracts(monkeypatch):
+    import sys
+    from tests.scheduler_support.strata_p9b import configure_mock_profile_factory
+    configure_mock_profile_factory(monkeypatch, sys.modules[__name__], model='synthetic')

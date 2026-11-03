@@ -35,6 +35,7 @@ class GatewayErrorCode(str, Enum):
     PROVIDER_TIMEOUT = "gateway_provider_timeout"
     PROVIDER_UNAVAILABLE = "gateway_provider_unavailable"
     INVALID_PROVIDER_RESPONSE = "gateway_invalid_provider_response"
+    STRATA_STRUCTURED_FAILED = 'strata_structured_output_failed'
     INTERNAL_ERROR = "gateway_internal_error"
     CONTEXT_OVER_BUDGET = CONTEXT_REASON_CODES["OVER_BUDGET"]
     CONTEXT_COUNT_UNAVAILABLE = CONTEXT_REASON_CODES["COUNT_UNAVAILABLE"]

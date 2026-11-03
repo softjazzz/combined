@@ -469,7 +469,11 @@ async def test_upgrade_failure_keeps_incomplete_and_is_not_frozen(monkeypatch, t
             batch = await native._extract_exam_lab_batch(projection=p, eligible_rule_ids=[check.RULE_ID], llm_client=client)
             assert batch.incomplete_specialty_rule_ids == frozenset({check.RULE_ID})
             assert batch.facts and batch.facts[0].semantic_state == "absent"
-            assert batch.llm_call_count == 3
+            if failure == "truncated":
+                assert batch.budget_rule_failures == {check.RULE_ID: "llm_context_budget_exhausted"}
+                assert batch.llm_call_count == 2  # 第三次HTTP以技术失败退出，不交付为完整抽取。
+            else:
+                assert batch.llm_call_count == 3
         assert sent == ["reference.test", "candidate.test", "reference.test"] * 2
         upgrades = [t for t in trace if t["event"] == "upgraded"]
         assert len(upgrades) == 2 and all(t["reason"] == ("truncated" if failure == "truncated" else "protocol_validation") for t in upgrades)

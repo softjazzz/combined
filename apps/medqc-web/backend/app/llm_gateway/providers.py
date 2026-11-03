@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+import math
 from typing import Any, Protocol
 
 import httpx
@@ -11,6 +12,7 @@ import httpx
 from app.services.llm_dispatch.contracts import GatewayErrorCode
 
 from .config import ProfileConfig
+from app.services.strata_protocol import prepare_request as prepare_strata_request, validate_result, upstream_error, StrataProtocolError
 
 
 NETWORK_RETRY_COUNT = 0
@@ -90,7 +92,7 @@ class ProviderSender(Protocol):
 def prepare_provider_payload(profile: ProfileConfig, raw_payload: dict[str, Any], *, allow_strata_prefix=False) -> dict[str, Any]:
     """只转发业务需要的 OpenAI 兼容字段，路由和凭据不在 payload 中。"""
 
-    allowed = _ALLOWED_PAYLOAD_FIELDS | ({"strata_prefix"} if allow_strata_prefix and profile.provider_code == "strata" else set())
+    allowed = _ALLOWED_PAYLOAD_FIELDS | ({'top_k', 'repetition_penalty'} if profile.provider_code == 'strata' else set()) | ({"strata_prefix"} if allow_strata_prefix and profile.provider_code == "strata" else set())
     if not isinstance(raw_payload, dict) or set(raw_payload) - allowed:
         raise InvalidPayloadError()
     payload = deepcopy(raw_payload)
@@ -121,6 +123,13 @@ def prepare_provider_payload(profile: ProfileConfig, raw_payload: dict[str, Any]
 
     if profile.provider_code == "strata":
         _map_strata_thinking(payload)
+        for key in ('top_k', 'repetition_penalty'):
+            if key in payload and (isinstance(payload[key], bool) or not isinstance(payload[key], (int, float))
+                                   or not math.isfinite(payload[key]) or payload[key] <= 0):
+                raise InvalidPayloadError()
+        if 'top_k' in payload and type(payload['top_k']) is not int:
+            raise InvalidPayloadError()
+        payload = prepare_strata_request(payload)
     elif "chat_template_kwargs" in payload:
         raise InvalidPayloadError()
     return payload
@@ -145,6 +154,7 @@ def _validate_optional_numbers(payload: dict[str, Any]) -> None:
     for key in ("temperature", "top_p", "frequency_penalty", "presence_penalty"):
         if key in payload and (
             isinstance(payload[key], bool) or not isinstance(payload[key], (int, float))
+            or not math.isfinite(payload[key])
         ):
             raise InvalidPayloadError()
     for key in ("max_tokens", "max_completion_tokens"):
@@ -213,6 +223,22 @@ class HttpxProviderSender:
     def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
 
+    def prepare(self, profile: ProfileConfig, payload: dict[str, Any]) -> dict[str, Any]:
+        from app.services.llm_token_budget import BudgetError, guard_payload, strict_enabled
+        try:
+            if profile.provider_code == 'strata':
+                from app.services.strata_protocol import require_deployment_identity
+                require_deployment_identity(profile.model, profile.api_endpoint, profile.context_budget, profile.model_identity)
+                payload = prepare_provider_payload(profile, payload, allow_strata_prefix=True)
+            guard_payload(profile.provider_code, profile.name, payload, profile.context_budget,
+                          enabled=strict_enabled() or profile.provider_code == "strata", phase="provider_http_boundary")
+        except (BudgetError, StrataProtocolError) as error:
+            # 直接使用sender时也不绕过；通常排队前已经完成同一准入。
+            rejected = InvalidPayloadError()
+            rejected.code = error.code
+            raise rejected from None
+        return payload
+
     async def send(
         self,
         profile: ProfileConfig,
@@ -220,15 +246,7 @@ class HttpxProviderSender:
         *,
         timeout_seconds: float,
     ) -> dict[str, Any]:
-        from app.services.llm_token_budget import BudgetError, guard_payload, strict_enabled
-        try:
-            guard_payload(profile.provider_code, profile.name, payload, profile.context_budget,
-                          enabled=strict_enabled(), phase="provider_http_boundary")
-        except BudgetError as error:
-            # 直接使用sender时也不绕过；通常排队前已经完成同一准入。
-            rejected = InvalidPayloadError()
-            rejected.code = error.code
-            raise rejected from None
+        payload = self.prepare(profile, payload)
         headers = {"Content-Type": "application/json"}
         if profile.api_key:
             headers["Authorization"] = f"Bearer {profile.api_key}"
@@ -246,6 +264,16 @@ class HttpxProviderSender:
             raise ProviderTransportError() from None
 
         if not 200 <= response.status_code < 300:
+            if profile.provider_code == 'strata':
+                try:
+                    body = response.json()
+                except (ValueError, UnicodeDecodeError):
+                    body = None
+                error = upstream_error(response.status_code, body)
+                if error is not None:
+                    rejected = ProviderError(error.code)
+                    rejected.code = error.code
+                    raise rejected from None
             raise ProviderHTTPError(response.status_code)
         if len(response.content) > MAX_PROVIDER_RESPONSE_BYTES:
             raise InvalidProviderResponseError()
@@ -255,6 +283,13 @@ class HttpxProviderSender:
             raise InvalidProviderResponseError() from None
         if not isinstance(decoded, dict):
             raise InvalidProviderResponseError()
+        if profile.provider_code == 'strata':
+            try:
+                validate_result(decoded, profile.model)
+            except StrataProtocolError as error:
+                rejected = ProviderError(error.code)
+                rejected.code = error.code
+                raise rejected from None
         return decoded
 
 

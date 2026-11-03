@@ -233,6 +233,12 @@ class SichuanQCLLMClient:
         if self.provider_code == "local_openai" and self.dispatch_mode != "gateway":
             raise ProviderConfigurationError("local_openai requires the controlled Gateway")
         self.refresh_dispatch_identity()
+        if self.provider_code == 'strata':
+            from .strata_protocol import validate_model_selection
+            self.allowed_model_ids = tuple(config.get('allowed_model_ids', [self.model])) if config else (self.model,)
+            validate_model_selection(self.model, self.allowed_model_ids)
+            self.temperature, self.top_p = 0, 1
+            self.enable_thinking, self.thinking_budget, self.reasoning_effort = False, None, ''
 
     def refresh_dispatch_identity(self) -> None:
         """从当前受控 Settings 刷新非敏感 Gateway 地址身份。"""
@@ -287,6 +293,9 @@ class SichuanQCLLMClient:
     def _build_request_payload(self, prompt, *, max_completion_tokens=None, response_format_payload=None,
                                enable_thinking=None, thinking_budget=None, temperature=None):
         max_tokens = self._resolve_max_tokens(prompt)
+        if self.provider_code == 'strata' and max_completion_tokens is not None and max_tokens < max_completion_tokens:
+            from .strata_protocol import StrataProtocolError
+            raise StrataProtocolError('strata_output_budget_insufficient')
         if max_completion_tokens is not None:
             max_tokens = min(max_tokens, max_completion_tokens)
         resolved_enable_thinking = (
@@ -312,7 +321,10 @@ class SichuanQCLLMClient:
         )
         if response_format_payload is not None:
             payload["response_format"] = deepcopy(response_format_payload)
-
+        if self.provider_code == 'strata':
+            from .strata_protocol import prepare_request, validate_model_selection
+            validate_model_selection(self.model, self.allowed_model_ids)
+            payload = prepare_request(payload)
         return payload
 
     def probe_context_budget(self, prompt, *, max_completion_tokens=None, response_format=None,
@@ -324,7 +336,7 @@ class SichuanQCLLMClient:
             enable_thinking=enable_thinking, thinking_budget=thinking_budget, temperature=temperature))
         profile, capability = deployed_capability(self.provider_code, self.model,
             self.gateway_profile, self.api_endpoint, dispatch_mode=self.dispatch_mode)
-        return assess_payload(self.provider_code, profile, payload, capability, enabled=strict_enabled())
+        return assess_payload(self.provider_code, profile, payload, capability, enabled=strict_enabled() or self.provider_code == "strata")
 
     async def generate(
         self,
@@ -362,7 +374,7 @@ class SichuanQCLLMClient:
         attempt_usages: list[dict[str, int]] = []
 
         if self.dispatch_mode == "direct" and not self.api_endpoint:
-            if self.allow_mock_when_unconfigured:
+            if self.allow_mock_when_unconfigured and self.provider_code != "strata":
                 api_time = time.time() - api_start
                 self._record_stats_delta(successes=1)
                 return {
@@ -393,12 +405,22 @@ class SichuanQCLLMClient:
 
         try:
             attempt_no += 1
-            result, attempt_usage = await self._perform_observed_attempt(
-                logical_call_id=logical_call_id,
-                attempt_no=attempt_no,
-                headers=headers,
-                payload=payload,
-            )
+            try:
+                result, attempt_usage = await self._perform_observed_attempt(
+                    logical_call_id=logical_call_id, attempt_no=attempt_no, headers=headers, payload=payload,
+                )
+            except Exception as error:
+                if (self.provider_code != 'strata' or getattr(error, 'code', None) != 'strata_structured_output_failed'
+                        or 'response_format' not in payload):
+                    raise
+                # 仅撤下服务端格式约束，原Prompt、证据、输出预算和严格事实解析器不变。
+                # 第二次失败直接退出；每次尝试仍经过最终准入、剩余时间和调用次数检查。
+                retry_payload = deepcopy(payload)
+                retry_payload.pop('response_format')
+                attempt_no += 1
+                result, attempt_usage = await self._perform_observed_attempt(
+                    logical_call_id=logical_call_id, attempt_no=attempt_no, headers=headers, payload=retry_payload,
+                )
             if attempt_usage is not None:
                 attempt_usages.append(attempt_usage)
             self._raise_for_upstream_error(result)
@@ -466,7 +488,15 @@ class SichuanQCLLMClient:
             result["_usage_breakdown"] = usage_breakdown
             result["_cot_observation"] = cot_observation
             return result
-        except Exception:
+        except Exception as error:
+            if self.provider_code == 'strata' and getattr(error, 'code', None) == 'strata_structured_output_failed':
+                from .strata_protocol import StrataProtocolError
+                from .llm_token_budget import note_budget_failure
+                terminal = StrataProtocolError('strata_structured_output_failed', terminal=True)
+                terminal.request_started = True
+                note_budget_failure(terminal)
+                self._record_stats_delta(api_time=time.time() - api_start, errors=1)
+                raise terminal from None
             api_time = time.time() - api_start
             self._record_stats_delta(api_time=api_time, errors=1)
             raise
@@ -487,8 +517,17 @@ class SichuanQCLLMClient:
         from .llm_token_budget import deployed_capability, guard_payload, strict_enabled
         profile, capability = deployed_capability(self.provider_code, self.model,
             self.gateway_profile, self.api_endpoint, dispatch_mode=self.dispatch_mode)
+        if self.provider_code == 'strata' and self.dispatch_mode == 'direct':
+            from .strata_protocol import deployed_identity, require_deployment_identity
+            identity = deployed_identity(self.provider_code, self.model, profile, self.api_endpoint)
+            try:
+                require_deployment_identity(self.model, self.api_endpoint, capability, identity)
+            except Exception as error:
+                from .llm_token_budget import note_budget_failure
+                note_budget_failure(error)
+                raise
         from .llm_observability import current_llm_observation_context
-        guard_payload(self.provider_code, profile, payload, capability, enabled=strict_enabled(),
+        guard_payload(self.provider_code, profile, payload, capability, enabled=strict_enabled() or self.provider_code == "strata",
                       phase="client_final_request", attribution={"logical_call_id": logical_call_id,
                           "attempt_no": attempt_no, "role": self.model_role,
                           "executor": current_llm_observation_context().executor_key,
@@ -507,6 +546,7 @@ class SichuanQCLLMClient:
             logical_call_id=logical_call_id, attempt_no=attempt_no, payload=payload,
         )
         transport_observation = None
+        received_result = None
         try:
             from .luxian_0609.execution_time_budget import request_timeout
 
@@ -532,7 +572,7 @@ class SichuanQCLLMClient:
                             consume_exam_result_prefix_request()
                     prefix_kwargs = {"case_prefix": case_prefix} if case_prefix is not None else {}
                     from .llm_token_budget import LOCAL
-                    if strict_enabled() and self.provider_code in LOCAL:
+                    if (strict_enabled() and self.provider_code in LOCAL) or self.provider_code == "strata":
                         # 远程Gateway即使默认关闭，也必须执行最终组装后的准入；旧Gateway拒绝未知字段而非静默绕过。
                         prefix_kwargs["context_budget_required"] = True
                     if getattr(self, "request_observation_enabled", False):
@@ -566,7 +606,12 @@ class SichuanQCLLMClient:
                         headers=headers,
                         payload=payload,
                         timeout_seconds=timeout_seconds,
+                        **({"allow_disconnect_retry": False} if self.provider_code == "strata" else {}),
                     )
+            received_result = result
+            if self.provider_code == 'strata':
+                from .strata_protocol import validate_result
+                validate_result(result, self.model)
             finish_diagnostic_attempt(diagnostic_attempt, result=result)
             usage = observed_usage(result)
             status, safe_error_kind = safe_status_for_http_result(result)
@@ -587,9 +632,10 @@ class SichuanQCLLMClient:
             from .llm_token_budget import note_budget_failure
             note_budget_failure(error)
             status, safe_error_kind = safe_status_for_exception(error)
-            failed_cache_observation = None
+            failed_cache_observation = dict(received_result) if isinstance(received_result, dict) else None
             if case_prefix is not None:
-                failed_cache_observation = {"_strata_cache_expected": True}
+                failed_cache_observation = dict(failed_cache_observation or {})
+                failed_cache_observation["_strata_cache_expected"] = True
                 if getattr(error, "cache_trace", None) is not None:
                     failed_cache_observation["_strata_cache"] = error.cache_trace
                 if getattr(error, "cache_trace_invalid", False):
@@ -611,7 +657,7 @@ class SichuanQCLLMClient:
                 started_timestamp=started_timestamp,
                 status=status,
                 safe_error_kind=safe_error_kind,
-                usage=None,
+                usage=observed_usage(received_result) if isinstance(received_result, dict) else None,
             )
             raise
 
@@ -898,6 +944,11 @@ class SichuanQCLLMClient:
         return 0
 
     def _resolve_max_tokens(self, prompt: str) -> int:
+        if self.provider_code == 'strata':
+            if type(self.max_tokens) is not int or not 1 <= self.max_tokens <= self.MAX_TOKENS_HARD_CAP:
+                from .strata_protocol import StrataProtocolError
+                raise StrataProtocolError('strata_output_budget_insufficient')
+            return self.max_tokens
         max_tokens = int(self.max_tokens or self.DEFAULT_MAX_TOKENS)
         if max_tokens <= 0:
             raise ValueError("max_tokens must be a positive integer")
