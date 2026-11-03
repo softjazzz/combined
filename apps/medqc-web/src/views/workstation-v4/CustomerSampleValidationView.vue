@@ -599,6 +599,7 @@
                       <span>并发病历数</span>
                       <a-select
                         v-model:value="runOptions.maxParallelRecords"
+                        :disabled="initialConfigLoading"
                         class="w-[88px] customer-sample-toolbar-select"
                         size="middle"
                         :options="parallelOptions"
@@ -1657,6 +1658,7 @@
             v-if="!editableCopyReadonly"
             type="primary"
             :loading="editableCopySaveAndRunLoading"
+            :disabled="initialConfigLoading"
             @click="saveEditableCopy({ runAfterSave: true })"
           >
             保存并验证
@@ -1666,6 +1668,7 @@
     </a-modal>
 
     <SemanticRulesBatchResultDrawer
+      v-if="mountedDrawers.batch || batchResultOpen"
       :open="batchResultOpen"
       :batch-job-detail="batchJobDetail"
       :batch-job-detail-loading="batchJobLoading"
@@ -1684,6 +1687,7 @@
     />
 
     <QCRecordResultComparisonDrawer
+      v-if="mountedDrawers.comparison || recordResultComparisonOpen"
       :open="recordResultComparisonOpen"
       :focus="recordResultComparisonFocus"
       @close="closeRecordResultComparison"
@@ -1790,6 +1794,7 @@
     </a-drawer>
 
     <QCReviewDrawer
+      v-if="mountedDrawers.review || reviewDrawerVisible"
       :visible="reviewDrawerVisible"
       :record="reviewDrawerRecord"
       @update:visible="reviewDrawerVisible = $event"
@@ -1800,13 +1805,16 @@
 </template>
 
 <script setup lang="ts">
-import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
+import { reactive, watchEffect } from 'vue'
+import { deferredComponent } from './customer-sample-validation/deferredComponent'
+const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
 import MedicalRecordContextBanner from './customer-sample-validation/MedicalRecordContextBanner.vue'
 import { FileText } from 'lucide-vue-next'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
 
 const {
+  initialConfigLoading,
   activeRecord,
   addEditableCopyDocument,
   addEditableCopyOrderDocument,
@@ -2037,6 +2045,14 @@ const {
   Trash2,
   workflowSteps,
 } = useCustomerSampleValidationController()
+
+// 首次打开才挂载；关闭后保留组件，维持原抽屉内的页签和筛选状态。
+const mountedDrawers = reactive({ batch: false, comparison: false, review: false })
+watchEffect(() => {
+  if (batchResultOpen.value) mountedDrawers.batch = true
+  if (recordResultComparisonOpen.value) mountedDrawers.comparison = true
+  if (reviewDrawerVisible.value) mountedDrawers.review = true
+})
 </script>
 
 <style scoped src="./CustomerSampleValidationView.css"></style>

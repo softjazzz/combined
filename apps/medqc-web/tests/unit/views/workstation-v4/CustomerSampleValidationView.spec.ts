@@ -1058,6 +1058,80 @@ async function expandLuxianFamily(wrapper: ReturnType<typeof mount>, familyName:
 }
 
 describe('CustomerSampleValidationView', () => {
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((done) => { resolve = done })
+    return { promise, resolve }
+  }
+
+  it('列表不等待并发设置和完整规则说明；设置未就绪时不允许启动质控', async () => {
+    const config = deferred<{ execution_concurrency: { max_parallel_records: number } }>()
+    const catalog = deferred<{ success: boolean; data: { rules: unknown[] } }>()
+    getDefaultLLMConfigSummary.mockReturnValueOnce(config.promise)
+    listLuxian0609CustomerRules.mockReturnValueOnce(catalog.promise)
+    const wrapper = await mountView()
+    expect(getManualSamplePoolRecords).toHaveBeenCalled()
+    expect(wrapper.find('[data-customer-guide="run-validation"]').attributes('disabled')).toBeDefined()
+    expect(runManualSamplePool).not.toHaveBeenCalled()
+    config.resolve({ execution_concurrency: { max_parallel_records: 2 } })
+    catalog.resolve({ success: true, data: { rules: buildLuxian0609Rules() } })
+    await flushPromises()
+    expect(wrapper.find('[data-customer-guide="run-validation"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('同步状态慢时仍可加载病历列表', async () => {
+    const sync = deferred<{ success: boolean; data: null }>()
+    getLatestManualSamplePoolSyncJob.mockReturnValueOnce(sync.promise)
+    const wrapper = await mountView()
+    expect(getManualSamplePoolRecords).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('客户样本验证')
+    sync.resolve({ success: true, data: null })
+    await flushPromises()
+  })
+
+  it('影响筛选口径的规则集目录仍先于列表；其他配置可以同时请求', async () => {
+    const directory = deferred<{ success: boolean; data: { items: unknown[] } }>()
+    listManualSampleValidationRuleSets.mockReturnValueOnce(directory.promise)
+    await mountView()
+    expect(listLuxian0609CustomerRules).toHaveBeenCalled()
+    expect(getManualSamplePoolRecords).not.toHaveBeenCalled()
+    directory.resolve({ success: true, data: { items: buildRuleSets() } })
+    await flushPromises()
+    expect(getManualSamplePoolRecords).toHaveBeenCalled()
+  })
+
+  it('未打开的结果和审核抽屉不参与首屏挂载', async () => {
+    const wrapper = await mountView()
+    expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(false)
+    expect(wrapper.find('.qc-review-drawer-stub').exists()).toBe(false)
+    expect(wrapper.find('.record-result-comparison-drawer-stub').exists()).toBe(false)
+  })
+
+  it('较早的列表响应不能覆盖后来的查询结果', async () => {
+    const old = deferred<{ success: boolean; data: { pool: ReturnType<typeof buildPool>; items: ReturnType<typeof buildRecord>[]; total: number; page: number; page_size: number } }>()
+    getManualSamplePoolRecords.mockReturnValueOnce(old.promise).mockResolvedValueOnce({
+      success: true, data: { pool: buildPool(), items: [buildRecord({ patient_name: '新查询结果' })], total: 1, page: 1, page_size: 20 },
+    })
+    const wrapper = await mountView()
+    await wrapper.findAll('button').find((button) => button.text() === '查询')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('新查询结果')
+    old.resolve({ success: true, data: { pool: buildPool(), items: [buildRecord({ patient_name: '过期查询结果' })], total: 1, page: 1, page_size: 20 } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('新查询结果')
+    expect(wrapper.text()).not.toContain('过期查询结果')
+  })
+
+  it('页面卸载后目录响应不再启动列表读取', async () => {
+    const directory = deferred<{ success: boolean; data: { items: unknown[] } }>()
+    listManualSampleValidationRuleSets.mockReturnValueOnce(directory.promise)
+    const wrapper = await mountView()
+    wrapper.unmount()
+    directory.resolve({ success: true, data: { items: buildRuleSets() } })
+    await flushPromises()
+    expect(listManualSamplePools).not.toHaveBeenCalled()
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
@@ -2943,7 +3017,7 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.find('.record-compare-head').exists()).toBe(false)
     expect(modalText).not.toContain('病历信息')
     expect(wrapper.find('.editable-copy-form-grid').exists()).toBe(false)
-    expect(wrapper.find('.record-compare-shell').exists()).toBe(true)
+    await vi.waitFor(() => expect(wrapper.find('.record-compare-shell').exists()).toBe(true), { timeout: 3000 })
     expect(wrapper.findComponent({ name: 'QCRecordCompareWorkbench' }).props('dischargeTime')).toBe(
       '2026-06-26 08:31:00',
     )
@@ -2952,7 +3026,7 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.get('[data-testid="record-admission-time"]').text()).toContain(
       '2026-02-02 10:00:00',
     )
-    expect(modalText).toContain('入院记录')
+    expect(wrapper.find('.a-modal-stub').text()).toContain('入院记录')
     expect(wrapper.find('.editable-copy-document-directory-list.is-tree').exists()).toBe(true)
     const admissionToggle = wrapper.get('[data-testid="record-document-group-toggle-admission"]')
     expect(admissionToggle.attributes('aria-expanded')).toBe('true')
@@ -4048,7 +4122,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 
-  it('发起验证成功后应自动打开结果抽屉并显示成功提示', async () => {
+  it('发起验证成功后显示任务卡片，点击查看结果才加载抽屉，关闭重开保留实例', async () => {
     const wrapper = await mountView()
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
@@ -4066,7 +4140,21 @@ describe('CustomerSampleValidationView', () => {
       }),
     )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-2')
-    expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
+    expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(false)
+    await wrapper.find('[data-testid="qc-task-view-result"]').trigger('click')
+    await flushPromises()
+    await vi.waitFor(() => expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true))
+    const originalElement = wrapper.find('.batch-result-drawer-stub').element
+    expect(wrapper.find('.batch-result-drawer-stub').attributes('data-open')).toBe('true')
+    const close = wrapper.findComponent(SemanticRulesBatchResultDrawerStub).vm.$attrs.close
+    expect(typeof close).toBe('function')
+    if (typeof close === 'function') close()
+    await nextTick()
+    expect(wrapper.find('.batch-result-drawer-stub').attributes('data-open')).toBe('false')
+    await wrapper.find('[data-testid="qc-task-view-result"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.batch-result-drawer-stub').element).toBe(originalElement)
+    expect(wrapper.find('.batch-result-drawer-stub').attributes('data-open')).toBe('true')
   })
 
   it('切换到 SC 样本规则模式后应按 sc 模式提交', async () => {
@@ -4411,7 +4499,9 @@ describe('CustomerSampleValidationView', () => {
     )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-timeout')
     expect(message.error).not.toHaveBeenCalledWith('创建客户样本验证任务失败')
-    expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
+    await wrapper.find('[data-testid="qc-task-view-result"]').trigger('click')
+    await flushPromises()
+    await vi.waitFor(() => expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true))
   })
 
   it('程序规则模式同步样本病历时不再限制内涵和首批', async () => {
