@@ -53,3 +53,12 @@ jobs:
         run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_strata_admin_configuration.py tests/unit/test_llm_config_permissions.py tests/unit/test_llm_config_loader.py
       - name: M2 synthetic Outbox and Worker delivery
         run: python -B scripts/run_qc_scheduler_tests.py --profile m2-synthetic --suite m2-release
+      - name: Settings snapshot and source lookup responsiveness (offline)
+        run: >-
+          sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)"
+          -B scripts/run_qc_scheduler_tests.py --profile offline
+          tests/unit/test_settings_snapshot.py tests/unit/test_settings_llm_env_alias.py
+          tests/unit/test_sync_departments_async.py
+          tests/unit/test_sync_router.py::TestSyncRouter::test_departments_value_error_maps_422
+          tests/unit/test_sync_router.py::TestSyncRouter::test_read_permission_matrix
+          tests/unit/test_sync_router.py::TestSyncRouter::test_write_permission_matrix

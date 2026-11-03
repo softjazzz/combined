@@ -125,3 +125,21 @@ node node_modules/vitest/vitest.mjs run --config vitest.page-load.config.ts test
 5文件82项通过，0跳过。包含真实composable初始化与固定网络应答、字段重试、慢科室时切换模型设置、AbortSignal适配、源错误不转换为空成功、原同步权限/范围及既有同步控件。完整vue-tsc、全量src只读ESLint、改动测试定向ESLint、编码和diff检查通过；未执行全量单元集或新版本真实浏览器源连接验收。本次测试主动阻断网络，不访问业务数据库、源PG或模型，没有真实同步或质控任务。
 
 未重启前后端。运行后端仍是5750b8c48，需后续重启加载e51639753的配套线程池修复，才能消除源连接超时对后端其他请求的阻塞；前端开发服务器会按Vite机制热更新源文件。未改集成分支及其未提交材料，未推送、合并或部署。
+
+## PR #30 CI复核与补充门禁
+
+复核固定Head为6842e5c65，Base仍a2cde7b5f，PR保持Draft且未合并。四个PR工作流均成功：零模型质量门实际日志为11961通过、0失败、0超时；前端类型检查通过，各定向批次131/54/43通过；调度器分批通过，既有双模型组保留2个私有材料跳过；一次性基础设施检查及故障矩阵通过。不能把这些重叠批次相加为独立验收数。
+
+确认的覆盖缺口：前端工作流没有明确运行样本主页面、静默后台composable及API测试；调度器工作流没有明确运行新增配置快照和科室非阻塞测试。补入原工作流，保留全部原步骤；前端及后端新步骤仍在Linux的`unshare --net`内执行，并叠加既有Node传输层阻断/前端隔离配置或后端offline Runner，不放宽隔离。补齐相关文件触发条件，独立修改入口/API/测试时也会触发前端检查。
+
+增加2项快照边界测试：工作目录变化不能沿用相对dotenv快照；文件密钥目录启用时必须每次解析。只使用合成环境及临时空目录，未读取真实密钥或dotenv内容。本轮不改运行逻辑或医学合同。
+
+本机重跑新前端CI步骤（Windows不执行Linux命名空间包装，保留其余相同命令）：
+
+```text
+node --require ./scripts/frontpage-v2-no-network.cjs node_modules/vitest/vitest.mjs run --config vitest.page-load.config.ts tests/unit/views/workstation-v4/CustomerSampleValidationView.spec.ts tests/unit/views/workstation-v4/customer-sample-validation/deferredComponent.spec.ts tests/unit/router/customer-sample-validation-permissions.spec.ts tests/unit/services/llm-config-service.spec.ts tests/unit/vite-manual-chunks.spec.ts tests/unit/views/workstation-v4/useDataSync.background.spec.ts tests/unit/views/workstation-v4/useDataSync.spec.ts tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts tests/unit/services/sync-departments.spec.ts tests/unit/views/workstation-v4/components/qc/QcSyncAndRunControl.spec.ts
+```
+
+10文件172项通过、0跳过。新后端步骤在相同offline Runner执行配置快照、环境别名、科室异步、422及原读写权限矩阵：57项通过、0跳过。Ruff、定向只读ESLint、两份workflow YAML解析与网络隔离命令检查、编码和diff检查通过。类型检查由原Head CI完整执行通过；本轮没有TypeScript修改，不重复全量检查。未在本机重跑全量零模型门或一次性PG/MQ；新提交的远端CI另行跟踪，不能沿用旧Head状态声称新Head已通过。
+
+未连接业务库、源PG或模型，不运行患者质控、不改集成分支、不重启服务。现有源PG不可达、真实成功返回科室链路及生产包/多用户性能限制仍保留。

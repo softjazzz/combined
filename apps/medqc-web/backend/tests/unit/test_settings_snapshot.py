@@ -58,6 +58,24 @@ def test_invalid_new_environment_cannot_reuse_previous_valid_snapshot(counted_se
     assert len(counted_settings) == 3
 
 
+def test_changing_working_directory_cannot_reuse_relative_dotenv_snapshot(counted_settings, monkeypatch, tmp_path):
+    module.get_settings()
+    other = tmp_path / 'other-synthetic-backend'
+    other.mkdir()
+    monkeypatch.chdir(other)
+    module.get_settings()
+    assert len(counted_settings) == 2
+
+
+def test_secret_file_directory_disables_snapshot(counted_settings, monkeypatch, tmp_path):
+    secrets = tmp_path / 'synthetic-secrets'
+    secrets.mkdir()
+    monkeypatch.setitem(module.Settings.model_config, 'secrets_dir', str(secrets))
+    module.get_settings()
+    module.get_settings()
+    assert len(counted_settings) == 2
+
+
 @pytest.mark.asyncio
 async def test_config_database_wait_does_not_block_event_loop(monkeypatch):
     from app.services import llm_config_loader as loader
