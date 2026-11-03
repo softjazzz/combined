@@ -22,6 +22,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_luxian_0609_canonical_result_finalizer.py",
         "tests/unit/test_luxian_0609_privacy_request_scope.py",
         "tests/unit/test_context_token_budget.py",
+        "tests/unit/test_context_budget_review_regressions.py",
         "tests/unit/test_gateway_context_budget.py",
         "tests/unit/test_exam_context_budget.py",
         "tests/unit/test_luxian_0609_native_exam_lab_execution.py",

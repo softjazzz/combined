@@ -96,6 +96,16 @@ _FAILURES = ContextVar("llm_context_budget_failures", default=None)
 _FREEZE_IDENTITY = ContextVar("llm_context_freeze_identity", default=None)
 
 
+class _BudgetFailures(list):
+    """已由规则所有者承接的错误仍阻止冻结，但不再抹去同族返回值。"""
+    def __init__(self):
+        super().__init__()
+        self.handled = set()
+
+    def unhandled(self):
+        return [error for error in self if id(error) not in self.handled]
+
+
 def freeze_identity(client) -> str | None:
     if client is None or not (strict_enabled() or split_enabled()):
         return None
@@ -105,7 +115,8 @@ def freeze_identity(client) -> str | None:
     if provider not in LOCAL or not (strict_enabled() or split_enabled()):
         return None
     model = str(getattr(base, "model", ""))
-    profile, cap = deployed_capability(provider, model, getattr(base, "gateway_profile", None), getattr(base, "api_endpoint", None))
+    profile, cap = deployed_capability(provider, model, getattr(base, "gateway_profile", None), getattr(base, "api_endpoint", None),
+                                      dispatch_mode=getattr(base, 'dispatch_mode', 'direct'))
     # 双模型路由的候选Profile能力版本也须隔离，不能只绑定参考模型。
     from .exam_result_model_route import current_route
     route = current_route()
@@ -144,7 +155,7 @@ def freeze_namespace():
 
 @contextmanager
 def budget_failure_scope():
-    failures = []
+    failures = _BudgetFailures()
     token = _FAILURES.set(failures)
     try:
         yield failures
@@ -156,18 +167,40 @@ def context_budget_failed() -> bool:
     return bool(_FAILURES.get())
 
 
+@contextmanager
+def budget_rule_scope(on_failure):
+    """规则所有者显式承接局部失败；未知/未承接错误仍沿原保守边界抛出。"""
+    parent = _FAILURES.get()
+    with budget_failure_scope() as failures:
+        try:
+            yield
+        except BaseException as error:
+            if not is_budget_error(error):
+                raise
+            note_budget_failure(error)
+        finally:
+            if failures:
+                # 回调由执行器生成技术结果，不在基础设施层重判临床状态。
+                # 若回调失败，错误不得被标为已承接。
+                if parent is not None:
+                    parent.extend(error for error in failures if error not in parent)
+                on_failure(failures[0])
+                if isinstance(parent, _BudgetFailures):
+                    parent.handled.update(id(error) for error in failures)
+
+
 def budget_guarded_executor(function):
-    """非检查族旧catch可能吞掉配置异常；执行器边界关闭该族，不改临床状态所有者。"""
+    """仅未由具体规则承接的旧catch异常在执行器边界失败关闭。"""
     @wraps(function)
     async def run(*args, **kwargs):
-        failures = []
+        failures = _BudgetFailures()
         token = _FAILURES.set(failures)
         escaped = None
         try:
             with token_freeze_scope(kwargs.get("llm_client")):
                 result = await function(*args, **kwargs)
-            if failures:
-                raise failures[0]
+            if failures.unhandled():
+                raise failures.unhandled()[0]
             return result
         except BaseException as error:
             if is_budget_error(error):
@@ -288,7 +321,8 @@ def guard_payload(provider: str, profile: str, payload: dict, capability: Budget
     return result
 
 
-def deployed_capability(provider: str, model: str, profile: str | None, endpoint: str | None) -> tuple[str, BudgetCapability | None]:
+def deployed_capability(provider: str, model: str, profile: str | None, endpoint: str | None,
+                        *, dispatch_mode: str = 'direct') -> tuple[str, BudgetCapability | None]:
     """复用既有Gateway部署Profile目录，直接HTTP也须绑定同一真实部署身份。"""
     try:
         raw = json.loads(os.getenv("LLM_GATEWAY_PROFILES_JSON", "[]"))
@@ -296,10 +330,13 @@ def deployed_capability(provider: str, model: str, profile: str | None, endpoint
             entries = [{"profile": key, **item} for key, item in raw.items()]
         else:
             entries = raw
+        if dispatch_mode not in {'direct', 'gateway'} or dispatch_mode == 'gateway' and not profile:
+            return profile or 'unbound', None
         matches = [item for item in entries if isinstance(item, dict) and item.get("provider_code") == provider
             and item.get("model") == model and (not profile or item.get("profile") == profile)
-            and str(item.get("api_endpoint", "")).rstrip("/").removesuffix("/chat/completions")
-                == str(endpoint or "").rstrip("/").removesuffix("/chat/completions")]
+            and (dispatch_mode == 'gateway' or
+                 str(item.get("api_endpoint", "")).rstrip("/").removesuffix("/chat/completions")
+                 == str(endpoint or "").rstrip("/").removesuffix("/chat/completions"))]
         if len(matches) != 1:
             return profile or "unbound", None
         item = matches[0]

@@ -323,7 +323,7 @@ class SichuanQCLLMClient:
             max_completion_tokens=max_completion_tokens, response_format_payload=self._copy_response_format(response_format),
             enable_thinking=enable_thinking, thinking_budget=thinking_budget, temperature=temperature))
         profile, capability = deployed_capability(self.provider_code, self.model,
-            self.gateway_profile, self.api_endpoint)
+            self.gateway_profile, self.api_endpoint, dispatch_mode=self.dispatch_mode)
         return assess_payload(self.provider_code, profile, payload, capability, enabled=strict_enabled())
 
     async def generate(
@@ -486,7 +486,7 @@ class SichuanQCLLMClient:
         payload = protect_current_payload(payload)
         from .llm_token_budget import deployed_capability, guard_payload, strict_enabled
         profile, capability = deployed_capability(self.provider_code, self.model,
-            self.gateway_profile, self.api_endpoint)
+            self.gateway_profile, self.api_endpoint, dispatch_mode=self.dispatch_mode)
         from .llm_observability import current_llm_observation_context
         guard_payload(self.provider_code, profile, payload, capability, enabled=strict_enabled(),
                       phase="client_final_request", attribution={"logical_call_id": logical_call_id,
