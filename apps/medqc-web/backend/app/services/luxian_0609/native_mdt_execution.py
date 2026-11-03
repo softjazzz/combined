@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..llm_token_budget import budget_guarded_executor
+
 from dataclasses import dataclass
 from datetime import datetime, time
 import json
@@ -837,6 +839,7 @@ def _prompt(*, surgery_names: Sequence[str], context: str) -> str:
 {context}"""
 
 
+@budget_guarded_executor
 async def execute_luxian_0609_native_mdt_rule(
     *,
     institute_id: str,

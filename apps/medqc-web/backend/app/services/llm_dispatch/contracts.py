@@ -13,6 +13,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..llm_request_observation import GatewayRequestObservation
+from ..llm_context_contract import CONTEXT_REASON_CODES
 
 
 GATEWAY_COMPLETIONS_PATH = "/v1/llm/completions"
@@ -35,6 +36,10 @@ class GatewayErrorCode(str, Enum):
     PROVIDER_UNAVAILABLE = "gateway_provider_unavailable"
     INVALID_PROVIDER_RESPONSE = "gateway_invalid_provider_response"
     INTERNAL_ERROR = "gateway_internal_error"
+    CONTEXT_OVER_BUDGET = CONTEXT_REASON_CODES["OVER_BUDGET"]
+    CONTEXT_COUNT_UNAVAILABLE = CONTEXT_REASON_CODES["COUNT_UNAVAILABLE"]
+    CONTEXT_CAPABILITY_UNVERIFIED = CONTEXT_REASON_CODES["CAPABILITY_UNVERIFIED"]
+    CONTEXT_BUDGET_EXHAUSTED = CONTEXT_REASON_CODES["BUDGET_EXHAUSTED"]
 
 
 class GatewayCasePrefix(BaseModel):
@@ -89,6 +94,7 @@ class GatewayCompletionRequest(BaseModel):
     payload: dict[str, Any]
     case_prefix: GatewayCasePrefix | None = None
     observe_request: bool = Field(default=False, strict=True)
+    context_budget_required: bool = Field(default=False, strict=True)
     case_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     package_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 

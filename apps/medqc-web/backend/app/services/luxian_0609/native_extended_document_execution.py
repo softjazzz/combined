@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from ..llm_token_budget import budget_guarded_executor
+
 import asyncio
 from collections import Counter
 
@@ -2461,6 +2463,7 @@ class NativeExtendedDocumentExecutionResult:
     api_time: float = 0.0
 
 
+@budget_guarded_executor
 async def execute_luxian_0609_native_extended_document_rules(
     *,
     rule_ids: Sequence[str],

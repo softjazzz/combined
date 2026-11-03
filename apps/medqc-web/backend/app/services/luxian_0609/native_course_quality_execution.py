@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..llm_token_budget import budget_guarded_executor, budget_rule_scope
+
 from dataclasses import dataclass, replace
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -643,6 +645,7 @@ def _admission_material_ready(
     return (complaint_fact or complaint_text) and (diagnosis_fact or diagnosis_text)
 
 
+@budget_guarded_executor
 async def execute_luxian_0609_native_course_quality_rules(
     *,
     rule_ids: Sequence[str],
@@ -789,9 +792,10 @@ async def execute_luxian_0609_native_course_quality_rules(
                 (outcome.rule_id, outcome.customer_display_facts)
             )
 
-    for rule_id in selected:
+    async def run_rule(rule_id):
+        nonlocal llm_call_count, prompt_tokens, completion_tokens, total_tokens, api_time
         if rule_id in projection_gap_rule_ids:
-            continue
+            return
         if rule_id == "LX0609-02-01-03" and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
@@ -805,7 +809,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 decision=course_decision,
             )) is not None:
                 customer_display_facts.append(("LX0609-02-01-03", display_facts))
-            continue
+            return
         if rule_id in {"LX0609-02-01-04", "LX0609-02-01-05"} and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
@@ -823,7 +827,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             completion_tokens += severity_execution.completion_tokens
             total_tokens += severity_execution.total_tokens
             api_time += severity_execution.api_time
-            continue
+            return
         if rule_id == "LX0609-01-02-02" and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
@@ -838,7 +842,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             completion_tokens += differential_execution.completion_tokens
             total_tokens += differential_execution.total_tokens
             api_time += differential_execution.api_time
-            continue
+            return
         if rule_id in {"LX0609-12-01-01", "LX0609-01-01-02"} and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
@@ -849,7 +853,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             )
             if terminal_outcome is not None:
                 emit_course_semantic(terminal_outcome)
-                continue
+                return
             if rule_id == "LX0609-12-01-01":
                 comparison_material_state = _rule_016_comparison_material_state(
                     typed_documents
@@ -863,7 +867,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                             executor_type="program",
                         )
                     )
-                    continue
+                    return
                 if comparison_material_state == "unavailable":
                     emit_course_semantic(
                         _CourseSemanticOutcome(
@@ -873,7 +877,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                             executor_type="program",
                         )
                     )
-                    continue
+                    return
             if rule_id == "LX0609-12-01-01":
                 copy_coverage = _rule_016_copy_coverage(typed_documents)
                 if copy_coverage is not None:
@@ -896,7 +900,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                             ),
                         )
                     )
-                    continue
+                    return
                 emit_course_semantic(
                     _CourseSemanticOutcome(
                         rule_id=rule_id,
@@ -905,12 +909,12 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             if rule_id == "LX0609-01-01-02":
                 terminal_outcome = _lx018_pre_model_outcome(typed_documents)
                 if terminal_outcome is not None:
                     emit_course_semantic(terminal_outcome)
-                    continue
+                    return
             context = _context(rule_id, typed_documents)
             wrapper = wrappers_by_id.get(rule_id)
             if (
@@ -931,7 +935,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             length_result = (
                 _lx018_length_criterion_result(typed_documents)
                 if rule_id == "LX0609-01-01-02"
@@ -971,7 +975,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         ),
                     )
                 )
-                continue
+                return
             llm_call_count += 1
             try:
                 response = await llm_client.generate(
@@ -1022,7 +1026,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         ),
                     )
                 )
-                continue
+                return
             prompt, completion, total, elapsed = _usage(response)
             prompt_tokens += prompt
             completion_tokens += completion
@@ -1064,7 +1068,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                             ),
                         )
                     )
-                    continue
+                    return
                 semantic_result, _relation_state = atomic_result
                 assert length_result is not None
                 if semantic_result.status is CriterionStatus.UNKNOWN:
@@ -1097,7 +1101,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         criterion_results=(length_result, semantic_result),
                     )
                 )
-                continue
+                return
             if is_compliant is None:
                 emit_course_semantic(
                     _CourseSemanticOutcome(
@@ -1111,7 +1115,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         api_time=elapsed,
                     )
                 )
-                continue
+                return
             emit_course_semantic(
                 _CourseSemanticOutcome(
                     rule_id=rule_id,
@@ -1124,7 +1128,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     api_time=elapsed,
                 )
             )
-            continue
+            return
         if rule_id == "LX0609-12-01-02":
             if copy_source_failure:
                 emit_copy(
@@ -1135,13 +1139,13 @@ async def execute_luxian_0609_native_course_quality_rules(
                         safe_metadata={},
                     )
                 )
-                continue
+                return
             copy_outcome = _assess_copy(
                 copy_documents,
                 source_complete=copy_documents is not documents,
             )
             emit_copy(copy_outcome)
-            continue
+            return
 
         controlled_fact = ""
         if rule_id == "LX0609-02-01-03":
@@ -1166,7 +1170,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     executor_type="program",
                 )
             )
-            continue
+            return
         elif rule_id == "LX0609-02-01-04":
             if serious_state == "absent":
                 results.append(
@@ -1177,7 +1181,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             if serious_state != "present":
                 results.append(
                     _result(
@@ -1187,7 +1191,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             if not _timeline_ready(documents):
                 results.append(
                     _result(
@@ -1197,7 +1201,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             controlled_fact = "当前就诊存在病重医嘱"
         elif rule_id == "LX0609-02-01-05":
             if critical_state == "absent":
@@ -1209,7 +1213,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             if critical_state != "present":
                 results.append(
                     _result(
@@ -1219,7 +1223,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             if not _timeline_ready(documents):
                 results.append(
                     _result(
@@ -1229,7 +1233,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             controlled_fact = "当前就诊存在病危医嘱"
         elif rule_id == "LX0609-12-01-01":
             comparison_material_state = _rule_016_comparison_material_state(documents)
@@ -1242,7 +1246,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             if comparison_material_state == "unavailable":
                 results.append(
                     _result(
@@ -1252,7 +1256,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             copy_coverage = _rule_016_copy_coverage(documents)
             if copy_coverage is None:
                 results.append(
@@ -1263,7 +1267,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-                continue
+                return
             exact_copy = copy_coverage >= _RULE_016_EXACT_MATCH
             results.append(
                 _result(
@@ -1277,7 +1281,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     executor_type="program",
                 )
             )
-            continue
+            return
         elif rule_id == "LX0609-01-01-02":
             terminal_outcome = _lx018_pre_model_outcome(documents)
             if terminal_outcome is not None:
@@ -1290,7 +1294,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         criterion_results=terminal_outcome.criterion_results,
                     )
                 )
-                continue
+                return
 
         context = _context(rule_id, documents, controlled_fact=controlled_fact)
         wrapper = wrappers_by_id.get(rule_id)
@@ -1312,7 +1316,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     executor_type="program",
                 )
             )
-            continue
+            return
         length_result = (
             _lx018_length_criterion_result(documents)
             if rule_id == "LX0609-01-01-02"
@@ -1352,7 +1356,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     ),
                 )
             )
-            continue
+            return
         llm_call_count += 1
         try:
             response = await llm_client.generate(
@@ -1403,7 +1407,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     ),
                 )
             )
-            continue
+            return
         prompt, completion, total, elapsed = _usage(response)
         prompt_tokens += prompt
         completion_tokens += completion
@@ -1423,7 +1427,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     api_time=elapsed,
                 )
             )
-            continue
+            return
         if rule_id == "LX0609-01-01-02":
             atomic_result = _lx018_atomic_semantic_result(
                 response, chief_complaint=_lx018_complaint_text(documents),
@@ -1459,7 +1463,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         ),
                     )
                 )
-                continue
+                return
             semantic_result, _relation_state = atomic_result
             assert length_result is not None
             if semantic_result.status is CriterionStatus.UNKNOWN:
@@ -1492,7 +1496,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                     criterion_results=(length_result, semantic_result),
                 )
             )
-            continue
+            return
         status = "compliant" if is_compliant else "non_compliant"
         extra_metadata: Mapping[str, Any] | None = None
         results.append(
@@ -1508,6 +1512,24 @@ async def execute_luxian_0609_native_course_quality_rules(
                 extra_metadata=extra_metadata,
             )
         )
+
+    def emit_budget_failure(rule_id, error):
+        # 仅承接受影响规则，不能丢弃已完成的兄弟规则；临床判断仍由本执行器负责。
+        results[:] = [item for item in results if item['rule_id'] != rule_id]
+        decisions[:] = [item for item in decisions if item.rule_id != rule_id]
+        customer_display_facts[:] = [item for item in customer_display_facts if item[0] != rule_id]
+        if rule_id in typed_requested:
+            decisions.append(RuleDecision(
+                rule_id=rule_id, snapshot_hash=evidence_snapshot.snapshot_hash,
+                applicability=ApplicabilityState.ERROR, evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN, reason_code=error.code, fact_refs=(),
+                evaluator_version='course-context-budget-v1'))
+        else:
+            results.append(_result(rule_id, 'technical_error', error.code, executor_type='program'))
+
+    for rule_id in selected:
+        with budget_rule_scope(lambda error: emit_budget_failure(rule_id, error)):
+            await run_rule(rule_id)
 
     return NativeCourseQualityExecutionResult(
         results=tuple(results),

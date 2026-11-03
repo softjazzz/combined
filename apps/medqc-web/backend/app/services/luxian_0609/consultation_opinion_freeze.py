@@ -137,6 +137,9 @@ def save_opinion_payload(
     created_at: str | None = None,
 ) -> FrozenOpinionPayload:
     """写入冻结事实（原子替换）。已存在旧版本时状态记为 rebuilt。"""
+    from ..llm_token_budget import context_budget_failed
+    if context_budget_failed():
+        return
 
     directory = _coerce_store_dir(store_dir) or default_store_dir()
     existing = load_opinion_payload(

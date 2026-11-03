@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..llm_token_budget import budget_guarded_executor
+
 import asyncio
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -3430,6 +3432,7 @@ async def _performed_source_state(
     return "absent", ""
 
 
+@budget_guarded_executor
 async def execute_luxian_0609_native_transfusion_rules(
     *,
     rule_ids: Sequence[str],

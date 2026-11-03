@@ -207,7 +207,11 @@ class SichuanQCLLMClient:
                 self.allow_mock_when_unconfigured,
             )
 
-        self.request_observation_enabled = getattr(get_settings(), "LLM_REQUEST_OBSERVATION_ENABLED", False) is True
+        from .llm_token_budget import LOCAL, strict_enabled
+        self.request_observation_enabled = (
+            getattr(get_settings(), "LLM_REQUEST_OBSERVATION_ENABLED", False) is True
+            or self.provider_code in LOCAL and strict_enabled()
+        )
         self.strata_observation_mode = (
             getattr(get_settings(), "STRATA_CASE_CACHE_MODE", "off")
             if self.provider_code == "strata" else "off"
@@ -280,6 +284,48 @@ class SichuanQCLLMClient:
                 tokens=tokens, api_time=api_time,
             )
 
+    def _build_request_payload(self, prompt, *, max_completion_tokens=None, response_format_payload=None,
+                               enable_thinking=None, thinking_budget=None, temperature=None):
+        max_tokens = self._resolve_max_tokens(prompt)
+        if max_completion_tokens is not None:
+            max_tokens = min(max_tokens, max_completion_tokens)
+        resolved_enable_thinking = (
+            self.enable_thinking if enable_thinking is None else enable_thinking
+        )
+        resolved_thinking_budget = (
+            self.thinking_budget if thinking_budget is None else thinking_budget
+        )
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            # 调用方可按场景覆盖（如 0609 抽取固定为 0）；未指定时沿用客户端配置。
+            "temperature": self.temperature if temperature is None else float(temperature),
+            "top_p": self.top_p,
+            "max_tokens": max_tokens,
+            "stream": False,
+        }
+        payload.update(
+            self._build_provider_specific_payload(
+                enable_thinking=resolved_enable_thinking,
+                thinking_budget=resolved_thinking_budget,
+            )
+        )
+        if response_format_payload is not None:
+            payload["response_format"] = deepcopy(response_format_payload)
+
+        return payload
+
+    def probe_context_budget(self, prompt, *, max_completion_tokens=None, response_format=None,
+                             enable_thinking=None, thinking_budget=None, temperature=None, **_):
+        from .llm_token_budget import assess_payload, deployed_capability, strict_enabled
+        from .luxian_0609.privacy_request_scope import protect_current_payload
+        payload = protect_current_payload(self._build_request_payload(prompt,
+            max_completion_tokens=max_completion_tokens, response_format_payload=self._copy_response_format(response_format),
+            enable_thinking=enable_thinking, thinking_budget=thinking_budget, temperature=temperature))
+        profile, capability = deployed_capability(self.provider_code, self.model,
+            self.gateway_profile, self.api_endpoint, dispatch_mode=self.dispatch_mode)
+        return assess_payload(self.provider_code, profile, payload, capability, enabled=strict_enabled())
+
     async def generate(
         self,
         prompt: str,
@@ -340,32 +386,10 @@ class SichuanQCLLMClient:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        max_tokens = self._resolve_max_tokens(prompt)
-        if max_completion_tokens is not None:
-            max_tokens = min(max_tokens, max_completion_tokens)
-        resolved_enable_thinking = (
-            self.enable_thinking if enable_thinking is None else enable_thinking
-        )
-        resolved_thinking_budget = (
-            self.thinking_budget if thinking_budget is None else thinking_budget
-        )
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            # 调用方可按场景覆盖（如 0609 抽取固定为 0）；未指定时沿用客户端配置。
-            "temperature": self.temperature if temperature is None else float(temperature),
-            "top_p": self.top_p,
-            "max_tokens": max_tokens,
-            "stream": False,
-        }
-        payload.update(
-            self._build_provider_specific_payload(
-                enable_thinking=resolved_enable_thinking,
-                thinking_budget=resolved_thinking_budget,
-            )
-        )
-        if response_format_payload is not None:
-            payload["response_format"] = deepcopy(response_format_payload)
+        payload = self._build_request_payload(prompt, max_completion_tokens=max_completion_tokens,
+            response_format_payload=response_format_payload, enable_thinking=enable_thinking,
+            thinking_budget=thinking_budget, temperature=temperature)
+        max_tokens = payload["max_tokens"]
 
         try:
             attempt_no += 1
@@ -447,6 +471,8 @@ class SichuanQCLLMClient:
             self._record_stats_delta(api_time=api_time, errors=1)
             raise
 
+    owns_context_attempt_budget = True
+
     async def _perform_observed_attempt(
         self,
         *,
@@ -458,6 +484,17 @@ class SichuanQCLLMClient:
         from .luxian_0609.privacy_request_scope import protect_current_payload
 
         payload = protect_current_payload(payload)
+        from .llm_token_budget import deployed_capability, guard_payload, strict_enabled
+        profile, capability = deployed_capability(self.provider_code, self.model,
+            self.gateway_profile, self.api_endpoint, dispatch_mode=self.dispatch_mode)
+        from .llm_observability import current_llm_observation_context
+        guard_payload(self.provider_code, profile, payload, capability, enabled=strict_enabled(),
+                      phase="client_final_request", attribution={"logical_call_id": logical_call_id,
+                          "attempt_no": attempt_no, "role": self.model_role,
+                          "executor": current_llm_observation_context().executor_key,
+                          "root_job_id": current_llm_observation_context().root_job_id})
+        from .luxian_0609.exam_token_budget import take_http_attempt
+        take_http_attempt(self)
         case_prefix = None
         event_id, started_timestamp = await self._observability_recorder.start_attempt(
             logical_call_id=logical_call_id,
@@ -494,6 +531,10 @@ class SichuanQCLLMClient:
                             protect_current_payload({"case_prefix": case_prefix.model_dump(mode="json")})
                             consume_exam_result_prefix_request()
                     prefix_kwargs = {"case_prefix": case_prefix} if case_prefix is not None else {}
+                    from .llm_token_budget import LOCAL
+                    if strict_enabled() and self.provider_code in LOCAL:
+                        # 远程Gateway即使默认关闭，也必须执行最终组装后的准入；旧Gateway拒绝未知字段而非静默绕过。
+                        prefix_kwargs["context_budget_required"] = True
                     if getattr(self, "request_observation_enabled", False):
                         prefix_kwargs["observe_request"] = True
                     if self.provider_code == "strata":
@@ -543,6 +584,8 @@ class SichuanQCLLMClient:
             )
             return result, usage
         except BaseException as error:
+            from .llm_token_budget import note_budget_failure
+            note_budget_failure(error)
             status, safe_error_kind = safe_status_for_exception(error)
             failed_cache_observation = None
             if case_prefix is not None:

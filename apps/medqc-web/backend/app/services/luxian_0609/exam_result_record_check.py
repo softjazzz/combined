@@ -23,6 +23,8 @@ none。Python 另核验：引文须逐字见于病程；report_span 须逐字见
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+import asyncio
+import logging
 import json
 import re
 from time import perf_counter
@@ -159,6 +161,7 @@ class ResultRecordOutcome:
     incomplete_event_positions: frozenset[int] = frozenset()
     # 仅表示独立通过协议、引文和输入完整性校验的配对，不代表整事件核完。
     covered_pairs: frozenset[tuple[int, str]] = frozenset()
+    budget_failure_reason: str | None = None
 
 
 def _normalize(text: str) -> str:
@@ -172,7 +175,8 @@ def _course_text(projection: ExamLabTextProjection, ref: str) -> str:
 
 def _report_catalog(projection):
     from .exam_result_context import protocol
-    if protocol() == 'comparison_v1' and projection.comparison_events is not None:
+    from .exam_token_budget import full_evidence_mode
+    if (protocol() == 'comparison_v1' or full_evidence_mode()) and projection.comparison_events is not None:
         return projection.comparison_events
     return events_for_family(projection, 'exam')
 
@@ -212,6 +216,9 @@ def _input_complete_for_event(projection: ExamLabTextProjection, position: int, 
     if not 1 <= position <= len(events) or projection.course_projection_truncated:
         return False
     full_report = "\n".join(dict.fromkeys(text for text in events[position - 1].result_texts if text))
+    from .exam_token_budget import full_evidence_mode
+    if full_evidence_mode():
+        return True
     return (len(full_report) <= MAX_REPORT_CHARS
             and all(len(_course_text(projection, ref)) <= MAX_COURSE_CHARS for ref in refs))
 
@@ -237,7 +244,10 @@ def _targets(projection: ExamLabTextProjection) -> dict[int, tuple[str, tuple[st
     for position, event in enumerate(events_for_family(projection, "exam"), start=1):
         if not event.target_confirmed or event.guidance_only:
             continue
-        report = "\n".join(dict.fromkeys(t for t in event.result_texts if t))[:MAX_REPORT_CHARS]
+        report = "\n".join(dict.fromkeys(t for t in event.result_texts if t))
+        from .exam_token_budget import full_evidence_mode
+        if not full_evidence_mode():
+            report = report[:MAX_REPORT_CHARS]
         if not report.strip():
             continue
         refs = _course_refs_for_rule_event(projection, rule_id=RULE_ID, event_position=position)
@@ -254,6 +264,7 @@ def _targets(projection: ExamLabTextProjection) -> dict[int, tuple[str, tuple[st
 def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, tuple[str, ...]]]) -> str:
     from .exam_result_context import protocol, extend_payload, INSTRUCTIONS
     # 同一份病程常同时记录多次检查的结果：全文只列一次，事件只给编号（2026-10-23 C02 输入重复）。
+    from .exam_token_budget import full_evidence_mode
     refs_in_batch = dict.fromkeys(ref for _, (_, refs) in sorted(targets.items()) for ref in refs)
     payload = {
         "events": [
@@ -261,11 +272,11 @@ def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, 
             for position, (report, refs) in sorted(targets.items())
         ],
         "course_docs": [
-            {"course_doc_ref": ref, "text": _course_text(projection, ref)[:MAX_COURSE_CHARS]}
+            {"course_doc_ref": ref, "text": _course_text(projection, ref) if full_evidence_mode() else _course_text(projection, ref)[:MAX_COURSE_CHARS]}
             for ref in refs_in_batch
         ],
     }
-    comparison = protocol() == 'comparison_v1'
+    comparison = protocol() == 'comparison_v1' or full_evidence_mode()
     if comparison:
         extend_payload(projection, payload)
     return (
@@ -428,6 +439,9 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
     calls = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     state = "failed"
+    budget_failure = None
+    from .exam_token_budget import active, generate as token_generate
+    from ..llm_token_budget import BudgetError, client_probe, is_budget_error
     from ..exam_result_model_route import current_route
 
     route = current_route()
@@ -442,13 +456,24 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
             details = redact_luxian_0609_patient_privacy(details)
             prompt = prompt.replace("\nEVENTS_JSON=", "\n上一次输出未通过校验：仅补核尚未通过的配对；已通过配对保持原判。校验错误："
                                     + details + "\nEVENTS_JSON=", 1)
-        if len(prompt) > MAX_PROMPT_CHARS or not budget.take():
+        if len(prompt) > MAX_PROMPT_CHARS and not active(llm_client):
             break
         expected = {position: refs for position, (_, refs) in pending.items()}
         reports = {position: report for position, (report, _) in pending.items()}
         input_complete = all(_input_complete_for_event(projection, position, refs)
                              for position, refs in expected.items())
         selected, target = route.selected(input_complete=input_complete) if route is not None else (llm_client, "reference")
+        if active(selected):
+            verdict = client_probe(selected, prompt, max_completion_tokens=MAX_COMPLETION_TOKENS,
+                                   **structured_output_kwargs(selected))
+            if verdict is None or verdict.status != "ACCEPT":
+                budget_failure = BudgetError(verdict).code if verdict is not None else "llm_context_count_unavailable"
+                state = "over_budget" if verdict is not None and verdict.status == "OVER_BUDGET" else "budget_failed"
+                break
+        if not budget.take():
+            if active(llm_client):
+                budget_failure = "llm_context_budget_exhausted"
+            break
         calls += 1
         started = perf_counter()
         if route is not None:
@@ -459,12 +484,21 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
         try:
             from app.services.strata_case_context import exam_result_prefix_scope
             with exam_result_prefix_scope():
-                response = await selected.generate(prompt, max_completion_tokens=MAX_COMPLETION_TOKENS,
+                response = await token_generate(selected, prompt, recovery=bool(attempt), max_completion_tokens=MAX_COMPLETION_TOKENS,
                     allow_length_retry=False, **structured_output_kwargs(selected))
-        except Exception:
+        except asyncio.CancelledError:
+            logging.getLogger(__name__).info("exam_context_batch_cancelled covered_pairs=%s pending_pairs=%s",
+                sorted(covered), [(position, ref) for position, (_, refs) in pending.items()
+                                 for ref in refs if (position, ref) not in covered])
+            raise
+        except Exception as error:
+            if is_budget_error(error):
+                budget_failure = error.code
+                state = "budget_failed"
+                calls -= int(not getattr(error, "request_started", False))  # 仅发送前拒绝不算调用。
             if route is not None:
-                route.observe("request_finished", target=target, reason="technical_failure", state="failed",
-                              logical_calls=1, elapsed_seconds=perf_counter() - started)
+                route.observe("request_finished", target=target, reason=budget_failure or "technical_failure", state="failed",
+                              logical_calls=int(not budget_failure or getattr(error, "request_started", False)), elapsed_seconds=perf_counter() - started)
             break
         usage = _usage(response)
         prompt_tokens += usage[0]
@@ -513,10 +547,11 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
     complete = {position for position, (_, refs) in original.items()
                 if all((position, ref) in covered for ref in refs)}
     empty.update({position: tuple(sorted(accepted.get(position, ()))) for position in set(complete) | set(accepted)})
-    return ResultRecordOutcome("ready" if covered or empty or state == "ready" else state, empty,
+    return ResultRecordOutcome(state if budget_failure or state == "truncated" else "ready" if covered or empty or state == "ready" else state, empty,
         calls, prompt_tokens, completion_tokens, total_tokens, api_time,
         conflict_refs={position: tuple(sorted(refs)) for position, refs in conflicting.items() if position in complete},
-        incomplete_event_positions=frozenset(set(original) - complete), covered_pairs=frozenset(covered))
+        incomplete_event_positions=frozenset(set(original) - complete), covered_pairs=frozenset(covered),
+        budget_failure_reason=budget_failure)
 
 
 def _report_clauses(report: str) -> tuple[str, ...]:
@@ -554,11 +589,17 @@ def _verbatim_confirmed(
 async def check_exam_result_record(projection: ExamLabTextProjection, llm_client: Any) -> ResultRecordOutcome:
     from ..exam_result_model_route import exam_result_route_scope
 
+    from .exam_token_budget import active, recovery_scope
     with exam_result_route_scope(llm_client):
+        if active(llm_client):
+            with recovery_scope():
+                return await _check_exam_result_record_in_route_scope(projection, llm_client)
         return await _check_exam_result_record_in_route_scope(projection, llm_client)
 
 
 async def _check_exam_result_record_in_route_scope(projection: ExamLabTextProjection, llm_client: Any) -> ResultRecordOutcome:
+    from .exam_token_budget import active, current_budget
+    local = active(llm_client)
     targets = _targets(projection)
     if not targets or llm_client is None:
         return ResultRecordOutcome('skipped', {})
@@ -583,25 +624,47 @@ async def _check_exam_result_record_in_route_scope(projection: ExamLabTextProjec
     try:
         pending = partition_targets(model_targets, refs=lambda target: target[1], subset=subset,
                                     prompt=lambda batch: _prompt(projection, batch),
-                                    max_completion_tokens=MAX_COMPLETION_TOKENS, max_prompt_chars=MAX_PROMPT_CHARS,
+                                    max_completion_tokens=MAX_COMPLETION_TOKENS, max_prompt_chars=2**63 if local else MAX_PROMPT_CHARS,
                                     pair_tokens=ESTIMATED_PAIR_TOKENS)
     except ValueError:
         return ResultRecordOutcome('failed', {})
     budget = CallBudget()
     pieces = []
     conflicts = {}
+    failures = []
+    pending = [(batch, 0) for batch in pending]
     while pending and budget.used < budget.maximum:
-        batch = pending.pop(0)
-        outcome = await _check_result_batch(projection, llm_client, batch, budget)
+        batch, depth = pending.pop(0)
+        try:
+            outcome = await _check_result_batch(projection, llm_client, batch, budget)
+        except asyncio.CancelledError:
+            logging.getLogger(__name__).info("exam_context_cancelled covered_pairs=%s pending_pairs=%s",
+                sorted(covered), [(position, ref) for piece, _ in [(batch, depth), *pending]
+                                 for position, (_, refs) in piece.items() for ref in refs if (position, ref) not in covered])
+            raise
         pieces.append(outcome)
-        if outcome.state == 'truncated':
-            pending[:0] = bisect_targets(batch, refs=lambda target: target[1], subset=subset)
-        elif outcome.state == 'ready':
-            covered.update(outcome.covered_pairs)
-            for position, values in outcome.recorded_refs.items():
-                accepted.setdefault(position, set()).update(values)
-            for position, values in outcome.conflict_refs.items():
-                conflicts.setdefault(position, set()).update(values)
+        covered.update(outcome.covered_pairs)
+        for position, values in outcome.recorded_refs.items():
+            accepted.setdefault(position, set()).update(values)
+        for position, values in outcome.conflict_refs.items():
+            conflicts.setdefault(position, set()).update(values)
+        unfinished = {position: (report, remaining) for position, (report, refs) in batch.items()
+                      if (remaining := tuple(ref for ref in refs if (position, ref) not in covered))}
+        if outcome.state in {'truncated', 'over_budget'}:
+            children = bisect_targets(unfinished, refs=lambda target: target[1], subset=subset)
+            shared = current_budget()
+            can_split = not local or (depth < shared.max_depth and shared.remaining() > 0
+                                     and shared.recoveries < shared.max_recoveries)
+            if children and can_split:
+                if local:
+                    shared.recoveries += 1
+                pending[:0] = [(child, depth + 1) for child in children]
+            elif outcome.budget_failure_reason:
+                failures.append(outcome.budget_failure_reason)
+        elif outcome.budget_failure_reason:
+            failures.append(outcome.budget_failure_reason)
+    if pending and local:
+        failures.append('llm_context_budget_exhausted')
     # 一个事件拆成多批后必须核完整，未核完的事件不固定“未记录”。
     complete = {position for position, refs in all_refs.items()
                 if all((position, ref) in covered for ref in refs)}
@@ -610,6 +673,10 @@ async def _check_exam_result_record_in_route_scope(projection: ExamLabTextProjec
     # 不抹掉已经验证的正面证据。
     recorded.update({position: tuple(sorted(refs)) for position, refs in accepted.items() if refs})
     ready = bool(recorded) or bool(confirmed) or any(item.state == 'ready' for item in pieces)
+    if local:
+        logging.getLogger(__name__).info("exam_context_coverage expected_pairs=%s covered_pairs=%s incomplete_positions=%s requests=%s reason=%s",
+            sum(map(len, all_refs.values())), len(covered), sorted(set(all_refs) - complete),
+            sum(item.llm_call_count for item in pieces), failures[0] if failures else "complete" if not set(all_refs) - complete else "protocol_incomplete")
     return ResultRecordOutcome(
         'ready' if ready else 'failed', recorded,
         sum(item.llm_call_count for item in pieces), sum(item.prompt_tokens for item in pieces),
@@ -617,6 +684,8 @@ async def _check_exam_result_record_in_route_scope(projection: ExamLabTextProjec
         sum(item.api_time for item in pieces),
         conflict_refs={position: tuple(sorted(values)) for position, values in conflicts.items() if position in complete},
         incomplete_event_positions=frozenset(set(all_refs) - complete),
+        covered_pairs=frozenset(covered),
+        budget_failure_reason=failures[0] if failures else None,
     )
 
 

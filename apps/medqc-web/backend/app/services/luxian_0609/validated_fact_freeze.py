@@ -49,6 +49,9 @@ def load_facts(namespace, key):
 
 
 def save_facts(namespace, key, payload):
+    from ..llm_token_budget import context_budget_failed
+    if context_budget_failed():
+        return
     if key is not None:
         try:
             save_payload(namespace, key, payload)

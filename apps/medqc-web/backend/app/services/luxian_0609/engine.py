@@ -14,6 +14,7 @@ import math
 from typing import Any, Callable, Iterable, Mapping
 
 from app.services.llm_observability import llm_executor_observation_context
+from app.services.llm_context_contract import CONTEXT_FAILURE_REASON_CODES
 from app.core.execution_timing import measure_stage, timing_labels
 
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
@@ -312,6 +313,7 @@ class Luxian0609ExecutionEngine:
                     evaluation_task = asyncio.create_task(
                         registration.executor.evaluate(context)
                     )
+                execution_reason = ""
                 try:
                     done, _ = await asyncio.wait(
                         {evaluation_task},
@@ -332,7 +334,10 @@ class Luxian0609ExecutionEngine:
                     except asyncio.CancelledError:
                         # 执行器自行取消只污染本族，不得误伤独立 family。
                         failure_kind = "cancelled"
-                    except Exception:
+                    except Exception as error:
+                        code = getattr(error, "code", None)
+                        if isinstance(code, str) and code in CONTEXT_FAILURE_REASON_CODES:
+                            execution_reason = code
                         logger.exception(
                             "LX0609 规则族执行适配失败: executor_key=%s",
                             executor_key,
@@ -376,7 +381,7 @@ class Luxian0609ExecutionEngine:
                     selected_rule_ids=context.selected_rule_ids,
                     failure_kind=failure_kind,
                     reason_code=(
-                        contract_reason_code if failure_kind == "contract" else ""
+                        contract_reason_code if failure_kind == "contract" else execution_reason
                     ),
                     envelope=(
                         payload

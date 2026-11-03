@@ -105,6 +105,7 @@ class GatewayDispatchClient:
         case_key: str | None = None,
         package_key: str | None = None,
         observe_request: bool = False,
+        context_budget_required: bool = False,
     ) -> dict[str, Any]:
         normalized_profile = validate_gateway_profile(
             profile=profile, provider_code=provider_code
@@ -139,6 +140,7 @@ class GatewayDispatchClient:
                 case_key=case_key,
                 package_key=package_key,
                 observe_request=observe_request,
+                context_budget_required=context_budget_required,
             )
         except (ValidationError, ValueError, TypeError) as exc:
             raise GatewayDispatchError(
@@ -245,6 +247,8 @@ class GatewayDispatchClient:
     @staticmethod
     def _request_body(request: GatewayCompletionRequest) -> dict[str, Any]:
         body = request.model_dump(mode="json")
+        if not body.get("context_budget_required"):
+            body.pop("context_budget_required", None)
         if not body.get("observe_request"):
             body.pop("observe_request", None)
         if body.get("case_prefix") is None:

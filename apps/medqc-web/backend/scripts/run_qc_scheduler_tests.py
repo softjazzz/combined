@@ -16,6 +16,21 @@ from sqlalchemy.pool import StaticPool
 
 
 SUITES: dict[str, tuple[str, ...]] = {
+    "context-budget-p5b": (
+        "tests/unit/test_luxian_0609_engine.py",
+        "tests/unit/test_failed_rule_retry.py",
+        "tests/unit/test_luxian_0609_canonical_result_finalizer.py",
+        "tests/unit/test_luxian_0609_privacy_request_scope.py",
+        "tests/unit/test_context_token_budget.py",
+        "tests/unit/test_context_budget_review_regressions.py",
+        "tests/unit/test_gateway_context_budget.py",
+        "tests/unit/test_exam_context_budget.py",
+        "tests/unit/test_luxian_0609_native_exam_lab_execution.py",
+        "tests/unit/test_luxian_0609_second_stage_freeze_completion.py",
+        "tests/unit/test_exam_result_pair_recovery.py",
+        "tests/unit/test_luxian_0609_exam_targeted_retry.py",
+        "tests/unit/test_exam_result_input_completeness.py",
+    ),
     "dual-model-exam": (
         "tests/unit/test_exam_result_comparison_context.py",
         "tests/unit/test_exam_result_pair_recovery.py",
