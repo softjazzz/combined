@@ -90,11 +90,20 @@ def main():
             (Path(__file__).parent / "legacy-bootstrap-schema.json").read_text()
         )
         conn = psycopg2.connect(url.replace("postgresql+psycopg2://", "postgresql://"))
+        initialize_job_owner = False
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT to_regclass('public.alembic_version')")
-                if cur.fetchone()[0] is None:
-                    allowed = {("qc", "sync_job_state"), ("public", "visit_index")}
+                has_version_table = cur.fetchone()[0] is not None
+                if has_version_table:
+                    cur.execute("SELECT version_num FROM public.alembic_version")
+                if not has_version_table or not cur.fetchall():
+                    allowed = {
+                        ("qc", "sync_job_state"),
+                        ("public", "visit_index"),
+                        ("qc", "custom_qc_batch_jobs"),
+                        ("public", "alembic_version"),
+                    }
                     cur.execute(
                         "SELECT table_schema,table_name FROM information_schema.tables WHERE table_schema IN ('public','qc','sys','cdm','legacy') AND table_type='BASE TABLE'"
                     )
@@ -114,9 +123,15 @@ def main():
                             )
                         else:
                             transfer.create_material(cur, table)
+                    initialize_job_owner = True
             conn.commit()
         finally:
             conn.close()
+        if initialize_job_owner:
+            # 056外键指向旧运行时任务owner；沿用既有表定义，不能删除迁移的归属检查。
+            from app.services.custom_qc_workspace_service import _batch_jobs_table
+
+            _batch_jobs_table()
         r = subprocess.run(
             [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"],
             capture_output=True,
