@@ -30,11 +30,16 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
           VITE_MEDQC_GIT_COMMIT: ${{ github.sha }}
         run: |
-          export VITE_MEDQC_BUILD_ID="medqc-linux-${GITHUB_SHA:0:9}"
+          export VITE_MEDQC_BUILD_ID="medqc-web-customer-$(date -u +%Y%m%d-%H%M%S)"
+          echo "VITE_MEDQC_BUILD_ID=$VITE_MEDQC_BUILD_ID" >> "$GITHUB_ENV"
           npm ci
           npm run build
       - name: Prepare PG16, 7zip and portable runtime
         run: |
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc -o "$RUNNER_TEMP/pgdg.asc"
+          gpg --show-keys --with-colons "$RUNNER_TEMP/pgdg.asc" | grep -q 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8'
+          sudo install -m 0644 "$RUNNER_TEMP/pgdg.asc" /usr/share/keyrings/medqc-pgdg.asc
+          echo 'deb [signed-by=/usr/share/keyrings/medqc-pgdg.asc] https://apt.postgresql.org/pub/repos/apt jammy-pgdg main' | sudo tee /etc/apt/sources.list.d/medqc-pgdg.list
           sudo apt-get update -qq
           sudo apt-get install -y p7zip-full postgresql-16
           python apps/medqc-web/scripts/linux_offline/collect.py --out "$RUNNER_TEMP/medqc-offline"

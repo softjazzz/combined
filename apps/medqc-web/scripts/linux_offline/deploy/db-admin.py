@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, unquote
 from uuid import uuid4
 
 
@@ -64,8 +64,8 @@ def main():
         env.update(
             PGHOST=parts.hostname,
             PGPORT=str(parts.port or 5432),
-            PGUSER=parts.username or "",
-            PGPASSWORD=parts.password or "",
+            PGUSER=unquote(parts.username or ""),
+            PGPASSWORD=unquote(parts.password or ""),
             PGDATABASE="medqc_business",
         )
         for cmd in (

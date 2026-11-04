@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -93,7 +94,9 @@ def main():
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=repo, text=True
     ).strip()
-    build_id = "medqc-linux-" + commit[:9]
+    build_id = os.environ["VITE_MEDQC_BUILD_ID"]
+    if not re.fullmatch(r"medqc-web-customer-[0-9]{8}-[0-9]{6}", build_id):
+        raise RuntimeError("invalid_build_id")
     runtime = out / "application"
     backend = runtime / "backend"
     for name in subprocess.check_output(
@@ -147,11 +150,18 @@ def main():
         dst = backend / relative
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
-    # 规则目录是正式读取链的静态资源。
-    shutil.copytree(app / "docs/0602", runtime / "docs/0602")
+    # 正式规则目录位于backend/app/data；不复制审计/病例文档目录。
     shutil.copytree(app / "dist", runtime / "frontend/dist")
     (backend / "app/data/runtime_build.json").write_text(
-        json.dumps({"build_id": build_id, "git_commit": commit}) + "\n"
+        json.dumps(
+            {
+                "schema_version": 1,
+                "inventory_schema_version": 1,
+                "build_id": build_id,
+                "git_commit": commit,
+            }
+        )
+        + "\n"
     )
     shutil.copy2(app / "scripts/serve_dist_spa.py", runtime / "serve_dist_spa.py")
     shutil.copytree(app / "scripts/linux_offline/deploy", out / "deploy")

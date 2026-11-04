@@ -40,3 +40,74 @@ def test_production_guard_still_rejects_injected_demo():
         assert_no_default_demo_users_in_production(
             "production", {"admin@medqc.com": {}}
         )
+
+
+@pytest.mark.parametrize("missing", [None, "validation_material_copies"])
+def test_core_schema_validation_is_readonly_and_optional_tables_are_not_required(
+    monkeypatch, missing
+):
+    from types import SimpleNamespace
+    from app.core import server_startup
+    from app.services import user_scope_owner, auth_store
+
+    events = []
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def execute(self, statement):
+            events.append(str(statement))
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(all=lambda: ["20261102_000062"])
+            )
+
+        def rollback(self):
+            events.append("rollback")
+
+    class Inspector:
+        def has_table(self, name, schema):
+            return name not in {
+                "rule_validation_runs",
+                "rule_validation_events",
+                missing,
+            } and schema in {"qc", "sys"}
+
+        def get_columns(self, *a, **kw):
+            return [
+                {"name": n}
+                for n in auth_store._REQUIRED_AUTH_COLUMNS | {"institute_id"}
+            ]
+
+    monkeypatch.setattr(server_startup.sa, "inspect", lambda _: Inspector())
+    monkeypatch.setattr(
+        user_scope_owner, "configured_search_path", lambda: ["sys", "qc", "public"]
+    )
+    engine = SimpleNamespace(
+        dialect=SimpleNamespace(name="postgresql"), connect=lambda: Connection()
+    )
+    if missing:
+        with pytest.raises(RuntimeError, match="server_required_table_missing"):
+            server_startup.validate_server_schema(engine)
+    else:
+        server_startup.validate_server_schema(engine)
+    assert events[0] == "SET TRANSACTION READ ONLY"
+    assert events[-1] == "rollback"
+
+
+def test_frontend_static_path_is_confined(tmp_path):
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[3] / "scripts/serve_dist_spa.py"
+    spec = importlib.util.spec_from_file_location("serve_dist_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    handler = object.__new__(module.SpaHandler)
+    handler.directory = str(tmp_path / "dist")
+    handler.path = "/index.html"
+    assert handler._within_static_root()
+    handler.path = "/%2e%2e/backend/.env"
+    assert not handler._within_static_root()
