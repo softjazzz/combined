@@ -37,7 +37,14 @@ if not a.manifest_only:
             for name, (ver, sha) in sorted(selected.items())
         )
     )
-files = sorted(p for p in a.root.rglob("*") if p.is_file() and p.name != "SHA256SUMS")
+files = sorted(
+    p
+    for p in a.root.rglob("*")
+    if p.is_file()
+    and p.name != "SHA256SUMS"
+    and "__pycache__" not in p.parts
+    and p.suffix not in {".pyc", ".pyo"}
+)
 (a.root / "SHA256SUMS").write_text(
     "".join(f"{digest(p)}  {p.relative_to(a.root).as_posix()}\n" for p in files)
 )

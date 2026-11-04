@@ -25,11 +25,14 @@ ss -ltn | grep -E ':(80|8001)\b' || true
 getent passwd medqc-business || sudo useradd --system --user-group \
   --home-dir /data/medqc/business --no-create-home --shell /usr/sbin/nologin medqc-business
 sudo install -d -o medqc-business -g medqc-business -m 0750 /data/medqc/business
-sudo -u medqc-business env MEDQC_INSTALL_ROOT=/data/medqc/business \
+sudo -H -u medqc-business test -x /data/medqc
+sudo -H -u medqc-business env -C /data/medqc/offline-install MEDQC_INSTALL_ROOT=/data/medqc/business \
   MEDQC_PYTHON=/usr/bin/python3.10 bash "$KIT/deploy/install.sh"
 ```
 
 install.sh会离线建立新venv、pip check、复制新版本并建立current/venv符号链接。兼容服务器ensurepip缺失，不接触系统Python包。不会创建数据库、启动服务或自动迁移；如出现失败保留日志，不能强行跳过依赖校验。
+
+如果独立账号不能穿透/data/medqc，停止并由管理员核对目录ACL；仅需对该账号授予父目录穿透权限，不递归改属主/权限或加入同步服务组。安装器会切换到交付目录，避免继承guohua私有工作目录。新包不携带Python缓存；不要通过修改文件内容或跳过哈希解决旧包权限问题。
 
 ## 3. 由Docker管理员创建新业务库和专用账号
 

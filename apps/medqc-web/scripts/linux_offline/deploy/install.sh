@@ -2,6 +2,8 @@
 set -euo pipefail
 umask 027
 KIT=$(cd -- "$(dirname -- "$0")/.." && pwd)
+# sudo切换账号可能继承无权访问的/home/guohua；所有子命令使用可读的交付目录。
+cd "$KIT"
 ROOT=${MEDQC_INSTALL_ROOT:-/data/medqc/business}
 PYTHON=${MEDQC_PYTHON:-python3.10}
 source /etc/os-release

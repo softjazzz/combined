@@ -187,7 +187,11 @@ def main():
         + "\n"
     )
     shutil.copy2(app / "scripts/serve_dist_spa.py", runtime / "serve_dist_spa.py")
-    shutil.copytree(app / "scripts/linux_offline/deploy", out / "deploy")
+    shutil.copytree(
+        app / "scripts/linux_offline/deploy",
+        out / "deploy",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+    )
     portable(
         "pg16",
         [

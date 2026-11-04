@@ -9,6 +9,8 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,7 +56,10 @@ jobs:
       - name: Final checksums and archive
         run: |
           python apps/medqc-web/scripts/linux_offline/make_lock.py "$RUNNER_TEMP/medqc-offline" --manifest-only
-          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" medqc-offline
+          tar -C "$RUNNER_TEMP" --exclude='__pycache__' --exclude='*.pyc' --exclude='*.pyo' -czf "$RUNNER_TEMP/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" medqc-offline
+          if tar -tzf "$RUNNER_TEMP/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" | grep -E '(^|/)__pycache__(/|$)|\.py[co]$'; then
+            echo 'Python cache unexpectedly included in delivery'; exit 1
+          fi
           cd "$RUNNER_TEMP"
           sha256sum MedQC-Ubuntu22-Python310-PG16-offline.tar.gz > MedQC-Ubuntu22-Python310-PG16-offline.tar.gz.sha256
       - name: Publish dependency resolution evidence
