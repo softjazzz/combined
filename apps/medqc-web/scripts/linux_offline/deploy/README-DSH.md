@@ -65,7 +65,7 @@ sudo -u medqc-business /data/medqc/business/venv/bin/python \
   "$KIT/deploy/db-admin.py" check
 ```
 
-configure.py交互接收新业务库密码并生成独立JWT，保存600权限配置；不打印凭据。migrate先执行PG16完整备份及目录校验，再实际升级到062并初始化既有运行时样本元数据表。不会stamp或连接同步库。create-admin只新增显式账号，密码现场输入两次；已有同名账号会拒绝，不重置或提升现有用户。
+configure.py交互接收新业务库密码并生成独立JWT，保存600权限配置；不打印凭据。migrate先执行PG16完整备份及目录校验。对全新空库，它显式初始化历史迁移依赖的sync_job_state、visit_index和既有任务owner，再实际执行Alembic迁移到062，最后初始化既有运行时样本元数据与11张Bundle表。前置和Bundle模板只有结构，没有患者行；已有同名结构不一致即停止，不覆盖。不会stamp或连接同步库。create-admin只新增显式账号，密码现场输入两次；已有同名账号会拒绝，不重置或提升现有用户。
 
 默认ENV=production、正常启动模式，但MEDQC_STARTUP_BACKGROUND_ENABLED=false。它只读检查必要业务结构，跳过启动DDL、预热和历史恢复；不是依赖可选规则验证表的acceptance模式。手动业务入口保留，初次验收不要点击质控/同步。生产环境不加载内存演示账号，也不向缓存账号回退，原有默认账号保护仍保留。
 

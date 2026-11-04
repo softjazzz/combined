@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 027
 KIT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 ROOT=${MEDQC_INSTALL_ROOT:-/data/medqc/business}
 PYTHON=${MEDQC_PYTHON:-python3.10}
@@ -9,6 +10,9 @@ source /etc/os-release
 (cd "$KIT" && sha256sum --check --quiet SHA256SUMS)
 BUILD=$("$PYTHON" -c 'import json,sys;print(json.load(open(sys.argv[1]))["build_id"])' "$KIT/BUILD.json")
 [[ "$ROOT" == /* && "$ROOT" != / && ! -L "$ROOT" ]] || exit 1
+for link in current venv; do
+  [[ ! -e "$ROOT/$link" || -L "$ROOT/$link" ]] || { echo "Refusing non-symlink $link"; exit 1; }
+done
 [[ ! -e "$ROOT/releases/$BUILD" && ! -e "$ROOT/venvs/$BUILD" ]] || { echo 'Release already exists; inspect before reinstall'; exit 1; }
 mkdir -p "$ROOT"/{releases,venvs,config,backups,logs,state,tools}
 cp -a "$KIT/application" "$ROOT/releases/$BUILD"

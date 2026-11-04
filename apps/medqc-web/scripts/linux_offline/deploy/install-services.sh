@@ -8,6 +8,8 @@ id medqc-business >/dev/null
 if ss -ltnH | awk '{print $4}' | grep -Eq ':(80|8001)$'; then echo '80 or 8001 already in use; abort'; exit 1; fi
 for name in medqc-business-api medqc-business-web; do
   [[ ! -e /etc/systemd/system/$name.service ]] || { echo "Unit exists: $name; inspect upgrade manually"; exit 1; }
+done
+for name in medqc-business-api medqc-business-web; do
   install -m 0644 "$HERE/$name.service" "/etc/systemd/system/$name.service"
 done
 systemd-analyze verify /etc/systemd/system/medqc-business-api.service /etc/systemd/system/medqc-business-web.service

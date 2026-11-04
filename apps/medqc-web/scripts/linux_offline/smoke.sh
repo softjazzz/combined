@@ -17,14 +17,15 @@ if ! /usr/lib/postgresql/16/bin/pg_ctl -D "$TEST/pg" -l "$TEST/pg.log" -o "-h 12
 API= WEB=
 cleanup(){ [[ -z "$API" ]] || kill "$API" 2>/dev/null || true; [[ -z "$WEB" ]] || kill "$WEB" 2>/dev/null || true; /usr/lib/postgresql/16/bin/pg_ctl -D "$TEST/pg" -m fast -w stop >/dev/null || true; }
 trap cleanup EXIT
-"$KIT/tools/pg16/psql" -h 127.0.0.1 -p 55498 -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE medqc_business' >/dev/null
+"$KIT/tools/pg16/psql" -h 127.0.0.1 -p 55498 -d postgres -v ON_ERROR_STOP=1 -c 'CREATE ROLE medqc_business_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION' >/dev/null
+"$KIT/tools/pg16/psql" -h 127.0.0.1 -p 55498 -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE medqc_business OWNER medqc_business_app' >/dev/null
 export MEDQC_SMOKE_ROOT="$MEDQC_INSTALL_ROOT"
 export ENV=production
 "$VENV/bin/python" - <<'PY'
 import os,secrets
 from pathlib import Path
 p=Path(os.environ['MEDQC_SMOKE_ROOT'])/'config/business.env'
-s=p.read_text().replace('postgresql://medqc_business_app:REPLACE_PASSWORD@127.0.0.1:5432/medqc_business','postgresql://runner@127.0.0.1:55498/medqc_business').replace('REPLACE_WITH_LOCALLY_GENERATED_RANDOM_SECRET',secrets.token_hex(32))
+s=p.read_text().replace('postgresql://medqc_business_app:REPLACE_PASSWORD@127.0.0.1:5432/medqc_business','postgresql://medqc_business_app@127.0.0.1:55498/medqc_business').replace('REPLACE_WITH_LOCALLY_GENERATED_RANDOM_SECRET',secrets.token_hex(32))
 s=s.replace('/data/medqc/business',os.environ['MEDQC_SMOKE_ROOT'])
 p.write_text(s)
 PY
@@ -62,7 +63,7 @@ for route in ['/api/v1/auth/me','/api/v1/qc/sample-pools']:
     connection.request('GET',route,headers={'Authorization':'Bearer '+token});response=connection.getresponse();response.read();assert response.status==200,(route,response.status)
 connection.close()
 front=json.loads((r/'application/frontend/dist/build-info.json').read_text());assert front['git_commit']==info['git_commit'] and front['build_id']==info['build_id']
-report={'offline_install':True,'pip_check':True,'imports':True,'pg_major':16,'empty_database_migration':True,'production_startup':True,'frontend_and_api':True,'persistent_auth_and_sample_list':True,'static_traversal_rejected':True,'model_calls':0,'network_namespace':'loopback-only','commit':build['commit']}
+report={'offline_install':True,'pip_check':True,'imports':True,'pg_major':16,'database_role':'non-superuser database owner','empty_database_migration':True,'production_startup':True,'frontend_and_api':True,'persistent_auth_and_sample_list':True,'static_traversal_rejected':True,'model_calls':0,'network_namespace':'loopback-only','commit':build['commit']}
 (r/'VALIDATION.json').write_text(json.dumps(report,indent=2)+'\n')
 print(json.dumps(report))
 PY
