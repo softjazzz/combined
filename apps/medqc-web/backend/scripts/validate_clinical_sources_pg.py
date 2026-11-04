@@ -70,7 +70,16 @@ def run(args):
     command("initdb", "-D", cluster, "-U", "postgres", "--auth=trust", "--encoding=UTF8", "--no-locale")
     with (cluster / "postgresql.conf").open("a", encoding="utf-8", newline="\n") as file:
         file.write(f"\nport={args.port}\nlisten_addresses='127.0.0.1'\ncluster_name='{cluster_name}'\nshared_buffers='16MB'\nmax_connections=16\njit=off\n")
-    command("pg_ctl", "-D", cluster, "-l", directory / "postgres.log", "-w", "start")
+    if os.name != "nt":
+        # Ubuntu PG的默认socket目录由postgres拥有；一次性runner只用本次新目录。
+        with (cluster / "postgresql.conf").open("a", encoding="utf-8", newline="\n") as file:
+            socket_directory = str(directory).replace("'", "''")
+            file.write(f"unix_socket_directories='{socket_directory}'\n")
+    try:
+        command("pg_ctl", "-D", cluster, "-l", directory / "postgres.log", "-w", "start")
+    except subprocess.CalledProcessError:
+        print((directory / "postgres.log").read_text(encoding="utf-8", errors="replace"))
+        raise
     engines = []
     try:
         admin = psycopg2.connect(host="127.0.0.1", port=args.port, user="postgres", dbname="postgres")
