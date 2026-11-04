@@ -28,6 +28,16 @@ s=s.replace('/data/medqc/business',os.environ['MEDQC_SMOKE_ROOT'])
 p.write_text(s)
 PY
 "$VENV/bin/python" "$KIT/deploy/db-admin.py" migrate --root "$MEDQC_INSTALL_ROOT" > "$KIT/migration-smoke.log" 2>&1 || { cat "$MEDQC_INSTALL_ROOT/logs/migration-private.log" 2>/dev/null; cat "$KIT/migration-smoke.log"; exit 1; }
+export MEDQC_SMOKE_LOGIN="$TEST/login.json" KIT
+"$VENV/bin/python" - <<'PY'
+import getpass,json,os,runpy,secrets,sys
+from pathlib import Path
+password=secrets.token_urlsafe(24)
+getpass.getpass=lambda *a,**kw:password
+sys.argv=['db-admin.py','create-admin','--root',os.environ['MEDQC_SMOKE_ROOT'],'--username','fixture_admin']
+runpy.run_path(str(Path(os.environ['KIT'])/'deploy/db-admin.py'),run_name='__main__')
+Path(os.environ['MEDQC_SMOKE_LOGIN']).write_text(json.dumps({'account':'fixture_admin','password':password}))
+PY
 cd "$MEDQC_INSTALL_ROOT/current/backend"
 "$VENV/bin/python" -m uvicorn app.main:app --host 127.0.0.1 --port 8001 > "$KIT/api-smoke.log" 2>&1 & API=$!
 "$VENV/bin/python" ../serve_dist_spa.py --host 127.0.0.1 --port 18080 --dir ../frontend/dist --api-target http://127.0.0.1:8001 > "$KIT/web-smoke.log" 2>&1 & WEB=$!
@@ -39,10 +49,19 @@ curl -fsS http://127.0.0.1:18080/api/v1/runtime-build >/dev/null
 export KIT
 "$VENV/bin/python" - <<'PY'
 import json,os
+import http.client
 from pathlib import Path
 r=Path(os.environ['KIT']);build=json.loads((r/'BUILD.json').read_text());info=json.loads((r/'runtime-smoke.json').read_text())
 assert build['commit'] in json.dumps(info)
-report={'offline_install':True,'pip_check':True,'imports':True,'pg_major':16,'empty_database_migration':True,'production_startup':True,'frontend_and_api':True,'static_traversal_rejected':True,'model_calls':0,'network_namespace':'loopback-only','commit':build['commit']}
+connection=http.client.HTTPConnection('127.0.0.1',18080)
+connection.request('POST','/api/v1/auth/login',Path(os.environ['MEDQC_SMOKE_LOGIN']).read_text(),{'Content-Type':'application/json'})
+response=connection.getresponse();body=json.loads(response.read());assert response.status==200
+token=(body.get('data') or body)['access_token']
+for route in ['/api/v1/auth/me','/api/v1/qc/sample-pools']:
+    connection.request('GET',route,headers={'Authorization':'Bearer '+token});response=connection.getresponse();response.read();assert response.status==200,(route,response.status)
+connection.close()
+front=json.loads((r/'application/frontend/dist/build-info.json').read_text());assert front['git_commit']==info['git_commit'] and front['build_id']==info['build_id']
+report={'offline_install':True,'pip_check':True,'imports':True,'pg_major':16,'empty_database_migration':True,'production_startup':True,'frontend_and_api':True,'persistent_auth_and_sample_list':True,'static_traversal_rejected':True,'model_calls':0,'network_namespace':'loopback-only','commit':build['commit']}
 (r/'VALIDATION.json').write_text(json.dumps(report,indent=2)+'\n')
 print(json.dumps(report))
 PY

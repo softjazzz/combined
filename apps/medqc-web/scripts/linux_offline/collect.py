@@ -99,10 +99,16 @@ def main():
         raise RuntimeError("invalid_build_id")
     runtime = out / "application"
     backend = runtime / "backend"
-    for name in subprocess.check_output(
-        ["git", "ls-files", "apps/medqc-web/backend"], cwd=repo, text=True
-    ).splitlines():
+    for name in (
+        subprocess.check_output(
+            ["git", "ls-files", "-z", "apps/medqc-web/backend"], cwd=repo, text=True
+        )
+        .rstrip("\0")
+        .split("\0")
+    ):
         relative = Path(name).relative_to("apps/medqc-web/backend")
+        if relative.parts[0] == "docs":
+            continue
         parts = set(relative.parts)
         if parts & {
             "tests",
