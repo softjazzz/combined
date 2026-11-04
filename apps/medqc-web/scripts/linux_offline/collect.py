@@ -97,6 +97,9 @@ def main():
     build_id = os.environ["VITE_MEDQC_BUILD_ID"]
     if not re.fullmatch(r"medqc-web-customer-[0-9]{8}-[0-9]{6}", build_id):
         raise RuntimeError("invalid_build_id")
+    frontend_identity = json.loads((app / "dist/build-info.json").read_text())
+    if frontend_identity != {"build_id": build_id, "git_commit": commit}:
+        raise RuntimeError("frontend_build_identity_mismatch")
     runtime = out / "application"
     backend = runtime / "backend"
     for name in (

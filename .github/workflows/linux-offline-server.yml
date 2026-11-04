@@ -35,7 +35,7 @@ jobs:
           export VITE_MEDQC_BUILD_ID="medqc-web-customer-$(date -u +%Y%m%d-%H%M%S)"
           echo "VITE_MEDQC_BUILD_ID=$VITE_MEDQC_BUILD_ID" >> "$GITHUB_ENV"
           npm ci
-          npm run build
+          npx vite build --config vite.customer.config.mjs --configLoader native
       - name: Prepare PG16, 7zip and portable runtime
         run: |
           curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc -o "$RUNNER_TEMP/pgdg.asc"
