@@ -1,0 +1,35 @@
+name: Linux offline server bundle
+on:
+  push:
+    branches: [codex/linux-offline-server-20261104]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Resolve Linux wheels
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/medqc-offline/wheelhouse"
+          python -m pip download --only-binary=:all: -r apps/medqc-web/backend/requirements.txt -d "$RUNNER_TEMP/medqc-offline/wheelhouse" 2>&1 | tee "$RUNNER_TEMP/resolve.log"
+      - name: Publish dependency resolution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-resolve-evidence
+          path: ${{ runner.temp }}/resolve.log
+          if-no-files-found: error
+      - name: Publish resolved wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-wheelhouse-intermediate
+          path: ${{ runner.temp }}/medqc-offline
+          compression-level: 0
