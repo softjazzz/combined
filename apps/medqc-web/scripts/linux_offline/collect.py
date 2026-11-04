@@ -107,7 +107,12 @@ def main():
         .split("\0")
     ):
         relative = Path(name).relative_to("apps/medqc-web/backend")
-        if relative.parts[0] == "docs":
+        if relative.parts[0] not in {
+            "app",
+            "alembic",
+            "config",
+            "data",
+        } and relative.name not in {"alembic.ini", "requirements.txt"}:
             continue
         parts = set(relative.parts)
         if parts & {
@@ -123,6 +128,7 @@ def main():
             "manual_qc_runs",
             "sample_pool_uploads",
             "secrets",
+            "sessions",
         }:
             continue
         if "private" in name.lower() or relative.name.startswith(
@@ -144,7 +150,15 @@ def main():
             "product_activation_state.json",
             "activation.json",
             "generate_medqc_activation_code.py",
+            "mongo_sync_config.json",
+            "sync_run_history.json",
+            "frontpage_demo_case.json",
+            "drg_grouper_config_store.json",
         }:
+            continue
+        if ".backup" in relative.name or relative.name.endswith(
+            (".db-journal", ".db-wal", ".db-shm")
+        ):
             continue
         if "app/storage/qc_diagnostics" in str(relative):
             continue
