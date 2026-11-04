@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import os
+
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -28,64 +30,68 @@ def assert_no_default_demo_users_in_production(env: str, user_store: dict | None
 
 
 # In-memory users (migrated from legacy main_api.py)
-users_db = {
-    "admin@medqc.com": {
-        "id": "admin-001",
-        "username": "admin",
-        "email": "admin@medqc.com",
-        "display_name": "\u7cfb\u7edf\u7ba1\u7406\u5458",
-        "department": "\u7cfb\u7edf\u7ba1\u7406\u90e8",
-        "roles": ["admin", "qc_manager"],
-        "password_hash": pwd_context.hash("admin888"),
-        "avatar": "",
-        "phone": "13800138000",
-        "bio": "\u7cfb\u7edf\u7ba1\u7406\u5458\uff0c\u8d1f\u8d23\u6574\u4e2a\u533b\u7597\u8d28\u63a7\u7cfb\u7edf\u7684\u8fd0\u7ef4\u548c\u7ba1\u7406\u5de5\u4f5c\u3002",
-        "created_at": "2024-01-01T00:00:00Z",
-        "last_login": None,
-    },
-    "qc@medqc.com": {
-        "id": "qc-001",
-        "username": "qc_manager",
-        "email": "qc@medqc.com",
-        "display_name": "\u8d28\u63a7\u4e3b\u7ba1",
-        "department": "\u8d28\u63a7\u79d1",
-        "roles": ["qc_manager"],
-        "password_hash": pwd_context.hash("qc123456"),
-        "avatar": "",
-        "phone": "13800138001",
-        "bio": "\u8d28\u63a7\u79d1\u4e3b\u7ba1\uff0c\u4e13\u6ce8\u4e8e\u533b\u7597\u8d28\u91cf\u63a7\u5236\u548c\u75c5\u6848\u5ba1\u6838\u5de5\u4f5c\u3002",
-        "created_at": "2024-01-15T00:00:00Z",
-        "last_login": None,
-    },
-    "doctor@medqc.com": {
-        "id": "doctor-001",
-        "username": "doctor",
-        "email": "doctor@medqc.com",
-        "display_name": "\u4e34\u5e8a\u533b\u751f",
-        "department": "\u5185\u79d1",
-        "roles": ["doctor"],
-        "password_hash": pwd_context.hash("doctor123"),
-        "avatar": "",
-        "phone": "13800138002",
-        "bio": "\u5185\u79d1\u533b\u751f\uff0c\u4ece\u4e8b\u4e34\u5e8a\u8bca\u7597\u548c\u75c5\u6848\u8bb0\u5f55\u5de5\u4f5c\u3002",
-        "created_at": "2024-02-01T00:00:00Z",
-        "last_login": None,
-    },
-    "sync_admin@medqc.com": {
-        "id": "sync-admin-001",
-        "username": "sync_admin",
-        "email": "sync_admin@medqc.com",
-        "display_name": "\u5b9e\u65bd\u7ba1\u7406\u5458",
-        "department": "\u5b9e\u65bd\u8fd0\u7ef4\u90e8",
-        "roles": ["sync_admin"],
-        "password_hash": pwd_context.hash("sync888"),
-        "avatar": "",
-        "phone": "13800138003",
-        "bio": "\u5ba2\u6237\u673a\u5b9e\u65bd\u4e0e\u540c\u6b65\u6392\u969c\u8d26\u53f7\uff0c\u53ef\u8bbf\u95ee\u6570\u636e\u540c\u6b65\u9ad8\u7ea7\u914d\u7f6e\u3002",
-        "created_at": "2024-02-15T00:00:00Z",
-        "last_login": None,
-    },
-}
+def _development_users():
+    return {
+        "admin@medqc.com": {
+            "id": "admin-001",
+            "username": "admin",
+            "email": "admin@medqc.com",
+            "display_name": "\u7cfb\u7edf\u7ba1\u7406\u5458",
+            "department": "\u7cfb\u7edf\u7ba1\u7406\u90e8",
+            "roles": ["admin", "qc_manager"],
+            "password_hash": pwd_context.hash("admin888"),
+            "avatar": "",
+            "phone": "13800138000",
+            "bio": "\u7cfb\u7edf\u7ba1\u7406\u5458\uff0c\u8d1f\u8d23\u6574\u4e2a\u533b\u7597\u8d28\u63a7\u7cfb\u7edf\u7684\u8fd0\u7ef4\u548c\u7ba1\u7406\u5de5\u4f5c\u3002",
+            "created_at": "2024-01-01T00:00:00Z",
+            "last_login": None,
+        },
+        "qc@medqc.com": {
+            "id": "qc-001",
+            "username": "qc_manager",
+            "email": "qc@medqc.com",
+            "display_name": "\u8d28\u63a7\u4e3b\u7ba1",
+            "department": "\u8d28\u63a7\u79d1",
+            "roles": ["qc_manager"],
+            "password_hash": pwd_context.hash("qc123456"),
+            "avatar": "",
+            "phone": "13800138001",
+            "bio": "\u8d28\u63a7\u79d1\u4e3b\u7ba1\uff0c\u4e13\u6ce8\u4e8e\u533b\u7597\u8d28\u91cf\u63a7\u5236\u548c\u75c5\u6848\u5ba1\u6838\u5de5\u4f5c\u3002",
+            "created_at": "2024-01-15T00:00:00Z",
+            "last_login": None,
+        },
+        "doctor@medqc.com": {
+            "id": "doctor-001",
+            "username": "doctor",
+            "email": "doctor@medqc.com",
+            "display_name": "\u4e34\u5e8a\u533b\u751f",
+            "department": "\u5185\u79d1",
+            "roles": ["doctor"],
+            "password_hash": pwd_context.hash("doctor123"),
+            "avatar": "",
+            "phone": "13800138002",
+            "bio": "\u5185\u79d1\u533b\u751f\uff0c\u4ece\u4e8b\u4e34\u5e8a\u8bca\u7597\u548c\u75c5\u6848\u8bb0\u5f55\u5de5\u4f5c\u3002",
+            "created_at": "2024-02-01T00:00:00Z",
+            "last_login": None,
+        },
+        "sync_admin@medqc.com": {
+            "id": "sync-admin-001",
+            "username": "sync_admin",
+            "email": "sync_admin@medqc.com",
+            "display_name": "\u5b9e\u65bd\u7ba1\u7406\u5458",
+            "department": "\u5b9e\u65bd\u8fd0\u7ef4\u90e8",
+            "roles": ["sync_admin"],
+            "password_hash": pwd_context.hash("sync888"),
+            "avatar": "",
+            "phone": "13800138003",
+            "bio": "\u5ba2\u6237\u673a\u5b9e\u65bd\u4e0e\u540c\u6b65\u6392\u969c\u8d26\u53f7\uff0c\u53ef\u8bbf\u95ee\u6570\u636e\u540c\u6b65\u9ad8\u7ea7\u914d\u7f6e\u3002",
+            "created_at": "2024-02-15T00:00:00Z",
+            "last_login": None,
+        },
+    }
+
+
+users_db = {} if os.getenv("ENV", "development").strip().lower() == "production" else _development_users()
 
 # In-memory medical records (simple seed for dev)
 medical_records_db = {}
@@ -110,7 +116,8 @@ def _seed_records():
             "file_url": None,
         }
 
-_seed_records()
+if os.getenv("ENV", "development").strip().lower() != "production":
+    _seed_records()
 
 # QC in-memory stores
 qc_results_db = {}

@@ -30,6 +30,9 @@ class SpaHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self._maybe_proxy():
             return
+        if not self._within_static_root():
+            self.send_error(403)
+            return
         target = Path(self.translate_path(self.path))
         if target.is_file():
             return super().do_GET()
@@ -39,6 +42,9 @@ class SpaHandler(SimpleHTTPRequestHandler):
 
     def do_HEAD(self):
         if self._maybe_proxy():
+            return
+        if not self._within_static_root():
+            self.send_error(403)
             return
         target = Path(self.translate_path(self.path))
         if target.is_file():
@@ -71,6 +77,15 @@ class SpaHandler(SimpleHTTPRequestHandler):
             return
         self.send_response(204)
         self.end_headers()
+
+    def _within_static_root(self):
+        # 直接开放院内80端口时，编码路径及符号链接也不能越出静态目录。
+        root = Path(self.directory).resolve()
+        try:
+            Path(self.translate_path(self.path)).resolve().relative_to(root)
+            return True
+        except (ValueError, OSError):
+            return False
 
     def _maybe_proxy(self) -> bool:
         api_target = getattr(self.server, "api_target", None)

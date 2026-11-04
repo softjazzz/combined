@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+KIT=$1
+PYTHON=$2
+TEST=$(mktemp -d /tmp/medqc-linux-offline-XXXXXX)
+export MEDQC_INSTALL_ROOT="$TEST/business" MEDQC_PYTHON="$PYTHON"
+bash "$KIT/deploy/install.sh" > "$KIT/install-offline.log" 2>&1
+VENV="$MEDQC_INSTALL_ROOT/venv"
+"$VENV/bin/python" -m pip check
+"$VENV/bin/python" -c 'import fastapi,uvicorn,pydantic,sqlalchemy,psycopg2,asyncpg,fitz,pdfplumber,pandas,numpy,faiss,openpyxl,docx,reportlab,cryptography,sklearn; print("offline imports passed")'
+"$KIT/tools/pg16/pg_dump" --version
+echo synthetic > "$TEST/test.txt"
+"$KIT/tools/7zip/7z" a -mhe=on -pSyntheticOnly "$TEST/test.7z" "$TEST/test.txt" >/dev/null
+"$KIT/tools/7zip/7z" t -pSyntheticOnly "$TEST/test.7z" >/dev/null
+/usr/lib/postgresql/16/bin/initdb -D "$TEST/pg" -A trust --no-locale -E UTF8 >/dev/null
+/usr/lib/postgresql/16/bin/pg_ctl -D "$TEST/pg" -l "$TEST/pg.log" -o "-h 127.0.0.1 -p 55498 -c shared_buffers=32MB -c max_connections=15" -w start >/dev/null
+API= WEB=
+cleanup(){ [[ -z "$API" ]] || kill "$API" 2>/dev/null || true; [[ -z "$WEB" ]] || kill "$WEB" 2>/dev/null || true; /usr/lib/postgresql/16/bin/pg_ctl -D "$TEST/pg" -m fast -w stop >/dev/null || true; }
+trap cleanup EXIT
+"$KIT/tools/pg16/psql" -h 127.0.0.1 -p 55498 -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE medqc_business' >/dev/null
+export MEDQC_SMOKE_ROOT="$MEDQC_INSTALL_ROOT"
+"$VENV/bin/python" - <<'PY'
+import os,secrets
+from pathlib import Path
+p=Path(os.environ['MEDQC_SMOKE_ROOT'])/'config/business.env'
+s=p.read_text().replace('postgresql://medqc_business_app:REPLACE_PASSWORD@127.0.0.1:5432/medqc_business','postgresql://runner@127.0.0.1:55498/medqc_business').replace('REPLACE_WITH_LOCALLY_GENERATED_RANDOM_SECRET',secrets.token_hex(32))
+s=s.replace('/data/medqc/business',os.environ['MEDQC_SMOKE_ROOT'])
+p.write_text(s)
+PY
+"$VENV/bin/python" "$KIT/deploy/db-admin.py" migrate --root "$MEDQC_INSTALL_ROOT" > "$KIT/migration-smoke.log" 2>&1 || { cat "$MEDQC_INSTALL_ROOT/logs/migration-private.log" 2>/dev/null; cat "$KIT/migration-smoke.log"; exit 1; }
+cd "$MEDQC_INSTALL_ROOT/current/backend"
+"$VENV/bin/python" -m uvicorn app.main:app --host 127.0.0.1 --port 8001 > "$KIT/api-smoke.log" 2>&1 & API=$!
+"$VENV/bin/python" ../serve_dist_spa.py --host 127.0.0.1 --port 18080 --dir ../frontend/dist --api-target http://127.0.0.1:8001 > "$KIT/web-smoke.log" 2>&1 & WEB=$!
+for i in $(seq 1 45); do curl -fsS http://127.0.0.1:8001/api/v1/runtime-build > "$KIT/runtime-smoke.json" && break || sleep 1; done
+kill -0 "$API" || { cat "$KIT/api-smoke.log"; exit 1; }
+curl -fsS http://127.0.0.1:18080/workstation-v5/login >/dev/null
+curl -fsS http://127.0.0.1:18080/api/v1/runtime-build >/dev/null
+[[ $(curl --path-as-is -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/%2e%2e/backend/.env) == 403 ]]
+export KIT
+"$VENV/bin/python" - <<'PY'
+import json,os
+from pathlib import Path
+r=Path(os.environ['KIT']);build=json.loads((r/'BUILD.json').read_text());info=json.loads((r/'runtime-smoke.json').read_text())
+assert build['commit'] in json.dumps(info)
+report={'offline_install':True,'pip_check':True,'imports':True,'pg_major':16,'empty_database_migration':True,'production_startup':True,'frontend_and_api':True,'static_traversal_rejected':True,'model_calls':0,'network_namespace':'loopback-only','commit':build['commit']}
+(r/'VALIDATION.json').write_text(json.dumps(report,indent=2)+'\n')
+print(json.dumps(report))
+PY

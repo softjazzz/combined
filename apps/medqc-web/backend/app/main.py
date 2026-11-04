@@ -404,6 +404,15 @@ def create_app() -> FastAPI:
             logger.info("验收启动结构检查通过；不执行DDL、后台预热或旧任务恢复")
             return
 
+        # 服务器首次展示部署仍用正常模式和生产认证；只禁启动阶段的后台副作用。
+        if os.getenv("MEDQC_STARTUP_BACKGROUND_ENABLED", "true").strip().lower() in {"0", "false", "no"}:
+            from .core.server_startup import validate_server_schema
+            from .database.connection import engine
+            validate_server_schema(engine)
+            app.state.startup_mode = "normal"
+            logger.info("服务器必要结构只读校验通过；启动预热和后台恢复已关闭")
+            return
+
         try:
             # 初始化 CDM 数据库
             from .database import init_db

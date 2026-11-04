@@ -8,7 +8,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,6 +20,36 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/medqc-offline/wheelhouse"
           python -m pip download --only-binary=:all: -r apps/medqc-web/backend/requirements.txt -d "$RUNNER_TEMP/medqc-offline/wheelhouse" 2>&1 | tee "$RUNNER_TEMP/resolve.log"
+          python -m pip download --only-binary=:all: pip -d "$RUNNER_TEMP/medqc-offline/wheelhouse"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build versioned frontend
+        working-directory: apps/medqc-web
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          VITE_MEDQC_GIT_COMMIT: ${{ github.sha }}
+        run: |
+          export VITE_MEDQC_BUILD_ID="medqc-linux-${GITHUB_SHA:0:9}"
+          npm ci
+          npm run build
+      - name: Prepare PG16, 7zip and portable runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y p7zip-full postgresql-16
+          python apps/medqc-web/scripts/linux_offline/collect.py --out "$RUNNER_TEMP/medqc-offline"
+          python -m venv "$RUNNER_TEMP/lock-env"
+          "$RUNNER_TEMP/lock-env/bin/python" -m pip install --no-index --find-links "$RUNNER_TEMP/medqc-offline/wheelhouse" -r apps/medqc-web/backend/requirements.txt
+          "$RUNNER_TEMP/lock-env/bin/python" apps/medqc-web/scripts/linux_offline/make_lock.py "$RUNNER_TEMP/medqc-offline"
+      - name: Ubuntu22 Python310 PG16 offline isolation smoke
+        run: |
+          sudo unshare --net bash -c 'ip link set lo up; exec runuser -u runner -- "$@"' bash bash apps/medqc-web/scripts/linux_offline/smoke.sh "$RUNNER_TEMP/medqc-offline" "$(command -v python)"
+      - name: Final checksums and archive
+        run: |
+          python apps/medqc-web/scripts/linux_offline/make_lock.py "$RUNNER_TEMP/medqc-offline" --manifest-only
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" medqc-offline
+          cd "$RUNNER_TEMP"
+          sha256sum MedQC-Ubuntu22-Python310-PG16-offline.tar.gz > MedQC-Ubuntu22-Python310-PG16-offline.tar.gz.sha256
       - name: Publish dependency resolution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -27,9 +57,20 @@ jobs:
           name: linux-resolve-evidence
           path: ${{ runner.temp }}/resolve.log
           if-no-files-found: error
-      - name: Publish resolved wheels
+      - name: Publish validated Linux delivery
         uses: actions/upload-artifact@v4
         with:
-          name: linux-wheelhouse-intermediate
-          path: ${{ runner.temp }}/medqc-offline
+          name: medqc-linux-offline-validated
+          path: |
+            ${{ runner.temp }}/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz
+            ${{ runner.temp }}/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz.sha256
           compression-level: 0
+      - name: Publish non-sensitive smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-smoke-evidence
+          path: |
+            ${{ runner.temp }}/medqc-offline/*smoke*
+            ${{ runner.temp }}/medqc-offline/install-offline.log
+            ${{ runner.temp }}/medqc-offline/VALIDATION.json
