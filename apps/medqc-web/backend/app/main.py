@@ -62,6 +62,7 @@ from .routers import account_management as account_management_router
 from .routers import settlement as settlement_router
 from .routers import scoring_config as scoring_config_router
 from .routers import sync as sync_router
+from .routers import clinical_sources as clinical_sources_router
 from .routers import data_pipelines as data_pipelines_router
 from .routers import workstation as workstation_router
 from .routers import custom_qc as custom_qc_router
@@ -127,13 +128,14 @@ def create_app() -> FastAPI:
     settings = get_settings()
     logger.info("LLM diagnostics at startup: %s", settings.llm_diagnostics())
 
+    from .services.clinical_sources import bind_request
     app = FastAPI(
         title="医疗质控系统API",
         description="模块化后端应用（重构入口）",
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
-        dependencies=[Depends(enforce_default_auth)],
+        dependencies=[Depends(enforce_default_auth), Depends(bind_request)],
     )
 
     # CORS
@@ -341,6 +343,7 @@ def create_app() -> FastAPI:
     # 数据同步（PG 同步链路）
     app.include_router(sync_router.router)
     app.include_router(data_pipelines_router.router)
+    app.include_router(clinical_sources_router.router)
     # Workstation V4 聚合工作台
     app.include_router(workstation_router.router)
     # 自定义质控点体验中心

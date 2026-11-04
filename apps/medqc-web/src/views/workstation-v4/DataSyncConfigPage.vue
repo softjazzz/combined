@@ -30,6 +30,7 @@
     </header>
 
     <template v-if="activeTab === 'dataSync'">
+      <ClinicalSourceSettingsPanel v-if="canManageLlmConfig" />
       <DataPipelineSettingsPanel
         v-if="canManageLlmConfig"
         @selection="selectedDataPipeline = $event"
@@ -533,6 +534,7 @@ import { useDataSync } from './composables/useDataSync'
 import LlmPerformanceObservabilityPanel from './components/system-config/LlmPerformanceObservabilityPanel.vue'
 import AccountManagementPanel from './components/system-config/AccountManagementPanel.vue'
 import QcRuntimeSettingsPanel from './components/system-config/QcRuntimeSettingsPanel.vue'
+import ClinicalSourceSettingsPanel from './components/system-config/ClinicalSourceSettingsPanel.vue'
 import DataPipelineSettingsPanel from './components/system-config/DataPipelineSettingsPanel.vue'
 import type { DataPipeline } from '@/api/dataPipelines'
 import { useAuthStore } from '@/stores/auth'

@@ -1,7 +1,15 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 
 const mocks = vi.hoisted(() => ({
   getRaw: vi.fn(),
+}))
+
+vi.mock('@/api/clinicalSources', () => ({
+  clinicalSourcesApi: { options: vi.fn(async () => ({ default_source: 'legacy_pg', sources: [
+    { id: 'legacy_pg', name: '原有数据源', enabled: true },
+    { id: 'independent_cdm', name: '服务器CDM', enabled: true },
+  ] })) },
 }))
 
 vi.mock('@/services/apiService', () => ({
@@ -44,11 +52,6 @@ function mockWorkstationResponse() {
   })
 }
 
-async function flushPromises() {
-  await Promise.resolve()
-  await Promise.resolve()
-}
-
 describe('usePatientRecords workstation filters', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -66,6 +69,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'visit',
       dept: 'ICU',
       analytics_scope: 'final',
@@ -86,6 +90,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 2,
       page_size: 10,
+      source_id: 'legacy_pg',
       date_field: 'admission',
       dept: '中医科',
       doctor: '陈医师',
@@ -103,6 +108,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'visit',
       hospital_status: 'inpatient',
     })
@@ -113,6 +119,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'visit',
       hospital_status: 'discharged',
     })
@@ -129,6 +136,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'visit',
       hospital_status: 'discharged',
     })
@@ -143,6 +151,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'visit',
       sync_scope: 'today_inpatient',
     })
@@ -160,6 +169,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'visit',
       hospital_status: 'inpatient',
       inpatient_sort: 'longest',
@@ -217,6 +227,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'visit',
       dept: '普通外科',
     })
@@ -234,6 +245,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'visit',
       doctor: '陈医师',
     })
@@ -293,6 +305,7 @@ describe('usePatientRecords workstation filters', () => {
     const records = usePatientRecords('inpatient')
     records.searchText.value = '旧条件'
     const firstRequest = records.fetchData()
+    await flushPromises()
     records.searchText.value = '新条件'
     const secondRequest = records.fetchData()
 

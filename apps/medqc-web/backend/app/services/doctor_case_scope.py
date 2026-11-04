@@ -64,6 +64,16 @@ def resolve_doctor_case_scope(actor_id: str, *, session_factory=None) -> DoctorC
             doctors = [row for row in candidates if "doctor" in _effective_persistent_roles(row["role"], row["roles_json"])]
             if len(doctors) != 1:
                 raise HTTPException(403, "存在同名医生账号，暂不能确定本人病历范围，请联系管理员")
+            from ..database import clinical_connection
+            if clinical_connection.configured():
+                from .clinical_case_catalog import catalog, KEYS
+                from sqlalchemy import select
+                source = catalog(clinical_connection.get_engine())
+                with clinical_connection.get_engine().connect() as connection:
+                    rows = connection.execute(select(*[source.c[k] for k in KEYS]).where(
+                        source.c.institute_id == institute, func.trim(source.c.department) == department,
+                        func.trim(source.c.doctor) == name)).all()
+                return DoctorCaseScope(institute, department, name, tuple(sorted(tuple(str(v) for v in row) for row in rows)))
             mr = MedicalRecordFrontpage
             from .medical_records.query_service import (
                 _workstation_department_expr, _workstation_discharge_join_condition,
@@ -92,6 +102,10 @@ def resolve_doctor_case_scope(actor_id: str, *, session_factory=None) -> DoctorC
 
 def resolve_record_identity(scope: DoctorCaseScope, record_id: str, *, session_factory=None):
     """旧单号入口必须唯一解析三坐标；同院/跨院同号也不能取第一条放行。"""
+    from ..database import clinical_connection
+    if clinical_connection.configured():
+        from .clinical_case_catalog import resolve_identity
+        return scope.require_case(**resolve_identity(record_id))
     factory = session_factory or SessionLocal
     try:
         if factory is None:
@@ -125,7 +139,7 @@ async def enforce_doctor_case_access(request: Request, user: dict[str, Any]) -> 
         "/api/v1/auth/", "/api/v1/notifications", "/api/v1/record-reviews",
         "/api/v1/modern-appeals", "/api/v1/defect-rectifications", "/api/v1/case-communications",
     )
-    if path.startswith(owned_prefixes) or path in {"/api/v1/runtime-build", "/api/v1/health"}:
+    if path.startswith(owned_prefixes) or path in {"/api/v1/runtime-build", "/api/v1/health", "/api/v1/clinical-sources/options"}:
         return
     scope = await run_in_threadpool(resolve_doctor_case_scope, str(user.get("id") or ""))
     request.state.doctor_case_scope = scope

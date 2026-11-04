@@ -32,6 +32,15 @@ describe('QcRunSelectedControl', () => {
 
   afterEach(() => vi.useRealTimers())
 
+  it('CDM页面不会恢复旧源保存的任务进度', async () => {
+    window.sessionStorage.setItem('medqc:selected-qc:running', JSON.stringify({ jobId: 'legacy-task', owner: 'selected-qc-user' }))
+    const wrapper = mount(QcRunSelectedControl, { props: { carePhase: 'inpatient', sourceId: 'independent_cdm', recordRefs: [] } })
+    await flushPromises()
+    expect(mocks.getJob).not.toHaveBeenCalled()
+    expect(window.sessionStorage.getItem('medqc:selected-qc:running')).toContain('legacy-task')
+    wrapper.unmount()
+  })
+
   it('没有勾选病历时禁用质控入口', () => {
     const wrapper = mount(QcRunSelectedControl, {
       props: { carePhase: 'inpatient', recordRefs: [] },

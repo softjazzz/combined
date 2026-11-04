@@ -1640,11 +1640,13 @@ def test_get_workstation_data_rejects_unknown_inpatient_sort(workstation_session
 
 
 def test_get_workstation_data_today_inpatient_scope_uses_verified_status(
-    workstation_session_factory,
+    workstation_session_factory, monkeypatch,
 ):
     """快捷范围只保留今日由轻量状态核验确认仍在院的记录。"""
 
-    today = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    # 固定医院日期，不能用开发机时区的“今天”构造医院时区的当日核验样本。
+    today = datetime(2026, 11, 4, 9)
+    monkeypatch.setattr(query_service_module, "_hospital_today", lambda: today.date())
     _insert_workstation_records(
         workstation_session_factory,
         MedicalRecordFrontpage(

@@ -49,6 +49,10 @@ const mockAuthStore = {
 
 const mockRoute = reactive({ query: {} as Record<string, string> })
 
+vi.mock('@/views/workstation-v4/components/system-config/ClinicalSourceSettingsPanel.vue', () => ({
+  default: { template: '<div data-testid="clinical-source-settings" />' },
+}))
+
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
 }))
@@ -241,6 +245,7 @@ describe('DataSyncConfigPage visit progress', () => {
   it('科室仍在后台加载时可以切到模型设置', async () => {
     mockState.departmentsLoading = true
     const wrapper = mountPage()
+    await flushPromises()
     expect(wrapper.get('[data-testid="departments-background-loading"]').text()).toContain('后台')
     const tab = wrapper.findAll('[role="tab"]').find((item) => item.text() === '模型配置')
     expect(tab).toBeDefined()
@@ -253,6 +258,7 @@ describe('DataSyncConfigPage visit progress', () => {
   it('源科室失败仅在字段旁提示并允许只读重试', async () => {
     mockState.departmentsError = '未能读取服务器科室，请确认连接后重试。'
     const wrapper = mountPage()
+    await flushPromises()
     const hint = wrapper.get('[data-testid="departments-background-error"]')
     await hint.get('button').trigger('click')
     expect(mockLoadDepartments).toHaveBeenCalledTimes(2)

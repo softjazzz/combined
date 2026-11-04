@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import json
 import os
@@ -10,6 +12,21 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine, make_url
 
+_selection: ContextVar[dict | None] = ContextVar("clinical_source_selection", default=None)
+
+
+def current_selection() -> dict | None:
+    return _selection.get()
+
+
+@contextmanager
+def selected(source: dict):
+    token = _selection.set(dict(source))
+    try:
+        yield
+    finally:
+        _selection.reset(token)
+
 
 class ClinicalSourceConfigurationError(RuntimeError):
     def __init__(self):
@@ -17,6 +34,9 @@ class ClinicalSourceConfigurationError(RuntimeError):
 
 
 def configured() -> bool:
+    source = current_selection()
+    if source is not None:
+        return source["id"] == "independent_cdm"
     return bool(os.getenv("CDM_DATABASE_URL", "").strip()
                 or os.getenv("CDM_PGPASSFILE", "").strip())
 
@@ -53,6 +73,14 @@ def _engine(value: str, passfile: str) -> Engine:
 
 
 def get_engine() -> Engine | None:
+    source = current_selection()
+    if source is not None:
+        if source["id"] == "legacy_pg":
+            return None
+        passfile = os.getenv("CDM_PGPASSFILE", "").strip()
+        if not passfile:
+            raise ClinicalSourceConfigurationError()
+        return _engine(source["url"], passfile)
     value = os.getenv("CDM_DATABASE_URL", "").strip()
     if not value:
         if os.getenv("CDM_PGPASSFILE", "").strip():
@@ -63,6 +91,9 @@ def get_engine() -> Engine | None:
 
 def source_binding() -> str:
     """仅隔离不同临床源的持久缓存，不包含口令、passfile或患者数据。"""
+    source = current_selection()
+    if source is not None:
+        return source["binding"]
     value = os.getenv("CDM_DATABASE_URL", "").strip()
     if not value:
         if os.getenv("CDM_PGPASSFILE", "").strip():

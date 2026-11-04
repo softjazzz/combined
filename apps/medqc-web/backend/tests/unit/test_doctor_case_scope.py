@@ -27,6 +27,8 @@ def database(monkeypatch):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     with engine.connect() as connection:
         connection.execute(text("ATTACH DATABASE ':memory:' AS cdm"))
+        connection.execute(text("ATTACH DATABASE ':memory:' AS qc"))
+        connection.execute(text("CREATE TABLE qc.sync_config_registry(namespace TEXT,config_key TEXT,payload_json TEXT)"))
         connection.commit()
     SysUser.__table__.create(engine)
     MR.__table__.create(engine)  # public旧表替身，不能成为授权来源。
@@ -35,6 +37,8 @@ def database(monkeypatch):
     QCResult.__table__.create(engine)
     def factory():
         return Session(engine)
+    from app.database import connection as owner
+    monkeypatch.setattr(owner, "SessionLocal", factory)
     monkeypatch.setattr(policy, "SessionLocal", factory)
     monkeypatch.setattr(query_service, "_session_factory", factory)
     monkeypatch.setattr(export_service, "_session_factory", factory)

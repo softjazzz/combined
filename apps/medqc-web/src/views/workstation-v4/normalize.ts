@@ -150,6 +150,7 @@ export function normalizeRecord(raw: unknown): PatientRecord {
   return {
     id,
     recordKey: pickString(source, ['recordKey', 'record_key']) || undefined,
+    sourceId: source.sourceId === 'independent_cdm' ? 'independent_cdm' : 'legacy_pg',
     visitId,
     instituteId: pickString(source, ['instituteId', 'institute_id', 'hospital_code']) || undefined,
     patientId: pickString(source, ['patientId', 'patient_id']) || undefined,
