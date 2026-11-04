@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "purpose": "Schema only: historical prerequisites of migrations029/047, no rows or patient identities",
+  "tables": [
+    {
+      "schema": "qc",
+      "name": "sync_job_state",
+      "columns": [
+        {
+          "name": "job_name",
+          "type": "character varying(64)",
+          "notnull": true
+        },
+        {
+          "name": "is_running",
+          "type": "boolean",
+          "notnull": true
+        },
+        {
+          "name": "last_sync_time",
+          "type": "character varying(32)",
+          "notnull": false
+        },
+        {
+          "name": "last_sync_status",
+          "type": "character varying(32)",
+          "notnull": true
+        },
+        {
+          "name": "total_records_synced",
+          "type": "integer",
+          "notnull": true
+        },
+        {
+          "name": "logs_json",
+          "type": "text",
+          "notnull": false
+        },
+        {
+          "name": "remote_connected",
+          "type": "boolean",
+          "notnull": true
+        },
+        {
+          "name": "local_connected",
+          "type": "boolean",
+          "notnull": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp without time zone",
+          "notnull": true
+        }
+      ],
+      "primary": [
+        "job_name"
+      ],
+      "constraints": [
+        {
+          "name": "sync_job_state_pkey",
+          "kind": "p",
+          "columns": [
+            "job_name"
+          ]
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "schema": "public",
+      "name": "visit_index",
+      "columns": [
+        {
+          "name": "institute_id",
+          "type": "character varying(128)",
+          "notnull": true
+        },
+        {
+          "name": "patient_id",
+          "type": "character varying(128)",
+          "notnull": true
+        },
+        {
+          "name": "visit_id",
+          "type": "character varying(128)",
+          "notnull": true
+        },
+        {
+          "name": "scene_current",
+          "type": "character varying(32)",
+          "notnull": true
+        },
+        {
+          "name": "scene_history",
+          "type": "jsonb",
+          "notnull": true
+        },
+        {
+          "name": "anchor_table",
+          "type": "character varying(128)",
+          "notnull": false
+        },
+        {
+          "name": "anchor_time",
+          "type": "timestamp with time zone",
+          "notnull": false
+        },
+        {
+          "name": "policy_version",
+          "type": "character varying(128)",
+          "notnull": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "notnull": true
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ],
+      "constraints": [
+        {
+          "name": "visit_index_pkey",
+          "kind": "p",
+          "columns": [
+            "institute_id",
+            "patient_id",
+            "visit_id"
+          ]
+        }
+      ],
+      "indexes": []
+    }
+  ]
+}

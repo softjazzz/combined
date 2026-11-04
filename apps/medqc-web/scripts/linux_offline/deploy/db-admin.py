@@ -82,6 +82,41 @@ def main():
             r = subprocess.run(cmd, env=env, capture_output=True)
             if r.returncode:
                 raise RuntimeError("backup_or_listing_failed")
+        # 历史029/047假定两个运行时表预先存在。只在空库/本初始化残留两表时建立前置，
+        # 不修改已有版本库，也不伪造Alembic版本。实际新增列仍由029/047/053执行。
+        import sample_set_transfer as transfer
+
+        prereq = json.loads(
+            (Path(__file__).parent / "legacy-bootstrap-schema.json").read_text()
+        )
+        conn = psycopg2.connect(url.replace("postgresql+psycopg2://", "postgresql://"))
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT to_regclass('public.alembic_version')")
+                if cur.fetchone()[0] is None:
+                    allowed = {("qc", "sync_job_state"), ("public", "visit_index")}
+                    cur.execute(
+                        "SELECT table_schema,table_name FROM information_schema.tables WHERE table_schema IN ('public','qc','sys','cdm','legacy') AND table_type='BASE TABLE'"
+                    )
+                    existing = set(cur.fetchall())
+                    if not existing <= allowed:
+                        raise ValueError("unversioned_nonempty_database_refused")
+                    cur.execute("CREATE SCHEMA IF NOT EXISTS qc")
+                    for table in prereq["tables"]:
+                        if (table["schema"], table["name"]) not in allowed:
+                            raise ValueError("invalid_legacy_table")
+                        if (table["schema"], table["name"]) in existing:
+                            actual = transfer.descriptor(
+                                cur, table["schema"], table["name"]
+                            )
+                            transfer.compatible_columns(
+                                table["columns"], actual["columns"]
+                            )
+                        else:
+                            transfer.create_material(cur, table)
+            conn.commit()
+        finally:
+            conn.close()
         r = subprocess.run(
             [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"],
             capture_output=True,
@@ -104,6 +139,33 @@ def main():
             workspace._batch_jobs_table,
         ):
             fn()
+        # 旧Bundle没有纳入历史Alembic；首次业务空库按已冻结业务结构显式初始化。
+        # 只接受公共Bundle白名单，无临床行、身份或来源库写入。
+        import sample_set_transfer as transfer
+
+        bundle_schema = json.loads(
+            (Path(__file__).parent / "runtime-bundle-schema.json").read_text()
+        )
+        conn = psycopg2.connect(url.replace("postgresql+psycopg2://", "postgresql://"))
+        try:
+            with conn.cursor() as cur:
+                for table in bundle_schema["tables"]:
+                    if (
+                        table["schema"] != "public"
+                        or table["name"] not in transfer.BUNDLES
+                    ):
+                        raise ValueError("invalid_runtime_bundle_table")
+                    cur.execute("SELECT to_regclass(%s)", ("public." + table["name"],))
+                    if cur.fetchone()[0]:
+                        actual = transfer.descriptor(cur, "public", table["name"])
+                        transfer.compatible_columns(table["columns"], actual["columns"])
+                        if table["primary"] != actual["primary"]:
+                            raise ValueError("bundle_primary_mismatch")
+                    else:
+                        transfer.create_material(cur, table)
+            conn.commit()
+        finally:
+            conn.close()
         print(json.dumps({"migrated": True, "backup": str(backup)}))
     if args.action == "create-admin":
         password = getpass.getpass("New administrator password (not logged): ")
