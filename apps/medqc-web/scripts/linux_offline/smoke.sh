@@ -41,7 +41,7 @@ runpy.run_path(str(Path(os.environ['KIT'])/'deploy/db-admin.py'),run_name='__mai
 Path(os.environ['MEDQC_SMOKE_LOGIN']).write_text(json.dumps({'account':'fixture_admin','password':password}))
 PY
 "$VENV/bin/python" -B apps/medqc-web/scripts/linux_offline/tests/transfer_pg.py --root "$MEDQC_INSTALL_ROOT" --kit "$KIT" > "$KIT/transfer-smoke.log" 2>&1 || { cat "$KIT/transfer-smoke.log"; exit 1; }
-(cd apps/medqc-web/backend && "$VENV/bin/python" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_linux_transfer_columns.py tests/unit/test_linux_server_startup.py tests/unit/test_production_guard.py tests/unit/test_runtime_build_endpoint.py tests/unit/test_acceptance_startup.py) > "$KIT/unit-smoke.log" 2>&1 || { cat "$KIT/unit-smoke.log"; exit 1; }
+(cd apps/medqc-web/backend && ENV=development "$VENV/bin/python" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_linux_transfer_columns.py tests/unit/test_linux_server_startup.py tests/unit/test_production_guard.py tests/unit/test_runtime_build_endpoint.py tests/unit/test_acceptance_startup.py) > "$KIT/unit-smoke.log" 2>&1 || { cat "$KIT/unit-smoke.log"; exit 1; }
 cd "$MEDQC_INSTALL_ROOT/current/backend"
 "$VENV/bin/python" -m uvicorn app.main:app --host 127.0.0.1 --port 8001 > "$KIT/api-smoke.log" 2>&1 & API=$!
 "$VENV/bin/python" ../serve_dist_spa.py --host 127.0.0.1 --port 80 --dir ../frontend/dist --api-target http://127.0.0.1:8001 > "$KIT/web-smoke.log" 2>&1 & WEB=$!
