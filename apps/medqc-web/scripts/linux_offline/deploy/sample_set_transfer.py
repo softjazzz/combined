@@ -452,16 +452,7 @@ def validate_owner(account, institutes):
     return str(account["id"])
 
 
-LEGACY_JOB_JSON_COLUMNS = {
-    "summary_json",
-    "items_json",
-    "failed_records_json",
-    "child_job_ids_json",
-    "child_summary_json",
-}
-
-
-def compatible_columns(expected, actual, *, table=None):
+def compatible_columns(expected, actual):
     # JSON按字段名装入目标复合类型，写入也沿用目标物理列序；不要求两库attnum相同。
     # 仍严格核对全部字段，不能用dict覆盖掩盖重复列名。
     def named(columns):
@@ -475,22 +466,7 @@ def compatible_columns(expected, actual, *, table=None):
             result[name] = column
         return result
 
-    source, target = named(expected), named(actual)
-    if source.keys() != target.keys():
-        raise ValueError("target_columns_differ_from_export")
-    for name, column in source.items():
-        if column == target[name]:
-            continue
-        # 旧任务包五个JSON列要求非空，但正式创建/补跑用NULL表示尚无结果。
-        # 只允许这一明确owner的源严格、目标可空方向；源值仍在compare_shared逐行检查。
-        if (
-            table is not None
-            and (table["schema"], table["name"]) == ("qc", "custom_qc_batch_jobs")
-            and name in LEGACY_JOB_JSON_COLUMNS
-            and column["notnull"] is True
-            and target[name] == {**column, "notnull": False}
-        ):
-            continue
+    if named(expected) != named(actual):
         raise ValueError("target_columns_differ_from_export")
 
 
@@ -666,7 +642,7 @@ def preflight(conn, folder, manifest, username, user_schema):
                 safe_type(column["type"])
             if table["schema"] != schema or installed:
                 target = descriptor(cur, table["schema"], table["name"])
-                compatible_columns(table["columns"], target["columns"], table=table)
+                compatible_columns(table["columns"], target["columns"])
                 if table["primary"] != target["primary"]:
                     raise ValueError("target_primary_key_mismatch")
             if table["schema"] != schema:

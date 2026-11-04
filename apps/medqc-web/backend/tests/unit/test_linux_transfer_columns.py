@@ -50,24 +50,13 @@ def test_column_order_fix_keeps_structural_rejections(change):
         load_tool().compatible_columns(expected, actual)
 
 
-def test_only_legacy_job_json_accepts_source_stricter_nullability():
+def test_json_nullability_differences_are_still_rejected():
     transfer = load_tool()
     source = [{"name": "items_json", "type": "text", "notnull": True}]
     target = [{**source[0], "notnull": False}]
-    transfer.compatible_columns(
-        source, target, table={"schema": "qc", "name": "custom_qc_batch_jobs"}
-    )
-    for table in [
-        None,
-        {"schema": "public", "name": "custom_qc_batch_jobs"},
-        {"schema": "qc", "name": "other"},
-    ]:
+    for expected, actual in [(source, target), (target, source)]:
         with pytest.raises(ValueError):
-            transfer.compatible_columns(source, target, table=table)
-    with pytest.raises(ValueError):
-        transfer.compatible_columns(
-            target, source, table={"schema": "qc", "name": "custom_qc_batch_jobs"}
-        )
+            transfer.compatible_columns(expected, actual)
 
 
 def test_required_source_values_checked_before_any_insert(tmp_path):

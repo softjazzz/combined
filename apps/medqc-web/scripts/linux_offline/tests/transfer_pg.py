@@ -51,9 +51,7 @@ def main():
             # 独立冻结的真实导出结构20项，不是用目标库自身反射后自证兼容。
             for table in contract["tables"]:
                 actual = transfer.descriptor(cur, table["schema"], table["name"])
-                transfer.compatible_columns(
-                    table["columns"], actual["columns"], table=table
-                )
+                transfer.compatible_columns(table["columns"], actual["columns"])
                 assert actual["primary"] == table["primary"]
             checks.append("20_exported_shared_schemas_compatible")
             assert jobs.ensure_job_owner(cur, transfer) is False
@@ -175,9 +173,7 @@ def main():
                     rows = [row]
                 table["file"] = f"{table['schema']}.{table['name']}.jsonl"
                 table["count"] = len(rows)
-                transfer.write_lines(folder / table["file"], rows) if hasattr(
-                    transfer, "write_lines"
-                ) else (folder / table["file"]).write_text(
+                (folder / table["file"]).write_text(
                     "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
                     encoding="utf-8",
                 )
@@ -268,7 +264,7 @@ def main():
             job = next(t for t in tables if t["name"] == "custom_qc_batch_jobs")
             original = (folder / job["file"]).read_text()
             bad = json.loads(original)
-            bad["items_json"] = None
+            bad["rule_count"] = None
             (folder / job["file"]).write_text(json.dumps(bad) + "\n")
             job["sha256"] = transfer.sha256(folder / job["file"])
             save_manifest()
@@ -276,7 +272,7 @@ def main():
             (folder / job["file"]).write_text(original)
             job["sha256"] = transfer.sha256(folder / job["file"])
             save_manifest()
-            checks.append("null_source_legacy_json_rejected")
+            checks.append("null_source_required_column_rejected")
             assert command("import")["verified"]
             assert command("verify")["verified"]
             assert command("import")["already_imported"]
@@ -378,6 +374,12 @@ def main():
             total_records=0,
         )
         assert created["status"] == "queued" and created["items"] == []
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT execution_mode,draft_ids_json,rule_count,items_json,failed_records_json FROM qc.custom_qc_batch_jobs WHERE id=%s",
+                (created["id"],),
+            )
+            assert cur.fetchone() == ("batch", "[]", 1, None, None)
         checks.append(
             "formal_job_creation_without_execution_preserves_null_empty_results"
         )

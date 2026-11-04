@@ -136,6 +136,14 @@ def main():
             raise RuntimeError(
                 "migration_failed; inspect restricted local migration log; do not stamp"
             )
+        # 先验证/修复任务owner，再允许既有运行时初始化；非空异常表不会先被兼容DDL改动。
+        conn = psycopg2.connect(url.replace("postgresql+psycopg2://", "postgresql://"))
+        try:
+            with conn.cursor() as cur:
+                ensure_job_owner(cur, transfer)
+            conn.commit()
+        finally:
+            conn.close()
         # 旧样本与规则草稿表是既有运行时owner，首次空库须显式初始化。
         from app.services import custom_qc_sample_pool_service as pool
         from app.services import custom_qc_workspace_service as workspace
@@ -159,8 +167,6 @@ def main():
         conn = psycopg2.connect(url.replace("postgresql+psycopg2://", "postgresql://"))
         try:
             with conn.cursor() as cur:
-                # 也处理旧交付包已迁移062、但尚无任务的31列空表；非空表拒绝自动改动。
-                ensure_job_owner(cur, transfer)
                 for table in bundle_schema["tables"]:
                     if (
                         table["schema"] != "public"
