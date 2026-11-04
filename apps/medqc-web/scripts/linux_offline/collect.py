@@ -207,8 +207,8 @@ def main():
                 "commit": commit,
                 "build_id": build_id,
                 "platform": "Ubuntu22.04-x86_64-Python3.10",
-                "source_base": "0d3c17c447c873735842eb2a568b38985dfca68f",
-                "scope": "Business database and 1026 display; independent CDM is not connected",
+                "source_base": "998f7ac94ff6d9bf3a5a52383c0f909a36ad6509",
+                "scope": "Dual clinical sources; legacy default, CDM opt-in; MQ/models/background tasks off",
             },
             indent=2,
         )

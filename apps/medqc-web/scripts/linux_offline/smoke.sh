@@ -46,6 +46,14 @@ Path(os.environ['MEDQC_SMOKE_LOGIN']).write_text(json.dumps({'account':'fixture_
 PY
 "$VENV/bin/python" -B apps/medqc-web/scripts/linux_offline/tests/transfer_pg.py --root "$MEDQC_INSTALL_ROOT" --kit "$KIT" > "$KIT/transfer-smoke.log" 2>&1 || { cat "$KIT/transfer-smoke.log"; exit 1; }
 (cd apps/medqc-web/backend && ENV=development "$VENV/bin/python" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_linux_bundle_hygiene.py tests/unit/test_linux_transfer_columns.py tests/unit/test_linux_server_startup.py tests/unit/test_production_guard.py tests/unit/test_runtime_build_endpoint.py tests/unit/test_acceptance_startup.py) > "$KIT/unit-smoke.log" 2>&1 || { cat "$KIT/unit-smoke.log"; exit 1; }
+# 两个一次性PG16库；完整060临床schema快照，无患者数据，不接医院CDM。
+ENV=development "$VENV/bin/python" -B apps/medqc-web/backend/scripts/validate_clinical_sources_pg.py \
+  --pg-bin /usr/lib/postgresql/16/bin \
+  --preflight-script "$KIT/deploy/cdm-preflight.py" \
+  --source-schema apps/medqc-web/scripts/linux_offline/tests/clinical-schema-060.sql \
+  --output-dir "$TEST/dual-source" --port 62996 > "$KIT/dual-source-smoke.log" 2>&1 || { cat "$KIT/dual-source-smoke.log"; cat "$TEST/dual-source/commands.log"; exit 1; }
+cp "$TEST/dual-source/result.json" "$KIT/DUAL-SOURCE-VALIDATION.json"
+(cd apps/medqc-web/backend && ENV=development "$VENV/bin/python" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_clinical_sources.py tests/unit/test_latest_full_record_result.py tests/unit/test_workstation_query_service.py tests/unit/test_doctor_case_scope.py tests/unit/test_current_document_view.py tests/unit/test_current_frontpage_view.py tests/unit/test_linux_dual_source_delivery.py) > "$KIT/clinical-unit-smoke.log" 2>&1 || { cat "$KIT/clinical-unit-smoke.log"; exit 1; }
 cd "$MEDQC_INSTALL_ROOT/current/backend"
 "$VENV/bin/python" -m uvicorn app.main:app --host 127.0.0.1 --port 8001 > "$KIT/api-smoke.log" 2>&1 & API=$!
 "$VENV/bin/python" ../serve_dist_spa.py --host 127.0.0.1 --port 80 --dir ../frontend/dist --api-target http://127.0.0.1:8001 > "$KIT/web-smoke.log" 2>&1 & WEB=$!
@@ -65,13 +73,17 @@ connection=http.client.HTTPConnection('127.0.0.1',80)
 connection.request('POST','/api/v1/auth/login',Path(os.environ['MEDQC_SMOKE_LOGIN']).read_text(),{'Content-Type':'application/json'})
 response=connection.getresponse();body=json.loads(response.read());assert response.status==200
 token=(body.get('data') or body)['access_token']
-for route in ['/api/v1/auth/me','/api/v1/qc/sample-pools']:
-    connection.request('GET',route,headers={'Authorization':'Bearer '+token});response=connection.getresponse();response.read();assert response.status==200,(route,response.status)
+for route in ['/api/v1/auth/me','/api/v1/qc/sample-pools','/api/v1/clinical-sources/options']:
+    connection.request('GET',route,headers={'Authorization':'Bearer '+token});response=connection.getresponse();raw=response.read();assert response.status==200,(route,response.status)
+    if route.endswith('/options'):
+        options=json.loads(raw)['data'];assert options['default_source']=='legacy_pg'
+        assert next(source for source in options['sources'] if source['id']=='independent_cdm')['enabled'] is False
 connection.close()
 front=json.loads((r/'application/frontend/dist/build-info.json').read_text());assert front['git_commit']==info['git_commit'] and front['build_id']==info['build_id']
 report={'offline_install':True,'pip_check':True,'imports':True,'pg_major':16,'database_role':'non-superuser database owner','empty_database_migration':True,'production_startup':True,'frontend_and_api':True,'persistent_auth_and_sample_list':True,'static_traversal_rejected':True,'model_calls':0,'network_namespace':'loopback-only','commit':build['commit']}
 report.update(synthetic_transfer_roundtrip=True, exported_shared_schema_contracts=20, legacy_job_columns=True, column_order_independent=True)
 report['install_from_inaccessible_cwd'] = True
+report.update(dual_source_pg16=True, source_tables=68, legacy_default=True, cdm_default_disabled=True, mq_default_disabled=True, no_model_credentials=True, background_default_disabled=True)
 (r/'VALIDATION.json').write_text(json.dumps(report,indent=2)+'\n')
 print(json.dumps(report))
 PY

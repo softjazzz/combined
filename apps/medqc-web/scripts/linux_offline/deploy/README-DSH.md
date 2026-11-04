@@ -1,6 +1,6 @@
 # DSH：Ubuntu22 / Python310 / PG16 完整离线部署
 
-本包为独立业务应用及依赖，不附患者数据、口令、JWT、激活码、私钥或模型。此前1026加密包仍单独使用。本次仅连接新建medqc_business，独立CDM接入尚未完成。不可将DATABASE_URL改为medqc_sync_cdm。
+本包为独立业务应用及依赖，不附患者数据、口令、JWT、激活码、私钥或模型。此前1026加密包仍单独使用。本版基于业务合并998f7ac94，支持显式选源的独立CDM只读接入，默认仍使用原有源、CDM停用。不可将DATABASE_URL改为medqc_sync_cdm。已部署服务器升级请先读本目录UPGRADE-CDM-DSH.md，不重复建库、建账号或导入1026。
 
 ## 1. 核对交付文件及前置条件
 
@@ -136,6 +136,6 @@ sudo journalctl -u medqc-business-api.service -u medqc-business-web.service --si
 
 本包在GitHub独立Ubuntu22/Python310环境构建，断网命名空间中安装和合成PG16迁移/启动检查；具体结果以VALIDATION.json及日志为准。没有连接医院服务器、同步CDM或模型，没有运行真实病历或模型质量验收。PG客户端随包独立携带，不升级医院PG16.13。
 
-不附Node业务助手、ICD语义向量、模型或医院数据；可选业务助手、服务器中文PDF字体及实际80端口/systemd/防火墙/激活/院内页面仍由现场确认。独立CDM读取及普通医院病例发现暂未接入，本阶段不能靠改连接串启用。
+不附Node业务助手、ICD语义向量、模型或医院数据；可选业务助手、服务器中文PDF字体及实际80端口/systemd/防火墙/激活/院内页面仍由现场确认。独立CDM病历池/三坐标读取已接入；现场表字段、专用只读账号、历史结果及只读联调仍需验收。只读检查不保存设置，启用和保存必须另行授权；不能靠替换业务连接串启用。
 
 PG16构建来源：https://www.postgresql.org/download/linux/ubuntu/ 。仅构建机在线使用官方签名源，医院安装阶段不访问该源。

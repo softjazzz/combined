@@ -1,0 +1,10 @@
+{
+  "source_revision": "20261104_000060",
+  "source_commit": "dfb41f244ca853e6f084fa8b6a27955df4385d51",
+  "source_bootstrap_sha256": "a59fdfa91ebe2e89d4e05e8d4615d79104e00d269ddc6c85fa377e16f3b319e5",
+  "schema_sha256": "7425e409ab0c429817f347178bc5a1aeea61aed46d3a6856be9184713dd0e22b",
+  "tables": 68,
+  "schema_only": true,
+  "normalization": "remove PG18 transaction_timeout and psql restrict session commands; clinical DDL unchanged",
+  "synthetic_only": true
+}

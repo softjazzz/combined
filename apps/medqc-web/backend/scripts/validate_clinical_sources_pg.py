@@ -32,7 +32,7 @@ def denied(*args, **kwargs):
 def bootstrap(source: Path, url: str, passfile: Path):
     """在独立进程中加载正式同步迁移，拒绝读取它旁边的.env。"""
     sys.path.insert(0, str(source))
-    spec = importlib.util.spec_from_file_location("synthetic_cdm_bootstrap", source / "scripts/bootstrap_cache_sync_database.py")
+    spec = importlib.util.spec_from_file_location("medqc_sync_cdm_bootstrap", source / "scripts/bootstrap_cache_sync_database.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     parsed = sa.engine.make_url(url)
@@ -46,7 +46,7 @@ def bootstrap(source: Path, url: str, passfile: Path):
         "DATABASE_URL": "", "MEDQC_BOOTSTRAP_DATABASE_URL": url, "PGPASSFILE": str(passfile),
         "PGPASSWORD": "", "DB_SCHEMA_MODE": "split", "REMOTE_DB_URL": "",
     }):
-        return module.initialize(parsed.database, owner_role="synthetic_cdm_owner")
+        return module.initialize(parsed.database, owner_role="medqc_sync_cdm_owner")
 
 
 def run(args):
@@ -81,29 +81,36 @@ def run(args):
         admin.rollback()
         admin.autocommit = True
         with admin.cursor() as cursor:
-            cursor.execute("CREATE ROLE synthetic_cdm_owner NOLOGIN")
+            cursor.execute("CREATE ROLE medqc_sync_cdm_owner NOLOGIN")
             cursor.execute("CREATE ROLE synthetic_reader LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE")
-            cursor.execute("CREATE DATABASE synthetic_cdm OWNER synthetic_cdm_owner")
+            cursor.execute("CREATE DATABASE medqc_sync_cdm OWNER medqc_sync_cdm_owner")
             cursor.execute("CREATE DATABASE synthetic_business")
         admin.close()
-        url = f"postgresql+psycopg2://postgres@127.0.0.1:{args.port}/synthetic_cdm"
+        url = f"postgresql+psycopg2://postgres@127.0.0.1:{args.port}/medqc_sync_cdm"
         passfile = directory / "synthetic.pgpass"
         passfile.write_text(f"127.0.0.1:{args.port}:*:synthetic_reader:synthetic-only\n127.0.0.1:{args.port}:*:postgres:synthetic-only\n", encoding="utf-8")
         passfile.chmod(0o600)
-        # 使用正式同步060迁移，不把同步分支迁移移入业务062链。
-        environment = {key: value for key, value in os.environ.items() if not any(part in key.upper() for part in ("DATABASE", "DSN", "API_KEY", "PGPASS", "CDM_", "PYTHONPATH"))}
-        with logs.open("ab") as output:
-            subprocess.run([sys.executable, "-B", __file__, "--bootstrap-source", str(args.source_backend.resolve()),
-                "--bootstrap-url", url, "--bootstrap-passfile", str(passfile)], check=True, env=environment,
-                stdout=output, stderr=output, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        # 使用正式同步060迁移或其无数据schema快照，不移入业务062迁移链。
+        if args.source_schema:
+            schema = args.source_schema.resolve()
+            provenance = json.loads(schema.with_suffix(".provenance.json").read_text())
+            assert hashlib.sha256(schema.read_bytes()).hexdigest() == provenance["schema_sha256"]
+            assert provenance["schema_only"] and provenance["synthetic_only"]
+            command("psql", "-X", "-h", "127.0.0.1", "-p", args.port, "-U", "postgres", "-d", "medqc_sync_cdm", "--set=ON_ERROR_STOP=1", "-f", schema)
+        else:
+            environment = {key: value for key, value in os.environ.items() if not any(part in key.upper() for part in ("DATABASE", "DSN", "API_KEY", "PGPASS", "CDM_", "PYTHONPATH"))}
+            with logs.open("ab") as output:
+                subprocess.run([sys.executable, "-B", __file__, "--bootstrap-source", str(args.source_backend.resolve()),
+                    "--bootstrap-url", url, "--bootstrap-passfile", str(passfile)], check=True, env=environment,
+                    stdout=output, stderr=output, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
         # 相同临床结构镜像到一次性业务库，只为构造同键不同内容；不导出任何现存数据。
         schema_file = directory / "synthetic-schema.sql"
-        command("pg_dump", "-h", "127.0.0.1", "-p", args.port, "-U", "postgres", "-d", "synthetic_cdm",
+        command("pg_dump", "-h", "127.0.0.1", "-p", args.port, "-U", "postgres", "-d", "medqc_sync_cdm",
                 "--schema-only", "--schema=cdm", "--no-owner", "--no-privileges", "-f", schema_file)
         command("psql", "-X", "-h", "127.0.0.1", "-p", args.port, "-U", "postgres", "-d", "synthetic_business",
                 "--set=ON_ERROR_STOP=1", "-f", schema_file)
         source = sa.create_engine(url)
-        business = sa.create_engine(url.replace("synthetic_cdm", "synthetic_business"), connect_args={"options": "-csearch_path=public,qc,sys,cdm"})
+        business = sa.create_engine(url.replace("medqc_sync_cdm", "synthetic_business"), connect_args={"options": "-csearch_path=public,qc,sys,cdm"})
         engines.extend([source, business])
         for engine, marker in ((source, "SYNTHETIC-CDM"), (business, "SYNTHETIC-LEGACY")):
             with engine.begin() as connection:
@@ -114,9 +121,12 @@ def run(args):
         with source.begin() as connection:
             connection.execute(sa.text("INSERT INTO cdm.inpat_registration(institute_id,patient_id,visit_id,name,admission_datetime) VALUES('I','P2','V2','SYNTHETIC-NO-FRONTPAGE','2026-10-03 08:00')"))
             connection.execute(sa.text("INSERT INTO cdm.discharge_record(institute_id,patient_id,visit_id,document_id,discharge_time,record_content) VALUES('I','P','V','EXIT','2026-10-04 11:00','SYNTHETIC-DISCHARGE')"))
-            connection.execute(sa.text("GRANT CONNECT ON DATABASE synthetic_cdm TO synthetic_reader"))
+            connection.execute(sa.text("GRANT CONNECT ON DATABASE medqc_sync_cdm TO synthetic_reader"))
             connection.execute(sa.text("GRANT USAGE ON SCHEMA cdm TO synthetic_reader"))
             connection.execute(sa.text("GRANT SELECT ON ALL TABLES IN SCHEMA cdm TO synthetic_reader"))
+        if args.preflight_script:
+            subprocess.run([sys.executable, "-B", str(args.preflight_script.resolve()), "--host", "127.0.0.1", "--port", str(args.port),
+                "--username", "synthetic_reader", "--database", "medqc_sync_cdm", "--passfile", str(passfile)], check=True)
         def fingerprint():
             with source.connect() as connection:
                 tables = sa.inspect(connection).get_table_names(schema="cdm")
@@ -133,7 +143,7 @@ def run(args):
             def connect(dsn=None, **kwargs):
                 values = {**(parse_dsn(dsn) if dsn else {}), **kwargs}
                 assert values.get("host") == "127.0.0.1" and int(values.get("port", 0)) == args.port
-                assert values.get("dbname") in {"synthetic_business", "synthetic_cdm"}
+                assert values.get("dbname") in {"synthetic_business", "medqc_sync_cdm"}
                 return real_connect(dsn, **kwargs)
             stack.enter_context(patch.object(psycopg2, "connect", connect))
             from app.database import connection as owner, clinical_connection as clinical
@@ -152,7 +162,7 @@ def run(args):
             profile = settings.SourceSettings()
             profile.cdm.enabled = True
             profile.cdm.port = args.port
-            profile.cdm.database = "synthetic_cdm"
+            profile.cdm.database = "medqc_sync_cdm"
             profile.cdm.username = "synthetic_reader"
             selected = settings.snapshot(profile, "independent_cdm")
             engines.append(clinical._engine(selected["url"], str(passfile)))
@@ -292,7 +302,8 @@ def run(args):
             "source_tables": table_count, "source_data_and_schema_unchanged": True,
             "source_role_write_denied": True, "business_cache_write_verified": True, "same_keys_isolated": True, "canonical_source_selection_verified": True, "doctor_scope_verified": True,
             "pdf_business_route_verified": True, "models_called": 0, "real_databases_connected": False,
-            "source_bootstrap_sha256": hashlib.sha256((args.source_backend / "scripts/bootstrap_cache_sync_database.py").read_bytes()).hexdigest()}
+            "source_bootstrap_sha256": provenance["source_bootstrap_sha256"] if args.source_schema else hashlib.sha256((args.source_backend / "scripts/bootstrap_cache_sync_database.py").read_bytes()).hexdigest(),
+            "source_schema_snapshot": bool(args.source_schema)}
         (directory / "result.json").write_text(json.dumps(result, indent=2)+"\n", encoding="utf-8")
         print(json.dumps(result))
     finally:
@@ -304,8 +315,11 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pg-bin", type=Path)
-    parser.add_argument("--source-backend", type=Path)
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--source-backend", type=Path)
+    source.add_argument("--source-schema", type=Path)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--preflight-script", type=Path)
     parser.add_argument("--port", type=int, default=62996)
     parser.add_argument("--bootstrap-source", type=Path)
     parser.add_argument("--bootstrap-url")
@@ -313,7 +327,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.bootstrap_source:
         bootstrap(args.bootstrap_source, args.bootstrap_url, args.bootstrap_passfile)
-    elif all((args.pg_bin, args.source_backend, args.output_dir)):
+    elif args.pg_bin and args.output_dir and (args.source_backend or args.source_schema):
         run(args)
     else:
         parser.error("pg-bin, source-backend and a fresh output-dir are required")

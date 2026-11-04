@@ -86,3 +86,4 @@ jobs:
             ${{ runner.temp }}/medqc-offline/*smoke*
             ${{ runner.temp }}/medqc-offline/install-offline.log
             ${{ runner.temp }}/medqc-offline/VALIDATION.json
+            ${{ runner.temp }}/medqc-offline/DUAL-SOURCE-VALIDATION.json
