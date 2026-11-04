@@ -50,7 +50,7 @@ jobs:
           "$RUNNER_TEMP/lock-env/bin/python" apps/medqc-web/scripts/linux_offline/make_lock.py "$RUNNER_TEMP/medqc-offline"
       - name: Ubuntu22 Python310 PG16 offline isolation smoke
         run: |
-          sudo unshare --net bash -c 'ip link set lo up; exec runuser -u runner -- "$@"' bash bash apps/medqc-web/scripts/linux_offline/smoke.sh "$RUNNER_TEMP/medqc-offline" "$(command -v python)"
+          sudo unshare --net bash -c 'ip link set lo up; exec setpriv --reuid=runner --regid=runner --init-groups --inh-caps=+net_bind_service --ambient-caps=+net_bind_service --no-new-privs "$@"' bash bash apps/medqc-web/scripts/linux_offline/smoke.sh "$RUNNER_TEMP/medqc-offline" "$(command -v python)"
       - name: Final checksums and archive
         run: |
           python apps/medqc-web/scripts/linux_offline/make_lock.py "$RUNNER_TEMP/medqc-offline" --manifest-only

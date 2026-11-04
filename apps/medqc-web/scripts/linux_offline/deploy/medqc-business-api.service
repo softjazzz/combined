@@ -8,6 +8,7 @@ User=medqc-business
 Group=medqc-business
 WorkingDirectory=/data/medqc/business/current/backend
 Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=ENV=production
 Environment=TZ=Asia/Shanghai
 ExecStart=/data/medqc/business/venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1
 Restart=on-failure

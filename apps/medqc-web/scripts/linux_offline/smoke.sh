@@ -13,12 +13,13 @@ echo synthetic > "$TEST/test.txt"
 "$KIT/tools/7zip/7z" a -mhe=on -pSyntheticOnly "$TEST/test.7z" "$TEST/test.txt" >/dev/null
 "$KIT/tools/7zip/7z" t -pSyntheticOnly "$TEST/test.7z" >/dev/null
 /usr/lib/postgresql/16/bin/initdb -D "$TEST/pg" -A trust --no-locale -E UTF8 >/dev/null
-/usr/lib/postgresql/16/bin/pg_ctl -D "$TEST/pg" -l "$TEST/pg.log" -o "-h 127.0.0.1 -p 55498 -c shared_buffers=32MB -c max_connections=15" -w start >/dev/null
+if ! /usr/lib/postgresql/16/bin/pg_ctl -D "$TEST/pg" -l "$TEST/pg.log" -o "-h 127.0.0.1 -p 55498 -k $TEST -c shared_buffers=32MB -c max_connections=15" -w start >/dev/null; then cat "$TEST/pg.log"; exit 1; fi
 API= WEB=
 cleanup(){ [[ -z "$API" ]] || kill "$API" 2>/dev/null || true; [[ -z "$WEB" ]] || kill "$WEB" 2>/dev/null || true; /usr/lib/postgresql/16/bin/pg_ctl -D "$TEST/pg" -m fast -w stop >/dev/null || true; }
 trap cleanup EXIT
 "$KIT/tools/pg16/psql" -h 127.0.0.1 -p 55498 -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE medqc_business' >/dev/null
 export MEDQC_SMOKE_ROOT="$MEDQC_INSTALL_ROOT"
+export ENV=production
 "$VENV/bin/python" - <<'PY'
 import os,secrets
 from pathlib import Path
@@ -40,12 +41,12 @@ Path(os.environ['MEDQC_SMOKE_LOGIN']).write_text(json.dumps({'account':'fixture_
 PY
 cd "$MEDQC_INSTALL_ROOT/current/backend"
 "$VENV/bin/python" -m uvicorn app.main:app --host 127.0.0.1 --port 8001 > "$KIT/api-smoke.log" 2>&1 & API=$!
-"$VENV/bin/python" ../serve_dist_spa.py --host 127.0.0.1 --port 18080 --dir ../frontend/dist --api-target http://127.0.0.1:8001 > "$KIT/web-smoke.log" 2>&1 & WEB=$!
+"$VENV/bin/python" ../serve_dist_spa.py --host 127.0.0.1 --port 80 --dir ../frontend/dist --api-target http://127.0.0.1:8001 > "$KIT/web-smoke.log" 2>&1 & WEB=$!
 for i in $(seq 1 45); do curl -fsS http://127.0.0.1:8001/api/v1/runtime-build > "$KIT/runtime-smoke.json" && break || sleep 1; done
 kill -0 "$API" || { cat "$KIT/api-smoke.log"; exit 1; }
-curl -fsS http://127.0.0.1:18080/workstation-v5/login >/dev/null
-curl -fsS http://127.0.0.1:18080/api/v1/runtime-build >/dev/null
-[[ $(curl --path-as-is -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/%2e%2e/backend/.env) == 403 ]]
+curl -fsS http://127.0.0.1/workstation-v5/login >/dev/null
+curl -fsS http://127.0.0.1/api/v1/runtime-build >/dev/null
+[[ $(curl --path-as-is -s -o /dev/null -w '%{http_code}' http://127.0.0.1/%2e%2e/backend/.env) == 403 ]]
 export KIT
 "$VENV/bin/python" - <<'PY'
 import json,os
@@ -53,7 +54,7 @@ import http.client
 from pathlib import Path
 r=Path(os.environ['KIT']);build=json.loads((r/'BUILD.json').read_text());info=json.loads((r/'runtime-smoke.json').read_text())
 assert build['commit'] in json.dumps(info)
-connection=http.client.HTTPConnection('127.0.0.1',18080)
+connection=http.client.HTTPConnection('127.0.0.1',80)
 connection.request('POST','/api/v1/auth/login',Path(os.environ['MEDQC_SMOKE_LOGIN']).read_text(),{'Content-Type':'application/json'})
 response=connection.getresponse();body=json.loads(response.read());assert response.status==200
 token=(body.get('data') or body)['access_token']

@@ -12,6 +12,7 @@ from uuid import uuid4
 
 
 def main():
+    os.umask(0o077)
     p = argparse.ArgumentParser()
     p.add_argument("action", choices=["check", "migrate", "create-admin"])
     p.add_argument("--root", type=Path, default=Path("/data/medqc/business"))
