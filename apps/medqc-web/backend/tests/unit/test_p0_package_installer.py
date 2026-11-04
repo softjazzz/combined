@@ -66,9 +66,28 @@ def test_loaded_runtime_proof_compares_real_loaded_functions(tmp_path, monkeypat
 
 
 def test_formal_release_proof_needs_no_patch_marker(tmp_path, monkeypatch):
+    import inspect
+    from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
     from app.services.qc_workspace import p0_runtime
+    # 正式执行方法带计时包装；发布校验必须穿透包装并保留补跑能力识别。
+    wrapped = CustomQCWorkspaceService.complete_batch_job
+    assert inspect.unwrap(wrapped) is not wrapped
     fake_source = tmp_path / "app/services/qc_workspace/p0_runtime.py"
     monkeypatch.setattr(p0_runtime, "__file__", str(fake_source))
     assert p0_runtime.loaded_p0_proof() is None
     proof = p0_runtime.loaded_p0_proof(release_identity={"available": True})
     assert proof["loaded_equals_disk"] is True and proof["recovery_supported"] is True
+
+
+def test_release_proof_still_detects_changed_business_body(tmp_path, monkeypatch):
+    from app.services.qc_workspace import p0_runtime
+    from app.services.luxian_0609 import native_transfusion_execution
+    source = tmp_path / "fake_transfusion.py"
+    source.write_text("def _programmatic_044_status(documents):\n return 'before'\n", encoding="utf8")
+    namespace = {}
+    exec(compile(source.read_bytes(), str(source), "exec"), namespace)
+    monkeypatch.setattr(native_transfusion_execution, "_programmatic_044_status", namespace["_programmatic_044_status"])
+    source.write_text("def _programmatic_044_status(documents):\n return 'after'\n", encoding="utf8")
+    proof = p0_runtime.loaded_p0_proof(release_identity={"available": True})
+    assert proof["loaded_equals_disk"] is False
+    assert proof["functions"]["transfusion"]["loaded_equals_disk"] is False
