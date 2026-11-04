@@ -111,6 +111,9 @@ class GatewayRuntime:
         if profile is None:
             raise GatewayAPIError(GatewayErrorCode.INVALID_PROFILE.value, status_code=400, retryable=False)
         payload = prepare_provider_payload(profile, completion.payload, allow_strata_prefix=internal_prefix)
+        if isinstance(self.sender, HttpxProviderSender):
+            await self.sender.ensure_counter(profile)
+            payload = self.sender.prepare(profile, payload)
         try:
             guard_payload(profile.provider_code, profile.name, payload, profile.context_budget,
                           enabled=strict_enabled() or completion.context_budget_required, phase="gateway_before_queue", attribution={"request_id": str(completion.request_id)})
@@ -237,10 +240,15 @@ class GatewayRuntime:
                     raise GatewayAPIError(error.code, status_code=400, retryable=False) from None
                 # 这段在 wait_for 创建的 task 真正被调度后才执行。
                 # 置位后直接 await coroutine，中间无任务切换点，sender 函数体立即进入。
+                if isinstance(self.sender, HttpxProviderSender):
+                    await self.sender.ensure_identity(profile)
+                    final_payload = self.sender.prepare(profile, payload)
+                else:
+                    final_payload = payload
                 dispatch_state.started = True
                 return await self.sender.send(
                     profile,
-                    payload,
+                    final_payload,
                     timeout_seconds=latest_remaining,
                 )
 

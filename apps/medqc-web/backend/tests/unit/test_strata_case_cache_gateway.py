@@ -11,13 +11,14 @@ from pydantic import ValidationError
 
 from app.llm_gateway.config import GatewayConfigurationError, GatewaySettings, ProfileConfig, ResourceConfig
 from app.llm_gateway.main import GatewayRuntime
+from app.services.strata_protocol import prepare_request
 from app.llm_gateway.providers import InvalidPayloadError, ProviderHTTPError, ProviderTimeoutError
 from app.services.llm_dispatch.contracts import GatewayCasePrefix, GatewayCompletionRequest, GatewayPrimeMetrics
 
 
 def settings(*, enabled=True, capacity=64):
     profile = ProfileConfig("strata_first_pass", "gpu", "strata", "synthetic-model",
-                            "http://provider.test/v1/chat/completions")
+                            "http://provider.test/v1/chat/completions", strata_protocol="strata-p9b-v1")
     return GatewaySettings(
         token="synthetic-gateway-token-at-least-32-chars", resources={"gpu": ResourceConfig("gpu", 2, 4)},
         profiles={profile.name: profile}, allowed_hosts=frozenset({"provider.test"}),
@@ -72,7 +73,7 @@ async def test_disabled_unproven_reuse_and_small_prefix_are_exact_cold_requests(
     runtime = GatewayRuntime(settings(enabled=enabled), sender)
     req = request(expected=expected, prefix=prefix)
     result = await runtime.complete(req)
-    assert sender.payloads == [req.payload]
+    assert sender.payloads == [prepare_request(req.payload)]
     assert result["choices"] == answer()["choices"]
     assert result["_strata_cache"]["prime_requests_started"] == 0
     assert await runtime.shutdown()
@@ -122,7 +123,7 @@ async def test_invalid_prime_checkpoint_falls_back_to_original_without_fake_judg
     runtime = GatewayRuntime(settings(), sender)
     req = request()
     result = await runtime.complete(req)
-    assert sender.payloads[-1] == req.payload
+    assert sender.payloads[-1] == prepare_request(req.payload)
     assert result["choices"] == answer()["choices"]
     assert result["_strata_cache"]["strategy"] == "prime_failed"
     assert not runtime.case_cache.entries
@@ -135,7 +136,7 @@ async def test_known_prime_http_failure_cold_fallback_and_miss_never_reasks_succ
     runtime = GatewayRuntime(settings(), sender)
     req = request()
     result = await runtime.complete(req)
-    assert len(sender.payloads) == 2 and sender.payloads[-1] == req.payload
+    assert len(sender.payloads) == 2 and sender.payloads[-1] == prepare_request(req.payload)
     assert result["_strata_cache"]["prime_error_code"] == "gateway_provider_rejected"
     assert await runtime.shutdown()
     sender = Sender(cache=0)
@@ -243,7 +244,7 @@ async def test_upstream_cannot_spoof_gateway_or_worker_cache_markers():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("variant", ["top", "nested", "unknown"])
-async def test_thinking_true_or_unknown_keeps_original_cold(variant):
+async def test_thinking_is_canonical_off_before_cache(variant):
     sender = Sender()
     runtime = GatewayRuntime(settings(), sender)
     req = request()
@@ -255,14 +256,14 @@ async def test_thinking_true_or_unknown_keeps_original_cold(variant):
     else:
         req.payload.pop("chat_template_kwargs")
     await runtime.complete(req)
-    assert len(sender.payloads) == 1
-    assert "strata_prefix" not in sender.payloads[0]
-    assert not runtime.case_cache.entries
+    assert len(sender.payloads) == 2
+    assert all(p["chat_template_kwargs"] == {"enable_thinking": False} for p in sender.payloads)
+    assert runtime.case_cache.entries
     assert await runtime.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_thinking_conflict_rejected_and_budget_changes_identity():
+async def test_thinking_conflict_rejected_and_inactive_budget_is_removed():
     sender = Sender()
     runtime = GatewayRuntime(settings(), sender)
     bad = request()
@@ -275,7 +276,7 @@ async def test_thinking_conflict_rejected_and_budget_changes_identity():
     second = request()
     second.payload["thinking_budget"] = 200
     await runtime.complete(second)
-    assert sum(p.get("max_tokens") == 1 for p in sender.payloads) == 2
+    assert sum(p.get("max_tokens") == 1 for p in sender.payloads) == 1
     assert await runtime.shutdown()
 
 
@@ -294,7 +295,7 @@ async def test_malformed_prime_choice_never_builds_checkpoint(choices):
     req = request()
     result = await runtime.complete(req)
     assert not runtime.case_cache.entries
-    assert sender.payloads[-1] == req.payload
+    assert sender.payloads[-1] == prepare_request(req.payload)
     assert result["_strata_cache"]["strategy"] == "prime_failed"
     assert await runtime.shutdown()
 

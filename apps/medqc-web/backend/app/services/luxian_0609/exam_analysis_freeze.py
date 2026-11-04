@@ -50,8 +50,20 @@ def freeze_key(prompt: str, expected: Mapping[int, tuple[str, ...]] | None = Non
     return digest.hexdigest()
 
 
+def _windows_storage_path(path: Path) -> Path:
+    # P5-B/实验隔离增加目录深度；保留完整隔离键，使用Windows长路径而不截短摘要。
+    if os.name != 'nt':
+        return path
+    absolute = str(path.resolve())
+    if absolute.startswith('\\\\?\\'):
+        return Path(absolute)
+    if absolute.startswith('\\\\'):
+        return Path('\\\\?\\UNC\\' + absolute[2:])
+    return Path('\\\\?\\' + absolute)
+
+
 def load_payload(namespace: str, key: str) -> Mapping[str, Any] | None:
-    path = experiment_store_dir(default_store_dir()) / namespace / f"{key}.json"
+    path = _windows_storage_path(experiment_store_dir(default_store_dir()) / namespace / f"{key}.json")
     if not path.is_file():
         return None
     try:
@@ -70,7 +82,7 @@ def save_payload(namespace: str, key: str, payload: Mapping[str, Any]) -> None:
     from ..llm_token_budget import context_budget_failed
     if context_budget_failed():
         return
-    directory = experiment_store_dir(default_store_dir()) / namespace
+    directory = _windows_storage_path(experiment_store_dir(default_store_dir()) / namespace)
     path = directory / f"{key}.json"
     if path.is_file():
         return

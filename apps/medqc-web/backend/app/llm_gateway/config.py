@@ -10,6 +10,7 @@ import re
 from typing import Any, Mapping
 from urllib.parse import urlsplit, urlunsplit
 from app.services.llm_token_budget import BudgetCapability
+from app.services.strata_protocol import StrataModelIdentity, p9_enabled
 
 
 _PROFILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
@@ -42,6 +43,9 @@ class ProfileConfig:
     api_endpoint: str
     api_key: str | None = None
     context_budget: BudgetCapability | None = None
+    model_identity: StrataModelIdentity | None = None
+    strata_protocol: str | None = None
+    handoff_dir: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,7 +145,7 @@ class GatewaySettings:
         allowed_raw = _load_json(env, "LLM_GATEWAY_ALLOWED_HOSTS")
         resources = _parse_resources(resources_raw)
         allowed_hosts = _parse_allowed_hosts(allowed_raw)
-        profiles = _parse_profiles(profiles_raw, resources, allowed_hosts)
+        profiles = _parse_profiles(profiles_raw, resources, allowed_hosts, handoff_dir=env.get("STRATA_HANDOFF_DIR"))
 
         state_dir_value = str(env.get("LLM_GATEWAY_STATE_DIR") or "").strip()
         if not state_dir_value:
@@ -276,10 +280,11 @@ def _parse_profiles(
     value: Any,
     resources: Mapping[str, ResourceConfig],
     allowed_hosts: frozenset[str],
+    *, handoff_dir: str | None = None,
 ) -> dict[str, ProfileConfig]:
     result: dict[str, ProfileConfig] = {}
     for item in _named_entries(value, id_field="profile", config_name="profile configuration"):
-        allowed = {"profile", "resource_id", "provider_code", "model", "api_endpoint", "api_key", "context_budget"}
+        allowed = {"profile", "resource_id", "provider_code", "model", "api_endpoint", "api_key", "context_budget", "model_identity", "strata_protocol"}
         if set(item) - allowed:
             raise GatewayConfigurationError("profile configuration has unsupported fields")
         name = item.get("profile")
@@ -310,8 +315,23 @@ def _parse_profiles(
         normalized_endpoint = _validated_endpoint(endpoint, allowed_hosts)
         try:
             budget = BudgetCapability.model_validate(item["context_budget"]) if item.get("context_budget") else None
+            model_identity = StrataModelIdentity.model_validate(item["model_identity"]) if item.get("model_identity") else None
+            if normalized_provider == 'strata' and model.strip() == 'qwen3.6-35b-a3b' and handoff_dir:
+                from app.services.strata_handoff import load_handoff
+                handoff = load_handoff(handoff_dir)
+                expected_budget = handoff.capability(name)
+                expected_identity = handoff.model_identity(normalized_endpoint)
+                if budget is not None and budget != expected_budget:
+                    raise ValueError('handoff_capability_mismatch')
+                if model_identity is not None and model_identity != expected_identity:
+                    raise ValueError('handoff_identity_mismatch')
+                budget, model_identity = expected_budget, expected_identity
         except ValueError:
-            raise GatewayConfigurationError("invalid profile context capability") from None
+            if normalized_provider == 'strata' and p9_enabled(model.strip(), item.get('strata_protocol')):
+                # 未确认的DSH元数据只使该Profile失败关闭，不阻断其他Provider启动。
+                budget, model_identity = None, None
+            else:
+                raise GatewayConfigurationError("invalid profile context capability") from None
         result[name] = ProfileConfig(
             name=name,
             resource_id=resource_id,
@@ -320,6 +340,9 @@ def _parse_profiles(
             api_endpoint=normalized_endpoint,
             api_key=api_key.strip() if api_key is not None else None,
             context_budget=budget,
+            model_identity=model_identity,
+            strata_protocol=item.get("strata_protocol"),
+            handoff_dir=handoff_dir if normalized_provider == "strata" and model.strip() == "qwen3.6-35b-a3b" else None,
         )
     if not result:
         raise GatewayConfigurationError("at least one profile must be explicitly configured")

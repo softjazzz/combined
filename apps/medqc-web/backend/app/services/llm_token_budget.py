@@ -10,6 +10,7 @@ import hashlib
 import logging
 import os
 import time
+import threading
 from functools import wraps
 from typing import Callable, Literal
 
@@ -92,6 +93,7 @@ class BudgetError(ProviderConfigurationError):
 
 # 由未来DSH部署适配器显式注册真实计量实现；本轮不提供字符估算或伪分词器。
 _COUNTERS: dict[tuple[str, str], tuple[CounterIdentity, Callable[[dict], int]]] = {}
+_COUNTERS_LOCK = threading.RLock()
 _FAILURES = ContextVar("llm_context_budget_failures", default=None)
 _FREEZE_IDENTITY = ContextVar("llm_context_freeze_identity", default=None)
 
@@ -107,12 +109,14 @@ class _BudgetFailures(list):
 
 
 def freeze_identity(client) -> str | None:
-    if client is None or not (strict_enabled() or split_enabled()):
+    if client is None:
         return None
     from .exam_result_model_route import _unwrap
     base, _ = _unwrap(client)
     provider = getattr(base, "provider_code", "")
-    if provider not in LOCAL or not (strict_enabled() or split_enabled()):
+    from .strata_protocol import is_p9_client
+    p9 = is_p9_client(base)
+    if provider not in LOCAL or not (strict_enabled() or split_enabled() or p9):
         return None
     model = str(getattr(base, "model", ""))
     profile, cap = deployed_capability(provider, model, getattr(base, "gateway_profile", None), getattr(base, "api_endpoint", None),
@@ -134,9 +138,15 @@ def freeze_identity(client) -> str | None:
                     route_capabilities.append(candidate_cap.model_dump())
         except (ValueError, TypeError, KeyError, AttributeError):
             route_capabilities = ["unverified"]
-    return json.dumps({"protocol": PROTOCOL, "provider": provider, "model": model, "profile": profile,
+    transport = {}
+    if p9:
+        from .strata_protocol import PROTOCOL_VERSION, deployed_identity
+        identity = deployed_identity(provider, model, profile, getattr(base, 'api_endpoint', None))
+        transport = {'strata_transport_protocol': PROTOCOL_VERSION,
+                     'model_identity': identity.model_dump() if identity else None}
+    return json.dumps({**transport, "protocol": PROTOCOL, "provider": provider, "model": model, "profile": profile,
         "route_capabilities": route_capabilities,
-        "capability": cap.model_dump() if cap else None, "strict": strict_enabled(), "split": split_enabled()}, sort_keys=True)
+        "capability": cap.model_dump() if cap else None, "strict": strict_enabled() or p9, "split": split_enabled()}, sort_keys=True)
 
 
 @contextmanager
@@ -223,9 +233,20 @@ def note_budget_failure(error):
 
 
 def register_counter(name: str, revision: str, identity: CounterIdentity, counter: Callable[[dict], int]) -> None:
-    if (name, revision) in _COUNTERS or not callable(counter):
-        raise ValueError("counter identity already registered or invalid")
-    _COUNTERS[name, revision] = (identity, counter)
+    with _COUNTERS_LOCK:
+        if (name, revision) in _COUNTERS or not callable(counter):
+            raise ValueError("counter identity already registered or invalid")
+        _COUNTERS[name, revision] = (identity, counter)
+
+
+def unregister_counter(name, revision, owner) -> bool:
+    """只卸载自己的实例，防止关闭一个Runtime误删别人的注册。"""
+    with _COUNTERS_LOCK:
+        entry = _COUNTERS.get((name, revision))
+        if entry is None or entry[1] is not owner:
+            return False
+        del _COUNTERS[name, revision]
+        return True
 
 
 @contextmanager
@@ -235,7 +256,7 @@ def counter_scope(name: str, revision: str, identity: CounterIdentity, counter: 
     try:
         yield
     finally:
-        _COUNTERS.pop((name, revision), None)
+        unregister_counter(name, revision, counter)
 
 
 def _flag(name):
@@ -287,7 +308,8 @@ def assess_payload(provider: str, profile: str, payload: dict, capability: Budge
         (payload.get("chat_template_kwargs") or {}).get("thinking_budget")) if value is not None]
     if any(type(thinking) is not int or thinking < 0 or thinking > reserve for thinking in thinking_values):
         return verdict("CAPABILITY_UNVERIFIED", "thinking_output_semantics_unverified", **metadata)
-    entry = _COUNTERS.get((cap.counter_id, cap.counter_revision))
+    with _COUNTERS_LOCK:
+        entry = _COUNTERS.get((cap.counter_id, cap.counter_revision))
     expected = CounterIdentity(**{key: getattr(cap, key) for key in CounterIdentity.__dataclass_fields__})
     if entry is None:
         return verdict("COUNT_UNAVAILABLE", "counter_not_installed", **metadata)
@@ -341,6 +363,14 @@ def deployed_capability(provider: str, model: str, profile: str | None, endpoint
             return profile or "unbound", None
         item = matches[0]
         value = BudgetCapability.model_validate(item["context_budget"]) if item.get("context_budget") else None
+        if provider == 'strata' and model == 'qwen3.6-35b-a3b':
+            from .strata_handoff import configured_root, load_handoff
+            root = configured_root()
+            if root:
+                expected = load_handoff(root).capability(item['profile'])
+                if value is not None and value != expected:
+                    return item['profile'], None
+                value = expected
         return item["profile"], value
     except (ValueError, TypeError, KeyError, AttributeError):
         return profile or "unbound", None

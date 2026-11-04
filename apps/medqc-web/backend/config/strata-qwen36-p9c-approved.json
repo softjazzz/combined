@@ -1,0 +1,22 @@
+{
+  "schema": "medqc-strata-p9c-approved-v1",
+  "model": "qwen3.6-35b-a3b",
+  "context_tokens": 16384,
+  "files": {
+    "integration_example.py": "b02951e31ff77f154add2ac31e11765acc9c44fa3679a607508c94d5208216e0",
+    "model-identity.json": "e4501f758e409d8103022b3defd50431aecaa0b599d6e28e052ad90503be76b1",
+    "provider-capability.json": "5210d53fca3e9b0995e4df2f8b3b6a9dddf6054d9a6b1f6fb2bf0f3a7da9bff6",
+    "README.md": "91d751ce7c8b8432eb756bfa575c86da63ffe67aba3da79e614efd3c6199776d",
+    "requirements.txt": "a6c80fdb0a8645ef052279f0826c56551e71ce2ff1c15e0db7c6e4134c465b7a",
+    "token_counter.py": "423ab01cd672129809bb027fdca77750a81436829d4830b53a7e72f0f147d49c",
+    "tokenizer/chat_template.jinja": "55d4931433fe502b794226ee7f4d206a6bdd436ac9f80eb7d8ebb4c639f9ea0c",
+    "tokenizer/merges.txt": "4ba698529766c7a2f5052083ea10cdf2485577f5237a332ee291054eb11e3332",
+    "tokenizer/token_type.json": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b",
+    "tokenizer/tokenizer.json": "2297d930613fcea0cbade386046ba7328b3aea97a9e3e4ac4154eb7a6d617665",
+    "tokenizer/vocab.json": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4",
+    "validation/corpus.json": "a953a32681aed18250685df8a5a274aba51262e5b6701a898604b212117c23c6",
+    "validation/test_vectors.json": "dbf0abb4aa005afc954f1d43cf953d5994f1e0750fa1a3d8800a3671abdb40f8",
+    "validation/verify.py": "3873f2bc0a599009ac970c982be28dca94a407dfbe32cb3dcca8ca1d4502da4a"
+  },
+  "report_sha256": "7714efff31ea9258042a03d63e5313bf255f916e7036dcf19309c7a3cf9cafdb"
+}

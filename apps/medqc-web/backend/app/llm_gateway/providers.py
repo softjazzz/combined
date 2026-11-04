@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+import math
 from typing import Any, Protocol
 
 import httpx
 
 from app.services.llm_dispatch.contracts import GatewayErrorCode
+from app.services.llm_token_budget import BudgetError
 
 from .config import ProfileConfig
+from app.services.strata_protocol import prepare_request as prepare_strata_request, validate_result, upstream_error, StrataProtocolError, p9_enabled
 
 
 NETWORK_RETRY_COUNT = 0
@@ -90,7 +93,7 @@ class ProviderSender(Protocol):
 def prepare_provider_payload(profile: ProfileConfig, raw_payload: dict[str, Any], *, allow_strata_prefix=False) -> dict[str, Any]:
     """只转发业务需要的 OpenAI 兼容字段，路由和凭据不在 payload 中。"""
 
-    allowed = _ALLOWED_PAYLOAD_FIELDS | ({"strata_prefix"} if allow_strata_prefix and profile.provider_code == "strata" else set())
+    allowed = _ALLOWED_PAYLOAD_FIELDS | ({'top_k', 'repetition_penalty'} if profile.provider_code == 'strata' and p9_enabled(profile.model, profile.strata_protocol) else set()) | ({"strata_prefix"} if allow_strata_prefix and profile.provider_code == "strata" else set())
     if not isinstance(raw_payload, dict) or set(raw_payload) - allowed:
         raise InvalidPayloadError()
     payload = deepcopy(raw_payload)
@@ -121,9 +124,21 @@ def prepare_provider_payload(profile: ProfileConfig, raw_payload: dict[str, Any]
 
     if profile.provider_code == "strata":
         _map_strata_thinking(payload)
+        if p9_enabled(profile.model, profile.strata_protocol):
+            return _prepare_p9_numbers(payload)
     elif "chat_template_kwargs" in payload:
         raise InvalidPayloadError()
     return payload
+
+
+def _prepare_p9_numbers(payload):
+    for key in ('top_k', 'repetition_penalty'):
+        if key in payload and (isinstance(payload[key], bool) or not isinstance(payload[key], (int, float))
+                               or not math.isfinite(payload[key]) or payload[key] <= 0):
+            raise InvalidPayloadError()
+    if 'top_k' in payload and type(payload['top_k']) is not int:
+        raise InvalidPayloadError()
+    return prepare_strata_request(payload)
 
 
 def _validate_messages(value: Any) -> None:
@@ -145,6 +160,7 @@ def _validate_optional_numbers(payload: dict[str, Any]) -> None:
     for key in ("temperature", "top_p", "frequency_penalty", "presence_penalty"):
         if key in payload and (
             isinstance(payload[key], bool) or not isinstance(payload[key], (int, float))
+            or not math.isfinite(payload[key])
         ):
             raise InvalidPayloadError()
     for key in ("max_tokens", "max_completion_tokens"):
@@ -213,6 +229,45 @@ class HttpxProviderSender:
     def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
 
+    def prepare(self, profile: ProfileConfig, payload: dict[str, Any]) -> dict[str, Any]:
+        from app.services.llm_token_budget import BudgetError, guard_payload, strict_enabled
+        try:
+            if profile.provider_code == 'strata' and p9_enabled(profile.model, profile.strata_protocol):
+                from app.services.strata_protocol import require_deployment_identity
+                require_deployment_identity(profile.model, profile.api_endpoint, profile.context_budget, profile.model_identity)
+                payload = prepare_provider_payload(profile, payload, allow_strata_prefix=True)
+            guard_payload(profile.provider_code, profile.name, payload, profile.context_budget,
+                          enabled=strict_enabled() or (profile.provider_code == "strata" and p9_enabled(profile.model, profile.strata_protocol)), phase="provider_http_boundary")
+        except (BudgetError, StrataProtocolError) as error:
+            # 直接使用sender时也不绕过；通常排队前已经完成同一准入。
+            rejected = InvalidPayloadError()
+            rejected.code = error.code
+            raise rejected from None
+        return payload
+
+    async def ensure_counter(self, profile):
+        if profile.provider_code == 'strata' and profile.model == 'qwen3.6-35b-a3b':
+            from app.services.strata_handoff import ensure_counter, _fail
+            try:
+                if not profile.handoff_dir:
+                    raise _fail('handoff_not_configured')
+                await ensure_counter(profile.handoff_dir)
+            except BudgetError as error:
+                rejected = InvalidPayloadError()
+                rejected.code = error.code
+                raise rejected from None
+
+    async def ensure_identity(self, profile):
+        if profile.provider_code == 'strata' and profile.model == 'qwen3.6-35b-a3b':
+            from app.services.strata_handoff import ensure_endpoint
+            try:
+                await ensure_endpoint(profile.handoff_dir, profile.api_endpoint, profile.api_key,
+                                      transport=self._transport)
+            except BudgetError as error:
+                rejected = InvalidPayloadError()
+                rejected.code = error.code
+                raise rejected from None
+
     async def send(
         self,
         profile: ProfileConfig,
@@ -220,15 +275,10 @@ class HttpxProviderSender:
         *,
         timeout_seconds: float,
     ) -> dict[str, Any]:
-        from app.services.llm_token_budget import BudgetError, guard_payload, strict_enabled
-        try:
-            guard_payload(profile.provider_code, profile.name, payload, profile.context_budget,
-                          enabled=strict_enabled(), phase="provider_http_boundary")
-        except BudgetError as error:
-            # 直接使用sender时也不绕过；通常排队前已经完成同一准入。
-            rejected = InvalidPayloadError()
-            rejected.code = error.code
-            raise rejected from None
+        await self.ensure_counter(profile)
+        payload = self.prepare(profile, payload)
+        await self.ensure_identity(profile)
+        payload = self.prepare(profile, payload)
         headers = {"Content-Type": "application/json"}
         if profile.api_key:
             headers["Authorization"] = f"Bearer {profile.api_key}"
@@ -246,6 +296,16 @@ class HttpxProviderSender:
             raise ProviderTransportError() from None
 
         if not 200 <= response.status_code < 300:
+            if profile.provider_code == 'strata' and p9_enabled(profile.model, profile.strata_protocol):
+                try:
+                    body = response.json()
+                except (ValueError, UnicodeDecodeError):
+                    body = None
+                error = upstream_error(response.status_code, body)
+                if error is not None:
+                    rejected = ProviderError(error.code)
+                    rejected.code = error.code
+                    raise rejected from None
             raise ProviderHTTPError(response.status_code)
         if len(response.content) > MAX_PROVIDER_RESPONSE_BYTES:
             raise InvalidProviderResponseError()
@@ -255,6 +315,13 @@ class HttpxProviderSender:
             raise InvalidProviderResponseError() from None
         if not isinstance(decoded, dict):
             raise InvalidProviderResponseError()
+        if profile.provider_code == 'strata' and p9_enabled(profile.model, profile.strata_protocol):
+            try:
+                validate_result(decoded, profile.model)
+            except StrataProtocolError as error:
+                rejected = ProviderError(error.code)
+                rejected.code = error.code
+                raise rejected from None
         return decoded
 
 

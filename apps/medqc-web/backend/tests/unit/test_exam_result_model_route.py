@@ -67,13 +67,30 @@ def harness(monkeypatch, tmp_path, handler, *, mode="cascade", config=None, clou
         candidate_profile: ProfileConfig(candidate_profile, "candidate", "alibaba" if cloud else "local_openai", "synthetic-35b",
                                          "http://candidate.test/v1/chat/completions", "synthetic-key" if cloud else None),
     }
+    from tests.scheduler_support.strata_p9b import install_mock_profile
+    profiles = {name: install_mock_profile(monkeypatch, profile) for name, profile in profiles.items()}
+    # 固定旧夹具补齐服务端身份回显，不篡改显式错误身份；真实身份拒绝由P9-B独立反例覆盖。
+    async def identified_handler(request):
+        import inspect
+        result = handler(request)
+        if inspect.isawaitable(result):
+            result = await result
+        if result.status_code == 200:
+            try:
+                content = result.json()
+            except ValueError:
+                return result
+            if isinstance(content, dict) and 'model' not in content:
+                content['model'] = json.loads(request.content)['model']
+                return httpx.Response(200, json=content)
+        return result
     gateway_settings = GatewaySettings(
         token=settings.LLM_GATEWAY_TOKEN, resources={"reference": ResourceConfig("reference", 2, 2),
                                                     "candidate": ResourceConfig("candidate", 1, 1)},
         profiles=profiles, allowed_hosts=frozenset({"reference.test", "candidate.test"}),
         state_dir=tmp_path, startup_isolation_seconds=0,
     )
-    app = create_app(gateway_settings, http_transport=httpx.MockTransport(handler), enforce_single_instance=False)
+    app = create_app(gateway_settings, http_transport=httpx.MockTransport(identified_handler), enforce_single_instance=False)
     client = qc_llm_client.SichuanQCLLMClient(
         {"provider_code": "alibaba" if cloud else "strata", "model": "synthetic-flash", "api_endpoint": "http://reference.test/v1",
          "dispatch_mode": "gateway", "gateway_profile": reference_profile},
@@ -296,7 +313,10 @@ async def test_outer_family_freeze_is_partitioned_before_lookup(monkeypatch, tmp
     monkeypatch.setattr(native, "_extract_exam_lab_batch_uncached", fixed)
     monkeypatch.setattr(native, "_main_freeze_key", lambda *_: "same-input")
     await native._extract_exam_lab_batch(projection=p, eligible_rule_ids=[check.RULE_ID], llm_client=client)
-    baseline = load_payload("main", "same-input")
+    from app.services.llm_token_budget import token_freeze_scope
+    with token_freeze_scope(client):
+        baseline = load_payload("main", "same-input")
+    assert load_payload("main", "same-input") is None
     assert len(calls) == 1 and calls[0] is None and baseline is not None
     for mode in ("shadow", "cascade"):
         settings.LLM_EXAM_RESULT_ROUTING = policy(mode)
@@ -312,7 +332,8 @@ async def test_outer_family_freeze_is_partitioned_before_lookup(monkeypatch, tmp
         assert len(calls) == 4 + index
     assert len(set(calls)) == 7
     assert current_llm_experiment_namespace() is None
-    assert load_payload("main", "same-input") == baseline
+    with token_freeze_scope(client):
+        assert load_payload("main", "same-input") == baseline
     assert await app.state.gateway_runtime.shutdown()
 
 
@@ -331,7 +352,9 @@ async def test_privacy_and_model_attribution_follow_actual_candidate(monkeypatch
     assert result.state == "ready"
     assert sent[0]["model"] == "synthetic-35b"
     assert "张模拟" not in json.dumps(sent, ensure_ascii=False)
-    assert "张模拟" not in caplog.text and "candidate.test" not in caplog.text
+    assert "张模拟" not in caplog.text
+    app_logs = "\n".join(record.getMessage() for record in caplog.records if record.name.startswith("app."))
+    assert "candidate.test" not in app_logs  # 第三方httpx默认URL日志不属于应用归因记录。
     assert "total_tokens" in caplog.text
     assert await app.state.gateway_runtime.shutdown()
 

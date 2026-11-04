@@ -37,7 +37,7 @@ def original_prompt(p):
 
 
 def response(content="{\"unchanged\":true}", *, cached=800, prime=False):
-    return {"choices": [{"finish_reason": "stop", "message": {"content": content}}],
+    return {"model": "synthetic-model", "choices": [{"finish_reason": "stop", "message": {"content": content}}],
             "usage": {"prompt_tokens": 1000, "completion_tokens": 1 if prime else 20,
                       "prompt_tokens_details": {"cached_tokens": cached}},
             "timings": {"cache_n": cached, "prompt_n": 200, "prompt_ms": 2,
@@ -386,7 +386,7 @@ async def test_old_prompt_three_cases_real_dispatch_continuation_matches_fifo(mo
             assert case_name not in active_cases
             active_cases.add(case_name)
             max_active = max(max_active, len(active_cases))
-            assert set(body) == {"model", "messages", "temperature", "top_p", "max_tokens", "stream", "chat_template_kwargs"}
+            assert set(body) == {"model", "messages", "temperature", "top_p", "max_tokens", "stream", "chat_template_kwargs", "top_k", "presence_penalty", "frequency_penalty", "repetition_penalty"}
             assert "package_key" not in body and len(body["messages"]) == 1
             seen.append(body)
             await asyncio.sleep(0)
@@ -412,3 +412,10 @@ async def test_old_prompt_three_cases_real_dispatch_continuation_matches_fifo(mo
     baseline = await run(False)
     priority = await run(True)
     assert baseline == priority
+
+
+@pytest.fixture(autouse=True)
+def p9b_mock_deployment_contracts(monkeypatch):
+    import sys
+    from tests.scheduler_support.strata_p9b import configure_mock_profile_factory
+    configure_mock_profile_factory(monkeypatch, sys.modules[__name__])

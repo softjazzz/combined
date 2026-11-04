@@ -50,7 +50,8 @@ async def test_strict_candidate_constructed_by_route_reaches_gateway_without_end
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('failure_state', ['CAPABILITY_UNVERIFIED', 'COUNT_UNAVAILABLE', 'OVER_BUDGET', 'BUDGET_EXHAUSTED'])
+@pytest.mark.parametrize('failure_state', ['CAPABILITY_UNVERIFIED', 'COUNT_UNAVAILABLE', 'OVER_BUDGET', 'BUDGET_EXHAUSTED',
+    'strata_model_identity_mismatch', 'strata_output_truncated', 'strata_structured_output_failed'])
 async def test_real_course_mixed_success_and_budget_failure_survive_engine(monkeypatch, tmp_path, failure_state):
     from app.services.luxian_0609 import native_course_quality_execution as course
     from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows, build_luxian_0609_evidence_read_session
@@ -83,6 +84,9 @@ async def test_real_course_mixed_success_and_budget_failure_survive_engine(monke
         async def generate(self, prompt, **kwargs):
             calls.append(prompt)
             from app.services.llm_token_budget import BudgetError, BudgetVerdict, note_budget_failure
+            if failure_state.startswith('strata_'):
+                from app.services.strata_protocol import StrataProtocolError
+                raise StrataProtocolError(failure_state, terminal=True)
             if failure_state == 'CAPABILITY_UNVERIFIED':
                 guard_payload('strata', 'unbound', payload(), None, enabled=True)
             error = BudgetError(BudgetVerdict(failure_state, 'synthetic-fixed-rejection', 'unbound', 'synthetic'))
@@ -109,7 +113,9 @@ async def test_real_course_mixed_success_and_budget_failure_survive_engine(monke
         evidence_snapshot=session.snapshot, evidence_materials=session.materials) for d in reduced]
     assert [r['status'] for r in final] == ['not_applicable', 'compliant', 'technical_error']
     from app.services.llm_context_contract import CONTEXT_REASON_CODES
-    assert final[-1]['reason_code'] == CONTEXT_REASON_CODES[failure_state]
+    expected_code = (CONTEXT_REASON_CODES['CAPABILITY_UNVERIFIED' if failure_state == 'strata_model_identity_mismatch'
+                     else 'BUDGET_EXHAUSTED'] if failure_state.startswith('strata_') else CONTEXT_REASON_CODES[failure_state])
+    assert final[-1]['reason_code'] == expected_code
     assert len(calls) == 1
     assert not list(tmp_path.rglob('*.json'))
 

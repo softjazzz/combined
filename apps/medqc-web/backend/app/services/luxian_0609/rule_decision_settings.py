@@ -100,7 +100,7 @@ def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
         and len(gateway_endpoint_sha256) == 64
     ):
         raise ValueError("LX0609任务Gateway配置不可用")
-    return {
+    identity = {
         "provider": provider,
         "model": model,
         "endpoint_sha256": hashlib.sha256(endpoint.encode("utf-8")).hexdigest(),
@@ -117,6 +117,15 @@ def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
             gateway_endpoint_sha256 if dispatch_mode == "gateway" else None
         ),
     }
+    from ..strata_protocol import is_p9_client
+    if is_p9_client(client):
+        from ..strata_protocol import GREEDY, PROTOCOL_VERSION
+        from ..llm_token_budget import freeze_identity
+        identity['context_capability'] = freeze_identity(client)
+        identity.update(GREEDY)
+        identity.update(transport_protocol=PROTOCOL_VERSION, enable_thinking=False,
+                        thinking_budget=None, reasoning_effort='')
+    return identity
 
 
 def capture_luxian_0609_task_runtime(qc_service: Any) -> dict[str, Any]:
