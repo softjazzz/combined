@@ -314,7 +314,7 @@ def test_migration_schema_owner_matches_runtime_mode(monkeypatch):
 
 
 @pytest.fixture()
-def workspace_service(monkeypatch):
+def workspace_service(monkeypatch, tmp_path):
     from app.services import custom_qc_workspace_service as workspace_module
 
     engine = sa.create_engine(
@@ -329,7 +329,9 @@ def workspace_service(monkeypatch):
     monkeypatch.setattr(
         workspace_module,
         "get_settings",
-        lambda: SimpleNamespace(QC_TASK_DISPATCH_MODE="rabbitmq"),
+        lambda: SimpleNamespace(QC_TASK_DISPATCH_MODE="rabbitmq", QC_DISPATCH_STATE_DIR=str(tmp_path),
+            LLM_DISPATCH_MODE="gateway", LLM_GATEWAY_URL="http://synthetic-gateway",
+            LLM_GATEWAY_TOKEN="synthetic-token", LLM_GATEWAY_PROFILE="alibaba_first_pass"),
     )
     workspace_module._drafts_table.cache_clear()
     workspace_module._batch_jobs_table.cache_clear()
@@ -365,6 +367,11 @@ def _create_workspace_job(service, *, kind: str = "leaf", parent_id: str | None 
             "rule_set_key": "luxian_0609_qc_v1",
             "rule_set_version": "2026-06-09",
             "rule_ids": ["LX0609-001"],
+            "lx0609_task_runtime": {
+                role: {"dispatch_mode": "gateway", "gateway_profile": "alibaba_first_pass",
+                       "gateway_endpoint_sha256": "a" * 64}
+                for role in ("first_pass", "adjudicator")
+            },
         },
         record_ids=["synthetic-visit"],
         total_records=1,
@@ -384,6 +391,38 @@ def test_workspace_create_commits_job_dispatch_and_outbox_together(workspace_ser
         ) == 1
         assert session.scalar(sa.select(sa.func.count()).select_from(tables.dispatch)) == 1
         assert session.scalar(sa.select(sa.func.count()).select_from(tables.outbox)) == 1
+
+
+def test_saved_toggle_controls_new_jobs_and_not_old_jobs(workspace_service):
+    from app.services.qc_dispatch.control import save_control
+    module, service, sessions, tables = workspace_service
+    cfg = module.get_settings()
+    save_control(enabled=False, expected_revision=0, actor='synthetic', settings=cfg)
+    legacy = _create_workspace_job(service)
+    save_control(enabled=True, expected_revision=1, actor='synthetic', settings=cfg)
+    mq = _create_workspace_job(service)
+    save_control(enabled=False, expected_revision=2, actor='synthetic', settings=cfg)
+    later = _create_workspace_job(service)
+    assert qc_dispatch_mode_from_filters(legacy['filters']) == 'legacy'
+    assert qc_dispatch_mode_from_filters(mq['filters']) == 'rabbitmq'
+    assert qc_dispatch_mode_from_filters(later['filters']) == 'legacy'
+    assert service.get_batch_job(job_id=mq['id'], created_by='synthetic')['filters']['qc_dispatch']['mode'] == 'rabbitmq'
+    with sessions() as session:
+        assert session.scalar(sa.select(sa.func.count()).select_from(tables.outbox)) == 1
+        assert session.scalar(sa.select(sa.func.count()).select_from(tables.dispatch)) == 1
+
+
+def test_mode_changed_after_preflight_cannot_insert_direct_model_mq_job(workspace_service, monkeypatch):
+    from app.services.qc_dispatch.dispatcher import QCDispatchEntrypointError
+    module, service, sessions, tables = workspace_service
+    cfg = module.get_settings()
+    cfg.LLM_DISPATCH_MODE = 'direct'
+    monkeypatch.setattr(module, 'get_settings', lambda: cfg)
+    with pytest.raises(QCDispatchEntrypointError, match='Gateway'):
+        _create_workspace_job(service)
+    with sessions() as session:
+        assert session.scalar(sa.select(sa.func.count()).select_from(service._batch_job_table)) == 0
+        assert session.scalar(sa.select(sa.func.count()).select_from(tables.outbox)) == 0
 
 
 def test_workspace_dispatch_failure_rolls_back_job_insert(workspace_service, monkeypatch):
@@ -434,10 +473,13 @@ def test_mq_retry_without_failure_scope_preserves_success_and_requires_recovery(
 
 
 def test_parent_retry_only_requeues_failed_mq_child_and_preserves_completed_child(
-    workspace_service,
+    workspace_service, monkeypatch,
 ):
-    _, service, sessions, tables = workspace_service
-    parent = _create_workspace_job(service, kind="parent")
+    module, service, sessions, tables = workspace_service
+    # 合成历史父任务，仅覆盖原有恢复合同；生产新建入口明确禁止MQ父任务。
+    with monkeypatch.context() as historical:
+        historical.setattr(module, "assert_new_qc_task_dispatch_ready", lambda **_kwargs: "rabbitmq")
+        parent = _create_workspace_job(service, kind="parent")
     completed = _create_workspace_job(service, kind="child", parent_id=parent["id"])
     failed = _create_workspace_job(service, kind="child", parent_id=parent["id"])
     service.update_parent_child_jobs(
@@ -688,3 +730,54 @@ def test_business_failure_of_explicit_nonformal_mq_job_is_recovery_visible(
     assert [item.job_id for item in service._qc_dispatch.list_recovery_candidates()] == [
         job["id"]
     ]
+
+
+def test_infra_job_uses_formal_gateway_identity_before_transaction(workspace_service, monkeypatch):
+    from tests.scheduler_support import infra_runtime
+    _, service, sessions, tables = workspace_service
+    infra_runtime.PROBE.create(sessions.kw['bind'], checkfirst=True)
+    monkeypatch.setattr(infra_runtime, 'runtime', lambda: (None, service))
+    monkeypatch.setattr(infra_runtime, 'SessionLocal', sessions)
+    monkeypatch.setenv('LLM_DISPATCH_MODE', 'gateway')
+    monkeypatch.setenv('LLM_GATEWAY_URL', 'http://127.0.0.1:9/never-connect')
+    monkeypatch.setenv('LLM_GATEWAY_TOKEN', 'synthetic-unreachable-gateway-token')
+    monkeypatch.setenv('LLM_GATEWAY_PROFILE', 'alibaba_first_pass')
+    job_id, _ = infra_runtime.new_job()
+    job = service.get_batch_job(job_id=job_id, created_by='synthetic-infra')
+    snapshot = job['filters']['lx0609_task_runtime']
+    assert snapshot['schema_version'] == 2
+    for role in ('first_pass', 'adjudicator'):
+        assert snapshot[role]['dispatch_mode'] == 'gateway'
+        assert len(snapshot[role]['gateway_endpoint_sha256']) == 64
+    assert 'synthetic-unreachable-gateway-token' not in json.dumps(snapshot)
+    with sessions() as session:
+        assert session.scalar(sa.select(sa.func.count()).select_from(tables.outbox)) == 1
+
+
+@pytest.mark.parametrize('fault', ['missing', 'direct', 'profile', 'endpoint'])
+def test_infra_identity_failure_keeps_transaction_empty(workspace_service, monkeypatch, fault):
+    from tests.scheduler_support import infra_runtime
+    from app.services.luxian_0609 import rule_decision_settings
+    from app.services.qc_dispatch.dispatcher import QCDispatchEntrypointError
+    _, service, sessions, tables = workspace_service
+    monkeypatch.setattr(infra_runtime, 'runtime', lambda: (None, service))
+    monkeypatch.setenv('LLM_DISPATCH_MODE', 'gateway')
+    monkeypatch.setenv('LLM_GATEWAY_URL', 'http://127.0.0.1:9/never-connect')
+    monkeypatch.setenv('LLM_GATEWAY_TOKEN', 'synthetic-unreachable-gateway-token')
+    monkeypatch.setenv('LLM_GATEWAY_PROFILE', 'alibaba_first_pass')
+    capture = rule_decision_settings.capture_luxian_0609_task_runtime
+    def invalid(service):
+        snapshot = capture(service)
+        if fault == 'missing':
+            snapshot.pop('adjudicator')
+        else:
+            key, value = {'direct': ('dispatch_mode', 'direct'), 'profile': ('gateway_profile', ''),
+                          'endpoint': ('gateway_endpoint_sha256', '')}[fault]
+            snapshot['adjudicator'][key] = value
+        return snapshot
+    monkeypatch.setattr(rule_decision_settings, 'capture_luxian_0609_task_runtime', invalid)
+    with pytest.raises(QCDispatchEntrypointError, match='Gateway'):
+        infra_runtime.new_job()
+    with sessions() as session:
+        for table in (service._batch_job_table, tables.dispatch, tables.outbox):
+            assert session.scalar(sa.select(sa.func.count()).select_from(table)) == 0

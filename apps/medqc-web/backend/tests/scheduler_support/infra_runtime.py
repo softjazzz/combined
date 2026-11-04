@@ -6,6 +6,7 @@ import importlib.util
 import os
 from pathlib import Path
 import uuid
+from types import SimpleNamespace
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -111,11 +112,21 @@ def close_runtime_connections() -> None:
 
 def new_job() -> tuple[str, str]:
     _repo, workspace = runtime()
+    # 与正式入口相同：冻结实际客户端身份；只构造客户端，绝不generate/连接Gateway。
+    from app.services.qc_llm_client import SichuanQCLLMClient
+    from app.services.llm_observability import LLMObservabilityRecorder, NullLLMCallEventStore
+    from app.services.luxian_0609.rule_decision_settings import capture_luxian_0609_task_runtime
+    client = SichuanQCLLMClient(
+        {'provider_code': 'alibaba', 'model': 'qwen3.8-flash', 'dispatch_mode': 'gateway',
+         'gateway_profile': 'alibaba_first_pass'},
+        observability_recorder=LLMObservabilityRecorder(store=NullLLMCallEventStore()),
+    )
+    snapshot = capture_luxian_0609_task_runtime(SimpleNamespace(client=client, adjudicator_client=client))
     job = workspace.create_batch_job(
         draft={"id": "synthetic-rule-library", "rule_code": "LX0609", "name": "synthetic", "scene": "final"},
         created_by="synthetic-infra", scope="final",
         filters={"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": RULE_SET_VERSION,
-                 "rule_ids": [ADMISSION_TIMELINESS_RULE_ID],
+                 "rule_ids": [ADMISSION_TIMELINESS_RULE_ID], "lx0609_task_runtime": snapshot,
                  "record_refs": [{"institute_id": "synthetic-institute", "patient_id": "synthetic-patient",
                                   "visit_id": "synthetic-visit"}]},
         record_ids=["synthetic-visit"], total_records=1,

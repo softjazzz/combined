@@ -20,6 +20,7 @@ from app.services.qc_dispatch.execution import run_batch_dispatch_job
 from app.services.qc_dispatch.rabbitmq_transport import RabbitMQTransport
 from app.services.qc_dispatch.repository import create_qc_dispatch_repository
 from app.services.llm_dispatch.provider_profiles import ProviderConfigurationError
+from app.services.qc_dispatch.status import report_service_status
 
 
 logger = logging.getLogger(__name__)
@@ -45,11 +46,18 @@ async def run_worker() -> None:
     qc_service_provider = create_qc_service_provider()
     recovery = WorkerRecovery(repository=repository, workspace=workspace)
     recovery_task = asyncio.create_task(recovery.run(), name="qc-worker-recovery")
+    transport = None
+    consumer_task: asyncio.Task[None] | None = None
+    status_task = asyncio.create_task(report_service_status(
+        settings, role="worker", broker=rabbitmq_settings,
+        is_ready=lambda: bool(transport is not None and transport.connected
+            and consumer_task is not None and not consumer_task.done() and not recovery_task.done()),
+    ), name="qc-worker-status")
 
     try:
         while True:
             transport = RabbitMQTransport(rabbitmq_settings)
-            consumer_task: asyncio.Task[None] | None = None
+            consumer_task = None
             try:
                 await transport.connect()
 
@@ -103,6 +111,8 @@ async def run_worker() -> None:
                     logger.warning("QC Worker 关闭失效连接时发生错误")
             await asyncio.sleep(5.0)
     finally:
+        status_task.cancel()
+        await asyncio.gather(status_task, return_exceptions=True)
         recovery_task.cancel()
         await asyncio.gather(recovery_task, return_exceptions=True)
 

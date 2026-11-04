@@ -434,6 +434,10 @@
       <FrontpageExtractionSettingsPanel />
     </section>
 
+    <section v-else-if="activeTab === 'qcRuntime' && canViewLlmObservability" class="mq-card system-config-panel">
+      <QcRuntimeSettingsPanel />
+    </section>
+
     <section
       v-else-if="activeTab === 'llmObservability' && canViewLlmObservability"
       class="mq-card system-config-panel"
@@ -519,6 +523,7 @@ import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import { useDataSync } from './composables/useDataSync'
 import LlmPerformanceObservabilityPanel from './components/system-config/LlmPerformanceObservabilityPanel.vue'
 import AccountManagementPanel from './components/system-config/AccountManagementPanel.vue'
+import QcRuntimeSettingsPanel from './components/system-config/QcRuntimeSettingsPanel.vue'
 import { useAuthStore } from '@/stores/auth'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
@@ -572,6 +577,7 @@ const canViewLlmObservability = computed(
 const configTabs = computed(() =>
   [
     { key: 'dataSync', label: '数据同步', testId: undefined, visible: true },
+    { key: 'qcRuntime', label: '质控运行', testId: 'qc-runtime-tab', visible: canViewLlmObservability.value },
     {
       key: 'frontpageExtraction',
       label: '首页抽取设置',
@@ -1063,18 +1069,19 @@ onMounted(async () => {
   const canOpenRequestedTab =
     (requestedTab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||
     (requestedTab === 'llmConfig' && canManageLlmConfig.value) ||
+    (requestedTab === 'qcRuntime' && canViewLlmObservability.value) ||
     (requestedTab === 'llmObservability' && canViewLlmObservability.value) ||
     (requestedTab === 'accounts' && canManageAccounts.value)
   if (canOpenRequestedTab) {
     activeTab.value = requestedTab
   }
-  if (!['llmConfig', 'llmObservability', 'accounts'].includes(activeTab.value)) {
+  if (!['llmConfig', 'llmObservability', 'accounts', 'qcRuntime'].includes(activeTab.value)) {
     await ensureSyncInitialized()
   }
 })
 
 watch(activeTab, async (tab) => {
-  if (['llmConfig', 'llmObservability', 'accounts'].includes(tab)) return
+  if (['llmConfig', 'llmObservability', 'accounts', 'qcRuntime'].includes(tab)) return
   await ensureSyncInitialized()
 })
 

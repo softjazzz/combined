@@ -104,6 +104,12 @@ class Settings(BaseSettings):
     # 质控任务调度默认保留 Web 进程内旧链；只有显式切换后，正式 LX0609
     # 叶任务才会通过事务 Outbox 投递给独立 Worker。
     QC_TASK_DISPATCH_MODE: Literal["legacy", "rabbitmq"] = "legacy"
+    # Web与MQ进程共享的非敏感开关/就绪状态目录；默认位于backend/data。
+    QC_DISPATCH_STATE_DIR: Optional[str] = None
+    QC_RABBITMQ_URL: Optional[str] = Field(default=None, repr=False)
+    QC_RABBITMQ_EXCHANGE: Optional[str] = None
+    QC_RABBITMQ_QUEUE: Optional[str] = None
+    QC_RABBITMQ_DEAD_QUEUE: Optional[str] = None
 
     # ICD semantic retrieval fallback (exact match still first)
     ICD_SEMANTIC_ENABLED: bool = False
