@@ -65,7 +65,7 @@ sudo -u medqc-business /data/medqc/business/venv/bin/python \
   "$KIT/deploy/db-admin.py" check
 ```
 
-configure.py交互接收新业务库密码并生成独立JWT，保存600权限配置；不打印凭据。migrate先执行PG16完整备份及目录校验。对全新空库，它显式初始化历史迁移依赖的sync_job_state、visit_index和既有任务owner，再实际执行Alembic迁移到062，最后初始化既有运行时样本元数据与11张Bundle表。前置和Bundle模板只有结构，没有患者行；已有同名结构不一致即停止，不覆盖。不会stamp或连接同步库。create-admin只新增显式账号，密码现场输入两次；已有同名账号会拒绝，不重置或提升现有用户。
+configure.py交互接收新业务库密码并生成独立JWT，保存600权限配置；不打印凭据。migrate先执行PG16完整备份及目录校验。对全新空库，它显式初始化历史迁移依赖的sync_job_state、visit_index和既有任务owner，再实际执行Alembic迁移到062，最后初始化既有运行时样本元数据与11张Bundle表。任务owner包含历史三列execution_mode/draft_ids_json/rule_count及源库已核实默认值batch/[]/1。已到062的31列空表可定向补齐，job_kind按导出结构允许空；非空表需要补列或改可空性时拒绝自动处理。五个任务JSON列继续允许NULL表示尚无结果，不复制旧库更严的约束。前置和Bundle模板只有结构，没有患者行；其他同名结构不一致即停止，不覆盖。不会stamp或连接同步库。create-admin只新增显式账号，密码现场输入两次；已有同名账号会拒绝，不重置或提升现有用户。
 
 默认ENV=production、正常启动模式，但MEDQC_STARTUP_BACKGROUND_ENABLED=false。它只读检查必要业务结构，跳过启动DDL、预热和历史恢复；不是依赖可选规则验证表的acceptance模式。手动业务入口保留，初次验收不要点击质控/同步。生产环境不加载内存演示账号，也不向缓存账号回退，原有默认账号保护仍保留。
 
@@ -74,7 +74,8 @@ configure.py交互接收新业务库密码并生成独立JWT，保存600权限�
 将原加密7z放入批准的数据目录。使用随包工具解压，提示时输入口令，不将口令写进命令行：
 
 ```bash
-/data/medqc/business/tools/7zip/7z x /data/medqc/approved-input/MedQC-1026-materials-results.7z \
+umask 077
+"$KIT/tools/7zip/7z" x /data/medqc/approved-input/MedQC-1026-materials-results.7z \
   -o/data/medqc/approved-input/1026
 ```
 
@@ -93,6 +94,8 @@ sudo -u medqc-business /data/medqc/business/venv/bin/python "$KIT/deploy/sample_
 ```
 
 每条命令必须独立确认退出码0再继续。脚本包含v2大JSON优化及逐表进度，不用旧超时副本。应得到27份、39145行、20任务、15Envelope、1140历史条目、99表verified=true。保留历史10完整/11部分/6当前无结果，不补跑。
+
+结构检查按列名匹配，物理列顺序不同可以通过；缺列、多列、类型、主键及普通可空性差异仍拒绝。仅qc.custom_qc_batch_jobs的summary_json/items_json/failed_records_json/child_job_ids_json/child_summary_json允许“旧包非空、目标可空”，同时逐行核对旧包要求的非空值；不能利用此兼容丢失旧结果。所有写入仍使用PG目标类型转换与完整行比较，不裁剪JSON、不跳过Check。遇非空旧任务表的结构问题，停止报告，不删表重建。
 
 ## 6. 安装并启动业务专属systemd单元
 

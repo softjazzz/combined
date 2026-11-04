@@ -1,0 +1,1829 @@
+{
+  "purpose": "Schema only: 20 exported shared targets; no patient or result rows",
+  "tables": [
+    {
+      "schema": "qc",
+      "name": "manual_problem_sample_pools",
+      "columns": [
+        {
+          "name": "id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "name",
+          "notnull": true,
+          "type": "character varying(200)"
+        },
+        {
+          "name": "source_file",
+          "notnull": true,
+          "type": "character varying(500)"
+        },
+        {
+          "name": "source_sheet",
+          "notnull": true,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "scene",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "description",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "created_by",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "created_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        },
+        {
+          "name": "updated_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        },
+        {
+          "name": "total_items",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "llm_intrinsic_items",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "programmatic_items",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "unsupported_items",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "matched_items",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "ambiguous_items",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "unmatched_items",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "ready_items",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "latest_job_id",
+          "notnull": false,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "latest_job_status",
+          "notnull": false,
+          "type": "character varying(20)"
+        }
+      ],
+      "primary": [
+        "id"
+      ]
+    },
+    {
+      "schema": "qc",
+      "name": "manual_problem_sample_pool_items",
+      "columns": [
+        {
+          "name": "id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "pool_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "row_no",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "department",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "patient_name",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "mr_no",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "manual_issue_text",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "normalized_issue_text",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "doctor_name",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "qc_date",
+          "notnull": false,
+          "type": "date"
+        },
+        {
+          "name": "qc_user",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "coverage_type",
+          "notnull": true,
+          "type": "character varying(30)"
+        },
+        {
+          "name": "issue_category",
+          "notnull": true,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "expected_scene",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "candidate_rule_ids_json",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "include_in_batch_1",
+          "notnull": true,
+          "type": "boolean"
+        },
+        {
+          "name": "exclude_reason",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "matched_institute_id",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "matched_patient_id",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "matched_visit_id",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "match_status",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "sync_status",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "bundle_status",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "latest_job_id",
+          "notnull": false,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "latest_match_status",
+          "notnull": false,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "raw_payload_json",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "created_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        },
+        {
+          "name": "updated_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        }
+      ],
+      "primary": [
+        "id"
+      ]
+    },
+    {
+      "schema": "qc",
+      "name": "validation_material_batches",
+      "columns": [
+        {
+          "name": "id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "source_pool_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "target_pool_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "storage_schema",
+          "notnull": true,
+          "type": "character varying(63)"
+        },
+        {
+          "name": "archive_sha256",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "plan_sha256",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "state",
+          "notnull": true,
+          "type": "character varying(24)"
+        },
+        {
+          "name": "manifest",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "created_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "id"
+      ]
+    },
+    {
+      "schema": "qc",
+      "name": "validation_material_copies",
+      "columns": [
+        {
+          "name": "id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "batch_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "sample",
+          "notnull": true,
+          "type": "character varying(3)"
+        },
+        {
+          "name": "source_item_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "source_patient_id",
+          "notnull": true,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "source_visit_id",
+          "notnull": true,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "identity_map",
+          "notnull": true,
+          "type": "jsonb"
+        }
+      ],
+      "primary": [
+        "id"
+      ]
+    },
+    {
+      "schema": "qc",
+      "name": "validation_material_files",
+      "columns": [
+        {
+          "name": "copy_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "file_id",
+          "notnull": true,
+          "type": "character varying(12)"
+        },
+        {
+          "name": "sha256",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "pages",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "content",
+          "notnull": true,
+          "type": "bytea"
+        }
+      ],
+      "primary": [
+        "copy_id",
+        "file_id"
+      ]
+    },
+    {
+      "schema": "qc",
+      "name": "validation_material_documents",
+      "columns": [
+        {
+          "name": "copy_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "candidate_id",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "file_id",
+          "notnull": true,
+          "type": "character varying(12)"
+        },
+        {
+          "name": "page_start",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "page_end",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "title",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "record_time_text",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "content",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "state",
+          "notnull": true,
+          "type": "character varying(24)"
+        },
+        {
+          "name": "target_table",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "target_document_id",
+          "notnull": false,
+          "type": "character varying(100)"
+        },
+        {
+          "name": "provenance",
+          "notnull": true,
+          "type": "jsonb"
+        }
+      ],
+      "primary": [
+        "copy_id",
+        "candidate_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "running_record_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "scene",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "department",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "admission_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "discharge_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "medical_text",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "text_available",
+          "notnull": true,
+          "type": "boolean"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "patient_name_masked",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "mobile_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "id_card_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "source_doc_priority",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "compat_strategy",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "final_record_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "scene",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "department",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "admission_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "discharge_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "medical_text",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "text_available",
+          "notnull": true,
+          "type": "boolean"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "patient_name_masked",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "mobile_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "id_card_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "source_doc_priority",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "compat_strategy",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "frontpage_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "scene",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "department",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "admission_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "discharge_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "medical_text",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "text_available",
+          "notnull": true,
+          "type": "boolean"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "patient_name_masked",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "mobile_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "id_card_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "source_doc_priority",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "compat_strategy",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "coding_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "scene",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "department",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "admission_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "discharge_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "medical_text",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "text_available",
+          "notnull": true,
+          "type": "boolean"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "patient_name_masked",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "mobile_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "id_card_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "source_doc_priority",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "compat_strategy",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "settlement_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "scene",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "department",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "admission_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "discharge_datetime",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "medical_text",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "text_available",
+          "notnull": true,
+          "type": "boolean"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "patient_name_masked",
+          "notnull": false,
+          "type": "character varying(255)"
+        },
+        {
+          "name": "mobile_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "id_card_masked",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "source_doc_priority",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "compat_strategy",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "admission_domain_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "execution_domain",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "timeline_facts",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "source_documents",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "course_domain_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "execution_domain",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "timeline_facts",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "source_documents",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "surgery_domain_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "execution_domain",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "timeline_facts",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "source_documents",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "consult_discussion_domain_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "execution_domain",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "timeline_facts",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "source_documents",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "terminal_domain_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "execution_domain",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "timeline_facts",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "source_documents",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "index_coding_settlement_domain_bundle",
+      "columns": [
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "execution_domain",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "policy_version",
+          "notnull": false,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "bundle_schema_version",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "document_hits",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "data_quality_flags",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "timeline_facts",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "source_documents",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "structured_context",
+          "notnull": true,
+          "type": "jsonb"
+        },
+        {
+          "name": "bundle_updated_at",
+          "notnull": true,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary": [
+        "institute_id",
+        "patient_id",
+        "visit_id"
+      ]
+    },
+    {
+      "schema": "qc",
+      "name": "custom_qc_rule_drafts",
+      "columns": [
+        {
+          "name": "id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "rule_code",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "name",
+          "notnull": true,
+          "type": "character varying(200)"
+        },
+        {
+          "name": "description",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "source_requirement",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "prompt_template",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "document_type",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "applicable_documents",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "severity",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "defect_level",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "complexity",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "scene",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "generation_mode",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "examples",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "check_logic",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "last_test_summary",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "published_rule_id",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "created_by",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "created_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        },
+        {
+          "name": "updated_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        }
+      ],
+      "primary": [
+        "id"
+      ]
+    },
+    {
+      "schema": "qc",
+      "name": "custom_qc_batch_jobs",
+      "columns": [
+        {
+          "name": "id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "draft_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "rule_code",
+          "notnull": true,
+          "type": "character varying(32)"
+        },
+        {
+          "name": "rule_name",
+          "notnull": true,
+          "type": "character varying(200)"
+        },
+        {
+          "name": "scene",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "scope",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "status",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "filters_json",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "record_ids_json",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "summary_json",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "items_json",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "failed_records_json",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "error_message",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "created_by",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "created_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        },
+        {
+          "name": "started_at",
+          "notnull": false,
+          "type": "timestamp without time zone"
+        },
+        {
+          "name": "finished_at",
+          "notnull": false,
+          "type": "timestamp without time zone"
+        },
+        {
+          "name": "updated_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        },
+        {
+          "name": "total_records",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "success_count",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "failed_count",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "issue_records",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "compliant_records",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "total_tokens",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "total_processing_time",
+          "notnull": true,
+          "type": "double precision"
+        },
+        {
+          "name": "execution_mode",
+          "notnull": true,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "draft_ids_json",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "rule_count",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "job_kind",
+          "notnull": false,
+          "type": "character varying(20)"
+        },
+        {
+          "name": "parent_job_id",
+          "notnull": false,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "child_job_ids_json",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "child_summary_json",
+          "notnull": false,
+          "type": "text"
+        },
+        {
+          "name": "family_key",
+          "notnull": false,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "family_name",
+          "notnull": false,
+          "type": "character varying(64)"
+        }
+      ],
+      "primary": [
+        "id"
+      ]
+    },
+    {
+      "schema": "qc",
+      "name": "luxian_0609_record_result_envelopes",
+      "columns": [
+        {
+          "name": "id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "job_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "root_job_id",
+          "notnull": true,
+          "type": "character varying(36)"
+        },
+        {
+          "name": "created_by",
+          "notnull": true,
+          "type": "character varying(64)"
+        },
+        {
+          "name": "record_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "institute_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "patient_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "visit_id",
+          "notnull": true,
+          "type": "character varying(128)"
+        },
+        {
+          "name": "rule_set_key",
+          "notnull": true,
+          "type": "character varying(96)"
+        },
+        {
+          "name": "rule_set_version",
+          "notnull": true,
+          "type": "character varying(96)"
+        },
+        {
+          "name": "envelope_json",
+          "notnull": true,
+          "type": "text"
+        },
+        {
+          "name": "result_count",
+          "notnull": true,
+          "type": "integer"
+        },
+        {
+          "name": "created_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        },
+        {
+          "name": "updated_at",
+          "notnull": true,
+          "type": "timestamp without time zone"
+        }
+      ],
+      "primary": [
+        "id"
+      ]
+    }
+  ]
+}

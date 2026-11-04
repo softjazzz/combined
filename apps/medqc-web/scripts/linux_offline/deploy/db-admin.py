@@ -85,12 +85,12 @@ def main():
         # 历史029/047假定两个运行时表预先存在。只在空库/本初始化残留两表时建立前置，
         # 不修改已有版本库，也不伪造Alembic版本。实际新增列仍由029/047/053执行。
         import sample_set_transfer as transfer
+        from job_schema import ensure_job_owner
 
         prereq = json.loads(
             (Path(__file__).parent / "legacy-bootstrap-schema.json").read_text()
         )
         conn = psycopg2.connect(url.replace("postgresql+psycopg2://", "postgresql://"))
-        initialize_job_owner = False
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT to_regclass('public.alembic_version')")
@@ -123,15 +123,10 @@ def main():
                             )
                         else:
                             transfer.create_material(cur, table)
-                    initialize_job_owner = True
+                    ensure_job_owner(cur, transfer)
             conn.commit()
         finally:
             conn.close()
-        if initialize_job_owner:
-            # 056外键指向旧运行时任务owner；沿用既有表定义，不能删除迁移的归属检查。
-            from app.services.custom_qc_workspace_service import _batch_jobs_table
-
-            _batch_jobs_table()
         r = subprocess.run(
             [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"],
             capture_output=True,
@@ -164,6 +159,8 @@ def main():
         conn = psycopg2.connect(url.replace("postgresql+psycopg2://", "postgresql://"))
         try:
             with conn.cursor() as cur:
+                # 也处理旧交付包已迁移062、但尚无任务的31列空表；非空表拒绝自动改动。
+                ensure_job_owner(cur, transfer)
                 for table in bundle_schema["tables"]:
                     if (
                         table["schema"] != "public"

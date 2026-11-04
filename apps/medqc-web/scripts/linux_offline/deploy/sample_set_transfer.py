@@ -452,8 +452,45 @@ def validate_owner(account, institutes):
     return str(account["id"])
 
 
-def compatible_columns(expected, actual):
-    if expected != actual:
+LEGACY_JOB_JSON_COLUMNS = {
+    "summary_json",
+    "items_json",
+    "failed_records_json",
+    "child_job_ids_json",
+    "child_summary_json",
+}
+
+
+def compatible_columns(expected, actual, *, table=None):
+    # JSON按字段名装入目标复合类型，写入也沿用目标物理列序；不要求两库attnum相同。
+    # 仍严格核对全部字段，不能用dict覆盖掩盖重复列名。
+    def named(columns):
+        result = {}
+        for column in columns:
+            name = column["name"]
+            ident(name)
+            safe_type(column["type"])
+            if name in result:
+                raise ValueError("duplicate_column_name")
+            result[name] = column
+        return result
+
+    source, target = named(expected), named(actual)
+    if source.keys() != target.keys():
+        raise ValueError("target_columns_differ_from_export")
+    for name, column in source.items():
+        if column == target[name]:
+            continue
+        # 旧任务包五个JSON列要求非空，但正式创建/补跑用NULL表示尚无结果。
+        # 只允许这一明确owner的源严格、目标可空方向；源值仍在compare_shared逐行检查。
+        if (
+            table is not None
+            and (table["schema"], table["name"]) == ("qc", "custom_qc_batch_jobs")
+            and name in LEGACY_JOB_JSON_COLUMNS
+            and column["notnull"] is True
+            and target[name] == {**column, "notnull": False}
+        ):
+            continue
         raise ValueError("target_columns_differ_from_export")
 
 
@@ -520,6 +557,10 @@ def compare_shared(cur, folder, table, owner, *, require_all):
     for row in read_lines(folder, table):
         # 只传小型主键值查重；未命中时不向PG发送或转换整行临床JSON。
         values = json.loads(row, parse_float=Decimal)
+        if any(
+            c["notnull"] and values.get(c["name"]) is None for c in table["columns"]
+        ):
+            raise ValueError("source_required_column_missing_or_null")
         keys = [values.get(k) for k in table["primary"]]
         if any(k is None for k in keys):
             raise ValueError("null_or_missing_primary_key")
@@ -625,7 +666,7 @@ def preflight(conn, folder, manifest, username, user_schema):
                 safe_type(column["type"])
             if table["schema"] != schema or installed:
                 target = descriptor(cur, table["schema"], table["name"])
-                compatible_columns(table["columns"], target["columns"])
+                compatible_columns(table["columns"], target["columns"], table=table)
                 if table["primary"] != target["primary"]:
                     raise ValueError("target_primary_key_mismatch")
             if table["schema"] != schema:
