@@ -23,7 +23,7 @@ CURRENT_VIEW_PROJECTION_LIMITS = {
 }
 
 # 仅合并进行中的同病例请求，结束立即移除；不缓存已完成的临床数据。
-_pending: dict[tuple[str, str, str], Future] = {}
+_pending: dict[tuple[str, str, str, str], Future] = {}
 _pending_lock = Lock()
 
 
@@ -85,9 +85,10 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
 
 
 def load_current_documents(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, Any]:
-    key = (institute_id.strip(), patient_id.strip(), visit_id.strip())
-    if not all(key):
+    identity = (institute_id.strip(), patient_id.strip(), visit_id.strip())
+    if not all(identity):
         raise ValueError("missing_current_record_identity")
+    key = (*identity, assembly._cache_binding(patient_id, visit_id))
     with _pending_lock:
         future = _pending.get(key)
         owner = future is None

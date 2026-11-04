@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .clinical_sources import bound_job
+
 import asyncio
 from contextlib import nullcontext
 from copy import deepcopy
@@ -1338,6 +1340,7 @@ def _renew_luxian_0609_lease_until_stopped(
 
 @observe_worker_timing
 @diagnostic_job_lifecycle
+@bound_job
 async def run_sichuan_workspace_batch_job(
     job_id: str,
     *,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import datetime
@@ -249,6 +250,8 @@ def find_user_by_account(account: str) -> dict[str, Any] | None:
         return None
     if db_user is not None:
         return db_user
+    if os.getenv("ENV", "development").strip().lower() == "production":
+        return None
 
     normalized = str(account or "").strip()
     normalized_lower = normalized.lower()
@@ -274,6 +277,8 @@ def resolve_user_by_subject(subject: str | None) -> dict[str, Any] | None:
         return None
     if db_user is not None:
         return db_user
+    if os.getenv("ENV", "development").strip().lower() == "production":
+        return None
 
     normalized_lower = normalized.lower()
     for user in users_db.values():

@@ -30,7 +30,17 @@
     </header>
 
     <template v-if="activeTab === 'dataSync'">
-      <section class="mq-card mq-card--padded sync-card" aria-labelledby="sync-card-title">
+      <ClinicalSourceSettingsPanel v-if="canManageLlmConfig" />
+      <DataPipelineSettingsPanel
+        v-if="canManageLlmConfig"
+        @selection="selectedDataPipeline = $event"
+        @ready="pipelineConfigReady = $event"
+      />
+      <section
+        v-if="showLegacyPipeline"
+        class="mq-card mq-card--padded sync-card"
+        aria-labelledby="sync-card-title"
+      >
         <div class="mq-card__head">
           <div>
             <h2 id="sync-card-title" class="mq-card__title">病历数据同步设置</h2>
@@ -336,7 +346,7 @@
 
       <!-- 高级设置：仅实施/同步管理员可见 -->
       <section
-        v-if="isSyncAdvancedUser"
+        v-if="showLegacyPipeline && isSyncAdvancedUser"
         class="mq-card mq-card--padded sync-advanced"
         aria-labelledby="sync-advanced-title"
       >
@@ -524,6 +534,9 @@ import { useDataSync } from './composables/useDataSync'
 import LlmPerformanceObservabilityPanel from './components/system-config/LlmPerformanceObservabilityPanel.vue'
 import AccountManagementPanel from './components/system-config/AccountManagementPanel.vue'
 import QcRuntimeSettingsPanel from './components/system-config/QcRuntimeSettingsPanel.vue'
+import ClinicalSourceSettingsPanel from './components/system-config/ClinicalSourceSettingsPanel.vue'
+import DataPipelineSettingsPanel from './components/system-config/DataPipelineSettingsPanel.vue'
+import type { DataPipeline } from '@/api/dataPipelines'
 import { useAuthStore } from '@/stores/auth'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
@@ -531,6 +544,8 @@ import MqIconTile from '@/components/icons/MqIconTile.vue'
 const workstationConfirmation = useWorkstationConfirmation()
 
 const activeTab = ref('dataSync')
+const selectedDataPipeline = ref<DataPipeline>('legacy_pg')
+const pipelineConfigReady = ref(false)
 const syncInitialized = ref(false)
 const detailWorkbenchOpen = ref(false)
 const syncScopeConfirmed = ref(false)
@@ -564,6 +579,11 @@ const canManageLlmConfig = computed(() =>
 )
 const canManageAccounts = computed(() => authStore.userRoles.includes('admin'))
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
+const showLegacyPipeline = computed(
+  () =>
+    selectedDataPipeline.value === 'legacy_pg' &&
+    (!canManageLlmConfig.value || pipelineConfigReady.value),
+)
 
 const isObservabilityOperationalAdmin = computed(() =>
   authStore.userRoles.some((role) => role === 'sync_admin' || role === 'super_admin'),
@@ -1075,14 +1095,30 @@ onMounted(async () => {
   if (canOpenRequestedTab) {
     activeTab.value = requestedTab
   }
-  if (!['llmConfig', 'llmObservability', 'accounts', 'qcRuntime'].includes(activeTab.value)) {
+  if (
+    !['llmConfig', 'llmObservability', 'accounts', 'qcRuntime'].includes(activeTab.value) &&
+    !(activeTab.value === 'dataSync' && canManageLlmConfig.value)
+  ) {
     await ensureSyncInitialized()
   }
 })
 
 watch(activeTab, async (tab) => {
   if (['llmConfig', 'llmObservability', 'accounts', 'qcRuntime'].includes(tab)) return
+  if (
+    tab === 'dataSync' &&
+    canManageLlmConfig.value &&
+    (!pipelineConfigReady.value || selectedDataPipeline.value !== 'legacy_pg')
+  )
+    return
   await ensureSyncInitialized()
+})
+
+watch([selectedDataPipeline, pipelineConfigReady], async ([pipeline, ready]) => {
+  closeExecuteConfirm(false)
+  syncScopeConfirmed.value = false
+  if (activeTab.value === 'dataSync' && ready && pipeline === 'legacy_pg')
+    await ensureSyncInitialized()
 })
 
 watch(hasPreflightPass, (isReady) => {

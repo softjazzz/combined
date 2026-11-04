@@ -261,6 +261,12 @@ class HandbookLedger:
         family = REPORT_RULES[rule_id]
         # 影像报告完整性以 PACS 检查与报告为依据，HIS 医嘱不是必需来源。
         required = FAMILY_SOURCES[family] if family == "exam" else RULE_SOURCES[rule_id]
+        if family == "exam" and self.sources["exam_item_report"].complete and any(
+            target_name("exam", _names(row)) for _, row in self.sources["exam_item_report"].rows
+        ):
+            # 已有正式报告独立成事件，不要求另一系统的检查主表已接入。
+            # 仅报告观察范围可用，不声明未见报告的检查已经完整。
+            required = ("exam_item_report",)
         return family not in self.overflow and all(self.sources[key].complete for key in required)
 
 

@@ -1,3 +1,5 @@
+import { clinicalSourcesApi, type ClinicalSourceId, type ClinicalSourceOption } from '@/api/clinicalSources'
+import { setPageClinicalSource } from '@/utils/clinical-source'
 import { computed, ref } from 'vue'
 import { ApiService } from '@/services/apiService'
 import type { DeptInfo, DoctorInfo, PatientRecord, RecordPoolQcSummary } from '../types'
@@ -72,6 +74,23 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const initialRouteQuery = new URLSearchParams(window.location.search)
   const initialDepartment = initialRouteQuery.get('department')?.trim()
   const initialDoctor = initialRouteQuery.get('doctor')?.trim()
+  const sourceId = ref<ClinicalSourceId | ''>('')
+  const sourceOptions = ref<ClinicalSourceOption[]>([])
+  let sourceLoading: Promise<void> | undefined
+  async function initializeSource() {
+    if (sourceId.value) return
+    if (!sourceLoading) sourceLoading = (async () => {
+      const options = await clinicalSourcesApi.options()
+      const requested = initialRouteQuery.get('source_id') || options.default_source
+      if (!options.sources.some((option) => option.id === requested && option.enabled)) {
+        throw new Error('当前数据源已停用或无效，请重新选择')
+      }
+      sourceOptions.value = options.sources
+      sourceId.value = requested as ClinicalSourceId
+      setPageClinicalSource(sourceId.value)
+    })().finally(() => { sourceLoading = undefined })
+    await sourceLoading
+  }
   const allRecords = ref<PatientRecord[]>([])
   const departments = ref<DeptInfo[]>([])
   const doctors = ref<DoctorInfo[]>([])
@@ -110,6 +129,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     loading.value = true
     loadError.value = false
     try {
+      await initializeSource()
+      if (requestSequence !== activeRequestSequence) return
       const [startDate, endDate] = dateRange.value || []
       const requestedPageSize =
         Number.isFinite(Number(targetPageSize)) && Number(targetPageSize) > 0
@@ -118,6 +139,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       const params: Record<string, string | number> = {
         page,
         page_size: requestedPageSize,
+        source_id: sourceId.value,
         date_field: dateField.value,
       }
       if (activeDept.value !== ALL_DEPARTMENTS) {
@@ -175,7 +197,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       // 过期请求不得覆盖较新的筛选、分页或住院状态响应。
       if (requestSequence !== activeRequestSequence) return
 
-      allRecords.value = normalizedRecords
+      allRecords.value = normalizedRecords.map((record) => ({ ...record, sourceId: sourceId.value || undefined }))
       departments.value =
         Array.isArray(data.departments) && data.departments.length > 0
           ? data.departments.map((dept: unknown) => normalizeDepartment(dept))
@@ -197,12 +219,27 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       if (requestSequence !== activeRequestSequence) return
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
       loadError.value = true
+      allRecords.value = []
+      serverTotal.value = 0
       qcSummary.value = { ...EMPTY_QC_SUMMARY }
     } finally {
       if (requestSequence === activeRequestSequence) {
         loading.value = false
       }
     }
+  }
+
+  function selectSource(value: string) {
+    if (!sourceOptions.value.some((option) => option.id === value && option.enabled)) return
+    ++activeRequestSequence
+    sourceId.value = value as ClinicalSourceId
+    setPageClinicalSource(value)
+    allRecords.value = []
+    departments.value = []
+    doctors.value = []
+    qcSummary.value = { ...EMPTY_QC_SUMMARY }
+    resetFilters()
+    void fetchData(1)
   }
 
   function handlePageChange(page: number, nextPageSize?: number) {
@@ -264,6 +301,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   }
 
   return {
+    sourceId,
+    sourceOptions,
+    selectSource,
     allRecords,
     departments,
     doctors,

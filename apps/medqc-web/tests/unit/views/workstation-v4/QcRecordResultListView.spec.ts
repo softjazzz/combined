@@ -12,6 +12,13 @@ const routeState = vi.hoisted(() => ({
   query: {} as Record<string, string>,
 }))
 
+vi.mock('@/api/clinicalSources', () => ({
+  clinicalSourcesApi: { options: vi.fn(async () => ({ default_source: 'legacy_pg', sources: [
+    { id: 'legacy_pg', name: '原有数据源', enabled: true },
+    { id: 'independent_cdm', name: '服务器CDM', enabled: true },
+  ] })) },
+}))
+
 vi.mock('@/services/apiService', () => ({
   ApiService: {
     getRaw: mocks.getRaw,
@@ -271,7 +278,8 @@ describe('QcRecordResultListView', () => {
       expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
         page: 1,
         page_size: 15,
-        date_field: dateField,
+        source_id: 'legacy_pg',
+      date_field: dateField,
         hospital_status: carePhase,
       })
     },
@@ -283,7 +291,7 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.classes()).toContain('running-qc-refined')
     expect(
       wrapper.findAll('.qc-record-result-list-view__field-label').map((label) => label.text()),
-    ).toEqual(['关键词', '科室', '入院日期'])
+    ).toEqual(['数据源', '关键词', '科室', '入院日期'])
     expect(
       wrapper
         .find('.qc-record-result-list-view__filters .qc-record-result-list-view__export-trigger')
@@ -301,7 +309,7 @@ describe('QcRecordResultListView', () => {
     expect(finalView.find('.qc-record-result-list-view__list-heading').exists()).toBe(true)
     expect(
       finalView.findAll('.qc-record-result-list-view__field-label').map((label) => label.text()),
-    ).toEqual(['关键词', '科室', '出院日期'])
+    ).toEqual(['数据源', '关键词', '科室', '出院日期'])
     expect(finalView.getComponent(QcRecordReviewPreview).props('carePhase')).toBe('discharged')
     expect(finalView.findAllComponents(QcRunSelectedControl)).toHaveLength(1)
   })
@@ -398,12 +406,13 @@ describe('QcRecordResultListView', () => {
     await inputs[0].setValue('患者甲')
     await inputs[1].setValue('2026-08-01')
     await inputs[2].setValue('2026-08-10')
-    await wrapper.find('select').setValue('重症医学科')
+    await wrapper.find('select[aria-label="科室筛选"]').setValue('重症医学科')
     await flushPromises()
 
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'discharge',
       dept: '重症医学科',
       keyword: '患者甲',
@@ -420,7 +429,7 @@ describe('QcRecordResultListView', () => {
     await inputs[0].setValue('患者甲')
     await inputs[1].setValue('2026-08-01')
     await inputs[2].setValue('2026-08-10')
-    await wrapper.find('select').setValue('重症医学科')
+    await wrapper.find('select[aria-label="科室筛选"]').setValue('重症医学科')
     await flushPromises()
 
     await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')
@@ -545,6 +554,7 @@ describe('QcRecordResultListView', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
+      source_id: 'legacy_pg',
       date_field: 'discharge',
       keyword: 'V-priority',
       hospital_status: 'discharged',

@@ -39,6 +39,12 @@ jobs:
           python-version: '3.10'
       - name: Install locked application and Worker dependencies
         run: python -m pip install -r requirements.txt -r requirements-qc-worker.txt
+      - name: Formal release runtime identity and wrapped-function proof (offline)
+        run: >-
+          sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)"
+          -B scripts/run_qc_scheduler_tests.py --profile offline
+          tests/unit/test_p0_package_installer.py tests/unit/test_runtime_build_endpoint.py
+          tests/unit/test_verify_release_source.py tests/unit/test_qc_diagnostic_runtime_build.py
       - name: M0 isolation and M1 Gateway admission
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite m1-admission tests/unit/test_qc_scheduler_isolation.py
       - name: Request attribution and A0-A1 freeze isolation (offline)
@@ -51,6 +57,15 @@ jobs:
         run: python -B scripts/run_qc_scheduler_tests.py --profile offline --suite compatibility
       - name: Local model catalog, selection and permissions (offline)
         run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_strata_admin_configuration.py tests/unit/test_llm_config_permissions.py tests/unit/test_llm_config_loader.py
+      - name: Dual data pipelines, persistent authorization and CDM isolation (offline)
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline --suite data-pipelines
+      - name: Clinical source case scope and saved result regression (offline)
+        run: >-
+          sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)"
+          -B scripts/run_qc_scheduler_tests.py --profile offline
+          tests/unit/test_clinical_sources.py tests/unit/test_latest_full_record_result.py
+          tests/unit/test_workstation_query_service.py tests/unit/test_doctor_case_scope.py
+          tests/unit/test_current_document_view.py tests/unit/test_current_frontpage_view.py
       - name: M2 synthetic Outbox and Worker delivery
         run: python -B scripts/run_qc_scheduler_tests.py --profile m2-synthetic --suite m2-release
       - name: Settings snapshot and source lookup responsiveness (offline)

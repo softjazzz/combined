@@ -1,0 +1,23 @@
+[Unit]
+Description=MedQC static frontend on port 80
+After=network.target medqc-business-api.service
+
+[Service]
+Type=simple
+User=medqc-business
+Group=medqc-business
+WorkingDirectory=/data/medqc/business/current
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/data/medqc/business/venv/bin/python /data/medqc/business/current/serve_dist_spa.py --host 0.0.0.0 --port 80 --dir /data/medqc/business/current/frontend/dist --api-target http://127.0.0.1:8001
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+Restart=on-failure
+RestartSec=5
+UMask=0077
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/data/medqc/business/logs
+
+[Install]
+WantedBy=multi-user.target

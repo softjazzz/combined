@@ -62,10 +62,14 @@ def load_frontpage_document(*, institute_id: str, patient_id: str, visit_id: str
         from .assembly import _default_source_schema
         copy_schema = material_source_schema(default_schema=_default_source_schema(), **identity)
     # 全字段仅用于只读展示，不能扩大公共组装器的规则输入白名单。
-    with engine.connect() as connection:
+    from .assembly import _source_engine
+    from ...database.clinical_connection import configured
+    read_engine = _source_engine("cdm") if configured() and not copy_schema else engine
+    with read_engine.connect() as connection:
         for table in ("mr", "mr_diagnosis", "mr_surgery", "mr_cost"):
+            source_table = "diagnosis" if table == "mr_diagnosis" and configured() and not copy_schema else table
             records = connection.execute(text(
-                f"SELECT * FROM {f'{copy_schema}.{table}' if copy_schema else clinical_table_sql(table)} "
+                f"SELECT * FROM {f'{copy_schema}.{table}' if copy_schema else clinical_table_sql(source_table)} "
                 "WHERE institute_id=:institute_id AND patient_id=:patient_id AND visit_id=:visit_id "
                 "LIMIT 1001"
             ), identity).mappings().all()

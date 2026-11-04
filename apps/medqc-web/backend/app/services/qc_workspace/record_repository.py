@@ -165,7 +165,9 @@ class RecordRepository:
         """只在本仓库会话绑定CDM来源，避免public影子表遮挡已迁移的业务表。"""
         from ..bundles.assembly import _default_source_schema
 
-        session = self._session_factory()
+        from ...database import clinical_connection
+        source_engine = clinical_connection.get_engine() if not self._material_schema else None
+        session = Session(source_engine) if source_engine is not None else self._session_factory()
         try:
             if self._material_schema or _default_source_schema() == "cdm":
                 # 与同步、Bundle和051的owner一致；不改连接池search_path或ORM元数据。
@@ -741,6 +743,15 @@ class RecordRepository:
         page_size: int,
         institute_id: Optional[str] = None,
     ) -> WorkspaceListResult:
+        from ...database.clinical_connection import configured
+        if configured() and not self._material_schema:
+            from ..clinical_case_catalog import case_identities
+            filters = dict(scope=scope, department=department, doctor=doctor, date_field=date_field,
+                start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id)
+            refs = case_identities(**filters, page=page, page_size=page_size)
+            total = case_identities(**filters, count_only=True)
+            items = self.collect_records(**filters, record_refs=refs) if refs else []
+            return WorkspaceListResult(items=items, total=total, page=page, page_size=page_size)
         session = self._open_session()
         try:
             query = self._build_records_query(
@@ -870,6 +881,22 @@ class RecordRepository:
                 return collected
         if record_ids and any(str(value).startswith("pdfv_") for value in record_ids):
             raise ValueError("material_copy_requires_complete_case_refs")
+        from ...database.clinical_connection import configured
+        if configured() and not self._material_schema and not record_refs and not record_ids:
+            from ..clinical_case_catalog import case_identities
+            if sync_scope not in (None, "all"):
+                from ..data_pipeline_settings import PipelineError
+                raise PipelineError("clinical_source_live_status_not_supported", 422)
+            refs = case_identities(scope=scope, department=department, doctor=doctor, date_field=date_field,
+                start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id)
+            if not refs:
+                return []
+            collected = []
+            for offset in range(0, len(refs), 128):
+                collected.extend(self.collect_records(scope=scope, department=department, doctor=doctor, date_field=date_field,
+                    start_date=start_date, end_date=end_date, keyword=keyword, record_refs=refs[offset:offset+128],
+                    _private_identity_collector=_private_identity_collector, institute_id=institute_id))
+            return collected
         session = self._open_session()
         try:
             query = self._build_records_query(
@@ -988,6 +1015,11 @@ class RecordRepository:
                 }
             )
 
+        from ...database.clinical_connection import configured
+        if configured() and not self._material_schema and not record_refs and not record_ids:
+            from ..clinical_case_catalog import case_identities
+            return case_identities(scope=scope, department=department, doctor=doctor, date_field=date_field,
+                start_date=start_date, end_date=end_date, keyword=keyword, count_only=True)
         session = self._open_session()
         try:
             query = self._build_records_query(

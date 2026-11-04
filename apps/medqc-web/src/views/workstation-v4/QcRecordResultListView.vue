@@ -35,6 +35,8 @@
             data-testid="qc-result-view-analysis"
             :class="{ 'is-active': activeView === 'analysis' }"
             :aria-pressed="activeView === 'analysis'"
+            :disabled="sourceId === 'independent_cdm'"
+            :title="sourceId === 'independent_cdm' ? 'CDM来源暂不提供跨病例结果分析' : ''"
             @click="activeView = 'analysis'"
           >
             结果分析
@@ -42,6 +44,8 @@
         </nav>
         <div class="review-workbench-primary">
           <QcRunSelectedControl
+            :key="sourceId"
+            :source-id="sourceId"
             :care-phase="carePhase"
             :record-refs="selectedQcRecordRefs"
             :selected-count="selectedCount"
@@ -88,6 +92,24 @@
           class="qc-record-result-list-view__filters"
           aria-label="病历筛选条件"
         >
+          <label class="qc-record-result-list-view__filter-field">
+            <span class="qc-record-result-list-view__field-label">数据源</span>
+            <select
+              :value="sourceId"
+              aria-label="病历数据源"
+              :disabled="loading"
+              @change="changeSource"
+            >
+              <option
+                v-for="source in sourceOptions"
+                :key="source.id"
+                :value="source.id"
+                :disabled="!source.enabled"
+              >
+                {{ source.name }}
+              </option>
+            </select>
+          </label>
           <label
             class="qc-record-result-list-view__filter-field qc-record-result-list-view__search-field"
           >
@@ -257,6 +279,7 @@
           </footer>
         </div>
         <QcRecordReviewPreview
+            :key="sourceId"
           :care-phase="carePhase"
           :row="previewRow"
           :refresh-key="previewRefreshKey"
@@ -274,6 +297,7 @@
     </section>
 
     <QcRecordResultAnalysisPanel
+            :key="sourceId"
       v-else
       :care-phase="carePhase"
       @open-result="handleOpenAnalysisResult"
@@ -351,6 +375,7 @@ const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '�
 const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' : '固定范围：已出院'))
 
 const {
+  sourceId, sourceOptions, selectSource,
   allRecords,
   activeDept,
   activeDoctor,
@@ -481,6 +506,14 @@ function formatMedicalRecordTimestamp(value?: string | null): string {
   const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2}))?/u)
   if (!match) return '—'
   return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
+}
+
+function changeSource(event: Event) {
+  closeResultDrawer()
+  activeView.value = 'records'
+  clearSelection()
+  activePreviewKey.value = ''
+  selectSource((event.target as HTMLSelectElement).value)
 }
 
 function applyFilters() {

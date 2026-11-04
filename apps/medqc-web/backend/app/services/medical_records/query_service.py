@@ -94,6 +94,12 @@ def list_medical_records(
     page_size: int = 20,
     case_scope=None,
 ) -> dict[str, Any]:
+    from ...database.clinical_connection import configured
+    if configured():
+        from ..clinical_case_catalog import workstation
+        result = workstation(dept=dept, keyword=keyword, start_date=start_date, end_date=end_date,
+            page=page, page_size=page_size, case_scope=case_scope, qc_projection_loader=lambda _: {})
+        return {"items": result["records"], "total": result["total"], "page": page, "page_size": page_size}
     if case_scope is not None:
         with _session_factory() as session:
             mr = MedicalRecordFrontpage
@@ -125,6 +131,10 @@ def get_stats(
     end_date: Optional[date] = None,
     case_scope=None,
 ) -> dict[str, Any]:
+    from ...database.clinical_connection import configured
+    if configured():
+        from ..data_pipeline_settings import PipelineError
+        raise PipelineError("clinical_source_legacy_statistics_not_supported", 422)
     if case_scope is not None:
         with _session_factory() as session:
             mr = MedicalRecordFrontpage
@@ -145,6 +155,11 @@ def get_stats(
 
 
 def get_departments(*, case_scope=None) -> list[str]:
+    from ...database.clinical_connection import configured
+    if configured():
+        from ..clinical_case_catalog import workstation
+        result = workstation(case_scope=case_scope, page_size=1, qc_projection_loader=lambda _: {})
+        return [item["name"] for item in result["departments"]]
     if case_scope is not None:
         return [case_scope.department]
     repo = get_repository()
@@ -1015,6 +1030,15 @@ def get_workstation_data(
     analytics_scope: Optional[str] = None,
     case_scope=None,
 ) -> dict[str, Any]:
+    from ...database import clinical_connection
+    if clinical_connection.configured():
+        from ..clinical_case_catalog import workstation
+        return workstation(dept=dept, doctor=doctor, keyword=keyword, start_date=start_date, end_date=end_date,
+            date_field=date_field, hospital_status=hospital_status, sync_scope=sync_scope, inpatient_sort=inpatient_sort,
+            page=page, page_size=page_size, case_scope=case_scope, qc_projection_loader=qc_projection_loader,
+            analytics_job_id=analytics_job_id, analytics_completed_from=analytics_completed_from,
+            analytics_completed_to=analytics_completed_to, analytics_rule_id=analytics_rule_id,
+            analytics_result_status=analytics_result_status, analytics_scope=analytics_scope)
     session_factory = session_factory or _session_factory
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
     if normalized_hospital_status not in {"all", "inpatient", "discharged"}:

@@ -1,6 +1,7 @@
 """正式发布或显式安装验收补丁后，冻结进程实际加载的 P0 函数一致性。"""
 
 import hashlib
+import inspect
 import json
 from pathlib import Path
 from types import CodeType
@@ -48,9 +49,11 @@ def loaded_p0_proof(*, release_identity=None):
     )
     checks = {}
     for name, function, path in functions:
+        # 计时装饰器通过 wraps 保留业务函数；校验其真实实现，不能在装饰器文件中查业务方法。
+        function = inspect.unwrap(function)
         disk = compile(Path(function.__code__.co_filename).read_bytes(), function.__code__.co_filename, "exec")
         actual = code_digest(function.__code__)
         checks[name] = {"loaded_equals_disk": actual == code_digest(find_code(disk, path)), "loaded_code_sha256": actual}
     return {"protocol": "medqc-p0-chain-v1", "loaded_equals_disk": files_unchanged and all(row["loaded_equals_disk"] for row in checks.values()),
-            "recovery_supported": "recovery_baseline" in CustomQCWorkspaceService.complete_batch_job.__code__.co_varnames,
+            "recovery_supported": "recovery_baseline" in inspect.unwrap(CustomQCWorkspaceService.complete_batch_job).__code__.co_varnames,
             "functions": checks}

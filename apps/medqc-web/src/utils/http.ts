@@ -1,5 +1,6 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import axios from 'axios'
+import { clinicalSourceForRequest } from './clinical-source'
 import { getAccessToken } from '@/utils/auth-token'
 import { attachTraceIdToError, ensureTraceHeaders, extractTraceIdFromResponse } from '@/utils/trace'
 
@@ -9,6 +10,11 @@ export const http = axios.create({
 })
 
 http.interceptors.request.use((config) => {
+  const source = clinicalSourceForRequest(config.url)
+  if (source) {
+    config.headers = config.headers || {}
+    config.headers['X-Clinical-Source'] = source
+  }
   const token = getAccessToken()
   if (token) {
     config.headers = config.headers || {}

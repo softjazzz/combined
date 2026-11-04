@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { clinicalSourceForRequest } from '@/utils/clinical-source'
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 import {
@@ -155,6 +156,11 @@ class TokenManager {
 // 请求拦截器
 apiClient.interceptors.request.use(
   (config: AxiosRequestConfig) => {
+    const source = clinicalSourceForRequest(config.url)
+    if (source) {
+      config.headers = config.headers || {}
+      config.headers['X-Clinical-Source'] = source
+    }
     const token = TokenManager.getToken()
     if (token && !TokenManager.isTokenExpired(token)) {
       config.headers = config.headers || {}

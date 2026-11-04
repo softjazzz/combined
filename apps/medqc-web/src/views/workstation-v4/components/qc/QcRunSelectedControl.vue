@@ -113,6 +113,7 @@ export interface SelectedQcRecordRef {
 type RunState = 'idle' | 'creating' | 'running' | 'completed' | 'failed'
 
 const props = defineProps<{
+  sourceId?: string
   carePhase: QcRecordCarePhase
   recordRefs: SelectedQcRecordRef[]
   selectedCount?: number
@@ -164,7 +165,8 @@ function workflowOwner(): string {
 }
 
 function storageKey(): string {
-  return `medqc:selected-qc:${scene.value}`
+  const suffix = props.sourceId === 'independent_cdm' ? ':independent_cdm' : ''
+  return `medqc:selected-qc:${scene.value}${suffix}`
 }
 
 function persistJob(jobId: string) {

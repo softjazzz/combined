@@ -4437,6 +4437,20 @@ async def _execute_extended_document_group(
                     )
                 )
                 continue
+            body_only_medication_scope = (
+                any(_clean(row.get("discharge_order_source")).startswith("record_content:")
+                    for row in discharge_rows)
+                and not formal_prescription_medications
+                and formal_prescription_error == "source_unavailable"
+                and all(
+                    observation.query_state.value in {"unavailable", "empty"}
+                    for observation in evidence_snapshot.observations
+                    if observation.source_key in {"inpat_prescription", "inpat_prescription_item"}
+                )
+            )
+            if body_only_medication_scope:
+                # 只核对实际出院文书的带药内容，不把未知处方范围报成“处方0项”。
+                formal_prescription_error = ""
             (
                 medications,
                 medication_error,
@@ -4605,7 +4619,9 @@ async def _execute_extended_document_group(
                             {
                                 "verification_kind": "discharge_medication_completeness_check",
                                 "medication_count": len(medications),
-                                "prescription_medication_count": len(formal_prescription_medications),
+                                **({"prescription_medication_count": len(formal_prescription_medications),
+                                    "missing_drug_names": list(missing_drug_names)}
+                                   if not body_only_medication_scope else {}),
                                 "required_fields": [
                                     "drug_name",
                                     "dose",
@@ -4613,7 +4629,6 @@ async def _execute_extended_document_group(
                                     "duration",
                                 ],
                                 "missing_fields": missing_fields,
-                                "missing_drug_names": list(missing_drug_names),
                             },
                         )
                     )
@@ -4623,7 +4638,7 @@ async def _execute_extended_document_group(
                     snapshot=evidence_snapshot,
                     source_keys=(
                         ("discharge_record",)
-                        if reason_code == "trigger_absent_complete"
+                        if reason_code == "trigger_absent_complete" or body_only_medication_scope
                         else ("discharge_record", "inpat_prescription", "inpat_prescription_item")
                     ),
                     final_state=final_state,

@@ -593,7 +593,7 @@ export async function getEditableMedicalRecordDocuments(
 export async function getEditableMedicalRecordDocument(
   visitId: string,
   summary: EditableMedicalRecordDocument,
-  params?: Omit<EditableDocumentRequestParams, 'view' | 'job_id' | 'record_ref'>,
+  params?: Omit<EditableDocumentRequestParams, 'view' | 'record_ref'>,
 ) {
   try {
     const response = await ApiService.requestRaw<unknown>({

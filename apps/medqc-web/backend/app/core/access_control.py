@@ -74,5 +74,9 @@ async def enforce_default_auth(
 
     request.state.current_user = resolve_current_user_from_token(credentials.credentials)
     from ..services.doctor_case_scope import enforce_doctor_case_access
+    from ..services.clinical_sources import prepare_request, request_selection
 
-    await enforce_doctor_case_access(request, request.state.current_user)
+    from starlette.concurrency import run_in_threadpool
+    await run_in_threadpool(prepare_request, request)
+    with request_selection(request):
+        await enforce_doctor_case_access(request, request.state.current_user)

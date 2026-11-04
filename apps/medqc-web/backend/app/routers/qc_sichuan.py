@@ -2176,6 +2176,10 @@ async def create_workspace_batch_job(
             else {}
         ),
     }
+    from ..database.clinical_connection import source_binding
+    binding = source_binding()
+    if binding:
+        idempotency_payload["clinical_source_binding"] = binding
     idempotency_digest = hashlib.sha256(
         json.dumps(idempotency_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()[:24]

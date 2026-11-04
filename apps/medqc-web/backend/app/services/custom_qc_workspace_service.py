@@ -3135,6 +3135,8 @@ class CustomQCWorkspaceService:
             normalized_run_mode = _normalize_run_mode(run_mode)
             normalized_job_kind = _safe_text(job_kind, "leaf").lower() or "leaf"
             base_filters = dict(filters or {})
+            from .clinical_sources import freeze
+            freeze(base_filters)
             if DISPATCH_FILTER_KEY in base_filters:
                 raise ValueError("qc_dispatch 由任务服务冻结，调用方不得注入")
             formal_0609 = base_filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
@@ -3771,6 +3773,9 @@ class CustomQCWorkspaceService:
                 # 先用轻量身份与冻结范围选轮，只加载选中任务的结果大字段。
                 candidate = _row_to_batch_job(dict(row))
                 filters = candidate.get("filters") or {}
+                from .clinical_sources import job_matches
+                if not job_matches(filters, normalized_patient_id, normalized_visit_id):
+                    continue
                 saved_partial_attempt = bool(row.get("saved_partial_attempt"))
                 if saved_partial_attempt:
                     if row["id"] in canonical_job_ids:
@@ -4145,6 +4150,9 @@ class CustomQCWorkspaceService:
                     else _safe_json_loads(row.get("filters_json"), {})
                 )
                 filters_dict = filters if isinstance(filters, dict) else {}
+                from .clinical_sources import job_matches
+                if not job_matches(filters_dict):
+                    continue
                 filter_rule_set_key = _safe_text(filters_dict.get("rule_set_key"))
                 filter_rule_set_version = _safe_text(filters_dict.get("rule_set_version"))
                 if (

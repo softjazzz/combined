@@ -2701,9 +2701,12 @@ class SichuanQCService:
         patient_id: str,
         visit_id: str,
     ) -> Optional[Dict[str, Any]]:
-        if SessionLocal is None:
+        from ..database.clinical_connection import get_engine
+        from sqlalchemy.orm import Session
+        source_engine = get_engine()
+        if source_engine is None and SessionLocal is None:
             return None
-        session = SessionLocal()
+        session = Session(source_engine) if source_engine is not None else SessionLocal()
         try:
             rows = (
                 clinical_query(session, Diagnosis)
@@ -2743,9 +2746,12 @@ class SichuanQCService:
         diagnosis_name: str,
         limit: int,
     ) -> List[Dict[str, Any]]:
-        if SessionLocal is None or not dept_name:
+        from ..database.clinical_connection import get_engine
+        from sqlalchemy.orm import Session
+        source_engine = get_engine()
+        if not dept_name or source_engine is None and SessionLocal is None:
             return []
-        session = SessionLocal()
+        session = Session(source_engine) if source_engine is not None else SessionLocal()
         try:
             diagnosis_query = clinical_query(session, Diagnosis).filter(
                 Diagnosis.institute_id == institute_id,

@@ -116,6 +116,9 @@ def _load_documents_from_bundle(
         )
         return _project_customer_safe_source_refs(payload)
     except Exception as exc:
+        from ..database.clinical_connection import configured
+        if configured():
+            raise HTTPException(503, "clinical_source_read_unavailable") from None
         logger.warning("加载 bundle 文书失败: %s", exc)
         return _build_empty_documents_payload("bundle_load_failed")
 
@@ -144,6 +147,9 @@ def _load_document_summaries_from_bundle(
             )
         )
     except Exception as exc:
+        from ..database.clinical_connection import configured
+        if configured():
+            raise HTTPException(503, "clinical_source_read_unavailable") from None
         logger.warning("加载 bundle 文书目录失败: error_type=%s", type(exc).__name__)
         return _build_empty_documents_payload("bundle_load_failed")
 
@@ -346,6 +352,9 @@ def _extract_qc_findings(row: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Lis
 
 async def _load_defect_annotations(record_id: str, content: str) -> Tuple[List[Dict[str, Any]], str]:
     """读取最近一次质控结果的缺陷标注，返回 (标注列表, 状态)。"""
+    from ..database.clinical_connection import configured
+    if configured():
+        return [], "unavailable_for_source"
     sb = get_supabase()
     if sb is None:
         return [], "unavailable"

@@ -63,16 +63,31 @@ def _pick_time_columns(columns: set[str]) -> list[str]:
 
 
 def _session_factory() -> Session:
-    return Session(engine)
+    from ...database.clinical_connection import get_engine
+    return Session(get_engine() or engine)
+
+
+def _read_repository():
+    from ...database.clinical_connection import configured
+    if not configured():
+        return get_repository()
+    from ...database.repository import SqliteRepository
+    repo = SqliteRepository()
+    repo._session_factory = _session_factory
+    return repo
 
 
 def get_frontpage(institute_id: str, patient_id: str, visit_id: str) -> Optional[dict[str, Any]]:
-    repo = get_repository()
+    repo = _read_repository()
     return repo.get_frontpage(institute_id, patient_id, visit_id)
 
 
 def get_frontpage_by_mr_no(mr_no: str) -> Optional[dict[str, Any]]:
-    repo = get_repository()
+    repo = _read_repository()
+    from ...database.clinical_connection import configured
+    if configured():
+        from ..clinical_case_catalog import resolve_identity
+        return repo.get_frontpage(**resolve_identity(mr_no))
     result = repo.list_patients(keyword=mr_no, page_size=1)
     if not result["items"]:
         raise MedicalRecordsNotFoundError(f"病案号未找到: {mr_no}")
@@ -81,17 +96,17 @@ def get_frontpage_by_mr_no(mr_no: str) -> Optional[dict[str, Any]]:
 
 
 def get_diagnoses(institute_id: str, patient_id: str, visit_id: str) -> list[dict]:
-    repo = get_repository()
+    repo = _read_repository()
     return repo.get_diagnoses(institute_id, patient_id, visit_id)
 
 
 def get_surgeries(institute_id: str, patient_id: str, visit_id: str) -> list[dict]:
-    repo = get_repository()
+    repo = _read_repository()
     return repo.get_surgeries(institute_id, patient_id, visit_id)
 
 
 def get_cost(institute_id: str, patient_id: str, visit_id: str) -> Optional[dict]:
-    repo = get_repository()
+    repo = _read_repository()
     return repo.get_cost(institute_id, patient_id, visit_id)
 
 
@@ -101,7 +116,7 @@ def get_record_content(
     visit_id: str,
     record_type: str = "admission",
 ) -> Optional[str]:
-    repo = get_repository()
+    repo = _read_repository()
     return repo.get_record_content(institute_id, patient_id, visit_id, record_type)
 
 
@@ -141,6 +156,16 @@ def get_documents(
     mode: Optional[str] = None,
     session_factory: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
+    from ...database.clinical_connection import configured
+    if configured() and session_factory is None:
+        from ..clinical_case_catalog import resolve_identity
+        from ..bundles.current_view import load_current_documents
+        result = load_current_documents(**resolve_identity(visit_id))
+        if mode == "concat":
+            content = "\n\n".join(doc.get("content") or "" for doc in result["documents"])
+            return {"text": content, "visit_id": visit_id, "mode": "concat", "total_length": len(content),
+                    "document_count": sum(bool(doc.get("has_content")) for doc in result["documents"])}
+        return result
     session_factory = session_factory or _session_factory
     documents: list[dict[str, Any]] = []
     try:
@@ -202,9 +227,14 @@ def get_frontpage_sheet(
     session_factory: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
+    from ...database.clinical_connection import configured
+    selection = {}
+    if configured():
+        from ..clinical_case_catalog import resolve_identity
+        selection["institute_id"] = resolve_identity(visit_id, patient_id=patient_id)["institute_id"]
     with session_factory() as session:
         fp = clinical_query(session, MedicalRecordFrontpage).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            patient_id=patient_id, visit_id=visit_id, **selection
         ).first()
         if not fp:
             raise MedicalRecordsNotFoundError("未找到病案首页数据")
@@ -215,7 +245,7 @@ def get_frontpage_sheet(
             basic[col.name] = str(val) if val is not None else None
 
         diag_rows = clinical_query(session, Diagnosis).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            patient_id=patient_id, visit_id=visit_id, **selection
         ).order_by(Diagnosis.diagnosis_type, Diagnosis.diagnosis_no).all()
         diagnoses = []
         main_diag_seen = False
@@ -240,7 +270,7 @@ def get_frontpage_sheet(
             })
 
         surg_rows = clinical_query(session, MrSurgery).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            patient_id=patient_id, visit_id=visit_id, **selection
         ).all()
         surgeries = []
         for surg in surg_rows:
@@ -260,7 +290,7 @@ def get_frontpage_sheet(
             })
 
         cost_row = clinical_query(session, MrCost).filter_by(
-            patient_id=patient_id, visit_id=visit_id
+            patient_id=patient_id, visit_id=visit_id, **selection
         ).first()
         cost_data = None
         if cost_row:

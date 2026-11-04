@@ -1,0 +1,218 @@
+{
+  "schema": "qc",
+  "name": "custom_qc_batch_jobs",
+  "columns": [
+    {
+      "name": "id",
+      "notnull": true,
+      "type": "character varying(36)"
+    },
+    {
+      "name": "draft_id",
+      "notnull": true,
+      "type": "character varying(36)"
+    },
+    {
+      "name": "rule_code",
+      "notnull": true,
+      "type": "character varying(32)"
+    },
+    {
+      "name": "rule_name",
+      "notnull": true,
+      "type": "character varying(200)"
+    },
+    {
+      "name": "scene",
+      "notnull": true,
+      "type": "character varying(20)"
+    },
+    {
+      "name": "scope",
+      "notnull": true,
+      "type": "character varying(20)"
+    },
+    {
+      "name": "status",
+      "notnull": true,
+      "type": "character varying(20)"
+    },
+    {
+      "name": "filters_json",
+      "notnull": true,
+      "type": "text"
+    },
+    {
+      "name": "record_ids_json",
+      "notnull": true,
+      "type": "text"
+    },
+    {
+      "name": "summary_json",
+      "notnull": false,
+      "type": "text"
+    },
+    {
+      "name": "items_json",
+      "notnull": false,
+      "type": "text"
+    },
+    {
+      "name": "failed_records_json",
+      "notnull": false,
+      "type": "text"
+    },
+    {
+      "name": "error_message",
+      "notnull": false,
+      "type": "text"
+    },
+    {
+      "name": "created_by",
+      "notnull": true,
+      "type": "character varying(64)"
+    },
+    {
+      "name": "created_at",
+      "notnull": true,
+      "type": "timestamp without time zone"
+    },
+    {
+      "name": "started_at",
+      "notnull": false,
+      "type": "timestamp without time zone"
+    },
+    {
+      "name": "finished_at",
+      "notnull": false,
+      "type": "timestamp without time zone"
+    },
+    {
+      "name": "updated_at",
+      "notnull": true,
+      "type": "timestamp without time zone"
+    },
+    {
+      "name": "total_records",
+      "notnull": true,
+      "type": "integer"
+    },
+    {
+      "name": "success_count",
+      "notnull": true,
+      "type": "integer"
+    },
+    {
+      "name": "failed_count",
+      "notnull": true,
+      "type": "integer"
+    },
+    {
+      "name": "issue_records",
+      "notnull": true,
+      "type": "integer"
+    },
+    {
+      "name": "compliant_records",
+      "notnull": true,
+      "type": "integer"
+    },
+    {
+      "name": "total_tokens",
+      "notnull": true,
+      "type": "integer"
+    },
+    {
+      "name": "total_processing_time",
+      "notnull": true,
+      "type": "double precision"
+    },
+    {
+      "name": "execution_mode",
+      "notnull": true,
+      "type": "character varying(20)"
+    },
+    {
+      "name": "draft_ids_json",
+      "notnull": true,
+      "type": "text"
+    },
+    {
+      "name": "rule_count",
+      "notnull": true,
+      "type": "integer"
+    },
+    {
+      "name": "job_kind",
+      "notnull": false,
+      "type": "character varying(20)"
+    },
+    {
+      "name": "parent_job_id",
+      "notnull": false,
+      "type": "character varying(36)"
+    },
+    {
+      "name": "child_job_ids_json",
+      "notnull": false,
+      "type": "text"
+    },
+    {
+      "name": "child_summary_json",
+      "notnull": false,
+      "type": "text"
+    },
+    {
+      "name": "family_key",
+      "notnull": false,
+      "type": "character varying(64)"
+    },
+    {
+      "name": "family_name",
+      "notnull": false,
+      "type": "character varying(64)"
+    }
+  ],
+  "primary": [
+    "id"
+  ],
+  "constraints": [
+    {
+      "columns": [
+        "id"
+      ],
+      "kind": "p",
+      "name": "custom_qc_batch_jobs_pkey"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "ix_qc_custom_qc_batch_jobs_draft_id",
+      "columns": [
+        "draft_id"
+      ],
+      "unique": false
+    },
+    {
+      "name": "ix_qc_custom_qc_batch_jobs_rule_code",
+      "columns": [
+        "rule_code"
+      ],
+      "unique": false
+    },
+    {
+      "name": "ix_qc_custom_qc_batch_jobs_created_by",
+      "columns": [
+        "created_by"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_custom_qc_batch_jobs_parent_job_id",
+      "columns": [
+        "parent_job_id"
+      ],
+      "unique": false
+    }
+  ]
+}

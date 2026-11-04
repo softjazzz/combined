@@ -50,6 +50,19 @@ on:
       - 'apps/medqc-web/tests/unit/views/workstation/QCOverviewView.spec.ts'
       - 'apps/medqc-web/tsconfig*.json'
       - 'apps/medqc-web/package*.json'
+      - 'apps/medqc-web/src/api/clinicalSources.ts'
+      - 'apps/medqc-web/src/api/dataPipelines.ts'
+      - 'apps/medqc-web/src/utils/clinical-source.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/components/system-config/ClinicalSourceSettingsPanel.vue'
+      - 'apps/medqc-web/src/views/workstation-v4/components/system-config/DataPipelineSettingsPanel.vue'
+      - 'apps/medqc-web/src/views/workstation-v4/components/qc/QcRunSelectedControl.vue'
+      - 'apps/medqc-web/src/views/workstation-v4/composables/usePatientRecords.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
+      - 'apps/medqc-web/src/services/manual-case-sample-service.ts'
+      - 'apps/medqc-web/tests/unit/clinicalSources.spec.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/components/qc/QcRunSelectedControl.spec.ts'
+      - 'apps/medqc-web/tests/clinical-source-network-guard.ts'
+      - 'apps/medqc-web/vitest.clinical-sources.config.mts'
       - '.github/workflows/qc-workstation-frontend-validation.yml'
   push:
     branches: ['codex/**']
@@ -100,6 +113,19 @@ on:
       - 'apps/medqc-web/tests/unit/views/workstation/QCOverviewView.spec.ts'
       - 'apps/medqc-web/tsconfig*.json'
       - 'apps/medqc-web/package*.json'
+      - 'apps/medqc-web/src/api/clinicalSources.ts'
+      - 'apps/medqc-web/src/api/dataPipelines.ts'
+      - 'apps/medqc-web/src/utils/clinical-source.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/components/system-config/ClinicalSourceSettingsPanel.vue'
+      - 'apps/medqc-web/src/views/workstation-v4/components/system-config/DataPipelineSettingsPanel.vue'
+      - 'apps/medqc-web/src/views/workstation-v4/components/qc/QcRunSelectedControl.vue'
+      - 'apps/medqc-web/src/views/workstation-v4/composables/usePatientRecords.ts'
+      - 'apps/medqc-web/src/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
+      - 'apps/medqc-web/src/services/manual-case-sample-service.ts'
+      - 'apps/medqc-web/tests/unit/clinicalSources.spec.ts'
+      - 'apps/medqc-web/tests/unit/views/workstation-v4/components/qc/QcRunSelectedControl.spec.ts'
+      - 'apps/medqc-web/tests/clinical-source-network-guard.ts'
+      - 'apps/medqc-web/vitest.clinical-sources.config.mts'
       - '.github/workflows/qc-workstation-frontend-validation.yml'
   workflow_dispatch:
 
@@ -164,3 +190,15 @@ jobs:
           src/views/workstation-v4/customer-sample-validation/deferredComponent.ts
           src/views/workstation-v4/customer-sample-validation/useCustomerSampleValidationController.ts
           tests/page-load-offline-setup.ts vitest.page-load.config.ts vite.config.mjs
+      - name: Clinical source selection and frozen job document origin (isolated)
+        run: >-
+          sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)"
+          --require ./scripts/frontpage-v2-no-network.cjs node_modules/vitest/vitest.mjs run
+          --config vitest.clinical-sources.config.mts
+      - name: Read-only clinical source configuration lint
+        run: >-
+          node node_modules/eslint/bin/eslint.js --no-fix --quiet
+          src/api/clinicalSources.ts src/utils/clinical-source.ts
+          src/views/workstation-v4/components/system-config/ClinicalSourceSettingsPanel.vue
+          src/views/workstation-v4/composables/usePatientRecords.ts
+          src/views/workstation-v4/components/qc/QcRunSelectedControl.vue
