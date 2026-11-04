@@ -730,3 +730,54 @@ def test_business_failure_of_explicit_nonformal_mq_job_is_recovery_visible(
     assert [item.job_id for item in service._qc_dispatch.list_recovery_candidates()] == [
         job["id"]
     ]
+
+
+def test_infra_job_uses_formal_gateway_identity_before_transaction(workspace_service, monkeypatch):
+    from tests.scheduler_support import infra_runtime
+    _, service, sessions, tables = workspace_service
+    infra_runtime.PROBE.create(sessions.kw['bind'], checkfirst=True)
+    monkeypatch.setattr(infra_runtime, 'runtime', lambda: (None, service))
+    monkeypatch.setattr(infra_runtime, 'SessionLocal', sessions)
+    monkeypatch.setenv('LLM_DISPATCH_MODE', 'gateway')
+    monkeypatch.setenv('LLM_GATEWAY_URL', 'http://127.0.0.1:9/never-connect')
+    monkeypatch.setenv('LLM_GATEWAY_TOKEN', 'synthetic-unreachable-gateway-token')
+    monkeypatch.setenv('LLM_GATEWAY_PROFILE', 'alibaba_first_pass')
+    job_id, _ = infra_runtime.new_job()
+    job = service.get_batch_job(job_id=job_id, created_by='synthetic-infra')
+    snapshot = job['filters']['lx0609_task_runtime']
+    assert snapshot['schema_version'] == 2
+    for role in ('first_pass', 'adjudicator'):
+        assert snapshot[role]['dispatch_mode'] == 'gateway'
+        assert len(snapshot[role]['gateway_endpoint_sha256']) == 64
+    assert 'synthetic-unreachable-gateway-token' not in json.dumps(snapshot)
+    with sessions() as session:
+        assert session.scalar(sa.select(sa.func.count()).select_from(tables.outbox)) == 1
+
+
+@pytest.mark.parametrize('fault', ['missing', 'direct', 'profile', 'endpoint'])
+def test_infra_identity_failure_keeps_transaction_empty(workspace_service, monkeypatch, fault):
+    from tests.scheduler_support import infra_runtime
+    from app.services.luxian_0609 import rule_decision_settings
+    from app.services.qc_dispatch.dispatcher import QCDispatchEntrypointError
+    _, service, sessions, tables = workspace_service
+    monkeypatch.setattr(infra_runtime, 'runtime', lambda: (None, service))
+    monkeypatch.setenv('LLM_DISPATCH_MODE', 'gateway')
+    monkeypatch.setenv('LLM_GATEWAY_URL', 'http://127.0.0.1:9/never-connect')
+    monkeypatch.setenv('LLM_GATEWAY_TOKEN', 'synthetic-unreachable-gateway-token')
+    monkeypatch.setenv('LLM_GATEWAY_PROFILE', 'alibaba_first_pass')
+    capture = rule_decision_settings.capture_luxian_0609_task_runtime
+    def invalid(service):
+        snapshot = capture(service)
+        if fault == 'missing':
+            snapshot.pop('adjudicator')
+        else:
+            key, value = {'direct': ('dispatch_mode', 'direct'), 'profile': ('gateway_profile', ''),
+                          'endpoint': ('gateway_endpoint_sha256', '')}[fault]
+            snapshot['adjudicator'][key] = value
+        return snapshot
+    monkeypatch.setattr(rule_decision_settings, 'capture_luxian_0609_task_runtime', invalid)
+    with pytest.raises(QCDispatchEntrypointError, match='Gateway'):
+        infra_runtime.new_job()
+    with sessions() as session:
+        for table in (service._batch_job_table, tables.dispatch, tables.outbox):
+            assert session.scalar(sa.select(sa.func.count()).select_from(table)) == 0

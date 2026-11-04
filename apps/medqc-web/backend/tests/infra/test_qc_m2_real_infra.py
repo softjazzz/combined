@@ -490,3 +490,39 @@ def test_archive_and_retry_lock_competition_preserves_both_generations():
     ]
     assert len(generation_two) == 1
     assert generation_two[0]["status"] == "pending"
+
+
+def test_missing_gateway_identity_cannot_create_job_or_outbox():
+    from app.services.qc_dispatch.dispatcher import QCDispatchEntrypointError
+    repo, workspace = runtime()
+    with pytest.raises(QCDispatchEntrypointError, match='Gateway'):
+        workspace.create_batch_job(draft={'id': 'synthetic', 'name': 'synthetic'},
+            created_by='synthetic-infra', scope='final',
+            filters={'rule_set_key': 'luxian_0609_qc_v1'},
+            record_ids=['synthetic-visit'], total_records=1)
+    with SessionLocal() as session:
+        assert session.scalar(sa.select(sa.func.count()).select_from(workspace._batch_job_table)) == 0
+        assert session.scalar(sa.select(sa.func.count()).select_from(repo.outbox_table)) == 0
+
+
+def test_toggle_only_affects_new_jobs_and_old_mq_finishes_after_disable(real_infra_spec, tmp_path, monkeypatch):
+    from app.core.settings import get_settings
+    from app.services.qc_dispatch.control import save_control
+    monkeypatch.setenv('QC_DISPATCH_STATE_DIR', str(tmp_path / 'control'))
+    cfg = get_settings()
+    save_control(enabled=False, expected_revision=0, actor='synthetic-admin', settings=cfg)
+    legacy, _ = new_job()
+    assert not outbox_rows(legacy)
+    save_control(enabled=True, expected_revision=1, actor='synthetic-admin', settings=cfg)
+    queued, scope = new_job()
+    assert len(outbox_rows(queued)) == 1
+    save_control(enabled=False, expected_revision=2, actor='synthetic-admin', settings=cfg)
+    later, _ = new_job()
+    assert not outbox_rows(later)
+    _publish_actor(real_infra_spec, scope, queued)
+    _worker_actor(real_infra_spec, scope, queued)
+    repo, workspace = runtime()
+    assert repo.get_job_status(queued) == 'completed'
+    assert envelope_count(queued) == 1
+    assert workspace.get_batch_job(job_id=queued, created_by='synthetic-infra')['filters']['qc_dispatch']['mode'] == 'rabbitmq'
+    assert repo.get_job_status(legacy) == repo.get_job_status(later) == 'queued'

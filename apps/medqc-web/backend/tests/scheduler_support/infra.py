@@ -101,6 +101,7 @@ class InfraSpec:
             "LLM_GATEWAY_PROFILE": "alibaba_first_pass",
             "MEDQC_QC_SCHEDULER_TEST_PROFILE": "isolated-infra",
             "MEDQC_INFRA_MANIFEST": self.manifest_path,
+            "QC_DISPATCH_STATE_DIR": str(Path(self.manifest_path).parent / ("dispatch-" + self.run_id)),
         })
         return env
 
