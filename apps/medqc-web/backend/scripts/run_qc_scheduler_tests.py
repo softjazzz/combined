@@ -144,6 +144,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_qc_infra_isolation.py",
     ),
     "m1-admission": (
+        "tests/unit/test_llm_http_proxy.py",
         "tests/unit/test_llm_gateway_admission.py",
         "tests/unit/test_llm_gateway_cancellation.py",
         "tests/unit/test_llm_gateway_api.py",

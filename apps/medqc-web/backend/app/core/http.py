@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar
 import httpx
 
 from .settings import get_settings
+from .llm_http_proxy import LLMHTTPProxyPolicy
 from .execution_timing import measure_stage, record_stage_duration, track_http_future
 from .http_attempt_observation import current_http_attempt_observation
 
@@ -18,7 +19,13 @@ T = TypeVar("T")
 
 
 class _SharedHttpResources:
-    def __init__(self, max_concurrency: int) -> None:
+    def __init__(self, max_concurrency: int, *,
+                 proxy_policy: LLMHTTPProxyPolicy | None = None,
+                 transport: httpx.BaseTransport | None = None,
+                 proxy_transport: httpx.BaseTransport | None = None) -> None:
+        settings = get_settings() if proxy_policy is None else None
+        self.proxy_policy = proxy_policy if proxy_policy is not None else LLMHTTPProxyPolicy.load(
+            getattr(settings, "LLM_HTTP_PROXY", ""), getattr(settings, "LLM_HTTP_PROXY_HOSTS", ""))
         physical_capacity = 64
         self.client = httpx.Client(
             limits=httpx.Limits(
@@ -26,7 +33,22 @@ class _SharedHttpResources:
                 max_keepalive_connections=physical_capacity,
             ),
             trust_env=False,
+            follow_redirects=False,
+            **({"transport": transport} if transport is not None else {}),
         )
+        self.proxy_client = None
+        try:
+            if self.proxy_policy.url:
+                options = self.proxy_policy.client_options(
+                    "https://" + sorted(self.proxy_policy.hosts)[0],
+                    transport=transport, proxy_transport=proxy_transport)
+                self.proxy_client = httpx.Client(
+                    limits=httpx.Limits(max_connections=physical_capacity,
+                                       max_keepalive_connections=physical_capacity),
+                    trust_env=False, follow_redirects=False, **options)
+        except Exception:
+            self.client.close()
+            raise
         self.executor = ThreadPoolExecutor(
             max_workers=physical_capacity,
             thread_name_prefix="medqc-llm-http",
@@ -35,6 +57,24 @@ class _SharedHttpResources:
         self._active_count = 0
         self._max_concurrency = max_concurrency
         self._local = threading.local()
+
+    def post_json(self, url: str, headers: Dict[str, str], payload: Dict[str, Any],
+                  timeout_seconds: int, *, allow_disconnect_retry: bool = True) -> Dict[str, Any]:
+        proxied = self.proxy_policy.matches(url)
+        client = self.proxy_client if proxied else self.client
+        try:
+            result = _post_json(client, url, headers, payload, timeout_seconds,
+                                allow_disconnect_retry=allow_disconnect_retry, reject_redirects=proxied)
+        except httpx.HTTPError as error:
+            if not proxied:
+                raise
+            # 不回显代理 URL、凭据或底层异常，不切换直连客户端。
+            error_type = httpx.TimeoutException if isinstance(error, httpx.TimeoutException) else httpx.TransportError
+            raise error_type("llm_http_proxy_transport_error") from None
+        if proxied and isinstance(result, dict) and result.get("__status__") == 407:
+            return {"__status__": 407, "__error__": True,
+                    "body": {"error": "llm_http_proxy_authentication_failed"}}
+        return result
 
     @property
     def max_concurrency(self) -> int:
@@ -166,7 +206,11 @@ def close_shared_http_resources() -> None:
     if resources is None:
         return
     resources.executor.shutdown(wait=True, cancel_futures=False)
-    resources.client.close()
+    try:
+        resources.client.close()
+    finally:
+        if resources.proxy_client is not None:
+            resources.proxy_client.close()
 
 
 def _is_private_address(host: str) -> bool:
@@ -201,7 +245,7 @@ def _post_json(
     headers: Dict[str, str],
     payload: Dict[str, Any],
     timeout_seconds: int,
-    *, allow_disconnect_retry: bool = True,
+    *, allow_disconnect_retry: bool = True, reject_redirects: bool = False,
 ) -> Dict[str, Any]:
     observation = current_http_attempt_observation()
 
@@ -232,7 +276,7 @@ def _post_json(
         body = resp.json() if resp.text else {}
     except Exception:
         body = {"text": resp.text}
-    if resp.status_code >= 400:
+    if resp.status_code >= 400 or (reject_redirects and resp.status_code >= 300):
         return {"__status__": resp.status_code, "__error__": True, "body": body}
     return body
 
@@ -260,8 +304,7 @@ async def safe_post_json(
     # AsyncClient 绑定到某一个 detached task 的事件循环。
     resources = _get_or_create_shared_resources()
     return await run_shared_http_call(
-        lambda: _post_json(
-            resources.client,
+        lambda: resources.post_json(
             url,
             headers,
             payload,

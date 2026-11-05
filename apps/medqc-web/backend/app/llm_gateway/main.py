@@ -309,12 +309,14 @@ def create_app(
     *,
     sender: ProviderSender | None = None,
     http_transport: httpx.AsyncBaseTransport | None = None,
+    proxy_http_transport: httpx.AsyncBaseTransport | None = None,
     enforce_single_instance: bool = True,
 ) -> FastAPI:
     """创建不依赖主 app/DB 的独立 Gateway。"""
 
     resolved = settings or GatewaySettings.from_env()
-    provider_sender = sender or HttpxProviderSender(transport=http_transport)
+    provider_sender = sender or HttpxProviderSender(transport=http_transport,
+        proxy_policy=resolved.http_proxy, proxy_transport=proxy_http_transport)
     runtime = GatewayRuntime(resolved, provider_sender)
     sentinel = SingleInstanceSentinel(resolved.state_dir) if enforce_single_instance else None
 

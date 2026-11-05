@@ -34,6 +34,7 @@ class GatewayErrorCode(str, Enum):
     PROVIDER_REJECTED = "gateway_provider_rejected"
     PROVIDER_TIMEOUT = "gateway_provider_timeout"
     PROVIDER_UNAVAILABLE = "gateway_provider_unavailable"
+    PROXY_CONFIGURATION_INVALID = "gateway_proxy_configuration_invalid"
     INVALID_PROVIDER_RESPONSE = "gateway_invalid_provider_response"
     STRATA_STRUCTURED_FAILED = 'strata_structured_output_failed'
     INTERNAL_ERROR = "gateway_internal_error"
