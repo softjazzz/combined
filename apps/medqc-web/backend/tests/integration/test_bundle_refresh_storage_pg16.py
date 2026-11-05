@@ -252,6 +252,8 @@ def test_ambiguous_owner_blocks_without_changing_history(db, has_history):
         "extra_required",
         "permission",
         "sequence",
+        "schema_usage",
+        "explicit_sequence",
     ],
 )
 def test_incompatible_or_unauthorized_storage_refused(db, damage):
@@ -267,13 +269,15 @@ def test_incompatible_or_unauthorized_storage_refused(db, damage):
         "extra_required": "ALTER TABLE qc.bundle_refresh_jobs ADD COLUMN unexpected text NOT NULL",
         "permission": "REVOKE INSERT ON qc.bundle_refresh_jobs FROM medqc_job_api",
         "sequence": "REVOKE USAGE ON SEQUENCE qc.bundle_refresh_failures_id_seq FROM medqc_job_api",
+        "schema_usage": "REVOKE USAGE ON SCHEMA qc FROM medqc_job_api",
+        "explicit_sequence": "CREATE SEQUENCE qc.custom_id; ALTER TABLE qc.bundle_refresh_failures ALTER COLUMN id SET DEFAULT nextval('qc.custom_id')",
     }
     with owner.begin() as c:
         c.execute(sa.text(sqls[damage]))
     with api.connect() as c:
         with pytest.raises(RefreshStorageError):
             bind_storage(c)
-    if damage not in ("permission", "sequence"):
+    if damage not in ("permission", "sequence", "schema_usage", "explicit_sequence"):
         with pytest.raises(RuntimeError, match="refresh_storage_"):
             migrate(owner)
 
@@ -417,7 +421,11 @@ def test_customer_material_commit_and_bundle_same_source(db, monkeypatch, mode):
                 else document["document_type"]
             )
             timestamp = (
-                "report_time" if table == "exam_item_report" else "record_datetime"
+                "report_time"
+                if table == "exam_item_report"
+                else "record_time"
+                if table == "consultation_record"
+                else "record_datetime"
             )
             row = c.execute(
                 sa.text(
@@ -433,7 +441,13 @@ def test_customer_material_commit_and_bundle_same_source(db, monkeypatch, mode):
                 hashlib.sha256(row.record_content.encode()).digest()
                 == hashlib.sha256(document["content"].encode()).digest()
             )
-            assert row[4] == datetime.fromisoformat(document["record_time"])
+            from datetime import timezone
+
+            expected = datetime.fromisoformat(document["record_time"])
+            if table == "consultation_record":
+                # owned集群会话为UTC；timestamptz保留该确定夹具的完整时刻。
+                expected = expected.replace(tzinfo=timezone.utc)
+            assert row[4] == expected
         bundle = c.execute(
             sa.text(
                 "SELECT medical_text,structured_context FROM public.running_record_bundle"
@@ -453,12 +467,25 @@ def test_customer_material_commit_and_bundle_same_source(db, monkeypatch, mode):
 
 
 @pytest.mark.parametrize(
-    "damage", ["missing_table", "read_permission", "write_permission", "insert_failure"]
+    "damage",
+    [
+        "missing_table",
+        "read_permission",
+        "write_permission",
+        "insert_failure",
+        "record_clock",
+    ],
 )
 def test_customer_failure_rolls_back_initial_transaction(db, monkeypatch, damage):
     service, schema, names = setup_case(db, monkeypatch, "split")
     owner, api = db
     with owner.begin() as c:
+        if damage == "record_clock":
+            c.execute(
+                sa.text(
+                    "ALTER TABLE cdm.daily_course_record DROP COLUMN record_datetime"
+                )
+            )
         if damage == "missing_table":
             c.execute(sa.text("DROP TABLE cdm.exam_item_report"))
         if damage == "read_permission":

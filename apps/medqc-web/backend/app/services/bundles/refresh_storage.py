@@ -91,6 +91,14 @@ def owner_plan(connection, *, allow_missing=False, split=True):
 
 def validate_table(connection, schema, table, *, permissions=True):
     name = qualified(schema, table)
+    if (
+        permissions
+        and not connection.execute(
+            sa.text("SELECT has_schema_privilege(current_user,:schema,'USAGE')"),
+            {"schema": schema},
+        ).scalar()
+    ):
+        raise RefreshStorageError("refresh_storage_schema_permissions:" + schema)
     inspector = sa.inspect(connection)
     columns = {c["name"]: c for c in inspector.get_columns(table, schema=schema)}
     expected = JOBS if table == TABLES[0] else FAILURES
@@ -198,19 +206,35 @@ def validate_table(connection, schema, table, *, permissions=True):
         if not allowed:
             raise RefreshStorageError("refresh_storage_permissions:" + name)
         if table == TABLES[1]:
-            sequence = connection.execute(
+            sequences = (
+                connection.execute(
+                    sa.text("""
+                SELECT seq.oid::regclass::text FROM pg_attrdef ad
+                JOIN pg_attribute a ON a.attrelid=ad.adrelid AND a.attnum=ad.adnum
+                JOIN pg_depend d ON d.classid='pg_attrdef'::regclass AND d.objid=ad.oid AND d.refclassid='pg_class'::regclass
+                JOIN pg_class seq ON seq.oid=d.refobjid AND seq.relkind='S'
+                WHERE ad.adrelid=to_regclass(:name) AND a.attname='id'
+            """),
+                    {"name": name},
+                )
+                .scalars()
+                .all()
+            )
+            owned = connection.execute(
                 sa.text("SELECT pg_get_serial_sequence(:name,'id')"), {"name": name}
             ).scalar()
-            if (
-                sequence
-                and not connection.execute(
+            if owned:
+                sequences.append(owned)
+            if not sequences:
+                raise RefreshStorageError("refresh_storage_sequence_unverified:" + name)
+            for sequence in set(sequences):
+                if not connection.execute(
                     sa.text("SELECT has_sequence_privilege(current_user,:seq,'USAGE')"),
                     {"seq": sequence},
-                ).scalar()
-            ):
-                raise RefreshStorageError(
-                    "refresh_storage_sequence_permissions:" + name
-                )
+                ).scalar():
+                    raise RefreshStorageError(
+                        "refresh_storage_sequence_permissions:" + name
+                    )
 
 
 def bind_storage(connection):
