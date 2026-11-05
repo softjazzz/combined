@@ -1,0 +1,80 @@
+name: Linux compact proxy-enabled upgrade
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      VITE_MEDQC_GIT_COMMIT: fa314c6c251fc5dd02eda96a7d30d70642cc1eb0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/medqc-web/package-lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: medqc-linux-offline-validated
+          run-id: 41937037181
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/existing-dependencies
+      - name: Verify existing dependency evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/existing-dependencies"
+          echo '72fd98f7116ccbe6105354caa3ec4902cee6ef397b970bed9367d158040495aa  MedQC-Ubuntu22-Python310-PG16-offline.tar.gz' | sha256sum -c -
+          tar -xzf MedQC-Ubuntu22-Python310-PG16-offline.tar.gz
+          cd medqc-offline
+          sha256sum -c --quiet SHA256SUMS
+      - name: Build frontend from fixed business source
+        working-directory: apps/medqc-web
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          export VITE_MEDQC_BUILD_ID="medqc-web-customer-$(date -u +%Y%m%d-%H%M%S)"
+          echo "VITE_MEDQC_BUILD_ID=$VITE_MEDQC_BUILD_ID" >> "$GITHUB_ENV"
+          npm ci
+          npx vite build --config vite.customer.config.mjs --configLoader native
+      - name: Collect application without dependencies
+        run: |
+          python -B apps/medqc-web/scripts/linux_app_upgrade/build_current.py --full "$RUNNER_TEMP/existing-dependencies/medqc-offline" --out "$RUNNER_TEMP/compact-upgrade" --raw "$RUNNER_TEMP/raw-application"
+      - name: Ubuntu offline reuse, proxy profile and rollback validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo --preserve-env=RUNNER_TEMP,PYTHONDONTWRITEBYTECODE unshare --net bash -c 'ip link set lo up; exec setpriv --reuid=runner --regid=runner --init-groups --no-new-privs "$@"' bash bash -c '
+            set -euo pipefail
+            "$1" -B apps/medqc-web/scripts/linux_app_upgrade/test_upgrade.py
+            "$1" -B apps/medqc-web/scripts/linux_app_upgrade/smoke_upgrade.py --kit "$RUNNER_TEMP/compact-upgrade/medqc-app-upgrade" --full "$RUNNER_TEMP/existing-dependencies/medqc-offline" --python "$1"
+          ' bash "$(command -v python)" 2>&1 | tee "$RUNNER_TEMP/compact-upgrade/upgrade-smoke.log"
+      - name: Seal compact archive
+        run: |
+          cd "$RUNNER_TEMP/compact-upgrade"
+          tar --exclude='__pycache__' --exclude='*.pyc' -czf MedQC-Ubuntu22-Python310-app-upgrade-fa314c6c2.tar.gz medqc-app-upgrade
+          sha256sum MedQC-Ubuntu22-Python310-app-upgrade-fa314c6c2.tar.gz > MedQC-Ubuntu22-Python310-app-upgrade-fa314c6c2.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: medqc-linux-proxy-upgrade-validated
+          compression-level: 0
+          path: |
+            ${{ runner.temp }}/compact-upgrade/*.tar.gz
+            ${{ runner.temp }}/compact-upgrade/*.sha256
+            ${{ runner.temp }}/compact-upgrade/UPGRADE-VALIDATION.json
+            ${{ runner.temp }}/compact-upgrade/upgrade-smoke.log
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: linux-proxy-upgrade-failure-evidence
+          path: ${{ runner.temp }}/compact-upgrade/upgrade-smoke.log

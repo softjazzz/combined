@@ -87,6 +87,8 @@ def portable(prefix, binaries, out):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--application-only", action="store_true")
+    parser.add_argument("--application-commit")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[4]
     app = repo / "apps/medqc-web"
@@ -94,6 +96,13 @@ def main():
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=repo, text=True
     ).strip()
+    if args.application_commit:
+        subprocess.run(["git", "diff", "--exit-code", args.application_commit, "--",
+                        "apps/medqc-web/backend", "apps/medqc-web/src", "apps/medqc-web/public",
+                        "apps/medqc-web/package.json", "apps/medqc-web/package-lock.json",
+                        "apps/medqc-web/vite.customer.config.mjs"], cwd=repo, check=True,
+                       stdout=subprocess.DEVNULL)
+        commit = subprocess.check_output(["git", "rev-parse", args.application_commit], cwd=repo, text=True).strip()
     build_id = os.environ["VITE_MEDQC_BUILD_ID"]
     if not re.fullmatch(r"medqc-web-customer-[0-9]{8}-[0-9]{6}", build_id):
         raise RuntimeError("invalid_build_id")
@@ -192,23 +201,24 @@ def main():
         out / "deploy",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
     )
-    portable(
-        "pg16",
-        [
-            f"/usr/lib/postgresql/16/bin/{n}"
-            for n in ["pg_dump", "pg_restore", "psql", "pg_isready"]
-        ],
-        out,
-    )
-    portable("7zip", ["/usr/lib/p7zip/7z"], out)
+    if not args.application_only:
+        portable(
+            "pg16",
+            [
+                f"/usr/lib/postgresql/16/bin/{n}"
+                for n in ["pg_dump", "pg_restore", "psql", "pg_isready"]
+            ],
+            out,
+        )
+        portable("7zip", ["/usr/lib/p7zip/7z"], out)
     (out / "BUILD.json").write_text(
         json.dumps(
             {
                 "commit": commit,
                 "build_id": build_id,
                 "platform": "Ubuntu22.04-x86_64-Python3.10",
-                "source_base": "0d3c17c447c873735842eb2a568b38985dfca68f",
-                "scope": "Business database and 1026 display; independent CDM is not connected",
+                "source_base": commit,
+                "scope": "Application-only; deployment proxy profile enabled; existing state preserved" if args.application_only else "Business server bundle",
             },
             indent=2,
         )
