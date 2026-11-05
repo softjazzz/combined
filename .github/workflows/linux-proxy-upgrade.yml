@@ -1,6 +1,8 @@
 name: Linux compact proxy-enabled upgrade
 on:
   workflow_dispatch:
+  push:
+    branches: [codex/linux-proxy-delivery-20261105]
 permissions:
   contents: read
   actions: read
