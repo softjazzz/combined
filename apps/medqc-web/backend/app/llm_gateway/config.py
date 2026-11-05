@@ -10,6 +10,7 @@ import re
 from typing import Any, Mapping
 from urllib.parse import urlsplit, urlunsplit
 from app.services.llm_token_budget import BudgetCapability
+from app.core.llm_http_proxy import LLMHTTPProxyPolicy
 from app.services.strata_protocol import StrataModelIdentity, p9_enabled
 
 
@@ -87,6 +88,7 @@ class GatewaySettings:
     cache_max_entries: int = 64
     strata_case_sequential: bool = True
     continuation: CaseContinuationConfig = field(default_factory=CaseContinuationConfig)
+    http_proxy: LLMHTTPProxyPolicy = field(default_factory=LLMHTTPProxyPolicy)
 
     def __post_init__(self) -> None:
         if not isinstance(self.continuation, CaseContinuationConfig):
@@ -164,6 +166,7 @@ class GatewaySettings:
             maximum=3600,
         )
         return cls(
+            http_proxy=LLMHTTPProxyPolicy.parse(env.get("LLM_HTTP_PROXY"), env.get("LLM_HTTP_PROXY_HOSTS")),
             token=token,
             resources=resources,
             profiles=profiles,

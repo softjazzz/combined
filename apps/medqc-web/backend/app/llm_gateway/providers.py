@@ -9,6 +9,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.core.llm_http_proxy import LLMHTTPProxyPolicy
+
 from app.services.llm_dispatch.contracts import GatewayErrorCode
 from app.services.llm_token_budget import BudgetError
 
@@ -226,8 +228,12 @@ def _map_strata_thinking(payload: dict[str, Any]) -> None:
 class HttpxProviderSender:
     """不跟随重定向、不读取系统代理、首期不自动重试。"""
 
-    def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
+    def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None,
+                 proxy_policy: LLMHTTPProxyPolicy | None = None,
+                 proxy_transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
+        self._proxy_policy = proxy_policy or LLMHTTPProxyPolicy()
+        self._proxy_transport = proxy_transport
 
     def prepare(self, profile: ProfileConfig, payload: dict[str, Any]) -> dict[str, Any]:
         from app.services.llm_token_budget import BudgetError, guard_payload, strict_enabled
@@ -284,7 +290,8 @@ class HttpxProviderSender:
             headers["Authorization"] = f"Bearer {profile.api_key}"
         try:
             async with httpx.AsyncClient(
-                transport=self._transport,
+                **self._proxy_policy.client_options(profile.api_endpoint,
+                    transport=self._transport, proxy_transport=self._proxy_transport),
                 follow_redirects=False,
                 trust_env=False,
                 timeout=httpx.Timeout(timeout_seconds),

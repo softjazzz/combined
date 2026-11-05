@@ -239,6 +239,9 @@ class Settings(BaseSettings):
     QC_BATCH_RECORD_MAX_CONCURRENCY: int = Field(default=16, ge=1, le=32)
     # 全进程共享的 LLM HTTP 出口预算；所有事件循环与后台线程共同受此上限约束。
     LLM_HTTP_MAX_CONCURRENCY: int = Field(default=40, ge=1, le=64)
+    # 部署级出口，空值关闭；修改后重启实际发送 HTTP 的进程。
+    LLM_HTTP_PROXY: str = Field(default="", repr=False)
+    LLM_HTTP_PROXY_HOSTS: str = ""
     LLM_ENABLE_TRUNCATE: bool = Field(
         default=False,
         validation_alias=AliasChoices("LLM_ENABLE_TRUNCATE", "SICHUAN_ENABLE_TRUNCATE"),
