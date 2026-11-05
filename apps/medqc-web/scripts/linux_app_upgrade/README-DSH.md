@@ -34,7 +34,9 @@ sudo -H -u medqc-business env -C "$DELIVERY" "$ROOT/venv/bin/python" -B "$KIT/ch
 OLD_APP=$(readlink -f "$ROOT/current")
 OLD_VENV=$(readlink -f "$ROOT/venv")
 sudo systemctl stop medqc-business-web medqc-business-api
-sudo -H -u medqc-business env -C "$DELIVERY" "$ROOT/venv/bin/python" -B "$KIT/stage_upgrade.py" --root "$ROOT" --expected-current "$OLD_APP"
+STAGE_REPORT=$(sudo -H -u medqc-business env -C "$DELIVERY" "$ROOT/venv/bin/python" -B "$KIT/stage_upgrade.py" --root "$ROOT" --expected-current "$OLD_APP")
+printf '%s\n' "$STAGE_REPORT"
+NEW_APP=$(printf '%s' "$STAGE_REPORT" | "$ROOT/venv/bin/python" -c 'import json,sys; print(json.load(sys.stdin)["release"])')
 ```
 
 核对输出receipt中的previous_current、staged_current和unchanged_venv。暂存不切current、不改配置；目标重复或依赖不符拒绝覆盖，保留异常现场。
@@ -42,7 +44,9 @@ sudo -H -u medqc-business env -C "$DELIVERY" "$ROOT/venv/bin/python" -B "$KIT/st
 ### 3. 显式应用启用代理的部署配置
 
 ```bash
-sudo -H -u medqc-business env -C "$DELIVERY" "$ROOT/venv/bin/python" -B "$KIT/apply_proxy.py" --env-file "$ROOT/config/business.env" --backup-dir "$ROOT/backups"
+PROXY_REPORT=$(sudo -H -u medqc-business env -C "$DELIVERY" "$ROOT/venv/bin/python" -B "$KIT/apply_proxy.py" --env-file "$ROOT/config/business.env" --backup-dir "$ROOT/backups")
+printf '%s\n' "$PROXY_REPORT"
+PROXY_BACKUP=$(printf '%s' "$PROXY_REPORT" | "$ROOT/venv/bin/python" -c 'import json,sys; print(json.load(sys.stdin)["backup"])')
 ```
 
 记录返回的backup完整路径，不打印配置正文。脚本先做0600备份，再原子更新LLM_HTTP_PROXY和LLM_HTTP_PROXY_HOSTS；重复键等异常停止。保留原账号、Key、激活、CDM、RabbitMQ、快照及自动任务配置，不自动启用任何任务。不得复用此前暴露的Key。
@@ -51,11 +55,9 @@ sudo -H -u medqc-business env -C "$DELIVERY" "$ROOT/venv/bin/python" -B "$KIT/ap
 
 ### 4. 切换与零模型验收
 
-保持同一个Shell中的ROOT/KIT/OLD_APP/OLD_VENV。从receipt读取NEW_APP，从第3步读取PROXY_BACKUP，替换下方两个占位路径：
+保持同一个Shell中的ROOT/KIT/OLD_APP/OLD_VENV，以及前两步自动取得的NEW_APP和PROXY_BACKUP：
 
 ```bash
-NEW_APP=/data/medqc/business/releases/实际build_id
-PROXY_BACKUP=/data/medqc/business/backups/实际business.env.before-proxy文件名
 case "$NEW_APP" in "$ROOT"/releases/*) ;; *) exit 1;; esac
 test "$(readlink -f "$ROOT/current")" = "$OLD_APP"
 test "$(readlink -f "$ROOT/venv")" = "$OLD_VENV"
