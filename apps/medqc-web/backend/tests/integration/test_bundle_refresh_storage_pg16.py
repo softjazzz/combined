@@ -460,12 +460,16 @@ def test_customer_material_commit_and_bundle_same_source(db, monkeypatch, mode):
         assert "synthetic-content-daily_course_record" in bundle.medical_text
         # 检查报告属于既有course域Bundle，不强行改变运行病历medical_text合同。
         course = c.execute(
-            sa.text(
-                "SELECT medical_text,structured_context FROM public.course_domain_bundle"
-            )
-        ).one()
-        assert "synthetic-content-exam_report" in course.medical_text
-        assert "exam_item_report" in json.dumps(course.structured_context)
+            sa.text("SELECT structured_context FROM public.course_domain_bundle")
+        ).scalar_one()
+        report = course["documents"]["exam_item_report"][0]
+        assert report["record_content"] == "synthetic-content-exam_report"
+        assert (report["institute_id"], report["patient_id"], report["visit_id"]) == (
+            "CUSTOMER_TEST",
+            result["patient_id"],
+            result["visit_id"],
+        )
+        assert report["report_time"] == "2026-01-02T10:00:00"
     with clinical_connection.selected({"id": "legacy_pg", "binding": ""}):
         rows = assembly._select_records(
             schema=schema,
