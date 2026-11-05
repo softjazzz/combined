@@ -15,6 +15,7 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import dotenv
@@ -111,6 +112,7 @@ def run(args):
                 connection.execute(sa.text("INSERT INTO cdm.admission_record(institute_id,patient_id,visit_id,document_id,name,admission_datetime,record_datetime,record_content) VALUES('I','P','V','D',:name,'2026-10-01 08:00','2026-10-01 09:00',:name)"), {"name": marker})
                 connection.execute(sa.text("INSERT INTO cdm.diagnosis(institute_id,patient_id,visit_id,diagnosis_id,diagnosis_type,diagnosis_no,diagnosis_name,diagnosis_code) VALUES('I','P','V','DX','出院主要诊断','1',:name,'SYNTHETIC')"), {"name": marker})
                 connection.execute(sa.text("INSERT INTO cdm.daily_course_record(institute_id,patient_id,visit_id,document_id,record_content,record_datetime,submit_datetime) VALUES('I','P','V','D',:name,'2026-10-02 09:00','2026-10-02 10:00')"), {"name": marker})
+                connection.execute(sa.text("INSERT INTO cdm.inpat_registration(institute_id,patient_id,visit_id,name,admission_datetime) VALUES('I','P','V',:name,:admitted)"), {"name": marker, "admitted": "2026-10-01 08:00" if engine is source else "2026-09-01 08:00"})
         with source.begin() as connection:
             connection.execute(sa.text("INSERT INTO cdm.inpat_registration(institute_id,patient_id,visit_id,name,admission_datetime) VALUES('I','P2','V2','SYNTHETIC-NO-FRONTPAGE','2026-10-03 08:00')"))
             connection.execute(sa.text("INSERT INTO cdm.discharge_record(institute_id,patient_id,visit_id,document_id,discharge_time,record_content) VALUES('I','P','V','EXIT','2026-10-04 11:00','SYNTHETIC-DISCHARGE')"))
@@ -236,6 +238,8 @@ def run(args):
             # 病历级材料：并发发布只影响下一轮，任务重试和历史文书保持原版本。
             from app.services import case_material_snapshot as frozen_material
             from app.services.case_material_capture import capture, obtain
+            from app.services.qc_input_adapters.running_final_bundle_adapter import adapt_bundle_to_evidence_payload
+            from app.services import sample_programmatic_evidence as programmatic
             from app.services.clinical_source_contract import inspect_source
             from datetime import timedelta, timezone
             stack.enter_context(patch.dict(os.environ, {
@@ -258,6 +262,7 @@ def run(args):
                         return
                     published.append(True)
                     with source.begin() as connection:
+                        connection.execute(sa.text("UPDATE cdm.inpat_registration SET admission_datetime='2026-10-02 08:00' WHERE patient_id='P'"))
                         connection.execute(sa.text("UPDATE cdm.first_course_record SET record_content='SYNTHETIC-PEER-V2' WHERE document_id='FC-PEER'"))
                         for name in ("admission_record", "daily_course_record"):
                             connection.execute(sa.text(f"UPDATE cdm.{name} SET record_content='SYNTHETIC-PUBLISHED-V2' WHERE patient_id='P'"))
@@ -281,9 +286,18 @@ def run(args):
                         assert expected in str(current_view.load_current_documents(**identity))
                         assembled = assembly.assemble_domain_bundle(execution_domain="admission", **identity)
                         assert expected in str(assembled)
+                        # 正式输入适配包含旧补充取证；业务库同键内容及最新CDM均不得混入。
+                        with patch.object(programmatic, "engine", SimpleNamespace(connect=denied)), patch.object(programmatic, "get_documents", denied):
+                            payload = adapt_bundle_to_evidence_payload({**identity, "scene": "running", **assembled})
+                            assert expected in str(payload["programmatic_timeline"])
+                            assert "SYNTHETIC-LEGACY" not in str(payload)
+                            assert payload["programmatic_timeline"]["admission_time"] == ("2026-10-01 08:00:00" if snapshot is one else "2026-10-02 08:00:00")
+                            if snapshot is one:
+                                assert "SYNTHETIC-PUBLISHED-V2" not in str(payload)
                 assert obtain("snapshot-job-v1", ("I","P","V"), retry=True)["fingerprint"] == one["fingerprint"]
                 # 恢复合成写入，随后核对所有读取操作未改变源库。
                 with source.begin() as connection:
+                    connection.execute(sa.text("UPDATE cdm.inpat_registration SET admission_datetime='2026-10-01 08:00' WHERE patient_id='P'"))
                     connection.execute(sa.text("UPDATE cdm.first_course_record SET record_content='SYNTHETIC-PEER-V1' WHERE document_id='FC-PEER'"))
                     for name in ("admission_record", "daily_course_record"):
                         connection.execute(sa.text(f"UPDATE cdm.{name} SET record_content='SYNTHETIC-CDM' WHERE patient_id='P'"))
@@ -292,6 +306,11 @@ def run(args):
                 with frozen_material.activate(legacy_snapshot):
                     rows = reader.read_luxian_0609_snapshot_source_rows(source_key="daily_course_record", source_schema=None, **identity)
                     assert rows.rows[0]["record_content"] == "SYNTHETIC-LEGACY"
+                    with patch.object(programmatic, "engine", SimpleNamespace(connect=denied)), patch.object(programmatic, "get_documents", denied):
+                        payload = adapt_bundle_to_evidence_payload({**identity, "scene": "final"})
+                        assert "SYNTHETIC-LEGACY" in str(payload["programmatic_timeline"])
+                        assert "SYNTHETIC-CDM" not in str(payload)
+                        assert payload["programmatic_timeline"]["admission_time"] == "2026-09-01 08:00:00"
                 # PDF副本不新增快照，继续由既有业务库读取路径验证。
                 assert frozen_material.load("pdf-case-material", ("I","pdfp_P","pdfv_V")) is None
             # 只有出院文书时日期可展示，绝不补零点作为精确时刻。

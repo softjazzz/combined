@@ -14,6 +14,7 @@ from ..database import clinical_connection as clinical
 def capture(*, identity, cancellation_check=None, after_table_read=None):
     from .bundles import assembly, current_view, emr_view
     from .luxian_0609 import source_evidence_reader as reader
+    from .sample_programmatic_evidence import capture_programmatic_sources, _SOURCE_TABLES
     from .validation_material_source import material_source_schema, is_material_copy
 
     if is_material_copy(identity[1], identity[2]):
@@ -56,7 +57,7 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
             state.update(engine=engine, connection=connection)
             with material.recording(state):
                 limits = assembly._material_limits_for_variants(scenes=tuple(assembly._SCENE_DOC_PRIORITY), domains=tuple(assembly._DOMAIN_DOC_PRIORITY))
-                names = set(limits) | set(reader._NATIVE_SOURCE_FIELDS) | {"mr", "mr_diagnosis", "mr_cost", "mr_surgery", "diagnosis", "inpat_registration"}
+                names = set(limits) | set(reader._NATIVE_SOURCE_FIELDS) | set(_SOURCE_TABLES) | {"mr", "mr_diagnosis", "mr_cost", "mr_surgery", "diagnosis", "inpat_registration"}
                 inspector = inspect(connection)
                 # 目录元数据也来自本事务；缺表不与权限错误混为一谈。
                 for table in sorted(names):
@@ -70,6 +71,8 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                     state["tables"][table] = rows
                     if after_table_read:
                         after_table_read(table)
+                # 旧程序取证需要完整结构化行，不能以Bundle文本投影代替。
+                state["programmatic_sources"] = capture_programmatic_sources(state, check)
                 arguments = {**coordinates, "source_schema": schema}
                 functions = (
                     reader.read_luxian_0609_course_round_timeline,

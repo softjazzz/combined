@@ -2952,6 +2952,7 @@ def load_domain_bundle_document_index(
         f"""
         SELECT institute_id, patient_id, visit_id, execution_domain,
                COALESCE(structured_context->>'clinical_source_binding', '') AS clinical_source_binding,
+               COALESCE(structured_context->>'case_material_fingerprint', '') AS case_material_fingerprint,
                bundle_schema_version, bundle_updated_at,
                COALESCE(
                  (
@@ -3009,7 +3010,8 @@ def load_domain_bundle_document_index(
     if not row:
         return None
     payload = dict(row)
-    if str(payload.pop("clinical_source_binding", "") or "") != _cache_binding(patient_id, visit_id):
+    cache_identity = {key: payload.pop(key, "") for key in ("clinical_source_binding", "case_material_fingerprint")}
+    if not _cache_source_matches(cache_identity, patient_id, visit_id):
         return None
     for field_name in ("source_documents", "structured_context"):
         value = payload.get(field_name)
@@ -3052,6 +3054,7 @@ def load_domain_bundle_for_emr_render(
         f"""
         SELECT institute_id, patient_id, visit_id, execution_domain,
                COALESCE(structured_context->>'clinical_source_binding', '') AS clinical_source_binding,
+               COALESCE(structured_context->>'case_material_fingerprint', '') AS case_material_fingerprint,
                bundle_schema_version, bundle_updated_at,
                COALESCE(
                  (
@@ -3104,7 +3107,8 @@ def load_domain_bundle_for_emr_render(
     if not row:
         return None
     payload = dict(row)
-    if str(payload.pop("clinical_source_binding", "") or "") != _cache_binding(patient_id, visit_id):
+    cache_identity = {key: payload.pop(key, "") for key in ("clinical_source_binding", "case_material_fingerprint")}
+    if not _cache_source_matches(cache_identity, patient_id, visit_id):
         return None
     value = payload.get("source_documents")
     if isinstance(value, str):

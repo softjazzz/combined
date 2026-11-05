@@ -34,6 +34,9 @@ from app.services.sichuan_qc_service import SichuanQCService
 
 mode, database_path, build_id, *rest = sys.argv[1:]
 database = sa.create_engine('sqlite:///' + database_path)
+from app.services.bundles import assembly as probe_material_assembly
+# 该探针只验证SQLite任务恢复/Canonical；所有业务源门槛使用同一合成后端。
+probe_material_assembly.engine = database
 storage.engine = database
 storage._draft_schema = lambda: None
 storage._sync_batch_job_parent_columns = lambda **_kwargs: None

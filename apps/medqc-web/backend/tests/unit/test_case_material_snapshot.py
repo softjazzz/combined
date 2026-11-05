@@ -26,6 +26,72 @@ def dataset(body="v1"):
             "documents": {"documents": [{"id": "D", "doc_type": "daily_course_record", "content": body}], "documents_tree": []}}
 
 
+@pytest.mark.parametrize("binding", ["", "synthetic-cdm-binding"])
+def test_formal_adapter_uses_frozen_supplements_and_registration(monkeypatch, binding):
+    from types import SimpleNamespace
+    from app.services import sample_programmatic_evidence as evidence
+    from app.services.qc_input_adapters.running_final_bundle_adapter import adapt_bundle_to_evidence_payload
+
+    # 当前库可能已修改，或同键属于另一来源；正式适配链不可建立任何回源连接。
+    monkeypatch.setattr(evidence, "engine", SimpleNamespace(connect=lambda: pytest.fail("snapshot bypassed to current business database")))
+    monkeypatch.setattr(evidence, "get_documents", lambda **_: pytest.fail("unscoped detail fallback"))
+    state = dataset("frozen-course")
+    for table in (*evidence._SOURCE_TABLES, "inpat_registration"):
+        state["tables"].setdefault(table, [])
+        state["columns"].setdefault(table, [])
+    state["tables"]["inpat_registration"] = [{"admission_datetime": "2026-11-01 08:00:00", "discharge_datetime": "2026-11-03 08:00:00"}]
+    state["columns"]["inpat_registration"] = list(state["tables"]["inpat_registration"][0])
+    state["programmatic_sources"] = {table: {"rows": state["tables"][table]} for table in (*evidence._SOURCE_TABLES, "inpat_registration")}
+    state["binding"] = binding
+    bundle = {**dict(zip(("institute_id", "patient_id", "visit_id"), IDENTITY)), "scene": "running",
+              "medical_text": "existing inventory", "source_documents": [{"source_table": "admission_record", "document_id": "A", "content": "inventory-body"}]}
+    with clinical.selected({"id": "independent_cdm" if binding else "legacy_pg", "binding": binding}):
+        frozen = material.persist("adapter-case", state)
+        with material.activate(frozen):
+            result = adapt_bundle_to_evidence_payload(bundle)["programmatic_timeline"]
+    assert "frozen-course" in str(result)
+    assert result["admission_time"] == "2026-11-01 08:00:00"
+
+
+def test_formal_adapter_missing_snapshot_table_fails_instead_of_reading_live(monkeypatch):
+    from app.services import sample_programmatic_evidence as evidence
+    from app.services.qc_input_adapters.running_final_bundle_adapter import adapt_bundle_to_evidence_payload
+    monkeypatch.setattr(evidence, "engine", None)
+    monkeypatch.setattr(evidence, "get_documents", lambda **_: pytest.fail("unscoped detail fallback"))
+    with material.activate(material.persist("missing-table", dataset())):
+        with pytest.raises(material.MaterialSnapshotError, match="uncaptured"):
+            adapt_bundle_to_evidence_payload({**dict(zip(("institute_id", "patient_id", "visit_id"), IDENTITY)), "scene": "final"})
+
+
+def test_empty_captured_sources_do_not_enter_live_detail_fallback(monkeypatch):
+    from app.services import sample_programmatic_evidence as evidence
+    monkeypatch.setattr(evidence, "get_documents", lambda **_: pytest.fail("unscoped detail fallback"))
+    state = dataset()
+    state["programmatic_sources"] = {table: {"rows": []} for table in (*evidence._SOURCE_TABLES, "inpat_registration")}
+    with material.activate(material.persist("empty", state)):
+        result = evidence.build_programmatic_evidence_payload(bundle=dict(zip(("institute_id", "patient_id", "visit_id"), IDENTITY)))
+        assert not any(result["programmatic_timeline"]["documents"].values())
+        with pytest.raises(material.MaterialSnapshotError, match="forbidden"):
+            evidence._fetch_detail_service_fallback_items(IDENTITY[-1])
+
+
+def test_snapshot_supplement_preserves_structured_fields_limits_and_missing_tables():
+    from app.services import sample_programmatic_evidence as evidence
+    state = dataset()
+    state["programmatic_sources"] = {table: {"rows": []} for table in (*evidence._SOURCE_TABLES, "inpat_registration")}
+    state["programmatic_sources"]["labtest_master"] = {"unavailable": True}
+    state["programmatic_sources"]["labtest_item_report"] = {"rows": [
+        {"document_id": "L1", "test_id": "T1", "result": "5.5", "unit": "synthetic-unit"},
+        {"document_id": "L2", "test_id": "T2", "result": "6.5"},
+    ]}
+    bundle = dict(zip(("institute_id", "patient_id", "visit_id"), IDENTITY))
+    with material.activate(material.persist("lab", state)):
+        evidence._fetch_source_table_fallback_items(bundle, strict_structured_source_limits={"labtest_master": 1, "labtest_item_report": 1})
+    assert bundle["_structured_source_readiness"] == {"labtest_master": "unavailable", "labtest_item_report": "partial"}
+    row, = bundle["_structured_source_rows"]["labtest_item_report"]
+    assert (row["test_id"], row["result"], row["unit"]) == ("T1", "5.5", "synthetic-unit")
+
+
 @pytest.mark.parametrize("change", ["body", "time", "status", "add", "remove"])
 def test_changes_new_task_but_original_task_is_immutable(change):
     first = material.persist("original", dataset())

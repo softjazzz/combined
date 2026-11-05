@@ -102,3 +102,31 @@ npm run check:encoding
 ```
 
 新保护集已加入既有data-pipelines测试集合，避免未来CI漏跑；本轮未推送或触发GitHub CI。
+
+## PR38复审修复（2026-11-05，原Head e6c5ce7ae）
+
+原Head仍有旧程序取证绕过快照，不能据前述定向测试声明全部读取闭环。实际正式适配器在目录已有材料时，仍调用sample_programmatic_evidence补充SQL；没有材料时还有文书详情回退。本轮先执行反例，观察到两个来源均绕过快照、缺失材料进入详情回退，再修复：
+
+- 同一REPEATABLE READ事务捕获26张补充源表及inpat_registration的原始行，使用选定源和完整三键，纳入内容指纹；不以Bundle文本投影丢掉结构化检验字段。
+- 激活快照后只投影捕获行，保留原证据构造、条数限制及partial/unavailable合同。未捕获表明确失败；已确认空集合不回源；详情回退在快照上下文中被阻断。未激活快照的旧路径和PDF路径不变。
+- 目录索引和单文书Bundle读取也核对材料指纹，补齐此前只核对来源的两处轻量缓存路径。其他缓存测试按来源+指纹合同验收，未删除新保护。
+- CI跨进程的两项失败源于SQLite任务/Canonical探针仍保留PG材料engine。用固定PG方言对象且禁止网络复现material_capture_failed和无Canonical结果，再将探针材料engine明确绑定同一临时SQLite。只更新审查过的固定探针SHA256，仍校验完整脚本、模式、路径，并在子进程重装网络与数据库隔离；没有放宽任意子进程或PG连接权限。
+
+本轮验证（各集合有重叠，不相加）：
+
+- data-pipelines加程序取证、正式适配和隔离护栏：**848通过**。
+- 材料/正式适配、Bundle、Native及Canonical/早期失败晚期成功保护：**283通过、1私有录制入口跳过**。
+- 已审查的跨进程完成/恢复/身份漂移集合：**18通过**，包括原CI失败的finish与recover-full。
+- 原生PG18.3合成双库：通过。正式适配输入验证了同键不同来源、并发修改正文和入院时间后旧任务仍取旧值、新任务取新值；即使禁止程序取证模块业务连接和详情读取仍能成功。产物在backend/.tmp/case-material-review-pg-v2/result.json，自建集群已停止。
+- 相关Python静态错误检查通过；未修改前端源码，原前端118项及类型检查是前轮证据，本轮不冒称重新执行。
+
+复现命令：
+
+```powershell
+python -B scripts/run_qc_scheduler_tests.py --profile offline --suite data-pipelines tests/unit/test_sample_programmatic_evidence.py tests/unit/test_running_final_bundle_adapter.py tests/unit/test_qc_scheduler_isolation.py
+python -B scripts/run_qc_scheduler_tests.py --profile offline --allow-reviewed-restart-probe --suite compatibility-restart
+python -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_case_material_snapshot.py tests/unit/test_sample_programmatic_evidence.py tests/unit/test_running_final_bundle_adapter.py tests/unit/test_luxian_0609_evidence_snapshot_provider.py tests/unit/test_bundle_scene_cache_fallback.py tests/unit/test_domain_bundle_assembly.py tests/unit/test_bundle_emr_view.py tests/unit/test_exam_poc_acceptance.py
+python -B scripts/validate_clinical_sources_pg.py --pg-bin 'D:\Program Files\PostgreSQL\18\bin' --source-backend C:\medqc-data-integration-service\apps\medqc-web\backend --output-dir .tmp\case-material-review-pg-fresh --port 63018
+```
+
+旧实验快照未捕获programmatic_sources时，不能用当前源补造后继续执行，必须明确技术未完成；历史文书仍按原留存快照显示，不清理旧文件。PDF不新增快照、PG16/真实发布窗口/跨主机存储未验收的限制仍然保留。未合并、部署、访问业务库或模型、运行患者质控。
