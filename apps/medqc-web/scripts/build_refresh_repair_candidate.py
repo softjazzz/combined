@@ -30,6 +30,12 @@ for line in (root/'CHECKSUMS.sha256').read_text().splitlines():
     path=(root/name).resolve()
     assert path.is_relative_to(root) and path.is_file()
     assert hashlib.sha256(path.read_bytes()).hexdigest()==digest,name
+import importlib.util
+for name in ('app/services/bundles/refresh_storage.py','app/services/customer_test_storage.py'):
+    path=root/'runtime-overlay/backend'/name
+    spec=importlib.util.spec_from_file_location('review_helper_'+path.stem,path)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
 for path in (root/'runtime-overlay').rglob('*.py'):
     ast.parse(path.read_text(encoding='utf-8'),filename=str(path))
 package=json.loads((root/'PACKAGE.json').read_text())
@@ -63,6 +69,20 @@ def main():
             "2026-11-05-business-bundle-refresh-repair*.md"
         ):
             (package / path.name).write_bytes(path.read_bytes())
+        (package / "DIFF.patch").write_bytes(
+            subprocess.check_output(
+                [
+                    "git",
+                    "diff",
+                    BASE,
+                    head,
+                    "--",
+                    "apps/medqc-web/backend",
+                    "docs/plans/2026-11-05-business-bundle-refresh-repair.md",
+                ],
+                cwd=ROOT,
+            )
+        )
         metadata = dict(
             kind="review-only-source-overlay",
             deployable=False,

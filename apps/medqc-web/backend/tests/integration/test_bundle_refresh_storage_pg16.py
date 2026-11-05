@@ -179,12 +179,21 @@ def test_migration_owner_matrix_and_real_lifecycle(db, monkeypatch, jobs, failur
         bound, _ = owner_plan(c)
         assert bound["bundle_refresh_jobs"] == (jobs or failures or "qc")
         assert bound["bundle_refresh_failures"] == (failures or jobs or "qc")
+    oids = []
     for order in ("public,qc", "qc,public"):
         with api.begin() as c:
             c.execute(sa.text("SET LOCAL search_path=" + order))
-            assert manager.bind_storage(c)["bundle_refresh_jobs"].startswith(
+            binding = manager.bind_storage(c)
+            oids.append(
+                c.execute(
+                    sa.text("SELECT to_regclass(:name)::oid"),
+                    {"name": binding["bundle_refresh_jobs"]},
+                ).scalar()
+            )
+            assert binding["bundle_refresh_jobs"].startswith(
                 '"' + (jobs or failures or "qc") + '"'
             )
+    assert len(set(oids)) == 1
     if failures:
         assert any(
             r["visit_id"] == "old"
@@ -275,7 +284,7 @@ def make_case():
         ("first_course_record", "2026-01-01T11:00:00"),
         ("exam_report", "2026-01-02T10:00:00"),
         ("daily_course_record", "2026-01-02T12:00:00"),
-        ("senior_course_record", "2026-01-04T13:00:00"),
+        ("consultation_record", "2026-01-04T13:00:00"),
     ]
     return {
         "case_title": "synthetic-only",
@@ -330,7 +339,7 @@ def setup_case(db, monkeypatch, mode):
         "first_course_record",
         "exam_item_report",
         "daily_course_record",
-        "senior_course_record",
+        "consultation_record",
     ]
     for name in names:
         table = next(t for t in cdm.Base.metadata.tables.values() if t.name == name)
@@ -398,6 +407,33 @@ def test_customer_material_commit_and_bundle_same_source(db, monkeypatch, mode):
                 ).scalar()
                 == 1
             )
+        import hashlib
+        from datetime import datetime
+
+        for document in make_case()["documents"]:
+            table = (
+                "exam_item_report"
+                if document["document_type"] == "exam_report"
+                else document["document_type"]
+            )
+            timestamp = (
+                "report_time" if table == "exam_item_report" else "record_datetime"
+            )
+            row = c.execute(
+                sa.text(
+                    f'SELECT institute_id,patient_id,visit_id,record_content,"{timestamp}" FROM "{schema}"."{table}"'
+                )
+            ).one()
+            assert (row.institute_id, row.patient_id, row.visit_id) == (
+                "CUSTOMER_TEST",
+                result["patient_id"],
+                result["visit_id"],
+            )
+            assert (
+                hashlib.sha256(row.record_content.encode()).digest()
+                == hashlib.sha256(document["content"].encode()).digest()
+            )
+            assert row[4] == datetime.fromisoformat(document["record_time"])
         bundle = c.execute(
             sa.text(
                 "SELECT medical_text,structured_context FROM public.running_record_bundle"
@@ -420,8 +456,6 @@ def test_customer_material_commit_and_bundle_same_source(db, monkeypatch, mode):
     "damage", ["missing_table", "read_permission", "write_permission", "insert_failure"]
 )
 def test_customer_failure_rolls_back_initial_transaction(db, monkeypatch, damage):
-    from app.services.customer_test_storage import CustomerTestStorageError
-
     service, schema, names = setup_case(db, monkeypatch, "split")
     owner, api = db
     with owner.begin() as c:
@@ -444,8 +478,22 @@ def test_customer_failure_rolls_back_initial_transaction(db, monkeypatch, damage
             return original(session, table, rows)
 
         monkeypatch.setattr(service, "_upsert_reflected_rows", fail)
-    with pytest.raises(CustomerTestStorageError):
-        service.create_customer_test_record(payload=make_case(), created_by="synthetic")
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.routers import qc_sample_pools as router
+
+    monkeypatch.setattr(router, "_service", lambda: service)
+    app = FastAPI()
+    # 使用真实端点函数及DTO，进程内HTTP；不加载应用启动任务或现场权限配置。
+    app.post("/synthetic/test-records")(router.create_test_record)
+    app.dependency_overrides[router.get_current_user] = lambda: {
+        "id": "synthetic",
+        "role": "admin",
+    }
+    with TestClient(app) as client:
+        response = client.post("/synthetic/test-records", json=make_case())
+    assert response.status_code == 503, response.text
+    assert response.json()["detail"].startswith("customer_material_")
     with owner.connect() as c:
         for table in (
             "qc.manual_problem_sample_pools",
