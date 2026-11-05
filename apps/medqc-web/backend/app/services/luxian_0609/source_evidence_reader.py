@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from app.services.bundles import assembly as bundle_assembly
+from app.services import case_material_snapshot as case_material
 from app.services.validation_material_source import (
     DOCUMENT_STATUS_TABLES,
     material_document_sql_filter,
@@ -990,6 +991,7 @@ def build_luxian_0609_course_round_timeline_from_rows(
     return result
 
 
+@case_material.material_query
 def read_luxian_0609_course_round_timeline(
     *,
     institute_id: str,
@@ -1055,7 +1057,7 @@ def read_luxian_0609_course_round_timeline(
             f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
             f"{document_filter} ORDER BY {order_sql} LIMIT :limit_rows"
         )
-        with engine.connect() as connection:
+        with case_material.source_connection(engine) as connection:
             rows = connection.execute(
                 bundle_assembly.text(sql),
                 {
@@ -1190,6 +1192,7 @@ def luxian_0609_native_source_row_limit(source_key: str) -> int:
     return _source_limit(source_key)
 
 
+@case_material.material_query
 def has_luxian_0609_current_visit_unstable_order(
     *, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> bool:
@@ -1218,7 +1221,7 @@ def has_luxian_0609_current_visit_unstable_order(
         f"OR {bundle_assembly._quote_ident('order_name')} LIKE :serious_name) LIMIT 1"
     )
     try:
-        with engine.connect() as connection:
+        with case_material.source_connection(engine) as connection:
             row = connection.execute(
                 bundle_assembly.text(sql),
                 {
@@ -1234,6 +1237,7 @@ def has_luxian_0609_current_visit_unstable_order(
     return row is not None
 
 
+@case_material.material_query
 def read_luxian_0609_severity_order_rows(
     *,
     institute_id: str,
@@ -1303,7 +1307,7 @@ def read_luxian_0609_severity_order_rows(
         f"ORDER BY {order_sql} LIMIT :limit_rows"
     )
     try:
-        with engine.connect() as connection:
+        with case_material.source_connection(engine) as connection:
             raw_rows = connection.execute(
                 bundle_assembly.text(sql),
                 {
@@ -1388,6 +1392,7 @@ def read_luxian_0609_severity_order_rows(
     )
 
 
+@case_material.material_query
 def read_luxian_0609_exam_lab_order_rows(
     *,
     institute_id: str,
@@ -1438,7 +1443,7 @@ def read_luxian_0609_exam_lab_order_rows(
         f"ORDER BY {order_sql} LIMIT :limit_rows"
     )
     try:
-        with engine.connect() as connection:
+        with case_material.source_connection(engine) as connection:
             rows = connection.execute(
                 bundle_assembly.text(sql),
                 {
@@ -1464,6 +1469,7 @@ def read_luxian_0609_exam_lab_order_rows(
     )
 
 
+@case_material.material_query
 def read_luxian_0609_rescue_order_rows(
     *,
     institute_id: str,
@@ -1516,7 +1522,7 @@ def read_luxian_0609_rescue_order_rows(
         f"ORDER BY {order_sql} LIMIT :limit_rows"
     )
     try:
-        with engine.connect() as connection:
+        with case_material.source_connection(engine) as connection:
             raw_rows = connection.execute(
                 bundle_assembly.text(sql),
                 {
@@ -1559,6 +1565,7 @@ def read_luxian_0609_rescue_order_rows(
     )
 
 
+@case_material.material_query
 def read_luxian_0609_discharge_horizon_rows(
     *,
     institute_id: str,
@@ -1603,7 +1610,7 @@ def read_luxian_0609_discharge_horizon_rows(
             "LIMIT :limit_rows"
         )
         try:
-            with engine.connect() as connection:
+            with case_material.source_connection(engine) as connection:
                 candidate_rows = connection.execute(
                     bundle_assembly.text(sql),
                     {
@@ -1651,6 +1658,7 @@ def read_luxian_0609_discharge_horizon_rows(
     )
 
 
+@case_material.material_query
 def read_luxian_0609_runtime_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:
@@ -1702,7 +1710,7 @@ def read_luxian_0609_runtime_source_rows(
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
         f"{document_filter}{order_sql} LIMIT :limit_rows"
     )
-    with engine.connect() as connection:
+    with case_material.source_connection(engine) as connection:
         rows = connection.execute(
             bundle_assembly.text(sql),
             {
@@ -1716,6 +1724,7 @@ def read_luxian_0609_runtime_source_rows(
     return [dict(row) for row in rows]
 
 
+@case_material.material_query
 def read_luxian_0609_native_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:
@@ -1775,7 +1784,7 @@ def read_luxian_0609_native_source_rows(
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
         f"{document_filter}{order_sql} LIMIT :limit_rows"
     )
-    with engine.connect() as connection:
+    with case_material.source_connection(engine) as connection:
         rows = connection.execute(
             bundle_assembly.text(sql),
             {
@@ -1882,7 +1891,7 @@ def _read_mr_visit_time_context(
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id LIMIT :limit_rows"
     )
     try:
-        with bundle_assembly._source_engine(trusted_schema).connect() as connection:
+        with case_material.source_connection(bundle_assembly._source_engine(trusted_schema)) as connection:
             raw_rows = connection.execute(bundle_assembly.text(sql), {
                 "institute_id": institute_id, "patient_id": patient_id,
                 "visit_id": visit_id, "limit_rows": 2,
@@ -1902,6 +1911,7 @@ def _read_mr_visit_time_context(
     )
 
 
+@case_material.material_query
 def read_luxian_0609_snapshot_source_rows(
     *,
     source_key: str,
@@ -2036,7 +2046,7 @@ def read_luxian_0609_snapshot_source_rows(
         f"{document_filter} ORDER BY {order_sql} LIMIT :limit_rows"
     )
     try:
-        with engine.connect() as connection:
+        with case_material.source_connection(engine) as connection:
             raw_rows = connection.execute(
                 bundle_assembly.text(sql),
                 {

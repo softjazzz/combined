@@ -258,8 +258,8 @@ def test_historical_document_source_comes_from_job_not_current_default(settings_
     from app.database import connection as owner
     value = sources.snapshot(profile, "independent_cdm")
     filters = {"record_refs": [REF], "clinical_source": value}
-    settings_store.execute(text("CREATE TABLE qc.custom_qc_batch_jobs(id TEXT,created_by TEXT,filters_json TEXT)"))
-    settings_store.execute(text("INSERT INTO qc.custom_qc_batch_jobs VALUES('saved','owner',:filters)"), {"filters": json.dumps(filters)})
+    settings_store.execute(text("CREATE TABLE qc.custom_qc_batch_jobs(id TEXT,created_by TEXT,filters_json TEXT,parent_job_id TEXT)"))
+    settings_store.execute(text("INSERT INTO qc.custom_qc_batch_jobs VALUES('saved','owner',:filters,NULL)"), {"filters": json.dumps(filters)})
     settings_store.commit()
     monkeypatch.setattr(owner, "SessionLocal", lambda: Session(settings_store.get_bind()))
     monkeypatch.setattr(sources, "configuration", lambda: pytest.fail("历史任务不按当前默认源重新解释"))

@@ -18,7 +18,7 @@ const EMPTY_QC_SUMMARY: RecordPoolQcSummary = {
 }
 export type WorkstationDateField = 'visit' | 'admission' | 'discharge' | 'updated'
 export type WorkstationDateRange = [string, string] | null
-export type HospitalStatusScope = 'all' | 'inpatient' | 'discharged'
+export type HospitalStatusScope = 'all' | 'inpatient' | 'discharged' | 'unknown'
 export type RecordPoolSyncScope = 'all' | 'today_inpatient'
 export type InpatientSort = 'default' | 'longest' | 'recent'
 
@@ -113,11 +113,12 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const inpatientSort = ref<InpatientSort>('default')
   let activeRequestSequence = 0
 
-  const hospOptions: Array<{ value: HospitalStatusScope; label: string }> = [
+  const hospOptions = computed<Array<{ value: HospitalStatusScope; label: string }>>(() => [
     { value: 'all', label: '全部病历' },
     { value: 'inpatient', label: '在院' },
     { value: 'discharged', label: '已出院' },
-  ]
+    ...(sourceId.value === 'independent_cdm' ? [{ value: 'unknown' as const, label: '状态未知' }] : []),
+  ])
 
   // 住院状态由服务端筛选；禁止对当前页病历再次本地过滤造成假统计。
   const scopedRecords = computed(() => allRecords.value)
@@ -273,7 +274,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   }
 
   function selectHospFilter(value: HospitalStatusScope) {
-    const nextValue = hospOptions.some((option) => option.value === value) ? value : 'all'
+    const nextValue = hospOptions.value.some((option) => option.value === value) ? value : 'all'
     if (hospFilter.value === nextValue) return
     hospFilter.value = nextValue
     currentPage.value = 1

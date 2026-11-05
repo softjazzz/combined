@@ -68,3 +68,15 @@ describe('RecordPoolPreviewPanel 病历池右侧预览', () => {
     expect(text).toContain('住院天数—')
   })
 })
+
+
+it('CDM日期精度和未确认在院状态原样展示', () => {
+  const wrapper = mount(RecordPoolPreviewPanel, { props: { row: {
+    ...row, sourceId: 'independent_cdm', hospitalizationStatus: 'unknown',
+    admissionPrecision: 'date', dischargeDate: '', materialCompleteness: '首页未观察到',
+  } } })
+  expect(wrapper.text()).toContain('状态未知')
+  expect(wrapper.text()).toContain('2026-08-01（仅日期）')
+  expect(wrapper.text()).toContain('独立CDM · 首页未观察到')
+  expect(wrapper.text()).not.toContain('00:00:00')
+})

@@ -17,6 +17,12 @@ vi.mock('@/services/manual-case-sample-service', () => ({
   getEditableMedicalRecordDocument: getDocumentMock,
 }))
 
+vi.mock('@/api/qc-result-feedback-demo', () => ({
+  getQcResultFeedbackDemo: vi.fn(async () => ({ success: true, data: [] })),
+  listQcResultFeedbackDemo: vi.fn(async () => ({ success: true, data: [] })),
+  saveQcResultFeedbackDemo: vi.fn(async () => ({ success: true })),
+}))
+
 const issues: QCRecordCompareIssue[] = [
   {
     key: 'issue-compliant',
@@ -1420,4 +1426,20 @@ describe('QCRecordCompareWorkbench', () => {
     expect(wrapper.text()).toContain('已定位到文书，未定位到具体片段')
     expect(wrapper.find('mark').exists()).toBe(false)
   })
+})
+
+
+it('当前病历与历史任务快照参数互斥', async () => {
+  getDocumentsMock.mockResolvedValue({ success: true, data: { documents: [] } })
+  const wrapper = mount(QCRecordCompareWorkbench, { props: {
+    visitId: 'V', instituteId: 'I', patientId: 'P', jobId: 'HISTORICAL',
+    recordRef: 'SAFE-REF', sourceView: 'current', issues: [], documentOnly: true,
+  } })
+  await flushPromises()
+  expect(getDocumentsMock).toHaveBeenLastCalledWith('V', expect.objectContaining({ source_view: 'current' }))
+  expect(getDocumentsMock.mock.calls.at(-1)?.[1]).not.toHaveProperty('job_id')
+  await wrapper.setProps({ sourceView: 'saved' })
+  await flushPromises()
+  expect(getDocumentsMock).toHaveBeenLastCalledWith('V', expect.objectContaining({ job_id: 'HISTORICAL' }))
+  wrapper.unmount()
 })

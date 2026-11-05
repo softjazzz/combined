@@ -8,6 +8,7 @@ export default defineConfig({
     setupFiles: ['./tests/setup.ts', './tests/clinical-source-network-guard.ts'],
     include: [
       'tests/unit/views/workstation-v4/usePatientRecords.spec.ts',
+      'tests/unit/views/workstation-v4/RecordPoolPreviewPanel.spec.ts',
       'tests/unit/views/workstation-v4/QcRecordResultListView.spec.ts',
       'tests/unit/views/workstation-v4/DataSyncConfigPage.spec.ts',
       'tests/unit/clinicalSources.spec.ts',

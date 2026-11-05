@@ -169,8 +169,14 @@ async function check() {
   if (!settings.value || busy.value) return
   busy.value = true
   try {
-    await clinicalSourcesApi.check(settings.value)
-    notice.value = 'CDM连接及目录结构只读检查通过，未保存配置'
+    const report = await clinicalSourcesApi.check(settings.value)
+    if (!report.ok) {
+      const failures = report.dependencies.filter((row) => !['structure_ready', 'rows_present', 'zero_rows'].includes(row.status)
+        && (row.required || row.status !== 'table_missing'))
+      notice.value = `只读预检未通过：${failures.length ? failures.map((row) => `${row.table} (${row.status})`).join('、') : '账号权限或只读事务不符合要求'}`
+      return
+    }
+    notice.value = 'CDM完整依赖只读检查通过；发布就绪仍待确认，未保存配置'
   } catch {
     notice.value = 'CDM检查未通过，请核对连接、只读权限和同步表结构；未切换来源'
   } finally {

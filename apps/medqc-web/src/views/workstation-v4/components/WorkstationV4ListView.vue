@@ -435,7 +435,7 @@ interface StageMetaLike {
   singleActionText: string
 }
 
-type HospFilterValue = 'all' | 'inpatient' | 'discharged'
+type HospFilterValue = 'all' | 'inpatient' | 'discharged' | 'unknown'
 
 interface HospFilterOption {
   value: HospFilterValue
@@ -525,7 +525,7 @@ function normalizeDoctorValue(value: unknown): string {
 
 function normalizeHospFilterValue(value: unknown): HospFilterValue {
   const normalized = String(value || 'all').trim()
-  return normalized === 'inpatient' || normalized === 'discharged' ? normalized : 'all'
+  return normalized === 'inpatient' || normalized === 'discharged' || normalized === 'unknown' ? normalized : 'all'
 }
 
 function normalizeInpatientSort(value: unknown): InpatientSort {

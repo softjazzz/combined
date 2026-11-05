@@ -3,6 +3,7 @@
  * 优先使用后端核验的 hospitalizationStatus；缺失时按是否有出院日期推断。
  */
 export interface HospitalizationRow {
+  sourceId?: 'legacy_pg' | 'independent_cdm'
   dischargeDate?: string
   hospitalizationStatus?: 'inpatient' | 'discharged' | 'unknown'
   hospitalizationStatusVerifiedAt?: string
@@ -25,7 +26,7 @@ export function resolvedHospitalizationStatus(record: HospitalizationRow) {
 export function hospitalizationStatusLabel(record: HospitalizationRow) {
   const status = resolvedHospitalizationStatus(record)
   if (status === 'discharged') return '已出院'
-  if (status === 'unknown') return '待核验'
+  if (status === 'unknown') return record.sourceId === 'independent_cdm' ? '状态未知' : '待核验'
   return '在院'
 }
 

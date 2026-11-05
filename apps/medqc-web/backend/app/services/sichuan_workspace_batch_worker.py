@@ -2410,6 +2410,8 @@ async def run_sichuan_workspace_batch_job(
                 bundle_payload: Optional[Dict[str, Any]] = None
                 attempted_bundle_scenes: List[str] = []
                 runtime_shadow_summary: Optional[Dict[str, Any]] = None
+                if record.get("_case_material_error"):
+                    raise RuntimeError(record["_case_material_error"])
 
                 def _capture_usage_observation(payload: Dict[str, Any]) -> None:
                     nonlocal record_usage_observation_complete
@@ -3476,7 +3478,32 @@ async def run_sichuan_workspace_batch_job(
                             with live_result_scope(
                                 lambda key, rows: _publish_family(record, key, rows)
                             ) if enable_incremental_results and native_direct_enabled else nullcontext():
-                                result = await _evaluate_single_record_impl(record)
+                                from . import case_material_snapshot as materials
+                                from .case_material_capture import obtain
+                                from .validation_material_source import is_material_copy
+                                from .bundles import assembly as material_assembly
+                                from ..database import clinical_connection as material_clinical
+                                identity = (institute_id, patient_id, visit_id)
+                                backed_by_pg = getattr(getattr(material_assembly.engine, "dialect", None), "name", "") == "postgresql"
+                                frozen = None
+                                if all(identity) and not is_material_copy(patient_id, visit_id) and (material_clinical.configured() or backed_by_pg):
+                                    try:
+                                        frozen = await asyncio.to_thread(obtain, root_job_id, identity,
+                                            retry=is_failed_rule_retry, cancellation_check=_raise_if_cancelled)
+                                    except materials.MaterialSnapshotError as error:
+                                        record = {**record, "_case_material_error": str(error)}
+                                with materials.activate(frozen):
+                                    if frozen is not None:
+                                        scene = "final" if str(record.get("scope") or filters.get("query_scope") or current.get("scope")) == "final" else "running"
+                                        try:
+                                            inputs = material_assembly._assemble_scene_bundle(scene=scene, source_schema=frozen["schema"],
+                                                institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+                                            record = {**record, "medical_text": inputs["medical_text"]}
+                                        except Exception:
+                                            record = {**record, "_case_material_error": "material_projection_failed"}
+                                    result = await _evaluate_single_record_impl(record)
+                                    if frozen is not None:
+                                        result["case_material_fingerprint"] = frozen["fingerprint"]
                             result["_live_case"] = (institute_id, patient_id, visit_id)
                             return result
                         finally:

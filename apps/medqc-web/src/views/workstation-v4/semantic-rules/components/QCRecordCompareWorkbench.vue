@@ -1250,10 +1250,10 @@ async function loadDocuments() {
     institute_id: String(props.instituteId || '').trim() || undefined,
     patient_id: String(props.patientId || '').trim() || undefined,
     visit_id: visitId,
-    ...(jobId && recordRef
+    ...(jobId && props.sourceView !== 'current'
       ? {
           job_id: jobId,
-          record_ref: recordRef,
+          ...(recordRef ? { record_ref: recordRef } : {}),
         }
       : {}),
     ...(props.sourceView === 'current'

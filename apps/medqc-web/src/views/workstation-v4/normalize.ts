@@ -182,6 +182,9 @@ export function normalizeRecord(raw: unknown): PatientRecord {
     hospitalizationStatusSource:
       pickString(source, ['hospitalizationStatusSource', 'hospitalization_status_source']) ||
       undefined,
+    admissionPrecision: source.admissionPrecision === 'date' || source.admissionPrecision === 'datetime' ? source.admissionPrecision : 'unknown',
+    dischargePrecision: source.dischargePrecision === 'date' || source.dischargePrecision === 'datetime' ? source.dischargePrecision : 'unknown',
+    materialCompleteness: pickString(source, ['materialCompleteness']) || undefined,
     updateTime: updateTime || undefined,
     sortTime: sortTime || undefined,
     days: asNumber(

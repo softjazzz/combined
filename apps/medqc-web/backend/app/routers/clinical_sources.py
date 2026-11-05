@@ -1,6 +1,5 @@
 """临床读取来源设置；同步链路与读取来源分别配置。"""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import inspect, text
 
 from ..core.audit import audit_event
 from ..core.response import success_response
@@ -58,18 +57,10 @@ def check(value: sources.SourceSettings, _actor: dict = Depends(require_pipeline
         with clinical_connection.selected(selection):
             engine = clinical_connection.get_engine()
             with engine.connect() as connection:
-                readonly = connection.execute(text("SHOW transaction_read_only")).scalar()
-                tables = set(inspect(connection).get_table_names(schema="cdm"))
-                from ..services.clinical_case_catalog import REQUIRED_TABLES
-                missing = sorted(set(REQUIRED_TABLES) - tables)
-                permission = connection.execute(text("""
-                    SELECT bool_and(has_table_privilege(current_user, quote_ident(table_schema)||'.'||quote_ident(table_name), 'SELECT'))
-                        AND NOT bool_or(has_table_privilege(current_user, quote_ident(table_schema)||'.'||quote_ident(table_name), 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
-                    FROM information_schema.tables WHERE table_schema='cdm'
-                """)).scalar()
-                if readonly != "on" or missing or permission is not True:
-                    raise PipelineError("clinical_source_contract_incomplete", 409)
-        return success_response(data={"connected": True, "read_only": True, "schema": "cdm"})
+                from ..services.clinical_source_contract import inspect_source
+                report = inspect_source(connection)
+        # 预检报告逐项列出缺表、缺列、权限、空表；不替代发布就绪门禁。
+        return success_response(data={"connected": True, **report})
     except PipelineError as error:
         raise HTTPException(error.status, error.code) from None
     except Exception:

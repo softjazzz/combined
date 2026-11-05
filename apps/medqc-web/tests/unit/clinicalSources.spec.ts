@@ -47,7 +47,7 @@ beforeEach(() => {
   })
   mocks.configuration.mockResolvedValue(settings())
   mocks.save.mockImplementation(async (value) => ({ ...value, version: 1 }))
-  mocks.check.mockResolvedValue({ connected: true, read_only: true })
+  mocks.check.mockResolvedValue({ connected: true, read_only: true, ok: true, dependencies: [], publication_ready: null })
 })
 
 describe('双数据源页面隔离', () => {
@@ -112,4 +112,20 @@ describe('双数据源页面隔离', () => {
     expect(wrapper.text()).toContain('未保存配置')
     wrapper.unmount()
   })
+})
+
+
+it('某张规则表无权限时不报告预检成功，也不保存或启用配置', async () => {
+  mocks.check.mockResolvedValueOnce({ connected: true, read_only: true, ok: false,
+    dependencies: [{ table: 'bloodtrans_record', required: true, status: 'select_denied', missing_columns: [] }],
+  })
+  const wrapper = mount(ClinicalSourceSettingsPanel)
+  await flushPromises()
+  const button = wrapper.findAll('button').find((item) => item.text() === '只读检查 CDM')
+  await button?.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('bloodtrans_record (select_denied)')
+  expect(wrapper.text()).not.toContain('只读检查通过')
+  expect(mocks.save).not.toHaveBeenCalled()
+  wrapper.unmount()
 })

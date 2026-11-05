@@ -16,6 +16,9 @@ export interface PatientRecord {
   department: string
   admissionDate: string
   dischargeDate: string
+  admissionPrecision?: 'date' | 'datetime' | 'unknown'
+  dischargePrecision?: 'date' | 'datetime' | 'unknown'
+  materialCompleteness?: string
   dischargeDatetime?: string
   hospitalizationStatus?: 'inpatient' | 'discharged' | 'unknown'
   hospitalizationStatusVerifiedAt?: string
@@ -301,6 +304,9 @@ export interface WorkstationWorklistItem {
   department: string
   admissionDate?: string
   dischargeDate?: string
+  admissionPrecision?: 'date' | 'datetime' | 'unknown'
+  dischargePrecision?: 'date' | 'datetime' | 'unknown'
+  materialCompleteness?: string
   dischargeDatetime?: string
   workflowType: 'frontpage' | 'coding' | 'settlement'
   queueStatus: QueueStatusCode

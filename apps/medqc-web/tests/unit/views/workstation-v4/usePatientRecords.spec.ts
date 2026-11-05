@@ -325,3 +325,21 @@ describe('usePatientRecords workstation filters', () => {
     expect(records.loading.value).toBe(false)
   })
 })
+
+
+describe('独立CDM状态筛选', () => {
+  it('只给CDM提供未知状态，切回旧源后清除筛选', async () => {
+    window.history.replaceState({}, '', '/workstation-v5?source_id=independent_cdm')
+    mockWorkstationResponse()
+    const records = usePatientRecords()
+    await records.fetchData()
+    expect(records.hospOptions.value.map((option) => option.value)).toContain('unknown')
+    records.selectHospFilter('unknown')
+    await flushPromises()
+    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', expect.objectContaining({ source_id: 'independent_cdm', hospital_status: 'unknown' }))
+    records.selectSource('legacy_pg')
+    await flushPromises()
+    expect(records.hospOptions.value.map((option) => option.value)).not.toContain('unknown')
+    expect(records.hospFilter.value).toBe('all')
+  })
+})

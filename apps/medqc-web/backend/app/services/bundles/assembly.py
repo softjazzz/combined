@@ -13,6 +13,7 @@ from sqlalchemy import inspect, text
 
 from ...database.connection import DB_SCHEMA_MODE, engine
 from ...database import clinical_connection
+from .. import case_material_snapshot as case_material
 from ..document_assembly import (
     assemble_document,
     build_document_select_columns,
@@ -564,6 +565,11 @@ def _cache_source_matches(context: Any, patient_id: str, visit_id: str) -> bool:
         except (TypeError, ValueError):
             context = {}
     stored = context.get("clinical_source_binding", "") if isinstance(context, dict) else ""
+    material = case_material.current()
+    if clinical_connection.configured() and material is None:
+        return False
+    if material is not None:
+        return stored == _cache_binding(patient_id, visit_id) and isinstance(context, dict) and context.get("case_material_fingerprint") == material["fingerprint"]
     return stored == _cache_binding(patient_id, visit_id)
 
 
@@ -613,6 +619,9 @@ def _table_exists(schema: str, table_name: str) -> bool:
 
 
 def _get_table_columns(schema: str, table: str) -> tuple[str, ...]:
+    frozen = case_material.frozen_columns(schema, table)
+    if frozen is not None:
+        return frozen
     read_engine = _source_engine(schema)
     if read_engine is None:
         return ()
@@ -812,6 +821,9 @@ def _select_records(
     )
     schema = material_source_schema(strict=clinical_connection.configured(), default_schema=_default_source_schema(), requested_schema=schema,
         institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+    captured = case_material.frozen_rows(schema, table, (institute_id, patient_id, visit_id), limit)
+    if captured is not None:
+        return captured
     read_engine = _source_engine(schema)
     columns = set(_get_table_columns(schema, table))
     if not columns:
@@ -911,7 +923,7 @@ def _select_records(
         f"WHERE {where_sql}{document_filter}{order_sql} LIMIT :limit_rows"
     )
 
-    with read_engine.connect() as conn:
+    with case_material.source_connection(read_engine) as conn:
         rows = conn.execute(text(sql), params).mappings().all()
     return [{**dict(row), "__document_type": table} for row in rows]
 
@@ -2459,6 +2471,8 @@ def _assemble_scene_bundle(
             patient_profile=patient_profile,
             structured_context=structured_context,
         )
+    if case_material.current() is not None:
+        bundle.setdefault("structured_context", {})["case_material_fingerprint"] = case_material.current()["fingerprint"]
     return bundle
 
 
@@ -2468,6 +2482,8 @@ def _upsert_scene_bundle(
     bundle: dict[str, Any],
     bundle_schema: str,
 ) -> None:
+    if case_material.current() is not None:
+        bundle.setdefault("structured_context", {})["case_material_fingerprint"] = case_material.current()["fingerprint"]
     table_name = _SCENE_BUNDLE_TABLE.get(scene)
     if not table_name:
         raise ValueError(f"Unsupported scene bundle table: {scene}")
@@ -2701,6 +2717,8 @@ def load_or_assemble_scene_bundle(
         policy_version=policy_version,
     )
     _upsert_scene_bundle(scene=scene, bundle=bundle, bundle_schema=bundle_schema)
+    if case_material.current() is not None:
+        bundle.setdefault("structured_context", {})["case_material_fingerprint"] = case_material.current()["fingerprint"]
     return bundle
 
 
@@ -2815,6 +2833,8 @@ def _upsert_domain_bundle(
     bundle: dict[str, Any],
     bundle_schema: str,
 ) -> None:
+    if case_material.current() is not None:
+        bundle.setdefault("structured_context", {})["case_material_fingerprint"] = case_material.current()["fingerprint"]
     table_name = _DOMAIN_BUNDLE_TABLE.get(execution_domain)
     if not table_name:
         raise ValueError(f"Unsupported execution domain bundle table: {execution_domain}")
@@ -3415,6 +3435,8 @@ def load_or_assemble_domain_bundle(
         bundle=bundle,
         bundle_schema=bundle_schema,
     )
+    if case_material.current() is not None:
+        bundle.setdefault("structured_context", {})["case_material_fingerprint"] = case_material.current()["fingerprint"]
     return bundle
 
 
