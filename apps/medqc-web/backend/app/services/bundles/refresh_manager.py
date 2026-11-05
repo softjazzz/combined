@@ -10,10 +10,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ...database.connection import engine
+from .refresh_storage import bind_storage
 
 SUPPORTED_BUNDLE_SCENES: tuple[str, ...] = ("running", "final", "frontpage", "coding")
 SUPPORTED_FAILURE_STATUS: tuple[str, ...] = ("all", "unresolved", "resolved")
-_TABLES_CHECKED = False
 
 
 def _pg_required_in_current_env() -> bool:
@@ -43,31 +43,9 @@ def _safe_text(value: Any, max_length: int) -> str:
     return text_value[:max_length]
 
 
-def _ensure_tables(session: Session) -> None:
-    global _TABLES_CHECKED
-    if _TABLES_CHECKED:
-        return
-
-    required = ("bundle_refresh_failures", "bundle_refresh_jobs")
-    missing: list[str] = []
-    for table_name in required:
-        exists = session.execute(
-            text(
-                """
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-                  AND table_name = :table_name
-                """
-            ),
-            {"table_name": table_name},
-        ).first()
-        if not exists:
-            missing.append(table_name)
-    if missing:
-        raise RuntimeError(f"缺少 bundle refresh 表（请先执行 Alembic 迁移）: {', '.join(missing)}")
-
-    _TABLES_CHECKED = True
+def _ensure_tables(session: Session) -> dict[str, str]:
+    # 每个真实连接重新验证，不继承其他engine或旧owner的进程全局缓存。
+    return bind_storage(session.connection())
 
 
 def ensure_bundle_refresh_tables() -> None:
@@ -94,11 +72,12 @@ def create_bundle_refresh_job(
         raise RuntimeError("DATABASE_URL 未配置，无法创建 bundle refresh job")
     job_id = f"bundlejob-{uuid.uuid4().hex[:12]}"
     with Session(engine) as session:
-        _ensure_tables(session)
+        owners = _ensure_tables(session)
+        jobs = owners["bundle_refresh_jobs"]
         session.execute(
             text(
-                """
-                INSERT INTO bundle_refresh_jobs (
+                f"""
+                INSERT INTO {jobs} (
                     job_id, scene, job_type, status, requested_by, policy_version,
                     source_schema, bundle_schema, filters_json, input_total
                 ) VALUES (
@@ -127,11 +106,12 @@ def set_bundle_refresh_job_running(job_id: str) -> None:
     if not _ensure_engine_available("bundle_refresh_manager"):
         return
     with Session(engine) as session:
-        _ensure_tables(session)
+        owners = _ensure_tables(session)
+        jobs = owners["bundle_refresh_jobs"]
         session.execute(
             text(
-                """
-                UPDATE bundle_refresh_jobs
+                f"""
+                UPDATE {jobs}
                 SET status = 'running', started_at = CURRENT_TIMESTAMP
                 WHERE job_id = :job_id
                 """
@@ -153,11 +133,12 @@ def complete_bundle_refresh_job(
     if not _ensure_engine_available("bundle_refresh_manager"):
         return
     with Session(engine) as session:
-        _ensure_tables(session)
+        owners = _ensure_tables(session)
+        jobs = owners["bundle_refresh_jobs"]
         session.execute(
             text(
-                """
-                UPDATE bundle_refresh_jobs
+                f"""
+                UPDATE {jobs}
                 SET
                     status = :status,
                     processed = :processed,
@@ -208,11 +189,12 @@ def record_bundle_refresh_failure(
         return
 
     with Session(engine) as session:
-        _ensure_tables(session)
+        owners = _ensure_tables(session)
+        failures = owners["bundle_refresh_failures"]
         session.execute(
             text(
-                """
-                INSERT INTO bundle_refresh_failures (
+                f"""
+                INSERT INTO {failures} AS current_failure (
                     scene, institute_id, patient_id, visit_id, policy_version,
                     source_schema, bundle_schema, trigger_source, error_stage,
                     error_message, error_detail, attempt_count, first_failed_at,
@@ -232,7 +214,7 @@ def record_bundle_refresh_failure(
                     error_stage = EXCLUDED.error_stage,
                     error_message = EXCLUDED.error_message,
                     error_detail = EXCLUDED.error_detail,
-                    attempt_count = bundle_refresh_failures.attempt_count + 1,
+                    attempt_count = current_failure.attempt_count + 1,
                     last_failed_at = CURRENT_TIMESTAMP,
                     last_job_id = EXCLUDED.last_job_id,
                     resolved = FALSE,
@@ -268,11 +250,12 @@ def mark_bundle_refresh_success(
         return
     normalized_scene = _normalize_scene(scene)
     with Session(engine) as session:
-        _ensure_tables(session)
+        owners = _ensure_tables(session)
+        failures = owners["bundle_refresh_failures"]
         session.execute(
             text(
-                """
-                UPDATE bundle_refresh_failures
+                f"""
+                UPDATE {failures}
                 SET
                     resolved = TRUE,
                     resolved_at = CURRENT_TIMESTAMP,
@@ -344,7 +327,8 @@ def list_bundle_refresh_failures(
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     with Session(engine) as session:
-        _ensure_tables(session)
+        owners = _ensure_tables(session)
+        failures = owners["bundle_refresh_failures"]
         rows = session.execute(
             text(
                 f"""
@@ -353,7 +337,7 @@ def list_bundle_refresh_failures(
                     source_schema, bundle_schema, trigger_source, error_stage, error_message,
                     error_detail, attempt_count, first_failed_at, last_failed_at,
                     last_retry_at, last_job_id, resolved, resolved_at, resolved_by
-                FROM bundle_refresh_failures
+                FROM {failures}
                 {where_sql}
                 ORDER BY resolved ASC, last_failed_at DESC, id DESC
                 LIMIT :limit_rows OFFSET :offset_rows
@@ -363,7 +347,7 @@ def list_bundle_refresh_failures(
         ).mappings().all()
         total = int(
             session.execute(
-                text(f"SELECT COUNT(*) FROM bundle_refresh_failures {where_sql}"),
+                text(f"SELECT COUNT(*) FROM {failures} {where_sql}"),
                 {k: v for k, v in params.items() if k not in {"limit_rows", "offset_rows"}},
             ).scalar()
             or 0
@@ -456,7 +440,8 @@ def list_bundle_refresh_jobs(
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     with Session(engine) as session:
-        _ensure_tables(session)
+        owners = _ensure_tables(session)
+        jobs = owners["bundle_refresh_jobs"]
         rows = session.execute(
             text(
                 f"""
@@ -464,7 +449,7 @@ def list_bundle_refresh_jobs(
                     job_id, scene, job_type, status, requested_by, policy_version,
                     source_schema, bundle_schema, filters_json, input_total,
                     processed, succeeded, failed, error, created_at, started_at, finished_at
-                FROM bundle_refresh_jobs
+                FROM {jobs}
                 {where_sql}
                 ORDER BY created_at DESC
                 LIMIT :limit_rows OFFSET :offset_rows
@@ -474,7 +459,7 @@ def list_bundle_refresh_jobs(
         ).mappings().all()
         total = int(
             session.execute(
-                text(f"SELECT COUNT(*) FROM bundle_refresh_jobs {where_sql}"),
+                text(f"SELECT COUNT(*) FROM {jobs} {where_sql}"),
                 {k: v for k, v in params.items() if k not in {"limit_rows", "offset_rows"}},
             ).scalar()
             or 0

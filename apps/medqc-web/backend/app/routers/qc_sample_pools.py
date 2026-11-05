@@ -17,6 +17,7 @@ from ..core.response import get_trace_id, success_response
 from ..core.settings import get_settings
 from ..core.security import get_current_user, require_roles
 from ..services.product_activation import require_product_activation
+from ..services.customer_test_storage import CustomerTestStorageError
 from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD, get_fast_screen_full_rule_ids
 from ..routers.qc_sichuan import (
     _build_workspace_record_scene_snapshot,
@@ -527,6 +528,8 @@ async def create_test_record(
             payload=payload.model_dump(mode="json"),
             created_by=_current_user_id(current_user),
         )
+    except CustomerTestStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return success_response(

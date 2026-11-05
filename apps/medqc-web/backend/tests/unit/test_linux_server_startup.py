@@ -62,7 +62,7 @@ def test_core_schema_validation_is_readonly_and_optional_tables_are_not_required
         def execute(self, statement):
             events.append(str(statement))
             return SimpleNamespace(
-                scalars=lambda: SimpleNamespace(all=lambda: ["20261102_000062"])
+                scalars=lambda: SimpleNamespace(all=lambda: ["20261105_000063"])
             )
 
         def rollback(self):
@@ -82,6 +82,8 @@ def test_core_schema_validation_is_readonly_and_optional_tables_are_not_required
                 for n in auth_store._REQUIRED_AUTH_COLUMNS | {"institute_id"}
             ]
 
+    from app.services.bundles import refresh_storage
+    monkeypatch.setattr(refresh_storage, "bind_storage", lambda _: {})
     monkeypatch.setattr(server_startup.sa, "inspect", lambda _: Inspector())
     monkeypatch.setattr(
         user_scope_owner, "configured_search_path", lambda: ["sys", "qc", "public"]

@@ -14,8 +14,10 @@ def validate_server_schema(engine):
                 .scalars()
                 .all()
             )
-            if heads != ["20261102_000062"]:
-                raise RuntimeError("server_business_migration_062_required")
+            if heads != ["20261105_000063"]:
+                raise RuntimeError("server_business_migration_063_required")
+            from ..services.bundles.refresh_storage import bind_storage
+            bind_storage(conn)
             inspector = sa.inspect(conn)
             for table in (
                 "manual_problem_sample_pools",

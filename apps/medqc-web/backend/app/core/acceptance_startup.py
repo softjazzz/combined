@@ -129,6 +129,8 @@ def validate_acceptance_schema(engine: Engine | None, *, schema_mode: str) -> No
         try:
             # 在首次反射前保护当前事务；失败和成功都回滚，不修复结构。
             connection.execute(sa.text("SET TRANSACTION READ ONLY"))
+            from ..services.bundles.refresh_storage import bind_storage
+            bind_storage(connection)
             inspector = sa.inspect(connection)
             for schema, tables in _REQUIRED_TABLES.items():
                 for table in tables:

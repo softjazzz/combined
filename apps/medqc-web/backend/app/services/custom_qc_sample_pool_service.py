@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 
 from .clinical_read import clinical_query
+from .customer_test_storage import business_material_operation, reflect_materials, CustomerTestStorageError, local_schema
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import (
     AdmissionRecord,
@@ -4055,15 +4056,6 @@ class CustomQCSamplePoolService:
             return None
 
     @staticmethod
-    def _reflect_cdm_table(table_name: str, metadata: MetaData) -> Optional[Table]:
-        if engine is None:
-            raise RuntimeError("DATABASE_URL is not configured; sample pool unavailable")
-        try:
-            return Table(table_name, metadata, autoload_with=engine)
-        except Exception:
-            return None
-
-    @staticmethod
     def _upsert_reflected_rows(session: Session, table: Table, rows: Sequence[Dict[str, Any]]) -> int:
         cleaned_rows: List[Dict[str, Any]] = []
         allowed_columns = set(table.c.keys())
@@ -4151,6 +4143,7 @@ class CustomQCSamplePoolService:
             return {"application_id": f"{visit_id}-BLOOD-APP-{index:03d}"}
         return {}
 
+    @business_material_operation
     def create_customer_test_record(
         self,
         *,
@@ -4331,12 +4324,14 @@ class CustomQCSamplePoolService:
                 "order_datetime": record_time or submit_time,
                 "record_content": content,
             }
+            if table_name in {"exam_item_report", "labtest_item_report"}:
+                row["report_time"] = record_time or submit_time
             rows_by_table.setdefault(table_name, []).append(row)
 
         inserted_summary: Dict[str, int] = {}
-        metadata = MetaData()
         session = _session()
         try:
+            reflected = reflect_materials(session, rows_by_table)
             existing_pool = session.execute(
                 select(self._pool_table.c.id).where(self._pool_table.c.id == CUSTOMER_TEST_POOL_ID)
             ).first()
@@ -4370,9 +4365,7 @@ class CustomQCSamplePoolService:
                 )
 
             for table_name, rows in rows_by_table.items():
-                table = self._reflect_cdm_table(table_name, metadata)
-                if table is None:
-                    continue
+                table = reflected[table_name]
                 inserted_summary[table_name] = self._upsert_reflected_rows(session, table, rows)
 
             # manual_problem_sample_pool_items.id is varchar(36); keep the
@@ -4464,6 +4457,11 @@ class CustomQCSamplePoolService:
             session.execute(statement)
             self._update_pool_counters(session, CUSTOMER_TEST_POOL_ID)
             session.commit()
+        except Exception as error:
+            session.rollback()
+            if isinstance(error, CustomerTestStorageError):
+                raise
+            raise CustomerTestStorageError("customer_material_transaction_failed") from None
         finally:
             session.close()
 
@@ -4480,6 +4478,7 @@ class CustomQCSamplePoolService:
                 table_name="mr",
                 rows=rows_by_table.get("mr") or bundle_rows,
                 policy_version="customer_test_record_builder",
+                ensure_existing_only=True,
                 sync_scene="running",
                 allow_frontpage_only=False,
                 latest_mirror_success_time=datetime.now(),
@@ -4490,18 +4489,24 @@ class CustomQCSamplePoolService:
                 scene="running",
                 rows=bundle_rows,
                 policy_version="customer_test_record_builder",
+                source_schema=local_schema(),
+                continue_on_error=False,
             )
             refresh_scene_bundles_for_rows(
                 scene="final",
                 rows=bundle_rows,
                 policy_version="customer_test_record_builder",
+                source_schema=local_schema(),
+                continue_on_error=False,
             )
             refresh_domain_bundles_for_rows(
                 rows=bundle_rows,
                 policy_version="customer_test_record_builder",
+                source_schema=local_schema(),
+                continue_on_error=False,
             )
         except Exception as exc:
-            bundle_error = _safe_text(str(exc))
+            bundle_error = "customer_bundle_refresh_failed:" + type(exc).__name__
 
         session = _session()
         try:
@@ -4520,6 +4525,8 @@ class CustomQCSamplePoolService:
                             scene="running",
                             rows=bundle_rows,
                             policy_version="customer_test_record_builder",
+                            source_schema=local_schema(),
+                            continue_on_error=False,
                         )
                         bundle_status = self._wait_running_bundle_ready(
                             institute_id=CUSTOMER_TEST_INSTITUTE_ID,
