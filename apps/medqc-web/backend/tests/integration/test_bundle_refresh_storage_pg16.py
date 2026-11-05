@@ -348,6 +348,9 @@ def setup_case(db, monkeypatch, mode):
         "exam_item_report",
         "daily_course_record",
         "consultation_record",
+        "discharge_record",
+        "senior_course_record",
+        "surgery_record",
     ]
     for name in names:
         table = next(t for t in cdm.Base.metadata.tables.values() if t.name == name)
@@ -409,11 +412,13 @@ def test_customer_material_commit_and_bundle_same_source(db, monkeypatch, mode):
     assert sum(result["inserted_tables"].values()) == 9
     with owner.connect() as c:
         for table in names:
-            assert (
-                c.execute(
-                    sa.text(f'SELECT count(*) FROM "{schema}"."{table}"')
-                ).scalar()
-                == 1
+            assert c.execute(
+                sa.text(f'SELECT count(*) FROM "{schema}"."{table}"')
+            ).scalar() == (
+                0
+                if table
+                in {"discharge_record", "senior_course_record", "surgery_record"}
+                else 1
             )
         import hashlib
         from datetime import datetime
@@ -479,6 +484,31 @@ def test_customer_material_commit_and_bundle_same_source(db, monkeypatch, mode):
             visit_id=result["visit_id"],
         )
         assert rows[0]["record_content"] == "synthetic-content-daily_course_record"
+
+    from app.services.clinical_sources import legacy_snapshot
+    from app.services.luxian_0609.evidence_snapshot_provider import (
+        build_luxian_0609_evidence_read_session,
+    )
+
+    with clinical_connection.selected(legacy_snapshot()):
+        formal = build_luxian_0609_evidence_read_session(
+            selected_rule_ids=("LX0609-06-01-04",),
+            institute_id="CUSTOMER_TEST",
+            patient_id=result["patient_id"],
+            visit_id=result["visit_id"],
+            source_schema=schema,
+            created_at="2026-01-04T20:00:00+08:00",
+            evaluation_as_of_date="2026-01-04",
+        )
+    report_rows = formal.materials.rows("exam_item_report")
+    course_rows = formal.materials.rows("daily_course_record")
+    assert len(report_rows) == len(course_rows) == 1
+    assert report_rows[0]["record_content"] == "synthetic-content-exam_report"
+    assert course_rows[0]["record_content"] == "synthetic-content-daily_course_record"
+    assert report_rows[0]["document_id"] != course_rows[0]["document_id"]
+    assert "2026-01-02" in str(report_rows[0]["report_time"])
+    assert "10:00:00" in str(report_rows[0]["report_time"])
+    assert "12:00:00" in str(course_rows[0]["record_datetime"])
 
 
 @pytest.mark.parametrize(
@@ -648,3 +678,99 @@ def no_models(monkeypatch):
     monkeypatch.setattr(SichuanQCLLMClient, "generate", denied)
     yield
     assert calls == []
+
+
+@pytest.mark.parametrize("mode", ["single", "split"])
+@pytest.mark.parametrize(
+    "kind", ["discharge_record", "senior_course_record", "surgery_record", "mixed"]
+)
+@pytest.mark.parametrize("explicit", [False, True])
+def test_submit_only_and_explicit_record_time_api_pg16(
+    db, monkeypatch, mode, kind, explicit
+):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.routers import qc_sample_pools as router
+
+    service, schema, _ = setup_case(db, monkeypatch, mode)
+    owner, _ = db
+    kinds = (
+        ["discharge_record", "senior_course_record", "surgery_record"]
+        if kind == "mixed"
+        else [kind]
+    )
+    payload = make_case()
+    payload["documents"] = payload["documents"] if kind == "mixed" else []
+    for document_kind in kinds:
+        payload["documents"].append(
+            {
+                "document_type": document_kind,
+                "title": "synthetic-" + document_kind,
+                "content": "synthetic-content-" + document_kind,
+                "submit_time": "2026-01-03T10:00:00",
+                **({"record_time": "2026-01-03T09:00:00"} if explicit else {}),
+            }
+        )
+    monkeypatch.setattr(router, "_service", lambda: service)
+    app = FastAPI()
+    app.post("/synthetic/test-records")(router.create_test_record)
+    app.dependency_overrides[router.get_current_user] = lambda: {
+        "id": "synthetic",
+        "role": "admin",
+    }
+    with TestClient(app) as client:
+        response = client.post("/synthetic/test-records", json=payload)
+    pool_schema = "qc" if mode == "split" else "public"
+    with owner.connect() as c:
+        if explicit:
+            assert response.status_code == 503, response.text
+            assert (
+                response.json()["detail"]
+                == "customer_material_time_column:" + schema + "." + kinds[0]
+            )
+            for table in [
+                f"{pool_schema}.manual_problem_sample_pools",
+                f"{pool_schema}.manual_problem_sample_pool_items",
+                f"{schema}.patient_information",
+                f"{schema}.mr",
+                *[f"{schema}.{name}" for name in kinds],
+            ]:
+                assert c.execute(sa.text("SELECT count(*) FROM " + table)).scalar() == 0
+            return
+        assert response.status_code == 200, response.text
+        result = response.json()["data"]
+        assert result["bundle_status"] == "ready" and not result["bundle_error"]
+        for document_kind in kinds:
+            row = c.execute(
+                sa.text(f'SELECT to_jsonb(t) FROM "{schema}"."{document_kind}" t')
+            ).scalar_one()
+            assert row["record_content"] == "synthetic-content-" + document_kind
+            assert (
+                row["patient_id"] == result["patient_id"]
+                and row["visit_id"] == result["visit_id"]
+            )
+            assert row["submit_datetime"] == "2026-01-03T10:00:00"
+            assert row.get("record_datetime") is None and row.get("record_time") is None
+            domain = {
+                "discharge_record": "terminal_domain_bundle",
+                "senior_course_record": "course_domain_bundle",
+                "surgery_record": "surgery_domain_bundle",
+            }[document_kind]
+            context = c.execute(
+                sa.text(f'SELECT structured_context FROM public."{domain}"')
+            ).scalar_one()
+            document = context["documents"][document_kind][0]
+            assert document["record_content"] == row["record_content"]
+            assert document["submit_datetime"] == row["submit_datetime"]
+            assert (
+                document.get("record_datetime") is None
+                and document.get("record_time") is None
+            )
+        assert (
+            c.execute(
+                sa.text(
+                    f'SELECT count(*) FROM "{pool_schema}".manual_problem_sample_pool_items'
+                )
+            ).scalar()
+            == 1
+        )

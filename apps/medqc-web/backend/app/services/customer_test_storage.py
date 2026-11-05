@@ -60,7 +60,9 @@ def reflect_materials(session, rows_by_table):
                 )
                 if name in ("exam_item_report", "labtest_item_report"):
                     required.add("report_time")
-                elif name != "inpat_nondrug_order" and "record_datetime" in rows[0]:
+                elif name != "inpat_nondrug_order" and any(
+                    row.get("record_datetime") is not None for row in rows
+                ):
                     # 不同文书有不同权威时钟；至少保留显式输入时间，而非丢弃后补零点。
                     if not ({"record_datetime", "record_time"} & set(table.c.keys())):
                         raise CustomerTestStorageError(
@@ -81,6 +83,11 @@ def reflect_materials(session, rows_by_table):
                 raise CustomerTestStorageError(
                     "customer_material_primary_key:" + schema + "." + name
                 )
+            # 仅映射已提供的记录时刻，不能生成或覆盖提交时刻。
+            if "record_datetime" not in table.c and "record_time" in table.c:
+                for row in rows:
+                    if row.get("record_datetime") is not None:
+                        row["record_time"] = row["record_datetime"]
             for c in table.columns:
                 if (
                     not c.nullable
@@ -108,10 +115,6 @@ def reflect_materials(session, rows_by_table):
                 raise CustomerTestStorageError(
                     "customer_material_permissions:" + schema + "." + name
                 )
-            # 旧表使用record_time时，显式映射原输入，不丢失真实记录时刻。
-            if "record_datetime" not in table.c and "record_time" in table.c:
-                for row in rows:
-                    row["record_time"] = row.get("record_datetime")
             result[name] = table
         return result
     except CustomerTestStorageError:

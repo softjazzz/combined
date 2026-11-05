@@ -4319,7 +4319,8 @@ class CustomQCSamplePoolService:
                 "submitter": _safe_text(document.get("doctor_name"), "测试医师"),
                 "submitter_id": _safe_text(document.get("doctor_code"), "CUSTOMER-DOCTOR"),
                 "submit_datetime": submit_time,
-                "record_datetime": record_time or submit_time,
+                # 未明确填写记录时间时保持未知，不把提交时间提升为记录事实。
+                "record_datetime": record_time,
                 "report_datetime": record_time or submit_time,
                 "order_datetime": record_time or submit_time,
                 "record_content": content,
