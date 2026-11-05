@@ -254,6 +254,8 @@ def test_ambiguous_owner_blocks_without_changing_history(db, has_history):
         "sequence",
         "schema_usage",
         "explicit_sequence",
+        "deferrable_unique",
+        "wrong_sort",
     ],
 )
 def test_incompatible_or_unauthorized_storage_refused(db, damage):
@@ -263,6 +265,8 @@ def test_incompatible_or_unauthorized_storage_refused(db, damage):
     migrate(owner)
     grant(owner)
     sqls = {
+        "deferrable_unique": "ALTER TABLE qc.bundle_refresh_failures DROP CONSTRAINT uq_bundle_refresh_failure_case; ALTER TABLE qc.bundle_refresh_failures ADD CONSTRAINT uq_bundle_refresh_failure_case UNIQUE(scene,institute_id,patient_id,visit_id) DEFERRABLE",
+        "wrong_sort": "DROP INDEX qc.idx_bundle_refresh_failures_list; CREATE INDEX idx_bundle_refresh_failures_list ON qc.bundle_refresh_failures(resolved,last_failed_at,id)",
         "missing_column": "ALTER TABLE qc.bundle_refresh_failures DROP COLUMN error_detail",
         "missing_unique": "ALTER TABLE qc.bundle_refresh_failures DROP CONSTRAINT uq_bundle_refresh_failure_case",
         "missing_default": "ALTER TABLE qc.bundle_refresh_jobs ALTER COLUMN processed DROP DEFAULT",
@@ -454,7 +458,14 @@ def test_customer_material_commit_and_bundle_same_source(db, monkeypatch, mode):
             )
         ).one()
         assert "synthetic-content-daily_course_record" in bundle.medical_text
-        assert "synthetic-content-exam_report" in bundle.medical_text
+        # 检查报告属于既有course域Bundle，不强行改变运行病历medical_text合同。
+        course = c.execute(
+            sa.text(
+                "SELECT medical_text,structured_context FROM public.course_domain_bundle"
+            )
+        ).one()
+        assert "synthetic-content-exam_report" in course.medical_text
+        assert "exam_item_report" in json.dumps(course.structured_context)
     with clinical_connection.selected({"id": "legacy_pg", "binding": ""}):
         rows = assembly._select_records(
             schema=schema,

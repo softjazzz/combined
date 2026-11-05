@@ -164,12 +164,12 @@ def validate_table(connection, schema, table, *, permissions=True):
     indexes = (
         connection.execute(
             sa.text("""
-        SELECT i.indisunique,i.indisvalid,i.indisready,i.indpred IS NULL AS whole,
+        SELECT i.indisunique,i.indimmediate,am.amname,i.indisvalid,i.indisready,i.indpred IS NULL AS whole,
             i.indexprs IS NULL AS plain, i.indoption::smallint[] AS options,
             ARRAY(SELECT a.attname::text FROM unnest(i.indkey::smallint[]) WITH ORDINALITY k(num,pos)
                   JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.num
                   WHERE k.pos<=i.indnkeyatts ORDER BY k.pos) AS keys
-        FROM pg_index i WHERE i.indrelid=to_regclass(:name)
+        FROM pg_index i JOIN pg_class ix ON ix.oid=i.indexrelid JOIN pg_am am ON am.oid=ix.relam WHERE i.indrelid=to_regclass(:name)
     """),
             {"name": name},
         )
@@ -179,10 +179,15 @@ def validate_table(connection, schema, table, *, permissions=True):
     valid_indexes = [
         i
         for i in indexes
-        if i["indisvalid"] and i["indisready"] and i["whole"] and i["plain"]
+        if i["indisvalid"]
+        and i["indisready"]
+        and i["whole"]
+        and i["plain"]
+        and i["amname"] == "btree"
     ]
     if table == TABLES[1] and not any(
         i["indisunique"]
+        and i["indimmediate"]
         and set(i["keys"]) == {"scene", "institute_id", "patient_id", "visit_id"}
         and len(i["keys"]) == 4
         for i in valid_indexes
