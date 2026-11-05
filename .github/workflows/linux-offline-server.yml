@@ -3,10 +3,18 @@ on:
   push:
     branches: [codex/linux-offline-server-20261104]
   workflow_dispatch:
+    inputs:
+      delivery:
+        description: Full install or application-only upgrade
+        type: choice
+        default: full
+        options: [full, application-upgrade]
 permissions:
   contents: read
+  actions: read
 jobs:
   build:
+    if: inputs.delivery != 'application-upgrade'
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:
@@ -86,3 +94,48 @@ jobs:
             ${{ runner.temp }}/medqc-offline/*smoke*
             ${{ runner.temp }}/medqc-offline/install-offline.log
             ${{ runner.temp }}/medqc-offline/VALIDATION.json
+
+  application-upgrade:
+    if: github.event_name == 'workflow_dispatch' && inputs.delivery == 'application-upgrade'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/download-artifact@v4
+        with:
+          name: medqc-linux-offline-validated
+          run-id: 41937037181
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/verified-full
+      - name: Derive application-only package from verified bytes
+        run: |
+          python -B apps/medqc-web/scripts/linux_app_upgrade/make_package.py \
+            --source "$RUNNER_TEMP/verified-full/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" \
+            --output "$RUNNER_TEMP/app-upgrade"
+          tar -C "$RUNNER_TEMP/verified-full" -xzf "$RUNNER_TEMP/verified-full/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz"
+      - name: Existing dependency reuse, stage and rollback in network isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo unshare --net bash -c 'ip link set lo up; exec setpriv --reuid=runner --regid=runner --init-groups --no-new-privs "$@"' bash bash -c '
+            set -euo pipefail
+            python -B apps/medqc-web/scripts/linux_app_upgrade/test_upgrade.py
+            python -B apps/medqc-web/scripts/linux_app_upgrade/smoke_upgrade.py \
+              --kit "$RUNNER_TEMP/app-upgrade/medqc-app-upgrade" \
+              --full "$RUNNER_TEMP/verified-full/medqc-offline" --python "$(command -v python)"
+          ' 2>&1 | tee "$RUNNER_TEMP/app-upgrade/upgrade-smoke.log"
+      - name: Publish validated compact application upgrade
+        uses: actions/upload-artifact@v4
+        with:
+          name: medqc-linux-app-upgrade-validated
+          compression-level: 0
+          path: |
+            ${{ runner.temp }}/app-upgrade/*.tar.gz
+            ${{ runner.temp }}/app-upgrade/*.sha256
+            ${{ runner.temp }}/app-upgrade/UPGRADE-VALIDATION.json
+            ${{ runner.temp }}/app-upgrade/upgrade-smoke.log
