@@ -24,6 +24,13 @@ export interface ClinicalSourceSettings {
     username: string
   }
 }
+export interface ClinicalSourceCheck {
+  connected: boolean
+  ok: boolean
+  read_only: boolean
+  publication_ready: boolean | null
+  dependencies: Array<{ table: string; required: boolean; status: string; missing_columns: string[] }>
+}
 interface Envelope<T> {
   success: boolean
   data: T
@@ -46,7 +53,7 @@ export const clinicalSourcesApi = {
   async check(value: ClinicalSourceSettings) {
     return unwrap(
       (
-        await http.post<Envelope<{ connected: boolean; read_only: boolean }>>(
+        await http.post<Envelope<ClinicalSourceCheck>>(
           `${base}/check`,
           value,
         )

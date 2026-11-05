@@ -1,10 +1,10 @@
 """独立CDM病历目录：临床查询只在源库执行，结果摘要另从业务库装配。"""
-from datetime import datetime, time
+from datetime import date, datetime
 from functools import lru_cache
 from fastapi import HTTPException
 import math
 
-from sqlalchemy import DateTime, MetaData, Table, String, and_, case, cast, func, literal, or_, select, tuple_, union_all
+from sqlalchemy import Date, DateTime, MetaData, Table, String, and_, case, cast, func, inspect, literal, or_, select, tuple_, union_all
 
 from ..database import clinical_connection as clinical
 from .data_pipeline_settings import PipelineError
@@ -16,7 +16,7 @@ FIELDS = {
     "insurance": ("insurance_type_name", "insurance_type"), "bed": ("bed_no",),
     "department": ("discharge_dept_name", "admission_dept_name", "dept_name"),
     "doctor": ("attending_physician_sign",), "mr_no": ("mr_no", "inpat_no"),
-    "admission": ("admission_datetime",), "discharge": ("discharge_datetime", "discharge_time"),
+    "admission": ("admission_datetime", "admission_date"), "discharge": ("discharge_datetime", "discharge_time", "discharge_date"),
     "updated": ("last_modified_datetime", "last_modified_time", "record_datetime", "record_time"),
 }
 
@@ -27,6 +27,8 @@ def catalog(engine):
     queries = []
     # mr可为空；住院登记及入院记录同样进入目录，不以首页是否生成作为病例存在门槛。
     for priority, name in enumerate(REQUIRED_TABLES):
+        if name == "inpat_registration" and not inspect(engine).has_table(name, schema="cdm"):
+            continue
         table = Table(name, metadata, schema="cdm", autoload_with=engine)
         if not set(KEYS) <= set(table.c.keys()):
             raise PipelineError("clinical_source_contract_incomplete", 503)
@@ -72,7 +74,9 @@ def resolve_identity(record_id: str, *, patient_id: str | None = None) -> dict:
 def _datetime(value):
     if not value:
         return None
-    result = datetime.fromisoformat(str(value))
+    if len(str(value)) == 10:
+        return date.fromisoformat(str(value))
+    result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     if result.tzinfo:
         from zoneinfo import ZoneInfo
         result = result.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
@@ -92,9 +96,12 @@ def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None
     if keyword:
         predicates.append(or_(*[source.c[k].contains(keyword, autoescape=True) for k in ("name", "mr_no", "visit_id")]))
     if hospital_status == "inpatient":
-        predicates.extend([source.c.discharge.is_(None), source.c.admission.is_not(None)])
+        # 当前发布合同没有权威在院登记；没有出院信息不能证明在院。
+        predicates.append(literal(False))
     elif hospital_status == "discharged":
         predicates.append(source.c.discharge.is_not(None))
+    elif hospital_status == "unknown":
+        predicates.append(source.c.discharge.is_(None))
     # 与既有病历池一致：visit范围包含入院或出院，不能仅按入院过滤。
     if start_date or end_date:
         names = ("admission", "discharge") if date_field in (None, "visit") else (date_field,)
@@ -102,9 +109,9 @@ def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None
         for name in names:
             bounds = []
             if start_date:
-                bounds.append(cast(source.c[name], DateTime) >= datetime.combine(start_date, time.min))
+                bounds.append(cast(source.c[name], Date) >= start_date)
             if end_date:
-                bounds.append(cast(source.c[name], DateTime) <= datetime.combine(end_date, time.max))
+                bounds.append(cast(source.c[name], Date) <= end_date)
             ranges.append(and_(*bounds))
         predicates.append(or_(*ranges))
     if institute_id:
@@ -147,7 +154,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
     if sync_scope not in (None, "all"):
         # CDM发布不是HIS实时在院核验；不能冒充“今日核验”。
         raise PipelineError("clinical_source_live_status_not_supported", 422)
-    if hospital_status not in (None, "all", "inpatient", "discharged") or date_field not in (None, "visit", "admission", "discharge", "updated"):
+    if hospital_status not in (None, "all", "inpatient", "discharged", "unknown") or date_field not in (None, "visit", "admission", "discharge", "updated"):
         raise PipelineError("invalid_clinical_catalog_filter", 422)
     try:
         engine = clinical.get_engine()
@@ -181,10 +188,13 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                 "age": row["age"] or "", "bedNo": row["bed"] or "", "insurance": row["insurance"] or "",
                 "department": row["department"] or "未分科室", "doctor": row["doctor"] or "未返回",
                 "admissionDate": admission.isoformat() if admission else "", "dischargeDate": discharge.isoformat() if discharge else "",
-                "dischargeDatetime": discharge.isoformat() if discharge else None,
-                "hospitalizationStatus": "discharged" if discharge else "inpatient" if admission else "unknown",
-                "hospitalizationStatusSource": "cdm_published", "updateTime": row["updated"] or "",
-                "days": max(0, ((discharge or datetime.now()) - admission).days) if admission else 0,
+                "admissionPrecision": "datetime" if isinstance(admission, datetime) else "date" if admission else "unknown",
+                "dischargePrecision": "datetime" if isinstance(discharge, datetime) else "date" if discharge else "unknown",
+                "dischargeDatetime": discharge.isoformat() if isinstance(discharge, datetime) else None,
+                "hospitalizationStatus": "discharged" if discharge else "unknown",
+                "hospitalizationStatusSource": "cdm_observed_discharge" if discharge else "cdm_inpatient_unconfirmed",
+                "materialCompleteness": "首页未观察到" if not row["has_frontpage"] else "发布完整性尚未证明", "updateTime": row["updated"] or "",
+                "days": max(0, (((discharge.date() if isinstance(discharge, datetime) else discharge) or date.today()) - (admission.date() if isinstance(admission, datetime) else admission)).days) if admission else 0,
                 "status": "not_run", "cdmFrontpageEmpty": not bool(row["has_frontpage"]),
                 "latest_qc_summary": summaries.get(identity)})
         return {"records": records, "total": total, "page": page, "pageSize": page_size,

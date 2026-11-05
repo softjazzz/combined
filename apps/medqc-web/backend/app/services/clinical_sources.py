@@ -132,6 +132,13 @@ def prepare_request(request: Request) -> None:
             material_source_schema(default_schema="cdm", **identity)
         except Exception:
             raise HTTPException(422, "clinical_material_identity_unavailable") from None
+        job_id = request.query_params.get("job_id") if path.startswith("/api/v1/emr/") else None
+        if job_id:
+            selection = source_for_saved_job(request, job_id)
+            if selection["id"] != "legacy_pg":
+                raise HTTPException(409, "clinical_material_job_source_mismatch")
+            # 用户指定PDF副本沿用原读取链，不要求或生成新的任务材料快照。
+            request.state.material_root_job_id = ""
         request.state.clinical_source = legacy_snapshot()
         return
     try:
@@ -166,8 +173,22 @@ def prepare_request(request: Request) -> None:
 
 
 async def bind_request(request: Request):
+    from . import case_material_snapshot as materials
     with clinical.selected(getattr(request.state, "clinical_source", legacy_snapshot())):
-        yield
+        frozen = None
+        root_job = getattr(request.state, "material_root_job_id", "")
+        if root_job:
+            identity = tuple(request.query_params.get(key) or request.path_params.get(key) or "" for key in ("institute_id", "patient_id", "visit_id"))
+            try:
+                frozen = materials.load(root_job, identity)
+                if frozen is None:
+                    raise HTTPException(409, "historical_material_snapshot_not_retained")
+                if request.query_params.get("source_view") == "current":
+                    raise HTTPException(409, "historical_and_current_material_views_conflict")
+            except materials.MaterialSnapshotError:
+                raise HTTPException(409, "historical_material_snapshot_unavailable") from None
+        with materials.activate(frozen):
+            yield
 
 
 def source_for_saved_job(request: Request, job_id: str) -> dict:
@@ -177,7 +198,7 @@ def source_for_saved_job(request: Request, job_id: str) -> dict:
         raise PipelineError("clinical_source_job_unavailable", 503)
     try:
         with SessionLocal() as session:
-            row = session.execute(text("SELECT created_by,filters_json FROM qc.custom_qc_batch_jobs WHERE id=:id"), {"id": job_id}).first()
+            row = session.execute(text("SELECT created_by,filters_json,parent_job_id FROM qc.custom_qc_batch_jobs WHERE id=:id"), {"id": job_id}).first()
         if row is None:
             raise PipelineError("clinical_source_job_not_found", 404)
         actor = getattr(request.state, "current_user", {})
@@ -185,6 +206,7 @@ def source_for_saved_job(request: Request, job_id: str) -> dict:
             raise PipelineError("clinical_source_job_forbidden", 403)
         filters = json.loads(row[1] or "{}")
         selection = saved_snapshot(filters)
+        request.state.material_root_job_id = str(row[2] or filters.get("parent_job_id") or job_id)
         if TASK_KEY in filters:
             identity = tuple(request.query_params.get(k) or request.path_params.get(k) or "" for k in ("institute_id", "patient_id", "visit_id"))
             refs = filters.get("record_refs") or []

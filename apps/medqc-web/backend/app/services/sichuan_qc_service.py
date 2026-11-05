@@ -1,3 +1,4 @@
+from . import case_material_snapshot as case_material
 
 from typing import Callable, Dict, Any, List, Optional, Tuple
 from dataclasses import replace
@@ -2695,6 +2696,7 @@ class SichuanQCService:
         return best_signal
 
     @staticmethod
+    @case_material.material_query
     def _resolve_primary_diagnosis_context(
         *,
         institute_id: str,
@@ -2706,7 +2708,8 @@ class SichuanQCService:
         source_engine = get_engine()
         if source_engine is None and SessionLocal is None:
             return None
-        session = Session(source_engine) if source_engine is not None else SessionLocal()
+        material_bind = case_material.session_bind(source_engine)
+        session = Session(material_bind) if material_bind is not None else SessionLocal()
         try:
             rows = (
                 clinical_query(session, Diagnosis)
@@ -2736,6 +2739,7 @@ class SichuanQCService:
             session.close()
 
     @staticmethod
+    @case_material.material_query
     def _load_same_disease_first_course_candidates(
         *,
         institute_id: str,
@@ -2751,7 +2755,8 @@ class SichuanQCService:
         source_engine = get_engine()
         if not dept_name or source_engine is None and SessionLocal is None:
             return []
-        session = Session(source_engine) if source_engine is not None else SessionLocal()
+        material_bind = case_material.session_bind(source_engine)
+        session = Session(material_bind) if material_bind is not None else SessionLocal()
         try:
             diagnosis_query = clinical_query(session, Diagnosis).filter(
                 Diagnosis.institute_id == institute_id,

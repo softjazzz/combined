@@ -89,7 +89,7 @@ async def get_workstation_data_api(
     start_date: Optional[date] = Query(None, description="筛选开始日期"),
     end_date: Optional[date] = Query(None, description="筛选结束日期"),
     date_field: Optional[str] = Query("visit", description="日期字段：visit/admission/discharge/updated"),
-    hospital_status: Literal["all", "inpatient", "discharged"] = Query(
+    hospital_status: Literal["all", "inpatient", "discharged", "unknown"] = Query(
         "all",
         description="住院状态：all/inpatient/discharged；按权威出院时间判定",
     ),

@@ -854,7 +854,7 @@ const priorityCardsFiltered = computed(() => {
 
 const totalVisibleCount = computed(() => displayServerTotal.value || listRecords.value.length)
 const activeHospLabel = computed(
-  () => hospOptions.find((option) => option.value === hospFilter.value)?.label || '全部',
+  () => hospOptions.value.find((option) => option.value === hospFilter.value)?.label || '全部',
 )
 const isTodaySyncedInpatientScope = computed(() => syncScope.value === 'today_inpatient')
 const scopeStatusText = computed(() => {
@@ -950,6 +950,10 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
     riskReason: priorityReason(record),
     admissionDate: record.admissionDate || '-',
     dischargeDate: record.dischargeDate || '-',
+    sourceId: record.sourceId,
+    admissionPrecision: record.admissionPrecision,
+    dischargePrecision: record.dischargePrecision,
+    materialCompleteness: record.materialCompleteness,
     hospitalizationStatus: record.hospitalizationStatus,
     hospitalizationStatusVerifiedAt: record.hospitalizationStatusVerifiedAt,
     updatedAt:

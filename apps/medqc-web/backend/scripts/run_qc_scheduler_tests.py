@@ -56,6 +56,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_exam_result_input_completeness.py",
     ),
     "data-pipelines": (
+        "tests/unit/test_case_material_snapshot.py",
         "tests/unit/test_clinical_sources.py",
         "tests/unit/test_data_pipelines.py",
         "tests/unit/test_independent_cdm_connection.py",

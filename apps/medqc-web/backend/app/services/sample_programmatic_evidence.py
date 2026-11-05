@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from ..database.connection import engine
 from .medical_records.detail_service import get_documents
+from . import case_material_snapshot as case_material
 
 
 _DATETIME_PATTERNS = (
@@ -668,6 +669,9 @@ def _flatten_inventory_items(
         bundle_payload["_source_table_fallback_meta"] = fallback_meta
     if fallback_items:
         return fallback_items
+    if case_material.current() is not None:
+        # 已捕获的空集合就是本轮材料，不能再以visit_id到当前库补文书。
+        return []
     detail_service_items = _fetch_detail_service_fallback_items(_safe_text(bundle_payload.get("visit_id")))
     if detail_service_items:
         bundle_payload["_detail_service_fallback_used"] = True
@@ -675,11 +679,108 @@ def _flatten_inventory_items(
     return []
 
 
+def capture_programmatic_sources(state, cancellation_check):
+    """在既有取材事务捕获补充证据原行，不借业务库连接或放宽三键。"""
+    sources = {}
+    parameters = dict(zip(("institute_id", "patient_id", "visit_id"), state["identity"]))
+    if not all(parameters.values()):
+        raise case_material.MaterialSnapshotError("programmatic_material_identity_missing")
+    for table in (*_SOURCE_TABLES, "inpat_registration"):
+        cancellation_check()
+        columns = state["columns"].get(table)
+        if columns is None:
+            raise case_material.MaterialSnapshotError("uncaptured_programmatic_columns")
+        if not columns:
+            sources[table] = {"unavailable": True}
+            continue
+        if not set(parameters).issubset(columns):
+            raise case_material.MaterialSnapshotError("programmatic_material_visit_keys_missing")
+        with case_material.source_connection(state["engine"]) as connection:
+            rows = connection.execute(text(
+                f'SELECT * FROM "{state["schema"]}"."{table}" '
+                'WHERE institute_id=:institute_id AND patient_id=:patient_id AND visit_id=:visit_id LIMIT 10001'
+            ), parameters).mappings().all()
+        if len(rows) >= 10001:
+            raise case_material.MaterialSnapshotError("programmatic_material_capacity_exceeded")
+        sources[table] = {"rows": [dict(row) for row in rows]}
+    return sources
+
+
+def _frozen_source_table_fallback_items(bundle_payload, strict_limits):
+    """仅投影已捕获的补充材料，缺捕获项与已确认缺表/零行分别处理。"""
+    state = case_material.current()
+    case_material.identity_check(state, tuple(_safe_text(bundle_payload.get(key)) for key in ("institute_id", "patient_id", "visit_id")))
+    sources = state.get("programmatic_sources", {})
+    names = (*_SOURCE_TABLES, "inpat_registration")
+    if any(table not in sources for table in names):
+        raise case_material.MaterialSnapshotError("uncaptured_programmatic_source")
+    items, readiness, structured_readiness, structured_rows = [], {}, {}, {}
+    for table in _SOURCE_TABLES:
+        source = sources[table]
+        strict_limit = (strict_limits or {}).get(table)
+        strict = strict_limit is not None and table in _STRUCTURED_SOURCE_ROW_FIELDS
+        if source.get("unavailable"):
+            readiness[table] = "unavailable"
+            if strict:
+                structured_readiness[table] = "unavailable"
+            continue
+        limit = max(1, int(strict_limit)) if strict else int(_FALLBACK_DOC_FETCH_LIMITS.get(table, 20))
+        if "rows" not in source:
+            raise case_material.MaterialSnapshotError("uncaptured_programmatic_rows")
+        rows = source["rows"][:limit]
+        partial = len(source["rows"]) > limit or (strict and not rows and _bundle_has_source_material(bundle_payload, table))
+        readiness[table] = "partial" if partial else "complete"
+        if strict:
+            structured_readiness[table] = readiness[table]
+            structured_rows[table] = [{field: row.get(field) for field in _STRUCTURED_SOURCE_ROW_FIELDS[table]} for row in rows]
+        items.extend(_project_fallback_rows(table, rows))
+    registration_source = sources["inpat_registration"]
+    if "rows" not in registration_source and not registration_source.get("unavailable"):
+        raise case_material.MaterialSnapshotError("uncaptured_programmatic_registration")
+    registrations = registration_source.get("rows", [])
+    metadata = {key: _safe_text(registrations[0].get(key)) for key in ("admission_datetime", "discharge_datetime")} if registrations else {}
+    bundle_payload["_source_table_readiness"] = readiness
+    bundle_payload["_structured_source_readiness"] = structured_readiness
+    bundle_payload["_structured_source_rows"] = structured_rows
+    return items, metadata
+
+
+def _project_fallback_rows(table_name, rows):
+    fallback_items = []
+    for row in rows:
+        item = dict(row)
+        display_time = _safe_text(item.get("record_time") or item.get("submit_datetime") or item.get("update_time"))
+        row_text = _safe_text(item.get("record_content")) or _item_text(item)
+        fallback_items.append(
+            {
+                "source_table": table_name,
+                "document_type": table_name,
+                "document_id": _safe_text(item.get("document_id")),
+                "test_id": _safe_text(item.get("test_id")),
+                "test_no": _safe_text(item.get("test_no")),
+                "exam_id": _safe_text(item.get("exam_id")),
+                "exam_no": _safe_text(item.get("exam_no")),
+                "document_title": _safe_text(item.get("document_title") or table_name),
+                "record_time": _safe_text(item.get("record_time")),
+                "display_time": display_time,
+                "submit_datetime": _safe_text(item.get("submit_datetime")),
+                "last_modified_time": _safe_text(item.get("last_modified_time")),
+                "update_time": _safe_text(item.get("update_time")),
+                "content": row_text,
+                "text_preview": row_text[:400],
+                "structured_sections": _formal_course_structured_sections(item),
+            }
+        )
+    return fallback_items
+
+
 def _fetch_source_table_fallback_items(
     bundle_payload: dict[str, Any],
     *,
     strict_structured_source_limits: Mapping[str, int] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    if case_material.current() is not None:
+        return _frozen_source_table_fallback_items(bundle_payload, strict_structured_source_limits)
     institute_id = _safe_text(bundle_payload.get("institute_id"))
     visit_id = _safe_text(bundle_payload.get("visit_id"))
     patient_id = _safe_text(bundle_payload.get("patient_id"))
@@ -802,30 +903,7 @@ def _fetch_source_table_fallback_items(
                     }
                     for row in rows
                 ]
-            for row in rows:
-                item = dict(row)
-                display_time = _safe_text(item.get("record_time") or item.get("submit_datetime") or item.get("update_time"))
-                row_text = _safe_text(item.get("record_content")) or _item_text(item)
-                fallback_items.append(
-                    {
-                        "source_table": table_name,
-                        "document_type": table_name,
-                        "document_id": _safe_text(item.get("document_id")),
-                        "test_id": _safe_text(item.get("test_id")),
-                        "test_no": _safe_text(item.get("test_no")),
-                        "exam_id": _safe_text(item.get("exam_id")),
-                        "exam_no": _safe_text(item.get("exam_no")),
-                        "document_title": _safe_text(item.get("document_title") or table_name),
-                        "record_time": _safe_text(item.get("record_time")),
-                        "display_time": display_time,
-                        "submit_datetime": _safe_text(item.get("submit_datetime")),
-                        "last_modified_time": _safe_text(item.get("last_modified_time")),
-                        "update_time": _safe_text(item.get("update_time")),
-                        "content": row_text,
-                        "text_preview": row_text[:400],
-                        "structured_sections": _formal_course_structured_sections(item),
-                    }
-                )
+            fallback_items.extend(_project_fallback_rows(table_name, rows))
         bundle_payload["_source_table_readiness"] = source_readiness
         bundle_payload["_structured_source_readiness"] = (
             structured_source_readiness
@@ -906,6 +984,8 @@ def _bundle_has_source_material(
 
 
 def _fetch_detail_service_fallback_items(visit_id: str) -> list[dict[str, Any]]:
+    if case_material.current() is not None:
+        raise case_material.MaterialSnapshotError("uncaptured_detail_query_forbidden")
     if not visit_id:
         return []
     try:

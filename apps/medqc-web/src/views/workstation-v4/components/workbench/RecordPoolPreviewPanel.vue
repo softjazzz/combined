@@ -40,11 +40,15 @@
         </div>
         <div>
           <dt>入院日期</dt>
-          <dd>{{ displayHospitalDate(row.admissionDate) }}</dd>
+          <dd>{{ displayHospitalDate(row.admissionDate) }}{{ row.admissionPrecision === 'date' ? '（仅日期）' : '' }}</dd>
         </div>
         <div>
           <dt>出院日期</dt>
-          <dd>{{ dischargeDateLabel(row) }}</dd>
+          <dd>{{ dischargeDateLabel(row) }}{{ row.dischargePrecision === 'date' ? '（仅日期）' : '' }}</dd>
+        </div>
+        <div v-if="row.sourceId === 'independent_cdm'">
+          <dt>数据来源</dt>
+          <dd>独立CDM · {{ row.materialCompleteness || '发布完整性未确认' }}</dd>
         </div>
       </dl>
 

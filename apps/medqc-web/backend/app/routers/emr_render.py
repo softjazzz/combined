@@ -14,11 +14,14 @@ from ..services.bundles.emr_view import (
     build_documents_tree,
     load_bundle_document,
     load_bundle_document_summaries,
+    summarize_frozen_documents,
     load_bundle_documents,
     pick_document,
     build_render_view,
 )
 from ..services.bundles.current_view import load_current_documents
+from ..services import case_material_snapshot as case_material
+from copy import deepcopy
 from ..services.qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
 
 router = APIRouter(
@@ -101,6 +104,10 @@ def _load_documents_from_bundle(
     patient_id: Optional[str],
     visit_id: Optional[str],
 ) -> Dict[str, Any]:
+    frozen = case_material.current()
+    if frozen is not None:
+        case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
+        return _project_customer_safe_source_refs(deepcopy(frozen["documents"]))
     normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
     normalized_institute_id = str(institute_id or "").strip()
     normalized_patient_id = str(patient_id or "").strip()
@@ -131,6 +138,11 @@ def _load_document_summaries_from_bundle(
     visit_id: Optional[str],
     execution_domain: Optional[str] = None,
 ) -> Dict[str, Any]:
+    frozen = case_material.current()
+    if frozen is not None:
+        case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
+        return _project_customer_safe_source_refs(summarize_frozen_documents(
+            documents=deepcopy(frozen["documents"]["documents"]), execution_domain=execution_domain))
     normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
     normalized_institute_id = str(institute_id or "").strip()
     normalized_patient_id = str(patient_id or "").strip()
@@ -164,6 +176,15 @@ def _load_document_from_bundle(
     doc_type: str,
     doc_id: str,
 ) -> Dict[str, Any] | None:
+    frozen = case_material.current()
+    if frozen is not None:
+        case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
+        documents = _project_customer_safe_source_refs(deepcopy(frozen["documents"]))["documents"]
+        if doc_id:
+            documents = [doc for doc in documents if str(doc_id) in {
+                str(doc.get(key) or "") for key in ("id", "doc_id", "document_id", "doc_key")
+            } and (not doc_type or doc.get("doc_type") == doc_type)]
+        return pick_document(documents=documents, doc_type=doc_type, doc_id=doc_id)
     normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
     normalized_institute_id = str(institute_id or "").strip()
     normalized_patient_id = str(patient_id or "").strip()

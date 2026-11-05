@@ -5,6 +5,7 @@ from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import text
+from .. import case_material_snapshot as case_material
 
 from ...database.connection import engine
 from ...database.models.cdm import MedicalRecordFrontpage, MrCost, MrSurgery
@@ -52,6 +53,7 @@ def _table(columns: tuple[tuple[str, str], ...], rows: list[dict[str, Any]]) -> 
     }
 
 
+@case_material.material_query
 def load_frontpage_document(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, Any] | None:
     identity = {"institute_id": institute_id, "patient_id": patient_id, "visit_id": visit_id}
     if not all(str(v).strip() for v in identity.values()):
@@ -65,7 +67,7 @@ def load_frontpage_document(*, institute_id: str, patient_id: str, visit_id: str
     from .assembly import _source_engine
     from ...database.clinical_connection import configured
     read_engine = _source_engine("cdm") if configured() and not copy_schema else engine
-    with read_engine.connect() as connection:
+    with case_material.source_connection(read_engine) as connection:
         for table in ("mr", "mr_diagnosis", "mr_surgery", "mr_cost"):
             source_table = "diagnosis" if table == "mr_diagnosis" and configured() and not copy_schema else table
             records = connection.execute(text(

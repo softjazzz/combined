@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Any
 
 from . import assembly, emr_view
+from .. import case_material_snapshot as case_material
 from .frontpage_view import load_frontpage_document
 from ..luxian_0609.basic_timeliness_facts import extract_admission_anchor
 from ..validation_material_source import (
@@ -88,6 +89,10 @@ def load_current_documents(*, institute_id: str, patient_id: str, visit_id: str)
     identity = (institute_id.strip(), patient_id.strip(), visit_id.strip())
     if not all(identity):
         raise ValueError("missing_current_record_identity")
+    frozen = case_material.current()
+    if frozen is not None:
+        case_material.identity_check(frozen, identity)
+        return deepcopy(frozen["documents"])
     key = (*identity, assembly._cache_binding(patient_id, visit_id))
     with _pending_lock:
         future = _pending.get(key)

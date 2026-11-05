@@ -952,6 +952,26 @@ def _collapse_summary_only_documents(documents: list[dict[str, Any]]) -> list[di
     return [doc for doc in visible if doc.get("doc_type") != "labtest_master"] + [summary]
 
 
+def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_domain: str | None = None) -> dict[str, Any]:
+    """沿原摘要owner投影冻结材料；目录响应不携带完整正文/章节/渲染块。"""
+    summaries = []
+    for index, document in enumerate(documents):
+        domain = str(document.get("execution_domain") or "")
+        if execution_domain and domain and execution_domain != domain:
+            continue
+        raw = {**document, "document_type": document.get("doc_type") or document.get("document_type"),
+               "document_title": document.get("document_title") or document.get("doc_name"),
+               "document_id": document.get("document_id") or document.get("id"),
+               "display_time": document.get("sort_time"), "length": len(str(document.get("content") or ""))}
+        summary = _normalize_source_document_summary(raw_doc=raw, index=index, execution_domain=domain)
+        for key in ("id", "doc_id", "doc_key", "document_id", "source_ref", "source_document_id", "source_document_aliases"):
+            if document.get(key) is not None:
+                summary[key] = document[key]
+        summaries.append(summary)
+    return {"layout_version":"bundle_struct_v1", "documents":summaries, "documents_tree":[],
+            "empty_reason":"" if summaries else "material_documents_empty"}
+
+
 def load_bundle_document_summaries(
     *,
     institute_id: str,

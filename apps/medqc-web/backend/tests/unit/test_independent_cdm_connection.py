@@ -6,6 +6,7 @@ import pytest
 
 from app.database import clinical_connection as clinical
 from app.services.bundles import assembly
+from app.services import case_material_snapshot as material
 from app.services.luxian_0609 import source_evidence_reader as reader
 
 IDENTITY = dict(institute_id="synthetic-I", patient_id="synthetic-P", visit_id="synthetic-V")
@@ -185,14 +186,20 @@ def test_external_bundle_assembly_can_read_without_any_business_database(monkeyp
     ("load_domain_bundle_document_index", {}),
     ("load_domain_bundle_for_emr_render", {"doc_type": "admission_record", "doc_id": "D"}),
 ])
-def test_old_business_cache_does_not_hide_new_cdm_and_valid_binding_is_accepted(monkeypatch, loader, extra):
+def test_cdm_cache_needs_both_source_binding_and_fixed_material(monkeypatch, loader, extra):
     business, cdm = install(monkeypatch)
     business.rows = [{**IDENTITY, "structured_context": {}, "source_documents": []}]
     method = getattr(assembly, loader)
     assert method(execution_domain="admission", **IDENTITY, **extra) is None
     binding = clinical.source_binding()
     business.rows[0].update(structured_context={"clinical_source_binding": binding}, clinical_source_binding=binding)
-    assert method(execution_domain="admission", **IDENTITY, **extra) is not None
+    assert method(execution_domain="admission", **IDENTITY, **extra) is None
+    business.rows[0]["structured_context"]["case_material_fingerprint"] = "fixed-content"
+    business.rows[0]["case_material_fingerprint"] = "fixed-content"
+    with material.activate({"fingerprint": "different-content"}):
+        assert method(execution_domain="admission", **IDENTITY, **extra) is None
+    with material.activate({"fingerprint": "fixed-content"}):
+        assert method(execution_domain="admission", **IDENTITY, **extra) is not None
     assert not cdm.calls
 
 
@@ -224,7 +231,12 @@ def test_scene_cache_is_bound_to_cdm_and_rejected_after_rolling_back_to_single_d
     args = dict(scene="running", schema="public", **IDENTITY)
     assert assembly._load_scene_bundle(**args) is None
     business.rows[0]["structured_context"]["clinical_source_binding"] = clinical.source_binding()
-    assert assembly._load_scene_bundle(**args) is not None
+    assert assembly._load_scene_bundle(**args) is None
+    business.rows[0]["structured_context"]["case_material_fingerprint"] = "fixed-content"
+    with material.activate({"fingerprint": "different-content"}):
+        assert assembly._load_scene_bundle(**args) is None
+    with material.activate({"fingerprint": "fixed-content"}):
+        assert assembly._load_scene_bundle(**args) is not None
     monkeypatch.delenv("CDM_DATABASE_URL")
     assert assembly._load_scene_bundle(**args) is None
 
@@ -238,4 +250,9 @@ def test_legacy_payload_readers_cannot_return_other_source_cached_data(monkeypat
     business.rows = [{"structured_context": context}]
     assert getattr(assembly, loader)(**IDENTITY) is None
     context["clinical_source_binding"] = clinical.source_binding()
-    assert getattr(assembly, loader)(**IDENTITY) is not None
+    assert getattr(assembly, loader)(**IDENTITY) is None
+    context["case_material_fingerprint"] = "fixed-content"
+    with material.activate({"fingerprint": "different-content"}):
+        assert getattr(assembly, loader)(**IDENTITY) is None
+    with material.activate({"fingerprint": "fixed-content"}):
+        assert getattr(assembly, loader)(**IDENTITY) is not None

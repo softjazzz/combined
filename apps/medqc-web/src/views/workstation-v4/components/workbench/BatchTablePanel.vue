@@ -280,6 +280,10 @@ export interface WorkbenchRow {
   admissionDate?: string
   dischargeDate?: string
   hospitalizationStatus?: 'inpatient' | 'discharged' | 'unknown'
+  sourceId?: 'legacy_pg' | 'independent_cdm'
+  admissionPrecision?: 'date' | 'datetime' | 'unknown'
+  dischargePrecision?: 'date' | 'datetime' | 'unknown'
+  materialCompleteness?: string
   hospitalizationStatusVerifiedAt?: string
   updatedAt: string
   isDemo: boolean

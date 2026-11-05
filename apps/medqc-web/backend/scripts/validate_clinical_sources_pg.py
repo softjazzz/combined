@@ -15,6 +15,7 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import dotenv
@@ -111,9 +112,12 @@ def run(args):
                 connection.execute(sa.text("INSERT INTO cdm.admission_record(institute_id,patient_id,visit_id,document_id,name,admission_datetime,record_datetime,record_content) VALUES('I','P','V','D',:name,'2026-10-01 08:00','2026-10-01 09:00',:name)"), {"name": marker})
                 connection.execute(sa.text("INSERT INTO cdm.diagnosis(institute_id,patient_id,visit_id,diagnosis_id,diagnosis_type,diagnosis_no,diagnosis_name,diagnosis_code) VALUES('I','P','V','DX','出院主要诊断','1',:name,'SYNTHETIC')"), {"name": marker})
                 connection.execute(sa.text("INSERT INTO cdm.daily_course_record(institute_id,patient_id,visit_id,document_id,record_content,record_datetime,submit_datetime) VALUES('I','P','V','D',:name,'2026-10-02 09:00','2026-10-02 10:00')"), {"name": marker})
+                connection.execute(sa.text("INSERT INTO cdm.inpat_registration(institute_id,patient_id,visit_id,name,admission_datetime) VALUES('I','P','V',:name,:admitted)"), {"name": marker, "admitted": "2026-10-01 08:00" if engine is source else "2026-09-01 08:00"})
         with source.begin() as connection:
             connection.execute(sa.text("INSERT INTO cdm.inpat_registration(institute_id,patient_id,visit_id,name,admission_datetime) VALUES('I','P2','V2','SYNTHETIC-NO-FRONTPAGE','2026-10-03 08:00')"))
             connection.execute(sa.text("INSERT INTO cdm.discharge_record(institute_id,patient_id,visit_id,document_id,discharge_time,record_content) VALUES('I','P','V','EXIT','2026-10-04 11:00','SYNTHETIC-DISCHARGE')"))
+            connection.execute(sa.text("INSERT INTO cdm.first_course_record(institute_id,patient_id,visit_id,document_id,dept_name,record_content) VALUES('I','P','V','FC-SELF','合成科室','SYNTHETIC-FIRST-COURSE'),('I','PEER','PEER-V','FC-PEER','合成科室','SYNTHETIC-PEER-V1')"))
+            connection.execute(sa.text("INSERT INTO cdm.diagnosis(institute_id,patient_id,visit_id,diagnosis_id,diagnosis_code,diagnosis_name,dept_name) VALUES('I','PEER','PEER-V','PEER-DX','SYNTHETIC','SYNTHETIC-PEER','合成科室')"))
             connection.execute(sa.text("GRANT CONNECT ON DATABASE synthetic_cdm TO synthetic_reader"))
             connection.execute(sa.text("GRANT USAGE ON SCHEMA cdm TO synthetic_reader"))
             connection.execute(sa.text("GRANT SELECT ON ALL TABLES IN SCHEMA cdm TO synthetic_reader"))
@@ -157,11 +161,13 @@ def run(args):
             selected = settings.snapshot(profile, "independent_cdm")
             engines.append(clinical._engine(selected["url"], str(passfile)))
             from app.routers import clinical_sources as source_api
-            assert source_api.check(profile, _actor={"id": "synthetic-admin"})["data"]["read_only"] is True
+            report = source_api.check(profile, _actor={"id": "synthetic-admin"})["data"]
+            assert report["ok"], [(r["table"],r["status"],r["missing_columns"]) for r in report["dependencies"] if r["status"] not in {"rows_present","zero_rows"}]
             identity = dict(institute_id="I", patient_id="P", visit_id="V")
             with business.begin() as connection:
                 for name in assembly._DOMAIN_BUNDLE_TABLE.values():
                     connection.execute(sa.text(f"CREATE TABLE IF NOT EXISTS public.{name}(institute_id text,patient_id text,visit_id text,execution_domain text,policy_version text,bundle_schema_version text,document_hits jsonb,data_quality_flags jsonb,timeline_facts jsonb,source_documents jsonb,structured_context jsonb,bundle_updated_at timestamp,PRIMARY KEY(institute_id,patient_id,visit_id))"))
+                connection.execute(sa.text("CREATE TABLE cdm.mr_diagnosis (LIKE cdm.diagnosis)"))
                 connection.execute(sa.text("CREATE SCHEMA qc"))
                 connection.execute(sa.text("CREATE TABLE qc.sync_config_registry(namespace text,config_key text,payload_json text,updated_by text,source text,change_reason text,updated_at timestamp,PRIMARY KEY(namespace,config_key))"))
                 connection.execute(sa.text("CREATE SCHEMA pdfmat_012345abcdef"))
@@ -185,7 +191,8 @@ def run(args):
                 page = workstation(qc_projection_loader=lambda _: {})
                 assert page["total"] == 2 and {row["name"] for row in page["records"]} == {"SYNTHETIC-CDM", "SYNTHETIC-NO-FRONTPAGE"}
                 assert workstation(hospital_status="discharged", qc_projection_loader=lambda _: {})["total"] == 1
-                assert workstation(hospital_status="inpatient", qc_projection_loader=lambda _: {})["total"] == 1
+                assert workstation(hospital_status="inpatient", qc_projection_loader=lambda _: {})["total"] == 0
+                assert workstation(hospital_status="unknown", qc_projection_loader=lambda _: {})["total"] == 1
                 assert workstation(doctor="合成医生", qc_projection_loader=lambda _: {})["total"] == 1
                 assert detail_service.get_frontpage(**identity)["name"] == "SYNTHETIC-CDM"
                 repository = RecordRepository(session_factory=lambda: Session(business))
@@ -227,6 +234,98 @@ def run(args):
                         assert error.orig.pgcode == "42501"
                     else:
                         raise AssertionError("source role unexpectedly writable")
+            assert before == fingerprint()[0]
+            # 病历级材料：并发发布只影响下一轮，任务重试和历史文书保持原版本。
+            from app.services import case_material_snapshot as frozen_material
+            from app.services.case_material_capture import capture, obtain
+            from app.services.qc_input_adapters.running_final_bundle_adapter import adapt_bundle_to_evidence_payload
+            from app.services import sample_programmatic_evidence as programmatic
+            from app.services.clinical_source_contract import inspect_source
+            from datetime import timedelta, timezone
+            stack.enter_context(patch.dict(os.environ, {
+                "QC_CASE_MATERIAL_DIR": str(directory / "case-materials"),
+                "QC_CDM_CAPTURE_WINDOW_UNTIL": (__import__("datetime").datetime.now(timezone.utc)+timedelta(hours=1)).isoformat(),
+            }))
+            with clinical.selected(selected):
+                # 撤掉一张规则表权限，pg_catalog仍必须发现该依赖。
+                with source.begin() as connection:
+                    connection.execute(sa.text("REVOKE SELECT ON cdm.bloodtrans_record FROM synthetic_reader"))
+                with clinical.get_engine().connect() as connection:
+                    report = inspect_source(connection)
+                    assert not report["ok"]
+                    assert next(r for r in report["dependencies"] if r["table"] == "bloodtrans_record")["status"] == "select_denied"
+                with source.begin() as connection:
+                    connection.execute(sa.text("GRANT SELECT ON cdm.bloodtrans_record TO synthetic_reader"))
+                published = []
+                def concurrent_publish(table):
+                    if table != "admission_record" or published:
+                        return
+                    published.append(True)
+                    with source.begin() as connection:
+                        connection.execute(sa.text("UPDATE cdm.inpat_registration SET admission_datetime='2026-10-02 08:00' WHERE patient_id='P'"))
+                        connection.execute(sa.text("UPDATE cdm.first_course_record SET record_content='SYNTHETIC-PEER-V2' WHERE document_id='FC-PEER'"))
+                        for name in ("admission_record", "daily_course_record"):
+                            connection.execute(sa.text(f"UPDATE cdm.{name} SET record_content='SYNTHETIC-PUBLISHED-V2' WHERE patient_id='P'"))
+                try:
+                    capture(identity=("I","P","V"), cancellation_check=lambda: True)
+                except frozen_material.MaterialSnapshotError as error:
+                    assert str(error) == "material_capture_cancelled"
+                else:
+                    raise AssertionError("material cancellation ignored")
+                one = frozen_material.persist("snapshot-job-v1", capture(identity=("I","P","V"), after_table_read=concurrent_publish))
+                assert published
+                two = obtain("snapshot-job-v2", ("I","P","V"))
+                assert one["fingerprint"] != two["fingerprint"]
+                for snapshot, expected in ((one,"SYNTHETIC-CDM"),(two,"SYNTHETIC-PUBLISHED-V2")):
+                    with frozen_material.activate(snapshot):
+                        for table in ("admission_record", "daily_course_record"):
+                            result = reader.read_luxian_0609_snapshot_source_rows(source_key=table, source_schema="cdm", **identity)
+                            assert result.rows[0]["record_content"] == expected
+                        peers = SichuanQCService._load_same_disease_first_course_candidates(institute_id="I",current_patient_id="P",current_visit_id="V",dept_name="合成科室",diagnosis_code="SYNTHETIC",diagnosis_name="SYNTHETIC-CDM",limit=10)
+                        assert len(peers) == 1 and peers[0]["record_content"] == ("SYNTHETIC-PEER-V1" if snapshot is one else "SYNTHETIC-PEER-V2")
+                        assert expected in str(current_view.load_current_documents(**identity))
+                        assembled = assembly.assemble_domain_bundle(execution_domain="admission", **identity)
+                        assert expected in str(assembled)
+                        # 正式输入适配包含旧补充取证；业务库同键内容及最新CDM均不得混入。
+                        with patch.object(programmatic, "engine", SimpleNamespace(connect=denied)), patch.object(programmatic, "get_documents", denied):
+                            payload = adapt_bundle_to_evidence_payload({**identity, "scene": "running", **assembled})
+                            assert expected in str(payload["programmatic_timeline"])
+                            assert "SYNTHETIC-LEGACY" not in str(payload)
+                            assert payload["programmatic_timeline"]["admission_time"] == ("2026-10-01 08:00:00" if snapshot is one else "2026-10-02 08:00:00")
+                            if snapshot is one:
+                                assert "SYNTHETIC-PUBLISHED-V2" not in str(payload)
+                assert obtain("snapshot-job-v1", ("I","P","V"), retry=True)["fingerprint"] == one["fingerprint"]
+                # 恢复合成写入，随后核对所有读取操作未改变源库。
+                with source.begin() as connection:
+                    connection.execute(sa.text("UPDATE cdm.inpat_registration SET admission_datetime='2026-10-01 08:00' WHERE patient_id='P'"))
+                    connection.execute(sa.text("UPDATE cdm.first_course_record SET record_content='SYNTHETIC-PEER-V1' WHERE document_id='FC-PEER'"))
+                    for name in ("admission_record", "daily_course_record"):
+                        connection.execute(sa.text(f"UPDATE cdm.{name} SET record_content='SYNTHETIC-CDM' WHERE patient_id='P'"))
+            with clinical.selected(settings.legacy_snapshot()):
+                legacy_snapshot = frozen_material.persist("legacy-case-material", capture(identity=("I","P","V")))
+                with frozen_material.activate(legacy_snapshot):
+                    rows = reader.read_luxian_0609_snapshot_source_rows(source_key="daily_course_record", source_schema=None, **identity)
+                    assert rows.rows[0]["record_content"] == "SYNTHETIC-LEGACY"
+                    with patch.object(programmatic, "engine", SimpleNamespace(connect=denied)), patch.object(programmatic, "get_documents", denied):
+                        payload = adapt_bundle_to_evidence_payload({**identity, "scene": "final"})
+                        assert "SYNTHETIC-LEGACY" in str(payload["programmatic_timeline"])
+                        assert "SYNTHETIC-CDM" not in str(payload)
+                        assert payload["programmatic_timeline"]["admission_time"] == "2026-09-01 08:00:00"
+                # PDF副本不新增快照，继续由既有业务库读取路径验证。
+                assert frozen_material.load("pdf-case-material", ("I","pdfp_P","pdfv_V")) is None
+            # 只有出院文书时日期可展示，绝不补零点作为精确时刻。
+            with source.begin() as connection:
+                connection.execute(sa.text("INSERT INTO cdm.discharge_record(institute_id,patient_id,visit_id,document_id,admission_date,discharge_date,record_content) VALUES('I','P3','V3','DATE-ONLY','2026-10-01','2026-10-04','SYNTHETIC-DATE-ONLY')"))
+            from datetime import date
+            with clinical.selected(selected):
+                page = workstation(hospital_status="discharged",start_date=date(2026,10,1),end_date=date(2026,10,1),date_field="admission",qc_projection_loader=lambda _: {})
+                row = next(row for row in page["records"] if row["id"] == "V3")
+                assert row["admissionDate"] == "2026-10-01" and row["admissionPrecision"] == "date"
+                assert row["dischargeDate"] == "2026-10-04" and row["dischargeDatetime"] is None
+            with source.begin() as connection:
+                connection.execute(sa.text("DELETE FROM cdm.discharge_record WHERE visit_id='V3'"))
+            # 并发写入可能触发同步审计；不把测试发布写入伪报为取材副作用。
+            after_test_publication = fingerprint()[0]
             # 使用正式Canonical保存/选轮链，同坐标的两个源不能互相覆盖“最新结果”。
             from datetime import datetime
             from app.services import custom_qc_workspace_service as workspace
@@ -287,11 +386,11 @@ def run(args):
                 back = assembly.load_or_assemble_domain_bundle(execution_domain="admission", **identity)
                 assert "SYNTHETIC-LEGACY" in str(back) and "SYNTHETIC-CDM" not in str(back)
             after, _ = fingerprint()
-            assert before == after
+            assert after_test_publication == after
         result = {"ok": True, "postgres_version": source.dialect.server_version_info, "source_revision": "20261104_000060",
-            "source_tables": table_count, "source_data_and_schema_unchanged": True,
+            "source_tables": table_count, "source_read_phases_unchanged": True, "synthetic_concurrent_publish_performed": True,
             "source_role_write_denied": True, "business_cache_write_verified": True, "same_keys_isolated": True, "canonical_source_selection_verified": True, "doctor_scope_verified": True,
-            "pdf_business_route_verified": True, "models_called": 0, "real_databases_connected": False,
+            "pdf_business_route_verified": True, "case_material_repeatable_read_verified": True, "historical_material_immutable": True, "hidden_permission_detected": True, "models_called": 0, "real_databases_connected": False,
             "source_bootstrap_sha256": hashlib.sha256((args.source_backend / "scripts/bootstrap_cache_sync_database.py").read_bytes()).hexdigest()}
         (directory / "result.json").write_text(json.dumps(result, indent=2)+"\n", encoding="utf-8")
         print(json.dumps(result))
