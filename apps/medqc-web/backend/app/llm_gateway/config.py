@@ -166,7 +166,7 @@ class GatewaySettings:
             maximum=3600,
         )
         return cls(
-            http_proxy=LLMHTTPProxyPolicy.parse(env.get("LLM_HTTP_PROXY"), env.get("LLM_HTTP_PROXY_HOSTS")),
+            http_proxy=LLMHTTPProxyPolicy.load(env.get("LLM_HTTP_PROXY"), env.get("LLM_HTTP_PROXY_HOSTS")),
             token=token,
             resources=resources,
             profiles=profiles,

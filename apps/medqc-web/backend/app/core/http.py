@@ -24,7 +24,7 @@ class _SharedHttpResources:
                  transport: httpx.BaseTransport | None = None,
                  proxy_transport: httpx.BaseTransport | None = None) -> None:
         settings = get_settings() if proxy_policy is None else None
-        self.proxy_policy = proxy_policy if proxy_policy is not None else LLMHTTPProxyPolicy.parse(
+        self.proxy_policy = proxy_policy if proxy_policy is not None else LLMHTTPProxyPolicy.load(
             getattr(settings, "LLM_HTTP_PROXY", ""), getattr(settings, "LLM_HTTP_PROXY_HOSTS", ""))
         physical_capacity = 64
         self.client = httpx.Client(

@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 import httpx
 
-from app.core.llm_http_proxy import LLMHTTPProxyPolicy
+from app.core.llm_http_proxy import LLMHTTPProxyPolicy, LLMProxyConfigurationError
 
 from app.services.llm_dispatch.contracts import GatewayErrorCode
 from app.services.llm_token_budget import BudgetError
@@ -47,6 +47,12 @@ _ALLOWED_PAYLOAD_FIELDS = frozenset(
 class ProviderError(RuntimeError):
     code = GatewayErrorCode.PROVIDER_UNAVAILABLE.value
     status_code = 502
+    retryable = False
+
+
+class ProviderProxyConfigurationError(ProviderError):
+    code = GatewayErrorCode.PROXY_CONFIGURATION_INVALID.value
+    status_code = 503
     retryable = False
 
 
@@ -237,6 +243,11 @@ class HttpxProviderSender:
 
     def prepare(self, profile: ProfileConfig, payload: dict[str, Any]) -> dict[str, Any]:
         from app.services.llm_token_budget import BudgetError, guard_payload, strict_enabled
+        try:
+            # 配置拒绝发生在排队和HTTP之前，不记为远端未知在途或隔离整资源。
+            self._proxy_policy.matches(profile.api_endpoint)
+        except LLMProxyConfigurationError:
+            raise ProviderProxyConfigurationError() from None
         try:
             if profile.provider_code == 'strata' and p9_enabled(profile.model, profile.strata_protocol):
                 from app.services.strata_protocol import require_deployment_identity

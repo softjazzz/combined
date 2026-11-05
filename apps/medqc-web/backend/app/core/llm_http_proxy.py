@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 import re
+import ipaddress
 from urllib.parse import urlsplit
 
 
@@ -22,11 +23,42 @@ def _hostname(value: str) -> str:
     return name
 
 
+def _explicit_local_host(host: str) -> bool:
+    # 不解析DNS；名单损坏时，仅放行明确本地地址，不猜测普通域名归属。
+    if host == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_link_local or any(
+        address in ipaddress.ip_network(cidr)
+        for cidr in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")
+    )
+
+
 @dataclass(frozen=True)
 class LLMHTTPProxyPolicy:
     # 首期仅支持现场 HTTP CONNECT 代理，不接受内嵌凭据。
     url: str = field(default='', repr=False)
     hosts: frozenset[str] = field(default_factory=frozenset)
+    error_code: str | None = None
+    scope_unknown: bool = False
+
+    @classmethod
+    def load(cls, url: str | None = None, hosts: str | None = None):
+        """启动保留错误状态，延迟到目标请求拒绝；绝不将坏配置当作关闭。"""
+        try:
+            return cls.parse(url, hosts)
+        except LLMProxyConfigurationError as error:
+            valid_hosts = set()
+            unknown = not bool((hosts or '').strip())
+            for part in (hosts or '').split(','):
+                try:
+                    valid_hosts.add(_hostname(part.strip()))
+                except LLMProxyConfigurationError:
+                    unknown = True
+            return cls(hosts=frozenset(valid_hosts), error_code=str(error), scope_unknown=unknown)
 
     @classmethod
     def parse(cls, url: str | None = None, hosts: str | None = None):
@@ -54,7 +86,7 @@ class LLMHTTPProxyPolicy:
         return cls(url=url, hosts=normalized)
 
     def matches(self, url: str) -> bool:
-        if not self.url:
+        if not self.url and not self.error_code:
             return False
         try:
             parsed = urlsplit(url)
@@ -67,6 +99,10 @@ class LLMHTTPProxyPolicy:
             host = parsed.hostname.rstrip('.').encode('idna').decode('ascii').lower()
         except (ValueError, UnicodeError):
             raise LLMProxyConfigurationError('llm_http_proxy_invalid_target') from None
+        if self.error_code:
+            if host in self.hosts or (self.scope_unknown and not _explicit_local_host(host)):
+                raise LLMProxyConfigurationError(self.error_code)
+            return False
         return host in self.hosts
 
     def client_options(self, url: str, *, transport=None, proxy_transport=None) -> dict:

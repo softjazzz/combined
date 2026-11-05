@@ -273,8 +273,7 @@ def test_gateway_environment_parses_same_policy(tmp_path):
         "LLM_HTTP_PROXY": PROXY, "LLM_HTTP_PROXY_HOSTS": HOST}
     assert GatewaySettings.from_env(env).http_proxy == POLICY
     env["LLM_HTTP_PROXY_HOSTS"] = ""
-    with pytest.raises(LLMProxyConfigurationError):
-        GatewaySettings.from_env(env)
+    assert GatewaySettings.from_env(env).http_proxy.error_code == "llm_http_proxy_incomplete"
 
 
 @pytest.mark.asyncio
@@ -368,3 +367,91 @@ def test_production_sync_async_proxy_clients_keep_certificate_verification():
                 asyncio.run(client.aclose())
             else:
                 client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("proxy_url,hosts", [(PROXY, ""), ("", HOST), ("invalid", HOST), (PROXY, "*.aliyuncs.com")])
+async def test_invalid_proxy_direct_keeps_local_calls_and_rejects_cloud(monkeypatch, proxy_url, hosts):
+    seen = []
+    local = "http://127.0.0.1:18083/v1/chat/completions"
+    def send(request):
+        seen.append(str(request.url))
+        assert str(request.url) == local
+        return httpx.Response(200, json=ANSWER)
+    monkeypatch.setattr(http, "get_settings", lambda: SimpleNamespace(
+        LLM_HTTP_MAX_CONCURRENCY=2, LLM_HTTP_PROXY=proxy_url, LLM_HTTP_PROXY_HOSTS=hosts))
+    resources = http._SharedHttpResources(2, transport=httpx.MockTransport(send))
+    monkeypatch.setattr(http, "_shared_resources", resources)
+    monkeypatch.setattr(http, "_is_allowed_host", lambda host: True)
+    assert resources.proxy_policy.error_code
+    assert resources.proxy_client is None
+    assert await http.safe_post_json(local, {}, payload(), 2) == ANSWER
+    with pytest.raises(LLMProxyConfigurationError):
+        await http.safe_post_json(URL, {}, payload(), 2)
+    assert await http.safe_post_json(local, {}, payload(), 2) == ANSWER
+    assert seen == [local, local]
+    assert resources._active_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("proxy_url,hosts", [(PROXY, ""), ("", HOST), ("invalid", HOST), (PROXY, "*.aliyuncs.com")])
+async def test_invalid_proxy_gateway_starts_and_keeps_strata_available(tmp_path, proxy_url, hosts):
+    local = "http://127.0.0.1:18083/v1/chat/completions"
+    env = {"LLM_GATEWAY_TOKEN": "synthetic-token-that-is-long-enough",
+        "LLM_GATEWAY_STATE_DIR": str(tmp_path), "LLM_GATEWAY_STARTUP_ISOLATION_SECONDS": "0",
+        "LLM_GATEWAY_ALLOWED_HOSTS": json.dumps([HOST, "127.0.0.1:18083"]),
+        "LLM_GATEWAY_RESOURCES_JSON": json.dumps({"cloud": {"capacity_class": "bailian"},
+                                                   "local": {"capacity_class": "strata"}}),
+        "LLM_GATEWAY_PROFILES_JSON": json.dumps({
+            "alibaba_first": {"resource_id": "cloud", "provider_code": "alibaba", "model": "qwen-plus",
+                              "api_endpoint": URL, "api_key": "synthetic-key"},
+            "strata_first": {"resource_id": "local", "provider_code": "strata", "model": "qwen3.8-flash",
+                             "api_endpoint": local}}),
+        "LLM_HTTP_PROXY": proxy_url, "LLM_HTTP_PROXY_HOSTS": hosts}
+    settings = GatewaySettings.from_env(env)
+    assert settings.http_proxy.error_code
+    seen = []
+    def send(request):
+        seen.append(str(request.url))
+        assert str(request.url) == local
+        return httpx.Response(200, json=ANSWER)
+    app = create_app(settings, http_transport=httpx.MockTransport(send), enforce_single_instance=False)
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gateway.test") as client:
+            for selected, model, expected in [("strata_first", "qwen3.8-flash", 200),
+                                              ("alibaba_first", "qwen-plus", 503),
+                                              ("strata_first", "qwen3.8-flash", 200)]:
+                response = await client.post("/v1/llm/completions",
+                    headers={"Authorization": f"Bearer {settings.token}"},
+                    json={"request_id": str(uuid4()), "profile": selected,
+                          "deadline_at": (datetime.now(timezone.utc) + timedelta(seconds=20)).isoformat(),
+                          "timeout_seconds": 5, "payload": payload(model)})
+                assert response.status_code == expected, response.text
+                if expected == 503:
+                    assert response.json()["detail"]["code"] == "gateway_proxy_configuration_invalid"
+                    assert response.json()["detail"]["retryable"] is False
+            counts = await app.state.gateway_runtime.resource_counts()
+            assert all(not row["unknown_inflight"] for row in counts)
+    assert seen == [local, local]
+
+
+@pytest.mark.parametrize("hosts,target,blocked", [
+    (HOST, "https://other.example/v1", False),
+    (HOST, URL, True),
+    ("", URL, True),
+    ("", "https://other.example/v1", True),
+    ("", "http://192.168.140.177:18083/v1", False),
+    ("", "http://[::1]:18083/v1", False),
+    ("", "http://local-model.internal/v1", True),
+    ("127.0.0.1", "http://127.0.0.1:18083/v1", True),
+    ("127.0.0.1,*", "http://127.0.0.1:18083/v1", True),
+])
+def test_broken_policy_preserves_known_scope_and_never_guesses_dns(hosts, target, blocked):
+    policy = LLMHTTPProxyPolicy.load("invalid-proxy-with-secret", hosts)
+    assert policy.error_code
+    assert "secret" not in repr(policy)
+    if blocked:
+        with pytest.raises(LLMProxyConfigurationError):
+            policy.client_options(target)
+    else:
+        assert policy.client_options(target) == {}
