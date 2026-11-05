@@ -123,13 +123,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo unshare --net bash -c 'ip link set lo up; exec setpriv --reuid=runner --regid=runner --init-groups --no-new-privs "$@"' bash bash -c '
+          sudo --preserve-env=RUNNER_TEMP,PYTHONDONTWRITEBYTECODE unshare --net bash -c 'ip link set lo up; exec setpriv --reuid=runner --regid=runner --init-groups --no-new-privs "$@"' bash bash -c '
             set -euo pipefail
-            python -B apps/medqc-web/scripts/linux_app_upgrade/test_upgrade.py
-            python -B apps/medqc-web/scripts/linux_app_upgrade/smoke_upgrade.py \
+            PYTHON=$1
+            "$PYTHON" -B apps/medqc-web/scripts/linux_app_upgrade/test_upgrade.py
+            "$PYTHON" -B apps/medqc-web/scripts/linux_app_upgrade/smoke_upgrade.py \
               --kit "$RUNNER_TEMP/app-upgrade/medqc-app-upgrade" \
-              --full "$RUNNER_TEMP/verified-full/medqc-offline" --python "$(command -v python)"
-          ' 2>&1 | tee "$RUNNER_TEMP/app-upgrade/upgrade-smoke.log"
+              --full "$RUNNER_TEMP/verified-full/medqc-offline" --python "$PYTHON"
+          ' bash "$(command -v python)" 2>&1 | tee "$RUNNER_TEMP/app-upgrade/upgrade-smoke.log"
       - name: Publish validated compact application upgrade
         uses: actions/upload-artifact@v4
         with:
