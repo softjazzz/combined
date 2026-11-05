@@ -210,7 +210,7 @@ def test_ambiguous_owner_blocks_without_changing_history(db, has_history):
                     ),
                     {"v": schema},
                 )
-    with pytest.raises(RefreshStorageError, match="ambiguous"):
+    with pytest.raises(RuntimeError, match="refresh_storage_owner_ambiguous"):
         migrate(owner)
     with owner.connect() as c:
         assert (
@@ -265,7 +265,7 @@ def test_incompatible_or_unauthorized_storage_refused(db, damage):
         with pytest.raises(RefreshStorageError):
             bind_storage(c)
     if damage not in ("permission", "sequence"):
-        with pytest.raises(RefreshStorageError):
+        with pytest.raises(RuntimeError, match="refresh_storage_"):
             migrate(owner)
 
 
@@ -275,7 +275,7 @@ def make_case():
         ("first_course_record", "2026-01-01T11:00:00"),
         ("exam_report", "2026-01-02T10:00:00"),
         ("daily_course_record", "2026-01-02T12:00:00"),
-        ("discharge_record", "2026-01-04T13:00:00"),
+        ("senior_course_record", "2026-01-04T13:00:00"),
     ]
     return {
         "case_title": "synthetic-only",
@@ -330,7 +330,7 @@ def setup_case(db, monkeypatch, mode):
         "first_course_record",
         "exam_item_report",
         "daily_course_record",
-        "discharge_record",
+        "senior_course_record",
     ]
     for name in names:
         table = next(t for t in cdm.Base.metadata.tables.values() if t.name == name)

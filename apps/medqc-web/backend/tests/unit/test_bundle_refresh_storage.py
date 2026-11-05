@@ -59,3 +59,33 @@ def test_identifier_is_code_allowlist_only():
         qualified("cdm", "bundle_refresh_jobs")
     with pytest.raises(RefreshStorageError):
         qualified("qc", "sys_users")
+
+
+def test_frozen_migration_v1_matches_runtime_contract_without_importing_it():
+    import ast
+    from pathlib import Path
+    from app.services.bundles import refresh_storage
+
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic/versions/20261105_000063_bundle_refresh_storage.py"
+    )
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    assert "services.bundles" not in path.read_text(encoding="utf-8")
+    selected = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(t, ast.Name)
+            and t.id in {"TABLES", "SCHEMAS", "JOBS", "FAILURES"}
+            for t in node.targets
+        )
+    ]
+    namespace = {}
+    exec(
+        compile(ast.Module(body=selected, type_ignores=[]), str(path), "exec"),
+        namespace,
+    )
+    for key in ("TABLES", "SCHEMAS", "JOBS", "FAILURES"):
+        assert namespace[key] == getattr(refresh_storage, key)

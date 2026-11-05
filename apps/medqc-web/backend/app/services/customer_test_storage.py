@@ -37,7 +37,11 @@ def reflect_materials(session, rows_by_table):
         for name, rows in rows_by_table.items():
             # 仅接收自建入口内部映射生成的名字，不接受请求schema/table。
             table = sa.Table(name, metadata, schema=schema, autoload_with=connection)
-            required = {"institute_id", "patient_id", "record_content"}
+            required = {"institute_id", "patient_id"}
+            if name == "diagnosis":
+                required.update({"diagnosis_id", "diagnosis_name"})
+            else:
+                required.add("record_content")
             if name != "patient_information":
                 required.add("visit_id")
             if name in ("mr", "inpat_registration"):
