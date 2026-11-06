@@ -1,6 +1,10 @@
 """固定东华普通来源：真实owned PG16业务/临床分工，不做双普通来源切换。"""
 
 import asyncio
+import importlib.util
+from pathlib import Path
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from datetime import datetime
 import json
 import re
@@ -194,6 +198,12 @@ def persist_task_and_result(d, monkeypatch):
                     )
         metadata.create_all(c)
     grant(d["business_owner"])
+    with d["business_owner"].begin() as c:
+        c.execute(
+            sa.text(
+                "GRANT DELETE ON qc.luxian_0609_record_result_envelopes TO medqc_job_api"
+            )
+        )
     monkeypatch.setattr(workspace, "_session", d["factory"])
     service = object.__new__(workspace.CustomQCWorkspaceService)
     service._batch_job_table = jobs
@@ -320,16 +330,17 @@ def test_registered_local_material_not_cdm_or_new_snapshot(single, mode, monkeyp
     sources.freeze(filters)
     assert sources.saved_snapshot(filters)["id"] == "legacy_pg"
     with d["business_owner"].begin() as c:
-        c.execute(
-            sa.text(
-                "CREATE TABLE qc.validation_material_batches(id text PRIMARY KEY,storage_schema text NOT NULL,state text NOT NULL)"
-            )
+        path = (
+            Path(__file__).resolve().parents[2]
+            / "alembic/versions/20261026_000055_validation_material_copies.py"
         )
-        c.execute(
-            sa.text(
-                "CREATE TABLE qc.validation_material_copies(batch_id text,institute_id text,patient_id text,visit_id text)"
-            )
+        spec = importlib.util.spec_from_file_location(
+            "synthetic_material_revision", path
         )
+        revision = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(revision)
+        with Operations.context(MigrationContext.configure(c)):
+            revision.upgrade()
         c.execute(sa.text("CREATE SCHEMA pdfmat_111111111111"))
         c.execute(
             sa.text(
@@ -338,12 +349,12 @@ def test_registered_local_material_not_cdm_or_new_snapshot(single, mode, monkeyp
         )
         c.execute(
             sa.text(
-                "INSERT INTO qc.validation_material_batches VALUES('synthetic','pdfmat_111111111111','ready')"
+                "INSERT INTO qc.validation_material_batches(id,source_pool_id,target_pool_id,storage_schema,archive_sha256,plan_sha256,state,manifest) VALUES('synthetic','source-pool','material-pool','pdfmat_111111111111',repeat('0',64),repeat('1',64),'ready','{}'::jsonb)"
             )
         )
         c.execute(
             sa.text(
-                "INSERT INTO qc.validation_material_copies VALUES('synthetic','PDI','pdfp_P','pdfv_V')"
+                "INSERT INTO qc.validation_material_copies(id,batch_id,sample,source_item_id,institute_id,source_patient_id,source_visit_id,patient_id,visit_id,identity_map) VALUES('copy','synthetic','001','item','PDI','original-p','original-v','pdfp_P','pdfv_V','{}'::jsonb)"
             )
         )
         c.execute(

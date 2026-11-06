@@ -1081,7 +1081,7 @@ async function handleExecuteSync() {
 }
 
 onMounted(async () => {
-  void loadDepartments()
+  if (showLegacyPipeline.value) void loadDepartments()
   const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   const canOpenRequestedTab =
     (requestedTab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||
