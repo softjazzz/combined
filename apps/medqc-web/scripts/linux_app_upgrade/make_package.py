@@ -8,11 +8,6 @@ import subprocess
 import tarfile
 
 
-SOURCE_SHA256 = "72fd98f7116ccbe6105354caa3ec4902cee6ef397b970bed9367d158040495aa"
-APPLICATION_COMMIT = "09f627a0e19380d5a605302cc0058482a7c2682f"
-ARCHIVE_NAME = "MedQC-Ubuntu22-Python310-app-upgrade-09f627a0e.tar.gz"
-
-
 def digest(path):
     value = hashlib.sha256()
     with path.open("rb") as file:
@@ -21,8 +16,12 @@ def digest(path):
     return value.hexdigest()
 
 
-def build(source: Path, output: Path):
-    if output.exists() or digest(source) != SOURCE_SHA256:
+def build(source: Path, output: Path, *, source_sha256: str, application_commit: str):
+    import re
+
+    if not re.fullmatch(r"[0-9a-f]{64}", source_sha256) or not re.fullmatch(r"[0-9a-f]{40}", application_commit):
+        raise ValueError("explicit_source_and_application_identity_required")
+    if output.exists() or digest(source) != source_sha256:
         raise ValueError("fresh_output_and_verified_source_required")
     output.mkdir(parents=True)
     kit = output / "medqc-app-upgrade"
@@ -60,29 +59,33 @@ def build(source: Path, output: Path):
     if expected is None or expected != {key: value for key, value in source_hashes.items() if key != "SHA256SUMS"}:
         raise ValueError("source_internal_checksum_mismatch")
     info = json.loads((kit / "BUILD.json").read_text())
-    if info["commit"] != APPLICATION_COMMIT:
+    if info["commit"] != application_commit:
         raise ValueError("wrong_application_version")
     here = Path(__file__).resolve().parent
     for name in ("check_compat.py", "stage_upgrade.py", "README-DSH.md"):
         shutil.copyfile(here / name, kit / name)
     packaging_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=here, text=True).strip()
-    (kit / "PACKAGE.json").write_text(json.dumps({"kind": "application-only-upgrade", "application_commit": APPLICATION_COMMIT,
+    (kit / "PACKAGE.json").write_text(json.dumps({"kind": "application-only-upgrade", "application_commit": application_commit,
         "source_base": info["source_base"], "build_id": info["build_id"], "packaging_commit": packaging_commit,
-        "source_archive_sha256": SOURCE_SHA256, "source_internal_files_verified": len(expected),
+        "source_archive_sha256": source_sha256, "source_internal_files_verified": len(expected),
         "all_selected_source_files_identical": True, "selected_source_files": len(selected),
-        "dependencies_included": False, "tools_included": False, "database_migrations_required": False}, indent=2) + "\n")
+        "dependencies_included": False, "tools_included": False,
+        "database_migrations_required": None,
+        "database_migration_policy": "release-specific preflight required; never auto-migrate"}, indent=2) + "\n")
     manifest = {path.relative_to(kit).as_posix(): digest(path) for path in sorted(kit.rglob("*")) if path.is_file()}
     (kit / "SHA256SUMS").write_text("".join(f"{value}  {name}\n" for name, value in manifest.items()), encoding="utf-8")
-    archive = output / ARCHIVE_NAME
+    archive = output / f"MedQC-Ubuntu22-Python310-app-upgrade-{application_commit[:9]}.tar.gz"
     with tarfile.open(archive, "w:gz", compresslevel=9) as tar:
         tar.add(kit, arcname=kit.name)
     archive.with_name(archive.name + ".sha256").write_text(f"{digest(archive)}  {archive.name}\n", encoding="ascii")
-    print(json.dumps({"archive": str(archive), "bytes": archive.stat().st_size, "sha256": digest(archive), "application_commit": APPLICATION_COMMIT}))
+    print(json.dumps({"archive": str(archive), "bytes": archive.stat().st_size, "sha256": digest(archive), "application_commit": application_commit}))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--source-sha256", required=True)
+    parser.add_argument("--application-commit", required=True)
     arguments = parser.parse_args()
-    build(arguments.source, arguments.output)
+    build(arguments.source, arguments.output, source_sha256=arguments.source_sha256, application_commit=arguments.application_commit)

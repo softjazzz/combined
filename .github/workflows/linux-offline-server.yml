@@ -1,5 +1,10 @@
 name: Linux offline server bundle
 on:
+  pull_request:
+    branches: [codex/business-agent-integration]
+    paths:
+      - 'apps/medqc-web/scripts/linux_app_upgrade/**'
+      - '.github/workflows/linux-offline-server.yml'
   push:
     branches: [codex/linux-offline-server-20261104]
   workflow_dispatch:
@@ -9,12 +14,37 @@ on:
         type: choice
         default: full
         options: [full, application-upgrade]
+      source_run_id:
+        description: Validated full-package workflow run (application-upgrade only)
+        type: string
+      source_sha256:
+        description: Externally confirmed source tar SHA256 (application-upgrade only)
+        type: string
+      application_commit:
+        description: Exact application commit in validated source BUILD.json
+        type: string
 permissions:
   contents: read
   actions: read
 jobs:
+  upgrade-tools-isolated:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Synthetic upgrade tools without network or application startup
+        run: >-
+          sudo unshare --net -- "$(command -v python)" -B -c
+          "import socket,runpy,sys; sys.path.insert(0,'apps/medqc-web/scripts/linux_app_upgrade');
+          deny=lambda *a,**k:(_ for _ in ()).throw(RuntimeError('isolated_network_denied'));
+          socket.socket.connect=deny; socket.create_connection=deny; socket.getaddrinfo=deny;
+          sys.argv=['test_upgrade.py']; runpy.run_path('apps/medqc-web/scripts/linux_app_upgrade/test_upgrade.py',run_name='__main__')"
   build:
-    if: inputs.delivery != 'application-upgrade'
+    if: github.event_name != 'pull_request' && inputs.delivery != 'application-upgrade'
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:
@@ -106,17 +136,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Require explicit validated source identity
+        env:
+          SOURCE_RUN: ${{ inputs.source_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha256 }}
+          APP_COMMIT: ${{ inputs.application_commit }}
+        run: |
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$APP_COMMIT" =~ ^[0-9a-f]{40}$ ]]
       - uses: actions/download-artifact@v4
         with:
           name: medqc-linux-offline-validated
-          run-id: 41937037181
+          run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/verified-full
       - name: Derive application-only package from verified bytes
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha256 }}
+          APP_COMMIT: ${{ inputs.application_commit }}
         run: |
           python -B apps/medqc-web/scripts/linux_app_upgrade/make_package.py \
             --source "$RUNNER_TEMP/verified-full/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" \
-            --output "$RUNNER_TEMP/app-upgrade"
+            --output "$RUNNER_TEMP/app-upgrade" --source-sha256 "$SOURCE_SHA" --application-commit "$APP_COMMIT"
           tar -C "$RUNNER_TEMP/verified-full" -xzf "$RUNNER_TEMP/verified-full/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz"
       - name: Existing dependency reuse, stage and rollback in network isolation
         shell: bash

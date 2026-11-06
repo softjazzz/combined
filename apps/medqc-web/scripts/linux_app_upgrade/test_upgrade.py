@@ -2,13 +2,16 @@
 import hashlib
 from importlib import metadata
 import json
+import io
 from pathlib import Path
 import tempfile
+import tarfile
 import unittest
 from unittest.mock import patch
 
 import check_compat
 import stage_upgrade
+import make_package
 
 
 class UpgradeTests(unittest.TestCase):
@@ -84,6 +87,42 @@ class UpgradeTests(unittest.TestCase):
         with patch.object(stage_upgrade, "check", return_value={"ok": False, "error": "dependency_mismatch"}):
             self.assertFalse(stage_upgrade.stage(self.kit, self.base / "absent", self.base / "absent")["ok"])
         self.assertFalse((self.base / "absent").exists())
+
+    def source_archive(self):
+        files = {"BUILD.json": json.dumps({**self.info, "source_base": "synthetic"}).encode(),
+                 "requirements-linux.lock": b"example==1.0\n",
+                 "application/backend/marker.py": b"# synthetic\n"}
+        files["SHA256SUMS"] = "".join(hashlib.sha256(value).hexdigest() + "  " + key + "\n"
+                                          for key, value in files.items()).encode()
+        archive = self.base / "synthetic-full.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            for name, value in files.items():
+                info = tarfile.TarInfo("medqc-offline/" + name)
+                info.size = len(value)
+                tar.addfile(info, io.BytesIO(value))
+        return archive
+
+    def test_builder_requires_external_hash(self):
+        with self.assertRaisesRegex(ValueError, "verified_source"):
+            make_package.build(self.source_archive(), self.base / "output",
+                source_sha256="0" * 64, application_commit=self.info["commit"])
+
+    def test_builder_requires_application_identity(self):
+        source = self.source_archive()
+        with self.assertRaisesRegex(ValueError, "wrong_application"):
+            make_package.build(source, self.base / "output", source_sha256=make_package.digest(source),
+                               application_commit="1" * 40)
+
+    def test_builder_matches_explicit_version_and_does_not_claim_no_migration(self):
+        source = self.source_archive()
+        with patch.object(make_package.subprocess, "check_output", return_value="1" * 40):
+            make_package.build(source, self.base / "output", source_sha256=make_package.digest(source),
+                               application_commit=self.info["commit"])
+        kit = self.base / "output/medqc-app-upgrade"
+        self.assertEqual(check_compat.verify_package(kit), {**self.info, "source_base": "synthetic"})
+        package = json.loads((kit / "PACKAGE.json").read_text())
+        self.assertIsNone(package["database_migrations_required"])
+        self.assertEqual(package["application_commit"], self.info["commit"])
 
     @unittest.skipIf(__import__("os").name == "nt", "Linux symlink stage is exercised by Ubuntu isolation")
     def test_stage_preserves_current_venv_env_and_refuses_repeat(self):

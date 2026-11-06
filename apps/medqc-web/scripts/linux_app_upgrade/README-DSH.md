@@ -1,3 +1,19 @@
+# 业务线适配说明（2026-11-06）
+
+本目录合入PR #37的精简升级工具，不合入其过期双源应用/测试DDL，不构建或部署任何新包。下面原09f627a0e/062记录仅保留历史复现，**不能用于当前业务线服务器升级**；当前版本须使用新发行说明的应用Commit、Build、数据库迁移要求与只读预检，不恢复双源切换。
+
+生成器不再默认下载或提取旧09f627a0e。必须同时显式提供已验收完整包、发行方SHA256、该包BUILD.json的完整应用Commit；不一致拒绝。手动workflow同样要求source_run_id/source_sha256/application_commit，不能偷偷换最新Artifact。输出包PACKAGE.json的database_migrations_required为null（尚需逐版本确认），不是承诺无需迁移；工具本身不连接库、不迁移、不启停或部署。定时新功能需要064，既有063刷新必须保留。
+
+依赖检查复用源包精确版本锁，不自动安装。未通过当前发布环境的计量/身份/依赖/迁移验收，不得将工具自测当作交付包验收。本次未调用手动制包workflow。
+
+```text
+python -B apps/medqc-web/scripts/linux_app_upgrade/make_package.py --source <已验收完整tar.gz> --source-sha256 <发行方64位SHA256> --application-commit <该包40位应用Commit> --output <全新目录>
+```
+
+原PR #37历史包、Ubuntu11项隔离及依赖复用冒烟结果属于原固定应用，不能替代当前业务线应用验收。新版本仍需独立说明迁移、发布窗口及回退，不通过downgrade删历史表。
+
+---
+
 # Linux精简应用升级包：复用已有依赖
 
 应用来自已验证的完整包，文件逐字节一致，未重新编译。业务基线998f7ac94，实际应用Commit **09f627a0e19380d5a605302cc0058482a7c2682f**，Build **medqc-web-customer-20261104-235302**。PACKAGE.json中的packaging_commit仅是升级工具版本，不是应用runtime Commit。
