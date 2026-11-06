@@ -50,9 +50,9 @@ for line in (root / "CHECKSUMS.sha256").read_text().splitlines():
     assert path.is_relative_to(root) and path.is_file(), name
     assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, name
 for path in root.rglob("*.py"):
-    ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
     assert path.name != "source_bound_storage.py"
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8-sig"))):
         if isinstance(node, ast.ImportFrom): assert "source_bound_storage" not in (node.module or "")
         if isinstance(node, ast.Import): assert all("source_bound_storage" not in alias.name for alias in node.names)
 versions = root / "apps/medqc-web/backend/alembic/versions"
@@ -60,7 +60,7 @@ revisions, parents = set(), set()
 for path in versions.glob("*.py"):
     if path.name == "__init__.py": continue
     assert "000064" not in path.name
-    for node in ast.parse(path.read_text()).body:
+    for node in ast.parse(path.read_text(encoding="utf-8-sig")).body:
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             names = [x.id for x in targets if isinstance(x, ast.Name)]
