@@ -112,6 +112,7 @@ def include(name):
         return name.endswith(".py")
     if name in {
         BE + "requirements.txt",
+        BE + "tests/__init__.py",
         BE + "alembic.ini",
         BE + "scripts/run_qc_scheduler_tests.py",
         BE + "scripts/run_single_donghua_pg_tests.py",
