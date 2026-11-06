@@ -414,7 +414,7 @@ def test_real_dual_sources_cache_snapshots_and_background(
     with clinical.selected(d["independent"]), material.activate(stored["legacy"]):
         with pytest.raises(material.MaterialSnapshotError):
             assembly._select_records(
-                schema=d["schema"],
+                schema="cdm",
                 table="daily_course_record",
                 institute_id=d["identity"][0],
                 patient_id=d["identity"][1],
