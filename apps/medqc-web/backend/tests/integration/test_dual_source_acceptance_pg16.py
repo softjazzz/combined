@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.engine import URL
+from sqlalchemy.orm import sessionmaker
 
 from joint_pg_support import ISOLATION_ACTIVE, PORT, connect, create_database
 from test_bundle_refresh_storage_pg16 import setup_case, grant, make_case
@@ -74,6 +75,14 @@ def dual_factory(db, monkeypatch, tmp_path):
         business_owner, business = db
         service, schema, _ = setup_case(db, monkeypatch, mode)
         monkeypatch.setattr(clinical, "_engine", factory)
+        # 旧集合已经导入过这些模块：将测试进程内的业务连接别名绑定到本轮物理库。
+        from app.services.bundles import frontpage_view, assembly
+        from app.services import sichuan_qc_service
+
+        monkeypatch.setattr(frontpage_view, "engine", business)
+        monkeypatch.setattr(
+            sichuan_qc_service, "SessionLocal", sessionmaker(bind=business)
+        )
         name = "medqc_joint_clinic_" + uuid.uuid4().hex[:10]
         create_database(name)
         with closing(connect()) as admin:
@@ -238,6 +247,7 @@ def dual_factory(db, monkeypatch, tmp_path):
                     f'ALTER TABLE "{schema}".exam_item_report DROP COLUMN description'
                 )
             )
+        assembly._get_table_columns.cache_clear()
         before = contents(owner)
         counts = {"normal_write_attempts": 0, "wrong_source_reads": 0}
 
@@ -345,6 +355,11 @@ def test_real_dual_sources_cache_snapshots_and_background(
                 "exam_item_report",
             )
             assert ("description" in columns) is expected
+    from app.services.clinical_source_contract import inspect_source
+
+    with d["readonly"].connect() as c:
+        contract = inspect_source(c, check_rows=False)
+        assert contract["ok"], contract
     stored = {}
     for name, source in (("legacy", d["legacy"]), ("independent", d["independent"])):
         with clinical.selected(source):
