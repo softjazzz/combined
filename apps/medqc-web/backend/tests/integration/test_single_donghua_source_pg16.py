@@ -405,8 +405,11 @@ def test_registered_local_material_not_cdm_or_new_snapshot(single, mode, monkeyp
         )
         assert rows[0]["record_content"] == "synthetic-pdf-original"
     assert not read_calls
-    req.scope["query_string"] = (
-        b"institute_id=PDI&patient_id=pdfp_fake&visit_id=pdfv_fake"
+    forged = Request(
+        {
+            **req.scope,
+            "query_string": b"institute_id=PDI&patient_id=pdfp_fake&visit_id=pdfv_fake",
+        }
     )
     with pytest.raises(__import__("fastapi").HTTPException):
-        sources.prepare_request(req)
+        sources.prepare_request(forged)
