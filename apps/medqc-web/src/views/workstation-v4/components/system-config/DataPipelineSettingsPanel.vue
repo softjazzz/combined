@@ -12,7 +12,7 @@
           数据抽取链路
         </h2>
         <p class="mq-card__desc">
-          分别管理原PG同步和独立CDM同步；任务记录各自保留。
+          东华独立同步服务发布临床材料；应用侧原PG同步已停用。
         </p>
       </div>
       <a-button
@@ -260,7 +260,6 @@ const draft = reactive({
 })
 const selected = ref<DataPipeline>('legacy_pg')
 const options: { value: DataPipeline; label: string; description: string }[] = [
-  { value: 'legacy_pg', label: '原PG同步', description: 'clinical_data／homology → 原业务库CDM' },
   { value: 'independent_cdm', label: '独立CDM同步', description: 'Caché → 独立同步服务 → 独立CDM' },
 ]
 const loading = ref(false),
@@ -307,6 +306,7 @@ const canSubmit = computed(() =>
 )
 
 function select(value: DataPipeline) {
+  if (value !== 'independent_cdm') return
   selected.value = value
   draft.default_pipeline = value
   saved.value = false
@@ -322,7 +322,7 @@ async function load() {
     if (generation !== epoch || ticket !== loadId) return
     configuration.value = data
     Object.assign(draft, data.settings)
-    select(data.settings.default_pipeline)
+    select('independent_cdm')
     emit('ready', true)
   } catch {
     if (generation === epoch && ticket === loadId) {

@@ -1,15 +1,17 @@
-/** 来源属于当前页面，禁止通过localStorage在不同页签间隐式切换。 */
+/** 普通病历固定东华；历史任务和已登记材料由后端专用路径解析。 */
 export function clinicalSourceForRequest(url?: string): string | undefined {
   if (!url || typeof window === 'undefined') return undefined
   if (!/^\/api\/(?:v1\/)?(?:medical-records|emr|records|qc\/sichuan)(?:\/|$)/u.test(url))
     return undefined
-  if (window.location.pathname.includes('customer-sample-validation')) return 'legacy_pg'
-  const source = new URLSearchParams(window.location.search).get('source_id')
-  return source === 'legacy_pg' || source === 'independent_cdm' ? source : undefined
+  const request = new URL(url, window.location.origin)
+  if (request.pathname.includes('/workspace/batch-jobs/') || request.searchParams.has('job_id')) return undefined
+  if (window.location.pathname.includes('customer-sample-validation')) return undefined
+  return 'independent_cdm'
 }
 
-export function setPageClinicalSource(source: string): void {
+export function setPageClinicalSource(_source: string): void {
   const url = new URL(window.location.href)
-  url.searchParams.set('source_id', source)
+  if (url.pathname.includes('customer-sample-validation') || url.searchParams.has('job_id')) return
+  url.searchParams.set('source_id', 'independent_cdm')
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
 }

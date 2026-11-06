@@ -30,4 +30,9 @@ trap stop_owned_pg EXIT
 cd "$ROOT/apps/medqc-web/backend"
 "$PG_BIN/psql" -h 127.0.0.1 -p 62997 -U postgres -d postgres -Atc \
   "SELECT current_setting('server_version'),current_setting('cluster_name'),inet_server_port()"
-"$PYTHON" -B scripts/run_bundle_refresh_pg_tests.py --data-directory "$PG_OWNER_ROOT/data"
+PG_TEST_ENTRY="${MEDQC_PG_TEST_ENTRY:-scripts/run_bundle_refresh_pg_tests.py}"
+case "$PG_TEST_ENTRY" in
+  scripts/run_bundle_refresh_pg_tests.py|scripts/run_single_donghua_pg_tests.py) ;;
+  *) echo 'Unapproved owned PG test entry' >&2; exit 1 ;;
+esac
+"$PYTHON" -B "$PG_TEST_ENTRY" --data-directory "$PG_OWNER_ROOT/data"

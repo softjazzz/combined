@@ -8,6 +8,8 @@ ETL 同步服务 — 从远端 PostgreSQL 拉取数据写入本地 PostgreSQL。
 
 import os
 import json
+from .clinical_source_policy import legacy_sync_operation
+
 import logging
 import re
 import uuid
@@ -1214,6 +1216,7 @@ def load_db_config() -> Dict:
     return cfg
 
 
+@legacy_sync_operation
 def save_db_config(config: Dict, runtime_password: Optional[str] = None) -> Dict:
     """保存数据库配置到 PG config registry（不持久化明文密码）。"""
     global _runtime_remote_password
@@ -1253,6 +1256,7 @@ def save_db_config(config: Dict, runtime_password: Optional[str] = None) -> Dict
 
 # ==================== 远端数据库连接 ====================
 
+@legacy_sync_operation
 def get_remote_db_url() -> str:
     """从配置构建远端 PG DSN（安全处理特殊字符口令）。"""
     cfg = load_db_config()
@@ -1292,6 +1296,7 @@ def _refresh_all_bundle_variants_after_sync(
     )
 
 
+@legacy_sync_operation
 def test_remote_connection() -> Dict:
     """测试远端数据库连接"""
     url = get_remote_db_url()
@@ -2142,6 +2147,7 @@ def list_sync_tables() -> List[Dict[str, Any]]:
     ]
 
 
+@legacy_sync_operation
 def save_sync_tables_config(updates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     table_map = {str(item["name"]): item for item in SYNC_TABLES}
     changed_names: set[str] = set()
@@ -2281,6 +2287,7 @@ def _resolve_target_tables_with_scope(
 
 
 
+@legacy_sync_operation
 def call_stored_procedure(remote_url: str, procedure: str, date_str: str, param_count: int = 1) -> List[Dict]:
     """
     调用远端存储过程并返回结果
@@ -2533,6 +2540,7 @@ def _resolve_remote_visit_filters(cursor, remote_schema: str, source_table: str)
     return date_field, dept_field
 
 
+@legacy_sync_operation
 def list_remote_departments(limit: int = 500) -> Dict[str, Any]:
     """
     从源 PG 拉取科室列表（用于同步策略中的科室选择）。
@@ -2733,6 +2741,7 @@ def estimate_pg_sync_impact(
     }
 
 
+@legacy_sync_operation
 def fetch_remote_rows_by_visit_keys(
     *,
     remote_url: str,
@@ -2786,6 +2795,7 @@ def fetch_remote_rows_by_visit_keys(
         conn.close()
 
 
+@legacy_sync_operation
 def fetch_remote_rows_by_case_refs(
     *,
     remote_url: str,
@@ -2866,6 +2876,7 @@ def fetch_remote_rows_by_case_refs(
         conn.close()
 
 
+@legacy_sync_operation
 def fetch_remote_rows_by_table(
     remote_url: str,
     remote_schema: str,
@@ -3378,6 +3389,7 @@ def _resolve_case_scope_window(
     return _current_hospital_date(), None, None, departments, None
 
 
+@legacy_sync_operation
 def run_sync(
     sync_date: str = None,
     tables: List[str] = None,

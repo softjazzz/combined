@@ -71,7 +71,7 @@ def dual_factory(db, monkeypatch, tmp_path):
     factory = clinical._engine
     cleanup = []
 
-    def make(mode, damage=None):
+    def make(mode, damage=None, *, extra_seed=None):
         business_owner, business = db
         service, schema, _ = setup_case(db, monkeypatch, mode)
         monkeypatch.setattr(clinical, "_engine", factory)
@@ -259,6 +259,8 @@ def dual_factory(db, monkeypatch, tmp_path):
                 )
             )
         assembly._get_table_columns.cache_clear()
+        if extra_seed is not None:
+            extra_seed(business_owner, owner, schema, identity)
         before = contents(owner)
         counts = {"normal_write_attempts": 0, "wrong_source_reads": 0}
 

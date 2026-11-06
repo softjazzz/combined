@@ -22,6 +22,7 @@ from .etl_sync import (
     load_db_config,
     upsert_to_local,
 )
+from .clinical_source_policy import legacy_sync_operation
 from .visit_index_service import ingest_sync_rows
 from .homology_sync import resolve_homology_source
 
@@ -122,6 +123,7 @@ class CaseSetSyncService:
             raise RuntimeError("病例Bundle统一刷新失败")
         return stats
 
+    @legacy_sync_operation
     def sync_case_set(
         self,
         *,

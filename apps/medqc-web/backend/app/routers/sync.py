@@ -40,7 +40,13 @@ _AUTO_QC_ENQUEUE_FAILED_WARNING = "资料同步已完成，但质控任务未创
 _AUTO_QC_WORKFLOW_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$")
 _AUTO_QC_FINAL_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-router = APIRouter(prefix="/api/v1/sync", tags=["data-sync"])
+def require_legacy_sync_available():
+    from ..services.clinical_source_policy import fixed_cdm
+    if fixed_cdm():
+        raise HTTPException(409,"legacy_sync_disabled_in_fixed_cdm")
+
+
+router = APIRouter(prefix="/api/v1/sync", tags=["data-sync"], dependencies=[Depends(require_legacy_sync_available)])
 
 
 def _ok(request: Request, data: dict | list | str | int | float | bool | None, message: str | None = None):

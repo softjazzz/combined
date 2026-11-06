@@ -3135,6 +3135,8 @@ class CustomQCWorkspaceService:
             normalized_run_mode = _normalize_run_mode(run_mode)
             normalized_job_kind = _safe_text(job_kind, "leaf").lower() or "leaf"
             base_filters = dict(filters or {})
+            if record_refs:
+                base_filters["record_refs"]=[ref.as_dict() for ref in normalize_case_refs(record_refs)]
             from .clinical_sources import freeze
             freeze(base_filters)
             if DISPATCH_FILTER_KEY in base_filters:

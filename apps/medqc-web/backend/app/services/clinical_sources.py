@@ -14,6 +14,7 @@ from sqlalchemy.engine import URL
 
 from ..database import clinical_connection as clinical
 from .data_pipeline_settings import PipelineError
+from .clinical_source_policy import fixed_cdm
 
 NAMESPACE, KEY = "clinical", "sources_v1"
 TASK_KEY = "clinical_source"
@@ -57,6 +58,8 @@ def snapshot(settings: SourceSettings, source_id: str, *, allow_disabled=False) 
     if source_id not in IDS:
         raise PipelineError("unknown_clinical_source", 422)
     if source_id == "legacy_pg":
+        if fixed_cdm():
+            raise PipelineError("ordinary_source_fixed_donghua_cdm", 409)
         if not settings.legacy_enabled and not allow_disabled:
             raise PipelineError("clinical_source_disabled", 409)
         return {**legacy_snapshot(), "version": settings.version, "name": settings.legacy_name}
@@ -78,6 +81,8 @@ def snapshot(settings: SourceSettings, source_id: str, *, allow_disabled=False) 
 
 def save(session, proposed: SourceSettings, actor: str) -> SourceSettings:
     current, raw = load(session)
+    if fixed_cdm():
+        proposed = proposed.model_copy(update={"default_source": "independent_cdm", "legacy_enabled": False})
     if proposed.version != current.version:
         raise PipelineError("clinical_source_configuration_changed", 409)
     if not proposed.legacy_enabled and not proposed.cdm.enabled:
@@ -102,15 +107,52 @@ def configuration() -> SourceSettings:
     from ..database.connection import SessionLocal
     if SessionLocal is None:
         if os.getenv("ENV", "development").lower() not in {"prod", "production"}:
-            return SourceSettings()
+            return SourceSettings(default_source="independent_cdm",legacy_enabled=False) if fixed_cdm() else SourceSettings()
         raise PipelineError("clinical_source_configuration_unavailable")
     try:
         with SessionLocal() as session:
-            return load(session)[0]
+            value = load(session)[0]
+            return value.model_copy(update={"default_source": "independent_cdm", "legacy_enabled": False}) if fixed_cdm() else value
     except PipelineError:
         raise
     except Exception:
         raise PipelineError("clinical_source_configuration_unavailable") from None
+
+
+def _registered_local_case(ref: dict) -> bool:
+    from .validation_material_source import is_material_copy, material_source_schema
+    keys = ("institute_id", "patient_id", "visit_id")
+    if not all(ref.get(key) for key in keys):
+        raise PipelineError("clinical_material_identity_incomplete", 422)
+    identity = {key: str(ref[key]) for key in keys}
+    if is_material_copy(identity["patient_id"], identity["visit_id"]):
+        material_source_schema(default_schema="cdm", **identity)
+        return True
+    if identity["institute_id"] != "CUSTOMER_TEST":
+        return False
+    from ..database.connection import SessionLocal, DB_SCHEMA_MODE
+    if SessionLocal is None:
+        raise PipelineError("clinical_material_registration_unavailable")
+    schema = "qc" if str(DB_SCHEMA_MODE).lower()=="split" else "public"
+    with SessionLocal() as session:
+        found = session.execute(text(f"SELECT 1 FROM {schema}.manual_problem_sample_pool_items WHERE pool_id=:pool AND matched_institute_id=:institute_id AND matched_patient_id=:patient_id AND matched_visit_id=:visit_id LIMIT 1"), {**identity, "pool":"customer-created-test-records-v1"}).first()
+    if found is None:
+        raise PipelineError("clinical_material_identity_not_registered", 422)
+    return True
+
+
+def _local_material_filters(filters: dict) -> bool:
+    refs = filters.get("record_refs")
+    if not isinstance(refs,list) or not refs:
+        return False
+    local = [_registered_local_case(ref) for ref in refs if isinstance(ref,dict)]
+    if len(local)!=len(refs) or any(local) and not all(local):
+        raise PipelineError("clinical_material_mixed_sources",422)
+    return bool(local) and all(local)
+
+
+def ordinary_snapshot():
+    return snapshot(configuration(), "independent_cdm")
 
 
 def prepare_request(request: Request) -> None:
@@ -141,6 +183,13 @@ def prepare_request(request: Request) -> None:
             request.state.material_root_job_id = ""
         request.state.clinical_source = legacy_snapshot()
         return
+    if fixed_cdm() and request.method=="GET" and identity["institute_id"]=="CUSTOMER_TEST" and not request.query_params.get("job_id"):
+        try:
+            if _registered_local_case(identity):
+                request.state.clinical_source=legacy_snapshot()
+                return
+        except (PipelineError,ValueError):
+            raise HTTPException(422,"clinical_material_identity_not_registered") from None
     try:
         header = request.headers.get("x-clinical-source")
         query = request.query_params.get("source_id")
@@ -154,8 +203,13 @@ def prepare_request(request: Request) -> None:
             request.state.clinical_source = selection
         else:
             settings = configuration()
-            # 无显式来源的旧详情链接保留原库；新病历池先解析默认源再携带显式来源。
-            default = settings.default_source if path.endswith("/workstation") or request.method == "POST" else "legacy_pg"
+            # 单源部署不允许旧链接切回原库；兼容模式仅供保留原部署与隔离回归。
+            if fixed_cdm():
+                if (header or query) not in (None,"independent_cdm"):
+                    raise PipelineError("ordinary_source_fixed_donghua_cdm",409)
+                default = "independent_cdm"
+            else:
+                default = settings.default_source if path.endswith("/workstation") or request.method == "POST" else "legacy_pg"
             request.state.clinical_source = snapshot(settings, header or query or default)
         if request.state.clinical_source["id"] == "independent_cdm" and "medical-records/" in path:
             suffix = path.split("medical-records/", 1)[1]
@@ -222,10 +276,17 @@ def source_for_saved_job(request: Request, job_id: str) -> dict:
 
 
 def freeze(filters: dict) -> None:
-    source = clinical.current_selection() or legacy_snapshot()
+    if fixed_cdm():
+        local_material = _local_material_filters(filters)
+        source = legacy_snapshot() if local_material else (
+            clinical.current_selection() or ordinary_snapshot())
+        if source["id"]=="legacy_pg" and not local_material:
+            source=ordinary_snapshot()
+    else:
+        source = clinical.current_selection() or legacy_snapshot()
     refs = filters.get("record_refs") or []
     refs = [ref for ref in refs if isinstance(ref, dict)] if isinstance(refs, list) else []
-    if filters.get("sample_pool_id") or (refs and all(str(ref.get("patient_id", "")).startswith("pdfp_") and str(ref.get("visit_id", "")).startswith("pdfv_") for ref in refs)):
+    if not fixed_cdm() and (filters.get("sample_pool_id") or (refs and all(str(ref.get("patient_id", "")).startswith("pdfp_") and str(ref.get("visit_id", "")).startswith("pdfv_") for ref in refs))):
         source = legacy_snapshot()
     existing = filters.get(TASK_KEY)
     if existing is not None and existing != source:
@@ -271,6 +332,9 @@ def bound_job(function):
                 workspace.fail_batch_job(job_id=job_id, error_message="clinical_source_snapshot_invalid",
                     queued_only=True, expected_queued_filters_json=raw)
             return None
+        if fixed_cdm() and source["id"]=="legacy_pg" and not _local_material_filters((job or {}).get("filters") or {}):
+            # 历史普通旧源任务保持原状；不自动执行、不改绑或改写其状态。
+            return None
         with clinical.selected(source):
             return await function(job_id, workspace=workspace, **kwargs)
     return run
@@ -278,5 +342,8 @@ def bound_job(function):
 
 @contextmanager
 def request_selection(request: Request):
-    with clinical.selected(getattr(request.state, "clinical_source", legacy_snapshot())):
+    source=getattr(request.state,"clinical_source",None)
+    if source is None:
+        source=ordinary_snapshot() if fixed_cdm() else legacy_snapshot()
+    with clinical.selected(source):
         yield
