@@ -3,10 +3,11 @@ import { computed, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataSyncConfigPage from '@/views/workstation-v4/DataSyncConfigPage.vue'
 
-const { mockRunPreflight, mockMessageWarning, mockLoadDepartments } = vi.hoisted(() => ({
+const { mockRunPreflight, mockMessageWarning, mockLoadDepartments, mockInitialize } = vi.hoisted(() => ({
   mockRunPreflight: vi.fn(),
   mockMessageWarning: vi.fn(),
   mockLoadDepartments: vi.fn(),
+  mockInitialize: vi.fn(),
 }))
 
 const mockState = reactive({
@@ -74,7 +75,7 @@ vi.mock('@/views/workstation-v4/composables/useDataSync', () => ({
     state: mockState,
     isReadonly: ref(false),
     hasPreflightPass: computed(() => Boolean(mockState.preflightResult?.executable)),
-    initialize: vi.fn().mockResolvedValue(undefined),
+    initialize: mockInitialize,
     loadDepartments: mockLoadDepartments,
     resetState: vi.fn(),
     testAllConnections: vi.fn(),
@@ -162,7 +163,7 @@ describe('DataSyncConfigPage visit progress', () => {
     mockUserRoles = ['sync_admin']
     const wrapper = mountPage()
     await flushPromises()
-    expect(wrapper.text()).toContain('高级设置与运行记录')
+    expect(wrapper.text()).not.toContain('高级设置与运行记录')
     await wrapper.get('[data-testid="choose-independent"]').trigger('click')
     expect(wrapper.find('[data-testid="check-record-scope-action"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('高级设置与运行记录')
@@ -192,6 +193,7 @@ describe('DataSyncConfigPage visit progress', () => {
     wrapper.unmount()
   })
   beforeEach(() => {
+    mockInitialize.mockReset()
     mockRunPreflight.mockReset()
     mockMessageWarning.mockReset()
     mockLoadDepartments.mockReset()
@@ -227,349 +229,16 @@ describe('DataSyncConfigPage visit progress', () => {
     }
   })
 
-  it('重新打开页面时不把上一次同步结果当作本次进度', async () => {
-    const wrapper = mountPage()
-    await flushPromises()
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.text()).toContain('可进入病历池')
-    expect(wrapper.text()).toContain('资料类别进度')
-    expect(wrapper.text()).toContain('0 / 20 份')
-    expect(wrapper.text()).not.toContain('3 / 20 份')
-    expect(wrapper.text()).not.toContain('有 2 份病历明细已同步但病历池暂不可见')
-    expect(wrapper.get('[data-testid="sync-progress-status"]').classes()).not.toContain(
-      'mq-status--warning',
-    )
-  })
-
-  it('科室仍在后台加载时可以切到模型设置', async () => {
+  it('旧PG同步被固定停用，后台科室和旧任务状态不能触发初始化', async () => {
     mockState.departmentsLoading = true
     const wrapper = mountPage()
     await flushPromises()
-    expect(wrapper.get('[data-testid="departments-background-loading"]').text()).toContain('后台')
-    const tab = wrapper.findAll('[role="tab"]').find((item) => item.text() === '模型配置')
-    expect(tab).toBeDefined()
-    await tab!.trigger('click')
-    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe('llmConfig')
-    expect(mockMessageWarning).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="check-record-scope-action"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('病历数据同步设置')
+    expect(wrapper.text()).not.toContain('高级设置与运行记录')
+    expect(mockInitialize).not.toHaveBeenCalled()
+    expect(mockLoadDepartments).not.toHaveBeenCalled()
+    expect(mockRunPreflight).not.toHaveBeenCalled()
     wrapper.unmount()
-  })
-
-  it('源科室失败仅在字段旁提示并允许只读重试', async () => {
-    mockState.departmentsError = '未能读取服务器科室，请确认连接后重试。'
-    const wrapper = mountPage()
-    await flushPromises()
-    const hint = wrapper.get('[data-testid="departments-background-error"]')
-    await hint.get('button').trigger('click')
-    expect(mockLoadDepartments).toHaveBeenCalledTimes(2)
-    expect(mockMessageWarning).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('未重新检查范围时本次同步计数全部从零开始', async () => {
-    mockState.preflightResult = null
-
-    const wrapper = mountPage()
-    await flushPromises()
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.text()).toContain('本次候选')
-    expect(wrapper.text()).toContain('0 / 0 份')
-    expect(wrapper.text()).not.toContain('3 / 20 份')
-  })
-
-  it('高级账号将表名和行数收纳在默认折叠的同步详情中', async () => {
-    mockUserRoles = ['sync_admin']
-    mockState.pgSyncState = {
-      is_running: false,
-      last_sync_status: 'success',
-      progress: {
-        status: 'success',
-        stage: 'completed',
-        tables_total: 8,
-        tables_done: 8,
-        rows_pulled_total: 120,
-        rows_upserted_total: 100,
-        eligible_visit_count: 20,
-      },
-    }
-
-    const wrapper = mountPage()
-    await flushPromises()
-
-    const details = wrapper.get('[data-testid="sync-technical-details"]')
-    expect(details.attributes('open')).toBeUndefined()
-    expect(wrapper.text()).toContain('资料类别进度')
-    expect(details.text()).toContain('当前资料表')
-    expect(wrapper.text()).toContain('已拉取行数')
-    expect(wrapper.text()).toContain('0 / 20 份')
-  })
-
-  it('使用客户语言展示病例范围与Bundle刷新阶段', async () => {
-    mockState.isSyncing = true
-    mockState.pgSyncState = {
-      is_running: true,
-      last_sync_status: 'running',
-      progress: {
-        status: 'running',
-        stage: 'scope_resolution',
-        current_table: 'mr',
-        tables_total: 8,
-        tables_done: 0,
-        eligible_visit_count: 0,
-      },
-    }
-    const wrapper = mountPage()
-    await flushPromises()
-    expect(wrapper.text()).toContain('正在确定病历范围')
-    expect(wrapper.text()).not.toContain('正在同步数据：mr')
-
-    mockState.pgSyncState.progress.stage = 'bundle_refresh'
-    mockState.pgSyncState.progress.current_table = ''
-    mockState.pgSyncState.progress.bundle_progress = {
-      total: 20,
-      completed: 7,
-      remaining: 13,
-    }
-    await wrapper.vm.$nextTick()
-    expect(wrapper.text()).toContain('正在刷新病历资料视图')
-    expect(wrapper.text()).toContain('病历资料视图')
-    expect(wrapper.text()).toContain('7 / 20 份')
-  })
-
-  it('按用户任务顺序展示三步单页同步引导', async () => {
-    const wrapper = mountPage()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('选择病历类型')
-    expect(wrapper.text()).toContain('设置同步范围')
-    expect(wrapper.text()).toContain('检查结果')
-    expect(wrapper.text()).toContain('抽取科室')
-    expect(wrapper.text()).toContain('出院开始日期')
-    expect(wrapper.text()).toContain('出院结束日期')
-    expect(wrapper.findAll('[data-testid^="sync-scene-"]')).toHaveLength(3)
-    expect(wrapper.get('[data-testid="sync-scene-final"]').classes()).toContain('is-active')
-    expect(wrapper.findAll('[data-testid="check-record-scope-action"]')).toHaveLength(1)
-    expect(wrapper.text()).toContain('mr_no 不是同步条件')
-    expect(wrapper.text()).not.toContain('配置摘要')
-    expect(wrapper.text()).not.toContain('安全说明')
-  })
-
-  it('在院范围不展示历史日期选择器并说明按当前时刻判断', async () => {
-    mockState.policyForm.scope = 'running'
-
-    const wrapper = mountPage()
-    await flushPromises()
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.text()).toContain('当前在院统计时间')
-    expect(wrapper.text()).toContain('以执行检查时的医院当前时间为准')
-    expect(wrapper.text()).not.toContain('入院开始日期')
-    expect(wrapper.text()).not.toContain('在院截止日期')
-    expect(wrapper.text()).not.toContain('出院开始日期')
-    expect(wrapper.text()).not.toContain('出院结束日期')
-    const datePickers = wrapper.findAll('.date-picker-stub')
-    expect(datePickers).toHaveLength(0)
-    mockState.policyForm.scope = 'final'
-  })
-
-  it('合并范围只展示出院日期范围并保留中文日期选择器', async () => {
-    mockState.policyForm.scope = 'both'
-
-    const wrapper = mountPage()
-    await flushPromises()
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.text()).toContain('当前在院 + 期间出院病历')
-    expect(wrapper.text()).toContain('出院开始日期')
-    expect(wrapper.text()).toContain('出院结束日期')
-    const datePickers = wrapper.findAll('.date-picker-stub')
-    expect(datePickers).toHaveLength(2)
-    expect(datePickers.every((picker) => picker.attributes('data-locale') === '请选择日期')).toBe(
-      true,
-    )
-    mockState.policyForm.scope = 'final'
-  })
-
-  it('点击病历类型卡片直接更新同步范围', async () => {
-    const wrapper = mountPage()
-    await flushPromises()
-
-    await wrapper.get('[data-testid="sync-scene-running"]').trigger('click')
-
-    expect(mockState.policyForm.scope).toBe('running')
-    expect(wrapper.text()).toContain('当前在院统计时间')
-    mockState.policyForm.scope = 'final'
-  })
-
-  it('只有检查通过后才展示确认和正式同步操作', async () => {
-    mockState.preflightResult = {
-      estimated_impact: 12,
-      executable: false,
-      blockers: ['源库住院登记不可用'],
-      warnings: [],
-    }
-    const wrapper = mountPage()
-    await flushPromises()
-    expect(wrapper.text()).not.toContain('我已确认同步 12 份病历')
-
-    mockState.preflightResult.executable = true
-    mockState.preflightResult.blockers = []
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.text()).toContain('我已确认同步 12 份病历')
-    expect(wrapper.text()).toContain('开始同步')
-  })
-
-  it('执行同步前在页面内弹窗展示范围摘要，取消后不执行', async () => {
-    mockUserRoles = ['sync_admin']
-    mockState.preflightResult = {
-      source: 'pg',
-      estimated_impact: 12,
-      executable: true,
-      blockers: [],
-      warnings: [],
-    }
-    const wrapper = mountPage()
-    await flushPromises()
-    expect(wrapper.find('.sync-confirm').exists()).toBe(false)
-
-    await wrapper.get('.sync-actions__confirm input').setValue(true)
-    const executeButton = wrapper
-      .findAll('button')
-      .find((button) => button.text() === '确认执行同步')
-    await executeButton?.trigger('click')
-    await flushPromises()
-
-    const dialog = wrapper.get('.sync-confirm')
-    expect(dialog.text()).toContain('执行前确认')
-    expect(dialog.text()).toContain('找到可同步病历 12 份')
-    expect(dialog.text()).toContain('已出院病历')
-    expect(dialog.text()).toContain('2026-06-01 ~ 2026-06-30')
-
-    const cancelButton = dialog.findAll('button').find((button) => button.text() === '取消')
-    await cancelButton?.trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.sync-confirm').exists()).toBe(false)
-  })
-
-  it('演示账号只看到简化同步向导并隐藏实施诊断信息', async () => {
-    mockUserRoles = ['admin', 'qc_manager']
-    mockState.preflightResult = null
-
-    const wrapper = mountPage()
-    await flushPromises()
-    const text = wrapper.text()
-
-    expect(text).toContain('病历数据同步设置')
-    expect(text).toContain('检查病历范围')
-    expect(text).not.toContain('我已确认同步')
-    expect(text).toContain('出院开始日期')
-    expect(text).toContain('出院结束日期')
-    expect(text).not.toContain('clinical_data')
-    expect(text).not.toContain('本地 CDM')
-    expect(text).not.toContain('discharge_record')
-    expect(text).not.toContain('表组预检表')
-    expect(text).not.toContain('实施诊断模式')
-  })
-
-  it('实施账号可以展开高级配置和运行日志', async () => {
-    mockUserRoles = ['sync_admin']
-
-    const wrapper = mountPage()
-    await flushPromises()
-    expect(wrapper.text()).toContain('高级设置与运行记录')
-    expect(wrapper.text()).not.toContain('clinical_data')
-
-    await wrapper.get('[data-testid="advanced-sync-toggle"]').trigger('click')
-
-    expect(wrapper.text()).toContain('clinical_data')
-    expect(wrapper.text()).toContain('表组预检')
-  })
-
-  it.each([
-    { role: 'qc_manager', frontpage: true, llm: false, observability: false },
-    { role: 'admin', frontpage: true, llm: true, observability: true },
-    { role: 'sync_admin', frontpage: true, llm: true, observability: true },
-    { role: 'super_admin', frontpage: true, llm: true, observability: true },
-    { role: 'doctor', frontpage: false, llm: false, observability: false },
-  ])('按 $role 的后端角色合同展示系统配置页签', async ({ role, frontpage, llm, observability }) => {
-    mockUserRoles = [role]
-
-    const wrapper = mountPage()
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="frontpage-config-tab"]').exists()).toBe(frontpage)
-    expect(wrapper.find('[data-testid="llm-config-tab"]').exists()).toBe(llm)
-    expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(observability)
-  })
-
-  it('演示账号不显示模型性能页签', async () => {
-    mockUserRoles = ['admin']
-    mockAuthStore.user.is_demo_account = true
-
-    const wrapper = mountPage()
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(false)
-  })
-
-  it('内置同步管理员即使带演示标记仍显示模型性能页签', async () => {
-    mockUserRoles = ['sync_admin']
-    mockAuthStore.user.is_demo_account = true
-
-    const wrapper = mountPage()
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(true)
-  })
-
-  it('管理员通过 tab 查询参数可直接打开模型性能页签', async () => {
-    mockUserRoles = ['admin']
-    mockRoute.query = { tab: 'llmObservability' }
-
-    const wrapper = mountPage()
-    await flushPromises()
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe(
-      'llmObservability',
-    )
-  })
-
-  it('0 条候选病历时展示客户化 warning 口径', async () => {
-    mockUserRoles = ['admin', 'qc_manager']
-    mockState.preflightResult = {
-      estimated_impact: 0,
-      executable: false,
-      blockers: [],
-      warnings: [],
-    }
-
-    const wrapper = mountPage()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('没有找到符合条件的已出院病历，请检查科室名称或出院日期范围。')
-    expect(wrapper.text()).not.toContain('预检通过')
-  })
-
-  it('范围解析失败时只提示阻断原因，不误报为零候选病历', async () => {
-    mockRunPreflight.mockResolvedValue({
-      estimated_impact: 0,
-      executable: false,
-      blockers: ['候选病历范围解析失败，请检查日期、科室和源库住院登记配置'],
-      warnings: [],
-    })
-
-    const wrapper = mountPage()
-    await flushPromises()
-    await wrapper.get('[data-testid="check-record-scope-action"]').trigger('click')
-
-    expect(mockMessageWarning).toHaveBeenCalledWith(
-      '检查未通过：候选病历范围解析失败，请检查日期、科室和源库住院登记配置',
-    )
-    expect(mockMessageWarning).not.toHaveBeenCalledWith(
-      '没有找到符合条件的已出院病历，请检查科室名称或出院日期范围。',
-    )
   })
 })

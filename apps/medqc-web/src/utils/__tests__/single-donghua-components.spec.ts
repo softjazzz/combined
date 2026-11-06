@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { AxiosHeaders } from 'axios'
 import Panel from '@/views/workstation-v4/components/system-config/ClinicalSourceSettingsPanel.vue'
 import { clinicalSourcesApi } from '@/api/clinicalSources'
 import { ApiService } from '@/services/apiService'
@@ -33,7 +34,7 @@ describe('真实面板及病历池单源行为', () => {
   })
   it('过期默认配置及URL不能改变列表请求，行身份继续传给详情与任务', async () => {
     vi.mocked(clinicalSourcesApi.options).mockResolvedValue({ default_source: 'legacy_pg', sources: [{ id: 'legacy_pg', name: 'old', enabled: true }, { id: 'independent_cdm', name: '东华CDM', enabled: true }] })
-    vi.mocked(ApiService.getRaw).mockResolvedValue({ data: { records: [{ id: 'R', institute_id: 'I', patient_id: 'P', visit_id: 'V' }], total: 1 } })
+    vi.mocked(ApiService.getRaw).mockResolvedValue({ data: { records: [{ id: 'R', institute_id: 'I', patient_id: 'P', visit_id: 'V' }], total: 1 }, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } })
     const records = usePatientRecords()
     await records.fetchData()
     expect(ApiService.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', expect.objectContaining({ source_id: 'independent_cdm' }))

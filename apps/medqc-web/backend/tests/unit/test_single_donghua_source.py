@@ -6,7 +6,11 @@ from fastapi import HTTPException
 from app.database import clinical_connection as clinical
 from app.services import clinical_sources as sources
 from app.services.data_pipeline_settings import PipelineError
-from tests.unit.test_clinical_sources import profile as original_profile, request
+from tests.unit.test_clinical_sources import (
+    profile as original_profile,
+    request,
+    settings_store as original_store,
+)
 
 from tests.unit.test_latest_full_record_result import (
     saved_jobs as original_jobs,
@@ -15,6 +19,7 @@ from tests.unit.test_latest_full_record_result import (
 )
 
 profile = original_profile
+settings_store = original_store
 
 
 @pytest.fixture(autouse=True)
@@ -286,3 +291,17 @@ def test_registered_custom_history_still_checks_job_authorization(monkeypatch):
     with pytest.raises(HTTPException) as caught:
         sources.prepare_request(req)
     assert caught.value.status_code == 403 and calls == ["old"]
+
+
+def test_fixed_connection_can_be_staged_disabled_without_fallback(
+    settings_store, monkeypatch
+):
+    monkeypatch.delenv("CDM_PGPASSFILE", raising=False)
+    saved = sources.save(settings_store, sources.SourceSettings(), "synthetic-admin")
+    assert (
+        saved.default_source == "independent_cdm"
+        and not saved.legacy_enabled
+        and not saved.cdm.enabled
+    )
+    with pytest.raises(PipelineError, match="disabled"):
+        sources.snapshot(saved, saved.default_source)

@@ -85,9 +85,10 @@ def save(session, proposed: SourceSettings, actor: str) -> SourceSettings:
         proposed = proposed.model_copy(update={"default_source": "independent_cdm", "legacy_enabled": False})
     if proposed.version != current.version:
         raise PipelineError("clinical_source_configuration_changed", 409)
-    if not proposed.legacy_enabled and not proposed.cdm.enabled:
+    if not fixed_cdm() and not proposed.legacy_enabled and not proposed.cdm.enabled:
         raise PipelineError("at_least_one_clinical_source_required", 422)
-    snapshot(proposed, proposed.default_source)
+    if not fixed_cdm():
+        snapshot(proposed, proposed.default_source)
     if proposed.cdm.enabled:
         snapshot(proposed, "independent_cdm")
     saved = proposed.model_copy(update={"version": current.version + 1})

@@ -25,7 +25,7 @@ ORDINARY = ("0001", "0002", "0003")
 
 
 @pytest.fixture
-def single(dual_factory, monkeypatch):
+def single(dual_factory, db, monkeypatch):
     from app.database import connection
 
     def seed(business, clinical, schema, original):
@@ -55,12 +55,14 @@ def single(dual_factory, monkeypatch):
         monkeypatch.setattr(connection, "SessionLocal", factory)
         monkeypatch.setattr(connection, "engine", d["business"])
         from app.services.medical_records import query_service, detail_service
+
         monkeypatch.setattr(query_service, "engine", d["business"])
         monkeypatch.setattr(detail_service, "engine", d["business"])
         monkeypatch.setattr(
             query_service, "_load_latest_luxian_0609_qc_summaries", lambda *a, **k: {}
         )
         d["factory"] = factory
+        d["business_owner"] = db[0]
         return d
 
     return create
@@ -164,12 +166,15 @@ def persist_task_and_result(d, monkeypatch):
         read_luxian_0609_snapshot_source_rows,
     )
 
+    monkeypatch.setattr(workspace, "engine", d["business"])
+    monkeypatch.setattr(workspace, "SessionLocal", d["factory"])
+    workspace._batch_jobs_table.cache_clear()
     metadata = sa.MetaData()
     jobs = workspace._batch_jobs_table(readonly=True).to_metadata(metadata, schema="qc")
     envelopes = workspace._record_result_envelopes_table().to_metadata(
         metadata, schema="qc"
     )
-    with d["owner"].begin() as c:
+    with d["business_owner"].begin() as c:
         existing = (
             sa.inspect(c).get_columns(jobs.name, schema="qc")
             if sa.inspect(c).has_table(jobs.name, schema="qc")
@@ -188,7 +193,7 @@ def persist_task_and_result(d, monkeypatch):
                         )
                     )
         metadata.create_all(c)
-    grant(d["owner"])
+    grant(d["business_owner"])
     monkeypatch.setattr(workspace, "_session", d["factory"])
     service = object.__new__(workspace.CustomQCWorkspaceService)
     service._batch_job_table = jobs
@@ -314,7 +319,7 @@ def test_registered_local_material_not_cdm_or_new_snapshot(single, mode, monkeyp
     }
     sources.freeze(filters)
     assert sources.saved_snapshot(filters)["id"] == "legacy_pg"
-    with d["owner"].begin() as c:
+    with d["business_owner"].begin() as c:
         c.execute(
             sa.text(
                 "CREATE TABLE qc.validation_material_batches(id text PRIMARY KEY,storage_schema text NOT NULL,state text NOT NULL)"
@@ -352,7 +357,7 @@ def test_registered_local_material_not_cdm_or_new_snapshot(single, mode, monkeyp
                 "GRANT SELECT ON pdfmat_111111111111.daily_course_record TO medqc_job_api"
             )
         )
-    grant(d["owner"])
+    grant(d["business_owner"])
     material._registered_schema.cache_clear()
     from starlette.requests import Request
 
