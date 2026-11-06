@@ -87,7 +87,6 @@ def include(name):
     if name.startswith(BE + "app/"):
         rel = Path(name[len(BE) :])
         if set(rel.parts) & {
-            "storage",
             "sessions",
             "logs",
             "uploads",
