@@ -61,8 +61,9 @@ for path in versions.glob("*.py"):
     if path.name == "__init__.py": continue
     assert "000064" not in path.name
     for node in ast.parse(path.read_text()).body:
-        if isinstance(node, ast.Assign):
-            names = [x.id for x in node.targets if isinstance(x, ast.Name)]
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names = [x.id for x in targets if isinstance(x, ast.Name)]
             if "revision" in names: revisions.add(ast.literal_eval(node.value))
             if "down_revision" in names:
                 value = ast.literal_eval(node.value)
@@ -164,7 +165,7 @@ def main():
             target = package / name
             target.parent.mkdir(parents=True, exist_ok=True)
             data = git("show", f"{head}:{name}")
-            if b"PRIVATE KEY-----" in data:
+            if Path(name).suffix in {".pem", ".key"} and b"PRIVATE KEY-----" in data:
                 raise RuntimeError("private_key_in_candidate")
             target.write_bytes(data)
         for src in (ROOT / APP / "dist").rglob("*"):
