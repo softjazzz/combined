@@ -119,6 +119,17 @@ def dual_factory(db, monkeypatch, tmp_path):
                 if table.name in wanted:
                     table.to_metadata(metadata, schema=target)
             metadata.create_all(engine)
+        # 旧源首页查看还读mr_diagnosis；仓库无独立ORM/建表迁移。
+        # 仅在本轮合成库用正式Diagnosis字段建立空只读兼容视图，明确不是历史迁移证据。
+        with business_owner.begin() as c:
+            c.execute(
+                sa.text(
+                    f'CREATE VIEW "{schema}".mr_diagnosis AS SELECT * FROM "{schema}".diagnosis WHERE false'
+                )
+            )
+            c.execute(
+                sa.text(f'GRANT SELECT ON "{schema}".mr_diagnosis TO medqc_job_api')
+            )
         grant(business_owner)
         passfile = tmp_path / "synthetic.pgpass"
         passfile.write_text(
