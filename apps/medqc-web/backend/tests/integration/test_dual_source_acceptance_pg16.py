@@ -17,7 +17,10 @@ from sqlalchemy.engine import URL
 from joint_pg_support import ISOLATION_ACTIVE, PORT, connect, create_database
 from test_bundle_refresh_storage_pg16 import setup_case, grant, make_case
 
-pytest_plugins = ["test_bundle_refresh_storage_pg16"]
+import test_bundle_refresh_storage_pg16 as storage
+
+db = storage.db
+no_models = storage.no_models
 
 pytestmark = pytest.mark.skipif(
     not ISOLATION_ACTIVE, reason="owned PG16 guard required"
@@ -314,6 +317,20 @@ def test_real_dual_sources_cache_snapshots_and_background(
     assert str(foreign["submit_datetime"]) == "2026-01-02 19:00:00"
     assert str(foreign["last_modified_datetime"]) == "2026-01-03 07:00:00"
     assert clinical.current_selection() is None
+    from app.services.luxian_0609.source_evidence_reader import (
+        read_luxian_0609_snapshot_source_rows,
+    )
+
+    with clinical.selected(d["independent"]):
+        discharged = read_luxian_0609_snapshot_source_rows(
+            source_key="discharge_record",
+            institute_id=d["identity"][0],
+            patient_id=d["identity"][1],
+            visit_id=d["identity"][2],
+            source_schema=None,
+        ).rows[0]
+    assert str(discharged["discharge_time"]) == "2026-01-04 09:07:06"
+    assert str(discharged["submit_datetime"]) == "2026-01-05 16:00:00"
     stored = {}
     for name, source in (("legacy", d["legacy"]), ("independent", d["independent"])):
         with clinical.selected(source):
@@ -385,10 +402,11 @@ def test_real_dual_sources_cache_snapshots_and_background(
             )
         ).scalar()
     with d["readonly"].connect().execution_options(negative_readonly_test=True) as c:
-        with pytest.raises(sa.exc.DBAPIError):
+        with pytest.raises(sa.exc.DBAPIError) as rejected:
             c.execute(
                 sa.text("UPDATE cdm.daily_course_record SET record_content='forbidden'")
             )
+        assert rejected.value.orig.pgcode in {"25006", "42501"}
         c.rollback()
 
 
@@ -412,3 +430,50 @@ def test_independent_dependency_failures_never_fall_back(dual_factory, mode, dam
         read(d, d["legacy"])["record_content"]
         == "synthetic-content-daily_course_record"
     )
+
+
+@pytest.mark.parametrize("mode", ["single", "split"])
+def test_default_independent_refresh_failure_recovers_locally(
+    dual_factory, mode, monkeypatch
+):
+    from app.services import custom_qc_sample_pool_service as pool
+    from app.services.bundles import assembly
+    from app.database import clinical_connection as clinical
+
+    d = dual_factory(mode)
+    original = pool.refresh_scene_bundles_for_rows
+    monkeypatch.setattr(
+        pool,
+        "refresh_scene_bundles_for_rows",
+        lambda **k: (_ for _ in ()).throw(RuntimeError("synthetic refresh failure")),
+    )
+    result = d["service"].create_customer_test_record(
+        payload=make_case(), created_by="synthetic"
+    )
+    assert result["bundle_status"] == "pending" and result["bundle_error"]
+    monkeypatch.setattr(pool, "refresh_scene_bundles_for_rows", original)
+    key = dict(
+        institute_id="CUSTOMER_TEST",
+        patient_id=result["patient_id"],
+        visit_id=result["visit_id"],
+    )
+    with d["business"].connect() as c:
+        assert (
+            c.execute(
+                sa.text(
+                    f'SELECT count(*) FROM "{d["schema"]}".daily_course_record WHERE patient_id=:patient_id'
+                ),
+                key,
+            ).scalar()
+            == 1
+        )
+    with clinical.selected(d["legacy"]):
+        summary = assembly.refresh_scene_bundles_for_rows(
+            scene="running",
+            rows=[key],
+            source_schema=d["schema"],
+            continue_on_error=False,
+        )
+    assert summary["updated"] == 1
+    assert d["service"]._check_running_bundle_status(**key) == "ready"
+    assert clinical.current_selection() is None
