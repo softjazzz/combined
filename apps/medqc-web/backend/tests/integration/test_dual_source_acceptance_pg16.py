@@ -231,6 +231,13 @@ def dual_factory(db, monkeypatch, tmp_path):
                         "REVOKE SELECT ON cdm.daily_course_record FROM medqc_job_worker"
                     )
                 )
+        # 合成库故意保留不同的可选列形态，验证反射缓存也按物理源隔离。
+        with business_owner.begin() as c:
+            c.execute(
+                sa.text(
+                    f'ALTER TABLE "{schema}".exam_item_report DROP COLUMN description'
+                )
+            )
         before = contents(owner)
         counts = {"normal_write_attempts": 0, "wrong_source_reads": 0}
 
@@ -331,6 +338,13 @@ def test_real_dual_sources_cache_snapshots_and_background(
         ).rows[0]
     assert str(discharged["discharge_time"]) == "2026-01-04 09:07:06"
     assert str(discharged["submit_datetime"]) == "2026-01-05 16:00:00"
+    for source, expected in ((d["legacy"], False), (d["independent"], True)) * 2:
+        with clinical.selected(source):
+            columns = assembly._get_table_columns(
+                d["schema"] if source["id"] == "legacy_pg" else "cdm",
+                "exam_item_report",
+            )
+            assert ("description" in columns) is expected
     stored = {}
     for name, source in (("legacy", d["legacy"]), ("independent", d["independent"])):
         with clinical.selected(source):
@@ -341,7 +355,9 @@ def test_real_dual_sources_cache_snapshots_and_background(
             }
             sources.freeze(filters)
             assert sources.saved_snapshot(json.loads(json.dumps(filters))) == source
-            stored[name] = capture.obtain("synthetic-" + name, d["identity"])
+            stored[name] = material.persist(
+                "synthetic-" + name, capture.capture(identity=d["identity"])
+            )
     assert stored["legacy"]["fingerprint"] != stored["independent"]["fingerprint"]
 
     def load(name):
@@ -390,7 +406,7 @@ def test_real_dual_sources_cache_snapshots_and_background(
     @sources.bound_job
     async def background(job_id, *, workspace):
         assert clinical.current_selection()["id"] == "legacy_pg"
-        return d["service"].get_item(item_id=d["result"]["item_id"])
+        return d["service"].get_item(item_id=d["result"]["item"]["id"])
 
     assert asyncio.run(background("synthetic", workspace=Workspace())) is not None
     assert clinical.current_selection() is None

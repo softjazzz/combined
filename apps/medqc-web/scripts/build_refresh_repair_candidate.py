@@ -22,6 +22,16 @@ FILES = [
     "app/services/visit_index_service.py",
     "alembic/versions/20261105_000063_bundle_refresh_storage.py",
 ]
+VALIDATION = [
+    "scripts/run_bundle_refresh_pg_tests.py",
+    "scripts/run_bundle_refresh_pg_ci.sh",
+    "scripts/validate_local_dual_source_readonly.py",
+    "tests/integration/joint_pg_support.py",
+    "tests/integration/local_pg18_readonly_support.py",
+    "tests/integration/test_bundle_refresh_storage_pg16.py",
+    "tests/integration/test_dual_source_acceptance_pg16.py",
+    "tests/unit/test_local_readonly_guard.py",
+]
 SELF_CHECK = """import ast,hashlib,json
 from pathlib import Path
 root=Path(__file__).resolve().parent
@@ -36,7 +46,7 @@ for name in ('app/services/bundles/refresh_storage.py','app/services/customer_te
     spec=importlib.util.spec_from_file_location('review_helper_'+path.stem,path)
     module=importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-for path in (root/'runtime-overlay').rglob('*.py'):
+for path in root.rglob('*.py'):
     ast.parse(path.read_text(encoding='utf-8'),filename=str(path))
 package=json.loads((root/'PACKAGE.json').read_text())
 assert package['database_migrations_required'] is True
@@ -48,6 +58,7 @@ print(json.dumps({'checksums':'ok','python_syntax':'ok','review_only':True,'netw
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True)
+    parser.add_argument("--pg18-report", type=Path)
     args = parser.parse_args()
     output = Path(args.out).resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -65,10 +76,50 @@ def main():
             target = package / "runtime-overlay/backend" / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes((ROOT / BACKEND / name).read_bytes())
+        for name in VALIDATION:
+            target = package / "validation" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((ROOT / BACKEND / name).read_bytes())
         for path in (ROOT / "docs/plans").glob(
             "2026-11-05-business-bundle-refresh-repair*.md"
         ):
             (package / path.name).write_bytes(path.read_bytes())
+        for path in (ROOT / "docs/plans").glob(
+            "2026-11-05-dual-source-local-acceptance*.md"
+        ):
+            (package / path.name).write_bytes(path.read_bytes())
+        if args.pg18_report:
+            report = json.loads(args.pg18_report.read_text(encoding="utf-8"))
+            assert report["stage"] == "PG18_READONLY"
+            assert report["status"] == "PASS_WITH_DOCUMENTED_FIXTURE_LIMITATIONS"
+            assert report["existing_data_unchanged"] is True
+            assert all(
+                report["counts"][key] == 0
+                for key in (
+                    "forbidden_connections",
+                    "write_attempts",
+                    "model_attempts",
+                    "external_transport_attempts",
+                )
+            )
+            # 仅导出固定字段和计数；不复制原交接、连接配置、正文、患者键或内容哈希。
+            evidence = dict(
+                stage="PG18_READONLY",
+                status=report["status"],
+                sample_count=int(report["sample_count"]),
+                table_count=len(report["tables"]),
+                reader_calls=sum(int(row["calls"]) for row in report["paths"]),
+                matched_rows=sum(int(row["matched"]) for row in report["paths"]),
+                truncated=sum(int(row["truncated"]) for row in report["paths"]),
+                existing_data_unchanged=True,
+                forbidden_connections=0,
+                write_attempts=0,
+                model_attempts=0,
+                external_transport_attempts=0,
+            )
+            (package / "PG18-READONLY-SUMMARY.json").write_text(
+                json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+            )
         (package / "DIFF.patch").write_bytes(
             subprocess.check_output(
                 [
@@ -99,6 +150,10 @@ def main():
             ],
             model_calls=0,
             clinical_data_included=False,
+            validation_base_commit="52fa585c61d0dbbc3df8508308260e46a13b33c8",
+            pg18_evidence_included=bool(args.pg18_report),
+            validation_requires_owned_pg16=True,
+            validation_instructions="Review-only; do not execute against existing databases. PG18 requires original approved handoff, not included.",
         )
         (package / "PACKAGE.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
