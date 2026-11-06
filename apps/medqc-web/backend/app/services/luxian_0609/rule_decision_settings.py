@@ -100,7 +100,9 @@ def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
         and len(gateway_endpoint_sha256) == 64
     ):
         raise ValueError("LX0609任务Gateway配置不可用")
+    role_identity = getattr(client, "task_role_identity", None)
     identity = {
+        **({"task_roles": role_identity} if isinstance(role_identity, dict) else {}),
         "provider": provider,
         "model": model,
         "endpoint_sha256": hashlib.sha256(endpoint.encode("utf-8")).hexdigest(),

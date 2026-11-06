@@ -110,6 +110,8 @@ class Settings(BaseSettings):
     QC_RABBITMQ_EXCHANGE: Optional[str] = None
     QC_RABBITMQ_QUEUE: Optional[str] = None
     QC_RABBITMQ_DEAD_QUEUE: Optional[str] = None
+    # 每日计划与MQ独立；默认不启动计时器，不创建任何质控任务。
+    QC_DAILY_SCHEDULER_ENABLED: bool = False
 
     # ICD semantic retrieval fallback (exact match still first)
     ICD_SEMANTIC_ENABLED: bool = False

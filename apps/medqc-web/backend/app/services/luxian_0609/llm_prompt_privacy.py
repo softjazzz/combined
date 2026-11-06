@@ -563,6 +563,14 @@ class _Luxian0609PrivacyRedactingLLMClient:
         default=(), repr=False
     )
 
+    @property
+    def task_role_identity(self):
+        return getattr(self.delegate, "task_role_identity", None)
+
+    @property
+    def model_role(self):
+        return getattr(self.delegate, "model_role", "adjudicator")
+
     def _prepare_request(self, prompt, kwargs):
         try:
             identities = set(self.identity_values)
@@ -615,8 +623,19 @@ class _Luxian0609PrivacyRedactingLLMClient:
         """按调用点换用 LLM_ROLE_MODELS 配置的模型；身份脱敏与护栏不变。"""
         from .llm_role_routing import build_role_delegate
 
+        identity = getattr(self.delegate, "task_role_identity", None)
+        if isinstance(identity, dict) and "specialty_verification" in identity.get("roles", {}):
+            return self.for_task_role("specialty_verification")
         delegate = build_role_delegate(role)
         if delegate is None:
+            return self
+        return _Luxian0609PrivacyRedactingLLMClient(delegate, self.identity_values, self.identity_providers)
+
+    def for_task_role(self, role: str) -> Any:
+        from ..llm_task_roles import client_for_task
+
+        delegate = client_for_task(self.delegate, role)
+        if delegate is self.delegate:
             return self
         return _Luxian0609PrivacyRedactingLLMClient(delegate, self.identity_values, self.identity_providers)
 

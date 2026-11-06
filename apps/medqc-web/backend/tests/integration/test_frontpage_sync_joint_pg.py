@@ -27,7 +27,7 @@ pytestmark = pytest.mark.skipif(
 
 BACKEND = Path(__file__).resolve().parents[2]
 VERSION_DIR = BACKEND / "alembic/versions"
-HEAD = "20261105_000063"
+HEAD = "20261106_000064"
 
 
 def revision(filename):
@@ -129,7 +129,8 @@ def test_both_incremental_histories_and_single_head(application):
     engine, mode = application
     scripts = ScriptDirectory(str(BACKEND / "alembic"))
     assert scripts.get_heads() == [HEAD]
-    assert scripts.get_revision(HEAD).down_revision == "20261102_000062"
+    assert scripts.get_revision(HEAD).down_revision == "20261105_000063"
+    assert scripts.get_revision("20261105_000063").down_revision == "20261102_000062"
     assert set(scripts.get_revision("20261102_000062").down_revision) == {
         "20261102_000060", "20261102_000061"
     }

@@ -77,12 +77,20 @@ def assert_new_qc_task_dispatch_ready(
         if isinstance(task_runtime_snapshot, Mapping)
         else []
     )
+    all_identities = list(runtime_identities)
+    for identity in runtime_identities:
+        roles = identity.get("task_roles") if isinstance(identity, Mapping) else None
+        if isinstance(roles, Mapping):
+            selected = roles.get("roles")
+            if not isinstance(selected, Mapping):
+                raise QCDispatchEntrypointError("RabbitMQ 角色模型身份不完整")
+            all_identities.extend(selected.values())
     if len(runtime_identities) != 2 or any(
         not isinstance(identity, Mapping)
         or str(identity.get("dispatch_mode") or "").strip().lower() != "gateway"
         or not str(identity.get("gateway_profile") or "").strip()
         or len(str(identity.get("gateway_endpoint_sha256") or "")) != 64
-        for identity in runtime_identities
+        for identity in all_identities
     ):
         raise QCDispatchEntrypointError(
             "RabbitMQ 质控任务的实际模型运行身份不是完整 Gateway 配置"

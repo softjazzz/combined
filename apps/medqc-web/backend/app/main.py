@@ -366,6 +366,9 @@ def create_app() -> FastAPI:
     app.include_router(payment_monitoring_router.router)
     app.include_router(product_activation_router.router)
     app.include_router(quality_reports_router.router)
+    from .routers import daily_qc
+
+    app.include_router(daily_qc.router)
     app.include_router(staff_work_analysis_router.router)
     app.include_router(manual_quality_reports_router.router)
     app.include_router(manual_defect_reviews_router.router)
@@ -460,6 +463,10 @@ def create_app() -> FastAPI:
             if strict_startup_checks:
                 raise
 
+        from .services.daily_qc.runner import start as start_daily_qc
+
+        start_daily_qc(app)
+
     @app.on_event("shutdown")
     async def shutdown_event():
         """应用关闭时清理后台任务。"""
@@ -469,6 +476,9 @@ def create_app() -> FastAPI:
         except Exception:
             logger.warning("停止 SC 规则来源巡检任务失败", exc_info=True)
         finally:
+            from .services.daily_qc.runner import stop as stop_daily_qc
+
+            await stop_daily_qc(app)
             close_shared_http_resources()
 
     return app

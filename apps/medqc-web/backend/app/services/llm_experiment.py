@@ -60,11 +60,22 @@ def experiment_store_dir(base: Path) -> Path:
     context_namespace = freeze_namespace()
     if context_namespace is not None:
         base = base / "context-budget" / context_namespace
-    if namespace is None:
+    from .llm_task_roles import current_task_role_partition
+
+    partition = current_task_role_partition()
+    if namespace is None and partition is None:
         return base
-    target = base / "experiments" / namespace
+    target = base / "experiments" / namespace if namespace else base
+    if partition:
+        target = target / "task-roles" / partition
     if base.resolve() not in target.resolve().parents:
         raise LLMExperimentConfigurationError(
             "LLM experiment store escapes owner directory"
         )
+    # 分区之下仍有64位事实文件名；Windows部署目录较长时用长路径前缀。
+    if partition and os.name == "nt":
+        resolved = str(target.resolve())
+        if not resolved.startswith("\\\\?\\"):
+            resolved = "\\\\?\\UNC\\" + resolved[2:] if resolved.startswith("\\\\") else "\\\\?\\" + resolved
+        return Path(resolved)
     return target

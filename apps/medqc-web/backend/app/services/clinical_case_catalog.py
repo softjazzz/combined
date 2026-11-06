@@ -144,6 +144,25 @@ def case_identities(*, scope="all", department=None, doctor=None, keyword=None, 
         raise PipelineError("clinical_source_read_unavailable", 503) from error
 
 
+def schedule_options(*, scope, institute_id=None):
+    """计划选项与正式取材使用同一目录、状态语义；失联时不回退业务库。"""
+    try:
+        engine = clinical.get_engine()
+        source = catalog(engine)
+        predicates = _predicates(source,
+            hospital_status={"running": "inpatient", "final": "discharged"}[scope])
+        with engine.connect() as connection:
+            institutes = connection.execute(select(source.c.institute_id).where(*predicates).distinct()).scalars().all()
+            departments = connection.execute(select(source.c.department).where(
+                *predicates, source.c.institute_id == institute_id).distinct()).scalars().all() if institute_id else []
+        return {"institutes": sorted(institutes),
+                "departments": sorted({value for value in departments if value})}
+    except (PipelineError, HTTPException):
+        raise
+    except Exception as error:
+        raise PipelineError("clinical_source_read_unavailable", 503) from error
+
+
 def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_date=None,
                 date_field="visit", hospital_status="all", sync_scope="all", inpatient_sort="default",
                 page=1, page_size=50, case_scope=None, qc_projection_loader=None, **analytics):

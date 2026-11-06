@@ -22,6 +22,7 @@ none。Python 另核验：引文须逐字见于病程；report_span 须逐字见
 
 from __future__ import annotations
 
+from ..llm_task_roles import task_role_call
 from dataclasses import dataclass, field, replace
 import asyncio
 import logging
@@ -586,6 +587,7 @@ def _verbatim_confirmed(
     return confirmed
 
 
+@task_role_call("specialty_verification")
 async def check_exam_result_record(projection: ExamLabTextProjection, llm_client: Any) -> ResultRecordOutcome:
     from ..exam_result_model_route import exam_result_route_scope
 

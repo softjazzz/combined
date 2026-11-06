@@ -97,6 +97,9 @@ export interface LLMExecutionConcurrency {
   http_max_concurrency: number
 }
 
+export type LLMTaskRole = 'fact_extraction' | 'judgment_analysis' | 'specialty_verification'
+export type LLMTaskRoleModels = Record<LLMTaskRole, { provider_code: string; model_code: string } | null>
+
 export interface LLMConnectionTestInput {
   provider_code: string
   model_code: string
@@ -113,6 +116,7 @@ export interface LLMConfigSummary {
     enable_thinking?: boolean
     thinking_budget?: number | null
     reasoning_effort?: string
+    task_role_models?: LLMTaskRoleModels
     [key: string]: unknown
   }
   execution_concurrency?: LLMExecutionConcurrency

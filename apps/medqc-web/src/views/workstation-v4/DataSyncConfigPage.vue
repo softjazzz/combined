@@ -29,7 +29,9 @@
       </div>
     </header>
 
-    <template v-if="activeTab === 'dataSync'">
+    <DailyQcSchedulePanel v-if="activeTab === 'dailyQc' && canManageLlmConfig" />
+
+    <template v-else-if="activeTab === 'dataSync'">
       <ClinicalSourceSettingsPanel v-if="canManageLlmConfig" />
       <DataPipelineSettingsPanel
         v-if="canManageLlmConfig"
@@ -530,6 +532,7 @@ import ConnectionStudio from './components/sync-console/ConnectionStudio.vue'
 import SyncRunPanel from './components/sync-console/SyncRunPanel.vue'
 import FrontpageExtractionSettingsPanel from './components/system-config/FrontpageExtractionSettingsPanel.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
+import DailyQcSchedulePanel from './components/system-config/DailyQcSchedulePanel.vue'
 import { useDataSync } from './composables/useDataSync'
 import LlmPerformanceObservabilityPanel from './components/system-config/LlmPerformanceObservabilityPanel.vue'
 import AccountManagementPanel from './components/system-config/AccountManagementPanel.vue'
@@ -594,6 +597,7 @@ const configTabs = computed(() =>
   [
     { key: 'dataSync', label: '数据同步', testId: undefined, visible: true },
     { key: 'qcRuntime', label: '质控运行', testId: 'qc-runtime-tab', visible: canViewLlmObservability.value },
+    { key: 'dailyQc', label: '定时质控', testId: 'daily-qc-config-tab', visible: canManageLlmConfig.value },
     {
       key: 'frontpageExtraction',
       label: '首页抽取设置',
@@ -1087,13 +1091,14 @@ onMounted(async () => {
     (requestedTab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||
     (requestedTab === 'llmConfig' && canManageLlmConfig.value) ||
     (requestedTab === 'qcRuntime' && canViewLlmObservability.value) ||
+    (requestedTab === 'dailyQc' && canManageLlmConfig.value) ||
     (requestedTab === 'llmObservability' && canViewLlmObservability.value) ||
     (requestedTab === 'accounts' && canManageAccounts.value)
   if (canOpenRequestedTab) {
     activeTab.value = requestedTab
   }
   if (
-    !['llmConfig', 'llmObservability', 'accounts', 'qcRuntime'].includes(activeTab.value) &&
+    !['llmConfig', 'llmObservability', 'accounts', 'qcRuntime', 'dailyQc'].includes(activeTab.value) &&
     !(activeTab.value === 'dataSync' && canManageLlmConfig.value)
   ) {
     await ensureSyncInitialized()
@@ -1101,7 +1106,7 @@ onMounted(async () => {
 })
 
 watch(activeTab, async (tab) => {
-  if (['llmConfig', 'llmObservability', 'accounts', 'qcRuntime'].includes(tab)) return
+  if (['llmConfig', 'llmObservability', 'accounts', 'qcRuntime', 'dailyQc'].includes(tab)) return
   if (
     tab === 'dataSync' &&
     canManageLlmConfig.value &&

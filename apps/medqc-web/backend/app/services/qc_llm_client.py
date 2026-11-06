@@ -243,10 +243,48 @@ class SichuanQCLLMClient:
             self.temperature, self.top_p = 0, 1
             self.enable_thinking, self.thinking_budget, self.reasoning_effort = False, None, ''
 
+        # 接纳任务前固定全部角色运行配置；后续调用不再重新读取后台选型。
+        from .llm_task_roles import build_task_role_runtimes, task_role_identity
+
+        role_base = config or {}
+        self.task_role_selections, self._task_role_runtimes = (
+            (deepcopy(role_base.get("task_role_selections") or {}), deepcopy(role_base["task_role_runtimes"]))
+            if "task_role_runtimes" in role_base
+            else build_task_role_runtimes(role_base)
+        )
+        self.task_role_identity = (deepcopy(role_base["task_role_identity"])
+                                   if "task_role_identity" in role_base
+                                   else task_role_identity(self._task_role_runtimes, {
+                                       **role_base, "gateway_endpoint_sha256": self.gateway_endpoint_sha256,
+                                   }))
+        self._task_role_owner = self
+        self._task_role_clients: dict[str, SichuanQCLLMClient] = {}
+
     @property
     def strata_p9b(self):
         from .strata_protocol import is_p9_client
         return is_p9_client(self)
+
+    def for_task_role(self, role: str) -> "SichuanQCLLMClient":
+        from .llm_task_roles import TASK_ROLES
+
+        if role not in TASK_ROLES:
+            raise ProviderConfigurationError("unknown model task role")
+        owner = self._task_role_owner
+        runtime = owner._task_role_runtimes.get(role)
+        if runtime is None:
+            # 继承原正式客户端，包括历史裁决环境配置；不额外创建请求。
+            return owner
+        if role not in owner._task_role_clients:
+            child = SichuanQCLLMClient(
+                deepcopy(runtime), observability_recorder=owner._observability_recorder,
+                gateway_dispatch_client=owner._gateway_dispatch_client,
+            )
+            child._task_role_owner = owner
+            child.task_role_identity = deepcopy(owner.task_role_identity)
+            child._stats_parent = owner
+            owner._task_role_clients[role] = child
+        return owner._task_role_clients[role]
 
     def refresh_dispatch_identity(self) -> None:
         """从当前受控 Settings 刷新非敏感 Gateway 地址身份。"""

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from ..llm_token_budget import budget_guarded_executor
+from ..llm_task_roles import task_role_call
 
 import asyncio
 from dataclasses import dataclass, replace
@@ -5218,13 +5219,16 @@ async def _execute_consultation_episode_rules(
             payload = dict(frozen.payload)
         else:
             # 仅可确定识别的引文落地违规新增一次补核；结构错误沿用原失败路径。
+            from ..llm_task_roles import client_for_task
+
+            extraction_client = client_for_task(llm_client, "fact_extraction")
             first_prompt = _prompt(documents)
             attempt_prompt = first_prompt
             for attempt in range(2):
                 started = time.perf_counter()
                 phase = "call"
                 calls += 1
-                response = await llm_client.generate(attempt_prompt, **structured_output_kwargs(llm_client))
+                response = await extraction_client.generate(attempt_prompt, **structured_output_kwargs(extraction_client))
                 phase = "validate"
                 if not isinstance(response, Mapping):
                     raise _SemanticInvalid()
@@ -6352,6 +6356,7 @@ def _consultation_response_freeze_is_complete(
     )
 
 
+@task_role_call("judgment_analysis")
 @budget_guarded_executor
 async def execute_luxian_0609_native_consultation_episode_rules(
     *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,

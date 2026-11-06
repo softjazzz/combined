@@ -1937,6 +1937,11 @@ async def create_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    return await admit_workspace_batch_job(request, payload, current_user, qc_service)
+
+
+async def admit_workspace_batch_job(request, payload, current_user, qc_service, *, scheduled_origin=None):
+    """手动与定时共用接纳owner；定时来源不是HTTP输入字段。"""
     requested_rule_set = get_sichuan_rule_set(payload.rule_set_key)
     if payload.diagnostic_capture:
         if not set(current_user.get("roles", [])).intersection({"admin", "super_admin"}):
@@ -2093,7 +2098,14 @@ async def create_workspace_batch_job(
     )
     if payload.sync_scope == "today_inpatient":
         collect_kwargs["sync_scope"] = payload.sync_scope
+    if scheduled_origin is not None:
+        collect_kwargs["institute_id"] = scheduled_origin["institute_id"]
     records = workspace.collect_records(**collect_kwargs)
+    if scheduled_origin is not None:
+        if any(str(record.get("institute_id") or "") != scheduled_origin["institute_id"] for record in records):
+            raise HTTPException(403, "定时计划候选机构不匹配")
+        if len(records) > scheduled_origin["max_records"]:
+            raise HTTPException(422, "定时计划病历超过单次上限，请缩小筛选范围")
     if not records:
         raise HTTPException(status_code=422, detail="当前筛选条件下没有可执行病历")
 
@@ -2135,6 +2147,7 @@ async def create_workspace_batch_job(
         else []
     )
     idempotency_payload = {
+        **({"daily_schedule": scheduled_origin} if scheduled_origin is not None else {}),
         **({LX0609_TASK_SETTINGS_FILTER_KEY: task_settings_snapshot} if task_settings_snapshot is not None else {}),
         **({LX0609_TASK_RUNTIME_FILTER_KEY: task_runtime_snapshot} if task_runtime_snapshot is not None else {}),
         **({"diagnostic_capture": True} if payload.diagnostic_capture else {}),
@@ -2185,7 +2198,7 @@ async def create_workspace_batch_job(
     ).hexdigest()[:24]
     idempotency_key = f"sichuan-workspace-run:{idempotency_digest}"
     created_by = _current_user_id(current_user)
-    for active_status in ("queued", "running"):
+    for active_status in (() if scheduled_origin is not None else ("queued", "running")):
         active_jobs = workspace.list_batch_jobs(
             created_by=created_by,
             status=active_status,
@@ -2238,6 +2251,7 @@ async def create_workspace_batch_job(
             created_by=created_by,
             scope=normalized_scope,
             filters={
+                **({"daily_schedule": scheduled_origin} if scheduled_origin is not None else {}),
                 "department": payload.department,
                 "doctor": payload.doctor,
                 **(
@@ -2303,6 +2317,7 @@ async def create_workspace_batch_job(
             execution_mode="multi",
             run_mode=run_mode,
             rule_count=len(rule_ids),
+            **({"scheduled_run_id": scheduled_origin["run_id"]} if scheduled_origin is not None else {}),
         )
     except QCDispatchSchemaUnavailable as exc:
         raise HTTPException(status_code=503, detail="质控任务调度存储尚未就绪") from exc

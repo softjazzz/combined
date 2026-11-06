@@ -17,6 +17,7 @@ Python 核验：引文须逐字见于病程。不按字面核对部位：真实�
 
 from __future__ import annotations
 
+from ..llm_task_roles import task_role_call
 from dataclasses import dataclass, replace
 import json
 import re
@@ -339,6 +340,7 @@ def _subset(target: _Target, refs: tuple[str, ...]) -> _Target:
     return replace(target, refs=refs)
 
 
+@task_role_call("specialty_verification")
 async def check_exam_reason(projection: ExamLabTextProjection, llm_client: Any) -> ExamReasonOutcome:
     targets = _targets(projection)
     if not targets or llm_client is None:

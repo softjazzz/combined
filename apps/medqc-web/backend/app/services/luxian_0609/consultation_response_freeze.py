@@ -82,6 +82,9 @@ class FrozenResponseClient:
         self._recorded: dict[str, list[Any]] = defaultdict(list)
         self.reused_calls = 0
         self._experiment_namespace = current_llm_experiment_namespace()
+        from ..llm_task_roles import current_task_role_partition
+
+        self._task_role_partition = current_task_role_partition()
         self._store_path = _path(visit_id)
         path = self._store_path
         if path.is_file():
@@ -98,13 +101,30 @@ class FrozenResponseClient:
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
 
+    def for_task_role(self, role: str) -> Any:
+        from ..llm_task_roles import client_for_task
+
+        selected = client_for_task(self._inner, role)
+        if selected is self._inner:
+            return self
+        return _RoleResponseClient(self, selected)
+
     def _require_same_experiment(self) -> None:
         if current_llm_experiment_namespace() != self._experiment_namespace:
             raise LLMExperimentConfigurationError("frozen response client experiment changed")
+        from ..llm_task_roles import current_task_role_partition
+
+        if current_task_role_partition() != self._task_role_partition:
+            raise LLMExperimentConfigurationError("frozen response client task roles changed")
 
     async def generate(self, prompt: str, **kwargs: Any) -> Any:
+        return await self._generate_with(self._inner, prompt, **kwargs)
+
+    async def _generate_with(self, inner: Any, prompt: str, **kwargs: Any) -> Any:
         self._require_same_experiment()
         key = _key(prompt, kwargs)
+        if getattr(inner, "task_role_identity", None):
+            key += ":" + str(getattr(inner, "model_role", "default"))
         index = self._served[key]
         self._served[key] += 1
         stored = self._stored.get(key, ())
@@ -113,7 +133,7 @@ class FrozenResponseClient:
             response = stored[index]
             self._recorded[key].append(response)
             return _without_usage(response)
-        response = await self._inner.generate(prompt, **kwargs)
+        response = await inner.generate(prompt, **kwargs)
         try:
             json.dumps(response, ensure_ascii=False)
             self._recorded[key].append(copy.deepcopy(response))
@@ -140,3 +160,19 @@ class FrozenResponseClient:
         temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
         temporary.write_text(json.dumps(artifact, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
         os.replace(temporary, path)
+
+
+class _RoleResponseClient:
+    """角色选择保留同一轮应答账本、使用量与完成后提交门槛。"""
+
+    def __init__(self, owner, inner):
+        self._owner, self._inner = owner, inner
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    def for_task_role(self, role):
+        return self._owner.for_task_role(role)
+
+    async def generate(self, prompt, **kwargs):
+        return await self._owner._generate_with(self._inner, prompt, **kwargs)
