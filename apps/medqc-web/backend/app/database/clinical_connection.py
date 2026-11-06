@@ -34,9 +34,12 @@ class ClinicalSourceConfigurationError(RuntimeError):
 
 
 def configured() -> bool:
+    from ..services.clinical_source_policy import fixed_cdm
     source = current_selection()
     if source is not None:
         return source["id"] == "independent_cdm"
+    if fixed_cdm():
+        return True
     return bool(os.getenv("CDM_DATABASE_URL", "").strip()
                 or os.getenv("CDM_PGPASSFILE", "").strip())
 
@@ -81,6 +84,11 @@ def get_engine() -> Engine | None:
         if not passfile:
             raise ClinicalSourceConfigurationError()
         return _engine(source["url"], passfile)
+    from ..services.clinical_source_policy import fixed_cdm
+    if fixed_cdm():
+        from ..services.clinical_sources import ordinary_snapshot
+        source=ordinary_snapshot()
+        return _engine(source["url"], os.getenv("CDM_PGPASSFILE", "").strip())
     value = os.getenv("CDM_DATABASE_URL", "").strip()
     if not value:
         if os.getenv("CDM_PGPASSFILE", "").strip():
@@ -94,6 +102,10 @@ def source_binding() -> str:
     source = current_selection()
     if source is not None:
         return source["binding"]
+    from ..services.clinical_source_policy import fixed_cdm
+    if fixed_cdm():
+        from ..services.clinical_sources import ordinary_snapshot
+        return ordinary_snapshot()["binding"]
     value = os.getenv("CDM_DATABASE_URL", "").strip()
     if not value:
         if os.getenv("CDM_PGPASSFILE", "").strip():

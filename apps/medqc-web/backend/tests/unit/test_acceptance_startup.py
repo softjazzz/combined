@@ -110,6 +110,9 @@ class DatabaseRecorder:
 @pytest.fixture
 def database(monkeypatch):
     recorder = DatabaseRecorder()
+    # 真实刷新结构/权限由独立PG16矩阵验证；本文件保持旧结构门禁的Mock边界。
+    from app.services.bundles import refresh_storage
+    monkeypatch.setattr(refresh_storage, "bind_storage", lambda _: {})
     monkeypatch.setattr(acceptance_startup.sa, "inspect", recorder.inspect)
     return recorder
 

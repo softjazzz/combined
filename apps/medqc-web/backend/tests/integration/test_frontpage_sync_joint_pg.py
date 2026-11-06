@@ -27,7 +27,7 @@ pytestmark = pytest.mark.skipif(
 
 BACKEND = Path(__file__).resolve().parents[2]
 VERSION_DIR = BACKEND / "alembic/versions"
-HEAD = "20261102_000062"
+HEAD = "20261105_000063"
 
 
 def revision(filename):
@@ -127,6 +127,12 @@ def application(request):
 
 def test_both_incremental_histories_and_single_head(application):
     engine, mode = application
+    scripts = ScriptDirectory(str(BACKEND / "alembic"))
+    assert scripts.get_heads() == [HEAD]
+    assert scripts.get_revision(HEAD).down_revision == "20261102_000062"
+    assert set(scripts.get_revision("20261102_000062").down_revision) == {
+        "20261102_000060", "20261102_000061"
+    }
     schema = "cdm" if mode == "split" else "public"
     qc = "qc" if mode == "split" else "public"
     with engine.connect() as connection:
@@ -152,6 +158,13 @@ def test_both_incremental_histories_and_single_head(application):
         revision("20261102_000060_sync_mq_heads.py").validate_schema(
             inspector, cdm_schema=schema, qc_schema=qc if mode == "split" else None
         )
+        # 真实执行063后的两表也校验实际owner/列/约束/索引，不能仅推进版本号。
+        from app.services.bundles.refresh_storage import bind_storage
+        owners = bind_storage(connection)
+        assert owners == {
+            name: f'"{qc}"."{name}"'
+            for name in ("bundle_refresh_jobs", "bundle_refresh_failures")
+        }
     # 重复upgrade不是重复执行建表或索引。
     migrate(engine, "head")
 

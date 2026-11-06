@@ -7,7 +7,7 @@
       <div>
         <h2 class="mq-card__title">病历读取数据源</h2>
         <p class="mq-card__desc">
-          运行／终末病历池可按来源切换。1026材料副本和历史结果仍保留在业务库。
+          普通病历固定读取东华CDM。1026材料和历史结果保留在业务库。
         </p>
       </div>
     </div>
@@ -27,41 +27,8 @@
       v-if="settings"
       @submit.prevent="save"
     >
-      <div class="source-grid">
-        <label
-          >默认数据源
-          <select
-            v-model="settings.default_source"
-            aria-label="默认数据源"
-          >
-            <option
-              value="legacy_pg"
-              :disabled="!settings.legacy_enabled"
-            >
-              {{ settings.legacy_name }}
-            </option>
-            <option
-              value="independent_cdm"
-              :disabled="!settings.cdm.enabled"
-            >
-              {{ settings.cdm.name }}
-            </option>
-          </select>
-        </label>
-        <label
-          >原有来源名称<input
-            v-model="settings.legacy_name"
-            required
-            maxlength="100"
-        /></label>
-        <label class="source-toggle"
-          ><input
-            v-model="settings.legacy_enabled"
-            type="checkbox"
-          />启用原有数据源</label
-        >
-      </div>
-      <h3>独立 CDM 只读来源</h3>
+      <p class="mq-card__desc">普通临床来源：东华CDM（只读）。此页面不提供原Homo／clinical_data切换。</p>
+      <h3>东华CDM连接设置</h3>
       <div class="source-grid">
         <label
           >来源名称<input
@@ -103,7 +70,7 @@
         /></label>
       </div>
       <p class="mq-card__desc">
-        密码由部署侧的专用凭据文件提供，不在页面保存。保存不会连接源库、同步数据或启动质控；默认源仅影响新打开的病历池。
+        密码由部署侧的专用凭据文件提供，不在页面保存。保存不会连接源库、同步数据或启动质控；已有任务保留创建时的来源，不重新计算历史结果。
       </p>
       <div class="source-actions">
         <button
@@ -157,7 +124,7 @@ async function save() {
   if (!settings.value || busy.value) return
   busy.value = true
   try {
-    settings.value = await clinicalSourcesApi.save(settings.value)
+    settings.value = await clinicalSourcesApi.save({ ...settings.value, default_source: 'independent_cdm', legacy_enabled: false })
     notice.value = '设置已保存，已有任务继续使用创建时的来源'
   } catch {
     notice.value = '保存失败，请检查来源、部署凭据，或重新读取后再保存'

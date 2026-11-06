@@ -92,24 +92,10 @@
           class="qc-record-result-list-view__filters"
           aria-label="病历筛选条件"
         >
-          <label class="qc-record-result-list-view__filter-field">
+          <div class="qc-record-result-list-view__filter-field" aria-label="病历数据源">
             <span class="qc-record-result-list-view__field-label">数据源</span>
-            <select
-              :value="sourceId"
-              aria-label="病历数据源"
-              :disabled="loading"
-              @change="changeSource"
-            >
-              <option
-                v-for="source in sourceOptions"
-                :key="source.id"
-                :value="source.id"
-                :disabled="!source.enabled"
-              >
-                {{ source.name }}
-              </option>
-            </select>
-          </label>
+            <span>东华CDM</span>
+          </div>
           <label
             class="qc-record-result-list-view__filter-field qc-record-result-list-view__search-field"
           >
@@ -375,7 +361,7 @@ const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '�
 const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' : '固定范围：已出院'))
 
 const {
-  sourceId, sourceOptions, selectSource,
+  sourceId,
   allRecords,
   activeDept,
   activeDoctor,
@@ -506,14 +492,6 @@ function formatMedicalRecordTimestamp(value?: string | null): string {
   const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2}))?/u)
   if (!match) return '—'
   return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
-}
-
-function changeSource(event: Event) {
-  closeResultDrawer()
-  activeView.value = 'records'
-  clearSelection()
-  activePreviewKey.value = ''
-  selectSource((event.target as HTMLSelectElement).value)
 }
 
 function applyFilters() {

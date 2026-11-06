@@ -133,8 +133,15 @@ def get_stats(
 ) -> dict[str, Any]:
     from ...database.clinical_connection import configured
     if configured():
-        from ..data_pipeline_settings import PipelineError
-        raise PipelineError("clinical_source_legacy_statistics_not_supported", 422)
+        from ..clinical_source_policy import fixed_cdm
+        if not fixed_cdm():
+            from ..data_pipeline_settings import PipelineError
+            raise PipelineError("clinical_source_legacy_statistics_not_supported", 422)
+        from ..clinical_case_catalog import workstation
+        result=workstation(dept=dept,start_date=start_date,end_date=end_date,case_scope=case_scope,page_size=1,qc_projection_loader=lambda _: {})
+        return {"total_records":result["total"], "source_id":"independent_cdm",
+                "total_qc_issues":None,"open_qc_issues":None,"resolved_qc_issues":None,
+                "qc_statistics_available":False,"qc_statistics_reason":"use_canonical_record_results"}
     if case_scope is not None:
         with _session_factory() as session:
             mr = MedicalRecordFrontpage

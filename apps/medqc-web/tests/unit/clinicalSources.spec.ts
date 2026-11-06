@@ -50,20 +50,14 @@ beforeEach(() => {
   mocks.check.mockResolvedValue({ connected: true, read_only: true, ok: true, dependencies: [], publication_ready: null })
 })
 
-describe('双数据源页面隔离', () => {
-  it('默认来源只在初始化取用，切换清除旧行并携带显式来源', async () => {
+describe('固定东华普通来源与材料页面隔离', () => {
+  it('旧选择不能切回原源，普通列表保留东华身份', async () => {
     const records = usePatientRecords('inpatient')
     await records.fetchData()
     expect(records.sourceId.value).toBe('independent_cdm')
-    expect(mocks.getRaw.mock.lastCall?.[1]).toMatchObject({ source_id: 'independent_cdm' })
-    records.selectSource('legacy_pg')
-    expect(records.allRecords.value).toEqual([])
-    await flushPromises()
-    expect(mocks.getRaw.mock.lastCall?.[1]).toMatchObject({
-      source_id: 'legacy_pg',
-      hospital_status: 'inpatient',
-    })
-    expect(records.allRecords.value[0]?.sourceId).toBe('legacy_pg')
+    expect(() => records.selectSource('legacy_pg')).toThrow('普通病历固定读取东华CDM')
+    expect(mocks.getRaw.mock.lastCall?.[1]).toMatchObject({ source_id: 'independent_cdm', hospital_status: 'inpatient' })
+    expect(records.allRecords.value[0]?.sourceId).toBe('independent_cdm')
     expect(mocks.options).toHaveBeenCalledTimes(1)
   })
 
@@ -71,8 +65,7 @@ describe('双数据源页面隔离', () => {
     const records = usePatientRecords()
     await records.fetchData()
     mocks.getRaw.mockRejectedValueOnce(new Error('fixed source unavailable'))
-    records.selectSource('legacy_pg')
-    await flushPromises()
+    await records.fetchData()
     expect(records.loadError.value).toBe(true)
     expect(records.allRecords.value).toEqual([])
     mocks.options.mockRejectedValueOnce(new Error('fixed settings unavailable'))
@@ -83,7 +76,7 @@ describe('双数据源页面隔离', () => {
     expect(mocks.getRaw).toHaveBeenCalledTimes(calls)
   })
 
-  it('按页签URL归属请求，客户样本强制旧源，管理API不携带来源', () => {
+  it('按页签URL归属请求，客户材料由后端登记决定，管理API不携带来源', () => {
     window.history.replaceState({}, '', '/workstation-v5/records/final?source_id=independent_cdm')
     expect(clinicalSourceForRequest('/api/v1/emr/V/documents')).toBe('independent_cdm')
     expect(clinicalSourceForRequest('/api/medical-records/workstation')).toBe('independent_cdm')
@@ -93,7 +86,7 @@ describe('双数据源页面隔离', () => {
       '',
       '/workstation-v5/customer-sample-validation?source_id=independent_cdm',
     )
-    expect(clinicalSourceForRequest('/api/v1/emr/V/documents')).toBe('legacy_pg')
+    expect(clinicalSourceForRequest('/api/v1/emr/V/documents')).toBeUndefined()
   })
 
   it('设置读取和保存不探测，只有点击只读检查才连接', async () => {

@@ -81,7 +81,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     if (sourceId.value) return
     if (!sourceLoading) sourceLoading = (async () => {
       const options = await clinicalSourcesApi.options()
-      const requested = initialRouteQuery.get('source_id') || options.default_source
+      const requested = 'independent_cdm'
       if (!options.sources.some((option) => option.id === requested && option.enabled)) {
         throw new Error('当前数据源已停用或无效，请重新选择')
       }
@@ -233,7 +233,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   function selectSource(value: string) {
     if (!sourceOptions.value.some((option) => option.id === value && option.enabled)) return
     ++activeRequestSequence
-    sourceId.value = value as ClinicalSourceId
+    if (value !== 'independent_cdm') throw new Error('普通病历固定读取东华CDM')
+    sourceId.value = 'independent_cdm'
     setPageClinicalSource(value)
     allRecords.value = []
     departments.value = []

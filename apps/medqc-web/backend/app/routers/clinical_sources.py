@@ -17,6 +17,9 @@ router = APIRouter(prefix="/api/v1/clinical-sources", tags=["clinical-sources"])
 def options(_user: dict = Depends(get_current_user)):
     try:
         value = sources.configuration()
+        if sources.fixed_cdm():
+            return success_response(data={"mode":"fixed_donghua_cdm", "default_source":"independent_cdm", "sources":[
+                {"id":"independent_cdm", "name":"东华CDM", "enabled":value.cdm.enabled}]})
         return success_response(data={"default_source": value.default_source, "sources": [
             {"id": "legacy_pg", "name": value.legacy_name, "enabled": value.legacy_enabled},
             {"id": "independent_cdm", "name": value.cdm.name, "enabled": value.cdm.enabled},

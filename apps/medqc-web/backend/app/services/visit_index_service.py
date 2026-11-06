@@ -58,6 +58,7 @@ def ingest_sync_rows(
     latest_mirror_success_time: Optional[datetime] = None,
     mirror_delay_base_minutes: int = 30,
     sync_interval_minutes: int = 30,
+    ensure_existing_only: bool = False,
 ) -> dict[str, int]:
     """
     将同步到的病例键轻量 upsert 到 visit_index。
@@ -103,7 +104,7 @@ def ingest_sync_rows(
 
     try:
         with Session(engine) as session:
-            if acceptance:
+            if acceptance or ensure_existing_only:
                 acceptance_startup.validate_visit_index_schema(session.connection())
             else:
                 _ensure_visit_index_table(session)

@@ -8,6 +8,16 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _legacy_clinical_contract_for_existing_rule_fixtures(monkeypatch):
+    """旧医学合同夹具使用原本的本地fake源；不凭部署默认变更重写医学预期。
+
+    单源入口集合在其fixed_mode fixture中明确覆盖为fixed_donghua_cdm，
+    并独立断言删除环境变量后的真实默认。这里不影响应用运行配置。
+    """
+    monkeypatch.setenv("MEDQC_CLINICAL_SOURCE_MODE", "legacy_compat")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_consultation_opinion_freeze(tmp_path, monkeypatch):
     """会诊意见事实冻结按用例隔离：避免用例之间复用第一阶段事实，也不写入 data/ 目录。"""
 

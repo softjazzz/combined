@@ -26,15 +26,16 @@
 - Do not add `@ts-ignore`; use `@ts-expect-error` with a short reason when unavoidable.
 
 ## Required Checks Before Commit
-Run in `apps/medqc-web`:
-1. `npm run check:encoding`
-2. `npm run lint`
-3. `npm run type-check`
-4. `npm run test:unit`
+按改动的实际影响选择最小必要验证，**禁止把小改动默认扩成全量测试、全量构建或重复CI**。不以测试数量作为完成标准。
 
-If full checks are too heavy locally, run at least:
-1. `npm run check:encoding`
-2. `npm run lint`
+- 仅改文档、注释或Agent指令：检查diff、编码和格式即可，不跑单测、类型检查、数据库集成或构建。
+- 局部功能或缺陷：运行直接受影响的测试文件或用例；类型、lint和静态检查仅选相关范围，不默认跑完整`npm run test:unit`或全量后端质量门。
+- 修改公共调用链、数据库迁移、权限、来源隔离或医学结果合同：补足受影响边界的必要集成回归；需要PG时使用隔离合成库，不把所有旧验收矩阵重新执行。
+- 定向检查通过后停止扩大验证；只有新修改影响已验证行为、检查失败或存在具体未解决风险时才补跑相关集合。不得因“更保险”重复跑已通过的集合。
+- 用户明确要求、适用的发布要求或现有必需CI门禁要求全量时才执行全量。可复用相同运行代码的已有CI结果，说明测试提交和后续差异；不关闭或放宽门禁。
+- 合并同一修复的必要修改后再提交/推送，避免细碎提交反复触发全量CI；不为文档和报告反复推送来重新取得相同测试结果。
+- 确定交付源码后再构建一次。只有影响交付内容或版本一致性的变化才重建；不因补充测试报告而反复打包。
+- 简要记录运行的检查、结果及必要未验证项，不为扩大通过数增加重复或镜像实现的测试。
 
 ## TypeScript Migration Strategy
 - Keep `tsconfig.json` as compatibility config for mixed JS/TS.

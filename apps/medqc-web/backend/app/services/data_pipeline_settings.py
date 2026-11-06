@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
+from .clinical_source_policy import fixed_cdm
 
 TABLE = "qc.sync_config_registry"
 NAMESPACE, KEY = "sync", "data_pipelines_v1"
@@ -30,18 +31,21 @@ def load(session) -> tuple[PipelineSettings, str | None]:
         f"SELECT payload_json FROM {TABLE} WHERE namespace=:ns AND config_key=:key"
     ), {"ns": NAMESPACE, "key": KEY}).first()
     if row is None:
-        return PipelineSettings(), None
+        return PipelineSettings(default_pipeline="independent_cdm") if fixed_cdm() else PipelineSettings(), None
     try:
-        return PipelineSettings.model_validate(json.loads(row[0])), row[0]
+        value=PipelineSettings.model_validate(json.loads(row[0]))
+        return value.model_copy(update={"default_pipeline":"independent_cdm"}) if fixed_cdm() else value, row[0]
     except (ValueError, TypeError):
         raise PipelineError("data_pipeline_configuration_invalid") from None
 
 
 def save(session, proposed: PipelineSettings, actor_id: str) -> PipelineSettings:
     current, raw = load(session)
+    if fixed_cdm():
+        proposed=proposed.model_copy(update={"default_pipeline":"independent_cdm"})
     if proposed.version != current.version:
         raise PipelineError("data_pipeline_configuration_changed", 409)
-    if proposed.default_pipeline == "independent_cdm" and not proposed.independent_enabled:
+    if not fixed_cdm() and proposed.default_pipeline == "independent_cdm" and not proposed.independent_enabled:
         raise PipelineError("independent_pipeline_disabled", 422)
     if proposed.independent_enabled:
         from .sync_control_client import deployment
@@ -78,7 +82,7 @@ def runtime_status() -> dict:
     try:
         # 只构造连接池/校验passfile；不checkout连接，不连接CDM。
         clinical_connection.get_engine()
-    except clinical_connection.ClinicalSourceConfigurationError:
+    except (clinical_connection.ClinicalSourceConfigurationError, PipelineError, ValueError):
         cdm_valid = False
     return {
         "control_configured": control_configured,

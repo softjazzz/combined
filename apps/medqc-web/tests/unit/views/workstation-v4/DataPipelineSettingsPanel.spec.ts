@@ -76,7 +76,7 @@ async function readyToSubmit(wrapper: ReturnType<typeof mountPanel>) {
   await flushPromises()
 }
 
-describe('双数据链路面板', () => {
+describe('独立同步控制面板', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     vi.stubGlobal(
@@ -104,7 +104,7 @@ describe('双数据链路面板', () => {
     expect(api.check).not.toHaveBeenCalled()
     expect(api.jobs).not.toHaveBeenCalled()
     expect(api.submit).not.toHaveBeenCalled()
-    expect(wrapper.emitted('selection')?.at(-1)).toEqual(['legacy_pg'])
+    expect(wrapper.emitted('selection')?.at(-1)).toEqual(['independent_cdm'])
     expect(wrapper.text()).toContain('原业务库CDM')
     wrapper.unmount()
   })

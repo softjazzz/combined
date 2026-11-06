@@ -544,7 +544,7 @@ import MqIconTile from '@/components/icons/MqIconTile.vue'
 const workstationConfirmation = useWorkstationConfirmation()
 
 const activeTab = ref('dataSync')
-const selectedDataPipeline = ref<DataPipeline>('legacy_pg')
+const selectedDataPipeline = ref<DataPipeline>('independent_cdm')
 const pipelineConfigReady = ref(false)
 const syncInitialized = ref(false)
 const detailWorkbenchOpen = ref(false)
@@ -579,11 +579,7 @@ const canManageLlmConfig = computed(() =>
 )
 const canManageAccounts = computed(() => authStore.userRoles.includes('admin'))
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
-const showLegacyPipeline = computed(
-  () =>
-    selectedDataPipeline.value === 'legacy_pg' &&
-    (!canManageLlmConfig.value || pipelineConfigReady.value),
-)
+const showLegacyPipeline = computed(() => false)
 
 const isObservabilityOperationalAdmin = computed(() =>
   authStore.userRoles.some((role) => role === 'sync_admin' || role === 'super_admin'),
@@ -961,6 +957,7 @@ const handlePolicyDepartmentChange = (values: string[]) => {
 
 async function ensureSyncInitialized() {
   if (syncInitialized.value) return
+  if (!showLegacyPipeline.value) return
   await initialize()
   if (state.isSyncing) currentPageSyncStarted.value = true
   syncInitialized.value = true
@@ -1084,7 +1081,7 @@ async function handleExecuteSync() {
 }
 
 onMounted(async () => {
-  void loadDepartments()
+  if (showLegacyPipeline.value) void loadDepartments()
   const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   const canOpenRequestedTab =
     (requestedTab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||

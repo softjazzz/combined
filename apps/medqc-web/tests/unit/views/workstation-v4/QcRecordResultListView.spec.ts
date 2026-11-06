@@ -278,7 +278,7 @@ describe('QcRecordResultListView', () => {
       expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
         page: 1,
         page_size: 15,
-        source_id: 'legacy_pg',
+        source_id: 'independent_cdm',
       date_field: dateField,
         hospital_status: carePhase,
       })
@@ -412,7 +412,7 @@ describe('QcRecordResultListView', () => {
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'discharge',
       dept: '重症医学科',
       keyword: '患者甲',
@@ -554,7 +554,7 @@ describe('QcRecordResultListView', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'discharge',
       keyword: 'V-priority',
       hospital_status: 'discharged',
@@ -665,21 +665,12 @@ describe('QcRecordResultListView', () => {
     },
   )
 
-  it('在同一页面切换结果分析，并将下钻病历交给既有结果抽屉', async () => {
+  it('东华来源暂不开放跨病例分析，不用旧库结果冒充当前来源', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
-
-    await wrapper.get('[data-testid="qc-result-view-analysis"]').trigger('click')
-    expect(wrapper.find('[data-testid="result-analysis-stub"]').exists()).toBe(true)
-
-    await wrapper.get('[data-testid="result-analysis-stub"]').trigger('click')
-    const drawer = wrapper.getComponent(ResultDrawerStub)
-    expect(drawer.props('open')).toBe(true)
-    expect(drawer.props('focus')).toMatchObject({
-      instituteId: 'H-analysis',
-      patientId: 'P-analysis',
-      visitId: 'V-analysis',
-      recordId: 'V-analysis',
-    })
+    expect(wrapper.get('[data-testid="qc-result-view-analysis"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-testid="result-analysis-stub"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('东华CDM')
+    wrapper.unmount()
   })
 })
