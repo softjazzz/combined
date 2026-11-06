@@ -229,7 +229,8 @@ def test_application_merge_validates_both_parents_and_physical_columns(schema):
     root = Path(__file__).resolve().parents[2] / "medqc-web/backend/alembic"
     script = ScriptDirectory(str(root))
     # 应用最新head已前移；062合并点的双父链及下方物理字段负例必须保留。
-    assert script.get_heads() == ["20261105_000063"]
+    assert script.get_heads() == ["20261106_000064"]
+    assert script.get_revision("20261106_000064").down_revision == "20261105_000063"
     assert script.get_revision("20261105_000063").down_revision == "20261102_000062"
     assert set(script.get_revision("20261102_000062").down_revision) == {
         "20261102_000060", "20261102_000061"
