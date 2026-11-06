@@ -43,6 +43,7 @@ if __name__ == "__main__":
                     "addopts=",
                     "--confcutdir=" + str(ROOT / "tests/integration"),
                     str(ROOT / "tests/integration/test_bundle_refresh_storage_pg16.py"),
+                    str(ROOT / "tests/integration/test_dual_source_acceptance_pg16.py"),
                 ]
             )
         )
