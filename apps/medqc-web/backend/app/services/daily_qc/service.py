@@ -34,29 +34,50 @@ def require_manager(store, actor_id):
 
 def options(store, actor_id, *, institute_id=None, scope="final"):
     require_manager(store, actor_id)
+    from ..clinical_source_policy import fixed_cdm
+    from ..clinical_sources import ordinary_snapshot
+    from ...database.clinical_connection import selected
+
+    # 管理路由仍绑定业务库；只有临床筛选读取进入固定来源，退出后恢复。
+    if fixed_cdm():
+        with selected(ordinary_snapshot()):
+            return _options(store, institute_id=institute_id, scope=scope)
+    return _options(store, institute_id=institute_id, scope=scope)
+
+
+def _options(store, *, institute_id, scope):
     from ...database.models.cdm import InpatRegistration, MedicalRecordFrontpage
     from ..clinical_read import clinical_query
     from ..qc_workspace.record_repository import RecordRepository
     from ..qc_rule_sets import list_sichuan_rule_sets
 
-    with store.sessions() as session:
-        institutes = sorted(
-            {
-                str(row[0]).strip()
-                for model in (InpatRegistration, MedicalRecordFrontpage)
-                for row in clinical_query(session, model.institute_id).distinct().all()
-                if row[0] and str(row[0]).strip()
-            }
+    from ...database.clinical_connection import configured
+
+    if configured():
+        from ..clinical_case_catalog import schedule_options
+
+        clinical_options = schedule_options(scope=scope, institute_id=institute_id)
+        institutes = clinical_options["institutes"]
+        filters = clinical_options
+    else:
+        with store.sessions() as session:
+            institutes = sorted(
+                {
+                    str(row[0]).strip()
+                    for model in (InpatRegistration, MedicalRecordFrontpage)
+                    for row in clinical_query(session, model.institute_id).distinct().all()
+                    if row[0] and str(row[0]).strip()
+                }
+            )
+        filters = (
+            RecordRepository(session_factory=store.sessions).get_record_filters(
+                scope=scope, department=None, institute_id=institute_id
+            )
+            if institute_id
+            else {"departments": []}
         )
     if institute_id and institute_id not in institutes:
         raise HTTPException(422, "请选择已同步机构")
-    filters = (
-        RecordRepository(session_factory=store.sessions).get_record_filters(
-            scope=scope, department=None, institute_id=institute_id
-        )
-        if institute_id
-        else {"departments": []}
-    )
     return {
         "institutes": institutes,
         "departments": filters["departments"],

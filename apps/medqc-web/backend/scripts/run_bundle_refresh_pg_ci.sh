@@ -32,7 +32,7 @@ cd "$ROOT/apps/medqc-web/backend"
   "SELECT current_setting('server_version'),current_setting('cluster_name'),inet_server_port()"
 PG_TEST_ENTRY="${MEDQC_PG_TEST_ENTRY:-scripts/run_bundle_refresh_pg_tests.py}"
 case "$PG_TEST_ENTRY" in
-  scripts/run_bundle_refresh_pg_tests.py|scripts/run_single_donghua_pg_tests.py) ;;
+  scripts/run_bundle_refresh_pg_tests.py|scripts/run_single_donghua_pg_tests.py|scripts/run_daily_qc_pg_tests.py) ;;
   *) echo 'Unapproved owned PG test entry' >&2; exit 1 ;;
 esac
 "$PYTHON" -B "$PG_TEST_ENTRY" --data-directory "$PG_OWNER_ROOT/data"

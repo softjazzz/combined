@@ -27,7 +27,7 @@ async def run_loop():
             raise
         except Exception:
             logger.error(
-                "daily_qc_tick_unavailable; check migration 063 and account authorization"
+                "daily_qc_tick_unavailable; check migration 064 and account authorization"
             )
         await asyncio.sleep(30)
 

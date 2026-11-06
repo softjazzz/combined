@@ -349,15 +349,15 @@ def test_api_crud_and_http_roles_cannot_forge_authority(
     )
 
 
-def test_063_migration_only_adds_schedule_tables(monkeypatch):
+def test_064_migration_only_adds_schedule_tables(monkeypatch):
     path = (
         Path(__file__).resolve().parents[2]
-        / "alembic/versions/20261102_000063_daily_qc_schedules.py"
+        / "alembic/versions/20261106_000064_daily_qc_schedules.py"
     )
     spec = importlib.util.spec_from_file_location("daily_qc_migration", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert module.down_revision == "20261102_000062"
+    assert module.down_revision == "20261105_000063"
     monkeypatch.setenv("DB_SCHEMA_MODE", "single")
     engine = sa.create_engine("sqlite://")
     with engine.begin() as connection:
@@ -426,7 +426,11 @@ def test_actual_task_creation_reuses_primary_key_and_single_outbox(
     monkeypatch.setattr(
         workspace_module,
         "get_settings",
-        lambda: SimpleNamespace(QC_TASK_DISPATCH_MODE=mode),
+        lambda: SimpleNamespace(
+            QC_TASK_DISPATCH_MODE=mode, LLM_DISPATCH_MODE="gateway",
+            LLM_GATEWAY_URL="http://synthetic.invalid", LLM_GATEWAY_TOKEN="synthetic-only",
+            LLM_GATEWAY_PROFILE="synthetic-profile",
+        ),
     )
     workspace = workspace_module.CustomQCWorkspaceService(readonly=True)
     workspace._batch_job_table.create(engine)
@@ -441,6 +445,11 @@ def test_actual_task_creation_reuses_primary_key_and_single_outbox(
         filters={
             "rule_set_key": "luxian_0609_qc_v1",
             "daily_schedule": {"run_id": run_id},
+            "lx0609_task_runtime": {
+                role: {"dispatch_mode": "gateway", "gateway_profile": "synthetic-profile",
+                       "gateway_endpoint_sha256": "a" * 64}
+                for role in ("first_pass", "adjudicator")
+            },
         },
         record_ids=["V1"],
         total_records=1,
@@ -788,3 +797,41 @@ async def test_disabled_pending_plan_cannot_start_new_task(environment, monkeypa
         "failed"
     ]
     assert store.history(plan_id, "manager")[0]["reason"] == "disabled"
+
+
+@pytest.mark.parametrize("unavailable", [False, True])
+def test_fixed_cdm_options_override_management_legacy_context(environment, monkeypatch, unavailable):
+    from app.database import clinical_connection as clinical
+    from app.services import clinical_sources as sources, clinical_case_catalog as catalog
+    from app.services.daily_qc import service
+    from app.services.data_pipeline_settings import PipelineError
+
+    store, _, engine = environment
+    source = sa.table("catalog", sa.column("institute_id"), sa.column("department"), sa.column("discharge"))
+    with engine.begin() as connection:
+        connection.execute(sa.text("CREATE TABLE catalog(institute_id TEXT, department TEXT, discharge TEXT)"))
+        connection.execute(sa.text("INSERT INTO catalog VALUES ('CDM-A','CDM-dept','2026-11-01'), ('UNKNOWN','unknown',NULL)"))
+    monkeypatch.setenv("MEDQC_CLINICAL_SOURCE_MODE", "fixed_donghua_cdm")
+    monkeypatch.setattr(sources, "ordinary_snapshot", lambda: {"id": "independent_cdm", "binding": "synthetic"})
+    monkeypatch.setattr(catalog, "catalog", lambda _: source)
+
+    def selected_engine():
+        assert clinical.current_selection()["id"] == "independent_cdm"
+        if unavailable:
+            raise PipelineError("clinical_source_read_unavailable", 503)
+        return engine
+
+    monkeypatch.setattr(clinical, "get_engine", selected_engine)
+    # 管理账号仍由业务库校验；禁止以业务ORM查询临床选项。
+    monkeypatch.setattr(service, "require_manager", lambda *_: {"roles": ["admin"]})
+    monkeypatch.setattr(store, "sessions", lambda: pytest.fail("clinical options used business database"))
+    with clinical.selected({"id": "legacy_pg", "binding": "legacy"}):
+        if unavailable:
+            with pytest.raises(PipelineError):
+                service.options(store, "manager", institute_id="CDM-A")
+        else:
+            result = service.options(store, "manager", institute_id="CDM-A")
+            assert result["institutes"] == ["CDM-A"]
+            assert result["departments"] == ["CDM-dept"]
+            assert service.options(store, "manager", scope="running")["institutes"] == []
+        assert clinical.current_selection()["id"] == "legacy_pg"

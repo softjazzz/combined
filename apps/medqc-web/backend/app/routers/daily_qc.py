@@ -52,7 +52,7 @@ def list_plans(request: Request, context=Depends(authorized)):
     try:
         rows = [service.project_plan(row) for row in store.list(actor)]
     except SQLAlchemyError as exc:
-        raise HTTPException(503, "定时质控存储未就绪，请先执行063迁移") from exc
+        raise HTTPException(503, "定时质控存储未就绪，请先执行064迁移") from exc
     return success_response(
         {
             "items": rows,

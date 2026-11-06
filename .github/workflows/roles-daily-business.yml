@@ -1,0 +1,41 @@
+name: Roles and daily QC isolated acceptance
+on:
+  push:
+    branches: [codex/roles-daily-business-adapt-20261106]
+permissions:
+  contents: read
+jobs:
+  isolated-pg16:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      DATABASE_URL: ''
+      REMOTE_DB_URL: ''
+      MEDQC_ALLOW_REAL_LLM: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install declared test dependencies
+        run: python -m pip install -r apps/medqc-web/backend/requirements.txt
+      - name: Focused offline boundary and history regression
+        working-directory: apps/medqc-web/backend
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_llm_task_roles.py tests/unit/test_daily_qc_schedules.py tests/unit/test_frontpage_qc_v2_migration_graph.py tests/unit/test_linux_server_startup.py
+      - name: Daily migration and lease recovery on owned PG16
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JOINT_PYTHON="$(command -v python)"
+          sudo --preserve-env=JOINT_PYTHON,GITHUB_WORKSPACE unshare --net bash -euo pipefail <<'ISOLATED' 2>&1 | tee "$RUNNER_TEMP/roles-daily-pg16.log"
+          ip link set lo up
+          runuser -u "$SUDO_USER" -- env JOINT_PYTHON="$JOINT_PYTHON" MEDQC_PG_TEST_ENTRY=scripts/run_daily_qc_pg_tests.py bash "$GITHUB_WORKSPACE/apps/medqc-web/backend/scripts/run_bundle_refresh_pg_ci.sh"
+          ISOLATED
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: roles-daily-pg16-evidence
+          path: ${{ runner.temp }}/roles-daily-pg16.log

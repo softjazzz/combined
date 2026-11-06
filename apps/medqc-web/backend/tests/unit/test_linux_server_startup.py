@@ -62,7 +62,7 @@ def test_core_schema_validation_is_readonly_and_optional_tables_are_not_required
         def execute(self, statement):
             events.append(str(statement))
             return SimpleNamespace(
-                scalars=lambda: SimpleNamespace(all=lambda: ["20261105_000063"])
+                scalars=lambda: SimpleNamespace(all=lambda: ["20261106_000064"])
             )
 
         def rollback(self):

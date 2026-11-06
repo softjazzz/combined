@@ -7,6 +7,7 @@ from functools import wraps
 import hashlib
 import inspect
 import json
+from types import SimpleNamespace
 
 from .llm_dispatch.provider_profiles import ProviderConfigurationError
 
@@ -96,15 +97,25 @@ def task_role_identity(runtimes, base):
     legacy_routes = parse_role_models(getattr(get_settings(), "LLM_ROLE_MODELS", None))
     roles = {}
     for role, runtime in sorted({"default": base, **runtimes}.items()):
+        from .llm_token_budget import freeze_identity
+        from .strata_protocol import deployed_protocol
+
+        protocol = runtime.get("strata_protocol") or deployed_protocol(
+            runtime["provider_code"], runtime["model"], runtime.get("gateway_profile"), runtime.get("api_endpoint"))
+        probe = SimpleNamespace(**{key: runtime.get(key) for key in (
+            "provider_code", "model", "api_endpoint", "gateway_profile")},
+            dispatch_mode=runtime.get("dispatch_mode", "direct"), strata_protocol=protocol)
         roles[role] = {
             "provider": runtime["provider_code"], "model": runtime["model"],
             "endpoint_sha256": hashlib.sha256(str(runtime.get("api_endpoint") or "").encode()).hexdigest(),
             "dispatch_mode": runtime.get("dispatch_mode", "direct"),
             "gateway_profile": runtime.get("gateway_profile"),
             "gateway_endpoint_sha256": runtime.get("gateway_endpoint_sha256"),
+            "context_identity": freeze_identity(probe),
             "inference_parameters": {
                 key: (runtime.get("custom_parameters") or {}).get(key)
-                for key in ("temperature", "top_p", "max_tokens", "enable_thinking", "thinking_budget", "reasoning_effort")
+                for key in ("temperature", "top_p", "top_k", "presence_penalty", "frequency_penalty",
+                            "repetition_penalty", "max_tokens", "enable_thinking", "thinking_budget", "reasoning_effort")
             },
         }
     return {"version": ROUTING_VERSION, "roles": roles, "legacy_callpoint_models": legacy_routes}

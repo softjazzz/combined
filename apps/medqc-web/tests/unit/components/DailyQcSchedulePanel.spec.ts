@@ -108,7 +108,7 @@ describe('每日定时质控配置', () => {
   it('读取失败明确提示，不能伪装成没有计划', async () => {
     service.list.mockRejectedValueOnce(new Error('migration unavailable'))
     const wrapper = await render()
-    expect(wrapper.text()).toContain('063迁移')
+    expect(wrapper.text()).toContain('064迁移')
     expect(wrapper.text()).not.toContain('暂无每日质控计划')
     expect(wrapper.findAll('button').find(item => item.text() === '新增计划')?.element.disabled).toBe(true)
     wrapper.unmount()

@@ -271,7 +271,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try { const result = await dailyQcScheduleService.list(); if (active) status.value = result }
-  catch { if (active) error.value = '定时计划读取失败；请确认权限、接口及063迁移已就绪。' }
+  catch { if (active) error.value = '定时计划读取失败；请确认权限、接口及064迁移已就绪。' }
   finally { if (active) loading.value = false }
 }
 async function refreshOptions() {

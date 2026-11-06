@@ -301,3 +301,50 @@ async def test_role_failure_does_not_call_default_or_cloud_fallback(client, setu
         await root.for_task_role('fact_extraction').generate('合成材料')
     assert calls == ['qwen3.6-35b-a3b']
     assert root.error_count == 1
+
+
+def test_child_p9_capability_changes_outer_freeze_namespace(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from app.services import llm_token_budget as budget, strata_protocol
+    from app.services.llm_task_roles import task_role_identity
+
+    monkeypatch.setattr(loader, "get_settings", lambda: SimpleNamespace(LLM_ROLE_MODELS=None))
+    monkeypatch.setattr(strata_protocol, "deployed_protocol", lambda *args: strata_protocol.PROTOCOL_VERSION)
+    contract = {"revision": "first"}
+    def freeze(probe):
+        if probe.provider_code != "strata":
+            return None
+        assert probe.strata_protocol == strata_protocol.PROTOCOL_VERSION
+        assert probe.gateway_profile == "local-small"
+        return contract["revision"]
+    monkeypatch.setattr(budget, "freeze_identity", freeze)
+    base = {"provider_code": "alibaba", "model": "cloud", "custom_parameters": {}}
+    child = {"provider_code": "strata", "model": "qwen3.6-35b-a3b", "dispatch_mode": "gateway",
+             "gateway_profile": "local-small", "custom_parameters": {"top_k": 1}}
+    identity = task_role_identity({"fact_extraction": child}, base)
+    with task_role_scope(SimpleNamespace(task_role_identity=identity)):
+        previous = experiment_store_dir(tmp_path)
+    contract["revision"] = "changed-model-or-counter"
+    changed = task_role_identity({"fact_extraction": child}, base)
+    assert changed != identity
+    assert changed["roles"]["fact_extraction"]["inference_parameters"]["top_k"] == 1
+    with task_role_scope(SimpleNamespace(task_role_identity=changed)):
+        assert experiment_store_dir(tmp_path) != previous
+
+
+@pytest.mark.parametrize("child_mode", ["direct", "gateway"])
+def test_mq_validates_role_clients_too(child_mode):
+    from types import SimpleNamespace
+    from app.services.qc_dispatch.dispatcher import assert_new_qc_task_dispatch_ready, QCDispatchEntrypointError
+    gateway = {"dispatch_mode": "gateway", "gateway_profile": "synthetic", "gateway_endpoint_sha256": "a" * 64}
+    root = {**gateway, "task_roles": {"roles": {"fact_extraction": {**gateway, "dispatch_mode": child_mode}}}}
+    settings = SimpleNamespace(LLM_DISPATCH_MODE="gateway", LLM_GATEWAY_URL="http://synthetic.invalid",
+                               LLM_GATEWAY_TOKEN="synthetic", LLM_GATEWAY_PROFILE="synthetic")
+    def check():
+        return assert_new_qc_task_dispatch_ready(eligible_for_rabbitmq=True, settings=settings,
+            resolved_mode="rabbitmq", task_runtime_snapshot={"first_pass": root, "adjudicator": root})
+    if child_mode == "direct":
+        with pytest.raises(QCDispatchEntrypointError):
+            check()
+    else:
+        assert check() == "rabbitmq"
