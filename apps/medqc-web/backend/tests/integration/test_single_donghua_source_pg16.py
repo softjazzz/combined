@@ -27,7 +27,6 @@ ORDINARY = ("0001", "0002", "0003")
 @pytest.fixture
 def single(dual_factory, monkeypatch):
     from app.database import connection
-    from app.services.medical_records import query_service, detail_service
 
     def seed(business, clinical, schema, original):
         # 仅复制本测试合成行以准备普通病例：临床值与业务旧值故意不同。
@@ -54,6 +53,8 @@ def single(dual_factory, monkeypatch):
         d = dual_factory(mode, damage, extra_seed=seed)
         factory = sessionmaker(bind=d["business"])
         monkeypatch.setattr(connection, "SessionLocal", factory)
+        monkeypatch.setattr(connection, "engine", d["business"])
+        from app.services.medical_records import query_service, detail_service
         monkeypatch.setattr(query_service, "engine", d["business"])
         monkeypatch.setattr(detail_service, "engine", d["business"])
         monkeypatch.setattr(

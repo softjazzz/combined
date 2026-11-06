@@ -69,7 +69,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'visit',
       dept: 'ICU',
       analytics_scope: 'final',
@@ -90,7 +90,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 2,
       page_size: 10,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'admission',
       dept: '中医科',
       doctor: '陈医师',
@@ -108,7 +108,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'visit',
       hospital_status: 'inpatient',
     })
@@ -119,7 +119,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'visit',
       hospital_status: 'discharged',
     })
@@ -136,7 +136,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'visit',
       hospital_status: 'discharged',
     })
@@ -151,7 +151,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'visit',
       sync_scope: 'today_inpatient',
     })
@@ -169,7 +169,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'visit',
       hospital_status: 'inpatient',
       inpatient_sort: 'longest',
@@ -227,7 +227,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'visit',
       dept: '普通外科',
     })
@@ -245,7 +245,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'visit',
       doctor: '陈医师',
     })
@@ -328,7 +328,7 @@ describe('usePatientRecords workstation filters', () => {
 
 
 describe('独立CDM状态筛选', () => {
-  it('只给CDM提供未知状态，切回旧源后清除筛选', async () => {
+  it('固定CDM保留未知状态且拒绝切回旧源', async () => {
     window.history.replaceState({}, '', '/workstation-v5?source_id=independent_cdm')
     mockWorkstationResponse()
     const records = usePatientRecords()
@@ -337,9 +337,9 @@ describe('独立CDM状态筛选', () => {
     records.selectHospFilter('unknown')
     await flushPromises()
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', expect.objectContaining({ source_id: 'independent_cdm', hospital_status: 'unknown' }))
-    records.selectSource('legacy_pg')
-    await flushPromises()
-    expect(records.hospOptions.value.map((option) => option.value)).not.toContain('unknown')
-    expect(records.hospFilter.value).toBe('all')
+    expect(() => records.selectSource('legacy_pg')).toThrow('普通病历固定读取东华CDM')
+    expect(records.sourceId.value).toBe('independent_cdm')
+    expect(records.hospOptions.value.map((option) => option.value)).toContain('unknown')
+    expect(records.hospFilter.value).toBe('unknown')
   })
 })

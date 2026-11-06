@@ -278,7 +278,7 @@ describe('QcRecordResultListView', () => {
       expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
         page: 1,
         page_size: 15,
-        source_id: 'legacy_pg',
+        source_id: 'independent_cdm',
       date_field: dateField,
         hospital_status: carePhase,
       })
@@ -412,7 +412,7 @@ describe('QcRecordResultListView', () => {
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'discharge',
       dept: '重症医学科',
       keyword: '患者甲',
@@ -554,7 +554,7 @@ describe('QcRecordResultListView', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
-      source_id: 'legacy_pg',
+      source_id: 'independent_cdm',
       date_field: 'discharge',
       keyword: 'V-priority',
       hospital_status: 'discharged',
