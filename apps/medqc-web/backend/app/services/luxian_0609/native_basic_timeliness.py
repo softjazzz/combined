@@ -578,7 +578,9 @@ def _typed_basic_decisions(
     horizon_datetime_for_filter: datetime | None = None
     horizon_date_for_filter: date | None = None
     horizon_filter_issue = "authoritative_time_missing"
-    horizon_reason = observation_by_source[EVALUATION_HORIZON_SOURCE_KEY].reason_code
+    # 抢救等独立规则不需要终点，证据会话可以合法地没有该观测。
+    horizon_observation = observation_by_source.get(EVALUATION_HORIZON_SOURCE_KEY)
+    horizon_reason = horizon_observation.reason_code if horizon_observation is not None else ""
     if horizon_reason == "authoritative_time_conflict":
         horizon_filter_issue = horizon_reason
     try:

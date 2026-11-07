@@ -207,7 +207,8 @@ def _explicit_current_exam_quote(quote, current, catalog, course):
 
 def validation_identity(projection):
     # 只进入冻结摘要，不把新增的原始检查号外发到既有实验Prompt。
-    return [(event.document_refs, event.source_exam_ids, event.identity_text, event.result_texts)
+    return [(event.document_refs, event.source_exam_ids, event.identity_text, event.result_texts,
+             event.report_time.isoformat() if event.report_time is not None else None)
             for event in _report_catalog(projection)]
 
 
@@ -215,7 +216,8 @@ def validation_identity(projection):
 RESULT_RECORD_VALIDATION_VERSION = "exam-record-event-identity-v6"
 
 
-_MODALITY = re.compile(r'(?<![A-Za-z])(?:MRI|MR|CT|DR|CR)(?![A-Za-z])|磁共振|核磁', re.I)
+# CR也用于疗效评价，不作为独立的影像模态锚点。
+_MODALITY = re.compile(r'(?<![A-Za-z])(?:MRI|MR|CT|DR)(?![A-Za-z])|磁共振|核磁', re.I)
 
 
 def _modalities(text):
@@ -254,6 +256,8 @@ def _association_issue(projection, position, quote, span, ref):
                       if sum(clause in report for report in full_reports) == 1]
         if (not any(clause in _normalize(quote) for clause in own_unique)
                 and not _explicit_current_exam_quote(quote, current, catalog, course)):
+            if len(normalized_span) < MIN_VERBATIM_CHARS and own_unique:
+                return 'insufficient report span', '报告片段过短且为共同表述；请在原文中定位本次检查更完整的结果片段与对应引句，不得补造身份'
             return 'ambiguous repeated exam', '引句只证明多次检查的共同结果，须给出原文中属于当前事件的依据；无法确认时保留未完成'
     return None
 

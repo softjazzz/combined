@@ -39,11 +39,6 @@ def test_conflicted_snapshot_cannot_be_replaced_by_caller_or_current_source(poli
         institute_id='I', patient_id='P', visit_id='V', source_schema=None,
         created_at='2026-01-03T00:00:00+08:00', evaluation_as_of_date='2026-01-03',
         evaluation_horizon_policy=policy, evaluation_horizon_snapshot=frozen, row_reader=reader)
-    if policy == 'frozen_task_date':
-        with pytest.raises(ValueError, match='policy conflicts with frozen snapshot'):
-            build_luxian_0609_evidence_read_session(**kwargs)
-        assert frozen == before
-        return
     session = build_luxian_0609_evidence_read_session(**kwargs)
     execution, reduced = _reduce_typed_basic(session, (rule,))
     final = finalize_luxian_0609_reduced_customer_result(decision=reduced[0],
@@ -72,15 +67,15 @@ def test_resolved_running_snapshot_date_cannot_be_extended_by_caller():
         institute_id='I', patient_id='P', visit_id='V', source_schema=None,
         created_at='2026-01-03T00:00:00+08:00',
         evaluation_horizon_snapshot=frozen, row_reader=reader)
-    with pytest.raises(ValueError, match='as_of_date conflicts with frozen snapshot'):
-        build_luxian_0609_evidence_read_session(**kwargs, evaluation_as_of_date='2026-01-03')
-    session = build_luxian_0609_evidence_read_session(**kwargs)
-    execution, reduced = _reduce_typed_basic(session, (rule,))
-    final = finalize_luxian_0609_reduced_customer_result(decision=reduced[0],
-        raw_customer_display_facts=dict(execution.customer_display_facts).get(rule),
-        evidence_snapshot=session.snapshot, evidence_materials=session.materials)
-    assert final['status'] == 'data_gap'
-    assert final['reason_code'] == 'evaluation_window_not_mature'
+    for supplied_date, reason in ((None, 'evaluation_window_not_mature'),
+                                  ('2026-01-03', 'authoritative_time_conflict')):
+        session = build_luxian_0609_evidence_read_session(**kwargs, evaluation_as_of_date=supplied_date)
+        execution, reduced = _reduce_typed_basic(session, (rule,))
+        final = finalize_luxian_0609_reduced_customer_result(decision=reduced[0],
+            raw_customer_display_facts=dict(execution.customer_display_facts).get(rule),
+            evidence_snapshot=session.snapshot, evidence_materials=session.materials)
+        assert final['status'] == 'data_gap'
+        assert final['reason_code'] == reason
     assert frozen == before
 
 
@@ -184,6 +179,40 @@ def test_new_identity_guard_does_not_reuse_or_delete_old_specialty_freeze(monkey
     current = _main_freeze_key(p, [check.RULE_ID])
     monkeypatch.setattr(check, 'RESULT_RECORD_VALIDATION_VERSION', 'exam-record-cross-report-span-types-v5')
     assert _main_freeze_key(p, [check.RULE_ID]) != current
+
+
+def test_only_comparison_report_time_change_invalidates_freeze():
+    from dataclasses import replace
+    from datetime import timedelta
+    from app.services.luxian_0609.exam_lab_projection_batching import select_exam_lab_projection_batch
+    from app.services.luxian_0609.native_exam_lab_execution import _main_freeze_key
+    p = select_exam_lab_projection_batch(projection(same=True), [('exam', 1)]).projection
+    first, second = p.comparison_events
+    changed = replace(p, comparison_events=(first, replace(second, report_time=second.report_time + timedelta(hours=1))))
+    assert _main_freeze_key(p, [check.RULE_ID]) != _main_freeze_key(changed, [check.RULE_ID])
+
+
+def test_response_cr_is_not_an_imaging_modality():
+    assert not check._modalities('化疗疗效评价CR，病情稳定。')
+
+
+@pytest.mark.asyncio
+async def test_short_shared_span_can_retry_more_specific_evidence():
+    from tests.unit.test_luxian_0609_exam_targeted_retry import Client
+    from app.services.luxian_0609.exam_output_batching import CallBudget
+    current = '脑实质与脑室系统未见明显异常。'
+    p = build_exam_lab_text_projection(rows_by_source={
+        'exam_master': (
+            {'exam_id': 'HEAD-CT', 'exam_name': '头颅CT', 'report_time': '2026-01-01 10:00:00', 'exam_conclusion': current},
+            {'exam_id': 'CHEST-CT', 'exam_name': '胸部CT', 'report_time': '2026-01-01 11:00:00', 'exam_conclusion': '双肺及纵隔未见明显异常。'}),
+        'daily_course_record': ({'document_id': 'HEAD-NOTE', 'record_time': '2026-01-01 12:00:00',
+            'record_content': '本次头颅CT：' + current},)})
+    client = Client([json.loads(response(1, '未见明显异常', '未见明显异常')['content']),
+                     json.loads(response(1, current, current)['content'])])
+    outcome = await check._check_result_batch(p, client, {1: (current, ('D06-01',))}, CallBudget(2))
+    assert outcome.recorded_refs == {1: ('D06-01',)}
+    assert not outcome.incomplete_event_positions
+    assert outcome.llm_call_count == len(client.prompts) == 2
 
 
 @pytest.mark.asyncio

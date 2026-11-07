@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import logging
 from datetime import date, datetime
 from typing import Any, Callable, Mapping
 from zoneinfo import ZoneInfo
@@ -373,35 +374,67 @@ def build_luxian_0609_evidence_read_session(
             "LX0609-06-03-02",
         }.intersection(selected_rule_ids)
     )
-    if (
+    has_frozen_horizon = needs_evaluation_horizon and evaluation_horizon_snapshot is not None
+    if not has_frozen_horizon and (
         evaluation_horizon_policy is not None
         and evaluation_horizon_policy not in EVALUATION_HORIZON_POLICIES
     ):
         raise ValueError("evaluation_horizon_policy is invalid")
-    if horizon_unavailable_reason not in {
+    if not has_frozen_horizon and horizon_unavailable_reason not in {
         None,
         "authoritative_time_missing",
         "authoritative_time_conflict",
     }:
         raise ValueError("horizon_unavailable_reason is invalid")
-    if needs_evaluation_horizon and evaluation_horizon_snapshot is not None:
+    if has_frozen_horizon:
         # 逐例冻结是唯一评价依据，调用者的默认/旧参数不能把冲突快照重新放行。
         # 无快照的升级前入口仍沿用原有兼容逻辑，不修改快照或回查新材料修补它。
-        frozen_policy = resolve_record_evaluation_horizon_policy(evaluation_horizon_snapshot)
-        frozen_reason = resolve_record_evaluation_horizon_unavailable_reason(evaluation_horizon_snapshot)
-        if evaluation_horizon_policy is not None and evaluation_horizon_policy != frozen_policy:
-            raise ValueError("evaluation_horizon_policy conflicts with frozen snapshot")
-        if horizon_unavailable_reason is not None and horizon_unavailable_reason != frozen_reason:
-            raise ValueError("horizon_unavailable_reason conflicts with frozen snapshot")
-        if (frozen_policy == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE
-                and evaluation_as_of_date is not None
-                and _parse_evaluation_as_of_date(evaluation_as_of_date)
-                != _parse_evaluation_as_of_date(str(evaluation_horizon_snapshot.get("evaluation_horizon") or ""))):
-            raise ValueError("evaluation_as_of_date conflicts with frozen snapshot")
+        frozen_date = None
+        frozen_reason = "authoritative_time_missing"
+        frozen_policy = EVALUATION_HORIZON_POLICY_DISABLED
+        if isinstance(evaluation_horizon_snapshot, Mapping):
+            frozen_policy = resolve_record_evaluation_horizon_policy(evaluation_horizon_snapshot)
+            frozen_reason = resolve_record_evaluation_horizon_unavailable_reason(evaluation_horizon_snapshot)
+            if frozen_policy == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE:
+                _, frozen_reason = resolve_frozen_discharge_horizon(
+                    evaluation_horizon_snapshot, institute_id=institute_id,
+                    patient_id=patient_id, visit_id=visit_id,
+                )
+            elif frozen_policy == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE:
+                try:
+                    frozen_date = _parse_evaluation_as_of_date(
+                        str(evaluation_horizon_snapshot.get("evaluation_horizon") or "")
+                    )
+                except (TypeError, ValueError):
+                    frozen_date = None
+                if frozen_date is None:
+                    frozen_reason = "authoritative_time_missing"
+                elif not resolve_frozen_running_record_scene(
+                    evaluation_horizon_snapshot, institute_id=institute_id,
+                    patient_id=patient_id, visit_id=visit_id, expected_horizon_date=frozen_date,
+                ):
+                    frozen_reason = "authoritative_time_conflict"
+            else:
+                frozen_reason = frozen_reason or "authoritative_time_missing"
+        # 快照损坏/冲突通过原有data_gap合同关闭，不抛成整族技术失败。
+        # 只有快照本身有效时再核对冗余参数，不能以参数冲突覆盖更准确的缺失原因。
+        if not frozen_reason:
+            if ((evaluation_horizon_policy is not None and evaluation_horizon_policy != frozen_policy)
+                    or (horizon_unavailable_reason is not None and horizon_unavailable_reason != frozen_reason)):
+                frozen_reason = "authoritative_time_conflict"
+            if frozen_policy == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE and evaluation_as_of_date:
+                try:
+                    if _parse_evaluation_as_of_date(evaluation_as_of_date) != frozen_date:
+                        frozen_reason = "authoritative_time_conflict"
+                except (TypeError, ValueError):
+                    frozen_reason = "authoritative_time_conflict"
+        if frozen_reason:
+            frozen_policy = EVALUATION_HORIZON_POLICY_DISABLED
+            logging.getLogger(__name__).warning("frozen_evaluation_horizon_closed reason=%s", frozen_reason)
         evaluation_horizon_policy = frozen_policy
-        horizon_unavailable_reason = frozen_reason
+        horizon_unavailable_reason = frozen_reason or None
         evaluation_as_of_date = (
-            str(evaluation_horizon_snapshot.get("evaluation_horizon") or "")
+            frozen_date.isoformat()
             if evaluation_horizon_policy == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE else None
         )
     if (
