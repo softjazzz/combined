@@ -514,7 +514,7 @@ def _typed_030_front_page_trigger_refs(
 def _surgery_order_obligation(*, snapshot: Luxian0609EvidenceSnapshot,
                             materials: Luxian0609EvidenceMaterialStore) -> tuple[str, str] | None:
     """030仅增加安全门控；不改变029术前计划触发，也不从文本推定实施。"""
-    from .evaluation_horizon import read_precise_frozen_horizon
+    from .evaluation_horizon import read_frozen_evaluation_horizon, after_frozen_horizon
     from ..discharge_time import hospital_business_time
     try:
         orders = [row for _, row in materials.document_rows("inpat_nondrug_order", snapshot=snapshot)
@@ -545,7 +545,7 @@ def _surgery_order_obligation(*, snapshot: Luxian0609EvidenceSnapshot,
         if any(row.get("carried_datetime") for row in canceled):
             return "data_gap", "association_failed"
         return "not_applicable", "trigger_absent_complete"
-    horizon, _, error = read_precise_frozen_horizon(snapshot=snapshot, materials=materials)
+    horizon, _, error = read_frozen_evaluation_horizon(snapshot=snapshot, materials=materials)
     if error:
         return "technical_error" if error == "source_query_error" else "data_gap", error
     future = []
@@ -557,7 +557,7 @@ def _surgery_order_obligation(*, snapshot: Luxian0609EvidenceSnapshot,
             time = hospital_business_time(datetime.fromisoformat(raw.replace("Z", "+00:00"))) if ":" in raw else None
         except ValueError:
             time = None
-        future.append(str(row.get("order_status") or "").strip() != "停止" and time is not None and time > horizon)
+        future.append(str(row.get("order_status") or "").strip() != "停止" and time is not None and after_frozen_horizon(time, horizon))
     if future and all(future):
         return "not_applicable", "evaluation_window_not_mature"
     return "data_gap", "source_readiness_unproven"

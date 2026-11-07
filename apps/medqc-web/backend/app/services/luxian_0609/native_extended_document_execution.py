@@ -20,6 +20,7 @@ from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from app.core.execution_timing import measure_stage, timing_labels
+from .evaluation_horizon import frozen_window_is_mature
 
 from .decision_model import (
     ApplicabilityState,
@@ -411,14 +412,17 @@ def _critical_value_evaluation_horizon(
     if len(horizon_rows) != 1:
         return None, None, "authoritative_time_conflict"
     row = horizon_rows[0]
-    horizon_time = None if row.get("time_precision") == "date" else _precise_datetime(row.get("horizon_datetime"))
+    declared_time = _precise_datetime(row.get("horizon_datetime"))
+    if _clean(row.get("horizon_datetime")) and declared_time is None:
+        return None, None, "authoritative_time_missing"
+    horizon_time = None if row.get("time_precision") == "date" else declared_time
     raw_date = _clean(row.get("horizon_date"))
     try:
         horizon_date = date.fromisoformat(raw_date) if raw_date else None
     except ValueError:
         horizon_date = None
-    if horizon_time is not None and horizon_date is not None:
-        if horizon_time.date() != horizon_date:
+    if declared_time is not None and horizon_date is not None:
+        if declared_time.date() != horizon_date:
             return None, None, "authoritative_time_conflict"
     if horizon_time is None and horizon_date is None:
         return None, None, "authoritative_time_missing"
@@ -1312,6 +1316,8 @@ def _order_reason_rule_outcome(
     lab_master_rows: Sequence[Mapping[str, Any]],
     lab_item_rows: Sequence[Mapping[str, Any]],
     pathogen_sources_complete: bool,
+    evaluation_horizon: datetime | date | None,
+    horizon_error: str,
 ) -> tuple[str, str, Mapping[str, Any] | None, tuple[Mapping[str, Any], ...]]:
     """按医嘱事件映射054/057状态；模型只提供带引文的事实。
 
@@ -1370,6 +1376,21 @@ def _order_reason_rule_outcome(
             evaluated.append((event, "missing"))
     if not evaluated:
         return "not_applicable", "trigger_absent_complete", None, ()
+    window_outcome: tuple[str, str] | None = None
+    missing = [event for event, state in evaluated if state == "missing"]
+    if missing:
+        mature_missing = [event for event in missing if not horizon_error and evaluation_horizon is not None
+                          and frozen_window_is_mature(evaluation_horizon, event.window_end)]
+        if mature_missing:
+            # 未到期的另一事件不能成为本轮确定缺陷，成功/未知事实仍保留。
+            evaluated = [(event, state) for event, state in evaluated
+                         if state != "missing" or event in mature_missing]
+        elif any(state == "unresolved" for _, state in evaluated):
+            window_outcome = ("data_gap", "association_failed")
+        elif horizon_error or evaluation_horizon is None:
+            window_outcome = ("data_gap", horizon_error or "authoritative_time_missing")
+        else:
+            window_outcome = ("not_applicable", "evaluation_window_not_mature")
     names = list(dict.fromkeys(event.antimicrobial for event, _ in evaluated))
     unmatched = list(dict.fromkeys(event.antimicrobial for event, state in evaluated if state != "documented"))
     evidence: list[Mapping[str, Any]] = []
@@ -1382,6 +1403,8 @@ def _order_reason_rule_outcome(
         )
         evidence.extend(documents[ref].row for ref in dict.fromkeys(refs) if ref in documents)
     evidence = list({id(row): row for row in evidence}.values())
+    if window_outcome is not None:
+        return *window_outcome, None, tuple(evidence)
     states = {state for _event, state in evaluated}
     if "missing" in states:
         final_state, reason_code = "non_compliant", "requirement_violated"
@@ -2657,11 +2680,7 @@ async def _execute_extended_document_group(
         if {"LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-10-01-01", "LX0609-10-03-01"}.intersection(selected)
         else (None, None, None)
     )
-    order_reason_horizon_datetime = (
-        _critical_value_evaluation_horizon(horizon_rows, horizon_error)[1]
-        if {"LX0609-05-01-02", "LX0609-05-01-05"}.intersection(selected)
-        else None
-    )
+    antimicrobial_evaluation_horizon = antimicrobial_horizon_datetime or antimicrobial_horizon_date
     (
         transfer_horizon_date,
         transfer_horizon_datetime,
@@ -2887,8 +2906,10 @@ async def _execute_extended_document_group(
                     continue
                 late = True
             unmatched.append(event.antimicrobial)
-            pending = pending or (antimicrobial_horizon_datetime is not None and antimicrobial_horizon_datetime < event.time + _LX0609_058_SUPPORT_WINDOW)
-            mature_missing = mature_missing or (antimicrobial_horizon_datetime is not None and antimicrobial_horizon_datetime >= event.time + _LX0609_058_SUPPORT_WINDOW)
+            mature = (not antimicrobial_horizon_error and antimicrobial_evaluation_horizon is not None
+                      and frozen_window_is_mature(antimicrobial_evaluation_horizon, event.time + _LX0609_058_SUPPORT_WINDOW))
+            pending = pending or (antimicrobial_evaluation_horizon is not None and not mature)
+            mature_missing = mature_missing or mature
         if not unmatched:
             final_state, reason_code = "compliant", "requirement_satisfied"
         elif ambiguous:
@@ -2899,7 +2920,7 @@ async def _execute_extended_document_group(
             final_state, reason_code = "data_gap", consultation_error or senior_error
         elif late or mature_missing:
             final_state, reason_code = "non_compliant", "requirement_violated" if late else "required_document_missing"
-        elif antimicrobial_horizon_error or antimicrobial_horizon_datetime is None:
+        elif antimicrobial_horizon_error or antimicrobial_evaluation_horizon is None:
             return "data_gap", antimicrobial_horizon_error or "authoritative_time_missing", None, tuple(evidence)
         elif pending:
             return "not_applicable", "evaluation_window_not_mature", None, tuple(evidence)
@@ -2936,11 +2957,8 @@ async def _execute_extended_document_group(
                 exclusions_checked=rule_id == "LX0609-05-01-05",
                 discharge_time=_discharge_time(registration_rows, (), horizon_rows, horizon_error),
             )
-            horizon = order_reason_horizon_datetime
-            events = tuple(
-                event for event in resolution.events
-                if horizon is None or event.window_end <= horizon
-            )
+            # 正面证据可提前证明合规；只有缺失否定需要等待窗口成熟。
+            events = resolution.events
             documents, per_event, untimed = window_documents(
                 events,
                 (
@@ -2959,7 +2977,7 @@ async def _execute_extended_document_group(
                 events, documents, per_event, llm_client,
             )
             order_reason_cache[cache_key] = dict(
-                events=events, pending=any(event not in events for event in resolution.events), missing=resolution.time_missing_names,
+                events=events, missing=resolution.time_missing_names,
                 extraction=antimicrobial_order_reason_extraction, documents={doc.doc_ref: doc for doc in documents},
                 per_event=per_event, untimed=untimed,
             )
@@ -2974,14 +2992,9 @@ async def _execute_extended_document_group(
             lab_master_rows=lab_master_rows,
             lab_item_rows=lab_item_rows,
             pathogen_sources_complete=not (lab_master_error or lab_item_error),
+            evaluation_horizon=antimicrobial_evaluation_horizon,
+            horizon_error=antimicrobial_horizon_error or "",
         )
-        if outcome[0] != "technical_error":
-            if outcome[:2] == ("not_applicable", "trigger_absent_complete") and not order_reason_cache[cache_key]["pending"]:
-                return outcome
-            if antimicrobial_horizon_error or antimicrobial_horizon_datetime is None:
-                return "data_gap", antimicrobial_horizon_error or "authoritative_time_missing", None, outcome[3]
-            if order_reason_cache[cache_key]["pending"] and outcome[0] != "non_compliant":
-                return "not_applicable", "evaluation_window_not_mature", None, outcome[3]
         return outcome
 
     for rule_id in selected:
@@ -4121,9 +4134,9 @@ async def _execute_extended_document_group(
                     final_state, reason_code = "technical_error", documentation.reason_code
                 elif documentation.state == "unresolved":
                     final_state, reason_code = "data_gap", documentation.reason_code
-                elif missing and (antimicrobial_horizon_error or antimicrobial_horizon_datetime is None):
+                elif missing and (antimicrobial_horizon_error or antimicrobial_evaluation_horizon is None):
                     final_state, reason_code = "data_gap", antimicrobial_horizon_error or "authoritative_time_missing"
-                elif missing and not any(antimicrobial_horizon_datetime >= datetime.combine(trigger.anchor_date + timedelta(days=INVASIVE_RECORD_WINDOW_DAYS), datetime.min.time()) for trigger in triggers if trigger.procedure.name in missing):
+                elif missing and not any(frozen_window_is_mature(antimicrobial_evaluation_horizon, datetime.combine(trigger.anchor_date + timedelta(days=INVASIVE_RECORD_WINDOW_DAYS), datetime.min.time())) for trigger in triggers if trigger.procedure.name in missing):
                     final_state, reason_code = "not_applicable", "evaluation_window_not_mature"
                 elif missing:
                     final_state, reason_code = "non_compliant", "required_document_missing"
@@ -5828,7 +5841,7 @@ async def _execute_extended_document_group(
                 handoff_error=handoff_error,
                 handover_rows=handover_rows,
                 handover_error=handover_error,
-                evaluation_horizon_datetime=antimicrobial_horizon_datetime,
+                evaluation_horizon_datetime=antimicrobial_evaluation_horizon,
                 evaluation_horizon_error=antimicrobial_horizon_error or "",
             )
             if outcome.display_facts is not None:

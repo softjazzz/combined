@@ -26,10 +26,10 @@ EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_MISSING = "authoritative_time_missi
 EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_CONFLICT = "authoritative_time_conflict"
 
 
-def read_precise_frozen_horizon(
+def read_frozen_evaluation_horizon(
     *, snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609EvidenceMaterialStore,
-) -> tuple[datetime | None, str, str]:
-    """读取本次证据会话的统一终点；不从当前库或当前时间补值。"""
+) -> tuple[datetime | date | None, str, str]:
+    """保留统一冻结终点的日期/时刻精度，不从当前库或当前时间补值。"""
     from .evidence_material import EvidenceMaterialUnavailable, EvidenceMaterialTruncated
     from .evidence_snapshot import SourceCompleteness
     from .source_manifest import QueryStatus
@@ -55,16 +55,39 @@ def read_precise_frozen_horizon(
     if basis not in {"discharge_date", "evaluation_as_of"}:
         return None, basis, "authoritative_time_missing"
     raw = str(row.get("horizon_datetime") or "")
-    if row.get("time_precision") == "date" or ":" not in raw:
-        return None, basis, "authoritative_time_missing"
+    raw_date = str(row.get("horizon_date") or "")
+    if row.get("time_precision") == "date" or not raw:
+        try:
+            day = date.fromisoformat(raw_date)
+            # 日期有效不表示可以忽略同一冻结行中的矛盾时刻。
+            if raw and hospital_business_time(datetime.fromisoformat(raw.replace("Z", "+00:00"))).date() != day:
+                return None, basis, "authoritative_time_conflict"
+            return day, basis, ""
+        except ValueError:
+            return None, basis, "authoritative_time_missing"
     try:
         moment = hospital_business_time(datetime.fromisoformat(raw.replace("Z", "+00:00")))
-        raw_date = str(row.get("horizon_date") or "")
+        if ":" not in raw:
+            return None, basis, "authoritative_time_missing"
         if raw_date and date.fromisoformat(raw_date) != moment.date():
             return None, basis, "authoritative_time_conflict"
     except (TypeError, ValueError):
         return None, basis, "authoritative_time_missing"
     return moment, basis, ""
+
+
+def frozen_window_is_mature(horizon: datetime | date, deadline: datetime) -> bool:
+    """时刻沿用精确边界；日期只有明确晚于截止日才足以证明窗口完成。"""
+    if isinstance(horizon, datetime):
+        return horizon >= deadline
+    return horizon > deadline.date()
+
+
+def after_frozen_horizon(moment: datetime, horizon: datetime | date) -> bool:
+    """日期级范围内的同日时刻不可被擅自排除。"""
+    if isinstance(horizon, datetime):
+        return moment > horizon
+    return moment.date() > horizon
 
 
 def _normalized_text(value: Any) -> str:

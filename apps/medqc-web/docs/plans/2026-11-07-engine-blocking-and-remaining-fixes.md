@@ -1,5 +1,30 @@
 # LX0609 B-01～B-05及剩余发现：最小工程修复，待Claude复审
 
+## da8ec5740复审阻断P1-R1：日期终点修订
+
+Claude确认：`da8ec5740`把有效在院冻结日期当作权威时间缺失，并覆盖054/057已合规结果。此前494项通过没有覆盖Provider真实`frozen_task_date`取材，不能据此否认这一回退。本次修订基线固定为`da8ec5740019fc45a4f3bf24547bf3250f910a50`，不替换旧报告或终验回执。
+
+- 统一读取改为`read_frozen_evaluation_horizon`，原样保留`date`或`datetime`。日期有效不再返回时间缺失；缺失、矛盾、坏日期仍保守关闭，不用时钟或当前库补值。
+- 统一成熟比较：精确时刻沿用`>= deadline`；日期只有明确晚于截止日才算成熟，早于或等于截止日保留未到期。不补午夜或日末作为精确时刻。
+- 054/057先核验全部候选的正面事实，正面合规不依赖评价终点；仅缺理由的否定检查窗口。独立成熟缺陷保留，另一未成熟事件不列为该确定缺陷，成功/未知证据不丢失。
+- 058、071、075使用相同日期成熟边界，恢复明确超过期限的缺陷；原精确时刻阈值不变。
+- 030未来计划用冻结日期比较，可从实际在院取材进入未到期；同日计划或执行未知不凭时间推定手术已实施。
+- 013在院日期有效后，原生内部原因为`pathology_recording_deadline_unconfirmed`，按既有对外合同映射`data_gap/source_readiness_unproven`，不新增医学期限。日期级出院与报告同日时不捏造先后，保持未决；精确出院与报告同刻的原合同未改，宽限仍待临床确认。
+- 不改冻结文件、快照、模型事实协议或历史结果：本次修正的是基于既有事实的时间比较，没有重写过去任务。
+
+新增`test_luxian_0609_running_date_horizon_regression.py`：先有6项真实Provider在院反例全部失败，再修复转绿；最终29项包含真实在院/日期级出院、成熟/截止日前/同日、已记录正面、混合成熟与未成熟事件、013/030及腐坏时间保护。主体测试不手工注入终点；仅末尾两项解析器坏值单测注入矛盾行。文件命名已由现有零模型质量门自动收录，并核验恰好收录一次，没有放宽门禁。
+
+本次必要终验命令（在backend，仍用既有禁网入口）：
+
+```powershell
+$py = 'C:/Users/Coldplay/AppData/Local/Programs/Python/Python310/python.exe'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_running_date_horizon_regression.py tests/unit/test_luxian_0609_quality_gate.py::test_pr_no_model_gates_cover_every_luxian_0609_unit_test_file_exactly_once
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_native_extended_document_execution.py -k 'test_054 or test_057 or test_058 or test_071 or test_075 or test_052_date_only_horizon or test_052_missing_or_conflicting or test_055_requires_evaluation_horizon'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_engine_blocking_findings.py tests/unit/test_engine_remaining_findings.py -k 'horizon or window or surgery_plan or documented_reason or handover_missing or invasive_missing or late_support'
+```
+
+本次保存读取边界：054、057、058、071、075均经过Native、Binding、Finalizer与内存SQLite提交重读，核对状态、原因和事实。054/057/058/071核对非空证据内容、时间及原ID到source_ref的转换；075现有公开投影没有逐文书片段，核对空证据集合和操作事实保持一致，**不能称为075可定位原文证据验收完成**。未补P3-1～P3-3，不改061日期级出院24小时的待确认口径，不改病理宽限或手术实际执行定义。没有重跑旧494项或全量质量门。
+
 ## 固定范围
 
 - 开发基线：`94745e3b682a05b87335acf7d9196c0b8dcc2d35`，分支 `codex/frozen-exam-association-fix-20261107`。本报告与修复同提交，最终提交号以 `git rev-parse HEAD` 和提交后隔离回执核对。

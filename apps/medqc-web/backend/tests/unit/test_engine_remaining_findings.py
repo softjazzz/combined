@@ -446,7 +446,7 @@ def pathology_rows(daily=()):
         ("2026-05-02 10:00:00", False, "non_compliant", "requirement_violated"),
         ("2026-05-03 12:00:00", False, "non_compliant", "requirement_violated"),
         ("", False, "data_gap", "authoritative_time_missing"),
-        ("2026-05-03", False, "data_gap", "authoritative_time_missing"),
+        ("2026-05-03", False, "non_compliant", "requirement_violated"),
         ("2026-05-03 12:00:00", True, "data_gap", "authoritative_time_conflict"),
     ],
 )

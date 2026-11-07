@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from math import ceil
 from typing import Any, Mapping, Sequence
 
 from .shared import _clean, _parse_datetime, _row_time
+from ..evaluation_horizon import frozen_window_is_mature
 from app.services.document_assembly.signatures import course_physician_signatures
 
 
@@ -641,7 +642,7 @@ def _evaluate_structured_change_events(
 
 def _mature_handoff_outcome(
     state: str, reason: str, facts: Mapping[str, Any] | None,
-    horizon: datetime | None, horizon_error: str,
+    horizon: datetime | date | None, horizon_error: str,
 ) -> tuple[str, str, Mapping[str, Any] | None]:
     if state != "non_compliant" or not isinstance(facts, Mapping):
         return state, reason, facts
@@ -661,7 +662,7 @@ def _mature_handoff_outcome(
         if handover is None:
             if change is None or horizon_error or horizon is None:
                 missing_horizon = True
-            elif horizon >= change + timedelta(hours=24):
+            elif frozen_window_is_mature(horizon, change + timedelta(hours=24)):
                 confirmed = True
             else:
                 pending = True
@@ -684,7 +685,7 @@ def evaluate_physician_handoff(
     handoff_error: str,
     handover_rows: Sequence[Mapping[str, Any]],
     handover_error: str,
-    evaluation_horizon_datetime: datetime | None = None,
+    evaluation_horizon_datetime: datetime | date | None = None,
     evaluation_horizon_error: str = "",
 ) -> PhysicianHandoffOutcome:
     """逐次核对经治医师变更前交班与变更后24小时内接班记录。"""

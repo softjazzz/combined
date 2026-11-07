@@ -48,7 +48,7 @@ from .pathology_report_completeness import (
     PATHOLOGY_REPORT_COMPLETENESS_RULE_ID,
     evaluate_pathology_report_completeness,
 )
-from .evaluation_horizon import read_precise_frozen_horizon
+from .evaluation_horizon import read_frozen_evaluation_horizon, after_frozen_horizon
 
 
 
@@ -350,7 +350,7 @@ def _typed_decision_from_outcome(
             if outcome.rule_id in {"LX0609-06-02-02", "LX0609-06-02-03"}
             and outcome.reason_code == "pathology_event_association_unresolved"
             else "evaluation_window_not_mature"
-            if outcome.reason_code == "pathology_report_outside_evaluation_window"
+            if outcome.reason_code in {"pathology_report_outside_evaluation_window", "pathology_report_horizon_date_boundary"}
             else "source_readiness_unproven"
             if outcome.reason_code == "pathology_recording_deadline_unconfirmed"
             else outcome.reason_code if outcome.reason_code in {"authoritative_time_missing", "authoritative_time_conflict", "candidate_scope_incomplete"}
@@ -1198,7 +1198,7 @@ def _pathology_events(
 async def _typed_pathology_documentation(
     *, rule_id: str, master: SourceMaterial, report: SourceMaterial,
     targets: Mapping[str, SourceMaterial], llm_client: Any,
-    horizon: datetime | None = None, horizon_basis: str = "", horizon_error: str = "authoritative_time_missing",
+    horizon: datetime | date | None = None, horizon_basis: str = "", horizon_error: str = "authoritative_time_missing",
 ) -> _PathologyDocumentationOutcome:
     """模型逐次检查抽取取材/结果记录及原文引用，程序核验时间并判定。"""
 
@@ -1230,7 +1230,7 @@ async def _typed_pathology_documentation(
                     continue
                 if earliest_report is None or moment < earliest_report:
                     continue
-                if horizon is not None and moment > horizon:
+                if horizon is not None and after_frozen_horizon(moment, horizon):
                     continue
             times[id(row)] = moment
             checked.append((source, row))
@@ -1267,7 +1267,9 @@ async def _typed_pathology_documentation(
         if not sampling and state == "not_documented":
             # 只有闭合的终末范围能保留原未记录判定；不发明在院回报后时限。
             reason = (horizon_error if horizon is None else
-                      "pathology_report_outside_evaluation_window" if report_time is not None and report_time > horizon else
+                      "pathology_report_outside_evaluation_window" if report_time is not None and after_frozen_horizon(report_time, horizon) else
+                      "pathology_report_horizon_date_boundary"
+                      if not isinstance(horizon, datetime) and horizon_basis == "discharge_date" and report_time is not None and report_time.date() == horizon else
                       "pathology_recording_deadline_unconfirmed" if horizon_basis != "discharge_date" else "")
             if reason:
                 state = "unknown"
@@ -2584,7 +2586,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             ) if sampling_rule else ()
             horizon_kwargs = {}
             if not sampling_rule:
-                moment, basis, error = read_precise_frozen_horizon(
+                moment, basis, error = read_frozen_evaluation_horizon(
                     snapshot=evidence_snapshot, materials=evidence_materials,
                 )
                 horizon_kwargs = {"horizon": moment, "horizon_basis": basis, "horizon_error": error}

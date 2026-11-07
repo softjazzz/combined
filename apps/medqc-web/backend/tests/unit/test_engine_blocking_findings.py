@@ -73,7 +73,7 @@ def horizon(value):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rule", ["05-01-02", "05-01-05", "05-01-06"])
 @pytest.mark.parametrize(
-    "end,state", [("2026-06-01 11:00:00", "not_applicable"), ("2026-06-01", "data_gap")]
+    "end,state", [("2026-06-01 11:00:00", "not_applicable"), ("2026-06-01", "not_applicable")]
 )
 async def test_immature_or_date_only_antimicrobial_horizon(rule, end, state):
     snapshot, materials, native, reduceds = await fixtures._evaluate_selected(
