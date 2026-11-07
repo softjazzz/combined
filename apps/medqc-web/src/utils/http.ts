@@ -10,7 +10,7 @@ export const http = axios.create({
 })
 
 http.interceptors.request.use((config) => {
-  const source = clinicalSourceForRequest(config.url)
+  const source = clinicalSourceForRequest(config.url, config.method)
   if (source) {
     config.headers = config.headers || {}
     config.headers['X-Clinical-Source'] = source
