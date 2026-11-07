@@ -6,6 +6,18 @@
 
 依赖检查复用源包精确版本锁，不自动安装。未通过当前发布环境的计量/身份/依赖/迁移验收，不得将工具自测当作交付包验收。本次未调用手动制包workflow。
 
+## 当前候选的材料与迁移预检（2026-11-07）
+
+`check_compat.py`仍不读取业务配置或连接数据库。`stage_upgrade.py`在复制前只读解析`business.env`的材料路径，复用部署已有`python-dotenv`，不导入应用；其插值和进程环境优先级与应用`load_dotenv`一致。有效目录按`QC_CASE_MATERIAL_DIR`优先，否则取`QC_DISPATCH_STATE_DIR`父目录下的`case-materials`。二者都未配置时，应用回退到当前release的`backend/data/case-materials`，暂存器拒绝继续。相对路径、任何release或`current`及其符号链接别名中的路径均拒绝；尚未首次创建的持久目录允许通过。输出和回滚记录包含`material_storage_dir`及来源，不输出代理地址、凭据或其他配置。
+
+兼容检查与暂存必须沿用已安装业务venv中的`/data/medqc/business/venv/bin/python -B`，不能替换为系统`python3`。当前业务依赖已固定`python-dotenv==1.0.0`；缺失时停止并返回`existing_business_venv_python_dotenv_required`，不现场安装依赖或忽略错误。`check_compat`另会先核对venv身份及源包精确依赖锁。
+
+现场应另核对API、Worker及其服务环境实际使用同一目录。暂存命令的进程环境不等于systemd实际环境，此工具不读取systemd状态或证明服务权限。若旧材料已在release中，先停止交付并制定经批准的保留/迁移方案；不要直接新增路径变量让旧任务失去材料。暂存器不创建、搬迁或删除材料，也不覆盖`.env`、代理、模型、MQ或计划配置。代码回切必须保持同一持久目录并保留新旧材料、任务引用和历史结果，不以清空快照或数据库降级代替回滚。
+
+当前源码迁移依赖为`20261102_000062 → 20261105_000063 → 20261106_000064`：063为Bundle刷新存储，064为每日计划与触发账本，计划默认关闭。现场真实Alembic版本与结构仍未知，必须逐版本确认；不得沿用下方历史062“无需迁移”口径。仅在另获批准的维护窗口使用现有`db-admin.py`备份并执行必要迁移，不自动迁移、不stamp、不downgrade、不重新导入1026。代码回退前先确认旧版能读取升级后结构，保留新增表和数据。
+
+本轮仅准备预检，未制包、安装依赖、操作服务或访问数据库/模型。候选来源、定向检查及现场未验收项见`docs/plans/2026-11-07-closeout-linux-preflight.md`；下方历史操作示例不能直接用于当前版本。
+
 ```text
 python -B apps/medqc-web/scripts/linux_app_upgrade/make_package.py --source <已验收完整tar.gz> --source-sha256 <发行方64位SHA256> --application-commit <该包40位应用Commit> --output <全新目录>
 ```

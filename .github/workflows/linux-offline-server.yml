@@ -36,13 +36,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Install the existing application env parser for tool checks
+        run: python -m pip install --no-deps python-dotenv==1.0.0
       - name: Synthetic upgrade tools without network or application startup
         run: >-
           sudo unshare --net -- "$(command -v python)" -B -c
-          "import socket,runpy,sys; sys.path.insert(0,'apps/medqc-web/scripts/linux_app_upgrade');
+          "import socket,unittest,sys; sys.path.insert(0,'apps/medqc-web/scripts/linux_app_upgrade');
           deny=lambda *a,**k:(_ for _ in ()).throw(RuntimeError('isolated_network_denied'));
           socket.socket.connect=deny; socket.create_connection=deny; socket.getaddrinfo=deny;
-          sys.argv=['test_upgrade.py']; runpy.run_path('apps/medqc-web/scripts/linux_app_upgrade/test_upgrade.py',run_name='__main__')"
+          suite=unittest.defaultTestLoader.discover('apps/medqc-web/scripts/linux_app_upgrade',pattern='test_*.py');
+          result=unittest.TextTestRunner(verbosity=2).run(suite); sys.exit(not result.wasSuccessful())"
   build:
     if: github.event_name != 'pull_request' && inputs.delivery != 'application-upgrade'
     runs-on: ubuntu-22.04
@@ -136,6 +139,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Install the existing application env parser for tool checks
+        run: python -m pip install --no-deps python-dotenv==1.0.0
       - name: Require explicit validated source identity
         env:
           SOURCE_RUN: ${{ inputs.source_run_id }}
@@ -167,7 +172,7 @@ jobs:
           sudo --preserve-env=RUNNER_TEMP,PYTHONDONTWRITEBYTECODE unshare --net bash -c 'ip link set lo up; exec setpriv --reuid=runner --regid=runner --init-groups --no-new-privs "$@"' bash bash -c '
             set -euo pipefail
             PYTHON=$1
-            "$PYTHON" -B apps/medqc-web/scripts/linux_app_upgrade/test_upgrade.py
+            "$PYTHON" -B -m unittest discover -s apps/medqc-web/scripts/linux_app_upgrade -p "test_*.py"
             "$PYTHON" -B apps/medqc-web/scripts/linux_app_upgrade/smoke_upgrade.py \
               --kit "$RUNNER_TEMP/app-upgrade/medqc-app-upgrade" \
               --full "$RUNNER_TEMP/verified-full/medqc-offline" --python "$PYTHON"

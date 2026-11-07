@@ -78,7 +78,7 @@ class UpgradeTests(unittest.TestCase):
         root = self.base / "business"
         for name in ("releases/old", "venvs/existing", "config", "state"):
             (root / name).mkdir(parents=True, exist_ok=True)
-        (root / "config/business.env").write_text("UNCHANGED_CONFIGURATION")
+        (root / "config/business.env").write_text("# UNCHANGED_CONFIGURATION\nQC_DISPATCH_STATE_DIR=" + (root / "state/dispatch").as_posix() + "\nLLM_HTTP_PROXY=http://site-proxy:8080\n")
         (root / "current").symlink_to(root / "releases/old", target_is_directory=True)
         (root / "venv").symlink_to(root / "venvs/existing", target_is_directory=True)
         return root
