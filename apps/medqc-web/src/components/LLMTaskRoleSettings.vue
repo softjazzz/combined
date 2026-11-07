@@ -1,65 +1,67 @@
 <template>
   <div
-    class="ds-group"
+    class="llm-role-settings"
     data-testid="task-role-settings"
   >
-    <div class="ds-group__title">
-      按任务用途选模型
-    </div>
-    <p class="ds-row__hint">
-      默认继承当前模型，不增加调用次数。事实抽取用于检查检验主抽取及会诊意见；
-      专项核验用于检查结果、阳性分析和检查理由核验。其余正式语义调用使用判断分析模型。
-    </p>
-    <div
-      v-for="role in roleRows"
-      :key="role.key"
-      class="ds-row ds-row--top"
-    >
-      <div class="ds-row__left">
-        <div class="ds-row__label">
-          {{ role.label }}
+    <header class="llm-role-header">
+      <h3 class="llm-role-title">
+        按任务用途选模型
+      </h3>
+      <p class="mq-field__hint">
+        未单独指定的用途继承默认模型，不增加模型调用次数。
+      </p>
+    </header>
+    <div class="mq-inset llm-role-list">
+      <div
+        v-for="role in roleRows"
+        :key="role.key"
+        class="llm-role-row"
+      >
+        <div class="mq-field">
+          <span class="llm-role-label">{{ role.label }}</span>
+          <span class="mq-field__hint">{{ role.hint }}</span>
         </div>
-        <div class="ds-row__hint">
-          {{ role.hint }}
+        <div class="llm-role-controls">
+          <a-select
+            :data-testid="`task-role-provider-${role.key}`"
+            :aria-label="`${role.label}推理服务`"
+            :value="value[role.key]?.provider_code || 'inherit'"
+            :disabled="disabled"
+            :options="providerOptions"
+            class="llm-role-select"
+            @change="selectProvider(role.key, String($event))"
+          />
+          <a-select
+            v-if="value[role.key]"
+            :data-testid="`task-role-model-${role.key}`"
+            :aria-label="`${role.label}模型`"
+            :value="value[role.key]?.model_code || undefined"
+            :disabled="disabled || pending[value[role.key]?.provider_code || '']"
+            :loading="pending[value[role.key]?.provider_code || '']"
+            :options="modelOptions(value[role.key]?.provider_code || '')"
+            show-search
+            option-filter-prop="label"
+            placeholder="选择该用途的模型"
+            class="llm-role-select"
+            @change="selectModel(role.key, String($event))"
+          />
+          <span
+            v-else
+            class="mq-field__hint llm-role-inherit"
+          >使用默认模型</span>
+          <span
+            v-if="errors[value[role.key]?.provider_code || '']"
+            role="alert"
+            class="llm-role-error"
+          >
+            模型目录读取失败，请重新选择服务后重试。
+          </span>
         </div>
       </div>
-      <div class="task-role-controls">
-        <a-select
-          :data-testid="`task-role-provider-${role.key}`"
-          :value="value[role.key]?.provider_code || 'inherit'"
-          :disabled="disabled"
-          :options="providerOptions"
-          style="width: 220px"
-          @change="selectProvider(role.key, String($event))"
-        />
-        <a-select
-          v-if="value[role.key]"
-          :data-testid="`task-role-model-${role.key}`"
-          :value="value[role.key]?.model_code || undefined"
-          :disabled="disabled || pending[value[role.key]?.provider_code || '']"
-          :loading="pending[value[role.key]?.provider_code || '']"
-          :options="modelOptions(value[role.key]?.provider_code || '')"
-          show-search
-          option-filter-prop="label"
-          placeholder="选择该用途的模型"
-          style="width: 280px"
-          @change="selectModel(role.key, String($event))"
-        />
-        <span
-          v-else
-          class="ds-row__hint"
-        >继承默认模型（保留现有运行配置）</span>
-        <span
-          v-if="errors[value[role.key]?.provider_code || '']"
-          role="alert"
-        >
-          模型目录读取失败，请重新选择服务后重试。
-        </span>
-      </div>
     </div>
-    <p class="ds-row__hint">
-      配置在新任务开始时固定；修改不影响在途任务。角色调用失败不会自动切换其他服务。
-      保存只校验配置，连接测试只请求默认模型。
+    <p class="mq-field__hint llm-role-note">
+      事实抽取已绑定检查检验与会诊意见；专项核验用于检查结果、阳性分析及检查理由。
+      配置在新任务开始时固定，已有任务不受影响；角色调用失败不会自动切换服务。
     </p>
   </div>
 </template>
@@ -142,12 +144,74 @@ onBeforeUnmount(() => { mounted = false })
 </script>
 
 <style scoped>
-.ds-group { padding: 20px 0; }
-.ds-group__title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
-.ds-row { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; }
-.ds-row__left { min-width: 150px; }
-.ds-row__label { font-weight: 500; }
-.ds-row__hint { color: var(--mq-text-secondary, #64748b); font-size: 13px; line-height: 1.6; }
-.task-role-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-@media (max-width: 800px) { .ds-row { flex-direction: column; } }
+.llm-role-settings {
+  min-width: 0;
+}
+.llm-role-header {
+  margin-bottom: var(--mq-space-5);
+}
+.llm-role-title {
+  margin: 0;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-16);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.llm-role-header p {
+  margin: var(--mq-space-1) 0 0;
+}
+.llm-role-list {
+  padding-inline: var(--mq-space-4);
+}
+.llm-role-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.6fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--mq-space-4);
+  padding-block: var(--mq-space-4);
+}
+.llm-role-row + .llm-role-row {
+  border-top: 1px solid var(--mq-border);
+}
+.llm-role-label {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+}
+.llm-role-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: var(--mq-space-2);
+  min-width: 0;
+}
+.llm-role-select {
+  width: 100%;
+  min-width: 0;
+}
+.llm-role-inherit {
+  padding-inline: var(--mq-space-2);
+}
+.llm-role-error {
+  grid-column: 1 / -1;
+  color: var(--mq-danger-text);
+  font-size: var(--mq-font-12);
+}
+.llm-role-note {
+  margin: var(--mq-space-3) 0 0;
+}
+@container model-settings (max-width: 680px) {
+  .llm-role-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--mq-space-3);
+  }
+}
+@container model-settings (max-width: 420px) {
+  .llm-role-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .llm-role-inherit {
+    padding-inline: 0;
+  }
+}
 </style>
