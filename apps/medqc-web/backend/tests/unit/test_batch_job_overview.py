@@ -22,7 +22,9 @@ def overview_store(monkeypatch):
         *(sa.Column(name, sa.Text) for name in names),
         *(sa.Column(name, sa.DateTime) for name in ("created_at", "started_at", "finished_at", "updated_at")),
         *(sa.Column(name, sa.Integer) for name in ("total_records", "success_count", "failed_count", "issue_records", "compliant_records")))
-    engine = sa.create_engine("sqlite:///:memory:")
+    engine = sa.create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=sa.pool.StaticPool,
+    )
     metadata.create_all(engine)
     filters = json.dumps({"selected_rule_ids": ["r2", "r1"], "customer_rule_count": 2,
                           "record_refs": [{"patient_id": "PRIVATE_ID"}]})
@@ -95,8 +97,11 @@ async def test_overview_route_never_invokes_full_list_or_result_projection(monke
     def forbidden(*args, **kwargs):
         raise AssertionError("概览不得读取或投影完整结果")
 
-    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: SimpleNamespace(
-        list_batch_job_overviews=overview, list_batch_jobs=forbidden))
+    def readonly_workspace(*, readonly=False):
+        assert readonly is True
+        return SimpleNamespace(
+            list_batch_job_overviews=overview, list_batch_jobs=forbidden)
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", readonly_workspace)
     monkeypatch.setattr(qc_sichuan, "_workspace_batch_list_item", forbidden)
     monkeypatch.setattr(qc_sichuan, "_is_workspace_batch_job", lambda job: job.get("draft_id") == "workspace")
     result = await qc_sichuan.list_workspace_batch_jobs(
