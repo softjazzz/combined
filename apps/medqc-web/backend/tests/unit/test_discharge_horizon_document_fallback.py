@@ -212,6 +212,61 @@ def test_time_selection_is_explicit(kwargs, source, conflict):
     assert selection.conflict == conflict
 
 
+def test_clinical_candidate_catalog_uses_the_same_discharge_authority_as_task_freeze(monkeypatch):
+    """正式入口先按目录筛三坐标；目录不能用文书日期掩盖登记日期。"""
+    from sqlalchemy import Date, create_engine, func, select
+    from sqlalchemy.orm import Session
+    from sqlalchemy.sql import visitors
+    from sqlalchemy.sql.elements import Cast
+    from app.services import clinical_case_catalog as catalog
+    from app.services.qc_workspace import record_repository as repo
+
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS cdm")
+    scoped_engine = engine.execution_options(schema_translate_map={None: "cdm"})
+    for model in (repo.MedicalRecordFrontpage, repo.InpatRegistration,
+                  repo.AdmissionRecord, repo.DischargeRecord):
+        model.__table__.create(scoped_engine)
+    identity = dict(institute_id="I", patient_id="P", visit_id="V")
+    try:
+        with Session(scoped_engine) as db:
+            db.add(repo.MedicalRecordFrontpage(**identity, admission_datetime=datetime(2026, 2, 1),
+                discharge_datetime=datetime(2026, 2, 6, 10)))
+            db.add(repo.InpatRegistration(**identity, discharge_datetime=datetime(2026, 2, 5, 10)))
+            db.add(repo.DischargeRecord(**identity, discharge_time=datetime(2026, 2, 9, 8, 31)))
+            db.commit()
+            monkeypatch.setattr(catalog.clinical, "configured", lambda: False)
+            rows = repo.RecordRepository(session_factory=lambda: db).collect_records(
+                scope="all", department=None, doctor=None, date_field="admission", start_date=None,
+                end_date=None, keyword=None, record_refs=[repo.CaseRef.from_mapping(identity)])
+            frozen = build_record_evaluation_horizon_snapshot(rows, task_frozen_date="2026-09-09")[0]
+        source = catalog.catalog(engine)
+        with engine.connect() as connection:
+            candidate_discharge = connection.execute(select(source.c.discharge)).scalar_one()
+        # SQLite 的 CAST(text AS DATE) 只返回年份；用其 date() 函数承载 PG 的日期转换语义，
+        # 其余目录/筛选/正式取材调用均使用实际实现。
+        original_predicates = catalog._predicates
+
+        def sqlite_date_predicates(*args, **kwargs):
+            return [visitors.replacement_traverse(clause, {}, lambda node:
+                func.date(node.clause) if isinstance(node, Cast) and isinstance(node.type, Date)
+                else None) for clause in original_predicates(*args, **kwargs)]
+
+        monkeypatch.setattr(catalog, "_predicates", sqlite_date_predicates)
+        monkeypatch.setattr(catalog.clinical, "configured", lambda: True)
+        monkeypatch.setattr(catalog.clinical, "get_engine", lambda: scoped_engine)
+        selected = repo.RecordRepository(session_factory=lambda: Session(scoped_engine)).collect_records(
+            scope="final", department=None, doctor=None, date_field="discharge",
+            start_date="2026-02-05", end_date="2026-02-05", keyword=None)
+        assert len(selected) == 1, "登记出院日匹配的病例不能在独立CDM目录阶段丢选"
+        # 目录值直接用于 case_identities 的出院日期筛选；两者必须来自同一权威层。
+        assert str(candidate_discharge)[:19] == frozen["discharge_datetime"]
+    finally:
+        catalog.catalog.cache_clear()
+        engine.dispose()
+
+
 @pytest.mark.skipif(not os.environ.get("DISCHARGE_SIX_FIXTURE"), reason="需显式提供已有六例私有离线材料")
 def test_existing_six_materials_endpoint_and_canonical_roundtrip(monkeypatch, tmp_path):
     """读取既有文件，不新取患者材料；只执行一条受影响的程序规则，数据库仅内存SQLite。"""
