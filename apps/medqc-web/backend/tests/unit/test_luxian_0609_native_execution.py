@@ -108,7 +108,7 @@ def _typed_session(
     )
 
 
-def test_native_030_order_without_surgery_record_is_non_compliant_with_order_ref():
+def test_native_030_order_without_surgery_record_is_unresolved_with_order_ref():
     snapshot, materials = _typed_session(
         inpat_nondrug_order_rows=(
             {
@@ -142,19 +142,9 @@ def test_native_030_order_without_surgery_record_is_non_compliant_with_order_ref
     assert result.results == ()
     assert len(result.decisions) == 1
     assert result.decisions[0].fact_refs == (expected_order_ref,)
-    assert reduced[0].final_state.value == "non_compliant"
-    assert reduced[0].reason_code == "required_document_missing"
-    assert result.customer_display_facts == (
-        (
-            "LX0609-04-02-02",
-            {
-                "failure_kind": "surgery_document_missing",
-                "target_document": "surgery_record",
-                "surgery_trigger_kind": "surgery_order",
-                "surgery_order_confirmed": True,
-            },
-        ),
-    )
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    assert result.customer_display_facts == ()
 
 
 def test_native_030_performed_surgery_uses_performed_trigger_fact():
@@ -193,7 +183,7 @@ def test_native_030_performed_surgery_uses_performed_trigger_fact():
 
 @pytest.mark.parametrize("order_name,expected_state", [
     ("胸腔闭式引流术", "not_applicable"),
-    ("腹腔镜下阑尾切除术", "non_compliant"),
+    ("腹腔镜下阑尾切除术", "data_gap"),
 ])
 def test_native_030_order_trigger_does_not_claim_frontpage_procedure_as_surgery(
     order_name, expected_state,
@@ -245,18 +235,8 @@ def test_native_030_order_trigger_does_not_claim_frontpage_procedure_as_surgery(
         assert result.customer_display_facts == ()
         return
     assert result.decisions[0].fact_refs == (expected_order_ref,)
-    assert result.decisions[0].reason_code == "required_document_missing"
-    assert result.customer_display_facts == (
-        (
-            "LX0609-04-02-02",
-            {
-                "failure_kind": "surgery_document_missing",
-                "target_document": "surgery_record",
-                "surgery_trigger_kind": "surgery_order",
-                "surgery_order_confirmed": True,
-            },
-        ),
-    )
+    assert result.decisions[0].reason_code == "authoritative_time_missing"
+    assert result.customer_display_facts == ()
 
 
 @pytest.mark.parametrize("order_type,expected_state,reason", [

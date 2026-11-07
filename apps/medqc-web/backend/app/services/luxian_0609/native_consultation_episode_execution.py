@@ -1324,7 +1324,16 @@ def _resolve_execution_stay_window(
     return _StayWindow(admission.day if admission is not None else None, horizon.day)
 
 
+def _canceled_execution_order(row: Mapping[str, Any]) -> bool:
+    return (
+        _clean(row.get("order_status")) in {"作废", "已作废", "撤销", "已撤销", "取消", "已取消"}
+        or any(_clean(row.get(field)) for field in ("canceled_datetime", "cancel_datetime", "cancel_time", "revoke_time"))
+    )
+
+
 def _candidate_text(*, row: Mapping[str, Any], source_key: str) -> str:
+    if source_key in _ORDER_EXECUTION_SOURCE_KEYS and _canceled_execution_order(row):
+        return ""
     if source_key in _ORDER_EXECUTION_SOURCE_KEYS:
         # 医嘱关联只需要可辨识的结构化动作；不把冗长医嘱正文带入模型上下文。
         fields = (
@@ -1491,6 +1500,8 @@ def _candidate_documents(
                 source_technical = True
                 continue
         if is_order_source:
+            # 作废/撤销医嘱不能证明建议已落实；停嘱不是撤销，保留原合同。
+            rows = tuple(row for row in rows if not _canceled_execution_order(row))
             observed_order_ids.update(
                 order_id for row in rows if (order_id := _clean(row.get("order_id")))
             )
@@ -4520,12 +4531,17 @@ def _apply_order_measure_check(
         for item in completed
     ):
         # 逐措施剔除后仍保留明确拒绝的闭环；纯条件未成立不走这条合规分支。
+        if status == ("evaluation_unknown", "semantic_low_confidence"):
+            return status, frozenset(excluded)
         return ("compliant", "requirement_satisfied"), frozenset(excluded)
-    return _execution_quality_outcome(
+    refined = _execution_quality_outcome(
         assessments=kept_assessments,
         completed_recommendations=kept_completed,
         source_incomplete_keys=source_incomplete_keys & _ORDER_EXECUTION_SOURCE_KEYS,
-    ), frozenset(excluded)
+    )
+    if status == ("evaluation_unknown", "semantic_low_confidence") and refined[0] != "non_compliant":
+        return status, frozenset(excluded)
+    return refined, frozenset(excluded)
 
 
 def _execution_outcome(
@@ -4577,18 +4593,21 @@ def _execution_outcome(
         order_completed, order_assessments = _order_execution_view(
             completed_recommendations, assessments,
         )
-        if not order_completed and assessments is not None and any(
+        if not uncertain and not order_completed and assessments is not None and any(
             _is_order_recommendation(item.recommendation)
             and _order_scope_exclusion_reason(item) == "declined_in_record"
             for item in completed_recommendations
         ):
             # 需医嘱落实的建议全部由会诊记录写明拒绝/暂缓，已闭环，判合规而非不适用。
             return "compliant", "requirement_satisfied"
-        return _execution_quality_outcome(
+        outcome = _execution_quality_outcome(
             assessments=order_assessments,
             completed_recommendations=order_completed,
             source_incomplete_keys=source_incomplete_keys & _ORDER_EXECUTION_SOURCE_KEYS,
         )
+        if uncertain and outcome[0] != "non_compliant":
+            return "evaluation_unknown", "semantic_low_confidence"
+        return outcome
     if uncertain:
         return "evaluation_unknown", "semantic_low_confidence"
     if not completed or not completed_recommendations:

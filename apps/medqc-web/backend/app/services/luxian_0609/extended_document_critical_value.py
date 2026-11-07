@@ -649,7 +649,7 @@ def evaluate_critical_value_rules(
                         "compliant",
                         "requirement_within_threshold",
                     )
-                elif not unhandled_indexes:
+                elif any(item["outcome"] == "overdue" for item in event_results):
                     # 已有超时处置记录时，违反事实已成立，不依赖评价终点。
                     final_state, reason_code = "non_compliant", "threshold_exceeded"
                 else:

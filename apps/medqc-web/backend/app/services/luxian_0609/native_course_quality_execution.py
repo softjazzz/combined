@@ -1071,11 +1071,12 @@ async def execute_luxian_0609_native_course_quality_rules(
                     return
                 semantic_result, _relation_state = atomic_result
                 assert length_result is not None
-                if semantic_result.status is CriterionStatus.UNKNOWN:
+                if length_result.status is CriterionStatus.FAILED:
+                    # 已确定的长度缺陷不依赖语义子项完成；保留语义 unknown。
+                    status = "non_compliant"
+                elif semantic_result.status is CriterionStatus.UNKNOWN:
                     status = "data_gap"
                 elif semantic_result.status is CriterionStatus.FAILED:
-                    status = "non_compliant"
-                elif length_result.status is CriterionStatus.FAILED:
                     status = "non_compliant"
                 elif (
                     length_result.status is CriterionStatus.PASSED
@@ -1091,6 +1092,8 @@ async def execute_luxian_0609_native_course_quality_rules(
                         reason_code=(
                             "source_readiness_unproven"
                             if status == "data_gap"
+                            else "requirement_violated"
+                            if length_result.status is CriterionStatus.FAILED
                             else "course_customer_prompt"
                         ),
                         executor_type="llm",

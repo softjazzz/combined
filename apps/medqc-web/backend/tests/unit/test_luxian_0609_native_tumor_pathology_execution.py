@@ -283,6 +283,11 @@ def _material_session(
         visit_id="safe-visit",
         source_schema=None,
         created_at=CREATED_AT,
+        # 本夹具表示已闭合的终末评价范围；缺失/冲突边界见剩余发现保护集。
+        evaluation_horizon_snapshot={"record_id":"safe-visit", "record_scene":"final",
+            "resolution_status":"resolved", "evaluation_basis":"discharge_datetime",
+            "admission_datetime":"2026-04-01 08:00:00",
+            "discharge_datetime":"2026-07-01 12:00:00", "evaluation_horizon":"2026-07-01"},
         row_reader=reader,
         additional_source_keys=resolve_legacy_executor_material_source_keys(
             ("tumor_pathology",),

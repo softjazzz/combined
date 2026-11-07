@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace, field
 from datetime import datetime, timedelta
 import json
 import logging
@@ -49,7 +49,7 @@ MAX_DOCUMENTS = 60
 MAX_DOCUMENT_CHARS = 8000
 MAX_PROMPT_CHARS = 80000
 MAX_COMPLETION_TOKENS = 4096
-_CANCELED_STATUSES = frozenset({"撤销", "作废", "取消"})
+_CANCELED_STATUSES = frozenset({"撤销", "已撤销", "作废", "已作废", "取消", "已取消"})
 _EVENT_KINDS = ("start", "combine", "switch")
 # 只能提供预防用药引文的来源。
 PROPHYLAXIS_ONLY_SOURCES = frozenset({"surgery_record", "anesthesia_record"})
@@ -175,6 +175,7 @@ def derive_antimicrobial_use_events(
     names_in: Any,
     *,
     discharge_time: datetime | None = None,
+    exclusions_checked: bool = False,
 ) -> OrderEventResolution:
     """把抗菌药医嘱整理为开始/联合/更换/停用事件。缺开始时间的药物整体留作资料缺口。"""
 
@@ -182,7 +183,7 @@ def derive_antimicrobial_use_events(
     missing: list[str] = []
     by_name: dict[str, list[tuple[datetime | None, datetime | None, Mapping[str, Any]]]] = {}
     for row in orders:
-        if _is_excluded_order(row):
+        if _clean(row.get("drug_apply_method")) == "皮试" or (not exclusions_checked and _is_excluded_order(row)):
             continue
         for name in names_in(row):
             by_name.setdefault(name, []).append((_start_time(row), _end_time(row), row))
@@ -334,7 +335,7 @@ def _prompt(events: Sequence[AntimicrobialUseEvent], documents: Sequence[WindowD
         "documents": [
             {"doc_ref": doc.doc_ref, "source": doc.source_key,
              "time": doc.time.isoformat(sep=" ") if doc.time else "",
-             "text": redact_luxian_0609_patient_privacy(doc.text)[:MAX_DOCUMENT_CHARS]}
+             "text": redact_luxian_0609_patient_privacy(doc.text)}
             for doc in documents
         ],
     }
@@ -421,7 +422,7 @@ def _parse(
     items = payload.get("events")
     if not isinstance(items, list):
         raise ValueError("invalid events")
-    texts = {doc.doc_ref: redact_luxian_0609_patient_privacy(doc.text)[:MAX_DOCUMENT_CHARS] for doc in documents}
+    texts = {doc.doc_ref: redact_luxian_0609_patient_privacy(doc.text) for doc in documents}
     sources = {doc.doc_ref: doc.source_key for doc in documents}
     expected = {event.event_id for event in events}
     parsed: dict[str, EventReasonFacts] = {}
@@ -490,6 +491,8 @@ async def _run_extraction(
                 allow_length_retry=False, **structured_output_kwargs(llm_client),
             )
         except Exception as error:  # noqa: BLE001 - 失败语义统一映射，不吞成资料缺口
+            from ...llm_token_budget import note_budget_failure
+            note_budget_failure(error)
             timeout = isinstance(error, TimeoutError) or safe_status_for_exception(error)[0] == "timeout"
             return AntimicrobialReasonExtraction(
                 "technical_error", "model_timeout" if timeout else "model_transport_error",
@@ -572,7 +575,14 @@ async def _run_frozen_extraction(
         facts = _facts_from_payload(payload, expected_event_ids)
         if facts is not None:
             return AntimicrobialReasonExtraction("ready", "reason_facts_extracted", facts)
-    result = await _run_extraction(prompt, parse, llm_client, label=label)
+    from ...llm_token_budget import budget_rule_scope
+    budget_errors = []
+    with budget_rule_scope(budget_errors.append):
+        result = await _run_extraction(prompt, parse, llm_client, label=label)
+    if budget_errors:
+        error = budget_errors[0]
+        return replace(result, state="technical_error", reason_code=error.code, facts=(),
+                       llm_call_count=max(0, result.llm_call_count - int(not getattr(error, "request_started", False))))
     if result.state == "ready":
         save_payload(namespace, key, _facts_payload(result.facts))
     return result
@@ -590,7 +600,7 @@ async def extract_antimicrobial_reasons(
     if len(targets) > MAX_EVENTS or len(documents) > MAX_DOCUMENTS:
         return AntimicrobialReasonExtraction("data_gap", "candidate_scope_incomplete")
     return await _run_frozen_extraction(
-        "order_reason",
+        "order_reason_full_text_v2",
         _prompt(targets, documents, per_event),
         lambda content: _parse(content, targets, documents, per_event),
         llm_client, expected_event_ids=[event.event_id for event in targets], label="抗菌药理由",
@@ -611,7 +621,7 @@ def _special_prompt(events: Sequence[AntimicrobialUseEvent], documents: Sequence
         "documents": [
             {"doc_ref": doc.doc_ref, "source": doc.source_key,
              "time": doc.time.isoformat(sep=" ") if doc.time else "",
-             "text": redact_luxian_0609_patient_privacy(doc.text)[:MAX_DOCUMENT_CHARS]}
+             "text": redact_luxian_0609_patient_privacy(doc.text)}
             for doc in documents
         ],
     }
@@ -649,7 +659,7 @@ async def extract_special_antimicrobial_approvals(
     if len(targets) > MAX_EVENTS or len(documents) > MAX_DOCUMENTS:
         return AntimicrobialReasonExtraction("data_gap", "candidate_scope_incomplete")
     return await _run_frozen_extraction(
-        "special_approval",
+        "special_approval_full_text_v2",
         _special_prompt(targets, documents, per_event),
         lambda content: _parse(
             content, targets, documents, per_event,

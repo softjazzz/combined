@@ -25,6 +25,7 @@ from .evidence_snapshot_provider import classify_current_visit_surgery_order_row
 from .source_manifest import QueryStatus
 from .surgery_applicability import performed_surgery_rows, resolve_surgery_applicability
 from .surgery_record_coverage import definitely_uncovered_surgery_rows
+from .surgery_procedure_catalog import is_non_surgical_procedure_order
 
 
 # 029 已迁入 surgery_document 异步执行器；这里仅保留纯存在性判定。
@@ -58,14 +59,14 @@ _AGGREGATION_POLICY = "aggregation-v1"
 _EXECUTION_SCHEMA = "execution-v1"
 _EXECUTION_POLICY = "native-v1"
 _PACKAGE_VERSION = "lx0609-native-v1"
-_TYPED_EVALUATOR_VERSION = "surgery-presence-ruledecision-v2"
+_TYPED_EVALUATOR_VERSION = "surgery-presence-ruledecision-v3"
 _TYPED_RULE_SOURCE_KEYS = MappingProxyType(
     {
         "LX0609-04-01-01": frozenset(
             {"presurg_summary", "surgery_record", "mr_surgery"}
         ),
         "LX0609-04-02-02": frozenset(
-            {"inpat_nondrug_order", "surgery_record", "mr_surgery"}
+            {"inpat_nondrug_order", "surgery_record", "mr_surgery", "evaluation_context.horizon"}
         ),
         "LX0609-04-03-01": frozenset(
             {"surgery_safecheck_record", "surgery_record", "mr_surgery"}
@@ -510,6 +511,58 @@ def _typed_030_front_page_trigger_refs(
     )
 
 
+def _surgery_order_obligation(*, snapshot: Luxian0609EvidenceSnapshot,
+                            materials: Luxian0609EvidenceMaterialStore) -> tuple[str, str] | None:
+    """030仅增加安全门控；不改变029术前计划触发，也不从文本推定实施。"""
+    from .evaluation_horizon import read_precise_frozen_horizon
+    from ..discharge_time import hospital_business_time
+    try:
+        orders = [row for _, row in materials.document_rows("inpat_nondrug_order", snapshot=snapshot)
+                  if str(row.get("order_type") or "").strip() == "手术" and not is_non_surgical_procedure_order(row)]
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return "data_gap", "candidate_scope_incomplete"
+    if not orders:
+        return None
+    canceled = [row for row in orders if str(row.get("order_status") or "").strip()
+                in {"取消", "撤销", "作废", "已取消", "已撤销", "已作废"}
+                or row.get("canceled_datetime")]
+    applicability = resolve_surgery_applicability(snapshot=snapshot, materials=materials,
+                                                source_keys=("surgery_record", "mr_surgery"))
+    if applicability.is_performed_surgery:
+        # 单事件同时有取消和实施的结构化证据，不能借另一类证据消除冲突。
+        if len(orders) == 1 and canceled:
+            return "data_gap", "association_failed"
+        return None
+    for source in ("surgery_record", "mr_surgery"):
+        observation = next((item for item in snapshot.observations if item.source_key == source), None)
+        if observation is None or observation.query_state is QueryStatus.UNAVAILABLE:
+            return "data_gap", "source_readiness_unproven"
+        if observation.query_state is QueryStatus.ERROR:
+            return "technical_error", "source_query_error"
+        if observation.completeness is not SourceCompleteness.COMPLETE:
+            return "data_gap", "candidate_scope_incomplete"
+    if len(canceled) == len(orders):
+        if any(row.get("carried_datetime") for row in canceled):
+            return "data_gap", "association_failed"
+        return "not_applicable", "trigger_absent_complete"
+    horizon, _, error = read_precise_frozen_horizon(snapshot=snapshot, materials=materials)
+    if error:
+        return "technical_error" if error == "source_query_error" else "data_gap", error
+    future = []
+    for row in orders:
+        if row in canceled:
+            continue
+        raw = str(row.get("planned_start_datetime") or "")
+        try:
+            time = hospital_business_time(datetime.fromisoformat(raw.replace("Z", "+00:00"))) if ":" in raw else None
+        except ValueError:
+            time = None
+        future.append(str(row.get("order_status") or "").strip() != "停止" and time is not None and time > horizon)
+    if future and all(future):
+        return "not_applicable", "evaluation_window_not_mature"
+    return "data_gap", "source_readiness_unproven"
+
+
 def _surgery_presence_display_trigger_facts(
     *, rule_id: str, provided: Any
 ) -> dict[str, Any]:
@@ -710,18 +763,23 @@ def execute_luxian_0609_native_rules(
         and evidence_materials is not None
     ):
         try:
+            obligation = _surgery_order_obligation(snapshot=evidence_snapshot, materials=evidence_materials)
             front_page_trigger_refs = _typed_030_front_page_trigger_refs(
                 snapshot=evidence_snapshot, materials=evidence_materials
             )
         except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
             front_page_trigger_refs = ()
-        if front_page_trigger_refs:
+            obligation = ("data_gap", "candidate_scope_incomplete")
+        if obligation is not None:
+            final_state_by_rule_id["LX0609-04-02-02"], reason_by_rule_id["LX0609-04-02-02"] = obligation
+            front_page_trigger_refs = ()
+        elif front_page_trigger_refs:
             final_state_by_rule_id["LX0609-04-02-02"] = "non_compliant"
             reason_by_rule_id["LX0609-04-02-02"] = "required_document_missing"
     all_results = tuple(
         build_luxian_0609_native_result(
             rule_id=result.rule_id,
-            final_state=result.final_state.value,
+            final_state=final_state_by_rule_id[result.rule_id],
             finding_kind=result.finding_kind.value,
             reason_code=reason_by_rule_id[result.rule_id],
         )
@@ -740,7 +798,8 @@ def execute_luxian_0609_native_rules(
                     final_state_by_rule_id[rule_id] == "data_gap"
                     and reason_by_rule_id[rule_id] != "association_failed"
                 ):
-                    selected_fact_refs_by_rule[rule_id] = None
+                    selected_fact_refs_by_rule[rule_id] = (tuple(ref for ref, row in evidence_materials.document_rows(
+                        "inpat_nondrug_order", snapshot=evidence_snapshot) if str(row.get("order_type") or "").strip() == "手术") or None) if rule_id == "LX0609-04-02-02" else None
                 else:
                     selected_fact_refs_by_rule[rule_id] = (
                         _selected_surgery_presence_fact_refs(
@@ -768,7 +827,8 @@ def execute_luxian_0609_native_rules(
             non_compliant_reason=reason_by_rule_id[str(item["rule_id"])],
             reason_override=(
                 reason_by_rule_id[str(item["rule_id"])]
-                if final_state_by_rule_id[str(item["rule_id"])] == "data_gap"
+                if final_state_by_rule_id[str(item["rule_id"])] in {"data_gap", "technical_error"}
+                or reason_by_rule_id[str(item["rule_id"])] == "evaluation_window_not_mature"
                 else ""
             ),
             selected_fact_refs=selected_fact_refs_by_rule.get(

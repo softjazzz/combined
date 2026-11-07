@@ -48,6 +48,7 @@ from .pathology_report_completeness import (
     PATHOLOGY_REPORT_COMPLETENESS_RULE_ID,
     evaluate_pathology_report_completeness,
 )
+from .evaluation_horizon import read_precise_frozen_horizon
 
 
 
@@ -68,6 +69,7 @@ _TYPED_DECISION_RULE_IDS = frozenset(EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS)
 _TYPED_RULE_SOURCE_KEYS = {
     PATHOLOGY_REPORT_COMPLETENESS_RULE_ID: PATHOLOGY_COMPLETENESS_SOURCES,
     "LX0609-06-02-03": (
+        "evaluation_context.horizon",
         "pathology_exam_master",
         "pathology_exam_report",
         "surgery_record",
@@ -99,7 +101,7 @@ _TYPED_RULE_SOURCE_KEYS = {
         "death_record",
     ),
 }
-_TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v1"
+_TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v2"
 
 _PATHOLOGY_SOURCES = ("pathology_exam_master", "pathology_exam_report")
 _PATHOLOGY_TARGET_SOURCES = ("surgery_record", "daily_course_record")
@@ -347,6 +349,11 @@ def _typed_decision_from_outcome(
             else "association_failed"
             if outcome.rule_id in {"LX0609-06-02-02", "LX0609-06-02-03"}
             and outcome.reason_code == "pathology_event_association_unresolved"
+            else "evaluation_window_not_mature"
+            if outcome.reason_code == "pathology_report_outside_evaluation_window"
+            else "source_readiness_unproven"
+            if outcome.reason_code == "pathology_recording_deadline_unconfirmed"
+            else outcome.reason_code if outcome.reason_code in {"authoritative_time_missing", "authoritative_time_conflict", "candidate_scope_incomplete"}
             else "source_unavailable" if source_gap else "required_field_missing",
         )
     elif outcome.status == "technical_error":
@@ -1191,6 +1198,7 @@ def _pathology_events(
 async def _typed_pathology_documentation(
     *, rule_id: str, master: SourceMaterial, report: SourceMaterial,
     targets: Mapping[str, SourceMaterial], llm_client: Any,
+    horizon: datetime | None = None, horizon_basis: str = "", horizon_error: str = "authoritative_time_missing",
 ) -> _PathologyDocumentationOutcome:
     """模型逐次检查抽取取材/结果记录及原文引用，程序核验时间并判定。"""
 
@@ -1222,6 +1230,8 @@ async def _typed_pathology_documentation(
                     continue
                 if earliest_report is None or moment < earliest_report:
                     continue
+                if horizon is not None and moment > horizon:
+                    continue
             times[id(row)] = moment
             checked.append((source, row))
             documents.append(PathologyDocument(
@@ -1241,6 +1251,7 @@ async def _typed_pathology_documentation(
         reason = extraction.reason_code if status == "technical_error" else "tumor_target_projection_unavailable"
         return _PathologyDocumentationOutcome(status, reason, checked=tuple(checked), **usage)
     states: list[str] = []
+    unresolved_reasons: list[str] = []
     cited: list[tuple[str, Mapping[str, Any]]] = []
     for event, report_time in events:
         fact = extraction.events[event.event_id]
@@ -1253,6 +1264,14 @@ async def _typed_pathology_documentation(
                 state = "unknown"
             elif all(row is not other for _, other in cited):
                 cited.append((source, row))
+        if not sampling and state == "not_documented":
+            # 只有闭合的终末范围能保留原未记录判定；不发明在院回报后时限。
+            reason = (horizon_error if horizon is None else
+                      "pathology_report_outside_evaluation_window" if report_time is not None and report_time > horizon else
+                      "pathology_recording_deadline_unconfirmed" if horizon_basis != "discharge_date" else "")
+            if reason:
+                state = "unknown"
+                unresolved_reasons.append(reason)
         states.append(state)
     if "not_documented" in states:
         if untimed:
@@ -1266,7 +1285,9 @@ async def _typed_pathology_documentation(
         )
     if "unknown" in states:
         return _PathologyDocumentationOutcome(
-            "data_gap", "pathology_event_association_unresolved", checked=tuple(checked), **usage,
+            "technical_error" if "source_query_error" in unresolved_reasons else "data_gap",
+            ("source_query_error" if "source_query_error" in unresolved_reasons else sorted(unresolved_reasons)[0] if unresolved_reasons else "pathology_event_association_unresolved"),
+            cited=tuple(cited), checked=tuple(checked), **usage,
         )
     return _PathologyDocumentationOutcome(
         "compliant",
@@ -2476,7 +2497,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         target_states = tuple(
             materials[source_key].state for source_key in required_sources
         )
-        if rule_id == "LX0609-06-02-03" and all(
+        if rule_id == "LX0609-06-02-03" and not typed_rule and all(
             state == "empty" for state in target_states
         ):
             emit_outcome(
@@ -2534,7 +2555,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}:
             target_material_available = (
                 all(state in {"present", "empty"} for state in target_states)
-                and "present" in target_states
+                and ("present" in target_states or (typed_rule and rule_id == "LX0609-06-02-03"))
             )
         else:
             target_material_available = all(
@@ -2561,6 +2582,12 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     ("daily_course_record", target_materials["daily_course_record"]),
                 )
             ) if sampling_rule else ()
+            horizon_kwargs = {}
+            if not sampling_rule:
+                moment, basis, error = read_precise_frozen_horizon(
+                    snapshot=evidence_snapshot, materials=evidence_materials,
+                )
+                horizon_kwargs = {"horizon": moment, "horizon_basis": basis, "horizon_error": error}
             documentation = await _typed_pathology_documentation(
                 rule_id=rule_id, master=master, report=report,
                 targets=(
@@ -2568,6 +2595,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     if sampling_rule else target_materials
                 ),
                 llm_client=llm_client,
+                **horizon_kwargs,
             )
             llm_call_count += documentation.llm_call_count
             prompt_tokens += documentation.prompt_tokens

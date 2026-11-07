@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
-from typing import Any, Mapping
+from typing import Any, Mapping, TYPE_CHECKING
 
 from ..case_identity import CaseRef
 from ..discharge_time import DISCHARGE_TIME_POLICY, hospital_business_time
+
+if TYPE_CHECKING:
+    from .evidence_material import Luxian0609EvidenceMaterialStore
+    from .evidence_snapshot import Luxian0609EvidenceSnapshot
 
 
 EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE = "frozen_task_date"
@@ -20,6 +24,47 @@ EVALUATION_HORIZON_POLICIES = frozenset(
 )
 EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_MISSING = "authoritative_time_missing"
 EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_CONFLICT = "authoritative_time_conflict"
+
+
+def read_precise_frozen_horizon(
+    *, snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[datetime | None, str, str]:
+    """读取本次证据会话的统一终点；不从当前库或当前时间补值。"""
+    from .evidence_material import EvidenceMaterialUnavailable, EvidenceMaterialTruncated
+    from .evidence_snapshot import SourceCompleteness
+    from .source_manifest import QueryStatus
+    key = "evaluation_context.horizon"
+    observation = next((item for item in snapshot.observations if item.source_key == key), None)
+    if observation is None:
+        return None, "", "authoritative_time_missing"
+    if observation.query_state is QueryStatus.ERROR:
+        return None, "", "source_query_error"
+    if observation.completeness is not SourceCompleteness.COMPLETE:
+        return None, "", "candidate_scope_incomplete"
+    try:
+        rows = tuple(row for _, row in materials.document_rows(key, snapshot=snapshot))
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return None, "", "authoritative_time_missing"
+    if not rows:
+        reason = observation.reason_code
+        return None, "", reason if reason in {"authoritative_time_missing", "authoritative_time_conflict"} else "authoritative_time_missing"
+    if len(rows) != 1:
+        return None, "", "authoritative_time_conflict"
+    row = rows[0]
+    basis = str(row.get("basis") or "")
+    if basis not in {"discharge_date", "evaluation_as_of"}:
+        return None, basis, "authoritative_time_missing"
+    raw = str(row.get("horizon_datetime") or "")
+    if row.get("time_precision") == "date" or ":" not in raw:
+        return None, basis, "authoritative_time_missing"
+    try:
+        moment = hospital_business_time(datetime.fromisoformat(raw.replace("Z", "+00:00")))
+        raw_date = str(row.get("horizon_date") or "")
+        if raw_date and date.fromisoformat(raw_date) != moment.date():
+            return None, basis, "authoritative_time_conflict"
+    except (TypeError, ValueError):
+        return None, basis, "authoritative_time_missing"
+    return moment, basis, ""
 
 
 def _normalized_text(value: Any) -> str:
@@ -53,7 +98,8 @@ class RecordEvaluationHorizon:
     resolution_status: str
 
     def to_dict(self) -> dict[str, str]:
-        return asdict(self)
+        precision = "datetime" if ":" in self.discharge_datetime else "date" if self.discharge_datetime else "unknown"
+        return {**asdict(self), "discharge_time_precision": precision}
 
 
 def resolve_record_evaluation_horizon_policy(

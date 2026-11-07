@@ -46,6 +46,7 @@ from .extended_document.discharge_diagnosis_equivalence import (
     split_numbered_diagnoses,
 )
 from .extended_document.invasive_procedure_record import (
+    RECORD_WINDOW_DAYS as INVASIVE_RECORD_WINDOW_DAYS,
     candidate_order_rows as _invasive_candidate_order_rows,
     check_invasive_procedure_records,
     front_page_triggers as _invasive_front_page_triggers,
@@ -391,6 +392,12 @@ def _discharge_or_death_diagnosis_rows(
     return ()
 
 
+def _precise_datetime(value: Any) -> datetime | None:
+    if not re.search(r"\d{2}:\d{2}", str(value or "")):
+        return None
+    return _parse_datetime(value)
+
+
 def _critical_value_evaluation_horizon(
     horizon_rows: Sequence[Mapping[str, Any]],
     horizon_error: str,
@@ -404,7 +411,7 @@ def _critical_value_evaluation_horizon(
     if len(horizon_rows) != 1:
         return None, None, "authoritative_time_conflict"
     row = horizon_rows[0]
-    horizon_time = _parse_datetime(row.get("horizon_datetime"))
+    horizon_time = None if row.get("time_precision") == "date" else _precise_datetime(row.get("horizon_datetime"))
     raw_date = _clean(row.get("horizon_date"))
     try:
         horizon_date = date.fromisoformat(raw_date) if raw_date else None
@@ -883,6 +890,8 @@ def _discharge_time_with_source(
                 and horizon_time.date() != horizon_date.date()
             ):
                 return None, ""
+            if horizon_row.get("time_precision") == "date" or horizon_time is None or _precise_datetime(horizon_row.get("horizon_datetime")) is None:
+                return horizon_time or horizon_date, "evaluation_context.horizon_date_only"
             if horizon_time is not None or horizon_date is not None:
                 return (
                     horizon_time or horizon_date,
@@ -893,13 +902,13 @@ def _discharge_time_with_source(
         for field_name in ("discharge_datetime", "discharge_time"):
             parsed = _parse_datetime(row.get(field_name))
             if parsed is not None:
-                return parsed, f"inpat_registration.{field_name}"
+                return parsed, (f"inpat_registration.{field_name}" if _precise_datetime(row.get(field_name)) is not None else "inpat_registration.date_only")
 
     for row in discharge_rows:
         discharge_date = _parse_datetime(row.get("discharge_date"))
         precise_time: tuple[datetime, str] | None = None
         for field_name in ("discharge_datetime", "discharge_time"):
-            parsed = _parse_datetime(row.get(field_name))
+            parsed = _precise_datetime(row.get(field_name))
             if parsed is not None:
                 precise_time = (parsed, field_name)
                 break
@@ -908,7 +917,7 @@ def _discharge_time_with_source(
         if discharge_date is not None:
             if precise_time is not None and precise_time[0].date() == discharge_date.date():
                 return precise_time[0], f"discharge_record.{precise_time[1]}"
-            return discharge_date, "discharge_record.discharge_date"
+            return discharge_date, "discharge_record.date_only"
         if precise_time is not None:
             return precise_time[0], f"discharge_record.{precise_time[1]}"
     return None, ""
@@ -1021,6 +1030,7 @@ async def _assess_diagnosis_change_documentation(
     pairs: Sequence[tuple[str, Mapping[str, Any], str, str]],
     change_names: Sequence[str],
     llm_client: Any,
+    *, incomplete_names: frozenset[str] = frozenset(),
 ) -> tuple[str, str, dict[str, Any] | None, Any]:
     """对 (来源, 病程行, 正文, 变更诊断名) 候选做一次受控抽取并按诊断汇总。
 
@@ -1028,18 +1038,26 @@ async def _assess_diagnosis_change_documentation(
     仅因语义未知而无法确认→不确定。
     """
 
-    extraction = await extract_diagnosis_change_documentation(
-        tuple(
-            DiagnosisChangeDocumentInput(
-                local_doc_id=f"doc_{index:02d}",
-                source_type=source_key,
-                text=text,
-                changed_diagnosis=name,
-            )
-            for index, (source_key, _row, text, name) in enumerate(pairs, 1)
-        ),
-        llm_client,
-    )
+    from ..llm_token_budget import budget_rule_scope
+    budget_errors = []
+    with budget_rule_scope(budget_errors.append):
+        extraction = await extract_diagnosis_change_documentation(
+            tuple(
+                DiagnosisChangeDocumentInput(
+                    local_doc_id=f"doc_{index:02d}",
+                    source_type=source_key,
+                    text=text,
+                    changed_diagnosis=name,
+                )
+                for index, (source_key, _row, text, name) in enumerate(pairs, 1)
+            ),
+            llm_client,
+        )
+    if budget_errors:
+        error = budget_errors[0]
+        extraction = replace(extraction, state="technical_error", reason_code=error.code,
+            llm_call_count=max(0, extraction.llm_call_count - int(not getattr(error, "request_started", False))))
+        return "technical_error", error.code, None, extraction
     if extraction.state != "ready":
         return extraction.state, extraction.reason_code, None, extraction
     reason = {name: False for name in change_names}
@@ -1052,8 +1070,10 @@ async def _assess_diagnosis_change_documentation(
     unsatisfied = [name for name in change_names if not (reason[name] and basis[name])]
     if not unsatisfied:
         final_state, reason_code = "compliant", "requirement_satisfied"
-    elif any(not unknown[name] for name in unsatisfied):
+    elif any(not unknown[name] and name not in incomplete_names for name in unsatisfied):
         final_state, reason_code = "non_compliant", "requirement_violated"
+    elif any(name in incomplete_names for name in unsatisfied):
+        return "data_gap", "candidate_scope_incomplete", None, extraction
     else:
         return "uncertain", "semantic_low_confidence", None, extraction
     return final_state, reason_code, {
@@ -1159,6 +1179,7 @@ def _exclude_unperformed_antimicrobial_orders(
         cancelled = _clean(order.get("order_status")) in {
             "取消", "已取消", "作废", "已作废", "撤销", "未执行",
         }
+        cancelled = cancelled or any(_clean(order.get(field)) for field in ("canceled_datetime", "cancel_datetime", "cancel_time", "revoke_time"))
         if not performed and (cancelled or unperformed_rows):
             excluded_evidence.extend((order, *unperformed_rows))
         else:
@@ -2591,6 +2612,8 @@ async def _execute_extended_document_group(
             "LX0609-09-02-01",
             "LX0609-06-04-01",
             "LX0609-05-01-03",
+            "LX0609-05-01-02", "LX0609-05-01-05", "LX0609-05-01-06",
+            "LX0609-10-01-01", "LX0609-10-03-01",
             "LX0609-08-01-01",
             "LX0609-08-01-03",
             "LX0609-04-05-01",
@@ -2631,7 +2654,7 @@ async def _execute_extended_document_group(
         antimicrobial_horizon_error,
     ) = (
         _critical_value_evaluation_horizon(horizon_rows, horizon_error)
-        if "LX0609-05-01-03" in selected
+        if {"LX0609-05-01-02", "LX0609-05-01-03", "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-10-01-01", "LX0609-10-03-01"}.intersection(selected)
         else (None, None, None)
     )
     order_reason_horizon_datetime = (
@@ -2790,8 +2813,9 @@ async def _execute_extended_document_group(
 
         nonlocal special_approval_extraction
         resolution = derive_antimicrobial_use_events(
-            _antimicrobial_orders(drug_order_rows),
+            _exclude_unperformed_antimicrobial_orders(_antimicrobial_orders(drug_order_rows), (*daily_rows, *senior_rows, *consultation_rows))[0],
             lambda row: _antimicrobial_names_in(row, _SPECIAL_ANTIMICROBIALS),
+            exclusions_checked=True,
         )
         if resolution.time_missing_names:
             return "data_gap", "authoritative_time_missing", None, ()
@@ -2838,7 +2862,7 @@ async def _execute_extended_document_group(
         by_ref = {doc.doc_ref: doc for doc in documents}
         facts_by_event = {item.event_id: item for item in extraction.facts}
         unmatched: list[str] = []
-        late = untimed = ambiguous = False
+        late = untimed = ambiguous = pending = mature_missing = False
         support_times: list[datetime] = []
         evidence: list[Mapping[str, Any]] = []
         for event in events:
@@ -2863,6 +2887,8 @@ async def _execute_extended_document_group(
                     continue
                 late = True
             unmatched.append(event.antimicrobial)
+            pending = pending or (antimicrobial_horizon_datetime is not None and antimicrobial_horizon_datetime < event.time + _LX0609_058_SUPPORT_WINDOW)
+            mature_missing = mature_missing or (antimicrobial_horizon_datetime is not None and antimicrobial_horizon_datetime >= event.time + _LX0609_058_SUPPORT_WINDOW)
         if not unmatched:
             final_state, reason_code = "compliant", "requirement_satisfied"
         elif ambiguous:
@@ -2871,9 +2897,14 @@ async def _execute_extended_document_group(
             final_state, reason_code = "data_gap", "authoritative_time_missing"
         elif consultation_error or senior_error:
             final_state, reason_code = "data_gap", consultation_error or senior_error
+        elif late or mature_missing:
+            final_state, reason_code = "non_compliant", "requirement_violated" if late else "required_document_missing"
+        elif antimicrobial_horizon_error or antimicrobial_horizon_datetime is None:
+            return "data_gap", antimicrobial_horizon_error or "authoritative_time_missing", None, tuple(evidence)
+        elif pending:
+            return "not_applicable", "evaluation_window_not_mature", None, tuple(evidence)
         else:
-            final_state = "non_compliant"
-            reason_code = "requirement_violated" if late else "required_document_missing"
+            final_state, reason_code = "non_compliant", "required_document_missing"
         first_time = min(event.time for event in events)
         return final_state, reason_code, {
             "verification_kind": "special_antimicrobial_expert_support_check",
@@ -2892,9 +2923,17 @@ async def _execute_extended_document_group(
         rule_id: str,
     ) -> tuple[str, str, Mapping[str, Any] | None, tuple[Mapping[str, Any], ...]]:
         nonlocal antimicrobial_order_reason_extraction
-        if "events" not in order_reason_cache:
+        raw_orders = _antimicrobial_orders(drug_order_rows)
+        effective_orders = (_exclude_unperformed_antimicrobial_orders(raw_orders, (*daily_rows, *senior_rows, *consultation_rows))[0] if rule_id == "LX0609-05-01-05" else raw_orders)
+        exclusions_differ = rule_id == "LX0609-05-01-05" and any(
+            is_excluded_antimicrobial_order(row) and _clean(row.get("drug_apply_method")) != "皮试"
+            for row in effective_orders
+        )
+        cache_key = "performed" if effective_orders != raw_orders or exclusions_differ else "all"
+        if cache_key not in order_reason_cache:
             resolution = derive_antimicrobial_use_events(
-                _antimicrobial_orders(drug_order_rows), _antimicrobial_names_in,
+                effective_orders, _antimicrobial_names_in,
+                exclusions_checked=rule_id == "LX0609-05-01-05",
                 discharge_time=_discharge_time(registration_rows, (), horizon_rows, horizon_error),
             )
             horizon = order_reason_horizon_datetime
@@ -2919,23 +2958,31 @@ async def _execute_extended_document_group(
             antimicrobial_order_reason_extraction = await extract_antimicrobial_reasons(
                 events, documents, per_event, llm_client,
             )
-            order_reason_cache.update(
-                events=events, missing=resolution.time_missing_names,
-                documents={doc.doc_ref: doc for doc in documents},
+            order_reason_cache[cache_key] = dict(
+                events=events, pending=any(event not in events for event in resolution.events), missing=resolution.time_missing_names,
+                extraction=antimicrobial_order_reason_extraction, documents={doc.doc_ref: doc for doc in documents},
                 per_event=per_event, untimed=untimed,
             )
-        return _order_reason_rule_outcome(
+        outcome = _order_reason_rule_outcome(
             rule_id=rule_id,
-            events=order_reason_cache["events"],
-            time_missing_names=order_reason_cache["missing"],
-            documents=order_reason_cache["documents"],
-            per_event=order_reason_cache["per_event"],
-            untimed=order_reason_cache["untimed"],
-            extraction=antimicrobial_order_reason_extraction,
+            events=order_reason_cache[cache_key]["events"],
+            time_missing_names=order_reason_cache[cache_key]["missing"],
+            documents=order_reason_cache[cache_key]["documents"],
+            per_event=order_reason_cache[cache_key]["per_event"],
+            untimed=order_reason_cache[cache_key]["untimed"],
+            extraction=order_reason_cache[cache_key]["extraction"],
             lab_master_rows=lab_master_rows,
             lab_item_rows=lab_item_rows,
             pathogen_sources_complete=not (lab_master_error or lab_item_error),
         )
+        if outcome[0] != "technical_error":
+            if outcome[:2] == ("not_applicable", "trigger_absent_complete") and not order_reason_cache[cache_key]["pending"]:
+                return outcome
+            if antimicrobial_horizon_error or antimicrobial_horizon_datetime is None:
+                return "data_gap", antimicrobial_horizon_error or "authoritative_time_missing", None, outcome[3]
+            if order_reason_cache[cache_key]["pending"] and outcome[0] != "non_compliant":
+                return "not_applicable", "evaluation_window_not_mature", None, outcome[3]
+        return outcome
 
     for rule_id in selected:
         if rule_id == "LX0609-08-01-05":
@@ -3547,6 +3594,7 @@ async def _execute_extended_document_group(
                         if _clean(row.get("test_id"))
                         and _is_pathogen_lab(row)
                     }
+                    pathogen_rows = tuple(row for row in lab_master_rows if _is_pathogen_lab(row) or _clean(row.get("test_id")) in pathogen_test_ids)
                     specimen_times = tuple(
                         value
                         for row in lab_master_rows
@@ -3554,11 +3602,18 @@ async def _execute_extended_document_group(
                             _is_pathogen_lab(row)
                             or _clean(row.get("test_id")) in pathogen_test_ids
                         )
-                        and (value := _parse_datetime(row.get("request_datetime") or row.get("sample_datetime")))
+                        and (value := _precise_datetime(row.get("sample_datetime")))
                         is not None
                     )
-                    if first_order is None:
+                    if first_order is None or ((pathogen_rows or pathogen_test_ids) and len(specimen_times) != len(pathogen_rows) and not any(value <= first_order for value in specimen_times)):
                         final_state, reason_code = "data_gap", "authoritative_time_missing"
+                    elif not any(value <= first_order for value in specimen_times) and any(
+                        (request := _precise_datetime(row.get("request_datetime"))) is not None
+                        and (sample := _precise_datetime(row.get("sample_datetime"))) is not None
+                        and request <= first_order < sample for row in pathogen_rows
+                    ):
+                        # 申请与采样跨越用药起点，口径未确认时不选其中一个制造确定缺陷。
+                        final_state, reason_code = "data_gap", "authoritative_time_conflict"
                     else:
                         complete = any(value <= first_order for value in specimen_times)
                         final_state = "compliant" if complete else "non_compliant"
@@ -3608,6 +3663,13 @@ async def _execute_extended_document_group(
             has_selected_antimicrobial_evidence = bool(
                 selected_antimicrobial_evidence_rows
             )
+            uses_horizon = (
+                reason_code == "evaluation_window_not_mature"
+                or (rule_id in {"LX0609-05-01-02", "LX0609-05-01-05"} and final_state == "non_compliant")
+                or (rule_id == "LX0609-05-01-06" and reason_code == "required_document_missing")
+            )
+            if uses_horizon:
+                antimicrobial_document_refs = (*antimicrobial_document_refs, *_fact_refs(evidence_snapshot, ("evaluation_context.horizon",)))
             decisions.append(_decision(
                 rule_id=rule_id,
                 snapshot=evidence_snapshot,
@@ -4059,6 +4121,10 @@ async def _execute_extended_document_group(
                     final_state, reason_code = "technical_error", documentation.reason_code
                 elif documentation.state == "unresolved":
                     final_state, reason_code = "data_gap", documentation.reason_code
+                elif missing and (antimicrobial_horizon_error or antimicrobial_horizon_datetime is None):
+                    final_state, reason_code = "data_gap", antimicrobial_horizon_error or "authoritative_time_missing"
+                elif missing and not any(antimicrobial_horizon_datetime >= datetime.combine(trigger.anchor_date + timedelta(days=INVASIVE_RECORD_WINDOW_DAYS), datetime.min.time()) for trigger in triggers if trigger.procedure.name in missing):
+                    final_state, reason_code = "not_applicable", "evaluation_window_not_mature"
                 elif missing:
                     final_state, reason_code = "non_compliant", "required_document_missing"
                     display.append((rule_id, {
@@ -4081,7 +4147,7 @@ async def _execute_extended_document_group(
                 source_keys=(
                     "inpat_nondrug_order", "first_course_record", "daily_course_record",
                     "senior_course_record", "postsurg_firstcourse_record", "surgery_record",
-                    "mr_surgery",
+                    "mr_surgery", "evaluation_context.horizon",
                 ),
                 final_state=final_state, reason_code=reason_code,
             ))
@@ -4244,6 +4310,10 @@ async def _execute_extended_document_group(
             )
             continue
 
+        if rule_id == "LX0609-04-02-06" and death_error:
+            decisions.append(_decision(rule_id=rule_id, snapshot=evidence_snapshot, source_keys=("death_record",), final_state="data_gap", reason_code=death_error))
+            continue
+
         if rule_id == "LX0609-04-02-06":
             final_state = "compliant" if death_rows else "non_compliant"
             death_document_refs = _death_document_refs(
@@ -4357,6 +4427,7 @@ async def _execute_extended_document_group(
                 death_error=death_error,
                 registration_error=(
                     registration_error or discharge_horizon_error
+                    or ("authoritative_time_missing" if discharge_time_source.endswith(("date_only", "horizon_date_only")) else "")
                 ),
                 discharge_error=discharge_error,
                 discharge_time=(
@@ -5757,6 +5828,8 @@ async def _execute_extended_document_group(
                 handoff_error=handoff_error,
                 handover_rows=handover_rows,
                 handover_error=handover_error,
+                evaluation_horizon_datetime=antimicrobial_horizon_datetime,
+                evaluation_horizon_error=antimicrobial_horizon_error or "",
             )
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
@@ -5773,7 +5846,7 @@ async def _execute_extended_document_group(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        (outcome.change_source_key,)
+                        (outcome.change_source_key, "evaluation_context.horizon")
                     ),
                     document_refs=handoff_binding.document_refs,
                     # physician_change_event 尚未纳入客户文书投影白名单。保留它的
@@ -5924,13 +5997,13 @@ async def _execute_extended_document_group(
                         declared_candidates = {
                             name: _diagnosis_change_candidates(
                                 course_sources, diagnosis_name=name,
-                            )[:_DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE]
+                            )
                             for name in declared_diagnosis_names
                         }
                         structured_pairs = tuple(
                             (source_key, row, text, name)
                             for name, candidates in declared_candidates.items()
-                            for _time, text, source_key, row in candidates
+                            for _time, text, source_key, row in candidates[:_DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE]
                         )
                         if not all(declared_candidates.values()):
                             # 有声明的变更诊断在病程中从未提及：确定未记录理由与依据。
@@ -5952,6 +6025,7 @@ async def _execute_extended_document_group(
                                 diagnosis_change_extraction,
                             ) = await _assess_diagnosis_change_documentation(
                                 structured_pairs, declared_diagnosis_names, llm_client,
+                                incomplete_names=frozenset(name for name, candidates in declared_candidates.items() if len(candidates) > _DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE),
                             )
                         if structured_facts is not None:
                             display.append((rule_id, structured_facts))
@@ -6189,6 +6263,7 @@ async def _execute_extended_document_group(
                     selected: list[tuple[datetime | None, str, str, Mapping[str, Any]]] = []
                     table_pairs: list[tuple[str, Mapping[str, Any], str, str]] = []
                     untimed_only = False
+                    incomplete_names: set[str] = set()
                     unmentioned = False
                     for change_time, diagnosis_name, _change_row in change_events:
                         mentions = _diagnosis_change_candidates(
@@ -6199,6 +6274,8 @@ async def _execute_extended_document_group(
                         )
                         # 名称、理由与依据必须属于变更之后的同一条病程，不借用其他诊断的时间。
                         timed = tuple(item for item in candidates if item[0] is not None)
+                        if len(timed) > _DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE or len(timed) < len(candidates):
+                            incomplete_names.add(diagnosis_name)
                         timed = timed[:_DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE]
                         if timed:
                             table_pairs.extend(
@@ -6247,7 +6324,7 @@ async def _execute_extended_document_group(
                             table_facts,
                             diagnosis_change_extraction,
                         ) = await _assess_diagnosis_change_documentation(
-                            table_pairs, change_names, llm_client,
+                            table_pairs, change_names, llm_client, incomplete_names=frozenset(incomplete_names),
                         )
                         if table_facts is not None:
                             display.append((rule_id, table_facts))
@@ -6314,7 +6391,7 @@ async def _execute_extended_document_group(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
-                antimicrobial_order_reason_extraction,
+                *(entry["extraction"] for entry in order_reason_cache.values()),
                 special_approval_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,
@@ -6335,7 +6412,7 @@ async def _execute_extended_document_group(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
-                antimicrobial_order_reason_extraction,
+                *(entry["extraction"] for entry in order_reason_cache.values()),
                 special_approval_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,
@@ -6356,7 +6433,7 @@ async def _execute_extended_document_group(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
-                antimicrobial_order_reason_extraction,
+                *(entry["extraction"] for entry in order_reason_cache.values()),
                 special_approval_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,
@@ -6377,7 +6454,7 @@ async def _execute_extended_document_group(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
-                antimicrobial_order_reason_extraction,
+                *(entry["extraction"] for entry in order_reason_cache.values()),
                 special_approval_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,
@@ -6398,7 +6475,7 @@ async def _execute_extended_document_group(
             for item in (
                 course_content_extraction,
                 antimicrobial_action_extraction,
-                antimicrobial_order_reason_extraction,
+                *(entry["extraction"] for entry in order_reason_cache.values()),
                 special_approval_extraction,
                 antimicrobial_effect_extraction,
                 diagnosis_scope_extraction,

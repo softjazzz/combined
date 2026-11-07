@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import ceil
 from typing import Any, Mapping, Sequence
 
@@ -639,6 +639,39 @@ def _evaluate_structured_change_events(
 
 
 
+def _mature_handoff_outcome(
+    state: str, reason: str, facts: Mapping[str, Any] | None,
+    horizon: datetime | None, horizon_error: str,
+) -> tuple[str, str, Mapping[str, Any] | None]:
+    if state != "non_compliant" or not isinstance(facts, Mapping):
+        return state, reason, facts
+    events = facts.get("events") or ({
+        "change_time": facts.get("change_time"),
+        "handoff_time": next(iter(facts.get("handoff_times") or ()), None),
+        "handover_time": next(iter(facts.get("handover_times") or ()), None),
+    },)
+    pending = missing_horizon = confirmed = False
+    for item in events:
+        change = _parse_datetime(item.get("change_time"))
+        handoff = _parse_datetime(item.get("handoff_time"))
+        handover = _parse_datetime(item.get("handover_time"))
+        # 已证实未按要求交班或接班超时，不能被另一尚未成熟事件覆盖。
+        if change is not None and (handoff is None or handoff > change or (handover is not None and handover > change + timedelta(hours=24))):
+            confirmed = True
+        if handover is None:
+            if change is None or horizon_error or horizon is None:
+                missing_horizon = True
+            elif horizon >= change + timedelta(hours=24):
+                confirmed = True
+            else:
+                pending = True
+    if confirmed:
+        return state, reason, facts
+    if missing_horizon:
+        return "data_gap", horizon_error or "authoritative_time_missing", None
+    return ("not_applicable", "evaluation_window_not_mature", None) if pending else (state, reason, facts)
+
+
 def evaluate_physician_handoff(
     *,
     physician_change_rows: Sequence[Mapping[str, Any]],
@@ -651,6 +684,8 @@ def evaluate_physician_handoff(
     handoff_error: str,
     handover_rows: Sequence[Mapping[str, Any]],
     handover_error: str,
+    evaluation_horizon_datetime: datetime | None = None,
+    evaluation_horizon_error: str = "",
 ) -> PhysicianHandoffOutcome:
     """逐次核对经治医师变更前交班与变更后24小时内接班记录。"""
 
@@ -781,6 +816,9 @@ def evaluate_physician_handoff(
             handoff_rows=handoff_rows,
             handover_rows=handover_rows,
         )
+        final_state, reason_code, display_facts = _mature_handoff_outcome(
+            final_state, reason_code, display_facts, evaluation_horizon_datetime, evaluation_horizon_error,
+        )
         return PhysicianHandoffOutcome(
             final_state,
             reason_code,
@@ -793,6 +831,9 @@ def evaluate_physician_handoff(
             handoff_rows=handoff_rows,
             handover_rows=handover_rows,
         )
+        final_state, reason_code, display_facts = _mature_handoff_outcome(
+            final_state, reason_code, display_facts, evaluation_horizon_datetime, evaluation_horizon_error,
+        )
         return PhysicianHandoffOutcome(
             final_state,
             reason_code,
@@ -803,6 +844,9 @@ def evaluate_physician_handoff(
         change_rows=effective_change_rows,
         handoff_rows=handoff_rows,
         handover_rows=handover_rows,
+    )
+    final_state, reason_code, display_facts = _mature_handoff_outcome(
+        final_state, reason_code, display_facts, evaluation_horizon_datetime, evaluation_horizon_error,
     )
     return PhysicianHandoffOutcome(
         final_state,

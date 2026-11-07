@@ -363,7 +363,8 @@ def test_g_030_empty_target_and_standalone_032():
     fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
     pair = (fact.fact_type, fact.source_key)
     report = _gate(statuses={"surgery_record": QueryStatus.EMPTY}, facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
-    assert report.decisions[0].target_resolution is TargetResolution.EMPTY
+    assert report.decisions[0].target_resolution is None
+    assert report.decisions[0].trigger_resolution is TriggerResolution.SEMANTIC_CONFLICT
     surgical = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record")
     standalone = _gate(rule_ids=("LX0609-04-03-01",), facts=(surgical,), overrides={(surgical.fact_type, surgical.source_key): _observation((surgical.fact_type, surgical.source_key), fact_ids=(surgical.fact_id,))})
     assert standalone.decisions[0].trigger_resolution is TriggerResolution.MATCHED

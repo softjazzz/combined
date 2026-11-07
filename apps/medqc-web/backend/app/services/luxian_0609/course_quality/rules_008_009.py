@@ -1587,7 +1587,7 @@ def _rule_009_semantic_decision(
         reason_code=reason_code,
         fact_refs=base_decision.fact_refs,
         # v3 仅由受控 event_ref 解析权威时间，模型不再复述或改写时间。
-        evaluator_version="course-severity-semantic-v3",
+        evaluator_version="course-severity-semantic-v4",
         confidence=confidence,
     )
 
@@ -1604,47 +1604,24 @@ def _rule_009_change_event_decision(
 
     facts: list[dict[str, Any]] = []
     pending_window: dict[str, Any] | None = None
+    unresolved: list[dict[str, Any]] = []
     for event in events:
         event_ref = str(event["event_ref"])
         event_time = event_times.get(event_ref)
         course_ref = str(event.get("corresponding_course_ref") or "")
         if event_time is None:
-            return (
-                _rule_009_semantic_decision(
-                    base_decision=base_decision,
-                    data_gap_reason="authoritative_time_missing",
-                ),
-                {
-                    "failure_kind": "critical_change_time_unavailable",
-                    "threshold_hours": 24,
-                },
-            )
+            unresolved.append({"event_ref": event_ref, "reason_code": "authoritative_time_missing"})
+            continue
         deadline = event_time + _RULE_009_CHANGE_WINDOW
         if course_ref and course_ref not in course_times:
-            return (
-                _rule_009_semantic_decision(
-                    base_decision=base_decision,
-                    data_gap_reason="association_failed",
-                ),
-                {
-                    "failure_kind": "critical_change_course_association_failed",
-                    "event_ref": event_ref,
-                    "corresponding_course_ref": course_ref,
-                    "threshold_hours": 24,
-                },
-            )
+            unresolved.append({"event_ref": event_ref, "corresponding_course_ref": course_ref,
+                               "reason_code": "association_failed"})
+            continue
         course_time = course_times.get(course_ref) if course_ref else None
         if course_ref and course_time is None:
-            return (
-                _rule_009_semantic_decision(
-                    base_decision=base_decision,
-                    data_gap_reason="authoritative_time_missing",
-                ),
-                {
-                    "failure_kind": "critical_change_time_unavailable",
-                    "threshold_hours": 24,
-                },
-            )
+            unresolved.append({"event_ref": event_ref, "corresponding_course_ref": course_ref,
+                               "reason_code": "authoritative_time_missing"})
+            continue
         timely = course_time is not None and event_time <= course_time <= deadline
         if not timely:
             if isinstance(evaluation_horizon, datetime):
@@ -1687,6 +1664,20 @@ def _rule_009_change_event_decision(
                 "failure_kind": "critical_change_course_not_timely",
                 "change_events": sorted(facts, key=lambda item: item["timely"])[:_MAX_RULE_009_DISPLAY_EVENTS],
                 "unmet_events": unmet[:_MAX_RULE_009_DISPLAY_EVENTS],
+                **({"unresolved_events": sorted(unresolved, key=lambda item: item["event_ref"])[:_MAX_RULE_009_DISPLAY_EVENTS]} if unresolved else {}),
+                "threshold_hours": 24,
+            },
+        )
+    if unresolved:
+        unresolved.sort(key=lambda item: item["event_ref"])
+        association = next((item for item in unresolved if item["reason_code"] == "association_failed"), None)
+        reason = "association_failed" if association else "authoritative_time_missing"
+        return (
+            _rule_009_semantic_decision(base_decision=base_decision, data_gap_reason=reason),
+            {
+                "failure_kind": "critical_change_course_association_failed" if association else "critical_change_time_unavailable",
+                **({"event_ref": association["event_ref"], "corresponding_course_ref": association["corresponding_course_ref"]} if association else {}),
+                "unresolved_events": unresolved[:_MAX_RULE_009_DISPLAY_EVENTS],
                 "threshold_hours": 24,
             },
         )

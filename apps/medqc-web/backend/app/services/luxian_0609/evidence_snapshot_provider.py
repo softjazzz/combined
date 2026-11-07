@@ -71,7 +71,7 @@ _EMERGENCY_RESCUE_POSITIVE_PATTERN = re.compile(
 # 与出院处方等处的有效状态口径一致；类型“处置治疗”“材料”“输血”同样不是手术。
 # “麻醉”类型是局部浸润麻醉等收费医嘱，本身不是手术（1019 C03 床旁气管切开）。
 _EFFECTIVE_SURGERY_ORDER_STATUSES = frozenset({"新开", "执行中", "执行", "核实", "停止"})
-_EXCLUDED_SURGERY_ORDER_STATUSES = frozenset({"取消", "撤销", "作废"})
+_EXCLUDED_SURGERY_ORDER_STATUSES = frozenset({"取消", "撤销", "作废", "已取消", "已撤销", "已作废"})
 KNOWN_NON_SURGERY_ORDER_TYPES = frozenset(
     {"检查", "检验", "治疗", "处置治疗", "护理", "嘱托", "转科", "材料", "输血", "麻醉", "其他"}
 )
@@ -82,7 +82,7 @@ def classify_current_visit_surgery_order_rows(
     rows: tuple[Mapping[str, Any], ...],
     completeness: SourceCompleteness,
 ) -> tuple[str, tuple[str, ...]]:
-    """按029既定结构化口径判定手术医嘱，并返回仅供材料定位的原始 ID。
+    """按029既定结构化口径判定手术计划医嘱，不证明手术已实施或术后义务到期。
 
     返回的 ID 绝不能写入 FactV2；它只用于把同一次冻结材料行还原为公共
     证据投影所需的 document_ref。判定本身只依赖 ``order_type`` 和
@@ -342,6 +342,13 @@ def build_luxian_0609_evidence_read_session(
             "LX0609-01-01-01",
             "LX0609-01-02-01",
             "LX0609-04-02-01",
+            "LX0609-04-02-02",
+            "LX0609-06-02-03",
+            "LX0609-05-01-02",
+            "LX0609-05-01-05",
+            "LX0609-05-01-06",
+            "LX0609-10-01-01",
+            "LX0609-10-03-01",
             "LX0609-02-01-01",
             "LX0609-02-01-02",
             "LX0609-02-01-03",
@@ -939,6 +946,11 @@ def build_luxian_0609_evidence_read_session(
         horizon_entry = resolve_luxian_0609_physical_source_entry(
             EVALUATION_HORIZON_SOURCE_KEY
         )
+        date_only_frozen_discharge = bool(
+            evaluation_horizon_snapshot is not None and horizon_basis == "discharge_date"
+            and (evaluation_horizon_snapshot.get("discharge_time_precision") == "date"
+                 or ":" not in str(evaluation_horizon_snapshot.get("discharge_datetime") or ""))
+        )
         horizon_payload = (
             {
                 "horizon_date": horizon_date.isoformat(),
@@ -948,6 +960,7 @@ def build_luxian_0609_evidence_read_session(
                     else {}
                 ),
                 "basis": horizon_basis,
+                **({"time_precision": "date"} if date_only_frozen_discharge else {}),
                 **(
                     {"record_scene": horizon_record_scene}
                     if horizon_record_scene
@@ -964,6 +977,7 @@ def build_luxian_0609_evidence_read_session(
                         horizon_basis,
                         horizon_date.isoformat(),
                         horizon_datetime.isoformat() if horizon_datetime else "",
+                        *(("date-precision-v1",) if date_only_frozen_discharge else ()),
                         *((horizon_record_scene,) if horizon_record_scene else ()),
                         *((task_frozen_date.isoformat(),) if task_frozen_date is not None else ()),
                     )

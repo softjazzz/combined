@@ -626,6 +626,8 @@ def critical_value_customer_fact_status_is_valid(
     if any(value in {"association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
                for value in outcomes):
         return normalized_status == "data_gap"
+    if "overdue" in outcomes:
+        return normalized_status == "non_compliant"
     if "window_not_mature" in outcomes:
         return (
             normalized_status == "not_applicable"

@@ -3751,6 +3751,7 @@ async def test_course_009_missing_change_time_and_unresolved_course_are_delivere
     assert canonical["reason_code"] == "authoritative_time_missing"
     assert canonical["customer_display_facts"] == {
         "failure_kind": "critical_change_time_unavailable", "threshold_hours": 24,
+        "unresolved_events": [{"event_ref": "E01", "reason_code": "authoritative_time_missing"}],
     }
     assert "缺少可核验的变化发生时间" in canonical["findings"]
 

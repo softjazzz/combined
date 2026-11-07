@@ -11,7 +11,6 @@ from types import MappingProxyType
 from typing import Any
 
 from . import fact_coverage as coverage_module
-from . import fact_schema as fact_schema_module
 from . import planner as planner_module
 from . import shadow_fact_bundle as bundle_module
 from . import source_manifest as manifest_module
@@ -385,6 +384,12 @@ def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bun
                 outcome = _pair_resolution(item, contexts[source])
                 if outcome is not None:
                     blockers.append(outcome)
+        if rule.rule_id == "LX0609-04-02-02":
+            # 医嘱事实仍供029术前评价；030不能仅以计划事实确认术后义务。
+            performed = [ref for ref in matched if (ref.fact_type, ref.source_key) in _PERFORMED_PAIRS]
+            if matched and not performed:
+                conflict = True
+            matched = performed
         if matched:
             target = entries[rule.target_source_key]
             target_map = {

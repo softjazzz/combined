@@ -681,14 +681,14 @@ _PENDING_REPORT = {"labtest_item_report": (
 
 
 @pytest.mark.parametrize("basis,extra,expected,issue", [
-    ("discharge", {}, ("non_compliant", "requirement_violated"), "report_missing"),
+    ("discharge", {}, ("data_gap", "target_report_missing"), "report_missing"),
     ("running", {}, ("not_applicable", "evaluation_window_not_mature"), "report_not_yet_due"),
     ("running", _PENDING_REPORT, ("not_applicable", "evaluation_window_not_mature"), "report_not_yet_due"),
     ("discharge", _PENDING_REPORT, ("data_gap", "target_report_missing"), "report_content_unavailable"),
     ("", {}, ("data_gap", "target_report_missing"), "report_missing"),
 ])
 def test_culture_missing_report_depends_on_discharge_or_running_horizon(basis, extra, expected, issue):
-    """院方口径：出院终末缺报告判不合规；在院运行中缺报告或培养中暂不评价。"""
+    """出院且本地无报告不足以证明临床漏报告；在院待回报保持原口径。"""
     snapshot, materials = _session(rows={**_CULTURE_ROWS, **extra})
     ledger = build_handbook_ledger(rule_ids=(CULTURE_RULE,), snapshot=snapshot, materials=materials)
     outcome = evaluate_report_completeness(CULTURE_RULE, ledger, horizon_basis=basis)
@@ -708,7 +708,7 @@ def test_culture_missing_report_depends_on_discharge_or_running_horizon(basis, e
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("basis,expected", [("discharge_date", "non_compliant"), ("evaluation_as_of", "not_applicable")])
+@pytest.mark.parametrize("basis,expected", [("discharge_date", "data_gap"), ("evaluation_as_of", "not_applicable")])
 async def test_native_culture_rule_reads_evaluation_horizon_basis(basis, expected):
     snapshot, materials = _session(rows={
         **_CULTURE_ROWS,

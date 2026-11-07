@@ -208,17 +208,23 @@ def _response_content(response: Mapping[str, Any]) -> Any:
 
 
 async def _call(llm_client: Any, prompt: str) -> tuple[Mapping[str, Any] | None, float]:
+    from ...llm_token_budget import budget_rule_scope, is_budget_error
     started = perf_counter()
-    try:
-        response = await llm_client.generate(
-            prompt,
-            max_completion_tokens=MAX_COMPLETION_TOKENS,
-            allow_length_retry=False,
-            **structured_output_kwargs(llm_client),
-        )
-    except Exception:
-        return None, perf_counter() - started
-    return response, perf_counter() - started
+    errors = []
+    response = None
+    with budget_rule_scope(errors.append):
+        try:
+            response = await llm_client.generate(
+                prompt, max_completion_tokens=MAX_COMPLETION_TOKENS,
+                allow_length_retry=False, **structured_output_kwargs(llm_client),
+            )
+        except Exception as error:
+            if is_budget_error(error):
+                raise
+    if errors:
+        response = {"_context_failure": errors[0].code,
+                    "_request_started": bool(getattr(errors[0], "request_started", False))}
+    return response if isinstance(response, Mapping) else None, perf_counter() - started
 
 
 def _usage_tuple(response: Mapping[str, Any], elapsed: float) -> tuple[int, int, int, float]:
@@ -300,6 +306,8 @@ async def map_orders_to_invasive_catalog(
     response, elapsed = await _call(llm_client, _mapping_prompt(names))
     if response is None:
         return OrderMappingResult("technical_error", "model_transport_error", 1, api_time=elapsed)
+    if response.get("_context_failure"):
+        return OrderMappingResult("technical_error", response["_context_failure"], int(response["_request_started"]), api_time=elapsed)
     usage = _usage_tuple(response, elapsed)
     try:
         mapped = _parse_mapping(response, names)
@@ -370,7 +378,7 @@ def _record_prompt(
     triggers: Sequence[ProcedureTrigger], records: Sequence[tuple[datetime, str]],
 ) -> tuple[str, tuple[str, ...]]:
     texts = tuple(
-        redact_luxian_0609_patient_privacy(text)[:MAX_RECORD_CHARS] for _time, text in records
+        redact_luxian_0609_patient_privacy(text) for _time, text in records
     )
     payload = {
         "procedures": [
@@ -475,9 +483,13 @@ async def check_invasive_procedure_records(
     if llm_client is None or not callable(getattr(llm_client, "generate", None)):
         return RecordDocumentationResult("technical_error", "model_transport_error")
     prompt, texts = _record_prompt(triggers, records)
+    if len(prompt) > MAX_RECORDS * MAX_RECORD_CHARS:
+        return RecordDocumentationResult("unresolved", "candidate_scope_incomplete")
     response, elapsed = await _call(llm_client, prompt)
     if response is None:
         return RecordDocumentationResult("technical_error", "model_transport_error", 1, api_time=elapsed)
+    if response.get("_context_failure"):
+        return RecordDocumentationResult("technical_error", response["_context_failure"], int(response["_request_started"]), api_time=elapsed)
     usage = _usage_tuple(response, elapsed)
     try:
         states = _parse_records(response, triggers, records, texts)
