@@ -77,7 +77,7 @@ def test_cast_business_time_serializes_iso_strings_at_second_precision(raw, expe
 
 
 def test_query_date_fallback_keeps_midnight_and_frozen_date_contract():
-    row = records("query", discharge_date=date(2026, 2, 7))
+    row = records("query", discharge_date=date(2026, 2, 7), time=None)
     assert row["discharge_datetime"] == "2026-02-07 00:00:00"
     frozen = build_record_evaluation_horizon_snapshot([row], task_frozen_date="2026-09-09")[0]
     assert frozen["discharge_datetime"] == "2026-02-07 00:00:00"
