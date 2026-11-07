@@ -466,7 +466,7 @@
 
     <section
       v-else-if="activeTab === 'llmConfig' && canManageLlmConfig"
-      class="mq-card system-config-panel"
+      class="model-settings-panel"
     >
       <LLMApiConfig />
     </section>

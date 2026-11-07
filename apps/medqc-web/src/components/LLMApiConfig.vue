@@ -1,245 +1,283 @@
 <template>
-  <div class="ds-root">
-    <div class="ds-split">
-      <div class="ds-split__aside">
-        <div class="ds-aside-card">
-          <div class="ds-aside-eyebrow">
-            模型与参数
-          </div>
-          <h2 class="ds-section-title">
+  <div
+    class="llm-settings"
+    data-testid="llm-settings-v71"
+  >
+    <section
+      class="mq-card mq-card--padded llm-overview"
+      aria-labelledby="llm-settings-title"
+    >
+      <header class="mq-card__head llm-overview__head">
+        <div>
+          <h2
+            id="llm-settings-title"
+            class="mq-card__title"
+          >
             模型配置治理
           </h2>
-          <p class="ds-section-desc">
-            统一管理云端 API、本地推理与运行参数。服务地址和密钥由部署配置提供，
-            此处维护推理服务与模型选择。
+          <p class="mq-card__desc">
+            选择默认推理模型，并按质控用途分配模型。服务地址与密钥由部署配置管理。
           </p>
-
-          <div class="ds-meta-list">
-            <div class="ds-meta-card">
-              <span class="ds-meta__label">当前来源</span>
-              <a-tag color="blue">
-                {{ source }}
-              </a-tag>
-            </div>
-            <div class="ds-meta-card">
-              <span class="ds-meta__label">配置状态</span>
-              <a-tag :color="dirty ? 'orange' : 'green'">
-                {{ dirty ? '草稿未保存' : '已同步' }}
-              </a-tag>
-            </div>
-          </div>
-
-          <div class="ds-aside-note">
-            推荐流程：先选推理服务与模型，再调高级参数，最后做连接验证并统一保存。
-          </div>
         </div>
-      </div>
-
-      <div class="ds-split__main">
-        <a-alert
-          v-if="isReadonly"
-          type="info"
-          show-icon
-          message="当前为只读模式"
-          description="仅系统配置管理员可修改并保存模型配置。"
-          class="mb-3"
-        />
-
-        <div class="ds-hero">
-          <div class="ds-hero__content">
-            <div class="ds-hero__label">
-              当前草稿
-            </div>
-            <div class="ds-hero__title">
-              {{ draft.provider_code || '未选择厂商' }} / {{ draft.model_code || '未选择模型' }}
-            </div>
-            <div class="ds-hero__desc">
-              高级参数：Temperature {{ draft.temperature.toFixed(1) }}，Top P
-              {{ draft.top_p.toFixed(1) }}，Max Tokens {{ draft.max_tokens }}
-            </div>
-          </div>
-          <div class="ds-hero__state">
-            <a-tag :color="dirty ? 'orange' : 'green'">
-              {{ dirty ? '待保存' : '已同步' }}
-            </a-tag>
-          </div>
+        <span
+          class="mq-status"
+          :class="dirty ? 'mq-status--warning' : ''"
+          role="status"
+        >
+          {{ loading ? '正在读取' : dirty ? '草稿未保存' : '已同步' }}
+        </span>
+      </header>
+      <dl class="mq-soft llm-summary">
+        <div>
+          <dt>默认模型</dt>
+          <dd class="mq-mono">
+            {{ draft.model_code || '未选择模型' }}
+          </dd>
         </div>
+        <div>
+          <dt>角色分工</dt>
+          <dd>{{ Object.values(taskRoles).filter((role) => !role).length }} / 3 项继承默认</dd>
+        </div>
+        <div>
+          <dt>配置来源</dt>
+          <dd>
+            {{
+              source === 'env' ? '部署配置' : source.includes('database') ? '已保存配置' : '待确认'
+            }}
+          </dd>
+        </div>
+      </dl>
+    </section>
 
-        <div class="ds-card">
-          <div class="ds-card__body ds-divide">
-            <div class="ds-group">
-              <div class="ds-group__title">
-                默认推理服务与模型
-              </div>
+    <a-alert
+      v-if="isReadonly"
+      type="info"
+      show-icon
+      message="当前为只读模式"
+      description="仅系统配置管理员可修改并保存模型配置。"
+    />
 
-              <div class="ds-row">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
-                    推理方式
-                  </div>
-                  <div class="ds-row__hint">
-                    选择云端 API 或院内部署的本地模型。
-                  </div>
-                </div>
-                <a-segmented
-                  :value="inferenceMode"
-                  :options="inferenceModeOptions"
-                  :disabled="isReadonly || loading || saving"
-                  @change="handleInferenceModeChange"
-                />
-              </div>
-
-              <div class="ds-row">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
-                    推理服务
-                  </div>
-                  <div class="ds-row__hint">
-                    可选择云端 API 或本地推理，地址与密钥由部署配置统一托管。
-                  </div>
-                </div>
-                <a-select
-                  v-model:value="draft.provider_code"
-                  class="ds-select"
-                  style="width: 260px"
-                  :disabled="isReadonly || loading || saving"
-                  :options="providerOptions"
-                  @change="handleProviderChange"
-                />
-              </div>
-
-              <a-alert
-                v-if="inferenceMode === 'local'"
-                data-testid="local-model-status"
-                :type="selectionUnavailable ? 'warning' : 'info'"
-                show-icon
-                :message="selectionUnavailable ? '本地模型尚未就绪' : '本地模型配置已就绪'"
-                :description="localSelectionDescription"
+    <ol
+      class="llm-steps"
+      aria-label="模型配置步骤"
+    >
+      <li class="mq-card mq-card--padded llm-step">
+        <span
+          class="llm-step__number"
+          aria-hidden="true"
+        >01</span>
+        <section
+          class="llm-step__content"
+          aria-labelledby="llm-default-title"
+        >
+          <header class="llm-section-head">
+            <h3
+              id="llm-default-title"
+              class="llm-section-title"
+            >
+              默认推理服务与模型
+            </h3>
+            <p class="mq-field__hint">
+              未单独指定用途时，使用这里选择的模型。
+            </p>
+          </header>
+          <div class="llm-default-fields">
+            <div class="mq-field llm-field--wide">
+              <span class="mq-field__label">推理方式</span>
+              <a-segmented
+                class="llm-inference-mode"
+                :value="inferenceMode"
+                :options="inferenceModeOptions"
+                :disabled="isReadonly || loading || saving"
+                @change="handleInferenceModeChange"
               />
-
-              <div class="ds-row">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
-                    默认模型
-                  </div>
-                  <div class="ds-row__hint">
-                    内置模型不可删除，自定义模型支持增删。
-                  </div>
-                </div>
-                <a-select
-                  v-model:value="draft.model_code"
-                  show-search
-                  option-filter-prop="label"
-                  class="ds-select"
-                  :placeholder="inferenceMode === 'local' ? '选择已登记的本地模型' : '选择模型'"
-                  style="width: 360px"
-                  :loading="loadingModels"
-                  :disabled="isReadonly || loadingModels || saving || !models.length"
-                >
-                  <a-select-option
-                    v-for="item in models"
-                    :key="item.model_code"
-                    :value="item.model_code"
-                    :label="item.model_name"
-                  >
-                    {{ item.model_name }}
-                    <a-tag
-                      v-if="item.is_custom"
-                      color="purple"
-                      class="ml-1"
-                    >
-                      自定义
-                    </a-tag>
-                  </a-select-option>
-                </a-select>
-              </div>
-
-              <div class="ds-row ds-row--top">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
-                    {{ inferenceMode === 'local' ? '本地模型管理' : '自定义模型' }}
-                  </div>
-                  <div class="ds-row__hint">
-                    {{ inferenceMode === 'local'
-                      ? '填写服务实际接受的模型 ID，保留大小写；可登记多个模型，添加后仍需保存才能切换。'
-                      : '仅新增/删除模型名称，不变更 API 地址与密钥。' }}
-                  </div>
-                </div>
-                <div class="custom-model-panel">
-                  <a-space-compact style="width: 100%">
-                    <a-input
-                      v-model:value="newModelCode"
-                      class="ds-input"
-                      :disabled="isReadonly || loading || saving || addingModel || Boolean(deletingModelCode)"
-                      :placeholder="inferenceMode === 'local' ? '输入本地服务实际模型 ID' : '输入模型名，如 Qwen/Qwen3.5-14B'"
-                      @press-enter="addCustomModel"
-                    />
-                    <a-button
-                      :disabled="isReadonly || loading || saving || addingModel || Boolean(deletingModelCode) || !newModelCode.trim()"
-                      :loading="addingModel"
-                      @click="addCustomModel"
-                    >
-                      添加
-                    </a-button>
-                  </a-space-compact>
-
-                  <div
-                    v-if="customModels.length"
-                    class="custom-model-list"
-                  >
-                    <div
-                      v-for="item in customModels"
-                      :key="`custom-${item.model_code}`"
-                      class="custom-model-item"
-                    >
-                      <span>{{ item.model_name }}</span>
-                      <a-button
-                        type="link"
-                        size="small"
-                        danger
-                        :disabled="isReadonly || loading || saving || addingModel || Boolean(deletingModelCode)"
-                        :loading="deletingModelCode === item.model_code"
-                        @click="removeCustomModel(item)"
-                      >
-                        删除
-                      </a-button>
-                    </div>
-                  </div>
-                  <div
-                    v-else
-                    class="custom-model-empty"
-                  >
-                    {{ inferenceMode === 'local' ? '尚未登记其他本地模型，可在上方添加。' : '当前厂商暂无自定义模型' }}
-                  </div>
-                </div>
-              </div>
             </div>
+            <div class="mq-field">
+              <label
+                for="llm-default-provider"
+                class="mq-field__label"
+              >推理服务</label>
+              <a-select
+                id="llm-default-provider"
+                v-model:value="draft.provider_code"
+                class="llm-control"
+                :disabled="isReadonly || loading || saving"
+                :options="providerOptions"
+                @change="handleProviderChange"
+              />
+            </div>
+            <div class="mq-field">
+              <label
+                for="llm-default-model"
+                class="mq-field__label"
+              >默认模型</label>
+              <a-select
+                id="llm-default-model"
+                v-model:value="draft.model_code"
+                class="llm-control"
+                show-search
+                option-filter-prop="label"
+                :placeholder="inferenceMode === 'local' ? '选择已登记的本地模型' : '选择模型'"
+                :loading="loadingModels"
+                :disabled="isReadonly || loadingModels || saving || !models.length"
+              >
+                <a-select-option
+                  v-for="item in models"
+                  :key="item.model_code"
+                  :value="item.model_code"
+                  :label="item.model_name"
+                >
+                  {{ item.model_name }}
+                  <span
+                    v-if="item.is_custom"
+                    class="mq-status llm-custom-badge"
+                  >自定义</span>
+                </a-select-option>
+              </a-select>
+            </div>
+          </div>
+          <a-alert
+            v-if="inferenceMode === 'local'"
+            data-testid="local-model-status"
+            :type="selectionUnavailable ? 'warning' : 'info'"
+            show-icon
+            :message="selectionUnavailable ? '本地模型尚未就绪' : '本地模型配置已就绪'"
+            :description="localSelectionDescription"
+            class="llm-local-status"
+          />
 
-            <LLMTaskRoleSettings
-              v-model:value="taskRoles"
-              :providers="providers"
-              :local-providers="localProviders"
-              :default-provider="draft.provider_code"
-              :disabled="isReadonly || loading || saving"
-            />
-            <a-alert
-              v-if="rolesIncomplete"
-              type="warning"
-              show-icon
-              message="请补齐角色模型选择，并确认本地部署配置已就绪。"
-            />
-
-            <div class="ds-group">
-              <div class="ds-group__title">
-                高级参数
+          <details class="llm-disclosure llm-model-management">
+            <summary>
+              <span>{{ inferenceMode === 'local' ? '本地模型管理' : '自定义模型' }}</span>
+              <span class="mq-field__hint">{{ customModels.length }} 个自定义模型</span>
+            </summary>
+            <div class="llm-disclosure__body">
+              <p class="mq-field__hint">
+                {{
+                  inferenceMode === 'local'
+                    ? '填写服务实际接受的模型 ID，保留大小写。添加后仍需保存才能切换。'
+                    : '内置模型不可删除；新增模型名称不会更改 API 地址和密钥。'
+                }}
+              </p>
+              <div class="llm-add-model">
+                <a-input
+                  v-model:value="newModelCode"
+                  class="llm-control"
+                  :disabled="
+                    isReadonly || loading || saving || addingModel || Boolean(deletingModelCode)
+                  "
+                  :placeholder="
+                    inferenceMode === 'local'
+                      ? '输入本地服务实际模型 ID'
+                      : '输入模型名，如 Qwen/Qwen3.5-14B'
+                  "
+                  @press-enter="addCustomModel"
+                />
+                <a-button
+                  class="mq-btn"
+                  :disabled="
+                    isReadonly ||
+                      loading ||
+                      saving ||
+                      addingModel ||
+                      Boolean(deletingModelCode) ||
+                      !newModelCode.trim()
+                  "
+                  :loading="addingModel"
+                  @click="addCustomModel"
+                >
+                  添加
+                </a-button>
               </div>
+              <ul
+                v-if="customModels.length"
+                class="llm-custom-models"
+              >
+                <li
+                  v-for="item in customModels"
+                  :key="`custom-${item.model_code}`"
+                >
+                  <span class="mq-mono">{{ item.model_name }}</span>
+                  <a-button
+                    type="link"
+                    size="small"
+                    danger
+                    :disabled="
+                      isReadonly || loading || saving || addingModel || Boolean(deletingModelCode)
+                    "
+                    :loading="deletingModelCode === item.model_code"
+                    @click="removeCustomModel(item)"
+                  >
+                    删除
+                  </a-button>
+                </li>
+              </ul>
+              <p
+                v-else
+                class="mq-field__hint"
+              >
+                {{
+                  inferenceMode === 'local'
+                    ? '尚未登记其他本地模型，可在上方添加。'
+                    : '当前厂商暂无自定义模型'
+                }}
+              </p>
+            </div>
+          </details>
+        </section>
+      </li>
 
-              <div class="ds-row ds-row--top">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
+      <li class="mq-card mq-card--padded llm-step">
+        <span
+          class="llm-step__number"
+          aria-hidden="true"
+        >02</span>
+        <section
+          class="llm-step__content"
+          aria-label="按任务用途选模型"
+        >
+          <LLMTaskRoleSettings
+            v-model:value="taskRoles"
+            :providers="providers"
+            :local-providers="localProviders"
+            :default-provider="draft.provider_code"
+            :disabled="isReadonly || loading || saving"
+          />
+          <a-alert
+            v-if="rolesIncomplete"
+            type="warning"
+            show-icon
+            message="请补齐角色模型选择，并确认本地部署配置已就绪。"
+            class="llm-local-status"
+          />
+        </section>
+      </li>
+
+      <li class="mq-card mq-card--padded llm-step">
+        <span
+          class="llm-step__number"
+          aria-hidden="true"
+        >03</span>
+        <details
+          class="llm-disclosure llm-step__content"
+          data-testid="llm-advanced-settings"
+        >
+          <summary>
+            <span class="llm-section-title">参数与执行并发</span>
+            <span class="mq-field__hint">输出参数、病历并发与模型槽位</span>
+          </summary>
+          <div class="llm-disclosure__body llm-advanced-fields">
+            <div class="llm-parameter-group">
+              <h4 class="llm-parameter-title">
+                高级参数
+              </h4>
+
+              <div class="llm-parameter-row">
+                <div class="mq-field">
+                  <div class="mq-field__label">
                     Temperature
                   </div>
-                  <div class="ds-row__hint">
+                  <div class="mq-field__hint">
                     控制输出随机性，值越高越发散。
                   </div>
                 </div>
@@ -258,12 +296,12 @@
                 </div>
               </div>
 
-              <div class="ds-row ds-row--top">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
+              <div class="llm-parameter-row">
+                <div class="mq-field">
+                  <div class="mq-field__label">
                     Top P
                   </div>
-                  <div class="ds-row__hint">
+                  <div class="mq-field__hint">
                     核采样阈值，控制候选词覆盖范围。
                   </div>
                 </div>
@@ -282,164 +320,142 @@
                 </div>
               </div>
 
-              <div class="ds-row">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
+              <div class="llm-parameter-row">
+                <div class="mq-field">
+                  <div class="mq-field__label">
                     Max Tokens
                   </div>
-                  <div class="ds-row__hint">
+                  <div class="mq-field__hint">
                     单次请求最大输出 token 数。
                   </div>
                 </div>
                 <a-input-number
                   v-model:value="draft.max_tokens"
-                  class="ds-input-number"
+                  class="llm-control"
                   :disabled="isReadonly || loading"
                   :min="1000"
                   :max="32768"
                   :step="1000"
-                  style="width: 220px"
                 />
               </div>
             </div>
-
-            <div class="ds-group">
-              <div class="ds-group__title">
+            <div class="llm-parameter-group">
+              <h4 class="llm-parameter-title">
                 执行并发
-              </div>
+              </h4>
 
-              <div class="ds-row">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
+              <div class="llm-parameter-row">
+                <div class="mq-field">
+                  <div class="mq-field__label">
                     同时处理病历数
                   </div>
-                  <div class="ds-row__hint">
-                    单个质控任务同时进入执行链的病历上限，已按完整链验证推荐 16。
+                  <div class="mq-field__hint">
+                    单个质控任务同时进入执行链的病历上限。
                   </div>
                 </div>
                 <a-input-number
                   v-model:value="draft.max_parallel_records"
-                  class="ds-input-number"
+                  class="llm-control"
                   :disabled="isReadonly || loading"
                   :min="1"
                   :max="32"
                   :step="1"
-                  style="width: 220px"
                 />
               </div>
 
-              <div class="ds-row">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
+              <div class="llm-parameter-row">
+                <div class="mq-field">
+                  <div class="mq-field__label">
                     单病历规则族并发
                   </div>
-                  <div class="ds-row__hint">
+                  <div class="mq-field__hint">
                     每份病历可同时执行的独立规则族数量，当前安全上限为 4。
                   </div>
                 </div>
                 <a-input-number
                   v-model:value="draft.family_max_concurrency"
-                  class="ds-input-number"
+                  class="llm-control"
                   :disabled="isReadonly || loading"
                   :min="1"
                   :max="4"
                   :step="1"
-                  style="width: 220px"
                 />
               </div>
 
-              <div class="ds-row">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
+              <div class="llm-parameter-row">
+                <div class="mq-field">
+                  <div class="mq-field__label">
                     全局模型 HTTP 槽位
                   </div>
-                  <div class="ds-row__hint">
+                  <div class="mq-field__hint">
                     客户端 HTTP 请求上限；网关另按服务资源限流，本地 Strata 容量由部署配置控制。
                   </div>
                 </div>
                 <a-input-number
                   v-model:value="draft.http_max_concurrency"
-                  class="ds-input-number"
+                  class="llm-control"
                   :disabled="isReadonly || loading"
                   :min="1"
                   :max="64"
                   :step="1"
-                  style="width: 220px"
                 />
               </div>
             </div>
-
-            <div class="ds-group">
-              <div class="ds-group__title">
-                连接验证
-              </div>
-
-              <div class="ds-row">
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
-                    测试连接
-                  </div>
-                  <div class="ds-row__hint">
-                    测试草稿配置，不依赖是否已保存。
-                  </div>
-                </div>
-                <a-button
-                  class="ds-test-btn"
-                  :loading="testing"
-                  :disabled="!canTest"
-                  @click="testConnection"
-                >
-                  测试连接
-                </a-button>
-              </div>
-
-              <div
-                v-if="testResult"
-                class="ds-row ds-row--result"
-              >
-                <div class="ds-row__left">
-                  <div class="ds-row__label">
-                    最近一次结果
-                  </div>
-                  <div class="ds-row__hint">
-                    {{ testResult.description }}
-                  </div>
-                </div>
-                <a-tag :color="testResult.success ? 'green' : 'red'">
-                  {{ testResult.success ? '成功' : '失败' }}
-                </a-tag>
-              </div>
-            </div>
           </div>
+        </details>
+      </li>
+    </ol>
 
-          <div class="ds-card__footer">
-            <span class="ds-footer-meta">来源：{{ source }}</span>
-            <div class="ds-actions">
-              <a-button
-                :disabled="loading"
-                @click="reloadAll"
-              >
-                刷新
-              </a-button>
-              <a-button
-                :disabled="isReadonly || loading"
-                @click="resetDefault"
-              >
-                恢复默认
-              </a-button>
-              <a-button
-                type="primary"
-                :loading="saving"
-                :disabled="isReadonly || loading || !canTest || !dirty"
-                @click="saveDraft"
-              >
-                保存配置
-              </a-button>
-            </div>
-          </div>
-        </div>
+    <footer
+      class="mq-card mq-card--padded llm-actions"
+      aria-label="模型配置操作"
+    >
+      <div class="llm-actions__copy">
+        <p>修改仅对新任务生效</p>
+        <span class="mq-field__hint">连接测试会实际请求默认模型；保存只校验配置。</span>
+        <span
+          v-if="testResult"
+          role="status"
+          class="mq-status"
+          :class="testResult.success ? 'mq-status--success' : 'mq-status--danger'"
+        >
+          {{ testResult.success ? '连接成功' : '连接失败' }}：{{ testResult.description }}
+        </span>
       </div>
-    </div>
+      <div class="llm-actions__buttons">
+        <a-button
+          class="mq-btn"
+          :disabled="loading"
+          @click="reloadAll"
+        >
+          刷新
+        </a-button>
+        <a-button
+          class="mq-btn"
+          :disabled="isReadonly || loading"
+          @click="resetDefault"
+        >
+          恢复默认
+        </a-button>
+        <a-button
+          class="mq-btn"
+          :loading="testing"
+          :disabled="!canTest"
+          @click="testConnection"
+        >
+          测试连接
+        </a-button>
+        <a-button
+          class="mq-btn mq-btn--primary"
+          type="primary"
+          :loading="saving"
+          :disabled="isReadonly || loading || !canTest || !dirty"
+          @click="saveDraft"
+        >
+          保存配置
+        </a-button>
+      </div>
+    </footer>
   </div>
 </template>
 
@@ -825,283 +841,249 @@ onBeforeUnmount(() => { ++modelRequestVersion })
 </script>
 
 <style scoped>
-.ds-root {
-  max-width: 1100px;
-  padding: 4px 2px 16px;
-}
-
-.ds-split {
+.llm-settings {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-
-@media (min-width: 960px) {
-  .ds-split {
-    grid-template-columns: 280px 1fr;
-    gap: 18px;
-  }
-}
-
-.ds-aside-card {
-  position: sticky;
-  top: 12px;
-  padding: 16px 14px;
-  border: 1px solid #d8e3f2;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 36%),
-    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.06);
-}
-
-.ds-aside-eyebrow {
-  margin-bottom: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: #2563eb;
-}
-
-.ds-section-title {
-  font-size: 21px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1.2;
-  margin: 0 0 8px;
-}
-
-.ds-section-desc {
-  margin: 0;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.65;
-}
-
-.ds-meta-list {
-  margin-top: 12px;
-  display: grid;
-  gap: 8px;
-}
-
-.ds-meta-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.ds-meta__label {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.ds-aside-note {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
-  font-size: 12px;
-  line-height: 1.7;
-  color: #64748b;
-}
-
-.ds-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 10px;
-  padding: 14px 16px;
-  border: 1px solid #dbe7f5;
-  border-radius: 18px;
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95), rgba(248, 250, 252, 0.98)), #fff;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
-}
-
-.ds-hero__label {
-  margin-bottom: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: #2563eb;
-}
-
-.ds-hero__title {
-  font-size: 18px;
-  line-height: 1.25;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.ds-hero__desc {
-  margin-top: 6px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: #64748b;
-}
-
-.ds-card {
-  background: #fff;
-  border: 1px solid #dbe7f5;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.06);
-}
-
-.ds-divide > * {
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.ds-divide > *:last-child {
-  border-bottom: none;
-}
-
-.ds-group {
-  padding: 2px 0;
-}
-
-.ds-group__title {
-  font-size: 12px;
-  font-weight: 700;
-  color: #2563eb;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 12px 16px 6px;
-}
-
-.ds-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 10px 16px;
-}
-
-.ds-row--top {
-  align-items: flex-start;
-}
-
-.ds-row--result {
-  background: #fbfdff;
-}
-
-.ds-row__left {
+  gap: var(--mq-space-4);
   min-width: 0;
-  flex: 1;
+  container: model-settings / inline-size;
 }
-
-.ds-row__label {
-  font-size: 13px;
-  color: #0f172a;
+.llm-overview__head {
+  flex-wrap: wrap;
+}
+.llm-overview__head > div {
+  flex: 1 1 320px;
+}
+.llm-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--mq-space-4);
+  padding: var(--mq-space-4);
+  margin: var(--mq-space-5) 0 0;
+}
+.llm-summary dt {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+}
+.llm-summary dd {
+  margin: var(--mq-space-2) 0 0;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.llm-summary dd.mq-mono {
+  font-size: var(--mq-font-13);
+}
+.llm-steps {
+  display: grid;
+  gap: var(--mq-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.llm-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: var(--mq-space-4);
+}
+.llm-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 64px;
+  bottom: -17px;
+  left: 44px;
+  border-left: 1px solid var(--mq-brand-200);
+  pointer-events: none;
+}
+.llm-step__number {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--mq-info-border);
+  border-radius: var(--mq-radius-tag);
+  background: var(--mq-info-bg);
+  color: var(--mq-brand-600);
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-13);
   font-weight: 600;
 }
-
-.ds-row__hint {
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.55;
-  color: #94a3b8;
+.llm-step__content {
+  min-width: 0;
 }
-
+.llm-section-head {
+  margin-bottom: var(--mq-space-5);
+}
+.llm-section-title {
+  margin: 0;
+  font-size: var(--mq-font-16);
+  font-weight: 600;
+  color: var(--mq-text-primary);
+  line-height: 1.5;
+}
+.llm-section-head p {
+  margin: var(--mq-space-1) 0 0;
+}
+.llm-default-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mq-space-4);
+}
+.llm-field--wide {
+  grid-column: 1 / -1;
+}
+.llm-inference-mode {
+  width: fit-content;
+  max-width: 100%;
+}
+.llm-control {
+  width: 100%;
+  min-width: 0;
+}
+.llm-custom-badge {
+  margin-left: var(--mq-space-2);
+  padding-block: 0;
+}
+.llm-local-status {
+  margin-top: var(--mq-space-4);
+}
+.llm-disclosure > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--mq-space-2);
+  cursor: pointer;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
+  list-style: none;
+}
+.llm-disclosure > summary::before {
+  content: '›';
+  flex: 0 0 14px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-20);
+  line-height: 24px;
+  transition: transform 160ms ease;
+}
+.llm-disclosure[open] > summary::before {
+  transform: rotate(90deg);
+}
+.llm-disclosure > summary:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 4px;
+  border-radius: var(--mq-radius-control);
+}
+.llm-disclosure__body {
+  padding-top: var(--mq-space-4);
+}
+.llm-model-management {
+  margin-top: var(--mq-space-5);
+  padding-top: var(--mq-space-4);
+  border-top: 1px solid var(--mq-border);
+}
+.llm-add-model {
+  display: flex;
+  align-items: start;
+  gap: var(--mq-space-2);
+  margin: var(--mq-space-3) 0;
+}
+.llm-custom-models {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.llm-custom-models li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mq-space-3);
+  padding-block: var(--mq-space-2);
+  border-bottom: 1px solid var(--mq-border);
+}
+.llm-custom-models .mq-mono {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.llm-advanced-fields {
+  display: grid;
+  gap: var(--mq-space-6);
+}
+.llm-parameter-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--mq-space-5);
+}
+.llm-parameter-title {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+.llm-parameter-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mq-space-3);
+  min-width: 0;
+}
 .slider-wrap {
-  width: 360px;
-  padding: 8px 12px 4px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  padding: 0 var(--mq-space-2) var(--mq-space-4);
 }
-
 .slider-value {
   text-align: right;
-  font-size: 12px;
-  color: #2563eb;
-  font-weight: 700;
-  margin-bottom: 4px;
+  color: var(--mq-brand-600);
+  font-family: var(--mq-font-mono);
+  font-size: var(--mq-font-13);
 }
-
-.custom-model-panel {
-  width: 360px;
-  padding: 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
-}
-
-.custom-model-list {
-  margin-top: 6px;
-  border: 1px solid #edf2f7;
-  border-radius: 8px;
-  padding: 4px 8px;
-  background: #fff;
-}
-
-.custom-model-item {
+.llm-actions {
+  position: sticky;
+  bottom: var(--mq-space-4);
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 30px;
+  flex-wrap: wrap;
+  gap: var(--mq-space-4);
 }
-
-.custom-model-empty {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #94a3b8;
+.llm-actions__copy {
+  display: grid;
+  gap: var(--mq-space-1);
+  min-width: 0;
 }
-
-.ds-select :deep(.ant-select-selector),
-.ds-input :deep(.ant-input),
-.ds-input-number :deep(.ant-input-number) {
-  border-radius: 12px !important;
+.llm-actions__copy p {
+  margin: 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
 }
-
-.ds-test-btn {
-  border-radius: 12px;
-}
-
-.ds-card__footer {
-  padding: 10px 16px;
+.llm-actions__buttons {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: linear-gradient(180deg, #fcfdff 0%, #f8fafc 100%);
-  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  gap: var(--mq-space-2);
 }
-
-.ds-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ds-footer-meta {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.ml-1 {
-  margin-left: 6px;
-}
-
-@media (max-width: 959px) {
-  .ds-aside-card {
-    position: static;
+@container model-settings (max-width: 680px) {
+  .llm-default-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
-
-  .ds-hero,
-  .ds-row,
-  .ds-card__footer {
-    flex-direction: column;
-    align-items: stretch;
+  .llm-summary {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-
-  .slider-wrap,
-  .custom-model-panel {
+  .llm-summary > div:first-child {
+    grid-column: 1 / -1;
+  }
+  .llm-parameter-group {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .llm-actions__buttons {
     width: 100%;
+    justify-content: flex-end;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .llm-disclosure > summary::before {
+    transition: none;
   }
 }
 </style>
