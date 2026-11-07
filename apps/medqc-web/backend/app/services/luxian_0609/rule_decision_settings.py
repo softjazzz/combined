@@ -101,7 +101,10 @@ def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
     ):
         raise ValueError("LX0609任务Gateway配置不可用")
     role_identity = getattr(client, "task_role_identity", None)
+    from .llm_role_routing import legacy_role_identity
+    legacy_identity = legacy_role_identity(getattr(client, "_legacy_role_runtimes", {}) or {})
     identity = {
+        **({"legacy_roles": legacy_identity} if legacy_identity else {}),
         **({"task_roles": role_identity} if isinstance(role_identity, dict) else {}),
         "provider": provider,
         "model": model,

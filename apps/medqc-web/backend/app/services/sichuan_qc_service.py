@@ -457,6 +457,7 @@ class SichuanQCService:
             "task_role_runtimes": deepcopy(getattr(client, "_task_role_runtimes", {})),
             "task_role_selections": deepcopy(getattr(client, "task_role_selections", {})),
             "task_role_identity": deepcopy(getattr(client, "task_role_identity", None)),
+            "legacy_role_runtimes": deepcopy(getattr(client, "_legacy_role_runtimes", {})),
             "custom_parameters": {
                 "temperature": client.temperature,
                 "top_p": client.top_p,

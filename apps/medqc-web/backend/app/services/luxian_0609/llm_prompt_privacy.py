@@ -626,8 +626,11 @@ class _Luxian0609PrivacyRedactingLLMClient:
         identity = getattr(self.delegate, "task_role_identity", None)
         if isinstance(identity, dict) and "specialty_verification" in identity.get("roles", {}):
             return self.for_task_role("specialty_verification")
-        delegate = build_role_delegate(role)
+        selector = getattr(self.delegate, "for_legacy_role", None)
+        delegate = selector(role) if callable(selector) else build_role_delegate(role)
         if delegate is None:
+            return self
+        if delegate is self.delegate:
             return self
         return _Luxian0609PrivacyRedactingLLMClient(delegate, self.identity_values, self.identity_providers)
 

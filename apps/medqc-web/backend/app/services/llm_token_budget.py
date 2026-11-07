@@ -207,7 +207,8 @@ def budget_guarded_executor(function):
         token = _FAILURES.set(failures)
         escaped = None
         try:
-            with token_freeze_scope(kwargs.get("llm_client")):
+            from .llm_task_roles import task_role_scope
+            with task_role_scope(kwargs.get("llm_client")), token_freeze_scope(kwargs.get("llm_client")):
                 result = await function(*args, **kwargs)
             if failures.unhandled():
                 raise failures.unhandled()[0]
