@@ -37,4 +37,13 @@ tests/unit/services/workspace-metadata-routing.spec.ts
 
 本轮未连接业务PG、独立CDM或模型服务，未创建业务任务、运行质控、重算历史、执行迁移或部署；未重复全量测试、构建或现网浏览器验收。仍运行原版本的本机服务不会自动获得这次修复，切换版本须另行安排。
 
-回滚本提交即可恢复旧行为；没有数据、配置或迁移回滚操作。源码仅本地提交，未推送、合并或打包。
+回滚修复提交即可恢复旧行为；没有数据、配置或迁移回滚操作。修复已推送为 Draft PR #45，未合并或打包。
+
+## 2026-11-07 只读收口核对
+
+- [PR #45](https://github.com/softjazzz/combined/pull/45) 仍为 OPEN、Draft；远端 Head 与本地运行代码均为 `0c92b275c011d8c98314d5298b06af337712a773`，base 为 `6ad6817b1b66c21b7c94542772a8452215250de5`，无冲突。本次仅更新说明，不改运行代码。
+- 先用 GitHub 连接工具读取 PR 与 PR 工作流；其 combined status 不含 CheckRun，故用独立 `gh pr view` 只读补全 rollup，实际为 7/7 SUCCESS（4条 PR 工作流、3条 Push 工作流），未重跑 CI、评论或修改 PR。
+- [PR 零模型质量门](https://github.com/softjazzz/combined/actions/runs/42345121080/job/128321085296) 的实际日志确认 `passed_tests=11961`、`failed_tests=0`、`timeout_count=0`。其余 PR 检查：[前端](https://github.com/softjazzz/combined/actions/runs/42345121220/job/128321085926)、[调度隔离](https://github.com/softjazzz/combined/actions/runs/42345121094/job/128321085383)、[一次性基础设施](https://github.com/softjazzz/combined/actions/runs/42345121087/job/128321085416) 均成功。
+- 源码复核未发现新缺口：仅两个精确 GET 不依赖 CDM；列表和 overview 都传入 `readonly=True`，表定义不执行 DDL，列表查询沿用 `created_by` 条件。全局认证、来源冲突/未知来源拒绝、历史任务来源与病例身份校验均保持原链。
+- 本轮无新增测试执行，复用上述相同运行代码的后端30项、前端14项隔离结果，未重复全量或 CI。新增核心后端17项及真实 Axios 拦截器8项仍属于本地结果，不能称为已被当前 CI 收录。
+- 隔离入口已复核：后端阻断 dotenv、真实 socket 及非 SQLite 连接，前端预加载入口阻断 TCP/TLS/fetch，测试仅使用合成内存 SQLite 或固定 adapter，不加载应用 lifespan。本轮 GitHub 读取与测试隔离进程分离；未访问业务 PG/CDM/模型，未启动或重启服务、部署、打包、写业务库或重跑病例。
