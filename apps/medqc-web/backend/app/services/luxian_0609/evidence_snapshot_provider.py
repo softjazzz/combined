@@ -24,6 +24,8 @@ from .evaluation_horizon import (
     EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE,
     resolve_frozen_discharge_horizon,
     resolve_frozen_running_record_scene,
+    resolve_record_evaluation_horizon_policy,
+    resolve_record_evaluation_horizon_unavailable_reason,
     resolve_snapshot_task_frozen_date,
 )
 from .evidence_material import (
@@ -382,6 +384,26 @@ def build_luxian_0609_evidence_read_session(
         "authoritative_time_conflict",
     }:
         raise ValueError("horizon_unavailable_reason is invalid")
+    if needs_evaluation_horizon and evaluation_horizon_snapshot is not None:
+        # 逐例冻结是唯一评价依据，调用者的默认/旧参数不能把冲突快照重新放行。
+        # 无快照的升级前入口仍沿用原有兼容逻辑，不修改快照或回查新材料修补它。
+        frozen_policy = resolve_record_evaluation_horizon_policy(evaluation_horizon_snapshot)
+        frozen_reason = resolve_record_evaluation_horizon_unavailable_reason(evaluation_horizon_snapshot)
+        if evaluation_horizon_policy is not None and evaluation_horizon_policy != frozen_policy:
+            raise ValueError("evaluation_horizon_policy conflicts with frozen snapshot")
+        if horizon_unavailable_reason is not None and horizon_unavailable_reason != frozen_reason:
+            raise ValueError("horizon_unavailable_reason conflicts with frozen snapshot")
+        if (frozen_policy == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE
+                and evaluation_as_of_date is not None
+                and _parse_evaluation_as_of_date(evaluation_as_of_date)
+                != _parse_evaluation_as_of_date(str(evaluation_horizon_snapshot.get("evaluation_horizon") or ""))):
+            raise ValueError("evaluation_as_of_date conflicts with frozen snapshot")
+        evaluation_horizon_policy = frozen_policy
+        horizon_unavailable_reason = frozen_reason
+        evaluation_as_of_date = (
+            str(evaluation_horizon_snapshot.get("evaluation_horizon") or "")
+            if evaluation_horizon_policy == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE else None
+        )
     if (
         horizon_unavailable_reason is not None
         and evaluation_horizon_policy != EVALUATION_HORIZON_POLICY_DISABLED
@@ -771,6 +793,9 @@ def build_luxian_0609_evidence_read_session(
                 visit_id=visit_id,
                 expected_horizon_date=horizon_date,
             )
+            if evaluation_horizon_snapshot is not None and not horizon_record_scene:
+                horizon_date = None
+                resolved_horizon_reason = "authoritative_time_conflict"
         elif (
             evaluation_horizon_policy == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
             and evaluation_horizon_snapshot is not None

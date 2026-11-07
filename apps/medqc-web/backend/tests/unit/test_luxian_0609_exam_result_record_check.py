@@ -2,7 +2,6 @@
 
 import json
 from dataclasses import replace
-from types import SimpleNamespace
 
 import pytest
 
@@ -152,7 +151,9 @@ async def test_plan_only_or_result_of_another_exam_is_not_recorded():
     assert outcome.recorded_refs == {1: ()}
     # 误归为已记录但所记内容与本次报告片段对不上：Python 不采信。
     misfiled = _doc(ref, "result_recorded", "外院MRI提示半月板撕裂", "主动脉壁钙化")
-    assert (await check_exam_result_record(projection, _Client([_answer(misfiled)]))).recorded_refs == {1: ()}
+    rejected = await check_exam_result_record(projection, _Client([_answer(misfiled)]))
+    assert not rejected.recorded_refs
+    assert rejected.incomplete_event_positions == frozenset({1})
 
 
 @pytest.mark.asyncio
@@ -221,7 +222,7 @@ async def test_long_verbatim_restatement_of_report_is_confirmed_without_model():
 
 @pytest.mark.asyncio
 async def test_verbatim_confirmation_is_positive_only_and_skips_shared_report_sentences(monkeypatch):
-    """逐字确认只作正面认定：未逐字出现的病程照常送模型；两次检查报告同句时不确认，交模型判断归属。"""
+    """逐字确认只作正面认定；共同结果不能在无事件依据时由模型同时认领两次检查。"""
     from app.services.luxian_0609 import exam_result_record_check as module
 
     projection = _projection("胸部CT提示右肺下叶占位，考虑恶性可能，拟行纤支镜检查。", PLAN_ONLY)
@@ -233,13 +234,15 @@ async def test_verbatim_confirmation_is_positive_only_and_skips_shared_report_se
 
     report = "右肺下叶占位，考虑恶性可能；主动脉壁钙化。"
     monkeypatch.setattr(module, "_targets", lambda _: {1: (report, (verbatim,)), 2: (report, (verbatim,))})
-    same_reports = [SimpleNamespace(result_texts=(report,), document_refs=(f'E01-{position:02d}',))
+    same_reports = [replace(projection.imaging_events[0], result_texts=(report,),
+                            document_refs=(f'E01-{position:02d}',), source_exam_ids=(f'EX-{position}',))
                     for position in (1, 2)]
     monkeypatch.setattr(module, "events_for_family", lambda projection, family: same_reports)
     shared = _Client([_answer(*[{**_doc(verbatim, "result_recorded", "右肺下叶占位，考虑恶性可能", "右肺下叶占位"),
                                  "event_position": position} for position in (1, 2)])])
     outcome = await check_exam_result_record(projection, shared)
-    assert shared.prompts and outcome.recorded_refs == {1: (verbatim,), 2: (verbatim,)}
+    assert shared.prompts and not outcome.recorded_refs
+    assert outcome.incomplete_event_positions == frozenset({1, 2})
 
 
 @pytest.mark.asyncio

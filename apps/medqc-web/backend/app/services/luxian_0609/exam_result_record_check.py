@@ -73,6 +73,9 @@ class _RetryIssue:
     field: str
     value: str
     hint: str
+    # 原文无法区分重复检查时，重复生成也不能补出身份；保留未完成且不消耗补核。
+    retryable: bool = True
+    pair: tuple[int, str] | None = None
 
 
 class _RetryViolation(ValueError):
@@ -175,9 +178,8 @@ def _course_text(projection: ExamLabTextProjection, ref: str) -> str:
 
 
 def _report_catalog(projection):
-    from .exam_result_context import protocol
-    from .exam_token_budget import full_evidence_mode
-    if (protocol() == 'comparison_v1' or full_evidence_mode()) and projection.comparison_events is not None:
+    # 程序校验始终使用原事件目录，不能因拆批或旧Prompt路径制造“报告独有”。
+    if projection.comparison_events is not None:
         return projection.comparison_events
     return events_for_family(projection, 'exam')
 
@@ -205,11 +207,55 @@ def _explicit_current_exam_quote(quote, current, catalog, course):
 
 def validation_identity(projection):
     # 只进入冻结摘要，不把新增的原始检查号外发到既有实验Prompt。
-    return [(event.document_refs, event.source_exam_ids) for event in _report_catalog(projection)]
+    return [(event.document_refs, event.source_exam_ids, event.identity_text, event.result_texts)
+            for event in _report_catalog(projection)]
 
 
 # 仅参与主冻结键，不改变 JSON 协议或发送的 Prompt。
-RESULT_RECORD_VALIDATION_VERSION = "exam-record-cross-report-span-types-v5"
+RESULT_RECORD_VALIDATION_VERSION = "exam-record-event-identity-v6"
+
+
+_MODALITY = re.compile(r'(?<![A-Za-z])(?:MRI|MR|CT|DR|CR)(?![A-Za-z])|磁共振|核磁', re.I)
+
+
+def _modalities(text):
+    return {"MRI" if token.upper() in {"MR", "MRI"} or token in {"磁共振", "核磁"}
+            else token.upper() for token in _MODALITY.findall(text)}
+
+
+def _quote_statements(quote, course):
+    """带回引句所属原句的身份前缀，不能摘掉DR/既往等前缀伪装成本次。"""
+    normalized = _normalize(quote).strip('。；;！？')
+    return tuple(statement for statement in re.split(r'[。；;！？\n]', course)
+                 if normalized and normalized in _normalize(statement))
+
+
+def _association_issue(projection, position, quote, span, ref):
+    """只拦客观身份矛盾和重复结果歧义，不以未逐字匹配判未记录。"""
+    current = events_for_family(projection, 'exam')[position - 1]
+    catalog = _report_catalog(projection)
+    course = _course_text(projection, ref)
+    own_modes = _modalities(current.identity_text)
+    statements = _quote_statements(quote, course)
+    modes = _modalities(quote)
+    if not modes and len(statements) == 1:
+        modes = _modalities(statements[0])
+    if len(own_modes) == 1 and len(modes) == 1 and own_modes.isdisjoint(modes):
+        return 'quote exam identity mismatch', '引句所属原文明确为另一检查模态，须核对当前事件，不能因结果相似接纳'
+    # 同样结果出现在多份报告时，共同片段本身不能证明属于当前哪一次。
+    normalized_span = _normalize(span)
+    course_time = projection.course_times.get(ref)
+    other_reports = [_normalize('\n'.join(event.result_texts)) for event in catalog
+                     if event.document_refs != current.document_refs
+                     and (course_time is None or event.report_time is None or event.report_time <= course_time)]
+    if normalized_span and any(normalized_span in report for report in other_reports):
+        full_reports = [_normalize('\n'.join(event.result_texts)) for event in catalog]
+        own_unique = [clause for clause in _report_clauses('\n'.join(current.result_texts))
+                      if sum(clause in report for report in full_reports) == 1]
+        if (not any(clause in _normalize(quote) for clause in own_unique)
+                and not _explicit_current_exam_quote(quote, current, catalog, course)):
+            return 'ambiguous repeated exam', '引句只证明多次检查的共同结果，须给出原文中属于当前事件的依据；无法确认时保留未完成'
+    return None
 
 
 def _input_complete_for_event(projection: ExamLabTextProjection, position: int, refs: Sequence[str]) -> bool:
@@ -397,6 +443,12 @@ def _parse(
                 issues.append(_RetryIssue("quote matches other report", location, "quote", "",
                     f"引句匹配其他报告独有结果，事件位置{other_positions}；须重新核对当前事件，不得用后次结果替代"))
                 continue
+        association_issue = _association_issue(projection, position, quote, span, ref)
+        if association_issue is not None:
+            reason, hint = association_issue
+            issues.append(_RetryIssue(reason, location, 'quote', '', hint,
+                retryable=reason != 'ambiguous repeated exam', pair=key))
+            continue
         # 所记结果仍须与本次报告片段对得上。
         if kind in SPAN_TYPES and _shares_finding(span, quote):
             (recorded if kind in RECORDED_TYPES else conflicting)[position].append(ref)
@@ -436,7 +488,7 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
     if not original:
         return ResultRecordOutcome("ready", empty)
     pending = dict(original)
-    covered, accepted, conflicting = set(), {}, {}
+    covered, accepted, conflicting, unresolved = set(), {}, {}, set()
     calls = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     state = "failed"
@@ -513,6 +565,7 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
         except _RetryViolation as exc:
             error = exc
             valid, recorded, conflicts = exc.valid_pairs, exc.recorded, exc.conflicts
+            unresolved.update(issue.pair for issue in exc.issues if not issue.retryable and issue.pair is not None)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
             error = exc
             valid, recorded, conflicts = set(), {}, {}
@@ -537,8 +590,11 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
         # 已通过的配对不再发送。失败事件的其余独立成功配对也能保留，
         # 但整个事件只有全覆盖后才能形成否定或进入冻结。
         pending = {position: (report, remaining) for position, (report, refs) in original.items()
-                   if (remaining := tuple(ref for ref in refs if (position, ref) not in covered))}
-        feedback = tuple(getattr(error, "issues", ()))
+                   if (remaining := tuple(ref for ref in refs
+                       if (position, ref) not in covered and (position, ref) not in unresolved))}
+        feedback = tuple(issue for issue in getattr(error, "issues", ()) if issue.retryable)
+        if not pending:
+            break
         if target == "candidate" and route is not None and route.upgrade():
             route.observe("upgraded", reason="truncated" if isinstance(error, _TruncatedResponse)
                           else "protocol_validation", budget_used=budget.used)
@@ -581,8 +637,10 @@ def _verbatim_confirmed(
     for position, (report, refs) in targets.items():
         unique = [clause for clause in _report_clauses(report) if sum(clause in text for text in reports) <= 1]
         for ref in refs:
-            course = _normalize(_course_text(projection, ref))
-            if any(clause in course for clause in unique):
+            course = _course_text(projection, ref)
+            if any(clause in _normalize(course)
+                   and _association_issue(projection, position, clause, clause, ref) is None
+                   for clause in unique):
                 confirmed.add((position, ref))
     return confirmed
 

@@ -70,6 +70,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/unit/test_luxian_0609_native_extended_document_execution.py",
     ),
     "dual-model-exam": (
+        "tests/unit/test_frozen_exam_identity_protection.py",
         "tests/unit/test_exam_result_comparison_context.py",
         "tests/unit/test_exam_result_pair_recovery.py",
         "tests/unit/test_exam_hard_poc.py",

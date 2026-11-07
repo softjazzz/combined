@@ -578,6 +578,9 @@ def _typed_basic_decisions(
     horizon_datetime_for_filter: datetime | None = None
     horizon_date_for_filter: date | None = None
     horizon_filter_issue = "authoritative_time_missing"
+    horizon_reason = observation_by_source[EVALUATION_HORIZON_SOURCE_KEY].reason_code
+    if horizon_reason == "authoritative_time_conflict":
+        horizon_filter_issue = horizon_reason
     try:
         frozen_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
         if len(frozen_rows) == 1:
