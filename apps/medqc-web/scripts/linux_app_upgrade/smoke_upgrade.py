@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="medqc-app-reuse-") as directory:
     old = root / "releases/old"
     (old / "marker").write_text("fixed-old-release")
     config = root / "config/business.env"
-    config.write_text("THIS_CONFIGURATION_MUST_NOT_BE_READ_OR_CHANGED\n")
+    config.write_text("# THIS_CONFIGURATION_MUST_NOT_BE_CHANGED\nQC_DISPATCH_STATE_DIR=" + (root / "state/dispatch").as_posix() + "\n")
     before = hashlib.sha256(config.read_bytes()).hexdigest()
     (root / "current").symlink_to(old)
     (root / "venv").symlink_to(venv)

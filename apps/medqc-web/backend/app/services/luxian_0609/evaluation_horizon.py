@@ -5,6 +5,7 @@ from datetime import date, datetime
 from typing import Any, Mapping
 
 from ..case_identity import CaseRef
+from ..discharge_time import DISCHARGE_TIME_POLICY, hospital_business_time
 
 
 EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE = "frozen_task_date"
@@ -300,17 +301,38 @@ def build_record_evaluation_horizon_snapshot(
             if all(record_ref)
             else ""
         ) or task_frozen_date
-        snapshot = resolve_record_evaluation_horizon(
-            record_id=record_id,
-            record_scene=record.get("scope"),
-            admission_datetime=(
-                record.get("admission_datetime") or record.get("admission_date")
-            ),
-            discharge_datetime=(
-                record.get("discharge_datetime") or record.get("discharge_date")
-            ),
-            task_frozen_date=frozen_date,
-        ).to_dict()
+        admission_value = record.get("admission_datetime") or record.get("admission_date")
+        discharge_value = record.get("discharge_datetime") or record.get("discharge_date")
+        # 只归一新建任务的业务时间；历史快照读取器仍严格校验原值，禁止执行时补值。
+        def local_value(value):
+            try:
+                parsed = hospital_business_time(value)
+                original = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00")) if value else None
+                if isinstance(parsed, datetime) and original is not None and original.tzinfo is not None:
+                    return parsed.isoformat(sep=" ")
+            except (TypeError, ValueError, OverflowError):
+                pass
+            return value
+
+        if record.get("scope") == "final" and record.get("discharge_horizon_conflict"):
+            # 已识别的来源冲突（含非空非法时间）保留原值和原因，不先解析成任务创建异常。
+            snapshot = RecordEvaluationHorizon(
+                record_id=record_id, record_scene="final",
+                admission_datetime=_normalized_text(local_value(admission_value)),
+                discharge_datetime=_normalized_text(local_value(discharge_value)),
+                evaluation_horizon="", evaluation_basis="", resolution_status="time_conflict",
+            ).to_dict()
+        else:
+            snapshot = resolve_record_evaluation_horizon(
+                record_id=record_id,
+                record_scene=record.get("scope"),
+                admission_datetime=local_value(admission_value),
+                discharge_datetime=local_value(discharge_value),
+                task_frozen_date=frozen_date,
+            ).to_dict()
+        if record.get("discharge_horizon_source"):
+            snapshot["discharge_horizon_source"] = record["discharge_horizon_source"]
+            snapshot["discharge_horizon_policy"] = DISCHARGE_TIME_POLICY
         # 用户决定（2026-10-20）：死亡讨论等死后文书的时限按“死亡时间+7天”与任务冻结日中较早者评价，
         # 已出院病例的终点是出院日，故另随快照保存冻结日。
         if frozen_date:

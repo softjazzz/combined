@@ -1,4 +1,4 @@
-"""仅复制新release并保存回滚记录，不切current、不改venv/配置、不启停服务。"""
+"""只读预检材料路径后复制新release；不切current、改配置或启停服务。"""
 import argparse
 import json
 import os
@@ -7,6 +7,36 @@ import shutil
 import sys
 
 from check_compat import check
+
+
+def material_storage_preflight(config: Path, root: Path, old: Path, destination: Path) -> dict:
+    # 与应用load_dotenv保持相同插值和进程环境优先级；不导入app，不输出其他配置。
+    try:
+        from dotenv.main import DotEnv
+    except ImportError:
+        raise ValueError("existing_business_venv_python_dotenv_required; use_root_venv_bin_python; do_not_install_dependencies") from None
+
+    values = {**DotEnv(config, override=False, encoding="utf-8").dict(), **os.environ}
+    explicit = (values.get("QC_CASE_MATERIAL_DIR") or "").strip()
+    dispatch = (values.get("QC_DISPATCH_STATE_DIR") or "").strip()
+    if explicit:
+        path, source = Path(explicit), "QC_CASE_MATERIAL_DIR"
+    elif dispatch:
+        dispatch_path = Path(dispatch)
+        if not dispatch_path.is_absolute():
+            raise ValueError("absolute_material_storage_required")
+        path, source = dispatch_path.parent / "case-materials", "QC_DISPATCH_STATE_DIR"
+    else:
+        path, source = old / "backend/data/case-materials", "release_default"
+    if not path.is_absolute():
+        raise ValueError("absolute_material_storage_required")
+    resolved = path.resolve()
+    # resolve同时识别current或任意符号链接别名，不能只比较输入字符串前缀。
+    for application in (root / "releases", root / "current", old, destination):
+        application = application.resolve()
+        if resolved == application or application in resolved.parents:
+            raise ValueError("material_storage_inside_release; preserve_history_before_upgrade")
+    return {"material_storage_dir": str(resolved), "material_storage_source": source}
 
 
 def stage(kit: Path, root: Path, expected_current: Path) -> dict:
@@ -25,16 +55,17 @@ def stage(kit: Path, root: Path, expected_current: Path) -> dict:
     receipt = root / "state" / ("app-upgrade-" + report["build_id"] + ".json")
     if destination.exists() or receipt.exists():
         raise ValueError("target_release_or_receipt_already_exists")
+    material = material_storage_preflight(config, root, old, destination)
     shutil.copytree(kit / "application", destination, symlinks=False)
     (destination / "backend/.env").symlink_to(config)
     record = {"previous_current": str(old), "staged_current": str(destination), "unchanged_venv": str((root / "venv").resolve()),
-              "application_commit": report["commit"], "build_id": report["build_id"], "activated": False}
+              "application_commit": report["commit"], "build_id": report["build_id"], "activated": False, **material}
     receipt.parent.mkdir(exist_ok=True)
     with receipt.open("x", encoding="utf-8") as file:
         json.dump(record, file, indent=2)
         file.write("\n")
     assert (root / "current").resolve() == old
-    return {"ok": True, "staged": True, "activated": False, "receipt": str(receipt), "release": str(destination), "database_connections": 0}
+    return {"ok": True, "staged": True, "activated": False, "receipt": str(receipt), "release": str(destination), "database_connections": 0, **material}
 
 
 def main():

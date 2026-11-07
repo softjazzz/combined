@@ -256,7 +256,8 @@ _INTERNAL_SOURCE_ENTRIES = (
         "inpat_registration", "inpat_registration", "mr", access_mode=_BOUNDED,
         query_version="snapshot-provider-inpat_registration-v2",
     ),
-    _entry("inpat_registration.discharge_horizon", access_mode=_BOUNDED),
+    _entry("inpat_registration.discharge_horizon", access_mode=_BOUNDED,
+           query_version="snapshot-provider-discharge-horizon-v2"),
     _entry(
         "inpat_nondrug_order.severity_order",
         access_mode=_BOUNDED,

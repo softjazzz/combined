@@ -15,6 +15,7 @@ from ...database.models.cdm import (
     MedicalRecordFrontpage,
 )
 from ..case_identity import CaseRef, CaseRefInput, normalize_case_refs
+from ..discharge_time import select_discharge_time
 
 
 def _capture_private_orm_identities(collector: Callable[[str, Any], None] | None, source_key: str, rows: Sequence[Any]) -> None:
@@ -225,6 +226,9 @@ class RecordRepository:
             .filter(AdmissionRecord.visit_id.in_(missing_ids))
             .all()
         )
+        admission_by_identity = {
+            CaseRef.from_mapping(row.__dict__): row for row in admission_rows
+        }
 
         _capture_private_orm_identities(_private_identity_collector, "discharge_record", discharge_rows)
         _capture_private_orm_identities(_private_identity_collector, "inpat_registration", registration_rows)
@@ -250,11 +254,13 @@ class RecordRepository:
             if source is None:
                 continue
             discharge_source = discharge_by_visit.get(visit_id)
-            discharge_datetime = (
-                getattr(source, "discharge_datetime", None)
-                or getattr(discharge_source, "discharge_date", None)
-                or getattr(discharge_source, "discharge_time", None)
+            discharge_selection = select_discharge_time(
+                registration=getattr(source, "discharge_datetime", None),
+                document_date=getattr(discharge_source, "discharge_date", None),
+                document_time=getattr(discharge_source, "discharge_time", None),
+                document_status=getattr(discharge_source, "document_status", None),
             )
+            discharge_datetime = discharge_selection.value
             item_scope = "final" if discharge_datetime else "running"
             if scope_value != "all" and item_scope != scope_value:
                 continue
@@ -288,7 +294,9 @@ class RecordRepository:
                 ):
                     continue
 
-            admission_datetime = getattr(source, "admission_datetime", None)
+            admission_datetime = getattr(
+                admission_by_identity.get(CaseRef.from_mapping(source.__dict__)), "admission_datetime", None
+            ) or getattr(source, "admission_datetime", None)
             if not _record_dates_match_range(
                 date_field=date_field_value,
                 admission_datetime=admission_datetime,
@@ -315,6 +323,8 @@ class RecordRepository:
                     "discharge_date": _to_iso_date(discharge_datetime),
                     "admission_datetime": _to_iso_datetime(admission_datetime),
                     "discharge_datetime": _to_iso_datetime(discharge_datetime),
+                    "discharge_horizon_source": discharge_selection.source,
+                    "discharge_horizon_conflict": discharge_selection.conflict,
                     "status": "completed" if item_scope == "final" else "running",
                     "medical_text": medical_text,
                     "medical_text_length": len(medical_text),
@@ -402,11 +412,13 @@ class RecordRepository:
                 return None
 
             discharge_source = discharge_by_ref.get(ref)
-            discharge_datetime = (
-                getattr(source, "discharge_datetime", None)
-                or getattr(discharge_source, "discharge_date", None)
-                or getattr(discharge_source, "discharge_time", None)
+            discharge_selection = select_discharge_time(
+                registration=getattr(source, "discharge_datetime", None),
+                document_date=getattr(discharge_source, "discharge_date", None),
+                document_time=getattr(discharge_source, "discharge_time", None),
+                document_status=getattr(discharge_source, "document_status", None),
             )
+            discharge_datetime = discharge_selection.value
             item_scope = "final" if discharge_datetime else "running"
             if scope_value != "all" and item_scope != scope_value:
                 continue
@@ -465,6 +477,8 @@ class RecordRepository:
                     "discharge_date": _to_iso_date(discharge_datetime),
                     "admission_datetime": _to_iso_datetime(admission_datetime),
                     "discharge_datetime": _to_iso_datetime(discharge_datetime),
+                    "discharge_horizon_source": discharge_selection.source,
+                    "discharge_horizon_conflict": discharge_selection.conflict,
                     "status": "completed" if item_scope == "final" else "running",
                     "medical_text": medical_text,
                     "medical_text_length": len(medical_text),
@@ -565,6 +579,7 @@ class RecordRepository:
         )
         discharge_dt_expr = func.coalesce(
             # 源库可同时存在 timestamp、date 和 text，先统一类型再取业务时间。
+            cast(InpatRegistration.discharge_datetime, String),
             cast(MedicalRecordFrontpage.discharge_datetime, String),
             cast(DischargeRecord.discharge_date, String),
             cast(DischargeRecord.discharge_time, String),
@@ -579,6 +594,10 @@ class RecordRepository:
                 MedicalRecordFrontpage,
                 discharge_dt_expr.label("effective_discharge_datetime"),
                 admission_dt_expr.label("effective_admission_datetime"),
+                InpatRegistration.discharge_datetime,
+                DischargeRecord.discharge_date,
+                DischargeRecord.discharge_time,
+                DischargeRecord.document_status,
             )
             .outerjoin(
                 DischargeRecord,
@@ -686,6 +705,7 @@ class RecordRepository:
         source_row = row
         effective_discharge_datetime = None
         effective_admission_datetime = None
+        discharge_selection = None
         if isinstance(row, tuple) or (
             hasattr(row, "_mapping") and not hasattr(row, "visit_id")
         ):
@@ -694,6 +714,16 @@ class RecordRepository:
                 effective_discharge_datetime = row[1]
             if len(row) > 2:
                 effective_admission_datetime = row[2]
+            if len(row) > 6:
+                discharge_selection = select_discharge_time(
+                    registration=row[3], frontpage=source_row.discharge_datetime,
+                    document_date=row[4], document_time=row[5],
+                    document_status=row[6],
+                )
+                effective_discharge_datetime = discharge_selection.value
+                # 保留已有查询 DTO 的日期字符串格式；纯日期并不新增精确时刻证据。
+                if isinstance(effective_discharge_datetime, date) and not isinstance(effective_discharge_datetime, datetime):
+                    effective_discharge_datetime = effective_discharge_datetime.isoformat()
         effective_discharge_datetime = (
             effective_discharge_datetime or source_row.discharge_datetime
         )
@@ -724,6 +754,9 @@ class RecordRepository:
             "discharge_date": _to_iso_date(effective_discharge_datetime),
             "admission_datetime": _to_iso_datetime(effective_admission_datetime),
             "discharge_datetime": _to_iso_datetime(effective_discharge_datetime),
+            **({"discharge_horizon_source": discharge_selection.source,
+                "discharge_horizon_conflict": discharge_selection.conflict}
+               if discharge_selection is not None else {}),
             "status": "completed" if item_scope == "final" else "running",
             "medical_text": _safe_text(source_row.record_content),
             "medical_text_length": len(_safe_text(source_row.record_content)),

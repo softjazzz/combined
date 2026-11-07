@@ -8,6 +8,7 @@ from sqlalchemy import Date, DateTime, MetaData, Table, String, and_, case, cast
 
 from ..database import clinical_connection as clinical
 from .data_pipeline_settings import PipelineError
+from .validation_material_source import EXPLICITLY_INVALID_DOCUMENT_STATUSES, material_document_status_column
 
 REQUIRED_TABLES = ("mr", "inpat_registration", "admission_record", "discharge_record")
 KEYS = ("institute_id", "patient_id", "visit_id")
@@ -35,18 +36,26 @@ def catalog(engine):
         columns = [cast(table.c[key], String).label(key) for key in KEYS]
         columns.append(literal(priority).label("priority"))
         for field, aliases in FIELDS.items():
-            candidates = [func.nullif(cast(table.c[key], String), "") for key in aliases if key in table.c]
+            candidates = [func.nullif(func.trim(cast(table.c[key], String)) if field == "discharge"
+                                      else cast(table.c[key], String), "")
+                          for key in aliases if key in table.c]
             # 主治医生只接受首页权威字段；不把任何文书签名当负责人。
             if field == "doctor" and name != "mr":
                 candidates = []
             value = func.coalesce(*candidates) if len(candidates) > 1 else candidates[0] if candidates else literal(None, String)
+            if field == "discharge" and name == "discharge_record":
+                status = material_document_status_column(source_table=name, source_columns=set(table.c.keys()))
+                if status is not None:
+                    value = case((func.trim(cast(table.c[status], String)).in_(EXPLICITLY_INVALID_DOCUMENT_STATUSES),
+                                  literal(None, String)), else_=value)
             columns.append(value.label(field))
         queries.append(select(*columns))
     rows = union_all(*queries).subquery()
     fields = []
     for field in FIELDS:
         # 按来源优先级而非跨源SQL JOIN，保证整个查询只读CDM。
-        order = (3, 0, 1, 2) if field == "discharge" else (0, 1, 2, 3)
+        # 候选日期筛选必须与正式取材一致，否则被提前筛掉的病例无法在冻结阶段补回。
+        order = (1, 0, 3) if field == "discharge" else (0, 1, 2, 3)
         fields.append(func.coalesce(*[func.max(rows.c[field]).filter(rows.c.priority == p) for p in order]).label(field))
     return select(*[rows.c[key] for key in KEYS], *fields, func.max(case((rows.c.priority == 0, 1), else_=0)).label("has_frontpage")).where(
         *[rows.c[key].is_not(None) & (rows.c[key] != "") for key in KEYS]

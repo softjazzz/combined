@@ -638,31 +638,8 @@ class SichuanQCService:
         """
         success = await LLMConfigLoader.reload_config_for_service(self, config_name, user_id)
         if success:
-            first_pass_config = {
-                "provider_code": self.client.provider_code,
-                "api_endpoint": self.client.api_endpoint,
-                "api_key": self.client.api_key,
-                "model": self.client.model,
-                "timeout_seconds": self.client.timeout_seconds,
-                "allow_mock_when_unconfigured": self.client.allow_mock_when_unconfigured,
-                "source": self.client.config_source,
-                "dispatch_mode": getattr(self.client, "dispatch_mode", "direct"),
-                "gateway_profile": getattr(self.client, "gateway_profile", None),
-                "custom_parameters": {
-                    "temperature": self.client.temperature,
-                    "top_p": self.client.top_p,
-                    "max_tokens": self.client.max_tokens,
-                    "enable_thinking": self.client.enable_thinking,
-                    "thinking_budget": self.client.thinking_budget,
-                    "reasoning_effort": self.client.reasoning_effort,
-                    "execution_concurrency": {
-                        "max_parallel_records": self.client.max_parallel_records,
-                        "family_max_concurrency": self.client.family_max_concurrency,
-                        "http_max_concurrency": self.client.http_max_concurrency,
-                    },
-                },
-            }
-            self.adjudicator_client = SichuanQCLLMClient(build_adjudicator_runtime_config(first_pass_config))
+            # Loader 已原子构造并校验一审/分析客户端，保留完整角色与选型身份。
+            # 不从默认客户端的部分字段再次重建，避免热重载丢失已保存的角色配置。
             self.luxian_0609_execution_concurrency = (
                 capture_llm_execution_concurrency(self.client)
             )

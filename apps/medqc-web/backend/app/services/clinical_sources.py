@@ -19,6 +19,10 @@ from .clinical_source_policy import fixed_cdm
 NAMESPACE, KEY = "clinical", "sources_v1"
 TASK_KEY = "clinical_source"
 IDS = {"legacy_pg", "independent_cdm"}
+WORKSPACE_METADATA_GET_PATHS = frozenset({
+    "/api/v1/qc/sichuan/workspace/rule-sets",
+    "/api/v1/qc/sichuan/workspace/batch-jobs",
+})
 
 
 class CDMProfile(BaseModel):
@@ -160,6 +164,16 @@ def prepare_request(request: Request) -> None:
     paths = ("/api/medical-records", "/api/v1/medical-records", "/api/v1/records", "/api/v1/emr", "/api/v1/qc/sichuan/workspace")
     # 样本集和其它业务API仍属业务库，不让全局默认改变1026或管理操作。
     path = request.url.path
+    if request.method == "GET" and path in WORKSPACE_METADATA_GET_PATHS:
+        header = request.headers.get("x-clinical-source")
+        query = request.query_params.get("source_id")
+        if header and query and header != query:
+            raise HTTPException(422, "clinical_source_selection_conflict")
+        if (header or query) and (header or query) not in IDS:
+            raise HTTPException(422, "unknown_clinical_source")
+        # 仅业务目录与账号历史列表，不读取临床材料，也不以旧库替代停用CDM。
+        request.state.clinical_source = legacy_snapshot()
+        return
     job_detail = "/workspace/batch-jobs/" in path
     if job_detail or not path.startswith(paths):
         request.state.clinical_source = legacy_snapshot()

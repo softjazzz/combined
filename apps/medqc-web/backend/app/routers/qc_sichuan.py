@@ -1676,8 +1676,8 @@ async def evaluate_batch(
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"四川省批量质控评估失败: {e}")
 
 
-def _sichuan_workspace_service() -> CustomQCWorkspaceService:
-    return CustomQCWorkspaceService()
+def _sichuan_workspace_service(*, readonly: bool = False) -> CustomQCWorkspaceService:
+    return CustomQCWorkspaceService(readonly=readonly)
 
 
 def get_result_feedback_demo_store() -> ResultFeedbackDemoStore:
@@ -2405,7 +2405,7 @@ async def list_workspace_batch_jobs(
     page_size: int = Query(10, ge=1, le=100),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    workspace = _sichuan_workspace_service()
+    workspace = _sichuan_workspace_service(readonly=True)
     if str(view or "").strip().lower() == "overview":
         # 质控记录页：只要任务元数据与进度，不读结果明细，也不返回结果计数。
         overview = await run_in_threadpool(

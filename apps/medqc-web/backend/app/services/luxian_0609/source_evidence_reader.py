@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from app.services.bundles import assembly as bundle_assembly
 from app.services import case_material_snapshot as case_material
+from app.services.discharge_time import select_discharge_time
 from app.services.validation_material_source import (
     DOCUMENT_STATUS_TABLES,
     material_document_sql_filter,
@@ -1573,7 +1574,7 @@ def read_luxian_0609_discharge_horizon_rows(
     visit_id: str,
     source_schema: str | None,
 ) -> SnapshotSourceRows:
-    """读取本次住院的权威出院时间，登记表缺行或出院时间为空时回退病案首页。"""
+    """登记 > 首页 > 有效出院文书；只有缺失/空值才下降优先级。"""
 
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
@@ -1584,30 +1585,42 @@ def read_luxian_0609_discharge_horizon_rows(
         "institute_id",
         "patient_id",
         "visit_id",
-        "discharge_datetime",
     }
     raw_rows: list[Mapping[str, Any]] = []
     selected_table = ""
     readable_source_found = False
-    query_failed = False
-    for table_name in ("inpat_registration", "mr"):
+    for table_name in ("inpat_registration", "mr", "discharge_record"):
         try:
             columns = set(
                 bundle_assembly._get_table_columns(trusted_schema, table_name)
             )
         except Exception:
-            query_failed = True
-            continue
+            raise SourceEvidenceQueryError() from None
         if not required.issubset(columns):
             continue
+        time_fields = (
+            [field for field in ("discharge_date", "discharge_time") if field in columns]
+            if table_name == "discharge_record"
+            else ["discharge_datetime"] if "discharge_datetime" in columns else []
+        )
+        if not time_fields:
+            continue
         readable_source_found = True
+        document_filter, document_params = (
+            _material_document_filter(schema=trusted_schema, table=table_name, columns=columns,
+                institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+            if table_name == "discharge_record" else ("", {})
+        )
         sql = (
-            f"SELECT {bundle_assembly._quote_ident('discharge_datetime')} "
+            f"SELECT {', '.join(bundle_assembly._quote_ident(field) for field in time_fields)} "
             f"FROM {bundle_assembly._qualified_table(trusted_schema, table_name)} "
             f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
             f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
             f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-            "LIMIT :limit_rows"
+            "AND (" + " OR ".join(
+                f"NULLIF(TRIM(CAST({bundle_assembly._quote_ident(field)} AS TEXT)), '') IS NOT NULL"
+                for field in time_fields
+            ) + f") {document_filter}LIMIT :limit_rows"
         )
         try:
             with case_material.source_connection(engine) as connection:
@@ -1617,39 +1630,46 @@ def read_luxian_0609_discharge_horizon_rows(
                         "institute_id": institute_id,
                         "patient_id": patient_id,
                         "visit_id": visit_id,
+                        **document_params,
                         "limit_rows": 2,
                     },
                 ).mappings().all()
         except Exception:
-            query_failed = True
-            continue
+            # 权限/连接失败不等于空来源，不能用低优先级时间掩盖。
+            raise SourceEvidenceQueryError() from None
         # 登记表有行但出院时间为空（客户 CDM 常见）与缺行同样回退病案首页；
         # 否则时间界限会静默落回评价日，已出院病例被按“至今未查房”误判。
         candidate_rows = [
             row for row in candidate_rows
-            if str(row.get("discharge_datetime") or "").strip()
+            if any(str(row.get(field) or "").strip() for field in time_fields)
         ]
         if candidate_rows:
             raw_rows = list(candidate_rows)
             selected_table = table_name
             break
     if not readable_source_found:
-        if query_failed:
-            raise SourceEvidenceQueryError() from None
         raise SourceEvidenceUnavailable()
-    safe_rows = tuple(
-        {
-            "discharge_datetime": row.get("discharge_datetime"),
+    safe_rows = []
+    for row in raw_rows[:1]:
+        selected = select_discharge_time(
+            registration=row.get("discharge_datetime") if selected_table == "inpat_registration" else None,
+            frontpage=row.get("discharge_datetime") if selected_table == "mr" else None,
+            document_date=row.get("discharge_date"), document_time=row.get("discharge_time"),
+        )
+        value = (selected.value.isoformat(sep=" ")
+                 if isinstance(selected.value, datetime) else selected.value)
+        safe_rows.append({
+            "discharge_datetime": value,
+            "time_source": selected.source,
+            **({"time_conflict": True} if selected.conflict else {}),
             "row_ref": digest_source_evidence(
                 (
                     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
                     selected_table,
-                    row.get("discharge_datetime"),
+                    row,
                 )
             ),
-        }
-        for row in raw_rows[:1]
-    )
+        })
     return SnapshotSourceRows.create(
         source_key=CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
         rows=safe_rows,

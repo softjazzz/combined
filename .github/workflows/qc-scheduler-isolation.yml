@@ -66,6 +66,7 @@ jobs:
           tests/unit/test_clinical_sources.py tests/unit/test_latest_full_record_result.py
           tests/unit/test_workstation_query_service.py tests/unit/test_doctor_case_scope.py
           tests/unit/test_current_document_view.py tests/unit/test_current_frontpage_view.py
+          tests/unit/test_workspace_metadata_readonly.py
       - name: M2 synthetic Outbox and Worker delivery
         run: python -B scripts/run_qc_scheduler_tests.py --profile m2-synthetic --suite m2-release
       - name: Settings snapshot and source lookup responsiveness (offline)
@@ -79,7 +80,7 @@ jobs:
           tests/unit/test_sync_router.py::TestSyncRouter::test_write_permission_matrix
 
       - name: Task role selection, effective requests and freeze partition (offline)
-        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_llm_task_roles.py
+        run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_llm_task_roles.py tests/unit/test_business_closeout_configuration.py tests/unit/test_strata_client_binding.py
 
       - name: Daily QC plans, admission, crash recovery and Outbox (offline)
         run: sudo --preserve-env=PYTHONDONTWRITEBYTECODE unshare --net -- "$(command -v python)" -B scripts/run_qc_scheduler_tests.py --profile offline tests/unit/test_daily_qc_schedules.py tests/unit/test_qc_dispatch_entrypoints.py

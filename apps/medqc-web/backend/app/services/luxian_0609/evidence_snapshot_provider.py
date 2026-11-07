@@ -795,7 +795,7 @@ def build_luxian_0609_evidence_read_session(
                 admission_value,
                 field_name="admission_datetime",
             )
-            if "LX0609-02-01-03" in selected_rule_ids:
+            if "LX0609-02-01-03" in selected_rule_ids or not str(admission_value or "").strip():
                 from .basic_timeliness_facts import extract_admission_anchor, AdmissionAnchorState
                 fallback_material = material_sources.get("admission_record")
                 anchor = extract_admission_anchor(
@@ -824,13 +824,17 @@ def build_luxian_0609_evidence_read_session(
                 and discharge_material is not None
                 and len(discharge_material.rows) == 1
             ):
-                discharge_value = discharge_material.rows[0].get("discharge_datetime")
+                source_time_conflict = discharge_material.rows[0].get("time_conflict") is True
+                discharge_value = (
+                    None if source_time_conflict
+                    else discharge_material.rows[0].get("discharge_datetime")
+                )
                 discharge_date = _parse_discharge_date(discharge_value)
                 discharge_datetime = _parse_authoritative_datetime(
                     discharge_value,
                     field_name="discharge_datetime",
                 )
-                has_time_conflict = (
+                has_time_conflict = source_time_conflict or (
                     discharge_datetime < admission_datetime
                     if discharge_datetime is not None
                     and admission_datetime is not None
