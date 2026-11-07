@@ -730,9 +730,12 @@ async def test_list_keeps_other_rows_when_one_historical_result_is_invalid(monke
          "summary": {"rule_results": [{"rule_id": "LX0609-010"}]}},
     ]
     monkeypatch.setattr(qc_sichuan, "_is_workspace_batch_job", lambda job: True)
-    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: SimpleNamespace(
-        list_batch_jobs=lambda **kwargs: SimpleNamespace(items=jobs, total=2, page=1, page_size=5)
-    ))
+    def readonly_workspace(*, readonly=False):
+        assert readonly is True
+        return SimpleNamespace(
+            list_batch_jobs=lambda **kwargs: SimpleNamespace(items=jobs, total=2, page=1, page_size=5)
+        )
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", readonly_workspace)
     result = await qc_sichuan.list_workspace_batch_jobs(
         _request(), status=None, scope=None, q=None, executor_type=None, cache_hit=None,
         created_start_date=None, created_end_date=None, record_id=None,

@@ -23,4 +23,12 @@ describe('固定东华来源，历史与材料专用入口保持中立', () => {
     expect(clinicalSourceForRequest('/api/v1/auth/login')).toBeUndefined()
     expect(clinicalSourceForRequest('/api/v1/clinical-sources')).toBeUndefined()
   })
+
+  it.each(['rule-sets', 'batch-jobs'])('业务集合GET %s不依赖CDM，POST仍选择固定来源', (collection) => {
+    const url = `/api/v1/qc/sichuan/workspace/${collection}`
+    expect(clinicalSourceForRequest(`${url}?page=1`, 'get')).toBeUndefined()
+    expect(clinicalSourceForRequest(url, 'GET')).toBeUndefined()
+    expect(clinicalSourceForRequest(url, 'post')).toBe('independent_cdm')
+    expect(clinicalSourceForRequest(`${url}-extra`, 'get')).toBe('independent_cdm')
+  })
 })

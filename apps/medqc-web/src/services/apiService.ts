@@ -156,7 +156,7 @@ class TokenManager {
 // 请求拦截器
 apiClient.interceptors.request.use(
   (config: AxiosRequestConfig) => {
-    const source = clinicalSourceForRequest(config.url)
+    const source = clinicalSourceForRequest(config.url, config.method)
     if (source) {
       config.headers = config.headers || {}
       config.headers['X-Clinical-Source'] = source
