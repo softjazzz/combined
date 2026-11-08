@@ -289,6 +289,19 @@ def _safe_text(value: Any, default: str = "") -> str:
     return str(value).strip()
 
 
+def _compliant_record_refs(items: Any) -> set[str]:
+    """合规病历：至少一项合规，且其余项目只有合规或不适用；有缺陷、待核、资料不足或技术失败的不计入。"""
+    statuses: Dict[str, set[str]] = {}
+    for item in items or ():
+        ref = _safe_text(item.get("record_ref"))
+        if ref:
+            statuses.setdefault(ref, set()).add(_safe_text(item.get("status")))
+    return {
+        ref for ref, values in statuses.items()
+        if "compliant" in values and values <= {"compliant", "not_applicable"}
+    }
+
+
 def _safe_json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, default=str)
 
@@ -1109,13 +1122,7 @@ def project_customer_safe_batch_job(
         "total_records": _to_int(raw_summary.get("total_records"), _to_int(job.get("total_records"))),
         "success_count": _to_int(raw_summary.get("success_count"), _to_int(job.get("success_count"))),
         "failed_count": _to_int(raw_summary.get("failed_count"), _to_int(job.get("failed_count"))),
-        "compliant_records": len(
-            {
-                _safe_text(item.get("record_ref"))
-                for item in items
-                if item.get("status") == "compliant"
-            }
-        ),
+        "compliant_records": len(_compliant_record_refs(items)),
         "result_count": len(items),
         "issue_records": len(issue_refs),
         "status_counts": status_counts,
@@ -1372,11 +1379,7 @@ def project_customer_safe_batch_job(
     ]
     if safe_summary.get("execution_status") in {"partial_failed", "failed"}:
         failed_refs = {failure["record_ref"] for failure in failed_records}
-        safe_summary["compliant_records"] = len({
-            _safe_text(item.get("record_ref"))
-            for item in items
-            if item.get("status") == "compliant" and item.get("record_ref") not in failed_refs
-        })
+        safe_summary["compliant_records"] = len(_compliant_record_refs(items) - failed_refs)
     item_record_refs = {
         _safe_text(item.get("record_ref"))
         for item in items
