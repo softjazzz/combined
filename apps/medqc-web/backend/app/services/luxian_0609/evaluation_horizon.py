@@ -94,6 +94,21 @@ def _normalized_text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _is_date_only(value: Any) -> bool:
+    """来源值只有日期（无时分）时，不能把补出的零点当作真实时刻参与先后比较。"""
+    text = _normalized_text(value)
+    return bool(text) and ":" not in text
+
+
+def _discharge_before_admission(
+    discharge: datetime, admission: datetime, *, discharge_raw: Any, admission_raw: Any,
+) -> bool:
+    """任一侧只有日期时按自然日比较：同日入出院不构成时间冲突。"""
+    if _is_date_only(discharge_raw) or _is_date_only(admission_raw):
+        return discharge.date() < admission.date()
+    return discharge < admission
+
+
 def _parse_datetime(value: Any, *, field_name: str) -> datetime | None:
     text = _normalized_text(value)
     if not text:
@@ -226,8 +241,11 @@ def resolve_frozen_running_record_scene(
 
 def resolve_frozen_discharge_horizon(
     snapshot: Mapping[str, Any], *, institute_id: str, patient_id: str, visit_id: str,
-) -> tuple[datetime | None, str]:
-    """只校验本病例已冻结的 final 终点；失败时不得用执行时资料补值。"""
+) -> tuple[datetime | date | None, str]:
+    """只校验本病例已冻结的 final 终点；失败时不得用执行时资料补值。
+
+    日期级出院返回 ``date``：不得补成“出院日 00:00”精确时刻，否则出院当日的事件会被排除。
+    """
     missing = EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_MISSING
     conflict = EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_CONFLICT
     if not isinstance(snapshot, Mapping):
@@ -257,12 +275,18 @@ def resolve_frozen_discharge_horizon(
         return None, missing
     if admission is None or discharge is None:
         return None, missing
+    discharge_raw = snapshot.get("discharge_datetime")
     try:
-        if discharge < admission or horizon != discharge.date():
+        if horizon != discharge.date() or _discharge_before_admission(
+            discharge, admission,
+            discharge_raw=discharge_raw, admission_raw=snapshot.get("admission_datetime"),
+        ):
             return None, conflict
     except TypeError:
         # 混用无时区/有时区时间无法证明先后，不能隐式假设时区。
         return None, conflict
+    if _is_date_only(discharge_raw):
+        return discharge.date(), ""
     return discharge, ""
 
 
@@ -327,7 +351,10 @@ def resolve_record_evaluation_horizon(
             resolution_status="authoritative_time_missing",
         )
     try:
-        time_conflict = discharge_time < admission_time
+        time_conflict = _discharge_before_admission(
+            discharge_time, admission_time,
+            discharge_raw=discharge_text, admission_raw=admission_text,
+        )
     except TypeError:
         # 与冻结终点读取口径一致：时区信息混用时保留冲突，不隐式补时区或中断建任务。
         time_conflict = True

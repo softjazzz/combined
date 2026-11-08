@@ -840,12 +840,17 @@ def build_luxian_0609_evidence_read_session(
             evaluation_horizon_policy == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
             and evaluation_horizon_snapshot is not None
         ):
-            horizon_datetime, resolved_horizon_reason = resolve_frozen_discharge_horizon(
+            frozen_discharge, resolved_horizon_reason = resolve_frozen_discharge_horizon(
                 evaluation_horizon_snapshot, institute_id=institute_id,
                 patient_id=patient_id, visit_id=visit_id,
             )
-            if horizon_datetime is not None:
-                horizon_date = horizon_datetime.date()
+            if frozen_discharge is not None:
+                # 日期级出院只冻结日期，不写补零点的 horizon_datetime（消费点按日期口径处理）。
+                if isinstance(frozen_discharge, datetime):
+                    horizon_datetime = frozen_discharge
+                    horizon_date = frozen_discharge.date()
+                else:
+                    horizon_date = frozen_discharge
                 horizon_basis = "discharge_date"
                 task_frozen_date = resolve_snapshot_task_frozen_date(evaluation_horizon_snapshot)
         elif evaluation_horizon_policy != EVALUATION_HORIZON_POLICY_DISABLED:

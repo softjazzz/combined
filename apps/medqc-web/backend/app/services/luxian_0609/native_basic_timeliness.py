@@ -742,6 +742,14 @@ def _typed_basic_decisions(
             )
         if maturity_state == "mature":
             return None
+        if (
+            maturity_state == "not_reached"
+            and horizon_datetime is None
+            and horizon_row.get("basis") == "discharge_date"
+            and horizon_date == (anchor + threshold).date()
+        ):
+            # 日期级出院恰在截止日：无法证明出院早于或晚于截止时刻，不能当作“未到期”。
+            return gap(rule_id, "authoritative_time_missing")
         if maturity_state == "not_reached":
             return (
                 not_applicable(rule_id, "evaluation_window_not_mature")
