@@ -107,15 +107,19 @@ def _rule_009_substantive_text(row: Mapping[str, Any]) -> str:
 def _authoritative_natural_date(value: Any) -> date | None:
     """把权威时间字段收敛为自然日；不读取正文，也不比较时分秒。"""
 
+    from ...discharge_time import hospital_business_time
+
+    # 带时区的时刻先换算为医院本地时间再取自然日（与 02-01-05 一致）。
     if isinstance(value, datetime):
-        return value.date()
+        return hospital_business_time(value).date() if value.tzinfo is not None else value.date()
     if isinstance(value, date):
         return value
     if not isinstance(value, str) or not value.strip():
         return None
     normalized = value.strip()
     try:
-        return datetime.fromisoformat(normalized).date()
+        parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+        return hospital_business_time(parsed).date() if parsed.tzinfo is not None else parsed.date()
     except ValueError:
         try:
             return date.fromisoformat(normalized)
@@ -131,16 +135,19 @@ def _severity_active_date_intervals(
     """按权威时间顺序配对病重/病危开始与解除事件，保留再次下达区间。"""
 
     def local_datetime(value: Any) -> datetime | None:
-        # 保留既有自然日口径的本地时钟；先按时分秒配对，再投影日期。
+        # 保留既有自然日口径的本地时钟；先按时分秒配对，再投影日期。带时区先换算为医院本地时间。
+        from ...discharge_time import hospital_business_time
+
         if isinstance(value, datetime):
-            return value.replace(tzinfo=None)
+            return hospital_business_time(value) if value.tzinfo is not None else value
         if isinstance(value, date):
             return datetime.combine(value, datetime.min.time())
         if isinstance(value, str) and value.strip():
             try:
-                return datetime.fromisoformat(value.strip()).replace(tzinfo=None)
+                parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
             except ValueError:
-                pass
+                return None
+            return hospital_business_time(parsed) if parsed.tzinfo is not None else parsed
         return None
 
     events: list[tuple[datetime, int, int, str]] = []
