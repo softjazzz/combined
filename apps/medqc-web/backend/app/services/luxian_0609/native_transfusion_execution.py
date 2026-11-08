@@ -4166,24 +4166,24 @@ async def execute_luxian_0609_native_transfusion_rules(
                 course_source_unavailable = False
                 for source_key in ("daily_course_record", "senior_course_record"):
                     source_rows = _source_document_rows(documents, source_key)
-                    if rule_id == "LX0609-07-02-02":
-                        source_state = _logical_source_state(documents, source_key)
-                        if source_state == "missing" and (
-                            isinstance(documents.get(source_key), list)
-                            or not isinstance(
-                                documents.get("__logical_source_states__"), Mapping
-                            )
-                        ):
-                            # Legacy payloads predate logical source-state metadata.
-                            source_state = "available" if source_rows else "empty"
-                        if source_state == "error":
-                            course_failure = TransfusionCoursePresenceResult(
-                                "technical_error", reason_code="source_query_error"
-                            )
-                            break
-                        if source_state not in {"available", "empty"}:
-                            course_source_unavailable = True
-                            continue
+                    # 07-02-01 与 07-02-02 同样不能把截断/读取失败的病程来源当作“没有输血病程”。
+                    source_state = _logical_source_state(documents, source_key)
+                    if source_state == "missing" and (
+                        isinstance(documents.get(source_key), list)
+                        or not isinstance(
+                            documents.get("__logical_source_states__"), Mapping
+                        )
+                    ):
+                        # Legacy payloads predate logical source-state metadata.
+                        source_state = "available" if source_rows else "empty"
+                    if source_state == "error":
+                        course_failure = TransfusionCoursePresenceResult(
+                            "technical_error", reason_code="source_query_error"
+                        )
+                        break
+                    if source_state not in {"available", "empty"}:
+                        course_source_unavailable = True
+                        continue
                     candidates = list(select_transfusion_course_candidates(source_rows))
                     if not candidates:
                         continue

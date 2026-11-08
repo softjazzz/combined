@@ -3973,6 +3973,9 @@ async def _execute_extended_document_group(
                 if not any(word in _clean(row.get("order_status")) for word in ("取消", "作废", "撤销", "未执行"))
             )
             transfusion_source_error = mr_bloodtrans_error or bloodtrans_record_error
+            # 无专用输血记录时实施事实靠病程兜底：病程读取失败不能当作“没有输血”或“全部已核”。
+            course_fallback_error = "" if dedicated_performance_source else (daily_error or senior_error)
+            order_source_error = nondrug_order_error or drug_order_error
             actual_transfusion_rows = tuple(mr_bloodtrans_rows)
             consumed_bloodtrans_rows: list[Mapping[str, Any]] = []
             unconfirmed_record_count = 0
@@ -3986,7 +3989,9 @@ async def _execute_extended_document_group(
                 final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
             elif not mr_bloodtrans_rows and not performance_rows:
                 final_state, reason_code = (
-                    ("data_gap", "positive_assertion_not_explicit") if pending_order
+                    ("data_gap", course_fallback_error) if course_fallback_error
+                    else ("data_gap", "positive_assertion_not_explicit") if pending_order
+                    else ("data_gap", order_source_error) if order_source_error
                     else ("not_applicable", "trigger_absent_complete")
                 )
             else:
@@ -4066,6 +4071,9 @@ async def _execute_extended_document_group(
                         facts = None
                     elif final_state == "non_compliant" and unconfirmed_record_count and facts is not None:
                         facts = {**facts, "unconfirmed_record_count": unconfirmed_record_count}
+                    if final_state == "compliant" and course_fallback_error and not mr_bloodtrans_rows:
+                        # 读取失败的病程里可能还有未核对的输血事件，不能确认合规。
+                        final_state, reason_code, facts = "data_gap", course_fallback_error, None
                     if facts is not None:
                         display.append((rule_id, dict(facts)))
             decisions.append(_decision(
