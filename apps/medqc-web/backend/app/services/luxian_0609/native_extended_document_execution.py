@@ -54,6 +54,7 @@ from .extended_document.invasive_procedure_record import (
     map_orders_to_invasive_catalog,
     merge_triggers as _merge_invasive_triggers,
     order_triggers as _invasive_order_triggers,
+    trigger_key as _invasive_trigger_key,
 )
 from .extended_document.death_discussion import (
     evaluate_death_discussion_timeliness,
@@ -4139,15 +4140,16 @@ async def _execute_extended_document_group(
                 )
                 invasive_extractions.append(documentation)
                 states = dict(documentation.states)
-                names = [trigger.procedure.name for trigger in triggers]
-                missing = [
-                    trigger.procedure.name for trigger in triggers
-                    if states.get(trigger.procedure.code) == "not_documented"
+                # 逐次（目录项+操作日）核对；客户事实沿用按目录项去重的名称形状。
+                names = list(dict.fromkeys(trigger.procedure.name for trigger in triggers))
+                missing_triggers = [
+                    trigger for trigger in triggers
+                    if states.get(_invasive_trigger_key(trigger)) == "not_documented"
                 ]
+                missing = [trigger.procedure.name for trigger in missing_triggers]
                 mature_missing = list(dict.fromkeys(
-                    trigger.procedure.name for trigger in triggers
-                    if trigger.procedure.name in missing
-                    and not antimicrobial_horizon_error and antimicrobial_evaluation_horizon is not None
+                    trigger.procedure.name for trigger in missing_triggers
+                    if not antimicrobial_horizon_error and antimicrobial_evaluation_horizon is not None
                     and frozen_window_is_mature(antimicrobial_evaluation_horizon, datetime.combine(
                         trigger.anchor_date + timedelta(days=INVASIVE_RECORD_WINDOW_DAYS), datetime.min.time()))
                 ))
