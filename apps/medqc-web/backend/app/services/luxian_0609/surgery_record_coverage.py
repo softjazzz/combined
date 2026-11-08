@@ -45,9 +45,12 @@ def same_day_surgery_coverage_unresolved(
     master_rows: Sequence[Mapping[str, object]],
     record_rows: Sequence[Mapping[str, object]],
 ) -> bool:
-    """同日多台（开始时刻不同）而当日记录份数不足时，无法证明每台都有记录。
+    """同日多台（开始时刻不同）时，无法证明每台都有自己的记录则判为未决。
 
-    同台术式拆行开始时刻相同，按一台计；缺时间的记录可能属于任一天，也不能证明逐台覆盖。
+    记录份数不等于台次：同一台的初写、修订等多份记录结构化开始时刻相同，
+    只证明该台。逐台核对：记录开始时刻与某台完全一致的只覆盖该台；其余
+    当日记录和缺时间记录才可能属于尚未覆盖的台次，数量不足即未决。
+    同台术式拆行开始时刻相同，按一台计。
     """
     begins_by_day: dict[object, set[datetime]] = {}
     for row in master_rows:
@@ -61,8 +64,12 @@ def same_day_surgery_coverage_unresolved(
     for day, begins in begins_by_day.items():
         if len(begins) < 2:
             continue
-        dated = sum(1 for value in record_times if value is not None and value.date() == day)
-        if dated + undated >= 1 and dated < len(begins):
+        same_day = [value for value in record_times if value is not None and value.date() == day]
+        if not same_day and not undated:
+            continue
+        covered = {value for value in same_day if value in begins}
+        residual = sum(1 for value in same_day if value not in begins) + undated
+        if len(begins - covered) > residual:
             return True
     return False
 
