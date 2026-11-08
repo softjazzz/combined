@@ -2140,6 +2140,19 @@ def _datetime_from_match(match: re.Match[str]) -> datetime | None:
         return None
 
 
+def _parse_document_calendar_datetime(value: Any) -> datetime | None:
+    """保留原始时区坐标下的日历时刻（仅用于与同一行原始日期做一致性校验）。"""
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo is not None else value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return _parse_document_datetime(value)
+    return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+
+
 def _parse_document_datetime(value: Any) -> datetime | None:
     # 带时区的时间先换算为医院本地时间再去掉时区，不能直接丢弃时区（如 08:00Z 应为本地 16:00）。
     from ..discharge_time import hospital_business_time
@@ -2330,7 +2343,7 @@ def _047_evaluation_horizon(
         )
     row = rows[0]
     raw_datetime = row.get("horizon_datetime")
-    raw_calendar_datetime = _parse_document_datetime(raw_datetime)
+    raw_calendar_datetime = _parse_document_calendar_datetime(raw_datetime)
     horizon_datetime = parse_precise_transfusion_datetime(raw_datetime)
     raw_date = _clean(row.get("horizon_date"))
     horizon_date: date | None = None
