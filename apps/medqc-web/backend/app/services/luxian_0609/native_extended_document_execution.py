@@ -366,40 +366,58 @@ def _latest_written_diagnosis_version(
 ) -> tuple[tuple[Mapping[str, Any], ...], str | None]:
     """多版本出院记录（初写、补录、修订）只取最后一份权威版本的诊断，不合并比对。
 
-    各版本诊断相同时取任一版本；不同且无法凭出院记录时间唯一确定最后版本时返回缺口。
-    行缺少文书编号（旧快照）时保持原样。
+    候选版本取全部出院记录文书与诊断行所属文书的并集：最新版没有诊断行时
+    返回空，由后续给出诊断缺失，不借用旧版。各版本在判定所用字段（序号、名称、
+    主诊断标记、类型）上完全相同时取任一版本；否则凭出院记录时间唯一确定
+    最后版本，无法确定时返回缺口。诊断行缺少文书编号（旧快照）时保持原样。
     """
     from .basic_timeliness_facts import parse_authoritative_datetime
 
     rows = tuple(written_rows)
     ids = [_clean(row.get("document_id")) for row in rows]
-    if not rows or not all(ids) or len(set(ids)) < 2:
+    if not all(ids):
         return rows, None
     groups: dict[str, list[Mapping[str, Any]]] = {}
     for doc_id, row in zip(ids, rows):
         groups.setdefault(doc_id, []).append(row)
+    candidates = set(groups)
+    discharge_ids = {
+        doc_id for row in discharge_rows if (doc_id := _clean(row.get("document_id")))
+    }
+    # 仅当诊断行文书编号能与出院记录对上时，才把无诊断行的出院记录计入版本。
+    if candidates and candidates <= discharge_ids:
+        candidates = discharge_ids
+    if len(candidates) < 2:
+        return rows, None
 
     def signature(group):
-        return sorted((_clean(row.get("diagnosis_no")), _clean(row.get("diagnosis_name"))) for row in group)
+        return tuple(sorted(
+            (
+                _clean(row.get("diagnosis_no")),
+                _clean(row.get("diagnosis_name") or row.get("diagnosis")),
+                _clean(row.get("diagnosis_main")),
+                _clean(row.get("diagnosis_type")),
+            )
+            for row in group
+        ))
 
-    signatures = {doc_id: signature(group) for doc_id, group in groups.items()}
-    if len({tuple(value) for value in signatures.values()}) == 1:
+    if candidates == set(groups) and len({signature(group) for group in groups.values()}) == 1:
         return tuple(next(iter(groups.values()))), None
     times: dict[str, Any] = {}
     for row in discharge_rows:
         doc_id = _clean(row.get("document_id"))
-        if doc_id in groups:
+        if doc_id in candidates:
             moment = parse_authoritative_datetime(authoritative_document_time_value(row))
             if moment is None or (doc_id in times and times[doc_id] != moment):
                 return (), "version_conflict"
             times[doc_id] = moment
-    if set(times) != set(groups):
+    if set(times) != candidates:
         return (), "version_conflict"
     latest = max(times.values())
     latest_ids = [doc_id for doc_id, moment in times.items() if moment == latest]
     if len(latest_ids) != 1:
         return (), "version_conflict"
-    return tuple(groups[latest_ids[0]]), None
+    return tuple(groups.get(latest_ids[0], ())), None
 
 
 def _discharge_or_death_diagnosis_rows(
