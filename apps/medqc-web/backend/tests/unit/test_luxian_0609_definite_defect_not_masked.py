@@ -131,3 +131,18 @@ async def test_065_definite_missing_surgery_not_masked_by_unknown_round(isolated
 async def test_065_definite_missing_surgery_not_masked_by_model_failure(isolated_freeze):
     item = await _run_065(6, _Failing())
     assert item.final_state.value == "non_compliant"
+
+
+def test_utc_report_time_is_converted_before_comparison():
+    # 08:00Z 即本地 16:00，晚于 15:00 输血，不能当作输血前检查。
+    labs = _labs()
+    for row in labs:
+        if row["item_name"] == "HIV抗体":
+            row["report_datetime"] = "2026-06-10T08:00:00+00:00"
+    documents = {
+        "mr_bloodtrans": [{"transfution_datetime": "2026-06-10 15:00:00"}],
+        "labtest_item_report": labs,
+        "__logical_source_states__": {"labtest_item_report": "available"},
+    }
+    status, reason, _ = transfusion.evaluate_pretransfusion_nine_items(documents)
+    assert (status, reason) == ("non_compliant", "pretransfusion_tests_after_transfusion")

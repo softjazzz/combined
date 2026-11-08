@@ -2141,8 +2141,11 @@ def _datetime_from_match(match: re.Match[str]) -> datetime | None:
 
 
 def _parse_document_datetime(value: Any) -> datetime | None:
+    # 带时区的时间先换算为医院本地时间再去掉时区，不能直接丢弃时区（如 08:00Z 应为本地 16:00）。
+    from ..discharge_time import hospital_business_time
+
     if isinstance(value, datetime):
-        return value.replace(tzinfo=None) if value.tzinfo is not None else value
+        return hospital_business_time(value).replace(tzinfo=None) if value.tzinfo is not None else value
     if not isinstance(value, str):
         return None
     candidate = value.strip()
@@ -2153,10 +2156,10 @@ def _parse_document_datetime(value: Any) -> datetime | None:
         if match:
             return _datetime_from_match(match)
     try:
-        parsed = datetime.fromisoformat(candidate)
+        parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
     except ValueError:
         return None
-    return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+    return hospital_business_time(parsed).replace(tzinfo=None) if parsed.tzinfo is not None else parsed
 
 
 def _transfusion_end_evidence(
