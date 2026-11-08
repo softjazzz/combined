@@ -2881,10 +2881,12 @@ async def _execute_extended_document_group(
         by_ref = {doc.doc_ref: doc for doc in documents}
         facts_by_event = {item.event_id: item for item in extraction.facts}
         unmatched: list[str] = []
+        confirmed_unmatched: list[str] = []
         late = untimed = ambiguous = pending = mature_missing = False
         support_times: list[datetime] = []
         evidence: list[Mapping[str, Any]] = []
         for event in events:
+            event_late = False
             evidence.extend(event.orders)
             facts = facts_by_event.get(event.event_id)
             approval = facts.quotes.get("approval") if facts is not None else None
@@ -2905,11 +2907,14 @@ async def _execute_extended_document_group(
                 if doc.time <= event.time + _LX0609_058_SUPPORT_WINDOW:
                     continue
                 late = True
+                event_late = True
             unmatched.append(event.antimicrobial)
             mature = (not antimicrobial_horizon_error and antimicrobial_evaluation_horizon is not None
                       and frozen_window_is_mature(antimicrobial_evaluation_horizon, event.time + _LX0609_058_SUPPORT_WINDOW))
             pending = pending or (antimicrobial_evaluation_horizon is not None and not mature)
             mature_missing = mature_missing or mature
+            if event_late or mature:
+                confirmed_unmatched.append(event.antimicrobial)
         if not unmatched:
             final_state, reason_code = "compliant", "requirement_satisfied"
         elif ambiguous:
@@ -2935,7 +2940,8 @@ async def _execute_extended_document_group(
             "expert_support_time": min(support_times).isoformat(sep=" ") if support_times else None,
             "support_before_use": final_state == "compliant",
             "unmatched_special_antimicrobials": (
-                [] if reason_code == "association_failed" else list(dict.fromkeys(unmatched))
+                [] if reason_code == "association_failed" else
+                list(dict.fromkeys(confirmed_unmatched if final_state == "non_compliant" else unmatched))
             ),
             "association_ambiguous": final_state == "data_gap" and reason_code == "association_failed",
         }, tuple({id(row): row for row in evidence}.values())
@@ -4130,13 +4136,20 @@ async def _execute_extended_document_group(
                     trigger.procedure.name for trigger in triggers
                     if states.get(trigger.procedure.code) == "not_documented"
                 ]
+                mature_missing = list(dict.fromkeys(
+                    trigger.procedure.name for trigger in triggers
+                    if trigger.procedure.name in missing
+                    and not antimicrobial_horizon_error and antimicrobial_evaluation_horizon is not None
+                    and frozen_window_is_mature(antimicrobial_evaluation_horizon, datetime.combine(
+                        trigger.anchor_date + timedelta(days=INVASIVE_RECORD_WINDOW_DAYS), datetime.min.time()))
+                ))
                 if documentation.state == "technical_error":
                     final_state, reason_code = "technical_error", documentation.reason_code
                 elif documentation.state == "unresolved":
                     final_state, reason_code = "data_gap", documentation.reason_code
                 elif missing and (antimicrobial_horizon_error or antimicrobial_evaluation_horizon is None):
                     final_state, reason_code = "data_gap", antimicrobial_horizon_error or "authoritative_time_missing"
-                elif missing and not any(frozen_window_is_mature(antimicrobial_evaluation_horizon, datetime.combine(trigger.anchor_date + timedelta(days=INVASIVE_RECORD_WINDOW_DAYS), datetime.min.time())) for trigger in triggers if trigger.procedure.name in missing):
+                elif missing and not mature_missing:
                     final_state, reason_code = "not_applicable", "evaluation_window_not_mature"
                 elif missing:
                     final_state, reason_code = "non_compliant", "required_document_missing"
@@ -4144,7 +4157,7 @@ async def _execute_extended_document_group(
                         "failure_kind": "invasive_procedure_record_missing",
                         "procedures": names,
                         "procedure_count": len(names),
-                        "missing_procedures": missing,
+                        "missing_procedures": mature_missing,
                     }))
                 elif any(state == "uncertain" for state in states.values()):
                     final_state, reason_code = "data_gap", "semantic_extraction_unresolved"

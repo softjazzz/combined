@@ -4031,6 +4031,10 @@ def customer_finding_from_controlled_facts(
                 detail = "缺少交班记录"
             elif outcome == "handover_missing":
                 detail = f"交班记录 {handoff_time}，缺少接班记录"
+            elif outcome == "handover_window_not_mature":
+                detail = f"交班记录 {handoff_time}，接班评价窗口尚未到期"
+            elif outcome == "handover_window_unresolved":
+                detail = f"交班记录 {handoff_time}，接班评价终点尚未确认，待核验"
             elif outcome in {"completed_within_threshold", "handover_late"}:
                 duration = _format_exact_elapsed_duration(
                     started_at=change_time,

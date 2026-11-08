@@ -651,6 +651,7 @@ def _mature_handoff_outcome(
         "handoff_time": next(iter(facts.get("handoff_times") or ()), None),
         "handover_time": next(iter(facts.get("handover_times") or ()), None),
     },)
+    events = [dict(item) for item in events]
     pending = missing_horizon = confirmed = False
     for item in events:
         change = _parse_datetime(item.get("change_time"))
@@ -662,12 +663,16 @@ def _mature_handoff_outcome(
         if handover is None:
             if change is None or horizon_error or horizon is None:
                 missing_horizon = True
+                if item.get("outcome") == "handover_missing":
+                    item["outcome"] = "handover_window_unresolved"
             elif frozen_window_is_mature(horizon, change + timedelta(hours=24)):
                 confirmed = True
             else:
                 pending = True
+                if item.get("outcome") == "handover_missing":
+                    item["outcome"] = "handover_window_not_mature"
     if confirmed:
-        return state, reason, facts
+        return state, reason, {**facts, "events": events} if "events" in facts else facts
     if missing_horizon:
         return "data_gap", horizon_error or "authoritative_time_missing", None
     return ("not_applicable", "evaluation_window_not_mature", None) if pending else (state, reason, facts)

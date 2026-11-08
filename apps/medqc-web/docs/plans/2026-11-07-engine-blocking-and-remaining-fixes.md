@@ -1,5 +1,26 @@
 # LX0609 B-01～B-05及剩余发现：最小工程修复，待Claude复审
 
+## 258ec2f99复审P2-T1：成熟缺陷与未到期展示分离
+
+本次增量基线`258ec2f9993c9d806971906461aba6fd324b6d4f`。Claude已确认P1-R1解除；随后确认058/075总体状态正确、但缺失清单带入未到期事件。另沿真实Provider在院路径复现071同类问题：已有成熟缺陷时，另一未到期接班仍显示`handover_missing`。三条规则正反顺序共6项反例先失败，修复后通过。
+
+- 058保留全部已核对药物和原总体判定，单独收集成熟缺失或已确认迟写的药物，只有它们进入确定缺陷的`unmatched_special_antimicrobials`；未到期项仍属于核验范围，不伪造其已完成。
+- 075保持全部操作范围及总数，`missing_procedures`仅保留成熟缺失；只有未到期操作仍按原时限未到处理。
+- 071保留事件列表，在执行器内把尚未成熟的接班标为`handover_window_not_mature`，无法确认终点的标为`handover_window_unresolved`，不修改调用方事实。原独立确认缺陷及总体状态保留。
+- 连续性映射接受上述两个受控事件标记并校验其结构；只有等待事件的清单不能被接纳为合规或确定不合规。Renderer仅显示既定标记为“尚未到期/待核验”，不重新计算医学阈值或业务方向。
+- 六项混合保护从Native经Binding、Finalizer和内存Canonical提交重读，核对状态、原因、客户事实及文案；单独未知窗口还增加1项合同保护。075原有公开投影无逐文书片段的限制仍在。
+
+必要终验在同一本地提交上执行，命令如下；不重跑494、132或全量质量门，不累加历史测试数量。新保护文件仍由已有质量门自动收录。
+
+```powershell
+$py = 'C:/Users/Coldplay/AppData/Local/Programs/Python/Python310/python.exe'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_running_date_horizon_regression.py
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_native_extended_document_execution.py -k 'test_058 or test_071 or test_075'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_continuity_result_mapping.py tests/unit/test_luxian_0609_physician_handoff.py tests/unit/test_luxian_0609_antimicrobial_result_mapping.py -k 'handoff or invasive or 058 or special or 10-01-01 or 10-03-01 or 05-01-06'
+```
+
+不新增期限、结果状态或医学义务，不修改材料、旧冻结及历史结果，不涉及0916、业务库、真实模型或27份重跑；不扩大P3。以上为候选修复，等待Claude复审，不自动推送、合并或部署。
+
 ## da8ec5740复审阻断P1-R1：日期终点修订
 
 Claude确认：`da8ec5740`把有效在院冻结日期当作权威时间缺失，并覆盖054/057已合规结果。此前494项通过没有覆盖Provider真实`frozen_task_date`取材，不能据此否认这一回退。本次修订基线固定为`da8ec5740019fc45a4f3bf24547bf3250f910a50`，不替换旧报告或终验回执。

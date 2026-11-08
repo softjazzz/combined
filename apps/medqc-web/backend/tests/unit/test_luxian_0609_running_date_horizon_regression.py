@@ -397,3 +397,182 @@ def test_date_precision_cannot_hide_corrupt_clock(clock, error):
         == error
     )
     assert _critical_value_evaluation_horizon(rows, "")[2] == error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "rule", ["LX0609-05-01-06", "LX0609-10-03-01", "LX0609-10-01-01"]
+)
+@pytest.mark.parametrize("reverse", [False, True])
+async def test_mixed_pending_event_is_not_published_as_missing(rule, reverse):
+    if rule == "LX0609-05-01-06":
+        source = "inpat_drug_order"
+        events = [
+            drug("美罗培南"),
+            {**drug("万古霉素"), "planned_start_datetime": "2026-06-09 20:00:00"},
+        ]
+        key, expected = "unmatched_special_antimicrobials", ["美罗培南"]
+    elif rule == "LX0609-10-03-01":
+        source = "mr_surgery"
+        events = [
+            {
+                "surgery_id": "P1",
+                "surgery_code": "50.9101",
+                "surgery_name": "经皮肝穿刺引流术",
+                "surgery_begin_datetime": datetime(2026, 6, 2, 10),
+            },
+            {
+                "surgery_id": "P2",
+                "surgery_code": "03.9102",
+                "surgery_name": "脊神经根阻滞术",
+                "surgery_begin_datetime": datetime(2026, 6, 9, 10),
+            },
+        ]
+        key, expected = "missing_procedures", ["经皮肝穿刺引流术"]
+    else:
+        source = "physician_change_event"
+        events = [
+            {
+                "change_datetime": "2026-06-01 10:00:00",
+                "old_physician_name": "甲",
+                "new_physician_name": "乙",
+            },
+            {
+                "change_datetime": "2026-06-09 20:00:00",
+                "old_physician_name": "乙",
+                "new_physician_name": "丙",
+            },
+        ]
+    if reverse:
+        events.reverse()
+    rows = {source: tuple(events)}
+    if rule == "LX0609-10-01-01":
+        rows["handoff_record"] = (
+            {
+                "document_id": "H1",
+                "shift_time": "2026-06-01 10:00:00",
+                "handoff_doctor": "甲",
+                "record_time": "2026-06-01 09:00:00",
+            },
+            {
+                "document_id": "H2",
+                "shift_time": "2026-06-09 20:00:00",
+                "handoff_doctor": "乙",
+                "record_time": "2026-06-09 19:00:00",
+            },
+        )
+    session, native, item = await extended(rule, rows)
+    assert item.final_state.value == "non_compliant"
+    facts = dict(native.customer_display_facts)[rule]
+    if rule == "LX0609-10-01-01":
+        assert [
+            (event["change_time"], event["outcome"]) for event in facts["events"]
+        ] == [
+            ("2026-06-01 10:00:00", "handover_missing"),
+            ("2026-06-09 20:00:00", "handover_window_not_mature"),
+        ]
+    else:
+        assert facts[key] == expected
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_reduced_customer_result,
+    )
+    from test_luxian_0609_death_record_timeliness import saved_roundtrip
+
+    final = finalize_luxian_0609_reduced_customer_result(
+        decision=item,
+        raw_customer_display_facts=facts,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    assert final["status"] == "non_compliant"
+    assert final["customer_display_facts"]
+    if rule == "LX0609-10-01-01":
+        assert (
+            final["customer_display_facts"]["events"][-1]["outcome"]
+            == "handover_window_not_mature"
+        )
+        assert "尚未到期" in final["findings"]
+        assert "缺少" not in final["findings"].split("第2次变更", 1)[-1]
+    else:
+        assert final["customer_display_facts"][key] == expected
+        if rule == "LX0609-05-01-06":
+            assert "万古霉素" not in final["findings"].split("其中", 1)[-1]
+        else:
+            assert (
+                "脊神经根阻滞术"
+                not in final["findings"].split("未找到对应操作记录：", 1)[-1]
+            )
+    saved = saved_roundtrip(final)
+    assert saved["customer_display_facts"] == final["customer_display_facts"]
+    assert (saved["status"], saved["reason_code"]) == (
+        final["status"],
+        final["reason_code"],
+    )
+    assert saved["findings"] == final["findings"]
+
+
+def test_handoff_unknown_window_is_not_a_confirmed_missing_event():
+    from app.services.luxian_0609.extended_document.physician_handoff import (
+        _mature_handoff_outcome,
+    )
+    from app.services.luxian_0609.continuity_result_mapping import (
+        safe_continuity_customer_display_facts,
+        continuity_customer_fact_status_is_valid,
+    )
+
+    event = dict(
+        event_position=1,
+        change_time="2026-06-01 10:00:00",
+        handoff_time=None,
+        handover_time=None,
+        handover_interval_seconds=None,
+        outcome="handoff_missing",
+    )
+    facts = dict(
+        verification_kind="physician_handoff_multi_event_check",
+        change_event_count=2,
+        handover_threshold_hours=24,
+        events=[
+            event,
+            {
+                **event,
+                "event_position": 2,
+                "change_time": "2026-06-09 20:00:00",
+                "handoff_time": "2026-06-09 19:00:00",
+                "outcome": "handover_missing",
+            },
+        ],
+    )
+    state, _, updated = _mature_handoff_outcome(
+        "non_compliant",
+        "requirement_violated",
+        facts,
+        None,
+        "authoritative_time_missing",
+    )
+    assert (
+        state == "non_compliant"
+        and updated["events"][1]["outcome"] == "handover_window_unresolved"
+    )
+    assert facts["events"][1]["outcome"] == "handover_missing"  # 不修改调用方事实。
+    safe = safe_continuity_customer_display_facts(
+        rule_id="LX0609-10-01-01", raw=updated
+    )
+    assert safe is not None
+    assert continuity_customer_fact_status_is_valid(
+        rule_id="LX0609-10-01-01", status=state, safe_facts=safe
+    )
+    only_pending = {
+        **safe,
+        "events": [
+            {
+                **e,
+                "handoff_time": e["change_time"],
+                "outcome": "handover_window_not_mature",
+            }
+            for e in safe["events"]
+        ],
+    }
+    assert not continuity_customer_fact_status_is_valid(
+        rule_id="LX0609-10-01-01", status="non_compliant", safe_facts=only_pending
+    )
