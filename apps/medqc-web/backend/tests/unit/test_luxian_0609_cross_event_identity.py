@@ -316,3 +316,122 @@ async def test_063_conflicting_versions_without_unique_latest_is_data_gap():
     final = await _063_final(_discharge_rows(NAMES[:1], NAMES, second_time="2026-06-10 15:00:00"))
     assert final["status"] == "data_gap"
     assert final["customer_display_facts"]["written_gap"] == "version_conflict"
+
+
+# ---------- 复核补充：同类事件证据归属与版本边界 ----------
+class _ScriptedInvasiveModel:
+    """plan: 操作日 -> (记录选择函数, 摘录)；未列出的操作日回答 not_documented。"""
+
+    def __init__(self, plan):
+        self.plan = plan
+        self.record_payloads = []
+
+    async def generate(self, prompt, **kwargs):
+        payload = json.loads(prompt.rsplit("INPUT_JSON=", 1)[1])
+        if "catalog" in payload:
+            catalog_id = next(c["id"] for c in payload["catalog"] if c["name"] == INVASIVE_NAME)
+            return _reply({"schema_version": "lx0609-invasive-order-mapping-v2", "matches": [
+                {"id": order["id"], "catalog": catalog_id} for order in payload["orders"]
+            ]})
+        self.record_payloads.append(payload["records"])
+        items = []
+        for procedure in payload["procedures"]:
+            choice = self.plan.get(procedure["operation_date"])
+            record = next((r for r in payload["records"] if choice and choice[0](r)), None)
+            items.append({"id": procedure["id"], "state": "documented" if record else "not_documented",
+                          "record": record["id"] if record else None,
+                          "quote": choice[1] if record else None})
+        return _reply({"schema_version": "lx0609-invasive-procedure-record-v1", "items": items})
+
+
+def _two_day_rows(*records):
+    rows = _invasive_rows((1, 2), 2, "front")
+    rows["daily_course_record"] = tuple(records)
+    return rows
+
+
+def _course(doc, day, hour, text):
+    return {"document_id": doc, "record_time": f"2026-06-{day:02d} {hour:02d}:00:00", "record_content": text}
+
+
+@pytest.mark.asyncio
+async def test_075_same_document_from_two_sources_is_one_record():
+    rows = _invasive_rows((1, 2), 2, "front")
+    rows["senior_course_record"] = rows["daily_course_record"]
+    model = _ScriptedInvasiveModel({
+        "2026-06-01": (lambda r: True, DONE_TEXT), "2026-06-02": (lambda r: True, DONE_TEXT),
+    })
+    item = await _extended("LX0609-10-03-01", rows, model, final=True)
+    assert [len(records) for records in model.record_payloads] == [1]
+    assert item.final_state.value == "data_gap"
+
+
+@pytest.mark.asyncio
+async def test_075_two_documents_both_stating_second_day_do_not_prove_first():
+    rows = _two_day_rows(
+        _course("D2A", 2, 15, f"2026年6月2日，今日{DONE_TEXT}，操作顺利。"),
+        _course("D2B", 2, 16, f"补充今日操作经过：2026年6月2日{DONE_TEXT}，状态平稳。"),
+    )
+    model = _ScriptedInvasiveModel({
+        "2026-06-01": (lambda r: r["time"].endswith("15:00"), DONE_TEXT),
+        "2026-06-02": (lambda r: r["time"].endswith("16:00"), DONE_TEXT),
+    })
+    item = await _extended("LX0609-10-03-01", rows, model, final=True)
+    assert item.final_state.value == "data_gap"
+
+
+@pytest.mark.asyncio
+async def test_075_consecutive_days_each_with_own_record_is_compliant():
+    rows = _two_day_rows(
+        _course("D1", 1, 15, f"今日{DONE_TEXT}，过程顺利。"),
+        _course("D2", 2, 15, f"今日再次{DONE_TEXT}，过程顺利。"),
+    )
+    model = _ScriptedInvasiveModel({
+        "2026-06-01": (lambda r: r["time"].startswith("2026-06-01"), DONE_TEXT),
+        "2026-06-02": (lambda r: r["time"].startswith("2026-06-02"), DONE_TEXT),
+    })
+    item = await _extended("LX0609-10-03-01", rows, model, final=True)
+    assert item.final_state.value == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_075_one_document_recording_each_dated_occurrence_is_compliant():
+    text = f"6月1日{DONE_TEXT}；6月2日再次{DONE_TEXT}，过程顺利。"
+    rows = _two_day_rows(_course("D", 2, 15, text))
+    model = _ScriptedInvasiveModel({
+        "2026-06-01": (lambda r: True, f"6月1日{DONE_TEXT}"),
+        "2026-06-02": (lambda r: True, f"6月2日再次{DONE_TEXT}"),
+    })
+    item = await _extended("LX0609-10-03-01", rows, model, final=True)
+    assert item.final_state.value == "compliant"
+
+
+def test_030_versions_of_first_surgery_do_not_cover_second():
+    first = _surgery_record(2, 8)
+    revised = {**first, "document_id": "R28-revised", "record_time": "2026-06-02 12:00:00"}
+    final = _surgery_presence_final({
+        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+        "surgery_record": [first, revised],
+    })
+    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
+
+
+@pytest.mark.asyncio
+async def test_063_latest_version_without_diagnoses_does_not_borrow_older():
+    final = await _063_final(_discharge_rows(NAMES, ()))
+    assert final["status"] == "data_gap"
+    assert final["customer_display_facts"]["written_gap"] == "diagnoses_missing"
+
+
+@pytest.mark.asyncio
+async def test_063_latest_main_flag_change_is_used():
+    rows = _discharge_rows(NAMES, NAMES)
+    diagnoses = []
+    for doc, main in (("D1", NAMES[0]), ("D2", NAMES[1])):
+        for row in _diagnoses(doc, NAMES):
+            diagnoses.append({**{k: v for k, v in row.items() if k != "diagnosis_no"},
+                              "diagnosis_main": "是" if row["diagnosis_name"] == main else "否"})
+    rows["discharge_record_diagnosis"] = tuple(diagnoses)
+    final = await _063_final(rows)
+    assert final["status"] == "non_compliant"
+    assert final["customer_display_facts"]["written_main"] == NAMES[1]

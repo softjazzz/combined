@@ -325,10 +325,14 @@ async def map_orders_to_invasive_catalog(
 def window_records(
     triggers: Sequence[ProcedureTrigger],
     record_rows: Sequence[Mapping[str, Any]],
-) -> tuple[tuple[datetime, str], ...]:
-    """返回落在任一操作日起 3 天窗口内的记录（时间, 正文），按时间排序。"""
+) -> tuple[tuple[datetime, str, str], ...]:
+    """返回落在任一操作日起 3 天窗口内的记录（时间, 正文, 原文书身份），按时间排序。
 
-    selected: list[tuple[datetime, str]] = []
+    同一份原文书（编号、时间、正文均相同）在多个来源出现时只保留一条，
+    不能因来源重复被当成两份记录。没有文书编号时以时间和正文作为身份。
+    """
+
+    selected: dict[tuple[str, datetime, str], tuple[datetime, str, str]] = {}
     for row in record_rows:
         recorded = _record_time(row)
         text = _record_text(row)
@@ -339,8 +343,21 @@ def window_records(
             and trigger.anchor_date <= recorded.date() < trigger.anchor_date + timedelta(days=RECORD_WINDOW_DAYS)
             for trigger in triggers
         ):
-            selected.append((recorded, text))
-    return tuple(sorted(selected, key=lambda item: item[0]))
+            doc_id = str(row.get("document_id") or "").strip()
+            identity = f"doc:{doc_id}" if doc_id else f"text:{recorded.isoformat()}|{text}"
+            selected.setdefault((identity, recorded, text), (recorded, text, identity))
+    return tuple(sorted(selected.values(), key=lambda item: (item[0], item[2])))
+
+
+def _quote_states_date(quote: str, day: date) -> bool:
+    """摘录原文是否明示该操作日期（年月日、月日或数字日期格式）。"""
+    text = _normalize(quote)
+    y, m, d = day.year, day.month, day.day
+    patterns = (
+        rf"(?<!\d)(?:{y}年)?0?{m}月0?{d}[日号](?!\d)",
+        rf"(?<!\d){y}[-/.]0?{m}[-/.]0?{d}(?!\d)",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
 
 
 def _record_time(row: Mapping[str, Any]) -> datetime | None:
@@ -381,10 +398,10 @@ def _record_text(row: Mapping[str, Any]) -> str:
 
 
 def _record_prompt(
-    triggers: Sequence[ProcedureTrigger], records: Sequence[tuple[datetime, str]],
+    triggers: Sequence[ProcedureTrigger], records: Sequence[tuple[datetime, str, str]],
 ) -> tuple[str, tuple[str, ...]]:
     texts = tuple(
-        redact_luxian_0609_patient_privacy(text) for _time, text in records
+        redact_luxian_0609_patient_privacy(text) for _time, text, _identity in records
     )
     payload = {
         "procedures": [
@@ -398,7 +415,7 @@ def _record_prompt(
         ],
         "records": [
             {"id": f"R{index:02d}", "time": recorded.strftime("%Y-%m-%d %H:%M"), "text": text}
-            for index, ((recorded, _raw), text) in enumerate(zip(records, texts), start=1)
+            for index, ((recorded, _raw, _identity), text) in enumerate(zip(records, texts), start=1)
         ],
     }
     prompt = (
@@ -422,7 +439,7 @@ def _record_prompt(
 def _parse_records(
     response: Mapping[str, Any],
     triggers: Sequence[ProcedureTrigger],
-    records: Sequence[tuple[datetime, str]],
+    records: Sequence[tuple[datetime, str, str]],
     texts: Sequence[str],
 ) -> tuple[tuple[str, str], ...]:
     payload = _json_response_object(_response_content(response))
@@ -476,23 +493,45 @@ def _parse_records(
         elif state == "documented" and not in_window(record_ids[item["record"]]):
             # 引用的是窗口外（属于其他次操作）的记录，本次是否有记录无法确定。
             state = "uncertain"
-        states.append((procedure_id, state, item["record"]))
+        elif state == "documented":
+            index = record_ids[item["record"]]
+            record_day = records[index][0].date()
+            shared = any(
+                other is not trigger
+                and other.procedure.code == trigger.procedure.code
+                and other.anchor_date is not None
+                and other.anchor_date <= record_day < other.anchor_date + timedelta(days=RECORD_WINDOW_DAYS)
+                for other in triggers
+            )
+            # 记录也落在同一操作另一次的窗口内时，须能证明它写的是本次：
+            # 摘录明示本次操作日期，或记录写于本次操作当日。窗口重叠、编号不同
+            # 或文书份数都不能单独证明归属。
+            if shared and not (
+                _quote_states_date(item["quote"], trigger.anchor_date)
+                or record_day == trigger.anchor_date
+            ):
+                state = "uncertain"
+        identity = records[record_ids[item["record"]]][2] if state == "documented" else None
+        dated = state == "documented" and _quote_states_date(item["quote"], trigger.anchor_date)
+        states.append((procedure_id, state, identity, dated))
     if seen != set(procedures):
         raise ValueError("incomplete procedure coverage")
-    # 同一条记录被用来证明同一目录项的多次操作时，无法确定它属于哪一次。
-    cited: dict[tuple[str, str], int] = {}
-    for procedure_id, state, record_id in states:
+    # 同一份原文书被用来证明同一目录项的多次操作时，只有每次引用的摘录都写明
+    # 各自操作日期（文书确实逐次记录）才成立，否则无法确定它属于哪一次。
+    cited: dict[tuple[str, str], list[bool]] = {}
+    for procedure_id, state, identity, dated in states:
         if state == "documented":
-            key = (procedures[procedure_id].procedure.code, record_id)
-            cited[key] = cited.get(key, 0) + 1
+            cited.setdefault((procedures[procedure_id].procedure.code, identity), []).append(dated)
+
+    def resolved(procedure_id: str, state: str, identity: str | None) -> str:
+        if state != "documented":
+            return state
+        flags = cited[(procedures[procedure_id].procedure.code, identity)]
+        return "documented" if len(flags) == 1 or all(flags) else "uncertain"
+
     return tuple(
-        (
-            trigger_key(procedures[procedure_id]),
-            "uncertain"
-            if state == "documented" and cited[(procedures[procedure_id].procedure.code, record_id)] > 1
-            else state,
-        )
-        for procedure_id, state, record_id in states
+        (trigger_key(procedures[procedure_id]), resolved(procedure_id, state, identity))
+        for procedure_id, state, identity, _dated in states
     )
 
 
