@@ -3786,6 +3786,8 @@ def customer_finding_from_controlled_facts(
                 gaps.append(f"{label}排列序号无效或重复")
             elif gap == "equivalence_unresolved":
                 gaps.append(f"{label}中部分名称与{authority_label}是否为同一诊断尚无法可靠确认")
+            elif gap == "version_conflict":
+                gaps.append("出院记录存在多个版本且诊断不一致，无法确定最终版本")
         return "；".join(gaps) + "，暂时无法完成诊断内容及顺序核对。"
 
     if rule_id == "LX0609-08-01-03" and kind == "discharge_main_diagnosis_check":

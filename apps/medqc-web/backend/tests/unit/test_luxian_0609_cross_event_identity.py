@@ -240,3 +240,79 @@ def test_030_same_day_two_surgeries_two_records_is_compliant():
         "surgery_record": [_surgery_record(2, 8), _surgery_record(2, 20)],
     })
     assert final["status"] == "compliant"
+
+
+# ---------- 08-01-03：多版本出院记录的诊断不合并比对 ----------
+class _NoCallModel:
+    async def generate(self, *args, **kwargs):
+        raise AssertionError("本用例不应调用模型")
+
+
+def _diagnoses(doc, names):
+    return tuple({"document_id": doc, "diagnosis_type": "出院诊断", "diagnosis_name": name,
+                  "diagnosis_no": index} for index, name in enumerate(names, 1))
+
+
+def _discharge_rows(first_names, second_names, *, second_time="2026-06-11 09:00:00"):
+    names = ("社区获得性肺炎", "2型糖尿病")
+    return {
+        "discharge_record": (
+            {"document_id": "D1", "record_time": "2026-06-10 15:00:00", "record_content": "出院记录"},
+            {"document_id": "D2", "record_time": second_time, "record_content": "出院记录（修订）"},
+        ),
+        "discharge_record_diagnosis": _diagnoses("D1", first_names) + _diagnoses("D2", second_names),
+        "mr_diagnosis": tuple({"diagnosis_type": "出院诊断", "diagnosis_name": name, "diagnosis_no": index}
+                              for index, name in enumerate(names, 1)),
+        "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00",
+                                "discharge_datetime": "2026-06-10 12:00:00", "status": "出院"},),
+    }
+
+
+async def _063_final(rows):
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_reduced_customer_result,
+    )
+    from app.services.luxian_0609.native_extended_document_execution import (
+        execute_luxian_0609_native_extended_document_rules,
+    )
+
+    rule = "LX0609-08-01-03"
+    session = _session(rule, rows, "extended_document", final=True)
+    native = await execute_luxian_0609_native_extended_document_rules(
+        rule_ids=(rule,), decision_rule_ids=(rule,), evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials, llm_client=_NoCallModel(),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=native.decisions, expected_rule_ids=(rule,),
+        snapshot=session.snapshot, evidence_materials=session.materials,
+    )[0]
+    return finalize_luxian_0609_reduced_customer_result(
+        decision=reduced, raw_customer_display_facts=dict(native.customer_display_facts).get(rule),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+
+
+NAMES = ("社区获得性肺炎", "2型糖尿病")
+
+
+@pytest.mark.asyncio
+async def test_063_identical_versions_are_compared_once():
+    final = await _063_final(_discharge_rows(NAMES, NAMES))
+    assert final["status"] == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_063_latest_version_is_used():
+    # 初写版漏了糖尿病，修订版完整：以修订版为准。
+    final = await _063_final(_discharge_rows(NAMES[:1], NAMES))
+    assert final["status"] == "compliant"
+    # 反过来：修订版漏写，初写完整，以修订版为准判不合规。
+    final = await _063_final(_discharge_rows(NAMES, NAMES[:1]))
+    assert final["status"] == "non_compliant"
+
+
+@pytest.mark.asyncio
+async def test_063_conflicting_versions_without_unique_latest_is_data_gap():
+    final = await _063_final(_discharge_rows(NAMES[:1], NAMES, second_time="2026-06-10 15:00:00"))
+    assert final["status"] == "data_gap"
+    assert final["customer_display_facts"]["written_gap"] == "version_conflict"

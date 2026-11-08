@@ -360,6 +360,48 @@ def _has_source_observation(
     return any(observation.source_key == normalized for observation in snapshot.observations)
 
 
+def _latest_written_diagnosis_version(
+    written_rows: Sequence[Mapping[str, Any]],
+    discharge_rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[Mapping[str, Any], ...], str | None]:
+    """多版本出院记录（初写、补录、修订）只取最后一份权威版本的诊断，不合并比对。
+
+    各版本诊断相同时取任一版本；不同且无法凭出院记录时间唯一确定最后版本时返回缺口。
+    行缺少文书编号（旧快照）时保持原样。
+    """
+    from .basic_timeliness_facts import parse_authoritative_datetime
+
+    rows = tuple(written_rows)
+    ids = [_clean(row.get("document_id")) for row in rows]
+    if not rows or not all(ids) or len(set(ids)) < 2:
+        return rows, None
+    groups: dict[str, list[Mapping[str, Any]]] = {}
+    for doc_id, row in zip(ids, rows):
+        groups.setdefault(doc_id, []).append(row)
+
+    def signature(group):
+        return sorted((_clean(row.get("diagnosis_no")), _clean(row.get("diagnosis_name"))) for row in group)
+
+    signatures = {doc_id: signature(group) for doc_id, group in groups.items()}
+    if len({tuple(value) for value in signatures.values()}) == 1:
+        return tuple(next(iter(groups.values()))), None
+    times: dict[str, Any] = {}
+    for row in discharge_rows:
+        doc_id = _clean(row.get("document_id"))
+        if doc_id in groups:
+            moment = parse_authoritative_datetime(authoritative_document_time_value(row))
+            if moment is None or (doc_id in times and times[doc_id] != moment):
+                return (), "version_conflict"
+            times[doc_id] = moment
+    if set(times) != set(groups):
+        return (), "version_conflict"
+    latest = max(times.values())
+    latest_ids = [doc_id for doc_id, moment in times.items() if moment == latest]
+    if len(latest_ids) != 1:
+        return (), "version_conflict"
+    return tuple(groups[latest_ids[0]]), None
+
+
 def _discharge_or_death_diagnosis_rows(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -3803,15 +3845,18 @@ async def _execute_extended_document_group(
                     discharge_diagnosis_rows, diagnosis_scope=diagnosis_scope,
                     allow_untyped_legacy_rows=not mr_diagnosis_observed and diagnosis_scope == "discharge",
                 )
+                written_rows, version_gap = _latest_written_diagnosis_version(written_rows, discharge_rows)
                 consumed.extend((authority_source_key, row) for row in authority_rows)
                 consumed.extend(("discharge_record_diagnosis", row) for row in written_rows)
                 authority, authority_gap = _diagnosis_sequence(authority_rows)
                 written, written_gap = _diagnosis_sequence(written_rows)
+                if version_gap:
+                    written_gap = version_gap
                 authority = split_numbered_diagnoses(authority)
                 written = split_numbered_diagnoses(written)
                 names_complete = (
                     authority_gap not in {"diagnoses_missing", "name_missing"}
-                    and written_gap not in {"diagnoses_missing", "name_missing"}
+                    and written_gap not in {"diagnoses_missing", "name_missing", "version_conflict"}
                 )
                 order_gap = {"order_missing", "order_invalid"}
                 order_comparable = authority_gap is None and written_gap is None
