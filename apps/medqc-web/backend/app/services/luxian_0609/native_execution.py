@@ -24,7 +24,10 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .evidence_snapshot_provider import classify_current_visit_surgery_order_rows
 from .source_manifest import QueryStatus
 from .surgery_applicability import performed_surgery_rows, resolve_surgery_applicability
-from .surgery_record_coverage import definitely_uncovered_surgery_rows
+from .surgery_record_coverage import (
+    definitely_uncovered_surgery_rows,
+    same_day_surgery_coverage_unresolved,
+)
 from .surgery_procedure_catalog import is_non_surgical_procedure_order
 
 
@@ -468,7 +471,7 @@ def _typed_030_front_page_trigger_refs(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
-) -> tuple[str, ...]:
+) -> tuple[tuple[str, ...], bool]:
     """030 与 029 同一触发口径：首页确认的已实施手术也触发手术记录要求。
 
     首页“手术及操作”同时含治疗性操作，只采用共用手术适用性解析器按院内
@@ -485,30 +488,34 @@ def _typed_030_front_page_trigger_refs(
         or observation.query_state not in {QueryStatus.EMPTY, QueryStatus.AVAILABLE}
         or observation.completeness is not SourceCompleteness.COMPLETE
     ):
-        return ()
+        return (), False
     applicability = resolve_surgery_applicability(
         snapshot=snapshot, materials=materials, source_keys=("mr_surgery",)
     )
     if not applicability.is_performed_surgery:
-        return ()
+        return (), False
     document_rows = materials.document_rows("mr_surgery", snapshot=snapshot)
     performed = performed_surgery_rows(
         source_key="mr_surgery", rows=tuple(row for _, row in document_rows)
     )
+    record_rows = (
+        () if observation.query_state is QueryStatus.EMPTY
+        else tuple(materials.rows("surgery_record"))
+    )
     missing = (
         performed
         if observation.query_state is QueryStatus.EMPTY
-        else definitely_uncovered_surgery_rows(
-            performed, tuple(materials.rows("surgery_record"))
-        )
+        else definitely_uncovered_surgery_rows(performed, record_rows)
     )
-    return tuple(
+    refs = tuple(
         dict.fromkeys(
             reference
             for reference, row in document_rows
             if any(row is candidate for candidate in missing)
         )
     )
+    # 同日多台而记录不足时不能回落为“有记录即合规”。
+    return refs, not refs and same_day_surgery_coverage_unresolved(performed, record_rows)
 
 
 def _surgery_order_obligation(*, snapshot: Luxian0609EvidenceSnapshot,
@@ -764,11 +771,11 @@ def execute_luxian_0609_native_rules(
     ):
         try:
             obligation = _surgery_order_obligation(snapshot=evidence_snapshot, materials=evidence_materials)
-            front_page_trigger_refs = _typed_030_front_page_trigger_refs(
+            front_page_trigger_refs, same_day_unresolved = _typed_030_front_page_trigger_refs(
                 snapshot=evidence_snapshot, materials=evidence_materials
             )
         except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
-            front_page_trigger_refs = ()
+            front_page_trigger_refs, same_day_unresolved = (), False
             obligation = ("data_gap", "candidate_scope_incomplete")
         if obligation is not None:
             final_state_by_rule_id["LX0609-04-02-02"], reason_by_rule_id["LX0609-04-02-02"] = obligation
@@ -776,6 +783,9 @@ def execute_luxian_0609_native_rules(
         elif front_page_trigger_refs:
             final_state_by_rule_id["LX0609-04-02-02"] = "non_compliant"
             reason_by_rule_id["LX0609-04-02-02"] = "required_document_missing"
+        elif same_day_unresolved and final_state_by_rule_id.get("LX0609-04-02-02") == "compliant":
+            final_state_by_rule_id["LX0609-04-02-02"] = "data_gap"
+            reason_by_rule_id["LX0609-04-02-02"] = "association_failed"
     all_results = tuple(
         build_luxian_0609_native_result(
             rule_id=result.rule_id,

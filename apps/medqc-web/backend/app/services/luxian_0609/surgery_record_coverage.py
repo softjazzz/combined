@@ -32,6 +32,41 @@ def surgery_event_time(row: Mapping[str, object], *, end: bool = False) -> datet
     return None
 
 
+def _coverage_candidate(row: Mapping[str, object]) -> bool:
+    if not has_qualified_traditional_surgery_row(row):
+        return False
+    incision = str(row.get("surgical_incision_level") or row.get("surgial_incision_level") or "").strip().upper()
+    return catalog_surgery_state(row) is not None or incision in {
+        "I", "II", "III", "IV", "Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ",
+    }
+
+
+def same_day_surgery_coverage_unresolved(
+    master_rows: Sequence[Mapping[str, object]],
+    record_rows: Sequence[Mapping[str, object]],
+) -> bool:
+    """同日多台（开始时刻不同）而当日记录份数不足时，无法证明每台都有记录。
+
+    同台术式拆行开始时刻相同，按一台计；缺时间的记录可能属于任一天，也不能证明逐台覆盖。
+    """
+    begins_by_day: dict[object, set[datetime]] = {}
+    for row in master_rows:
+        if not _coverage_candidate(row):
+            continue
+        begin = surgery_event_time(row)
+        if begin is not None:
+            begins_by_day.setdefault(begin.date(), set()).add(begin)
+    record_times = tuple(surgery_event_time(row) for row in record_rows)
+    undated = sum(1 for value in record_times if value is None)
+    for day, begins in begins_by_day.items():
+        if len(begins) < 2:
+            continue
+        dated = sum(1 for value in record_times if value is not None and value.date() == day)
+        if dated + undated >= 1 and dated < len(begins):
+            return True
+    return False
+
+
 def definitely_uncovered_surgery_rows(
     master_rows: Sequence[Mapping[str, object]],
     record_rows: Sequence[Mapping[str, object]],
@@ -44,14 +79,9 @@ def definitely_uncovered_surgery_rows(
     missing = []
     record_times = tuple(surgery_event_time(row) for row in record_rows)
     for row in master_rows:
-        if not has_qualified_traditional_surgery_row(row):
-            continue
         # 未命中目录的等级回退只能沿用旧适用性，不能据此新增缺记录缺陷。
         # 首页“手术及操作”也可能给非手术操作填等级；有明确切口等级时可独立确认。
-        incision = str(row.get("surgical_incision_level") or row.get("surgial_incision_level") or "").strip().upper()
-        if catalog_surgery_state(row) is None and incision not in {
-            "I", "II", "III", "IV", "Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ",
-        }:
+        if not _coverage_candidate(row):
             continue
         begin = surgery_event_time(row)
         end = surgery_event_time(row, end=True)

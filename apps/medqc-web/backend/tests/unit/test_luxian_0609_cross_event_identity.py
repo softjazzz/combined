@@ -167,3 +167,76 @@ async def test_075_each_occurrence_documented_is_compliant():
     )
     item = await _extended("LX0609-10-03-01", rows, _LenientInvasiveModel())
     assert item.final_state.value == "compliant"
+
+
+# ---------- 04-02-02：同日多台手术只有一份手术记录 ----------
+SURGERY_NAME = "腹腔镜下阑尾切除术"
+
+
+def _surgery_master(day, hour=8, *, surgeon="甲", name=SURGERY_NAME, code="47.0101"):
+    return {"surgery_name": name, "surgery_code": code, "surgeon": surgeon, "main_surgery_sign": "",
+            "surgery_begin_datetime": datetime(2026, 6, day, hour),
+            "surgery_end_datetime": datetime(2026, 6, day, hour + 2),
+            "surgical_level": "二级", "surgical_incision_level": "II", "surgial_incision_level": "II"}
+
+
+def _surgery_record(day, hour=8):
+    return {"document_id": f"R{day}{hour}", "surgery_name": SURGERY_NAME, "surgeon": "甲",
+            "surgeon_sign": "甲",
+            "surgery_begin_time": f"2026-06-{day:02d} {hour:02d}:00:00+08:00",
+            "surgery_end_time": f"2026-06-{day:02d} {hour + 2:02d}:00:00+08:00",
+            "record_time": f"2026-06-{day:02d} {hour + 3:02d}:00:00",
+            "surgery_process": "手术经过：顺利。", "record_content": "手术经过：顺利。"}
+
+
+def _surgery_presence_final(rows):
+    from app.services.luxian_0609 import native_execution
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_reduced_customer_result,
+    )
+
+    rule = "LX0609-04-02-02"
+    session = _session(rule, rows, "surgery_presence", final=True)
+    native = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=(rule,), visit_id="V", institute_id="I", patient_id="P", source_schema=None,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=(rule,),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=native.decisions, expected_rule_ids=(rule,),
+        snapshot=session.snapshot, evidence_materials=session.materials,
+    )[0]
+    return finalize_luxian_0609_reduced_customer_result(
+        decision=reduced, raw_customer_display_facts=dict(native.customer_display_facts).get(rule),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_030_same_day_two_surgeries_one_record_is_not_compliant(reverse):
+    from tests.unit.test_luxian_0609_death_record_timeliness import saved_roundtrip
+
+    masters = [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")]
+    final = _surgery_presence_final({
+        "mr_surgery": masters[::-1] if reverse else masters,
+        "surgery_record": [_surgery_record(2, 8)],
+    })
+    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
+    saved = saved_roundtrip(final)
+    assert (saved["status"], saved["reason_code"]) == ("data_gap", "association_failed")
+
+
+def test_030_split_rows_of_one_surgery_share_one_record():
+    final = _surgery_presence_final({
+        "mr_surgery": [_surgery_master(2), _surgery_master(2, name="腹腔镜下肠粘连松解术", code="54.5101")],
+        "surgery_record": [_surgery_record(2, 8)],
+    })
+    assert final["status"] == "compliant"
+
+
+def test_030_same_day_two_surgeries_two_records_is_compliant():
+    final = _surgery_presence_final({
+        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+        "surgery_record": [_surgery_record(2, 8), _surgery_record(2, 20)],
+    })
+    assert final["status"] == "compliant"
