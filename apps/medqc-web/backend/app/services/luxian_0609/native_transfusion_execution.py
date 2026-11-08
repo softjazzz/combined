@@ -1387,21 +1387,6 @@ def evaluate_pretransfusion_nine_items(
         base_facts["failed_transfusion_times"] = [
             str(item["transfusion_time"]) for item in failed_checks
         ]
-    time_gap_checks = [item for item in failed_checks if item["missing_time_items"]]
-    if time_gap_checks:
-        base_facts.update(
-            {
-                "failure_kind": "pretransfusion_test_time_missing",
-                "missing_time_items": sorted(
-                    {
-                        name
-                        for item in time_gap_checks
-                        for name in item["missing_time_items"]
-                    }
-                ),
-            }
-        )
-        return "data_gap", "authoritative_time_missing", base_facts
     missing_checks = [item for item in failed_checks if item["missing_items"]]
     if missing_checks:
         base_facts.update(
@@ -1449,6 +1434,22 @@ def evaluate_pretransfusion_nine_items(
             }
         )
         return "non_compliant", "pretransfusion_tests_after_transfusion", base_facts
+    # 缺时间只说明该项无法核对，不能掩盖其他项目已确认的缺失、院外或晚于输血。
+    time_gap_checks = [item for item in failed_checks if item["missing_time_items"]]
+    if time_gap_checks:
+        base_facts.update(
+            {
+                "failure_kind": "pretransfusion_test_time_missing",
+                "missing_time_items": sorted(
+                    {
+                        name
+                        for item in time_gap_checks
+                        for name in item["missing_time_items"]
+                    }
+                ),
+            }
+        )
+        return "data_gap", "authoritative_time_missing", base_facts
 
     latest = max(
         datetime.fromisoformat(str(item["latest_valid_test_time"]))

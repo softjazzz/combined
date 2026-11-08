@@ -5074,7 +5074,14 @@ async def _execute_extended_document_group(
                                 "document_id": event.document_id,
                                 "senior_round_times": [],
                             })
-                    if body_issue:
+                    if unmet_events:
+                        # 逐台确定缺失（窗口到期、窗口内无任何查房、也无可能落入窗口的无日期查房）
+                        # 不受其他台正文未决或模型失败影响。
+                        final_state, reason_code = (
+                            "non_compliant",
+                            "required_document_missing",
+                        )
+                    elif body_issue:
                         final_state, reason_code = "data_gap", body_issue
                     elif unresolved_senior_semantics:
                         final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
@@ -5082,11 +5089,6 @@ async def _execute_extended_document_group(
                         final_state, reason_code = "data_gap", "authoritative_time_missing"
                     elif unresolved_senior_body:
                         final_state, reason_code = "data_gap", "required_field_missing"
-                    elif unmet_events:
-                        final_state, reason_code = (
-                            "non_compliant",
-                            "required_document_missing",
-                        )
                     elif not_mature_events:
                         final_state, reason_code = (
                             "not_applicable",
@@ -5113,7 +5115,10 @@ async def _execute_extended_document_group(
                         ),
                         "senior_round_times": senior_round_delivery_values,
                     }
-                    if not body_issue and not unresolved_senior_semantics and (not unresolved_senior_body or unresolved_senior_time):
+                    if unmet_events or (
+                        not body_issue and not unresolved_senior_semantics
+                        and (not unresolved_senior_body or unresolved_senior_time)
+                    ):
                         display.append((rule_id, {
                             "verification_kind": "postoperative_senior_round_window_unavailable",
                             "issue": "authoritative_time_missing",
