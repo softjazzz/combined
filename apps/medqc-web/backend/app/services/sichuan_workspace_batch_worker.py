@@ -28,6 +28,7 @@ from .custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     LX0609_ATTEMPT_FILTER_KEY,
     LX0609_LEASE_FILTER_KEY,
+    records_with_only_neutral_statuses,
 )
 from .customer_rule_sets import CUSTOMER_LUXIAN_RULE_SET_KEY
 from .effect_priority_qc import (
@@ -594,17 +595,6 @@ def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _records_with_only_status(items: List[Dict[str, Any]], status: str) -> set[str]:
-    """所有项目都是该状态的病历（如“全部不适用”），而不是含任一该状态项目的病历。"""
-    normalized = str(status or "").strip().lower()
-    statuses: Dict[str, set[str]] = {}
-    for item in items:
-        record_id = str(item.get("record_key") or item.get("record_id") or "").strip()
-        if record_id:
-            statuses.setdefault(record_id, set()).add(str(item.get("status") or "").strip().lower())
-    return {record_id for record_id, values in statuses.items() if values == {normalized}}
-
-
 def _build_record_status_counts(
     *,
     total_records: int,
@@ -623,7 +613,7 @@ def _build_record_status_counts(
         for item in (not_applicable_record_ids or set())
         if str(item or "").strip()
     }
-    # 按病历互斥分类（失败 > 确定缺陷 > 待核 > 资料不足 > 全部不适用 > 合规），各类之和等于总数。
+    # 按病历互斥分类（失败 > 确定缺陷 > 待核 > 资料不足 > 只有不适用/暂停 > 合规），各类之和等于总数。
     issue_ids.difference_update(failed_ids)
     uncertain_ids.difference_update(failed_ids, issue_ids)
     data_gap_ids.difference_update(failed_ids, issue_ids, uncertain_ids)
@@ -1935,7 +1925,7 @@ async def run_sichuan_workspace_batch_job(
                 uncertain_record_ids=uncertain_record_ids,
                 data_gap_record_ids=_record_ids_for_item_status("data_gap"),
                 failed_record_ids=failed_record_ids,
-                not_applicable_record_ids=_records_with_only_status(all_items, "not_applicable"),
+                not_applicable_record_ids=records_with_only_neutral_statuses(all_items),
             )
             result_status_counts = _build_item_status_counts(all_items)
             patch: Dict[str, Any] = {
@@ -3998,7 +3988,7 @@ async def run_sichuan_workspace_batch_job(
             if str(item.get("display_status") or "") == "rejected_by_system"
             and str(item.get("record_key") or item.get("record_id") or "")
         }
-        not_applicable_record_ids = _records_with_only_status(all_items, "not_applicable")
+        not_applicable_record_ids = records_with_only_neutral_statuses(all_items)
         record_status_counts = _build_record_status_counts(
             total_records=total_records,
             issue_record_ids=issue_record_ids,

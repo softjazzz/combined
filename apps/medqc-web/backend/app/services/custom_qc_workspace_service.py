@@ -289,16 +289,38 @@ def _safe_text(value: Any, default: str = "") -> str:
     return str(value).strip()
 
 
-def _compliant_record_refs(items: Any) -> set[str]:
-    """合规病历：至少一项合规，且其余项目只有合规或不适用；有缺陷、待核、资料不足或技术失败的不计入。"""
+# 病历级统计的统一合同（批处理 Worker 与客户 DTO 共用）：
+# 有问题状态的病历不算合规；只有中性状态（不适用、暂停未执行）的病历归“不适用”；其余为合规。
+RECORD_PROBLEM_STATUSES = frozenset({
+    "non_compliant", "ai_suggested_non_compliant", "uncertain", "data_gap", "technical_error",
+})
+RECORD_NEUTRAL_STATUSES = frozenset({"not_applicable", "not_executed"})
+
+
+def _record_statuses(items: Any, key_fields: tuple[str, ...]) -> Dict[str, set[str]]:
     statuses: Dict[str, set[str]] = {}
     for item in items or ():
-        ref = _safe_text(item.get("record_ref"))
+        ref = next((_safe_text(item.get(field)) for field in key_fields if _safe_text(item.get(field))), "")
         if ref:
-            statuses.setdefault(ref, set()).add(_safe_text(item.get("status")))
+            statuses.setdefault(ref, set()).add(_safe_text(item.get("status")).lower())
+    return statuses
+
+
+def records_with_only_neutral_statuses(
+    items: Any, key_fields: tuple[str, ...] = ("record_key", "record_id"),
+) -> set[str]:
+    """所有项目都是中性状态（不适用或暂停未执行）的病历。"""
     return {
-        ref for ref, values in statuses.items()
-        if "compliant" in values and values <= {"compliant", "not_applicable"}
+        ref for ref, values in _record_statuses(items, key_fields).items()
+        if values <= RECORD_NEUTRAL_STATUSES
+    }
+
+
+def _compliant_record_refs(items: Any) -> set[str]:
+    """合规病历：没有任何问题状态，且不只是中性状态。"""
+    return {
+        ref for ref, values in _record_statuses(items, ("record_ref",)).items()
+        if not values & RECORD_PROBLEM_STATUSES and not values <= RECORD_NEUTRAL_STATUSES
     }
 
 
