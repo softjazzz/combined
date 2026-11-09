@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -325,7 +326,11 @@ async def test_failed_specialty_check_retries_then_successful_batch_reuses(
     )
 
     assert first.incomplete_specialty_rule_ids == frozenset({rule_id})
-    assert first.facts == (fact,)
+    # 06-01-04 专项失败时主抽取结论改为未决（用户口径 2026-11-08），其余规则沿用原逻辑。
+    assert first.facts == (
+        (replace(fact, semantic_state="specialty_unverified"),)
+        if rule_id == "LX0609-06-01-04" else (fact,)
+    )
     assert (first.llm_call_count, first.prompt_tokens, first.completion_tokens, first.total_tokens) == (
         3,
         18,

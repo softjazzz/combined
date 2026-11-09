@@ -168,8 +168,10 @@ async def test_existing_hard_recording_formal_chain(monkeypatch, tmp_path):
                     arm=arm, mature=True, main_payload=main,
                     allow_incomplete=bool(result["incomplete_event_positions"]) or result["state"] != "ready",
                     specialty_targets=["candidate.test" if r["model"] == MODELS[1] else "reference.test" for r in requests])
-                expected = "compliant" if all(any(kind == "result_recorded" for p, _, kind in case.gold if p == position)
-                    for position in {p for p, _, _ in case.gold}) else "non_compliant"
+                # 用户口径（2026-11-08）：专项未核完的保护病例，主抽取结论未经核实，保留资料不足。
+                expected = "data_gap" if case.guard_only else (
+                    "compliant" if all(any(kind == "result_recorded" for p, _, kind in case.gold if p == position)
+                        for position in {p for p, _, _ in case.gold}) else "non_compliant")
                 rows.append({**item, "replay_available": True, "integrity_passed": True,
                              "gold_status": expected, "status_matches_gold": replay["saved"]["status"] == expected,
                              "replay": replay})

@@ -1621,6 +1621,10 @@ def _single_text_fact_outcome(
     if event_time is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_time_missing", refs)
 
+    if fact.semantic_state == "specialty_unverified":
+        # 06-01-04 专项未能确认归属或调用失败：主抽取结论未经核实，保留为资料关联不足，
+        # 既不判合规也不判“未记录”（用户口径 2026-11-08）。
+        return _ExamLabOutcome(rule_id, "data_gap", "association_failed", refs)
     if fact.semantic_state == "absent":
         if projection.course_time_incomplete or projection.course_projection_truncated:
             return _ExamLabOutcome(

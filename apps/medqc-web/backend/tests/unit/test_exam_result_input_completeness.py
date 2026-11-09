@@ -87,7 +87,7 @@ async def test_previous_negative_freeze_is_not_reused_or_deleted(monkeypatch, tm
     try:
         for _ in range(2):
             batch = await native._extract_exam_lab_batch(projection=p, eligible_rule_ids=[check.RULE_ID], llm_client=client)
-            assert batch.llm_call_count == 2 and batch.facts[0].semantic_state == "present"
+            assert batch.llm_call_count == 2 and batch.facts[0].semantic_state == "specialty_unverified"
             assert batch.incomplete_specialty_rule_ids == frozenset({check.RULE_ID})
         assert len(sent) == 4
         assert freeze.load_payload("main", old_key) == old_payload

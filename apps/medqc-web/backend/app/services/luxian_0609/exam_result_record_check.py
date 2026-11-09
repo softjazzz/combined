@@ -12,6 +12,7 @@
 none。Python 另核验：引文须逐字见于病程；report_span 须逐字见于本次报告，且与引文至少有
 2 个连续相同字，避免把其他检查的结果挂到本事件。末次输出仍漏核时按事件处理，未定事件沿用
 主抽取判断；调用失败时整体沿用主抽取判断。
+（用户口径 2026-11-08 起：未定事件与调用失败均改为未决，见 apply_result_record。）
 
 用户口径（2026-10-12）：病程在描述本次检查结果、但与报告有实质矛盾（真实样本：术后复查 MRI
 报告仍写半月板撕裂，出院当天查房写“复查MRI可见半月板已修整”）时，该病程不算记录了本次结果，
@@ -44,6 +45,8 @@ from .exam_output_batching import CallBudget, partition_targets, bisect_targets
 from .transfusion_order_trigger import _json_response_object, _usage
 
 RULE_ID = "LX0609-06-01-04"
+# 专项未能独立核实归属的事件：执行器按资料关联不足（data_gap/association_failed）处理。
+UNVERIFIED_STATE = "specialty_unverified"
 SCHEMA_VERSION = "lx0609-exam-result-record-v1"
 RECORDED_TYPES = ("result_recorded",)
 CONFLICT_TYPES = ("result_conflicting",)
@@ -757,19 +760,35 @@ def apply_result_record(
     facts: Sequence[ExamLabEventFact], outcome: ResultRecordOutcome,
     *, partial_in_window_positions: frozenset[int] = frozenset(),
 ) -> tuple[ExamLabEventFact, ...]:
-    """用逐份核对结论固定 06-01-04 的病程事实；未覆盖的事实保持原样。"""
-    if outcome.state != "ready":
+    """用逐份核对结论固定 06-01-04 的病程事实。
+
+    用户口径（2026-11-08）：专项未能确认归属的事件，主抽取未经独立核实的结论（已记录或
+    未记录）都不能作为确定依据，改为未决（资料不足），不改成确定“未记录”。
+    - 专项整体失败：所有已适用事件均未决；
+    - 专项未核完的事件：有独立核实的窗口内证据时采用该证据，否则未决
+      （“早期失败、晚期成功”不能制造确定超时）；
+    - 已核完的事件及其他事件的成功结论照常采用。
+    """
+    def unresolved(fact: ExamLabEventFact) -> ExamLabEventFact:
+        if fact.applicability != "applicable" or fact.semantic_state not in {"present", "absent"}:
+            return fact
+        return replace(fact, semantic_state=UNVERIFIED_STATE)
+
+    if outcome.state == "skipped":
         return tuple(facts)
+    if outcome.state != "ready":
+        return tuple(unresolved(fact) if fact.rule_id == RULE_ID else fact for fact in facts)
     result = []
     for fact in facts:
         refs = outcome.recorded_refs.get(fact.event_position)
-        if fact.rule_id != RULE_ID or refs is None:
+        if fact.rule_id != RULE_ID:
             result.append(fact)
             continue
-        if (fact.event_position in outcome.incomplete_event_positions
-                and fact.event_position not in partial_in_window_positions):
-            # 只核实“写过”不能证明“首次写于超时后”。成功证据仍在outcome，
-            # 但未知/仅晚期证据沿用既有主事实回退，不替换其早期引用。
+        if fact.event_position in outcome.incomplete_event_positions:
+            if fact.event_position not in partial_in_window_positions:
+                result.append(unresolved(fact))
+                continue
+        elif refs is None:
             result.append(fact)
             continue
         event_refs = tuple(ref for ref in fact.evidence_refs if ref not in fact.course_doc_refs)

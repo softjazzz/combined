@@ -203,7 +203,10 @@ def test_apply_overrides_only_011_facts_and_keeps_report_evidence():
     assert fixed[0].semantic_state == "present" and fixed[0].course_doc_refs == ("D3",)
     assert fixed[0].evidence_refs == ("D3", "R1")
     assert fixed[1] == facts[1] and fixed[2] == facts[2]
-    assert apply_result_record(facts, ResultRecordOutcome("failed", {})) == facts
+    # 用户口径（2026-11-08）：专项调用失败时，已适用事件的主抽取结论不能作为确定依据，改为未决。
+    failed = apply_result_record(facts, ResultRecordOutcome("failed", {}))
+    assert failed[0].semantic_state == "specialty_unverified" and failed[0].course_doc_refs == ("D1",)
+    assert failed[1] == facts[1] and failed[2] == facts[2]
 
 
 @pytest.mark.asyncio

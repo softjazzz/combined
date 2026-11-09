@@ -410,8 +410,9 @@ async def test_long_negative_cannot_override_correct_main_or_freeze(monkeypatch,
     partial_negative = completion_for(case.projection(), "none")
     row = await formal_replay(monkeypatch, tmp_path, case=case, recordings=[{"completion": partial_negative}],
         arm=arm, mature=True, allow_incomplete=True, specialty_targets=["reference.test"])
-    assert row["saved"]["status"] == "compliant"
-    assert row["facts"][0]["semantic_state"] == "present"
+    # 用户口径（2026-11-08）：长否定不能覆盖主抽取，但未核实的主抽取也不能单独证明合规。
+    assert row["saved"]["status"] == "data_gap"
+    assert row["facts"][0]["semantic_state"] == "specialty_unverified"
     assert row["incomplete_specialty_rule_ids"] == [check.RULE_ID]
     assert row["frozen_files"] == []
 
@@ -434,7 +435,7 @@ async def test_complete_other_event_still_applies_when_one_document_is_partial(m
         recordings=[{"completion": completion_for(p, "none")}], arm="cascade", mature=True,
         allow_incomplete=True, specialty_targets=["reference.test"], main_payload=main_payload)
     assert row["saved"]["status"] == "non_compliant"
-    assert [(f["event_position"], f["semantic_state"]) for f in row["facts"]] == [(1, "present"), (2, "absent")]
+    assert [(f["event_position"], f["semantic_state"]) for f in row["facts"]] == [(1, "specialty_unverified"), (2, "absent")]
     assert row["incomplete_specialty_rule_ids"] == [check.RULE_ID] and not row["frozen_files"]
 
 
@@ -468,7 +469,8 @@ async def test_upgrade_failure_keeps_incomplete_and_is_not_frozen(monkeypatch, t
         for _ in range(2):
             batch = await native._extract_exam_lab_batch(projection=p, eligible_rule_ids=[check.RULE_ID], llm_client=client)
             assert batch.incomplete_specialty_rule_ids == frozenset({check.RULE_ID})
-            assert batch.facts and batch.facts[0].semantic_state == "absent"
+            assert batch.facts and batch.facts[0].semantic_state == (
+                "absent" if failure == "truncated" else "specialty_unverified")
             if failure == "truncated":
                 assert batch.budget_rule_failures == {check.RULE_ID: "llm_context_budget_exhausted"}
                 assert batch.llm_call_count == 2  # 第三次HTTP以技术失败退出，不交付为完整抽取。
