@@ -349,15 +349,33 @@ def window_records(
     return tuple(sorted(selected.values(), key=lambda item: (item[0], item[2])))
 
 
-def _quote_states_date(quote: str, day: date) -> bool:
-    """摘录原文是否明示该操作日期（年月日、月日或数字日期格式）。"""
+_QUOTE_DATE_PATTERNS = (
+    re.compile(r"(?<!\d)(?:(\d{4})年)?(\d{1,2})月(\d{1,2})[日号]"),
+    re.compile(r"(?<!\d)(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)"),
+)
+_RELATIVE_PAST_DAY = re.compile(r"昨日|昨天|昨晚|前日|前天|日前")
+
+
+def _quote_dates(quote: str) -> tuple[tuple[int | None, int, int], ...]:
+    """摘录中明示的日期（年可缺省）。"""
     text = _normalize(quote)
-    y, m, d = day.year, day.month, day.day
-    patterns = (
-        rf"(?<!\d)(?:{y}年)?0?{m}月0?{d}[日号](?!\d)",
-        rf"(?<!\d){y}[-/.]0?{m}[-/.]0?{d}(?!\d)",
-    )
-    return any(re.search(pattern, text) for pattern in patterns)
+    found: list[tuple[int | None, int, int]] = []
+    for pattern in _QUOTE_DATE_PATTERNS:
+        for match in pattern.finditer(text):
+            year, month, day = match.groups()
+            found.append((int(year) if year else None, int(month), int(day)))
+    return tuple(found)
+
+
+def _date_matches(entry: tuple[int | None, int, int], day: date) -> bool:
+    year, month, dom = entry
+    return (month, dom) == (day.month, day.day) and (year is None or year == day.year)
+
+
+def _quote_states_date(quote: str, day: date) -> bool:
+    """摘录明示且只明示该操作日期；写明年份时年份必须一致。"""
+    dates = _quote_dates(quote)
+    return bool(dates) and all(_date_matches(entry, day) for entry in dates)
 
 
 def _record_time(row: Mapping[str, Any]) -> datetime | None:
@@ -496,6 +514,7 @@ def _parse_records(
         elif state == "documented":
             index = record_ids[item["record"]]
             record_day = records[index][0].date()
+            quote_dates = _quote_dates(item["quote"])
             shared = any(
                 other is not trigger
                 and other.procedure.code == trigger.procedure.code
@@ -503,12 +522,19 @@ def _parse_records(
                 and other.anchor_date <= record_day < other.anchor_date + timedelta(days=RECORD_WINDOW_DAYS)
                 for other in triggers
             )
-            # 记录也落在同一操作另一次的窗口内时，须能证明它写的是本次：
-            # 摘录明示本次操作日期，或记录写于本次操作当日。窗口重叠、编号不同
-            # 或文书份数都不能单独证明归属。
-            if shared and not (
+            # 摘录明示的日期都不是本次操作日（含年份不一致）：说的是别的操作。
+            if quote_dates and not any(_date_matches(entry, trigger.anchor_date) for entry in quote_dates):
+                state = "uncertain"
+            # 记录也落在同一操作另一次的窗口内时，须能证明它写的是本次：摘录只明示
+            # 本次操作日期；或摘录没有任何日期或“昨日”等相对日期、且记录写于本次
+            # 操作当日。窗口重叠、编号不同或文书份数都不能单独证明归属。
+            elif shared and not (
                 _quote_states_date(item["quote"], trigger.anchor_date)
-                or record_day == trigger.anchor_date
+                or (
+                    not quote_dates
+                    and not _RELATIVE_PAST_DAY.search(_normalize(item["quote"]))
+                    and record_day == trigger.anchor_date
+                )
             ):
                 state = "uncertain"
         identity = records[record_ids[item["record"]]][2] if state == "documented" else None
