@@ -1,6 +1,6 @@
 """手术族正式记录覆盖：仅以结构化事件日期证明缺失，不猜测关联。"""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Mapping, Sequence
 from zoneinfo import ZoneInfo
 
@@ -45,54 +45,75 @@ def same_day_surgery_coverage_unresolved(
     master_rows: Sequence[Mapping[str, object]],
     record_rows: Sequence[Mapping[str, object]],
 ) -> bool:
-    """同日多台（开始时刻不同）时，无法证明每台都有自己的记录则判为未决。
+    """同日多台（开始时刻不同）时，每台都须有能唯一关联到它的手术记录，否则未决。
 
-    记录份数不等于台次：同一台的初写、修订等多份记录结构化开始时刻相同，
-    只证明该台。逐台核对：记录开始时刻与某台完全一致的只覆盖该台；未被精确
-    覆盖的台次须有开始时刻落在本台开始至下一台开始（及本台已知结束）之间的
-    其他记录，否则未决。
-    缺开始时刻的记录不能证明任何未被精确覆盖的台次。
-    同台术式拆行开始时刻相同，按一台计。
+    记录份数不等于台次。逐份记录确定可关联的台次：
+    - 记录开始时刻与某台完全一致，只关联该台（同台初写、修订都只证明该台）；
+    - 否则记录时段（开始至结束，无结束取开始时刻）须与该台时段（开始至已知结束，
+      无结束取至下一台开始）相交；结束后才开始、或早于开始就已结束的记录不属于该台；
+    - 与多台相交时以术式名称收窄，仍不唯一则不证明任何一台。
+    缺开始时刻的记录不能证明任何台次。同台术式拆行开始时刻相同，按一台计。
     """
-    begins_by_day: dict[object, set[datetime]] = {}
-    ends: dict[datetime, datetime] = {}
+    from .surgery_event_association import procedure_matches_surgery
+
+    surgeries_by_day: dict[object, dict[datetime, dict[str, object]]] = {}
     for row in master_rows:
         if not _coverage_candidate(row):
             continue
         begin = surgery_event_time(row)
-        if begin is not None:
-            begins_by_day.setdefault(begin.date(), set()).add(begin)
-            end = surgery_event_time(row, end=True)
-            if end is not None and end >= begin:
-                ends[begin] = max(end, ends.get(begin, end))
-    record_times = tuple(surgery_event_time(row) for row in record_rows)
-    undated = sum(1 for value in record_times if value is None)
-    for day, begins in begins_by_day.items():
-        if len(begins) < 2:
+        if begin is None:
             continue
-        same_day = [value for value in record_times if value is not None and value.date() == day]
+        slot = surgeries_by_day.setdefault(begin.date(), {}).setdefault(
+            begin, {"ends": set(), "names": set()}
+        )
+        end = surgery_event_time(row, end=True)
+        if end is not None and end >= begin:
+            slot["ends"].add(end)
+        name = str(row.get("surgery_name") or "").strip()
+        if name:
+            slot["names"].add(name)
+    records = tuple(
+        (surgery_event_time(row), surgery_event_time(row, end=True),
+         str(row.get("surgery_name") or "").strip())
+        for row in record_rows
+    )
+    undated = any(begin is None for begin, _end, _name in records)
+    for day, surgeries in surgeries_by_day.items():
+        if len(surgeries) < 2:
+            continue
+        same_day = [item for item in records if item[0] is not None and item[0].date() == day]
         if not same_day and not undated:
             continue
-        covered = {value for value in same_day if value in begins}
-        uncovered = begins - covered
-        if not uncovered:
-            continue
-        if undated:
+        ordered = sorted(surgeries)
+        spans: dict[datetime, tuple[datetime, datetime | None]] = {}
+        for index, begin in enumerate(ordered):
+            ends = surgeries[begin]["ends"]
+            if len(ends) == 1:
+                spans[begin] = (begin, next(iter(ends)))
+            else:
+                # 结束时间缺失或不一致时，以下一台开始为界（开区间）。
+                later = ordered[index + 1] if index + 1 < len(ordered) else None
+                spans[begin] = (begin, None if later is None else later - timedelta(microseconds=1))
+        covered: set[datetime] = set()
+        for record_begin, record_end, record_name in same_day:
+            if record_begin in surgeries:
+                covered.add(record_begin)
+                continue
+            record_stop = record_end if record_end is not None and record_end >= record_begin else record_begin
+            candidates = [
+                begin for begin, (span_begin, span_end) in spans.items()
+                if record_stop >= span_begin and (span_end is None or record_begin <= span_end)
+            ]
+            if len(candidates) > 1 and record_name:
+                named = [
+                    begin for begin in candidates
+                    if any(procedure_matches_surgery(record_name, name) for name in surgeries[begin]["names"])
+                ]
+                candidates = named or candidates
+            if len(candidates) == 1:
+                covered.add(candidates[0])
+        if set(surgeries) - covered:
             return True
-        ordered = sorted(begins)
-        for begin in uncovered:
-            later = [value for value in ordered if value > begin]
-            upper = later[0] if later else None
-            end = ends.get(begin)
-            # 开始时刻早于本台、不早于下一台或晚于本台已知结束的记录都不可能是本台记录。
-            if not any(
-                value not in begins
-                and begin <= value
-                and (upper is None or value < upper)
-                and (end is None or value <= end)
-                for value in same_day
-            ):
-                return True
     return False
 
 
