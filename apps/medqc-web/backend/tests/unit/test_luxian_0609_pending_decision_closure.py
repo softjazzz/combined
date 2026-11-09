@@ -283,3 +283,60 @@ async def test_060104_missing_report_text_is_unresolved_and_not_frozen(
     # 主事实本已 unknown 时也不得冻结为“专项完整”。
     assert row["incomplete_specialty_rule_ids"] == [check.RULE_ID]
     assert not row["frozen_files"]
+
+
+@pytest.mark.asyncio
+async def test_060104_v7_complete_freeze_is_isolated_and_left_untouched(monkeypatch, tmp_path):
+    """v7 可能已把缺正文 + 主事实 unknown 的批次冻结为“专项完整”。
+    在同一正式执行上下文（同一冻结分区）写入这样一份 v7 完整冻结：旧键下它可被读取；
+    新执行（v8）不得命中它，仍需模型调用并交付资料不足；旧文件字节保持不变。"""
+    from types import SimpleNamespace
+
+    from app.services.luxian_0609 import exam_result_record_check as check
+    from app.services.luxian_0609 import native_exam_lab_execution as native
+    from app.services.luxian_0609.exam_lab_fact_extraction import ExamLabEventFact
+    from tests.unit.test_exam_poc_acceptance import formal_replay
+    from tests.unit.test_luxian_0609_native_exam_lab_execution import _fact_response
+
+    assert check.RESULT_RECORD_VALIDATION_VERSION == "exam-record-event-identity-v8"
+    rows = {
+        "exam_master": ({"exam_id": "EX1", "exam_name": "胸部CT", "exam_type": "CT",
+                         "exam_time": "2026-01-02 08:00:00", "report_time": "2026-01-02 10:00:00"},),
+        "daily_course_record": ({"document_id": "C1", "record_time": "2026-01-02 12:00:00",
+                                 "record_content": "患者一般情况平稳，继续观察。"},),
+    }
+    main = _fact_response((check.RULE_ID,))
+    main["facts"][0].update(semantic_state="unknown", applicability="applicable", course_doc_positions=[])
+
+    real_key = native._main_freeze_key
+    planted: dict = {}
+
+    def key_with_v7_plant(projection, eligible_rule_ids):
+        current = real_key(projection, eligible_rule_ids)
+        if not planted:
+            with monkeypatch.context() as patch:
+                patch.setattr(check, "RESULT_RECORD_VALIDATION_VERSION", "exam-record-event-identity-v7")
+                old_key = real_key(projection, eligible_rule_ids)
+            # 旧版本曾可能写入的“专项完整”冻结；若被采用将跳过模型调用。
+            before = set((tmp_path / "f").rglob("*")) if (tmp_path / "f").exists() else set()
+            native._save_frozen_exam_lab_batch(old_key, native._ExamLabBatchResult(facts=(ExamLabEventFact(
+                rule_id=check.RULE_ID, applicability="applicable", semantic_state="unknown",
+                positive_state="not_relevant", course_doc_refs=(), evidence_refs=(), event_position=1),)))
+            [path] = [item for item in (tmp_path / "f").rglob("*") if item.is_file() and item not in before]
+            # 旧键下该冻结确为可读的完整专项冻结，证明隔离依赖版本而非文件无效。
+            assert native._load_frozen_exam_lab_batch(old_key, requires_specialty_completion=True) is not None
+            planted.update(old_key=old_key, new_key=current, path=path, content=path.read_bytes())
+        return current
+
+    monkeypatch.setattr(native, "_main_freeze_key", key_with_v7_plant)
+    row = await formal_replay(monkeypatch, tmp_path, case=SimpleNamespace(name="v7-isolation", rows=lambda: rows),
+                              recordings=[], arm="reference", mature=True, allow_incomplete=True,
+                              main_payload=main)
+    assert planted and planted["old_key"] != planted["new_key"]
+    # formal_replay 已断言 batch.llm_call_count == 实际请求数 == 1：未采用旧冻结。
+    assert row["saved"]["status"] == "data_gap"
+    assert row["saved"]["reason_code"] == "required_field_missing"
+    assert row["incomplete_specialty_rule_ids"] == [check.RULE_ID]
+    # 新执行不写入新的完整冻结；旧文件仍在且内容未变。
+    assert planted["path"].is_file() and planted["path"].read_bytes() == planted["content"]
+    assert row["frozen_files"] == [str(planted["path"].relative_to(tmp_path / "f"))]

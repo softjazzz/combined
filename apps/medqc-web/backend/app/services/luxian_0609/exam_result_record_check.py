@@ -217,7 +217,9 @@ def validation_identity(projection):
 
 # 仅参与主冻结键，不改变 JSON 协议或发送的 Prompt。
 # v7：缺报告正文无法专项核实的事件不再沿用主抽取并冻结为完整（2026-11-08），旧冻结自然不再命中。
-RESULT_RECORD_VALIDATION_VERSION = "exam-record-event-identity-v7"
+# v8：主事实本已 unknown（含适用性未知）的缺正文事件同样不得冻结为完整；v7 期间可能已写入
+# 这类“专项完整”冻结，升版使其自然不再命中。旧文件保留，不删除、不覆盖（2026-11-08）。
+RESULT_RECORD_VALIDATION_VERSION = "exam-record-event-identity-v8"
 
 
 # CR也用于疗效评价，不作为独立的影像模态锚点。
