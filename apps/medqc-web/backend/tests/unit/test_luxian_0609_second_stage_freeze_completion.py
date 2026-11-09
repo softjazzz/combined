@@ -369,7 +369,9 @@ def test_main_freeze_key_invalidates_v1_without_removing_old_cache(monkeypatch, 
     )
     exam_analysis_freeze.save_payload("main", legacy_key, {"incomplete_v1": True})
     legacy_path = exam_analysis_freeze.default_store_dir() / "main" / f"{legacy_key}.json"
-    current_key = exam_lab._main_freeze_key(object(), rule_ids)
+    current_key = exam_lab._main_freeze_key(
+        SimpleNamespace(comparison_events=(), imaging_events=(), imaging_event=None), rule_ids,
+    )
 
     assert current_key != legacy_key
     assert legacy_path.is_file()

@@ -97,6 +97,7 @@ async def test_named_existing_ordinary_antimicrobial_is_not_anonymous_target_sup
 async def test_synthetic_sqlite_new_instance_retains_only_target_related_support_properties(name, tmp_path):
     from sqlalchemy import MetaData, create_engine
     from sqlalchemy.orm import Session
+    from sqlalchemy.pool import NullPool
     import app.services.custom_qc_workspace_service as workspace
     from app.services.qc_workspace.canonical_result_store import CanonicalResultStore, envelope_item_from_rule_result, keyed_ref
 
@@ -105,8 +106,11 @@ async def test_synthetic_sqlite_new_instance_retains_only_target_related_support
     assert result["status"] == source["oracle"]["status"]
     item = {**result, "record_id": "V", "visit_id": "V", "institute_id": "I", "patient_id": "P"}
     table = workspace._record_result_envelopes_table().to_metadata(MetaData(), schema=None)
-    url = "sqlite:///" + (tmp_path / "tpd04.sqlite").as_posix()
-    engine = create_engine(url)
+    from uuid import uuid4
+    # 保持一个内存锚连接，验证重建Engine/Session后的真实保存读取。
+    url = "sqlite:///file:tpd04_" + uuid4().hex + "?mode=memory&cache=shared&uri=true"
+    engine = create_engine(url, poolclass=NullPool)
+    keeper = engine.connect()
     table.metadata.create_all(engine)
     try:
         with Session(engine) as write_db:
@@ -118,7 +122,7 @@ async def test_synthetic_sqlite_new_instance_retains_only_target_related_support
             )
             write_db.commit()
         engine.dispose()
-        engine = create_engine(url)
+        engine = create_engine(url, poolclass=NullPool)
         with Session(engine) as read_db:
             saved = CanonicalResultStore(table).load_selected(
                 read_db, root_job_id="J", institute_id="I", patient_id="P", visit_id="V",
@@ -147,6 +151,7 @@ async def test_synthetic_sqlite_new_instance_retains_only_target_related_support
                     assert evidence["field_path"] == "record_content"
                     assert evidence["evidence_excerpt"] == row["record_content"]
     finally:
+        keeper.close()
         engine.dispose()
 
 @pytest.mark.asyncio

@@ -80,6 +80,12 @@ def _session(
         source_schema=None,
         created_at=CREATED_AT,
         row_reader=reader,
+        evaluation_horizon_snapshot={
+            "institute_id": "safe-institute", "patient_id": "safe-patient", "visit_id": "safe-visit",
+            "record_scene": "final", "evaluation_basis": "discharge_datetime", "resolution_status": "resolved",
+            "evaluation_horizon": "2025-08-20", "admission_datetime": "2025-01-01 08:00:00",
+            "discharge_datetime": "2025-08-20 18:00:00", "discharge_time_precision": "datetime",
+        },
         additional_source_keys=resolve_legacy_executor_material_source_keys(
             ("tumor_pathology",), selected_rule_ids=(rule_id,)
         ),

@@ -41,7 +41,8 @@ async def test_key_drug_specimen_identity_links_detail_to_master_time():
     )
     rows["labtest_master"] = ({
         "test_id": "synthetic-lab", "labtest_subject": "微生物检验",
-        "request_datetime": "2026-06-01 09:00:00",
+        "request_datetime": "2026-06-01 08:30:00",
+        "sample_datetime": "2026-06-01 09:00:00",
     },)
     rows["labtest_item_report"] = ({
         "test_id": "synthetic-lab", "lab_item_name": "细菌培养及药敏",

@@ -29,6 +29,8 @@ from app.services.luxian_0609.decision_binding import (
 
 # 人工审阅的历史病例协议标签；仅用于冻结模型oracle，不由产品函数推断。
 _COURSE_LABELS = {
+    "输注去白悬浮红细胞2U；2026年6月5日16:10输注完毕。输血后复查血红蛋白较前改善，未见输血不良反应。": "record",
+    "输注去白悬浮红细胞，输血过程平稳。": "record",
     "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，结束时间16:10。输血过程中严密观察，未见不良反应。输血后复查血红蛋白提升，治疗有效。": "record",
     "普通病程仅提到拟输血和备血。": "not_record",
     "输血过程及输血后评价记录。": "not_record",
@@ -486,8 +488,8 @@ async def test_typed_044_llm_failure_semantics_bind_and_reduce(
                 "quote": "输入A型Rh(D)阳性2U",
                 "document_ref": "typed-transfusion-document",
             },
-            "evaluation_unknown",
-            "semantic_output_unknown",
+            "data_gap",
+            "semantic_extraction_unresolved",
             110,
         ),
         (None, "technical_error", "model_transport_error", 0),
@@ -529,7 +531,13 @@ async def test_typed_046_llm_failure_semantics_bind_and_reduce(
     )
 
     assert result.results == ()
-    assert result.customer_display_facts == ()
+    if expected_reason == "semantic_extraction_unresolved":
+        assert dict(result.customer_display_facts)["LX0609-07-02-02"] == {
+            "failure_kind": "transfusion_component_unresolved", "transfusion_order_present": True,
+            "record_count": 1, "unresolved_component_record_count": 1,
+        }
+    else:
+        assert result.customer_display_facts == ()
     # 引文或绑定错误定向补核一次，调用与 Token 各计两次。
     assert result.llm_call_count == (2 if expected_tokens == 220 else 1) + _protocol_calls(result)
     assert result.total_tokens == expected_tokens
@@ -1472,7 +1480,7 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
             bloodtrans_record=[
                 {
                     "content": (
-                        "2026年6月5日16:10输注完毕。"
+                        "输注去白悬浮红细胞2U；2026年6月5日16:10输注完毕。"
                         "输血后复查血红蛋白较前改善，未见输血不良反应。"
                     ),
                     "record_time": "2026-06-05 16:20:00",
@@ -1708,7 +1716,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
         ),
         (
             "LX0609-07-02-01",
-            _documents(daily_course_record=[]),
+            _documents(daily_course_record=[], bloodtrans_record=[{"content": "输注去白悬浮红细胞，输血过程平稳。"}]),
             [],
             True,
             "compliant",
@@ -1742,7 +1750,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
         ),
         (
             "LX0609-07-02-02",
-            _documents(daily_course_record=[]),
+            _documents(daily_course_record=[], bloodtrans_record=[{"content": "输注去白悬浮红细胞，输血过程平稳。"}]),
             [],
             True,
             "non_compliant",
@@ -1994,7 +2002,10 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
         patient_id="safe-patient",
         visit_id="safe-visit",
         source_schema=None,
-        llm_client=_Client([]),
+        llm_client=_Client([{
+            "assertion": "unclear", "component_text": "", "quote": "输血目的：纠正贫血",
+            "document_ref": "blood-046-incomplete-9",
+        }]),
     )
 
     assert result.results[0]["status"] == "non_compliant"
@@ -2004,11 +2015,12 @@ async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limi
     facts = dict(result.customer_display_facts)["LX0609-07-02-02"]
     assert facts["record_count"] == 9
     assert facts["incomplete_record_count"] == 1
-    assert facts["missing_fields"] == ["component", "dose"]
-    assert facts["missing_field_record_counts"] == {"component": 1, "dose": 1}
+    assert facts["missing_fields"] == ["dose"]
+    assert facts["unresolved_component_record_count"] == 1
+    assert facts["missing_field_record_counts"] == {"dose": 1}
     assert facts["source_document_ids"] == ["blood-046-incomplete-9"]
-    assert result.llm_call_count == _protocol_calls(result)
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1 + _protocol_calls(result)
+    assert result.total_tokens == 110
 
 
 @pytest.mark.asyncio
@@ -2045,11 +2057,12 @@ async def test_046_recognizes_complete_customer_narrative_wording(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
+async def test_046_semantic_component_does_not_borrow_cross_record_fields(
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
-    client = _Client([{"is_compliant": True}])
+    client = _Client([{"assertion": "not_explicit", "component_text": "",
+                       "quote": "输血目的：纠正贫血", "document_ref": "SYN-CROSS-046-1"}])
 
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-02-02",),
@@ -2057,6 +2070,7 @@ async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
         evidence_payload=_documents(
             bloodtrans_record=[
                 {
+                    "document_id": "SYN-CROSS-046-1",
                     "content": (
                         '输血目的：纠正贫血；开始时间14:20，结束时间16:10。输血过程中严密观察，未见寒战及输血不良反应。输血后复查血红蛋白提升，治疗有效。'
                     )
@@ -2080,16 +2094,16 @@ async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
     assert result.results[0]["metadata"]["reason_code"] == (
         "transfusion_course_record_incomplete"
     )
-    assert result.results[0]["metadata"]["executor_type"] == "program"
+    assert result.results[0]["metadata"]["executor_type"] == "llm"
     facts = dict(result.customer_display_facts)["LX0609-07-02-02"]
     assert facts["missing_fields"] == [
         "component",
         "dose",
         "reason_or_indication",
     ]
-    assert result.llm_call_count == 0 + _protocol_calls(result)
-    assert result.total_tokens == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1 + _protocol_calls(result)
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -2179,8 +2193,8 @@ async def test_046_llm_confirms_explicit_component_from_same_record_and_preserve
                 "quote": "A型Rh(D)阳性2u",
                 "document_ref": "blood-046-type-only",
             },
-            "uncertain",
-            "semantic_output_unknown",
+            "data_gap",
+            "semantic_extraction_unresolved",
         ),
         (
             {

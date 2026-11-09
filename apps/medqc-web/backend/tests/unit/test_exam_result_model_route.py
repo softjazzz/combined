@@ -314,7 +314,8 @@ async def test_outer_family_freeze_is_partitioned_before_lookup(monkeypatch, tmp
     monkeypatch.setattr(native, "_main_freeze_key", lambda *_: "same-input")
     await native._extract_exam_lab_batch(projection=p, eligible_rule_ids=[check.RULE_ID], llm_client=client)
     from app.services.llm_token_budget import token_freeze_scope
-    with token_freeze_scope(client):
+    from app.services.llm_task_roles import task_role_scope
+    with task_role_scope(client), token_freeze_scope(client):
         baseline = load_payload("main", "same-input")
     assert load_payload("main", "same-input") is None
     assert len(calls) == 1 and calls[0] is None and baseline is not None
@@ -332,7 +333,7 @@ async def test_outer_family_freeze_is_partitioned_before_lookup(monkeypatch, tmp
         assert len(calls) == 4 + index
     assert len(set(calls)) == 7
     assert current_llm_experiment_namespace() is None
-    with token_freeze_scope(client):
+    with task_role_scope(client), token_freeze_scope(client):
         assert load_payload("main", "same-input") == baseline
     assert await app.state.gateway_runtime.shutdown()
 

@@ -492,16 +492,16 @@ async def test_tumor_pathology_missing_semantic_client_is_technical_error_throug
         "technical_error",
     ]
     assert [item.evaluator_version for item in execution.decisions] == [
-        "tumor-pathology-ruledecision-shadow-v1",
-        "tumor-pathology-ruledecision-shadow-v1",
+        "tumor-pathology-ruledecision-shadow-v2",
+        "tumor-pathology-ruledecision-shadow-v2",
     ]
     assert [event["executor_key"] for event in trace_events] == [
         "tumor_pathology",
         "tumor_pathology",
     ]
     assert [event["evaluator_version"] for event in trace_events] == [
-        "tumor-pathology-ruledecision-shadow-v1",
-        "tumor-pathology-ruledecision-shadow-v1",
+        "tumor-pathology-ruledecision-shadow-v2",
+        "tumor-pathology-ruledecision-shadow-v2",
     ]
 
 

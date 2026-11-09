@@ -387,7 +387,8 @@ def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bun
         if rule.rule_id == "LX0609-04-02-02":
             # 医嘱事实仍供029术前评价；030不能仅以计划事实确认术后义务。
             performed = [ref for ref in matched if (ref.fact_type, ref.source_key) in _PERFORMED_PAIRS]
-            if matched and not performed:
+            if matched and not performed and not blockers:
+                # 计划不能证明实施；但来源不可用/失败仍沿既有失败通道，不能被计划未决盖掉。
                 conflict = True
             matched = performed
         if matched:

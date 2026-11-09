@@ -136,7 +136,11 @@ class RecordEvaluationHorizon:
     resolution_status: str
 
     def to_dict(self) -> dict[str, str]:
-        precision = "datetime" if ":" in self.discharge_datetime else "date" if self.discharge_datetime else "unknown"
+        try:
+            discharge = _parse_datetime(self.discharge_datetime, field_name="discharge_datetime")
+        except ValueError:
+            discharge = None
+        precision = ("datetime" if ":" in self.discharge_datetime else "date") if discharge is not None else "unknown"
         return {**asdict(self), "discharge_time_precision": precision}
 
 

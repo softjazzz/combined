@@ -433,7 +433,7 @@ def test_native_core_emits_direct_rule_decisions_on_shared_snapshot(monkeypatch)
     assert {item.snapshot_hash for item in result.decisions} == {snapshot_hash}
     assert all(item.fact_refs for item in result.decisions)
     assert {item.evaluator_version for item in result.decisions} == {
-        "surgery-presence-ruledecision-v2"
+        "surgery-presence-ruledecision-v3"
     }
     assert result.decisions[0].reason_code == "required_document_missing"
 

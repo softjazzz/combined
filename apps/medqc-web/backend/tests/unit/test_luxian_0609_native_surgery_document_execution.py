@@ -892,10 +892,12 @@ def _typed_session(
             elif surgery_mode == "multi":
                 rows = (
                     {
+                        "document_id": "SYN-MULTI-SURGERY-1",
                         "surgery_begin_time": "2026-01-01 08:00:00+08",
                         "record_content": "本次手术不属于紧急抢救手术。",
                     },
                     {
+                        "document_id": "SYN-MULTI-SURGERY-2",
                         "surgery_begin_time": "2026-01-02 08:00:00+08",
                         "record_content": "本次手术不属于紧急抢救手术。",
                     },
@@ -2857,7 +2859,7 @@ async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_re
 
 
 @pytest.mark.asyncio
-async def test_typed_078_source_query_error_is_delivered_as_data_gap():
+async def test_typed_078_source_query_error_is_technical_error():
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         if source_key == "presurg_summary":
@@ -2895,8 +2897,8 @@ async def test_typed_078_source_query_error_is_delivered_as_data_gap():
     )
 
     assert (reduced[0].final_state, reduced[0].reason_code) == (
-        "data_gap",
-        "source_readiness_unproven",
+        "technical_error",
+        "source_query_error",
     )
     assert result.llm_call_count == 0
 

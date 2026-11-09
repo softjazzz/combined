@@ -285,7 +285,7 @@ def test_real_nonzero_030_matched_target_present_is_compliant(monkeypatch):
     assert (captured["fact_id"],) in captured["coverage_fact_ids"]
 
 
-def test_real_nonzero_030_order_trigger_target_empty_is_non_compliant():
+def test_real_nonzero_030_order_trigger_target_empty_remains_unconfirmed():
     observations = (SourceQueryObservation.create(source_key="inpat_nondrug_order", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_application", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_record", query_status="empty", query_version="query-v1"))
     payload = {"programmatic_timeline": {"documents": {"inpat_nondrug_order": [{"content": "safe"}], "surgery_application": [{"content": "safe"}]}}}
     legacy = Luxian0609Fact(fact_type="current_visit_surgery_order_confirmed", family="surgery_anesthesia", source_document_type="医嘱", source_document_id="order-1", record_time="", quote="safe", confidence=0.9, extractor="structured", trace={})
@@ -293,7 +293,7 @@ def test_real_nonzero_030_order_trigger_target_empty_is_non_compliant():
     pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-empty").hexdigest(), legacy_fact=legacy, mapping=mapping)
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order", refs=(pair.pair_ref,)), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record", processed=0))
     report = _zero(selected_rule_ids=["LX0609-04-02-02"], scoped_customer_rule_ids=["LX0609-04-02-02"], record_rule_map={"visit-orch-001": ["LX0609-04-02-02"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
-    assert report.results[0].final_state.value == "non_compliant"
+    assert report.results[0].final_state.value == "evaluation_unknown"
 
 
 def test_real_nonzero_030_order_trigger_target_unavailable_is_data_gap():

@@ -717,6 +717,9 @@ def execute_luxian_0609_native_rules(
         return _technical_results(selected, reason_code="native_execution_failure")
 
     def result_reason(rule_id: str, final_state: str) -> str:
+        if final_state == "technical_error":
+            # 影子链技术失败必须使用RuleDecision允许的原因，不能被通用成功标记覆盖。
+            return "executor_exception"
         if final_state == "data_gap":
             return "required_field_missing"
         if final_state != "non_compliant":

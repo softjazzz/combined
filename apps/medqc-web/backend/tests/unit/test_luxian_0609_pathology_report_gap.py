@@ -17,6 +17,12 @@ async def _run(reports, *, rule_id="LX0609-06-02-03"):
     session = build_luxian_0609_evidence_read_session(
         selected_rule_ids=(rule_id,), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2026-07-03T09:00:00+08:00", row_reader=reader,
+        evaluation_horizon_snapshot={
+            "institute_id": "I", "patient_id": "P", "visit_id": "V",
+            "record_scene": "final", "evaluation_basis": "discharge_datetime", "resolution_status": "resolved",
+            "evaluation_horizon": "2026-07-03", "admission_datetime": "2025-01-01 08:00:00",
+            "discharge_datetime": "2026-07-03 08:00:00", "discharge_time_precision": "datetime",
+        },
     )
     result = await execute_luxian_0609_native_tumor_pathology_rules(
         rule_ids=(rule_id,), wrapper_rules=[], evidence_payload={},

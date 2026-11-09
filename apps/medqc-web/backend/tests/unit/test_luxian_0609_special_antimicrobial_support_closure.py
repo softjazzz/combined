@@ -249,6 +249,13 @@ async def _run(rows):
         selected_rule_ids=(RULE,), institute_id="synthetic-I", patient_id="synthetic-P",
         visit_id="synthetic-V", source_schema=None, created_at="2026-10-08T10:00:00+08:00",
         row_reader=read,
+        evaluation_as_of_date=rows["evaluation_context.horizon"][0]["horizon_date"],
+        evaluation_horizon_policy="frozen_task_date",
+        evaluation_horizon_snapshot={
+            "institute_id": "synthetic-I", "patient_id": "synthetic-P", "visit_id": "synthetic-V",
+            "record_scene": "running", "evaluation_basis": "task_frozen_date", "resolution_status": "resolved",
+            "evaluation_horizon": rows["evaluation_context.horizon"][0]["horizon_date"],
+        },
         additional_source_keys=resolve_legacy_executor_material_source_keys(
             ("extended_document",), selected_rule_ids=(RULE,),
         ),

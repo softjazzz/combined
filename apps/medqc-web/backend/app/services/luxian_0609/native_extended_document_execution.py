@@ -3344,6 +3344,8 @@ async def _execute_extended_document_group(
                 # 疗程不满48小时即停用的不要求48–72小时评价。
                 course_resolution = derive_antimicrobial_use_events(
                     rule_antimicrobial_orders, _antimicrobial_names_in,
+                    # 已按本次实际给药证据核对取消/未实施，不能在建疗程时再次仅凭状态排除。
+                    exclusions_checked=True,
                 )
                 order_events = tuple(
                     (_AntimicrobialOrderEvent(event.orders, (event.antimicrobial,)), event.antimicrobial, event.time)

@@ -143,8 +143,8 @@ def test_target_qualification_rejects_unapproved_policy_and_count_above_target_r
 
 @pytest.mark.parametrize(("status", "resolution", "readiness"), [(QueryStatus.AVAILABLE, TargetResolution.PRESENT, GateReadiness.READY), (QueryStatus.EMPTY, TargetResolution.EMPTY, GateReadiness.READY), (QueryStatus.UNAVAILABLE, TargetResolution.UNAVAILABLE, GateReadiness.BLOCKED), (QueryStatus.ERROR, TargetResolution.ERROR, GateReadiness.BLOCKED)])
 def test_a_matched_target_matrix(status, resolution, readiness):
-    fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
-    plan = _plan()
+    # 术后记录义务以已实施事实触发，计划医嘱不证明实施。
+    fact = _fact(fact_type="current_visit_surgery_confirmed", source_key="mr_surgery")
     pair = (fact.fact_type, fact.source_key)
     report = _gate(statuses={"surgery_record": status}, facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
     assert (report.decisions[0].target_resolution, report.decisions[0].readiness) == (resolution, readiness)
@@ -230,7 +230,6 @@ def test_d_valid_fact_semantic_conflicts(field, value):
 def test_d_order_and_performed_semantics_and_e_positive_wins():
     order = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
     performed = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record", document_id="doc-performed")
-    plan = _plan()
     bad_pair = ("current_visit_surgery_confirmed", "surgery_application")
     report = _gate(facts=(order, performed), overrides={(order.fact_type, order.source_key): _observation((order.fact_type, order.source_key), fact_ids=(order.fact_id,)), (performed.fact_type, performed.source_key): _observation((performed.fact_type, performed.source_key), fact_ids=(performed.fact_id,)), bad_pair: _observation(bad_pair, state="partial", processed=1, reason="partial_budget_limit")})
     assert report.decisions[0].trigger_resolution is TriggerResolution.MATCHED

@@ -19,6 +19,7 @@ from test_luxian_0609_preop_fact_protocol import (
     SUMMARY,
     TEXT,
     fact,
+    assert_invalid_preop_field,
     present_items,
     publish,
 )
@@ -73,11 +74,10 @@ def test_invalid_or_noncontinuous_reference_is_not_repaired(value):
     items = present_items(SUMMARY)
     items["precautions"] = span(span_id=value)
     final, _ = publish(SUMMARY, items=items)
-    assert (
-        final["customer_display_facts"]["verification_kind"]
-        == "preop_fact_extraction_invalid"
-    )
-    assert final["customer_display_facts"]["invalid_fields"] == ["precautions"]
+    assert final["status"] == "technical_error"
+    assert final["reason_code"] == "model_invalid_output"
+    assert not final.get("customer_display_facts")
+    assert_invalid_preop_field(items, SUMMARY, "precautions")
 
 
 @pytest.mark.parametrize(
@@ -94,10 +94,10 @@ def test_invalid_span_shape_keeps_failure_semantics(value):
     items = present_items(SUMMARY)
     items["precautions"] = value
     final, _ = publish(SUMMARY, items=items)
-    assert (
-        final["customer_display_facts"]["verification_kind"]
-        == "preop_fact_extraction_invalid"
-    )
+    assert final["status"] == "technical_error"
+    assert final["reason_code"] == "model_invalid_output"
+    assert not final.get("customer_display_facts")
+    assert_invalid_preop_field(items, SUMMARY, "precautions")
 
 
 def test_different_fields_can_reuse_the_same_original_span():
@@ -121,17 +121,20 @@ def test_old_quotes_keep_strict_compatibility_and_no_repair():
         items = present_items(SUMMARY)
         items["precautions"] = value
         final, _ = publish(SUMMARY, items=items)
-        assert (
-            final["customer_display_facts"]["verification_kind"]
-            == "preop_fact_extraction_invalid"
-        )
+        assert final["status"] == "technical_error"
+        assert final["reason_code"] == "model_invalid_output"
+        assert not final.get("customer_display_facts")
+        assert_invalid_preop_field(items, SUMMARY, "precautions")
 
 
 def test_planned_procedure_requires_existing_short_quote_not_sentence_span():
     items = present_items(SUMMARY)
     items["planned_procedure"] = span(span_id="d1:s1")
     final, prompt = publish(SUMMARY, items=items)
-    assert final["customer_display_facts"]["invalid_fields"] == ["planned_procedure"]
+    assert final["status"] == "technical_error"
+    assert final["reason_code"] == "model_invalid_output"
+    assert not final.get("customer_display_facts")
+    assert_invalid_preop_field(items, SUMMARY, "planned_procedure")
     assert "planned_procedure" in prompt and "短" in prompt
 
 
@@ -338,5 +341,5 @@ def test_duplicate_source_document_identity_is_rejected_before_catalog_or_model(
     )
     assert client.prompts == []
     assert result.llm_call_count == 0
-    assert result.decisions[0].evidence_state.value == "data_gap"
-    assert result.decisions[0].reason_code == "source_readiness_unproven"
+    assert result.decisions[0].evidence_state.value == "technical_error"
+    assert result.decisions[0].reason_code == "snapshot_mismatch"
