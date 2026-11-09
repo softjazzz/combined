@@ -280,10 +280,13 @@ def colon_pathology_missing_items(
     missing = []
     if not _LYMPH_NODE_COUNT_PATTERN.search(text):
         missing.append("lymph_node_count")
-    # 标签不构成分期；明确否定/待填的示例值也不能当成已记录的病理分期。
+    # 否定须直接修饰分期填写/存在；“未见淋巴结转移 pT3N0”仍有真实分期。
     positive_stages = [
         match for match in _PATHOLOGIC_STAGE_PATTERN.finditer(text)
-        if not re.search(r"(?:未(?:见|记录|填写)|无|缺少|待填)[^。；;，,]{0,12}$", text[max(0, match.start()-20):match.start()])
+        if not re.search(
+            r"(?:未(?:见|记录|填写)|无|缺少|待填)\s*(?:(?:病理)?分期\s*[:：]?\s*)?$",
+            text[max(0, match.start() - 20):match.start()],
+        )
         and not re.match(r"\s*(?:未(?:记录|填写)|待填)", text[match.end():])
     ]
     if not positive_stages:

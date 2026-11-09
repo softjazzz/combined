@@ -119,6 +119,7 @@ async def test_discussion_event_controls(case):
     ("pTNM：未填写", "non_compliant"), ("未记录pTNM分期", "non_compliant"),
     ("未记录pT3N0", "non_compliant"),
     ("pT3N0", "compliant"), ("ypT2N0", "compliant"),
+    ("未见淋巴结转移 pT3N0", "compliant"),
 ])
 async def test_pathology_requires_stage_value(stage, expected):
     result = await run(LYMPH, {
