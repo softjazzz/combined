@@ -82,3 +82,30 @@ def test_worker_and_customer_dto_classify_neutral_records_alike(statuses, bucket
         assert value == counts[key], (key, dto, counts)
     # 单条规则原始状态不因病历级分类改变。
     assert [item["status"] for item in items] == list(statuses)
+
+
+def test_failed_record_is_failed_first_in_customer_dto_router_and_worker(monkeypatch):
+    """整份作业投影：含暂停项的病历另有规则执行失败时，三端都按失败优先，不计未执行。"""
+    import app.routers.qc_sichuan as router
+    from app.services.custom_qc_workspace_service import project_customer_safe_batch_job
+
+    ref = "rec_" + "a" * 24
+    pending = {**build_luxian_0609_pending_definition_result("LX0609-03-01-01"), "record_ref": ref}
+    job = {"id": "synthetic-job", "status": "failed", "items": [pending],
+           "failed_records": [{"record_ref": ref, "rule_id": "LX0609-04-01-01"}],
+           "filters": {"rule_set_key": "luxian_0609_qc_v1",
+                       "selected_rule_ids": ["LX0609-03-01-01", "LX0609-04-01-01"]},
+           "summary": {"total_records": 1, "success_count": 0, "failed_count": 1,
+                       "execution_status": "partial_failed"}}
+    dto = project_customer_safe_batch_job(job, hmac_key="synthetic-test-only")
+    monkeypatch.setattr(router, "customer_safe_projection_key", lambda: "synthetic-test-only")
+    response = router._workspace_batch_response_item(job)
+    na_ids, paused_ids = classify_neutral_records([{**pending, "record_key": ref}])
+    counts = _build_record_status_counts(
+        total_records=1, issue_record_ids=set(), uncertain_record_ids=set(), data_gap_record_ids=set(),
+        failed_record_ids={ref}, not_applicable_record_ids=na_ids, not_executed_record_ids=paused_ids,
+    )
+    assert (counts["failed"], counts["not_executed"], counts["compliant"]) == (1, 0, 0)
+    for summary in (dto["summary"], response["summary"]):
+        assert (summary["not_executed_records"], summary["not_applicable_records"],
+                summary["compliant_records"]) == (0, 0, 0)

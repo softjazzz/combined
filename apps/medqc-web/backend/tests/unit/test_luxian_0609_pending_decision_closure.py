@@ -234,3 +234,44 @@ def test_029_performed_surgery_without_summary_is_still_defect():
               "surgery_process": "手术经过：顺利。", "record_content": "手术经过：顺利。"}
     final = _029_final({"surgery_record": [record], "inpat_nondrug_order": [_order(12)]}, day="2026-06-10")
     assert _saved(final)["status"] == "non_compliant"
+
+
+# ---------- 第六轮复核：结束时间冲突、缺报告正文的专项跳过 ----------
+def test_030_conflicting_known_ends_do_not_become_unbounded():
+    second = _surgery_master(2, 20, surgeon="乙")
+    other_component = {**second, "surgery_name": "腹腔镜下肠粘连松解术", "surgery_code": "54.5101",
+                       "surgery_end_datetime": datetime(2026, 6, 2, 21)}
+    late = {**_surgery_record(2, 20), "document_id": "LATE",
+            "surgery_begin_time": "2026-06-02 23:00:00+08:00",
+            "surgery_end_time": "2026-06-02 23:30:00+08:00", "record_time": "2026-06-02 23:45:00"}
+    final = _surgery_presence_final({
+        "mr_surgery": [_surgery_master(2, 8), second, other_component],
+        "surgery_record": [_surgery_record(2, 8), late],
+    })
+    assert (_saved(final)["status"], final["reason_code"]) == ("data_gap", "association_failed")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("main_state", ["absent", "present"])
+async def test_060104_missing_report_text_is_unresolved_and_not_frozen(monkeypatch, tmp_path, main_state):
+    from types import SimpleNamespace
+
+    from app.services.luxian_0609 import exam_result_record_check as check
+    from tests.unit.test_exam_poc_acceptance import formal_replay
+    from tests.unit.test_luxian_0609_native_exam_lab_execution import _fact_response
+
+    rows = {
+        "exam_master": ({"exam_id": "EX1", "exam_name": "胸部CT", "exam_type": "CT",
+                         "exam_time": "2026-01-02 08:00:00", "report_time": "2026-01-02 10:00:00"},),
+        "daily_course_record": ({"document_id": "C1", "record_time": "2026-01-02 12:00:00",
+                                 "record_content": "患者一般情况平稳，继续观察。"},),
+    }
+    main = _fact_response((check.RULE_ID,))
+    main["facts"][0].update(semantic_state=main_state,
+                            course_doc_positions=[1] if main_state == "present" else [])
+    row = await formal_replay(monkeypatch, tmp_path, case=SimpleNamespace(name="no-report-text", rows=lambda: rows),
+                              recordings=[], arm="reference", mature=True, allow_incomplete=True,
+                              main_payload=main)
+    assert (row["saved"]["status"], row["saved"]["reason_code"]) == ("data_gap", "required_field_missing")
+    assert row["incomplete_specialty_rule_ids"] == [check.RULE_ID]
+    assert not row["frozen_files"]

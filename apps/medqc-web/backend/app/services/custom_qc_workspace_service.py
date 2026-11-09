@@ -1405,9 +1405,13 @@ def project_customer_safe_batch_job(
         for item in list(job.get("failed_records") or [])
         if isinstance(item, dict)
     ]
-    if safe_summary.get("execution_status") in {"partial_failed", "failed"}:
-        failed_refs = {failure["record_ref"] for failure in failed_records}
+    failed_refs = {failure["record_ref"] for failure in failed_records}
+    if safe_summary.get("execution_status") in {"partial_failed", "failed"} or failed_refs:
+        # 与批处理 Worker 同一合同：执行失败的病历优先归失败，不再计入合规、不适用或未执行。
+        neutral_na, neutral_paused = classify_neutral_records(items, ("record_ref",))
         safe_summary["compliant_records"] = len(_compliant_record_refs(items) - failed_refs)
+        safe_summary["not_applicable_records"] = len(neutral_na - failed_refs)
+        safe_summary["not_executed_records"] = len(neutral_paused - failed_refs)
     item_record_refs = {
         _safe_text(item.get("record_ref"))
         for item in items
