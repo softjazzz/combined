@@ -525,3 +525,52 @@ async def test_063_later_discharge_record_without_id_cannot_borrow_older():
     final = await _063_final(rows)
     assert final["status"] == "data_gap"
     assert final["customer_display_facts"]["written_gap"] == "version_conflict"
+
+
+# ---------- 第三轮复核：摘录所在句、末台结束边界、单份文书显式编号冲突 ----------
+@pytest.mark.asyncio
+@pytest.mark.parametrize("second_text,expected", [
+    ("补记昨日操作经过：2026年6月1日" + DONE_TEXT + "，术后平稳。", "data_gap"),
+    ("2026年6月2日再次" + DONE_TEXT + "，操作顺利。", "compliant"),
+], ids=["short_quote_in_previous_day_sentence", "short_quote_in_own_day_sentence"])
+async def test_075_short_quote_is_judged_with_its_sentence(second_text, expected):
+    first = f"2026年6月1日{DONE_TEXT}"
+    rows = _two_day_rows(_course("D1", 1, 15, first + "。"), _course("S", 2, 15, second_text))
+    model = _ScriptedInvasiveModel({
+        "2026-06-01": (lambda r: r["time"].startswith("2026-06-01"), first),
+        "2026-06-02": (lambda r: r["time"].startswith("2026-06-02"), DONE_TEXT),
+    })
+    item = await _extended("LX0609-10-03-01", rows, model, final=True)
+    assert item.final_state.value == expected
+
+
+def test_030_record_after_last_surgery_ended_cannot_cover_it():
+    late = {**_surgery_record(2, 8), "document_id": "LATE",
+            "surgery_begin_time": "2026-06-02 23:00:00+08:00",
+            "surgery_end_time": "2026-06-02 23:30:00+08:00", "record_time": "2026-06-02 23:45:00"}
+    final = _surgery_presence_final({
+        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+        "surgery_record": [_surgery_record(2, 8), late],
+    })
+    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
+
+
+@pytest.mark.asyncio
+async def test_063_single_discharge_record_with_foreign_diagnosis_id_is_gap():
+    rows = _discharge_rows(NAMES, ())
+    rows["discharge_record"] = (rows["discharge_record"][1],)
+    rows["discharge_record_diagnosis"] = _diagnoses("D1", NAMES)
+    final = await _063_final(rows)
+    assert final["status"] == "data_gap"
+    assert final["customer_display_facts"]["written_gap"] == "version_conflict"
+
+
+@pytest.mark.asyncio
+async def test_063_single_discharge_record_with_unbound_legacy_diagnoses_is_compared():
+    rows = _discharge_rows(NAMES, ())
+    rows["discharge_record"] = (rows["discharge_record"][1],)
+    rows["discharge_record_diagnosis"] = tuple(
+        {k: v for k, v in row.items() if k != "document_id"} for row in _diagnoses("D1", NAMES)
+    )
+    final = await _063_final(rows)
+    assert final["status"] == "compliant"

@@ -367,7 +367,7 @@ def _latest_written_diagnosis_version(
     """多版本出院记录（初写、补录、修订）只取最后一份权威版本的诊断，不合并比对。
 
     诊断行以 ``document_id`` 归属出院记录。只有一份出院记录时沿用其诊断行
-    （兼容未带文书编号的旧快照）。多份出院记录时：
+    （兼容未带文书编号的旧快照），但两边编号都有而不一致时返回冲突。多份出院记录时：
     - 出院记录或诊断行缺文书编号、诊断行归属不到任何出院记录，均无法确认
       诊断属于哪一版，返回 ``version_conflict``，不借旧版判定；
     - 各版在判定字段（序号、名称、主诊断标记、类型）上完全相同时取任一版本；
@@ -384,7 +384,12 @@ def _latest_written_diagnosis_version(
         groups.setdefault(doc_id, []).append(row)
     distinct_parents = set(parent_ids)
     if len(discharge_rows) <= 1 or (all(parent_ids) and len(distinct_parents) == 1):
-        # 单一出院记录：多组诊断行仍无法判定版本。
+        # 单一出院记录：缺编号的旧快照沿用其诊断行；两边都有编号而明确不一致，
+        # 或多组诊断行时，无法确认诊断属于该出院记录。
+        known_parents = {doc_id for doc_id in distinct_parents if doc_id}
+        known_children = {doc_id for doc_id in groups if doc_id}
+        if known_parents and known_children and not known_children <= known_parents:
+            return (), "version_conflict"
         if len(groups) <= 1:
             return rows, None
         if all(ids) and set(groups) <= distinct_parents:
@@ -3863,7 +3868,14 @@ async def _execute_extended_document_group(
                     discharge_diagnosis_rows, diagnosis_scope=diagnosis_scope,
                     allow_untyped_legacy_rows=not mr_diagnosis_observed and diagnosis_scope == "discharge",
                 )
-                written_rows, version_gap = _latest_written_diagnosis_version(written_rows, discharge_rows)
+                # 死亡病例的诊断行可能归属死亡记录；归属明确为死亡记录时以其为版本父文书。
+                version_parents = discharge_rows
+                if diagnosis_scope == "death":
+                    death_ids = {_clean(row.get("document_id")) for row in death_rows} - {""}
+                    child_ids = {_clean(row.get("document_id")) for row in written_rows} - {""}
+                    if child_ids and child_ids <= death_ids:
+                        version_parents = death_rows
+                written_rows, version_gap = _latest_written_diagnosis_version(written_rows, version_parents)
                 consumed.extend((authority_source_key, row) for row in authority_rows)
                 consumed.extend(("discharge_record_diagnosis", row) for row in written_rows)
                 authority, authority_gap = _diagnosis_sequence(authority_rows)
