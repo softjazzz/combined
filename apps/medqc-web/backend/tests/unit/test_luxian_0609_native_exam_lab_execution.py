@@ -4555,6 +4555,8 @@ async def test_executor_passes_controlled_evaluation_horizon_into_post_rule(monk
         exam_rows=({
             "exam_type": "CT",
             "report_time": "2026-04-26 10:00:00",
+            # 有报告正文才能专项确认“未记录”；缺正文时按未决处理（2026-11-08）。
+            "exam_conclusion": "右肺下叶结节影。",
         },),
         discharge_horizon_rows=({
             "discharge_datetime": "2026-04-27 10:00:00",
@@ -4564,8 +4566,13 @@ async def test_executor_passes_controlled_evaluation_horizon_into_post_rule(monk
             "horizon_date": "2026-04-27",
         },),
     )
+    from app.services.luxian_0609.exam_result_record_check import SCHEMA_VERSION as RECORD_SCHEMA
+
     client = _Client([
-        _fact_response(("LX0609-06-01-04",), semantic_state="absent")
+        _fact_response(("LX0609-06-01-04",), semantic_state="absent"),
+        # 专项核实报告后病程未记录本次结果（2026-11-08 起未经专项核实的“未记录”不作确定依据）。
+        {"schema_version": RECORD_SCHEMA, "docs": [{"event_position": 1, "course_doc_ref": "D06-01",
+                                                    "quote_type": "none", "quote": "", "report_span": ""}]},
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -4579,7 +4586,7 @@ async def test_executor_passes_controlled_evaluation_horizon_into_post_rule(monk
     )
 
     assert result.decisions[0].qc_direction.value == "defect"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
 
 
 def test_report_time_cannot_replace_missing_course_record_time():
@@ -5376,6 +5383,8 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
                 "exam_id": "EXAM-2",
                 "exam_name": "头颅MRI",
                 "report_time": "2026-04-04 12:00:00",
+                # 有报告正文才能专项确认“未记录”；缺正文时按未决处理（2026-11-08）。
+                "exam_conclusion": "左侧基底节区腔隙灶。",
             },
         ),
         course_rows=({

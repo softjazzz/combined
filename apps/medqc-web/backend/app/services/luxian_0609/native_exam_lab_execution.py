@@ -2550,6 +2550,25 @@ async def _extract_exam_lab_batch_uncached(
                         )
                         text_facts = apply(text_facts, check_outcome,
                                            partial_in_window_positions=partial_in_window)
+                        # 缺报告正文的事件无法专项核实（含整体 skipped）：主抽取已记录/未记录
+                        # 都不作确定依据，按报告正文缺失保留资料不足，且不得完整冻结（用户口径 2026-11-08）。
+                        from .exam_result_record_check import report_text_missing_positions
+                        missing_report = report_text_missing_positions(projection)
+                        if missing_report and any(
+                            fact.rule_id == rule_id and fact.event_position in missing_report
+                            and fact.applicability == "applicable"
+                            and fact.semantic_state in {"present", "absent"}
+                            for fact in text_facts
+                        ):
+                            text_facts = tuple(
+                                replace(fact, semantic_state="unknown")
+                                if fact.rule_id == rule_id and fact.event_position in missing_report
+                                and fact.applicability == "applicable"
+                                and fact.semantic_state in {"present", "absent"}
+                                else fact
+                                for fact in text_facts
+                            )
+                            incomplete_specialty_rule_ids.add(rule_id)
                     else:
                         text_facts = apply(text_facts, check_outcome)
     return _ExamLabBatchResult(

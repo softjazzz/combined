@@ -310,17 +310,17 @@ async def test_failed_specialty_check_retries_then_successful_batch_reuses(
     monkeypatch.setattr(exam_lab, check_name, _check)
 
     first = await exam_lab._extract_exam_lab_batch(
-        projection=object(),
+        projection=SimpleNamespace(imaging_events=(), imaging_event=None),
         eligible_rule_ids=(rule_id,),
         llm_client=object(),
     )
     second = await exam_lab._extract_exam_lab_batch(
-        projection=object(),
+        projection=SimpleNamespace(imaging_events=(), imaging_event=None),
         eligible_rule_ids=(rule_id,),
         llm_client=object(),
     )
     third = await exam_lab._extract_exam_lab_batch(
-        projection=object(),
+        projection=SimpleNamespace(imaging_events=(), imaging_event=None),
         eligible_rule_ids=(rule_id,),
         llm_client=object(),
     )
@@ -464,7 +464,7 @@ async def test_main_extraction_failure_paths_do_not_freeze_or_reference_unset_co
         monkeypatch.setattr(exam_lab, "parse_exam_lab_fact_response_isolated", _parse)
 
     result = await exam_lab._extract_exam_lab_batch(
-        projection=object(),
+        projection=SimpleNamespace(imaging_events=(), imaging_event=None),
         eligible_rule_ids=("LX0609-06-01-05",),
         llm_client=object(),
     )

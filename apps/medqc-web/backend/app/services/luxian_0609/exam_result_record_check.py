@@ -216,7 +216,8 @@ def validation_identity(projection):
 
 
 # 仅参与主冻结键，不改变 JSON 协议或发送的 Prompt。
-RESULT_RECORD_VALIDATION_VERSION = "exam-record-event-identity-v6"
+# v7：缺报告正文无法专项核实的事件不再沿用主抽取并冻结为完整（2026-11-08），旧冻结自然不再命中。
+RESULT_RECORD_VALIDATION_VERSION = "exam-record-event-identity-v7"
 
 
 # CR也用于疗效评价，不作为独立的影像模态锚点。
@@ -313,6 +314,16 @@ def _targets(projection: ExamLabTextProjection) -> dict[int, tuple[str, tuple[st
             )
         targets[position] = (report, tuple(ref for ref in refs if _course_text(projection, ref).strip()))
     return targets
+
+
+def report_text_missing_positions(projection: ExamLabTextProjection) -> frozenset[int]:
+    """已确认目标、非 CT 引导操作但缺报告正文的检查：专项无法核实是否记录了本次结果。"""
+    return frozenset(
+        position
+        for position, event in enumerate(events_for_family(projection, "exam"), start=1)
+        if event.target_confirmed and not event.guidance_only
+        and not any(str(text or "").strip() for text in event.result_texts)
+    )
 
 
 def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, tuple[str, ...]]]) -> str:
