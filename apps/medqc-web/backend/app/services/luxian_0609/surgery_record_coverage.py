@@ -50,7 +50,8 @@ def same_day_surgery_coverage_unresolved(
     记录份数不等于台次。逐份记录确定可关联的台次：
     - 记录开始时刻与某台完全一致，只关联该台（同台初写、修订都只证明该台）；
     - 否则记录时段（开始至结束，无结束取开始时刻）须与该台时段（开始至已知结束，
-      无结束取至下一台开始）相交；结束后才开始、或早于开始就已结束的记录不属于该台；
+      结束不一致取最早结束，无结束取至下一台开始）相交；结束后才开始、或早于开始就
+      已结束的记录不属于该台；
     - 与多台相交时以术式名称收窄，仍不唯一则不证明任何一台。
     缺开始时刻的记录不能证明任何台次。同台术式拆行开始时刻相同，按一台计。
     """
@@ -88,12 +89,16 @@ def same_day_surgery_coverage_unresolved(
         spans: dict[datetime, tuple[datetime, datetime | None]] = {}
         for index, begin in enumerate(ordered):
             ends = surgeries[begin]["ends"]
-            if len(ends) == 1:
-                spans[begin] = (begin, next(iter(ends)))
-            else:
-                # 结束时间缺失或不一致时，以下一台开始为界（开区间）。
-                later = ordered[index + 1] if index + 1 < len(ordered) else None
-                spans[begin] = (begin, None if later is None else later - timedelta(microseconds=1))
+            later = ordered[index + 1] if index + 1 < len(ordered) else None
+            bounds = []
+            if ends:
+                # 结束时间不一致时不任取其一，也不放宽为无上界：以最早的已知结束为界，
+                # 晚于它才开始的记录无法证明属于本台（保持未决）。
+                bounds.append(min(ends))
+            if later is not None:
+                bounds.append(later - timedelta(microseconds=1))
+            # 结束时间完全未知且为当日最后一台时，才不设上界。
+            spans[begin] = (begin, min(bounds) if bounds else None)
         covered: set[datetime] = set()
         for record_begin, record_end, record_name in same_day:
             if record_begin in surgeries:
