@@ -3102,6 +3102,7 @@ def _execution_prompt(
     completed: Sequence[_CompletedRecommendation],
     candidates: Sequence[_CandidateDocument],
     share_visible_order_refs: bool = False,
+    cap_truncated_refs: set[str] | None = None,
 ) -> tuple[str, Mapping[str, frozenset[str]]]:
     entries: list[dict[str, object]] = []
     allowed_refs: dict[str, frozenset[str]] = {}
@@ -3204,6 +3205,12 @@ def _execution_prompt(
                     *earlier[:_MAX_ORDER_CANDIDATES_PER_SOURCE],
                 )
             )
+            if cap_truncated_refs is not None and (
+                len(same_day) > _MAX_SAME_DAY_ORDER_CANDIDATES_PER_SOURCE
+                or len(earlier) > _MAX_ORDER_CANDIDATES_PER_SOURCE
+            ):
+                # 源读取完整不等于本建议的核对候选完整：上限排除了合同范围内的医嘱。
+                cap_truncated_refs.add(item.recommendation.recommendation_ref)
         kept_refs = {
             candidate.ref
             for candidate in included
@@ -6167,6 +6174,52 @@ async def _execute_consultation_episode_rules(
             }:
                 continue
             statuses[rule_id] = ("data_gap", "linkage_unresolved")
+    if (
+        statuses.get("LX0609-03-01-04", ("",))[0] == "non_compliant"
+        and execution_candidate_projection is not None
+        and completed_recommendations
+    ):
+        # 医嘱候选按建议排序截断后，被排除的合同窗口内医嘱可能正是执行证据。
+        # 只有不受截断影响的建议仍能独立证明缺陷时才维持不合规；否则按候选不完整交付。
+        cap_truncated_refs: set[str] = set()
+        for item in completed_recommendations:
+            try:
+                _execution_prompt(
+                    completed=(item,), candidates=execution_candidate_projection.candidates,
+                    cap_truncated_refs=cap_truncated_refs,
+                )
+            except (_SourceGap, _SemanticInvalid):
+                continue
+        if cap_truncated_refs:
+            view_completed, view_assessments = _order_execution_view(
+                completed_recommendations, order_assessments, excluded_refs=measure_excluded_refs,
+            )
+            untouched_completed = tuple(
+                item for item in view_completed
+                if item.recommendation.recommendation_ref not in cap_truncated_refs
+            )
+            untouched_assessments = tuple(
+                item for item in view_assessments or ()
+                if item.recommendation_ref not in cap_truncated_refs
+            )
+            untouched_status = _execution_quality_outcome(
+                assessments=untouched_assessments,
+                completed_recommendations=untouched_completed,
+                source_incomplete_keys=execution_source_incomplete_keys & _ORDER_EXECUTION_SOURCE_KEYS,
+            )
+            untouched_measure_missing = any(
+                measures and ref not in cap_truncated_refs
+                for ref, measures in measure_missing_by_ref.items()
+            )
+            truncated_in_scope = any(
+                item.recommendation.recommendation_ref in cap_truncated_refs for item in view_completed
+            )
+            if (
+                truncated_in_scope
+                and untouched_status[0] != "non_compliant"
+                and not untouched_measure_missing
+            ):
+                statuses["LX0609-03-01-04"] = ("data_gap", "candidate_scope_incomplete")
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,
         projection=execution_candidate_projection,

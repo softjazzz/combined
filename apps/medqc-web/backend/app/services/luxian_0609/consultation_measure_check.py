@@ -42,7 +42,9 @@ SCHEMA_VERSION = "lx0609-consultation-measure-check-v5"
 PROTOCOL_ATTEMPTS = 2
 MAX_MEASURE_CHARS = 40
 MAX_QUOTE_CHARS = 80
-MAX_CANDIDATE_CHARS = 1500
+# 单条候选正文上限与会诊候选投影一致（_MAX_CANDIDATE_CHARS=5000，超出者投影已标来源不完整）。
+# 不再截断正文：局部可见不能形成“未找到执行证据”的完整否定；超限时整批按未完成返回。
+MAX_CANDIDATE_CHARS = 5000
 MAX_PROMPT_CHARS = 60000
 MAX_MEASURES_PER_RECOMMENDATION = 12
 MAX_GENERIC_PER_RECOMMENDATION = 12
@@ -137,7 +139,7 @@ def _prompt(
                     "ref": alias_by_ref[ref],
                     "source": candidates_by_ref[ref].source_key,
                     "time": candidates_by_ref[ref].observed_time.value.isoformat(sep=" "),
-                    "text": candidates_by_ref[ref].text[:MAX_CANDIDATE_CHARS],
+                    "text": candidates_by_ref[ref].text,
                 }
                 for ref in sorted(allowed, key=lambda value: alias_by_ref.get(value, value))
                 if ref in candidates_by_ref and ref in alias_by_ref
@@ -340,6 +342,11 @@ async def check_consultation_measures(
         return MeasureCheckOutcome("skipped", {})
     candidates_by_ref = {candidate.ref: candidate for candidate in candidates}
     ref_by_alias = {alias: ref for ref, alias in alias_by_ref.items()}
+    if any(
+        len(candidates_by_ref[ref].text) > MAX_CANDIDATE_CHARS
+        for refs in allowed_refs.values() for ref in refs if ref in candidates_by_ref
+    ):
+        return MeasureCheckOutcome("failed", {})
     prompt = _prompt(completed, candidates_by_ref, allowed_refs, alias_by_ref)
     if len(prompt) > MAX_PROMPT_CHARS:
         return MeasureCheckOutcome("failed", {})

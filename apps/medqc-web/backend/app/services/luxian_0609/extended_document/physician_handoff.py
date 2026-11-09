@@ -779,6 +779,34 @@ def evaluate_physician_handoff(
     )
 
     if len(change_times) != len(effective_change_rows):
+        if change_times and change_source_key in {"physician_change_event", "inpat_nondrug_order"}:
+            # 缺变更时间的事件保持未决；其余有可靠时间的事件仍按原逐事件合同（含成熟判定）核对。
+            # 只有这些事件自身已形成确定缺陷时才交付不合规，缺失清单不列入未决事件；
+            # 否则沿用下方整体资料不足（不把未决事件写成缺失、超时或已完成）。
+            timed_rows = tuple(
+                row for row in effective_change_rows
+                if _parse_datetime(
+                    row.get("change_datetime") or row.get("handoff_datetime")
+                    or row.get("prescribed_datetime") or row.get("order_time")
+                ) is not None
+            )
+            timed_outcome = evaluate_physician_handoff(
+                physician_change_rows=timed_rows if change_source_key == "physician_change_event" else (),
+                physician_change_error=physician_change_error,
+                nondrug_order_rows=timed_rows if change_source_key == "inpat_nondrug_order" else (),
+                nondrug_order_error=nondrug_order_error,
+                daily_course_rows=daily_course_rows,
+                daily_course_error=daily_course_error,
+                handoff_rows=handoff_rows,
+                handoff_error=handoff_error,
+                handover_rows=handover_rows,
+                handover_error=handover_error,
+                evaluation_horizon_datetime=evaluation_horizon_datetime,
+                evaluation_horizon_error=evaluation_horizon_error,
+            )
+            if (timed_outcome.final_state == "non_compliant"
+                    and timed_outcome.change_source_key == change_source_key):
+                return timed_outcome
         return PhysicianHandoffOutcome(
             "data_gap",
             "authoritative_time_missing",

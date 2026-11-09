@@ -576,3 +576,84 @@ def test_handoff_unknown_window_is_not_a_confirmed_missing_event():
     assert not continuity_customer_fact_status_is_valid(
         rule_id="LX0609-10-01-01", status="non_compliant", safe_facts=only_pending
     )
+
+
+
+# ---- 10-01-01（2026-11-08）：缺变更时间的事件保持未决，不抹掉另一可靠事件的确定缺失 ----
+_HANDOFF_E1 = {"event_id": "CHG-1", "change_datetime": "2026-06-01 10:00:00",
+               "old_physician_name": "甲", "new_physician_name": "乙"}
+_HANDOFF_E2_UNTIMED = {"event_id": "CHG-2", "old_physician_name": "乙", "new_physician_name": "丙"}
+_HANDOFF_E3 = {"event_id": "CHG-3", "change_datetime": "2026-06-05 08:00:00",
+               "old_physician_name": "丁", "new_physician_name": "戊"}
+_HANDOFF_E3_RECORDS = {
+    "handoff_record": ({"document_id": "HANDOFF-3", "shift_time": "2026-06-05 08:00:00",
+                        "handoff_doctor": "丁", "record_time": "2026-06-05 07:50:00"},),
+    "handover_record": ({"document_id": "HANDOVER-3", "shift_time": "2026-06-05 08:00:00",
+                         "handover_doctor": "戊", "record_time": "2026-06-05 14:00:00"},),
+}
+
+
+async def _handoff_saved(changes, extra=None):
+    import copy
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_reduced_customer_result,
+    )
+    from test_luxian_0609_death_record_timeliness import saved_roundtrip
+
+    rows = {"physician_change_event": tuple(changes), **(extra or {})}
+    before = copy.deepcopy(rows)
+    session, native, item = await extended("LX0609-10-01-01", rows)
+    assert rows == before  # 不就地修改调用方事实
+    final = finalize_luxian_0609_reduced_customer_result(
+        decision=item,
+        raw_customer_display_facts=dict(native.customer_display_facts).get("LX0609-10-01-01"),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    saved = saved_roundtrip(final)
+    assert (saved["status"], saved["reason_code"]) == (final["status"], final["reason_code"]) == (
+        item.final_state.value, item.reason_code)
+    assert saved["customer_display_facts"] == final["customer_display_facts"]
+    return saved
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("order", ["E1_first", "E2_first"])
+async def test_handoff_untimed_change_cannot_hide_mature_missing_event(order):
+    changes = [_HANDOFF_E1, _HANDOFF_E2_UNTIMED]
+    if order == "E2_first":
+        changes.reverse()
+    saved = await _handoff_saved(changes)
+    assert (saved["status"], saved["reason_code"]) == ("non_compliant", "requirement_violated")
+    facts = saved["customer_display_facts"]
+    # 缺失清单只指向可靠事件 E1，未决的 E2 不被列为缺失、超时或已完成。
+    assert facts["change_time"] == "2026-06-01 10:00:00"
+    assert "2026-06-01 10:00:00" in saved["findings"]
+
+
+@pytest.mark.asyncio
+async def test_handoff_reliable_missing_event_alone_stays_defect():
+    saved = await _handoff_saved([_HANDOFF_E1])
+    assert saved["status"] == "non_compliant"
+
+
+@pytest.mark.asyncio
+async def test_handoff_only_untimed_change_stays_data_gap():
+    saved = await _handoff_saved([_HANDOFF_E2_UNTIMED])
+    assert (saved["status"], saved["reason_code"]) == ("data_gap", "authoritative_time_missing")
+
+
+@pytest.mark.asyncio
+async def test_handoff_completed_event_plus_untimed_change_is_not_upgraded():
+    # 唯一可靠事件已按时完成：没有确定缺陷，未决事件不能被写成合规，保持整体资料不足。
+    saved = await _handoff_saved([_HANDOFF_E3, _HANDOFF_E2_UNTIMED], _HANDOFF_E3_RECORDS)
+    assert (saved["status"], saved["reason_code"]) == ("data_gap", "authoritative_time_missing")
+
+
+@pytest.mark.asyncio
+async def test_handoff_defect_keeps_completed_sibling_and_ignores_untimed():
+    saved = await _handoff_saved([_HANDOFF_E1, _HANDOFF_E3, _HANDOFF_E2_UNTIMED], _HANDOFF_E3_RECORDS)
+    assert saved["status"] == "non_compliant"
+    outcomes = {event["change_time"]: event["outcome"] for event in saved["customer_display_facts"]["events"]}
+    assert outcomes["2026-06-05 08:00:00"] == "completed_within_threshold"
+    assert outcomes["2026-06-01 10:00:00"] in {"handoff_missing", "handover_missing"}
+    assert len(outcomes) == 2
