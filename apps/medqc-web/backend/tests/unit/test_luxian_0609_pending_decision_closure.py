@@ -252,8 +252,13 @@ def test_030_conflicting_known_ends_do_not_become_unbounded():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("main_state", ["absent", "present"])
-async def test_060104_missing_report_text_is_unresolved_and_not_frozen(monkeypatch, tmp_path, main_state):
+@pytest.mark.parametrize("main_state,applicability", [
+    ("absent", "applicable"), ("present", "applicable"),
+    ("unknown", "applicable"), ("unknown", "unknown"),
+], ids=["absent", "present", "applicable_unknown", "unknown_unknown"])
+async def test_060104_missing_report_text_is_unresolved_and_not_frozen(
+    monkeypatch, tmp_path, main_state, applicability,
+):
     from types import SimpleNamespace
 
     from app.services.luxian_0609 import exam_result_record_check as check
@@ -267,11 +272,14 @@ async def test_060104_missing_report_text_is_unresolved_and_not_frozen(monkeypat
                                  "record_content": "患者一般情况平稳，继续观察。"},),
     }
     main = _fact_response((check.RULE_ID,))
-    main["facts"][0].update(semantic_state=main_state,
+    main["facts"][0].update(semantic_state=main_state, applicability=applicability,
                             course_doc_positions=[1] if main_state == "present" else [])
     row = await formal_replay(monkeypatch, tmp_path, case=SimpleNamespace(name="no-report-text", rows=lambda: rows),
                               recordings=[], arm="reference", mature=True, allow_incomplete=True,
                               main_payload=main)
-    assert (row["saved"]["status"], row["saved"]["reason_code"]) == ("data_gap", "required_field_missing")
+    assert row["saved"]["status"] == "data_gap"
+    if applicability == "applicable":
+        assert row["saved"]["reason_code"] == "required_field_missing"
+    # 主事实本已 unknown 时也不得冻结为“专项完整”。
     assert row["incomplete_specialty_rule_ids"] == [check.RULE_ID]
     assert not row["frozen_files"]

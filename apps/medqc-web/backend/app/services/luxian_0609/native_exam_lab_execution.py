@@ -2554,6 +2554,14 @@ async def _extract_exam_lab_batch_uncached(
                         # 都不作确定依据，按报告正文缺失保留资料不足，且不得完整冻结（用户口径 2026-11-08）。
                         from .exam_result_record_check import report_text_missing_positions
                         missing_report = report_text_missing_positions(projection)
+                        # 缺正文且仍需核实（非明确不适用）的事件存在时，专项即未完成，不论主结论
+                        # 是否需要改写（主事实本已 unknown 时同样不得冻结为完整）。
+                        if missing_report and any(
+                            fact.rule_id == rule_id and fact.event_position in missing_report
+                            and fact.applicability != "not_applicable"
+                            for fact in text_facts
+                        ):
+                            incomplete_specialty_rule_ids.add(rule_id)
                         if missing_report and any(
                             fact.rule_id == rule_id and fact.event_position in missing_report
                             and fact.applicability == "applicable"
