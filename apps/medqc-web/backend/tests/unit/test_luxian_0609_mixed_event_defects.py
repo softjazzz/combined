@@ -275,3 +275,134 @@ async def test_050201_mismatch_on_untimed_administration_is_not_independent():
 
     final = await _050201("使用奥沙利铂120mg 静滴。", [ORDER, _cis(order_status="拟执行")])
     assert _loaded(final)["status"] == "data_gap"
+
+
+# ---------- 复核补充：06-04-02 另一报告危急值标志冲突 ----------
+REPORT_A = {"test_id": "REPORT-A", "item_name": "血钾", "abnormal_indicator": "PH",
+            "report_time": "2026-06-01 14:00:00"}
+CONFLICT_B = {"test_id": "REPORT-B", "item_name": "血钠", "abnormal_indicator": "PL", "result_flag": "PH",
+              "report_time": "2026-06-01 14:00:00"}
+HANDLED_C = {"test_id": "REPORT-C", "item_name": "血糖", "abnormal_indicator": "PL",
+             "report_time": "2026-06-01 14:00:00"}
+
+
+async def _060402_rows(items, records, monkeypatch, tmp_path):
+    from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+    from test_luxian_0609_native_extended_document_execution import _evaluate_selected
+
+    for key in ("LUXIAN_0609_OPINION_FREEZE_DIR", "LUXIAN_0609_CONSULTATION_RESPONSE_FREEZE_DIR",
+                "LUXIAN_0609_ANTIMICROBIAL_FREEZE_DIR", "LUXIAN_0609_EXAM_ANALYSIS_FREEZE_DIR"):
+        monkeypatch.setenv(key, str(tmp_path / key))
+    rule = "LX0609-06-04-02"
+    rows = {"labtest_item_report": tuple(items), "crisis_value_record": tuple(records),
+            "evaluation_context.horizon": ({"horizon_datetime": "2026-06-02 12:00:00", "basis": "evaluation_as_of"},)}
+    snapshot, materials, execution, reduced = await _evaluate_selected((rule,), rows)
+    return finalize_luxian_0609_reduced_customer_result(
+        decision=reduced[0], raw_customer_display_facts=dict(execution.customer_display_facts).get(rule),
+        evidence_snapshot=snapshot, evidence_materials=materials,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("conflict_first", [False, True], ids=["A_first", "B_first"])
+async def test_060402_unhandled_not_masked_by_other_report_flag_conflict(conflict_first, monkeypatch, tmp_path):
+    items = [CONFLICT_B, REPORT_A] if conflict_first else [REPORT_A, CONFLICT_B]
+    final = await _060402_rows(items, (), monkeypatch, tmp_path)
+    loaded = _loaded(final)
+    assert (loaded["status"], loaded["reason_code"]) == ("non_compliant", "required_document_missing")
+    facts = final["customer_display_facts"]
+    assert [(e["critical_item_names"], e["outcome"]) for e in facts["event_results"]] == [(["血钾"], "unhandled")]
+    # 冲突报告只列为待核，不任取标志，不列为未处置。
+    assert facts["report_time_gaps"] == [
+        {"critical_item_names": ["血钠"], "critical_flags": [], "issue": "critical_flag_conflict"}
+    ]
+    assert "血钠的危急值标志冲突" in final["findings"]
+    assert "血钠：报告后未找到" not in final["findings"]
+
+
+@pytest.mark.asyncio
+async def test_060402_handled_report_kept_beside_unhandled_and_flag_conflict(monkeypatch, tmp_path):
+    from test_luxian_0609_critical_value_disposition_time import disposition
+
+    final = await _060402_rows([REPORT_A, CONFLICT_B, HANDLED_C],
+                               (disposition("2026-06-01 15:00:00", "REPORT-C"),), monkeypatch, tmp_path)
+    assert _loaded(final)["status"] == "non_compliant"
+    outcomes = {tuple(e["critical_item_names"]): e["outcome"] for e in final["customer_display_facts"]["event_results"]}
+    assert outcomes == {("血钾",): "unhandled", ("血糖",): "handled"}
+
+
+@pytest.mark.asyncio
+async def test_060402_only_flag_conflict_report_is_not_a_defect(monkeypatch, tmp_path):
+    final = await _060402_rows([CONFLICT_B], (), monkeypatch, tmp_path)
+    assert (_loaded(final)["status"], final["reason_code"]) == ("data_gap", "required_field_missing")
+
+
+# ---------- 复核补充：05-02-01 未决事件的字段差异不混入确定缺陷 ----------
+CIS_ORAL_UNDATED = "使用顺铂40mg 口服"
+
+
+def _mixed_route_case(reverse, *, ox_route="静滴"):
+    from chemotherapy_administration_test_support import fact
+    from test_luxian_0609_chemo_closure import ORDER
+
+    ox_quote = f"{CHEMO_DAY} 使用奥沙利铂120mg {ox_route}"
+    body = ox_quote + "。" + CIS_ORAL_UNDATED + "。"
+    orders = [ORDER, _cis()]
+    if reverse:
+        orders.reverse()
+    annotations = {body: (
+        fact(ox_quote, dose="120mg", route=ox_route, date=CHEMO_DAY, target=1 if reverse else 0),
+        fact(CIS_ORAL_UNDATED, drug="顺铂", dose="40mg", route="口服", target=0 if reverse else 1),
+    )}
+    return body, orders, annotations
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reverse"])
+async def test_050201_unconfirmed_route_difference_not_published_as_defect(reverse):
+    final = await _050201(*_mixed_route_case(reverse))
+    loaded = _loaded(final)
+    assert (loaded["status"], loaded["reason_code"]) == ("non_compliant", "requirement_violated")
+    fields = final["customer_display_facts"]["field_results"]
+    assert (fields["dose"], fields["route"]) == ("mismatched", "unknown")
+    assert final["customer_display_facts"]["confirmed_mismatch_event_count"] == 1
+    assert "剂量记录不一致；" in final["findings"] and "使用方法记录不一致" not in final["findings"]
+    assert "剂量、使用方法记录不一致" not in final["findings"]
+
+
+@pytest.mark.asyncio
+async def test_050201_confirmed_route_defect_kept_beside_undated_event():
+    final = await _050201(*_mixed_route_case(False, ox_route="口服"))
+    fields = _loaded(final)["customer_display_facts"]["field_results"]
+    assert final["status"] == "non_compliant"
+    assert (fields["dose"], fields["route"]) == ("mismatched", "mismatched")
+
+
+@pytest.mark.asyncio
+async def test_050201_only_undated_route_difference_stays_data_gap():
+    from chemotherapy_administration_test_support import fact
+
+    body = CIS_ORAL_UNDATED + "。"
+    annotations = {body: (fact(CIS_ORAL_UNDATED, drug="顺铂", dose="40mg", route="口服", target=0),)}
+    final = await _050201(body, [_cis()], annotations)
+    assert _loaded(final)["status"] == "data_gap"
+
+
+# ---------- 复核补充：05-02-01 拟执行医嘱不改写其他医嘱的技术失败 ----------
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_pending", [False, True], ids=["active_only", "with_pending"])
+async def test_050201_model_failure_stays_technical_with_or_without_pending(with_pending, monkeypatch):
+    import chemotherapy_administration_test_support as support
+    from test_luxian_0609_chemo_closure import ORDER, _course, _run
+
+    async def timeout(*_args, **_kwargs):
+        raise TimeoutError("synthetic transport timeout")
+
+    monkeypatch.setattr(support.FrozenChemotherapyAdministrationClient, "generate", timeout)
+    orders = [ORDER, _cis(order_status="拟执行")] if with_pending else [ORDER]
+    _execution, reduced, final = await _run(_course(f"{CHEMO_DAY} 使用奥沙利铂130mg 静滴。"), orders=orders)
+    assert reduced.final_state.value == final["status"] == "technical_error"
+    assert final["reason_code"] != "required_field_missing"
+    # 技术失败走失败通道：不能作为可交付结果保存成临床资料不足。
+    with pytest.raises(ValueError):
+        saved_roundtrip(final)

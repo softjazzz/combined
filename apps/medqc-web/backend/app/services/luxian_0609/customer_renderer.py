@@ -3582,7 +3582,8 @@ def customer_finding_from_controlled_facts(
             ]
             pending = [
                 "、".join(item.get("critical_item_names", [])) + (
-                    "的报告时间字段冲突" if item.get("issue") == "authoritative_time_conflict"
+                    "的危急值标志冲突" if item.get("issue") == "critical_flag_conflict"
+                    else "的报告时间字段冲突" if item.get("issue") == "authoritative_time_conflict"
                     else "的报告时间缺失或无法解析"
                 )
                 for item in gaps

@@ -359,15 +359,20 @@ def _confirmed_independent_time_outcomes(
     *, rule_ids: tuple[str, ...], inputs: CriticalValueInput,
     critical_items: tuple[CriticalValueItem, ...],
 ) -> dict[str, CriticalValueOutcome]:
-    """独立事件的已确认缺陷不能被另一事件的报告时间缺口覆盖。"""
+    """独立事件的已确认缺陷不能被另一事件自身的报告时间缺口或危急值标志冲突覆盖。
+
+    仅在来源完整、每份报告身份可区分、全部处置均能归到已知报告时隔离；
+    否则不强行拆分，沿用整体资料不足。冲突报告不任取标志，只列为待核。
+    """
 
     if inputs.lab_item_error or inputs.crisis_error or not critical_items:
         return {}
-    if any(item.event_key is None or _critical_display_flag(item) is None for item in critical_items):
+    if any(item.event_key is None for item in critical_items):
         return {}
     gap_keys = {
         item.event_key for item in critical_items
         if item.report_time is None or item.report_time_error is not None
+        or _critical_display_flag(item) is None
     }
     if not gap_keys:
         return {}
@@ -388,18 +393,20 @@ def _confirmed_independent_time_outcomes(
     for item in critical_items:
         if item.event_key in gap_keys:
             gap_groups.setdefault(item.event_key, []).append(item)
-    gaps = [
-        {
+    gaps = []
+    for group in gap_groups.values():
+        flag_conflict = any(_critical_display_flag(item) is None for item in group)
+        gaps.append({
             "critical_item_names": [item.item_name[:40] for item in group],
-            "critical_flags": [_critical_display_flag(item) for item in group],
+            # 标志冲突的报告不任取一个标志展示。
+            "critical_flags": [] if flag_conflict else [_critical_display_flag(item) for item in group],
             "issue": (
-                "authoritative_time_conflict"
+                "critical_flag_conflict" if flag_conflict
+                else "authoritative_time_conflict"
                 if any(item.report_time_error == "authoritative_time_conflict" for item in group)
                 else "authoritative_time_missing"
             ),
-        }
-        for group in gap_groups.values()
-    ]
+        })
     return {
         outcome.rule_id: replace(outcome, display_facts={**outcome.display_facts, "report_time_gaps": gaps})
         for outcome in known_outcomes

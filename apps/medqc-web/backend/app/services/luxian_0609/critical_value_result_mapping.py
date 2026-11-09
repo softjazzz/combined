@@ -381,10 +381,14 @@ def _safe_report_time_gaps(raw: Any) -> list[dict[str, Any]] | None:
             or type(item["critical_item_names"]) is not list
             or _safe_text_list(item["critical_item_names"], minimum=1, maximum=100, item_maximum=40) is None
             or type(item["critical_flags"]) is not list
-            or len(item["critical_flags"]) != len(item["critical_item_names"])
-            or any(type(flag) is not str or flag not in {"PL", "PH"} for flag in item["critical_flags"])
             or type(item["issue"]) is not str
-            or item["issue"] not in {"authoritative_time_missing", "authoritative_time_conflict"}
+            or item["issue"] not in {"authoritative_time_missing", "authoritative_time_conflict",
+                                     "critical_flag_conflict"}
+            # 标志冲突不展示任一标志；其余缺口逐项给出确定标志。
+            or (item["issue"] == "critical_flag_conflict" and item["critical_flags"] != [])
+            or (item["issue"] != "critical_flag_conflict"
+                and len(item["critical_flags"]) != len(item["critical_item_names"]))
+            or any(type(flag) is not str or flag not in {"PL", "PH"} for flag in item["critical_flags"])
         ):
             return None
     return [dict(item) for item in raw]
