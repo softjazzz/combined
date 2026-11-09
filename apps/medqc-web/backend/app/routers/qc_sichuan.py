@@ -989,6 +989,7 @@ _DEBUG_SNAPSHOT_SUMMARY_FIELDS = (
     "issue_records",
     "compliant_records",
     "not_applicable_records",
+    "not_executed_records",
     "uncertain_records",
     "data_quality_gap_count",
     "rejected_by_system_count",
