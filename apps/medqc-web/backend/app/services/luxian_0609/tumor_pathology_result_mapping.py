@@ -310,7 +310,6 @@ def _safe_026(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or not 0 <= missing_event_count <= raw["order_count"]
         or type(confirmed) is not int
         or confirmed < 0
-        or ("confirmed_mismatch_event_count" in raw and confirmed == 0)
         or (confirmed > 0 and "mismatched" not in (fields.values() if isinstance(fields, Mapping) else ()))
         or unresolved + missing_course + unknown_time + missing_event_count + confirmed > raw["order_count"]
         or not isinstance(fields, Mapping)
@@ -345,7 +344,7 @@ def _safe_026(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         **({"unresolved_event_count": unresolved} if "unresolved_event_count" in raw else {}),
         **({"missing_course_event_count": missing_course} if "missing_course_event_count" in raw else {}),
         **({"unknown_time_event_count": unknown_time} if "unknown_time_event_count" in raw else {}),
-        **({"confirmed_mismatch_event_count": confirmed} if confirmed else {}),
+        **({"confirmed_mismatch_event_count": confirmed} if "confirmed_mismatch_event_count" in raw else {}),
     }
 
 
@@ -456,10 +455,17 @@ def tumor_pathology_customer_fact_status_is_valid(
         if safe_facts is None:
             return False
         if safe_facts.get("missing_order_event_count", 0) > 0:
-            # 新事实的缺字段不掩盖完整独立事件已确认的缺陷。
+            # 新执行始终提供确认计数（含零），只接受独立可靠缺陷；无计数的已保存事实
+            # 保持原合同，不能因本轮收紧而改判或失读。白名单投影必须保留显式零。
+            independent = (
+                safe_facts.get("confirmed_mismatch_event_count", 0) > 0
+                or safe_facts.get("missing_course_event_count", 0) > 0
+            ) if "confirmed_mismatch_event_count" in safe_facts else (
+                "mismatched" in safe_facts["field_results"].values()
+            )
             expected_status = (
                 "non_compliant"
-                if "mismatched" in safe_facts["field_results"].values()
+                if independent
                 else "data_gap"
             )
             return normalized_status == expected_status

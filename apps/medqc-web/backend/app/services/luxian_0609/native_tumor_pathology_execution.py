@@ -1794,27 +1794,28 @@ async def _typed_chemotherapy_comparison(
         "unresolved_event_count": unresolved_event_count,
         "missing_course_event_count": missing_course_event_count,
         "unknown_time_event_count": unknown_time_event_count,
-        **({"confirmed_mismatch_event_count": confirmed_mismatch_event_count}
-           if confirmed_mismatch_event_count else {}),
+        # 显式零表示已逐事件核查但没有可靠缺陷；缺少此计数的历史事实仍按旧合同读取。
+        "confirmed_mismatch_event_count": confirmed_mismatch_event_count,
     }
-    if missing_order_fields:
-        # 完整独立事件已确认的不一致不能被另一事件的字段缺口掩盖。
-        independent_mismatch = "mismatched" in field_results.values()
-        return (
-            "non_compliant" if independent_mismatch else "data_gap",
-            "chemotherapy_record_mismatch" if independent_mismatch else "chemotherapy_order_fields_missing",
-            facts,
-            chemotherapy_orders,
-            tuple(selected_course_rows),
-        )
     independent_mismatch_proven = bool(confirmed_mismatch_event_count or missing_course_event_count)
-    if independent_mismatch_proven and (unresolved_event_count or unknown_time_event_count):
-        # 交付缺陷时，只保留可靠事件确认的不一致字段；仅由未决事件造成的差异改为尚无法核对。
+    if missing_order_event_count or (
+        independent_mismatch_proven and (unresolved_event_count or unknown_time_event_count)
+    ):
+        # 缺字段分支也只保留可靠事件确认的不一致；未决差异不能进入确定缺陷文案。
         field_results = {
             key: "unknown" if value == "mismatched" and key not in confirmed_fields else value
             for key, value in field_results.items()
         }
         facts["field_results"] = field_results
+    if missing_order_fields:
+        # 完整独立事件已确认的不一致不能被另一事件的字段缺口掩盖。
+        return (
+            "non_compliant" if independent_mismatch_proven else "data_gap",
+            "chemotherapy_record_mismatch" if independent_mismatch_proven else "chemotherapy_order_fields_missing",
+            facts,
+            chemotherapy_orders,
+            tuple(selected_course_rows),
+        )
     if unresolved_event_count and not independent_mismatch_proven:
         return (
             "data_gap",

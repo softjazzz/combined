@@ -265,3 +265,60 @@ def test_missing_course_controlled_cause_preserves_status_precedence(
         assert valid(rule_id=RULE, status=candidate, safe_facts=safe) is (
             candidate == status
         )
+
+
+def _legacy_missing_order_with_undated_difference():
+    # 05455b87f 已保存事实形状：缺字段提前返回时未写入零确认计数。
+    return facts(
+        missing_order_fields=["dose"], missing_order_event_count=1,
+        unresolved_event_count=0, missing_course_event_count=0, unknown_time_event_count=1,
+        field_results={"drug_name": "unknown", "dose": "unknown", "route": "mismatched", "time": "unknown"},
+    )
+
+
+@pytest.mark.parametrize("explicit_count,expected", [(False, "non_compliant"), (True, "data_gap")])
+def test_missing_order_new_proof_contract_and_legacy_are_distinct(explicit_count, expected):
+    raw = _legacy_missing_order_with_undated_difference()
+    if explicit_count:
+        raw["confirmed_mismatch_event_count"] = 0
+    safe = sanitize(rule_id=RULE, raw=raw)
+    assert safe == raw
+    # 再次投影也保留显式零，不能回落到 legacy 的全局差异旁路。
+    assert sanitize(rule_id=RULE, raw=safe) == safe
+    for status in ("compliant", "non_compliant", "data_gap"):
+        assert valid(rule_id=RULE, status=status, safe_facts=safe) is (status == expected)
+
+
+@pytest.mark.parametrize("count", [-1, True, False, 1.0, "0", None, 3])
+def test_confirmed_count_remains_strict_and_bounded(count):
+    raw = _legacy_missing_order_with_undated_difference()
+    raw["confirmed_mismatch_event_count"] = count
+    assert sanitize(rule_id=RULE, raw=raw) is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_saved_missing_order_result_is_read_without_rejudgment():
+    from test_luxian_0609_chemo_closure import _course, _run
+
+    _, _, final = await _run(_course("2026-04-26 使用奥沙利铂120mg 静滴。"))
+    legacy = {
+        **final,
+        "customer_display_facts": _legacy_missing_order_with_undated_difference(),
+        "findings": "已读取 2 条化疗医嘱及对应病程，使用方法记录不一致；药物名称、剂量、用药时间尚无法核对，未能完成全部项目的一致性核对。",
+    }
+    assert legacy["status"] == "non_compliant"
+    # 正式 Canonical INSERT/commit、关闭 Session、新 Session load，原状态/原因/事实/文案不变。
+    assert_sqlite_roundtrip(legacy)
+    # 同样的无证明事实若来自新执行，既有 Finalizer 必须拒绝发布确定不合规。
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+    )
+    new_unproven = {**legacy, "customer_display_facts": {
+        **legacy["customer_display_facts"], "confirmed_mismatch_event_count": 0,
+    }}
+    rejected, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result=new_unproven, raw_facts=new_unproven["customer_display_facts"],
+    )
+    assert handled
+    assert (rejected["status"], rejected["reason_code"]) == ("technical_error", "model_invalid_output")
+    assert "customer_display_facts" not in rejected

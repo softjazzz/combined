@@ -388,6 +388,79 @@ async def test_050201_only_undated_route_difference_stays_data_gap():
     assert _loaded(final)["status"] == "data_gap"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reverse"])
+async def test_050201_missing_order_cannot_promote_undated_route_difference(reverse):
+    from chemotherapy_administration_test_support import fact
+    from test_luxian_0609_chemo_closure import ORDER
+
+    orders = [ORDER | {"single_dose_unit": ""}, _cis()]
+    if reverse:
+        orders.reverse()
+    body = CIS_ORAL_UNDATED + "。"
+    annotations = {body: (fact(CIS_ORAL_UNDATED, drug="顺铂", dose="40mg", route="口服",
+                               target=0 if reverse else 1),)}
+    final = await _050201(body, orders, annotations)
+    loaded = _loaded(final)
+    assert (loaded["status"], loaded["reason_code"]) == ("data_gap", "required_field_missing")
+    facts = loaded["customer_display_facts"]
+    assert facts["confirmed_mismatch_event_count"] == facts["missing_course_event_count"] == 0
+    assert facts["unknown_time_event_count"] == facts["missing_order_event_count"] == 1
+    assert set(facts["field_results"].values()) == {"unknown"}
+    assert "记录不一致" not in loaded["findings"]
+    assert "尚无法核对" in loaded["findings"]
+    assert len(loaded["evidence"]) == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reverse"])
+@pytest.mark.parametrize("ox_route", ["静滴", "口服"])
+async def test_050201_missing_order_keeps_only_confirmed_fields_and_success(reverse, ox_route):
+    from chemotherapy_administration_test_support import fact
+    from test_luxian_0609_chemo_closure import ORDER
+
+    partial = {**ORDER, "document_id": "synthetic-partial-taxol", "generic_name": "紫杉醇",
+               "single_dose_unit": ""}
+    success = {**ORDER, "document_id": "synthetic-success-docetaxel", "generic_name": "多西他赛"}
+    orders = [ORDER, _cis(), partial, success]
+    if reverse:
+        orders.reverse()
+    targets = {row["generic_name"]: index for index, row in enumerate(orders)}
+    ox_quote = f"{CHEMO_DAY} 使用奥沙利铂120mg {ox_route}"
+    success_quote = f"{CHEMO_DAY} 使用多西他赛130mg 静滴"
+    body = "。".join((ox_quote, CIS_ORAL_UNDATED, success_quote)) + "。"
+    annotations = {body: (
+        fact(ox_quote, dose="120mg", route=ox_route, date=CHEMO_DAY, target=targets["奥沙利铂"]),
+        fact(CIS_ORAL_UNDATED, drug="顺铂", dose="40mg", route="口服", target=targets["顺铂"]),
+        fact(success_quote, drug="多西他赛", dose="130mg", route="静滴", date=CHEMO_DAY,
+             target=targets["多西他赛"]),
+    )}
+    final = await _050201(body, orders, annotations)
+    loaded = _loaded(final)
+    assert (loaded["status"], loaded["reason_code"]) == ("non_compliant", "requirement_violated")
+    facts = loaded["customer_display_facts"]
+    assert facts["order_count"] == 4
+    assert facts["confirmed_mismatch_event_count"] == facts["unknown_time_event_count"] == 1
+    assert facts["missing_order_event_count"] == 1
+    assert facts["missing_course_event_count"] == facts["unresolved_event_count"] == 0
+    # 成功事件仍完成比较：不混入缺陷、未记录或未决计数，证据保持可定位。
+    assert {ref["source_document_id"] for ref in final["customer_evidence"]} == {
+        "synthetic-chemo-order", "synthetic-cis-order", "synthetic-partial-taxol",
+        "synthetic-success-docetaxel", "synthetic-chemo-course",
+    }
+    from app.services.qc_workspace.canonical_result_store import keyed_ref
+    assert {ref["source_ref"] for ref in loaded["evidence"]} == {
+        keyed_ref("src", ref["source_document_id"], hmac_key="synthetic-death-test-key")
+        for ref in final["customer_evidence"]
+    }
+    assert facts["field_results"] == {
+        "drug_name": "unknown", "dose": "mismatched",
+        "route": "mismatched" if ox_route == "口服" else "unknown", "time": "unknown",
+    }
+    assert "剂量" in loaded["findings"] and "记录不一致" in loaded["findings"]
+    assert ("使用方法记录不一致" in loaded["findings"]) is (ox_route == "口服")
+
+
 # ---------- 复核补充：05-02-01 拟执行医嘱不改写其他医嘱的技术失败 ----------
 @pytest.mark.asyncio
 @pytest.mark.parametrize("with_pending", [False, True], ids=["active_only", "with_pending"])
