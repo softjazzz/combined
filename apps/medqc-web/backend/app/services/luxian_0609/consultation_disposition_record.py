@@ -637,7 +637,7 @@ async def check_disposition_record(
     if not documents:
         return DispositionRecordOutcome("not_applicable", "trigger_absent_complete")
     if llm_client is None:
-        return DispositionRecordOutcome("data_gap", "semantic_extraction_unresolved")
+        return DispositionRecordOutcome("technical_error", "model_transport_error")
     prompt = build_opinion_prompt(documents)
     if len(prompt) > 60000:
         return DispositionRecordOutcome("data_gap", "source_truncated")

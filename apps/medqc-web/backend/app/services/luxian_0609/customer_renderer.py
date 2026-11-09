@@ -4284,6 +4284,8 @@ def customer_finding_from_controlled_facts(
             return f"已核对{checked}，未找到输血病程记录。" if checked else ""
 
     if rule_id == "LX0609-07-02-02":
+        if kind == "transfusion_component_unresolved":
+            return "现有记录的实际成分暂无法可靠确认，请复核或重试；不要据此补写记录。"
         if kind == "transfusion_course_record_complete":
             return "输血病程已记录指征、起止时间、血液成分、输注量、过程观察及反应处理。"
         if kind == "transfusion_course_record_incomplete":
@@ -4316,10 +4318,15 @@ def customer_finding_from_controlled_facts(
                     and raw_counts[field] > 0
                 ]
                 if details:
+                    unresolved_count = facts.get("unresolved_component_record_count")
+                    unresolved_note = (
+                        f"另有{unresolved_count}份输血记录的成分尚待核验。"
+                        if type(unresolved_count) is int and unresolved_count > 0 else ""
+                    )
                     return (
                         f"共核对 {record_count} 份输血病程记录，其中 "
                         f"{incomplete_record_count} 份存在缺项："
-                        f"{'；'.join(details)}。"
+                        f"{'；'.join(details)}。{unresolved_note}"
                     )
             if isinstance(raw_missing, list) and raw_missing == ["component"]:
                 return "输血记录单未明确记录实际输注血液成分。"

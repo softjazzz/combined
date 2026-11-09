@@ -465,6 +465,15 @@ def _safe_045(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 def _safe_046(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("verification_kind") or raw.get("failure_kind")
+    if kind == "transfusion_component_unresolved":
+        record_count = raw.get("record_count")
+        unresolved = raw.get("unresolved_component_record_count")
+        if (set(raw) != {"failure_kind", "transfusion_order_present", "record_count", "unresolved_component_record_count"}
+                or raw.get("transfusion_order_present") is not True
+                or type(record_count) is not int or record_count < 1
+                or type(unresolved) is not int or not 1 <= unresolved <= record_count):
+            return None
+        return dict(raw)
     if kind not in {"transfusion_course_record_complete", "transfusion_course_record_incomplete"}:
         return None
     allowed_fields = {
@@ -513,6 +522,13 @@ def _safe_046(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         result["missing_field_record_counts"] = {
             key: raw_missing_counts[key] for key in missing
         }
+    if "unresolved_component_record_count" in raw:
+        unresolved = raw["unresolved_component_record_count"]
+        if (kind != "transfusion_course_record_incomplete"
+                or type(unresolved) is not int or not 0 <= unresolved <= record_count):
+            return None
+        # 同份记录可同时缺指征且成分待核，两个计数不要求互斥。
+        result["unresolved_component_record_count"] = unresolved
     return result
 
 
@@ -694,7 +710,8 @@ def safe_transfusion_customer_display_facts(
 
 
 def transfusion_customer_fact_status_is_valid(
-    *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None
+    *, rule_id: str, status: str, safe_facts: Mapping[str, Any] | None,
+    reason_code: str | None = None,
 ) -> bool:
     """验证输血 facts 与执行器已确定终态不冲突。"""
 
@@ -738,6 +755,8 @@ def transfusion_customer_fact_status_is_valid(
     if safe_facts.get("failure_kind") == "system_data_contract_gap":
         return status == "data_gap"
     if normalized_rule_id == "LX0609-07-02-02":
+        if kind == "transfusion_component_unresolved":
+            return status == "data_gap" and reason_code == "semantic_extraction_unresolved"
         expected_status = {
             "transfusion_course_record_complete": "compliant",
             "transfusion_course_record_incomplete": "non_compliant",
