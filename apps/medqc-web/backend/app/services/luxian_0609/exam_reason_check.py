@@ -38,6 +38,7 @@ from .transfusion_order_trigger import _json_response_object, _usage
 
 RULE_ID = "LX0609-06-01-02"
 SCHEMA_VERSION = "lx0609-exam-reason-check-v1"
+REASON_VALIDATION_VERSION = "exam-reason-pair-completion-v2"
 REASON_TYPES = ("reason_stated",)
 QUOTE_TYPES = ("reason_stated", "plan_without_purpose", "result_restatement", "other_exam", "none")
 PROTOCOL_ATTEMPTS = 2
@@ -131,7 +132,7 @@ def _pair_count(docs: Sequence[Any], key: tuple[Any, Any]) -> int:
 
 @dataclass(frozen=True)
 class ExamReasonOutcome:
-    state: str  # ready / skipped / failed
+    state: str  # ready / partial / skipped / failed
     # 事件位置 -> 写明原因的窗口内病程引用（空元组表示已核对、未写原因）。
     reason_refs: Mapping[int, tuple[str, ...]]
     llm_call_count: int = 0
@@ -139,6 +140,7 @@ class ExamReasonOutcome:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    covered_pairs: frozenset[tuple[int, str]] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -220,7 +222,7 @@ def _parse(
     targets: Mapping[int, _Target],
     *,
     allow_partial: bool = False,
-) -> dict[int, tuple[str, ...]]:
+) -> tuple[dict[int, tuple[str, ...]], frozenset[tuple[int, str]]]:
     choices = response.get("choices")
     if choices is not None:
         if choices[0].get("finish_reason") == "length":
@@ -278,7 +280,8 @@ def _parse(
     if evidence_failed or not seen or (issues and not allow_partial):
         raise _RetryViolation(issues)
     complete = {position for position, refs in expected.items() if all((position, ref) in seen for ref in refs)}
-    return {position: tuple(refs) for position, refs in stated.items() if refs or position in complete}
+    return ({position: tuple(refs) for position, refs in stated.items() if refs or position in complete},
+            frozenset(seen))
 
 
 _RETRY_HINTS = {
@@ -322,7 +325,7 @@ async def _check_reason_batch(
             completion_tokens += usage[1]
             total_tokens += usage[2]
             api_time += usage[3]
-            stated = _parse(response, projection, model_targets, allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS)
+            stated, covered = _parse(response, projection, model_targets, allow_partial=attempt + 1 == PROTOCOL_ATTEMPTS)
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             if isinstance(error, _TruncatedResponse) and sum(len(t.refs) for t in model_targets.values()) > 1:
@@ -332,8 +335,9 @@ async def _check_reason_batch(
                 return ExamReasonOutcome("failed", {}, calls, prompt_tokens, completion_tokens,
                                          total_tokens, api_time or perf_counter() - started)
             attempt_prompt = _retry_prompt(prompt, error, response)
-    return ExamReasonOutcome("ready", stated, calls, prompt_tokens, completion_tokens, total_tokens,
-                             api_time or perf_counter() - started)
+    complete = all((position, ref) in covered for position, target in model_targets.items() for ref in target.refs)
+    return ExamReasonOutcome("ready" if complete else "partial", stated, calls, prompt_tokens, completion_tokens, total_tokens,
+                             api_time or perf_counter() - started, covered_pairs=covered)
 
 
 def _subset(target: _Target, refs: tuple[str, ...]) -> _Target:
@@ -371,20 +375,22 @@ async def check_exam_reason(projection: ExamLabTextProjection, llm_client: Any) 
         pieces.append(outcome)
         if outcome.state == "truncated":
             pending[:0] = bisect_targets(batch, refs=lambda target: target.refs, subset=_subset)
-        elif outcome.state == "ready":
+        elif outcome.state in {"ready", "partial"}:
+            covered.update(outcome.covered_pairs)
             for position, refs in outcome.reason_refs.items():
                 stated.setdefault(position, set()).update(refs)
-                covered.update((position, ref) for ref in batch[position].refs)
     # 一次检查拆到多批：任一批写明原因即已写；全部配对核完且均未写才判未写，其余沿用主抽取。
     for position, target in model_targets.items():
         if stated.get(position) or all((position, ref) in covered for ref in target.refs):
             reason_refs[position] = tuple(sorted(stated.get(position, ())))
-    ready = any(item.state == "ready" for item in pieces) or bool(reason_refs)
+    ready = any(item.state in {"ready", "partial"} for item in pieces) or bool(reason_refs)
+    complete = all((position, ref) in covered for position, target in model_targets.items() for ref in target.refs)
     return ExamReasonOutcome(
-        "ready" if ready else "failed", reason_refs if ready else {},
+        "ready" if complete else "partial" if ready else "failed", reason_refs if ready else {},
         sum(item.llm_call_count for item in pieces), sum(item.prompt_tokens for item in pieces),
         sum(item.completion_tokens for item in pieces), sum(item.total_tokens for item in pieces),
         sum(item.api_time for item in pieces),
+        covered_pairs=frozenset(covered),
     )
 
 
@@ -392,7 +398,7 @@ def apply_exam_reason(
     facts: Sequence[ExamLabEventFact], outcome: ExamReasonOutcome,
 ) -> tuple[ExamLabEventFact, ...]:
     """用窗口内核对结论固定 06-01-02 的病程事实；未覆盖的事实保持原样。"""
-    if outcome.state != "ready":
+    if outcome.state not in {"ready", "partial"}:
         return tuple(facts)
     result = []
     for fact in facts:

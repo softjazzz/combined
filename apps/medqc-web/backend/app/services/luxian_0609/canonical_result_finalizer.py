@@ -98,6 +98,7 @@ _DATA_GAP_EXPLANATIONS = {
 }
 
 _RULE_DATA_GAP_EXPLANATIONS = {
+    ("LX0609-06-03-04", "semantic_extraction_unresolved"): {"reason_label": "培养报告阳性性质待确认", "missing_sources": [], "missing_fields": []},
     ("LX0609-04-05-02", "semantic_extraction_unresolved"): {"reason_label": "病程正文抽取待确认", "missing_sources": [], "missing_fields": []},
     ("LX0609-04-05-02", "candidate_scope_incomplete"): {"reason_label": "病程正文核对范围不足", "missing_sources": [], "missing_fields": []},
     ("LX0609-08-02-01", "semantic_extraction_unresolved"): {"reason_label": "病程正文抽取待确认", "missing_sources": [], "missing_fields": []},
