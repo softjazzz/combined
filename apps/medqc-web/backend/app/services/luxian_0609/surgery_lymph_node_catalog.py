@@ -68,7 +68,9 @@ _STAGE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _PATHOLOGIC_STAGE_PATTERN = re.compile(
-    r"(?<![A-Za-z])y?p\s*T\s*(?:is|[0-4][a-d]?|x)\s*N\s*(?:[0-3][a-c]?|x)",
+    # 病理前缀可直接修饰T/N值，也可位于有值的pTNM/ypTNM字段标签上。
+    r"(?<![A-Za-z])y?p\s*(?:TNM\s*(?:分期\s*)?[:：]?\s*)?"
+    r"T\s*(?:is|[0-4][a-d]?|x)\s*N\s*(?:[0-3][a-c]?|x)",
     re.IGNORECASE,
 )
 _CHINESE_NUMBER = r"[一二三四五六七八九十两百]+"

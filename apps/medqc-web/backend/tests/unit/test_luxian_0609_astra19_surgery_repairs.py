@@ -120,6 +120,9 @@ async def test_discussion_event_controls(case):
     ("未记录pT3N0", "non_compliant"),
     ("pT3N0", "compliant"), ("ypT2N0", "compliant"),
     ("未见淋巴结转移 pT3N0", "compliant"),
+    pytest.param("pTNM：T3N0M0", "compliant", id="label_ptnm"),
+    pytest.param("ypTNM分期：T2N0M0", "compliant", id="label_yptnm"),
+    pytest.param("cTNM：T3N0M0", "non_compliant", id="clinical_label"),
 ])
 async def test_pathology_requires_stage_value(stage, expected):
     result = await run(LYMPH, {
