@@ -372,6 +372,26 @@ def _date_matches(entry: tuple[int | None, int, int], day: date) -> bool:
     return (month, dom) == (day.month, day.day) and (year is None or year == day.year)
 
 
+_SENTENCE_BREAK = re.compile(r"[。;；!！?？\n]")
+
+
+def _quote_context(text: str, quote: str) -> str:
+    """摘录在原文中所在的整句（各出现处合并）。
+
+    日期与相对日期以整句判断，裁短的摘录不能丢掉同句已写明的相反日期。
+    """
+    body, target = _normalize(text), _normalize(quote)
+    contexts: list[str] = []
+    start = body.find(target) if target else -1
+    while start >= 0:
+        end = start + len(target)
+        left = max((m.end() for m in _SENTENCE_BREAK.finditer(body, 0, start)), default=0)
+        right_match = _SENTENCE_BREAK.search(body, end)
+        contexts.append(body[left:right_match.start() if right_match else len(body)])
+        start = body.find(target, start + 1)
+    return "。".join(contexts) or target
+
+
 def _quote_states_date(quote: str, day: date) -> bool:
     """摘录明示且只明示该操作日期；写明年份时年份必须一致。"""
     dates = _quote_dates(quote)
@@ -514,7 +534,8 @@ def _parse_records(
         elif state == "documented":
             index = record_ids[item["record"]]
             record_day = records[index][0].date()
-            quote_dates = _quote_dates(item["quote"])
+            context = _quote_context(texts[index], item["quote"])
+            quote_dates = _quote_dates(context)
             shared = any(
                 other is not trigger
                 and other.procedure.code == trigger.procedure.code
@@ -522,23 +543,25 @@ def _parse_records(
                 and other.anchor_date <= record_day < other.anchor_date + timedelta(days=RECORD_WINDOW_DAYS)
                 for other in triggers
             )
-            # 摘录明示的日期都不是本次操作日（含年份不一致）：说的是别的操作。
+            # 摘录所在句明示的日期都不是本次操作日（含年份不一致）：说的是别的操作。
             if quote_dates and not any(_date_matches(entry, trigger.anchor_date) for entry in quote_dates):
                 state = "uncertain"
-            # 记录也落在同一操作另一次的窗口内时，须能证明它写的是本次：摘录只明示
-            # 本次操作日期；或摘录没有任何日期或“昨日”等相对日期、且记录写于本次
-            # 操作当日。窗口重叠、编号不同或文书份数都不能单独证明归属。
+            # 记录也落在同一操作另一次的窗口内时，须能证明它写的是本次：摘录所在句
+            # 只明示本次操作日期；或该句没有任何日期或“昨日”等相对日期、且记录写于
+            # 本次操作当日。窗口重叠、编号不同或文书份数都不能单独证明归属。
             elif shared and not (
-                _quote_states_date(item["quote"], trigger.anchor_date)
+                _quote_states_date(context, trigger.anchor_date)
                 or (
                     not quote_dates
-                    and not _RELATIVE_PAST_DAY.search(_normalize(item["quote"]))
+                    and not _RELATIVE_PAST_DAY.search(context)
                     and record_day == trigger.anchor_date
                 )
             ):
                 state = "uncertain"
         identity = records[record_ids[item["record"]]][2] if state == "documented" else None
-        dated = state == "documented" and _quote_states_date(item["quote"], trigger.anchor_date)
+        dated = state == "documented" and _quote_states_date(
+            _quote_context(texts[record_ids[item["record"]]], item["quote"]), trigger.anchor_date
+        )
         states.append((procedure_id, state, identity, dated))
     if seen != set(procedures):
         raise ValueError("incomplete procedure coverage")
