@@ -366,29 +366,32 @@ def _latest_written_diagnosis_version(
 ) -> tuple[tuple[Mapping[str, Any], ...], str | None]:
     """多版本出院记录（初写、补录、修订）只取最后一份权威版本的诊断，不合并比对。
 
-    候选版本取全部出院记录文书与诊断行所属文书的并集：最新版没有诊断行时
-    返回空，由后续给出诊断缺失，不借用旧版。各版本在判定所用字段（序号、名称、
-    主诊断标记、类型）上完全相同时取任一版本；否则凭出院记录时间唯一确定
-    最后版本，无法确定时返回缺口。诊断行缺少文书编号（旧快照）时保持原样。
+    诊断行以 ``document_id`` 归属出院记录。只有一份出院记录时沿用其诊断行
+    （兼容未带文书编号的旧快照）。多份出院记录时：
+    - 出院记录或诊断行缺文书编号、诊断行归属不到任何出院记录，均无法确认
+      诊断属于哪一版，返回 ``version_conflict``，不借旧版判定；
+    - 各版在判定字段（序号、名称、主诊断标记、类型）上完全相同时取任一版本；
+    - 否则凭出院记录时间唯一确定最后版本，取该版诊断（可为空，由后续给出
+      诊断缺失）；无法唯一确定时返回 ``version_conflict``。
     """
     from .basic_timeliness_facts import parse_authoritative_datetime
 
     rows = tuple(written_rows)
     ids = [_clean(row.get("document_id")) for row in rows]
-    if not all(ids):
-        return rows, None
+    parent_ids = [_clean(row.get("document_id")) for row in discharge_rows]
     groups: dict[str, list[Mapping[str, Any]]] = {}
     for doc_id, row in zip(ids, rows):
         groups.setdefault(doc_id, []).append(row)
-    candidates = set(groups)
-    discharge_ids = {
-        doc_id for row in discharge_rows if (doc_id := _clean(row.get("document_id")))
-    }
-    # 仅当诊断行文书编号能与出院记录对上时，才把无诊断行的出院记录计入版本。
-    if candidates and candidates <= discharge_ids:
-        candidates = discharge_ids
-    if len(candidates) < 2:
-        return rows, None
+    distinct_parents = set(parent_ids)
+    if len(discharge_rows) <= 1 or (all(parent_ids) and len(distinct_parents) == 1):
+        # 单一出院记录：多组诊断行仍无法判定版本。
+        if len(groups) <= 1:
+            return rows, None
+        if all(ids) and set(groups) <= distinct_parents:
+            return rows, None
+        return (), "version_conflict"
+    if not all(parent_ids) or not all(ids) or not set(groups) <= distinct_parents:
+        return (), "version_conflict"
 
     def signature(group):
         return tuple(sorted(
@@ -401,18 +404,15 @@ def _latest_written_diagnosis_version(
             for row in group
         ))
 
-    if candidates == set(groups) and len({signature(group) for group in groups.values()}) == 1:
+    if set(groups) == distinct_parents and len({signature(group) for group in groups.values()}) == 1:
         return tuple(next(iter(groups.values()))), None
     times: dict[str, Any] = {}
     for row in discharge_rows:
         doc_id = _clean(row.get("document_id"))
-        if doc_id in candidates:
-            moment = parse_authoritative_datetime(authoritative_document_time_value(row))
-            if moment is None or (doc_id in times and times[doc_id] != moment):
-                return (), "version_conflict"
-            times[doc_id] = moment
-    if set(times) != candidates:
-        return (), "version_conflict"
+        moment = parse_authoritative_datetime(authoritative_document_time_value(row))
+        if moment is None or (doc_id in times and times[doc_id] != moment):
+            return (), "version_conflict"
+        times[doc_id] = moment
     latest = max(times.values())
     latest_ids = [doc_id for doc_id, moment in times.items() if moment == latest]
     if len(latest_ids) != 1:

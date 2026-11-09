@@ -435,3 +435,93 @@ async def test_063_latest_main_flag_change_is_used():
     final = await _063_final(rows)
     assert final["status"] == "non_compliant"
     assert final["customer_display_facts"]["written_main"] == NAMES[1]
+
+
+# ---------- 第二轮复核：明示日期优先、缺时刻记录与父子身份 ----------
+def test_quote_date_requires_matching_year():
+    from datetime import date
+
+    from app.services.luxian_0609.extended_document.invasive_procedure_record import (
+        _quote_states_date,
+    )
+
+    assert _quote_states_date(f"2026年6月1日{DONE_TEXT}", date(2026, 6, 1))
+    assert _quote_states_date(f"6月1日{DONE_TEXT}", date(2026, 6, 1))
+    assert not _quote_states_date(f"2025年6月1日{DONE_TEXT}", date(2026, 6, 1))
+    assert not _quote_states_date(f"6月1日、6月2日{DONE_TEXT}", date(2026, 6, 1))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("supplement", [
+    "补记昨日操作经过：2026年6月1日" + DONE_TEXT,
+    "补记昨日操作经过：" + DONE_TEXT,
+])
+async def test_075_same_day_supplement_of_previous_operation_is_not_current(supplement):
+    first = f"2026年6月1日{DONE_TEXT}"
+    rows = _two_day_rows(_course("D1", 1, 15, first + "。"), _course("S", 2, 15, supplement + "。"))
+    model = _ScriptedInvasiveModel({
+        "2026-06-01": (lambda r: r["time"].startswith("2026-06-01"), first),
+        "2026-06-02": (lambda r: r["time"].startswith("2026-06-02"), supplement),
+    })
+    item = await _extended("LX0609-10-03-01", rows, model, final=True)
+    assert item.final_state.value == "data_gap"
+
+
+@pytest.mark.asyncio
+async def test_075_previous_year_history_does_not_prove_this_year():
+    history = f"2025年6月1日{DONE_TEXT}"
+    current = f"2026年6月2日再次{DONE_TEXT}"
+    rows = _two_day_rows(_course("H", 2, 15, "既往史：" + history + "。"), _course("D2", 2, 16, current + "。"))
+    model = _ScriptedInvasiveModel({
+        "2026-06-01": (lambda r: r["time"].endswith("15:00"), history),
+        "2026-06-02": (lambda r: r["time"].endswith("16:00"), current),
+    })
+    item = await _extended("LX0609-10-03-01", rows, model, final=True)
+    assert item.final_state.value == "data_gap"
+
+
+@pytest.mark.parametrize("revision", [
+    {"surgery_begin_time": None},
+    {"surgery_begin_time": "2026-06-02 09:00:00+08:00"},
+], ids=["undated", "inexact_begin_before_second"])
+def test_030_revision_of_first_surgery_cannot_cover_second(revision):
+    first = {**_surgery_record(2, 8), "surgery_begin_time": "2026-06-02 08:30:00+08:00"}
+    revised = {**first, "document_id": "R28-revised", "record_time": "2026-06-02 12:00:00", **revision}
+    final = _surgery_presence_final({
+        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+        "surgery_record": [first, revised],
+    })
+    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
+
+
+def test_030_each_surgery_with_own_inexact_record_is_not_association_gap():
+    records = [
+        {**_surgery_record(2, 8), "surgery_begin_time": "2026-06-02 08:20:00+08:00"},
+        {**_surgery_record(2, 20), "surgery_begin_time": "2026-06-02 20:15:00+08:00"},
+    ]
+    final = _surgery_presence_final({
+        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+        "surgery_record": records,
+    })
+    assert final["reason_code"] != "association_failed"
+
+
+@pytest.mark.asyncio
+async def test_063_diagnoses_not_linked_to_any_discharge_version_is_gap():
+    rows = _discharge_rows(NAMES, ())
+    rows["discharge_record_diagnosis"] = _diagnoses("OTHER", NAMES)
+    final = await _063_final(rows)
+    assert final["status"] == "data_gap"
+    assert final["customer_display_facts"]["written_gap"] == "version_conflict"
+
+
+@pytest.mark.asyncio
+async def test_063_later_discharge_record_without_id_cannot_borrow_older():
+    rows = _discharge_rows(NAMES, ())
+    rows["discharge_record"] = (
+        rows["discharge_record"][0],
+        {k: v for k, v in rows["discharge_record"][1].items() if k != "document_id"},
+    )
+    final = await _063_final(rows)
+    assert final["status"] == "data_gap"
+    assert final["customer_display_facts"]["written_gap"] == "version_conflict"
