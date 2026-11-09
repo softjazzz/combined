@@ -132,6 +132,7 @@ _FINALIZER_DATA_GAP_CUSTOMER_MESSAGES = {
     "applicability_source_gap": "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
 }
 _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
+    ("LX0609-07-02-02", "semantic_extraction_unresolved"): "现有输血记录的实际成分尚无法可靠确认，暂时无法完成记录完整性核对。",
     ("LX0609-06-03-04", "semantic_extraction_unresolved"): "现有培养报告尚无法明确是否为阳性菌结果，暂时无法完成阳性结果分析核对。",
     ("LX0609-04-05-02", "semantic_extraction_unresolved"): "现有上级医师查房正文尚未形成可靠抽取结果，暂时无法确认病程内容是否完整。",
     ("LX0609-04-05-02", "candidate_scope_incomplete"): "现有上级医师查房正文超出本次受控抽取范围，暂时无法完成病程内容核对。",
@@ -624,6 +625,11 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-07-02-02", "semantic_extraction_unresolved"): (
+        "输血记录成分暂无法确认",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-07-02-02", "semantic_extraction_unresolved")],
+        "请复核现有输血记录或重试质控；不要据此补写或改写记录。",
+    ),
     ("LX0609-06-03-04", "semantic_extraction_unresolved"): (
         "培养报告阳性性质待确认",
         _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-06-03-04", "semantic_extraction_unresolved")],
@@ -5114,6 +5120,7 @@ def render_luxian_0609_customer_result(
                 ("LX0609-03-01-04", "semantic_extraction_unresolved"),
                 ("LX0609-03-01-05", "semantic_extraction_unresolved"),
                 ("LX0609-06-03-04", "semantic_extraction_unresolved"),
+                ("LX0609-07-02-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-04-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-05-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-05-02", "candidate_scope_incomplete"),
