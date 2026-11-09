@@ -48,8 +48,9 @@ def same_day_surgery_coverage_unresolved(
     """同日多台（开始时刻不同）时，无法证明每台都有自己的记录则判为未决。
 
     记录份数不等于台次：同一台的初写、修订等多份记录结构化开始时刻相同，
-    只证明该台。逐台核对：记录开始时刻与某台完全一致的只覆盖该台；其余
-    当日记录和缺时间记录才可能属于尚未覆盖的台次，数量不足即未决。
+    只证明该台。逐台核对：记录开始时刻与某台完全一致的只覆盖该台；未被精确
+    覆盖的台次须有开始时刻落在本台与下一台之间的其他记录，否则未决。
+    缺开始时刻的记录不能证明任何未被精确覆盖的台次。
     同台术式拆行开始时刻相同，按一台计。
     """
     begins_by_day: dict[object, set[datetime]] = {}
@@ -68,9 +69,21 @@ def same_day_surgery_coverage_unresolved(
         if not same_day and not undated:
             continue
         covered = {value for value in same_day if value in begins}
-        residual = sum(1 for value in same_day if value not in begins) + undated
-        if len(begins - covered) > residual:
+        uncovered = begins - covered
+        if not uncovered:
+            continue
+        if undated:
             return True
+        ordered = sorted(begins)
+        for begin in uncovered:
+            later = [value for value in ordered if value > begin]
+            upper = later[0] if later else None
+            # 开始时刻早于本台、或不早于下一台的记录都不可能是本台记录。
+            if not any(
+                value not in begins and begin <= value and (upper is None or value < upper)
+                for value in same_day
+            ):
+                return True
     return False
 
 
