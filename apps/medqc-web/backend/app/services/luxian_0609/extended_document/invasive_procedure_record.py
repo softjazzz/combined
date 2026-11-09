@@ -354,6 +354,8 @@ _QUOTE_DATE_PATTERNS = (
     re.compile(r"(?<!\d)(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)"),
 )
 _RELATIVE_PAST_DAY = re.compile(r"昨日|昨天|昨晚|前日|前天|日前")
+# 原文以“今日”等指明当日实施；书写日期本身不是实施日期，只用来解读该相对表述。
+_RELATIVE_SAME_DAY = re.compile(r"今[日天晨早晚]|今[上下]午|本日")
 
 
 def _quote_dates(quote: str) -> tuple[tuple[int | None, int, int], ...]:
@@ -546,14 +548,16 @@ def _parse_records(
             # 摘录所在句明示的日期都不是本次操作日（含年份不一致）：说的是别的操作。
             if quote_dates and not any(_date_matches(entry, trigger.anchor_date) for entry in quote_dates):
                 state = "uncertain"
-            # 记录也落在同一操作另一次的窗口内时，须能证明它写的是本次：摘录所在句
-            # 只明示本次操作日期；或该句没有任何日期或“昨日”等相对日期、且记录写于
-            # 本次操作当日。窗口重叠、编号不同或文书份数都不能单独证明归属。
+            # 记录也落在同一操作另一次的窗口内时，须由原文证明它写的是本次（用户口径
+            # 2026-11-08：不能仅凭记录当天书写认定属于当天这次）：摘录所在句只明示本次
+            # 操作日期；或该句以“今日”等指明当日实施、没有其他日期或“昨日”等表述，且
+            # 记录写于本次操作当日。窗口重叠、编号不同或文书份数都不能单独证明归属。
             elif shared and not (
                 _quote_states_date(context, trigger.anchor_date)
                 or (
                     not quote_dates
                     and not _RELATIVE_PAST_DAY.search(context)
+                    and _RELATIVE_SAME_DAY.search(context)
                     and record_day == trigger.anchor_date
                 )
             ):
