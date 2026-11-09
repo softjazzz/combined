@@ -47,8 +47,9 @@ async def test_029_excludes_unrelated_orders_from_decision_and_customer_evidence
         decisions=result.decisions, expected_rule_ids=("LX0609-04-01-01",),
         snapshot=session.snapshot, evidence_materials=session.materials,
     )
-    expected_state = "compliant" if has_summary else "non_compliant"
-    expected_reason = "requirement_satisfied" if has_summary else "required_document_missing"
+    # 用户口径（2026-11-08）：仅医嘱触发、实施情况未知时缺小结保留未决。
+    expected_state = "compliant" if has_summary else "data_gap"
+    expected_reason = "requirement_satisfied" if has_summary else "source_readiness_unproven"
     assert reduced[0].final_state.value == expected_state
     assert reduced[0].reason_code == expected_reason
     assert result.llm_call_count == result.total_tokens == 0
@@ -59,7 +60,7 @@ async def test_029_excludes_unrelated_orders_from_decision_and_customer_evidence
     for ref, _ in session.materials.document_rows("presurg_summary", snapshot=session.snapshot):
         assert ref in adopted_refs
     canonical = finalize_luxian_0609_reduced_customer_result(
-        decision=reduced[0], raw_customer_display_facts=dict(result.customer_display_facts)["LX0609-04-01-01"],
+        decision=reduced[0], raw_customer_display_facts=dict(result.customer_display_facts).get("LX0609-04-01-01"),
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
     expected_coordinates = {("inpat_nondrug_order", "operation||1")}

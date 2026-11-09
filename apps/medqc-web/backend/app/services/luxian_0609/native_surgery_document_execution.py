@@ -30,7 +30,7 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .evidence_snapshot_provider import classify_current_visit_surgery_order_rows
 from .fact_schema import Assertion, EventStatus
-from .native_execution import build_luxian_0609_native_result
+from .native_execution import _surgery_order_obligation, build_luxian_0609_native_result
 from .native_preop_content_execution import evaluate_preop_content_rules
 from .planner import PlannedRule
 from .source_manifest import QueryStatus
@@ -282,6 +282,8 @@ def _typed_decision_from_outcome(
             if (outcome.rule_id == "LX0609-04-04-02" and outcome.reason_code in {
                 "semantic_extraction_unresolved", "candidate_scope_incomplete", "source_readiness_unproven",
             })
+            # 029 仅医嘱触发、实施情况待确认（用户口径 2026-11-08），保留专用原因与文案。
+            or (outcome.rule_id == "LX0609-04-01-01" and outcome.reason_code == "source_readiness_unproven")
             or outcome.reason_code
             in {
                 "source_unavailable",
@@ -2224,6 +2226,32 @@ def _only_endoscopic_procedures(materials: Luxian0609EvidenceMaterialStore) -> b
     )
 
 
+def _typed_029_order_only_gate(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    performed_triggered: bool,
+    fact_refs: tuple[str, ...],
+) -> _SurgeryDocumentOutcome | None:
+    """仅凭手术医嘱触发、准备判缺术前小结时，先确认手术已到期或已实施。
+
+    用户口径（2026-11-08）：只有未来手术计划且无已实施证据时按尚未到期处理；计划时间
+    已过但实施情况未知时保留未决，不认定已实施也不放行。已实施手术沿用既有合同。
+    与 030 共用同一医嘱义务门控，不从文本推定实施。
+    """
+    if performed_triggered:
+        return None
+    gate = _surgery_order_obligation(snapshot=snapshot, materials=materials)
+    if gate is None:
+        return None
+    status, reason = gate
+    if status == "data_gap" and reason not in {"candidate_scope_incomplete", "association_failed"}:
+        # 评价终点或计划时间无法确定、未见实施证据：统一为“手术实施情况待确认”，
+        # 不沿用描述已实施手术缺时间的原因，避免客户文案误称已实施。
+        reason = "source_readiness_unproven"
+    return _SurgeryDocumentOutcome("LX0609-04-01-01", status, reason, "program", None, fact_refs)
+
+
 async def _typed_029_outcome(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -2283,6 +2311,12 @@ async def _typed_029_outcome(
     if target_gate is not None:
         return replace(target_gate, fact_refs=order_refs), 0, 0, 0, 0, 0.0
     if _typed_observation_state(snapshot, "presurg_summary") == "empty":
+        order_gate = _typed_029_order_only_gate(
+            snapshot=snapshot, materials=materials,
+            performed_triggered=performed_triggered, fact_refs=order_refs,
+        )
+        if order_gate is not None:
+            return order_gate, 0, 0, 0, 0, 0.0
         return (
             _SurgeryDocumentOutcome(
                 "LX0609-04-01-01",
@@ -2400,6 +2434,12 @@ async def _typed_029_outcome(
             ),
             0, 0, 0, 0, 0.0,
         )
+    order_gate = _typed_029_order_only_gate(
+        snapshot=snapshot, materials=materials,
+        performed_triggered=performed_triggered, fact_refs=selected_refs,
+    )
+    if order_gate is not None:
+        return order_gate, 0, 0, 0, 0, 0.0
     return (
         _SurgeryDocumentOutcome(
             "LX0609-04-01-01",

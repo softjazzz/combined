@@ -520,7 +520,7 @@ def _typed_030_front_page_trigger_refs(
 
 def _surgery_order_obligation(*, snapshot: Luxian0609EvidenceSnapshot,
                             materials: Luxian0609EvidenceMaterialStore) -> tuple[str, str] | None:
-    """030仅增加安全门控；不改变029术前计划触发，也不从文本推定实施。"""
+    """030 与 029（仅医嘱触发、缺术前小结时）共用的安全门控；不从文本推定实施。"""
     from .evaluation_horizon import read_frozen_evaluation_horizon, after_frozen_horizon
     from ..discharge_time import hospital_business_time
     try:

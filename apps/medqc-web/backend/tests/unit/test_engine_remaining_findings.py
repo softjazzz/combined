@@ -622,7 +622,8 @@ async def test_preop_summary_not_exempted_by_postop_execution_gate():
                     "order_id": "O",
                     "order_type": "手术",
                     "order_status": "新开",
-                    "planned_start_datetime": "2026-05-04 08:00:00",
+                    # 计划时间在出院前且已过；无实施证据（用户口径 2026-11-08 起保留未决）。
+                    "planned_start_datetime": "2026-05-02 08:00:00",
                 },
             )
         },
@@ -642,7 +643,8 @@ async def test_preop_summary_not_exempted_by_postop_execution_gate():
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )[0]
-    assert item.final_state.value == "non_compliant"
+    # 不被 030 门控豁免为不适用；计划时间已过但无实施证据时保留未决（用户口径 2026-11-08）。
+    assert (item.final_state.value, item.reason_code) == ("data_gap", "source_readiness_unproven")
 
 
 @pytest.mark.asyncio

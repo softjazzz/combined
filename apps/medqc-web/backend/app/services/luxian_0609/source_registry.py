@@ -475,7 +475,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-11-01-01": ("surgery_record", "mr_surgery", "surgery_inform_consent"),
     # 029 的新增适用触发仅为结构化手术医嘱；严格已实施手术仍由执行器
     # 复用既有 surgery_record/mr_surgery 事实。申请单不参与本次判定。
-    "LX0609-04-01-01": ("inpat_nondrug_order",),
+    # 仅医嘱触发、缺小结时与 030 共用评价终点判断计划是否到期（用户口径 2026-11-08）。
+    "LX0609-04-01-01": ("inpat_nondrug_order", "evaluation_context.horizon", "inpat_registration", "inpat_registration.discharge_horizon"),
     # 030 以结构化手术医嘱触发“有医嘱但无手术记录”，必须在同一快照
     # 绑定命中的医嘱行，不能退回来源级观察引用。
     "LX0609-04-02-02": ("inpat_nondrug_order", "evaluation_context.horizon", "inpat_registration", "inpat_registration.discharge_horizon"),

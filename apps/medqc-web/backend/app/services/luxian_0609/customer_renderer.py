@@ -144,6 +144,7 @@ _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
     ("LX0609-07-03-01", "candidate_scope_incomplete"): "输血后病程超出本次受控抽取范围，暂时无法完成输血效果评价核对。",
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。',
     ("LX0609-07-01-03", "source_readiness_unproven"): '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。',
+    ("LX0609-04-01-01", "source_readiness_unproven"): '已发现手术医嘱，但计划时间已过或无法确认，且未找到已实施手术的记录，暂时无法确认本次手术是否已实施，暂不判定术前小结缺失。',
     ("LX0609-07-01-03", "candidate_scope_incomplete"): '现有输血正文超出本次受控抽取范围，暂时无法完成实施事实核对。',
     ("LX0609-03-01-04", "semantic_extraction_unresolved"): "会诊建议或其中的措施尚未形成可靠的核对结果，暂时无法确认会诊建议是否均已执行。",
     ("LX0609-03-01-01", "semantic_extraction_unresolved"): "会诊意见原文是否明确、包含哪些建议尚未形成可靠的抽取结果，暂时无法完成本项核对。",
@@ -692,6 +693,7 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
     ("LX0609-07-01-03", "semantic_extraction_unresolved"): ('输血实施事实暂无法确认', '现有输血记录正文尚未形成可靠的实施事实抽取结果，暂时无法核对输血前九项。', '请复核现有输血正文或重试质控；不要据此补写或改写记录。'),
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): ('输血实施事实暂无法确认', '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。', '请复核现有记录及实际输血事件；不要据此补写输血或检验记录。'),
     ("LX0609-07-01-03", "source_readiness_unproven"): ('输血记录正文暂不可读取', '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。', '请核对源记录正文及同步映射后重新质控；不要据此补写或改写记录。'),
+    ("LX0609-04-01-01", "source_readiness_unproven"): ('手术实施情况暂无法确认', _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-04-01-01", "source_readiness_unproven")], '请核对手术是否实际实施及手术记录同步情况后重新质控；不要据此补写或改写记录。'),
     ("LX0609-07-01-03", "candidate_scope_incomplete"): ('输血实施资料超出本次可核范围', '现有输血正文超出本次受控抽取范围，暂时无法完成实施事实核对。', '请复核现有材料或联系质控系统支持；不要据此补写或改写记录。'),
     ("LX0609-04-04-02", "semantic_extraction_unresolved"): (
         "麻醉访视内容暂无法确认",
@@ -1328,6 +1330,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "已确认实施麻醉，本项麻醉访视填写规范核对不适用",
         "局部麻醉不适用本项核对；如非局部麻醉但麻醉访视记录缺失，则由 LX0609-04-04-01 先行核对，本项仅在两类访视记录均存在时核对填写规范。",
         "如适用非局部麻醉，请先补齐麻醉访视记录，再核对记录填写是否规范。",
+    ),
+    ("LX0609-04-01-01", "evaluation_window_not_mature"): (
+        "手术尚未到计划时间，暂不判定术前小结缺失",
+        "截至本次冻结评价时点，仅有未来手术计划，尚无已实施手术的记录。",
+        "无需按缺项处理；请在手术前完成术前小结，手术实施后将重新评估。",
     ),
     ("LX0609-04-04-01", "evaluation_window_not_mature"): (
         "手术结束尚未满24小时，暂不判定麻醉术后访视缺失",
@@ -5059,6 +5066,7 @@ def render_luxian_0609_customer_result(
                 ("LX0609-07-03-01", "candidate_scope_incomplete"),
                 ("LX0609-07-01-03", "positive_assertion_not_explicit"),
                 ("LX0609-07-01-03", "source_readiness_unproven"),
+                ("LX0609-04-01-01", "source_readiness_unproven"),
                 ("LX0609-07-01-03", "candidate_scope_incomplete"),
             }
         )
