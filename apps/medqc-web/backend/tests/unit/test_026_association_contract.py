@@ -247,7 +247,8 @@ def test_forged_cause_count_combinations_rejected(changes):
     assert sanitize(rule_id=RULE, raw=raw) is None
 
 
-@pytest.mark.parametrize("unknown_time,status", [(0, "non_compliant"), (1, "data_gap")])
+# 2026-11-08 口径：完整病程中的未记录可独立成立，另一事件时间未知不能掩盖。
+@pytest.mark.parametrize("unknown_time,status", [(0, "non_compliant"), (1, "non_compliant")])
 def test_missing_course_controlled_cause_preserves_status_precedence(
     unknown_time, status
 ):

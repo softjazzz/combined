@@ -238,6 +238,13 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
         "recommendation_evidence",
         "excluded_recommendations",
     }
+    if rule_id == "LX0609-03-01-04":
+        allowed_internal_keys.add("unresolved_opinion_episode_count")
+    unresolved_episodes = raw.get("unresolved_opinion_episode_count")
+    if unresolved_episodes is not None and (
+        type(unresolved_episodes) is not int or not 1 <= unresolved_episodes <= 100
+    ):
+        return None
     count_keys = (
         "completed_opinion_episode_count",
         "recommendation_count",
@@ -321,6 +328,8 @@ def _safe_execution_facts(*, rule_id: str, raw: Mapping[str, Any]) -> dict[str, 
     }
     if recommendation_results is not None:
         safe_facts["recommendation_results"] = recommendation_results
+    if unresolved_episodes is not None:
+        safe_facts["unresolved_opinion_episode_count"] = unresolved_episodes
     raw_recommendation_evidence = raw.get("recommendation_evidence")
     if raw_recommendation_evidence is not None:
         if (
@@ -668,7 +677,7 @@ def _published_execution_facts(rule_id: str, raw: dict[str, Any]) -> bool:
     base = {"verification_kind", "completed_opinion_episode_count", "recommendation_count",
             "specific_execution_count", "generic_execution_count", "missing_execution_count", "relation_state"}
     optional = (
-        {"recommendation_evidence", "excluded_recommendations"}
+        {"recommendation_evidence", "excluded_recommendations", "unresolved_opinion_episode_count"}
         if is_023
         else {"recommendation_evidence", "recommendation_results"}
     )
@@ -683,6 +692,11 @@ def _published_execution_facts(rule_id: str, raw: dict[str, Any]) -> bool:
             or any(type(raw[key]) is not int or not 0 <= raw[key] <= 100 for key in (
                 "completed_opinion_episode_count", "recommendation_count", "specific_execution_count",
                 "generic_execution_count", "missing_execution_count"))):
+        return False
+    if "unresolved_opinion_episode_count" in raw and (
+        type(raw["unresolved_opinion_episode_count"]) is not int
+        or not 1 <= raw["unresolved_opinion_episode_count"] <= 100
+    ):
         return False
     return (("recommendation_results" not in raw or _published_recommendation_results(raw))
             and ("recommendation_evidence" not in raw or _published_recommendation_evidence(raw))

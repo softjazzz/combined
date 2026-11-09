@@ -564,6 +564,13 @@ def evaluate_critical_value_rules(
                         outcome=event_outcome,
                     ))
                 event_results = tuple(results)
+                # 06-04-02 只核处置存在性：报告时间可靠、来源完整、归属已核清的前提下，某报告
+                # 完全没有指向它的处置记录即确定未处置，不能被另一报告的处置时间问题掩盖；
+                # 时间待核的报告保持原状，不列为未处置。
+                if rule_id == "LX0609-06-04-02" and any(
+                    item["outcome"] == "unhandled" for item in event_results
+                ):
+                    final_state, reason_code = "non_compliant", "required_document_missing"
             elif rule_id == "LX0609-06-04-02":
                 event_results = tuple(
                     _event_display(

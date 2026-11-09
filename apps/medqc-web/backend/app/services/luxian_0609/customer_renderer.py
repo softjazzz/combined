@@ -3059,6 +3059,12 @@ def customer_finding_from_controlled_facts(
             finding_parts.append(
                 f"其余{len(labels_by_state['specific'])}条建议已开立对应医嘱。"
             )
+        unresolved_episodes = facts.get("unresolved_opinion_episode_count")
+        if type(unresolved_episodes) is int and unresolved_episodes > 0:
+            # 未进入核查的会诊只说明待核，不列为未执行。
+            finding_parts.append(
+                f"另有{unresolved_episodes}次会诊的意见时间缺失或不在本次住院期间，暂未核查其建议执行情况。"
+            )
         exclusion_notes = {
             "execution_condition_not_defined": "未说明何时达到执行条件",
             "non_order_recommendation": "不通过开立医嘱落实",
@@ -3314,6 +3320,16 @@ def customer_finding_from_controlled_facts(
                     f"已读取 {facts.get('order_count')} 条化疗医嘱及对应病程，"
                     f"{known_mismatch}当前资料不足，尚无法完成一致性核对。"
                 )
+            pending = sum(
+                value for value in (facts.get("unresolved_event_count"), facts.get("unknown_time_event_count"))
+                if type(value) is int and value > 0
+            )
+            if mismatched and pending:
+                # 已确认的不一致单列；未决医嘱只说明尚无法核对，不列为不一致。
+                return (
+                    f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，{mismatched}记录不一致；"
+                    f"另有 {pending} 条化疗医嘱尚无法核对，未能完成全部项目的一致性核对。"
+                )
             if mismatched:
                 return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，{mismatched}记录不一致。"
             return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。"
@@ -3520,6 +3536,30 @@ def customer_finding_from_controlled_facts(
             for item in event_results
         ):
             return "处置记录存在，但无法与各次危急值报告唯一对应，暂无法核对。"
+        if rule_id == "LX0609-06-04-02" and isinstance(event_results, list) and any(
+            isinstance(item, Mapping) and item.get("outcome") == "unhandled" for item in event_results
+        ) and any(
+            isinstance(item, Mapping) and item.get("outcome") in {
+                "authoritative_time_missing", "authoritative_time_conflict",
+            } for item in event_results
+        ):
+            # 确定未处置的报告与处置时间待核的报告分开写，待核项不列为未处置。
+            def _names(item):
+                return "、".join(str(name) for name in item.get("critical_item_names", ()) if name) or "危急值项目"
+            failures = "".join(
+                _names(item) + "：报告后未找到对应处置记录。"
+                for item in event_results if isinstance(item, Mapping) and item.get("outcome") == "unhandled"
+            )
+            pending = "；".join(
+                _names(item) + (
+                    "的处置时间早于报告时间" if item.get("outcome") == "authoritative_time_conflict"
+                    else "的处置时间缺失或无法解析"
+                )
+                for item in event_results
+                if isinstance(item, Mapping)
+                and item.get("outcome") in {"authoritative_time_missing", "authoritative_time_conflict"}
+            )
+            return "已确认问题：" + failures + "另有" + pending + "，暂无法核对这些项目的报告后处置。"
         if isinstance(event_results, list) and any(
             isinstance(item, Mapping) and item.get("outcome") in {
                 "authoritative_time_missing", "authoritative_time_conflict",

@@ -1566,7 +1566,31 @@ async def _typed_chemotherapy_comparison(
     )
     if not chemotherapy_orders:
         return "not_applicable", "chemotherapy_orders_cancelled", None, (), ()
-    if any(_clean(row.get("order_status")) in _CHEMO_ORDER_PENDING_STATUSES for row in chemotherapy_orders):
+    pending_orders = tuple(
+        row for row in chemotherapy_orders
+        if _clean(row.get("order_status")) in _CHEMO_ORDER_PENDING_STATUSES
+    )
+    if pending_orders:
+        # 拟执行医嘱尚未证明实施，单独保留未决；其余医嘱照常逐条核对，已可靠确认的
+        # 不一致不能被拟执行医嘱掩盖。只有其余医嘱确认不一致时才交付缺陷。
+        active_orders = tuple(row for row in chemotherapy_orders if row not in pending_orders)
+        if active_orders:
+            pending_ids = {id(row) for row in pending_orders}
+            status, reason, facts, _active, course_rows = await _typed_chemotherapy_comparison(
+                orders=SourceMaterial(orders.state, tuple(row for row in orders.rows if id(row) not in pending_ids)),
+                course_records=course_records, llm_client=llm_client, extractions=extractions,
+            )
+            if status == "non_compliant" and isinstance(facts, Mapping):
+                facts = {
+                    **facts,
+                    "order_count": len(chemotherapy_orders),
+                    "unresolved_event_count": int(facts.get("unresolved_event_count") or 0) + len(pending_orders),
+                    "field_results": {
+                        key: "unknown" if value == "matched" else value
+                        for key, value in dict(facts["field_results"]).items()
+                    },
+                }
+                return status, reason, facts, chemotherapy_orders, course_rows
         return "data_gap", "chemotherapy_order_not_executed", None, chemotherapy_orders, ()
     if not any(_course_record_text(row) for row in course_records.rows):
         return "data_gap", "chemotherapy_course_record_unavailable", None, (), ()
@@ -1622,6 +1646,9 @@ async def _typed_chemotherapy_comparison(
     unresolved_event_count = 0
     missing_course_event_count = 0
     unknown_time_event_count = 0
+    # 来自时间已核实的给药事件，或完整病程中明确停用/未记录的事件的不一致，才是可独立
+    # 交付的确定缺陷；时间未知事件的不一致不能单独成立。
+    confirmed_mismatch_event_count = 0
     selected_course_rows: list[Mapping[str, Any]] = []
     if expected_events:
         # 目标药物身份只给模型药名（不给剂量），由模型逐份病程抽取给药原子事实。
@@ -1665,6 +1692,7 @@ async def _typed_chemotherapy_comparison(
                 if withheld:
                     # 病程明确未给/停用而医嘱为执行：记录与医嘱不一致。
                     field_results["drug_name"] = "mismatched"
+                    confirmed_mismatch_event_count += 1
                     selected_course_rows.extend(row for row, _ in withheld)
                 elif planned:
                     # 仅计划不能证明已实施，也不能断言未记录。
@@ -1713,19 +1741,27 @@ async def _typed_chemotherapy_comparison(
                 continue
             claimed_facts.add(id(fact))
             selected_course_rows.append(row)
+            event_fields: dict[str, str] = {}
             # 片段已保证至多一个剂量；在整条片段上沿用既有剂量边界规则（d1、分母、千分位等）。
             if not fact.dose_quote or not _chemotherapy_dose_matches(event["dose"], fact.quote):
-                field_results["dose"] = (
+                event_fields["dose"] = (
                     "unknown" if fact.dose_quote
-                    and _chemotherapy_dose_unit_unconfirmed(event["dose"], fact.quote)
+                    and _chemotherapy_dose_unit_unconfirmed(event["dose"], fact.quote) else "mismatched"
+                )
+                field_results["dose"] = (
+                    "unknown" if event_fields["dose"] == "unknown"
                     and field_results["dose"] != "mismatched" else "mismatched"
                 )
             route_text = _normalized_comparison_text(fact.route_quote or fact.quote)
             if _normalized_comparison_text(event["route"]) not in route_text:
+                event_fields["route"] = "mismatched"
                 field_results["route"] = "mismatched"
             time_state = _chemotherapy_fact_time_state(event["prescribed"], row, fact)
             if time_state == "unknown":
                 unknown_time_event_count += 1
+            elif time_state == "mismatched" or "mismatched" in event_fields.values():
+                # 本次给药时间已核实（或时间本身不一致）的事件，其不一致可独立成立。
+                confirmed_mismatch_event_count += 1
             if time_state == "mismatched" or (
                 time_state == "unknown" and field_results["time"] != "mismatched"
             ):
@@ -1747,6 +1783,8 @@ async def _typed_chemotherapy_comparison(
         "unresolved_event_count": unresolved_event_count,
         "missing_course_event_count": missing_course_event_count,
         "unknown_time_event_count": unknown_time_event_count,
+        **({"confirmed_mismatch_event_count": confirmed_mismatch_event_count}
+           if confirmed_mismatch_event_count else {}),
     }
     if missing_order_fields:
         # 完整独立事件已确认的不一致不能被另一事件的字段缺口掩盖。
@@ -1758,7 +1796,8 @@ async def _typed_chemotherapy_comparison(
             chemotherapy_orders,
             tuple(selected_course_rows),
         )
-    if unresolved_event_count:
+    independent_mismatch_proven = bool(confirmed_mismatch_event_count or missing_course_event_count)
+    if unresolved_event_count and not independent_mismatch_proven:
         return (
             "data_gap",
             "chemotherapy_event_association_ambiguous",
@@ -1774,10 +1813,10 @@ async def _typed_chemotherapy_comparison(
             chemotherapy_orders,
             tuple(selected_course_rows),
         )
-    if unknown_time_event_count or (
+    if not independent_mismatch_proven and (unknown_time_event_count or (
         not missing_course_event_count
         and any(value == "unknown" for value in field_results.values())
-    ):
+    )):
         return (
             "data_gap",
             "chemotherapy_time_unavailable",

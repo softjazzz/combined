@@ -615,7 +615,12 @@ def critical_value_customer_fact_status_is_valid(
         return normalized_status == "data_gap"
     outcomes = [item.get("outcome") for item in safe_facts.get("event_results", ())]
     if str(rule_id).strip().upper() == "LX0609-06-04-02":
-        if any(value in {"association_failed", "authoritative_time_missing", "authoritative_time_conflict"}
+        if "association_failed" in outcomes:
+            return normalized_status == "data_gap"
+        # 某报告确定未处置时，另一报告的处置时间待核不能掩盖该缺陷（时间待核事件仍保留原样）。
+        if "unhandled" in outcomes:
+            return normalized_status == "non_compliant"
+        if any(value in {"authoritative_time_missing", "authoritative_time_conflict"}
                for value in outcomes):
             return normalized_status == "data_gap"
         return normalized_status == (

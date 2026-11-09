@@ -215,16 +215,10 @@ async def test_ambiguous_association_does_not_claim_initialized_fields_are_verif
     if mixed == "absent_conflict":
         expected_fields["time"] = "mismatched"
     assert raw_facts["field_results"] == expected_fields
-    status = "non_compliant" if mixed in {"absent", "absent_known"} else "data_gap"
-    reason = (
-        "requirement_violated"
-        if mixed in {"absent", "absent_known"}
-        else (
-            "source_unavailable"
-            if mixed in {"absent_time", "absent_conflict"}
-            else "required_field_missing"
-        )
-    )
+    # 2026-11-08 口径：另一事件未决不能掩盖已可靠确认的不一致或完整病程中的未记录；
+    # 只有单纯归属不明（无任何确定缺陷）时保持资料不足。
+    status = "data_gap" if mixed is False else "non_compliant"
+    reason = "required_field_missing" if mixed is False else "requirement_violated"
     assert reduced.final_state.value == status
     assert reduced.reason_code == reason
     assert final["status"] == status
@@ -236,7 +230,7 @@ async def test_ambiguous_association_does_not_claim_initialized_fields_are_verif
         )
     if mixed == "all":
         assert "药物名称、剂量、使用方法、用药时间记录不一致" in final["findings"]
-        assert "当前资料不足，尚无法完成一致性核对" in final["findings"]
+        assert "另有 1 条化疗医嘱尚无法核对" in final["findings"]
     else:
         assert "尚无法核对" in final["findings"]
         if mixed == "absent_conflict":

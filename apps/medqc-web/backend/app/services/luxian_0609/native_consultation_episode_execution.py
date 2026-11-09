@@ -2574,6 +2574,7 @@ def _consultation_execution_display_facts(
     excluded_recommendations: Sequence[_CompletedRecommendation] = (),
     order_scope_excluded: Sequence[_CompletedRecommendation] = (),
     missing_measures_by_ref: Mapping[str, Sequence[str]] | None = None,
+    unresolved_opinion_episode_count: int = 0,
 ) -> Mapping[str, Any]:
     """解释020的关联结果或023的执行质量结果。"""
 
@@ -2935,6 +2936,9 @@ def _consultation_execution_display_facts(
                 for item in order_scope_excluded[:96]
             )
             facts["excluded_recommendations"] = facts["excluded_recommendations"][:96]
+    if rule_id == "LX0609-03-01-04" and unresolved_opinion_episode_count:
+        # 意见时间缺失或不在住院窗口内、未进入核查的会诊次数；不计入已核对建议。
+        facts["unresolved_opinion_episode_count"] = min(unresolved_opinion_episode_count, 100)
     return facts
 
 
@@ -2943,7 +2947,13 @@ def _completed_recommendations(
     documents: Sequence[Mapping[str, str]],
     *,
     stay_window: _StayWindow | None,
+    unresolved_episode_refs: list[str] | None = None,
 ) -> tuple[_CompletedRecommendation, ...]:
+    """返回可核查会诊的建议。
+
+    传入 ``unresolved_episode_refs`` 时，意见时间缺失或不在住院窗口内的会诊只记入该列表并跳过，
+    不再使整批失败（2026-11-08：一次会诊未决不能抹掉另一会诊的确定缺陷）；未传入时保持原行为。
+    """
     by_ref = {str(item["ref"]): item for item in documents}
     completed: list[_CompletedRecommendation] = []
     for item in episodes:
@@ -2957,14 +2967,15 @@ def _completed_recommendations(
         if any(member is None for member in members):
             raise _SemanticInvalid()
         observed_times = [_parse_observed_time(member.get("time")) for member in members if member is not None]
-        if not observed_times or any(value is None for value in observed_times):
-            raise _SourceGap()
-        if stay_window is None or any(
-            not stay_window.contains(value)
-            for value in observed_times
-            if value is not None
+        if (
+            not observed_times or any(value is None for value in observed_times)
+            or stay_window is None
+            or any(not stay_window.contains(value) for value in observed_times if value is not None)
         ):
-            raise _SourceGap()
+            if unresolved_episode_refs is None:
+                raise _SourceGap()
+            unresolved_episode_refs.append(item.episode_ref)
+            continue
         opinion_time = max(
             (value for value in observed_times if value is not None),
             key=lambda value: value.value,
@@ -2984,6 +2995,7 @@ def _excluded_conditional_recommendations(
     documents: Sequence[Mapping[str, str]],
     *,
     stay_window: _StayWindow | None,
+    skip_unresolved: bool = False,
 ) -> tuple[_CompletedRecommendation, ...]:
     """返回因执行条件不明确而不进入 023 证据核对的建议。"""
 
@@ -3004,14 +3016,14 @@ def _excluded_conditional_recommendations(
             for member in members
             if member is not None
         ]
-        if not observed_times or any(value is None for value in observed_times):
-            raise _SourceGap()
-        if stay_window is None or any(
-            not stay_window.contains(value)
-            for value in observed_times
-            if value is not None
+        if (
+            not observed_times or any(value is None for value in observed_times)
+            or stay_window is None
+            or any(not stay_window.contains(value) for value in observed_times if value is not None)
         ):
-            raise _SourceGap()
+            if not skip_unresolved:
+                raise _SourceGap()
+            continue
         opinion_time = max(
             (value for value in observed_times if value is not None),
             key=lambda value: value.value,
@@ -5352,6 +5364,8 @@ async def _execute_consultation_episode_rules(
     measure_missing_by_ref: dict[str, tuple[str, ...]] = {}
     measure_excluded_refs: frozenset[str] = frozenset()
     embedded_decision_refs: frozenset[str] = frozenset()
+    # 意见时间缺失或不在住院窗口内的会诊（仅限受影响会诊，不使整批失败）。
+    unresolved_episode_refs: list[str] = []
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
             for rule_id in stage_two_rule_ids:
@@ -5363,12 +5377,14 @@ async def _execute_consultation_episode_rules(
                     episodes,
                     documents,
                     stay_window=execution_stay_window,
+                    unresolved_episode_refs=unresolved_episode_refs,
                 )
                 excluded_conditional_recommendations = (
                     _excluded_conditional_recommendations(
                         episodes,
                         documents,
                         stay_window=execution_stay_window,
+                        skip_unresolved=True,
                     )
                 )
             except _SourceGap:
@@ -6140,6 +6156,17 @@ async def _execute_consultation_episode_rules(
                             ),
                         )
                     )
+    if unresolved_episode_refs:
+        # 未决会诊不参与本次核查，也不列为“确定未执行”。023 只有其余可核查会诊已确认的
+        # 不合规可交付；其余结论（含合规、不适用）都不能越过未决会诊，保持关联未决。
+        # 技术失败与其他资料缺口保留原语义。020 不在本次范围，维持原“关联未决”。
+        for rule_id in stage_two_rule_ids:
+            current = statuses.get(rule_id)
+            if rule_id == "LX0609-03-01-04" and current is not None and current[0] in {
+                "non_compliant", "technical_error", "data_gap", "evaluation_unknown",
+            }:
+                continue
+            statuses[rule_id] = ("data_gap", "linkage_unresolved")
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,
         projection=execution_candidate_projection,
@@ -6269,6 +6296,7 @@ async def _execute_consultation_episode_rules(
                     missing_measures_by_ref=(
                         measure_missing_by_ref if rule_id == "LX0609-03-01-04" else {}
                     ),
+                    unresolved_opinion_episode_count=len(set(unresolved_episode_refs)),
                 ),
             )
         )
