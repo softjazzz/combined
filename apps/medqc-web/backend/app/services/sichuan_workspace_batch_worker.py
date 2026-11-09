@@ -28,6 +28,7 @@ from .custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     LX0609_ATTEMPT_FILTER_KEY,
     LX0609_LEASE_FILTER_KEY,
+    classify_neutral_records,
 )
 from .customer_rule_sets import CUSTOMER_LUXIAN_RULE_SET_KEY
 from .effect_priority_qc import (
@@ -602,6 +603,7 @@ def _build_record_status_counts(
     data_gap_record_ids: set[str],
     failed_record_ids: set[str],
     not_applicable_record_ids: Optional[set[str]] = None,
+    not_executed_record_ids: Optional[set[str]] = None,
 ) -> Dict[str, int]:
     issue_ids = {str(item or "").strip() for item in issue_record_ids if str(item or "").strip()}
     uncertain_ids = {str(item or "").strip() for item in uncertain_record_ids if str(item or "").strip()}
@@ -612,7 +614,18 @@ def _build_record_status_counts(
         for item in (not_applicable_record_ids or set())
         if str(item or "").strip()
     }
-    not_applicable_ids.difference_update(issue_ids, uncertain_ids, data_gap_ids, failed_ids)
+    not_executed_ids = {
+        str(item or "").strip()
+        for item in (not_executed_record_ids or set())
+        if str(item or "").strip()
+    }
+    # 按病历互斥分类（失败 > 确定缺陷 > 待核 > 资料不足 > 含暂停的纯中性“未执行” > 全部不适用 > 合规），
+    # 各类之和等于总数。
+    issue_ids.difference_update(failed_ids)
+    uncertain_ids.difference_update(failed_ids, issue_ids)
+    data_gap_ids.difference_update(failed_ids, issue_ids, uncertain_ids)
+    not_executed_ids.difference_update(issue_ids, uncertain_ids, data_gap_ids, failed_ids)
+    not_applicable_ids.difference_update(issue_ids, uncertain_ids, data_gap_ids, failed_ids, not_executed_ids)
     compliant_records = max(
         0,
         int(total_records or 0)
@@ -620,6 +633,7 @@ def _build_record_status_counts(
         - len(uncertain_ids)
         - len(data_gap_ids)
         - len(failed_ids)
+        - len(not_executed_ids)
         - len(not_applicable_ids),
     )
     return {
@@ -627,6 +641,7 @@ def _build_record_status_counts(
         "uncertain": len(uncertain_ids),
         "data_gap": len(data_gap_ids),
         "not_applicable": len(not_applicable_ids),
+        "not_executed": len(not_executed_ids),
         "failed": len(failed_ids),
         "compliant": compliant_records,
     }
@@ -1914,13 +1929,15 @@ async def run_sichuan_workspace_batch_job(
             }
 
         def _build_progress_patch(processed_records_count: int) -> Dict[str, Any]:
+            neutral_na_ids, neutral_paused_ids = classify_neutral_records(all_items)
             record_status_counts = _build_record_status_counts(
                 total_records=processed_records_count,
                 issue_record_ids=issue_record_ids,
                 uncertain_record_ids=uncertain_record_ids,
                 data_gap_record_ids=_record_ids_for_item_status("data_gap"),
                 failed_record_ids=failed_record_ids,
-                not_applicable_record_ids=_record_ids_for_item_status("not_applicable"),
+                not_applicable_record_ids=neutral_na_ids,
+                not_executed_record_ids=neutral_paused_ids,
             )
             result_status_counts = _build_item_status_counts(all_items)
             patch: Dict[str, Any] = {
@@ -1944,6 +1961,7 @@ async def run_sichuan_workspace_batch_job(
                 "uncertain_records": len(uncertain_record_ids),
                 "data_quality_gap_records": record_status_counts["data_gap"],
                 "not_applicable_records": record_status_counts["not_applicable"],
+                "not_executed_records": record_status_counts["not_executed"],
                 "compliant_records": record_status_counts["compliant"],
                 "record_status_breakdown": record_status_counts,
                 "status_breakdown": result_status_counts,
@@ -3983,12 +4001,7 @@ async def run_sichuan_workspace_batch_job(
             if str(item.get("display_status") or "") == "rejected_by_system"
             and str(item.get("record_key") or item.get("record_id") or "")
         }
-        not_applicable_record_ids = {
-            str(item.get("record_key") or item.get("record_id") or "")
-            for item in all_items
-            if str(item.get("status") or "").strip().lower() == "not_applicable"
-            and str(item.get("record_key") or item.get("record_id") or "")
-        }
+        not_applicable_record_ids, not_executed_record_ids = classify_neutral_records(all_items)
         record_status_counts = _build_record_status_counts(
             total_records=total_records,
             issue_record_ids=issue_record_ids,
@@ -3996,6 +4009,7 @@ async def run_sichuan_workspace_batch_job(
             data_gap_record_ids=data_quality_gap_record_ids,
             failed_record_ids=failed_record_ids,
             not_applicable_record_ids=not_applicable_record_ids,
+            not_executed_record_ids=not_executed_record_ids,
         )
         result_status_counts = _build_item_status_counts(all_items)
         final_wall_clock_time = max(0.0, time.perf_counter() - job_wall_started)
@@ -4047,6 +4061,7 @@ async def run_sichuan_workspace_batch_job(
             "postprocess_label_counts": postprocess_label_counts,
             "data_quality_gap_records": len(data_quality_gap_record_ids),
             "not_applicable_records": record_status_counts["not_applicable"],
+            "not_executed_records": record_status_counts["not_executed"],
             "rejected_by_system_records": len(rejected_by_system_record_ids),
             "technical_error_records": len(technical_error_record_ids),
             "record_status_breakdown": record_status_counts,

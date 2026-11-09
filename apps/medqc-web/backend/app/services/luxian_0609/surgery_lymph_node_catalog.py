@@ -68,7 +68,9 @@ _STAGE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _PATHOLOGIC_STAGE_PATTERN = re.compile(
-    r"(?<![A-Za-z])y?p\s*T\s*(?:is|[0-4][a-d]?|x)\s*N\s*(?:[0-3][a-c]?|x)|pTNM",
+    # 病理前缀可直接修饰T/N值，也可位于有值的pTNM/ypTNM字段标签上。
+    r"(?<![A-Za-z])y?p\s*(?:TNM\s*(?:分期\s*)?[:：]?\s*)?"
+    r"T\s*(?:is|[0-4][a-d]?|x)\s*N\s*(?:[0-3][a-c]?|x)",
     re.IGNORECASE,
 )
 _CHINESE_NUMBER = r"[一二三四五六七八九十两百]+"
@@ -280,6 +282,15 @@ def colon_pathology_missing_items(
     missing = []
     if not _LYMPH_NODE_COUNT_PATTERN.search(text):
         missing.append("lymph_node_count")
-    if not _PATHOLOGIC_STAGE_PATTERN.search(text):
+    # 否定须直接修饰分期填写/存在；“未见淋巴结转移 pT3N0”仍有真实分期。
+    positive_stages = [
+        match for match in _PATHOLOGIC_STAGE_PATTERN.finditer(text)
+        if not re.search(
+            r"(?:未(?:见|记录|填写)|无|缺少|待填)\s*(?:(?:病理)?分期\s*[:：]?\s*)?$",
+            text[max(0, match.start() - 20):match.start()],
+        )
+        and not re.match(r"\s*(?:未(?:记录|填写)|待填)", text[match.end():])
+    ]
+    if not positive_stages:
         missing.append("pathologic_stage")
     return tuple(missing)

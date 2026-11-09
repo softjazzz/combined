@@ -437,7 +437,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "senior_course_record",
     ),
     # 病理/肿瘤规则的适用触发来源也必须参与 RuleDecision 引用绑定。
-    "LX0609-06-02-03": ("pathology_exam_master", "pathology_exam_report", "senior_course_record"),
+    "LX0609-06-02-03": ("pathology_exam_master", "pathology_exam_report", "senior_course_record", "evaluation_context.horizon", "inpat_registration", "inpat_registration.discharge_horizon"),
     "LX0609-06-02-02": (
         "pathology_exam_master",
         "pathology_exam_report",
@@ -475,10 +475,11 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-11-01-01": ("surgery_record", "mr_surgery", "surgery_inform_consent"),
     # 029 的新增适用触发仅为结构化手术医嘱；严格已实施手术仍由执行器
     # 复用既有 surgery_record/mr_surgery 事实。申请单不参与本次判定。
-    "LX0609-04-01-01": ("inpat_nondrug_order",),
+    # 仅医嘱触发、缺小结时与 030 共用评价终点判断计划是否到期（用户口径 2026-11-08）。
+    "LX0609-04-01-01": ("inpat_nondrug_order", "evaluation_context.horizon", "inpat_registration", "inpat_registration.discharge_horizon"),
     # 030 以结构化手术医嘱触发“有医嘱但无手术记录”，必须在同一快照
     # 绑定命中的医嘱行，不能退回来源级观察引用。
-    "LX0609-04-02-02": ("inpat_nondrug_order",),
+    "LX0609-04-02-02": ("inpat_nondrug_order", "evaluation_context.horizon", "inpat_registration", "inpat_registration.discharge_horizon"),
     # 麻醉同意书、访视和记录单规则都必须先由结构化手术清单确认
     # 本次住院是否实施麻醉以及麻醉方式，才能正确处理局麻例外。
     "LX0609-11-02-01": ("mr_surgery",),
@@ -635,10 +636,12 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-05-01-05": (
+        "evaluation_context.horizon",
         "first_course_record", "transfer_in_record", "senior_course_record", "consultation_record",
         "labtest_master", "labtest_item_report", "surgery_record", "anesthesia_record",
     ),
     "LX0609-05-01-06": (
+        "evaluation_context.horizon",
         "inpat_drug_order", "senior_course_record", "consultation_record",
     ),
     "LX0609-05-03-01": (
@@ -703,6 +706,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 优先使用权威经治医师变更事件；部分院端尚未提供独立事件表，允许
     # 明确医嘱或普通病程的受控医师签名时间线作为替代触发。
     "LX0609-10-01-01": (
+        "evaluation_context.horizon",
         "physician_change_event",
         "inpat_nondrug_order",
         "daily_course_record",
@@ -718,6 +722,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-12-02-01": ("diagnosis", "admission_record_diagnosis"),
     # 075：医嘱触发（运行病历）＋病案首页编码触发（终末），操作记录核对病程与手术记录。
     "LX0609-10-03-01": (
+        "evaluation_context.horizon",
         "inpat_nondrug_order", "first_course_record", "daily_course_record",
         "senior_course_record", "postsurg_firstcourse_record", "surgery_record", "mr_surgery",
     ),

@@ -157,6 +157,11 @@ def test_record_evaluation_horizon_is_resolved_per_record(
         "record_scene": record_scene,
         "admission_datetime": admission_datetime,
         "discharge_datetime": discharge_datetime,
+        # 两个有合法时刻的用例（含先后冲突）仍保留原始时刻精度。
+        "discharge_time_precision": {
+            "2026-06-13 18:00:00": "datetime",
+            "2026-06-01 18:00:00": "datetime",
+        }.get(discharge_datetime, "unknown"),
         **expected,
     }
 
@@ -646,6 +651,7 @@ def test_055_058_session_reads_each_executor_input_source() -> None:
 
     sources_058 = set(resolve_luxian_0609_decision_support_source_keys(("LX0609-05-01-06",)))
     assert sources_058 == {
+        "evaluation_context.horizon",
         "inpat_drug_order",
         "consultation_record",
         "senior_course_record",
@@ -1493,6 +1499,8 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
     assert calls == [
         "anesthesia_record",
         "inpat_nondrug_order",
+        "inpat_registration",
+        "inpat_registration.discharge_horizon",
         "mr_surgery",
         "postsurg_firstcourse_record",
         "presurg_discussion",
@@ -1503,7 +1511,10 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
     assert len(calls) == len(set(calls))
     assert {item.source_key for item in snapshot.observations} == {
         "anesthesia_record",
+        "evaluation_context.horizon",
         "inpat_nondrug_order",
+        "inpat_registration",
+        "inpat_registration.discharge_horizon",
         "mr_surgery",
         "postsurg_firstcourse_record",
         "presurg_discussion",
@@ -1521,7 +1532,7 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
         "surgery_risk_assessment",
     }
     assert all(item.completeness is SourceCompleteness.UNPROVEN for item in snapshot.observations if item.source_key in unavailable)
-    assert len(snapshot.document_refs) == 8
+    assert len(snapshot.document_refs) == 10
     order_facts = tuple(
         item
         for item in snapshot.facts
@@ -1888,10 +1899,9 @@ def test_provider_fingerprint_and_document_refs_are_stable_for_order_and_duplica
     second = _build(row_reader=reader)
     assert first.snapshot_hash == second.snapshot_hash
     assert first.document_refs == second.document_refs
-    # 同样的业务 document_id 在 surgery_record 与 anesthesia_record 中仍是
-    # 两份不同来源文书；每个来源各保留 3 个稳定引用。
-    assert len(first.document_refs) == 6
-    assert len(set(first.document_refs)) == 6
+    # 同号文书在四个实际读取来源中仍各自独立，每个来源保留3个稳定引用。
+    assert len(first.document_refs) == 12
+    assert len(set(first.document_refs)) == 12
     assert "private-a" not in repr(first.to_safe_dict())
 
 

@@ -5616,6 +5616,7 @@ def test_batch_record_status_counts_should_separate_not_applicable_from_complian
         "uncertain": 0,
         "data_gap": 1,
         "not_applicable": 1,
+        "not_executed": 0,
         "failed": 0,
         "compliant": 1,
     }

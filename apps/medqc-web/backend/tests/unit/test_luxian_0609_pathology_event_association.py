@@ -36,7 +36,13 @@ async def _run(rows, rule_id, client=None):
 
     session = build_luxian_0609_evidence_read_session(
         selected_rule_ids=(rule_id,), institute_id="I", patient_id="P", visit_id="V",
-        source_schema=None, created_at="2026-07-10T00:00:00+08:00", row_reader=reader,
+        source_schema=None, created_at="2026-07-10T19:00:00+08:00", row_reader=reader,
+        evaluation_horizon_snapshot={
+            "institute_id": "I", "patient_id": "P", "visit_id": "V",
+            "record_scene": "final", "evaluation_basis": "discharge_datetime", "resolution_status": "resolved",
+            "evaluation_horizon": "2026-07-10", "admission_datetime": "2025-01-01 08:00:00",
+            "discharge_datetime": "2026-07-10 18:00:00", "discharge_time_precision": "datetime",
+        },
     )
     client = client if client is not None else PathologyFactsClient()
     result = await execute_luxian_0609_native_tumor_pathology_rules(

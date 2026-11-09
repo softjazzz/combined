@@ -741,6 +741,7 @@ def build_exam_lab_rule_decision(
             "course_record_time_unproven": "document_completion_time_missing",
         }
         preserved_gap_reasons = {
+            "semantic_extraction_unresolved",
             "target_report_missing",
             "authoritative_time_missing",
             "authoritative_report_time_missing",

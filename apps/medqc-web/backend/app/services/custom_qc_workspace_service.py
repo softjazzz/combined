@@ -289,6 +289,45 @@ def _safe_text(value: Any, default: str = "") -> str:
     return str(value).strip()
 
 
+# 病历级统计的统一合同（批处理 Worker 与客户 DTO 共用）：
+# 有问题状态的病历不算合规；只有中性状态的病历不算合规，其中全部不适用归“不适用”，
+# 含暂停未执行（全部暂停或暂停与不适用混合）归“未执行”（用户口径 2026-11-08）；其余为合规。
+# 单条规则的原始状态保持不变，这里只做病历级分类。
+RECORD_PROBLEM_STATUSES = frozenset({
+    "non_compliant", "ai_suggested_non_compliant", "uncertain", "data_gap", "technical_error",
+})
+RECORD_NEUTRAL_STATUSES = frozenset({"not_applicable", "not_executed"})
+
+
+def _record_statuses(items: Any, key_fields: tuple[str, ...]) -> Dict[str, set[str]]:
+    statuses: Dict[str, set[str]] = {}
+    for item in items or ():
+        ref = next((_safe_text(item.get(field)) for field in key_fields if _safe_text(item.get(field))), "")
+        if ref:
+            statuses.setdefault(ref, set()).add(_safe_text(item.get("status")).lower())
+    return statuses
+
+
+def classify_neutral_records(
+    items: Any, key_fields: tuple[str, ...] = ("record_key", "record_id"),
+) -> tuple[set[str], set[str]]:
+    """只有中性状态的病历：返回（全部不适用, 含暂停未执行）两组病历。"""
+    not_applicable: set[str] = set()
+    not_executed: set[str] = set()
+    for ref, values in _record_statuses(items, key_fields).items():
+        if values and values <= RECORD_NEUTRAL_STATUSES:
+            (not_executed if "not_executed" in values else not_applicable).add(ref)
+    return not_applicable, not_executed
+
+
+def _compliant_record_refs(items: Any) -> set[str]:
+    """合规病历：没有任何问题状态，且不只是中性状态。"""
+    return {
+        ref for ref, values in _record_statuses(items, ("record_ref",)).items()
+        if not values & RECORD_PROBLEM_STATUSES and not values <= RECORD_NEUTRAL_STATUSES
+    }
+
+
 def _safe_json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, default=str)
 
@@ -1109,13 +1148,9 @@ def project_customer_safe_batch_job(
         "total_records": _to_int(raw_summary.get("total_records"), _to_int(job.get("total_records"))),
         "success_count": _to_int(raw_summary.get("success_count"), _to_int(job.get("success_count"))),
         "failed_count": _to_int(raw_summary.get("failed_count"), _to_int(job.get("failed_count"))),
-        "compliant_records": len(
-            {
-                _safe_text(item.get("record_ref"))
-                for item in items
-                if item.get("status") == "compliant"
-            }
-        ),
+        "compliant_records": len(_compliant_record_refs(items)),
+        "not_applicable_records": len(classify_neutral_records(items, ("record_ref",))[0]),
+        "not_executed_records": len(classify_neutral_records(items, ("record_ref",))[1]),
         "result_count": len(items),
         "issue_records": len(issue_refs),
         "status_counts": status_counts,
@@ -1370,13 +1405,13 @@ def project_customer_safe_batch_job(
         for item in list(job.get("failed_records") or [])
         if isinstance(item, dict)
     ]
-    if safe_summary.get("execution_status") in {"partial_failed", "failed"}:
-        failed_refs = {failure["record_ref"] for failure in failed_records}
-        safe_summary["compliant_records"] = len({
-            _safe_text(item.get("record_ref"))
-            for item in items
-            if item.get("status") == "compliant" and item.get("record_ref") not in failed_refs
-        })
+    failed_refs = {failure["record_ref"] for failure in failed_records}
+    if safe_summary.get("execution_status") in {"partial_failed", "failed"} or failed_refs:
+        # 与批处理 Worker 同一合同：执行失败的病历优先归失败，不再计入合规、不适用或未执行。
+        neutral_na, neutral_paused = classify_neutral_records(items, ("record_ref",))
+        safe_summary["compliant_records"] = len(_compliant_record_refs(items) - failed_refs)
+        safe_summary["not_applicable_records"] = len(neutral_na - failed_refs)
+        safe_summary["not_executed_records"] = len(neutral_paused - failed_refs)
     item_record_refs = {
         _safe_text(item.get("record_ref"))
         for item in items

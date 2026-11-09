@@ -204,7 +204,7 @@ async def test_worker_bundle_prepare_plan_and_as_of_freeze_probe(
         (record_id, rule_id, status, reason)
         for record_id in workspace.job["record_ids"]
         for rule_id, status, reason in (
-            (RULE_IDS[0], "data_gap", "authoritative_time_missing"),
+            (RULE_IDS[0], "data_gap", "authoritative_time_conflict"),
             (RULE_IDS[1], "not_applicable", "trigger_absent_complete"),
         )
         if rule_id in per_record_ids[record_id]

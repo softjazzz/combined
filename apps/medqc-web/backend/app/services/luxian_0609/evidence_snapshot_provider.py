@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import logging
 from datetime import date, datetime
 from typing import Any, Callable, Mapping
 from zoneinfo import ZoneInfo
@@ -24,6 +25,8 @@ from .evaluation_horizon import (
     EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE,
     resolve_frozen_discharge_horizon,
     resolve_frozen_running_record_scene,
+    resolve_record_evaluation_horizon_policy,
+    resolve_record_evaluation_horizon_unavailable_reason,
     resolve_snapshot_task_frozen_date,
 )
 from .evidence_material import (
@@ -68,7 +71,7 @@ _EMERGENCY_RESCUE_POSITIVE_PATTERN = re.compile(
 # 与出院处方等处的有效状态口径一致；类型“处置治疗”“材料”“输血”同样不是手术。
 # “麻醉”类型是局部浸润麻醉等收费医嘱，本身不是手术（1019 C03 床旁气管切开）。
 _EFFECTIVE_SURGERY_ORDER_STATUSES = frozenset({"新开", "执行中", "执行", "核实", "停止"})
-_EXCLUDED_SURGERY_ORDER_STATUSES = frozenset({"取消", "撤销", "作废"})
+_EXCLUDED_SURGERY_ORDER_STATUSES = frozenset({"取消", "撤销", "作废", "已取消", "已撤销", "已作废"})
 KNOWN_NON_SURGERY_ORDER_TYPES = frozenset(
     {"检查", "检验", "治疗", "处置治疗", "护理", "嘱托", "转科", "材料", "输血", "麻醉", "其他"}
 )
@@ -79,7 +82,7 @@ def classify_current_visit_surgery_order_rows(
     rows: tuple[Mapping[str, Any], ...],
     completeness: SourceCompleteness,
 ) -> tuple[str, tuple[str, ...]]:
-    """按029既定结构化口径判定手术医嘱，并返回仅供材料定位的原始 ID。
+    """按029既定结构化口径判定手术计划医嘱，不证明手术已实施或术后义务到期。
 
     返回的 ID 绝不能写入 FactV2；它只用于把同一次冻结材料行还原为公共
     证据投影所需的 document_ref。判定本身只依赖 ``order_type`` 和
@@ -338,7 +341,15 @@ def build_luxian_0609_evidence_read_session(
         {
             "LX0609-01-01-01",
             "LX0609-01-02-01",
+            "LX0609-04-01-01",
             "LX0609-04-02-01",
+            "LX0609-04-02-02",
+            "LX0609-06-02-03",
+            "LX0609-05-01-02",
+            "LX0609-05-01-05",
+            "LX0609-05-01-06",
+            "LX0609-10-01-01",
+            "LX0609-10-03-01",
             "LX0609-02-01-01",
             "LX0609-02-01-02",
             "LX0609-02-01-03",
@@ -371,17 +382,69 @@ def build_luxian_0609_evidence_read_session(
             "LX0609-06-03-02",
         }.intersection(selected_rule_ids)
     )
-    if (
+    has_frozen_horizon = needs_evaluation_horizon and evaluation_horizon_snapshot is not None
+    if not has_frozen_horizon and (
         evaluation_horizon_policy is not None
         and evaluation_horizon_policy not in EVALUATION_HORIZON_POLICIES
     ):
         raise ValueError("evaluation_horizon_policy is invalid")
-    if horizon_unavailable_reason not in {
+    if not has_frozen_horizon and horizon_unavailable_reason not in {
         None,
         "authoritative_time_missing",
         "authoritative_time_conflict",
     }:
         raise ValueError("horizon_unavailable_reason is invalid")
+    if has_frozen_horizon:
+        # 逐例冻结是唯一评价依据，调用者的默认/旧参数不能把冲突快照重新放行。
+        # 无快照的升级前入口仍沿用原有兼容逻辑，不修改快照或回查新材料修补它。
+        frozen_date = None
+        frozen_reason = "authoritative_time_missing"
+        frozen_policy = EVALUATION_HORIZON_POLICY_DISABLED
+        if isinstance(evaluation_horizon_snapshot, Mapping):
+            frozen_policy = resolve_record_evaluation_horizon_policy(evaluation_horizon_snapshot)
+            frozen_reason = resolve_record_evaluation_horizon_unavailable_reason(evaluation_horizon_snapshot)
+            if frozen_policy == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE:
+                _, frozen_reason = resolve_frozen_discharge_horizon(
+                    evaluation_horizon_snapshot, institute_id=institute_id,
+                    patient_id=patient_id, visit_id=visit_id,
+                )
+            elif frozen_policy == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE:
+                try:
+                    frozen_date = _parse_evaluation_as_of_date(
+                        str(evaluation_horizon_snapshot.get("evaluation_horizon") or "")
+                    )
+                except (TypeError, ValueError):
+                    frozen_date = None
+                if frozen_date is None:
+                    frozen_reason = "authoritative_time_missing"
+                elif not resolve_frozen_running_record_scene(
+                    evaluation_horizon_snapshot, institute_id=institute_id,
+                    patient_id=patient_id, visit_id=visit_id, expected_horizon_date=frozen_date,
+                ):
+                    frozen_reason = "authoritative_time_conflict"
+            else:
+                frozen_reason = frozen_reason or "authoritative_time_missing"
+        # 快照损坏/冲突通过原有data_gap合同关闭，不抛成整族技术失败。
+        # 只有快照本身有效时再核对冗余参数，不能以参数冲突覆盖更准确的缺失原因。
+        if not frozen_reason:
+            if ((evaluation_horizon_policy is not None and evaluation_horizon_policy != frozen_policy)
+                    or (horizon_unavailable_reason is not None and horizon_unavailable_reason != frozen_reason)):
+                frozen_reason = "authoritative_time_conflict"
+            if frozen_policy == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE and evaluation_as_of_date:
+                try:
+                    if _parse_evaluation_as_of_date(evaluation_as_of_date) != frozen_date:
+                        frozen_reason = "authoritative_time_conflict"
+                except (TypeError, ValueError):
+                    frozen_reason = "authoritative_time_conflict"
+        if frozen_reason:
+            frozen_policy = EVALUATION_HORIZON_POLICY_DISABLED
+            logging.getLogger(__name__).warning("frozen_evaluation_horizon_closed reason=%s", frozen_reason)
+        evaluation_horizon_policy = frozen_policy
+        horizon_unavailable_reason = frozen_reason or None
+        evaluation_as_of_date = (
+            frozen_date.isoformat()
+            if evaluation_horizon_policy == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE else None
+        )
     if (
         horizon_unavailable_reason is not None
         and evaluation_horizon_policy != EVALUATION_HORIZON_POLICY_DISABLED
@@ -771,16 +834,24 @@ def build_luxian_0609_evidence_read_session(
                 visit_id=visit_id,
                 expected_horizon_date=horizon_date,
             )
+            if evaluation_horizon_snapshot is not None and not horizon_record_scene:
+                horizon_date = None
+                resolved_horizon_reason = "authoritative_time_conflict"
         elif (
             evaluation_horizon_policy == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
             and evaluation_horizon_snapshot is not None
         ):
-            horizon_datetime, resolved_horizon_reason = resolve_frozen_discharge_horizon(
+            frozen_discharge, resolved_horizon_reason = resolve_frozen_discharge_horizon(
                 evaluation_horizon_snapshot, institute_id=institute_id,
                 patient_id=patient_id, visit_id=visit_id,
             )
-            if horizon_datetime is not None:
-                horizon_date = horizon_datetime.date()
+            if frozen_discharge is not None:
+                # 日期级出院只冻结日期，不写补零点的 horizon_datetime（消费点按日期口径处理）。
+                if isinstance(frozen_discharge, datetime):
+                    horizon_datetime = frozen_discharge
+                    horizon_date = frozen_discharge.date()
+                else:
+                    horizon_date = frozen_discharge
                 horizon_basis = "discharge_date"
                 task_frozen_date = resolve_snapshot_task_frozen_date(evaluation_horizon_snapshot)
         elif evaluation_horizon_policy != EVALUATION_HORIZON_POLICY_DISABLED:
@@ -881,6 +952,11 @@ def build_luxian_0609_evidence_read_session(
         horizon_entry = resolve_luxian_0609_physical_source_entry(
             EVALUATION_HORIZON_SOURCE_KEY
         )
+        date_only_frozen_discharge = bool(
+            evaluation_horizon_snapshot is not None and horizon_basis == "discharge_date"
+            and (evaluation_horizon_snapshot.get("discharge_time_precision") == "date"
+                 or ":" not in str(evaluation_horizon_snapshot.get("discharge_datetime") or ""))
+        )
         horizon_payload = (
             {
                 "horizon_date": horizon_date.isoformat(),
@@ -890,6 +966,7 @@ def build_luxian_0609_evidence_read_session(
                     else {}
                 ),
                 "basis": horizon_basis,
+                **({"time_precision": "date"} if date_only_frozen_discharge else {}),
                 **(
                     {"record_scene": horizon_record_scene}
                     if horizon_record_scene
@@ -906,6 +983,7 @@ def build_luxian_0609_evidence_read_session(
                         horizon_basis,
                         horizon_date.isoformat(),
                         horizon_datetime.isoformat() if horizon_datetime else "",
+                        *(("date-precision-v1",) if date_only_frozen_discharge else ()),
                         *((horizon_record_scene,) if horizon_record_scene else ()),
                         *((task_frozen_date.isoformat(),) if task_frozen_date is not None else ()),
                     )

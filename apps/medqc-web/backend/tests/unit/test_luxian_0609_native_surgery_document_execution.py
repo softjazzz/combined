@@ -892,10 +892,12 @@ def _typed_session(
             elif surgery_mode == "multi":
                 rows = (
                     {
+                        "document_id": "SYN-MULTI-SURGERY-1",
                         "surgery_begin_time": "2026-01-01 08:00:00+08",
                         "record_content": "本次手术不属于紧急抢救手术。",
                     },
                     {
+                        "document_id": "SYN-MULTI-SURGERY-2",
                         "surgery_begin_time": "2026-01-02 08:00:00+08",
                         "record_content": "本次手术不属于紧急抢救手术。",
                     },
@@ -2857,7 +2859,7 @@ async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_re
 
 
 @pytest.mark.asyncio
-async def test_typed_078_source_query_error_is_delivered_as_data_gap():
+async def test_typed_078_source_query_error_is_technical_error():
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         if source_key == "presurg_summary":
@@ -2895,8 +2897,8 @@ async def test_typed_078_source_query_error_is_delivered_as_data_gap():
     )
 
     assert (reduced[0].final_state, reduced[0].reason_code) == (
-        "data_gap",
-        "source_readiness_unproven",
+        "technical_error",
+        "source_query_error",
     )
     assert result.llm_call_count == 0
 
@@ -3133,17 +3135,19 @@ async def test_typed_scope_and_snapshot_material_binding_fail_closed():
             "requirement_satisfied",
             "已发现手术医嘱，术前小结已完整记录。",
         ),
+        # 用户口径（2026-11-08）：仅有手术医嘱、无计划时间也无已实施证据时，实施情况未知，
+        # 保留未决，不直接判缺术前小结。
         (
             (),
-            "non_compliant",
-            "required_document_missing",
-            "已发现手术医嘱，但未找到对应术前小结。",
+            "data_gap",
+            "source_readiness_unproven",
+            "手术实施情况暂无法确认",
         ),
         (
             ({"document_id": "summary-029", "record_content": "   "},),
-            "non_compliant",
-            "defect_proven",
-            "已发现手术医嘱，但对应术前小结正文为空。",
+            "data_gap",
+            "source_readiness_unproven",
+            "手术实施情况暂无法确认",
         ),
     ),
 )
@@ -3153,7 +3157,7 @@ async def test_typed_029_surgery_order_only_triggers_and_binds_selected_evidence
     expected_reason: str,
     expected_finding: str,
 ) -> None:
-    """029 的医嘱触发必须走既有 any-of 合同，不等待已实施手术。"""
+    """029 的医嘱触发走既有 any-of 合同；有小结即合规，缺小结时须先确认手术已到期或已实施。"""
 
     session = _typed_029_session(
         surgery_mode="empty",

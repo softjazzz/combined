@@ -370,7 +370,7 @@ def _safe_063(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         if (set(raw) != allowed or not any(gaps)
                 or any(value is not None and (not isinstance(value, str) or value not in {
                     "diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown",
-                    "equivalence_unresolved",
+                    "equivalence_unresolved", "version_conflict",
                 }) for value in gaps)):
             return None
         return dict(raw)
@@ -728,7 +728,7 @@ def validate_published_discharge_facts(
         elif raw.get("verification_kind") == "discharge_diagnosis_data_gap":
             gaps = (raw.get("authoritative_gap"), raw.get("written_gap"))
             allowed = {"diagnoses_missing", "name_missing", "order_missing", "order_invalid", "scope_conflict", "scope_unknown",
-                       "equivalence_unresolved"}
+                       "equivalence_unresolved", "version_conflict"}
             if (keys != {"verification_kind", "authoritative_gap", "written_gap"} | scope_keys
                     or not any(gaps)
                     or any(value is not None and (type(value) is not str or value not in allowed) for value in gaps)):

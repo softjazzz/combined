@@ -7,6 +7,7 @@ from typing import Any, Literal, Mapping
 
 
 from .source_evidence_reader import authoritative_document_time_value
+from .transfusion_association import parse_precise_transfusion_datetime
 
 
 AssessmentOutcome = tuple[str, str, Mapping[str, Any]]
@@ -85,15 +86,7 @@ def _text(value: Any) -> str:
 
 
 def _datetime(value: Any) -> datetime | None:
-    if isinstance(value, datetime):
-        return value.replace(tzinfo=None) if value.tzinfo is not None else value
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+    return parse_precise_transfusion_datetime(value)
 
 
 def _rows(documents: Mapping[str, Any], source_key: str) -> list[Mapping[str, Any]]:

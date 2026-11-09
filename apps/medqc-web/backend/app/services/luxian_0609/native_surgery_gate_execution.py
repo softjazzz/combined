@@ -2262,12 +2262,17 @@ async def _typed_028_outcome(
         for key in _028_COURSE_SOURCES
         for index, row in enumerate(rows[key])
     )
-    outcome = await evaluate_prophylactic_antimicrobial_duration(
-        events=events,
-        drug_order_rows=rows["inpat_drug_order"],
-        course_rows=course_rows if course_ok else (),
-        llm_client=llm_client,
-    )
+    from ..llm_token_budget import budget_rule_scope
+    budget_errors = []
+    with budget_rule_scope(budget_errors.append):
+        outcome = await evaluate_prophylactic_antimicrobial_duration(
+            events=events,
+            drug_order_rows=rows["inpat_drug_order"],
+            course_rows=course_rows if course_ok else (),
+            llm_client=llm_client,
+        )
+    if budget_errors:
+        return _SurgeryTextOutcome(rule_id, "technical_error", budget_errors[0].code), zero
     usage = (
         outcome.llm_call_count, outcome.prompt_tokens, outcome.completion_tokens,
         outcome.total_tokens, outcome.api_time,
@@ -2304,6 +2309,9 @@ def _decision_from_surgery_outcome(
         "malignancy_llm_invalid": "model_invalid_output",
         "malignancy_llm_transport_error": "model_transport_error",
     }.get(outcome.reason_code, "model_transport_error")
+    from ..llm_token_budget import CONTEXT_REASON_CODES
+    if outcome.reason_code in CONTEXT_REASON_CODES.values():
+        technical_reason_code = outcome.reason_code
     mapping = {
         "compliant": (
             ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT,
@@ -2327,6 +2335,8 @@ def _decision_from_surgery_outcome(
         ),
     }
     applicability, evidence_state, qc_direction, reason_code = mapping[outcome.status]
+    if outcome.status == "data_gap" and outcome.reason_code == "candidate_scope_incomplete":
+        reason_code = outcome.reason_code
     if outcome.reason_code == "catalog_combination_absent":
         # 恶性肿瘤手术不在院方“病种—术式”目录内：适用条件不满足。
         reason_code = "eligibility_not_met"

@@ -8,6 +8,8 @@ LLM_ROLE_MODELS="exam_finding_analysis=deepseek/deepseek-flash"：只有列出�
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
+import hashlib
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -41,43 +43,52 @@ def parse_role_models(raw: str | None) -> dict[str, tuple[str, str]]:
     return result
 
 
-def build_role_delegate(role: str) -> Any | None:
-    """返回该调用点配置的裁决模型客户端；未配置或不可用时返回 None。"""
+def capture_legacy_role_runtimes(base: dict) -> dict:
+    """接纳客户端时固定旧调用点配置，后续不再读取进程默认模型与参数。"""
     from ...core.settings import get_settings
-    from ..llm_config_loader import build_adjudicator_runtime_config, build_provider_runtime_config
+    from ..llm_config_loader import build_provider_runtime_config
     from ..llm_dispatch.provider_profiles import ProviderConfigurationError
-    from ..qc_llm_client import SichuanQCLLMClient
+    settings = get_settings()
+    result = {}
+    for role, (provider, model) in parse_role_models(settings.LLM_ROLE_MODELS).items():
+        if base.get("provider_code") in {"ollama", "strata", "local_openai"} and provider not in {"ollama", "strata", "local_openai"}:
+            raise ProviderConfigurationError("local legacy roles cannot route to cloud")
+        params = deepcopy(base.get("custom_parameters") or {})
+        if provider == "deepseek":
+            params["enable_thinking"] = False
+        runtime = build_provider_runtime_config(provider_code=provider, model_code=model,
+            custom_parameters=params, dispatch_mode=base.get("dispatch_mode"),
+            gateway_profile=base.get("gateway_profile") if (provider, model) == (base.get("provider_code"), base.get("model")) else None)
+        if runtime.get("provider_code") != provider:
+            raise ProviderConfigurationError("role provider override mismatch")
+        if runtime.get("dispatch_mode") == "direct" and not runtime.get("api_key") and provider not in {"ollama", "strata"}:
+            raise ProviderConfigurationError("role provider credential is unavailable")
+        if runtime.get("dispatch_mode") == "gateway":
+            runtime["gateway_endpoint_sha256"] = hashlib.sha256(str(settings.LLM_GATEWAY_URL or "").strip().rstrip('/').encode()).hexdigest()
+        runtime.update(source="frozen_legacy_role", model_role="adjudicator", allow_mock_when_unconfigured=False,
+            legacy_role_runtimes={}, task_role_runtimes={}, task_role_identity=None)
+        result[role] = runtime
+    return result
 
-    spec = parse_role_models(get_settings().LLM_ROLE_MODELS).get(role)
-    if spec is None:
-        return None
-    provider, model = spec
-    adjudicator = build_adjudicator_runtime_config()
-    params = dict(adjudicator.get("custom_parameters") or {})
-    if provider == "deepseek":
-        # 评估（2026-10-19）按关闭 thinking 运行；DeepSeek 不走 DashScope 的 thinking 参数。
-        params["enable_thinking"] = False
-    runtime = build_provider_runtime_config(
-        provider_code=provider,
-        model_code=model,
-        custom_parameters=params,
-        dispatch_mode=adjudicator.get("dispatch_mode"),
-        gateway_profile=(adjudicator.get("gateway_profile")
-                         if provider == adjudicator.get("provider_code") and model == adjudicator.get("model")
-                         else None),
-    )
-    if runtime.get("provider_code") != provider:
-        raise ProviderConfigurationError("role provider override mismatch")
-    if (
-        runtime.get("dispatch_mode") == "direct"
-        and not runtime.get("api_key")
-        and provider not in {"ollama", "strata"}
-    ):
-        # 医院内网 OpenAI-compatible 服务允许不设 Provider key；endpoint/model
-        # 已由各自 adapter 显式校验，不能因此回退到云端。
-        raise ProviderConfigurationError("role provider credential is unavailable")
-    runtime.update({"source": "env_role_model", "config_name": f"role:{role}", "model_role": "adjudicator"})
-    return SichuanQCLLMClient(runtime)
+
+def legacy_role_identity(runtimes):
+    """任务与冻结仅登记旧路由有效身份；凭据和地址原文不入结果。"""
+    fields = ("temperature", "top_p", "top_k", "presence_penalty", "frequency_penalty",
+              "repetition_penalty", "max_tokens", "enable_thinking", "thinking_budget", "reasoning_effort")
+    return {role: {"provider": value["provider_code"], "model": value["model"],
+        "endpoint_sha256": hashlib.sha256(str(value.get("api_endpoint") or "").encode()).hexdigest(),
+        "dispatch_mode": value.get("dispatch_mode", "direct"), "gateway_profile": value.get("gateway_profile"),
+        "gateway_endpoint_sha256": value.get("gateway_endpoint_sha256"),
+        "parameters": {key: (value.get("custom_parameters") or {}).get(key) for key in fields}}
+        for role, value in sorted(runtimes.items())}
+
+
+def build_role_delegate(role: str) -> Any | None:
+    """无正式客户端的兼容调用仍检查本地到云端边界；正式任务使用已冻结路由。"""
+    from ..llm_config_loader import build_adjudicator_runtime_config
+    from ..qc_llm_client import SichuanQCLLMClient
+    runtime = capture_legacy_role_runtimes(build_adjudicator_runtime_config()).get(role)
+    return SichuanQCLLMClient(runtime) if runtime else None
 
 
 def client_for_role(llm_client: Any, role: str) -> Any:

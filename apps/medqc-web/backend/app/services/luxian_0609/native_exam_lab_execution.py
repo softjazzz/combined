@@ -1570,6 +1570,13 @@ def _single_text_fact_outcome(
         return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
     if fact.applicability == "not_applicable":
         return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
+    if (rule_id == "LX0609-06-03-04" and event is not None
+            and event.target_confirmed and event.result_text_available
+            and fact.applicability == "unknown" and fact.positive_state == "unknown"
+            and fact.semantic_state in {"unknown", "absent"}):
+        # 合法语义未定不是缺报告/缺字段，更不能逸出为不可交付的 uncertain。
+        # 模型传输、配置及预算失败在外层按技术失败处理，不进入此事实分支。
+        return _ExamLabOutcome(rule_id, "data_gap", "semantic_extraction_unresolved", refs)
     if fact.applicability != "applicable":
         return _ExamLabOutcome(
             rule_id,
@@ -1621,6 +1628,10 @@ def _single_text_fact_outcome(
     if event_time is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_time_missing", refs)
 
+    if fact.semantic_state == "specialty_unverified":
+        # 06-01-04 专项未能确认归属或调用失败：主抽取结论未经核实，保留为资料关联不足，
+        # 既不判合规也不判“未记录”（用户口径 2026-11-08）。
+        return _ExamLabOutcome(rule_id, "data_gap", "association_failed", refs)
     if fact.semantic_state == "absent":
         if projection.course_time_incomplete or projection.course_projection_truncated:
             return _ExamLabOutcome(
@@ -2118,6 +2129,14 @@ def _main_freeze_key(projection: ExamLabTextProjection, eligible_rule_ids: Seque
     from .exam_result_record_check import RESULT_RECORD_VALIDATION_VERSION
 
     prompt = build_exam_lab_fact_prompt(selected_rule_ids=eligible_rule_ids, projection=projection)
+    if "LX0609-06-01-02" in eligible_rule_ids:
+        from .exam_reason_check import REASON_VALIDATION_VERSION
+        prompt = REASON_VALIDATION_VERSION + '\x1e' + prompt
+    if "LX0609-06-01-05" in eligible_rule_ids:
+        from .exam_finding_analysis import FINDING_ANALYSIS_VALIDATION_VERSION
+        from .exam_result_record_check import validation_identity
+        prompt = FINDING_ANALYSIS_VALIDATION_VERSION + '\x1e' + prompt
+        prompt += '\x1e' + json.dumps(validation_identity(projection), ensure_ascii=False, separators=(',', ':'))
     # 06-01-02/04/05 专项核验改为按输出量拆批、病程去重（2026-10-23）；核验结果随主抽取一并冻结，
     # 不含这三条规则的冻结结论不受影响。
     if {'LX0609-06-01-02', 'LX0609-06-01-04', 'LX0609-06-01-05'}.intersection(eligible_rule_ids):
@@ -2176,6 +2195,10 @@ def _load_frozen_exam_lab_batch(
 def _save_frozen_exam_lab_batch(key: str, result: _ExamLabBatchResult) -> None:
     if result.facts is None or result.rule_failures or result.incomplete_specialty_rule_ids:
         # 只冻结主抽取和专项核验均完整的批次；有失败规则或未完成专项时下次重新抽取/核验。
+        return
+    if any(fact.rule_id == "LX0609-06-03-04" and fact.positive_state == "unknown"
+           for fact in result.facts):
+        # 合法分类未定仍未完成，不把首次 unknown 永久固定为该报告结论。
         return
     save_payload("main", key, {
         "specialty_checks_complete": True,
@@ -2546,6 +2569,33 @@ async def _extract_exam_lab_batch_uncached(
                         )
                         text_facts = apply(text_facts, check_outcome,
                                            partial_in_window_positions=partial_in_window)
+                        # 缺报告正文的事件无法专项核实（含整体 skipped）：主抽取已记录/未记录
+                        # 都不作确定依据，按报告正文缺失保留资料不足，且不得完整冻结（用户口径 2026-11-08）。
+                        from .exam_result_record_check import report_text_missing_positions
+                        missing_report = report_text_missing_positions(projection)
+                        # 缺正文且仍需核实（非明确不适用）的事件存在时，专项即未完成，不论主结论
+                        # 是否需要改写（主事实本已 unknown 时同样不得冻结为完整）。
+                        if missing_report and any(
+                            fact.rule_id == rule_id and fact.event_position in missing_report
+                            and fact.applicability != "not_applicable"
+                            for fact in text_facts
+                        ):
+                            incomplete_specialty_rule_ids.add(rule_id)
+                        if missing_report and any(
+                            fact.rule_id == rule_id and fact.event_position in missing_report
+                            and fact.applicability == "applicable"
+                            and fact.semantic_state in {"present", "absent"}
+                            for fact in text_facts
+                        ):
+                            text_facts = tuple(
+                                replace(fact, semantic_state="unknown")
+                                if fact.rule_id == rule_id and fact.event_position in missing_report
+                                and fact.applicability == "applicable"
+                                and fact.semantic_state in {"present", "absent"}
+                                else fact
+                                for fact in text_facts
+                            )
+                            incomplete_specialty_rule_ids.add(rule_id)
                     else:
                         text_facts = apply(text_facts, check_outcome)
     return _ExamLabBatchResult(
@@ -3274,11 +3324,11 @@ async def execute_luxian_0609_native_exam_lab_rules(
             ):
                 # 来源完整且确实没有任何相关病程时，010/011/014 的“未记录”
                 # 可由 Python 直接确定；012/015 仅接受事件结果中的强阳性/阴性
-                # 提示。012 报告尚未完成异常/正常分类时仍需一次受控模型判断；
+                # 提示。012/015 报告尚未完成阳性/阴性分类时仍需一次受控模型判断；
                 # 模型只分类报告，病程为空和最终缺陷仍由 Python 确定。
                 for rule_id in tuple(eligible_rule_ids):
                     family = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
-                    if rule_id == "LX0609-06-01-05" and any(
+                    if rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"} and any(
                         event.positive_hint == "unknown"
                         for event in events_for_family(projection, family)
                     ):

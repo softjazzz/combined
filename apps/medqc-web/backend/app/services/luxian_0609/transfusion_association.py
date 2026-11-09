@@ -289,11 +289,7 @@ def _associate(source: str, row: Mapping[str, Any], index: int, stage: Literal["
         else authoritative_document_time_value(row)
     )
     document_date = parse_transfusion_document_date(raw_moment)
-    moment = (
-        parse_precise_transfusion_datetime(raw_moment)
-        if stage == "post"
-        else _datetime(raw_moment)
-    )
+    moment = parse_precise_transfusion_datetime(raw_moment)
     constraints: list[set[int]] = []
     basis = []
     keys = {key: str(row[key]) for key in _KEYS if row.get(key) and any(key in dict(event.keys) for event in events)}

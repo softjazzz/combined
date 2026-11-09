@@ -471,7 +471,9 @@ def evaluate_report_completeness(
                 else ("data_gap", "report_content_unavailable")
             )
         elif culture and horizon_basis == "discharge":
-            status, issue = "non_compliant", "report_missing"
+            # 完整性仅证明本地读取完成，出院不证明源系统确认缺报告。
+            # 当前合同没有可区分同步/关联缺口的权威否定凭据。
+            status, issue = "data_gap", "report_missing"
         elif culture and horizon_basis == "running":
             status, issue = "not_applicable", "report_not_yet_due"
         else:

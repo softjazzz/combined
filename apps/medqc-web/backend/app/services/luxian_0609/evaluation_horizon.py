@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
-from typing import Any, Mapping
+from typing import Any, Mapping, TYPE_CHECKING
 
 from ..case_identity import CaseRef
 from ..discharge_time import DISCHARGE_TIME_POLICY, hospital_business_time
+
+if TYPE_CHECKING:
+    from .evidence_material import Luxian0609EvidenceMaterialStore
+    from .evidence_snapshot import Luxian0609EvidenceSnapshot
 
 
 EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE = "frozen_task_date"
@@ -22,8 +26,87 @@ EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_MISSING = "authoritative_time_missi
 EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_CONFLICT = "authoritative_time_conflict"
 
 
+def read_frozen_evaluation_horizon(
+    *, snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[datetime | date | None, str, str]:
+    """保留统一冻结终点的日期/时刻精度，不从当前库或当前时间补值。"""
+    from .evidence_material import EvidenceMaterialUnavailable, EvidenceMaterialTruncated
+    from .evidence_snapshot import SourceCompleteness
+    from .source_manifest import QueryStatus
+    key = "evaluation_context.horizon"
+    observation = next((item for item in snapshot.observations if item.source_key == key), None)
+    if observation is None:
+        return None, "", "authoritative_time_missing"
+    if observation.query_state is QueryStatus.ERROR:
+        return None, "", "source_query_error"
+    if observation.completeness is not SourceCompleteness.COMPLETE:
+        return None, "", "candidate_scope_incomplete"
+    try:
+        rows = tuple(row for _, row in materials.document_rows(key, snapshot=snapshot))
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return None, "", "authoritative_time_missing"
+    if not rows:
+        reason = observation.reason_code
+        return None, "", reason if reason in {"authoritative_time_missing", "authoritative_time_conflict"} else "authoritative_time_missing"
+    if len(rows) != 1:
+        return None, "", "authoritative_time_conflict"
+    row = rows[0]
+    basis = str(row.get("basis") or "")
+    if basis not in {"discharge_date", "evaluation_as_of"}:
+        return None, basis, "authoritative_time_missing"
+    raw = str(row.get("horizon_datetime") or "")
+    raw_date = str(row.get("horizon_date") or "")
+    if row.get("time_precision") == "date" or not raw:
+        try:
+            day = date.fromisoformat(raw_date)
+            # 日期有效不表示可以忽略同一冻结行中的矛盾时刻。
+            if raw and hospital_business_time(datetime.fromisoformat(raw.replace("Z", "+00:00"))).date() != day:
+                return None, basis, "authoritative_time_conflict"
+            return day, basis, ""
+        except ValueError:
+            return None, basis, "authoritative_time_missing"
+    try:
+        moment = hospital_business_time(datetime.fromisoformat(raw.replace("Z", "+00:00")))
+        if ":" not in raw:
+            return None, basis, "authoritative_time_missing"
+        if raw_date and date.fromisoformat(raw_date) != moment.date():
+            return None, basis, "authoritative_time_conflict"
+    except (TypeError, ValueError):
+        return None, basis, "authoritative_time_missing"
+    return moment, basis, ""
+
+
+def frozen_window_is_mature(horizon: datetime | date, deadline: datetime) -> bool:
+    """时刻沿用精确边界；日期只有明确晚于截止日才足以证明窗口完成。"""
+    if isinstance(horizon, datetime):
+        return horizon >= deadline
+    return horizon > deadline.date()
+
+
+def after_frozen_horizon(moment: datetime, horizon: datetime | date) -> bool:
+    """日期级范围内的同日时刻不可被擅自排除。"""
+    if isinstance(horizon, datetime):
+        return moment > horizon
+    return moment.date() > horizon
+
+
 def _normalized_text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _is_date_only(value: Any) -> bool:
+    """来源值只有日期（无时分）时，不能把补出的零点当作真实时刻参与先后比较。"""
+    text = _normalized_text(value)
+    return bool(text) and ":" not in text
+
+
+def _discharge_before_admission(
+    discharge: datetime, admission: datetime, *, discharge_raw: Any, admission_raw: Any,
+) -> bool:
+    """任一侧只有日期时按自然日比较：同日入出院不构成时间冲突。"""
+    if _is_date_only(discharge_raw) or _is_date_only(admission_raw):
+        return discharge.date() < admission.date()
+    return discharge < admission
 
 
 def _parse_datetime(value: Any, *, field_name: str) -> datetime | None:
@@ -53,7 +136,12 @@ class RecordEvaluationHorizon:
     resolution_status: str
 
     def to_dict(self) -> dict[str, str]:
-        return asdict(self)
+        try:
+            discharge = _parse_datetime(self.discharge_datetime, field_name="discharge_datetime")
+        except ValueError:
+            discharge = None
+        precision = ("datetime" if ":" in self.discharge_datetime else "date") if discharge is not None else "unknown"
+        return {**asdict(self), "discharge_time_precision": precision}
 
 
 def resolve_record_evaluation_horizon_policy(
@@ -157,8 +245,11 @@ def resolve_frozen_running_record_scene(
 
 def resolve_frozen_discharge_horizon(
     snapshot: Mapping[str, Any], *, institute_id: str, patient_id: str, visit_id: str,
-) -> tuple[datetime | None, str]:
-    """只校验本病例已冻结的 final 终点；失败时不得用执行时资料补值。"""
+) -> tuple[datetime | date | None, str]:
+    """只校验本病例已冻结的 final 终点；失败时不得用执行时资料补值。
+
+    日期级出院返回 ``date``：不得补成“出院日 00:00”精确时刻，否则出院当日的事件会被排除。
+    """
     missing = EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_MISSING
     conflict = EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_CONFLICT
     if not isinstance(snapshot, Mapping):
@@ -188,12 +279,18 @@ def resolve_frozen_discharge_horizon(
         return None, missing
     if admission is None or discharge is None:
         return None, missing
+    discharge_raw = snapshot.get("discharge_datetime")
     try:
-        if discharge < admission or horizon != discharge.date():
+        if horizon != discharge.date() or _discharge_before_admission(
+            discharge, admission,
+            discharge_raw=discharge_raw, admission_raw=snapshot.get("admission_datetime"),
+        ):
             return None, conflict
     except TypeError:
         # 混用无时区/有时区时间无法证明先后，不能隐式假设时区。
         return None, conflict
+    if _is_date_only(discharge_raw):
+        return discharge.date(), ""
     return discharge, ""
 
 
@@ -258,7 +355,10 @@ def resolve_record_evaluation_horizon(
             resolution_status="authoritative_time_missing",
         )
     try:
-        time_conflict = discharge_time < admission_time
+        time_conflict = _discharge_before_admission(
+            discharge_time, admission_time,
+            discharge_raw=discharge_text, admission_raw=admission_text,
+        )
     except TypeError:
         # 与冻结终点读取口径一致：时区信息混用时保留冲突，不隐式补时区或中断建任务。
         time_conflict = True

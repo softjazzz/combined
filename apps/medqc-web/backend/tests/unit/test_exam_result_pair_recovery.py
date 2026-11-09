@@ -1,4 +1,5 @@
 """重复CT定位与配对恢复；合成材料、固定应答及严格离线执行。"""
+from dataclasses import replace
 import json
 
 import pytest
@@ -146,7 +147,9 @@ async def test_partial_positive_cannot_manufacture_late_first_record(monkeypatch
         case=SimpleNamespace(name='partial-first-record-time', rows=lambda: rows),
         recordings=recordings, arm='reference', mature=True, allow_incomplete=incomplete,
         main_payload=main)
-    assert row['saved']['status'] == ('non_compliant' if failed == 'early_none' else 'compliant')
+    # 用户口径（2026-11-08）：早期配对未核实时，主抽取早期引用不能单独证明合规，保留未决；
+    # 晚期核实成功也不能据此制造超时。
+    assert row['saved']['status'] == {'early_none': 'non_compliant', 'early': 'data_gap'}.get(failed, 'compliant')
     if incomplete:
         assert row['incomplete_specialty_rule_ids'] == [check.RULE_ID]
         assert not row['frozen_files']
@@ -161,5 +164,6 @@ def test_partial_late_evidence_remains_available_without_replacing_original_fact
     original = ExamLabEventFact(rule_id=check.RULE_ID, applicability='applicable', semantic_state='present',
         positive_state='not_relevant', course_doc_refs=('early',), evidence_refs=('event', 'early'))
     outcome = check.ResultRecordOutcome('ready', {1: ('late',)}, incomplete_event_positions=frozenset({1}))
-    assert check.apply_result_record((original,), outcome) == (original,)
+    # 不替换原引用（不制造超时），但未核实的主抽取结论改为未决。
+    assert check.apply_result_record((original,), outcome) == (replace(original, semantic_state=check.UNVERIFIED_STATE),)
     assert outcome.recorded_refs == {1: ('late',)}

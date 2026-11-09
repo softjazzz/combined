@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from math import ceil
 from typing import Any, Mapping, Sequence
 
 from .shared import _clean, _parse_datetime, _row_time
+from ..evaluation_horizon import frozen_window_is_mature
 from app.services.document_assembly.signatures import course_physician_signatures
 
 
@@ -639,6 +640,44 @@ def _evaluate_structured_change_events(
 
 
 
+def _mature_handoff_outcome(
+    state: str, reason: str, facts: Mapping[str, Any] | None,
+    horizon: datetime | date | None, horizon_error: str,
+) -> tuple[str, str, Mapping[str, Any] | None]:
+    if state != "non_compliant" or not isinstance(facts, Mapping):
+        return state, reason, facts
+    events = facts.get("events") or ({
+        "change_time": facts.get("change_time"),
+        "handoff_time": next(iter(facts.get("handoff_times") or ()), None),
+        "handover_time": next(iter(facts.get("handover_times") or ()), None),
+    },)
+    events = [dict(item) for item in events]
+    pending = missing_horizon = confirmed = False
+    for item in events:
+        change = _parse_datetime(item.get("change_time"))
+        handoff = _parse_datetime(item.get("handoff_time"))
+        handover = _parse_datetime(item.get("handover_time"))
+        # 已证实未按要求交班或接班超时，不能被另一尚未成熟事件覆盖。
+        if change is not None and (handoff is None or handoff > change or (handover is not None and handover > change + timedelta(hours=24))):
+            confirmed = True
+        if handover is None:
+            if change is None or horizon_error or horizon is None:
+                missing_horizon = True
+                if item.get("outcome") == "handover_missing":
+                    item["outcome"] = "handover_window_unresolved"
+            elif frozen_window_is_mature(horizon, change + timedelta(hours=24)):
+                confirmed = True
+            else:
+                pending = True
+                if item.get("outcome") == "handover_missing":
+                    item["outcome"] = "handover_window_not_mature"
+    if confirmed:
+        return state, reason, {**facts, "events": events} if "events" in facts else facts
+    if missing_horizon:
+        return "data_gap", horizon_error or "authoritative_time_missing", None
+    return ("not_applicable", "evaluation_window_not_mature", None) if pending else (state, reason, facts)
+
+
 def evaluate_physician_handoff(
     *,
     physician_change_rows: Sequence[Mapping[str, Any]],
@@ -651,6 +690,8 @@ def evaluate_physician_handoff(
     handoff_error: str,
     handover_rows: Sequence[Mapping[str, Any]],
     handover_error: str,
+    evaluation_horizon_datetime: datetime | date | None = None,
+    evaluation_horizon_error: str = "",
 ) -> PhysicianHandoffOutcome:
     """逐次核对经治医师变更前交班与变更后24小时内接班记录。"""
 
@@ -738,6 +779,52 @@ def evaluate_physician_handoff(
     )
 
     if len(change_times) != len(effective_change_rows):
+        if change_times and change_source_key in {"physician_change_event", "inpat_nondrug_order"}:
+            # 缺变更时间的事件保持未决；其余有可靠时间的事件仍按原逐事件合同（含成熟判定）核对。
+            # 只有这些事件自身已形成确定缺陷时才交付不合规，缺失清单不列入未决事件；
+            # 否则沿用下方整体资料不足（不把未决事件写成缺失、超时或已完成）。
+            timed_rows = tuple(
+                row for row in effective_change_rows
+                if _parse_datetime(
+                    row.get("change_datetime") or row.get("handoff_datetime")
+                    or row.get("prescribed_datetime") or row.get("order_time")
+                ) is not None
+            )
+            def related_records(rows, record_fields, change_fields):
+                # 仅隔离班次时间和人员均可证明不属于可靠事件的文书。
+                # 缺班次、缺身份或可能相关的坏时间文书仍参与核对，保持未决。
+                timed_physicians = set().union(*(
+                    _identity_tokens(row, change_fields) for row in timed_rows
+                ))
+                return tuple(
+                    row for row in rows
+                    if not (
+                        change_source_key == "physician_change_event"
+                        and _shift_time(row) is not None
+                        and _shift_time(row) not in change_times
+                        and timed_physicians
+                        and _identity_tokens(row, record_fields)
+                        and not _identity_tokens(row, record_fields).intersection(timed_physicians)
+                    )
+                )
+
+            timed_outcome = evaluate_physician_handoff(
+                physician_change_rows=timed_rows if change_source_key == "physician_change_event" else (),
+                physician_change_error=physician_change_error,
+                nondrug_order_rows=timed_rows if change_source_key == "inpat_nondrug_order" else (),
+                nondrug_order_error=nondrug_order_error,
+                daily_course_rows=daily_course_rows,
+                daily_course_error=daily_course_error,
+                handoff_rows=related_records(handoff_rows, _HANDOFF_PHYSICIAN_FIELDS, _OLD_PHYSICIAN_FIELDS),
+                handoff_error=handoff_error,
+                handover_rows=related_records(handover_rows, _HANDOVER_PHYSICIAN_FIELDS, _NEW_PHYSICIAN_FIELDS),
+                handover_error=handover_error,
+                evaluation_horizon_datetime=evaluation_horizon_datetime,
+                evaluation_horizon_error=evaluation_horizon_error,
+            )
+            if (timed_outcome.final_state == "non_compliant"
+                    and timed_outcome.change_source_key == change_source_key):
+                return timed_outcome
         return PhysicianHandoffOutcome(
             "data_gap",
             "authoritative_time_missing",
@@ -781,6 +868,9 @@ def evaluate_physician_handoff(
             handoff_rows=handoff_rows,
             handover_rows=handover_rows,
         )
+        final_state, reason_code, display_facts = _mature_handoff_outcome(
+            final_state, reason_code, display_facts, evaluation_horizon_datetime, evaluation_horizon_error,
+        )
         return PhysicianHandoffOutcome(
             final_state,
             reason_code,
@@ -793,6 +883,9 @@ def evaluate_physician_handoff(
             handoff_rows=handoff_rows,
             handover_rows=handover_rows,
         )
+        final_state, reason_code, display_facts = _mature_handoff_outcome(
+            final_state, reason_code, display_facts, evaluation_horizon_datetime, evaluation_horizon_error,
+        )
         return PhysicianHandoffOutcome(
             final_state,
             reason_code,
@@ -803,6 +896,9 @@ def evaluate_physician_handoff(
         change_rows=effective_change_rows,
         handoff_rows=handoff_rows,
         handover_rows=handover_rows,
+    )
+    final_state, reason_code, display_facts = _mature_handoff_outcome(
+        final_state, reason_code, display_facts, evaluation_horizon_datetime, evaluation_horizon_error,
     )
     return PhysicianHandoffOutcome(
         final_state,

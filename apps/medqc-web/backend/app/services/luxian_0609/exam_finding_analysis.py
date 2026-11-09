@@ -41,6 +41,7 @@ from .transfusion_order_trigger import _json_response_object, _usage
 
 RULE_ID = "LX0609-06-01-05"
 SCHEMA_VERSION = "lx0609-exam-finding-analysis-v4"
+FINDING_ANALYSIS_VALIDATION_VERSION = "exam-analysis-explicit-identity-v2"
 ANALYSIS_TYPES = ("finding_linked", "management_linked", "prior_comparison", "targeted_differential")
 NON_ANALYSIS_TYPES = ("listing_only", "diagnosis_only", "generic_plan", "none")
 QUOTE_TYPES = (*ANALYSIS_TYPES, *NON_ANALYSIS_TYPES)
@@ -464,6 +465,50 @@ def _shares_finding(span: str, quote: str) -> bool:
                for index in range(len(left) - MIN_SPAN_SHARED + 1))
 
 
+def _explicit_association_issue(projection: ExamLabTextProjection, position: int,
+                                quotes: Sequence[str], span: str, ref: str) -> bool:
+    """复用结果核验的明确身份守卫；不把共有所见歧义扩成新的分析口径。"""
+    from .exam_result_record_check import (
+        _association_issue, _explicit_current_exam_quote, _modalities, _report_catalog,
+    )
+    events = events_for_family(projection, "exam")
+    if not 1 <= position <= len(events):
+        return False
+    current = events[position - 1]
+    catalog = _report_catalog(projection)
+    course = _course_text(projection, ref)
+    # 合并实际选中的分析/依据片段；混写两模态不按其中一个短片段误拒。
+    quote = "".join(quotes)
+    own_modes = _modalities(current.identity_text)
+    for clause in re.split(r"[。；;！？\n，,]", quote):
+        if not re.search(r"结果\s*(?:尚未|未)\s*分析", clause):
+            continue
+        # 只拦与本事件编号、或目录中唯一的本模态可靠绑定的字面矛盾。
+        # 不把“未见异常”等医学阴性当成“尚未分析”，也不推断其它否定同义词。
+        mentioned_ids = {identifier for event in catalog for identifier in event.source_exam_ids
+                         if identifier and re.search(r"(?<![A-Za-z0-9._-])" + re.escape(identifier)
+                                                     + r"(?![A-Za-z0-9._-])", clause)}
+        explicit_id = bool(mentioned_ids) and mentioned_ids <= set(current.source_exam_ids)
+        unique_mode = (len(own_modes) == 1 and _modalities(clause) == own_modes
+                       and sum(bool(own_modes & _modalities(event.identity_text))
+                               for event in catalog) == 1)
+        if explicit_id or unique_mode:
+            return True
+    issue = _association_issue(projection, position, quote, span, ref)
+    if issue and issue[0] == "quote exam identity mismatch":
+        return True
+    # 另事件的句首锚点只证明排他归属时才拒收；同句共同分析本事件或多模态
+    # 仍由既有语义核验处理，不能把第一个被提到的检查当成唯一检查。
+    modes = _modalities(quote)
+    if (len(modes) > 1 and modes & own_modes) or any(
+        identifier in quote for identifier in current.source_exam_ids if identifier
+    ):
+        return False
+    return any(event.document_refs != current.document_refs
+               and _explicit_current_exam_quote(quote, event, catalog, course)
+               for event in catalog)
+
+
 def _parse(
     response: Mapping[str, Any],
     projection: ExamLabTextProjection,
@@ -578,6 +623,8 @@ def _parse(
                     raise ValueError("missing report span")
                 if normalized_span not in _normalize(reports[position]):
                     raise ValueError("span not in report")
+                if _explicit_association_issue(projection, position, quotes, span, ref):
+                    raise ValueError("quote exam identity mismatch")
                 # 照抄报告结论的引文不能证明分析；针对的异常须与本次报告片段对得上。
                 # 只写“结合某 MRI”而不写所见，即使模型归到鉴别类也不得靠检查部位放行。
                 attributed = any(_shares_finding(span, quote) for quote in quotes)
@@ -628,6 +675,7 @@ def _parse(
 
 
 _RETRY_HINTS = {
+    "quote exam identity mismatch": "所选原文明确属于另一模态或检查编号，不能因所见相似归到本事件；请核对本次报告，无法确认时保留未完成",
     "unresolved basis relation": "单独核对依据及判断是否针对所选报告片段的同一异常；其他异常为different_finding，确无依据为none，仍不确定保留uncertain",
     "invalid basis selection": "basis_fragment_ids为当前病程中确实提供依据的编号数组，缺依据时为空",
     "quote not in course": "course_fragment_ids和basis_fragment_ids只选该病程的片段编号，不得跨文书",
@@ -912,7 +960,10 @@ async def check_exam_finding_analysis(
         return FindingAnalysisOutcome("failed", {})
     # 用户决定（2026-10-22）：同一份病历版本的分析核验结论（含单事件复核）首次完整确定后
     # 冻结复用，避免开思考的临界判断逐次翻转（C15、C26）。键覆盖全部批次提示词。
-    key = freeze_key("".join(_prompt(job.projection, job.targets) for job in jobs), model_expected)
+    from .exam_result_record_check import validation_identity
+    key = freeze_key(FINDING_ANALYSIS_VALIDATION_VERSION + "\x1e"
+                     + json.dumps(validation_identity(projection), ensure_ascii=False, separators=(",", ":"))
+                     + "\x1e" + "\x1f".join(_prompt(job.projection, job.targets) for job in jobs), model_expected)
     frozen = load_analysis(key)
     if frozen is not None and set(model_expected) <= set(frozen[0]):
         return FindingAnalysisOutcome("ready", frozen[0], gap_refs=frozen[1])

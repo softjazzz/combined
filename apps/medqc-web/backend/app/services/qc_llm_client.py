@@ -244,6 +244,16 @@ class SichuanQCLLMClient:
             self.enable_thinking, self.thinking_budget, self.reasoning_effort = False, None, ''
 
         # 接纳任务前固定全部角色运行配置；后续调用不再重新读取后台选型。
+        from .luxian_0609.llm_role_routing import capture_legacy_role_runtimes
+        self._legacy_role_runtimes = (deepcopy(config["legacy_role_runtimes"])
+            if config is not None and "legacy_role_runtimes" in config else capture_legacy_role_runtimes({
+                "provider_code": self.provider_code, "model": self.model, "dispatch_mode": self.dispatch_mode,
+                "gateway_profile": self.gateway_profile,
+                "custom_parameters": {**((config or {}).get("custom_parameters") or {}),
+                    "temperature": self.temperature, "top_p": self.top_p, "max_tokens": self.max_tokens,
+                    "enable_thinking": self.enable_thinking, "thinking_budget": self.thinking_budget,
+                    "reasoning_effort": self.reasoning_effort}}))
+        self._legacy_role_clients = {}
         from .llm_task_roles import build_task_role_runtimes, task_role_identity
 
         role_base = config or {}
@@ -277,7 +287,7 @@ class SichuanQCLLMClient:
             return owner
         if role not in owner._task_role_clients:
             child = SichuanQCLLMClient(
-                deepcopy(runtime), observability_recorder=owner._observability_recorder,
+                {**deepcopy(runtime), "legacy_role_runtimes": deepcopy(owner._legacy_role_runtimes)}, observability_recorder=owner._observability_recorder,
                 gateway_dispatch_client=owner._gateway_dispatch_client,
             )
             child._task_role_owner = owner
@@ -285,6 +295,21 @@ class SichuanQCLLMClient:
             child._stats_parent = owner
             owner._task_role_clients[role] = child
         return owner._task_role_clients[role]
+
+    def for_legacy_role(self, role: str) -> "SichuanQCLLMClient":
+        runtime = self._legacy_role_runtimes.get(role)
+        if runtime is None:
+            return self
+        if self.provider_code in {"ollama", "strata", "local_openai"} and runtime["provider_code"] not in {"ollama", "strata", "local_openai"}:
+            raise ProviderConfigurationError("local legacy roles cannot route to cloud")
+        if role not in self._legacy_role_clients:
+            child = SichuanQCLLMClient(deepcopy(runtime), observability_recorder=self._observability_recorder,
+                gateway_dispatch_client=self._gateway_dispatch_client)
+            if runtime.get("dispatch_mode") == "gateway" and child.gateway_endpoint_sha256 != runtime.get("gateway_endpoint_sha256"):
+                raise ProviderConfigurationError("legacy role gateway identity changed")
+            child._stats_parent = self
+            self._legacy_role_clients[role] = child
+        return self._legacy_role_clients[role]
 
     def refresh_dispatch_identity(self) -> None:
         """从当前受控 Settings 刷新非敏感 Gateway 地址身份。"""

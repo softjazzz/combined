@@ -98,6 +98,8 @@ _DATA_GAP_EXPLANATIONS = {
 }
 
 _RULE_DATA_GAP_EXPLANATIONS = {
+    ("LX0609-07-02-02", "semantic_extraction_unresolved"): {"reason_label": "输血记录成分暂无法确认", "missing_sources": [], "missing_fields": []},
+    ("LX0609-06-03-04", "semantic_extraction_unresolved"): {"reason_label": "培养报告阳性性质待确认", "missing_sources": [], "missing_fields": []},
     ("LX0609-04-05-02", "semantic_extraction_unresolved"): {"reason_label": "病程正文抽取待确认", "missing_sources": [], "missing_fields": []},
     ("LX0609-04-05-02", "candidate_scope_incomplete"): {"reason_label": "病程正文核对范围不足", "missing_sources": [], "missing_fields": []},
     ("LX0609-08-02-01", "semantic_extraction_unresolved"): {"reason_label": "病程正文抽取待确认", "missing_sources": [], "missing_fields": []},
@@ -108,6 +110,7 @@ _RULE_DATA_GAP_EXPLANATIONS = {
     ("LX0609-07-03-01", "candidate_scope_incomplete"): {"reason_label": "输血后病程核对范围不足", "missing_sources": [], "missing_fields": []},
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): {"reason_label": '输血实施事实待确认', "missing_sources": [], "missing_fields": []},
     ("LX0609-07-01-03", "source_readiness_unproven"): {"reason_label": '输血正文读取待确认', "missing_sources": [], "missing_fields": []},
+    ("LX0609-04-01-01", "source_readiness_unproven"): {"reason_label": "手术实施情况待确认", "missing_sources": ["已实施手术的手术记录或病案首页手术信息"], "missing_fields": []},
     ("LX0609-07-01-03", "candidate_scope_incomplete"): {"reason_label": '实施事实核对范围不足', "missing_sources": [], "missing_fields": []},
     ("LX0609-03-01-04", "semantic_extraction_unresolved"): {"reason_label": "会诊建议执行核对待确认", "missing_sources": [], "missing_fields": []},
     ("LX0609-03-01-01", "semantic_extraction_unresolved"): {"reason_label": "会诊意见抽取待确认", "missing_sources": [], "missing_fields": []},
@@ -686,7 +689,7 @@ def validate_luxian_0609_published_customer_display_facts(
             rule_id=normalized_rule_id, raw=raw,
         )
         if validated is None or not transfusion_customer_fact_status_is_valid(
-            rule_id=normalized_rule_id, status=status, safe_facts=validated,
+            rule_id=normalized_rule_id, status=status, safe_facts=validated, reason_code=reason_code,
         ):
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
@@ -698,8 +701,22 @@ def validate_luxian_0609_published_customer_display_facts(
         if (validated is None or status != "non_compliant"
                 or "unconfirmed_record_count" not in validated
                 or not transfusion_customer_fact_status_is_valid(
-                    rule_id=normalized_rule_id, status=status, safe_facts=validated,
+                    rule_id=normalized_rule_id, status=status, safe_facts=validated, reason_code=reason_code,
                 )):
+            raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
+        return validated
+    if (normalized_rule_id == "LX0609-07-02-02" and isinstance(raw, Mapping)
+            and (raw.get("failure_kind") == "transfusion_component_unresolved"
+                 or "unresolved_component_record_count" in raw)):
+        # 新046形状只作受控状态/原因配对校验；不重判原始材料，不收紧旧历史形状。
+        from .transfusion_result_mapping import transfusion_customer_fact_status_is_valid
+
+        validated = validate_luxian_0609_executor_customer_display_facts(
+            rule_id=normalized_rule_id, raw=raw,
+        )
+        if validated is None or not transfusion_customer_fact_status_is_valid(
+            rule_id=normalized_rule_id, status=status, safe_facts=validated, reason_code=reason_code,
+        ):
             raise ValueError("LX0609 客户结果解释合同不完整，拒绝交付确定问题")
         return validated
     if normalized_rule_id in {"LX0609-06-03-05", "LX0609-06-03-06"}:
@@ -962,6 +979,7 @@ def finalize_luxian_0609_executor_customer_display_facts(
             rule_id=rule_id,
             status=str(finalized.get("status") or "").strip().lower(),
             safe_facts=safe_facts,
+            reason_code=str(finalized.get("reason_code") or ""),
         )
     )
     if (

@@ -136,6 +136,11 @@ def _identity(client):
     seen = set()
     while client is not None and id(client) not in seen:
         seen.add(id(client))
+        # 复用任务有效身份，同时覆盖默认云端、分角色及旧调用点路由。
+        from .luxian_0609.rule_decision_settings import _luxian_0609_model_identity
+        if isinstance(getattr(client, "provider_code", None), str) and isinstance(getattr(client, "model", None), str):
+            # 已有模型身份却不完整时应明确失败，不能落回未分区的旧冻结。
+            return {"default_model": _luxian_0609_model_identity(client)}
         identity = getattr(client, "task_role_identity", None)
         if isinstance(identity, dict):
             return identity

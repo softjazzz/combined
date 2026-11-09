@@ -48,6 +48,7 @@ from .pathology_report_completeness import (
     PATHOLOGY_REPORT_COMPLETENESS_RULE_ID,
     evaluate_pathology_report_completeness,
 )
+from .evaluation_horizon import read_frozen_evaluation_horizon, after_frozen_horizon
 
 
 
@@ -68,6 +69,7 @@ _TYPED_DECISION_RULE_IDS = frozenset(EXECUTABLE_TUMOR_PATHOLOGY_RULE_IDS)
 _TYPED_RULE_SOURCE_KEYS = {
     PATHOLOGY_REPORT_COMPLETENESS_RULE_ID: PATHOLOGY_COMPLETENESS_SOURCES,
     "LX0609-06-02-03": (
+        "evaluation_context.horizon",
         "pathology_exam_master",
         "pathology_exam_report",
         "surgery_record",
@@ -99,7 +101,7 @@ _TYPED_RULE_SOURCE_KEYS = {
         "death_record",
     ),
 }
-_TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v1"
+_TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v2"
 
 _PATHOLOGY_SOURCES = ("pathology_exam_master", "pathology_exam_report")
 _PATHOLOGY_TARGET_SOURCES = ("surgery_record", "daily_course_record")
@@ -347,6 +349,11 @@ def _typed_decision_from_outcome(
             else "association_failed"
             if outcome.rule_id in {"LX0609-06-02-02", "LX0609-06-02-03"}
             and outcome.reason_code == "pathology_event_association_unresolved"
+            else "evaluation_window_not_mature"
+            if outcome.reason_code in {"pathology_report_outside_evaluation_window", "pathology_report_horizon_date_boundary"}
+            else "source_readiness_unproven"
+            if outcome.reason_code == "pathology_recording_deadline_unconfirmed"
+            else outcome.reason_code if outcome.reason_code in {"authoritative_time_missing", "authoritative_time_conflict", "candidate_scope_incomplete"}
             else "source_unavailable" if source_gap else "required_field_missing",
         )
     elif outcome.status == "technical_error":
@@ -1191,6 +1198,7 @@ def _pathology_events(
 async def _typed_pathology_documentation(
     *, rule_id: str, master: SourceMaterial, report: SourceMaterial,
     targets: Mapping[str, SourceMaterial], llm_client: Any,
+    horizon: datetime | date | None = None, horizon_basis: str = "", horizon_error: str = "authoritative_time_missing",
 ) -> _PathologyDocumentationOutcome:
     """模型逐次检查抽取取材/结果记录及原文引用，程序核验时间并判定。"""
 
@@ -1222,6 +1230,8 @@ async def _typed_pathology_documentation(
                     continue
                 if earliest_report is None or moment < earliest_report:
                     continue
+                if horizon is not None and after_frozen_horizon(moment, horizon):
+                    continue
             times[id(row)] = moment
             checked.append((source, row))
             documents.append(PathologyDocument(
@@ -1241,6 +1251,7 @@ async def _typed_pathology_documentation(
         reason = extraction.reason_code if status == "technical_error" else "tumor_target_projection_unavailable"
         return _PathologyDocumentationOutcome(status, reason, checked=tuple(checked), **usage)
     states: list[str] = []
+    unresolved_reasons: list[str] = []
     cited: list[tuple[str, Mapping[str, Any]]] = []
     for event, report_time in events:
         fact = extraction.events[event.event_id]
@@ -1253,6 +1264,16 @@ async def _typed_pathology_documentation(
                 state = "unknown"
             elif all(row is not other for _, other in cited):
                 cited.append((source, row))
+        if not sampling and state == "not_documented":
+            # 只有闭合的终末范围能保留原未记录判定；不发明在院回报后时限。
+            reason = (horizon_error if horizon is None else
+                      "pathology_report_outside_evaluation_window" if report_time is not None and after_frozen_horizon(report_time, horizon) else
+                      "pathology_report_horizon_date_boundary"
+                      if not isinstance(horizon, datetime) and horizon_basis == "discharge_date" and report_time is not None and report_time.date() == horizon else
+                      "pathology_recording_deadline_unconfirmed" if horizon_basis != "discharge_date" else "")
+            if reason:
+                state = "unknown"
+                unresolved_reasons.append(reason)
         states.append(state)
     if "not_documented" in states:
         if untimed:
@@ -1266,7 +1287,9 @@ async def _typed_pathology_documentation(
         )
     if "unknown" in states:
         return _PathologyDocumentationOutcome(
-            "data_gap", "pathology_event_association_unresolved", checked=tuple(checked), **usage,
+            "technical_error" if "source_query_error" in unresolved_reasons else "data_gap",
+            ("source_query_error" if "source_query_error" in unresolved_reasons else sorted(unresolved_reasons)[0] if unresolved_reasons else "pathology_event_association_unresolved"),
+            cited=tuple(cited), checked=tuple(checked), **usage,
         )
     return _PathologyDocumentationOutcome(
         "compliant",
@@ -1543,7 +1566,35 @@ async def _typed_chemotherapy_comparison(
     )
     if not chemotherapy_orders:
         return "not_applicable", "chemotherapy_orders_cancelled", None, (), ()
-    if any(_clean(row.get("order_status")) in _CHEMO_ORDER_PENDING_STATUSES for row in chemotherapy_orders):
+    pending_orders = tuple(
+        row for row in chemotherapy_orders
+        if _clean(row.get("order_status")) in _CHEMO_ORDER_PENDING_STATUSES
+    )
+    if pending_orders:
+        # 拟执行医嘱尚未证明实施，单独保留未决；其余医嘱照常逐条核对，已可靠确认的
+        # 不一致不能被拟执行医嘱掩盖。只有其余医嘱确认不一致时才交付缺陷。
+        active_orders = tuple(row for row in chemotherapy_orders if row not in pending_orders)
+        if active_orders:
+            pending_ids = {id(row) for row in pending_orders}
+            status, reason, facts, _active, course_rows = await _typed_chemotherapy_comparison(
+                orders=SourceMaterial(orders.state, tuple(row for row in orders.rows if id(row) not in pending_ids)),
+                course_records=course_records, llm_client=llm_client, extractions=extractions,
+            )
+            if status not in {"compliant", "non_compliant", "not_applicable", "data_gap"}:
+                # 其余医嘱核查的技术失败（模型传输、无效输出等）原样保留状态与原因，
+                # 不能被拟执行医嘱改写为临床资料不足。
+                return status, reason, facts, chemotherapy_orders, course_rows
+            if status == "non_compliant" and isinstance(facts, Mapping):
+                facts = {
+                    **facts,
+                    "order_count": len(chemotherapy_orders),
+                    "unresolved_event_count": int(facts.get("unresolved_event_count") or 0) + len(pending_orders),
+                    "field_results": {
+                        key: "unknown" if value == "matched" else value
+                        for key, value in dict(facts["field_results"]).items()
+                    },
+                }
+                return status, reason, facts, chemotherapy_orders, course_rows
         return "data_gap", "chemotherapy_order_not_executed", None, chemotherapy_orders, ()
     if not any(_course_record_text(row) for row in course_records.rows):
         return "data_gap", "chemotherapy_course_record_unavailable", None, (), ()
@@ -1599,6 +1650,11 @@ async def _typed_chemotherapy_comparison(
     unresolved_event_count = 0
     missing_course_event_count = 0
     unknown_time_event_count = 0
+    # 来自时间已核实的给药事件，或完整病程中明确停用/未记录的事件的不一致，才是可独立
+    # 交付的确定缺陷；时间未知事件的不一致不能单独成立。
+    confirmed_mismatch_event_count = 0
+    # 由可靠事件确认不一致的字段；未决事件造成的差异不能借此发布为确定缺陷。
+    confirmed_fields: set[str] = set()
     selected_course_rows: list[Mapping[str, Any]] = []
     if expected_events:
         # 目标药物身份只给模型药名（不给剂量），由模型逐份病程抽取给药原子事实。
@@ -1642,6 +1698,8 @@ async def _typed_chemotherapy_comparison(
                 if withheld:
                     # 病程明确未给/停用而医嘱为执行：记录与医嘱不一致。
                     field_results["drug_name"] = "mismatched"
+                    confirmed_mismatch_event_count += 1
+                    confirmed_fields.add("drug_name")
                     selected_course_rows.extend(row for row, _ in withheld)
                 elif planned:
                     # 仅计划不能证明已实施，也不能断言未记录。
@@ -1649,6 +1707,7 @@ async def _typed_chemotherapy_comparison(
                 else:
                     missing_course_event_count += 1
                     field_results["drug_name"] = "mismatched"
+                    confirmed_fields.add("drug_name")
                 continue
             administered_rows = {id(row) for row, _ in administered}
             administered_doses = {_compact_dose(fact.dose_quote) for _, fact in administered}
@@ -1690,19 +1749,30 @@ async def _typed_chemotherapy_comparison(
                 continue
             claimed_facts.add(id(fact))
             selected_course_rows.append(row)
+            event_fields: dict[str, str] = {}
             # 片段已保证至多一个剂量；在整条片段上沿用既有剂量边界规则（d1、分母、千分位等）。
             if not fact.dose_quote or not _chemotherapy_dose_matches(event["dose"], fact.quote):
-                field_results["dose"] = (
+                event_fields["dose"] = (
                     "unknown" if fact.dose_quote
-                    and _chemotherapy_dose_unit_unconfirmed(event["dose"], fact.quote)
+                    and _chemotherapy_dose_unit_unconfirmed(event["dose"], fact.quote) else "mismatched"
+                )
+                field_results["dose"] = (
+                    "unknown" if event_fields["dose"] == "unknown"
                     and field_results["dose"] != "mismatched" else "mismatched"
                 )
             route_text = _normalized_comparison_text(fact.route_quote or fact.quote)
             if _normalized_comparison_text(event["route"]) not in route_text:
+                event_fields["route"] = "mismatched"
                 field_results["route"] = "mismatched"
             time_state = _chemotherapy_fact_time_state(event["prescribed"], row, fact)
             if time_state == "unknown":
                 unknown_time_event_count += 1
+            elif time_state == "mismatched" or "mismatched" in event_fields.values():
+                # 本次给药时间已核实（或时间本身不一致）的事件，其不一致可独立成立。
+                confirmed_mismatch_event_count += 1
+                confirmed_fields.update(key for key, value in event_fields.items() if value == "mismatched")
+                if time_state == "mismatched":
+                    confirmed_fields.add("time")
             if time_state == "mismatched" or (
                 time_state == "unknown" and field_results["time"] != "mismatched"
             ):
@@ -1724,18 +1794,29 @@ async def _typed_chemotherapy_comparison(
         "unresolved_event_count": unresolved_event_count,
         "missing_course_event_count": missing_course_event_count,
         "unknown_time_event_count": unknown_time_event_count,
+        # 显式零表示已逐事件核查但没有可靠缺陷；缺少此计数的历史事实仍按旧合同读取。
+        "confirmed_mismatch_event_count": confirmed_mismatch_event_count,
     }
+    independent_mismatch_proven = bool(confirmed_mismatch_event_count or missing_course_event_count)
+    if missing_order_event_count or (
+        independent_mismatch_proven and (unresolved_event_count or unknown_time_event_count)
+    ):
+        # 缺字段分支也只保留可靠事件确认的不一致；未决差异不能进入确定缺陷文案。
+        field_results = {
+            key: "unknown" if value == "mismatched" and key not in confirmed_fields else value
+            for key, value in field_results.items()
+        }
+        facts["field_results"] = field_results
     if missing_order_fields:
         # 完整独立事件已确认的不一致不能被另一事件的字段缺口掩盖。
-        independent_mismatch = "mismatched" in field_results.values()
         return (
-            "non_compliant" if independent_mismatch else "data_gap",
-            "chemotherapy_record_mismatch" if independent_mismatch else "chemotherapy_order_fields_missing",
+            "non_compliant" if independent_mismatch_proven else "data_gap",
+            "chemotherapy_record_mismatch" if independent_mismatch_proven else "chemotherapy_order_fields_missing",
             facts,
             chemotherapy_orders,
             tuple(selected_course_rows),
         )
-    if unresolved_event_count:
+    if unresolved_event_count and not independent_mismatch_proven:
         return (
             "data_gap",
             "chemotherapy_event_association_ambiguous",
@@ -1751,10 +1832,10 @@ async def _typed_chemotherapy_comparison(
             chemotherapy_orders,
             tuple(selected_course_rows),
         )
-    if unknown_time_event_count or (
+    if not independent_mismatch_proven and (unknown_time_event_count or (
         not missing_course_event_count
         and any(value == "unknown" for value in field_results.values())
-    ):
+    )):
         return (
             "data_gap",
             "chemotherapy_time_unavailable",
@@ -2476,7 +2557,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         target_states = tuple(
             materials[source_key].state for source_key in required_sources
         )
-        if rule_id == "LX0609-06-02-03" and all(
+        if rule_id == "LX0609-06-02-03" and not typed_rule and all(
             state == "empty" for state in target_states
         ):
             emit_outcome(
@@ -2534,7 +2615,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}:
             target_material_available = (
                 all(state in {"present", "empty"} for state in target_states)
-                and "present" in target_states
+                and ("present" in target_states or (typed_rule and rule_id == "LX0609-06-02-03"))
             )
         else:
             target_material_available = all(
@@ -2561,6 +2642,12 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     ("daily_course_record", target_materials["daily_course_record"]),
                 )
             ) if sampling_rule else ()
+            horizon_kwargs = {}
+            if not sampling_rule:
+                moment, basis, error = read_frozen_evaluation_horizon(
+                    snapshot=evidence_snapshot, materials=evidence_materials,
+                )
+                horizon_kwargs = {"horizon": moment, "horizon_basis": basis, "horizon_error": error}
             documentation = await _typed_pathology_documentation(
                 rule_id=rule_id, master=master, report=report,
                 targets=(
@@ -2568,6 +2655,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     if sampling_rule else target_materials
                 ),
                 llm_client=llm_client,
+                **horizon_kwargs,
             )
             llm_call_count += documentation.llm_call_count
             prompt_tokens += documentation.prompt_tokens

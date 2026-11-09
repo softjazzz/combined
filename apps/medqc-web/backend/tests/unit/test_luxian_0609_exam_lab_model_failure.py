@@ -136,8 +136,8 @@ async def test_cross_event_citation_recovers_with_event_isolated_context(monkeyp
         ),
     )
 
-    assert result.llm_call_count == 4  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
-    assert rows["LX0609-06-01-04"]["status"] == "compliant"
+    assert result.llm_call_count == 4  # 含 1 次 06-01-04 结果记录核对（替身未作答：专项未核实，06-01-04 保留资料不足，用户口径 2026-11-08）
+    assert rows["LX0609-06-01-04"]["status"] == "data_gap"
     assert rows["LX0609-06-01-05"]["status"] == "compliant"
     assert "EVENT_DOC=E01-01" in client.prompts[1]
     assert "EVENT_DOC=E01-02" not in client.prompts[1]
@@ -164,8 +164,8 @@ async def test_complex_assessment_event_recovery_keeps_configured_thinking(monke
         [bad, _single_event_answer("LX0609-06-01-05"), _single_event_answer("LX0609-06-01-05")],
     )
 
-    assert result.llm_call_count == 4  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
-    assert rows["LX0609-06-01-04"]["status"] == "compliant"
+    assert result.llm_call_count == 4  # 含 1 次 06-01-04 结果记录核对（替身未作答：专项未核实，06-01-04 保留资料不足，用户口径 2026-11-08）
+    assert rows["LX0609-06-01-04"]["status"] == "data_gap"
     assert rows["LX0609-06-01-05"]["status"] == "compliant"
     assert client.call_options == [
         {}, {}, {},
@@ -211,9 +211,9 @@ async def test_repaired_citation_preserves_other_rules_first_answer(monkeypatch)
         monkeypatch,
         [bad, _single_event_answer("LX0609-06-01-04"), _single_event_answer("LX0609-06-01-04")],
     )
-    assert result.llm_call_count == 4  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
+    assert result.llm_call_count == 4  # 含 1 次 06-01-04 结果记录核对（替身未作答：专项未核实，06-01-04 保留资料不足，用户口径 2026-11-08）
     assert {rule: row["status"] for rule, row in rows.items()} == {
-        "LX0609-06-01-04": "compliant", "LX0609-06-01-05": "compliant",
+        "LX0609-06-01-04": "data_gap", "LX0609-06-01-05": "compliant",
     }
     assert result.model_execution_stats["first_answer_success_rate"] == 0.5
     assert result.model_execution_stats["recovery_success_rate"] == 1.0
@@ -243,8 +243,8 @@ async def test_complete_material_model_unknown_is_not_required_field_missing(mon
     result, rows, _ = await _execute(
         monkeypatch, [unknown, deepcopy(unknown)], report_text="待排急性脑梗死。"
     )
-    assert result.llm_call_count == 3  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
-    assert rows["LX0609-06-01-04"]["status"] == "compliant"
+    assert result.llm_call_count == 3  # 含 1 次 06-01-04 结果记录核对（替身未作答：专项未核实，06-01-04 保留资料不足，用户口径 2026-11-08）
+    assert rows["LX0609-06-01-04"]["status"] == "data_gap"
     assert rows["LX0609-06-01-05"]["status"] == "technical_error"
     assert rows["LX0609-06-01-05"]["reason_code"] != "required_field_missing"
 
@@ -254,15 +254,17 @@ async def test_authoritative_positive_hint_resolves_model_classification_unknown
     answer = _answer()
     answer["facts"][3]["positive_state"] = "unknown"
     result, rows, _ = await _execute(monkeypatch, [answer])
-    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答：专项未核实，06-01-04 保留资料不足，用户口径 2026-11-08）
     assert rows["LX0609-06-01-05"]["status"] == "compliant"
 
 
 @pytest.mark.asyncio
 async def test_success_without_recovery_has_no_recovery_denominator(monkeypatch):
     result, rows, _ = await _execute(monkeypatch, [_answer()])
-    assert all(row["status"] == "compliant" for row in rows.values())
-    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
+    assert {rule: row["status"] for rule, row in rows.items()} == {
+        "LX0609-06-01-04": "data_gap", "LX0609-06-01-05": "compliant",
+    }
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答：专项未核实，06-01-04 保留资料不足，用户口径 2026-11-08）
     assert result.model_execution_stats["first_answer_success_rate"] == 1.0
     assert result.model_execution_stats["recovery_success_rate"] is None
     assert result.model_execution_stats["model_failure_rate"] == 0.0

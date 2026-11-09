@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -309,23 +310,27 @@ async def test_failed_specialty_check_retries_then_successful_batch_reuses(
     monkeypatch.setattr(exam_lab, check_name, _check)
 
     first = await exam_lab._extract_exam_lab_batch(
-        projection=object(),
+        projection=SimpleNamespace(imaging_events=(), imaging_event=None),
         eligible_rule_ids=(rule_id,),
         llm_client=object(),
     )
     second = await exam_lab._extract_exam_lab_batch(
-        projection=object(),
+        projection=SimpleNamespace(imaging_events=(), imaging_event=None),
         eligible_rule_ids=(rule_id,),
         llm_client=object(),
     )
     third = await exam_lab._extract_exam_lab_batch(
-        projection=object(),
+        projection=SimpleNamespace(imaging_events=(), imaging_event=None),
         eligible_rule_ids=(rule_id,),
         llm_client=object(),
     )
 
     assert first.incomplete_specialty_rule_ids == frozenset({rule_id})
-    assert first.facts == (fact,)
+    # 06-01-04 专项失败时主抽取结论改为未决（用户口径 2026-11-08），其余规则沿用原逻辑。
+    assert first.facts == (
+        (replace(fact, semantic_state="specialty_unverified"),)
+        if rule_id == "LX0609-06-01-04" else (fact,)
+    )
     assert (first.llm_call_count, first.prompt_tokens, first.completion_tokens, first.total_tokens) == (
         3,
         18,
@@ -364,7 +369,9 @@ def test_main_freeze_key_invalidates_v1_without_removing_old_cache(monkeypatch, 
     )
     exam_analysis_freeze.save_payload("main", legacy_key, {"incomplete_v1": True})
     legacy_path = exam_analysis_freeze.default_store_dir() / "main" / f"{legacy_key}.json"
-    current_key = exam_lab._main_freeze_key(object(), rule_ids)
+    current_key = exam_lab._main_freeze_key(
+        SimpleNamespace(comparison_events=(), imaging_events=(), imaging_event=None), rule_ids,
+    )
 
     assert current_key != legacy_key
     assert legacy_path.is_file()
@@ -459,7 +466,7 @@ async def test_main_extraction_failure_paths_do_not_freeze_or_reference_unset_co
         monkeypatch.setattr(exam_lab, "parse_exam_lab_fact_response_isolated", _parse)
 
     result = await exam_lab._extract_exam_lab_batch(
-        projection=object(),
+        projection=SimpleNamespace(imaging_events=(), imaging_event=None),
         eligible_rule_ids=("LX0609-06-01-05",),
         llm_client=object(),
     )

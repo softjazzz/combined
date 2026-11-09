@@ -12,6 +12,7 @@
 none。Python 另核验：引文须逐字见于病程；report_span 须逐字见于本次报告，且与引文至少有
 2 个连续相同字，避免把其他检查的结果挂到本事件。末次输出仍漏核时按事件处理，未定事件沿用
 主抽取判断；调用失败时整体沿用主抽取判断。
+（用户口径 2026-11-08 起：未定事件与调用失败均改为未决，见 apply_result_record。）
 
 用户口径（2026-10-12）：病程在描述本次检查结果、但与报告有实质矛盾（真实样本：术后复查 MRI
 报告仍写半月板撕裂，出院当天查房写“复查MRI可见半月板已修整”）时，该病程不算记录了本次结果，
@@ -44,6 +45,8 @@ from .exam_output_batching import CallBudget, partition_targets, bisect_targets
 from .transfusion_order_trigger import _json_response_object, _usage
 
 RULE_ID = "LX0609-06-01-04"
+# 专项未能独立核实归属的事件：执行器按资料关联不足（data_gap/association_failed）处理。
+UNVERIFIED_STATE = "specialty_unverified"
 SCHEMA_VERSION = "lx0609-exam-result-record-v1"
 RECORDED_TYPES = ("result_recorded",)
 CONFLICT_TYPES = ("result_conflicting",)
@@ -73,6 +76,9 @@ class _RetryIssue:
     field: str
     value: str
     hint: str
+    # 原文无法区分重复检查时，重复生成也不能补出身份；保留未完成且不消耗补核。
+    retryable: bool = True
+    pair: tuple[int, str] | None = None
 
 
 class _RetryViolation(ValueError):
@@ -175,9 +181,8 @@ def _course_text(projection: ExamLabTextProjection, ref: str) -> str:
 
 
 def _report_catalog(projection):
-    from .exam_result_context import protocol
-    from .exam_token_budget import full_evidence_mode
-    if (protocol() == 'comparison_v1' or full_evidence_mode()) and projection.comparison_events is not None:
+    # 程序校验始终使用原事件目录，不能因拆批或旧Prompt路径制造“报告独有”。
+    if projection.comparison_events is not None:
         return projection.comparison_events
     return events_for_family(projection, 'exam')
 
@@ -205,11 +210,62 @@ def _explicit_current_exam_quote(quote, current, catalog, course):
 
 def validation_identity(projection):
     # 只进入冻结摘要，不把新增的原始检查号外发到既有实验Prompt。
-    return [(event.document_refs, event.source_exam_ids) for event in _report_catalog(projection)]
+    return [(event.document_refs, event.source_exam_ids, event.identity_text, event.result_texts,
+             event.report_time.isoformat() if event.report_time is not None else None)
+            for event in _report_catalog(projection)]
 
 
 # 仅参与主冻结键，不改变 JSON 协议或发送的 Prompt。
-RESULT_RECORD_VALIDATION_VERSION = "exam-record-cross-report-span-types-v5"
+# v7：缺报告正文无法专项核实的事件不再沿用主抽取并冻结为完整（2026-11-08），旧冻结自然不再命中。
+# v8：主事实本已 unknown（含适用性未知）的缺正文事件同样不得冻结为完整；v7 期间可能已写入
+# 这类“专项完整”冻结，升版使其自然不再命中。旧文件保留，不删除、不覆盖（2026-11-08）。
+RESULT_RECORD_VALIDATION_VERSION = "exam-record-event-identity-v8"
+
+
+# CR也用于疗效评价，不作为独立的影像模态锚点。
+_MODALITY = re.compile(r'(?<![A-Za-z])(?:MRI|MR|CT|DR)(?![A-Za-z])|磁共振|核磁', re.I)
+
+
+def _modalities(text):
+    return {"MRI" if token.upper() in {"MR", "MRI"} or token in {"磁共振", "核磁"}
+            else token.upper() for token in _MODALITY.findall(text)}
+
+
+def _quote_statements(quote, course):
+    """带回引句所属原句的身份前缀，不能摘掉DR/既往等前缀伪装成本次。"""
+    normalized = _normalize(quote).strip('。；;！？')
+    return tuple(statement for statement in re.split(r'[。；;！？\n]', course)
+                 if normalized and normalized in _normalize(statement))
+
+
+def _association_issue(projection, position, quote, span, ref):
+    """只拦客观身份矛盾和重复结果歧义，不以未逐字匹配判未记录。"""
+    current = events_for_family(projection, 'exam')[position - 1]
+    catalog = _report_catalog(projection)
+    course = _course_text(projection, ref)
+    own_modes = _modalities(current.identity_text)
+    statements = _quote_statements(quote, course)
+    modes = _modalities(quote)
+    if not modes and len(statements) == 1:
+        modes = _modalities(statements[0])
+    if len(own_modes) == 1 and len(modes) == 1 and own_modes.isdisjoint(modes):
+        return 'quote exam identity mismatch', '引句所属原文明确为另一检查模态，须核对当前事件，不能因结果相似接纳'
+    # 同样结果出现在多份报告时，共同片段本身不能证明属于当前哪一次。
+    normalized_span = _normalize(span)
+    course_time = projection.course_times.get(ref)
+    other_reports = [_normalize('\n'.join(event.result_texts)) for event in catalog
+                     if event.document_refs != current.document_refs
+                     and (course_time is None or event.report_time is None or event.report_time <= course_time)]
+    if normalized_span and any(normalized_span in report for report in other_reports):
+        full_reports = [_normalize('\n'.join(event.result_texts)) for event in catalog]
+        own_unique = [clause for clause in _report_clauses('\n'.join(current.result_texts))
+                      if sum(clause in report for report in full_reports) == 1]
+        if (not any(clause in _normalize(quote) for clause in own_unique)
+                and not _explicit_current_exam_quote(quote, current, catalog, course)):
+            if len(normalized_span) < MIN_VERBATIM_CHARS and own_unique:
+                return 'insufficient report span', '报告片段过短且为共同表述；请在原文中定位本次检查更完整的结果片段与对应引句，不得补造身份'
+            return 'ambiguous repeated exam', '引句只证明多次检查的共同结果，须给出原文中属于当前事件的依据；无法确认时保留未完成'
+    return None
 
 
 def _input_complete_for_event(projection: ExamLabTextProjection, position: int, refs: Sequence[str]) -> bool:
@@ -260,6 +316,16 @@ def _targets(projection: ExamLabTextProjection) -> dict[int, tuple[str, tuple[st
             )
         targets[position] = (report, tuple(ref for ref in refs if _course_text(projection, ref).strip()))
     return targets
+
+
+def report_text_missing_positions(projection: ExamLabTextProjection) -> frozenset[int]:
+    """已确认目标、非 CT 引导操作但缺报告正文的检查：专项无法核实是否记录了本次结果。"""
+    return frozenset(
+        position
+        for position, event in enumerate(events_for_family(projection, "exam"), start=1)
+        if event.target_confirmed and not event.guidance_only
+        and not any(str(text or "").strip() for text in event.result_texts)
+    )
 
 
 def _prompt(projection: ExamLabTextProjection, targets: Mapping[int, tuple[str, tuple[str, ...]]]) -> str:
@@ -397,6 +463,12 @@ def _parse(
                 issues.append(_RetryIssue("quote matches other report", location, "quote", "",
                     f"引句匹配其他报告独有结果，事件位置{other_positions}；须重新核对当前事件，不得用后次结果替代"))
                 continue
+        association_issue = _association_issue(projection, position, quote, span, ref)
+        if association_issue is not None:
+            reason, hint = association_issue
+            issues.append(_RetryIssue(reason, location, 'quote', '', hint,
+                retryable=reason != 'ambiguous repeated exam', pair=key))
+            continue
         # 所记结果仍须与本次报告片段对得上。
         if kind in SPAN_TYPES and _shares_finding(span, quote):
             (recorded if kind in RECORDED_TYPES else conflicting)[position].append(ref)
@@ -436,7 +508,7 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
     if not original:
         return ResultRecordOutcome("ready", empty)
     pending = dict(original)
-    covered, accepted, conflicting = set(), {}, {}
+    covered, accepted, conflicting, unresolved = set(), {}, {}, set()
     calls = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     state = "failed"
@@ -513,6 +585,7 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
         except _RetryViolation as exc:
             error = exc
             valid, recorded, conflicts = exc.valid_pairs, exc.recorded, exc.conflicts
+            unresolved.update(issue.pair for issue in exc.issues if not issue.retryable and issue.pair is not None)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
             error = exc
             valid, recorded, conflicts = set(), {}, {}
@@ -537,8 +610,11 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
         # 已通过的配对不再发送。失败事件的其余独立成功配对也能保留，
         # 但整个事件只有全覆盖后才能形成否定或进入冻结。
         pending = {position: (report, remaining) for position, (report, refs) in original.items()
-                   if (remaining := tuple(ref for ref in refs if (position, ref) not in covered))}
-        feedback = tuple(getattr(error, "issues", ()))
+                   if (remaining := tuple(ref for ref in refs
+                       if (position, ref) not in covered and (position, ref) not in unresolved))}
+        feedback = tuple(issue for issue in getattr(error, "issues", ()) if issue.retryable)
+        if not pending:
+            break
         if target == "candidate" and route is not None and route.upgrade():
             route.observe("upgraded", reason="truncated" if isinstance(error, _TruncatedResponse)
                           else "protocol_validation", budget_used=budget.used)
@@ -581,8 +657,10 @@ def _verbatim_confirmed(
     for position, (report, refs) in targets.items():
         unique = [clause for clause in _report_clauses(report) if sum(clause in text for text in reports) <= 1]
         for ref in refs:
-            course = _normalize(_course_text(projection, ref))
-            if any(clause in course for clause in unique):
+            course = _course_text(projection, ref)
+            if any(clause in _normalize(course)
+                   and _association_issue(projection, position, clause, clause, ref) is None
+                   for clause in unique):
                 confirmed.add((position, ref))
     return confirmed
 
@@ -695,19 +773,35 @@ def apply_result_record(
     facts: Sequence[ExamLabEventFact], outcome: ResultRecordOutcome,
     *, partial_in_window_positions: frozenset[int] = frozenset(),
 ) -> tuple[ExamLabEventFact, ...]:
-    """用逐份核对结论固定 06-01-04 的病程事实；未覆盖的事实保持原样。"""
-    if outcome.state != "ready":
+    """用逐份核对结论固定 06-01-04 的病程事实。
+
+    用户口径（2026-11-08）：专项未能确认归属的事件，主抽取未经独立核实的结论（已记录或
+    未记录）都不能作为确定依据，改为未决（资料不足），不改成确定“未记录”。
+    - 专项整体失败：所有已适用事件均未决；
+    - 专项未核完的事件：有独立核实的窗口内证据时采用该证据，否则未决
+      （“早期失败、晚期成功”不能制造确定超时）；
+    - 已核完的事件及其他事件的成功结论照常采用。
+    """
+    def unresolved(fact: ExamLabEventFact) -> ExamLabEventFact:
+        if fact.applicability != "applicable" or fact.semantic_state not in {"present", "absent"}:
+            return fact
+        return replace(fact, semantic_state=UNVERIFIED_STATE)
+
+    if outcome.state == "skipped":
         return tuple(facts)
+    if outcome.state != "ready":
+        return tuple(unresolved(fact) if fact.rule_id == RULE_ID else fact for fact in facts)
     result = []
     for fact in facts:
         refs = outcome.recorded_refs.get(fact.event_position)
-        if fact.rule_id != RULE_ID or refs is None:
+        if fact.rule_id != RULE_ID:
             result.append(fact)
             continue
-        if (fact.event_position in outcome.incomplete_event_positions
-                and fact.event_position not in partial_in_window_positions):
-            # 只核实“写过”不能证明“首次写于超时后”。成功证据仍在outcome，
-            # 但未知/仅晚期证据沿用既有主事实回退，不替换其早期引用。
+        if fact.event_position in outcome.incomplete_event_positions:
+            if fact.event_position not in partial_in_window_positions:
+                result.append(unresolved(fact))
+                continue
+        elif refs is None:
             result.append(fact)
             continue
         event_refs = tuple(ref for ref in fact.evidence_refs if ref not in fact.course_doc_refs)

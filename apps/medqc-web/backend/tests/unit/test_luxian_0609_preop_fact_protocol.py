@@ -10,7 +10,7 @@ import pytest
 from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.evidence_snapshot_provider import SnapshotSourceRows, build_luxian_0609_evidence_read_session
-from app.services.luxian_0609.native_preop_content_execution import RULE_FIELDS
+from app.services.luxian_0609.native_preop_content_execution import RULE_FIELDS, _validate_response
 from app.services.luxian_0609.native_surgery_document_execution import execute_luxian_0609_native_surgery_document_rules
 
 SUMMARY = "LX0609-04-01-04"
@@ -24,6 +24,16 @@ def fact(state, quote=None, reviewed=True):
 
 def present_items(rule):
     return {field: fact("present", "拟行甲手术") for field in RULE_FIELDS[rule]}
+
+
+def assert_invalid_preop_field(items, rule, field):
+    # 技术失败不向客户暴露无效字段；字段级拒收仍在正式协议校验边界断言。
+    source = "presurg_summary" if rule == SUMMARY else "presurg_discussion"
+    validation = _validate_response({"documents": [{
+        "document_id": "D1", "source_type": source, "items": items,
+    }]}, {(source, "D1"): TEXT}, (rule,))
+    assert validation.rule_failures == {rule: ("field", (field,))}
+    assert validation.parsed == {}
 
 
 def publish(rule, *, items=None, rows=None, documents=None):
@@ -138,9 +148,10 @@ def test_date_priority_does_not_accept_a_forged_model_quote():
     final, _ = publish(DISCUSSION, items=items, rows={"presurg_discussion": [{
         "document_id": "D1", "record_content": TEXT, "record_time": "2026-01-01",
     }]})
-    assert final["status"] == "data_gap"
-    assert final["customer_display_facts"]["verification_kind"] == "preop_fact_extraction_invalid"
-    assert final["customer_display_facts"]["invalid_fields"] == ["discussion_date"]
+    assert final["status"] == "technical_error"
+    assert final["reason_code"] == "model_invalid_output"
+    assert not final.get("customer_display_facts")
+    assert_invalid_preop_field(items, DISCUSSION, "discussion_date")
 
 
 def test_body_date_quote_is_accepted_without_structured_date():
@@ -203,9 +214,10 @@ def test_summary_invalid_tristate_or_noncontinuous_quote_is_isolated(invalid):
     items = present_items(SUMMARY)
     items["precautions"] = invalid
     final, _ = publish(SUMMARY, items=items)
-    assert final["status"] == "data_gap"
-    assert final["customer_display_facts"]["verification_kind"] == "preop_fact_extraction_invalid"
-    assert final["customer_display_facts"]["invalid_fields"] == ["precautions"]
+    assert final["status"] == "technical_error"
+    assert final["reason_code"] == "model_invalid_output"
+    assert not final.get("customer_display_facts")
+    assert_invalid_preop_field(items, SUMMARY, "precautions")
 
 
 @pytest.mark.parametrize(("text", "value", "expected"), [

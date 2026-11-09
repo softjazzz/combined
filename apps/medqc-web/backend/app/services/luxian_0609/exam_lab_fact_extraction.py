@@ -2175,12 +2175,23 @@ def parse_exam_lab_fact_response_isolated(
                 selected_rule_ids=(rule_id,),
                 projection=projection,
             )
+            # 015 的报告阴阳性质本身可以合法未定；仅接纳字段一致、无病程引用的
+            # 明确 unknown 分类。其它 unknown、矛盾应答及协议错误仍走原恢复/失败。
+            unresolved_culture_positions = {
+                raw.get("event_position", 1) for raw in rows_by_rule[rule_id]
+                if rule_id == "LX0609-06-03-04"
+                and raw.get("applicability") == "unknown"
+                and raw.get("positive_state") == "unknown"
+                and raw.get("semantic_state") in {"unknown", "absent"}
+                and raw.get("course_doc_positions") == []
+            }
             if (
                 rule_id in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}
                 and not projection.course_time_incomplete
                 and not projection.course_projection_truncated
                 and any(
                     (fact.applicability == "unknown" or fact.semantic_state == "unknown")
+                    and fact.event_position not in unresolved_culture_positions
                     and (event := events_for_family(
                         projection, "exam" if rule_id in EXAM_RULE_IDS else "culture"
                     )[fact.event_position - 1]).target_confirmed

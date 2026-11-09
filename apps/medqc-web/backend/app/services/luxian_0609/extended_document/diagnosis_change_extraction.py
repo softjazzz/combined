@@ -368,6 +368,8 @@ async def _extract_once(
             **structured_output_kwargs(llm_client),
         )
     except Exception as error:
+        from ...llm_token_budget import note_budget_failure
+        note_budget_failure(error)
         return DiagnosisChangeExtraction(
             "technical_error",
             "model_transport_error",

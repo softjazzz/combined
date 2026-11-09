@@ -360,6 +360,22 @@ def _safe_009_event(item: Any) -> dict[str, Any] | None:
 
 def _safe_009(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("failure_kind")
+    if "unresolved_events" in raw:
+        unresolved = raw["unresolved_events"]
+        if not isinstance(unresolved, list) or len(unresolved) > 20:
+            return None
+        for item in unresolved:
+            if (not isinstance(item, dict) or not {"event_ref", "reason_code"} <= set(item) <= {"event_ref", "reason_code", "corresponding_course_ref"}
+                or item.get("reason_code") not in {"authoritative_time_missing", "association_failed"}
+                or not isinstance(item.get("event_ref"), str) or not 0 < len(item["event_ref"]) <= 256
+                or ("corresponding_course_ref" in item and (not isinstance(item["corresponding_course_ref"], str) or len(item["corresponding_course_ref"]) > 256))):
+                return None
+        base = _safe_009({key: value for key, value in raw.items() if key not in {"unresolved_events", "change_events"}
+                          or (key == "change_events" and kind in {"critical_change_course_timely", "critical_change_course_not_timely"})})
+        if base is None:
+            # 关联失败保留既有顶层坐标，同时附加逐事件未决标记。
+            return None
+        return {**base, "unresolved_events": [dict(item) for item in unresolved]}
     if kind == "critical_change_time_unavailable":
         return {"failure_kind": kind, "threshold_hours": 24} if raw.get("threshold_hours") == 24 else None
     if kind == "critical_change_course_association_failed":
@@ -508,6 +524,9 @@ def _published_008(raw: dict[str, Any]) -> bool:
 
 
 def _published_009(raw: dict[str, Any]) -> bool:
+    if "unresolved_events" in raw:
+        safe = _safe_009(raw)
+        return safe == raw and _published_009({key: value for key, value in raw.items() if key != "unresolved_events"})
     kind = raw.get("failure_kind")
     if type(kind) is not str:
         return False

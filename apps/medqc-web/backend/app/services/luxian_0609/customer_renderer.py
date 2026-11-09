@@ -132,6 +132,8 @@ _FINALIZER_DATA_GAP_CUSTOMER_MESSAGES = {
     "applicability_source_gap": "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
 }
 _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
+    ("LX0609-07-02-02", "semantic_extraction_unresolved"): "现有输血记录的实际成分尚无法可靠确认，暂时无法完成记录完整性核对。",
+    ("LX0609-06-03-04", "semantic_extraction_unresolved"): "现有培养报告尚无法明确是否为阳性菌结果，暂时无法完成阳性结果分析核对。",
     ("LX0609-04-05-02", "semantic_extraction_unresolved"): "现有上级医师查房正文尚未形成可靠抽取结果，暂时无法确认病程内容是否完整。",
     ("LX0609-04-05-02", "candidate_scope_incomplete"): "现有上级医师查房正文超出本次受控抽取范围，暂时无法完成病程内容核对。",
     ("LX0609-08-01-02", "semantic_extraction_unresolved"): "已读取出院医嘱，但部分带药的剂量、途径或用药时间仍无法可靠确认，暂时无法判定带药信息是否完整，请复核原文。",
@@ -144,6 +146,7 @@ _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES = {
     ("LX0609-07-03-01", "candidate_scope_incomplete"): "输血后病程超出本次受控抽取范围，暂时无法完成输血效果评价核对。",
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。',
     ("LX0609-07-01-03", "source_readiness_unproven"): '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。',
+    ("LX0609-04-01-01", "source_readiness_unproven"): '已发现手术医嘱，但计划时间已过或无法确认，且未找到已实施手术的记录，暂时无法确认本次手术是否已实施，暂不判定术前小结缺失。',
     ("LX0609-07-01-03", "candidate_scope_incomplete"): '现有输血正文超出本次受控抽取范围，暂时无法完成实施事实核对。',
     ("LX0609-03-01-04", "semantic_extraction_unresolved"): "会诊建议或其中的措施尚未形成可靠的核对结果，暂时无法确认会诊建议是否均已执行。",
     ("LX0609-03-01-01", "semantic_extraction_unresolved"): "会诊意见原文是否明确、包含哪些建议尚未形成可靠的抽取结果，暂时无法完成本项核对。",
@@ -622,6 +625,16 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 
 _RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-07-02-02", "semantic_extraction_unresolved"): (
+        "输血记录成分暂无法确认",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-07-02-02", "semantic_extraction_unresolved")],
+        "请复核现有输血记录或重试质控；不要据此补写或改写记录。",
+    ),
+    ("LX0609-06-03-04", "semantic_extraction_unresolved"): (
+        "培养报告阳性性质待确认",
+        _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-06-03-04", "semantic_extraction_unresolved")],
+        "请复核现有培养报告或重试质控；不要据此补写或改写病程。",
+    ),
     ("LX0609-03-01-01", "semantic_extraction_unresolved"): (
         "会诊意见暂无法可靠抽取",
         _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-03-01-01", "semantic_extraction_unresolved")],
@@ -692,6 +705,7 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
     ("LX0609-07-01-03", "semantic_extraction_unresolved"): ('输血实施事实暂无法确认', '现有输血记录正文尚未形成可靠的实施事实抽取结果，暂时无法核对输血前九项。', '请复核现有输血正文或重试质控；不要据此补写或改写记录。'),
     ("LX0609-07-01-03", "positive_assertion_not_explicit"): ('输血实施事实暂无法确认', '现有输血记录未能可靠确认实际实施事件，暂时无法核对输血前九项。', '请复核现有记录及实际输血事件；不要据此补写输血或检验记录。'),
     ("LX0609-07-01-03", "source_readiness_unproven"): ('输血记录正文暂不可读取', '已定位输血记录，但现有材料缺少可读取的正文，暂时无法确认是否实施输血。', '请核对源记录正文及同步映射后重新质控；不要据此补写或改写记录。'),
+    ("LX0609-04-01-01", "source_readiness_unproven"): ('手术实施情况暂无法确认', _FINALIZER_RULE_DATA_GAP_CUSTOMER_MESSAGES[("LX0609-04-01-01", "source_readiness_unproven")], '请核对手术是否实际实施及手术记录同步情况后重新质控；不要据此补写或改写记录。'),
     ("LX0609-07-01-03", "candidate_scope_incomplete"): ('输血实施资料超出本次可核范围', '现有输血正文超出本次受控抽取范围，暂时无法完成实施事实核对。', '请复核现有材料或联系质控系统支持；不要据此补写或改写记录。'),
     ("LX0609-04-04-02", "semantic_extraction_unresolved"): (
         "麻醉访视内容暂无法确认",
@@ -1328,6 +1342,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "已确认实施麻醉，本项麻醉访视填写规范核对不适用",
         "局部麻醉不适用本项核对；如非局部麻醉但麻醉访视记录缺失，则由 LX0609-04-04-01 先行核对，本项仅在两类访视记录均存在时核对填写规范。",
         "如适用非局部麻醉，请先补齐麻醉访视记录，再核对记录填写是否规范。",
+    ),
+    ("LX0609-04-01-01", "evaluation_window_not_mature"): (
+        "手术尚未到计划时间，暂不判定术前小结缺失",
+        "截至本次冻结评价时点，仅有未来手术计划，尚无已实施手术的记录。",
+        "无需按缺项处理；请在手术前完成术前小结，手术实施后将重新评估。",
     ),
     ("LX0609-04-04-01", "evaluation_window_not_mature"): (
         "手术结束尚未满24小时，暂不判定麻醉术后访视缺失",
@@ -2972,6 +2991,7 @@ def customer_finding_from_controlled_facts(
             "generic": [],
             "missing": [],
             "partial": [],
+            "unknown": [],
         }
         for item in recommendation_evidence:
             if (
@@ -3051,6 +3071,16 @@ def customer_finding_from_controlled_facts(
         if labels_by_state["specific"]:
             finding_parts.append(
                 f"其余{len(labels_by_state['specific'])}条建议已开立对应医嘱。"
+            )
+        unresolved_episodes = facts.get("unresolved_opinion_episode_count")
+        if type(unresolved_episodes) is int and unresolved_episodes > 0:
+            # 未进入核查的会诊只说明待核，不列为未执行。
+            finding_parts.append(
+                f"另有{unresolved_episodes}次会诊的意见时间缺失或不在本次住院期间，暂未核查其建议执行情况。"
+            )
+        if labels_by_state["unknown"]:
+            finding_parts.append(
+                f"待核实：{'；'.join(labels_by_state['unknown'])}，当前资料不能确认是否落实。"
             )
         exclusion_notes = {
             "execution_condition_not_defined": "未说明何时达到执行条件",
@@ -3307,6 +3337,16 @@ def customer_finding_from_controlled_facts(
                     f"已读取 {facts.get('order_count')} 条化疗医嘱及对应病程，"
                     f"{known_mismatch}当前资料不足，尚无法完成一致性核对。"
                 )
+            pending = sum(
+                value for value in (facts.get("unresolved_event_count"), facts.get("unknown_time_event_count"))
+                if type(value) is int and value > 0
+            )
+            if mismatched and pending:
+                # 已确认的不一致单列；未决医嘱只说明尚无法核对，不列为不一致。
+                return (
+                    f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，{mismatched}记录不一致；"
+                    f"另有 {pending} 条化疗医嘱尚无法核对，未能完成全部项目的一致性核对。"
+                )
             if mismatched:
                 return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，{mismatched}记录不一致。"
             return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。"
@@ -3513,6 +3553,30 @@ def customer_finding_from_controlled_facts(
             for item in event_results
         ):
             return "处置记录存在，但无法与各次危急值报告唯一对应，暂无法核对。"
+        if rule_id == "LX0609-06-04-02" and isinstance(event_results, list) and any(
+            isinstance(item, Mapping) and item.get("outcome") == "unhandled" for item in event_results
+        ) and any(
+            isinstance(item, Mapping) and item.get("outcome") in {
+                "authoritative_time_missing", "authoritative_time_conflict",
+            } for item in event_results
+        ):
+            # 确定未处置的报告与处置时间待核的报告分开写，待核项不列为未处置。
+            def _names(item):
+                return "、".join(str(name) for name in item.get("critical_item_names", ()) if name) or "危急值项目"
+            failures = "".join(
+                _names(item) + "：报告后未找到对应处置记录。"
+                for item in event_results if isinstance(item, Mapping) and item.get("outcome") == "unhandled"
+            )
+            pending = "；".join(
+                _names(item) + (
+                    "的处置时间早于报告时间" if item.get("outcome") == "authoritative_time_conflict"
+                    else "的处置时间缺失或无法解析"
+                )
+                for item in event_results
+                if isinstance(item, Mapping)
+                and item.get("outcome") in {"authoritative_time_missing", "authoritative_time_conflict"}
+            )
+            return "已确认问题：" + failures + "另有" + pending + "，暂无法核对这些项目的报告后处置。"
         if isinstance(event_results, list) and any(
             isinstance(item, Mapping) and item.get("outcome") in {
                 "authoritative_time_missing", "authoritative_time_conflict",
@@ -3535,7 +3599,8 @@ def customer_finding_from_controlled_facts(
             ]
             pending = [
                 "、".join(item.get("critical_item_names", [])) + (
-                    "的报告时间字段冲突" if item.get("issue") == "authoritative_time_conflict"
+                    "的危急值标志冲突" if item.get("issue") == "critical_flag_conflict"
+                    else "的报告时间字段冲突" if item.get("issue") == "authoritative_time_conflict"
                     else "的报告时间缺失或无法解析"
                 )
                 for item in gaps
@@ -3786,6 +3851,8 @@ def customer_finding_from_controlled_facts(
                 gaps.append(f"{label}排列序号无效或重复")
             elif gap == "equivalence_unresolved":
                 gaps.append(f"{label}中部分名称与{authority_label}是否为同一诊断尚无法可靠确认")
+            elif gap == "version_conflict":
+                gaps.append("出院记录存在多个版本且诊断不一致，无法确定最终版本")
         return "；".join(gaps) + "，暂时无法完成诊断内容及顺序核对。"
 
     if rule_id == "LX0609-08-01-03" and kind == "discharge_main_diagnosis_check":
@@ -4031,6 +4098,10 @@ def customer_finding_from_controlled_facts(
                 detail = "缺少交班记录"
             elif outcome == "handover_missing":
                 detail = f"交班记录 {handoff_time}，缺少接班记录"
+            elif outcome == "handover_window_not_mature":
+                detail = f"交班记录 {handoff_time}，接班评价窗口尚未到期"
+            elif outcome == "handover_window_unresolved":
+                detail = f"交班记录 {handoff_time}，接班评价终点尚未确认，待核验"
             elif outcome in {"completed_within_threshold", "handover_late"}:
                 duration = _format_exact_elapsed_duration(
                     started_at=change_time,
@@ -4219,6 +4290,8 @@ def customer_finding_from_controlled_facts(
             return f"已核对{checked}，未找到输血病程记录。" if checked else ""
 
     if rule_id == "LX0609-07-02-02":
+        if kind == "transfusion_component_unresolved":
+            return "现有记录的实际成分暂无法可靠确认，请复核或重试；不要据此补写记录。"
         if kind == "transfusion_course_record_complete":
             return "输血病程已记录指征、起止时间、血液成分、输注量、过程观察及反应处理。"
         if kind == "transfusion_course_record_incomplete":
@@ -4251,10 +4324,15 @@ def customer_finding_from_controlled_facts(
                     and raw_counts[field] > 0
                 ]
                 if details:
+                    unresolved_count = facts.get("unresolved_component_record_count")
+                    unresolved_note = (
+                        f"另有{unresolved_count}份输血记录的成分尚待核验。"
+                        if type(unresolved_count) is int and unresolved_count > 0 else ""
+                    )
                     return (
                         f"共核对 {record_count} 份输血病程记录，其中 "
                         f"{incomplete_record_count} 份存在缺项："
-                        f"{'；'.join(details)}。"
+                        f"{'；'.join(details)}。{unresolved_note}"
                     )
             if isinstance(raw_missing, list) and raw_missing == ["component"]:
                 return "输血记录单未明确记录实际输注血液成分。"
@@ -5041,6 +5119,8 @@ def render_luxian_0609_customer_result(
                 ("LX0609-03-01-03", "semantic_extraction_unresolved"),
                 ("LX0609-03-01-04", "semantic_extraction_unresolved"),
                 ("LX0609-03-01-05", "semantic_extraction_unresolved"),
+                ("LX0609-06-03-04", "semantic_extraction_unresolved"),
+                ("LX0609-07-02-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-04-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-05-02", "semantic_extraction_unresolved"),
                 ("LX0609-04-05-02", "candidate_scope_incomplete"),
@@ -5053,6 +5133,7 @@ def render_luxian_0609_customer_result(
                 ("LX0609-07-03-01", "candidate_scope_incomplete"),
                 ("LX0609-07-01-03", "positive_assertion_not_explicit"),
                 ("LX0609-07-01-03", "source_readiness_unproven"),
+                ("LX0609-04-01-01", "source_readiness_unproven"),
                 ("LX0609-07-01-03", "candidate_scope_incomplete"),
             }
         )

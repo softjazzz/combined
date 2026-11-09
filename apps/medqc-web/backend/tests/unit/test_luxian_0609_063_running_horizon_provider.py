@@ -42,8 +42,8 @@ def _running_snapshot() -> dict[str, str]:
     }
 
 
-def _horizon_row(snapshot: dict[str, str] | None) -> dict[str, object]:
-    session = build_luxian_0609_evidence_read_session(
+def _session(snapshot: dict[str, str] | None):
+    return build_luxian_0609_evidence_read_session(
         selected_rule_ids=(RULE,),
         institute_id="I",
         patient_id="P",
@@ -55,7 +55,10 @@ def _horizon_row(snapshot: dict[str, str] | None) -> dict[str, object]:
         evaluation_horizon_snapshot=snapshot,
         row_reader=_empty_reader,
     )
-    rows = session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)
+
+
+def _horizon_row(snapshot: dict[str, str] | None) -> dict[str, object]:
+    rows = _session(snapshot).materials.rows(EVALUATION_HORIZON_SOURCE_KEY)
     assert len(rows) == 1
     return dict(rows[0])
 
@@ -79,31 +82,31 @@ def test_063_derived_horizon_preserves_validated_frozen_running_scene() -> None:
 
 
 @pytest.mark.parametrize(
-    ("field", "value"),
+    ("field", "value", "reason"),
     [
-        ("institute_id", "OTHER"),
-        ("patient_id", "OTHER"),
-        ("visit_id", "OTHER"),
-        ("record_key", "[\"OTHER\",\"P\",\"V\"]"),
-        ("record_scene", "final"),
-        ("evaluation_basis", "discharge_datetime"),
-        ("evaluation_horizon", "2026-10-19"),
-        ("evaluation_horizon", "not-a-date"),
-        ("resolution_status", "scene_uncertain"),
+        ("institute_id", "OTHER", "authoritative_time_conflict"),
+        ("patient_id", "OTHER", "authoritative_time_conflict"),
+        ("visit_id", "OTHER", "authoritative_time_conflict"),
+        ("record_key", "[\"OTHER\",\"P\",\"V\"]", "authoritative_time_conflict"),
+        ("record_scene", "final", "authoritative_time_conflict"),
+        ("evaluation_basis", "discharge_datetime", "authoritative_time_conflict"),
+        ("evaluation_horizon", "2026-10-19", "authoritative_time_conflict"),
+        ("evaluation_horizon", "not-a-date", "authoritative_time_missing"),
+        ("resolution_status", "scene_uncertain", "authoritative_time_missing"),
     ],
 )
-def test_063_invalid_frozen_scene_does_not_remove_the_existing_horizon(
+def test_063_invalid_frozen_scene_closes_without_borrowing_caller_date(
     field: str,
     value: str,
+    reason: str,
 ) -> None:
     snapshot = deepcopy(_running_snapshot())
     snapshot[field] = value
 
-    row = _horizon_row(snapshot)
-
-    assert row["horizon_date"] == "2026-10-20"
-    assert row["basis"] == "evaluation_as_of"
-    assert "record_scene" not in row
+    session = _session(snapshot)
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY) == ()
+    observation = next(o for o in session.snapshot.observations if o.source_key == EVALUATION_HORIZON_SOURCE_KEY)
+    assert observation.reason_code == reason
 
 
 def test_063_legacy_horizon_without_snapshot_does_not_guess_scene() -> None:

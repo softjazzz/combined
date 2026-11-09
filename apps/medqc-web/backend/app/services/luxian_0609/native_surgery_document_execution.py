@@ -28,9 +28,12 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
-from .evidence_snapshot_provider import classify_current_visit_surgery_order_rows
+from .evidence_snapshot_provider import (
+    _explicit_emergency_rescue_state,
+    classify_current_visit_surgery_order_rows,
+)
 from .fact_schema import Assertion, EventStatus
-from .native_execution import build_luxian_0609_native_result
+from .native_execution import _surgery_order_obligation, build_luxian_0609_native_result
 from .native_preop_content_execution import evaluate_preop_content_rules
 from .planner import PlannedRule
 from .source_manifest import QueryStatus
@@ -39,6 +42,7 @@ from .source_evidence_reader import (
     has_qualified_traditional_surgery_row,
 )
 from .surgery_event_association import (
+    SurgeryEvent,
     associate_preop_document_to_surgery_event,
     build_surgery_document_events,
     count_associated_performed_surgery_events,
@@ -282,6 +286,8 @@ def _typed_decision_from_outcome(
             if (outcome.rule_id == "LX0609-04-04-02" and outcome.reason_code in {
                 "semantic_extraction_unresolved", "candidate_scope_incomplete", "source_readiness_unproven",
             })
+            # 029 仅医嘱触发、实施情况待确认（用户口径 2026-11-08），保留专用原因与文案。
+            or (outcome.rule_id == "LX0609-04-01-01" and outcome.reason_code == "source_readiness_unproven")
             or outcome.reason_code
             in {
                 "source_unavailable",
@@ -746,16 +752,15 @@ def _surgery_and_discussion_people(
             return None
         surgeons = set().union(*names_by_row) if names_by_row else set()
 
-    participants: set[str] = set()
-    for row in discussion_rows:
-        for field_name in (
-            "discuss_staff",
-            "host_name",
-            "submitter",
-            "physician_sign",
-        ):
-            participants.update(_person_names(row.get(field_name)))
-    return surgeons, participants
+    return surgeons, _discussion_participants(discussion_rows)
+
+
+def _discussion_participants(rows: Sequence[Mapping[str, Any]]) -> set[str]:
+    # 上传/提交人只证明数据操作，不能证明实际参加讨论。
+    return set().union(*(
+        _person_names(row.get(field))
+        for row in rows for field in ("discuss_staff", "host_name", "physician_sign")
+    ))
 
 
 def _unique_material_document_id(
@@ -807,13 +812,20 @@ def _anesthesia_consent_rows(
         return None
     matched = []
     for row in rows:
-        identity = _clean(
-            " ".join(
-                str(row.get(key) or "")
-                for key in ("consent_type", "document_title", "record_content")
-            )
-        )
-        if _ANESTHESIA_CONSENT_PATTERN.search(identity):
+        identities = [_clean(row.get(key)) for key in ("consent_type", "document_title")]
+        if any(_ANESTHESIA_CONSENT_PATTERN.search(value) for value in identities):
+            matched.append(row)
+            continue
+        # 明确属于其他同意书时，正文提及麻醉文书不能覆盖其身份。
+        if any(re.search(r"同意书|告知书", value) for value in identities):
+            continue
+        # 保留正文承载标题及医院页眉的旧模板；只认独立标题行或冒号标题，
+        # “麻醉知情同意书尚未签署”等叙述句不能证明文书身份。
+        body = str(row.get("record_content") or "").strip()
+        if re.search(
+            r"^[ \t]*[【（(]?[ \t]*麻醉(?:知情)?(?:告知)?(?:同意书|告知书)[】）)]?[ \t]*(?:[:：]|\r?$)",
+            body, re.MULTILINE,
+        ):
             matched.append(row)
     return tuple(matched)
 
@@ -833,6 +845,8 @@ def _minute_signature_state(value: Any) -> str:
     ):
         return "invalid"
     candidate = text.replace("/", "-").replace("Z", "+00:00")
+    # Python 3.10 fromisoformat 不接受基本偏移形式；只归一时区，不补时间。
+    candidate = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", candidate)
     try:
         datetime.fromisoformat(candidate)
     except ValueError:
@@ -891,12 +905,147 @@ def _course_records_emergency_intervention(
     materials: Luxian0609EvidenceMaterialStore | None,
 ) -> bool:
     rows = _anesthesia_visit_rows(materials, "daily_course_record") or ()
-    for row in rows:
-        text = str(row.get("record_content") or "")
-        for match in _COURSE_EMERGENCY_INTERVENTION_PATTERN.finditer(text):
-            if not _COURSE_HISTORY_PREFIX_PATTERN.search(text[max(0, match.start() - 16):match.start()]):
-                return True
-    return False
+    return any(_row_emergency_intervention(row) for row in rows)
+
+
+def _row_emergency_intervention(row: Mapping[str, Any]) -> bool:
+    text = str(row.get("record_content") or "")
+    return any(
+        not _COURSE_HISTORY_PREFIX_PATTERN.search(text[max(0, match.start() - 16):match.start()])
+        for match in _COURSE_EMERGENCY_INTERVENTION_PATTERN.finditer(text)
+    )
+
+
+def _039_linked_event(
+    row: Mapping[str, Any], events: Sequence[SurgeryEvent], *, discussion: bool,
+) -> int | None:
+    """039只接受唯一、互不冲突的身份/时序归属，不能跨台汇总人员或急诊。"""
+    identities = {
+        event.event_index for event in events for component in event.component_rows
+        for field in ("surgery_id", "application_id")
+        if _clean(row.get(field)) and _clean(row.get(field)) == _clean(component.get(field))
+    }
+    if not identities and any(
+        _clean(row.get(field)) and any(_clean(component.get(field)) for event in events for component in event.component_rows)
+        for field in ("surgery_id", "application_id")
+    ):
+        return None
+    recorded = _visit_datetime(authoritative_document_time_value(row))
+    if discussion:
+        association = associate_preop_document_to_surgery_event(
+            events=events, procedure_name=summary_surgery_name_from_row(row),
+            record_time=recorded,
+            planned_surgery_time=summary_planned_surgery_time_from_row(row),
+        )
+        timed = {association.event_index} if association.state == "matched" else set()
+    else:
+        # 抢救/急诊介入病程须属于唯一同日事件；同日多台时只能凭业务键。
+        timed = {
+            event.event_index for event in events
+            if recorded is not None and (begin := _visit_datetime(
+                event.row.get("surgery_begin_time") or event.row.get("surgery_begin_datetime")
+            )) is not None and begin.date() == recorded.date()
+        }
+    if identities:
+        if len(identities) != 1 or (timed and not identities.issubset(timed)):
+            return None
+        # 术后补写不得由相同业务键变成术前讨论。
+        if discussion and recorded is not None and not timed:
+            return None
+        return next(iter(identities))
+    return next(iter(timed)) if len(timed) == 1 else None
+
+
+def _typed_039_multiple_events_outcome(
+    snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609EvidenceMaterialStore | None,
+) -> _SurgeryDocumentOutcome | None:
+    """多台039在执行器逐事件判定；单台保留既有受控事实和客户投影合同。"""
+    if not isinstance(materials, Luxian0609EvidenceMaterialStore):
+        return None
+    rule_id = "LX0609-04-01-02"
+    # 单来源肯定事实的既有单台路径不因另一个可选手术来源不可读而改变。
+    row_count = 0
+    for source in ("surgery_record", "mr_surgery"):
+        try:
+            row_count += len(materials.rows(source))
+        except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+            continue
+    if row_count <= 1:
+        return None
+    events, reason = build_surgery_document_events(materials)
+    if events is None:
+        return _SurgeryDocumentOutcome(rule_id, "data_gap", reason, "program")
+    if len(events) <= 1:
+        return None
+    emergency_states = {
+        event.event_index: {
+            state for row in event.component_rows
+            if (state := _explicit_emergency_rescue_state((row,))) is not None
+        } for event in events
+    }
+    for source in ("rescue_record", "daily_course_record"):
+        rows = _anesthesia_visit_rows(materials, source) or ()
+        for row in rows:
+            state = _explicit_emergency_rescue_state((row,)) if source == "rescue_record" else (
+                True if _row_emergency_intervention(row) else None
+            )
+            if state is None:
+                continue
+            index = _039_linked_event(row, events, discussion=False)
+            if index is None:
+                return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
+            emergency_states[index].add(state)
+    if any(len(states) > 1 for states in emergency_states.values()):
+        return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
+    required = [event for event in events if emergency_states[event.event_index] != {True}]
+    if not required:
+        return _SurgeryDocumentOutcome(rule_id, "not_applicable", "emergency_rescue_exception", "program")
+    required_refs = ()
+    if len(required) != len(events):
+        # 混合急诊/择期时，既有“例外已排除”事实仅描述实际核对的非豁免台次。
+        required_refs = tuple(
+            ref for source in sorted({event.source_key for event in required})
+            for ref, row in materials.document_rows(source, snapshot=snapshot)
+            if any(row in event.component_rows for event in required if event.source_key == source)
+        )
+    blocker = _typed_source_gate(rule_id=rule_id, source_key="presurg_discussion", snapshot=snapshot)
+    if blocker is not None:
+        return blocker
+    discussions = {event.event_index: [] for event in events}
+    for row in materials.rows("presurg_discussion"):
+        index = _039_linked_event(row, events, discussion=True)
+        if index is None:
+            return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
+        discussions[index].append(row)
+    if required_refs:
+        required_refs += tuple(
+            ref for ref, row in materials.document_rows("presurg_discussion", snapshot=snapshot)
+            if any(row in discussions[event.event_index] for event in required)
+        )
+    for event in required:
+        rows = discussions[event.event_index]
+        if not rows:
+            return _SurgeryDocumentOutcome(rule_id, "non_compliant", "preop_discussion_missing", "program", {
+                "failure_kind": "preop_discussion_missing", "performed_surgery_confirmed": True,
+                "emergency_rescue_exception_absent": True, "checked_sources": ["presurg_discussion"],
+            }, fact_refs=required_refs)
+        names_by_row = [_person_names(row.get("surgeon")) for row in event.component_rows]
+        participants = _discussion_participants(rows)
+        if not names_by_row or any(not names for names in names_by_row) or not participants:
+            return _SurgeryDocumentOutcome(rule_id, "data_gap", "surgeon_participation_unresolved", "program")
+        surgeons = set().union(*names_by_row)
+        if not surgeons.issubset(participants):
+            return _SurgeryDocumentOutcome(rule_id, "non_compliant", "surgeon_not_in_preop_discussion", "program", {
+                "failure_kind": "surgeon_not_in_preop_discussion", "performed_surgery_confirmed": True,
+                "emergency_rescue_exception_absent": True, "discussion_state": "present",
+                "surgeon_participation_state": "absent", "surgeons": sorted(surgeons),
+                "discussion_participants": sorted(participants), "matched_surgeons": sorted(surgeons & participants),
+            }, fact_refs=required_refs)
+    return _SurgeryDocumentOutcome(rule_id, "compliant", "surgeon_participation_confirmed", "program", {
+        "verification_kind": "preop_discussion_surgeon_participation_confirmed",
+        "performed_surgery_confirmed": True, "emergency_rescue_exception_absent": True,
+        "discussion_state": "present", "surgeon_participation_state": "confirmed",
+    }, fact_refs=required_refs)
 
 
 def _anesthesia_visit_rows(
@@ -1490,6 +1639,9 @@ def _typed_terminal_outcome(
         )
         if blocker is not None:
             return blocker
+        event_outcome = _typed_039_multiple_events_outcome(snapshot, materials)
+        if event_outcome is not None:
+            return event_outcome
         if isinstance(snapshot, Luxian0609EvidenceSnapshot):
             emergency_states = {
                 state
@@ -2166,6 +2318,8 @@ def _typed_precise_terminal_refs(
         )
 
     if rule_id == "LX0609-04-01-02":
+        if outcome.fact_refs:
+            return outcome.fact_refs
         source_keys = [
             source_key
             for source_key in ("surgery_record", "mr_surgery")
@@ -2222,6 +2376,32 @@ def _only_endoscopic_procedures(materials: Luxian0609EvidenceMaterialStore) -> b
         and not _SURGICAL_SCOPE_PATTERN.search(name)
         for name in names
     )
+
+
+def _typed_029_order_only_gate(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    performed_triggered: bool,
+    fact_refs: tuple[str, ...],
+) -> _SurgeryDocumentOutcome | None:
+    """仅凭手术医嘱触发、准备判缺术前小结时，先确认手术已到期或已实施。
+
+    用户口径（2026-11-08）：只有未来手术计划且无已实施证据时按尚未到期处理；计划时间
+    已过但实施情况未知时保留未决，不认定已实施也不放行。已实施手术沿用既有合同。
+    与 030 共用同一医嘱义务门控，不从文本推定实施。
+    """
+    if performed_triggered:
+        return None
+    gate = _surgery_order_obligation(snapshot=snapshot, materials=materials)
+    if gate is None:
+        return None
+    status, reason = gate
+    if status == "data_gap" and reason not in {"candidate_scope_incomplete", "association_failed"}:
+        # 评价终点或计划时间无法确定、未见实施证据：统一为“手术实施情况待确认”，
+        # 不沿用描述已实施手术缺时间的原因，避免客户文案误称已实施。
+        reason = "source_readiness_unproven"
+    return _SurgeryDocumentOutcome("LX0609-04-01-01", status, reason, "program", None, fact_refs)
 
 
 async def _typed_029_outcome(
@@ -2283,6 +2463,12 @@ async def _typed_029_outcome(
     if target_gate is not None:
         return replace(target_gate, fact_refs=order_refs), 0, 0, 0, 0, 0.0
     if _typed_observation_state(snapshot, "presurg_summary") == "empty":
+        order_gate = _typed_029_order_only_gate(
+            snapshot=snapshot, materials=materials,
+            performed_triggered=performed_triggered, fact_refs=order_refs,
+        )
+        if order_gate is not None:
+            return order_gate, 0, 0, 0, 0, 0.0
         return (
             _SurgeryDocumentOutcome(
                 "LX0609-04-01-01",
@@ -2400,6 +2586,12 @@ async def _typed_029_outcome(
             ),
             0, 0, 0, 0, 0.0,
         )
+    order_gate = _typed_029_order_only_gate(
+        snapshot=snapshot, materials=materials,
+        performed_triggered=performed_triggered, fact_refs=selected_refs,
+    )
+    if order_gate is not None:
+        return order_gate, 0, 0, 0, 0, 0.0
     return (
         _SurgeryDocumentOutcome(
             "LX0609-04-01-01",

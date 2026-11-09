@@ -22,6 +22,7 @@ import re
 from time import perf_counter
 from typing import Any
 from zoneinfo import ZoneInfo
+from ..llm_token_budget import note_budget_failure
 
 from .extended_document.shared import order_repeat_kind
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
@@ -29,7 +30,7 @@ from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object, _usage
 
 RULE_ID = "LX0609-05-01-01"
-SCHEMA_VERSION = "lx0609-postop-infection-evidence-v1"
+SCHEMA_VERSION = "lx0609-postop-infection-evidence-v2"
 MAX_COMPLETION_TOKENS = 2048
 MAX_EVIDENCE_DOCUMENTS = 12
 MAX_DOCUMENT_CHARS = 3000
@@ -408,11 +409,14 @@ async def _infection_evidence(
     if not course_rows:
         return "not_recorded", (), (0, 0, 0, 0, 0.0)
     if len(course_rows) > MAX_EVIDENCE_DOCUMENTS:
-        return "unresolved", (), (0, 0, 0, 0, 0.0)
+        return "incomplete", (), (0, 0, 0, 0, 0.0)
     documents = [
-        (f"D{index}", redact_luxian_0609_patient_privacy(str(row.get("record_content") or ""))[:MAX_DOCUMENT_CHARS])
+        (f"D{index}", redact_luxian_0609_patient_privacy(str(row.get("record_content") or "")))
         for index, (_key, row, _time) in enumerate(course_rows, start=1)
     ]
+    # 不截正文；沿用原候选总容量，超出时明确未核全，不发送无限增长的请求。
+    if sum(len(text) for _, text in documents) > MAX_EVIDENCE_DOCUMENTS * MAX_DOCUMENT_CHARS:
+        return "incomplete", (), (0, 0, 0, 0, 0.0)
     if llm_client is None or not callable(getattr(llm_client, "generate", None)):
         return "technical_error", (), (0, 0, 0, 0, 0.0)
     started = perf_counter()
@@ -423,7 +427,8 @@ async def _infection_evidence(
             allow_length_retry=False,
             **structured_output_kwargs(llm_client),
         )
-    except Exception:
+    except Exception as error:
+        note_budget_failure(error)
         return "technical_error", (), (1, 0, 0, 0, perf_counter() - started)
     usage = (1, 0, 0, 0, perf_counter() - started)
     try:
@@ -433,10 +438,10 @@ async def _infection_evidence(
     except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError):
         return "technical_error", (), usage
     present = tuple(key for (doc_id, _text), (key, _row, _time) in zip(documents, course_rows) if states[doc_id] == "present")
+    if any(state == "unknown" for state in states.values()):
+        return "unresolved", present, usage
     if present:
         return "recorded", present, usage
-    if any(state == "unknown" for state in states.values()):
-        return "unresolved", (), usage
     return "not_recorded", (), usage
 
 
@@ -464,6 +469,12 @@ async def evaluate_prophylactic_antimicrobial_duration(
     evidence_keys: tuple[str, ...] = ()
     used_course: list[tuple[str, Mapping[str, Any]]] = []
     if pending:
+        candidate_times_complete = all(
+            not str(row.get("record_content") or "").strip()
+            or parse_time(row.get("record_time") or row.get("record_datetime")
+                          or row.get("submit_datetime") or row.get("submit_time")) is not None
+            for _key, row in course_rows
+        )
         timed_course = sorted(
             (
                 (key, row, time)
@@ -480,6 +491,8 @@ async def evaluate_prophylactic_antimicrobial_duration(
             key=lambda item: item[2],
         )
         state, evidence_keys, usage = await _infection_evidence(timed_course, llm_client)
+        if not candidate_times_complete and state not in {"technical_error", "incomplete"}:
+            state = "incomplete"
         used_course = [(key, row) for key, row, _time in timed_course]
         for result in pending:
             in_window = [
@@ -492,8 +505,8 @@ async def evaluate_prophylactic_antimicrobial_duration(
             elif state == "technical_error":
                 result.status, result.reason_code = "technical_error", "surgery_llm_invalid_output"
                 result.facts = {}
-            elif state == "unresolved":
-                result.status, result.reason_code = "data_gap", "required_field_missing"
+            elif state in {"unresolved", "incomplete"}:
+                result.status, result.reason_code = "data_gap", "candidate_scope_incomplete" if state == "incomplete" else "required_field_missing"
                 result.facts = {"failure_kind": "infection_evidence_unresolved"}
             else:
                 result.status, result.reason_code = "non_compliant", "requirement_violated"

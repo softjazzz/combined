@@ -1,0 +1,109 @@
+# LX0609 B-01～B-05及剩余发现：最小工程修复，待Claude复审
+
+## 258ec2f99复审P2-T1：成熟缺陷与未到期展示分离
+
+本次增量基线`258ec2f9993c9d806971906461aba6fd324b6d4f`。Claude已确认P1-R1解除；随后确认058/075总体状态正确、但缺失清单带入未到期事件。另沿真实Provider在院路径复现071同类问题：已有成熟缺陷时，另一未到期接班仍显示`handover_missing`。三条规则正反顺序共6项反例先失败，修复后通过。
+
+- 058保留全部已核对药物和原总体判定，单独收集成熟缺失或已确认迟写的药物，只有它们进入确定缺陷的`unmatched_special_antimicrobials`；未到期项仍属于核验范围，不伪造其已完成。
+- 075保持全部操作范围及总数，`missing_procedures`仅保留成熟缺失；只有未到期操作仍按原时限未到处理。
+- 071保留事件列表，在执行器内把尚未成熟的接班标为`handover_window_not_mature`，无法确认终点的标为`handover_window_unresolved`，不修改调用方事实。原独立确认缺陷及总体状态保留。
+- 连续性映射接受上述两个受控事件标记并校验其结构；只有等待事件的清单不能被接纳为合规或确定不合规。Renderer仅显示既定标记为“尚未到期/待核验”，不重新计算医学阈值或业务方向。
+- 六项混合保护从Native经Binding、Finalizer和内存Canonical提交重读，核对状态、原因、客户事实及文案；单独未知窗口还增加1项合同保护。075原有公开投影无逐文书片段的限制仍在。
+
+必要终验在同一本地提交上执行，命令如下；不重跑494、132或全量质量门，不累加历史测试数量。新保护文件仍由已有质量门自动收录。
+
+```powershell
+$py = 'C:/Users/Coldplay/AppData/Local/Programs/Python/Python310/python.exe'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_running_date_horizon_regression.py
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_native_extended_document_execution.py -k 'test_058 or test_071 or test_075'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_continuity_result_mapping.py tests/unit/test_luxian_0609_physician_handoff.py tests/unit/test_luxian_0609_antimicrobial_result_mapping.py -k 'handoff or invasive or 058 or special or 10-01-01 or 10-03-01 or 05-01-06'
+```
+
+不新增期限、结果状态或医学义务，不修改材料、旧冻结及历史结果，不涉及0916、业务库、真实模型或27份重跑；不扩大P3。以上为候选修复，等待Claude复审，不自动推送、合并或部署。
+
+## da8ec5740复审阻断P1-R1：日期终点修订
+
+Claude确认：`da8ec5740`把有效在院冻结日期当作权威时间缺失，并覆盖054/057已合规结果。此前494项通过没有覆盖Provider真实`frozen_task_date`取材，不能据此否认这一回退。本次修订基线固定为`da8ec5740019fc45a4f3bf24547bf3250f910a50`，不替换旧报告或终验回执。
+
+- 统一读取改为`read_frozen_evaluation_horizon`，原样保留`date`或`datetime`。日期有效不再返回时间缺失；缺失、矛盾、坏日期仍保守关闭，不用时钟或当前库补值。
+- 统一成熟比较：精确时刻沿用`>= deadline`；日期只有明确晚于截止日才算成熟，早于或等于截止日保留未到期。不补午夜或日末作为精确时刻。
+- 054/057先核验全部候选的正面事实，正面合规不依赖评价终点；仅缺理由的否定检查窗口。独立成熟缺陷保留，另一未成熟事件不列为该确定缺陷，成功/未知证据不丢失。
+- 058、071、075使用相同日期成熟边界，恢复明确超过期限的缺陷；原精确时刻阈值不变。
+- 030未来计划用冻结日期比较，可从实际在院取材进入未到期；同日计划或执行未知不凭时间推定手术已实施。
+- 013在院日期有效后，原生内部原因为`pathology_recording_deadline_unconfirmed`，按既有对外合同映射`data_gap/source_readiness_unproven`，不新增医学期限。日期级出院与报告同日时不捏造先后，保持未决；精确出院与报告同刻的原合同未改，宽限仍待临床确认。
+- 不改冻结文件、快照、模型事实协议或历史结果：本次修正的是基于既有事实的时间比较，没有重写过去任务。
+
+新增`test_luxian_0609_running_date_horizon_regression.py`：先有6项真实Provider在院反例全部失败，再修复转绿；最终29项包含真实在院/日期级出院、成熟/截止日前/同日、已记录正面、混合成熟与未成熟事件、013/030及腐坏时间保护。主体测试不手工注入终点；仅末尾两项解析器坏值单测注入矛盾行。文件命名已由现有零模型质量门自动收录，并核验恰好收录一次，没有放宽门禁。
+
+本次必要终验命令（在backend，仍用既有禁网入口）：
+
+```powershell
+$py = 'C:/Users/Coldplay/AppData/Local/Programs/Python/Python310/python.exe'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_running_date_horizon_regression.py tests/unit/test_luxian_0609_quality_gate.py::test_pr_no_model_gates_cover_every_luxian_0609_unit_test_file_exactly_once
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_native_extended_document_execution.py -k 'test_054 or test_057 or test_058 or test_071 or test_075 or test_052_date_only_horizon or test_052_missing_or_conflicting or test_055_requires_evaluation_horizon'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_engine_blocking_findings.py tests/unit/test_engine_remaining_findings.py -k 'horizon or window or surgery_plan or documented_reason or handover_missing or invasive_missing or late_support'
+```
+
+本次保存读取边界：054、057、058、071、075均经过Native、Binding、Finalizer与内存SQLite提交重读，核对状态、原因和事实。054/057/058/071核对非空证据内容、时间及原ID到source_ref的转换；075现有公开投影没有逐文书片段，核对空证据集合和操作事实保持一致，**不能称为075可定位原文证据验收完成**。未补P3-1～P3-3，不改061日期级出院24小时的待确认口径，不改病理宽限或手术实际执行定义。没有重跑旧494项或全量质量门。
+
+## 固定范围
+
+- 开发基线：`94745e3b682a05b87335acf7d9196c0b8dcc2d35`，分支 `codex/frozen-exam-association-fix-20261107`。本报告与修复同提交，最终提交号以 `git rev-parse HEAD` 和提交后隔离回执核对。
+- 保留该基线已包含的C18、检查归属v6及四项公共修复；本次补充清单没有覆盖或替代B-01～B-05。
+- 无迁移、配置启用、前端、集成分支修改。未推送、合并、部署、连接业务/CDM/PG/模型/代理，不涉及0916或27份重跑。
+
+## 问题与落点
+
+| 项目 | 工程状态 | 最小修改与保留边界 |
+|---|---|---|
+| B-01 054/057/058、071、075时窗 | 已修复 | Provider与来源计划都接入统一终点；未成熟窗口不报缺陷；缺失或日期级精度不伪造时刻。沿用原24小时/3自然日等阈值。交接班只有能独立确认的缺陷优先。 |
+| B-02 054/057/058、075正文与074候选上限 | 已修复 | 去掉局部正文裁切，仍受原总输入容量约束；不能完整核验则保留未决。074前三候选之外仍有材料时，局部否定不能确认该诊断缺理由；已定位正面证据仍有效。 |
+| B-03 死亡来源、病原时间、出院日期 | 已修复/口径待确认 | 死亡来源错误不再借其他材料确认正常结果；病原学缺采样时间保留缺口，申请与采样跨用药时刻保留冲突；出院日期精度进入快照与引用身份，24小时规则不按午夜推断。 |
+| B-04 无效医嘱 | 已修复 | 057/058使用既有实际给药过滤结果，明确取消/未执行不新增义务；已确认实施不会被取消标签再次丢掉。054保留独立口径与缓存；会诊候选排除明确作废/取消/撤销，不把停止当取消。 |
+| B-05 危急值、会诊 | 已修复 | 确认超时优先于另一未成熟事件；会诊未知不再变合规或不适用；意见措施补核不能把未知事件重新覆盖成合规。独立确认缺陷仍保留。 |
+| 补充05-01-01（并入B-02） | 已修复 | 感染证据正文完整发送且沿用原候选总容量，超过范围/候选时间不全不作完整否定。正面证据仅用于自身时间窗；有正面与未知文书时不抹掉未知。预算拒绝是技术失败且不丢同族成功，取消不吞掉。 |
+| 补充01-01-02 | 已修复 | 程序确认长度FAILED优先，合法语义unknown仍作为unknown子项；不改长度算法。Binding可交付长度缺陷。 |
+| 补充02-01-05（并入B-05） | 已修复 | 缺时间/关联失败逐事件收集，不提前返回抹掉已确认缺陷；新增可选`unresolved_events`受控事实经原映射、Finalizer、Canonical保存重读；不改变病危自然日合同。 |
+| 补充06-02-03 | 已修复安全边界/口径待确认 | 使用同一冻结终点，晚于终点不报当前窗口缺失；等于终点没有被一律排除。明确终末闭合范围且完整未记录保留原否定；缺失/冲突/日期精度保留原因；运行中没有既定到期依据，不发明回报后X小时。有效记录仍可证明已记。 |
+| 补充04-02-02 | 已修复安全边界/口径待确认 | Gate不再单以计划医嘱证明术后义务；未来计划、执行未知、明确取消、停止、可靠实施及取消/实施冲突分别处理。保留已实施缺记录的合法否定，不按文本猜执行。共用医嘱分类器仍表达计划事实，029术前小结不套术后豁免。 |
+| 补充06-03-02 | 正式入口复现后修复 | 合成本地读取完整＋出院＋无报告原来输出确定不合规；现在保留`data_gap/target_report_missing`。读取完整不证明源系统确认未出报告。已存在有效报告及在院待回报的原路径保留，不新增培养时限。 |
+
+主要生产修改：`native_extended_document_execution.py`、`extended_document/*`、危急值映射、`native_consultation_episode_execution.py`、`evaluation_horizon.py`、`evidence_snapshot_provider.py`、`source_registry.py`，以及补充清单列出的各原生执行器。没有另建执行器或改保存层医学判断。
+
+## 冻结与历史
+
+- 理由/特殊级会诊完整正文使用新的`order_reason_full_text_v2`、`special_approval_full_text_v2`命名空间；旧文件不删除、不覆盖。
+- 感染证据Prompt协议v2；其抽取函数没有新增独立持久缓存。病程语义评价v4、病理评价v2及手术存在性评价v3标明新执行语义。
+- 日期级出院快照新增精度，派生终点引用区分日期与精确午夜，旧任务快照不重写；仍沿用已有快照优先、旧入口兼容及模型身份隔离。
+- 固定保护验证旧理由冻结未被读取/改写、预算失败不产生成功冻结、精度变化使身份不同。未对现场全部冻结文件做扫描或历史重算。
+
+## 定向验证及命令
+
+在`apps/medqc-web/backend`，Python3.10使用已有禁网入口，主动阻断真实网络与非SQLite数据库；不使用Claude自制驱动的退出码作为验收。
+
+```powershell
+$py = 'C:/Users/Coldplay/AppData/Local/Programs/Python/Python310/python.exe'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_engine_blocking_findings.py tests/unit/test_engine_remaining_findings.py tests/unit/test_luxian_0609_frozen_discharge_horizon.py
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_native_course_quality_execution.py -k '018 or 009'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_native_execution.py tests/unit/test_luxian_0609_deterministic_gate.py tests/unit/test_luxian_0609_handbook_exam_lab.py tests/unit/test_luxian_0609_prophylactic_antimicrobial_duration.py -k '030 or culture or surgery or 028'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_native_tumor_pathology_execution.py -k '013 or 019'
+& $py -B scripts/run_pr8_offline_tests.py tests/unit/test_luxian_0609_native_extended_document_execution.py -k 'test_054 or test_056 or test_057 or test_058 or test_061 or test_071 or test_074 or test_075 or controlled_antimicrobial'
+```
+
+提交前已核对直接受影响的集合；提交后在同一HEAD执行以上必要终验，详细结果另附本机终验回执。不是全量质量门，也不是模型质量验证。开发中出现的反例、断言及原因码不匹配均实际修正后再验证，不把初次红灯隐去。
+
+- 新增B保护38项，新增剩余保护30项。病理、病危混合事件、死亡来源以及预算失败同族成功分别涉及内存Canonical保存；病理与病危断言状态、原因、事实及证据集合重读一致。并非每一条规则都重新走数据库。
+- 只读Store整理不算保存验收；本次使用`CanonicalResultStore.replace_for_job`提交到一次性内存SQLite后读取。
+- 原未记录负向、完整正向、语义unknown、未来计划、取消、停止、已实施、时间精度、预算拒绝、取消及来源隔离做直接受影响对照；旧测试仅补必要的已闭合时间上下文，或将旧不安全断言更新为本次明确合同。
+- 生产改动及新增保护文件的Ruff F、UTF-8/LF与`git diff --check`定向检查；不跑全库lint/build。
+
+## 尚未验收/不能扩大结论
+
+1. 病理在院回报到记录的期限、出院后补记义务尚需临床确认。超出本轮终点现在保守未决，不宣称医院未记录或病理规则质量已验收。
+2. 手术计划/停止的现场状态语义、实施证据与多台次关联仍按既有可靠结构化合同；未扩展自由文本触发，未解决所有多台次记录问题。
+3. 培养源系统确认漏报告与同步/关联缺口尚无权威区分凭据。不能仅靠本地缺行恢复确定否定。
+4. 054未执行范围、停嘱口径、日期级出院时限及申请/采样跨边界选择等待确认；本轮不修改07-02-01已授权的输血触发。
+5. 不顺带处理N-02～N-11及其他P3；C18历史运行代码、C27真实归属与06-01-04不完整回退主抽取等原有限制仍保留。
+6. 未执行真实模型、PG16、现场数据、临床标注或医学质量验收。工程保护通过不能称为所有规则或模型质量等价。
+
+结论：上述确定缺陷和安全边界完成本机工程修复，供Claude独立复审；临床口径未决项没有被写成新规则。不能据此自动合并、部署或批准正式医学交付。

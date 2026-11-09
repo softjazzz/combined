@@ -230,6 +230,9 @@ async def _evaluate(
     llm_client=None,
 ):
     rows_by_source = dict(rows_by_source)
+    completed_window_rules = {"LX0609-05-01-02", "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-10-01-01", "LX0609-10-03-01"}
+    if rule_id in completed_window_rules and "evaluation_context.horizon" not in rows_by_source:
+        rows_by_source["evaluation_context.horizon"] = ({"horizon_date": "2099-01-01", "horizon_datetime": "2099-01-01 00:00:00"},)
     if (
         rule_id in {"LX0609-05-01-03", "LX0609-04-05-01", "LX0609-04-05-02", "LX0609-10-02-01"}
         and "evaluation_context.horizon" not in rows_by_source
@@ -292,6 +295,9 @@ async def _evaluate_selected(
     llm_client=None,
 ):
     rows_by_source = dict(rows_by_source)
+    completed_window_rules = {"LX0609-05-01-02", "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-10-01-01", "LX0609-10-03-01"}
+    if completed_window_rules.intersection(rule_ids) and "evaluation_context.horizon" not in rows_by_source:
+        rows_by_source["evaluation_context.horizon"] = ({"horizon_date": "2099-01-01", "horizon_datetime": "2099-01-01 00:00:00"},)
     if (
         {"LX0609-05-01-03", "LX0609-04-05-01", "LX0609-04-05-02", "LX0609-10-02-01"}.intersection(rule_ids)
         and "evaluation_context.horizon" not in rows_by_source
@@ -6006,7 +6012,7 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
             ),
             "labtest_master": ({
                 "labtest_subject": "血培养及药敏", "specimen": "静脉血",
-                "request_datetime": "2026-06-01 09:00:00",
+                "request_datetime": "2026-06-01 09:00:00", "sample_datetime": "2026-06-01 09:00:00",
             },),
             "daily_course_record": (
                 {"record_time": "2026-06-01 12:00:00", "record_content": "患者重症感染，已在用药前留取血培养。经验性联合美罗培南和万古霉素覆盖耐药菌，记录启用及联合用药理由。"},
@@ -10444,7 +10450,7 @@ def _056_rows(*orders, culture_time=None):
             for name, time in orders
         ),
         "labtest_master": (
-            ({"labtest_subject": "痰培养及药敏", "specimen": "痰", "request_datetime": culture_time},)
+            ({"labtest_subject": "痰培养及药敏", "specimen": "痰", "request_datetime": culture_time, "sample_datetime": culture_time},)
             if culture_time else ()
         ),
         "daily_course_record": ({"record_time": "2026-06-01 12:00:00", "record_content": "病情记录。"},),

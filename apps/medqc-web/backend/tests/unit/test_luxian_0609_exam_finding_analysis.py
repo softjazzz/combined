@@ -161,9 +161,9 @@ async def test_quote_about_another_exam_does_not_count_for_this_event():
     wrong = _answer(ref, "management_linked", "胸部CT提示右肺小结节，请胸外科会诊评估", span="椎管狭窄")
     client = _Client([wrong, wrong])
     outcome = await check_exam_finding_analysis(projection, client)
-    # 引文与所选异常对不上：定向补核一次，仍对不上则不算分析。
-    assert outcome.state == "ready" and outcome.analysed_refs == {1: ()}
-    assert outcome.llm_call_count == 3 and "不能选“较某日片”" in client.prompts[1]  # 判为未分析的事件单独复核一次（用户决定 2026-10-19）
+    # 明确其他模态的错误引文经两次仍未纠正，保持未完成，不能冻结完整否定。
+    assert outcome.state == "failed" and outcome.analysed_refs == {}
+    assert outcome.llm_call_count == 2 and len(client.prompts) == 2
 
     _reset_analysis_freeze()
     client = _Client([

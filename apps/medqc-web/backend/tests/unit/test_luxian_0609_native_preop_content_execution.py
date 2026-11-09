@@ -958,7 +958,7 @@ async def test_ambiguous_document_cannot_fill_confirmed_missing_field_across_eve
 
 
 @pytest.mark.asyncio
-async def test_invalid_document_id_or_quote_is_data_gap():
+async def test_invalid_document_id_or_quote_is_technical_failure():
     text = "术前小结：患者情况稳定，拟行手术。"
     session = _session(summary=({"document_id": "summary-1", "record_content": text},))
     payload = _payload(
@@ -985,7 +985,7 @@ async def test_invalid_document_id_or_quote_is_data_gap():
         materials=session.materials,
         llm_client=_Client(payload),
     )
-    assert result.decisions[0].evidence_state.value == "data_gap"
+    assert result.decisions[0].evidence_state.value == "technical_error"
 
 
 @pytest.mark.asyncio
@@ -1011,7 +1011,7 @@ async def test_truncated_source_is_data_gap_without_model():
 
 
 @pytest.mark.asyncio
-async def test_source_query_error_is_delivered_as_data_gap_without_model():
+async def test_source_query_error_is_technical_failure_without_model():
     session = _session(error_sources=("presurg_summary",))
     result = await evaluate_preop_content_rules(
         rule_ids=("LX0609-04-01-04",),
@@ -1021,10 +1021,10 @@ async def test_source_query_error_is_delivered_as_data_gap_without_model():
     )
     decision = result.decisions[0]
     assert (decision.applicability.value, decision.evidence_state.value) == (
-        "unknown",
-        "data_gap",
+        "error",
+        "technical_error",
     )
-    assert decision.reason_code == "source_readiness_unproven"
+    assert decision.reason_code == "source_query_error"
     assert result.llm_call_count == 0
 
 
@@ -1700,7 +1700,7 @@ async def test_invalid_discussion_quote_does_not_void_valid_summary_facts():
     assert len(client.prompts) == 1 and result.llm_call_count == 1
     summary, discussion = result.decisions
     assert (summary.qc_direction.value, summary.reason_code) == ("defect", "requirement_violated")
-    assert (discussion.evidence_state.value, discussion.reason_code) == ("data_gap", "required_field_missing")
+    assert (discussion.evidence_state.value, discussion.reason_code) == ("technical_error", "model_invalid_output")
     facts = dict(result.customer_display_facts)
     assert facts["LX0609-04-01-04"]["missing_fields"] == ["preop_diagnosis", "surgeon_preop_visit"]
     assert facts["LX0609-04-01-05"] == {
@@ -1744,7 +1744,7 @@ async def test_document_shape_error_fails_only_its_own_rule():
 async def test_missing_rule_document_fails_only_that_rule():
     result, _client = await _run_shared(_shared_payload({}, drop_discussion=True))
     assert result.decisions[0].reason_code == "requirement_violated"
-    assert result.decisions[1].reason_code == "required_field_missing"
+    assert result.decisions[1].reason_code == "model_invalid_output"
     assert dict(result.customer_display_facts)["LX0609-04-01-05"]["failure_scope"] == "document"
 
 
@@ -1757,7 +1757,7 @@ async def test_unknown_or_duplicate_document_identity_rejects_the_whole_response
                  "items": _template_core_items("腹腔镜下胆囊切除术")}
     for extra in ((unknown,), (duplicate,)):
         result, _client = await _run_shared(_shared_payload(valid, extra=extra))
-        assert [d.reason_code for d in result.decisions] == ["source_readiness_unproven"] * 2
+        assert [d.reason_code for d in result.decisions] == ["model_invalid_output"] * 2
         assert result.customer_display_facts == ()
 
 
@@ -1766,7 +1766,7 @@ async def test_non_object_document_or_structure_rejects_the_whole_response():
     import json
     for payload in (json.dumps({"documents": "x"}), json.dumps({"documents": ["x"]})):
         result, _client = await _run_shared(payload)
-        assert [d.reason_code for d in result.decisions] == ["source_readiness_unproven"] * 2
+        assert [d.reason_code for d in result.decisions] == ["model_invalid_output"] * 2
 
 
 @pytest.mark.asyncio
@@ -1777,7 +1777,7 @@ async def test_invalid_summary_quote_fails_summary_rule_but_keeps_discussion():
     result, _client = await _run_shared(
         _shared_payload(_complete_discussion_items(None), summary_items=bad)
     )
-    assert result.decisions[0].reason_code == "required_field_missing"
+    assert result.decisions[0].reason_code == "model_invalid_output"
     assert dict(result.customer_display_facts)["LX0609-04-01-04"]["invalid_fields"] == ["surgical_indication"]
     assert result.decisions[1].qc_direction.value == "satisfied"
 

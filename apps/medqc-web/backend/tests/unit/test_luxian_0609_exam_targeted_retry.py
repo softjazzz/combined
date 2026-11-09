@@ -34,11 +34,11 @@ class Client:
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
 
 
-def _record_projection(candidates):
+def _record_projection(candidates, event_count=1):
     # 输入完整性需要真实事件目录；协议重试仍使用本测试指定的 D1/D2 编号。
-    typed = build_exam_lab_text_projection(rows_by_source={"exam_master": ({
-        "exam_id": "RETRY-EX-1", "exam_name": "胸部CT", "report_time": "2026-08-18 10:00:00",
-        "exam_conclusion": "肺部感染。"},)})
+    typed = build_exam_lab_text_projection(rows_by_source={"exam_master": tuple({
+        "exam_id": f"RETRY-EX-{index}", "exam_name": "胸部CT", "report_time": "2026-08-18 10:00:00",
+        "exam_conclusion": "肺部感染。"} for index in range(1, event_count + 1))})
     return replace(typed, course_candidates=candidates)
 
 
@@ -47,7 +47,7 @@ def site(request, monkeypatch):
     module = request.param
     text = "完善胸部CT了解肺部情况。胸部CT提示肺部感染，与发热咳嗽相符，故继续抗感染治疗。"
     projection = SimpleNamespace(course_candidates={"D1": (text,), "D2": (text,)})
-    if module is record:
+    if module in (record, analysis):
         projection = _record_projection(projection.course_candidates)
     if module is reason:
         targets = {1: reason._Target(("D1", "D2"), ("胸部CT",), "2026-08-18 10:00:00", "肺部感染。")}
@@ -195,7 +195,7 @@ async def test_record_collects_quote_and_span_failure_in_same_doc(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_analysis_collects_fragment_fields_and_preserves_completed_event(monkeypatch):
-    projection = SimpleNamespace(course_candidates={"D1": ("胸部CT提示肺部感染。",), "D2": ("胸部CT提示肺部感染。",)})
+    projection = _record_projection({"D1": ("胸部CT提示肺部感染。",), "D2": ("胸部CT提示肺部感染。",)}, event_count=2)
     monkeypatch.setattr(analysis, "_targets", lambda _: {1: ("肺部感染。", ("D1",)), 2: ("肺部感染。", ("D2",))})
     monkeypatch.setattr(analysis, "_report_lead_sites", lambda _: {})
     complete = {"event_position": 1, "course_doc_ref": "D1", "quote_type": "listing_only",
@@ -246,7 +246,7 @@ async def test_duplicate_coverage_reports_actual_occurrence_count(site):
 
 @pytest.mark.asyncio
 async def test_analysis_collects_missing_quote_and_report_selection(monkeypatch):
-    projection = SimpleNamespace(course_candidates={"D1": ("胸部CT提示肺部感染。",)})
+    projection = _record_projection({"D1": ("胸部CT提示肺部感染。",)})
     monkeypatch.setattr(analysis, "_targets", lambda _: {1: ("肺部感染。", ("D1",))})
     monkeypatch.setattr(analysis, "_report_lead_sites", lambda _: {})
     bad = {"schema_version": analysis.SCHEMA_VERSION, "docs": [{"event_position": 1, "course_doc_ref": "D1",
@@ -260,7 +260,7 @@ async def test_analysis_collects_missing_quote_and_report_selection(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_analysis_resolves_uncertain_relation_in_one_targeted_retry(monkeypatch):
-    projection = SimpleNamespace(course_candidates={"D1": ("胸部CT提示肺部感染，与发热相符，故继续抗感染治疗。",)})
+    projection = _record_projection({"D1": ("胸部CT提示肺部感染，与发热相符，故继续抗感染治疗。",)})
     monkeypatch.setattr(analysis, "_targets", lambda _: {1: ("肺部感染。", ("D1",))})
     monkeypatch.setattr(analysis, "_report_lead_sites", lambda _: {})
     doc = {"event_position": 1, "course_doc_ref": "D1", "quote_type": "finding_linked",

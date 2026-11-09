@@ -321,6 +321,7 @@ async def test_finalized_results_bind_order_and_quoted_course(rule_id) -> None:
     rows = {"inpat_drug_order": _ORDERS, "first_course_record": (), "senior_course_record": (),
             "consultation_record": (), "transfer_in_record": (), "labtest_master": (), "labtest_item_report": (),
             "daily_course_record": (_course("D-1", "2026-01-01 20:00:00", "考虑肺部感染，经验性予头孢曲松。"),)}
+    rows["evaluation_context.horizon"] = ({"horizon_date": "2026-01-03", "horizon_datetime": "2026-01-03 12:00:00"},)
     snapshot, materials = _session(rows)
     native = await execute_luxian_0609_native_extended_document_rules(
         rule_ids=(rule_id,), decision_rule_ids=(rule_id,), evidence_snapshot=snapshot,
@@ -517,7 +518,7 @@ async def test_056_uses_planned_start_as_first_use_time() -> None:
             {**_order("V", "万古霉素", "2026-01-01 13:00:00"), "prescribed_datetime": "2026-01-01 09:30:00"},
         ),
         "labtest_master": ({"test_id": "L1", "labtest_subject": "血培养及药敏", "specimen": "静脉血",
-                            "request_datetime": "2026-01-01 10:00:00"},),
+                            "request_datetime": "2026-01-01 10:00:00", "sample_datetime": "2026-01-01 10:00:00"},),
         "labtest_item_report": (),
     })
     assert reduced.final_state is CustomerFinalState.COMPLIANT

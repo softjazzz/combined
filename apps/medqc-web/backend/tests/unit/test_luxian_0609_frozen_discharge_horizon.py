@@ -210,9 +210,10 @@ def test_resolver_time_conflict_with_empty_basis_stays_conflict():
     assert next(o for o in session.snapshot.observations if o.source_key == EVALUATION_HORIZON_SOURCE_KEY).reason_code == "authoritative_time_conflict"
 
 
-def test_none_and_running_policies_keep_previous_behavior():
+def test_without_snapshot_keeps_legacy_behavior_but_inconsistent_snapshot_closes():
     session = build_luxian_0609_evidence_read_session(**_kwargs(None))
     assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)[0]["horizon_date"] == "2026-07-20"
     session = build_luxian_0609_evidence_read_session(**_kwargs({**FROZEN, "record_scene": "running"}, policy="frozen_task_date"))
-    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)[0]["horizon_date"] == "2026-08-01"
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY) == ()
+    assert next(o for o in session.snapshot.observations if o.source_key == EVALUATION_HORIZON_SOURCE_KEY).reason_code == "authoritative_time_conflict"
     assert build_luxian_0609_evidence_read_session(**_kwargs(policy="disabled")).materials.rows(EVALUATION_HORIZON_SOURCE_KEY) == ()

@@ -392,6 +392,19 @@ def continuity_customer_fact_status_is_valid(
         return expected is None or status == expected
     if str(rule_id or "").strip().upper() != "LX0609-10-01-01":
         return True
+    if isinstance(safe_facts, Mapping) and safe_facts.get("verification_kind") == "physician_handoff_multi_event_check":
+        events = safe_facts.get("events")
+        if not isinstance(events, (list, tuple)) or not all(isinstance(event, Mapping) for event in events):
+            return False
+        if not all(isinstance(event.get("outcome"), str) for event in events):
+            return False
+        outcomes = {event.get("outcome") for event in events}
+        if not outcomes & {"handover_window_not_mature", "handover_window_unresolved"}:
+            return True  # 保留原已发布事件合同，只校验新增待核标记与结果的一致性。
+        if status == "non_compliant":
+            return bool(outcomes & {"handoff_missing", "handover_missing", "handover_late"})
+        if status == "compliant":
+            return outcomes == {"completed_within_threshold"}
     if isinstance(safe_facts, Mapping) and (
         safe_facts.get("failure_kind") or safe_facts.get("verification_kind")
     ) == "physician_handoff_record_time_missing":
@@ -492,10 +505,10 @@ def _valid_handoff_events(raw: Mapping[str, Any]) -> bool:
             (handoff is not None and (not isinstance(handoff, str) or not handoff or len(handoff) > 32 or "\n" in handoff))
             or (handover is not None and (not isinstance(handover, str) or not handover or len(handover) > 32 or "\n" in handover))
             or (seconds is not None and (not isinstance(seconds, int) or isinstance(seconds, bool) or seconds < 0))
-            or outcome not in {"completed_within_threshold", "handoff_missing", "handover_missing", "handover_late"}
+            or outcome not in {"completed_within_threshold", "handoff_missing", "handover_missing", "handover_late", "handover_window_not_mature", "handover_window_unresolved"}
         ):
             return False
-        if (outcome == "completed_within_threshold" and (handoff is None or handover is None or seconds is None or seconds > 86400)) or (outcome == "handoff_missing" and handoff is not None) or (outcome == "handover_missing" and (handoff is None or handover is not None)) or (outcome == "handover_late" and (handoff is None or handover is None or seconds is None or seconds <= 86400)):
+        if (outcome == "completed_within_threshold" and (handoff is None or handover is None or seconds is None or seconds > 86400)) or (outcome == "handoff_missing" and handoff is not None) or (outcome == "handover_missing" and (handoff is None or handover is not None)) or (outcome in {"handover_window_not_mature", "handover_window_unresolved"} and (handoff is None or handover is not None or seconds is not None)) or (outcome == "handover_late" and (handoff is None or handover is None or seconds is None or seconds <= 86400)):
             return False
     return True
 

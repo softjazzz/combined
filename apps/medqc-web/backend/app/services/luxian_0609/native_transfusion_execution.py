@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ..llm_token_budget import budget_guarded_executor
+from ..llm_token_budget import budget_guarded_executor, budget_rule_scope
+from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
 
 import asyncio
 from dataclasses import dataclass
@@ -88,6 +89,7 @@ EXECUTOR_KEY = "transfusion"
 _TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-post-semantic-scope-v10"
 _PRE_ASSESSMENT_EVALUATOR_VERSION = "transfusion-pre-assessment-associated-v8"
+_COURSE_COMPLETENESS_EVALUATOR_VERSION = "transfusion-course-component-state-v1"
 
 # 049 仍缺少可受控关联的收费数量，因此旧的直接执行入口继续保守返回 DATA_GAP；
 # 新建客户任务会在任务入口明确暂停该规则，不会把此系统缺口交付为客户质控结论。
@@ -584,9 +586,9 @@ def _typed_decision_from_outcome(
             outcome.rule_id in {"LX0609-07-01-02", "LX0609-07-03-01"}
             and outcome.reason_code == "association_failed"
         )
-        # 047 效果评价交受控模型后的两类资料不足，原因码原样保留供客户文案区分。
+        # 受控语义核验未决的资料不足保留原因码，供客户文案区分。
         effect_extraction_gap = (
-            outcome.rule_id in {"LX0609-07-01-02", "LX0609-07-03-01"}
+            outcome.rule_id in {"LX0609-07-01-02", "LX0609-07-02-02", "LX0609-07-03-01"}
             and outcome.reason_code in {"semantic_extraction_unresolved", "candidate_scope_incomplete"}
         )
         dimensions = (
@@ -625,6 +627,7 @@ def _typed_decision_from_outcome(
             outcome.reason_code
             if outcome.reason_code
             in {
+                *CONTEXT_FAILURE_REASON_CODES,
                 "source_query_error",
                 "snapshot_mismatch",
                 "model_transport_error",
@@ -656,7 +659,9 @@ def _typed_decision_from_outcome(
         fact_refs=refs,
         evaluator_version=(
             _PRE_ASSESSMENT_EVALUATOR_VERSION
-            if outcome.rule_id == "LX0609-07-01-02" else _TYPED_EVALUATOR_VERSION
+            if outcome.rule_id == "LX0609-07-01-02"
+            else _COURSE_COMPLETENESS_EVALUATOR_VERSION
+            if outcome.rule_id == "LX0609-07-02-02" else _TYPED_EVALUATOR_VERSION
         ),
         confidence=None,
     )
@@ -1387,21 +1392,6 @@ def evaluate_pretransfusion_nine_items(
         base_facts["failed_transfusion_times"] = [
             str(item["transfusion_time"]) for item in failed_checks
         ]
-    time_gap_checks = [item for item in failed_checks if item["missing_time_items"]]
-    if time_gap_checks:
-        base_facts.update(
-            {
-                "failure_kind": "pretransfusion_test_time_missing",
-                "missing_time_items": sorted(
-                    {
-                        name
-                        for item in time_gap_checks
-                        for name in item["missing_time_items"]
-                    }
-                ),
-            }
-        )
-        return "data_gap", "authoritative_time_missing", base_facts
     missing_checks = [item for item in failed_checks if item["missing_items"]]
     if missing_checks:
         base_facts.update(
@@ -1449,6 +1439,22 @@ def evaluate_pretransfusion_nine_items(
             }
         )
         return "non_compliant", "pretransfusion_tests_after_transfusion", base_facts
+    # 缺时间只说明该项无法核对，不能掩盖其他项目已确认的缺失、院外或晚于输血。
+    time_gap_checks = [item for item in failed_checks if item["missing_time_items"]]
+    if time_gap_checks:
+        base_facts.update(
+            {
+                "failure_kind": "pretransfusion_test_time_missing",
+                "missing_time_items": sorted(
+                    {
+                        name
+                        for item in time_gap_checks
+                        for name in item["missing_time_items"]
+                    }
+                ),
+            }
+        )
+        return "data_gap", "authoritative_time_missing", base_facts
 
     latest = max(
         datetime.fromisoformat(str(item["latest_valid_test_time"]))
@@ -1825,7 +1831,8 @@ def _transfusion_046_field_checks(
     entry: str,
     *,
     component_confirmed: bool = False,
-) -> dict[str, bool]:
+    component_unresolved: bool = False,
+) -> dict[str, bool | None]:
     """逐份输血记录核验046必填项；受控LLM只能补齐component。"""
 
     return {
@@ -1837,8 +1844,9 @@ def _transfusion_046_field_checks(
             _TRANSFUSION_START_PATTERN.search(entry)
             and _TRANSFUSION_COURSE_END_PATTERN.search(entry)
         ),
-        "component": bool(
-            _TRANSFUSION_COMPONENT_PATTERN.search(entry) or component_confirmed
+        "component": (
+            True if _TRANSFUSION_COMPONENT_PATTERN.search(entry) or component_confirmed
+            else None if component_unresolved else False
         ),
         "dose": bool(_TRANSFUSION_DOSE_PATTERN.search(entry)),
         "process_observation": bool(_TRANSFUSION_OBSERVATION_PATTERN.search(entry)),
@@ -1853,29 +1861,27 @@ def _transfusion_record_ref(record: Mapping[str, Any], index: int) -> str:
     return _clean(record.get("document_id")) or f"bloodtrans_record-{index}"
 
 
-def _046_component_llm_candidate(
+def _046_component_llm_candidates(
     documents: Mapping[str, Any],
-) -> tuple[str, str] | None:
-    """仅在全部其他字段齐备、唯一成分字段未确定时允许一次模型调用。"""
+) -> tuple[tuple[str, str], ...]:
+    """成分词典未命中只表示待核；不能跳过同份或其他记录的确定缺项。"""
 
     rows = _source_document_rows(documents, "bloodtrans_record")
     candidates: list[tuple[str, str]] = []
     for index, record in enumerate(rows, start=1):
         entry = _row_text(record)
         if not documents.get("__course_presence_verified__") and not _is_substantive_transfusion_course_entry(entry):
-            return None
+            return ()
         checks = _transfusion_046_field_checks(entry)
         if checks["component"]:
             continue
-        if not all(present for name, present in checks.items() if name != "component"):
-            return None
         candidates.append((_transfusion_record_ref(record, index), entry))
-    # 一次事实提取不能安全覆盖多份待判文书；多候选保持现有确定性不合规。
-    return candidates[0] if len(candidates) == 1 else None
+    return tuple(candidates)
 
 
 def _programmatic_046_status(
     documents: Mapping[str, Any],
+    *, component_assertions: Mapping[str, str] | None = None,
 ) -> tuple[str, str] | None:
     verified = documents.get("__course_presence_verified__") is True
     entries = tuple(_row_text(row) for row in _source_document_rows(documents, "bloodtrans_record"))
@@ -1887,13 +1893,18 @@ def _programmatic_046_status(
         _TRANSFUSION_COURSE_INCOMPLETE_PATTERN.search(entry) for entry in entries
     ):
         return "non_compliant", "transfusion_course_record_incomplete"
-    if _046_component_llm_candidate(documents) is not None:
+    candidates = _046_component_llm_candidates(documents)
+    if candidates and component_assertions is None:
         return None
-    if entries and all(
-        (verified or _is_substantive_transfusion_course_entry(entry))
-        and all(_transfusion_046_field_checks(entry).values()) for entry in entries
-    ):
-        return "compliant", "transfusion_course_record_complete"
+    assertions = component_assertions or {}
+    checks = [
+        _transfusion_046_field_checks(
+            _row_text(row),
+            component_confirmed=assertions.get(_transfusion_record_ref(row, index)) == "explicit",
+            component_unresolved=assertions.get(_transfusion_record_ref(row, index)) not in {"explicit", "not_explicit"},
+        )
+        for index, row in enumerate(_source_document_rows(documents, "bloodtrans_record"), start=1)
+    ]
     if entries and all(
         (verified or _is_substantive_transfusion_course_entry(entry))
         and not (
@@ -1903,11 +1914,11 @@ def _programmatic_046_status(
         for entry in entries
     ):
         return "non_compliant", "transfusion_purpose_or_indication_missing"
-    if entries:
-        # 来源完整且已有输血病程正文时，字段核对的缺项本身就是本规则要判定
-        # 的“不完整”，不能再交给只返回布尔值、无法给出字段事实的通用模型。
+    if any(any(value is False for value in item.values()) for item in checks):
         return "non_compliant", "transfusion_course_record_incomplete"
-    return None
+    if any(item["component"] is None for item in checks):
+        return None
+    return "compliant", "transfusion_course_record_complete"
 
 
 def _046_component_prompt(*, document_ref: str, record_text: str) -> str:
@@ -2139,9 +2150,25 @@ def _datetime_from_match(match: re.Match[str]) -> datetime | None:
         return None
 
 
-def _parse_document_datetime(value: Any) -> datetime | None:
+def _parse_document_calendar_datetime(value: Any) -> datetime | None:
+    """保留原始时区坐标下的日历时刻（仅用于与同一行原始日期做一致性校验）。"""
     if isinstance(value, datetime):
         return value.replace(tzinfo=None) if value.tzinfo is not None else value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return _parse_document_datetime(value)
+    return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+
+
+def _parse_document_datetime(value: Any) -> datetime | None:
+    # 带时区的时间先换算为医院本地时间再去掉时区，不能直接丢弃时区（如 08:00Z 应为本地 16:00）。
+    from ..discharge_time import hospital_business_time
+
+    if isinstance(value, datetime):
+        return hospital_business_time(value).replace(tzinfo=None) if value.tzinfo is not None else value
     if not isinstance(value, str):
         return None
     candidate = value.strip()
@@ -2152,10 +2179,10 @@ def _parse_document_datetime(value: Any) -> datetime | None:
         if match:
             return _datetime_from_match(match)
     try:
-        parsed = datetime.fromisoformat(candidate)
+        parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
     except ValueError:
         return None
-    return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+    return hospital_business_time(parsed).replace(tzinfo=None) if parsed.tzinfo is not None else parsed
 
 
 def _transfusion_end_evidence(
@@ -2326,7 +2353,7 @@ def _047_evaluation_horizon(
         )
     row = rows[0]
     raw_datetime = row.get("horizon_datetime")
-    raw_calendar_datetime = _parse_document_datetime(raw_datetime)
+    raw_calendar_datetime = _parse_document_calendar_datetime(raw_datetime)
     horizon_datetime = parse_precise_transfusion_datetime(raw_datetime)
     raw_date = _clean(row.get("horizon_date"))
     horizon_date: date | None = None
@@ -3106,6 +3133,7 @@ def _programmatic_transfusion_display_facts(
     reason_code: str,
     documents: Mapping[str, Any],
     component_evidence_document_refs: Sequence[str] = (),
+    unresolved_component_document_refs: Sequence[str] = (),
     posttransfusion_assessment: _PosttransfusionEvaluationAssessment | None = None,
 ) -> Mapping[str, Any] | None:
     """从已参与裁决的同一份资料中生成受控事实，不回显正文。"""
@@ -3184,6 +3212,7 @@ def _programmatic_transfusion_display_facts(
         return payload
     if rule_id == "LX0609-07-02-02":
         llm_component_refs = set(component_evidence_document_refs)
+        unresolved_component_refs = set(unresolved_component_document_refs)
         checks_by_record = []
         for index, record in enumerate(records, start=1):
             text = _row_text(record)
@@ -3193,23 +3222,21 @@ def _programmatic_transfusion_display_facts(
                     component_confirmed=(
                         _transfusion_record_ref(record, index) in llm_component_refs
                     ),
+                    component_unresolved=_transfusion_record_ref(record, index) in unresolved_component_refs,
                 )
             )
         field_names = (
             "reason_or_indication", "start_and_end_time", "component", "dose",
             "process_observation", "reaction_and_handling", "clinical_effect",
         )
-        checked = {
-            field: bool(checks_by_record) and all(item[field] for item in checks_by_record)
-            for field in field_names
-        }
-        missing = sorted(key for key, present in checked.items() if not present)
+        checked = [field for field in field_names if any(item[field] is not None for item in checks_by_record)]
+        missing = sorted(field for field in field_names if any(item[field] is False for item in checks_by_record))
         missing_field_record_counts = {
-            field: sum(1 for item in checks_by_record if not item[field])
+            field: sum(1 for item in checks_by_record if item[field] is False)
             for field in missing
         }
         incomplete_record_count = sum(
-            1 for item in checks_by_record if not all(item.values())
+            1 for item in checks_by_record if any(value is False for value in item.values())
         )
         payload = {
             "performed_transfusion_confirmed": True,
@@ -3219,10 +3246,13 @@ def _programmatic_transfusion_display_facts(
             "missing_fields": missing,
             "missing_field_record_counts": missing_field_record_counts,
         }
+        unresolved_count = sum(1 for item in checks_by_record if item["component"] is None)
+        if unresolved_count:
+            payload["unresolved_component_record_count"] = unresolved_count
         source_document_ids = [
             document_id
             for record, record_checks in zip(records, checks_by_record, strict=True)
-            if status == "compliant" or not all(record_checks.values())
+            if status == "compliant" or any(value is False for value in record_checks.values())
             if (document_id := str(record.get("document_id", record.get("id", ""))).strip())
         ]
         if source_document_ids:
@@ -4166,24 +4196,24 @@ async def execute_luxian_0609_native_transfusion_rules(
                 course_source_unavailable = False
                 for source_key in ("daily_course_record", "senior_course_record"):
                     source_rows = _source_document_rows(documents, source_key)
-                    if rule_id == "LX0609-07-02-02":
-                        source_state = _logical_source_state(documents, source_key)
-                        if source_state == "missing" and (
-                            isinstance(documents.get(source_key), list)
-                            or not isinstance(
-                                documents.get("__logical_source_states__"), Mapping
-                            )
-                        ):
-                            # Legacy payloads predate logical source-state metadata.
-                            source_state = "available" if source_rows else "empty"
-                        if source_state == "error":
-                            course_failure = TransfusionCoursePresenceResult(
-                                "technical_error", reason_code="source_query_error"
-                            )
-                            break
-                        if source_state not in {"available", "empty"}:
-                            course_source_unavailable = True
-                            continue
+                    # 07-02-01 与 07-02-02 同样不能把截断/读取失败的病程来源当作“没有输血病程”。
+                    source_state = _logical_source_state(documents, source_key)
+                    if source_state == "missing" and (
+                        isinstance(documents.get(source_key), list)
+                        or not isinstance(
+                            documents.get("__logical_source_states__"), Mapping
+                        )
+                    ):
+                        # Legacy payloads predate logical source-state metadata.
+                        source_state = "available" if source_rows else "empty"
+                    if source_state == "error":
+                        course_failure = TransfusionCoursePresenceResult(
+                            "technical_error", reason_code="source_query_error"
+                        )
+                        break
+                    if source_state not in {"available", "empty"}:
+                        course_source_unavailable = True
+                        continue
                     candidates = list(select_transfusion_course_candidates(source_rows))
                     if not candidates:
                         continue
@@ -4267,71 +4297,63 @@ async def execute_luxian_0609_native_transfusion_rules(
                         status=status,
                         reason_code=reason_code,
                         documents=documents,
+                        unresolved_component_document_refs=tuple(
+                            ref for ref, _ in _046_component_llm_candidates(documents)
+                        ),
                     ),
                 )
                 continue
-            candidate = _046_component_llm_candidate(documents)
-            if candidate is not None:
-                document_ref, record_text = candidate
-                if llm_client is None:
-                    emit_outcome(
-                        rule_id,
-                        "technical_error",
-                        "model_transport_error",
-                        executor_type="program",
-                    )
-                    continue
-                checked = await _recheck_transfusion_semantics(
-                    _046_component_prompt(document_ref=document_ref, record_text=record_text), llm_client,
-                    _parse_046_component_response,
-                    lambda payload: _validated_046_component_assertion(
-                        payload, document_ref=document_ref, record_text=record_text),
-                )
+            candidates = _046_component_llm_candidates(documents)
+            if candidates:
+                # 保留既有单文书补核限额（最多一次原始调用及一次绑定纠正）。
+                # 超过覆盖能力是程序未完成，不是医学缺项或P5 token预算拒绝。
+                assertions: dict[str, str] = {}
+                failure_reason = "execution_program_error"
+                checked = _SemanticRecheck(None, failure_reason, 0, (0, 0, 0, 0.0))
+                if len(candidates) == 1:
+                    document_ref, record_text = candidates[0]
+                    if llm_client is None:
+                        checked = _SemanticRecheck(None, "model_transport_error", 0, (0, 0, 0, 0.0))
+                    else:
+                        budget_failures: list[Any] = []
+                        with budget_rule_scope(budget_failures.append):
+                            checked = await _recheck_transfusion_semantics(
+                                _046_component_prompt(document_ref=document_ref, record_text=record_text), llm_client,
+                                _parse_046_component_response,
+                                lambda payload: _validated_046_component_assertion(
+                                    payload, document_ref=document_ref, record_text=record_text),
+                            )
+                        if budget_failures:
+                            # P5准入失败仍由规则承接；保留独立确定缺陷，不改成临床DG。
+                            checked = _SemanticRecheck(None, budget_failures[0].code, checked.calls, checked.usage)
+                    if checked.state is not None:
+                        assertions[document_ref] = checked.state
                 llm_call_count += checked.calls
                 prompt_tokens += checked.usage[0]
                 completion_tokens += checked.usage[1]
                 total_tokens += checked.usage[2]
                 api_time += checked.usage[3]
-                assertion = checked.state
-                if assertion is None:
-                    emit_outcome(
-                        rule_id,
-                        "technical_error",
-                        checked.reason_code,
-                        executor_type="llm",
+                unresolved_refs = tuple(ref for ref, _ in candidates
+                                        if assertions.get(ref) not in {"explicit", "not_explicit"})
+                # 成分肯定只更新对应文书；重新汇总每份记录的确定缺项。
+                outcome = _programmatic_046_status(documents, component_assertions=assertions)
+                if outcome is None:
+                    outcome = ("data_gap", "semantic_extraction_unresolved") if checked.state == "unclear" else (
+                        "technical_error", checked.reason_code)
+                status, reason_code = outcome
+                display_facts = (
+                    {"failure_kind": "transfusion_component_unresolved",
+                     "record_count": len(_source_document_rows(documents, "bloodtrans_record")),
+                     "unresolved_component_record_count": len(unresolved_refs)}
+                    if status == "data_gap" else _programmatic_transfusion_display_facts(
+                        rule_id=rule_id, status=status, reason_code=reason_code, documents=documents,
+                        component_evidence_document_refs=tuple(ref for ref, state in assertions.items() if state == "explicit"),
+                        unresolved_component_document_refs=unresolved_refs,
                     )
-                    continue
-                if assertion == "unclear":
-                    emit_outcome(
-                        rule_id,
-                        "evaluation_unknown",
-                        "semantic_output_unknown",
-                        executor_type="llm",
-                    )
-                    continue
-                status = (
-                    "compliant" if assertion == "explicit" else "non_compliant"
                 )
                 emit_outcome(
-                    rule_id,
-                    status,
-                    "transfusion_course_record_complete"
-                    if status == "compliant"
-                    else "transfusion_course_record_incomplete",
-                    executor_type="llm",
-                    display_facts=_programmatic_transfusion_display_facts(
-                        rule_id=rule_id,
-                        status=status,
-                        reason_code=(
-                            "transfusion_course_record_complete"
-                            if status == "compliant"
-                            else "transfusion_course_record_incomplete"
-                        ),
-                        documents=documents,
-                        component_evidence_document_refs=(
-                            (document_ref,) if assertion == "explicit" else ()
-                        ),
-                    ),
+                    rule_id, status, reason_code, executor_type="llm" if checked.calls else "program",
+                    display_facts=display_facts,
                 )
                 continue
         if rule_id == "LX0609-07-03-01":

@@ -295,6 +295,7 @@ def _safe_026(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     unresolved = raw.get("unresolved_event_count", 0)
     missing_course = raw.get("missing_course_event_count", 0)
     unknown_time = raw.get("unknown_time_event_count", 0)
+    confirmed = raw.get("confirmed_mismatch_event_count", 0)
     if (
         raw.get("verification_kind") != "chemotherapy_order_course_comparison"
         or type(raw.get("order_count")) is not int
@@ -307,7 +308,10 @@ def _safe_026(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or unknown_time < 0
         or type(missing_event_count) is not int
         or not 0 <= missing_event_count <= raw["order_count"]
-        or unresolved + missing_course + unknown_time + missing_event_count > raw["order_count"]
+        or type(confirmed) is not int
+        or confirmed < 0
+        or (confirmed > 0 and "mismatched" not in (fields.values() if isinstance(fields, Mapping) else ()))
+        or unresolved + missing_course + unknown_time + missing_event_count + confirmed > raw["order_count"]
         or not isinstance(fields, Mapping)
         or set(fields) != allowed
         or any(value not in {"matched", "mismatched", "unknown"} for value in fields.values())
@@ -340,6 +344,7 @@ def _safe_026(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         **({"unresolved_event_count": unresolved} if "unresolved_event_count" in raw else {}),
         **({"missing_course_event_count": missing_course} if "missing_course_event_count" in raw else {}),
         **({"unknown_time_event_count": unknown_time} if "unknown_time_event_count" in raw else {}),
+        **({"confirmed_mismatch_event_count": confirmed} if "confirmed_mismatch_event_count" in raw else {}),
     }
 
 
@@ -450,19 +455,31 @@ def tumor_pathology_customer_fact_status_is_valid(
         if safe_facts is None:
             return False
         if safe_facts.get("missing_order_event_count", 0) > 0:
-            # 新事实的缺字段不掩盖完整独立事件已确认的缺陷。
+            # 新执行始终提供确认计数（含零），只接受独立可靠缺陷；无计数的已保存事实
+            # 保持原合同，不能因本轮收紧而改判或失读。白名单投影必须保留显式零。
+            independent = (
+                safe_facts.get("confirmed_mismatch_event_count", 0) > 0
+                or safe_facts.get("missing_course_event_count", 0) > 0
+            ) if "confirmed_mismatch_event_count" in safe_facts else (
+                "mismatched" in safe_facts["field_results"].values()
+            )
             expected_status = (
                 "non_compliant"
-                if "mismatched" in safe_facts["field_results"].values()
+                if independent
                 else "data_gap"
             )
             return normalized_status == expected_status
-        # 正关联缺口已禁止matched；保留已知不一致与另一个未知事件并存的资料不足。
+        # 正关联缺口已禁止matched。另一事件未决时，只有可独立成立的确定不一致（时间已核实的
+        # 给药不一致、明确停用，或完整病程中未记录）才交付缺陷，否则保持资料不足。
         if (
             safe_facts.get("unresolved_event_count", 0) > 0
             or safe_facts.get("unknown_time_event_count", 0) > 0
         ):
-            return normalized_status == "data_gap"
+            independent = (
+                safe_facts.get("confirmed_mismatch_event_count", 0) > 0
+                or safe_facts.get("missing_course_event_count", 0) > 0
+            )
+            return normalized_status == ("non_compliant" if independent else "data_gap")
         if safe_facts.get("missing_course_event_count", 0) > 0:
             return normalized_status == "non_compliant"
         field_results = safe_facts.get("field_results")

@@ -4555,6 +4555,8 @@ async def test_executor_passes_controlled_evaluation_horizon_into_post_rule(monk
         exam_rows=({
             "exam_type": "CT",
             "report_time": "2026-04-26 10:00:00",
+            # 有报告正文才能专项确认“未记录”；缺正文时按未决处理（2026-11-08）。
+            "exam_conclusion": "右肺下叶结节影。",
         },),
         discharge_horizon_rows=({
             "discharge_datetime": "2026-04-27 10:00:00",
@@ -4564,8 +4566,13 @@ async def test_executor_passes_controlled_evaluation_horizon_into_post_rule(monk
             "horizon_date": "2026-04-27",
         },),
     )
+    from app.services.luxian_0609.exam_result_record_check import SCHEMA_VERSION as RECORD_SCHEMA
+
     client = _Client([
-        _fact_response(("LX0609-06-01-04",), semantic_state="absent")
+        _fact_response(("LX0609-06-01-04",), semantic_state="absent"),
+        # 专项核实报告后病程未记录本次结果（2026-11-08 起未经专项核实的“未记录”不作确定依据）。
+        {"schema_version": RECORD_SCHEMA, "docs": [{"event_position": 1, "course_doc_ref": "D06-01",
+                                                    "quote_type": "none", "quote": "", "report_span": ""}]},
     ])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -4579,7 +4586,7 @@ async def test_executor_passes_controlled_evaluation_horizon_into_post_rule(monk
     )
 
     assert result.decisions[0].qc_direction.value == "defect"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
 
 
 def test_report_time_cannot_replace_missing_course_record_time():
@@ -4877,14 +4884,15 @@ async def test_typed_controlled_triggers_call_each_selected_rule_once_with_cropp
 
     assert result.results == ()
     assert [item.rule_id for item in result.decisions] == list(exam_lab.EXAM_LAB_RULE_IDS)
+    # 06-01-04 专项替身未作答：主抽取未经核实，保留未决（用户口径 2026-11-08）。
     assert [item.qc_direction.value for item in result.decisions] == [
         "defect",
-        "satisfied",
+        "unknown",
         "satisfied",
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，专项未核实）
 
 
 @pytest.mark.asyncio
@@ -4936,17 +4944,22 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
         evidence_materials=materials,
     )
 
-    assert [item.final_state.value for item in reduced] == ["compliant"] * 5
+    # 06-01-04 专项替身未作答：主抽取未经核实，保留资料不足（用户口径 2026-11-08）。
+    assert [item.final_state.value for item in reduced] == [
+        "compliant", "data_gap", "compliant", "compliant", "compliant",
+    ]
     assert all(item.reason_code != "snapshot_mismatch" for item in reduced)
     assert result.total_tokens == 110
-    assert len(client.prompts) == 3  # 含 010 检查前原因、06-01-04 结果记录核对各 1 次（替身未作答，回退主抽取）
+    assert len(client.prompts) == 3  # 含 010 检查前原因、06-01-04 结果记录核对各 1 次（替身未作答，专项未核实）
     assert all("SHOULD_NOT_REACH_PROMPT" not in prompt for prompt in client.prompts)
     assert all("FULL_CHART" not in prompt for prompt in client.prompts)
     assert all("主执行规则" not in prompt for prompt in client.prompts)
     assert "阳性影像结果" not in repr(result)
     assert "阳性培养结果" not in repr(result)
     display_facts = dict(result.customer_display_facts)
-    for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"):
+    # 06-01-04 专项未核实，不形成“已满足”事实。
+    assert "LX0609-06-01-04" not in display_facts
+    for rule_id in ("LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"):
         assert display_facts[rule_id]["verification_kind"] == (
             "exam_lab_requirement_checked"
         )
@@ -5037,11 +5050,12 @@ async def test_six_ct_mri_events_keep_main_facts_when_bounded_record_checks_have
         decision_rule_ids=("LX0609-06-01-04", "LX0609-06-01-05"),
     )
 
+    # 06-01-04 结果核验替身未作答：主抽取未经核实，保留未决；06-01-05 主事实保留（用户口径 2026-11-08）。
     assert [item.qc_direction.value for item in result.decisions] == [
-        "satisfied",
+        "unknown",
         "satisfied",
     ]
-    assert result.llm_call_count == 2  # 主抽取 1 次、结果核验 1 次（按输出量一批装下）；替身未作答，保留主抽取。
+    assert result.llm_call_count == 2  # 主抽取 1 次、结果核验 1 次（按输出量一批装下）；替身未作答，专项未核实。
     assert result.total_tokens == 110
     assert len(client.prompts) == 2
     assert "event_position" in client.prompts[0]
@@ -5055,8 +5069,9 @@ async def test_six_ct_mri_events_keep_main_facts_when_bounded_record_checks_have
             item["event_position"]
             for item in display_facts[rule_id]["event_results"]
         ] == [1, 2, 3, 4, 5, 6]
+        # 06-01-04 逐事件专项均未核实，保留资料不足；06-01-05 主事实保留。
         assert all(
-            item["event_status"] == "compliant"
+            item["event_status"] == ("data_gap" if rule_id == "LX0609-06-01-04" else "compliant")
             for item in display_facts[rule_id]["event_results"]
         )
 
@@ -5368,6 +5383,8 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
                 "exam_id": "EXAM-2",
                 "exam_name": "头颅MRI",
                 "report_time": "2026-04-04 12:00:00",
+                # 有报告正文才能专项确认“未记录”；缺正文时按未决处理（2026-11-08）。
+                "exam_conclusion": "左侧基底节区腔隙灶。",
             },
         ),
         course_rows=({
@@ -6618,7 +6635,7 @@ async def test_multi_event_unordered_model_facts_are_projected_in_ascending_orde
         },
     )
 
-    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，回退主抽取）
+    assert result.llm_call_count == 2  # 含 1 次 06-01-04 结果记录核对（替身未作答，专项未核实）
     assert not result.parse_failure_kinds
     display_facts = dict(result.customer_display_facts)
     for rule_id in ("LX0609-06-01-04", "LX0609-06-01-05"):
@@ -6628,7 +6645,10 @@ async def test_multi_event_unordered_model_facts_are_projected_in_ascending_orde
             for item in display_facts[rule_id]["event_results"]
         ] == [1, 2, 3, 4]
     # 顺序归一化后事实合同必须通过：不得被改写成 technical_error 并丢弃事实。
-    assert {item["status"] for item in canonical} == {"compliant"}
+    # 06-01-04 专项替身未作答，保留资料不足（用户口径 2026-11-08）。
+    assert {item["rule_id"]: item["status"] for item in canonical} == {
+        "LX0609-06-01-04": "data_gap", "LX0609-06-01-05": "compliant",
+    }
     assert all("customer_display_facts" in item for item in canonical)
 
 

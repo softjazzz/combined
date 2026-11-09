@@ -130,6 +130,12 @@ def _decision(
             QcDirection.UNKNOWN,
             None,
         ),
+        "technical_error": (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            None,
+        ),
     }
     applicability, evidence, direction, confidence = dimensions[status]
     return RuleDecision(
@@ -140,7 +146,7 @@ def _decision(
         qc_direction=direction,
         reason_code=reason,
         fact_refs=tuple(sorted(set(refs))),
-        evaluator_version="preop-content-v1",
+        evaluator_version="preop-content-v2",
         confidence=confidence,
     )
 
@@ -702,7 +708,7 @@ async def evaluate_preop_content_rules(
             continue
         if observation.query_state is QueryStatus.ERROR:
             terminal[rule_id] = _decision(
-                snapshot, rule_id, "data_gap", "source_readiness_unproven", refs
+                snapshot, rule_id, "technical_error", "source_query_error", refs
             )
             continue
         try:
@@ -731,20 +737,21 @@ async def evaluate_preop_content_rules(
     active = tuple(rule for rule in selected if rule not in terminal)
     if not active:
         return PreopContentExecution(tuple(terminal[rule] for rule in selected))
-    if llm_client is None:
+
+    def failed(reason: str, calls: int = 0, usage=(0, 0, 0, 0.0)) -> PreopContentExecution:
+        # 技术失败按具体受影响规则返回，不能吞掉同族已完成的程序结果。
         return PreopContentExecution(
             tuple(
-                terminal.get(rule)
-                or _decision(
-                    snapshot,
-                    rule,
-                    "data_gap",
-                    "source_readiness_unproven",
+                terminal.get(rule) or _decision(
+                    snapshot, rule, "technical_error", reason,
                     tuple(ref for ref, _, _ in records[rule]),
-                )
-                for rule in selected
-            )
+                ) for rule in selected
+            ),
+            llm_call_count=calls, prompt_tokens=usage[0], completion_tokens=usage[1],
+            total_tokens=usage[2], api_time=usage[3],
         )
+    if llm_client is None:
+        return failed("model_transport_error")
     documents = [
         (str(_document_id(row)), RULE_SOURCES[rule], text)
         for rule in active
@@ -753,73 +760,47 @@ async def evaluate_preop_content_rules(
     expected = {(source, doc_id): text for doc_id, source, text in documents}
     if len(expected) != len(documents):
         # 重复同源身份不能确定编号所属正文；与整体身份错误一致，拒绝本次抽取。
-        return PreopContentExecution(tuple(
-            terminal.get(rule) or _decision(
-                snapshot, rule, "data_gap", "source_readiness_unproven",
-                tuple(ref for ref, _, _ in records[rule]),
-            ) for rule in selected
-        ))
+        return failed("snapshot_mismatch")
+    from ..llm_token_budget import budget_rule_scope, is_budget_error
+    from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure
+
+    failure, calls = None, 1
+
+    def budget_failed(error):
+        nonlocal failure, calls
+        failure = error.code
+        calls = int(getattr(error, "request_started", False))
+
+    with budget_rule_scope(budget_failed):
+        try:
+            response = await llm_client.generate(
+                _prompt(documents, active), max_completion_tokens=4096,
+                allow_length_retry=False, enable_thinking=False,
+            )
+        except Exception as error:
+            if is_budget_error(error):
+                raise
+            failure = classify_luxian_0609_llm_call_failure(error)
+    if failure:
+        return failed(failure, calls)
+    if not isinstance(response, Mapping):
+        return failed("model_invalid_output", calls)
     try:
-        response = await llm_client.generate(
-            _prompt(documents, active),
-            max_completion_tokens=4096,
-            allow_length_retry=False,
-            enable_thinking=False,
-        )
-    except TimeoutError:
-        return PreopContentExecution(
-            tuple(
-                terminal.get(rule)
-                or _decision(
-                    snapshot,
-                    rule,
-                    "data_gap",
-                    "source_readiness_unproven",
-                    tuple(ref for ref, _, _ in records[rule]),
-                )
-                for rule in selected
-            ),
-            llm_call_count=1,
-        )
-    except Exception:
-        return PreopContentExecution(
-            tuple(
-                terminal.get(rule)
-                or _decision(
-                    snapshot,
-                    rule,
-                    "data_gap",
-                    "source_readiness_unproven",
-                    tuple(ref for ref, _, _ in records[rule]),
-                )
-                for rule in selected
-            ),
-            llm_call_count=1,
-        )
-    prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
-    payload = response_json_payload(response)
-    validated = _validate_response(payload, expected, active) if payload else None
+        prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
+        payload = response_json_payload(response)
+        choices = response.get("choices")
+        if isinstance(choices, list) and any(
+            isinstance(item, Mapping) and item.get("finish_reason") == "length" for item in choices
+        ):
+            return failed("model_invalid_output", calls, (prompt_tokens, completion_tokens, total_tokens, api_time))
+        validated = _validate_response(payload, expected, active) if payload is not None else None
+    except (ValueError, TypeError, KeyError):
+        return failed("model_invalid_output", calls)
     parsed = validated.parsed if validated is not None else None
     rule_failures = validated.rule_failures if validated is not None else {}
     if parsed is None:
-        return PreopContentExecution(
-            tuple(
-                terminal.get(rule)
-                or _decision(
-                    snapshot,
-                    rule,
-                    "data_gap",
-                    "source_readiness_unproven",
-                    tuple(ref for ref, _, _ in records[rule]),
-                )
-                for rule in selected
-            ),
-            llm_call_count=1,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            api_time=api_time,
-        )
+        return failed("model_parse_error" if payload is None else "model_invalid_output", calls,
+            (prompt_tokens, completion_tokens, total_tokens, api_time))
     events, event_reason = (
         build_performed_surgery_events(materials)
         if "LX0609-04-01-04" in active
@@ -859,11 +840,10 @@ async def evaluate_preop_content_rules(
             )
         )
         if rule in rule_failures:
-            # 本规则所需事实未通过校验：如实返回资料不足，不改写为 unknown，
-            # 不判合规；无效引文不进入公开事实或证据（证据只引用文书本身）。
+            # 无效输出是本规则技术未完成；不污染另一规则，也不冒充临床资料不足。
             failure_scope, invalid_fields = rule_failures[rule]
             decisions.append(
-                _decision(snapshot, rule, "data_gap", "required_field_missing", refs)
+                _decision(snapshot, rule, "technical_error", "model_invalid_output", refs)
             )
             display.append(
                 (

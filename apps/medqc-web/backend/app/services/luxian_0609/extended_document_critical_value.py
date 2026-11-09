@@ -359,15 +359,20 @@ def _confirmed_independent_time_outcomes(
     *, rule_ids: tuple[str, ...], inputs: CriticalValueInput,
     critical_items: tuple[CriticalValueItem, ...],
 ) -> dict[str, CriticalValueOutcome]:
-    """独立事件的已确认缺陷不能被另一事件的报告时间缺口覆盖。"""
+    """独立事件的已确认缺陷不能被另一事件自身的报告时间缺口或危急值标志冲突覆盖。
+
+    仅在来源完整、每份报告身份可区分、全部处置均能归到已知报告时隔离；
+    否则不强行拆分，沿用整体资料不足。冲突报告不任取标志，只列为待核。
+    """
 
     if inputs.lab_item_error or inputs.crisis_error or not critical_items:
         return {}
-    if any(item.event_key is None or _critical_display_flag(item) is None for item in critical_items):
+    if any(item.event_key is None for item in critical_items):
         return {}
     gap_keys = {
         item.event_key for item in critical_items
         if item.report_time is None or item.report_time_error is not None
+        or _critical_display_flag(item) is None
     }
     if not gap_keys:
         return {}
@@ -388,18 +393,20 @@ def _confirmed_independent_time_outcomes(
     for item in critical_items:
         if item.event_key in gap_keys:
             gap_groups.setdefault(item.event_key, []).append(item)
-    gaps = [
-        {
+    gaps = []
+    for group in gap_groups.values():
+        flag_conflict = any(_critical_display_flag(item) is None for item in group)
+        gaps.append({
             "critical_item_names": [item.item_name[:40] for item in group],
-            "critical_flags": [_critical_display_flag(item) for item in group],
+            # 标志冲突的报告不任取一个标志展示。
+            "critical_flags": [] if flag_conflict else [_critical_display_flag(item) for item in group],
             "issue": (
-                "authoritative_time_conflict"
+                "critical_flag_conflict" if flag_conflict
+                else "authoritative_time_conflict"
                 if any(item.report_time_error == "authoritative_time_conflict" for item in group)
                 else "authoritative_time_missing"
             ),
-        }
-        for group in gap_groups.values()
-    ]
+        })
     return {
         outcome.rule_id: replace(outcome, display_facts={**outcome.display_facts, "report_time_gaps": gaps})
         for outcome in known_outcomes
@@ -564,6 +571,13 @@ def evaluate_critical_value_rules(
                         outcome=event_outcome,
                     ))
                 event_results = tuple(results)
+                # 06-04-02 只核处置存在性：报告时间可靠、来源完整、归属已核清的前提下，某报告
+                # 完全没有指向它的处置记录即确定未处置，不能被另一报告的处置时间问题掩盖；
+                # 时间待核的报告保持原状，不列为未处置。
+                if rule_id == "LX0609-06-04-02" and any(
+                    item["outcome"] == "unhandled" for item in event_results
+                ):
+                    final_state, reason_code = "non_compliant", "required_document_missing"
             elif rule_id == "LX0609-06-04-02":
                 event_results = tuple(
                     _event_display(
@@ -649,7 +663,7 @@ def evaluate_critical_value_rules(
                         "compliant",
                         "requirement_within_threshold",
                     )
-                elif not unhandled_indexes:
+                elif any(item["outcome"] == "overdue" for item in event_results):
                     # 已有超时处置记录时，违反事实已成立，不依赖评价终点。
                     final_state, reason_code = "non_compliant", "threshold_exceeded"
                 else:
