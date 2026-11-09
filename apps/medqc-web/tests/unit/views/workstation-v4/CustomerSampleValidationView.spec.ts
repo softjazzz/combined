@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import CustomerSampleValidationView from '@/views/workstation-v4/CustomerSampleValidationView.vue'
+import ContentQCTab from '@/views/workstation-v4/components/ContentQCTab.vue'
 
 let latestBatchResultDrawerProps: Record<string, unknown> | null = null
 let latestRecordResultComparisonDrawerProps: Record<string, unknown> | null = null
@@ -34,6 +35,7 @@ const {
   reviewSichuanWorkspaceBatchJob,
   cancelSichuanWorkspaceBatchJob,
   getDefaultLLMConfigSummary,
+  evaluateSichuanBundleQC,
   routeQuery,
   routerPush,
   routerReplace,
@@ -74,6 +76,7 @@ const {
   reviewSichuanWorkspaceBatchJob: vi.fn(),
   cancelSichuanWorkspaceBatchJob: vi.fn(),
   getDefaultLLMConfigSummary: vi.fn(),
+  evaluateSichuanBundleQC: vi.fn(),
   routeQuery: {} as Record<string, unknown>,
   routerPush: vi.fn(),
   routerReplace: vi.fn(),
@@ -130,6 +133,8 @@ vi.mock('@/services/llmConfigService', () => ({
   },
 }))
 
+vi.mock('@/api/qc', () => ({ evaluateSichuanBundleQC }))
+
 vi.mock('xlsx', () => ({
   utils: {
     book_new: bookNew,
@@ -140,6 +145,11 @@ vi.mock('xlsx', () => ({
 }))
 
 vi.mock('@ant-design/icons-vue', () => ({
+  SafetyCertificateOutlined: { template: '<i />' },
+  ReloadOutlined: { template: '<i />' },
+  ThunderboltOutlined: { template: '<i />' },
+  CheckCircleOutlined: { template: '<i />' },
+  SearchOutlined: { template: '<i />' },
   InboxOutlined: defineComponent({
     name: 'InboxOutlinedStub',
     setup() {
@@ -1063,6 +1073,81 @@ describe('CustomerSampleValidationView', () => {
     const promise = new Promise<T>((done) => { resolve = done })
     return { promise, resolve }
   }
+
+
+  it('LX0609补跑完成后主状态条和结果抽屉刷新为新items与summary', async () => {
+    vi.useFakeTimers()
+    const success = { rule_id: 'LX0609-01-01-01', record_id: 'SYNTHETIC-V', status: 'compliant', is_compliant: true }
+    const recovered = { ...success, rule_id: 'LX0609-01-02-01' }
+    const base = {
+      id: 'job-1', rule_code: 'LX0609', scope: 'running', rule_set_key: 'luxian_0609_qc_v1',
+      record_ids: ['SYNTHETIC-V'], customer_rule_count: 2,
+      filters: { selected_rule_ids: [success.rule_id, recovered.rule_id] },
+    }
+    const initial = { ...base, status: 'failed', items: [success], summary: {
+      execution_status: 'partial_failed', completed_rule_count: 1, failed_rule_count: 1,
+      status_counts: { compliant: 1 }, automatic_failed_rule_retry: { status: 'queued', should_retry: true },
+    } }
+    const queued = { ...initial, status: 'queued' }
+    const completed = { ...base, status: 'completed', items: [success, recovered], summary: {
+      execution_status: 'completed', completed_rule_count: 2, failed_rule_count: 0,
+      status_counts: { compliant: 2 }, automatic_failed_rule_retry: { status: 'completed', should_retry: false },
+    } }
+    getSichuanWorkspaceBatchJob.mockReset().mockImplementation(async (id: string) => {
+      expect(id).toBe('job-1')
+      throw new Error('未列出的任务详情请求')
+    }).mockResolvedValueOnce({ success: true, data: initial })
+      .mockResolvedValueOnce({ success: true, data: queued })
+      .mockResolvedValueOnce({ success: true, data: completed })
+      .mockResolvedValueOnce({ success: true, data: completed })
+      .mockResolvedValueOnce({ success: true, data: completed })
+    const wrapper = await mountView()
+    const statusBar = wrapper.get('[data-testid="customer-sample-qc-task-status"]')
+    expect(statusBar.text()).toContain('补跑')
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    expect(statusBar.text()).toContain('排队中')
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    expect(statusBar.text()).toContain('已完成')
+    expect(statusBar.text()).not.toContain('自动补跑中')
+    await wrapper.get('[data-testid="qc-task-view-result"]').trigger('click')
+    await flushPromises()
+    const detail = latestBatchResultDrawerProps?.batchJobDetail as { items: unknown[]; summary: Record<string, unknown> }
+    expect(detail.items).toEqual([success, recovered])
+    expect(detail.summary.failed_rule_count).toBe(0)
+    expect(detail.summary.completed_rule_count).toBe(2)
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(5)
+    wrapper.unmount()
+  })
+
+  it('合规率组件刷新使用接口比例', async () => {
+    const response = (rate: number, count: number) => ({ success: true, data: {
+      document_id: 'SYNTHETIC-I-P-V',
+      evaluation_summary: { compliance_rate: rate, total_rules: 8, issues_found: 0,
+        compliant_count: count, uncertain_count: 0, not_applicable_count: 0 },
+      evaluation_results: [{ rule_id: 'LX0609-01-01-01', status: 'compliant', is_compliant: true, findings: '合成结果' }],
+    } })
+    evaluateSichuanBundleQC.mockReset().mockRejectedValue(new Error('未列出的评估请求'))
+      .mockResolvedValueOnce(response(12.5, 1)).mockResolvedValueOnce(response(37.5, 3))
+    const transparent = { template: '<div><slot /></div>' }
+    const wrapper = mount(ContentQCTab, {
+      props: { instituteId: 'SYNTHETIC-I', patientId: 'SYNTHETIC-P', visitId: 'SYNTHETIC-V', scene: 'final',
+        documents: [{ type: 'admission_record', label: '合成入院记录', content: '合成测试文书', has_content: true, length: 6 }] },
+      global: { stubs: { 'a-button': AButtonStub, 'a-tag': ATagStub, 'a-modal': true,
+        'a-radio-button': transparent, 'a-radio-group': transparent, 'a-switch': true, 'a-input': true,
+        'a-select': true, 'a-pagination': true, 'a-spin': true } },
+    })
+    await wrapper.get('.content-qc-tab__header-action').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.summary-card__progress').text()).toBe('12.5%')
+    await wrapper.get('.content-qc-tab__header-action').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.summary-card__progress').text()).toBe('37.5%')
+    expect(wrapper.text()).not.toContain('12.5%')
+    expect(evaluateSichuanBundleQC).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
 
   it('列表不等待并发设置和完整规则说明；设置未就绪时不允许启动质控', async () => {
     const config = deferred<{ execution_concurrency: { max_parallel_records: number } }>()

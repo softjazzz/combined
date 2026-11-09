@@ -630,3 +630,229 @@ async def test_023_order_candidate_cap_never_turns_into_defect(monkeypatch, tmp_
     assert saved["status"] == expected
     if expected == "data_gap":
         assert saved["reason_code"] == "candidate_scope_incomplete"
+
+
+class _MixedCapClient:
+    def __init__(self, payload):
+        self.payload = payload
+        self.kinds = []
+
+    async def generate(self, prompt, **kwargs):
+        from test_luxian_0609_native_consultation_episode_execution import (
+            _materialize_recommendation_quotes,
+        )
+
+        usage = {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+        if "RECOMMENDATIONS_JSON=" in prompt and SCHEMA_VERSION in prompt:
+            self.kinds.append("measure")
+            recs = json.loads(prompt.split("RECOMMENDATIONS_JSON=", 1)[1])
+            measures = []
+            for rec in recs:
+                med = "抗感染" in rec["recommendation_text"]
+                hit = next(
+                    (c for c in rec["candidates"] if med and _DRUG in c["text"]), None
+                )
+                measures.append(
+                    {
+                        "recommendation_ref": rec["recommendation_ref"],
+                        "measure": "抗感染治疗" if med else "复查血常规",
+                        "evidence_ref": hit["ref"] if hit else "",
+                        "quote": _DRUG if hit else "",
+                        "executed_action": _DRUG if hit else "",
+                        "action_relation": "matched" if hit else "not_found",
+                        "conditional": False,
+                    }
+                )
+                if "并复查血常规" in rec["recommendation_text"]:
+                    measures.append(
+                        {
+                            "recommendation_ref": rec["recommendation_ref"],
+                            "measure": "复查血常规",
+                            "evidence_ref": "",
+                            "quote": "",
+                            "executed_action": "",
+                            "action_relation": "not_found",
+                            "conditional": False,
+                        }
+                    )
+            value = {
+                "schema_version": SCHEMA_VERSION,
+                "measures": measures,
+                "generic": [
+                    {"recommendation_ref": r["recommendation_ref"], "text": "建议"}
+                    for r in recs
+                ],
+            }
+        else:
+            data = json.loads(prompt.rsplit("输入：", 1)[1])
+            if "consultation_documents" in data:
+                self.kinds.append("stage1")
+                value = _materialize_recommendation_quotes(self.payload, prompt)
+                return {
+                    "content": value
+                    if isinstance(value, str)
+                    else json.dumps(value, ensure_ascii=False),
+                    "usage": usage,
+                }
+            assert "recommendations" in data, "unexpected request"
+            self.kinds.append("stage2")
+            docs = {d["ref"]: d for d in data["candidate_documents"]}
+            vals = []
+            for rec in data["recommendations"]:
+                hit = next(
+                    (
+                        ref
+                        for ref in rec["allowed_candidate_refs"]
+                        if "抗感染" in rec["source_quote"] and _DRUG in docs[ref]["text"]
+                    ),
+                    None,
+                )
+                vals.append(
+                    {
+                        "recommendation_ref": rec["recommendation_ref"],
+                        "execution_state": "linked_specific" if hit else "absent",
+                        "structured_action_refs": [hit] if hit else [],
+                        "execution_quotes": [_DRUG] if hit else [],
+                        "execution_record_state": "no_trace",
+                        "trace_refs": [],
+                        "confidence": "high",
+                        "recommendation_coverage_state": "complete"
+                        if hit
+                        else "no_trace",
+                        "coverage_confidence": "high",
+                        "uncovered_source_quotes": [],
+                    }
+                )
+            value = {"executions": vals}
+        return {"content": json.dumps(value, ensure_ascii=False), "usage": usage}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "filler_count,partial",
+    [(79, False), (80, False), (81, False), (81, True)],
+    ids=[
+        "complete_control",
+        "capped_medication",
+        "capped_positive_kept",
+        "partial_positive_saved",
+    ],
+)
+async def test_capped_advice_not_listed_as_confirmed_missing_beside_unaffected_defect(
+    monkeypatch, tmp_path, filler_count, partial
+):
+    from test_luxian_0609_native_consultation_episode_execution import (
+        _episode,
+        _payload,
+    )
+    from test_luxian_0609_death_record_timeliness import saved_roundtrip
+    from app.services.luxian_0609.decision_binding import (
+        bind_and_reduce_luxian_0609_rule_decisions,
+    )
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_reduced_customer_result,
+    )
+
+    for key in (
+        "LUXIAN_0609_OPINION_FREEZE_DIR",
+        "LUXIAN_0609_CONSULTATION_RESPONSE_FREEZE_DIR",
+    ):
+        monkeypatch.setenv(key, str(tmp_path / key))
+    rows = _order_rows(filler_count)
+    if filler_count == 81:
+        rows["inpat_drug_order"][0]["prescribed_datetime"] = "2026-07-02 19:59:00"
+        rows["inpat_drug_order"][0]["start_datetime"] = "2026-07-02 19:59:00"
+    first_advice = "建议抗感染治疗并复查血常规" if partial else "建议抗感染治疗"
+    rows["consultation_record"][0]["record_content"] = f"会诊意见：{first_advice}；建议复查血常规"
+    rows["inpat_nondrug_order"] = [
+        {
+            "order_id": "OTHER",
+            "order_name": "更换伤口敷料",
+            "prescribed_datetime": "2026-07-02 19:00:00",
+            "order_status": "执行",
+        }
+    ]
+    ref = "consultation_record-1"
+    recommendations = [
+        {
+            "recommendation_ref": ref + "#r1",
+            "action_type": "medication",
+            "source_quote": first_advice,
+            "normalized_action": first_advice,
+            "opinion_ref": ref,
+        },
+        {
+            "recommendation_ref": ref + "#r2",
+            "action_type": "test",
+            "source_quote": "建议复查血常规",
+            "normalized_action": "建议复查血常规",
+            "opinion_ref": ref,
+        },
+    ]
+    if partial:
+        recommendations = recommendations[:1]
+    client = _MixedCapClient(
+        _payload(
+            episodes=[
+                _episode(
+                    ref, [ref], application="absent", recommendations=recommendations
+                )
+            ]
+        )
+    )
+    session = _formal_023_session(rows)
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-04",),
+        decision_rule_ids=("LX0609-03-01-04",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        opinion_freeze_dir=tmp_path / "opinion",
+    )
+    [reduced] = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-03-01-04",),
+        snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    final = finalize_luxian_0609_reduced_customer_result(
+        decision=reduced,
+        raw_customer_display_facts=dict(result.customer_display_facts).get(
+            "LX0609-03-01-04"
+        ),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    saved = saved_roundtrip(final, identity=("I", "P", "V"))
+    assert saved["status"] == ("data_gap" if partial else "non_compliant")
+    assert saved["customer_display_facts"]["missing_execution_count"] == (
+        0 if partial else 1
+    ), "只有完整核查的复查血常规可列确定未执行；被cap排除有效医嘱的抗感染建议仍应待核"
+    facts = saved["customer_display_facts"]
+    first = facts["recommendation_evidence"][0]
+    if not partial:
+        assert facts["recommendation_evidence"][1]["execution_state"] == "missing"
+    unresolved = filler_count == 80 or partial
+    assert first["execution_state"] == ("unknown" if unresolved else "specific")
+    assert "missing_measures" not in first
+    assert facts["specific_execution_count"] == (0 if unresolved else 1)
+    assert saved["reason_code"] == (
+        "candidate_scope_incomplete" if partial else "requirement_violated"
+    )
+    assert facts == final["customer_display_facts"]
+    assert (saved["status"], saved["reason_code"]) == (
+        reduced.final_state.value,
+        reduced.reason_code,
+    )
+    if partial:
+        assert first["execution_evidence"], "同建议已确认的医嘱正面引用必须保存重读后仍存在"
+    if unresolved and not partial:
+        assert "待核实：" in saved["findings"]
+        assert "建议抗感染治疗" in saved["findings"].split("待核实：", 1)[1]
+        assert "建议抗感染治疗" not in saved["findings"].split("未执行：", 1)[1].split("。", 1)[0]
+    else:
+        assert first["execution_evidence"]

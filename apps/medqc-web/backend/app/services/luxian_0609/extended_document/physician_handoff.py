@@ -790,6 +790,24 @@ def evaluate_physician_handoff(
                     or row.get("prescribed_datetime") or row.get("order_time")
                 ) is not None
             )
+            def related_records(rows, record_fields, change_fields):
+                # 仅隔离班次时间和人员均可证明不属于可靠事件的文书。
+                # 缺班次、缺身份或可能相关的坏时间文书仍参与核对，保持未决。
+                timed_physicians = set().union(*(
+                    _identity_tokens(row, change_fields) for row in timed_rows
+                ))
+                return tuple(
+                    row for row in rows
+                    if not (
+                        change_source_key == "physician_change_event"
+                        and _shift_time(row) is not None
+                        and _shift_time(row) not in change_times
+                        and timed_physicians
+                        and _identity_tokens(row, record_fields)
+                        and not _identity_tokens(row, record_fields).intersection(timed_physicians)
+                    )
+                )
+
             timed_outcome = evaluate_physician_handoff(
                 physician_change_rows=timed_rows if change_source_key == "physician_change_event" else (),
                 physician_change_error=physician_change_error,
@@ -797,9 +815,9 @@ def evaluate_physician_handoff(
                 nondrug_order_error=nondrug_order_error,
                 daily_course_rows=daily_course_rows,
                 daily_course_error=daily_course_error,
-                handoff_rows=handoff_rows,
+                handoff_rows=related_records(handoff_rows, _HANDOFF_PHYSICIAN_FIELDS, _OLD_PHYSICIAN_FIELDS),
                 handoff_error=handoff_error,
-                handover_rows=handover_rows,
+                handover_rows=related_records(handover_rows, _HANDOVER_PHYSICIAN_FIELDS, _NEW_PHYSICIAN_FIELDS),
                 handover_error=handover_error,
                 evaluation_horizon_datetime=evaluation_horizon_datetime,
                 evaluation_horizon_error=evaluation_horizon_error,

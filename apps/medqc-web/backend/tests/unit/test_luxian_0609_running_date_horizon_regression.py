@@ -657,3 +657,54 @@ async def test_handoff_defect_keeps_completed_sibling_and_ignores_untimed():
     assert outcomes["2026-06-05 08:00:00"] == "completed_within_threshold"
     assert outcomes["2026-06-01 10:00:00"] in {"handoff_missing", "handover_missing"}
     assert len(outcomes) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "shift,doctor,expected",
+    [
+        ("2026-06-05 08:00:00", "戊", "non_compliant"),
+        ("2026-06-01 10:00:00", "乙", "data_gap"),
+        (None, "戊", "data_gap"),
+        ("2026-06-05 08:00:00", "乙", "data_gap"),
+        ("2026-06-05 08:00:00", None, "data_gap"),
+    ],
+)
+async def test_handoff_bad_record_isolated_only_with_disjoint_shift_and_identity(
+    shift, doctor, expected
+):
+    saved = await _handoff_saved(
+        [
+            _HANDOFF_E1,
+            {"event_id": "E2", "old_physician_name": "丁", "new_physician_name": "戊"},
+        ],
+        {
+            "handoff_record": (
+                {
+                    "document_id": "H1",
+                    "shift_time": "2026-06-01 10:00:00",
+                    "handoff_doctor": "甲",
+                    "record_time": "2026-06-01 09:00:00",
+                },
+            ),
+            "handover_record": (
+                {
+                    "document_id": "HV2",
+                    "shift_time": shift,
+                    "handover_doctor": doctor,
+                    "record_time": None,
+                },
+            ),
+        },
+    )
+    assert saved["status"] == expected
+    facts = saved["customer_display_facts"]
+    if expected == "non_compliant":
+        assert saved["reason_code"] == "requirement_violated"
+        assert facts["change_time"] == "2026-06-01 10:00:00"
+        assert facts["handoff_times"] == ["2026-06-01 09:00:00"]
+        assert facts["handover_times"] == []
+        assert "HV2" not in str(facts)
+        assert "2026-06-01 10:00:00" in saved["findings"]
+    else:
+        assert saved["reason_code"] == "authoritative_time_missing"

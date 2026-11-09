@@ -2979,6 +2979,7 @@ def customer_finding_from_controlled_facts(
             "generic": [],
             "missing": [],
             "partial": [],
+            "unknown": [],
         }
         for item in recommendation_evidence:
             if (
@@ -3064,6 +3065,10 @@ def customer_finding_from_controlled_facts(
             # 未进入核查的会诊只说明待核，不列为未执行。
             finding_parts.append(
                 f"另有{unresolved_episodes}次会诊的意见时间缺失或不在本次住院期间，暂未核查其建议执行情况。"
+            )
+        if labels_by_state["unknown"]:
+            finding_parts.append(
+                f"待核实：{'；'.join(labels_by_state['unknown'])}，当前资料不能确认是否落实。"
             )
         exclusion_notes = {
             "execution_condition_not_defined": "未说明何时达到执行条件",

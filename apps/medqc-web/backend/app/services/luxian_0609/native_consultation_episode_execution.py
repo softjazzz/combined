@@ -2747,6 +2747,8 @@ def _consultation_execution_display_facts(
         recommendation_ref = item.recommendation.recommendation_ref
         assessment = assessments_by_recommendation.get(recommendation_ref)
         if assessment is not None:
+            if rule_id == "LX0609-03-01-04" and assessment.needs_manual_review:
+                return "unknown"
             if assessment.execution_record_state == "specific_trace":
                 return "specific"
             if assessment.execution_record_state == "generic_trace":
@@ -6175,7 +6177,7 @@ async def _execute_consultation_episode_rules(
                 continue
             statuses[rule_id] = ("data_gap", "linkage_unresolved")
     if (
-        statuses.get("LX0609-03-01-04", ("",))[0] == "non_compliant"
+        statuses.get("LX0609-03-01-04", ("",))[0] in {"non_compliant", "data_gap"}
         and execution_candidate_projection is not None
         and completed_recommendations
     ):
@@ -6194,32 +6196,46 @@ async def _execute_consultation_episode_rules(
             view_completed, view_assessments = _order_execution_view(
                 completed_recommendations, order_assessments, excluded_refs=measure_excluded_refs,
             )
-            untouched_completed = tuple(
-                item for item in view_completed
-                if item.recommendation.recommendation_ref not in cap_truncated_refs
+            unresolved_refs = {
+                item.recommendation_ref for item in view_assessments or ()
+                if item.recommendation_ref in cap_truncated_refs
+                and item.execution_state == "absent"
+                and item.execution_record_state == "no_trace"
+                and not item.execution_refs and not item.trace_refs
+            }
+            missing_measure_refs = cap_truncated_refs.intersection(measure_missing_by_ref)
+            # 截断只撤销完整否定；已独立核实的医嘱正面证据和具体程度缺陷保留。
+            # 023 逐建议状态是事实计数、引用和保存投影的共同来源，020 原判断不变。
+            order_assessments = tuple(
+                replace(
+                    item, execution_state="unknown", execution_record_state="unknown",
+                    recommendation_coverage_state="unknown", coverage_confidence="low",
+                    uncovered_source_quotes=(), hit_rules=(), needs_manual_review=True,
+                ) if item.recommendation_ref in unresolved_refs else (
+                    replace(item, recommendation_coverage_state="unknown", coverage_confidence="low",
+                            uncovered_source_quotes=(), needs_manual_review=True)
+                    if item.recommendation_ref in missing_measure_refs else item
+                )
+                for item in order_assessments or ()
             )
-            untouched_assessments = tuple(
-                item for item in view_assessments or ()
-                if item.recommendation_ref not in cap_truncated_refs
-            )
-            untouched_status = _execution_quality_outcome(
-                assessments=untouched_assessments,
-                completed_recommendations=untouched_completed,
-                source_incomplete_keys=execution_source_incomplete_keys & _ORDER_EXECUTION_SOURCE_KEYS,
-            )
-            untouched_measure_missing = any(
-                measures and ref not in cap_truncated_refs
-                for ref, measures in measure_missing_by_ref.items()
-            )
-            truncated_in_scope = any(
-                item.recommendation.recommendation_ref in cap_truncated_refs for item in view_completed
-            )
-            if (
-                truncated_in_scope
-                and untouched_status[0] != "non_compliant"
-                and not untouched_measure_missing
-            ):
-                statuses["LX0609-03-01-04"] = ("data_gap", "candidate_scope_incomplete")
+            measure_missing_by_ref = {
+                ref: measures for ref, measures in measure_missing_by_ref.items()
+                if ref not in missing_measure_refs
+            }
+            if unresolved_refs or missing_measure_refs:
+                view_completed, view_assessments = _order_execution_view(
+                    completed_recommendations, order_assessments, excluded_refs=measure_excluded_refs,
+                )
+                verified_status = _execution_quality_outcome(
+                    assessments=view_assessments,
+                    completed_recommendations=view_completed,
+                    source_incomplete_keys=execution_source_incomplete_keys & _ORDER_EXECUTION_SOURCE_KEYS,
+                )
+                statuses["LX0609-03-01-04"] = (
+                    ("non_compliant", "requirement_violated")
+                    if verified_status[0] == "non_compliant" or any(measure_missing_by_ref.values())
+                    else ("data_gap", "candidate_scope_incomplete")
+                )
     link_diagnostics = _link_diagnostics(
         completed_recommendations=completed_recommendations,
         projection=execution_candidate_projection,

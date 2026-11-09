@@ -222,3 +222,264 @@ def test_mixed_terminal_and_transient_failures_retry_only_transient_and_retain_b
                                                        retry_items=[recovered], retry_failures=[])
     assert items == [recovered]
     assert remaining == [failures[0]]
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("workspace_tables_without_database")
+@pytest.mark.parametrize("recovered", [True, False], ids=["recovered", "still_failed"])
+async def test_formal_worker_parent_retry_canonical_and_route_agree(
+    monkeypatch, recovered
+):
+    """实际 Worker 分类、定向补跑、父统计、内存保存及路由共用同一合成结果。"""
+    import copy
+    import json
+    from datetime import datetime
+    from types import SimpleNamespace
+    from sqlalchemy import MetaData, create_engine
+    from sqlalchemy.orm import Session
+    from sqlalchemy.pool import StaticPool
+    from starlette.requests import Request
+    import app.services.custom_qc_workspace_service as workspace_module
+    from app.routers import qc_sichuan
+    from app.services import sichuan_workspace_batch_worker as worker
+    from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+    from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
+    from app.services.qc_workspace.canonical_result_store import (
+        CanonicalResultStore,
+        envelope_item_from_rule_result,
+    )
+    from test_qc_sichuan_batch_throughput import (
+        _WorkspaceStub,
+        _ServiceStub,
+        _configure_formal_customer_sample_batch_fixture,
+        _freeze_formal_customer_batch_fixture_runtime,
+    )
+    from test_qc_sichuan_result_review import _admission_facts
+
+    rule_id = "LX0609-01-01-01"
+    rule = get_luxian_0609_rule(rule_id)
+    table = workspace_module._record_result_envelopes_table().to_metadata(
+        MetaData(), schema=None
+    )
+    engine = create_engine(
+        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
+    )
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    children = []
+    calls = []
+    snapshots = []
+    parent = {
+        "id": "synthetic-parent",
+        "job_kind": "parent",
+        "status": "failed",
+        "created_by": "tester",
+        "total_records": 2,
+        "draft_id": "sichuan-rule-library",
+        "filters": {
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-09",
+            "rule_ids": [rule_id],
+            "scoped_customer_rule_ids": [rule_id],
+        },
+    }
+
+    class Workspace(_WorkspaceStub):
+        def complete_batch_job(self, **kwargs):
+            super().complete_batch_job(**kwargs)
+            items = kwargs["items"]
+            assert all(item["status"] != "technical_error" for item in items)
+            with Session(engine) as db:
+                filters = {
+                    **self.job["filters"],
+                    "record_refs": self.job["filters"]["record_refs"] if items else [],
+                }
+                store.replace_for_job(
+                    db,
+                    job_row={**self.job, "filters_json": json.dumps(filters)},
+                    items=items,
+                    now=datetime(2026, 11, 9),
+                    projection_key="synthetic-retry-key",
+                    projector=lambda item: envelope_item_from_rule_result(
+                        item, hmac_key="synthetic-retry-key"
+                    ),
+                )
+                db.commit()
+            snapshots.append(copy.deepcopy(self.job))
+
+        def update_batch_job_progress(self, **kwargs):
+            items = kwargs.pop("items", None)
+            failures = kwargs.pop("failed_records", None)
+            super().update_batch_job_progress(**kwargs)
+            if items is not None:
+                self.items = list(items)
+            if failures is not None:
+                self.failed_records = list(failures)
+
+    service = _ServiceStub()
+    for index in (1, 2):
+        child = Workspace()
+        _configure_formal_customer_sample_batch_fixture(
+            child, rule_ids=[rule_id], record_ids=[f"visit-{index:03d}"]
+        )
+        child.job.update(
+            id=f"synthetic-child-{index}",
+            parent_job_id=parent["id"],
+            job_kind="leaf",
+            total_records=1,
+            created_by="tester",
+            rule_code="LX0609",
+            rule_name="合成入院时限核查",
+        )
+        settings = _freeze_formal_customer_batch_fixture_runtime(child, service)
+        children.append(child)
+    parent["child_job_ids"] = [child.job["id"] for child in children]
+    parent["filters"]["record_refs"] = [
+        child.job["filters"]["record_refs"][0] for child in children
+    ]
+    attempt = {"retry": False}
+
+    async def evaluate(**kwargs):
+        visit = kwargs["bundle"]["visit_id"]
+        active = tuple(kwargs["rule_ids"])
+        calls.append((visit, active))
+        failed = visit == "visit-002" and (not attempt["retry"] or not recovered)
+        item = {
+            "rule_id": rule_id,
+            "rule_version": rule["rule_version"],
+            "schema_version": "lx0609-customer-result-v2",
+            "status": "technical_error" if failed else "compliant",
+            "is_compliant": None if failed else True,
+            "reason_code": "model_invalid_output"
+            if failed
+            else "requirement_satisfied",
+            "metadata": {
+                "executor_type": "program",
+                "technical_error_internal": failed,
+            },
+        }
+        if not failed:
+            item.update(
+                customer_display_facts=_admission_facts(), findings="入院记录在24小时内完成。"
+            )
+        return {
+            "evaluation_results": [item],
+            "token_usage": {
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+            },
+            "luxian_0609_usage_observation_complete": True,
+            "luxian_0609_usage_unknown_executor_keys": [],
+        }
+
+    service.evaluate_running_final_bundle_input = evaluate
+    monkeypatch.setattr(worker, "get_settings", lambda: settings)
+    monkeypatch.setattr(worker, "load_luxian_0609_rules", lambda: [rule])
+    monkeypatch.setattr(
+        worker,
+        "get_product_activation_service",
+        lambda: SimpleNamespace(enforce=lambda: None),
+    )
+
+    async def provider():
+        return service
+
+    aggregate_service = CustomQCWorkspaceService()
+
+    def aggregate():
+        class Rows:
+            def mappings(self):
+                return self
+
+            def all(self):
+                return [copy.deepcopy(child.job) for child in children]
+
+        class ReadSession:
+            def execute(self, _statement):
+                return Rows()
+
+        with monkeypatch.context() as scoped:
+            scoped.setattr(
+                workspace_module,
+                "_row_to_batch_job",
+                lambda row, include_items=True: row,
+            )
+            return aggregate_service._aggregate_parent_job(ReadSession(), parent)
+
+    class RouteWorkspace:
+        def get_batch_job(self, *, job_id, created_by):
+            assert (job_id, created_by) == (parent["id"], "tester")
+            return aggregate()
+
+        def _load_batch_job_canonical_items(self, *, job, allow_partial=False):
+            return store.load_root_job_items(
+                job=job,
+                session_factory=lambda: Session(engine),
+                allow_partial=allow_partial,
+            )
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", RouteWorkspace)
+
+    async def route():
+        return await qc_sichuan.get_workspace_batch_job(
+            Request({"type": "http", "headers": []}),
+            parent["id"],
+            current_user={"id": "tester"},
+        )
+
+    try:
+        for child in children:
+            await worker.run_sichuan_workspace_batch_job(
+                child.job["id"], workspace=child, qc_service_provider=provider
+            )
+        before = aggregate()
+        assert before["status"] == "failed"
+        assert (before["success_count"], before["failed_count"]) == (1, 1)
+        assert (
+            before["summary"]["completed_rule_count"],
+            before["summary"]["failed_rule_count"],
+        ) == (1, 1)
+        before_route = (await route())["data"]
+        assert len(before_route["items"]) == 1
+        assert before_route["summary"]["failed_rule_count"] == 1
+        assert before_route["failed_count"] == 1
+        assert children[1].failed_records[0]["rule_id"] == rule_id
+        assert before_route["summary"]["status_counts"] == {"compliant": 1}
+        original_success = copy.deepcopy(children[0].job)
+        failed_child = children[1]
+        scope, failures = build_failed_rule_retry_scope(failed_child.job)
+        assert scope["pending_count"] == 1 and scope["rule_ids"] == [rule_id]
+        failed_child.job["filters"]["failed_rule_retry"] = scope
+        failed_child.job.update(status="queued", failed_records=failures)
+        attempt["retry"] = True
+        await worker.run_sichuan_workspace_batch_job(
+            failed_child.job["id"], workspace=failed_child, qc_service_provider=provider
+        )
+        assert children[0].job == original_success
+        assert calls == [
+            ("visit-001", (rule_id,)),
+            ("visit-002", (rule_id,)),
+            ("visit-002", (rule_id,)),
+        ]
+        after = aggregate()
+        expected = 2 if recovered else 1
+        assert after["status"] == ("completed" if recovered else "failed")
+        assert (after["success_count"], after["failed_count"]) == (
+            expected,
+            2 - expected,
+        )
+        assert after["summary"]["completed_rule_count"] == expected
+        assert after["summary"]["failed_rule_count"] == 2 - expected
+        assert failed_child.summary["retry_recovered_count"] == int(recovered)
+        assert failed_child.summary["retry_remaining_count"] == int(not recovered)
+        projected = (await route())["data"]
+        assert projected["summary"]["status_counts"] == {"compliant": expected}
+        assert len(projected["items"]) == expected
+        assert projected["summary"]["failed_rule_count"] == 2 - expected
+        assert projected["failed_count"] == 2 - expected
+        assert all(item["status"] == "compliant" for item in projected["items"])
+        assert projected["items"][0] == before_route["items"][0]
+        assert len(snapshots) == 3
+    finally:
+        engine.dispose()
