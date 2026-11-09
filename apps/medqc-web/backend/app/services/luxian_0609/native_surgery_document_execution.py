@@ -819,9 +819,13 @@ def _anesthesia_consent_rows(
         # 明确属于其他同意书时，正文提及麻醉文书不能覆盖其身份。
         if any(re.search(r"同意书|告知书", value) for value in identities):
             continue
-        # 保留正文承载标题的旧模板；正文中的待补/否定提及不是文书标题。
+        # 保留正文承载标题及医院页眉的旧模板；只认独立标题行或冒号标题，
+        # “麻醉知情同意书尚未签署”等叙述句不能证明文书身份。
         body = str(row.get("record_content") or "").strip()
-        if re.match(r"^[【（(]?\s*麻醉(?:知情)?(?:告知)?(?:同意书|告知书)[】）)]?\s*(?:[:：\r\n]|$)", body):
+        if re.search(
+            r"^[ \t]*[【（(]?[ \t]*麻醉(?:知情)?(?:告知)?(?:同意书|告知书)[】）)]?[ \t]*(?:[:：]|\r?$)",
+            body, re.MULTILINE,
+        ):
             matched.append(row)
     return tuple(matched)
 

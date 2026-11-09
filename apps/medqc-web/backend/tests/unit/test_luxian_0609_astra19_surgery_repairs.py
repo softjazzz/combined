@@ -143,6 +143,7 @@ def anesthesia():
                  "record_content":"本表为手术知情同意书。麻醉知情同意书尚未签署，须另行补签。"}, "non_compliant"),
     ("title", {"document_title":"麻醉知情同意书", "record_content":"已告知风险。"}, "compliant"),
     ("body", {"record_content":"麻醉知情同意书：已告知麻醉风险、方式及替代方案，患者同意麻醉并签名。"}, "compliant"),
+    ("header", {"record_content":"合成医院\n麻醉知情同意书\n麻醉风险已告知，患者同意麻醉并签名。"}, "compliant"),
     ("negative_body", {"record_content":"尚无麻醉知情同意书，待补签。"}, "non_compliant"),
 ])
 async def test_consent_identity_is_not_an_incidental_mention(case, form, expected):
