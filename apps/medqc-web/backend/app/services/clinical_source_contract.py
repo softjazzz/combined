@@ -73,9 +73,10 @@ def inspect_source(connection, *, check_rows=True):
             {"table":name,"required":name not in OPTIONAL,"status":"table_missing","missing_columns":[],"publication":"unconfirmed"} for name in TABLES],
             "publication_ready":None,"capture_requires_controlled_window":True,"account_read_only":False}
     schema_usage = connection.execute(text("SELECT has_schema_privilege(current_user,'cdm','USAGE')")).scalar_one()
+    # PG16 的 INHERIT TRUE / SET FALSE 仍可继承所有者能力，不能只检查角色切换。
     readonly_account = connection.execute(text("""
         SELECT NOT EXISTS (
-          SELECT 1 FROM pg_roles r WHERE pg_has_role(current_user,r.oid,'SET')
+          SELECT 1 FROM pg_roles r WHERE (pg_has_role(current_user,r.oid,'SET') OR pg_has_role(current_user,r.oid,'USAGE'))
           AND (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls
             OR has_schema_privilege(r.oid,'cdm','CREATE')
             OR has_database_privilege(r.oid,current_database(),'CREATE')
@@ -89,9 +90,9 @@ def inspect_source(connection, *, check_rows=True):
     """)).scalar_one()
     for name in TABLES:
         metadata = connection.execute(text("""
-            SELECT c.oid, pg_has_role(current_user,c.relowner,'SET') AS owns_object,
+            SELECT c.oid, (pg_has_role(current_user,c.relowner,'SET') OR pg_has_role(current_user,c.relowner,'USAGE')) AS owns_object,
               has_table_privilege(current_user,c.oid,'SELECT') AS readable,
-              EXISTS(SELECT 1 FROM pg_roles r WHERE pg_has_role(current_user,r.oid,'SET') AND
+              EXISTS(SELECT 1 FROM pg_roles r WHERE (pg_has_role(current_user,r.oid,'SET') OR pg_has_role(current_user,r.oid,'USAGE')) AND
                 (has_table_privilege(r.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                  OR has_any_column_privilege(r.oid,c.oid,'INSERT,UPDATE,REFERENCES'))) AS writable,
               ARRAY(SELECT a.attname FROM pg_attribute a WHERE a.attrelid=c.oid
