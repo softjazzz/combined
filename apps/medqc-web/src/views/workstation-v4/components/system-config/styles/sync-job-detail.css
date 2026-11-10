@@ -1,0 +1,10 @@
+.sync-units {
+  padding: 0;
+  list-style: none;
+}
+
+.sync-units li {
+  padding: var(--mq-space-4) 0;
+  border-bottom: 1px solid var(--mq-glass-border);
+  overflow-wrap: anywhere;
+}

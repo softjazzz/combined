@@ -24,6 +24,42 @@ export interface IndependentCatalog {
   profile: string
   interfaces: string[]
   manual_only: boolean
+  session: SyncCapabilities
+}
+export interface SyncCapabilities {
+  permissions: ('read' | 'run' | 'schedule')[]
+  timezone: string
+  last_complete_date: string
+  max_manual_days: number
+  features: { schedule_drafts: boolean; schedule_controls: false; date_recovery_profiles: string[] }
+}
+export interface SyncUnit {
+  unit_id?: string
+  sequence?: number
+  interface_name?: string
+  source_date?: string
+  phase?: string
+  status?: string
+  execution_attempts?: number
+  error: { code?: string; location?: string; retry_policy?: string }
+  result?: { counts?: Record<string, number>; selected?: number; written?: number }
+}
+export interface ScheduleDraftConfig {
+  frequency: 'daily' | 'weekly'
+  local_time: string
+  window_days: number
+  weekday?: number
+  interfaces: string[]
+}
+export interface SyncSchedule {
+  schedule_id: string
+  version: number
+  enabled: boolean
+  next_fire_at: string | null
+  config: Omit<ScheduleDraftConfig, 'interfaces'> & {
+    timezone: string
+    request: { profile: string; interfaces: string[]; mode: string; publish: boolean }
+  }
 }
 export interface IndependentSyncJob {
   job_id: string
@@ -42,6 +78,8 @@ export interface IndependentSyncJob {
   error?: { code?: string; location?: string }
   mode?: string
   published?: boolean
+  units?: SyncUnit[]
+  request?: { start_date?: string; end_date?: string; interfaces?: string[]; plan_version?: number }
 }
 export interface IndependentSyncRequest {
   operation_id: string
@@ -88,5 +126,17 @@ export const dataPipelinesApi = {
         )
       ).data,
     )
+  },
+  async detail(id: string): Promise<IndependentSyncJob> {
+    return unwrap((await http.get<Envelope<IndependentSyncJob>>(`${base}/independent/jobs/${encodeURIComponent(id)}`)).data)
+  },
+  async schedules(): Promise<SyncSchedule[]> {
+    return unwrap((await http.get<Envelope<{ schedules: SyncSchedule[] }>>(`${base}/independent/schedules`)).data).schedules
+  },
+  async schedule(id: string): Promise<SyncSchedule> {
+    return unwrap((await http.get<Envelope<SyncSchedule>>(`${base}/independent/schedules/${encodeURIComponent(id)}`)).data)
+  },
+  async saveDraft(id: string, payload: { version: number | null; config: ScheduleDraftConfig }): Promise<SyncSchedule> {
+    return unwrap((await http.put<Envelope<SyncSchedule>>(`${base}/independent/schedule-drafts/${encodeURIComponent(id)}`, payload)).data)
   },
 }

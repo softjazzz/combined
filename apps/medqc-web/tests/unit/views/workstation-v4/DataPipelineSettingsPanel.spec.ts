@@ -2,7 +2,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataPipelineSettingsPanel from '@/views/workstation-v4/components/system-config/DataPipelineSettingsPanel.vue'
-import type { DataPipelineConfiguration, IndependentSyncJob } from '@/api/dataPipelines'
+import type { DataPipelineConfiguration, IndependentSyncJob, IndependentCatalog, SyncSchedule, SyncCapabilities } from '@/api/dataPipelines'
+import SyncScheduleDraftPanel from '@/views/workstation-v4/components/system-config/SyncScheduleDraftPanel.vue'
+import SyncJobDetailDrawer from '@/views/workstation-v4/components/system-config/SyncJobDetailDrawer.vue'
 
 const api = vi.hoisted(() => ({
   configuration: vi.fn(),
@@ -11,6 +13,10 @@ const api = vi.hoisted(() => ({
   jobs: vi.fn(),
   submit: vi.fn(),
   action: vi.fn(),
+  detail: vi.fn(),
+  schedules: vi.fn(),
+  schedule: vi.fn(),
+  saveDraft: vi.fn(),
 }))
 vi.mock('@/api/dataPipelines', () => ({ dataPipelinesApi: api }))
 const auth = reactive({ user: { id: 'admin' }, userRoles: ['admin'] })
@@ -44,7 +50,11 @@ const job: IndependentSyncJob = {
 function mountPanel() {
   return mount(DataPipelineSettingsPanel, {
     global: {
-      stubs: {
+      stubs: stubs,
+    },
+  })
+}
+const stubs = {
         'a-button': {
           props: ['disabled', 'loading'],
           template: '<button :disabled="disabled"><slot /></button>',
@@ -56,11 +66,15 @@ function mountPanel() {
           template:
             '<select multiple :disabled="disabled" @change="$emit(\'update:value\', Array.from($event.target.selectedOptions).map(o => o.value))"><option v-for="option in options" :key="option.value" :value="option.value" :selected="value.includes(option.value)">{{option.label}}</option></select>',
         },
-      },
-    },
-  })
+  'a-drawer': {
+    name: 'ReviewDrawerStub', props: ['open', 'title', 'maskClosable', 'keyboard', 'closable'], emits: ['close'],
+    template: '<div v-if="open" role="dialog" :aria-label="title"><slot /></div>',
+  },
+        'a-empty': { props: ['description'], template: '<p>{{description}}</p>' },
 }
-function button(wrapper: ReturnType<typeof mountPanel>, text: string) {
+const capabilities: SyncCapabilities = { permissions: ['read', 'run', 'schedule'], timezone: 'Asia/Shanghai', last_complete_date: '2026-11-09', max_manual_days: 3,
+  features: { schedule_drafts: true, schedule_controls: false, date_recovery_profiles: ['accepted_manual'] } }
+function button(wrapper: Pick<ReturnType<typeof mountPanel>, 'findAll'>, text: string) {
   const result = wrapper.findAll('button').find((item) => item.text().includes(text))
   if (!result) throw new Error(`缺少按钮：${text}`)
   return result
@@ -92,10 +106,12 @@ describe('独立同步控制面板', () => {
       profile: 'accepted_manual',
       interfaces: ['web.mr'],
       manual_only: true,
+      session: structuredClone(capabilities),
     })
     api.save.mockResolvedValue(config(true))
     api.jobs.mockResolvedValue([job])
     api.submit.mockResolvedValue(job)
+    api.schedules.mockResolvedValue([])
   })
   it('初始只加载配置，不联网检查、读取任务或启动抽取', async () => {
     const wrapper = mountPanel()
@@ -113,7 +129,7 @@ describe('独立同步控制面板', () => {
     await flushPromises()
     await wrapper.get('[data-testid="pipeline-independent_cdm"]').trigger('click')
     await wrapper.get('.pipeline-toolbar input[type="checkbox"]').setValue(true)
-    await button(wrapper, '保存为默认').trigger('click')
+    await button(wrapper, '保存任务入口').trigger('click')
     await flushPromises()
     expect(api.save).toHaveBeenCalledWith({
       version: 1,
@@ -214,6 +230,179 @@ describe('独立同步控制面板', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('账号权限已变化')
     expect(wrapper.emitted('selection')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('日期与权限来自服务能力，超范围或只读令牌不能提交', async () => {
+    api.configuration.mockResolvedValue(config(true))
+    const wrapper = mountPanel()
+    await readyToSubmit(wrapper)
+    expect(wrapper.text()).toContain('单次最多 3 天')
+    await wrapper.get('[data-testid="pipeline-end"]').setValue('2020-10-29')
+    await wrapper.get('.pipeline-confirm input').setValue(true)
+    expect(button(wrapper, '提交预检任务').attributes('disabled')).toBeDefined()
+    api.check.mockResolvedValue({ profile: 'accepted_manual', interfaces: ['web.mr'], session: { ...capabilities, permissions: ['read'] } })
+    await button(wrapper, '检查服务').trigger('click')
+    await flushPromises()
+    await wrapper.get('.pipeline-confirm input').setValue(true)
+    expect(button(wrapper, '提交预检任务').attributes('disabled')).toBeDefined()
+    expect(api.submit).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  function catalogFixture(): IndependentCatalog {
+    return { profile: 'accepted_manual', interfaces: ['web.mr'], manual_only: true, session: structuredClone(capabilities) }
+  }
+  function draftRow(enabled = false, version = 1): SyncSchedule {
+    return { schedule_id: job.job_id, version, enabled, next_fire_at: null,
+      config: { frequency: 'daily', local_time: '02:00', window_days: 1, timezone: 'Asia/Shanghai',
+        request: { profile: 'accepted_manual', interfaces: ['web.mr'], mode: 'replay', publish: true } } }
+  }
+  function mountDraft(catalog = catalogFixture()) {
+    return mount(SyncScheduleDraftPanel, { props: { catalog }, global: { stubs } })
+  }
+  async function newDraft(wrapper: ReturnType<typeof mountDraft>) {
+    await button(wrapper, '新建禁用草稿').trigger('click')
+    await wrapper.get('select[multiple]').setValue(['web.mr'])
+  }
+  it('打开草稿面板不读写任务，只有明确保存才提交禁用草稿', async () => {
+    const wrapper = mountDraft()
+    expect(api.schedules).not.toHaveBeenCalled()
+    expect(api.saveDraft).not.toHaveBeenCalled()
+    await newDraft(wrapper)
+    api.saveDraft.mockResolvedValue(draftRow())
+    await button(wrapper, '保存禁用草稿').trigger('click')
+    await flushPromises()
+    const [id, payload] = api.saveDraft.mock.calls[0]
+    expect(id).toMatch(/^[a-f0-9-]{36}$/)
+    expect(payload).toEqual({ version: null, config: { frequency: 'daily', local_time: '02:00', window_days: 1, interfaces: ['web.mr'] } })
+    expect(wrapper.text()).toContain('保持禁用')
+    expect(api.submit).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('草稿超时不自动重试，显式重试保持同一编号版本与内容', async () => {
+    const wrapper = mountDraft()
+    await newDraft(wrapper)
+    api.saveDraft.mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(draftRow())
+    await button(wrapper, '保存禁用草稿').trigger('click')
+    await flushPromises()
+    expect(api.saveDraft).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('select[multiple]').attributes('disabled')).toBeDefined()
+    await button(wrapper, '使用原版本重试').trigger('click')
+    await flushPromises()
+    expect(api.saveDraft.mock.calls[0]).toEqual(api.saveDraft.mock.calls[1])
+    wrapper.unmount()
+  })
+  it('409版本冲突不自动覆盖，先核对再显式载入服务器版本', async () => {
+    const wrapper = mountDraft()
+    api.schedules.mockResolvedValue([draftRow()])
+    await button(wrapper, '读取计划').trigger('click')
+    await flushPromises()
+    await button(wrapper, '编辑禁用草稿').trigger('click')
+    api.saveDraft.mockRejectedValue({ isAxiosError: true, response: { status: 409 } })
+    await button(wrapper, '保存禁用草稿').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('版本冲突')
+    expect(api.saveDraft).toHaveBeenCalledTimes(1)
+    api.schedule.mockResolvedValue(draftRow(false, 3))
+    await button(wrapper, '核对服务器版本').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('服务器版本 3')
+    expect(api.saveDraft).toHaveBeenCalledTimes(1)
+    await button(wrapper, '载入服务器版本').trigger('click')
+    api.saveDraft.mockResolvedValue(draftRow(false, 4))
+    await button(wrapper, '保存禁用草稿').trigger('click')
+    await flushPromises()
+    expect(api.saveDraft.mock.calls[1][1].version).toBe(3)
+    wrapper.unmount()
+  })
+  it('只读令牌不能新建草稿，服务端已启用计划不能编辑', async () => {
+    const catalog = catalogFixture()
+    catalog.session.permissions = ['read']
+    const wrapper = mountDraft(catalog)
+    expect(button(wrapper, '新建禁用草稿').attributes('disabled')).toBeDefined()
+    api.schedules.mockResolvedValue([draftRow(true)])
+    await button(wrapper, '读取计划').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('只读')
+    expect(wrapper.text()).not.toContain('编辑禁用草稿')
+    expect(api.saveDraft).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('任务日期单元详情仅GET，保留失败状态与零计数', async () => {
+    api.detail.mockResolvedValue({ ...job, status: 'failed', request: { start_date: '2026-11-01', end_date: '2026-11-01', plan_version: 2 },
+      units: [{ unit_id: 'unit-1', source_date: '2026-11-01', interface_name: 'web.mr', phase: 'extract', status: 'failed', execution_attempts: 2,
+        error: { code: 'source_error', location: 'extract' }, result: { counts: { fetched: 0 } } }] })
+    const wrapper = mount(SyncJobDetailDrawer, { props: { jobId: job.job_id, canRetry: true }, global: { stubs } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('source_error')
+    expect(wrapper.text()).toContain('fetched: 0')
+    expect(api.action).not.toHaveBeenCalled()
+    await button(wrapper, '重试未完成单元').trigger('click')
+    expect(wrapper.emitted('retry')?.length).toBe(1)
+    expect(api.action).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('草稿写入未确认时不能重新检查服务丢失原请求', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    await button(wrapper, '检查服务').trigger('click')
+    await flushPromises()
+    await button(wrapper, '新建禁用草稿').trigger('click')
+    const selects = wrapper.findAll('select[multiple]')
+    await selects[selects.length - 1].setValue(['web.mr'])
+    api.saveDraft.mockRejectedValueOnce(new Error('timeout'))
+    await button(wrapper, '保存禁用草稿').trigger('click')
+    await flushPromises()
+    expect(button(wrapper, '检查服务').attributes('disabled')).toBeDefined()
+    expect(button(wrapper, '重新加载配置').attributes('disabled')).toBeDefined()
+    expect(api.saveDraft).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('复审：发布单元显示实际计数，零与未返回保持不同', async () => {
+    api.detail.mockResolvedValue({ ...job, units: [
+      { unit_id: 'published', phase: 'publish', status: 'succeeded', error: {}, result: { selected: 12, written: 0 } },
+      { unit_id: 'unknown', phase: 'publish', status: 'succeeded', error: {}, result: {} },
+    ] })
+    const wrapper = mount(SyncJobDetailDrawer, { props: { jobId: job.job_id, canRetry: false }, global: { stubs } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('待发布行数：12；实际写入行数：0')
+    expect(wrapper.text()).toContain('待发布行数：未返回；实际写入行数：未返回')
+    wrapper.unmount()
+  })
+  it('复审：草稿编辑和冲突确认在抽屉内，待确认时不能关闭', async () => {
+    const wrapper = mountDraft()
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    await newDraft(wrapper)
+    expect(wrapper.get('[role="dialog"]').attributes('aria-label')).toBe('禁用计划草稿')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('保存禁用草稿')
+    api.saveDraft.mockRejectedValueOnce({ isAxiosError: true, response: { status: 409 } })
+    await button(wrapper, '保存禁用草稿').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="dialog"]').text()).toContain('版本冲突')
+    const drawer = wrapper.getComponent({ name: 'ReviewDrawerStub' })
+    expect(drawer.props('maskClosable')).toBe(false)
+    expect(drawer.props('keyboard')).toBe(false)
+    expect(drawer.props('closable')).toBe(false)
+    drawer.vm.$emit('close')
+    await flushPromises()
+    expect(wrapper.get('[role="dialog"]').text()).toContain('核对服务器版本')
+    expect(api.saveDraft).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+  it('复审：保存状态502未确认后保留原请求，抽屉仍打开', async () => {
+    const wrapper = mountDraft()
+    await newDraft(wrapper)
+    api.saveDraft.mockRejectedValueOnce({ isAxiosError: true, response: { status: 502 } }).mockResolvedValueOnce(draftRow())
+    await button(wrapper, '保存禁用草稿').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="dialog"]').text()).toContain('保存尚未确认')
+    await button(wrapper, '使用原版本重试').trigger('click')
+    await flushPromises()
+    expect(api.saveDraft.mock.calls[0]).toEqual(api.saveDraft.mock.calls[1])
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

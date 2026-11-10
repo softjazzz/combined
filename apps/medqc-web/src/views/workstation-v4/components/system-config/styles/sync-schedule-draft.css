@@ -1,0 +1,38 @@
+.sync-drafts {
+  margin-top: var(--mq-space-6);
+  border-top: 1px solid var(--mq-glass-border);
+  padding-top: var(--mq-space-4);
+}
+
+.pipeline-toolbar,
+.pipeline-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mq-space-3);
+}
+
+.pipeline-fields label,
+.draft-editor > label {
+  display: grid;
+  gap: var(--mq-space-2);
+}
+
+.draft-list {
+  padding: 0;
+  list-style: none;
+}
+
+.draft-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mq-space-3);
+  padding: var(--mq-space-3) 0;
+  border-bottom: 1px solid var(--mq-glass-border);
+}
+
+.draft-editor {
+  display: grid;
+  gap: var(--mq-space-4);
+}

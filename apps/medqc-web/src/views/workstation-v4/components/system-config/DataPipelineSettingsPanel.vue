@@ -9,10 +9,10 @@
           id="pipeline-title"
           class="mq-card__title"
         >
-          数据抽取链路
+          数据同步管理
         </h2>
         <p class="mq-card__desc">
-          东华独立同步服务发布临床材料；应用侧原PG同步已停用。
+          查看东华同步任务、日期单元和禁用计划草稿；同步服务独立运行。
         </p>
       </div>
       <a-button
@@ -31,25 +31,12 @@
       role="alert"
     />
     <template v-if="configuration">
-      <div
-        class="pipeline-options"
-        role="group"
-        aria-label="选择数据抽取链路"
+      <p
+        class="pipeline-source"
+        data-testid="pipeline-independent_cdm"
       >
-        <button
-          v-for="option in options"
-          :key="option.value"
-          type="button"
-          class="pipeline-option"
-          :class="{ 'is-active': selected === option.value }"
-          :aria-pressed="selected === option.value"
-          :disabled="busy || loading"
-          :data-testid="`pipeline-${option.value}`"
-          @click="select(option.value)"
-        >
-          <strong>{{ option.label }}</strong><span>{{ option.description }}</span>
-        </button>
-      </div>
+        东华 Caché → 独立同步服务 → 独立CDM
+      </p>
       <div class="pipeline-toolbar">
         <label><input
           v-model="draft.independent_enabled"
@@ -62,7 +49,7 @@
           :disabled="busy || loading"
           @click="save"
         >
-          保存为默认链路
+          保存任务入口设置
         </a-button>
         <span
           v-if="saved"
@@ -111,18 +98,21 @@
             }}；API地址与访问凭据由部署配置提供，页面不保存密码。
           </p>
           <p class="pipeline-note">
-            仅人工按接口日期抽取，最多7天且不含医院当天。该范围不代表完整住院期资料；不启用定时抽取、不联动质控。
+            {{ catalog ? `单次最多 ${catalog.session.max_manual_days} 天，最晚 ${catalog.session.last_complete_date}（${catalog.session.timezone}）` : '日期范围与操作权限待服务检查后确认' }}。
+            同步成功不代表完整住院期资料已就绪，不联动质控。
           </p>
           <div class="pipeline-fields">
             <label>开始日期<input
               v-model="startDate"
               type="date"
+              :max="catalog?.session.last_complete_date"
               :disabled="scopeLocked"
               data-testid="pipeline-start"
             ></label>
             <label>结束日期<input
               v-model="endDate"
               type="date"
+              :max="catalog?.session.last_complete_date"
               :disabled="scopeLocked"
               data-testid="pipeline-end"
             ></label>
@@ -216,21 +206,39 @@
               <div class="pipeline-toolbar">
                 <a-button
                   v-if="['queued', 'running', 'recovery_required'].includes(job.status)"
-                  :disabled="busy || job.cancel_requested"
+                  :disabled="busy || job.cancel_requested || !canRun"
                   @click="act(job, 'cancel')"
                 >
                   {{ job.cancel_requested ? '取消已请求' : '取消任务' }}
                 </a-button>
                 <a-button
                   v-if="['failed', 'recovery_required'].includes(job.status)"
-                  :disabled="busy || !configuration.settings.independent_enabled"
+                  :disabled="busy || !configuration.settings.independent_enabled || !canRun"
                   @click="act(job, 'retry')"
                 >
-                  重试失败任务
+                  重试未完成单元
+                </a-button>
+                <a-button
+                  :disabled="busy"
+                  @click="detailId = job.job_id"
+                >
+                  查看日期单元
                 </a-button>
               </div>
             </article>
           </div>
+          <SyncJobDetailDrawer
+            :job-id="detailId"
+            :can-retry="canRun && configuration.settings.independent_enabled && !busy"
+            @close="detailId = null"
+            @retry="act($event, 'retry')"
+          />
+          <SyncScheduleDraftPanel
+            v-if="catalog"
+            :key="catalogGeneration"
+            :catalog="catalog"
+            @lock="draftLocked = $event"
+          />
         </div>
       </template>
     </template>
@@ -241,6 +249,8 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import SyncJobDetailDrawer from './SyncJobDetailDrawer.vue'
+import SyncScheduleDraftPanel from './SyncScheduleDraftPanel.vue'
 import {
   dataPipelinesApi,
   type DataPipeline,
@@ -259,22 +269,21 @@ const draft = reactive({
   independent_enabled: false,
 })
 const selected = ref<DataPipeline>('legacy_pg')
-const options: { value: DataPipeline; label: string; description: string }[] = [
-  { value: 'independent_cdm', label: '独立CDM同步', description: 'Caché → 独立同步服务 → 独立CDM' },
-]
 const loading = ref(false),
   saving = ref(false),
   checking = ref(false),
   refreshing = ref(false),
   submitting = ref(false),
   acting = ref(false)
+const draftLocked = ref(false)
 const busy = computed(
-  () => saving.value || checking.value || submitting.value || acting.value || refreshing.value,
+  () => saving.value || checking.value || submitting.value || acting.value || refreshing.value || draftLocked.value,
 )
 const error = ref(''),
   historyError = ref(''),
   saved = ref(false)
 const catalog = ref<IndependentCatalog | null>(null)
+const detailId = ref<string | null>(null), catalogGeneration = ref(0)
 const jobs = ref<IndependentSyncJob[] | null>(null)
 const startDate = ref(''),
   endDate = ref(''),
@@ -297,13 +306,20 @@ const statusLabels: Record<IndependentSyncJob['status'], string> = {
 const canSubmit = computed(() =>
   Boolean(
     configuration.value?.settings.independent_enabled &&
-      catalog.value &&
+      catalog.value && canRun.value && dateScopeValid.value &&
       confirmed.value &&
       startDate.value &&
       endDate.value &&
       interfaces.value.length,
   ),
 )
+const canRun = computed(() => catalog.value?.session.permissions.includes('run') === true)
+const dateScopeValid = computed(() => {
+  if (!catalog.value || !startDate.value || !endDate.value) return false
+  const start = Date.parse(`${startDate.value}T00:00:00Z`), end = Date.parse(`${endDate.value}T00:00:00Z`)
+  return Number.isFinite(start) && Number.isFinite(end) && start <= end &&
+    (end - start) / 86400000 < catalog.value.session.max_manual_days && endDate.value <= catalog.value.session.last_complete_date
+})
 
 function select(value: DataPipeline) {
   if (value !== 'independent_cdm') return
@@ -357,6 +373,8 @@ async function check() {
   checking.value = true
   error.value = ''
   catalog.value = null
+  catalogGeneration.value++
+  detailId.value = null
   confirmed.value = false
   try {
     const data = await dataPipelinesApi.check()
@@ -422,6 +440,7 @@ async function submit() {
   }
 }
 async function act(job: IndependentSyncJob, action: 'cancel' | 'retry') {
+  if (busy.value || !canRun.value || (action === 'retry' && !configuration.value?.settings.independent_enabled)) return
   const generation = epoch
   acting.value = true
   error.value = ''
@@ -448,6 +467,8 @@ watch(
     configuration.value = null
     catalog.value = null
     jobs.value = null
+    detailId.value = null
+    draftLocked.value = false
     unresolvedOperation.value = null
     loading.value = false
     saving.value = false
