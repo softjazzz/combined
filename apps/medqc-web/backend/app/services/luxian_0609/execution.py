@@ -52,7 +52,10 @@ from .executor_registry import (
 )
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .rule_decision_settings import resolve_typed_decision_rule_ids
-from .phase_scope import build_luxian_0609_pending_definition_result
+from .phase_scope import (
+    build_luxian_0609_pending_definition_result,
+    partition_luxian_0609_rule_scope,
+)
 from .treatment_order_consistency_shadow import run_luxian_0609_059_shadow
 from .implant_information_shadow import run_luxian_0609_025_shadow
 from .native_execution import (
@@ -293,6 +296,15 @@ async def prepare_luxian_0609_execution(
         settings=settings,
     )
     if not enabled:
+        if str(rule_set_key or "").strip() == LUXIAN_0609_RULE_SET_KEY:
+            explicit_customer_ids = tuple(selected_customer_rule_ids or ()) or tuple(
+                str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+                for rule in prepared_rules
+                if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper().startswith("LX0609-")
+            )
+            _, withheld = partition_luxian_0609_rule_scope(explicit_customer_ids)
+            if withheld:
+                raise ValueError("质控点未启用，禁止兼容执行：" + ",".join(withheld))
         return prepared_rules, Luxian0609ExecutionContext(
             enabled=False,
             prepared_rule_count=len(prepared_rules),
@@ -342,6 +354,14 @@ async def prepare_luxian_0609_execution(
                 or set(prepared_package_plan.selected_rule_ids) != requested_ids):
             raise ValueError("LX0609预备计划与当前病例规则范围不一致")
         package_plan = prepared_package_plan
+        # 补跑/恢复可能带有暂停前的计划。只更新执行资格，不改历史任务及冻结身份。
+        _, current_withheld = partition_luxian_0609_rule_scope(requested_ids)
+        if current_withheld:
+            package_plan = build_luxian_0609_package_plan_from_settings(
+                inventory=dependency_inventory,
+                selected_rule_ids=requested_customer_rule_ids,
+                settings=settings,
+            )
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()

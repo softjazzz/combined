@@ -40,6 +40,12 @@ _OUTPUT_FORMAT_FAILURE_REASON_CODES = frozenset({
 
 def _automatic_retryable_failure(failure: Mapping[str, Any]) -> bool:
     rule = str(failure.get("rule_id") or failure.get("rule_code") or "").strip().upper()
+    if rule.startswith("LX0609-"):
+        from ..luxian_0609.phase_scope import get_luxian_0609_phase_scope
+
+        scope = get_luxian_0609_phase_scope(rule)
+        if scope is not None and scope.phase_status == "pending_definition":
+            return False
     reason = str(failure.get("reason_code") or "")
     if reason in _DETERMINISTIC_FAILURE_REASON_CODES or reason in _OUTPUT_FORMAT_FAILURE_REASON_CODES:
         return False

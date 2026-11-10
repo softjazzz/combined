@@ -370,11 +370,14 @@ def test_exam_lab_family_flag_partitions_only_five_customer_rules():
         native_exam_lab_enabled=False,
     )
 
-    assert enabled.native_async_rule_ids == tuple(selected)
+    # 2026-11-10：族开关不能重新启用已暂停的06-01-04。
+    expected = tuple(rid for rid in selected if rid != "LX0609-06-01-04")
+    assert enabled.native_async_rule_ids == expected
     assert enabled.compatibility_rule_ids == ()
-    assert enabled.native_executor_batches == (("exam_lab", tuple(selected)),)
+    assert enabled.native_executor_batches == (("exam_lab", expected),)
+    assert enabled.not_executed_rule_ids == disabled.not_executed_rule_ids == ("LX0609-06-01-04",)
     assert disabled.native_async_rule_ids == ()
-    assert disabled.compatibility_rule_ids == tuple(selected)
+    assert disabled.compatibility_rule_ids == expected
 
 
 @pytest.mark.unit
@@ -482,11 +485,14 @@ def test_tumor_pathology_family_flag_partitions_only_four_customer_rules():
         native_tumor_pathology_enabled=False,
     )
 
-    assert enabled.native_async_rule_ids == tuple(selected)
+    # 2026-11-10：仅保留同族仍启用的规则，暂停项也不能进入兼容路径。
+    expected = ("LX0609-06-02-03", "LX0609-05-02-01")
+    assert enabled.native_async_rule_ids == expected
     assert enabled.compatibility_rule_ids == ()
-    assert enabled.native_executor_batches == (("tumor_pathology", tuple(selected)),)
+    assert enabled.native_executor_batches == (("tumor_pathology", expected),)
+    assert enabled.not_executed_rule_ids == disabled.not_executed_rule_ids == ("LX0609-06-02-02", "LX0609-08-01-04")
     assert disabled.native_async_rule_ids == ()
-    assert disabled.compatibility_rule_ids == tuple(selected)
+    assert disabled.compatibility_rule_ids == expected
 
 
 @pytest.mark.unit

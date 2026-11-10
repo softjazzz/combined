@@ -1240,7 +1240,7 @@ async def run_sample_pool_intrinsic_validation(
         if paused_selected_rule_ids and not requested_selected_rule_ids:
             raise HTTPException(
                 status_code=422,
-                detail="所选质控点当前均暂不执行，请调整质控范围",
+                detail="所选质控点均未启用，本次不会执行，请调整质控范围",
             )
         # 目录仍展示全部 75 条规则；将本次未进入执行器的规则明确传给 worker，
         # 避免客户结果层把“策略暂停”误投影为“未返回执行结果”。

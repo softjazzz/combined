@@ -87,6 +87,9 @@
     },
     {
       "rule_id": "LX0609-06-01-04",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "engineering_acceptance_pending_20261110",
+      "pending_definition_note": "未启用：工程验收中；新任务及补跑不执行，不计为合规，历史结果保留。",
       "source_document": "CT/MRI检查记录",
       "qc_point": "CT/MRI影像报告结果出具后24小时内未在病程中记录",
       "implementation_status": "active",
@@ -152,6 +155,9 @@
     },
     {
       "rule_id": "LX0609-06-02-02",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "engineering_acceptance_pending_20261110",
+      "pending_definition_note": "未启用：工程验收中；新任务及补跑不执行，不计为合规，历史结果保留。",
       "source_document": "病理检查",
       "qc_point": "取材情况未在病程记录或手术记录中记录",
       "implementation_status": "active",
@@ -228,6 +234,9 @@
     },
     {
       "rule_id": "LX0609-08-01-04",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "engineering_acceptance_pending_20261110",
+      "pending_definition_note": "未启用：工程验收中；新任务及补跑不执行，不计为合规，历史结果保留。",
       "source_document": "出院记录",
       "qc_point": "恶性肿瘤患者出院记录中无出院后肿瘤相关治疗计划",
       "implementation_status": "active",
@@ -236,6 +245,9 @@
     },
     {
       "rule_id": "LX0609-05-01-01",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "engineering_acceptance_pending_20261110",
+      "pending_definition_note": "未启用：工程验收中；新任务及补跑不执行，不计为合规，历史结果保留。",
       "source_document": "抗菌药物使用记录",
       "qc_point": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
       "implementation_status": "active",
@@ -252,6 +264,9 @@
     },
     {
       "rule_id": "LX0609-04-02-02",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "engineering_acceptance_pending_20261110",
+      "pending_definition_note": "未启用：工程验收中；新任务及补跑不执行，不计为合规，历史结果保留。",
       "source_document": "手术记录",
       "qc_point": "有手术医嘱但无手术记录",
       "implementation_status": "active",
@@ -614,6 +629,9 @@
     },
     {
       "rule_id": "LX0609-12-02-01",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "engineering_acceptance_pending_20261110",
+      "pending_definition_note": "未启用：工程验收中；新任务及补跑不执行，不计为合规，历史结果保留。",
       "source_document": "病程记录",
       "qc_point": "修正或补充诊断时，未记录修改或补充理由及诊断依据",
       "implementation_status": "active",
@@ -622,6 +640,9 @@
     },
     {
       "rule_id": "LX0609-10-03-01",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "engineering_acceptance_pending_20261110",
+      "pending_definition_note": "未启用：工程验收中；新任务及补跑不执行，不计为合规，历史结果保留。",
       "source_document": "有创操作记录",
       "qc_point": "有创操作医嘱但无有创操作记录",
       "implementation_status": "active",
