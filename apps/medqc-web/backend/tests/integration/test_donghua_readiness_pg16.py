@@ -15,6 +15,19 @@ def make(dual_factory, mode="normal"):
         with owner.begin() as c:
             for name in MISSING:
                 c.execute(sa.text(f'DROP TABLE IF EXISTS cdm."{name}" CASCADE'))
+            if mode in {"owner_direct", "owner_set_role"}:
+                from joint_pg_support import connect
+                from contextlib import closing
+                with closing(connect(owner.url.database)) as admin:
+                    admin.autocommit = True
+                    with admin.cursor() as cursor:
+                        holder = "medqc_job_worker" if mode == "owner_direct" else "medqc_job_api"
+                        cursor.execute(f"ALTER TABLE cdm.daily_course_record OWNER TO {holder}")
+                        cursor.execute(f"REVOKE ALL ON cdm.daily_course_record FROM {holder}")
+                        cursor.execute(f"GRANT SELECT ON cdm.daily_course_record TO {holder}")
+                        cursor.execute("GRANT SELECT ON cdm.daily_course_record TO medqc_owner")
+                        if mode == "owner_set_role":
+                            cursor.execute("GRANT medqc_job_api TO medqc_job_worker WITH INHERIT FALSE, SET TRUE")
             if mode.startswith("patient_"):
                 c.execute(sa.text("REVOKE SELECT ON cdm.patient_information FROM medqc_job_worker"))
                 columns = "institute_id" if mode == "patient_denied" else "institute_id,patient_id"
@@ -112,3 +125,25 @@ def test_patient_information_minimal_projection(dual_factory, mode):
     # Future three-key shape must not inherit a permanent permission exemption.
     required, selected = read_columns("patient_information", {"institute_id", "patient_id", "visit_id", "record_content"})
     assert "record_content" in selected and "visit_id" in selected
+
+
+@pytest.mark.parametrize("mode", ["owner_direct", "owner_set_role"])
+def test_readonly_owner_without_acl_writes_is_rejected(dual_factory, mode):
+    from app.services.clinical_source_contract import inspect_source
+    from joint_pg_support import connect
+    from contextlib import closing
+    d = None
+    try:
+        d = make(dual_factory, mode)
+        with d["readonly"].connect() as c:
+            assert not c.execute(sa.text("SELECT has_table_privilege(current_user,'cdm.daily_course_record','UPDATE')")).scalar_one()
+            report = inspect_source(c)
+        row = next(x for x in report["dependencies"] if x["table"] == "daily_course_record")
+        assert row["owns_object"] and row["status"] == "object_ownership_forbidden"
+        assert not report["ok"] and not report["account_read_only"]
+    finally:
+        if mode == "owner_set_role":
+            with closing(connect()) as admin:
+                admin.autocommit = True
+                with admin.cursor() as cursor:
+                    cursor.execute("REVOKE medqc_job_api FROM medqc_job_worker")

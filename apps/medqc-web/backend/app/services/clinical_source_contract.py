@@ -78,12 +78,19 @@ def inspect_source(connection, *, check_rows=True):
           SELECT 1 FROM pg_roles r WHERE pg_has_role(current_user,r.oid,'SET')
           AND (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls
             OR has_schema_privilege(r.oid,'cdm','CREATE')
-            OR has_database_privilege(r.oid,current_database(),'CREATE'))
+            OR has_database_privilege(r.oid,current_database(),'CREATE')
+            OR r.oid IN (
+              SELECT nspowner FROM pg_namespace WHERE nspname='cdm'
+              UNION SELECT datdba FROM pg_database WHERE datname=current_database()
+              UNION SELECT c.relowner FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='cdm'
+              UNION SELECT p.proowner FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='cdm'
+            ))
         )
     """)).scalar_one()
     for name in TABLES:
         metadata = connection.execute(text("""
-            SELECT c.oid, has_table_privilege(current_user,c.oid,'SELECT') AS readable,
+            SELECT c.oid, pg_has_role(current_user,c.relowner,'SET') AS owns_object,
+              has_table_privilege(current_user,c.oid,'SELECT') AS readable,
               EXISTS(SELECT 1 FROM pg_roles r WHERE pg_has_role(current_user,r.oid,'SET') AND
                 (has_table_privilege(r.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                  OR has_any_column_privilege(r.oid,c.oid,'INSERT,UPDATE,REFERENCES'))) AS writable,
@@ -103,9 +110,11 @@ def inspect_source(connection, *, check_rows=True):
                 denied = [column for column in sorted(selected) if not connection.execute(text(
                     "SELECT has_column_privilege(current_user,:oid,:column,'SELECT')"
                 ), {"oid": metadata["oid"], "column": column}).scalar_one()]
-            item.update(read_columns=sorted(selected), denied_columns=denied)
+            item.update(read_columns=sorted(selected), denied_columns=denied, owns_object=metadata["owns_object"])
             if not schema_usage or denied:
                 status = "select_denied"
+            elif metadata["owns_object"]:
+                status = "object_ownership_forbidden"
             elif metadata["writable"]:
                 status = "write_privilege_forbidden"
             elif missing:
