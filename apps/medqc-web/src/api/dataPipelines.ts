@@ -42,7 +42,7 @@ export interface SyncUnit {
   status?: string
   execution_attempts?: number
   error: { code?: string; location?: string; retry_policy?: string }
-  result?: { counts?: Record<string, number> }
+  result?: { counts?: Record<string, number>; selected?: number; written?: number }
 }
 export interface ScheduleDraftConfig {
   frequency: 'daily' | 'weekly'

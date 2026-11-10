@@ -412,3 +412,39 @@ def test_schedule_list_is_profile_bound_and_non_admin_cannot_access(database, mo
         assert client.get("/api/v1/sync/pipelines/independent/schedules").status_code == 403
         assert client.put(f"/api/v1/sync/pipelines/independent/schedule-drafts/{JOB_ID}", json=draft_payload()).status_code == 403
     assert calls == []
+
+
+def test_draft_missing_next_fire_at_remains_unconfirmed(database, monkeypatch):
+    """复审反例：显式null能通过，字段缺失不能被投影补成已确认状态。"""
+    async def fake(method, path, **kwargs):
+        if path == "/v1/session":
+            return capabilities()
+        if path == "/v1/interfaces":
+            return {"profiles": [{"profile": "accepted_manual", "interfaces": ["web.mr"]}]}
+        row = schedule_row()
+        row.pop("next_fire_at")
+        return row
+    monkeypatch.setattr(control, "request", fake)
+    with client_for() as client:
+        result = client.put(f"/api/v1/sync/pipelines/independent/schedule-drafts/{JOB_ID}", json=draft_payload())
+    assert result.status_code == 502
+    assert "invalid_schedule_response" in result.text
+
+
+@pytest.mark.parametrize("counts", [{"selected": 12, "written": 0}, {"selected": 0, "written": 0}])
+def test_publish_unit_top_level_counts_survive_detail(database, monkeypatch, counts):
+    async def fake(*args, **kwargs):
+        return raw_job(units=[{"unit_id": JOB_ID, "interface_name": "web.mr", "source_date": "2026-11-01",
+            "phase": "publish", "status": "succeeded", "result": {**counts, "record_content": "private"}}])
+    monkeypatch.setattr(control, "request", fake)
+    with client_for() as client:
+        result = client.get(f"/api/v1/sync/pipelines/independent/jobs/{JOB_ID}")
+    assert result.status_code == 200
+    assert result.json()["data"]["units"][0]["result"] == counts
+    assert "private" not in result.text
+
+
+def test_missing_or_invalid_publish_counts_are_not_fabricated_as_zero():
+    for raw in ({}, {"selected": True, "written": -1}, {"selected": "12", "written": None}):
+        result = control.public_unit({"phase": "publish", "result": raw})["result"]
+        assert "selected" not in result and "written" not in result

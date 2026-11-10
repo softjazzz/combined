@@ -250,13 +250,19 @@ def public_unit(raw: dict) -> dict:
         result["result"] = {"counts": {k: v for k, v in raw["result"].get("counts", {}).items()
             if k in {"fetched", "inserted", "updated", "unchanged", "selected", "written"} and type(v) is int and v >= 0}} if isinstance(raw["result"].get("counts"), dict) else {}
         result["result"].update(public_error(raw["result"]))
+        # 正式服务发布单元的计数位于result顶层，不与抽取counts合并或补零。
+        for key in ("selected", "written"):
+            value = raw["result"].get(key)
+            if type(value) is int and value >= 0:
+                result["result"][key] = value
     return result
 
 
 def public_schedule(raw: dict) -> dict:
     try:
         config = raw["config"]
-        if (type(raw["version"]) is not int or raw["version"] < 1 or type(raw["enabled"]) is not bool
+        if ("next_fire_at" not in raw
+                or type(raw["version"]) is not int or raw["version"] < 1 or type(raw["enabled"]) is not bool
                 or not isinstance(config, dict) or not isinstance(config.get("request"), dict)):
             raise ValueError
         if (config.get("frequency") not in {"daily", "weekly"} or config.get("timezone") != "Asia/Shanghai"

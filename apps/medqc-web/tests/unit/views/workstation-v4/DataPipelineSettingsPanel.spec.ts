@@ -66,7 +66,10 @@ const stubs = {
           template:
             '<select multiple :disabled="disabled" @change="$emit(\'update:value\', Array.from($event.target.selectedOptions).map(o => o.value))"><option v-for="option in options" :key="option.value" :value="option.value" :selected="value.includes(option.value)">{{option.label}}</option></select>',
         },
-        'a-drawer': { props: ['open'], template: '<div v-if="open"><slot /></div>' },
+  'a-drawer': {
+    name: 'ReviewDrawerStub', props: ['open', 'title', 'maskClosable', 'keyboard', 'closable'], emits: ['close'],
+    template: '<div v-if="open" role="dialog" :aria-label="title"><slot /></div>',
+  },
         'a-empty': { props: ['description'], template: '<p>{{description}}</p>' },
 }
 const capabilities: SyncCapabilities = { permissions: ['read', 'run', 'schedule'], timezone: 'Asia/Shanghai', last_complete_date: '2026-11-09', max_manual_days: 3,
@@ -355,6 +358,51 @@ describe('独立同步控制面板', () => {
     expect(button(wrapper, '检查服务').attributes('disabled')).toBeDefined()
     expect(button(wrapper, '重新加载配置').attributes('disabled')).toBeDefined()
     expect(api.saveDraft).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('复审：发布单元显示实际计数，零与未返回保持不同', async () => {
+    api.detail.mockResolvedValue({ ...job, units: [
+      { unit_id: 'published', phase: 'publish', status: 'succeeded', error: {}, result: { selected: 12, written: 0 } },
+      { unit_id: 'unknown', phase: 'publish', status: 'succeeded', error: {}, result: {} },
+    ] })
+    const wrapper = mount(SyncJobDetailDrawer, { props: { jobId: job.job_id, canRetry: false }, global: { stubs } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('待发布行数：12；实际写入行数：0')
+    expect(wrapper.text()).toContain('待发布行数：未返回；实际写入行数：未返回')
+    wrapper.unmount()
+  })
+  it('复审：草稿编辑和冲突确认在抽屉内，待确认时不能关闭', async () => {
+    const wrapper = mountDraft()
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    await newDraft(wrapper)
+    expect(wrapper.get('[role="dialog"]').attributes('aria-label')).toBe('禁用计划草稿')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('保存禁用草稿')
+    api.saveDraft.mockRejectedValueOnce({ isAxiosError: true, response: { status: 409 } })
+    await button(wrapper, '保存禁用草稿').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="dialog"]').text()).toContain('版本冲突')
+    const drawer = wrapper.getComponent({ name: 'ReviewDrawerStub' })
+    expect(drawer.props('maskClosable')).toBe(false)
+    expect(drawer.props('keyboard')).toBe(false)
+    expect(drawer.props('closable')).toBe(false)
+    drawer.vm.$emit('close')
+    await flushPromises()
+    expect(wrapper.get('[role="dialog"]').text()).toContain('核对服务器版本')
+    expect(api.saveDraft).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+  it('复审：保存状态502未确认后保留原请求，抽屉仍打开', async () => {
+    const wrapper = mountDraft()
+    await newDraft(wrapper)
+    api.saveDraft.mockRejectedValueOnce({ isAxiosError: true, response: { status: 502 } }).mockResolvedValueOnce(draftRow())
+    await button(wrapper, '保存禁用草稿').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="dialog"]').text()).toContain('保存尚未确认')
+    await button(wrapper, '使用原版本重试').trigger('click')
+    await flushPromises()
+    expect(api.saveDraft.mock.calls[0]).toEqual(api.saveDraft.mock.calls[1])
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

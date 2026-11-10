@@ -43,6 +43,9 @@
           <p v-if="unit.result?.counts">
             {{ Object.entries(unit.result.counts).map(([k, v]) => `${k}: ${v}`).join(' · ') }}
           </p>
+          <p v-if="unit.phase === 'publish'">
+            待发布行数：{{ unit.result?.selected ?? '未返回' }}；实际写入行数：{{ unit.result?.written ?? '未返回' }}
+          </p>
         </li>
       </ul>
       <a-button
@@ -87,7 +90,4 @@ async function load() {
 watch(() => props.jobId, () => { epoch++; job.value = null; error.value = ''; loading.value = false; void load() }, { immediate: true })
 onUnmounted(() => { epoch++ })
 </script>
-<style scoped>
-.sync-units { padding: 0; list-style: none; }
-.sync-units li { padding: var(--mq-space-4) 0; border-bottom: 1px solid var(--mq-glass-border); overflow-wrap: anywhere; }
-</style>
+<style scoped src="./styles/sync-job-detail.css"></style>
