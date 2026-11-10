@@ -10,6 +10,8 @@ from ..services.medical_records.errors import (
 
 
 def raise_medical_records_http_error(exc: Exception) -> None:
+    if isinstance(exc, HTTPException):
+        raise exc
     from ..services.data_pipeline_settings import PipelineError
     if isinstance(exc, PipelineError):
         raise HTTPException(exc.status, exc.code) from None

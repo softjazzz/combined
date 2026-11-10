@@ -1,6 +1,6 @@
 """病案数据 - 导出子域。"""
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from ..core.pagination import page_param, page_size_param
 from ..services.medical_records.export_service import (
@@ -37,6 +37,10 @@ async def get_table_data_api(
 async def get_frontpage_sheet_api(request: Request, patient_id: str, visit_id: str):
     try:
         identity = getattr(request.state, "doctor_case_identity", None)
-        return get_frontpage_sheet(patient_id, visit_id, **({"institute_id": identity["institute_id"]} if identity else {}))
+        institute = request.query_params.get("institute_id")
+        if identity and institute and institute != identity["institute_id"]:
+            raise HTTPException(403, "clinical_case_identity_forbidden")
+        institute = identity["institute_id"] if identity else institute
+        return get_frontpage_sheet(patient_id, visit_id, **({"institute_id": institute} if institute else {}))
     except Exception as exc:
         raise_medical_records_http_error(exc)

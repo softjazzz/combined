@@ -62,13 +62,15 @@ def catalog(engine):
     ).group_by(*[rows.c[key] for key in KEYS]).subquery()
 
 
-def resolve_identity(record_id: str, *, patient_id: str | None = None) -> dict:
+def resolve_identity(record_id: str, *, patient_id: str | None = None, institute_id: str | None = None) -> dict:
     try:
         engine = clinical.get_engine()
         source = catalog(engine)
         condition = or_(source.c.visit_id == record_id, source.c.mr_no == record_id)
         if patient_id:
             condition &= source.c.patient_id == patient_id
+        if institute_id:
+            condition &= source.c.institute_id == institute_id
         with engine.connect() as connection:
             rows = connection.execute(select(*[source.c[k] for k in KEYS]).where(condition).limit(2)).mappings().all()
         if len(rows) != 1:
@@ -202,7 +204,8 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
             doctors = connection.execute(select(facets.c.doctor, func.count()).group_by(facets.c.doctor)).all()
         if qc_projection_loader is None:
             from .medical_records.query_service import _load_latest_luxian_0609_qc_summaries
-            qc_projection_loader = _load_latest_luxian_0609_qc_summaries
+            from ..database.connection import SessionLocal
+            qc_projection_loader = lambda refs: _load_latest_luxian_0609_qc_summaries(refs, session_factory=SessionLocal)
         from .medical_records.query_service import _build_qc_summary, _normalize_latest_qc_summary_map
         from .case_identity import CaseRef
         summaries = _normalize_latest_qc_summary_map(qc_projection_loader(all_refs)) if all_refs else {}
