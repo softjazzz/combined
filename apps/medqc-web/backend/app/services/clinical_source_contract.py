@@ -35,6 +35,12 @@ REQUIRED_COLUMNS = {
 
 def read_columns(name, columns):
     """复用正式投影和ORM映射；返回实际会引用的列，不扩大到所有别名。"""
+    available = set(columns)
+    if name == "patient_information" and "visit_id" not in available:
+        # 两键主索引不会进入三键文书取材；本轮只有EXISTS/身份键权限探针。
+        # 若未来增加真实消费者或visit_id，仍走下方实际投影检查，不能永久豁免。
+        required = set(REQUIRED_COLUMNS[name])
+        return required, required & available
     from .bundles import assembly
     from .sample_programmatic_evidence import _SOURCE_TABLES
     from .luxian_0609 import source_evidence_reader as reader

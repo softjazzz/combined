@@ -67,3 +67,14 @@ PG16.15使用现有本机二进制，仅新建本分支owned集群，127.0.0.1:6
 首轮PR8入口直接跑两个旧单元文件曾有4项夹具初始化错误（未配置业务存储），不宣称该集合通过；最终改用现有scheduler隔离入口，仅跑本任务相关4项历史/PDF保护。开发过程中投影抽取遗留局部变量错误已由PG测试捕获并修复，不计作基线问题。未跑全量、前端、真实服务器、模型或27份。
 
 本机候选可交独立复审；现场仍BLOCKED：批准角色/凭据、类型与字段实际供给、失败后继及受控窗口未确认。CHECKSUMS列名证据继续有效，不新增服务器结构普查。本轮没有新增CDM对象或字段读取需求；只是共用现有投影、加强已读取ORM字段的预检。
+
+
+## 账号增量授权交接及patient_information预检补修
+
+复用同步Agent/DSH结果包cache-cdm-column-grant-delta-result.zip，SHA256 ba1be322d9cb8e5f57103f49ccbf9b5dd0af72c4ee5900c288ac30578891b483，本机实核外层及内部CHECKSUMS 8/8通过。现场19条列级GRANT单事务提交，348项由0变为348/348，19对象以medqc_cdm_ro执行LIMIT 0均PASS。表级SELECT仍30，patient_information原2键权限不变。这是DSH现场证据，本机未连接服务器；19个已确认投影权限缺口可关闭，不重复授权或普查结构。
+
+本机在49f9891e8之上补修read_columns：patient_information无visit_id时，真实三键取材在SQL前返回空，现有消费者只有身份键/EXISTS；预检仅检查institute_id/patient_id，不再为过预检要求额外8列。缺必要键仍报columns_missing，缺键SELECT仍报select_denied；若未来增加visit_id则恢复通用真实投影检查，不永久豁免正文权限。没有修改其他对象投影和现有权限拒绝策略。
+
+隔离PG16.15定向实际3项通过：patient最小两键授权通过、缺patient_id权限明确拒绝（两项都验证未来三键形态仍检查record_content），加既有newborn_record列权案例证明其他对象正常。沿本分支owned集群运行，禁网禁模型及业务库连接护栏不变；未重复前轮6项、4项或全量。Ruff F及diff检查通过。未执行新的DSH预检、没有推送、部署或修改现场权限/凭据/配置；不能把3项合成测试当作新版本现场验收。
+
+状态更新：ACCOUNT_TCP_READY；19对象投影权限已验证；本机预检误报已修，待独立复审。整体现场业务接入仍未READY：新业务预检未执行、字段实际供给/类型/语义及受控发布窗口未确认。早期正文的账号/凭据UNCONFIRMED属于49f9891e8时点记录，不再代表当前账号状态。

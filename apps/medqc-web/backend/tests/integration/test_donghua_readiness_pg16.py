@@ -15,6 +15,10 @@ def make(dual_factory, mode="normal"):
         with owner.begin() as c:
             for name in MISSING:
                 c.execute(sa.text(f'DROP TABLE IF EXISTS cdm."{name}" CASCADE'))
+            if mode.startswith("patient_"):
+                c.execute(sa.text("REVOKE SELECT ON cdm.patient_information FROM medqc_job_worker"))
+                columns = "institute_id" if mode == "patient_denied" else "institute_id,patient_id"
+                c.execute(sa.text(f"GRANT SELECT ({columns}) ON cdm.patient_information TO medqc_job_worker"))
             if mode == "columns":
                 from app.services.clinical_source_contract import read_columns
                 columns = {x["name"] for x in sa.inspect(c).get_columns("newborn_record", schema="cdm")}
@@ -86,3 +90,25 @@ def test_directory_real_default_loader_and_export_without_optional_children(dual
     assert result["diagnosis_source"] == "diagnosis"
     with pytest.raises(Exception):
         export_service.get_frontpage_sheet(patient, visit, institute_id="wrong-institute")
+
+
+@pytest.mark.parametrize("mode", ["patient_minimal", "patient_denied"])
+def test_patient_information_minimal_projection(dual_factory, mode):
+    from app.services.clinical_source_contract import inspect_source, read_columns
+    from app.services.bundles import assembly
+    d = make(dual_factory, mode)
+    with d["readonly"].connect() as c:
+        report = inspect_source(c)
+    row = next(x for x in report["dependencies"] if x["table"] == "patient_information")
+    assert row["read_columns"] == ["institute_id", "patient_id"]
+    if mode == "patient_denied":
+        assert not report["ok"] and row["status"] == "select_denied"
+        assert row["denied_columns"] == ["patient_id"]
+    else:
+        assert report["ok"], report
+        # Same actual consumer branch as capture: no visit_id means no source SQL at all.
+        assert assembly._select_records(schema="cdm", table="patient_information",
+            **dict(zip(("institute_id", "patient_id", "visit_id"), d["identity"]))) == []
+    # Future three-key shape must not inherit a permanent permission exemption.
+    required, selected = read_columns("patient_information", {"institute_id", "patient_id", "visit_id", "record_content"})
+    assert "record_content" in selected and "visit_id" in selected
