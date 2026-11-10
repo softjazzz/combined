@@ -73,10 +73,17 @@ def inspect_source(connection, *, check_rows=True):
             {"table":name,"required":name not in OPTIONAL,"status":"table_missing","missing_columns":[],"publication":"unconfirmed"} for name in TABLES],
             "publication_ready":None,"capture_requires_controlled_window":True,"account_read_only":False}
     schema_usage = connection.execute(text("SELECT has_schema_privilege(current_user,'cdm','USAGE')")).scalar_one()
-    # PG16 的 INHERIT TRUE / SET FALSE 仍可继承所有者能力，不能只检查角色切换。
+    # 先枚举可 SET 的身份（含当前身份），再展开该身份立即继承的能力。
+    # SET 和 USAGE 各自已经包含传递关系；不能只对当前账号分别取二者并集。
+    capability_roles = connection.execute(text("""
+        SELECT DISTINCT effective.oid
+        FROM pg_roles switched JOIN pg_roles effective
+          ON pg_has_role(switched.oid,effective.oid,'USAGE')
+        WHERE pg_has_role(current_user,switched.oid,'SET')
+    """)).scalars().all()
     readonly_account = connection.execute(text("""
         SELECT NOT EXISTS (
-          SELECT 1 FROM pg_roles r WHERE (pg_has_role(current_user,r.oid,'SET') OR pg_has_role(current_user,r.oid,'USAGE'))
+          SELECT 1 FROM pg_roles r WHERE r.oid = ANY(:capability_roles)
           AND (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls
             OR has_schema_privilege(r.oid,'cdm','CREATE')
             OR has_database_privilege(r.oid,current_database(),'CREATE')
@@ -87,19 +94,19 @@ def inspect_source(connection, *, check_rows=True):
               UNION SELECT p.proowner FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='cdm'
             ))
         )
-    """)).scalar_one()
+    """), {"capability_roles": capability_roles}).scalar_one()
     for name in TABLES:
         metadata = connection.execute(text("""
-            SELECT c.oid, (pg_has_role(current_user,c.relowner,'SET') OR pg_has_role(current_user,c.relowner,'USAGE')) AS owns_object,
+            SELECT c.oid, (c.relowner = ANY(:capability_roles)) AS owns_object,
               has_table_privilege(current_user,c.oid,'SELECT') AS readable,
-              EXISTS(SELECT 1 FROM pg_roles r WHERE (pg_has_role(current_user,r.oid,'SET') OR pg_has_role(current_user,r.oid,'USAGE')) AND
+              EXISTS(SELECT 1 FROM pg_roles r WHERE r.oid = ANY(:capability_roles) AND
                 (has_table_privilege(r.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                  OR has_any_column_privilege(r.oid,c.oid,'INSERT,UPDATE,REFERENCES'))) AS writable,
               ARRAY(SELECT a.attname FROM pg_attribute a WHERE a.attrelid=c.oid
                 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum) AS columns
             FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
             WHERE n.nspname='cdm' AND c.relname=:name AND c.relkind IN ('r','p','v','m','f')
-        """), {"name": name}).mappings().one_or_none()
+        """), {"name": name, "capability_roles": capability_roles}).mappings().one_or_none()
         item = {"table": name, "required": name not in OPTIONAL, "publication": "unconfirmed"}
         if metadata is None:
             item.update(status="table_missing", missing_columns=[])
