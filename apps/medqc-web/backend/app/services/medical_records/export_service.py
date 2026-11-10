@@ -165,6 +165,15 @@ def get_frontpage_sheet(
     *,
     institute_id: str | None = None,
 ) -> dict[str, Any]:
+    from ...database import clinical_connection as clinical
+    independent = clinical.configured()
+    if independent:
+        from ..clinical_case_catalog import resolve_identity
+        resolved = resolve_identity(visit_id, institute_id=institute_id, patient_id=patient_id)
+        institute_id = resolved["institute_id"]
+        if session_factory is None:
+            source = clinical.get_engine()
+            session_factory = lambda: Session(source)
     session_factory = session_factory or _session_factory
 
     with session_factory() as session:
@@ -193,7 +202,7 @@ def get_frontpage_sheet(
             if item:
                 diagnoses.append(item)
 
-        if not diagnoses:
+        if not diagnoses and not independent:
             mr_diag_rows = session.execute(
                 text(
                     f"SELECT * FROM {clinical_table_sql('mr_diagnosis')} "
@@ -215,7 +224,7 @@ def get_frontpage_sheet(
                     item["source_table"] = "mr_diagnosis"
                     diagnoses.append(item)
 
-        if not diagnoses:
+        if not diagnoses and not independent:
             record_diag_rows = session.execute(
                 text(
                     f"SELECT * FROM {clinical_table_sql('discharge_record_diagnosis')} "
@@ -249,7 +258,7 @@ def get_frontpage_sheet(
         )
         if pathology_row:
             pathology_info = _build_pathology_info(pathology_row)
-        else:
+        elif not independent:
             mr_pathology_row = session.execute(
                 text(
                     f"SELECT * FROM {clinical_table_sql('mr_diagnosis')} "
@@ -303,4 +312,6 @@ def get_frontpage_sheet(
             "surgeries": surgeries,
             "cost": cost_data,
             "other_medical_info": pathology_info,
+            "diagnosis_source": "diagnosis" if independent else "legacy",
+            "diagnosis_availability": "rows_present" if diagnoses else "not_observed",
         }

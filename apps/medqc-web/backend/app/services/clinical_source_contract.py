@@ -32,6 +32,31 @@ REQUIRED_COLUMNS = {
 }
 
 
+
+def read_columns(name, columns):
+    """复用正式投影和ORM映射；返回实际会引用的列，不扩大到所有别名。"""
+    from .bundles import assembly
+    from .sample_programmatic_evidence import _SOURCE_TABLES
+    from .luxian_0609 import source_evidence_reader as reader
+    from ..database.models import cdm
+    available = set(columns)
+    full_rows = set(_SOURCE_TABLES) | {"mr", "diagnosis", "mr_surgery", "mr_cost"}
+    orm = {"mr": cdm.MedicalRecordFrontpage, "diagnosis": cdm.Diagnosis,
+           "mr_surgery": cdm.MrSurgery, "mr_cost": cdm.MrCost,
+           "admission_record": cdm.AdmissionRecord, "discharge_record": cdm.DischargeRecord,
+           "first_course_record": cdm.FirstCourseRecord, "inpat_registration": cdm.InpatRegistration}
+    required = set(REQUIRED_COLUMNS.get(name, KEYS))
+    if name in orm:
+        required.update(column.name for column in orm[name].__table__.columns)
+    selected = set(available) if name in full_rows else assembly.source_projection_columns(name, available)
+    selected.update(set(reader._NATIVE_SOURCE_FIELDS.get(name, ())) & available)
+    selected.update(set(reader._SNAPSHOT_SOURCE_FIELDS.get(name, ())) & available)
+    selected.update(set((*assembly._ORDER_COLUMNS_PRIORITY, "document_id", "pathology_exam_id", "pathology_id",
+                         "diagnosis_id", "order_id", "record_time", "report_datetime", "surgery_begin_datetime",
+                         "surgery_begin_time", "transfution_datetime")) & available)
+    return required, selected | (required & available)
+
+
 def inspect_source(connection, *, check_rows=True):
     """逐个固定名字访问pg_catalog；无权限的表也不会从清单中消失。"""
     rows = []
@@ -43,15 +68,19 @@ def inspect_source(connection, *, check_rows=True):
             "publication_ready":None,"capture_requires_controlled_window":True,"account_read_only":False}
     schema_usage = connection.execute(text("SELECT has_schema_privilege(current_user,'cdm','USAGE')")).scalar_one()
     readonly_account = connection.execute(text("""
-        SELECT NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)
-          AND NOT has_schema_privilege(current_user,'cdm','CREATE')
-          AND NOT has_database_privilege(current_user,current_database(),'CREATE')
-        FROM pg_roles WHERE rolname=current_user
+        SELECT NOT EXISTS (
+          SELECT 1 FROM pg_roles r WHERE pg_has_role(current_user,r.oid,'SET')
+          AND (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls
+            OR has_schema_privilege(r.oid,'cdm','CREATE')
+            OR has_database_privilege(r.oid,current_database(),'CREATE'))
+        )
     """)).scalar_one()
     for name in TABLES:
         metadata = connection.execute(text("""
             SELECT c.oid, has_table_privilege(current_user,c.oid,'SELECT') AS readable,
-              has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS writable,
+              EXISTS(SELECT 1 FROM pg_roles r WHERE pg_has_role(current_user,r.oid,'SET') AND
+                (has_table_privilege(r.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                 OR has_any_column_privilege(r.oid,c.oid,'INSERT,UPDATE,REFERENCES'))) AS writable,
               ARRAY(SELECT a.attname FROM pg_attribute a WHERE a.attrelid=c.oid
                 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum) AS columns
             FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -61,8 +90,15 @@ def inspect_source(connection, *, check_rows=True):
         if metadata is None:
             item.update(status="table_missing", missing_columns=[])
         else:
-            missing = sorted(set(REQUIRED_COLUMNS.get(name, KEYS)) - set(metadata["columns"]))
-            if not schema_usage or not metadata["readable"]:
+            required, selected = read_columns(name, metadata["columns"])
+            missing = sorted(required - set(metadata["columns"]))
+            denied = []
+            if not metadata["readable"]:
+                denied = [column for column in sorted(selected) if not connection.execute(text(
+                    "SELECT has_column_privilege(current_user,:oid,:column,'SELECT')"
+                ), {"oid": metadata["oid"], "column": column}).scalar_one()]
+            item.update(read_columns=sorted(selected), denied_columns=denied)
+            if not schema_usage or denied:
                 status = "select_denied"
             elif metadata["writable"]:
                 status = "write_privilege_forbidden"

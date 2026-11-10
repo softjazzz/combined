@@ -806,29 +806,9 @@ def _find_text_value(record: dict[str, Any], columns: set[str]) -> str:
     return ""
 
 
-def _select_records(
-    *,
-    schema: str,
-    table: str,
-    institute_id: str,
-    patient_id: str,
-    visit_id: str,
-    limit: int = 3,
-) -> list[dict[str, Any]]:
-    from ..validation_material_source import (
-        material_document_status_column,
-        material_source_schema,
-    )
-    schema = material_source_schema(strict=clinical_connection.configured(), default_schema=_default_source_schema(), requested_schema=schema,
-        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
-    captured = case_material.frozen_rows(schema, table, (institute_id, patient_id, visit_id), limit)
-    if captured is not None:
-        return captured
-    read_engine = _source_engine(schema)
-    columns = set(_get_table_columns(schema, table))
-    if not columns:
-        return []
-
+def source_projection_columns(table: str, columns: set[str]) -> set[str]:
+    """取材与权限预检共用同一投影，避免维护第二份字段白名单。"""
+    from ..validation_material_source import material_document_status_column
     select_columns = {
         "institute_id",
         "patient_id",
@@ -874,7 +854,34 @@ def _select_records(
     )
     if document_status_column:
         select_columns.add(document_status_column)
-    selected = [col for col in select_columns if col in columns]
+    return set(select_columns) & set(columns)
+
+
+def _select_records(
+    *,
+    schema: str,
+    table: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    from ..validation_material_source import (
+        material_document_status_column,
+        material_source_schema,
+    )
+    schema = material_source_schema(strict=clinical_connection.configured(), default_schema=_default_source_schema(), requested_schema=schema,
+        institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
+    captured = case_material.frozen_rows(schema, table, (institute_id, patient_id, visit_id), limit)
+    if captured is not None:
+        return captured
+    read_engine = _source_engine(schema)
+    columns = set(_get_table_columns(schema, table))
+    if not columns:
+        return []
+
+    selected = sorted(source_projection_columns(table, columns))
+    document_status_column = material_document_status_column(source_table=table, source_columns=columns)
     if not selected:
         return []
 
