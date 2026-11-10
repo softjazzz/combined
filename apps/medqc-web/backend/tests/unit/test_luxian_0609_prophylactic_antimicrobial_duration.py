@@ -7,7 +7,6 @@ stop_datetime。
 from __future__ import annotations
 
 from datetime import datetime
-import json
 
 import pytest
 
@@ -15,7 +14,6 @@ from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_060
 from app.services.luxian_0609.evidence_snapshot_provider import build_luxian_0609_evidence_read_session
 from app.services.luxian_0609 import native_surgery_gate_execution as surgery
 from app.services.luxian_0609.prophylactic_antimicrobial_duration import (
-    SCHEMA_VERSION,
     SurgeryEventInput,
     evaluate_prophylactic_antimicrobial_duration,
     incision_class_value,
@@ -23,6 +21,7 @@ from app.services.luxian_0609.prophylactic_antimicrobial_duration import (
     is_systemic_antibacterial,
 )
 from app.services.luxian_0609.source_evidence_reader import SnapshotSourceRows
+from app.services.luxian_0609.infection_surgery_extraction import SurgeryIdentity
 from app.services.luxian_0609.surgery_gate_result_mapping import safe_surgery_gate_customer_display_facts
 from app.services.luxian_0609.customer_renderer import customer_finding_from_controlled_facts
 
@@ -33,16 +32,9 @@ class _Client:
 
     async def generate(self, prompt, **_kwargs):
         self.prompts.append(prompt)
-        docs = json.loads(prompt[prompt.rindex("\n") + 1:])
-        items = []
-        for doc, state in zip(docs, self.states):
-            quote = doc["text"][:8] if state == "present" else None
-            items.append({"id": doc["id"], "state": state, "quote": quote})
-        return {
-            "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(
-                {"schema_version": SCHEMA_VERSION, "documents": items}, ensure_ascii=False)}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-        }
+        from infection_surgery_test_support import infection_fact_response
+        return infection_fact_response(prompt, self.states)
+
 
 
 def _event(*, incision="I", cardiac=False, begin="2026-06-01 08:00", end="2026-06-01 10:00"):
@@ -51,6 +43,10 @@ def _event(*, incision="I", cardiac=False, begin="2026-06-01 08:00", end="2026-0
         end=datetime.fromisoformat(end) if end else None,
         incision_class=incision,
         cardiac=cardiac,
+        identity=SurgeryIdentity(
+            "synthetic-surgery", ({"name": "合成手术", "site": None,
+                "begin": {"value": begin, "precision": "datetime" if begin else "unknown"},
+                "end": {"value": end, "precision": "datetime" if end else "unknown"}},)),
     )
 
 
@@ -66,7 +62,7 @@ def _order(name, start, stop=None, *, temporary=False):
 
 
 def _course(time, text):
-    return {"record_time": time, "record_content": text}
+    return {"record_time": time, "record_content": "合成手术：" + text}
 
 
 @pytest.mark.parametrize(("value", "expected"), [
@@ -224,6 +220,7 @@ async def test_028_executor_end_to_end_with_synthetic_stop_time() -> None:
             "surgery_process": "手术顺利。",
         },),
         "mr_surgery": ({
+            "surgery_id": "MR-SYNTHETIC",
             "surgery_begin_datetime": datetime(2026, 6, 1, 8, 0), "surgery_end_datetime": datetime(2026, 6, 1, 10, 0),
             "surgial_incision_level": "Ⅱ", "surgery_code": "51.2301", "surgery_name": "腹腔镜胆囊切除术",
         },),
@@ -270,6 +267,7 @@ async def test_028_public_entry_keeps_prophylaxis_check_after_excluding_linked_t
             "surgery_process": "合成手术记录。",
         },),
         "mr_surgery": ({
+            "surgery_id": "MR-SYNTHETIC",
             "surgery_begin_datetime": datetime(2026, 6, 1, 8, 0),
             "surgery_end_datetime": datetime(2026, 6, 1, 10, 0),
             "surgial_incision_level": "Ⅱ", "surgery_code": "00.0000", "surgery_name": "合成腹部手术",

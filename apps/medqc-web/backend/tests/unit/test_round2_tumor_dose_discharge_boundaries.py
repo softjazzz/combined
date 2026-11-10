@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from chemotherapy_administration_test_support import FrozenChemotherapyAdministrationClient
+from luxian_0609_discharge_plan_test_facts import DischargePlanFactsClient
 
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
 from app.services.luxian_0609.canonical_result_finalizer import (
@@ -86,7 +87,9 @@ async def execute(
         patient_id="P",
         visit_id="V",
         source_schema=None,
-        llm_client=FrozenChemotherapyAdministrationClient(auto=True),
+        # 08-01-04 合同迁移：出院计划改为 LLM 事实抽取，使用按实际材料作答的固定事实替身。
+        llm_client=(DischargePlanFactsClient() if rule == "LX0609-08-01-04"
+                    else FrozenChemotherapyAdministrationClient(auto=True)),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
         decision_rule_ids=(rule,),

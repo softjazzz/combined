@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ..llm_token_budget import budget_guarded_executor
+from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
+from ..llm_token_budget import budget_guarded_executor, budget_rule_scope
 
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -33,6 +34,13 @@ from .malignancy_fact import (
     resolve_malignancy_visit_stage,
 )
 from .chemotherapy_administration_facts import CourseDocument, extract_chemotherapy_administrations
+from .discharge_plan_extraction import (
+    DischargePlanDocument,
+    DischargePlanField,
+    DischargePlanJudgement,
+    extract_discharge_plan_facts,
+    judge_discharge_plan,
+)
 from .pathology_documentation_extraction import (
     PathologyDocument,
     PathologyEvent,
@@ -49,6 +57,11 @@ from .pathology_report_completeness import (
     evaluate_pathology_report_completeness,
 )
 from .evaluation_horizon import read_frozen_evaluation_horizon, after_frozen_horizon
+from .pathology_sampling_extraction import (
+    EVALUATOR_VERSION as SAMPLING_EVALUATOR_VERSION,
+    build_sampling_context,
+    extract_pathology_sampling_facts,
+)
 
 
 
@@ -206,23 +219,6 @@ _CHEMOTHERAPY_EXPLICIT_DATE_PATTERN = re.compile(
     r"(?P<year>\d{4})[-年/](?P<month>\d{1,2})[-月/](?P<day>\d{1,2})日?"
 )
 _CLINICAL_CLAUSE_SEPARATOR = re.compile(r"[\r\n。；;！？!?]+")
-_DISCHARGE_PLAN_FUTURE_PATTERN = re.compile(r"(?:后续|出院后|继续|定期|计划|建议|门诊)")
-_DISCHARGE_PLAN_TREATMENT_PATTERN = re.compile(
-    r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤|治疗计划)"
-)
-# 业务基线 027：后续肿瘤治疗或随访计划任一项即可。随访只认明确的随访/定期复查安排；
-# 单项化验复查（如“门诊复查血常规”）和“如有不适随诊”类附条件叮嘱不算随访计划。
-_DISCHARGE_PLAN_FOLLOW_UP_PATTERN = re.compile(r"(?:随访|定期复查|定期复诊)")
-_DISCHARGE_PLAN_CONDITIONAL_PATTERN = re.compile(r"(?:不适|如有|若有|如出现|若出现|必要时)")
-_DISCHARGE_PLAN_NEGATIVE_TREATMENT_PATTERN = re.compile(
-    r"(?:暂不|不予|无需|未予|取消|停止|拒绝|不建议|不考虑|不行|不实施).{0,8}"
-    r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤)"
-)
-_DISCHARGE_PLAN_PENDING_TREATMENT_PATTERN = re.compile(
-    r"(?:待病理|待病检|待结果|待明确)"
-    r"|(?:必要时|酌情|视情况|视病情).{0,8}"
-    r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤)"
-)
 
 _MALIGNANT_FACT_TYPES = frozenset(
     {
@@ -282,6 +278,7 @@ class NativeTumorPathologyExecutionResult:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    diagnostic_semantic_snapshot: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -291,6 +288,14 @@ class _TumorRuleOutcome:
     reason_code: str
     executor_type: str
     fact_refs: tuple[str, ...] = ()
+
+
+_DISCHARGE_PLAN_DATA_GAP_REASONS = frozenset({"semantic_extraction_unresolved"})
+# 预算/上下文准入失败沿用共用的上下文原因码（如 llm_context_budget_exhausted），不并入执行异常。
+_DISCHARGE_PLAN_TECHNICAL_REASONS = frozenset({
+    "model_timeout", "model_transport_error", "model_invalid_output", "privacy_guard_blocked",
+    "execution_program_error", *CONTEXT_FAILURE_REASON_CODES,
+})
 
 
 def _typed_decision_from_outcome(
@@ -354,10 +359,19 @@ def _typed_decision_from_outcome(
             else "source_readiness_unproven"
             if outcome.reason_code == "pathology_recording_deadline_unconfirmed"
             else outcome.reason_code if outcome.reason_code in {"authoritative_time_missing", "authoritative_time_conflict", "candidate_scope_incomplete"}
+            # 08-01-04 计划抽取：合法 unknown 与材料超限保留准确原因，不并入字段缺失。
+            else outcome.reason_code
+            if outcome.rule_id == "LX0609-08-01-04"
+            and outcome.reason_code in _DISCHARGE_PLAN_DATA_GAP_REASONS
             else "source_unavailable" if source_gap else "required_field_missing",
         )
     elif outcome.status == "technical_error":
+        from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
+
         technical_reason = (
+            outcome.reason_code
+            if outcome.rule_id == "LX0609-06-02-02" and outcome.reason_code in CONTEXT_FAILURE_REASON_CODES
+            else
             "source_query_error"
             if outcome.reason_code
             in {"source_query_error", "malignancy_source_query_error"}
@@ -365,6 +379,10 @@ def _typed_decision_from_outcome(
             if outcome.reason_code in {"tumor_llm_invalid_output", "malignancy_llm_invalid"}
             else "model_transport_error"
             if outcome.reason_code in {"tumor_llm_failure", "malignancy_llm_transport_error"}
+            # 08-01-04 计划抽取沿用共用失败分类（超时/传输/协议/隐私/程序缺陷），不并入执行异常。
+            else outcome.reason_code
+            if outcome.rule_id == "LX0609-08-01-04"
+            and outcome.reason_code in _DISCHARGE_PLAN_TECHNICAL_REASONS
             else "executor_exception"
         )
         dimensions = (
@@ -385,7 +403,7 @@ def _typed_decision_from_outcome(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=refs,
-        evaluator_version=_TYPED_EVALUATOR_VERSION,
+        evaluator_version=SAMPLING_EVALUATOR_VERSION if outcome.rule_id == "LX0609-06-02-02" else _TYPED_EVALUATOR_VERSION,
         confidence=None,
     )
 
@@ -1202,7 +1220,9 @@ async def _typed_pathology_documentation(
 ) -> _PathologyDocumentationOutcome:
     """模型逐次检查抽取取材/结果记录及原文引用，程序核验时间并判定。"""
 
-    sampling = rule_id == "LX0609-06-02-02"
+    if rule_id != "LX0609-06-02-03":
+        raise ValueError("sampling must use the sampling-actions contract")
+    sampling = False
     events = _pathology_events(sampling=sampling, master=master, report=report)
     if not events:
         return _PathologyDocumentationOutcome("data_gap", "pathology_event_association_unresolved")
@@ -1860,66 +1880,77 @@ async def _typed_chemotherapy_comparison(
     )
 
 
-def _is_future_discharge_treatment_clause(clause: str) -> bool:
-    """历史语境中的继续/建议不证明未来计划，明确出院后语境可重新起算。"""
+# 027 送模字段：与原判定读取的出院记录字段一致，按字段标注、逐份保留文书边界。
+_DISCHARGE_PLAN_TEXT_FIELDS = (
+    ("content", "正文"), ("record_content", "正文"), ("assembled_text", "正文"),
+    ("treatment_course", "诊疗经过"), ("discharge_order", "出院医嘱"),
+)
+def _discharge_plan_documents(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[DischargePlanDocument, ...], tuple[Mapping[str, Any], ...]]:
+    """逐份构造送模文书（全部出院记录，不限份数），每份按真实字段分别送模。
 
-    if not _DISCHARGE_PLAN_FUTURE_PATTERN.search(clause):
-        return False
-    history_pattern = re.compile(
-        r"既往|此前|曾经|曾予|曾行|入院后|住院期间|住院中|住院后|本次住院|已完成|已结束"
-    )
-    future_scope_pattern = re.compile(r"出院后|离院后|后续|下次")
-    for treatment in _DISCHARGE_PLAN_TREATMENT_PATTERN.finditer(clause):
-        prefix = clause[: treatment.start()]
-        history_positions = [item.start() for item in history_pattern.finditer(prefix)]
-        future_positions = [item.start() for item in future_scope_pattern.finditer(prefix)]
-        if not history_positions or (
-            future_positions and future_positions[-1] > history_positions[-1]
-        ):
-            return True
-    return False
+    字段名称只作上下文，引文须绑定字段原值；正文为空的出院记录不送模，由调用方按资料不足处理。
+    每个非空真实字段按固定顺序各自保留：文字相同也不跨字段合并，字段身份（如出院医嘱与诊疗经过）
+    本身是区分出院安排与住院经过的上下文。
+    """
+
+    documents: list[DischargePlanDocument] = []
+    kept: list[Mapping[str, Any]] = []
+    for row in rows:
+        fields: list[DischargePlanField] = []
+        for key, label in _DISCHARGE_PLAN_TEXT_FIELDS:
+            value = str(row.get(key) or "").strip()
+            if value:
+                fields.append(DischargePlanField(key, label, value))
+        if fields:
+            kept.append(row)
+            documents.append(DischargePlanDocument(f"doc_{len(documents) + 1:02d}", tuple(fields)))
+    return tuple(documents), tuple(kept)
 
 
-def _typed_discharge_plan_outcome(
-    material: SourceMaterial,
-) -> tuple[str, str, Mapping[str, Any]]:
-    clauses = tuple(
-        normalized_clause
-        for row in material.rows
-        for clause in _CLINICAL_CLAUSE_SEPARATOR.split(_row_text(row))
-        if (normalized_clause := _clean(clause))
-    )
-    future_plan = any(_DISCHARGE_PLAN_FUTURE_PATTERN.search(item) for item in clauses)
-    treatment_plan_clauses = tuple(
-        item
-        for item in clauses
-        if _is_future_discharge_treatment_clause(item)
-        and not _DISCHARGE_PLAN_NEGATIVE_TREATMENT_PATTERN.search(item)
-        and not _DISCHARGE_PLAN_PENDING_TREATMENT_PATTERN.search(item)
-    )
-    treatment_plan = bool(treatment_plan_clauses)
-    follow_up_plan = any(
-        _DISCHARGE_PLAN_FOLLOW_UP_PATTERN.search(item)
-        and not _DISCHARGE_PLAN_CONDITIONAL_PATTERN.search(item)
-        for item in clauses
-    )
-    compliant = treatment_plan or follow_up_plan
-    return (
-        "compliant" if compliant else "non_compliant",
-        "malignant_discharge_plan_recorded"
-        if compliant
-        else "malignant_discharge_plan_missing",
-        {
+def _discharge_plan_outcome(
+    judgement: DischargePlanJudgement,
+    plan_rows: Sequence[Mapping[str, Any]],
+    *,
+    blank_record_present: bool,
+) -> tuple[str, str, Mapping[str, Any] | None, tuple[Mapping[str, Any], ...]]:
+    """把 Python 判定映射为状态、原因、客户事实及被采信计划所在文书。"""
+
+    if judgement.status == "compliant":
+        # 全部被采信计划都保留（不截前若干项），证据覆盖其所在的每一份出院记录。
+        accepted = judgement.accepted
+        index_by_id = {f"doc_{index:02d}": index for index in range(1, len(plan_rows) + 1)}
+        cited = tuple(dict.fromkeys(
+            id(plan_rows[index_by_id[item.local_doc_id] - 1]) for item in accepted
+        ))
+        rows_by_id = {id(row): row for row in plan_rows}
+        return "compliant", judgement.reason_code, {
             "verification_kind": "malignant_discharge_plan_check",
             "malignant_diagnosis_present": True,
             "plan_items": {
-                "future_plan": future_plan,
-                "tumor_treatment": treatment_plan,
-                "follow_up": follow_up_plan,
+                "future_plan": True,
+                "tumor_treatment": any(item.kind == "tumor_treatment" for item in accepted),
+                "follow_up": any(item.kind == "follow_up" for item in accepted),
             },
-            "requirement_met": compliant,
-        },
-    )
+            "requirement_met": True,
+            "accepted_plans": [
+                {"kind": item.kind, "quote": item.quote, "time_anchor": item.time_anchor,
+                 "document_index": index_by_id[item.local_doc_id], "field": item.field_key}
+                for item in accepted
+            ],
+        }, tuple(rows_by_id[row_id] for row_id in cited)
+    if judgement.status == "non_compliant":
+        if blank_record_present:
+            # 有出院记录正文为空，未经核验，不能形成完整否定。
+            return "data_gap", "required_field_missing", None, ()
+        return "non_compliant", judgement.reason_code, {
+            "verification_kind": "malignant_discharge_plan_check",
+            "malignant_diagnosis_present": True,
+            "plan_items": {"future_plan": False, "tumor_treatment": False, "follow_up": False},
+            "requirement_met": False,
+        }, tuple(plan_rows)
+    return judgement.status, judgement.reason_code, None, ()
 
 
 @budget_guarded_executor
@@ -2095,10 +2126,17 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             )
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
+    sampling_audit = None
 
     for rule_id in selected:
         typed_rule = rule_id in typed_requested
         source_for_rule = typed_source if typed_rule else source
+        sampling_session = (
+            rule_id == "LX0609-06-02-02" and evidence_snapshot is not None and evidence_materials is not None
+            and evidence_materials.snapshot_hash == evidence_snapshot.snapshot_hash
+        )
+        if sampling_session:
+            source_for_rule = typed_source
         facts_for_rule = () if typed_rule else facts
         context_sources: tuple[str, ...]
         if rule_id == PATHOLOGY_REPORT_COMPLETENESS_RULE_ID:
@@ -2137,7 +2175,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         if rule_id in {"LX0609-06-02-03", "LX0609-06-02-02"}:
             master = source_for_rule("pathology_exam_master")
             report = source_for_rule("pathology_exam_report")
-            if rule_id in typed_requested and any(
+            if (rule_id in typed_requested or sampling_session) and any(
                 material.state == "error" for material in (master, report)
             ):
                 emit_outcome(
@@ -2147,7 +2185,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     executor_type="program",
                 )
                 continue
-            if rule_id in typed_requested and any(
+            if (rule_id in typed_requested or sampling_session) and any(
                 material.state in {"unavailable", "truncated"}
                 for material in (master, report)
             ):
@@ -2532,7 +2570,9 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             if rule_id == "LX0609-05-02-01"
             else ("discharge_record",)
         )
-        if rule_id in typed_requested and any(
+        if rule_id == "LX0609-06-02-02" and materials["surgery_record"].state == "present":
+            required_sources = ("surgery_record",)
+        if (rule_id in typed_requested or sampling_session) and any(
             materials[source_key].state == "error"
             for source_key in required_sources
         ):
@@ -2543,7 +2583,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 executor_type="program",
             )
             continue
-        if rule_id in typed_requested and any(
+        if (rule_id in typed_requested or sampling_session) and any(
             materials[source_key].state in {"unavailable", "truncated"}
             for source_key in required_sources
         ):
@@ -2557,6 +2597,54 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         target_states = tuple(
             materials[source_key].state for source_key in required_sources
         )
+        if rule_id == "LX0609-06-02-02":
+            # 正常入口独立取材动作合同；全空目标也走同一安全边界，旧关键词路径不再参与。
+            if not sampling_session:
+                emit_outcome(rule_id, "data_gap", "pathology_source_unavailable", executor_type="program")
+                continue
+            selected_targets = tuple((key, materials[key]) for key in required_sources)
+            source_documents = {
+                key: evidence_materials.document_rows(key, snapshot=evidence_snapshot)
+                for key in (*_PATHOLOGY_SOURCES, *required_sources)
+            }
+            context = build_sampling_context(source_documents, checked_sources=required_sources)
+            extraction = await extract_pathology_sampling_facts(context=context, llm_client=llm_client)
+            sampling_audit = extraction.audit or {
+                "schema_version": "lx0609-pathology-sampling-actions-v1", "rule_id": rule_id,
+                "complete": False, "reason_code": extraction.reason_code,
+                "events": list(context.events), "actions": [], "associations": [],
+            }
+            llm_call_count += extraction.llm_call_count
+            prompt_tokens += extraction.prompt_tokens
+            completion_tokens += extraction.completion_tokens
+            total_tokens += extraction.total_tokens
+            api_time += extraction.api_time
+            status, reason = extraction.state, extraction.reason_code
+            if status == "ready":
+                states = tuple(extraction.associations.values())
+                status = "non_compliant" if "absent" in states else "data_gap" if "unknown" in states else "compliant"
+                reason = ("pathology_sampling_not_documented" if status == "non_compliant" else
+                          "pathology_event_association_unresolved" if status == "data_gap" else "pathology_sampling_recorded")
+            cited_sources = [key for key in required_sources if any(
+                ref in extraction.cited_refs for ref, _row in source_documents[key])]
+            display = _lx019_typed_display_facts(
+                pathology_master=master, pathology_report=report, checked=selected_targets,
+                documented_sources=cited_sources if status == "compliant" else None,
+            ) if status in {"compliant", "non_compliant"} else None
+            if display is not None:
+                display = {**display, **{
+                    name: sum(state == value for state in extraction.associations.values())
+                    for name, value in (("confirmed_event_count", "confirmed"), ("absent_event_count", "absent"),
+                                        ("unknown_event_count", "unknown"))
+                }}
+            refs = tuple(dict.fromkeys(
+                [ref for key in _PATHOLOGY_SOURCES for ref, _row in source_documents[key]]
+                + (list(extraction.cited_refs) if status == "compliant" else
+                   [ref for key in required_sources for ref, _row in source_documents[key]])
+            ))
+            emit_outcome(rule_id, status, reason, executor_type="llm" if extraction.llm_call_count else "program",
+                         display_facts=display, fact_refs=refs)
+            continue
         if rule_id == "LX0609-06-02-03" and not typed_rule and all(
             state == "empty" for state in target_states
         ):
@@ -2580,33 +2668,6 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                                 (complete_pathology_report_row,),
                             )
                         )
-                    if typed_rule
-                    else ()
-                ),
-            )
-            continue
-        if rule_id == "LX0609-06-02-02" and all(
-            state == "empty" for state in target_states
-        ):
-            missing_sampling_facts = _lx019_missing_sampling_display_facts(
-                pathology_master=master,
-                pathology_report=report,
-                surgery_record=materials["surgery_record"],
-                daily_course_record=materials["daily_course_record"],
-            )
-            emit_outcome(
-                rule_id,
-                "non_compliant" if missing_sampling_facts else "data_gap",
-                "pathology_sampling_not_documented"
-                if missing_sampling_facts
-                else "tumor_target_projection_unavailable",
-                executor_type="program",
-                display_facts=missing_sampling_facts,
-                fact_refs=(
-                    typed_document_refs(
-                        ("pathology_exam_master", master.rows),
-                        ("pathology_exam_report", report.rows),
-                    )
                     if typed_rule
                     else ()
                 ),
@@ -2713,22 +2774,43 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             )
             continue
         if rule_id == "LX0609-08-01-04" and typed_rule:
-            status, reason_code, display_facts = _typed_discharge_plan_outcome(
-                materials["discharge_record"]
+            # LLM 只抽取各出院记录中的治疗/随访安排及其时间归属，Python 校验并判定。
+            discharge_rows = materials["discharge_record"].rows
+            plan_documents, plan_rows = _discharge_plan_documents(discharge_rows)
+            # 规则所有者承接预算/上下文准入失败：只让本规则进入技术失败，同族已完成结果照常返回；
+            # 取消及非预算异常仍向上传播。失败时不形成抽取结果，因而也不会冻结。
+            plan_budget_errors: list[BaseException] = []
+            extraction = None
+            with budget_rule_scope(plan_budget_errors.append):
+                extraction = await extract_discharge_plan_facts(
+                    plan_documents, llm_client,
+                    freeze_scope=evidence_snapshot.visit_ref if evidence_snapshot is not None else None,
+                )
+            if plan_budget_errors or extraction is None:
+                emit_outcome(
+                    rule_id,
+                    "technical_error",
+                    getattr(plan_budget_errors[0], "code", "") if plan_budget_errors else "execution_program_error",
+                    executor_type="llm",
+                    fact_refs=typed_document_refs(("discharge_record", discharge_rows)),
+                )
+                continue
+            llm_call_count += extraction.llm_call_count
+            prompt_tokens += extraction.prompt_tokens
+            completion_tokens += extraction.completion_tokens
+            total_tokens += extraction.total_tokens
+            api_time += extraction.api_time
+            status, reason_code, display_facts, cited_rows = _discharge_plan_outcome(
+                judge_discharge_plan(extraction), plan_rows,
+                blank_record_present=len(plan_rows) != len(discharge_rows),
             )
             emit_outcome(
                 rule_id,
                 status,
                 reason_code,
-                executor_type="program",
+                executor_type="llm" if extraction.llm_call_count else "program",
                 display_facts=display_facts,
-                fact_refs=(
-                    typed_document_refs(
-                        ("discharge_record", materials["discharge_record"].rows)
-                    )
-                    if typed_rule
-                    else ()
-                ),
+                fact_refs=typed_document_refs(("discharge_record", cited_rows or discharge_rows)),
             )
             continue
         sampling_surgery = materials.get("surgery_record")
@@ -3022,4 +3104,5 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         api_time=api_time,
+        diagnostic_semantic_snapshot=sampling_audit,
     )

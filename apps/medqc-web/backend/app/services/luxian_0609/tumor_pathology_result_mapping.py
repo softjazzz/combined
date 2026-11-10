@@ -227,6 +227,11 @@ def _safe_013(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 def _safe_019(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if raw.get("verification_kind") == "pathology_report_field_gap":
         return _safe_013(raw)
+    count_keys = ("confirmed_event_count", "absent_event_count", "unknown_event_count")
+    counts = {key: raw[key] for key in count_keys if key in raw}
+    if counts and (set(counts) != set(count_keys) or any(type(value) is not int or value < 0 for value in counts.values())
+                   or sum(counts.values()) < 1):
+        return None
     raw_checked = raw.get("checked_target_sources")
     checked = _safe_checked_sources(
         raw_checked,
@@ -257,6 +262,8 @@ def _safe_019(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             or checked is None
             or documented is None
             or raw.get("requirement_met") is not True
+            or counts and (counts["confirmed_event_count"] < 1 or counts["absent_event_count"] > 0
+                           or counts["unknown_event_count"] > 0)
         ):
             return None
         return {
@@ -265,6 +272,7 @@ def _safe_019(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             "checked_target_sources": checked,
             "documented_sources": documented,
             "requirement_met": True,
+            **counts,
         }
     raw_triggers = raw.get("pathology_trigger_sources")
     if not isinstance(raw_triggers, list):
@@ -277,12 +285,14 @@ def _safe_019(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or triggers is None
         or not triggers
         or checked is None
+        or counts and counts["absent_event_count"] < 1
     ):
         return None
     return {
         "failure_kind": "pathology_sampling_not_documented",
         "pathology_trigger_sources": triggers,
         "checked_target_sources": checked,
+        **counts,
     }
 
 
@@ -366,12 +376,52 @@ def _safe_027(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or not isinstance(raw.get("requirement_met"), bool)
     ):
         return None
-    return {
+    safe = {
         "verification_kind": "malignant_discharge_plan_check",
         "malignant_diagnosis_present": True,
         "plan_items": {key: plan_items[key] for key in required},
         "requirement_met": raw["requirement_met"],
     }
+    if "accepted_plans" in raw:
+        # LLM 抽取协议（v1）新增：被采信的出院后计划及其文书位置；旧结果没有该字段仍可读。
+        accepted = _safe_027_accepted_plans(raw["accepted_plans"])
+        if (
+            accepted is None
+            or raw["requirement_met"] is not True
+            or plan_items["future_plan"] is not True
+            or plan_items["tumor_treatment"] != any(item["kind"] == "tumor_treatment" for item in accepted)
+            or plan_items["follow_up"] != any(item["kind"] == "follow_up" for item in accepted)
+        ):
+            return None
+        safe["accepted_plans"] = accepted
+    return safe
+
+
+# v2 起每条计划注明所属的真实字段；v1 历史结果没有 field，按原样读取。
+_027_PLAN_FIELDS = frozenset({"content", "record_content", "assembled_text", "treatment_course", "discharge_order"})
+_027_PLAN_KEYS = ("kind", "quote", "time_anchor", "document_index")
+
+
+def _safe_027_accepted_plans(raw: Any) -> list[dict[str, Any]] | None:
+    # 不限计划条数与文书序号上界：送模覆盖全部出院记录，第 9 份及以后同样可被采信。
+    if not isinstance(raw, list) or not raw:
+        return None
+    result = []
+    for item in raw:
+        if (
+            not isinstance(item, Mapping)
+            or set(item) not in ({*_027_PLAN_KEYS}, {*_027_PLAN_KEYS, "field"})
+            or item["kind"] not in {"tumor_treatment", "follow_up"}
+            or not isinstance(item["quote"], str) or not item["quote"].strip() or len(item["quote"]) > 200
+            or "\n" in item["quote"]
+            or not isinstance(item["time_anchor"], str) or len(item["time_anchor"]) > 40
+            or (item["time_anchor"] and item["time_anchor"] not in item["quote"])
+            or type(item["document_index"]) is not int or item["document_index"] < 1
+            or ("field" in item and item["field"] not in _027_PLAN_FIELDS)
+        ):
+            return None
+        result.append({key: item[key] for key in (*_027_PLAN_KEYS, *(("field",) if "field" in item else ()))})
+    return result
 
 
 def safe_tumor_pathology_customer_display_facts(
