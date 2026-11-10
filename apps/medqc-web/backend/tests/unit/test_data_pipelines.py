@@ -21,6 +21,12 @@ from app.services import sync_control_client as control
 JOB_ID = "00112233-4455-6677-8899-aabbccddeeff"
 
 
+def capabilities(**changes):
+    return {"permissions": ["read", "run", "schedule"], "timezone": "Asia/Shanghai",
+            "last_complete_date": "2026-11-09", "max_manual_days": 7,
+            "features": {"schedule_drafts": True, "schedule_controls": False, "date_recovery_profiles": []}, **changes}
+
+
 @pytest.fixture(autouse=True)
 def environment(monkeypatch):
     monkeypatch.setenv("SYNC_CONTROL_API_URL", "http://sync.invalid:8766")
@@ -146,16 +152,18 @@ def test_strict_request_shape_disabled_route_never_calls_remote(database, monkey
 @pytest.mark.parametrize("start,end", [("2020-01-01", "2020-01-08"), ("2020-01-02", "2020-01-01"), ("2099-01-01", "2099-01-01"), ("2020-02-30", "2020-03-01")])
 def test_date_scope_keeps_manual_seven_day_contract(start, end):
     with pytest.raises(settings.PipelineError):
-        control.prepare_job(start_date=start, end_date=end, interfaces=["web.mr"], publish=True, dry=False)
+        control.prepare_job(start_date=start, end_date=end, interfaces=["web.mr"], publish=True, dry=False, capabilities=capabilities())
 
 
 def test_submit_reuses_remote_idempotency_key_and_respects_interface_allowlist(monkeypatch):
     calls = []
     async def fake(method, path, **kwargs):
         calls.append((method, path, kwargs))
+        if path == "/v1/session":
+            return capabilities()
         return {"profiles": [{"profile": "accepted_manual", "interfaces": ["web.mr"]}]} if path == "/v1/interfaces" else raw_job()
     monkeypatch.setattr(control, "request", fake)
-    payload = control.prepare_job(start_date="2020-01-01", end_date="2020-01-02", interfaces=["web.mr"], publish=True, dry=False)
+    payload = control.prepare_job(start_date="2020-01-01", end_date="2020-01-02", interfaces=["web.mr"], publish=True, dry=False, capabilities=capabilities())
     operation_id = str(uuid4())
     asyncio.run(control.submit(payload, "admin", operation_id))
     asyncio.run(control.submit(payload, "admin", operation_id))
@@ -181,6 +189,8 @@ def test_profile_scope_cancel_and_retry_are_kept_separate(database, monkeypatch)
     profile = "accepted_manual"
     async def fake(method, path, **kwargs):
         calls.append((method, path))
+        if path == "/v1/session":
+            return capabilities()
         job = raw_job(request={"profile": profile})
         return {"jobs": [job, raw_job(request={"profile": "other"})]} if path.startswith("/v1/jobs?") else job
     monkeypatch.setattr(control, "request", fake)
@@ -246,3 +256,159 @@ def test_total_deadline_cancels_one_attempt_and_caller_cancel_is_not_swallowed(m
         with pytest.raises(asyncio.CancelledError):
             await task
     asyncio.run(caller_cancel())
+
+
+def test_session_controls_dates_and_recovery_plan_without_local_seven_day_limit(monkeypatch):
+    calls = []
+    async def fake(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        if path == "/v1/session":
+            return capabilities(max_manual_days=10, features={"date_recovery_profiles": ["accepted_manual"]})
+        if path == "/v1/interfaces":
+            return {"profiles": [{"profile": "accepted_manual", "interfaces": ["web.mr"]}]}
+        return raw_job()
+    monkeypatch.setattr(control, "request", fake)
+    payload = {"start_date": "2026-11-01", "end_date": "2026-11-09", "interfaces": ["web.mr"], "mode": "replay", "publish": True}
+    asyncio.run(control.submit(payload, "admin", str(uuid4())))
+    posts = [c for c in calls if c[0] == "POST"]
+    assert len(posts) == 1
+    assert posts[0][2]["payload"]["plan_version"] == 2
+    with pytest.raises(settings.PipelineError):
+        control.prepare_job(**{k: v for k, v in payload.items() if k != "mode"}, dry=False,
+            capabilities=capabilities(max_manual_days=2))
+
+
+@pytest.mark.parametrize("change", [{"max_manual_days": 0}, {"last_complete_date": "bad"}, {"features": []}, {"permissions": ["owner"]}])
+def test_invalid_capabilities_fail_closed(monkeypatch, change):
+    async def fake(*a, **kw):
+        return capabilities(**change)
+    monkeypatch.setattr(control, "request", fake)
+    with pytest.raises(settings.PipelineError, match="invalid_session"):
+        asyncio.run(control.session())
+
+
+def test_read_only_token_cannot_use_business_admin_to_run_or_save_draft(database, monkeypatch):
+    writes = []
+    async def fake(method, path, **kwargs):
+        if method != "GET":
+            writes.append(path)
+        return capabilities(permissions=["read"]) if path == "/v1/session" else {"profiles": [{"profile": "accepted_manual", "interfaces": ["web.mr"]}]}
+    monkeypatch.setattr(control, "request", fake)
+    with client_for() as client:
+        assert client.put("/api/v1/sync/pipelines", json={"independent_enabled": True}).status_code == 200
+        assert client.post("/api/v1/sync/pipelines/independent/jobs", json={
+            "operation_id": str(uuid4()), "start_date": "2020-01-01", "end_date": "2020-01-01", "interfaces": ["web.mr"],
+        }).status_code == 403
+        assert client.put(f"/api/v1/sync/pipelines/independent/schedule-drafts/{JOB_ID}", json=draft_payload()).status_code == 403
+    assert writes == []
+
+
+def draft_payload(version=None):
+    return {"version": version, "config": {"frequency": "daily", "local_time": "02:00", "window_days": 2, "interfaces": ["web.mr"]}}
+
+
+def schedule_row(enabled=False, version=1, profile="accepted_manual"):
+    return {"schedule_id": JOB_ID, "version": version, "enabled": enabled, "next_fire_at": None,
+            "config": {"frequency": "daily", "local_time": "02:00", "window_days": 2, "timezone": "Asia/Shanghai",
+                       "request": {"profile": profile, "interfaces": ["web.mr"], "mode": "replay", "publish": True}}}
+
+
+def test_disabled_draft_cas_and_admin_audit_without_enable_route(database, monkeypatch):
+    calls, audits = [], []
+    def audit(*args, **kwargs):
+        audits.append(kwargs)
+    monkeypatch.setattr(api, "audit_event", audit)
+    async def fake(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        if path == "/v1/session":
+            return capabilities()
+        if path == "/v1/interfaces":
+            return {"profiles": [{"profile": "accepted_manual", "interfaces": ["web.mr"]}]}
+        return schedule_row(version=2 if method == "PUT" else 1)
+    monkeypatch.setattr(control, "request", fake)
+    with client_for() as client:
+        result = client.put(f"/api/v1/sync/pipelines/independent/schedule-drafts/{JOB_ID}", json=draft_payload(1))
+        assert result.status_code == 200, result.text
+        assert result.json()["data"]["enabled"] is False
+        assert client.post(f"/api/v1/sync/pipelines/independent/schedules/{JOB_ID}/enable").status_code in {404, 405}
+        assert client.put(f"/api/v1/sync/pipelines/independent/schedule-drafts/{JOB_ID}", json={**draft_payload(), "enabled": True}).status_code == 422
+    writes = [c for c in calls if c[0] != "GET"]
+    assert len(writes) == 1
+    assert writes[0][1] == f"/v1/schedule-drafts/{JOB_ID}"
+    assert writes[0][2]["payload"]["version"] == 1
+    assert "enabled" not in writes[0][2]["payload"]
+    assert audits[-1]["current_user"]["id"] == "admin"
+    assert audits[-1]["resource"] == JOB_ID
+
+
+@pytest.mark.parametrize("scenario,expected", [("enabled", 409), ("other_profile", 403), ("conflict", 409)])
+def test_draft_never_overwrites_enabled_foreign_or_conflicting_version(database, monkeypatch, scenario, expected):
+    writes = []
+    async def fake(method, path, **kwargs):
+        if path == "/v1/session":
+            return capabilities()
+        if path == "/v1/interfaces":
+            return {"profiles": [{"profile": "accepted_manual", "interfaces": ["web.mr"]}]}
+        if method == "PUT":
+            writes.append(kwargs["payload"])
+            raise settings.PipelineError("schedule_version_conflict", 409)
+        return schedule_row(enabled=scenario == "enabled", profile="other" if scenario == "other_profile" else "accepted_manual")
+    monkeypatch.setattr(control, "request", fake)
+    with client_for() as client:
+        result = client.put(f"/api/v1/sync/pipelines/independent/schedule-drafts/{JOB_ID}", json=draft_payload(1))
+        assert result.status_code == expected
+    assert len(writes) == (1 if scenario == "conflict" else 0)
+
+
+def test_detail_preserves_date_units_and_errors_but_never_clinical_text(database, monkeypatch):
+    raw = raw_job(units=[{"unit_id": JOB_ID, "sequence": 1, "source_date": "2026-11-01", "interface_name": "web.mr",
+        "status": "failed", "phase": "extract", "execution_attempts": 2, "record_content": "private body",
+        "error": {"code": "source_error", "location": "extract", "retry_policy": "retryable", "message": "private body"},
+        "result": {"counts": {"fetched": 0, "private": 1}, "raw": "private body"}}])
+    async def fake(*a, **kw):
+        return raw
+    monkeypatch.setattr(control, "request", fake)
+    with client_for() as client:
+        result = client.get(f"/api/v1/sync/pipelines/independent/jobs/{JOB_ID}")
+    assert result.status_code == 200
+    unit = result.json()["data"]["units"][0]
+    assert unit["source_date"] == "2026-11-01" and unit["result"]["counts"]["fetched"] == 0
+    assert unit["error"]["retry_policy"] == "retryable"
+    assert "private" not in result.text
+
+
+def test_http_conflict_and_safe_error_are_not_swallowed_or_retried(monkeypatch):
+    real = httpx.AsyncClient
+    calls = []
+    def handler(req):
+        calls.append(req)
+        return httpx.Response(409, json={"error": {"code": "schedule_version_conflict", "location": "schedule", "message": "private"}})
+    monkeypatch.setattr(control.httpx, "AsyncClient", lambda **kw: real(**kw, transport=httpx.MockTransport(handler)))
+    with pytest.raises(settings.PipelineError) as exc:
+        asyncio.run(control.request("PUT", f"/v1/schedule-drafts/{JOB_ID}", payload=draft_payload(1)))
+    assert exc.value.status == 409
+    assert exc.value.public_details == {"code": "schedule_version_conflict", "location": "schedule"}
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("change", [{"next_fire_at": 123}, {"enabled": "false"}, {"version": True}])
+def test_malformed_draft_state_cannot_be_reported_as_saved_disabled(change):
+    with pytest.raises(settings.PipelineError):
+        control.public_schedule({**schedule_row(), **change})
+
+
+def test_schedule_list_is_profile_bound_and_non_admin_cannot_access(database, monkeypatch):
+    calls = []
+    async def fake(method, path, **kw):
+        calls.append(path)
+        return {"schedules": [schedule_row(), schedule_row(profile="foreign")]}
+    monkeypatch.setattr(control, "request", fake)
+    with client_for() as client:
+        result = client.get("/api/v1/sync/pipelines/independent/schedules")
+        assert result.status_code == 200
+        assert len(result.json()["data"]["schedules"]) == 1
+    calls.clear()
+    with client_for("doctor") as client:
+        assert client.get("/api/v1/sync/pipelines/independent/schedules").status_code == 403
+        assert client.put(f"/api/v1/sync/pipelines/independent/schedule-drafts/{JOB_ID}", json=draft_payload()).status_code == 403
+    assert calls == []
