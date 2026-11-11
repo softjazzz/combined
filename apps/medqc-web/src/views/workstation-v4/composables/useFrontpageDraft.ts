@@ -374,16 +374,33 @@ export function useFrontpageDraft(
     }
   }
 
+  const draftSelectionKey = computed(() => {
+    const record = selectedRecord.value
+    return JSON.stringify([
+      selectedId.value, record?.sourceId, record?.instituteId,
+      record?.patientId, record?.visitId || record?.id,
+    ])
+  })
+  let draftRequestSequence = 0
+
   async function loadSavedFrontpageDraft(visitId: string | null) {
+    const requestSequence = ++draftRequestSequence
+    const selectionKey = draftSelectionKey.value
+    const isCurrent = () => requestSequence === draftRequestSequence &&
+      selectionKey === draftSelectionKey.value
+    const record = selectedRecord.value
     const normalizedVisitId = String(visitId || '').trim()
-    if (!normalizedVisitId) {
-      setDraftEmpty()
+    // 当前CDM首页/正文由各自读取链加载，不访问旧业务源的AI草稿。
+    setDraftEmpty()
+    if (!normalizedVisitId || !record || record.sourceId === 'independent_cdm' ||
+      String(record.visitId || record.id).trim() !== normalizedVisitId) {
       return
     }
     try {
       const { data } = await apiClient.get(
         `/api/medical-records/ai-frontpage-draft/${normalizedVisitId}`,
       )
+      if (!isCurrent()) return
       const draft = data?.draft || data?.data?.draft || null
       if (!draft) {
         setDraftEmpty()
@@ -396,6 +413,7 @@ export function useFrontpageDraft(
       completedModules.value = rebuildCompletedModulesFromDraft(draft)
       onDraftChanged?.()
     } catch (err: any) {
+      if (!isCurrent()) return
       if (err?.response?.status !== 404) {
         console.error('读取 AI 首页草稿失败:', err)
       }
@@ -777,10 +795,10 @@ export function useFrontpageDraft(
   }
 
   watch(
-    selectedId,
-    (visitId) => {
+    draftSelectionKey,
+    () => {
       if (frontpageGenerating.value) return
-      void loadSavedFrontpageDraft(visitId)
+      void loadSavedFrontpageDraft(selectedId.value)
     },
     { immediate: true },
   )
