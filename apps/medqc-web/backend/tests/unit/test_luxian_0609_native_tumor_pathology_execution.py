@@ -5,6 +5,8 @@ import json
 import pytest
 
 from luxian_0609_pathology_test_facts import PathologyFactsClient
+from luxian_0609_discharge_plan_test_facts import DischargePlanFactsClient
+from app.services.luxian_0609.discharge_plan_extraction import SCHEMA_VERSION as DISCHARGE_PLAN_SCHEMA_VERSION
 from app.services.luxian_0609.pathology_documentation_extraction import (
     SCHEMA_VERSION as PATHOLOGY_SCHEMA_VERSION,
 )
@@ -78,12 +80,14 @@ def _payload(*, facts: list[dict] | None = None, **overrides: list[dict]) -> dic
 
 
 class _Client:
-    """其他调用按脚本输出；013/019 病理记录抽取交给协议一致的病理事实假客户端。"""
+    """其他调用按脚本输出；013/019 病理记录抽取与 027 出院计划抽取交给协议一致的固定事实假客户端。"""
 
-    def __init__(self, outputs: list[object], *, pathology: PathologyFactsClient | None = None) -> None:
+    def __init__(self, outputs: list[object], *, pathology: PathologyFactsClient | None = None,
+                 discharge_plan: DischargePlanFactsClient | None = None) -> None:
         self.outputs = list(outputs)
         self.prompts: list[str] = []
         self.pathology = pathology or PathologyFactsClient()
+        self.discharge_plan = discharge_plan or DischargePlanFactsClient()
 
     async def generate(
         self,
@@ -93,8 +97,10 @@ class _Client:
         allow_length_retry: bool = True,
         **kwargs,
     ) -> dict:
-        if PATHOLOGY_SCHEMA_VERSION in prompt:
+        if PATHOLOGY_SCHEMA_VERSION in prompt or "lx0609-pathology-sampling-actions-v1" in prompt:
             return await self.pathology.generate(prompt)
+        if DISCHARGE_PLAN_SCHEMA_VERSION in prompt:
+            return await self.discharge_plan.generate(prompt)
         self.prompts.append(prompt)
         output = self.outputs.pop(0)
         if isinstance(output, Exception):
@@ -1043,8 +1049,9 @@ async def test_typed_027_late_malignant_code_is_not_lost_by_prompt_row_limit() -
     assert reduce_luxian_0609_rule_decision(
         result.decisions[0]
     ).final_state.value == "compliant"
-    assert result.llm_call_count == 0
-    assert client.prompts == []
+    # 08-01-04 合同迁移：出院计划改为一次 LLM 事实抽取（固定应答 60 token）后由 Python 判定。
+    assert result.llm_call_count == 1
+    assert client.prompts == [] and len(client.discharge_plan.prompts) == 1
     assert dict(result.customer_display_facts)["LX0609-08-01-04"] == {
         "verification_kind": "malignant_discharge_plan_check",
         "malignant_diagnosis_present": True,
@@ -1054,6 +1061,8 @@ async def test_typed_027_late_malignant_code_is_not_lost_by_prompt_row_limit() -
             "follow_up": False,
         },
         "requirement_met": True,
+        "accepted_plans": [{"kind": "tumor_treatment", "quote": "出院后继续肿瘤专科治疗计划",
+                            "time_anchor": "出院后", "document_index": 1, "field": "record_content"}],
     }
 
 
@@ -1369,9 +1378,10 @@ async def test_typed_013_027_emit_ordered_decisions_from_same_session(monkeypatc
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
     ] == ["compliant", "compliant"]
-    # 013 为一次病理结果记录事实抽取（120）；027 为确定性计划事实，不调用模型。
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 120
+    # 013 为一次病理结果记录事实抽取（120）；027 为一次出院计划事实抽取（60）。
+    # 08-01-04 合同迁移：出院计划改为一次 LLM 事实抽取（固定应答 60 token）后由 Python 判定。
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 180
 
 
 @pytest.mark.asyncio
@@ -1426,12 +1436,14 @@ async def test_typed_027_uses_deterministic_plan_facts_while_legacy_stays_unchan
     ] == ["compliant", "compliant"]
     assert typed.results == ()
     assert raw.llm_call_count == 2
-    # typed 013 为一次病理记录事实抽取（120），027 为确定性计划事实。
-    assert typed.llm_call_count == 1
+    # typed 013 为一次病理记录事实抽取（120），027 为一次出院计划事实抽取（60）；旧入口不变。
+    # 08-01-04 合同迁移：出院计划改为一次 LLM 事实抽取（固定应答 60 token）后由 Python 判定。
+    assert typed.llm_call_count == 2
     assert raw.total_tokens == 220
-    assert typed.total_tokens == 120
+    assert typed.total_tokens == 180
     assert len(raw_client.prompts) == 2
     assert len(typed_client.prompts) == 0 and len(typed_client.pathology.prompts) == 1
+    assert len(typed_client.discharge_plan.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -1960,14 +1972,16 @@ async def test_typed_027_requires_future_tumor_treatment_in_one_plan_clause(
     assert result.decisions[0].reason_code == "requirement_violated"
     facts = dict(result.customer_display_facts)["LX0609-08-01-04"]
     # 单项化验复查不是肿瘤随访计划，不能替代治疗安排。
+    # 08-01-04 合同迁移：出院计划改为一次 LLM 事实抽取（固定应答 60 token）后由 Python 判定。
+    # 新合同中 future_plan 只表示存在被采信的出院后计划，不再是“出现未来字样”。
     assert facts["plan_items"] == {
-        "future_plan": True,
+        "future_plan": False,
         "tumor_treatment": False,
         "follow_up": False,
     }
     assert facts["requirement_met"] is False
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 60
 
 
 @pytest.mark.asyncio
@@ -2021,8 +2035,9 @@ async def test_typed_027_does_not_treat_negative_or_pending_treatment_as_plan(
     facts = dict(result.customer_display_facts)["LX0609-08-01-04"]
     assert facts["plan_items"]["tumor_treatment"] is expected_treatment
     assert facts["requirement_met"] is expected_treatment
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    # 08-01-04 合同迁移：出院计划改为一次 LLM 事实抽取（固定应答 60 token）后由 Python 判定。
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 60
 
 
 @pytest.mark.asyncio

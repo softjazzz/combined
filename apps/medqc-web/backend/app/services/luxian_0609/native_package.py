@@ -508,13 +508,15 @@ def resolve_package_rollback_execution_rule_ids(
     inventory: Sequence[Luxian0609RuleDependency],
     selected_rule_ids: Iterable[str],
 ) -> tuple[str, ...]:
-    """显式整体回滚适配：仅在关闭客户原生包时展开旧执行依赖。"""
+    """整体回滚也遵守当前暂停策略，不得借旧执行依赖重新启用规则。"""
 
     requested = {_normalize_rule_id(rule_id) for rule_id in selected_rule_ids}
     requested.discard("")
     by_id = {item.rule_id: item for item in inventory}
     if any(not rule_id.startswith("LX0609-") or rule_id not in by_id for rule_id in requested):
         raise ValueError("invalid LX0609 customer rule id")
+    executable, _ = partition_luxian_0609_rule_scope(requested)
+    requested = set(executable)
     return _ordered_unique(
         execution_rule_id
         for item in inventory

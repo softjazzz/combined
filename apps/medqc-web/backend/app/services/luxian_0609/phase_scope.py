@@ -36,6 +36,10 @@ _DEFAULT_PENDING_DEFINITION_MESSAGES = (
 )
 # 暂停原因的客户文案只在此处声明；总表只提供原因码，避免第二份暂停清单。
 _PENDING_DEFINITION_CUSTOMER_MESSAGES: dict[str, tuple[str, str]] = {
+    "engineering_acceptance_pending_20261110": (
+        "本质控点未启用（工程验收中），本次未执行，不计为合规或确定问题。",
+        "待工程与效果验收通过后再启用；当前请按医院要求人工核查，历史结果保持原样。",
+    ),
     "anesthesia_visit_sources_unavailable_customer_scope": (
         "麻醉术前、术后访视记录数据源暂不可用，本质控点已暂停，未生成合规或问题判定。",
         "待访视记录数据源接入并验收后再启用本质控点；当前不要求据此补写记录。",

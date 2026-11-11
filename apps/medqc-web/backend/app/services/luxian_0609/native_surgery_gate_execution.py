@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from ..llm_token_budget import budget_guarded_executor
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta, timezone
 import json
 import re
@@ -38,11 +38,16 @@ from .source_evidence_reader import (
     has_qualified_traditional_surgery_row,
     has_strict_performed_time,
     parse_strict_performed_time,
+    digest_source_evidence,
     read_luxian_0609_native_source_rows,
     read_luxian_0609_runtime_source_rows,
 )
 from .surgery_applicability import resolve_surgery_applicability
-from .surgery_event_association import group_surgery_rows_by_start
+from .surgery_event_association import (
+    group_surgery_rows_by_start, merge_surgery_component_rows, build_surgery_document_events,
+    SurgeryEvent, _is_strict_cross_source_match,
+)
+from .infection_surgery_extraction import INFECTION_SURGERY_CONTRACT_VERSION, SurgeryIdentity, clock_value
 from .surgery_record_coverage import definitely_uncovered_surgery_rows, surgery_event_time
 from .prophylactic_antimicrobial_duration import (
     SurgeryEventInput as _ProphylaxisSurgeryEvent,
@@ -183,6 +188,7 @@ class NativeSurgeryGateExecutionResult:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    diagnostic_semantic_snapshot: Mapping[str, Any] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -192,6 +198,7 @@ class _SurgeryTextOutcome:
     reason_code: str
     customer_display_facts: Mapping[str, Any] | None = None
     selected_document_refs: tuple[str, ...] = ()
+    diagnostic_semantic_snapshot: Mapping[str, Any] | None = field(default=None, repr=False)
 
 
 def _clean(value: Any) -> str:
@@ -2184,55 +2191,93 @@ def _colon_pathology_outcome(
 _028_COURSE_SOURCES = ("daily_course_record", "senior_course_record", "postsurg_firstcourse_record")
 
 
-def _028_surgery_events(
-    surgery_rows: Sequence[Mapping[str, Any]], mr_rows: Sequence[Mapping[str, Any]],
-) -> tuple[_ProphylaxisSurgeryEvent, ...]:
-    """手术记录优先形成事件，无手术记录时用病案首页；切口等级优先取同日首页。"""
-
-    def mr_date(row: Mapping[str, Any]) -> Any:
-        value = _prophylaxis_time(row.get("surgery_begin_datetime")) or _prophylaxis_time(
-            row.get("surgery_end_datetime")
-        )
-        return value.date() if value is not None else None
-
-    def incision_for(day: Any, text: Any) -> str:
-        values = {
-            incision_class_value(row.get("surgial_incision_level") or row.get("surgical_incision_level"))
-            for row in mr_rows
-            if day is not None and mr_date(row) == day
-        } - {"unknown"}
-        if len(values) == 1:
-            return next(iter(values))
-        return incision_class_from_text(text) if not values else "unknown"
-
-    events: list[_ProphylaxisSurgeryEvent] = []
-    for row in surgery_rows:
-        begin = _authoritative_surgery_begin_time(row)
-        end = _authoritative_surgery_end_time(source_key="surgery_record", row=row)
-        anchor = begin or end
-        day = anchor.date() if anchor is not None else None
-        same_day_mr = [item for item in mr_rows if day is not None and mr_date(item) == day]
-        events.append(_ProphylaxisSurgeryEvent(
-            begin=begin,
-            end=end,
-            incision_class=incision_for(
-                day, " ".join(str(row.get(key) or "") for key in ("record_content", "surgery_process"))
-            ),
-            cardiac=is_cardiac_surgery(
-                (row.get("surgery_code"), *(item.get("surgery_code") for item in same_day_mr)),
-                (row.get("surgery_name"), *(item.get("surgery_name") for item in same_day_mr)),
-            ),
-        ))
-    if not events:
-        for row in mr_rows:
-            events.append(_ProphylaxisSurgeryEvent(
-                begin=_prophylaxis_time(row.get("surgery_begin_datetime")),
-                end=_prophylaxis_time(row.get("surgery_end_datetime")),
-                incision_class=incision_class_value(
-                    row.get("surgial_incision_level") or row.get("surgical_incision_level")
-                ),
-                cardiac=is_cardiac_surgery((row.get("surgery_code"),), (row.get("surgery_name"),)),
-            ))
+def _028_surgery_events(*, materials, snapshot) -> tuple[_ProphylaxisSurgeryEvent, ...] | None:
+    """复用既有台次/组件/跨来源合同，稳定来源身份与时钟随事件传到抽取器。"""
+    source_rows = {source: tuple(materials.rows(source)) for source in ("surgery_record", "mr_surgery")}
+    source_rows["mr_surgery"] = tuple(row for row in source_rows["mr_surgery"] if has_qualified_traditional_surgery_row(row))
+    for source, rows in source_rows.items():
+        key = "document_id" if source == "surgery_record" else "surgery_id"
+        seen = {}
+        for row in rows:
+            identity = str(row.get(key) or "").strip()
+            if not identity:
+                return None
+            signature = tuple(str(row.get(field) or "") for field in (
+                "surgery_name", "surgery_code", "surgery_begin_time", "surgery_end_time",
+                "surgery_begin_datetime", "surgery_end_datetime", "surgial_incision_level", "surgical_incision_level"))
+            signature += (incision_class_from_text(str(row.get("record_content") or "") + str(row.get("surgery_process") or "")),)
+            if identity in seen and seen[identity] != signature:
+                return None
+            seen[identity] = signature
+    grouped, _reason = build_surgery_document_events(materials)
+    if grouped is None:
+        # 028原时长合同允许缺begin而以可靠end作锚点；仅单一来源唯一身份时保留，
+        # 不借此合并多台或绕过跨来源一致性核对。
+        nonempty = [(source, rows) for source, rows in source_rows.items() if rows]
+        if len(nonempty) == 1:
+            source, rows = nonempty[0]
+            identity_field = "document_id" if source == "surgery_record" else "surgery_id"
+            unique_rows = {str(row[identity_field]): row for row in rows}
+            if len(unique_rows) == 1:
+                row = next(iter(unique_rows.values()))
+                begin = _authoritative_surgery_begin_time(row) if source == "surgery_record" else _prophylaxis_time(row.get("surgery_begin_datetime"))
+                end = _authoritative_surgery_end_time(source_key=source, row=row)
+                if begin is None and end is not None:
+                    grouped = (SurgeryEvent(event_index=1, source_key=source, row=row),)
+    if grouped is None or (not grouped and any(source_rows.values())):
+        return None
+    mr_groups = group_surgery_rows_by_start("mr_surgery", source_rows["mr_surgery"])
+    events = []
+    for surgery in grouped:
+        components = list((surgery.source_key, row) for row in surgery.component_rows)
+        if surgery.source_key == "surgery_record" and source_rows["mr_surgery"]:
+            if len(grouped) == 1:
+                linked_mr = source_rows["mr_surgery"]  # 既有合同已确认单台复合组件
+            else:
+                matches = [group for group in (mr_groups or ())
+                    if _is_strict_cross_source_match(surgery.row, merge_surgery_component_rows(group))]
+                if len(matches) != 1:
+                    return None
+                linked_mr = matches[0]
+            components.extend(("mr_surgery", row) for row in linked_mr)
+        begin_values, end_values = set(), set()
+        prompt_components, material_refs = [], []
+        for source, row in components:
+            begin_field = "surgery_begin_time" if source == "surgery_record" else "surgery_begin_datetime"
+            end_field = "surgery_end_time" if source == "surgery_record" else "surgery_end_datetime"
+            # 单行同边界冲突或同台组件结束时刻冲突不可任取；跨来源日期精度由既有合同核对。
+            for fields, values in (((begin_field, "surgery_begin_datetime"), begin_values), ((end_field, "surgery_end_datetime"), end_values)):
+                row_values = {_prophylaxis_time(row.get(field)) for field in fields if _prophylaxis_time(row.get(field)) is not None}
+                if len(row_values) > 1:
+                    return None
+                if source == surgery.source_key:
+                    values.update(row_values)
+            material_ref = _material_document_ref_for_row(materials=materials, snapshot=snapshot, source_key=source, selected_row=row)
+            if not material_ref:
+                return None
+            material_refs.append(material_ref)
+            prompt_components.append({"material_ref": material_ref, "source_key": source,
+                "name": str(row.get("surgery_name") or ""), "site": None,
+                "begin": clock_value(row.get(begin_field) or row.get("surgery_begin_datetime")),
+                "end": clock_value(row.get(end_field) or row.get("surgery_end_datetime"))})
+        if len(begin_values) > 1 or len(end_values) > 1:
+            return None
+        ids = sorted({str(row.get("document_id" if surgery.source_key == "surgery_record" else "surgery_id"))
+                      for row in surgery.component_rows})
+        # 身份摘要只绑定来源业务主键集合；避免把真实来源ID暴露为可被隐私包装改写的引用。
+        reference = "surgery:" + digest_source_evidence({"source_key": surgery.source_key, "member_ids": ids})
+        incision_values = {incision_class_value(row.get("surgial_incision_level") or row.get("surgical_incision_level"))
+                           for source, row in components if source == "mr_surgery"} - {"unknown"}
+        incision = next(iter(incision_values)) if len(incision_values) == 1 else "unknown"
+        if not incision_values:
+            text_values = {incision_class_from_text(str(row.get("record_content") or "") + str(row.get("surgery_process") or ""))
+                           for source, row in components if source == "surgery_record"} - {"unknown"}
+            incision = next(iter(text_values)) if len(text_values) == 1 else "unknown"
+        events.append(_ProphylaxisSurgeryEvent(begin=next(iter(begin_values), None), end=next(iter(end_values), None),
+            incision_class=incision, cardiac=is_cardiac_surgery(tuple(row.get("surgery_code") for _, row in components),
+                tuple(row.get("surgery_name") for _, row in components)),
+            identity=SurgeryIdentity(reference, tuple(sorted(prompt_components, key=lambda part: (part["source_key"], part["material_ref"]))),
+                                     tuple(sorted(set(material_refs))), all(part["name"] for part in prompt_components))))
     return tuple(events)
 
 
@@ -2255,12 +2300,18 @@ async def _typed_028_outcome(
             return _SurgeryTextOutcome(rule_id, "technical_error", "source_query_error"), zero
         if states[source_key] not in {"available", "empty"}:
             return _SurgeryTextOutcome(rule_id, "data_gap", "required_field_missing"), zero
-    events = _028_surgery_events(rows["surgery_record"], rows["mr_surgery"])
+    events = _028_surgery_events(materials=materials, snapshot=snapshot)
+    if events is None:
+        return _SurgeryTextOutcome(rule_id, "data_gap", "association_failed", {"failure_kind": "infection_evidence_unresolved"},
+            diagnostic_semantic_snapshot={"rule_id": rule_id, "schema_version": INFECTION_SURGERY_CONTRACT_VERSION,
+                "complete": False, "failure_reason": "association_failed",
+                "source_refs": {source: dict.fromkeys((ref for ref, _ in materials.document_rows(source, snapshot=snapshot)), True)
+                                for source in ("surgery_record", "mr_surgery")}}), zero
     course_ok = all(states[key] in {"available", "empty"} for key in _028_COURSE_SOURCES)
     course_rows = tuple(
-        (f"{key}:{index}", row)
+        (f"{key}:{_material_document_ref_for_row(materials=materials, snapshot=snapshot, source_key=key, selected_row=row)}", row)
         for key in _028_COURSE_SOURCES
-        for index, row in enumerate(rows[key])
+        for row in rows[key]
     )
     from ..llm_token_budget import budget_rule_scope
     budget_errors = []
@@ -2270,9 +2321,8 @@ async def _typed_028_outcome(
             drug_order_rows=rows["inpat_drug_order"],
             course_rows=course_rows if course_ok else (),
             llm_client=llm_client,
+            course_scope_complete=course_ok,
         )
-    if budget_errors:
-        return _SurgeryTextOutcome(rule_id, "technical_error", budget_errors[0].code), zero
     usage = (
         outcome.llm_call_count, outcome.prompt_tokens, outcome.completion_tokens,
         outcome.total_tokens, outcome.api_time,
@@ -2293,6 +2343,7 @@ async def _typed_028_outcome(
     ]
     return _SurgeryTextOutcome(
         rule_id, status, reason, facts, tuple(dict.fromkeys(selected)),
+        outcome.diagnostic_semantic_snapshot,
     ), usage
 
 
@@ -2302,6 +2353,8 @@ def _decision_from_surgery_outcome(
     snapshot: Luxian0609EvidenceSnapshot,
 ) -> RuleDecision:
     technical_reason_code = {
+        **({outcome.reason_code: outcome.reason_code} if outcome.rule_id == "LX0609-05-01-01" and outcome.reason_code in {
+            "model_timeout", "model_invalid_output", "model_transport_error", "execution_program_error", "privacy_guard_blocked"} else {}),
         "source_query_error": "source_query_error",
         "surgery_llm_invalid_output": "model_invalid_output",
         "surgery_llm_failure": "model_transport_error",
@@ -2360,7 +2413,7 @@ def _decision_from_surgery_outcome(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=refs,
-        evaluator_version="surgery-text-fact-ruledecision-v1",
+        evaluator_version=INFECTION_SURGERY_CONTRACT_VERSION if outcome.rule_id == "LX0609-05-01-01" else "surgery-text-fact-ruledecision-v1",
         confidence=None,
     )
 
@@ -2572,13 +2625,14 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     typed_text_rule_ids: list[str] = []
+    infection_semantic_snapshot = None
     for rule_id in selected:
         if rule_id not in typed_requested:
             continue
         if rule_id == "LX0609-05-01-01" and _snapshot_performed_surgery_state(
             evidence_snapshot
         ) in {"present", "unknown"} and any(
-            item.source_key == "surgery_record"
+            item.source_key in {"surgery_record", "mr_surgery"}
             and item.query_state.value == "available"
             and item.completeness.value != "truncated"
             for item in evidence_snapshot.observations
@@ -2587,6 +2641,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             outcome_028, usage_028 = await _typed_028_outcome(
                 snapshot=evidence_snapshot, materials=evidence_materials, llm_client=llm_client,
             )
+            infection_semantic_snapshot = outcome_028.diagnostic_semantic_snapshot
             decisions.append(_decision_from_surgery_outcome(outcome=outcome_028, snapshot=evidence_snapshot))
             if outcome_028.customer_display_facts:
                 customer_display_facts.append((rule_id, outcome_028.customer_display_facts))
@@ -3167,6 +3222,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             api_time=api_time,
+            diagnostic_semantic_snapshot=infection_semantic_snapshot,
         )
 
     documents = _documents(evidence_payload)
@@ -3183,6 +3239,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             ),
             selected,
             decisions,
+            diagnostic_semantic_snapshot=infection_semantic_snapshot,
         )
     facts = _facts(evidence_payload)
     performed_state = _resolve_performed_state(
@@ -3321,4 +3378,5 @@ async def execute_luxian_0609_native_surgery_gate_rules(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         api_time=api_time,
+        diagnostic_semantic_snapshot=infection_semantic_snapshot,
     )

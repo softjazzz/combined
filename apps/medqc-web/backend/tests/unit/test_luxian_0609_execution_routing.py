@@ -82,6 +82,9 @@ def test_full_mainline_selects_only_currently_executable_typed_decisions() -> No
         for rule_id in selected
         if rule_id
         not in {
+            # 用户2026-11-10暂停，typed路由同样不得派发。
+            "LX0609-06-02-02", "LX0609-05-01-01", "LX0609-08-01-04",
+            "LX0609-12-02-01", "LX0609-06-01-04", "LX0609-10-03-01", "LX0609-04-02-02",
             "LX0609-03-01-01",
             "LX0609-03-01-02",
             "LX0609-03-01-03",
@@ -148,7 +151,7 @@ def test_unified_engine_off_keeps_only_always_typed_extended_rules() -> None:
     assert resolved == tuple(
         rule_id
         for rule_id in _rule_ids(50, 77)
-        if rule_id not in {"LX0609-05-03-01"}
+        if rule_id not in {"LX0609-05-03-01", "LX0609-12-02-01", "LX0609-10-03-01"}
     )
 
 

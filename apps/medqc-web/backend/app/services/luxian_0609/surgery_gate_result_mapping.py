@@ -323,8 +323,11 @@ def _safe_028_check(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     duration, threshold, evidence, met = (
         raw.get("duration_hours"), raw.get("threshold_hours"), raw.get("infection_evidence"), raw.get("requirement_met"),
     )
+    # 可选 stop_time_unknown：停药时间未知、时长为已证明下限，只能与已超时同现。
+    stop_unknown = "stop_time_unknown" in raw
     if (
-        set(raw) != _028_CHECK_KEYS
+        set(raw) - {"stop_time_unknown"} != _028_CHECK_KEYS
+        or (stop_unknown and (raw["stop_time_unknown"] is not True or evidence == "not_required"))
         or raw.get("incision_class") not in {"I", "II"}
         or type(raw.get("cardiac_surgery")) is not bool
         or threshold != (48 if raw.get("cardiac_surgery") else 24)
@@ -339,7 +342,7 @@ def _safe_028_check(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or met != (evidence != "not_recorded")
     ):
         return None
-    return {key: raw[key] for key in sorted(_028_CHECK_KEYS)}
+    return {key: raw[key] for key in sorted(set(raw))}
 
 
 def _safe_028(raw: Mapping[str, Any]) -> dict[str, Any] | None:

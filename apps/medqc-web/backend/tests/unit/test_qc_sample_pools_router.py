@@ -1921,19 +1921,15 @@ async def test_run_sample_pool_should_reject_scope_with_only_paused_customer_rul
                 sample_item_ids=["item-1"],
                 rule_set_key="luxian_0609_qc_v1",
                 selected_rule_ids=[
-                    "LX0609-04-02-04",
-                    "LX0609-05-01-01",
-                    "LX0609-07-04-02",
-                    "LX0609-05-01-04",
-                    "LX0609-05-03-01",
-                    "LX0609-10-03-01",
+                    "LX0609-06-02-02", "LX0609-05-01-01", "LX0609-08-01-04",
+                    "LX0609-12-02-01", "LX0609-06-01-04", "LX0609-10-03-01", "LX0609-04-02-02",
                 ],
             ),
             current_user={"id": "tester"},
         )
 
     assert exc_info.value.status_code == 422
-    assert "暂不执行" in str(exc_info.value.detail)
+    assert "未启用" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio
