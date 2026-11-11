@@ -162,13 +162,22 @@
                 v-if="compactReview"
                 class="qc-record-result-table__view-button"
                 type="button"
-                :aria-label="`查看${row.patientName || '当前病历'}完整质控结果`"
-                @click.stop="emit('open-full', row.recordKey)"
+                :aria-label="`查看${row.patientName || '当前病历'}病历文书`"
+                @click.stop="emit('open-record', row.recordKey)"
               >
-                查看
+                查看病历
               </button>
               <button
-                v-else
+                v-if="compactReview && row.resultStatus !== 'not-run'"
+                class="qc-record-result-table__view-button"
+                data-testid="open-saved-result"
+                type="button"
+                @click.stop="emit('open-full', row.recordKey)"
+              >
+                查看结果
+              </button>
+              <button
+                v-if="!compactReview"
                 class="qc-record-result-table__result-button"
                 :class="{
                   'qc-record-result-table__result-button--available':
@@ -247,6 +256,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   'open-result': [recordKey: string]
   'open-full': [recordKey: string]
+  'open-record': [recordKey: string]
   'update:selectedRecordKeys': [recordKeys: string[]]
 }>()
 
@@ -668,7 +678,7 @@ function togglePageSelection(event: Event) {
   width: 132px;
 }
 .qc-record-result-table--compact-review th:nth-child(6) {
-  width: 76px;
+  width: 180px;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__table thead th {
   font-size: 12px;
@@ -775,6 +785,9 @@ function togglePageSelection(event: Event) {
 .qc-record-result-table__row--active .qc-record-result-table__view-button {
   background: rgba(10, 108, 255, 0.12);
   color: #0a5fd6;
+}
+.qc-record-result-table__view-button + .qc-record-result-table__view-button {
+  margin-left: 6px;
 }
 .qc-record-result-table__view-button:focus-visible {
   outline: 2px solid #0a6cff;
