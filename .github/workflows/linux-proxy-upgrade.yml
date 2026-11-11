@@ -2,7 +2,9 @@ name: Linux fixed compact package isolated validation
 on:
   workflow_dispatch:
 permissions:
-  contents: read
+  # GitHub requires write-capable repository credentials to read draft release assets.
+  # Workflow only downloads the existing draft; it never publishes or edits releases.
+  contents: write
   actions: read
 jobs:
   validate:
