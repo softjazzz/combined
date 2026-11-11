@@ -79,6 +79,22 @@ class Gates(unittest.TestCase):
         self.assertIn('password_hash',required); self.assertEqual(len(tables),8)
         self.assertEqual(choose(search_path=['public','qc','sys'],schemas_with_user_table=['sys']),'sys')
         self.assertNotIn('app.main',sys.modules); self.assertNotIn('app.database.connection',sys.modules)
+    def test_cross_identity_even_with_valid_checksums(self):
+        import hashlib
+        from check_compat import verify_package
+        root=Path(tempfile.mkdtemp(prefix='identity-synthetic-'))
+        commit='a'*40; build='medqc-web-customer-20261111-234500'
+        values={'BUILD.json':{'commit':commit,'build_id':build},'PACKAGE.json':{'application_commit':commit,'build_id':build},'application/backend/app/data/runtime_build.json':{'git_commit':commit,'build_id':build},'application/frontend/dist/build-info.json':{'git_commit':commit,'build_id':build}}
+        def write():
+            for rel,value in values.items():
+                path=root/rel; path.parent.mkdir(parents=True,exist_ok=True); path.write_text(json.dumps(value))
+            (root/'SHA256SUMS').write_text('\n'.join(hashlib.sha256((root/rel).read_bytes()).hexdigest()+'  '+rel for rel in values)+'\n')
+        write(); self.assertEqual(verify_package(root)['commit'],commit)
+        values['application/frontend/dist/build-info.json']['git_commit']='b'*40; write()
+        with self.assertRaisesRegex(ValueError,'application_identity_disagrees'): verify_package(root)
+        values['application/frontend/dist/build-info.json']['git_commit']=commit
+        values['PACKAGE.json']['application_commit']='b'*40; write()
+        with self.assertRaisesRegex(ValueError,'package_identity_disagrees'): verify_package(root)
 
     def schema_case(self,revision='20261106_000064',readonly='on',missing_table=False,missing_auth=False):
         import sqlalchemy as sa
