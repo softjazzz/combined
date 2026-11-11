@@ -20,7 +20,7 @@ OLDKIT = TMP / 'input/old/medqc-app-upgrade'
 ROLLKIT = TMP / 'input/rollback/medqc-app-upgrade'
 ROOT = TMP / 'isolated-business'
 PG = Path('/usr/lib/postgresql/16/bin')
-report = {'package_sha256': 'db2faab527b787d1e344bb49a7036fdbe0dbfd6fa5e4559a713cf0f80d4c5edf',
+report = {'package_sha256': '322ae69d1443396ba39bd7d6473f902b3e77e323cf30d9e1538505181cad9b08',
           'application_commit': 'e1f65ffe73f121842dfa997c41d1c9c517bd804e',
           'old_application_commit': 'fa314c6c251fc5dd02eda96a7d30d70642cc1eb0',
           'network': 'unshare net; loopback only; disposable runner',

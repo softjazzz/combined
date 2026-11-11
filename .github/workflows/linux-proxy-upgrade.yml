@@ -31,12 +31,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/input" "$RUNNER_TEMP/evidence"
           gh release download medqc-e1f65ffe7-validation-input --repo softjazzz/combined --pattern '*.tar.gz' --dir "$RUNNER_TEMP/input"
           echo '72fd98f7116ccbe6105354caa3ec4902cee6ef397b970bed9367d158040495aa  '"$RUNNER_TEMP/full/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" | sha256sum -c -
-          echo 'db2faab527b787d1e344bb49a7036fdbe0dbfd6fa5e4559a713cf0f80d4c5edf  '"$RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-upgrade-e1f65ffe7-r2.tar.gz" | sha256sum -c -
+          echo '322ae69d1443396ba39bd7d6473f902b3e77e323cf30d9e1538505181cad9b08  '"$RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-upgrade-e1f65ffe7-r2.tar.gz" | sha256sum -c -
           echo '894ec70330be98bc820fa4d87eb507f766d45963c397116075a1d4407f348088  '"$RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-upgrade-fa314c6c2.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/full/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" -C "$RUNNER_TEMP/full"
           (cd "$RUNNER_TEMP/full/medqc-offline" && sha256sum --check --quiet SHA256SUMS)
           mkdir "$RUNNER_TEMP/input/new" "$RUNNER_TEMP/input/old" "$RUNNER_TEMP/input/rollback"
-          echo "87a89a3087562bfc6a5e170d8eec820acabd7d4ec7adfcd2367d61284f00e342  $RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-rollback-5d3e8d396.tar.gz" | sha256sum -c -
+          echo "d919ee203b06162ad66577bd603879132d9144491ad4d010804cc96530fb3c42  $RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-rollback-5d3e8d396.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-rollback-5d3e8d396.tar.gz" -C "$RUNNER_TEMP/input/rollback"
           (cd "$RUNNER_TEMP/input/rollback/medqc-app-upgrade" && sha256sum --check --quiet SHA256SUMS)
           tar -xzf "$RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-upgrade-e1f65ffe7-r2.tar.gz" -C "$RUNNER_TEMP/input/new"
