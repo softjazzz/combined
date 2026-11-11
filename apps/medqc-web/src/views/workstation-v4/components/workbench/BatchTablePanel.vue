@@ -187,17 +187,17 @@
         <template v-else-if="column.key === 'admissionDate'">
           <span
             class="batch-table-panel__standalone-date"
-            :title="record.admissionDate"
+            :title="displayHospitalDate(record.admissionDate)"
           >
-            {{ displayHospitalDate(record.admissionDate) }}
+            {{ tableHospitalDate(record.admissionDate) }}
           </span>
         </template>
         <template v-else-if="column.key === 'dischargeDate'">
           <span
             class="batch-table-panel__standalone-date"
-            :title="record.dischargeDate"
+            :title="dischargeDateLabel(record)"
           >
-            {{ dischargeDateLabel(record) }}
+            {{ tableHospitalDate(dischargeDateLabel(record)) }}
           </span>
         </template>
         <template v-else-if="column.key === 'admissionDischarge'">
@@ -367,7 +367,7 @@ const showBatchActions = computed(
     showClearFiltersAction.value,
 )
 const tableScroll = computed(() => ({
-  // 病历池最小宽度 = 固定列 536 + 患者列 136；再窄才出现横向滚动
+  // 保留窄屏横向滚动；宽屏由各列按比例共同分配空间。
   x: recordPoolMode.value ? 672 : 980,
   y: showSelection.value ? undefined : 440,
 }))
@@ -453,19 +453,23 @@ const stageColumns = [
   { title: '操作', key: 'action', dataIndex: 'action', width: 120 },
 ]
 
-// 病历池与右侧预览并排，列表列只剩约 660–760px：患者列不设宽度吃掉剩余空间，其余列按内容收紧
+function tableHospitalDate(value?: string) {
+  return displayHospitalDate(value).replace(/^(\d{4}-\d{2}-\d{2}) (?=\d{2}:\d{2})/, '$1\n')
+}
+
+// 患者列不再独占剩余空间，日期列保留完整日期与时间的两行宽度。
 const recordPoolColumns = [
-  { title: '患者 / 住院号', key: 'patient', dataIndex: 'patient' },
-  { title: '科室', key: 'department', dataIndex: 'department', width: 128, ellipsis: true },
+  { title: '患者 / 住院号', key: 'patient', dataIndex: 'patient', width: '24%' },
+  { title: '科室', key: 'department', dataIndex: 'department', width: '22%', ellipsis: true },
   {
     title: '住院状态',
     key: 'hospitalizationStatus',
     dataIndex: 'hospitalizationStatus',
-    width: 88,
+    width: '12%',
   },
-  { title: '入院日期', key: 'admissionDate', dataIndex: 'admissionDate', width: 104 },
-  { title: '出院日期', key: 'dischargeDate', dataIndex: 'dischargeDate', width: 104 },
-  { title: '操作', key: 'action', dataIndex: 'action', width: 72 },
+  { title: '入院日期', key: 'admissionDate', dataIndex: 'admissionDate', width: '16%' },
+  { title: '出院日期', key: 'dischargeDate', dataIndex: 'dischargeDate', width: '16%' },
+  { title: '操作', key: 'action', dataIndex: 'action', width: '10%' },
 ]
 
 const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stageColumns))
@@ -935,6 +939,15 @@ function rowClassName(record: WorkbenchRow): string {
 
 .batch-table-panel--record-pool .batch-table-panel__detail-button {
   padding-inline: 6px !important;
+}
+
+.batch-table-panel__standalone-date {
+  display: inline-block;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 .batch-table-panel--record-pool :deep(.ant-table-tbody > tr:hover > td) {

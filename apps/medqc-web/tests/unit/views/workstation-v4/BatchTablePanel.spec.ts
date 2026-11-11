@@ -348,6 +348,22 @@ describe('BatchTablePanel 病历池列表', () => {
     expect(wrapper.emitted('open-record')).toEqual([['["H-2","P-2","V-100"]']])
   })
 
+  it.each([
+    ['2026-11-03T08:51:43', '2026-11-03\n08:51:43', '2026-11-03 08:51:43'],
+    ['2026-11-03', '2026-11-03', '2026-11-03'],
+    ['2026-11-03T08:51:43+08:00', '2026-11-03\n08:51:43+08:00', '2026-11-03 08:51:43+08:00'],
+  ])('formats hospital time %s without inventing precision or shifting timezone', async (raw, visible, title) => {
+    const wrapper = mountTable()
+    const record = { ...wrapper.props('rows')[0], admissionDate: raw, dischargeDate: raw }
+    await wrapper.setProps({ rows: [record] })
+    for (const column of ['admissionDate', 'dischargeDate']) {
+      const cell = wrapper.get(`[data-column="${column}"] .batch-table-panel__standalone-date`)
+      expect(cell.text()).toBe(visible)
+      expect(cell.attributes('title')).toBe(title)
+    }
+    expect(record.admissionDate).toBe(raw)
+  })
+
   it('separates status and admission/discharge dates into scannable record-pool columns', () => {
     const wrapper = mountTable()
     const table = wrapper.getComponent({ name: 'ATable' })
