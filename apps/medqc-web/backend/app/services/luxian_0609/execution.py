@@ -132,6 +132,18 @@ def _family_outcome_decisions(outcome, snapshot, typed_rule_ids):
     return decisions
 
 
+def _rule_scoped_semantic_snapshots(execution, rule_ids):
+    """仅搬运所属规则的私有事实；没有rule_id的旧会诊快照保持原范围。"""
+    snapshot = getattr(execution, "diagnostic_semantic_snapshot", None)
+    if not isinstance(snapshot, Mapping):
+        return ()
+    selected = tuple(rule_ids)
+    owner_rule_id = str(snapshot.get("rule_id") or "").strip().upper()
+    if owner_rule_id:
+        selected = (owner_rule_id,) if owner_rule_id in selected else ()
+    return tuple((rule_id, snapshot) for rule_id in selected)
+
+
 def _published_family_results(*, outcome, snapshot, materials, wrapper_rules, typed_rule_ids, delivery_mode):
     """实时与最终汇总复用同一Binding/Finalizer，不从族原始输出另造结论。"""
     rule_ids = outcome.selected_rule_ids
@@ -147,6 +159,7 @@ def _published_family_results(*, outcome, snapshot, materials, wrapper_rules, ty
         native_results=deepcopy([r for r in envelope.results if r.get("rule_id") not in typed_ids]),
         evidence_snapshot=snapshot, evidence_materials=materials, reduced_decisions=reduced,
         customer_display_facts=deepcopy(envelope.customer_display_facts),
+        diagnostic_semantic_snapshots=_rule_scoped_semantic_snapshots(envelope, rule_ids),
         native_usage_attributions=(_build_execution_usage_attribution(
             executor_key=outcome.executor_key, rule_ids=rule_ids, execution=envelope,
         ),), delivery_mode=delivery_mode,
@@ -342,6 +355,9 @@ async def prepare_luxian_0609_execution(
     extended_document_required = bool(
         set(EXTENDED_DOCUMENT_RULE_IDS).intersection(package_plan.executable_rule_ids)
     )
+    event_fact_materials_required = bool(
+        {"LX0609-06-02-02", "LX0609-05-01-01"}.intersection(package_plan.executable_rule_ids)
+    )
     typed_decision_rule_ids = resolve_typed_decision_rule_ids(
         selected_rule_ids=package_plan.executable_rule_ids,
         settings=settings,
@@ -361,6 +377,7 @@ async def prepare_luxian_0609_execution(
             or unified_engine_enabled
             or surgery_document_source_guard_required
             or extended_document_required
+            or event_fact_materials_required
         )
         and all(
             isinstance(value, str) and value.strip()
@@ -368,7 +385,7 @@ async def prepare_luxian_0609_execution(
         )
     ):
         try:
-            if unified_engine_enabled or extended_document_required:
+            if unified_engine_enabled or extended_document_required or event_fact_materials_required:
                 evidence_session = build_luxian_0609_evidence_read_session(
                     selected_rule_ids=package_plan.executable_rule_ids,
                     institute_id=str(institute_id),
@@ -606,11 +623,9 @@ async def prepare_luxian_0609_execution(
                     outcome, evidence_snapshot, typed_decision_rule_ids,
                 ))
                 native_customer_display_facts.extend(envelope.customer_display_facts)
-                if envelope.diagnostic_semantic_snapshot is not None:
-                    native_diagnostic_semantic_snapshots.extend(
-                        (rule_id, envelope.diagnostic_semantic_snapshot)
-                        for rule_id in outcome.selected_rule_ids
-                    )
+                native_diagnostic_semantic_snapshots.extend(
+                    _rule_scoped_semantic_snapshots(envelope, outcome.selected_rule_ids)
+                )
                 native_usage_attributions.append(
                     _build_execution_usage_attribution(
                         executor_key=outcome.executor_key,
@@ -761,14 +776,9 @@ async def prepare_luxian_0609_execution(
         native_customer_display_facts.extend(
             getattr(consultation_execution, "customer_display_facts", ())
         )
-        consultation_snapshot = getattr(
-            consultation_execution, "diagnostic_semantic_snapshot", None
+        native_diagnostic_semantic_snapshots.extend(
+            _rule_scoped_semantic_snapshots(consultation_execution, consultation_rule_ids)
         )
-        if isinstance(consultation_snapshot, Mapping):
-            native_diagnostic_semantic_snapshots.extend(
-                (rule_id, consultation_snapshot)
-                for rule_id in consultation_rule_ids
-            )
         native_usage_attributions.append(
             _build_execution_usage_attribution(
                 executor_key=CONSULTATION_EXECUTOR_KEY,
@@ -819,6 +829,9 @@ async def prepare_luxian_0609_execution(
         native_customer_display_facts.extend(
             getattr(tumor_pathology_execution, "customer_display_facts", ())
         )
+        native_diagnostic_semantic_snapshots.extend(
+            _rule_scoped_semantic_snapshots(tumor_pathology_execution, tumor_pathology_rule_ids)
+        )
         native_usage_attributions.append(
             _build_execution_usage_attribution(
                 executor_key=TUMOR_PATHOLOGY_EXECUTOR_KEY,
@@ -868,6 +881,9 @@ async def prepare_luxian_0609_execution(
         native_results.extend(surgery_gate_execution.results)
         native_customer_display_facts.extend(
             surgery_gate_execution.customer_display_facts
+        )
+        native_diagnostic_semantic_snapshots.extend(
+            _rule_scoped_semantic_snapshots(surgery_gate_execution, surgery_gate_rule_ids)
         )
         native_usage_attributions.append(
             _build_execution_usage_attribution(

@@ -24,7 +24,7 @@ def _rows():
     return {
         "pathology_exam_master": [{"document_id": "master-A", "pathology_exam_id": "A", "specimen_name": "胆囊", "request_datetime": "2026-07-01 09:00:00"}],
         "pathology_exam_report": [{"document_id": "report-A", "pathology_exam_id": "A", "specimen_name": "胆囊", "diagnosis": "慢性胆囊炎", "report_datetime": "2026-07-02 10:00:00"}],
-        "surgery_record": [{"document_id": "surgery-A", "record_time": "2026-07-01 10:00:00", "surgery_process": "已切除胆囊，标本送病理检查。"}],
+        "surgery_record": [{"document_id": "surgery-A", "record_time": "2026-07-01 10:00:00", "surgery_process": "病理号A，已切除胆囊，标本送病理检查。"}],
         "daily_course_record": [{"document_id": "course-A", "record_time": "2026-07-02 12:00:00", "record_content": "胆囊病理结果：慢性胆囊炎。"}],
     }
 
@@ -96,7 +96,11 @@ async def test_documented_single_event_is_compliant_with_cited_document(rule_id,
 @pytest.mark.parametrize("rule_id", [SAMPLING, RESULT])
 async def test_not_documented_is_non_compliant_with_checked_documents(rule_id):
     final = await _run(_rows(), rule_id, _scripted("not_documented"))
-    assert final["status"] == "non_compliant"
+    # 新取材合同：缺独立实际动作/时间，不凭旧not_documented形成确定缺失。
+    assert final["status"] == ("data_gap" if rule_id == SAMPLING else "non_compliant")
+    if rule_id == SAMPLING:
+        assert final["reason_code"] == "association_failed"
+        return
     # 019 有手术记录时只核对手术记录；013 核对报告之后的记录。
     expected = {"surgery-A"} if rule_id == SAMPLING else {"course-A"}
     assert _documents(final) >= expected
@@ -121,7 +125,8 @@ async def test_paraphrased_result_and_specimen_reach_model_without_verbatim_matc
     rows["surgery_record"][0]["surgery_process"] = "行远端胃切除术，切除标本送病理检查。"
     rows["daily_course_record"][0]["record_content"] = "术后病理回报胃窦中分化腺癌，拟下周化疗。"
     for rule_id in (SAMPLING, RESULT):
-        assert (await _run(rows, rule_id))["status"] == "compliant"
+        # 取材原文未给出可核对的标本关联；结果记录仍按原合同交模型。
+        assert (await _run(rows, rule_id))["status"] == ("data_gap" if rule_id == SAMPLING else "compliant")
 
 
 @pytest.mark.asyncio
@@ -149,8 +154,8 @@ async def test_untimed_record_blocks_result_absence_but_not_sampling_review(rule
     rows = _rows()
     rows["daily_course_record"].append({"document_id": "course-untimed", "record_content": "胆囊标本已送病理。"})
     final = await _run(rows, rule_id, _scripted("not_documented"))
-    # 013 无时间文书无法核对先后，不能据此断言未记录；019 取材无时间要求，照常送模。
-    assert final["status"] == ("non_compliant" if rule_id == SAMPLING else "data_gap")
+    # 取材也不能把申请/报告时间当实际取材时间：没有独立动作证据时保留未决。
+    assert final["status"] == "data_gap"
 
 
 @pytest.mark.asyncio
@@ -231,27 +236,29 @@ async def test_019_with_surgery_record_ignores_sampling_written_only_in_course()
     rows["daily_course_record"][0]["record_content"] = "术中切除胆囊标本已送病理检查。"
     client = PathologyFactsClient()
     final = await _run(rows, SAMPLING, client)
-    assert final["status"] == "non_compliant"
+    # 目标仍仅手术记录；没有独立实际动作及时间，不能确定报缺。
+    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
     assert "已送病理检查" not in client.prompts[0]
-    assert final["customer_display_facts"]["checked_target_sources"] == [
-        {"source": "surgery_record", "state": "present"},
-    ]
-    assert "已核对手术记录，均未找到取材情况记录" in final["findings"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("course,expected", [
-    ("胃镜下于胃窦取活检组织4块送病理检查。", "compliant"),
-    ("胃镜检查顺利，患者无不适。", "non_compliant"),
+    ("病理号A，胃镜下于胃窦取活检组织4块送病理检查。", "compliant"),
+    ("胃镜检查顺利，患者无不适。", "data_gap"),
 ])
 async def test_019_without_surgery_record_checks_daily_course(course, expected):
     """院方口径：本次无手术记录（内镜、穿刺等活检）时核对日常病程。"""
     rows = _rows()
     rows["surgery_record"] = []
+    for key in ("pathology_exam_master", "pathology_exam_report"):
+        rows[key][0]["specimen_name"] = "胃窦"
     rows["daily_course_record"][0]["record_content"] = course
     rows["daily_course_record"][0]["record_time"] = "2026-07-01 12:00:00"
     final = await _run(rows, SAMPLING)
     assert final["status"] == expected
+    if expected == "data_gap":
+        assert final["reason_code"] == "association_failed"
+        return
     assert final["customer_display_facts"]["checked_target_sources"] == [
         {"source": "surgery_record", "state": "empty"},
         {"source": "daily_course_record", "state": "present"},

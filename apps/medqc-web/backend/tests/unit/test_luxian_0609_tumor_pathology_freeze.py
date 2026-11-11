@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 
 from luxian_0609_pathology_test_facts import PathologyFactsClient
+from luxian_0609_discharge_plan_test_facts import DischargePlanFactsClient
+from app.services.luxian_0609.discharge_plan_extraction import SCHEMA_VERSION as DISCHARGE_PLAN_SCHEMA_VERSION
 from app.services.luxian_0609.pathology_documentation_extraction import (
     SCHEMA_VERSION as PATHOLOGY_SCHEMA_VERSION,
 )
@@ -62,6 +64,7 @@ class _ControlledMalignancyClient:
     def __init__(self) -> None:
         self.prompts: list[str] = []
         self.pathology = PathologyFactsClient()
+        self.discharge_plan = DischargePlanFactsClient()
 
     async def generate(
         self,
@@ -72,8 +75,10 @@ class _ControlledMalignancyClient:
         **_kwargs: Any,
     ) -> dict[str, Any]:
         del max_completion_tokens, allow_length_retry
-        if PATHOLOGY_SCHEMA_VERSION in prompt:
+        if PATHOLOGY_SCHEMA_VERSION in prompt or "lx0609-pathology-sampling-actions-v1" in prompt:
             return await self.pathology.generate(prompt)
+        if DISCHARGE_PLAN_SCHEMA_VERSION in prompt:
+            return await self.discharge_plan.generate(prompt)
         self.prompts.append(prompt)
         return {
             "choices": [
@@ -163,7 +168,7 @@ def _rows() -> dict[str, tuple[dict[str, Any], ...]]:
             {
                 "document_id": "surgery-1",
                 "record_time": "2026-09-06 11:00:00",
-                "surgery_process": "术中切取病灶标本并送病理检查。",
+                "surgery_process": "病理号PATH-1，术中切除标本送病理检查。",
                 "record_content": "病理号PATH-1。病理结果为结肠腺癌。",
             },
         ),
@@ -294,25 +299,29 @@ async def test_tumor_pathology_freeze_real_chain_locks_current_contract() -> Non
     assert execution.results == ()
     assert [item.rule_id for item in execution.decisions] == list(RULE_IDS)
     assert all(item.snapshot_hash == session.snapshot.snapshot_hash for item in execution.decisions)
+    # 08-01-04 合同迁移：出院计划改为 LLM 事实抽取 + Python 判定。原关键词实现识别不了
+    # “出院后继续肿瘤专科治疗”而判不合规；按未变的 027 合同（后续肿瘤治疗或随访计划任一项），
+    # 人工冻结的事实标注为出院后肿瘤治疗安排，故结论为合规。
     assert [item.final_state.value for item in reduced] == [
         "compliant",
         "compliant",
         "compliant",
-        "non_compliant",
+        "compliant",
     ]
     assert [item.reason_code for item in reduced] == [
         "requirement_satisfied",
         "requirement_satisfied",
         "requirement_satisfied",
-        "requirement_violated",
+        "requirement_satisfied",
     ]
     assert all(item.fact_refs for item in reduced)
     # 026 一次给药原子事实抽取（替身不计 token）；013/019 各一次病理记录事实抽取
-    # （替身各 120 token）；恶性肿瘤判断不调用模型。
-    assert execution.llm_call_count == 3
-    assert (execution.prompt_tokens, execution.total_tokens) == (200, 240)
+    # （替身各 120 token）；027 一次出院计划事实抽取（60 token）；恶性肿瘤判断不调用模型。
+    assert execution.llm_call_count == 4
+    assert (execution.prompt_tokens, execution.total_tokens) == (250, 300)
     assert client.prompts == []
     assert len(client.pathology.prompts) == 2
+    assert len(client.discharge_plan.prompts) == 1
 
     facts = dict(execution.customer_display_facts)
     assert facts["LX0609-06-02-03"]["verification_kind"] == "pathology_result_documentation_check"
@@ -325,7 +334,7 @@ async def test_tumor_pathology_freeze_real_chain_locks_current_contract() -> Non
         "compliant",
         "compliant",
         "compliant",
-        "non_compliant",
+        "compliant",
     ]
     assert {
         (item["source_type"], item["source_document_id"])
@@ -493,7 +502,7 @@ async def test_tumor_pathology_missing_semantic_client_is_technical_error_throug
     ]
     assert [item.evaluator_version for item in execution.decisions] == [
         "tumor-pathology-ruledecision-shadow-v2",
-        "tumor-pathology-ruledecision-shadow-v2",
+        "pathology-sampling-actions-v1",
     ]
     assert [event["executor_key"] for event in trace_events] == [
         "tumor_pathology",
@@ -501,7 +510,7 @@ async def test_tumor_pathology_missing_semantic_client_is_technical_error_throug
     ]
     assert [event["evaluator_version"] for event in trace_events] == [
         "tumor-pathology-ruledecision-shadow-v2",
-        "tumor-pathology-ruledecision-shadow-v2",
+        "pathology-sampling-actions-v1",
     ]
 
 
@@ -543,15 +552,15 @@ async def test_tumor_pathology_direct_missing_semantic_client_freezes_llm_aggreg
     assert execution.llm_call_count == 0
     assert [item["metadata"]["executor_type"] for item in execution.results] == [
         "llm",
-        "llm",
+        "program",  # 新取材路径缺固定会话即关闭，没有语义调用。
     ]
     assert [item["metadata"]["executor_type"] for item in customer_results] == [
         "llm",
-        "llm",
+        "program",
     ]
     assert [item["metadata"]["aggregation_source"] for item in customer_results] == [
         "native_llm",
-        "native_llm",
+        "native_programmatic",
     ]
 
 
@@ -574,7 +583,7 @@ async def test_tumor_pathology_019_extraction_is_one_call_through_binding() -> N
         20,
         120,
     )
-    # 文书只写“术后一般情况平稳”“继续观察”，替身事实为未记录取材。
-    assert [item.final_state.value for item in reduced] == ["non_compliant"]
-    assert [item["status"] for item in customer_results] == ["non_compliant"]
+    # 没有独立实际取材动作和时间，新合同不能凭未见描述确定报缺。
+    assert [item.final_state.value for item in reduced] == ["data_gap"]
+    assert [item["status"] for item in customer_results] == ["data_gap"]
     assert len(client.prompts) == 1

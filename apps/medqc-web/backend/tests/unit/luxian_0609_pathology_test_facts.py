@@ -62,6 +62,42 @@ class PathologyFactsClient:
 
     async def generate(self, prompt: str, **_kwargs: Any) -> dict[str, Any]:
         self.prompts.append(prompt)
+        from app.services.luxian_0609.pathology_sampling_extraction import SCHEMA_VERSION as SAMPLING_SCHEMA
+
+        if SAMPLING_SCHEMA in prompt:
+            # 仅迁移固定应答协议；无独立实际时间的旧not_documented夹具保留unknown。
+            # 013仍按原协议处理；故意伪引文保留错误内容交给生产解析器拒收。
+            payload = json.loads(prompt.split("INPUT_JSON=", 1)[1])
+            events, docs = payload["pathology_events"], payload["documents"]
+            targets = [{"document": d["document"], "body": "\n".join(d["fields"].values())}
+                       for d in docs if d["target"]]
+            facts = self.script(True, events, targets)
+            actions, links = [], []
+            for event, fact in zip(events, facts):
+                if fact["state"] != "documented":
+                    links.append({"event": event["event"], "state": "unknown", "action": None})
+                    continue
+                doc = next(d for d in docs if d["document"] == fact["document"])
+                quote = fact["quote"]
+                if self.script is default_pathology_facts and event["specimen"] not in quote:
+                    # 新协议不能凭模型猜标本别名；旧默认替身没有这种原文证据时返回待核。
+                    # 自定义伪引文仍送生产解析器拒收，不以协议短路代替引文保护。
+                    links.append({"event": event["event"], "state": "unknown", "action": None})
+                    continue
+                name = next((name for name, body in doc["fields"].items() if quote in body), next(iter(doc["fields"])))
+                start = max(0, doc["fields"][name].find(quote))
+                identifier = f"a{len(actions) + 1}"
+                actions.append({"action": identifier, "document": doc["document"], "field": name,
+                                "start": start, "end": start + len(quote), "quote": quote,
+                                "specimen_quote": event["specimen"], "time": {"precision": "unknown", "value": None, "quote": None},
+                                "repeat_of": None})
+                links.append({"event": event["event"], "state": "confirmed", "action": identifier})
+            content = json.dumps({"schema_version": SAMPLING_SCHEMA, "actions": actions, "associations": links,
+                                  "document_coverage": [{"document": d["document"], "state": "complete"} for d in docs]},
+                                 ensure_ascii=False)
+            return {"choices": [{"message": {"content": content}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": self.tokens - 20, "completion_tokens": 20, "total_tokens": self.tokens},
+                    "_api_time": 0.1}
         sampling, events, documents = pathology_inputs(prompt)
         content = json.dumps(
             {"schema_version": SCHEMA_VERSION, "events": self.script(sampling, events, documents)},

@@ -2191,11 +2191,18 @@ def customer_finding_from_controlled_facts(
         incision = "Ⅰ" if facts.get("incision_class") == "I" else "Ⅱ"
         surgery = f"{incision}类切口{'心脏' if facts.get('cardiac_surgery') else ''}手术"
         anchor = "手术结束" if facts.get("anchor") == "surgery_end" else "手术开始（源库无手术结束时间）"
-        base = (
-            f"{surgery}，自{anchor} {facts.get('anchor_time')} 至抗菌药物最后停用 "
-            f"{facts.get('last_antibacterial_time')}，共 {facts.get('duration_hours')} 小时"
-            f"（时限 {facts.get('threshold_hours')} 小时）"
-        )
+        if facts.get("stop_time_unknown") is True:
+            base = (
+                f"{surgery}，续开的长期抗菌药物医嘱缺少停止时间；自{anchor} {facts.get('anchor_time')} "
+                f"至可确认的用药时刻 {facts.get('last_antibacterial_time')}，已至少 "
+                f"{facts.get('duration_hours')} 小时（时限 {facts.get('threshold_hours')} 小时，实际停药时间未知）"
+            )
+        else:
+            base = (
+                f"{surgery}，自{anchor} {facts.get('anchor_time')} 至抗菌药物最后停用 "
+                f"{facts.get('last_antibacterial_time')}，共 {facts.get('duration_hours')} 小时"
+                f"（时限 {facts.get('threshold_hours')} 小时）"
+            )
         evidence = facts.get("infection_evidence")
         if evidence == "not_required" and str(facts.get("last_antibacterial_time")) <= str(facts.get("anchor_time")):
             return (
@@ -2977,6 +2984,21 @@ def customer_finding_from_controlled_facts(
             checked_scope = "手术记录、日常病程记录和上级医师查房记录"
         else:
             return ""
+        count_keys = ("confirmed_event_count", "absent_event_count", "unknown_event_count")
+        if any(key in facts for key in count_keys):
+            counts = tuple(facts.get(key) for key in count_keys)
+            if any(type(value) is not int or value < 0 for value in counts) or counts[1] == 0:
+                return ""
+            confirmed, absent, unknown = counts
+            finding = (
+                f"已核对{checked_scope}；共核对{sum(counts)}次病理取材，"
+                f"其中{absent}次未找到对应取材情况记录"
+            )
+            if confirmed:
+                finding += f"，{confirmed}次已核实有对应记录"
+            if unknown:
+                finding += f"；另有{unknown}次归属待核，未计入缺失"
+            return finding + "。"
         return f"已确认存在病理取材事件；已核对{checked_scope}，均未找到取材情况记录。"
 
     if rule_id == "LX0609-03-01-04" and kind == "consultation_execution_quality_check":
@@ -3357,6 +3379,16 @@ def customer_finding_from_controlled_facts(
     if rule_id == "LX0609-08-01-04" and kind == "malignant_discharge_plan_check":
         if facts.get("requirement_met") is False:
             return "已确认出院诊断包含恶性肿瘤，但出院记录未写明出院后肿瘤相关治疗或随访安排。"
+        accepted = facts.get("accepted_plans")
+        if facts.get("requirement_met") is True and isinstance(accepted, list) and accepted:
+            labels = {"tumor_treatment": "出院后肿瘤治疗", "follow_up": "随访"}
+            shown = "；".join(
+                f"{labels.get(item.get('kind'), '计划')}"
+                + (f"（{item.get('time_anchor')}）" if item.get("time_anchor") else "")
+                + f"：“{item.get('quote')}”"
+                for item in accepted[:3] if isinstance(item, Mapping)
+            )
+            return f"已核对恶性肿瘤患者出院记录，记录了出院后安排（{shown}）。"
 
     if rule_id == "LX0609-04-04-02":
         if kind == "anesthesia_visits_complete":

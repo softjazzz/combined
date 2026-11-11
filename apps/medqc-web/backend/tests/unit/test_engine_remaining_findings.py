@@ -1,6 +1,13 @@
 """Claude剩余发现：合成材料与固定应答，经项目禁网入口执行。"""
 
 import pytest
+import json
+
+from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
+from app.services.luxian_0609 import prophylactic_antimicrobial_duration as pad
+from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
+from app.services.luxian_0609.executor_registry import resolve_legacy_executor_material_source_keys
+from app.services.luxian_0609.infection_surgery_extraction import SurgeryIdentity
 
 
 from datetime import datetime
@@ -156,23 +163,6 @@ def a_event(ref: str) -> dict:
     }
 
 
-import json
-
-
-from typing import Any
-
-
-from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
-
-
-from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
-
-
-from app.services.luxian_0609.executor_registry import (
-    resolve_legacy_executor_material_source_keys,
-)
-
-
 class b_NoModel:
     def __init__(self, outputs: list[Any] | None = None) -> None:
         self.outputs = list(outputs or [])
@@ -214,12 +204,6 @@ async def b_run(session, client):
     return result, reduce_luxian_0609_rule_decision(result.decisions[0])
 
 
-from typing import Any
-
-
-from app.services.luxian_0609 import prophylactic_antimicrobial_duration as pad
-
-
 _EVIDENCE = "切口红肿渗液，体温38.9℃，血常规白细胞18.2×10^9/L，考虑切口感染"
 
 
@@ -230,20 +214,9 @@ class f_Client:
 
     async def generate(self, prompt: str, **kwargs: Any) -> dict:
         self.prompts.append(prompt)
-        quote = _EVIDENCE if self.state == "present" else None
-        content = {
-            "schema_version": pad.SCHEMA_VERSION,
-            "documents": [{"id": "D1", "state": self.state, "quote": quote}],
-        }
-        return {
-            "choices": [
-                {
-                    "message": {"content": json.dumps(content, ensure_ascii=False)},
-                    "finish_reason": "stop",
-                }
-            ],
-            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-        }
+        from infection_surgery_test_support import infection_fact_response
+        return infection_fact_response(prompt, lambda _index, _doc: self.state, quote=_EVIDENCE)
+
 
 
 def f_inputs(body: str):
@@ -252,6 +225,10 @@ def f_inputs(body: str):
         end=datetime(2026, 3, 1, 10, 0),
         incision_class="I",
         cardiac=False,
+        identity=SurgeryIdentity(
+            "synthetic-surgery", ({"name": "合成手术", "site": None,
+                "begin": {"value": "2026-03-01 08:00:00", "precision": "datetime"},
+                "end": {"value": "2026-03-01 10:00:00", "precision": "datetime"}},)),
     )
     order = {
         "order_id": "a1",
@@ -264,7 +241,7 @@ def f_inputs(body: str):
     }
     course = (
         "daily_course_record:0",
-        {"record_time": "2026-03-02 09:00:00", "record_content": body},
+        {"record_time": "2026-03-02 09:00:00", "record_content": "合成手术：" + body},
     )
     return event, order, course
 
@@ -338,8 +315,8 @@ async def test_028_complete_negative_and_bounded_overflow():
         "absent",
     )
     assert (
-        outcome.status == "data_gap"
-        and outcome.reason_code == "candidate_scope_incomplete"
+        outcome.status == "technical_error"
+        and outcome.reason_code == "llm_context_over_budget"
     )
     assert not client.prompts
 
@@ -731,6 +708,7 @@ async def test_028_budget_rejection_keeps_timely_surgery_sibling(tmp_path, monke
         ),
         "mr_surgery": (
             {
+                "surgery_id": "MR-SYNTHETIC-BUDGET",
                 "surgery_begin_datetime": event.begin,
                 "surgery_end_datetime": event.end,
                 "surgial_incision_level": "Ⅰ",
@@ -816,29 +794,14 @@ async def test_028_untimed_candidate_cannot_complete_negative():
 
 @pytest.mark.asyncio
 async def test_028_partial_positive_does_not_clear_other_unknown_documents():
+    from app.services.luxian_0609.infection_surgery_extraction import InfectionDocument, extract_infection_surgery_facts
+    from infection_surgery_test_support import infection_fact_response
     class Mixed:
-        async def generate(self, *args, **kwargs):
-            return {
-                "content": json.dumps(
-                    {
-                        "schema_version": pad.SCHEMA_VERSION,
-                        "documents": [
-                            {"id": "D1", "state": "present", "quote": _EVIDENCE},
-                            {"id": "D2", "state": "unknown", "quote": None},
-                        ],
-                    }
-                )
-            }
-
-    state, keys, _ = await pad._infection_evidence(
-        (
-            ("first", {"record_content": _EVIDENCE}, datetime(2026, 3, 2)),
-            (
-                "second",
-                {"record_content": "待核对的另一台手术病程。"},
-                datetime(2026, 3, 4),
-            ),
-        ),
-        Mixed(),
-    )
-    assert state == "unresolved" and keys == ("first",)
+        async def generate(self, prompt, **kwargs):
+            return infection_fact_response(prompt, ["present", "unknown"], quote=_EVIDENCE)
+    event, _order, course = f_inputs(_EVIDENCE)
+    facts = await extract_infection_surgery_facts(surgeries=(event.identity,), targets=(event.identity.surgery_ref,),
+        documents=(InfectionDocument("first", "2026-03-02 09:00:00", course[1]["record_content"]),
+                   InfectionDocument("second", "2026-03-04 09:00:00", "待核对的另一台手术病程。")), llm_client=Mixed())
+    assert facts.complete is False and facts.documents["first"]["state"] == "present"
+    assert facts.documents["second"]["state"] == "unknown"
