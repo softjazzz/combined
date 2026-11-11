@@ -157,6 +157,7 @@ try:
     run([PYTHON, '-B', FULL / 'deploy/db-admin.py', 'migrate', '--root', ROOT], 'initialize-old-062')
     assert sql('SELECT version_num FROM public.alembic_version') == '20261102_000062'
     sql("CREATE TABLE public.synthetic_retention (kind text PRIMARY KEY, value text); INSERT INTO public.synthetic_retention VALUES ('materials','retained'),('history','retained')")
+    sql('ALTER TABLE public.synthetic_retention OWNER TO medqc_business_app')
     before_rows = sql('SELECT kind,value FROM public.synthetic_retention ORDER BY kind')
     assert startup('old_before_upgrade', report['old_application_commit'])
     stop_processes()
@@ -208,6 +209,10 @@ except Exception as error:
     report['status'] = 'BLOCKED'
     report['harness_or_execution_error'] = str(error)
 finally:
+    private_log = ROOT / 'logs/migration-private.log'
+    if private_log.exists():
+        # Synthetic fixture only; no hospital configuration or real material is ever loaded.
+        shutil.copyfile(private_log, EVIDENCE / 'synthetic-migration-detail.log')
     stop_processes()
     if pg_started:
         run([PG / 'pg_ctl', '-D', ROOT / 'pg', '-m', 'fast', '-w', 'stop'], 'stop-owned-pg16', required=False)
