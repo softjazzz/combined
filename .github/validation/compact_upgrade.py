@@ -17,9 +17,10 @@ EVIDENCE = TMP / 'evidence'
 FULL = TMP / 'full/medqc-offline'
 KIT = TMP / 'input/new/medqc-app-upgrade'
 OLDKIT = TMP / 'input/old/medqc-app-upgrade'
+ROLLKIT = TMP / 'input/rollback/medqc-app-upgrade'
 ROOT = TMP / 'isolated-business'
 PG = Path('/usr/lib/postgresql/16/bin')
-report = {'package_sha256': 'cc62a18e512b29eb5c1aa568de1730dad17cd449d1adbe2097b8cab4bbd6502d',
+report = {'package_sha256': 'db2faab527b787d1e344bb49a7036fdbe0dbfd6fa5e4559a713cf0f80d4c5edf',
           'application_commit': 'e1f65ffe73f121842dfa997c41d1c9c517bd804e',
           'old_application_commit': 'fa314c6c251fc5dd02eda96a7d30d70642cc1eb0',
           'network': 'unshare net; loopback only; disposable runner',
@@ -173,25 +174,47 @@ try:
             assert source.read_bytes() == (staged / source.relative_to(KIT / 'application')).read_bytes()
     switch(staged)
     # Exercise the exact delivered migration command rather than hiding missing helper files.
-    migration_rc = run([PYTHON, '-B', KIT / 'deploy/db-admin.py', 'migrate', '--root', ROOT],
-                       'exact-package-migration', required=False)
-    report['delivered_migration_command_passed'] = migration_rc == 0
-    if migration_rc:
-        report['blocked'].append('delivered_migration_command_failed')
-        # Continue diagnosis only, using unchanged tracked helpers from the exact application base.
-        # This is not counted as the delivered package migration passing.
-        run([PYTHON, '-B', REPO / 'apps/medqc-web/scripts/linux_offline/deploy/db-admin.py',
-             'migrate', '--root', ROOT], 'diagnostic-complete-helper-migration')
+    run([PYTHON, '-B', KIT / 'deploy/db-admin.py', 'migrate', '--root', ROOT],
+        'exact-package-migration')
+    report['delivered_migration_command_passed'] = True
     assert sql('SELECT version_num FROM public.alembic_version') == '20261106_000064'
     report['synthetic_migration_063_064'] = True
     assert startup('new_after_upgrade', report['application_commit'])
     stop_processes()
-    switch(old)
-    rollback_started = startup('old_after_rollback_on_064', report['old_application_commit'])
-    report['code_rollback_old_runtime_starts_with_retained_064'] = rollback_started
-    if not rollback_started:
-        report['blocked'].append('old_fa314c6c2_cannot_start_on_retained_064')
+    # Persist a real content-addressed synthetic snapshot through the application API.
+    snapshot_probe = '''
+import sys
+from app.database.clinical_connection import selected
+from app.services import case_material_snapshot as material
+identity = ('SYNTHETIC_ORG', 'SYNTHETIC_PATIENT', 'SYNTHETIC_VISIT')
+with selected({'binding': 'synthetic-cloud-only'}):
+    if sys.argv[1] == 'write':
+        material.persist('synthetic-retention-job', {'protocol': material.PROTOCOL,
+            'identity': list(identity), 'binding': 'synthetic-cloud-only',
+            'schema': 'cdm', 'documents': [{'text': 'synthetic material retained'}]})
+    value = material.load('synthetic-retention-job', identity)
+    assert value['documents'] == [{'text': 'synthetic material retained'}]
+print('synthetic snapshot persisted/read; no model or clinical source queries')
+'''
+    snapshot_env = {**os.environ, 'QC_CASE_MATERIAL_DIR': str(ROOT / 'state/case-materials')}
+    run([PYTHON, '-B', '-c', snapshot_probe, 'write'], 'new-snapshot-persist-read',
+        cwd=staged / 'backend', env=snapshot_env)
+    snapshot_hashes = {str(p.relative_to(ROOT)): digest(p)
+                       for p in (ROOT / 'state/case-materials').rglob('*') if p.is_file()}
+    run([PYTHON, '-B', ROLLKIT / 'check_compat.py', '--root', ROOT], 'rollback-check-compat')
+    run([PYTHON, '-B', ROLLKIT / 'stage_upgrade.py', '--root', ROOT, '--expected-current', staged], 'rollback-stage')
+    assert (ROOT / 'current').resolve() == staged
+    rollback_build = json.loads((ROLLKIT / 'BUILD.json').read_text())
+    fallback = ROOT / 'releases' / rollback_build['build_id']
+    switch(fallback)
+    assert startup('fallback_after_rollback_on_064', rollback_build['commit'])
+    report['rollback_commit'] = rollback_build['commit']
+    report['rollback_starts_with_retained_064'] = True
     stop_processes()
+    run([PYTHON, '-B', '-c', snapshot_probe, 'read'], 'rollback-snapshot-read',
+        cwd=fallback / 'backend', env=snapshot_env)
+    assert all(digest(ROOT / name) == value for name, value in snapshot_hashes.items())
+    report['real_synthetic_snapshot_read_on_rollback_and_bytes_retained'] = True
     assert sql('SELECT kind,value FROM public.synthetic_retention ORDER BY kind') == before_rows
     assert sql('SELECT version_num FROM public.alembic_version') == '20261106_000064'
     assert digest(config) == before_config
