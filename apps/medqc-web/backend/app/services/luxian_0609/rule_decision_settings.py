@@ -104,6 +104,7 @@ def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
     from .llm_role_routing import legacy_role_identity
     legacy_identity = legacy_role_identity(getattr(client, "_legacy_role_runtimes", {}) or {})
     identity = {
+        **({"endpoint_config_revision": client.endpoint_config_revision} if getattr(client, "endpoint_config_revision", None) else {}),
         **({"legacy_roles": legacy_identity} if legacy_identity else {}),
         **({"task_roles": role_identity} if isinstance(role_identity, dict) else {}),
         "provider": provider,

@@ -372,7 +372,11 @@ async def get_qc_service() -> SichuanQCService:
         使用数据库配置的SichuanQCService实例
     """
     global service
-    if service is None:
+    from ..services.llm_endpoint_settings import snapshot
+    endpoint_version = snapshot()["version"]
+    current_version = (getattr(getattr(service, "client", None), "endpoint_settings_snapshot", {}) or {}).get("version", 0)
+    if service is None or current_version != endpoint_version:
+        # 替换服务引用，不就地改动已经领取任务的客户端。
         await init_qc_service()
     return service
 

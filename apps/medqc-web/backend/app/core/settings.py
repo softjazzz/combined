@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     QC_TASK_DISPATCH_MODE: Literal["legacy", "rabbitmq"] = "legacy"
     # Web与MQ进程共享的非敏感开关/就绪状态目录；默认位于backend/data。
     QC_DISPATCH_STATE_DIR: Optional[str] = None
+    # 推理连接加密配置目录；多API/Worker进程须共享，生产应放release目录外。
+    LLM_ENDPOINT_CONFIG_DIR: Optional[str] = None
     QC_RABBITMQ_URL: Optional[str] = Field(default=None, repr=False)
     QC_RABBITMQ_EXCHANGE: Optional[str] = None
     QC_RABBITMQ_QUEUE: Optional[str] = None

@@ -1,0 +1,2 @@
+.endpoint-form { margin-top: var(--mq-space-5, 20px); }
+.endpoint-form .mq-field__hint { margin-top: var(--mq-space-2, 8px); }

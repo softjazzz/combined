@@ -43,6 +43,10 @@ def parse_role_models(raw: str | None) -> dict[str, tuple[str, str]]:
     return result
 
 
+from ..llm_endpoint_settings import pinned_runtime
+
+
+@pinned_runtime
 def capture_legacy_role_runtimes(base: dict) -> dict:
     """接纳客户端时固定旧调用点配置，后续不再读取进程默认模型与参数。"""
     from ...core.settings import get_settings
@@ -75,7 +79,8 @@ def legacy_role_identity(runtimes):
     """任务与冻结仅登记旧路由有效身份；凭据和地址原文不入结果。"""
     fields = ("temperature", "top_p", "top_k", "presence_penalty", "frequency_penalty",
               "repetition_penalty", "max_tokens", "enable_thinking", "thinking_budget", "reasoning_effort")
-    return {role: {"provider": value["provider_code"], "model": value["model"],
+    return {role: {**({"endpoint_config_revision": value["endpoint_config_revision"]} if value.get("endpoint_config_revision") else {}),
+        "provider": value["provider_code"], "model": value["model"],
         "endpoint_sha256": hashlib.sha256(str(value.get("api_endpoint") or "").encode()).hexdigest(),
         "dispatch_mode": value.get("dispatch_mode", "direct"), "gateway_profile": value.get("gateway_profile"),
         "gateway_endpoint_sha256": value.get("gateway_endpoint_sha256"),

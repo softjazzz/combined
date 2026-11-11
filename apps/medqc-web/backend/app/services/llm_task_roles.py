@@ -41,6 +41,10 @@ def normalize_task_roles(value):
     return result
 
 
+from .llm_endpoint_settings import pinned_runtime
+
+
+@pinned_runtime
 def build_task_role_runtimes(base):
     """一次构造并验证全部显式选型；仅进程内保留部署凭据。"""
     from .llm_config_loader import build_local_model_runtime_config, build_provider_runtime_config
@@ -106,6 +110,7 @@ def task_role_identity(runtimes, base):
             "provider_code", "model", "api_endpoint", "gateway_profile")},
             dispatch_mode=runtime.get("dispatch_mode", "direct"), strata_protocol=protocol)
         roles[role] = {
+            **({"endpoint_config_revision": runtime["endpoint_config_revision"]} if runtime.get("endpoint_config_revision") else {}),
             "provider": runtime["provider_code"], "model": runtime["model"],
             "endpoint_sha256": hashlib.sha256(str(runtime.get("api_endpoint") or "").encode()).hexdigest(),
             "dispatch_mode": runtime.get("dispatch_mode", "direct"),

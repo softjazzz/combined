@@ -50,7 +50,7 @@ const Input = defineComponent({
 
 async function render() {
   const wrapper = mount(LLMApiConfig, { global: { stubs: {
-    'a-select': Select, 'a-select-option': { props: ['value'], template: '<option :value="value"><slot /></option>' },
+    LLMEndpointSettings: true, 'a-select': Select, 'a-select-option': { props: ['value'], template: '<option :value="value"><slot /></option>' },
     'a-alert': Alert, 'a-button': Button, 'a-tag': Slot, 'a-space-compact': Slot,
     'a-segmented': Segmented, 'a-slider': true, 'a-input': Input, 'a-input-number': true,
   } } })
@@ -215,7 +215,7 @@ describe('后台云端与Strata选择', () => {
     const wrapper = await render()
     await wrapper.get('button[aria-pressed="false"]').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('尚未在部署配置中启用')
+    expect(wrapper.text()).toContain('尚未启用')
     for (const code of ['Local/Qwen-FLASH', 'Local/Qwen-35B']) {
       await wrapper.get('input').setValue(code)
       await wrapper.findAll('button').find((button) => button.text() === '添加')?.trigger('click')
