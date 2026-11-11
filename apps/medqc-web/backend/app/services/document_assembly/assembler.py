@@ -303,6 +303,8 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "surgical_incisionheal_level",
         "surgery_begin_time",
         "surgery_end_time",
+        "surgery_begin_datetime",
+        "surgery_end_datetime",
         "blood_loss",
         "other_content",
         "v2_schema",
@@ -979,6 +981,11 @@ _SURGERY_FIELD_ORDER: tuple[tuple[str, str], ...] = (
     ("intraoperative_diagnosis", "术中诊断"),
     ("postoperative_diagnosis", "术后诊断"),
     ("surgery_process", "手术经过"),
+    ("surgery_begin_datetime", "手术开始时间（源字段）"),
+    ("surgery_end_datetime", "手术结束时间（源字段）"),
+    ("record_datetime", "记录时间"),
+    ("submit_datetime", "提交时间"),
+    ("last_modified_datetime", "修改时间"),
     ("surgical_incisionheal_level", "切口愈合等级"),
     ("surgery_begin_time", "手术开始时间"),
     ("surgery_end_time", "手术结束时间"),
@@ -1066,8 +1073,19 @@ def _assemble_surgery_record_text(payload: dict[str, Any]) -> str:
         # 个别数据将术中过程写入 postsurg_firstcourse，不在 surgery_record；这里保持空串即可。
         surgery_process = ""
 
+    # 身份、提交时间和模板标签不能单独证明存在临床内容。
+    substantive_fields = (
+        "record_content", "surgery_process", "presurg_summary", "surgery_name", "surgery_code",
+        "preoperative_diagnosis", "intraoperative_diagnosis", "postoperative_diagnosis",
+        "blood_loss", "other_content", "anesthesia_method",
+    )
+    if not any((value := _merge_field_text(payload, key)) and not _is_non_content_placeholder(value)
+               for key in substantive_fields):
+        return ""
     lines = [
-        f"记录时间: {_merge_field_text(payload, 'record_time', 'record_datetime', 'submit_time', 'submit_datetime', 'last_modified_time', 'update_time')}",
+        f"记录时间: {_merge_field_text(payload, 'record_time', 'record_datetime')}",
+        f"提交时间: {_merge_field_text(payload, 'submit_datetime', 'submit_time')}",
+        f"修改时间: {_merge_field_text(payload, 'last_modified_datetime', 'last_modified_time')}",
         f"科室: {_merge_field_text(payload, 'dept_name')}",
         f"病房: {_merge_field_text(payload, 'ward_name', 'ward_no')}",
         f"记录者: {_merge_field_text(payload, 'submitter', 'recorder_sign')}",
@@ -1088,6 +1106,8 @@ def _assemble_surgery_record_text(payload: dict[str, Any]) -> str:
         f"切口愈合等级: {_merge_field_text(payload, 'surgical_incisionheal_level')}",
         f"手术开始时间: {_merge_field_text(payload, 'surgery_begin_time')}",
         f"手术结束时间: {_merge_field_text(payload, 'surgery_end_time')}",
+        f"手术开始时间（源字段）: {_merge_field_text(payload, 'surgery_begin_datetime')}",
+        f"手术结束时间（源字段）: {_merge_field_text(payload, 'surgery_end_datetime')}",
         f"失血量: {_merge_field_text(payload, 'blood_loss')}",
         f"其他内容: {_merge_field_text(payload, 'other_content')}",
         f"记录内容: {record_content}",
@@ -1343,7 +1363,8 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
             )
     elif document_type == "surgery_record":
         assembled_text = _assemble_surgery_record_text(payload)
-        source_fields.extend(_build_surgery_source_fields(payload))
+        if assembled_text:
+            source_fields.extend(_build_surgery_source_fields(payload))
         if _is_non_content_placeholder(_merge_field_text(payload, "record_content")):
             flags.append("record_content_placeholder")
     elif document_type == "presurg_discussion":

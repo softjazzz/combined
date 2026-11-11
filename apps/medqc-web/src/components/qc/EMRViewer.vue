@@ -45,7 +45,8 @@
         </div>
         <div class="emr-struct__meta-row">
           <span v-if="displayDocumentId">文书ID：{{ displayDocumentId }}</span>
-          <span v-if="metadata.record_time">记录时间：{{ metadata.record_time }}</span>
+          <span v-if="metadata.record_time">{{ displayClockLabel }}：{{ metadata.record_time }}</span>
+          <span v-if="metadata.document_status">源文书状态：{{ metadata.document_status }}</span>
           <span v-if="authorSummary">录入/修改人：{{ authorSummary }}</span>
           <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
         </div>
@@ -150,7 +151,8 @@
     <template v-else-if="renderedContent">
       <div class="emr-content-meta">
         <span v-if="displayDocumentId">文书ID：{{ displayDocumentId }}</span>
-        <span v-if="metadata.record_time">记录时间：{{ metadata.record_time }}</span>
+        <span v-if="metadata.record_time">{{ displayClockLabel }}：{{ metadata.record_time }}</span>
+        <span v-if="metadata.document_status">源文书状态：{{ metadata.document_status }}</span>
         <span v-if="authorSummary">录入/修改人：{{ authorSummary }}</span>
         <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
         <span
@@ -457,6 +459,11 @@ function summarizePeople(people: EmrDocumentPerson[] | undefined): string {
 const displayDocumentId = computed(() =>
   String(metadata.value.document_id || metadata.value.doc_id || '').trim(),
 )
+const displayClockLabel = computed(() => {
+  if (metadata.value.record_time_source === 'source_submit_time') return '提交时间'
+  if (metadata.value.record_time_source === 'fallback_display_time') return '显示时间（回退）'
+  return '记录时间'
+})
 const authorSummary = computed(() => summarizePeople(metadata.value.authors))
 const signatureSummary = computed(() => summarizePeople(metadata.value.signatures))
 const projectionNotice = computed(() =>

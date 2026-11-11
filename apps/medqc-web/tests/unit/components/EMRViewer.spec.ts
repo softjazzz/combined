@@ -341,3 +341,24 @@ describe('EMRViewer', () => {
     expect(wrapper.emitted('error')).toBeUndefined()
   })
 })
+
+
+it('显示源状态与提交时间来源并完整保留手术经过', async () => {
+  const body = '步骤：切开\n术中：合成内容' + '缝合。'.repeat(200)
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(jsonResponse({ documents: [{ id: 'S1', doc_type: 'surgery_record', has_content: true }] }))
+    .mockResolvedValueOnce(jsonResponse({ layout_version: 'bundle_struct_v1', content: body,
+      metadata: { doc_type: 'surgery_record', document_id: 'S1', document_status: 'Save',
+        record_time: '2026-11-01 10:00', record_time_source: 'source_submit_time' },
+      render_blocks: [{ block_id: 's1', block_type: 'kv_section', fields: [{ key: 'surgery_process', label: '手术经过', value: body }] }] })))
+  const wrapper = mount(EMRViewer, { props: { recordId: 'V1', visitId: 'V1', patientId: 'P1', instituteId: 'H1' },
+    global: { stubs: { 'a-spin': true } } })
+  await flushPromises()
+  await flushPromises()
+  expect(wrapper.text()).toContain('源文书状态：Save')
+  expect(wrapper.text()).toContain('提交时间：2026-11-01 10:00')
+  expect(wrapper.text()).not.toContain('记录时间：2026-11-01 10:00')
+  expect(wrapper.find('.emr-struct__field-value').element.textContent?.trim()).toBe(body)
+  wrapper.unmount()
+  vi.unstubAllGlobals()
+})
