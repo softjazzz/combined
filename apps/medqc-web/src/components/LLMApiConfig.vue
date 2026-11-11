@@ -16,7 +16,7 @@
             模型配置治理
           </h2>
           <p class="mq-card__desc">
-            选择默认推理模型，并按质控用途分配模型。服务地址与密钥由部署配置管理。
+            选择默认推理模型，并按质控用途分配模型。超级管理员可管理直连服务地址与密钥，未覆盖时沿用部署配置。
           </p>
         </div>
         <span
@@ -56,6 +56,8 @@
       message="当前为只读模式"
       description="仅系统配置管理员可修改并保存模型配置。"
     />
+
+    <LLMEndpointSettings @saved="reloadAll" />
 
     <ol
       class="llm-steps"
@@ -476,6 +478,7 @@ import {
   type LLMTaskRoleModels,
 } from '@/services/llmConfigService'
 import LLMTaskRoleSettings from './LLMTaskRoleSettings.vue'
+import LLMEndpointSettings from './LLMEndpointSettings.vue'
 import { authFetch } from '@/utils/auth-fetch'
 
 const emit = defineEmits<{
@@ -550,10 +553,10 @@ const selectionUnavailable = computed(() => isLocalProvider(draft.provider_code)
 const localSelectionDescription = computed(() => {
   const failureNote = '本地服务不可用时不会自动切到云端。'
   if (localOptionsError.value) return localOptionsError.value
-  if (!selectedLocalProvider.value?.enabled) return `该本地推理服务尚未在部署配置中启用。可以先登记模型名称；启用前不能保存为当前推理服务或测试连接。${failureNote}`
+  if (!selectedLocalProvider.value?.enabled) return `该本地推理服务尚未启用，可由超级管理员配置直连服务。可以先登记模型名称；启用前不能保存为当前推理服务或测试连接。${failureNote}`
   if (!models.value.length) return `尚无本地模型，请添加服务实际接受的模型 ID。添加名称不会下载模型或启动服务。${failureNote}`
   if (selectionUnavailable.value) return `所选模型的 API 地址或运行配置尚未齐备，请联系实施人员。模型名称已保留，当前生效配置不受影响。${failureNote}`
-  return `可选择并保存此本地模型；API 地址和密钥沿用部署配置。连接状态尚未验证，测试连接会实际请求模型服务。${failureNote}`
+  return `可选择并保存此本地模型；API 地址和密钥使用当前有效连接配置。连接状态尚未验证，测试连接会实际请求模型服务。${failureNote}`
 })
 const canTest = computed(() => !isReadonly.value && !loading.value && !saving.value && !addingModel.value && !deletingModelCode.value && !loadingModels.value && !selectionUnavailable.value && !rolesIncomplete.value && Boolean(draft.provider_code && draft.model_code))
 const dirty = computed(() => {

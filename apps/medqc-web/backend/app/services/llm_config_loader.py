@@ -1,7 +1,7 @@
 """
 LLM 配置加载服务
 数据库仅保存 provider/model/custom_parameters；
-敏感信息（endpoint / key）统一由 backend/.env 注入。
+连接信息默认由部署配置注入；超级管理员的加密连接覆盖仅用于新运行时。
 """
 from typing import Dict, Any, Optional
 import hashlib
@@ -11,6 +11,7 @@ import os
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..storage.memory import llm_configs
+from . import llm_endpoint_settings as endpoints
 from .llm_execution_concurrency import (
     concurrency_from_custom_parameters,
     with_execution_concurrency_defaults,
@@ -29,7 +30,7 @@ _USER_LLM_CONFIGS_TABLE_UNAVAILABLE = False
 QC_USE_SELECTED_MODEL_KEY = "qc_use_selected_model"
 
 
-def get_enabled_provider_codes() -> tuple[str, ...]:
+def _deployed_provider_codes() -> tuple[str, ...]:
     """返回当前环境允许暴露和使用的 provider 列表。"""
     settings = get_settings()
     configured_visible = tuple(
@@ -58,6 +59,10 @@ def get_enabled_provider_codes() -> tuple[str, ...]:
     return legacy
 
 
+def get_enabled_provider_codes() -> tuple[str, ...]:
+    return endpoints.enabled_codes(_deployed_provider_codes())
+
+
 def get_default_provider_code() -> str:
     """返回当前环境默认 provider。"""
     settings = get_settings()
@@ -76,6 +81,8 @@ def get_default_provider_code() -> str:
         return "alibaba"
     if "deepseek" in enabled:
         return "deepseek"
+    if not enabled:
+        raise ProviderConfigurationError("no LLM provider enabled")
     return enabled[0]
 
 
@@ -89,7 +96,8 @@ def build_provider_runtime_config(
 ) -> Dict[str, Any]:
     """根据 provider/model 组合生成实际运行时配置。"""
     settings = get_settings()
-    enabled = get_enabled_provider_codes()
+    endpoint_state = endpoints.snapshot()
+    enabled = endpoints.enabled_codes(_deployed_provider_codes(), endpoint_state)
     requested_code = (provider_code or get_default_provider_code()).strip().lower()
     code = validate_provider_code(requested_code)
     if code == "local_openai":
@@ -192,9 +200,10 @@ def build_provider_runtime_config(
             model_code=model,
         )
     )
-    return runtime
+    return endpoints.apply(runtime, endpoint_state)
 
 
+@endpoints.pinned_runtime
 def build_adjudicator_runtime_config(
     base_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:

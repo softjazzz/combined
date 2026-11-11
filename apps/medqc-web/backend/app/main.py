@@ -29,6 +29,7 @@ from .routers import ingest as ingest_router
 from .routers import medical_documents as medical_documents_router
 from .routers import debug as debug_router
 from .routers import llm_info as llm_info_router
+from .routers import llm_endpoints as llm_endpoints_router
 from .routers import qc_llm_configs as qc_llm_configs_router
 from .routers import semantic_rules as semantic_rules_router
 from .routers import tasks as tasks_router
@@ -284,6 +285,7 @@ def create_app() -> FastAPI:
     app.include_router(medical_documents_router.router)
     app.include_router(debug_router.router)
     app.include_router(llm_info_router.router)
+    app.include_router(llm_endpoints_router.router)
     app.include_router(qc_llm_configs_router.router)
     app.include_router(semantic_rules_router.router)
     app.include_router(tasks_router.router)

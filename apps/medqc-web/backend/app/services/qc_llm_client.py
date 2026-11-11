@@ -56,6 +56,12 @@ class SichuanQCLLMClient:
         observability_recorder: Optional[LLMObservabilityRecorder] = None,
         gateway_dispatch_client: Optional[GatewayDispatchClient] = None,
     ) -> None:
+        from . import llm_endpoint_settings as endpoints
+        if config is None and endpoints.snapshot()["providers"]:
+            from .llm_config_loader import build_provider_runtime_config, get_default_provider_code
+            config = build_provider_runtime_config(get_default_provider_code())
+        self.endpoint_settings_snapshot = deepcopy(config["endpoint_settings_snapshot"] if config and "endpoint_settings_snapshot" in config else endpoints.snapshot())
+        self.endpoint_config_revision = (config or {}).get("endpoint_config_revision")
         if config:
             self.api_endpoint: Optional[str] = config.get("api_endpoint")
             self.api_key: Optional[str] = config.get("api_key")
@@ -249,6 +255,7 @@ class SichuanQCLLMClient:
             if config is not None and "legacy_role_runtimes" in config else capture_legacy_role_runtimes({
                 "provider_code": self.provider_code, "model": self.model, "dispatch_mode": self.dispatch_mode,
                 "gateway_profile": self.gateway_profile,
+                "endpoint_settings_snapshot": self.endpoint_settings_snapshot,
                 "custom_parameters": {**((config or {}).get("custom_parameters") or {}),
                     "temperature": self.temperature, "top_p": self.top_p, "max_tokens": self.max_tokens,
                     "enable_thinking": self.enable_thinking, "thinking_budget": self.thinking_budget,
@@ -256,7 +263,7 @@ class SichuanQCLLMClient:
         self._legacy_role_clients = {}
         from .llm_task_roles import build_task_role_runtimes, task_role_identity
 
-        role_base = config or {}
+        role_base = {**(config or {}), "endpoint_settings_snapshot": self.endpoint_settings_snapshot}
         self.task_role_selections, self._task_role_runtimes = (
             (deepcopy(role_base.get("task_role_selections") or {}), deepcopy(role_base["task_role_runtimes"]))
             if "task_role_runtimes" in role_base

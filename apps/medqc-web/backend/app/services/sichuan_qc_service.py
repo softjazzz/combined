@@ -446,6 +446,8 @@ class SichuanQCService:
             "provider_code": client.provider_code,
             "api_endpoint": client.api_endpoint,
             "api_key": client.api_key,
+            "endpoint_settings_snapshot": deepcopy(getattr(client, "endpoint_settings_snapshot", {})),
+            "endpoint_config_revision": getattr(client, "endpoint_config_revision", None),
             "model": client.model,
             "timeout_seconds": client.timeout_seconds,
             "allow_mock_when_unconfigured": client.allow_mock_when_unconfigured,
