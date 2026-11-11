@@ -1,0 +1,56 @@
+name: Linux fixed compact package isolated validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/download-artifact@v4
+        with:
+          name: medqc-linux-offline-validated
+          run-id: 41937037181
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/full
+      - name: Fetch exact draft input and PG16 test binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/input" "$RUNNER_TEMP/evidence"
+          gh release download medqc-e1f65ffe7-validation-input --repo softjazzz/combined --pattern '*.tar.gz' --dir "$RUNNER_TEMP/input"
+          echo '72fd98f7116ccbe6105354caa3ec4902cee6ef397b970bed9367d158040495aa  '"$RUNNER_TEMP/full/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" | sha256sum -c -
+          echo 'cc62a18e512b29eb5c1aa568de1730dad17cd449d1adbe2097b8cab4bbd6502d  '"$RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-upgrade-e1f65ffe7.tar.gz" | sha256sum -c -
+          echo '894ec70330be98bc820fa4d87eb507f766d45963c397116075a1d4407f348088  '"$RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-upgrade-fa314c6c2.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/full/MedQC-Ubuntu22-Python310-PG16-offline.tar.gz" -C "$RUNNER_TEMP/full"
+          (cd "$RUNNER_TEMP/full/medqc-offline" && sha256sum --check --quiet SHA256SUMS)
+          mkdir "$RUNNER_TEMP/input/new" "$RUNNER_TEMP/input/old"
+          tar -xzf "$RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-upgrade-e1f65ffe7.tar.gz" -C "$RUNNER_TEMP/input/new"
+          tar -xzf "$RUNNER_TEMP/input/MedQC-Ubuntu22-Python310-app-upgrade-fa314c6c2.tar.gz" -C "$RUNNER_TEMP/input/old"
+          (cd "$RUNNER_TEMP/input/new/medqc-app-upgrade" && sha256sum --check --quiet SHA256SUMS)
+          (cd "$RUNNER_TEMP/input/old/medqc-app-upgrade" && sha256sum --check --quiet SHA256SUMS)
+          cmp "$RUNNER_TEMP/input/new/medqc-app-upgrade/requirements-linux.lock" "$RUNNER_TEMP/full/medqc-offline/requirements-linux.lock"
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc -o "$RUNNER_TEMP/pgdg.asc"
+          gpg --show-keys --with-colons "$RUNNER_TEMP/pgdg.asc" | grep -q 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8'
+          sudo install -m 0644 "$RUNNER_TEMP/pgdg.asc" /usr/share/keyrings/medqc-pgdg.asc
+          echo 'deb [signed-by=/usr/share/keyrings/medqc-pgdg.asc] https://apt.postgresql.org/pub/repos/apt jammy-pgdg main' | sudo tee /etc/apt/sources.list.d/medqc-pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-16
+      - name: Offline startup, dependency reuse and rollback
+        run: |
+          set -o pipefail
+          sudo --preserve-env=RUNNER_TEMP,PYTHONDONTWRITEBYTECODE unshare --net bash -c 'ip link set lo up; exec setpriv --reuid=runner --regid=runner --init-groups --no-new-privs "$@"' bash "$(command -v python)" -B .github/validation/compact_upgrade.py 2>&1 | tee "$RUNNER_TEMP/evidence/runner.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-e1f65ffe7-isolated-evidence
+          path: ${{ runner.temp }}/evidence/
