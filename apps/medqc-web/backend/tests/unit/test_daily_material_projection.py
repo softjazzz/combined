@@ -22,6 +22,7 @@ def test_reader_borrows_sqlalchemy_driver_without_transaction_ownership(monkeypa
         def execute(self, sql, params=None): calls.append(sql)
         def fetchone(self): return ("delivery_cdm_012345abcdef", "on", "repeatable read")
         def fetchall(self):
+            if "FROM cdm.daily_course_record" in calls[-1]: return []
             return [(reader.digest(("canonical-I", "P", "V")), {"canonical_case":["canonical-I","P","V"], "native_cases":[["cache","I","P","V"]], "identity_version":"1", "type_version":"1", "rule_version":"1", "approval_id":"synthetic"})]
     driver = SimpleNamespace(cursor=Cursor)
     connection = SimpleNamespace(connection=SimpleNamespace(driver_connection=driver),
@@ -31,7 +32,7 @@ def test_reader_borrows_sqlalchemy_driver_without_transaction_ownership(monkeypa
     assert result["case_id"] == reader.digest(("canonical-I", "P", "V"))
     assert result["business_binding"]["policy"]["canonical_case"] == ["canonical-I", "P", "V"]
     assert result["business_binding"]["native_case"] == ["I", "P", "V"]
-    assert len(calls) == 2
+    assert len(calls) == 3
 
 
 def test_all_daily_source_readers_use_selected_manifest_and_scope(monkeypatch):
@@ -57,7 +58,7 @@ def test_all_daily_source_readers_use_selected_manifest_and_scope(monkeypatch):
 
 
 def synthetic_manifest():
-    return {"contract":"daily-material-r2-v3", "items":[{"version_id":"a", "record_identity":"ra", "native_key":["I","P","V","D"], "source_namespace":"clinical", "source_object":"clinical.public.daily_course_record", "body":"synthetic body", "title":"日常病程", "record_time":"2026-11-01T08:00:00", "selected":True, "rule_usable":True, "native_fields":{"zero":0,"flag":False}, "target_payload":{}}], "fresh":True, "coverage":{}, "can_judge_clinical_absence":False}
+    return {"business_binding":{"policy":{"status_rules":[["clinical",None,"valid"],["cache",None,"valid"]]}}, "contract":"daily-material-r2-v3", "items":[{"version_id":"a", "record_identity":"ra", "native_key":["I","P","V","D"], "source_namespace":"clinical", "source_object":"clinical.public.daily_course_record", "body":"synthetic body", "title":"日常病程", "record_time":"2026-11-01T08:00:00", "selected":True, "rule_usable":True, "native_fields":{"zero":0,"flag":False}, "target_payload":{}}], "fresh":True, "coverage":{}, "can_judge_clinical_absence":False}
 
 
 def test_scope_survives_snapshot_encoding_including_empty_source_and_affects_identity():
@@ -229,7 +230,7 @@ def test_file_reference_failure_recovery_never_recaptures_retry(monkeypatch, tmp
 
 def test_projection_keeps_conflicts_in_inventory_but_only_usable_selected_rows():
     from app.services import daily_material_projection as projection
-    manifest = {"items": [
+    manifest = {"business_binding":{"policy":{"status_rules":[["clinical",None,"valid"]]}}, "items": [
         {"version_id":"a", "record_identity":"ra", "native_key":["I","P","V","same"], "source_namespace":"clinical", "source_object":"clinical.public.daily_course_record", "body":"reliable", "record_time":"2026-11-01T08:00:00", "selected":True, "rule_usable":True, "native_fields":{"zero":0,"flag":False}},
         {"version_id":"b", "record_identity":"rb", "native_key":["I","P","V","same"], "source_namespace":"cache", "source_object":"web.daily_course_record", "body":"conflict", "selected":True, "rule_usable":False},
     ], "coverage":{"cache":{"state":"UNKNOWN"}}, "can_judge_clinical_absence":False}
@@ -299,3 +300,102 @@ def test_readonly_missing_policy_is_controlled():
     cursor = SimpleNamespace(execute=lambda *args:None,fetchone=lambda:None)
     with pytest.raises(reader.IngestError,match="material_case_policy_missing"):
         reader._inputs(cursor,"synthetic")
+
+
+@pytest.mark.parametrize("meaning,availability,count", [(None,"UNCONFIRMED",0),("cancelled","SEMANTICS_APPROVED",0),("valid","SEMANTICS_APPROVED",1),("unsupported","SEMANTICS_APPROVED",0)])
+def test_frozen_status_semantics_control_formal_rows(meaning, availability, count):
+    from app.services import daily_material_projection as projection
+    value = synthetic_manifest()
+    value["items"][0].update(source_status="Save",state="SUPPLEMENT_CONFIRMED",field_availability={"source_status":availability})
+    value["business_binding"] = {"policy":{"status_rules":[] if meaning is None else [["clinical","Save",meaning]]}}
+    assert len(projection.project_rows(value)) == count
+    assert len(projection.project_documents(value)) == 1
+    if meaning not in ("valid","cancelled"):
+        value["can_judge_clinical_absence"] = True
+        assert not projection.scope_from_manifest(value)["can_judge_clinical_absence"]
+
+
+def test_material_display_is_safe_in_summary_full_and_empty_scope():
+    from app.services import daily_material_projection as projection
+    from app.services.bundles.emr_view import summarize_frozen_documents, build_render_view
+    value = synthetic_manifest()
+    value["fresh"] = False
+    value["items"][0].update(state="CONTENT_CONFLICT",rule_usable=False)
+    doc = projection.project_documents(value)[0]
+    summary = summarize_frozen_documents(documents=[doc])["documents"][0]
+    full = build_render_view(doc)["document_meta"]
+    for result in (summary,full):
+        assert result["material_source_label"] == "临床补充"
+        assert "冲突" in result["material_notice"]
+        assert "body" not in result and "daily_material" not in result
+    assert "待更新" in projection.display_scope(value)["notice"]
+    value["items"] = []
+    assert "暂无" in projection.display_scope(value)["notice"]
+
+
+@pytest.mark.parametrize("prior",[False,True])
+def test_current_base_observation_is_inventory_only(prior, monkeypatch, tmp_path):
+    from app.services import daily_material_projection as projection, daily_material_readonly as reader
+    value = synthetic_manifest()
+    if not prior: value["items"] = []
+    value["fresh"] = False
+    raw = {"institute_id":"I","patient_id":"P","visit_id":"V","document_id":"new", "record_content":"new base body", "document_status":"Save"}
+    value["business_base_inventory"] = projection.observed_base_inventory([tuple(raw.get(key) for key in reader.CACHE_COLUMNS)],value,("I","P","V"))
+    assert len(projection.project_rows(value)) == int(prior)
+    docs = projection.project_documents(value)
+    assert len(docs) == 1 + int(prior)
+    observed = docs[-1]
+    assert observed["content"] == "new base body"
+    assert observed["daily_material"]["source_revision"] == "UNCONFIRMED"
+    assert observed["version_id"].startswith("observed-")
+    assert observed["material_rule_usable"] is False
+    assert projection.observed_base_inventory([tuple(raw.get(key) for key in reader.CACHE_COLUMNS)], {"items":[observed["daily_material"]]},("I","P","V")) == []
+    from app.services import case_material_snapshot as material
+    monkeypatch.setenv("QC_CASE_MATERIAL_DIR",str(tmp_path))
+    material.persist("observed-root", {"protocol":material.PROTOCOL,"identity":["I","P","V"],"binding":"","daily_material_manifest":value})
+    value["business_base_inventory"][0]["body"] = "later base body"
+    assert material.load("observed-root",("I","P","V"))["daily_material_manifest"]["business_base_inventory"][0]["body"] == "new base body"
+
+
+
+def test_missing_binding_is_rejected_by_formal_reader():
+    from app.services import daily_material_projection as projection
+    class Cursor:
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def execute(self,*args): pass
+        def fetchall(self): return []
+    conn = SimpleNamespace(connection=SimpleNamespace(driver_connection=SimpleNamespace(cursor=Cursor)),engine=SimpleNamespace(url=SimpleNamespace(host="127.0.0.1",port=55499,database="delivery_cdm_012345abcdef")))
+    with pytest.raises(projection.MissingDailyBinding): projection.read_manifest(conn,("I","P","V"))
+
+
+def test_live_view_missing_binding_keeps_only_same_connection_base(monkeypatch):
+    from contextlib import nullcontext
+    from app.database import clinical_connection as clinical
+    from app.services import daily_material_projection as projection
+    from app.services.bundles import assembly
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def execution_options(self,**kw): assert kw == {"isolation_level":"REPEATABLE READ"}; return self
+        def begin(self): return nullcontext()
+        def exec_driver_sql(self,sql): pass
+    connection = Connection()
+    monkeypatch.setenv("QC_DAILY_MATERIAL_ENABLED","true")
+    monkeypatch.setattr(clinical,"configured",lambda:True)
+    monkeypatch.setattr(assembly,"_source_engine",lambda schema:SimpleNamespace(connect=lambda:connection))
+    def missing(conn,identity):
+        assert conn is connection
+        raise projection.MissingDailyBinding("daily_material_binding_missing")
+    monkeypatch.setattr(projection,"read_manifest",missing)
+    def base(conn,value,identity):
+        assert conn is connection
+        item = synthetic_manifest()["items"][0]
+        return [{**item,"state":"PENDING_RECONCILIATION","selected":False,"rule_usable":False}]
+    monkeypatch.setattr(projection,"read_base_inventory",base)
+    with projection.live_context(("I","P","V")):
+        value = projection.manifest(("I","P","V"))
+        assert len(projection.project_documents(value)) == 1
+        assert projection.project_rows(value) == []
+        assert value["business_binding"]["state"] == "UNAPPROVED"
+        assert not projection.scope_from_manifest(value)["can_judge_clinical_absence"]

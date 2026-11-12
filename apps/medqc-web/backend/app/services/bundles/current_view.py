@@ -75,6 +75,7 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
         discharge_rows=(), allow_date_fallback=False,
     )
     return {
+        "daily_material_status": daily.display_scope(manifest),
         "layout_version": "bundle_struct_v1",
         "visit_id": visit_id,
         "documents": documents,

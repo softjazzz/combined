@@ -383,3 +383,24 @@ it.each([
   wrapper.unmount()
   vi.unstubAllGlobals()
 })
+
+
+it('展示补充冲突和来源覆盖提示，不把待核材料当成正式材料', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({content:'合成正文', metadata:{material_source_label:'临床补充',material_notice:'内容冲突；未纳入正式材料',material_scope_notice:'来源覆盖待核'},render_blocks:[]})))
+  const wrapper = mount(EMRViewer, {props:{visitId:'V',patientId:'P',instituteId:'I',documentsManaged:true,documents:[{id:'D',doc_type:'daily_course_record',doc_name:'日常病程',has_content:true}]},global:{stubs:{'a-spin':true}}})
+  await flushPromises()
+  expect(wrapper.text()).toContain('临床补充')
+  expect(wrapper.text()).toContain('内容冲突；未纳入正式材料')
+  expect(wrapper.text()).toContain('来源覆盖待核')
+  wrapper.unmount()
+  vi.unstubAllGlobals()
+})
+
+it('空目录仍显示来源未批准和待更新提示', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({documents:[],daily_material_status:{notice:'补充来源尚未批准关联；材料选择待更新'}})))
+  const wrapper = mount(EMRViewer, {props:{visitId:'V',patientId:'P',instituteId:'I'},global:{stubs:{'a-spin':true}}})
+  await flushPromises()
+  expect(wrapper.text()).toContain('补充来源尚未批准关联；材料选择待更新')
+  wrapper.unmount()
+  vi.unstubAllGlobals()
+})

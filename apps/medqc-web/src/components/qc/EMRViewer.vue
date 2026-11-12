@@ -3,6 +3,12 @@
     ref="viewerRef"
     class="emr-viewer"
   >
+    <div v-if="materialStatusNotice" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
+      {{ materialStatusNotice }}
+    </div>
+    <div v-if="activeMaterialNotice" class="mb-3 text-xs text-slate-600" role="status">
+      {{ activeMaterialNotice }}
+    </div>
     <div
       v-if="!hideDocTabs && documentItems.length > 1"
       class="mb-5"
@@ -22,6 +28,7 @@
           @click="handleSwitchDoc(doc)"
         >
           {{ displayDocName(doc) }}
+          <span v-if="doc.material_notice" class="ml-1 text-xs">（{{ doc.material_source_label }} · {{ doc.material_notice }}）</span>
         </button>
       </div>
     </div>
@@ -248,7 +255,13 @@ import type { DefectAnnotation } from '@/composables/useDefectHighlight'
 import { getAccessToken } from '@/utils/auth-token'
 import { resolveMedicalFieldLabel } from '@/utils/medicalFieldLabels'
 
-interface EmrDocumentSummary {
+interface MaterialDisplay {
+  material_source_label?: string
+  material_notice?: string
+  material_scope_notice?: string
+}
+
+interface EmrDocumentSummary extends MaterialDisplay {
   version_id?: string
   id: string
   doc_type: string
@@ -289,7 +302,7 @@ interface EmrDocumentPerson {
   source_field?: string
 }
 
-interface EmrDocumentMetadata {
+interface EmrDocumentMetadata extends MaterialDisplay {
   doc_type?: string
   doc_name?: string
   doc_id?: string
@@ -315,6 +328,7 @@ const props = withDefaults(
     documents?: EmrDocumentSummary[]
     documentsManaged?: boolean
     documentsLoading?: boolean
+    materialNotice?: string
     maxHeight?: number
     hideDocTabs?: boolean
   }>(),
@@ -334,6 +348,10 @@ const loading = ref(false)
 const rawContent = ref('')
 const contentType = ref<'text' | 'html'>('text')
 const metadata = ref<EmrDocumentMetadata>({})
+const documentScopeNotice = ref('')
+const activeMaterial = computed(() => documentItems.value.find(doc => docIdentityKey(doc) === loadedDocKey.value))
+const materialStatusNotice = computed(() => props.materialNotice || documentScopeNotice.value || metadata.value.material_scope_notice || activeMaterial.value?.material_scope_notice || '')
+const activeMaterialNotice = computed(() => [metadata.value.material_source_label || activeMaterial.value?.material_source_label, metadata.value.material_notice || activeMaterial.value?.material_notice].filter(Boolean).join(' · '))
 const annotations = ref<DefectAnnotation[]>([])
 const documentItems = ref<EmrDocumentSummary[]>([])
 const loadedDocKey = ref('')
@@ -717,6 +735,7 @@ function pickInitialDocument(): EmrDocumentSummary | undefined {
 }
 
 async function fetchDocuments() {
+  documentScopeNotice.value = ''
   if (props.documentsManaged) {
     documentItems.value = Array.isArray(props.documents) ? props.documents : []
     const target = pickInitialDocument()
@@ -753,6 +772,7 @@ async function fetchDocuments() {
       return
     }
     const payload = result?.data || {}
+    documentScopeNotice.value = String(payload.daily_material_status?.notice || '')
     const docList = Array.isArray(payload.documents)
       ? payload.documents
       : Array.isArray(payload)

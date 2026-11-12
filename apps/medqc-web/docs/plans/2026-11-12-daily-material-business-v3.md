@@ -72,3 +72,24 @@ GRANT SELECT (institute_id, patient_id, visit_id, document_id, document_title, r
 ```
 
 仍需现场批准身份/类型/等价/覆盖policy、账号权限核对、捕获窗口、固定同步版本部署及只读联验；本次没有连接既有数据库、源接口或服务器，没有重跑27份/1026，未执行GRANT或开启部署开关。本地通过不能替代现场上线验收。
+
+
+## 独立复审补修（60085728d之后）
+
+固定本地工作树 `D:/MedQC-worktrees/daily-material-business-v3-20261112`，分支 `codex/daily-material-business-v3-20261112`。基线06c2fd4fa包含尚未合入PR57的反馈安全补修，本任务不修改、推送或合并PR57。
+
+- 源状态只按冻结business_binding.policy.status_rules解释：明确valid才可进入正式daily事实；cancelled排除；未映射或当前不支持的意义待核并阻断全集缺失推断，不猜Save等原字符串，不把SEMANTICS_APPROVED本身当作有效。完整原判定、field_availability、原状态仍留目录/快照。真实basic首次查房反例验证未知/取消不能成为合规阳性，valid阳性及旁侧独立valid证据保留。
+- 同RR追加固定23列base观察，与原items.target_payload作typed canonical精确比较；未匹配当前行进入business_base_inventory，只用于目录，不进入原selection/rule集合。观察身份为内容寻址observed版本，source_revision=UNCONFIRMED，不冒充发布版本。无prior也可见正文，历史任务观察内容仍不可变。
+- 全局开关启用但病例零binding：正式捕获仍拒绝；仅live目录捕获MissingDailyBinding，显示同连接base观察及“补充来源尚未批准关联”。多binding、错绑、坏policy、缺权不降级，不自动改用旧规则输入。
+- 目录摘要与全文metadata加入安全来源/状态/是否正式/覆盖待核提示，不重复发送raw证明。EMRViewer真实Vue组件模板挂载测试验证全文顶部提示；受控workspace空目录转fallback也保留提示。没有运行浏览器截图或现场页面，本轮UI证据是Vitest+jsdom组件DOM。
+
+补修必要验证：backend同禁env/network入口，`test_daily_material_projection.py test_daily_material_scope_execution.py test_bundle_emr_view.py test_current_document_view.py test_emr_render_performance_contract.py` 116 passed、3既有warnings、exit0。EMRViewer 11 passed、RecordDetailWorkspace.panel 4 passed，均exit0。前者新增两例先RED再GREEN。父级在60085728d独立81 passed；不把它当作补修后全量复跑。
+
+新增读层后独立PG再次验证通过：PG16.15，高端口63147，数据库delivery_cdm_c554c088a96f，已finally停止。结果`C:/Users/Coldplay/AppData/Local/Temp/daily-business-owned-pg-0nzx1skg/result.json`；同一外部probe_rr.py已补assert：正式project_rows两份、同RR观察集合不变、新RR变化正文仅目录/不正式、无selection_head时base可见/正式空。JSON未逐项列出新增assert，具体证据在脚本。依然是保真已发布fixture，不是实际同步发布。
+
+## 后续只读预检清单（仅准备，未执行）
+
+1. 由负责人确认目标独立CDM、捕获窗口、实际角色与CONNECT目标库权限，逐列核对上述SELECT草案；检查角色继承、对象所有权及组合后有效权限，确认无写权/建库建schema能力/SET ROLE绕过。此清单不执行GRANT，也不开启开关。
+2. 同步方须提供批准的身份、类型、status_rules有效/无效语义与覆盖范围；未知状态意义不能成为正式事实。明确补充状态字段的批准语义，不以字符串外观推断。
+3. 快照目录置于release目录外；核对应用账号读写权限、同任务实例共享路径、备份与原子恢复流程，验证内容对象及任务引用一起恢复、绑定一致；缺失/损坏不能回查最新替代。
+4. 获准后才进行现场只读联验：批准病例的同RR目标/manifest/目录一致性、实际字段权限、冻结后重试和历史定位。无关联普通病例应显示基础观察和未批准提示；新正式执行仍要求有效绑定。当前没有创建现场任务或启用开关。

@@ -102,6 +102,7 @@
               :doc-preview-active="!!activeDocType"
               :doc-preview-title="docPreviewTitle"
               :doc-preview-content="docPreviewContent"
+              :material-notice="dailyMaterialNotice"
               :documents="documentsList"
               :documents-loading="documentsLoading"
               @emr-loaded="handleEmrLoaded"
@@ -1113,6 +1114,7 @@ type ManagedDocItem = DocItem & {
 }
 
 const documentsList = ref<ManagedDocItem[]>([])
+const dailyMaterialNotice = ref('')
 const documentsTree = ref<DocTreeGroup[]>([])
 const documentsLoading = ref(false)
 const activeDocType = ref<string>('')
@@ -1853,6 +1855,8 @@ function buildDocumentRequestParams(
 
 function applyDocumentSummaryPayload(payload: Record<string, unknown>, requestSequence: number) {
   if (requestSequence !== documentsRequestSequence) return
+  const scope = payload.daily_material_status
+  dailyMaterialNotice.value = scope && typeof scope === 'object' ? pickText(scope as Record<string, unknown>, ['notice']) : ''
   const docsRaw = Array.isArray(payload.documents) ? payload.documents : []
   const docs = docsRaw.map((item, index) => normalizeDocItem(item, index))
   documentsList.value = docs
@@ -1908,6 +1912,7 @@ async function loadDocuments(visitId: string) {
   documentsLoading.value = true
   concatLoading.value = false
   documentsList.value = []
+  dailyMaterialNotice.value = ''
   documentsTree.value = []
   concatText.value = ''
   let backgroundLoadingStarted = false
@@ -2245,6 +2250,7 @@ watch(selectedRecordKey, (newKey) => {
   } else {
     qcSnapshotState.value = {}
     documentsList.value = []
+    dailyMaterialNotice.value = ''
     documentsTree.value = []
     concatText.value = ''
     settlementData.value = null

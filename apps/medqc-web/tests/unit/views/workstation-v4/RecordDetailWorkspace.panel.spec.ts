@@ -47,3 +47,10 @@ describe('病历详情的助手入口', () => {
     })
   })
 })
+
+
+it('空目录进入fallback后仍保留来源覆盖待核提示', async () => {
+  const wrapper = mountWorkspace({id:'V',instituteId:'I',patientId:'P',visitId:'V'})
+  await wrapper.setProps({emrRenderState:'fallback',documents:[],materialNotice:'补充来源尚未批准关联；材料选择待更新'})
+  expect(wrapper.text()).toContain('补充来源尚未批准关联；材料选择待更新')
+})

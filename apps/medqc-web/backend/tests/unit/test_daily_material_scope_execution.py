@@ -164,3 +164,24 @@ def test_programmatic_round_scope_preserves_positive(hours, expected):
     docs = [] if hours is None else [{"title":"主治医师查房", "content":"主治医师查房", "authored_at":str(datetime(2026,1,1)+timedelta(hours=hours))}]
     result = _evaluate_round({"rule_id":"LX0609-02-01-01"}, {"admission_time":"2026-01-01 00:00:00", "documents":{"daily_course_record":docs}, "material_scope":{"daily_course_record":{"can_judge_clinical_absence":False}}}, role="attending", hours=48)
     assert result["status"] == expected
+
+
+@pytest.mark.parametrize("meaning,other_valid,expected", [(None,False,"data_gap"),("cancelled",False,"data_gap"),("valid",False,"compliant"),(None,True,"compliant")])
+def test_approved_status_is_required_for_real_first_round_positive(meaning,other_valid,expected):
+    from copy import deepcopy
+    from test_daily_material_projection import synthetic_manifest
+    from test_luxian_0609_native_basic_timeliness import _reduce_typed_basic
+    from app.services import daily_material_projection as projection
+    value = synthetic_manifest()
+    item = value["items"][0]
+    # Fixed d7dc output permits selected/rule_usable despite UNCONFIRMED status semantics.
+    item.update(source_status="Save",state="SUPPLEMENT_CONFIRMED",record_time="2026-01-02 08:00:00",title="主治医师查房记录",body="主治医师查房，患者病情平稳。",field_availability={"source_status":"UNCONFIRMED" if meaning is None else "SEMANTICS_APPROVED"})
+    value["business_binding"] = {"policy":{"status_rules":[] if meaning is None else [["clinical","Save",meaning]]}}
+    if other_valid:
+        other = deepcopy(item)
+        other.update(source_status="Approved",version_id="other",record_identity="other-record")
+        value["business_binding"]["policy"]["status_rules"].append(["clinical","Approved","valid"])
+        value["items"].append(other)
+    rows = {"inpat_registration":[{"admission_datetime":"2026-01-01 08:00:00"}],"daily_course_record":projection.project_rows(value)}
+    _, reduced = _reduce_typed_basic(session("LX0609-02-01-01",rows),("LX0609-02-01-01",))
+    assert reduced[0].final_state.value == expected

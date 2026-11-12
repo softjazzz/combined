@@ -910,7 +910,7 @@ def _normalize_source_document_summary(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
-    for key in ("version_id", "source_record_identity", "source_namespace", "source_object"):
+    for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "material_source_label", "material_notice", "material_scope_notice"):
         if key in raw_doc:
             summary[key] = raw_doc[key]
     if raw_doc.get("version_id") and raw_doc.get("source_record_identity"):
@@ -918,7 +918,7 @@ def _normalize_source_document_summary(
         item = raw_doc.get("daily_material", {})
         summary["material_state"] = item.get("state")
         summary["material_selected"] = item.get("selected")
-        summary["material_rule_usable"] = item.get("rule_usable")
+        summary["material_rule_usable"] = raw_doc.get("material_rule_usable", item.get("rule_usable"))
     if raw_doc.get("chief_physician_sign_datetime") is not None:
         summary["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     if doc_type in _ORDER_DOC_TYPES:
@@ -970,7 +970,7 @@ def _collapse_summary_only_documents(documents: list[dict[str, Any]]) -> list[di
     return [doc for doc in visible if doc.get("doc_type") != "labtest_master"] + [summary]
 
 
-def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_domain: str | None = None) -> dict[str, Any]:
+def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_domain: str | None = None, daily_material_status=None) -> dict[str, Any]:
     """沿原摘要owner投影冻结材料；目录响应不携带完整正文/章节/渲染块。"""
     summaries = []
     for index, document in enumerate(documents):
@@ -986,7 +986,7 @@ def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_dom
             if document.get(key) is not None:
                 summary[key] = document[key]
         summaries.append(summary)
-    return {"layout_version":"bundle_struct_v1", "documents":summaries, "documents_tree":[],
+    return {"daily_material_status":daily_material_status, "layout_version":"bundle_struct_v1", "documents":summaries, "documents_tree":[],
             "empty_reason":"" if summaries else "material_documents_empty"}
 
 
@@ -1590,6 +1590,7 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
             "chief_physician_sign_datetime": _safe_text(document.get("chief_physician_sign_datetime")),
             "projection_incomplete": document.get("projection_incomplete") is True,
             "projection_notice": _safe_text(document.get("projection_notice")),
+            **{key: document[key] for key in ("source_namespace", "material_state", "material_selected", "material_rule_usable", "material_source_label", "material_notice", "material_scope_notice") if key in document},
             "source": "bundle",
         },
         "render_blocks": render_blocks,
