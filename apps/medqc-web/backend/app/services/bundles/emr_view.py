@@ -190,6 +190,9 @@ _FIELD_LABELS: dict[str, str] = {
     "surgical_incisionheal_level": "切口愈合等级",
     "surgery_begin_time": "手术开始时间",
     "surgery_end_time": "手术结束时间",
+    "surgery_begin_datetime": "手术开始时间（源字段）",
+    "surgery_end_datetime": "手术结束时间（源字段）",
+    "last_modified_datetime": "修改时间",
     "blood_loss": "失血量",
     "other_content": "其他内容",
     "discuss_staff": "参与人员",
@@ -392,6 +395,7 @@ def _normalize_source_document(
         "submit_time": submit_time,
         "record_time_source": record_time_source,
         "record_time_note": record_time_note,
+        "document_status": raw_doc.get("document_status"),
         "has_content": bool(content),
         "content": content or None,
         "length": len(content),
@@ -1206,6 +1210,8 @@ def pick_document(
 
 
 def _extract_kv_fields(document: dict[str, Any]) -> list[dict[str, str]]:
+    if document.get("doc_type") == "surgery_record" and not _safe_text(document.get("content")):
+        return []
     source_fields = list(document.get("source_fields") or [])
     fields: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -1233,7 +1239,7 @@ def _extract_kv_fields(document: dict[str, Any]) -> list[dict[str, str]]:
             }
         )
 
-    if fields and not surgery_mode:
+    if fields and (not surgery_mode or doc_type == "surgery_record"):
         return fields
 
     content = _safe_text(document.get("content"))
@@ -1557,6 +1563,7 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
             "record_time": _safe_text(document.get("sort_time") or document.get("record_time")),
             "submit_time": _safe_text(document.get("submit_time")),
             "record_time_source": _safe_text(document.get("record_time_source")),
+            "document_status": document.get("document_status"),
             "authors": list(document.get("authors") or []),
             "signatures": list(document.get("signatures") or []),
             "chief_physician_sign_datetime": _safe_text(document.get("chief_physician_sign_datetime")),
