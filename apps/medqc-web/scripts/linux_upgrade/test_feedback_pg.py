@@ -71,8 +71,18 @@ def test_migration_import_crud_idempotency_and_compatible_rollback(pg,tmp_path,m
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from app.routers.demo import router
+        from app.core import security
+        from types import SimpleNamespace
+        # 仅替换账号存储与签名配置；仍走真实JWT解析和管理员权限依赖。
+        subject='synthetic-feedback-upgrade-admin'
+        monkeypatch.setattr(security, 'get_settings', lambda: SimpleNamespace(
+            JWT_SECRET='synthetic-feedback-upgrade-test-only-secret', JWT_ALGORITHM='HS256'))
+        monkeypatch.setattr(security, 'resolve_user_by_subject', lambda value: {
+            'id': subject, 'username': subject, 'roles': ['admin'], 'is_active': True,
+        } if value == subject else None)
+        token=security.create_access_token({'sub': subject})
         app=FastAPI(); app.include_router(router)
-        with TestClient(app) as client:
+        with TestClient(app, headers={'Authorization': f'Bearer {token}'}) as client:
             payload=dict(rule_id='R',rule_code='R',rule_name='合成规则',document_name='合成文书',evaluation_result=True,feedback_type='correct')
             response=client.post('/api/v1/demo/feedbacks',json=payload)
             assert response.status_code==200,response.text

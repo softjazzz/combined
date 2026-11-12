@@ -37,3 +37,12 @@ node node_modules/vitest/vitest.mjs run src/api/__tests__/demoFeedback.spec.ts s
 ## 限制与边界
 
 这是工程隔离验证，不是现场浏览器验收；未跑全量、全量类型检查或真实 PG 本轮验证（未改 SQL/模型）。未合并、推送、部署、连接业务库、调用模型、运行质控或重跑27份。未处理独立的业务助手 access 503。未修改现有升级包，本地提交需复审后另行决定交付。
+
+
+## P2补修：PG验收脚本会话
+
+基于4166e191c，仅修改test_feedback_pg.py：使用固定合成签名配置、精确匹配的合成管理员账号和真实create_access_token，TestClient默认附带Bearer。未覆盖get_current_user或require_roles。monkeypatch在用例退出后恢复。
+
+必要验证：从当前脚本AST抽取原HTTP段，真实路由+合成内存SQLite完成提交、列表、统计、按规则、导出、删除；匿名请求仍在存储前拒绝。两项通过。原文件所有Assert的AST逐一对比基线完全一致，包括迁移、幂等、原SQLite、兼容回滚与新增反馈保护。
+
+本轮没有启动隔离PG或重跑迁移矩阵；验证仅针对改变的认证/HTTP会话，不能称PG端到端重验通过。产品源码、数据模型、医生反馈和历史结果均未修改。新增验证文件在C:/Users/Coldplay/AppData/Local/Temp/MedQC-review-4166e191c/test_p2_client_fix.py，使用同目录run_offline.py禁网入口执行。
