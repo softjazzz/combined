@@ -109,7 +109,7 @@ def load_current_documents(*, institute_id: str, patient_id: str, visit_id: str)
     if owner:
         try:
             from .. import daily_material_projection as daily
-            with daily.live_context(identity):
+            with daily.live_context(identity, allow_unbound_view=True):
                 future.set_result(_assemble_current_documents(
                     institute_id=key[0], patient_id=key[1], visit_id=key[2],
                 ))

@@ -393,9 +393,127 @@ def test_live_view_missing_binding_keeps_only_same_connection_base(monkeypatch):
         item = synthetic_manifest()["items"][0]
         return [{**item,"state":"PENDING_RECONCILIATION","selected":False,"rule_usable":False}]
     monkeypatch.setattr(projection,"read_base_inventory",base)
-    with projection.live_context(("I","P","V")):
+    with projection.live_context(("I","P","V"), allow_unbound_view=True):
         value = projection.manifest(("I","P","V"))
         assert len(projection.project_documents(value)) == 1
         assert projection.project_rows(value) == []
         assert value["business_binding"]["state"] == "UNAPPROVED"
         assert not projection.scope_from_manifest(value)["can_judge_clinical_absence"]
+
+
+@pytest.fixture
+def standalone_daily_owner(monkeypatch):
+    from contextlib import nullcontext
+    from app.database import clinical_connection as clinical
+    from app.services import daily_material_projection as projection
+    from app.services.bundles import assembly
+    calls = []
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def execution_options(self,**kw): assert kw == {"isolation_level":"REPEATABLE READ"}; return self
+        def begin(self): return nullcontext()
+        def exec_driver_sql(self,sql): pass
+    connection = Connection()
+    monkeypatch.setenv("QC_DAILY_MATERIAL_ENABLED","true")
+    monkeypatch.setattr(clinical,"configured",lambda:True)
+    monkeypatch.setattr(assembly,"_source_engine",lambda schema:SimpleNamespace(connect=lambda:connection))
+    def read(conn,identity):
+        assert conn is connection
+        calls.append(identity)
+        return synthetic_manifest()
+    monkeypatch.setattr(projection,"read_manifest",read)
+    for name in ("ensure_scene_bundle_tables","ensure_domain_bundle_tables","_upsert_scene_bundle","_upsert_domain_bundle","mark_bundle_refresh_success"):
+        monkeypatch.setattr(assembly,name,lambda **kw:None)
+    def assembled(**kw):
+        identity = tuple(kw[key] for key in ("institute_id","patient_id","visit_id"))
+        return {"rows":projection.rows(identity)}
+    monkeypatch.setattr(assembly,"_assemble_scene_bundle",assembled)
+    monkeypatch.setattr(assembly,"assemble_domain_bundle",assembled)
+    return assembly,calls
+
+
+@pytest.mark.parametrize("kind",["scene","domain","direct","index","render"])
+def test_standalone_bundle_owner_reads_manifest_instead_of_old_cache(standalone_daily_owner,kind,monkeypatch):
+    assembly,calls = standalone_daily_owner
+    monkeypatch.setattr(assembly,"_load_scene_bundle",lambda **kw:pytest.fail("stale scene cache read"))
+    kwargs = dict(institute_id="I",patient_id="P",visit_id="V")
+    if kind == "scene": result = assembly.load_or_assemble_scene_bundle(scene="running",**kwargs)
+    elif kind == "domain": result = assembly.load_or_assemble_domain_bundle(execution_domain="course",**kwargs)
+    elif kind == "direct": result = assembly.load_domain_bundle(execution_domain="course",**kwargs)
+    elif kind == "index": result = assembly.load_domain_bundle_document_index(execution_domain="course",**kwargs)
+    else: result = assembly.load_domain_bundle_for_emr_render(execution_domain="course",doc_type="daily_course_record",doc_id="D",**kwargs)
+    assert result["rows"][0]["record_content"] == "synthetic body"
+    assert calls == [("I","P","V")]
+
+
+def test_unified_refresh_owns_one_context_per_case(standalone_daily_owner,monkeypatch):
+    from app.services import daily_material_projection as projection
+    assembly,calls = standalone_daily_owner
+    def snapshot(**kw):
+        assert projection.rows(tuple(kw[key] for key in ("institute_id","patient_id","visit_id")))[0]["version_id"] == "a"
+        return SimpleNamespace(material_reads=1)
+    monkeypatch.setattr(assembly,"_build_material_snapshot",snapshot)
+    result = assembly.refresh_all_bundle_variants_for_rows(rows=[{"institute_id":"I","patient_id":"P","visit_id":visit} for visit in ("V","V2")],scenes=["running","final"],domains=["course"],continue_on_error=False)
+    assert calls == [("I","P","V"),("I","P","V2")]
+    assert result["scenes"]["running"]["updated"] == 2
+    assert result["domains"]["course"]["updated"] == 2
+
+
+
+def test_recording_column_inspection_uses_owned_connection(standalone_daily_owner,monkeypatch):
+    from app.services import daily_material_projection as projection, case_material_snapshot as material
+    assembly,_ = standalone_daily_owner
+    inspected = []
+    def inspect(connection):
+        assert connection is material.context()["connection"]
+        inspected.append(connection)
+        return SimpleNamespace(has_table=lambda **kw:True,get_columns=lambda **kw:[{"name":"document_id"}])
+    monkeypatch.setattr(assembly,"inspect",inspect)
+    with projection.live_context(("I","P","V")):
+        assert assembly._get_table_columns("cdm","senior_course_record") == ("document_id",)
+        assert assembly._get_table_columns("cdm","senior_course_record") == ("document_id",)
+    assert len(inspected) == 1
+
+
+def test_daily_manifest_overrides_unattested_bundle_material_snapshot(standalone_daily_owner):
+    from app.services import daily_material_projection as projection
+    assembly,_ = standalone_daily_owner
+    stale = SimpleNamespace(rows_for=lambda **kw:pytest.fail("old snapshot supplied daily"))
+    with projection.live_context(("I","P","V")):
+        result = assembly._material_rows(material_snapshot=stale,source_schema="cdm",table="daily_course_record",institute_id="I",patient_id="P",visit_id="V",limit=5)
+    assert result[0]["record_content"] == "synthetic body"
+
+
+@pytest.mark.parametrize("kind",["all","domain"])
+def test_bundle_capture_failure_only_fails_its_case(standalone_daily_owner,monkeypatch,kind):
+    from app.services import daily_material_projection as projection
+    assembly,calls = standalone_daily_owner
+    original = projection.read_manifest
+    def read(conn,identity):
+        if identity[-1] == "V": raise projection.MissingDailyBinding("daily_material_binding_missing")
+        return original(conn,identity)
+    monkeypatch.setattr(projection,"read_manifest",read)
+    monkeypatch.setattr(assembly,"_build_material_snapshot",lambda **kw:SimpleNamespace(material_reads=1))
+    failures = []
+    monkeypatch.setattr(assembly,"record_bundle_refresh_failure",lambda **kw:failures.append(kw))
+    rows=[{"institute_id":"I","patient_id":"P","visit_id":visit} for visit in ("V","V2")]
+    if kind == "all":
+        result=assembly.refresh_all_bundle_variants_for_rows(rows=rows,scenes=["running"],domains=["course"],continue_on_error=True)
+        assert result["scenes"]["running"] == {"processed":2,"updated":1,"failed":1,"skipped":0}
+        assert len(failures) == 1 and failures[0]["error_stage"] == "material_capture"
+        result=result["domains"]["course"]
+    else: result=assembly.refresh_domain_bundles_for_rows(rows=rows,domains=["course"],continue_on_error=True)
+    assert result == {"processed":2,"updated":1,"failed":1,"skipped":0}
+    assert calls == [("I","P","V2")]
+
+
+
+def test_bundle_owner_keeps_pdf_material_snapshot_when_daily_enabled(monkeypatch):
+    from app.services.bundles import assembly
+    from app.services import validation_material_source
+    monkeypatch.setenv("QC_DAILY_MATERIAL_ENABLED","true")
+    monkeypatch.setattr(validation_material_source,"is_material_copy",lambda *args:True)
+    snapshot = object()
+    owner = assembly._daily_bundle_owner(lambda **kwargs:kwargs["material_snapshot"])
+    assert owner(institute_id="I",patient_id="PDF-P",visit_id="PDF-V",material_snapshot=snapshot) is snapshot

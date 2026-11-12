@@ -93,3 +93,17 @@ GRANT SELECT (institute_id, patient_id, visit_id, document_id, document_title, r
 2. 同步方须提供批准的身份、类型、status_rules有效/无效语义与覆盖范围；未知状态意义不能成为正式事实。明确补充状态字段的批准语义，不以字符串外观推断。
 3. 快照目录置于release目录外；核对应用账号读写权限、同任务实例共享路径、备份与原子恢复流程，验证内容对象及任务引用一起恢复、绑定一致；缺失/损坏不能回查最新替代。
 4. 获准后才进行现场只读联验：批准病例的同RR目标/manifest/目录一致性、实际字段权限、冻结后重试和历史定位。无关联普通病例应显示基础观察和未批准提示；新正式执行仍要求有效绑定。当前没有创建现场任务或启用开关。
+
+
+## 独立Bundle入口闭合（ac8e8b201之后）
+
+实际调用包括clinical_completeness→load_or_assemble_scene_bundle，以及CaseSetSyncService→refresh_all_bundle_variants_for_rows。公共scene/domain组装owner和load/cache入口建立严格的daily上下文；已有捕获/冻结上下文复用并校验身份，底层_select_records不创建新连接。直接domain loader/index/render也在manifest存在时从同材料组装，不返回旧缓存；旧任务无manifest继续旧协议。无外部上下文却传入的material_snapshot不复用，新manifest的daily行始终由owner投影。
+
+统一刷新和domain-only刷新每病例一个上下文覆盖其variants，不能跨病例复用。捕获拒绝仅使该病例的variants计为failed，并沿原scene失败记录；continue_on_error继续后续病例，不把拒绝变成空材料成功。continue_on_error=false仍显式失败。正式Bundle不允许零binding目录降级，只有current_view明确allow_unbound_view=True。
+
+元数据读取同样复用recording.connection：_get_table_columns在受控录制中inspect当前SQLAlchemy连接并缓存本次列，不inspect engine或使用跨请求元数据缓存；历史缺列仍拒绝。
+
+新增独立scene/domain、直接loader/index/render、每病例多variant、列inspect同连接、旧临时snapshot、单病例捕获失败不影响另一病例共10例。前6例和批次失败2例先RED再GREEN。必要组 `test_daily_material_projection.py test_bundle_refresh_storage.py test_bundle_refresh_lx0609_material_contract.py test_domain_bundle_assembly.py test_current_document_view.py` 94 passed/3既有warnings/exit0；其后仅批次隔离与相关新入口10例通过。没有运行实际刷新任务、没有写既有库，upsert和失败记录均测试替身。
+
+
+补充限制：隔离PG使用自有临时集群测试账号及READ ONLY事务，不是最小列授权角色验收。SQLAlchemy连接所有权保留不等于数据库对象所有权/继承角色只读验收；权限草案来自实际SQL静态提取，仍需后续获准的只读预检，本轮不执行GRANT。全局daily开关开启时，PDF短路不得清空已有material_snapshot；此边界新增一例先失败再修复通过。

@@ -240,10 +240,13 @@ def _decode_scalar(value):
 
 
 @contextmanager
-def live_context(identity):
+def live_context(identity, *, allow_unbound_view=False):
     """普通查看与任务捕获共用投影；整次当前目录在同一RR中组装。"""
     from .validation_material_source import is_material_copy
-    if not enabled() or material.context() is not None or is_material_copy(identity[1], identity[2]):
+    state = material.context()
+    if state is not None:
+        material.identity_check(state, identity)
+    if not enabled() or state is not None or is_material_copy(identity[1], identity[2]):
         yield
         return
     from ..database import clinical_connection as clinical
@@ -258,6 +261,8 @@ def live_context(identity):
             try:
                 captured = read_manifest(connection, identity)
             except MissingDailyBinding:
+                if not allow_unbound_view:
+                    raise
                 # 仅目录的零关联边界；多关联、错绑、缺权等异常继续失败。
                 captured = {"contract":readonly.CONTRACT, "items":[], "fresh":False,
                             "can_judge_clinical_absence":False, "coverage":{}, "business_binding":{"state":"UNAPPROVED"}}
