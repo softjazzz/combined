@@ -124,6 +124,7 @@ def _event_projection(
         horizon_unavailable_reason=projection.horizon_unavailable_reason,
         course_time_incomplete=projection.course_time_incomplete,
         course_projection_truncated=projection.course_projection_truncated,
+        course_scope_complete=projection.course_scope_complete,
         course_texts={
             ref: course_texts[ref] for ref in course_refs if ref in course_texts
         },

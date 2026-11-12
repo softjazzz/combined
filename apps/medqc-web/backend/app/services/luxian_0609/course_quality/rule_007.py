@@ -233,6 +233,8 @@ def evaluate_rule_007_legacy(
         current - previous > _MAX_INTERVAL
         for previous, current in zip(ordered_times, ordered_times[1:])
     )
+    if interval_over_72h and not materials.permits_absence("daily_course_record"):
+        return missing_scope_decision()
     if interval_over_72h and substantive_record_without_time:
         return Rule007LegacyOutcome(
             status="data_gap",
@@ -651,12 +653,19 @@ def evaluate_rule_007_typed(
         for document_refs in bounded_record_refs_by_time.values()
         for document_ref in document_refs
     )
+    def missing_scope_decision():
+        return decision(applicability=ApplicabilityState.APPLICABLE,
+                        evidence_state=EvidenceState.DATA_GAP, qc_direction=QcDirection.UNKNOWN,
+                        reason_code="source_unavailable", refs=refs, confidence=None)
+
     capacity_facts = _missing_time_capacity_exceeded(
         admission_time=admission_time, record_times=ordered_times,
         horizon_time=horizon_time, horizon_date=horizon_date,
         missing_time_count=missing_time_count,
     )
     if capacity_facts is not None:
+        if not materials.permits_absence("daily_course_record"):
+            return missing_scope_decision()
         refs.update(missing_time_refs)
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
@@ -686,6 +695,8 @@ def evaluate_rule_007_typed(
                 refs=refs,
                 confidence=None,
             )
+        if not materials.permits_absence("daily_course_record"):
+            return missing_scope_decision()
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -739,6 +750,8 @@ def evaluate_rule_007_typed(
                 refs=refs,
                 confidence=None,
             )
+        if not materials.permits_absence("daily_course_record"):
+            return missing_scope_decision()
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,

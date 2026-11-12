@@ -148,6 +148,7 @@ def _document_entry(table_name: str, label: str, row: dict, total_rows: int, ind
         "source_fields": [field.to_dict() for field in assembled.source_fields],
         "assembly_status": assembled.assembly_status,
         "data_quality_flags": list(assembled.data_quality_flags),
+        **{key: row[key] for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "daily_material", "daily_material_scope") if key in row},
     }
 
 

@@ -382,6 +382,7 @@ class _TypedSource:
     state: str
     rows: tuple[Mapping[str, Any], ...] = ()
     source_key: str = ""
+    permits_absence: bool = True
 
 
 def _clean(value: Any) -> str:
@@ -500,7 +501,7 @@ def _typed_source(
     except EvidenceMaterialUnavailable:
         return _TypedSource("error", source_key=source_key)
     selected = tuple(row for row in rows if isinstance(row, Mapping))
-    return _TypedSource("present" if selected else "empty", selected, source_key)
+    return _TypedSource("present" if selected else "empty", selected, source_key, materials.permits_absence(source_key))
 
 
 def _snapshot_fact_state(
@@ -1470,7 +1471,7 @@ def _post_report_response_outcome(
             "exam_lab_text_fact",
             tuple(dict.fromkeys((*refs, safe_ref))) if safe_ref else refs,
         )
-    if projection.course_projection_truncated or projection.course_time_incomplete:
+    if (projection.course_projection_truncated or not projection.course_scope_complete) or projection.course_time_incomplete:
         # 与“未见分析”同口径：病程时间不完整时，可能有未进入窗口的病程在 24 小时内，
         # 只见超时分析也不能认定超时（C02）。
         return _ExamLabOutcome(
@@ -1633,7 +1634,7 @@ def _single_text_fact_outcome(
         # 既不判合规也不判“未记录”（用户口径 2026-11-08）。
         return _ExamLabOutcome(rule_id, "data_gap", "association_failed", refs)
     if fact.semantic_state == "absent":
-        if projection.course_time_incomplete or projection.course_projection_truncated:
+        if projection.course_time_incomplete or (projection.course_projection_truncated or not projection.course_scope_complete):
             return _ExamLabOutcome(
                 rule_id,
                 "data_gap",
@@ -1672,7 +1673,7 @@ def _single_text_fact_outcome(
                 if event is None
                 or not event.result_text_available
                 or projection.course_time_incomplete
-                or projection.course_projection_truncated
+                or (projection.course_projection_truncated or not projection.course_scope_complete)
                 else "evaluation_unknown",
             ),
             "exam_lab_text_fact_unknown",
@@ -1699,7 +1700,7 @@ def _single_text_fact_outcome(
         compliant = window is not None and any(
             window[0] <= item <= window[1] for item in course_times if item is not None
         )
-        if not compliant and projection.course_projection_truncated:
+        if not compliant and (projection.course_projection_truncated or not projection.course_scope_complete):
             return _ExamLabOutcome(
                 rule_id, "data_gap", "course_projection_incomplete", refs
             )
@@ -1715,7 +1716,7 @@ def _single_text_fact_outcome(
     )
     if any(interval <= timedelta(hours=24) for interval in post_event_intervals):
         return _ExamLabOutcome(rule_id, "compliant", "exam_lab_text_fact", refs)
-    if projection.course_projection_truncated:
+    if (projection.course_projection_truncated or not projection.course_scope_complete):
         return _ExamLabOutcome(
             rule_id, "data_gap", "course_projection_incomplete", refs
         )
@@ -3111,6 +3112,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     projection = None
                     projection_gap_reason = "course_projection_incomplete"
             if projection is not None:
+                scope_complete = evidence_materials.permits_absence("daily_course_record")
+                projection = replace(projection, course_scope_complete=scope_complete)
+                projection_batches = tuple(replace(batch, projection=replace(batch.projection, course_scope_complete=scope_complete)) for batch in projection_batches)
                 semantic_rule_ids: list[str] = []
                 for rule_id in eligible_rule_ids:
                     family = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"

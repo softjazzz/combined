@@ -69,7 +69,7 @@ def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any
     for document in list(payload.get("documents") or []):
         if not isinstance(document, dict):
             continue
-        source_document_id = str(document.get("document_id") or "").strip()
+        source_document_id = str((document.get("doc_key") if document.get("version_id") else document.get("document_id")) or "").strip()
         if source_document_id:
             document["source_ref"] = source_ref(source_document_id)
         source_document_ids = document.get("source_document_ids")

@@ -269,6 +269,7 @@ class TumorPathologyLLMClient(Protocol):
 class SourceMaterial:
     state: str
     rows: tuple[Mapping[str, Any], ...] = ()
+    permits_absence: bool = True
 
 
 @dataclass(frozen=True)
@@ -565,7 +566,7 @@ def _load_typed_source(
     # typed 判定必须消费本次 Evidence Session 的完整 bounded 材料；只在构造
     # 模型上下文时限行，不能让第9行以后的强触发事实被静默丢弃。
     material = tuple(row for row in rows if isinstance(row, Mapping))
-    return SourceMaterial("present" if material else "empty", material)
+    return SourceMaterial("present" if material else "empty", material, evidence_materials.permits_absence(source_key))
 
 
 def _row_text(row: Mapping[str, Any]) -> str:
@@ -1703,6 +1704,8 @@ async def _typed_chemotherapy_comparison(
                     selected_course_rows.extend(row for row, _ in withheld)
                 elif planned:
                     # 仅计划不能证明已实施，也不能断言未记录。
+                    unresolved_event_count += 1
+                elif not course_records.permits_absence:
                     unresolved_event_count += 1
                 else:
                     missing_course_event_count += 1

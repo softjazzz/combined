@@ -1384,6 +1384,7 @@ def _order_reason_rule_outcome(
     pathogen_sources_complete: bool,
     evaluation_horizon: datetime | date | None,
     horizon_error: str,
+    daily_scope_complete: bool = True,
 ) -> tuple[str, str, Mapping[str, Any] | None, tuple[Mapping[str, Any], ...]]:
     """按医嘱事件映射054/057状态；模型只提供带引文的事实。
 
@@ -1419,7 +1420,7 @@ def _order_reason_rule_outcome(
             elif event.event_id in untimed or (facts is not None and facts.documented_use == "unknown"):
                 evaluated.append((event, "unresolved"))
             else:
-                evaluated.append((event, "missing"))
+                evaluated.append((event, "missing" if daily_scope_complete else "unresolved"))
             continue
         if is_057:
             if facts is not None and facts.has("prophylaxis"):
@@ -1439,7 +1440,7 @@ def _order_reason_rule_outcome(
         elif event.event_id in untimed or (facts is not None and facts.documented_use == "unknown"):
             evaluated.append((event, "unresolved"))
         else:
-            evaluated.append((event, "missing"))
+            evaluated.append((event, "missing" if daily_scope_complete else "unresolved"))
     if not evaluated:
         return "not_applicable", "trigger_absent_complete", None, ()
     window_outcome: tuple[str, str] | None = None
@@ -2760,6 +2761,7 @@ async def _execute_extended_document_group(
         evidence_materials, "discharge_record"
     )
     daily_rows, daily_error = _source_rows(evidence_materials, "daily_course_record")
+    daily_scope_complete = evidence_materials.permits_absence("daily_course_record")
     senior_rows, senior_error = _source_rows(
         evidence_materials, "senior_course_record"
     )
@@ -3066,6 +3068,7 @@ async def _execute_extended_document_group(
             pathogen_sources_complete=not (lab_master_error or lab_item_error),
             evaluation_horizon=antimicrobial_evaluation_horizon,
             horizon_error=antimicrobial_horizon_error or "",
+            daily_scope_complete=daily_scope_complete,
         )
         return outcome
 
@@ -3199,6 +3202,8 @@ async def _execute_extended_document_group(
                 # 院方口径（2026-10-10）：诊断范围无法确认按资料不足交付，不交付 uncertain。
                 final_state, reason_code = "data_gap", "diagnosis_scope_uncertain"
                 scope_resolution = "unknown"
+            elif not uncertain_rows and not daily_scope_complete:
+                final_state, reason_code = "data_gap", "source_unavailable"
             elif not uncertain_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif not strong_uncertain_rows:
@@ -3599,7 +3604,7 @@ async def _execute_extended_document_group(
                     ))
                     # 已有药物确定缺评价（有权威时间、窗口内无评价）时直接判不合规，不因其他药物
                     # 评价不确定而降为资料不足；与054“缺失优先于不明”一致（2026-10-23，C08）。
-                    confirmed_missing = bool(unmatched_names) and not has_untimed_match
+                    confirmed_missing = bool(unmatched_names) and not has_untimed_match and daily_scope_complete
                     if has_unresolved_unknown and not confirmed_missing:
                         final_state, reason_code = (
                             "data_gap", "semantic_extraction_unresolved"
@@ -3622,6 +3627,9 @@ async def _execute_extended_document_group(
                             )
                     elif has_untimed_match:
                         final_state, reason_code = "data_gap", "authoritative_time_missing"
+                    elif not daily_scope_complete:
+                        final_state, reason_code = "data_gap", "source_unavailable"
+                        evaluation_resolution = "unknown"
                     else:
                         final_state, reason_code = "non_compliant", "threshold_exceeded"
                 if final_state == "data_gap" and reason_code in {
@@ -5400,7 +5408,9 @@ async def _execute_extended_document_group(
                                     "surgeon_round_present": surgeon_round,
                                     "preop_surgeon_round_present": preop_surgeon_round,
                                 })
-                    if definite_missing_events:
+                    if (definite_missing_events or unmet_events) and rule_id == "LX0609-04-05-01" and not daily_scope_complete:
+                        final_state, reason_code = "data_gap", "source_unavailable"
+                    elif definite_missing_events:
                         # 已确定某个术后日完全没有病程记录，属确定缺陷，不被术者身份等
                         # 其他资料缺口遮蔽。
                         final_state, reason_code = "non_compliant", "requirement_violated"
@@ -5533,6 +5543,7 @@ async def _execute_extended_document_group(
                 daily_rows=daily_rows,
                 senior_rows=senior_rows,
                 clinical_body_states=body_states,
+                daily_scope_complete=daily_scope_complete,
             )
             if body_issue:
                 outcome = PredischargeCourseOutcome("data_gap", body_issue)
@@ -5799,6 +5810,8 @@ async def _execute_extended_document_group(
                         # 上级同意只能由模型抽取确认；无模型时不能据未读到意见判缺。
                         window_course_count = 0
                         final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
+                    elif window_course_count and not daily_scope_complete:
+                        final_state, reason_code = "data_gap", "source_unavailable"
                     elif window_course_count:
                         final_state, reason_code = "non_compliant", "requirement_violated"
                         # 证据为窗口内实际核对过的病程文书。
@@ -5815,7 +5828,7 @@ async def _execute_extended_document_group(
                         )
                     else:
                         final_state, reason_code = "data_gap", "source_empty"
-                    render_display = True
+                    render_display = final_state != "data_gap" or reason_code != "source_unavailable"
                 if render_display:
                     approval_facts: dict[str, Any] = {}
                     if approval_match is not None:
@@ -5942,6 +5955,7 @@ async def _execute_extended_document_group(
                 nondrug_order_error=nondrug_order_error,
                 daily_course_rows=daily_rows,
                 daily_course_error=daily_error,
+                daily_scope_complete=daily_scope_complete,
                 handoff_rows=handoff_rows,
                 handoff_error=handoff_error,
                 handover_rows=handover_rows,
@@ -6075,7 +6089,9 @@ async def _execute_extended_document_group(
                     declared_diagnosis_names = _diagnosis_change_declarations(
                         admission_diagnosis_rows
                     )
-                    if not declared_diagnosis_names:
+                    if not declared_diagnosis_names and not daily_scope_complete:
+                        final_state, reason_code = "data_gap", "source_unavailable"
+                    elif not declared_diagnosis_names:
                         # 074 的触发条件只能由“观察到”修正/补充诊断的显式声明
                         # 成立，它有两条并列且都完整可读的声明通道：病程正文
                         # 变更表述（上面的 course_event_rows）与入院记录诊断的
@@ -6123,7 +6139,10 @@ async def _execute_extended_document_group(
                             for name, candidates in declared_candidates.items()
                             for _time, text, source_key, row in candidates[:_DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE]
                         )
-                        if not all(declared_candidates.values()):
+                        if not all(declared_candidates.values()) and not daily_scope_complete:
+                            final_state, reason_code = "data_gap", "source_unavailable"
+                            structured_facts = None
+                        elif not all(declared_candidates.values()):
                             # 有声明的变更诊断在病程中从未提及：确定未记录理由与依据。
                             final_state, reason_code = (
                                 "non_compliant",
@@ -6143,7 +6162,7 @@ async def _execute_extended_document_group(
                                 diagnosis_change_extraction,
                             ) = await _assess_diagnosis_change_documentation(
                                 structured_pairs, declared_diagnosis_names, llm_client,
-                                incomplete_names=frozenset(name for name, candidates in declared_candidates.items() if len(candidates) > _DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE),
+                                incomplete_names=frozenset(name for name, candidates in declared_candidates.items() if len(candidates) > _DIAGNOSIS_CHANGE_CANDIDATES_PER_CHANGE or not daily_scope_complete),
                             )
                         if structured_facts is not None:
                             display.append((rule_id, structured_facts))
@@ -6233,7 +6252,9 @@ async def _execute_extended_document_group(
                                     assertion.basis_state,
                                 )
                             )
-                            if "missing" in assertion_states:
+                            if "missing" in assertion_states and not daily_scope_complete:
+                                final_state, reason_code = "data_gap", "source_unavailable"
+                            elif "missing" in assertion_states:
                                 final_state, reason_code = (
                                     "non_compliant",
                                     "requirement_violated",
@@ -6412,7 +6433,9 @@ async def _execute_extended_document_group(
                             # 仅有变更之前的提及：不能证明本次变更的理由，作为不合规证据展示。
                             selected.extend(mentions)
                     candidate_rows = tuple(selected)
-                    if unmentioned:
+                    if unmentioned and not daily_scope_complete:
+                        final_state, reason_code = "data_gap", "source_unavailable"
+                    elif unmentioned:
                         # 变更后诊断在变更之后的病程中从未提及：确定未记录理由与依据。
                         final_state, reason_code = (
                             "non_compliant",
@@ -6442,7 +6465,7 @@ async def _execute_extended_document_group(
                             table_facts,
                             diagnosis_change_extraction,
                         ) = await _assess_diagnosis_change_documentation(
-                            table_pairs, change_names, llm_client, incomplete_names=frozenset(incomplete_names),
+                            table_pairs, change_names, llm_client, incomplete_names=frozenset(incomplete_names if daily_scope_complete else change_names),
                         )
                         if table_facts is not None:
                             display.append((rule_id, table_facts))

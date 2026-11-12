@@ -1966,7 +1966,9 @@ def _surgery_text_outcome(
                     elif duration <= timedelta(hours=48):
                         if fact.special_extension_reason == "documented":
                             event_states.append("compliant")
-                        elif fact.special_extension_reason == "unknown":
+                        elif fact.special_extension_reason == "unknown" or (
+                            materials is not None and not materials.permits_absence("daily_course_record")
+                        ):
                             event_states.append("data_gap")
                         else:
                             event_states.append("non_compliant_extension_missing")

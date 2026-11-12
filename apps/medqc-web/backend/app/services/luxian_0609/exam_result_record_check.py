@@ -270,7 +270,7 @@ def _association_issue(projection, position, quote, span, ref):
 
 def _input_complete_for_event(projection: ExamLabTextProjection, position: int, refs: Sequence[str]) -> bool:
     events = events_for_family(projection, "exam")
-    if not 1 <= position <= len(events) or projection.course_projection_truncated:
+    if not 1 <= position <= len(events) or projection.course_projection_truncated or not projection.course_scope_complete:
         return False
     full_report = "\n".join(dict.fromkeys(text for text in events[position - 1].result_texts if text))
     from .exam_token_budget import full_evidence_mode

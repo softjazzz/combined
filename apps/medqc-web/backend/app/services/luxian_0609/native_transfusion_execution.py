@@ -819,6 +819,7 @@ def _typed_documents_from_evidence_session(
     # 这里只构造同一快照内的材料和四态，不在辅助来源为空时提前终止。
     # 专用输血记录可能已足以给出确定结论；辅助来源四态只能在程序化判断
     # 无法定论后参与 fail-closed，不能覆盖专用记录的强事实。
+    documents["__material_scope__"] = {key: materials.scope(key) for key in logical_states if materials.scope(key) is not None}
     documents["__logical_source_states__"] = logical_states
     return documents, "", ""
 
@@ -2520,6 +2521,9 @@ def _programmatic_047_assessment(
     unusable_evaluation_time = False
     late_evaluation_found = False
 
+    daily_scope = documents.get("__material_scope__", {}).get("daily_course_record")
+    daily_absence_proven = daily_scope is None or daily_scope.get("can_judge_clinical_absence") is True
+
     # 多份独立输血记录按结束事件关联专门后评价；任何笼统评价都不得扇出。
     if len(event_refs) > 1:
         pending = set(event_refs)
@@ -2671,6 +2675,8 @@ def _programmatic_047_assessment(
             and _047_window_is_mature(known_end_by_ref[ref], horizon_datetime=horizon_datetime,
                                      horizon_date=horizon_date)[0]
         }
+        if not daily_absence_proven:
+            mature_missing = set()
         if late or mature_missing:
             selected = late or mature_missing
             refs = tuple(dict.fromkeys(
@@ -2743,6 +2749,8 @@ def _programmatic_047_assessment(
                 ),
                 selected_source_document_refs=selected_refs,
             )
+        if not daily_absence_proven:
+            return _PosttransfusionEvaluationAssessment("data_gap", "transfusion_source_unavailable")
         if horizon_error:
             return _PosttransfusionEvaluationAssessment(
                 "data_gap", "posttransfusion_evaluation_time_unavailable"
@@ -2867,6 +2875,8 @@ def _programmatic_047_assessment(
         return _PosttransfusionEvaluationAssessment(
             "data_gap", "posttransfusion_evaluation_time_unavailable"
         )
+    if not daily_absence_proven:
+        return _PosttransfusionEvaluationAssessment("data_gap", "transfusion_source_unavailable")
     assert horizon_date is not None
     mature, _ = _047_window_is_mature(
         latest_end,

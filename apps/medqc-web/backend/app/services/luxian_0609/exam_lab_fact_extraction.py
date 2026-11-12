@@ -146,6 +146,7 @@ class ExamLabTextProjection:
     horizon_unavailable_reason: str | None = None
     course_time_incomplete: bool = False
     course_projection_truncated: bool = False
+    course_scope_complete: bool = True
     course_texts: Mapping[str, str] | None = None
     source_document_refs: Mapping[str, tuple[str, str]] | None = None
     # 记录时间与提交时间分别保留，不合并成单一“病程时间”。None 表示旧式投影。
@@ -1798,6 +1799,7 @@ def parse_exam_lab_fact_response(
             and exam_reason_window(event) is not None
             and not projection.course_time_incomplete
             and not projection.course_projection_truncated
+            and projection.course_scope_complete
         ):
             # 用户口径（2026-10-11）：检查前48小时窗口内没有任何病程时，由程序
             # 确定为未写明原因，不采用模型输出（模型曾在此引用窗口外病程而漂移）。
@@ -2189,6 +2191,7 @@ def parse_exam_lab_fact_response_isolated(
                 rule_id in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}
                 and not projection.course_time_incomplete
                 and not projection.course_projection_truncated
+                and projection.course_scope_complete
                 and any(
                     (fact.applicability == "unknown" or fact.semantic_state == "unknown")
                     and fact.event_position not in unresolved_culture_positions

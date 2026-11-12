@@ -14,6 +14,24 @@ describe('EMRViewer', () => {
     vi.unstubAllGlobals()
   })
 
+  it('同源类型同号文书使用完整版本键请求全文', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ content: '合成版本正文', content_type: 'text', metadata: {}, defect_annotations: [], render_blocks: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const documents = [
+      { id: 'SHARED', doc_type: 'daily_course_record', doc_name: '补充版本', doc_key: 'daily_course_record::clinical-record::v1', version_id: 'v1', has_content: true },
+      { id: 'SHARED', doc_type: 'daily_course_record', doc_name: '基础版本', doc_key: 'daily_course_record::cache-record::v2', version_id: 'v2', has_content: true },
+    ]
+    const wrapper = mount(EMRViewer, {
+      props: { visitId: 'V', patientId: 'P', instituteId: 'I', documents, documentsManaged: true, activeDocKey: documents[0].doc_key },
+      global: { stubs: { 'a-spin': true, FileTextOutlined: true } },
+    })
+    await flushPromises()
+    await wrapper.setProps({ activeDocKey: documents[1].doc_key })
+    await flushPromises()
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0]), 'http://synthetic.invalid').searchParams.get('doc_id')).toBe(documents[0].doc_key)
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0]), 'http://synthetic.invalid').searchParams.get('doc_id')).toBe(documents[1].doc_key)
+  })
+
   it('在文书详情顶部展示受控元信息和投影截断提示', async () => {
     const fetchMock = vi
       .fn()

@@ -692,6 +692,7 @@ def evaluate_physician_handoff(
     handover_error: str,
     evaluation_horizon_datetime: datetime | date | None = None,
     evaluation_horizon_error: str = "",
+    daily_scope_complete: bool = True,
 ) -> PhysicianHandoffOutcome:
     """逐次核对经治医师变更前交班与变更后24小时内接班记录。"""
 
@@ -717,6 +718,8 @@ def evaluate_physician_handoff(
             return PhysicianHandoffOutcome(
                 "data_gap", daily_course_error, change_source_key
             )
+        if not daily_scope_complete:
+            return PhysicianHandoffOutcome("data_gap", "source_unavailable", change_source_key)
         effective_change_rows, derivation_error, derivation_facts = (
             _derive_change_rows_from_daily_courses(daily_course_rows)
         )
@@ -815,6 +818,7 @@ def evaluate_physician_handoff(
                 nondrug_order_error=nondrug_order_error,
                 daily_course_rows=daily_course_rows,
                 daily_course_error=daily_course_error,
+                daily_scope_complete=daily_scope_complete,
                 handoff_rows=related_records(handoff_rows, _HANDOFF_PHYSICIAN_FIELDS, _OLD_PHYSICIAN_FIELDS),
                 handoff_error=handoff_error,
                 handover_rows=related_records(handover_rows, _HANDOVER_PHYSICIAN_FIELDS, _NEW_PHYSICIAN_FIELDS),

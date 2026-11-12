@@ -1505,7 +1505,7 @@ def _candidate_documents(
             observed_order_ids.update(
                 order_id for row in rows if (order_id := _clean(row.get("order_id")))
             )
-        source_is_complete = True
+        source_is_complete = evidence_materials is None or evidence_materials.permits_absence(source_key)
         if evidence_snapshot is not None:
             observation = next(
                 (

@@ -115,7 +115,9 @@ def build_material_snapshot_ref(
     query_state: QueryStatus,
     completeness: SourceCompleteness,
     document_refs: tuple[str, ...],
+    material_scope: Mapping[str, Any] | None = None,
 ) -> str:
+    from ..case_material_snapshot import encode
     return "sha256:" + digest_source_evidence(
         {
             "completeness": completeness.value,
@@ -123,6 +125,7 @@ def build_material_snapshot_ref(
             "query_state": query_state.value,
             "query_version": query_version,
             "source_key": source_key,
+            **({"material_scope": encode(material_scope)} if material_scope is not None else {}),
         }
     )
 
@@ -188,6 +191,7 @@ class Luxian0609EvidenceMaterialStore:
                 query_state=observation.query_state,
                 completeness=observation.completeness,
                 document_refs=document_refs,
+                material_scope=material.material_scope,
             )
             if observation.snapshot_ref != expected_snapshot_ref:
                 raise ValueError("material rows do not match snapshot identity")
@@ -206,6 +210,14 @@ class Luxian0609EvidenceMaterialStore:
             MappingProxyType(document_rows_by_source),
         )
         return store
+
+    def scope(self, source_key: str):
+        material = self._sources.get(str(source_key or "").strip().lower())
+        return material.material_scope if material is not None else None
+
+    def permits_absence(self, source_key: str) -> bool:
+        value = self.scope(source_key)
+        return value is None or value.get("can_judge_clinical_absence") is True
 
     def has_source(self, source_key: str) -> bool:
         return str(source_key or "").strip().lower() in self._sources
@@ -294,6 +306,7 @@ class Luxian0609EvidenceMaterialStore:
             query_state=observation.query_state,
             completeness=observation.completeness,
             document_refs=document_refs,
+            material_scope=material.material_scope,
         )
         if (
             observation.snapshot_ref != expected_snapshot_ref

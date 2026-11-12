@@ -249,6 +249,7 @@ import { getAccessToken } from '@/utils/auth-token'
 import { resolveMedicalFieldLabel } from '@/utils/medicalFieldLabels'
 
 interface EmrDocumentSummary {
+  version_id?: string
   id: string
   doc_type: string
   doc_name: string
@@ -806,7 +807,8 @@ async function loadDocument(doc?: EmrDocumentSummary) {
   try {
     const extraParams: Record<string, string> = {}
     if (doc.doc_type) extraParams.doc_type = doc.doc_type
-    if (doc.id) extraParams.doc_id = doc.id
+    const locator = doc.version_id ? doc.doc_key || doc.id : doc.id
+    if (locator) extraParams.doc_id = locator
     if (doc.execution_domain) extraParams.execution_domain = doc.execution_domain
     const url = buildUrl('render', extraParams)
     if (!url) {

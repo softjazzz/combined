@@ -866,6 +866,10 @@ def _select_records(
     visit_id: str,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
+    from .. import daily_material_projection as daily
+    projected = daily.rows((institute_id, patient_id, visit_id), limit=limit) if table == "daily_course_record" else None
+    if projected is not None:
+        return projected
     from ..validation_material_source import (
         material_document_status_column,
         material_source_schema,
@@ -2228,7 +2232,11 @@ def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str
                 continue
             if table_name == "exam_master" and row_index in consumed_exam_masters:
                 continue
-            inventory.append(_inventory_entry(table_name=table_name, row=row))
+            entry = _inventory_entry(table_name=table_name, row=row)
+            for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "daily_material", "daily_material_scope"):
+                if key in row:
+                    entry[key] = row[key]
+            inventory.append(entry)
     return inventory
 
 

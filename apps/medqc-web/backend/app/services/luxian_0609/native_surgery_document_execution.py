@@ -903,9 +903,13 @@ _COURSE_HISTORY_PREFIX_PATTERN = re.compile(r"(?:既往|曾|年前|月前)[^。�
 
 def _course_records_emergency_intervention(
     materials: Luxian0609EvidenceMaterialStore | None,
-) -> bool:
+) -> bool | None:
     rows = _anesthesia_visit_rows(materials, "daily_course_record") or ()
-    return any(_row_emergency_intervention(row) for row in rows)
+    if any(_row_emergency_intervention(row) for row in rows):
+        return True
+    if materials is not None and not getattr(materials, "permits_absence", lambda source: True)("daily_course_record"):
+        return None
+    return False
 
 
 def _row_emergency_intervention(row: Mapping[str, Any]) -> bool:
@@ -1670,8 +1674,12 @@ def _typed_terminal_outcome(
                 fact_types=_EMERGENCY_FACT_TYPES,
                 source_key="rescue_record",
             )
-        if emergency_state == "absent" and _course_records_emergency_intervention(materials):
-            emergency_state = "present"
+        if emergency_state == "absent":
+            course_emergency = _course_records_emergency_intervention(materials)
+            if course_emergency is True:
+                emergency_state = "present"
+            elif course_emergency is None:
+                emergency_state = "unknown"
         if emergency_state == "present":
             return _SurgeryDocumentOutcome(
                 rule_id, "not_applicable", "emergency_rescue_exception", "program"

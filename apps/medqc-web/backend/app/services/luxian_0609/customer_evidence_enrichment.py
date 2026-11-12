@@ -13,6 +13,7 @@ from .source_registry import resolve_luxian_0609_customer_document_type
 
 
 _IDENTITY_FIELDS = (
+    "source_version_key",
     "document_id",
     "exam_id",
     "test_id",
@@ -539,6 +540,8 @@ def enrich_customer_evidence(
             enriched_rows.append(evidence)
             continue
         matched = matches[0]
+        if matched.get("source_version_key"):
+            evidence["source_document_id"] = str(matched["source_version_key"])
         record_time = (
             _real_record_time(matched)
             if strict_course_record_time and source_type in _COURSE_SOURCE_TYPES

@@ -375,7 +375,9 @@ def _normalize_source_document(
     record_time, record_time_source, record_time_note = _record_display_clock(raw_doc, doc_type, sort_time)
     group_key = _infer_group_key(doc_type)
     label = _friendly_doc_label(doc_type, doc_title)
-    doc_key = _build_doc_key(doc_type, doc_id, index)
+    doc_key = (f"{doc_type}::{raw_doc['source_record_identity']}::{raw_doc['version_id']}"
+               if raw_doc.get("source_record_identity") and raw_doc.get("version_id")
+               else _build_doc_key(doc_type, doc_id, index))
     normalized_id = doc_id or doc_key
 
     sections = list(raw_doc.get("sections") or [])
@@ -414,6 +416,9 @@ def _normalize_source_document(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
+    for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "daily_material", "daily_material_scope"):
+        if key in raw_doc:
+            normalized[key] = raw_doc[key]
     if raw_doc.get("chief_physician_sign_datetime") is not None:
         normalized["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     for field_name in INDEPENDENT_DOCUMENT_FIELDS.get(doc_type, ()):
@@ -905,6 +910,15 @@ def _normalize_source_document_summary(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
+    for key in ("version_id", "source_record_identity", "source_namespace", "source_object"):
+        if key in raw_doc:
+            summary[key] = raw_doc[key]
+    if raw_doc.get("version_id") and raw_doc.get("source_record_identity"):
+        summary["doc_key"] = f"{doc_type}::{raw_doc['source_record_identity']}::{raw_doc['version_id']}"
+        item = raw_doc.get("daily_material", {})
+        summary["material_state"] = item.get("state")
+        summary["material_selected"] = item.get("selected")
+        summary["material_rule_usable"] = item.get("rule_usable")
     if raw_doc.get("chief_physician_sign_datetime") is not None:
         summary["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     if doc_type in _ORDER_DOC_TYPES:
@@ -1175,6 +1189,13 @@ def pick_document(
 ) -> dict[str, Any] | None:
     wanted_id = _safe_text(doc_id)
     wanted_type = _safe_text(doc_type)
+
+    if wanted_id and any(doc.get("version_id") for doc in documents):
+        matches = [doc for doc in documents if (not wanted_type or _safe_text(doc.get("doc_type")) == wanted_type)
+                   and wanted_id in {_safe_text(doc.get(key)) for key in ("id", "doc_id", "document_id", "doc_key")}]
+        if len(matches) != 1:
+            return None
+        return matches[0]
 
     if wanted_id:
         if wanted_type:
