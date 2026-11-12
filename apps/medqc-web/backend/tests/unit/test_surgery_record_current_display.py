@@ -18,6 +18,16 @@ def test_datetime_and_full_body():
     assert fields["surgery_process"] == body
     assert fields["surgery_begin_datetime"] == row["surgery_begin_datetime"]
     assert doc["has_content"] is True
+    source = next(f for f in assemble_document("surgery_record", row).source_fields if f.source_field == "surgery_process")
+    assert source.source_table == "surgery_record"
+    assert source.raw_value_preview == body
+
+
+def test_modified_time_does_not_become_record_time():
+    _, result = view({"document_id": "modified-only", "surgery_process": "synthetic", "last_modified_datetime": "2026-11-01 12:00"})
+    assert result["document_meta"]["record_time_source"] == ""
+    fields = {f["key"]: f["value"] for b in result["render_blocks"] for f in b.get("fields", [])}
+    assert fields["last_modified_datetime"] == "2026-11-01 12:00"
 
 
 def test_empty_template():
