@@ -142,6 +142,25 @@ def route_client():
         yield client, emr_render
 
 
+def test_cdm_default_browse_assembles_and_renders_without_persistent_bundle(local_data, route_client, monkeypatch):
+    from app.database import clinical_connection
+    client, _ = route_client
+    monkeypatch.setattr(clinical_connection, "configured", lambda: True)
+    monkeypatch.setattr(clinical_connection, "get_engine", lambda: object())
+    # 真实装配器/目录投影/Renderer，仅临床行读取替换为合成材料。
+    response = client.get("/api/v1/emr/TEST-V/documents", params={**IDENTITY,
+        "view": "summary", "execution_domain": "admission"})
+    assert response.status_code == 200
+    document = next(d for d in response.json()["data"]["documents"] if d["document_id"] == "TEST-D")
+    assert "content" not in document
+    response = client.get("/api/v1/emr/TEST-V/render", params={**IDENTITY,
+        "doc_type": document["doc_type"], "doc_id": document["document_id"],
+        "execution_domain": document["execution_domain"]})
+    assert response.status_code == 200
+    assert "测试正文甲" in response.json()["data"]["content"]
+    local_data[2].assert_not_called()
+
+
 def test_current_endpoint_fails_503_instead_of_returning_saved(route_client, monkeypatch):
     client, route = route_client
     monkeypatch.setattr(route, "load_current_documents", Mock(side_effect=RuntimeError("synthetic")))

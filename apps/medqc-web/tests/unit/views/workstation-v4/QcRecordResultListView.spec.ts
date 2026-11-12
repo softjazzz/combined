@@ -46,6 +46,7 @@ vi.mock('@/stores/auth', () => ({
 import QcRecordResultListView from '@/views/workstation-v4/QcRecordResultListView.vue'
 import QcRunSelectedControl from '@/views/workstation-v4/components/qc/QcRunSelectedControl.vue'
 import QcRecordReviewPreview from '@/views/workstation-v4/components/qc/QcRecordReviewPreview.vue'
+import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
 
 const ResultDrawerStub = defineComponent({
   name: 'QCRecordResultComparisonDrawer',
@@ -181,6 +182,7 @@ function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
         QCRecordResultComparisonDrawer: ResultDrawerStub,
         QcRecordResultAnalysisPanel: ResultAnalysisStub,
         QcRecordReviewPreview: true,
+        QCRecordCompareWorkbench: true,
       },
     },
   })
@@ -605,15 +607,32 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.text()).not.toContain('下一闭环接入')
   })
 
-  it('行内「查看」与病历池一致：直接打开当前行的完整质控结果', async () => {
+  it('行内查看结果仍打开当前行的完整质控结果', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
     await wrapper
-      .get('tbody tr[data-record-key] .qc-record-result-table__view-button')
+      .get('tbody tr[data-record-key] [data-testid="open-saved-result"]')
       .trigger('click')
     await flushPromises()
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
+  })
+
+  it.each(['inpatient', 'discharged'] as const)('%s 未质控病例也能打开当前病历阅读', async (phase) => {
+    const wrapper = mountView(phase)
+    await flushPromises()
+    const row = wrapper.get('tr[data-record-key*="V-not-run"]')
+    expect(row.find('[data-testid="open-saved-result"]').exists()).toBe(false)
+    await row.get('.qc-record-result-table__view-button').trigger('click')
+    await flushPromises()
+    const reader = wrapper.getComponent(QCRecordCompareWorkbench)
+    expect(reader.props()).toMatchObject({
+      visitId: 'V-not-run', instituteId: 'H', patientId: 'P',
+      sourceView: 'current', documentOnly: true, feedbackAvailable: false,
+    })
+    expect(reader.props('jobId')).toBeUndefined()
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
+    expect(wrapper.text()).not.toContain('这份病历暂无已保存质控结果')
   })
 
   it.each(['failed', 'partial_failed'] as const)(
@@ -626,7 +645,7 @@ describe('QcRecordResultListView', () => {
       mocks.getRaw.mockResolvedValue(data)
       const wrapper = mountView('discharged')
       await flushPromises()
-      await wrapper.get('tr[data-record-key*="V-priority"] .qc-record-result-table__view-button').trigger('click')
+      await wrapper.get('tr[data-record-key*="V-priority"] [data-testid="open-saved-result"]').trigger('click')
       const focus = wrapper.getComponent(ResultDrawerStub).props('focus') as { label: string }
       expect(focus.label).toContain('质控结束')
       expect(focus.label).not.toContain('质控完成')

@@ -11,7 +11,10 @@ export interface HospitalizationRow {
 
 export function displayHospitalDate(value?: string) {
   const normalized = String(value || '').trim()
-  return normalized && normalized !== '-' ? normalized : '-'
+  // 仅替换 ISO 日期与时间的分隔符，不按浏览器时区转换，不给日期补零点。
+  return normalized && normalized !== '-'
+    ? normalized.replace(/^(\d{4}-\d{2}-\d{2})T(?=\d{2}:\d{2})/, '$1 ')
+    : '-'
 }
 
 export function isDischargedRecord(record: Pick<HospitalizationRow, 'dischargeDate'>) {

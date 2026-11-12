@@ -4,7 +4,7 @@
       <div>
         <span class="cdm-eyebrow">数据与配置 · 数据中心</span>
         <h1>数据管理</h1>
-        <p>查看本地 CDM 数据库的病案、诊断、手术和费用数据结构，辅助排查数据同步质量。</p>
+        <p>查看当前临床来源的病案资料；数据读取不代表材料完整性或质控验收通过。</p>
       </div>
       <a-button
         class="cdm-refresh-btn"
@@ -23,7 +23,7 @@
         </div>
         <div class="stat-body">
           <div class="stat-value">
-            {{ stats.total_records || 0 }}
+            {{ connected ? (stats.total_records ?? '未统计') : '—' }}
           </div>
           <div class="stat-label">
             病案总数
@@ -75,7 +75,7 @@
         </div>
         <div class="stat-body">
           <div class="stat-value">
-            {{ schema.total_tables || 0 }}
+            {{ independent ? '未提供' : (schema.total_tables ?? '未统计') }}
           </div>
           <div class="stat-label">
             CDM 数据表
@@ -87,22 +87,40 @@
     <!-- 数据源状态 -->
     <div class="datasource-bar">
       <div class="ds-left">
-        <span class="ds-dot ds-active" />
-        <span class="ds-text">数据源：<strong>SQLite</strong>（本地库）</span>
-        <a-tag color="green">
-          已连接
+        <span
+          class="ds-dot"
+          :class="{ 'ds-active': connected }"
+        />
+        <span class="ds-text">数据源：<strong>{{ sourceName }}</strong></span>
+        <a-tag :color="connected ? 'green' : 'orange'">
+          {{ connected ? '读取成功' : '尚未就绪' }}
         </a-tag>
       </div>
       <div class="ds-right">
-        <a-tag>CDM V1.0</a-tag>
+        <a-tag>只读浏览</a-tag>
         <span class="ds-path">{{ dbPath }}</span>
       </div>
     </div>
 
+    <a-alert
+      v-if="loadError"
+      type="error"
+      :message="loadError"
+      show-icon
+    />
+    <a-alert
+      v-if="detailError"
+      type="warning"
+      :message="detailError"
+      show-icon
+    />
     <!-- 主体：左表结构/数据 + 右数据预览 -->
     <div class="main-content">
       <!-- 左侧：表浏览面板 -->
-      <div class="schema-panel">
+      <div
+        v-if="!independent"
+        class="schema-panel"
+      >
         <div class="panel-header">
           <TableOutlined />
           <span>表浏览</span>
@@ -237,6 +255,17 @@
         </div>
       </div>
 
+      <div
+        v-else
+        class="schema-panel"
+      >
+        <div class="panel-header">
+          <TableOutlined />东华CDM只读浏览
+        </div>
+        <div class="data-empty">
+          当前来源不开放整表结构和原始表浏览。请在右侧选择病例查看首页资料；完整文书请使用病历池的“查看病历”。
+        </div>
+      </div>
       <!-- 右侧：数据预览 -->
       <div class="data-panel">
         <div class="panel-header">
@@ -254,9 +283,9 @@
         <div class="patient-cards">
           <div
             v-for="pt in patients"
-            :key="pt.visit_id"
+            :key="patientKey(pt)"
             class="patient-card"
-            :class="{ active: selectedPatient?.visit_id === pt.visit_id }"
+            :class="{ active: selectedPatient && patientKey(selectedPatient) === patientKey(pt) }"
             @click="selectPatient(pt)"
           >
             <div class="pt-top">
@@ -280,6 +309,7 @@
                 <span class="pt-days">{{ pt.hospital_duration }}天</span>
               </span>
               <a-button
+                v-if="!independent"
                 size="small"
                 type="link"
                 class="pt-view-btn"
@@ -453,6 +483,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { clinicalSourcesApi } from '@/api/clinicalSources'
 import { getAccessToken } from '@/utils/auth-token'
 import {
   FileTextOutlined,
@@ -486,7 +517,26 @@ const departments = ref<string[]>([])
 const selectedTable = ref('mr')
 const selectedPatient = ref<any>(null)
 const selectedDetail = ref<any>(null)
-const dbPath = ref('data/medqc.db')
+const dbPath = ref('')
+const independent = ref(true)
+const sourceName = ref('尚未确认')
+const connected = ref(false)
+const loadError = ref('')
+const detailError = ref('')
+let detailSequence = 0
+let loadSequence = 0
+function patientKey(pt: Record<string, unknown>) {
+  return JSON.stringify([pt.institute_id, pt.patient_id, pt.visit_id])
+}
+async function readJson(url: string) {
+  const resp = await fetch(url, { headers: getAuthHeaders({
+    'X-Clinical-Source': independent.value ? 'independent_cdm' : 'legacy_pg',
+  }) })
+  if (!resp.ok) throw new Error(`数据读取失败（HTTP ${resp.status}）`)
+  const body = await resp.json()
+  if (body?.success === false) throw new Error('数据接口未返回有效结果')
+  return body?.data ?? body
+}
 
 // 左侧面板视图：schema / data
 const leftView = ref<'schema' | 'data'>('schema')
@@ -501,12 +551,8 @@ const recordActiveTab = ref('mr')
 const recordTabs = ref<any[]>([])
 
 // ===== Computed =====
-const totalDiagnoses = computed(() => {
-  return patients.value.length > 0 ? patients.value.length * 2 + '+' : 0
-})
-const totalSurgeries = computed(() => {
-  return patients.value.length > 0 ? Math.ceil(patients.value.length * 0.6) + '+' : 0
-})
+const totalDiagnoses = computed(() => '未统计')
+const totalSurgeries = computed(() => '未统计')
 const currentTableColumns = computed(() => {
   const table = (schema.value.tables || []).find((t: any) => t.name === selectedTable.value)
   return table ? table.columns : []
@@ -555,36 +601,43 @@ function switchToDataView() {
 }
 
 async function loadTableData(tableName: string) {
+  if (independent.value) return
   tableDataLoading.value = true
   try {
     const resp = await fetch(`${API_BASE}/table-data/${tableName}`, {
       headers: getAuthHeaders(),
     })
+    if (!resp.ok) throw new Error('表数据接口不可用')
     tableData.value = await resp.json()
   } catch (e) {
+    loadError.value = '表数据读取失败，不能据此认定表为空'
     console.error('加载表数据失败', e)
   } finally {
     tableDataLoading.value = false
   }
 }
 
-async function selectPatient(pt: any) {
+async function selectPatient(pt: Record<string, unknown>) {
+  const sequence = ++detailSequence
   selectedPatient.value = pt
+  selectedDetail.value = null
+  detailError.value = ''
+  const identity = [pt.institute_id, pt.patient_id, pt.visit_id]
+  if (identity.some(value => value == null || String(value).trim() === '')) {
+    detailError.value = '病例身份不完整，无法读取详情'
+    return
+  }
   try {
-    const resp = await fetch(
-      `${API_BASE}/frontpage/${pt.institute_id}/${pt.patient_id}/${pt.visit_id}`,
-      {
-        headers: getAuthHeaders(),
-      },
-    )
-    selectedDetail.value = await resp.json()
-  } catch (e) {
-    console.error('加载病案详情失败', e)
+    const value = await readJson(`${API_BASE}/frontpage/${identity.map(value => encodeURIComponent(String(value))).join('/')}`)
+    if (sequence === detailSequence) selectedDetail.value = value
+  } catch {
+    if (sequence === detailSequence) detailError.value = '病案详情读取失败，请重试；此状态不表示没有诊断或文书。'
   }
 }
 
 // 病历弹窗：加载该患者在所有表中的数据
 async function openRecordModal(pt: any) {
+  if (independent.value) return
   recordModalTitle.value = `${pt.name} (${pt.mr_no}) — 各表原始数据`
   recordModalVisible.value = true
   recordModalLoading.value = true
@@ -644,24 +697,47 @@ async function openRecordModal(pt: any) {
 }
 
 async function loadData() {
+  const sequence = ++loadSequence
+  ++detailSequence
+  connected.value = false
+  loadError.value = ''
+  detailError.value = ''
+  patients.value = []
+  selectedPatient.value = null
+  selectedDetail.value = null
+  stats.value = {}
+  departments.value = []
+  schema.value = { tables: [], total_tables: null }
   try {
-    const [statsResp, schemaResp, listResp, deptsResp] = await Promise.all([
-      fetch(`${API_BASE}/stats`, { headers: getAuthHeaders() }),
-      fetch(`${API_BASE}/schema`, { headers: getAuthHeaders() }),
-      fetch(`${API_BASE}/list`, { headers: getAuthHeaders() }),
-      fetch(`${API_BASE}/departments`, { headers: getAuthHeaders() }),
+    const options = await clinicalSourcesApi.options()
+    if (sequence !== loadSequence) return
+    const source = options.sources.find(item => item.id === options.default_source)
+    if (!source?.enabled) throw new Error('当前临床来源未启用')
+    independent.value = source.id === 'independent_cdm'
+    sourceName.value = source.id === 'independent_cdm' ? '东华CDM（PostgreSQL）' : source.name
+    const [statsData, listData, deptsData, schemaData] = await Promise.all([
+      readJson(`${API_BASE}/stats`), readJson(`${API_BASE}/list`),
+      readJson(`${API_BASE}/departments`),
+      independent.value ? Promise.resolve({ tables: [], total_tables: null }) : readJson(`${API_BASE}/schema`),
     ])
-    stats.value = await statsResp.json()
-    schema.value = await schemaResp.json()
-    const listData = await listResp.json()
-    patients.value = listData.items || []
-    departments.value = await deptsResp.json()
-
-    if (patients.value.length > 0) {
-      await selectPatient(patients.value[0])
-    }
-  } catch (e) {
-    console.error('数据加载失败', e)
+    if (sequence !== loadSequence) return
+    stats.value = statsData
+    schema.value = schemaData
+    patients.value = (listData.items || []).map((pt: Record<string, unknown>) => ({
+      ...pt,
+      institute_id: pt.institute_id ?? pt.instituteId,
+      patient_id: pt.patient_id ?? pt.patientId,
+      visit_id: pt.visit_id ?? pt.visitId ?? pt.id,
+      admission_datetime: pt.admission_datetime ?? pt.admissionDate,
+      discharge_datetime: pt.discharge_datetime ?? pt.dischargeDate,
+      hospital_duration: pt.hospital_duration ?? pt.days ?? '—',
+    }))
+    departments.value = deptsData
+    connected.value = true
+    if (patients.value.length) await selectPatient(patients.value[0])
+  } catch (error) {
+    if (sequence !== loadSequence) return
+    loadError.value = error instanceof Error ? error.message : '数据加载失败，请重试'
   }
 }
 

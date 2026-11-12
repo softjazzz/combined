@@ -15,7 +15,11 @@ function mountWorkspace(selectedRecord: unknown) {
       documentsLoading: false,
       isSectionExpanded: () => false,
     },
-    global: { stubs: { 'a-button': { template: '<button><slot /></button>' } } },
+    global: { stubs: {
+      'a-button': { template: '<button><slot /></button>' },
+      'a-spin': true,
+      AsyncEMRViewer: { template: '<div data-testid="original-emr" />' },
+    } },
   })
 }
 
@@ -30,5 +34,16 @@ describe('病历详情的助手入口', () => {
   it('没有选中病例时不显示入口', () => {
     const wrapper = mountWorkspace(null)
     expect(wrapper.find('[data-testid="business-agent-record-entry"]').exists()).toBe(false)
+  })
+
+  it('东华病例无AI草稿也挂载原始文书查看器并传递三坐标', () => {
+    const wrapper = mountWorkspace({
+      id: 'V', instituteId: 'H', patientId: 'P', visitId: 'V', sourceId: 'independent_cdm',
+    })
+    const viewer = wrapper.find('[data-testid="original-emr"]')
+    expect(viewer.exists()).toBe(true)
+    expect(viewer.attributes()).toMatchObject({
+      'visit-id': 'V', 'patient-id': 'P', 'institute-id': 'H',
+    })
   })
 })

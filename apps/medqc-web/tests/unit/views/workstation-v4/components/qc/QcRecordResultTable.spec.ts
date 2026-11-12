@@ -74,8 +74,11 @@ describe('QcRecordResultTable', () => {
     expect(row.classes()).toContain('qc-record-result-table__row--selected')
     await row.trigger('click')
     expect(wrapper.emitted('open-result')).toEqual([[rows[0].recordKey]])
-    // 「查看」只打开完整结果，不重复触发预览
+    // 查看病历不依赖质控结果；查看结果保留独立入口，不重复触发预览。
     await wrapper.get('.qc-record-result-table__view-button').trigger('click')
+    expect(wrapper.emitted('open-record')).toEqual([[rows[0].recordKey]])
+    expect(wrapper.emitted('open-full')).toBeUndefined()
+    await wrapper.get('[data-testid="open-saved-result"]').trigger('click')
     expect(wrapper.emitted('open-full')).toEqual([[rows[0].recordKey]])
     expect(wrapper.emitted('open-result')).toHaveLength(1)
   })

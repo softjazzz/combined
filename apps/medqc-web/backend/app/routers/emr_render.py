@@ -108,6 +108,9 @@ def _load_documents_from_bundle(
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
         return _project_customer_safe_source_refs(deepcopy(frozen["documents"]))
+    current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
+    if current is not None:
+        return _project_customer_safe_source_refs(current)
     normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
     normalized_institute_id = str(institute_id or "").strip()
     normalized_patient_id = str(patient_id or "").strip()
@@ -143,6 +146,10 @@ def _load_document_summaries_from_bundle(
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
         return _project_customer_safe_source_refs(summarize_frozen_documents(
             documents=deepcopy(frozen["documents"]["documents"]), execution_domain=execution_domain))
+    current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
+    if current is not None:
+        return _project_customer_safe_source_refs(summarize_frozen_documents(
+            documents=current["documents"], execution_domain=execution_domain))
     normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
     normalized_institute_id = str(institute_id or "").strip()
     normalized_patient_id = str(patient_id or "").strip()
@@ -185,6 +192,10 @@ def _load_document_from_bundle(
                 str(doc.get(key) or "") for key in ("id", "doc_id", "document_id", "doc_key")
             } and (not doc_type or doc.get("doc_type") == doc_type)]
         return pick_document(documents=documents, doc_type=doc_type, doc_id=doc_id)
+    current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
+    if current is not None:
+        documents = _project_customer_safe_source_refs(current)["documents"]
+        return _pick_live_document(documents, execution_domain, doc_type, doc_id)
     normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
     normalized_institute_id = str(institute_id or "").strip()
     normalized_patient_id = str(patient_id or "").strip()
@@ -199,6 +210,42 @@ def _load_document_from_bundle(
         doc_id=str(doc_id or "").strip(),
         bundle_schema="public",
     )
+
+
+def _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id):
+    """普通 CDM 浏览不依赖已运行质控；历史快照由调用方优先处理。
+
+    复用只读即时装配，不创建/刷新持久 Bundle。不能将读取失败或身份缺失
+    转换成“没有文书”，也不能借用业务库的旧临床材料。
+    """
+    from ..database.clinical_connection import configured
+
+    if not configured():
+        return None
+    identity = {
+        "institute_id": str(institute_id or "").strip(),
+        "patient_id": str(patient_id or "").strip(),
+        "visit_id": _resolve_bundle_visit_id(record_id, visit_id),
+    }
+    if not all(identity.values()):
+        raise HTTPException(422, "clinical_material_identity_unavailable")
+    try:
+        return load_current_documents(**identity)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("读取当前 CDM 文书失败: error_type=%s", type(exc).__name__)
+        raise HTTPException(503, "clinical_source_read_unavailable") from None
+
+
+def _pick_live_document(documents, domain, doc_type, doc_id):
+    # 当前文书可能在两次请求间变化；指定文书不存在时不得显示另一份正文。
+    candidates = [doc for doc in documents
+                  if (not domain or doc.get("execution_domain") == domain)
+                  and (not doc_type or doc.get("doc_type") == doc_type)
+                  and (not doc_id or doc_id in {
+                      str(doc.get(key) or "") for key in ("id", "doc_id", "document_id", "doc_key")})]
+    return pick_document(documents=candidates, doc_type=doc_type, doc_id=doc_id)
 
 
 @router.get("/{record_id}/documents")
@@ -272,7 +319,20 @@ async def render_document(
     own_identity = getattr(request.state, "doctor_case_identity", None)
     if own_identity:
         institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
-    if execution_domain:
+    current = None
+    if case_material.current() is None:
+        current = await run_in_threadpool(
+            _load_live_cdm_documents, record_id, institute_id, patient_id, visit_id)
+    if current is not None:
+        current = _project_customer_safe_source_refs(current)
+        selected = _pick_live_document(
+            current["documents"], execution_domain,
+            str(doc_type or "").strip(), str(doc_id or "").strip())
+        documents_payload = {
+            "documents_tree": build_documents_tree([selected] if selected else []),
+            "empty_reason": "" if selected else "document_not_found",
+        }
+    elif execution_domain:
         selected = await run_in_threadpool(
             _load_document_from_bundle,
             record_id=record_id,

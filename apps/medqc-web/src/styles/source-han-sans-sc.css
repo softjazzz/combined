@@ -8,8 +8,7 @@
   font-family: 'Source Han Sans SC';
   src:
     local('Source Han Sans SC Regular'),
-    local('SourceHanSansSC-Regular'),
-    url('/fonts/source-han-sans-sc/SourceHanSansSC-Regular.otf') format('opentype');
+    local('SourceHanSansSC-Regular');
   font-display: swap;
   font-style: normal;
   font-weight: 400;
@@ -19,8 +18,7 @@
   font-family: 'Source Han Sans SC';
   src:
     local('Source Han Sans SC Medium'),
-    local('SourceHanSansSC-Medium'),
-    url('/fonts/source-han-sans-sc/SourceHanSansSC-Medium.otf') format('opentype');
+    local('SourceHanSansSC-Medium');
   font-display: swap;
   font-style: normal;
   font-weight: 500;
