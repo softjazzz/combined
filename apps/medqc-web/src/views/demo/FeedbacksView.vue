@@ -417,30 +417,21 @@
       </div>
     </a-modal>
 
-    <!-- 管理员密码验证弹窗 -->
+    <!-- 删除确认弹窗 -->
     <a-modal
-      v-model:open="passwordVisible"
-      title="管理员身份验证"
-      :confirm-loading="passwordLoading"
-      @ok="handlePasswordSubmit"
-      @cancel="handlePasswordCancel"
+      v-model:open="deleteVisible"
+      title="删除反馈"
+      :confirm-loading="deleteLoading"
+      @ok="handleDeleteSubmit"
+      @cancel="handleDeleteCancel"
     >
       <a-alert
-        message="权限验证"
-        description="删除反馈记录需要管理员权限，请输入管理员密码进行验证。"
+        message="确认删除"
+        description="确认删除这条反馈？服务端将验证当前账号的管理员权限。"
         type="warning"
         show-icon
         style="margin-bottom: 16px"
       />
-      <a-form layout="vertical">
-        <a-form-item label="管理员密码">
-          <a-input-password
-            v-model:value="adminPassword"
-            placeholder="请输入管理员密码"
-            @press-enter="handlePasswordSubmit"
-          />
-        </a-form-item>
-      </a-form>
       <template v-if="pendingDeleteRecord">
         <a-divider style="margin: 12px 0" />
         <a-descriptions
@@ -460,6 +451,7 @@
 </template>
 
 <script setup lang="ts">
+import { feedbackRequest } from '@/api/demoFeedback'
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
@@ -514,10 +506,9 @@ const pagination = ref<TablePaginationConfig>({
 const detailVisible = ref(false)
 const currentFeedback = ref<FeedbackRecord | null>(null)
 
-// 密码验证弹窗
-const passwordVisible = ref(false)
-const adminPassword = ref('')
-const passwordLoading = ref(false)
+// 删除确认弹窗
+const deleteVisible = ref(false)
+const deleteLoading = ref(false)
 const pendingDeleteRecord = ref<FeedbackRecord | null>(null)
 
 // 表格列配置
@@ -621,7 +612,7 @@ const loadFeedbacks = async () => {
       ...(filters.ruleCode && { rule_code: filters.ruleCode }),
     })
 
-    const response = await fetch(`/api/v1/demo/feedbacks?${params}`)
+    const response = await feedbackRequest(`/api/v1/demo/feedbacks?${params}`)
     const data = await response.json()
 
     if (data.success) {
@@ -641,7 +632,7 @@ const loadFeedbacks = async () => {
 // 加载统计数据
 const loadStats = async () => {
   try {
-    const response = await fetch('/api/v1/demo/feedbacks/stats')
+    const response = await feedbackRequest('/api/v1/demo/feedbacks/stats')
     const data = await response.json()
 
     if (data.success) {
@@ -683,32 +674,17 @@ const handleViewDetail = (record: FeedbackRecord | Record<string, any>) => {
 // 删除反馈记录
 const handleDelete = (record: FeedbackRecord | Record<string, any>) => {
   pendingDeleteRecord.value = record as FeedbackRecord
-  adminPassword.value = ''
-  passwordVisible.value = true
+  deleteVisible.value = true
 }
 
-// 验证管理员密码
-const handlePasswordSubmit = async () => {
-  if (!adminPassword.value) {
-    message.error('请输入管理员密码')
-    return
-  }
-
-  passwordLoading.value = true
+// 后端验证权限；此处仅确认用户删除意图。
+const handleDeleteSubmit = async () => {
+  deleteLoading.value = true
   try {
-    // 硬编码验证密码
-    if (adminPassword.value === 'admin888') {
-      // 密码验证成功，执行删除
-      passwordVisible.value = false
-      await confirmDelete()
-    } else {
-      message.error('管理员密码错误')
-    }
-  } catch (error) {
-    console.error('密码验证失败:', error)
-    message.error('密码验证失败，请稍后重试')
+    await confirmDelete()
+    deleteVisible.value = false
   } finally {
-    passwordLoading.value = false
+    deleteLoading.value = false
   }
 }
 
@@ -718,7 +694,7 @@ const confirmDelete = async () => {
 
   const record = pendingDeleteRecord.value
   try {
-    const response = await fetch(`/api/v1/demo/feedbacks/${record.feedback_id}`, {
+    const response = await feedbackRequest(`/api/v1/demo/feedbacks/${record.feedback_id}`, {
       method: 'DELETE',
     })
 
@@ -740,10 +716,9 @@ const confirmDelete = async () => {
   }
 }
 
-// 取消密码验证
-const handlePasswordCancel = () => {
-  passwordVisible.value = false
-  adminPassword.value = ''
+// 取消删除
+const handleDeleteCancel = () => {
+  deleteVisible.value = false
   pendingDeleteRecord.value = null
 }
 

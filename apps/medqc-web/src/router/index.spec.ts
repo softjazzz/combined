@@ -148,3 +148,21 @@ describe('旧 Dashboard 首页路由', () => {
     expect(router.currentRoute.value.fullPath).toBe('/workstation-v5/records/running?source=legacy')
   }, 15_000)
 })
+
+
+describe('反馈与整改入口保护', () => {
+  it('旧整改URL复用正式页面，不再进入旧接口页面', async () => {
+    const legacy = router.resolve('/dashboard/qc/rectifications').matched.at(-1)!
+    const modern = router.resolve('/workstation-v5/feedback').matched.at(-1)!
+    auth.roles.splice(0, auth.roles.length, 'admin')
+    await router.push('/dashboard/qc/rectifications')
+    await router.push('/workstation-v5/feedback')
+    expect(legacy.components!.default).toBe(modern.components!.default)
+    expect(legacy.meta.permission).toContain('doctor')
+  })
+  it.each(['/demo/lx33', '/demo/lx33/feedbacks'])('%s 必须登录管理员', path => {
+    const meta = router.resolve(path).meta
+    expect(meta.requiresAuth).toBe(true)
+    expect(meta.permission).toEqual(['admin', 'super_admin', 'sync_admin'])
+  })
+})
