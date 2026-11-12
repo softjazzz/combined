@@ -1,7 +1,7 @@
 """
 演示页面 API 路由
 用于 LX33 质控规则演示和反馈系统
-使用 SQLite 持久化存储
+演示反馈使用业务 PostgreSQL 独立表持久化
 """
 
 from datetime import datetime, timedelta, timezone

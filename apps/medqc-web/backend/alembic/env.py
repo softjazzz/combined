@@ -20,7 +20,7 @@ if str(BASE_DIR) not in sys.path:
 # Load backend-local env and prioritize DATABASE_URL from env.
 load_dotenv(BASE_DIR / ".env")
 database_url = os.getenv("DATABASE_URL", "").strip()
-if database_url:
+if database_url and config.attributes.get("connection") is None:
     config.set_main_option("sqlalchemy.url", database_url)
 
 # Interpret the config file for Python logging.

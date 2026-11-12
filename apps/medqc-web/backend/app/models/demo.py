@@ -12,7 +12,8 @@ Base = declarative_base()
 
 class Feedback(Base):
     """反馈记录模型"""
-    __tablename__ = "feedbacks"
+    __tablename__ = "demo_feedbacks"
+    __table_args__ = {"schema": "qc"}
 
     # 主键
     feedback_id = Column(String(36), primary_key=True, index=True, comment="反馈ID")

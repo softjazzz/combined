@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-def inspect(root: Path, expected: Path, require_current=True):
+def inspect(root: Path, expected: Path, require_current=True, feedback_pg_plan=False):
     root = root.resolve(strict=True)
     current = root / 'current'
     old = expected.resolve(strict=True)
@@ -28,6 +28,8 @@ def inspect(root: Path, expected: Path, require_current=True):
         rel=path.relative_to(old).as_posix()
         if path.is_symlink() and rel!='backend/.env': raise ValueError('unknown_backend_symlink')
         if path.is_file() and rel not in contract['files'] and rel!='backend/.env':
+            if feedback_pg_plan and rel in {'backend/data/demo_feedbacks.db', 'backend/data/demo_feedbacks.db-wal', 'backend/data/demo_feedbacks.db-shm'}:
+                continue  # 原文件保留；仅反馈PG专用维护流程可以接管。
             if '__pycache__' in path.parts and path.suffix=='.pyc': continue
             if rel==contract.get('emr_backup_path') and hashlib.sha256(path.read_bytes()).hexdigest()==contract['emr_before_sha256']: continue
             if rel==contract.get('emr_receipt_path'):
@@ -40,6 +42,8 @@ def inspect(root: Path, expected: Path, require_current=True):
     local_state = old / 'backend/data'
     if local_state.exists():
         for path in local_state.rglob('*'):
+            if feedback_pg_plan and not path.is_symlink() and path.is_file() and path.name in {'demo_feedbacks.db','demo_feedbacks.db-wal','demo_feedbacks.db-shm'} and path.parent == local_state:
+                continue
             # The shipped ICD dictionaries and synthetic templates are immutable
             # package resources, already hash-checked above, not runtime state.
             if path.is_symlink() or (path.is_file() and path.relative_to(old).as_posix() not in contract['files']):

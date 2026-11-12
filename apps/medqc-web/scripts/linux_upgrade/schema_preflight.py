@@ -23,7 +23,7 @@ def contract(backend):
     return required, tables, scope['select_user_owner_schema'], refresh
 
 
-def check(backend, env):
+def check(backend, env, revision='20261106_000064'):
     import sqlalchemy as sa
     from sqlalchemy.engine import make_url
     url = make_url(env.get('DATABASE_URL', ''))
@@ -47,10 +47,16 @@ def check(backend, env):
             try:
                 if conn.execute(sa.text('SHOW transaction_read_only')).scalar_one() != 'on': raise ValueError('readonly_not_effective')
                 if conn.execute(sa.text('SELECT current_database()')).scalar_one() != 'medqc_business': raise ValueError('wrong_database')
-                if conn.execute(sa.text('SELECT version_num FROM public.alembic_version')).scalars().all() != ['20261106_000064']:
-                    raise ValueError('public_alembic_064_required')
+                if revision not in ('20261106_000064','20261112_000065'):
+                    raise ValueError('unsupported_revision')
+                if conn.execute(sa.text('SELECT version_num FROM public.alembic_version')).scalars().all() != [revision]:
+                    raise ValueError('public_alembic_revision_mismatch')
                 refresh.bind_storage(conn)
                 inspector = sa.inspect(conn)
+                if revision == '20261112_000065':
+                    for name in ('demo_feedbacks','demo_feedback_imports'):
+                        if not inspector.has_table(name,schema='qc'):
+                            raise ValueError('feedback_pg_tables_missing')
                 for table in tables:
                     if not inspector.has_table(table, schema='qc'): raise ValueError('required_qc_table_missing')
                 owner = choose_owner(search_path=path.split(',') if path else [], schemas_with_user_table=[s for s in ('sys','public') if inspector.has_table('sys_users', schema=s)])
@@ -58,7 +64,7 @@ def check(backend, env):
                 if not required | {'institute_id'} <= columns: raise ValueError('auth_columns_missing')
             finally: conn.rollback()
     finally: engine.dispose()
-    return {'ok': True, 'revision': '20261106_000064', 'revision_schema': 'public', 'business_schema': 'qc', 'transaction_read_only': True, 'clinical_rows_read': 0}
+    return {'ok': True, 'revision': revision, 'revision_schema': 'public', 'business_schema': 'qc', 'transaction_read_only': True, 'clinical_rows_read': 0}
 
 
 if __name__ == '__main__':
