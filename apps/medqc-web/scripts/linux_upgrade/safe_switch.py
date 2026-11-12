@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
-import sys
 import time
 import urllib.request
 
@@ -26,8 +25,16 @@ def command(args):
 
 
 def unit(name):
-    lines = command(['systemctl','show',name,'--no-pager',*['--property='+p for p in PROPERTIES]])
-    return dict(line.split('=',1) for line in lines.splitlines() if '=' in line)
+    lines = command(['systemctl','show',name,'--no-pager','--all',*['--property='+p for p in PROPERTIES]])
+    return normalize_unit(dict(line.split('=',1) for line in lines.splitlines() if '=' in line))
+
+
+def normalize_unit(properties):
+    # systemd 249可省略空数组。仅可为空的属性补空；身份和启动合同缺失仍拒绝。
+    for key in ('User','Group','UMask','WorkingDirectory','ExecStart'):
+        if not properties.get(key, '').strip():
+            raise ValueError('service_property_missing:' + key)
+    return {key: properties.get(key, '') for key in PROPERTIES}
 
 
 def flags(env):
@@ -64,7 +71,7 @@ def persistent_paths(root, env):
 
 def context(root, current, offline=False, proc_root=Path('/proc')):
     from dotenv.main import DotEnv
-    api, web = unit(API), unit(WEB)
+    api, web = normalize_unit(unit(API)), normalize_unit(unit(WEB))
     for u in (api,web):
         if u['User'] != 'medqc-business' or u['Group'] != 'medqc-business' or u['UMask'] != '0077': raise ValueError('service_identity_or_umask_changed')
         if u['EnvironmentFiles'] or u['ExecStartPre'] or u['ExecStartPost']: raise ValueError('unverified_service_environment_or_hooks')

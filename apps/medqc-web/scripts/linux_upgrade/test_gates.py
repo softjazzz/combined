@@ -36,7 +36,7 @@ class Gates(unittest.TestCase):
         proc=root/'proc/42'; proc.mkdir(parents=True); (proc/'cwd').symlink_to(release/'backend')
         (proc/'cmdline').write_bytes(('\0'.join([str(root/'venv/bin/python'),'-m','uvicorn','app.main:app','--host','127.0.0.1','--port','8001','--workers','1'])+'\0').encode())
         (proc/'environ').write_bytes(b'ENV=production\0')
-        common={'User':'medqc-business','Group':'medqc-business','UMask':'0077','EnvironmentFiles':'','Environment':'ENV=production','ExecStartPre':'','ExecStartPost':''}
+        common={'User':'medqc-business','Group':'medqc-business','UMask':'0077','Environment':'ENV=production'}
         api={**common,'WorkingDirectory':str(root/'current/backend'),'ExecStart':'python -m uvicorn app.main:app'}
         web={**common,'WorkingDirectory':str(root/'current'),'ExecStart':str(root/'current/frontend/dist')}
         return root,release,proc,config,api,web
@@ -52,6 +52,46 @@ class Gates(unittest.TestCase):
         root,release,proc,config,api,web=self.fixture()
         with patch.object(s,'unit',side_effect=lambda n:api if n==s.API else web),patch.object(s,'command',return_value='42'):
             result=s.context(root,release,proc_root=root/'proc'); self.assertEqual(result['env']['MEDQC_STARTUP_BACKGROUND_ENABLED'],'false')
+
+    def test_systemctl_omitted_empty_properties(self):
+        output='User=medqc-business\nGroup=medqc-business\nUMask=0077\nWorkingDirectory=/synthetic\nExecStart=python\n'
+        with patch.object(s,'command',return_value=output) as command:
+            result=s.unit(s.API)
+        self.assertIn('--all',command.call_args.args[0])
+        for key in ('EnvironmentFiles','ExecStartPre','ExecStartPost','Environment','DropInPaths'):
+            self.assertEqual(result[key],'')
+
+    def test_missing_required_unit_properties_are_explicit(self):
+        required={'User':'medqc-business','Group':'medqc-business','UMask':'0077','WorkingDirectory':'/synthetic','ExecStart':'python'}
+        for key in required:
+            for missing in (None,''):
+                values=dict(required)
+                if missing is None: values.pop(key)
+                else: values[key]=missing
+                with self.subTest(key=key,missing=missing),self.assertRaisesRegex(ValueError,'service_property_missing:'+key):
+                    s.normalize_unit(values)
+
+    def test_nonempty_environment_files_and_hooks_still_rejected(self):
+        root,release,proc,config,api,web=self.fixture()
+        for key in ('EnvironmentFiles','ExecStartPre','ExecStartPost'):
+            with self.subTest(key=key),patch.object(s,'unit',return_value={**api,key:'unapproved'}),self.assertRaisesRegex(ValueError,'unverified_service_environment_or_hooks'):
+                s.context(root,release,proc_root=root/'proc')
+
+    def test_feedback_three_paths_use_compatible_context(self):
+        import feedback_upgrade as feedback
+        root,old,proc,config,api,web=self.fixture()
+        (root/'current').symlink_to(old)
+        real_context=s.context
+        modes=[]
+        def inspected(*args,**kwargs):
+            modes.append(kwargs.get('offline',False))
+            result=real_context(*args,**kwargs,proc_root=root/'proc')
+            self.assertEqual(result['env']['MEDQC_STARTUP_BACKGROUND_ENABLED'],'false')
+            raise ValueError('context_passed_stop_before_actions')
+        for action in ('preflight','apply','rollback'):
+            with self.subTest(action=action),patch.object(feedback,'check',return_value={'ok':True,'build_id':'new','commit':'synthetic'}),patch.object(feedback,'inspect'),patch.object(s,'unit',side_effect=lambda n:api if n==s.API else web),patch.object(s,'command',return_value='42'),patch.object(s,'context',side_effect=inspected),self.assertRaisesRegex(ValueError,'context_passed_stop_before_actions'):
+                feedback.run(action,root,root,old,True,True,True)
+        self.assertEqual(modes,[False,False,True])
     def test_unmanaged_process_override_rejected(self):
         root,release,proc,config,api,web=self.fixture(); (proc/'environ').write_bytes(b'ENV=production\0MEDQC_STARTUP_BACKGROUND_ENABLED=true\0')
         with patch.object(s,'unit',side_effect=lambda n:api if n==s.API else web),patch.object(s,'command',return_value='42'),self.assertRaises(ValueError): s.context(root,release,proc_root=root/'proc')
