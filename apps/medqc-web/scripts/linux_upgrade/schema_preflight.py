@@ -53,6 +53,8 @@ def check(backend, env, revision='20261106_000064'):
                     raise ValueError('public_alembic_revision_mismatch')
                 refresh.bind_storage(conn)
                 inspector = sa.inspect(conn)
+                if revision == '20261106_000064' and any(inspector.has_table(name,schema='qc') for name in ('demo_feedbacks','demo_feedback_imports')):
+                    raise ValueError('feedback_tables_exist_before_065_manual_review_required')
                 if revision == '20261112_000065':
                     for name in ('demo_feedbacks','demo_feedback_imports'):
                         if not inspector.has_table(name,schema='qc'):

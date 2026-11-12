@@ -26,7 +26,8 @@ class Switch(unittest.TestCase):
         with sqlite3.connect(old/'backend/data/demo_feedbacks.db') as db:
             db.execute('CREATE TABLE feedbacks (id text)'); db.execute("INSERT INTO feedbacks VALUES ('synthetic')")
         (kit/'EXPECTED-SERVER.json').write_text(json.dumps({'backend_identity':{},'frontend_identity':{}}))
-        ctx={'config_hash':f.digest(config),'config':config,'env':{},'units':[{},{}]}
+        unit={'User':'medqc-business','Group':'medqc-business','UMask':'0077','WorkingDirectory':str(old),'ExecStart':'{ path=/python ; argv[]=/python app ; ignore_errors=no ; start_time=[before] ; stop_time=[n/a] ; pid=42 ; code=(null) ; status=0/0 }'}
+        ctx={'config_hash':f.digest(config),'config':config,'env':{},'units':[dict(unit),dict(unit)]}
         return root,old,kit,ctx
 
     def mocks(self,root,old,kit,ctx,fail=False):
@@ -44,6 +45,7 @@ class Switch(unittest.TestCase):
         def stage(*args,**kwargs):
             shutil.copytree(kit/'application',root/'releases/new')
             (root/'releases/new/backend/.env').symlink_to(root/'config/business.env')
+            (root/'state/app-upgrade-new.json').write_text(json.dumps({'previous_current':str(old),'staged_current':str(root/'releases/new'),'application_commit':'synthetic','activated':False}))
         staging=stack.enter_context(patch.object(f,'stage',side_effect=stage))
         proc=stack.enter_context(patch.object(f.subprocess,'run'))
         proc.return_value.returncode=1 if fail else 0
@@ -84,6 +86,52 @@ class Switch(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'rollback_files_changed'):
             f.run('rollback',kit,root,old,True,True)
         command.assert_not_called()
+
+    def test_real_unchanged_across_stop_start_and_rollback(self):
+        root,old,kit,ctx=self.fixture()
+        real_unchanged=f.gates.unchanged
+        command,_,_=self.mocks(root,old,kit,ctx)
+        current=dict(ctx['units'][0])
+        def state(args):
+            current['ExecStart']=current['ExecStart'].replace('pid=42','pid=0').replace('[n/a]','[after stop]')
+            return ''
+        command.side_effect=state
+        with patch.object(f.gates,'unchanged',side_effect=real_unchanged),patch.object(f.gates,'unit',side_effect=lambda _:dict(current)):
+            self.assertTrue(f.run('apply',kit,root,old,True,True,True)['ok'])
+            self.assertTrue(f.run('rollback',kit,root,old,True,True)['ok'])
+
+    def failed_staging(self):
+        root,old,kit,ctx=self.fixture(); self.mocks(root,old,kit,ctx)
+        with patch.object(f,'snapshot_sqlite',side_effect=ValueError('stop_before_backup')):
+            with self.assertRaisesRegex(ValueError,'stop_before_backup'):
+                f.run('apply',kit,root,old,True,True,True)
+        return root,old,kit,ctx
+
+    def test_failed_attempt_archive_preview_and_preservation(self):
+        root,old,kit,ctx=self.failed_staging()
+        raw=old/'backend/data/demo_feedbacks.db'; before=raw.read_bytes()
+        with patch.object(f.gates,'active',return_value=True):
+            result=f.run('archive-failed',kit,root,old,False,True)
+            self.assertFalse(result['archived']); self.assertTrue((root/'releases/new').exists())
+            result=f.run('archive-failed',kit,root,old,True,True)
+        archive=Path(result['archive'])
+        self.assertTrue((archive/'new').is_dir())
+        self.assertTrue((archive/'new-rollback-compatible').is_dir())
+        self.assertTrue((archive/'feedback-upgrade-new.json').is_file())
+        self.assertTrue((archive/'app-upgrade-new.json').is_file())
+        self.assertEqual(raw.read_bytes(),before)
+        self.assertEqual((root/'current').resolve(),old)
+
+    def test_archive_rejects_backup_or_tampered_stage(self):
+        for reason in ('backup','stage'):
+            with self.subTest(reason=reason):
+                root,old,kit,ctx=self.failed_staging()
+                if reason=='backup': (root/'state/feedback-backup-new').mkdir()
+                else: (root/'releases/new/backend/unexpected.py').write_text('changed')
+                with patch.object(f.gates,'active',return_value=True),self.assertRaises(ValueError):
+                    f.run('archive-failed',kit,root,old,True,True)
+                self.assertTrue((root/'releases/new').is_dir())
+                self.assertFalse((root/'state/failed-feedback-new').exists())
 
 
 if __name__=='__main__': unittest.main()

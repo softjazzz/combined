@@ -61,6 +61,23 @@ class Gates(unittest.TestCase):
         for key in ('EnvironmentFiles','ExecStartPre','ExecStartPost','Environment','DropInPaths'):
             self.assertEqual(result[key],'')
 
+    def test_exec_start_runtime_only_changes_are_ignored(self):
+        running='{ path=/python ; argv[]=/python -m app --value=pid=99 ; ignore_errors=no ; start_time=[Mon start] ; stop_time=[n/a] ; pid=42 ; code=(null) ; status=0/0 }'
+        stopped=running.replace('pid=42','pid=0').replace('stop_time=[n/a]','stop_time=[Mon stop]').replace('code=(null)','code=exited').replace('status=0/0','status=0/SUCCESS')
+        self.assertEqual(s.stable_exec_start(running),s.stable_exec_start(stopped))
+        self.assertIn('--value=pid=99',s.stable_exec_start(stopped))
+        for before,after in (('/python','/other'),('-m app','-m other'),('ignore_errors=no','ignore_errors=yes')):
+            self.assertNotEqual(s.stable_exec_start(running),s.stable_exec_start(running.replace(before,after)))
+        with self.assertRaisesRegex(ValueError,'runtime_fields'):
+            s.stable_exec_start(running.replace('pid=42','unknown=42'))
+
+    def test_stable_unit_configuration_changes_still_rejected(self):
+        root,release,proc,config,api,web=self.fixture()
+        ctx={'units':[api,web],'config':config,'config_hash':s.hashlib.sha256(config.read_bytes()).hexdigest()}
+        for key,value in (('User','other'),('Group','other'),('UMask','0022'),('WorkingDirectory','/other'),('ExecStart','changed'),('Environment','ENV=other'),('DropInPaths','/new.conf')):
+            with self.subTest(key=key),patch.object(s,'unit',side_effect=lambda name:{**api,key:value} if name==s.API else web),self.assertRaisesRegex(ValueError,'service_or_config_changed'):
+                s.unchanged(ctx)
+
     def test_missing_required_unit_properties_are_explicit(self):
         required={'User':'medqc-business','Group':'medqc-business','UMask':'0077','WorkingDirectory':'/synthetic','ExecStart':'python'}
         for key in required:
@@ -136,7 +153,7 @@ class Gates(unittest.TestCase):
         values['PACKAGE.json']['application_commit']='b'*40; write()
         with self.assertRaisesRegex(ValueError,'package_identity_disagrees'): verify_package(root)
 
-    def schema_case(self,revision='20261106_000064',readonly='on',missing_table=False,missing_auth=False):
+    def schema_case(self,revision='20261106_000064',readonly='on',missing_table=False,missing_auth=False,feedback_table=False):
         import sqlalchemy as sa
         engine=MagicMock(); conn=engine.connect.return_value.__enter__.return_value
         statements=[]
@@ -146,7 +163,7 @@ class Gates(unittest.TestCase):
             result.scalars.return_value.all.return_value=[revision]
             return result
         conn.execute.side_effect=execute
-        inspector=MagicMock(); inspector.has_table.side_effect=lambda name,**kw: not missing_table or name=='sys_users'
+        inspector=MagicMock(); inspector.has_table.side_effect=lambda name,**kw: feedback_table if name in ('demo_feedbacks','demo_feedback_imports') else not missing_table or name=='sys_users'
         inspector.get_columns.return_value=[] if missing_auth else [{'name':'id'},{'name':'institute_id'}]
         refresh=MagicMock(); callbacks=[]
         def listener(*args):
@@ -162,6 +179,9 @@ class Gates(unittest.TestCase):
         with self.assertRaises(ValueError): callbacks[0](None,None,'DROP VIEW qc.anything',None,None,None)
         return result
     def test_readonly_064_and_no_ddl(self): self.assertTrue(self.schema_case()['ok'])
+    def test_064_with_feedback_tables_rejected(self):
+        with self.assertRaisesRegex(ValueError,'feedback_tables_exist_before_065'):
+            self.schema_case(feedback_table=True)
     def test_wrong_revision_rejected(self):
         with self.assertRaises(ValueError): self.schema_case(revision='20261105_000063')
     def test_readonly_not_effective_rejected(self):

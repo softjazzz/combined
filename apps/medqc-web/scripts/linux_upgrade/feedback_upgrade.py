@@ -98,8 +98,46 @@ def schema(kit,root,env,revision):
     return json.loads(p.stdout)
 
 
+def archive_failed(kit,root,old,build,ctx,receipt,execute):
+    """仅接管064、原版本仍运行且尚无SQLite备份的失败暂存。只归档，不删除。"""
+    if (root/'current').resolve(strict=True)!=old or not gates.active(gates.API) or not gates.active(gates.WEB):
+        raise ValueError('archive_requires_original_services_running')
+    schema(kit,root,ctx['env'],'20261106_000064')
+    backup=root/'state'/('feedback-backup-'+build['build_id'])
+    if backup.exists() or backup.is_symlink(): raise ValueError('backup_exists_manual_recovery_required')
+    if receipt.is_symlink() or not receipt.is_file() or receipt.stat().st_uid!=0 or receipt.stat().st_mode & 0o077:
+        raise ValueError('private_root_receipt_required')
+    proof=json.loads(receipt.read_text())
+    new=root/'releases'/build['build_id']
+    rollback=root/'releases'/(build['build_id']+'-rollback-compatible')
+    if proof['old']!=str(old) or proof['rollback']!=str(rollback) or proof['commit']!=build['commit'] or proof['config_hash']!=ctx['config_hash']:
+        raise ValueError('failed_attempt_identity_changed')
+    if [gates.normalize_unit(u) for u in proof['units']] != [gates.normalize_unit(u) for u in ctx['units']]:
+        raise ValueError('failed_attempt_service_configuration_changed')
+    gates.config_source(root,new); gates.config_source(root,rollback)
+    gates.staged_integrity(kit,new)
+    if file_manifest(rollback)!=proof['rollback_files']: raise ValueError('rollback_files_changed')
+    staged=root/'state'/('app-upgrade-'+build['build_id']+'.json')
+    record=json.loads(staged.read_text())
+    if record.get('previous_current')!=str(old) or record.get('staged_current')!=str(new) or record.get('application_commit')!=build['commit'] or record.get('activated') is not False:
+        raise ValueError('stage_receipt_mismatch')
+    paths=(new,rollback,receipt,staged)
+    for path in paths:
+        if path.is_symlink() or root not in path.resolve(strict=True).parents:
+            raise ValueError('unsafe_recovery_path')
+    archive=root/'state'/('failed-feedback-'+build['build_id'])
+    if archive.exists() or archive.is_symlink(): raise ValueError('archive_exists_inspect_plan_do_not_retry')
+    if not execute: return {'ok':True,'archive_ready':True,'objects':4,'archived':False,'database_writes':0}
+    gates.unchanged(ctx)
+    archive.mkdir(mode=0o700)
+    private_json(archive/'PLAN.json',{'sources':[str(p) for p in paths],'original_current':str(old),'revision':'20261106_000064'})
+    for path in paths:
+        os.rename(path,archive/path.name)
+    return {'ok':True,'archived':True,'objects':4,'archive':str(archive),'switched':False,'database_writes':0}
+
+
 def run(action,kit,root,old,execute=False,allow_db=False,allow_write=False):
-    if action not in ('preflight','apply','rollback'): raise ValueError('unknown_action')
+    if action not in ('preflight','apply','rollback','archive-failed'): raise ValueError('unknown_action')
     if action!='preflight' and (not hasattr(os,'geteuid') or os.geteuid()!=0):
         raise ValueError('root_maintenance_required')
     build=check(kit,root)
@@ -111,13 +149,15 @@ def run(action,kit,root,old,execute=False,allow_db=False,allow_write=False):
     ctx=gates.context(root,current,offline=action=='rollback')
     gates.persistent_paths(root,ctx['env']); gates.config_source(root,old)
     receipt=root/'state'/('feedback-upgrade-'+build['build_id']+'.json')
+    if action=='archive-failed':
+        return archive_failed(kit,root,old,build,ctx,receipt,execute)
     if action=='rollback':
         if not execute: raise ValueError('execute_required')
         if receipt.is_symlink() or not receipt.is_file() or receipt.stat().st_uid!=0 or receipt.stat().st_mode & 0o077:
             raise ValueError('private_root_receipt_required')
         proof=json.loads(receipt.read_text())
         target=Path(proof['rollback'])
-        if proof['old']!=str(old) or proof['commit']!=build['commit'] or proof['config_hash']!=ctx['config_hash'] or proof['units']!=list(ctx['units']):
+        if proof['old']!=str(old) or proof['commit']!=build['commit'] or proof['config_hash']!=ctx['config_hash'] or [gates.normalize_unit(u) for u in proof['units']]!=[gates.normalize_unit(u) for u in ctx['units']]:
             raise ValueError('rollback_identity_or_configuration_changed')
         if target.parent!=root/'releases' or target.is_symlink() or current not in (root/'releases'/build['build_id'],old,target):
             raise ValueError('unexpected_rollback_path')
@@ -171,7 +211,7 @@ def run(action,kit,root,old,execute=False,allow_db=False,allow_write=False):
 if __name__=='__main__':
     os.umask(0o077)
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('action',choices=['preflight','apply','rollback'])
+    p.add_argument('action',choices=['preflight','apply','rollback','archive-failed'])
     p.add_argument('--root',type=Path,required=True); p.add_argument('--expected-old',type=Path,required=True)
     p.add_argument('--execute',action='store_true'); p.add_argument('--allow-readonly-db',action='store_true')
     p.add_argument('--allow-feedback-migration',action='store_true')
