@@ -27,7 +27,7 @@ pytestmark = pytest.mark.skipif(
 
 BACKEND = Path(__file__).resolve().parents[2]
 VERSION_DIR = BACKEND / "alembic/versions"
-HEAD = "20261106_000064"
+HEAD = "20261112_000065"
 
 
 def revision(filename):
@@ -129,7 +129,8 @@ def test_both_incremental_histories_and_single_head(application):
     engine, mode = application
     scripts = ScriptDirectory(str(BACKEND / "alembic"))
     assert scripts.get_heads() == [HEAD]
-    assert scripts.get_revision(HEAD).down_revision == "20261105_000063"
+    assert scripts.get_revision(HEAD).down_revision == "20261106_000064"
+    assert scripts.get_revision("20261106_000064").down_revision == "20261105_000063"
     assert scripts.get_revision("20261105_000063").down_revision == "20261102_000062"
     assert set(scripts.get_revision("20261102_000062").down_revision) == {
         "20261102_000060", "20261102_000061"
@@ -166,8 +167,27 @@ def test_both_incremental_histories_and_single_head(application):
             name: f'"{qc}"."{name}"'
             for name in ("bundle_refresh_jobs", "bundle_refresh_failures")
         }
-    # 重复upgrade不是重复执行建表或索引。
+    # 065始终使用qc，不能在single模式创建ORM不可读的public同名表。
+    from app.models.demo import Feedback
+    from app.database.demo_feedback_transfer import imports
+    with engine.connect() as connection:
+        inspector = sa.inspect(connection)
+        for table in (Feedback.__table__, imports):
+            assert {c["name"] for c in inspector.get_columns(table.name, schema="qc")} == set(table.c.keys())
+            assert inspector.get_pk_constraint(table.name, schema="qc")["constrained_columns"] == ["feedback_id"]
+            assert not inspector.has_table(table.name, schema="public")
+    factory = sessionmaker(bind=engine)
+    with factory() as db:
+        db.add(Feedback(feedback_id="synthetic-065", rule_id="R", rule_code="R", rule_name="合成规则",
+                        document_name="合成文书", evaluation_result=True, feedback_type="correct"))
+        db.commit()
+    # 重复upgrade不是重复执行建表或索引，也不丢弃升级后新增反馈。
     migrate(engine, "head")
+    with pytest.raises(RuntimeError, match="feedback_history_preserved"):
+        revision("20261112_000065_demo_feedback_pg.py").downgrade()
+    with factory() as db:
+        assert db.query(Feedback).filter_by(feedback_id="synthetic-065").one().feedback_type == "correct"
+
 
 
 def test_pg_latest_case_lock_and_scoped_result_read(application):

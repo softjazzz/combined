@@ -231,7 +231,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'qc/rectifications',
         name: 'RectificationList',
-        component: () => import('@/views/qc/RectificationList.vue'),
+        component: () => import('@/views/workstation/HomeRectificationTodos.vue'),
         meta: {
           title: '整改任务',
           icon: 'ToolOutlined',
@@ -835,7 +835,8 @@ const routes: RouteRecordRaw[] = [
         name: 'LX33Demo',
         component: () => import('@/views/demo/LX33DemoView.vue'),
         meta: {
-          requiresAuth: false,
+          requiresAuth: true,
+          permission: ['admin', 'super_admin', 'sync_admin'],
           title: '泸县33条质控规则演示',
         },
       },
@@ -844,7 +845,8 @@ const routes: RouteRecordRaw[] = [
         name: 'LX33Feedbacks',
         component: () => import('@/views/demo/FeedbacksView.vue'),
         meta: {
-          requiresAuth: false,
+          requiresAuth: true,
+          permission: ['admin', 'super_admin', 'sync_admin'],
           title: '反馈记录',
         },
       },

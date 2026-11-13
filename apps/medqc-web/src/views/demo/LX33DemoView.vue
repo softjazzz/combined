@@ -442,6 +442,7 @@
 </template>
 
 <script setup lang="ts">
+import { feedbackRequest } from '@/api/demoFeedback'
 import { ref, computed, onMounted, h } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
@@ -670,7 +671,7 @@ const loadRules = async () => {
 const loadStats = async () => {
   loadingStats.value = true
   try {
-    const response = await fetch('/api/v1/demo/feedbacks/stats')
+    const response = await feedbackRequest('/api/v1/demo/feedbacks/stats')
     const data = await response.json()
 
     if (data.success) {
@@ -704,7 +705,7 @@ const handleFeedback = (result: EvaluationResult) => {
 // 提交反馈
 const handleFeedbackSubmit = async (feedbackData: any) => {
   try {
-    const response = await fetch('/api/v1/demo/feedbacks', {
+    const response = await feedbackRequest('/api/v1/demo/feedbacks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(feedbackData),
@@ -740,7 +741,7 @@ const showCreateRulePage = () => {
 // 导出反馈数据
 const exportFeedbacks = async () => {
   try {
-    const response = await fetch('/api/v1/demo/feedbacks/export')
+    const response = await feedbackRequest('/api/v1/demo/feedbacks/export')
     const blob = await response.blob()
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')

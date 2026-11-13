@@ -4,9 +4,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
-import sys
 import time
 import urllib.request
 
@@ -26,8 +26,37 @@ def command(args):
 
 
 def unit(name):
-    lines = command(['systemctl','show',name,'--no-pager',*['--property='+p for p in PROPERTIES]])
-    return dict(line.split('=',1) for line in lines.splitlines() if '=' in line)
+    lines = command(['systemctl','show',name,'--no-pager','--all',*['--property='+p for p in PROPERTIES]])
+    return normalize_unit(dict(line.split('=',1) for line in lines.splitlines() if '=' in line))
+
+
+def normalize_unit(properties):
+    # systemd 249可省略空数组。仅可为空的属性补空；身份和启动合同缺失仍拒绝。
+    for key in ('User','Group','UMask','WorkingDirectory','ExecStart'):
+        if not properties.get(key, '').strip():
+            raise ValueError('service_property_missing:' + key)
+    result = {key: properties.get(key, '') for key in PROPERTIES}
+    result['ExecStart'] = stable_exec_start(result['ExecStart'])
+    return result
+
+
+def stable_exec_start(value):
+    # 只移除已识别的执行状态尾段，保留path、完整argv和ignore_errors。
+    # 不对整段做“删除pid”等宽泛替换，避免误删命令参数中的同名文本。
+    if not value.startswith('{'):
+        return value
+    match = re.fullmatch(r'\{ path=(.*?) ; argv\[\]=(.*?) ; ignore_errors=(yes|no)(?: ; (.*?))? \}', value)
+    if not match:
+        raise ValueError('unsupported_exec_start_representation')
+    runtime = match.group(4)
+    if runtime:
+        fields = runtime.split(' ; ')
+        keys = [field.split('=', 1)[0] for field in fields]
+        if len(keys) != len(set(keys)) or set(keys) != {'start_time','stop_time','pid','code','status'}:
+            raise ValueError('unsupported_exec_start_runtime_fields')
+        if any('=' not in field for field in fields):
+            raise ValueError('unsupported_exec_start_runtime_fields')
+    return '{ path=' + match.group(1) + ' ; argv[]=' + match.group(2) + ' ; ignore_errors=' + match.group(3) + ' }'
 
 
 def flags(env):
@@ -64,7 +93,7 @@ def persistent_paths(root, env):
 
 def context(root, current, offline=False, proc_root=Path('/proc')):
     from dotenv.main import DotEnv
-    api, web = unit(API), unit(WEB)
+    api, web = normalize_unit(unit(API)), normalize_unit(unit(WEB))
     for u in (api,web):
         if u['User'] != 'medqc-business' or u['Group'] != 'medqc-business' or u['UMask'] != '0077': raise ValueError('service_identity_or_umask_changed')
         if u['EnvironmentFiles'] or u['ExecStartPre'] or u['ExecStartPost']: raise ValueError('unverified_service_environment_or_hooks')
@@ -114,7 +143,7 @@ def context(root, current, offline=False, proc_root=Path('/proc')):
 
 
 def unchanged(ctx):
-    if (unit(API),unit(WEB)) != ctx['units'] or hashlib.sha256(ctx['config'].read_bytes()).hexdigest() != ctx['config_hash']:
+    if tuple(normalize_unit(unit(name)) for name in (API,WEB)) != tuple(normalize_unit(u) for u in ctx['units']) or hashlib.sha256(ctx['config'].read_bytes()).hexdigest() != ctx['config_hash']:
         raise ValueError('service_or_config_changed_after_preflight')
 
 

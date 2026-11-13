@@ -5,7 +5,7 @@ import pytest
 from alembic.script import ScriptDirectory
 
 
-HEAD = "20261106_000064"
+HEAD = "20261112_000065"
 FRONTPAGE = "20261013_000048"
 HOMOLOGY = "20261016_000049"
 
@@ -18,7 +18,8 @@ def test_frontpage_and_homology_have_one_upgrade_head():
     scripts = _scripts()
     assert scripts.get_heads() == [HEAD]
     assert scripts.get_current_head() == HEAD
-    assert scripts.get_revision(HEAD).down_revision == "20261105_000063"
+    assert scripts.get_revision(HEAD).down_revision == "20261106_000064"
+    assert scripts.get_revision("20261106_000064").down_revision == "20261105_000063"
     assert scripts.get_revision("20261105_000063").down_revision == "20261102_000062"
     assert set(scripts.get_revision("20261102_000062").down_revision) == {'20261102_000060', '20261102_000061'}
     assert set(scripts.get_revision('20261102_000061').down_revision) == {FRONTPAGE, '20261030_000057'}

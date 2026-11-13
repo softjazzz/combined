@@ -14,8 +14,13 @@ def validate_server_schema(engine):
                 .scalars()
                 .all()
             )
-            if heads != ["20261106_000064"]:
-                raise RuntimeError("server_business_migration_064_required")
+            if heads != ["20261112_000065"]:
+                raise RuntimeError("server_business_migration_065_required")
+            from ..database.demo_feedback_transfer import Feedback, imports
+            for feedback_table in (Feedback.__table__, imports):
+                actual={c['name'] for c in sa.inspect(conn).get_columns(feedback_table.name,schema='qc')}
+                if not set(feedback_table.columns.keys()) <= actual:
+                    raise RuntimeError('server_demo_feedback_columns_missing')
             from ..services.bundles.refresh_storage import bind_storage
             bind_storage(conn)
             inspector = sa.inspect(conn)

@@ -41,8 +41,8 @@ def material_storage_preflight(config: Path, root: Path, old: Path, destination:
     return {"material_storage_dir": str(resolved), "material_storage_source": source}
 
 
-def stage(kit: Path, root: Path, expected_current: Path) -> dict:
-    inspect(root, expected_current)
+def stage(kit: Path, root: Path, expected_current: Path, feedback_pg_plan=False) -> dict:
+    inspect(root, expected_current, feedback_pg_plan=feedback_pg_plan)
     report = check(kit, root)
     if not report["ok"]:
         return report

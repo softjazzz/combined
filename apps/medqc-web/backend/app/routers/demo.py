@@ -1,7 +1,7 @@
 """
 演示页面 API 路由
 用于 LX33 质控规则演示和反馈系统
-使用 SQLite 持久化存储
+演示反馈使用业务 PostgreSQL 独立表持久化
 """
 
 from datetime import datetime, timedelta, timezone
@@ -31,6 +31,7 @@ from ..schemas.demo import (
     CustomRuleSaveRequest,
 )
 from ..database.demo_db import get_db
+from ..core.security import require_roles
 from ..models.demo import Feedback
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
@@ -427,7 +428,7 @@ async def save_custom_rule(
         trace_id=get_trace_id(request),
     )
 
-@router.post("/feedbacks", response_model=dict)
+@router.post("/feedbacks", response_model=dict, dependencies=[Depends(require_roles("admin", "super_admin"))])
 async def create_feedback(
     request: Request,
     feedback: FeedbackCreate,
@@ -477,7 +478,7 @@ async def create_feedback(
     )
 
 
-@router.get("/feedbacks", response_model=FeedbackListResponse)
+@router.get("/feedbacks", response_model=FeedbackListResponse, dependencies=[Depends(require_roles("admin", "super_admin"))])
 async def get_feedbacks(
     request: Request,
     page: int = Query(1, ge=1, description="页码"),
@@ -530,7 +531,7 @@ async def get_feedbacks(
     )
 
 
-@router.get("/feedbacks/stats", response_model=dict)
+@router.get("/feedbacks/stats", response_model=dict, dependencies=[Depends(require_roles("admin", "super_admin"))])
 async def get_feedback_stats(
     request: Request,
     days: int = Query(30, ge=1, le=365, description="统计天数"),
@@ -626,7 +627,7 @@ async def get_feedback_stats(
     )
 
 
-@router.get("/feedbacks/by-rule/{rule_code}")
+@router.get("/feedbacks/by-rule/{rule_code}", dependencies=[Depends(require_roles("admin", "super_admin"))])
 async def get_feedbacks_by_rule(
     request: Request,
     rule_code: str,
@@ -668,7 +669,7 @@ async def get_feedbacks_by_rule(
     )
 
 
-@router.delete("/feedbacks/{feedback_id}", response_model=dict)
+@router.delete("/feedbacks/{feedback_id}", response_model=dict, dependencies=[Depends(require_roles("admin", "super_admin"))])
 async def delete_feedback(
     request: Request,
     feedback_id: str,
@@ -706,7 +707,7 @@ async def delete_feedback(
     )
 
 
-@router.get("/feedbacks/export")
+@router.get("/feedbacks/export", dependencies=[Depends(require_roles("admin", "super_admin"))])
 async def export_feedbacks(
     request: Request,
     db: Session = Depends(get_db)
