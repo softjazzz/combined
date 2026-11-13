@@ -616,6 +616,40 @@ def test_controlled_fact_consumption_does_not_include_unused_sources():
     assert reduced.final_state.value == "compliant"
 
 
+@pytest.mark.parametrize("use_document_ref", [False, True])
+def test_binding_reuses_verified_rows_for_automatic_source_scope(monkeypatch, use_document_ref):
+    from test_luxian_0609_document_ref_binding import (
+        _source_rows, _snapshot_and_materials, _decision, _bind,
+    )
+    from app.services.luxian_0609.decision_binding import _allowed_source_keys
+    from app.services.luxian_0609.evidence_material import Luxian0609EvidenceMaterialStore
+
+    snapshot, materials = _snapshot_and_materials({
+        "daily_course_record": _source_rows("daily_course_record", ({"document_id": "D1"},)),
+    })
+    ref = (snapshot.document_refs[0] if use_document_ref
+           else snapshot.observations[0].snapshot_ref.removeprefix("sha256:"))
+    decision = _decision(snapshot, ref)
+    sources = {
+        key: {"status": "table_missing", "can_judge_clinical_absence": False}
+        for key in _allowed_source_keys(decision.rule_id)
+    }
+    sources["daily_course_record"]["status"] = "available"
+    original = Luxian0609EvidenceMaterialStore.document_rows
+    calls = []
+
+    def read_once(self, source_key, *, snapshot):
+        assert source_key not in calls, "绑定后不能重复扫描已验证材料"
+        calls.append(source_key)
+        return original(self, source_key, snapshot=snapshot)
+
+    monkeypatch.setattr(Luxian0609EvidenceMaterialStore, "document_rows", read_once)
+    with material.activate({"automatic_material": {"sources": sources}}):
+        reduced = _bind(snapshot, decision, materials)
+    assert reduced.final_state.value == "compliant"
+    assert calls == (["daily_course_record"] if use_document_ref else [])
+
+
 def test_empty_generic_body_does_not_erase_valid_structured_field_result():
     from test_luxian_0609_decision_binding import _snapshot, _decision
     from app.services.automatic_material_scope import guard_decision, describe_source

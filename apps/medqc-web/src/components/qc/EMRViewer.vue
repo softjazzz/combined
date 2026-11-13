@@ -310,6 +310,8 @@ interface EmrDocumentMetadata extends MaterialDisplay {
   doc_key?: string
   group_key?: string
   record_time?: string
+  record_time_source?: 'source_record_time' | 'source_submit_time' | 'fallback_display_time' | ''
+  document_status?: string | null
   source?: string
   authors?: EmrDocumentPerson[]
   signatures?: EmrDocumentPerson[]

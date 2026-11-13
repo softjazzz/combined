@@ -309,13 +309,11 @@ def bind_and_reduce_luxian_0609_rule_decisions(
             for fact in snapshot.facts:
                 if fact.source_key in allowed_keys and fact.fact_id in decision.fact_refs:
                     consumed_keys.add(fact.source_key)
-            if evidence_materials is not None:
-                for source_key in allowed_keys:
-                    try:
-                        rows = evidence_materials.document_rows(source_key, snapshot=snapshot)
-                    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
-                        continue
-                    if any(ref in decision.fact_refs for ref, _ in rows):
+            # 文书引用已在上面的绑定阶段验证并缓存；来源引用无需扫描材料。
+            # 不重读失败材料，避免把既有技术错误变成未捕获异常。
+            for source_key, rows in document_rows_cache.items():
+                if source_key in allowed_keys and rows is not None:
+                    if any(ref in candidate_document_refs for ref, _ in rows):
                         consumed_keys.add(source_key)
             bound = guard_decision(decision, consumed_keys or allowed_keys)
         try:
