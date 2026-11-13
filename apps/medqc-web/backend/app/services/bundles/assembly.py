@@ -2251,7 +2251,9 @@ def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str
     inventory.extend(lab_reports)
     inventory.extend(exam_reports)
     for table_name, rows in docs.items():
-        _get_table_columns(schema, table_name)
+        # 注意事项文书由已捕获材料派生，不是物理表；仍保留其目录和正文。
+        if table_name not in {_EXAM_ATTENTION_DOC_TYPE, _LAB_ATTENTION_DOC_TYPE}:
+            _get_table_columns(schema, table_name)
         if table_name in {"labtest_item_report", "exam_item", "exam_item_report"}:
             continue
         for row_index, row in enumerate(rows or []):

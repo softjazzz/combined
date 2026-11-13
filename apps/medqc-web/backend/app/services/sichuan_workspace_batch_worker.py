@@ -3536,8 +3536,10 @@ async def run_sichuan_workspace_batch_job(
                                             inputs = material_assembly._assemble_scene_bundle(scene=scene, source_schema=frozen["schema"],
                                                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
                                             record = {**record, "medical_text": inputs["medical_text"]}
-                                        except Exception:
-                                            return _material_failed_record(record, identity, "material_projection_failed")
+                                        except Exception as error:
+                                            from .material_admission import report_projection_failure
+                                            code = report_projection_failure(error, logger)
+                                            return _material_failed_record(record, identity, code)
                                     result = await _evaluate_single_record_impl(record)
                                     if frozen is not None:
                                         result["case_material_fingerprint"] = frozen["fingerprint"]

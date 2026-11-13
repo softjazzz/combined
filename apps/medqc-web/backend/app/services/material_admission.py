@@ -5,6 +5,8 @@ import os
 from .case_material_snapshot import MaterialSnapshotError
 
 MESSAGES = {
+    "uncaptured_material_columns": "装配所需的物理表列信息未包含在本次材料中，未开始执行质控规则。",
+    "uncaptured_material_table": "装配所需的物理表未包含在本次材料中，未开始执行质控规则。",
     "cdm_publication_window_unconfirmed": "CDM发布范围与取材窗口尚未确认或已过期，未开始执行该病历的质控规则。请先确认发布证据和有效取材窗口。",
     "material_source_contract_incomplete": "临床材料读取合同不完整，病历资料准备失败。",
     "material_source_unavailable": "临床材料来源不可用，病历资料准备失败。",
@@ -15,6 +17,23 @@ MESSAGES = {
     "material_publication_identity_conflict": "材料发布回执的身份关联存在冲突，未开始执行质控规则。",
     "material_publication_version_conflict": "材料发布回执与当前发布版本不一致，未开始执行质控规则。",
 }
+
+
+def report_projection_failure(error, logger):
+    """只记录类型及栈位置，不记录异常消息、源码行、局部变量或SQL参数。"""
+    from pathlib import Path
+    import traceback
+
+    code = "material_projection_failed"
+    if isinstance(error, MaterialSnapshotError) and str(error) in MESSAGES:
+        code = str(error)
+    frames = [
+        (Path(frame.f_code.co_filename).name, frame.f_code.co_name, line)
+        for frame, line in traceback.walk_tb(error.__traceback__)
+    ]
+    logger.error("material_assembly_failed code=%s type=%s frames=%s",
+                 code, type(error).__name__, frames)
+    return code
 
 
 def safe_material_failure(code):
