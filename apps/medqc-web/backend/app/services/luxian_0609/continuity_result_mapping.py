@@ -215,6 +215,22 @@ def validate_published_continuity_facts(
         return True, None
     if type(raw) is not dict:
         return False, None
+    if rule_id == "LX0609-12-02-01" and "diagnosis_change_trace" in raw:
+        # 独立旧版本曾发布v1明细；只读接受其精确合同，不将任意额外字段丢弃后放行。
+        # 非结构化来源的次数为None，不能用文书数替代，也不重新判定旧结果。
+        from .legacy_diagnosis_trace import validated_legacy_diagnosis_trace
+
+        if (set(raw) != {"verification_kind", "diagnosis_change_count", "reason_recorded",
+                        "basis_recorded", "diagnosis_change_trace"}
+                or raw["verification_kind"] != "diagnosis_change_documentation_check"
+                or any(type(raw[key]) is not bool for key in ("reason_recorded", "basis_recorded"))):
+            return False, None
+        trace = validated_legacy_diagnosis_trace(
+            raw["diagnosis_change_trace"], count=raw["diagnosis_change_count"],
+        )
+        if trace is None:
+            return False, None
+        return True, {**raw, "diagnosis_change_trace": trace}
     if rule_id in {"LX0609-10-02-01", "LX0609-10-02-02"} and "event_checks" in raw:
         base = {key: value for key, value in raw.items() if key not in {"event_checks", "transfer_order_count"}}
         valid_base, _ = validate_published_continuity_facts(rule_id=rule_id, raw=base, status=status)
