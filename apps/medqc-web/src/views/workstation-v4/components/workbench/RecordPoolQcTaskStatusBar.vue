@@ -126,10 +126,13 @@
       </div>
     </div>
 
-    <div
-      v-if="!isActive"
-      class="record-pool-qc-status__actions"
-    >
+    <div v-if="!isActive" class="record-pool-qc-status__actions">
+      <a
+        :href="`/workstation-v5/qc-task?job_id=${encodeURIComponent(currentJob.id)}`"
+        class="record-pool-qc-status__detail-link"
+        data-testid="qc-task-detail-link"
+        >查看本次结果与失败原因</a
+      >
       <button
         v-if="currentJob.status === 'completed'"
         type="button"
@@ -498,11 +501,7 @@ async function refreshJob(sequence: number) {
     if (result.data.status === 'completed') emit('completed')
   } else {
     consecutiveReadFailures += 1
-    const decision = decidePollReadFailure(
-      result.status,
-      consecutiveReadFailures,
-      result.jobStatus,
-    )
+    const decision = decidePollReadFailure(result.status, consecutiveReadFailures, result.jobStatus)
     // 结果交付不完整等确定性失败（文案或 409/404 状态码）停止轮询，避免无限重复请求
     if (result.message?.includes(DELIVERY_CONTRACT_ERROR) || decision !== 'retry') {
       pollError.value = false
@@ -632,6 +631,7 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.record-pool-qc-status__detail-link,
 .record-pool-qc-status__export {
   min-height: 34px;
   padding: 0 13px;
@@ -643,6 +643,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
   cursor: pointer;
 }
+.record-pool-qc-status__detail-link:hover,
 .record-pool-qc-status__export:hover:not(:disabled) {
   border-color: #bbd2ec;
   background: #f5f8fc;

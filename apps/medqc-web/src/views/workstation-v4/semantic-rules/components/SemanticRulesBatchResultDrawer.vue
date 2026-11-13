@@ -74,6 +74,7 @@
       </div>
 
       <div class="drawer-body">
+        <BatchTaskFailureSummary :job="batchJobDetail" />
         <BatchResultOverview :model="resultReviewOverviewModel" />
 
         <div
@@ -96,7 +97,7 @@
             >
               <span class="mq-mono">{{ failure.rule_id || '未知规则' }}</span>
               <span>{{ failureRecordLabel(failure) }}</span>
-              <span>模型输出失败，未形成质控结论</span>
+              <span>执行失败，未形成质控结论</span>
             </li>
           </ul>
         </div>
@@ -106,7 +107,7 @@
               <strong>部分执行失败</strong>
               <p>
                 已保留并可查看 {{ partialFailureSummary.completedCount }} 项有效结果；
-                {{ partialFailureSummary.failedCount }} 项模型执行失败未形成临床结论。
+                {{ partialFailureSummary.failedCount }} 项执行失败未形成临床结论。
               </p>
             </div>
             <span>{{ failedRuleRetryMessage }}</span>
@@ -121,7 +122,7 @@
               <span>{{
                 failure.record_ref || failure.visit_id || failure.record_id || '未知病历'
               }}</span>
-              <em>模型输出失败，未形成质控结论</em>
+              <em>执行失败，未形成质控结论</em>
             </div>
           </div>
         </section>
@@ -2000,6 +2001,7 @@
 </template>
 
 <script setup lang="ts">
+import BatchTaskFailureSummary from './BatchTaskFailureSummary.vue'
 import { ref } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import BatchRecordReviewPanel from '@/views/workstation-v4/semantic-rules/components/BatchRecordReviewPanel.vue'

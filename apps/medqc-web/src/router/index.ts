@@ -1044,6 +1044,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '整改待办', permission: ['admin', 'qc_manager', 'qc_staff', 'doctor'] },
       },
       {
+        path: 'qc-task',
+        name: 'WorkstationV5QcTaskDetail',
+        component: () => import('@/views/workstation/NotificationQcResult.vue'),
+        props: { entryMode: 'task' },
+        meta: {
+          title: '质控任务详情',
+          permission: ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'],
+        },
+      },
+      {
         path: 'qc-result',
         name: 'WorkstationV5NotificationQcResult',
         component: () => import('@/views/workstation/NotificationQcResult.vue'),

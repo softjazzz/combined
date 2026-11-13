@@ -4,7 +4,9 @@
     <a-result v-else-if="error" status="warning" title="结果暂不可用" :sub-title="error">
       <template #extra
         ><a-button @click="load">重试</a-button
-        ><a-button @click="close">返回消息</a-button></template
+        ><a-button @click="close">{{
+          entryMode === 'task' ? '返回病历池' : '返回消息'
+        }}</a-button></template
       >
     </a-result>
     <SemanticRulesBatchResultDrawer
@@ -34,6 +36,7 @@ import { message } from 'ant-design-vue'
 import { MESSAGE_CENTER_PATH } from './notificationNavigation'
 import {
   getNotificationQcResult,
+  getSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJobDebugSnapshot,
   exportSichuanWorkspaceBatchJob,
   reviewSichuanWorkspaceBatchJob,
@@ -53,7 +56,27 @@ import {
   getBatchJobStatusText,
 } from '@/views/workstation-v4/customer-sample-validation/batchJobPresentation'
 
+const props = withDefaults(defineProps<{ entryMode?: 'notification' | 'task' }>(), {
+  entryMode: 'notification',
+})
 const route = useRoute()
+const selectedId = computed(() =>
+  props.entryMode === 'task' ? route.query.job_id : route.query.notification_id,
+)
+const missingIdentityMessage = computed(() =>
+  props.entryMode === 'task' ? '缺少有效的任务ID' : '缺少有效的结果通知',
+)
+
+// 两种入口各自授权读取；通知404不能回退到任务或最新结果。
+async function readResult(id: string, mode: 'notification' | 'task') {
+  const result = await (mode === 'task'
+    ? getSichuanWorkspaceBatchJob(id)
+    : getNotificationQcResult(id))
+  if (mode === 'task' && result.success && result.data && result.data.id !== id) {
+    throw new Error('返回任务与当前任务不一致')
+  }
+  return result
+}
 const router = useRouter()
 const authStore = useAuthStore()
 const authScope = computed(() =>
@@ -77,7 +100,7 @@ let reviewRequest = 0
 let disposed = false
 
 function requestContext() {
-  return { generation, scope: authScope.value, notice: route.query.notification_id }
+  return { generation, scope: authScope.value, notice: selectedId.value, mode: props.entryMode }
 }
 
 function isCurrent(context: ReturnType<typeof requestContext>) {
@@ -85,7 +108,8 @@ function isCurrent(context: ReturnType<typeof requestContext>) {
     !disposed &&
     context.generation === generation &&
     context.scope === authScope.value &&
-    context.notice === route.query.notification_id
+    context.notice === selectedId.value &&
+    context.mode === props.entryMode
   )
 }
 
@@ -104,15 +128,15 @@ async function load() {
     error.value = '请使用有效账号重新登录'
     return
   }
-  const id = route.query.notification_id
+  const id = selectedId.value
   if (typeof id !== 'string' || !id.trim() || id.length > 36) {
     loading.value = false
-    error.value = '缺少有效的结果通知'
+    error.value = missingIdentityMessage.value
     return
   }
   loading.value = true
   try {
-    const result = await getNotificationQcResult(id)
+    const result = await readResult(id, context.mode)
     if (!isCurrent(context)) return
     if (!result.success || !result.data) {
       error.value = result.message || '结果读取失败'
@@ -126,11 +150,11 @@ async function load() {
   }
 }
 
-// 执行既有抽屉操作前重新核对通知，失效时不回退到最新结果。
+// 执行既有抽屉操作前重新核对对应入口权限，失效时不回退到其他结果。
 async function currentJob(context: ReturnType<typeof requestContext>) {
   const id = context.notice
-  if (typeof id !== 'string') throw new Error('缺少有效的结果通知')
-  const result = await getNotificationQcResult(id)
+  if (typeof id !== 'string') throw new Error(missingIdentityMessage.value)
+  const result = await readResult(id, context.mode)
   if (!isCurrent(context)) throw new Error('结果通知或账号已切换')
   if (!result.success || !result.data) {
     job.value = null
@@ -198,10 +222,12 @@ async function reviewResult(): Promise<void> {
 
 function close() {
   generation += 1
-  void router.push(MESSAGE_CENTER_PATH)
+  void router.push(
+    props.entryMode === 'task' ? '/workstation-v5/records/running' : MESSAGE_CENTER_PATH,
+  )
 }
 
-watch([() => route.query.notification_id, authScope], load, { immediate: true, flush: 'sync' })
+watch([selectedId, () => props.entryMode, authScope], load, { immediate: true, flush: 'sync' })
 onBeforeUnmount(() => {
   disposed = true
   generation += 1

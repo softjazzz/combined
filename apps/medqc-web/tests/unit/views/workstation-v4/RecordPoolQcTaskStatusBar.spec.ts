@@ -390,3 +390,13 @@ it('材料准备失败显示根因与零执行，不显示76条已执行', () =>
   expect(wrapper.text()).not.toContain('补跑未确认')
   wrapper.unmount()
 })
+
+it('失败任务提供明确任务ID入口，不依赖通知ID', () => {
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: { job: job({ id: 'failed-job', status: 'failed' }), autoPoll: false },
+  })
+  expect(wrapper.get('[data-testid="qc-task-detail-link"]').attributes('href')).toBe(
+    '/workstation-v5/qc-task?job_id=failed-job',
+  )
+  wrapper.unmount()
+})

@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  task: vi.fn(),
   push: vi.fn(),
-  route: { query: { notification_id: 'notice' } },
+  route: { query: { notification_id: 'notice' } as Record<string, string> },
   auth: {
     user: { id: 'manager', institute_id: 'A', department: 'D', is_active: true },
     userRoles: ['qc_manager'],
@@ -29,6 +30,7 @@ vi.mock('vue-router', () => ({
 }))
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getNotificationQcResult: mocks.get,
+  getSichuanWorkspaceBatchJob: mocks.task,
   getSichuanWorkspaceBatchJobDebugSnapshot: mocks.debug,
   exportSichuanWorkspaceBatchJob: mocks.export,
   reviewSichuanWorkspaceBatchJob: mocks.review,
@@ -37,6 +39,7 @@ vi.mock(
   '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue',
   () => ({
     default: {
+      name: 'ResultDrawerStub',
       props: [
         'batchJobDetail',
         'close',
@@ -59,8 +62,9 @@ vi.mock(
 )
 import NotificationQcResult from '@/views/workstation/NotificationQcResult.vue'
 
-function render() {
+function render(entryMode: 'notification' | 'task' = 'notification') {
   return mount(NotificationQcResult, {
+    props: { entryMode },
     global: {
       stubs: {
         'a-spin': true,
@@ -252,6 +256,88 @@ describe('结果就绪通知的精确V5下钻', () => {
     await wrapper.get('button').trigger('click')
     await flushPromises()
     expect(wrapper.get('[data-testid="result"]').text()).toContain('recovered')
+    wrapper.unmount()
+  })
+})
+
+describe('按任务ID读取失败及部分结果', () => {
+  it('使用任务接口且不请求通知', async () => {
+    mocks.route.query = { job_id: 'failed-job' }
+    const partial = { id: 'failed-job', status: 'failed', items: [{ rule_id: 'R1', status: 'data_gap' }], failed_records: [{ reason_code: 'model_transport_error' }] }
+    mocks.task.mockResolvedValue({ success: true, data: partial })
+    const wrapper = render('task')
+    await flushPromises()
+    expect(mocks.task).toHaveBeenCalledWith('failed-job')
+    expect(wrapper.findComponent({ name: 'ResultDrawerStub' }).props('batchJobDetail')).toEqual(partial)
+    expect(mocks.get).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="result"]').text()).toContain('failed-job')
+    await wrapper.get('[data-testid="close"]').trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith('/workstation-v5/records/running')
+    wrapper.unmount()
+  })
+  it('任务拒绝访问时不回退通知或其他任务', async () => {
+    mocks.route.query = { job_id: 'forbidden' }
+    mocks.task.mockResolvedValue({ success: false, message: '批量任务不存在或无权限' })
+    const wrapper = render('task')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="error"]').text()).toContain('无权限')
+    expect(wrapper.find('[data-testid="result"]').exists()).toBe(false)
+    expect(mocks.get).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('切换任务时拒绝迟到响应', async () => {
+    mocks.route.query = { job_id: 'old' }
+    const old = deferred<unknown>()
+    mocks.task
+      .mockReturnValueOnce(old.promise)
+      .mockResolvedValue({ success: true, data: { id: 'new' } })
+    const wrapper = render('task')
+    mocks.route.query.job_id = 'new'
+    await flushPromises()
+    old.resolve({ success: true, data: { id: 'old' } })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="result"]').text()).toContain('new')
+    expect(wrapper.text()).not.toContain('old')
+    wrapper.unmount()
+  })
+  it('拒绝返回其他任务的数据', async () => {
+    mocks.route.query = { job_id: 'requested' }
+    mocks.task.mockResolvedValue({ success: true, data: { id: 'another' } })
+    const wrapper = render('task')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="result"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="error"]').text()).toContain('不一致')
+    wrapper.unmount()
+  })
+  it('切换账号立即清空旧任务，重新授权失败不保留结果', async () => {
+    mocks.route.query = { job_id: 'failed-job' }
+    mocks.task
+      .mockResolvedValueOnce({ success: true, data: { id: 'failed-job' } })
+      .mockResolvedValueOnce({ success: false, message: '无权限' })
+    const wrapper = render('task')
+    await flushPromises()
+    mocks.auth.user.id = 'another-user'
+    await flushPromises()
+    expect(wrapper.find('[data-testid="result"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('无权限')
+    expect(mocks.get).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('未登录不请求任务接口', async () => {
+    mocks.route.query = { job_id: 'failed-job' }
+    mocks.auth.user.id = ''
+    const wrapper = render('task')
+    await flushPromises()
+    expect(mocks.task).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('重新登录')
+    wrapper.unmount()
+  })
+  it('任务模式不接受通知ID代替任务ID', async () => {
+    const wrapper = render('task')
+    await flushPromises()
+    expect(mocks.task).not.toHaveBeenCalled()
+    expect(mocks.get).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="error"]').text()).toContain('任务')
     wrapper.unmount()
   })
 })
