@@ -4,8 +4,9 @@ import json
 import logging
 import os
 import re
+from contextlib import ExitStack
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import lru_cache, wraps
 from datetime import date, datetime
 from typing import Any, Callable, Iterable, Mapping, Optional
 
@@ -14,6 +15,7 @@ from sqlalchemy import inspect, text
 from ...database.connection import DB_SCHEMA_MODE, engine
 from ...database import clinical_connection
 from .. import case_material_snapshot as case_material
+from .. import daily_material_projection as daily_material
 from ..document_assembly import (
     assemble_document,
     build_document_select_columns,
@@ -29,6 +31,19 @@ from .factory import (
     build_settlement_bundle,
 )
 from .refresh_manager import mark_bundle_refresh_success, record_bundle_refresh_failure
+
+def _daily_bundle_owner(function):
+    """独立Bundle入口一次严格捕获；嵌套组装复用调用者同RR或冻结上下文。"""
+    @wraps(function)
+    def wrapped(**kwargs):
+        identity = tuple(kwargs[key] for key in ("institute_id", "patient_id", "visit_id"))
+        owns_capture = daily_material.enabled() and case_material.context() is None
+        with daily_material.live_context(identity):
+            if owns_capture and "material_snapshot" in kwargs and daily_material.manifest(identity) is not None:
+                kwargs["material_snapshot"] = None
+            return function(**kwargs)
+    return wrapped
+
 
 logger = logging.getLogger(__name__)
 
@@ -517,6 +532,10 @@ def _material_rows(
     visit_id: str,
     limit: int,
 ) -> list[dict[str, Any]]:
+    if table == "daily_course_record":
+        projected = daily_material.rows((institute_id, patient_id, visit_id), limit=limit)
+        if projected is not None:
+            return projected
     if material_snapshot is not None:
         return material_snapshot.rows_for(
             source_schema=source_schema,
@@ -622,6 +641,14 @@ def _get_table_columns(schema: str, table: str) -> tuple[str, ...]:
     frozen = case_material.frozen_columns(schema, table)
     if frozen is not None:
         return frozen
+    state = case_material.context()
+    if state is not None and "connection" in state:
+        if schema != state["schema"]:
+            raise case_material.MaterialSnapshotError("material_source_schema_mismatch")
+        inspector = inspect(state["connection"])
+        columns = tuple(str(col.get("name") or "").strip() for col in inspector.get_columns(table_name=table, schema=schema)) if inspector.has_table(table_name=table, schema=schema) else ()
+        state["columns"][table] = columns
+        return columns
     read_engine = _source_engine(schema)
     if read_engine is None:
         return ()
@@ -866,6 +893,10 @@ def _select_records(
     visit_id: str,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
+    from .. import daily_material_projection as daily
+    projected = daily.rows((institute_id, patient_id, visit_id), limit=limit) if table == "daily_course_record" else None
+    if projected is not None:
+        return projected
     from ..validation_material_source import (
         material_document_status_column,
         material_source_schema,
@@ -2228,7 +2259,11 @@ def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str
                 continue
             if table_name == "exam_master" and row_index in consumed_exam_masters:
                 continue
-            inventory.append(_inventory_entry(table_name=table_name, row=row))
+            entry = _inventory_entry(table_name=table_name, row=row)
+            for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "daily_material", "daily_material_scope"):
+                if key in row:
+                    entry[key] = row[key]
+            inventory.append(entry)
     return inventory
 
 
@@ -2289,6 +2324,7 @@ def _build_medical_text(docs: dict[str, list[dict[str, Any]]], priority: tuple[s
     return "\n\n".join(blocks)
 
 
+@_daily_bundle_owner
 def _assemble_scene_bundle(
     *,
     scene: str,
@@ -2666,6 +2702,7 @@ def _scene_bundle_has_usable_content(bundle: dict[str, Any] | None) -> bool:
     return bool(inventory)
 
 
+@_daily_bundle_owner
 def load_or_assemble_scene_bundle(
     *,
     scene: str,
@@ -2684,7 +2721,7 @@ def load_or_assemble_scene_bundle(
 
     from ..validation_material_source import is_material_copy
     # 独立验证材料可补入/替换/撤回文书，新任务不能复用去重前的旧Bundle。
-    if not force_refresh and not is_material_copy(patient_id, visit_id):
+    if not force_refresh and not is_material_copy(patient_id, visit_id) and daily_material.manifest((institute_id, patient_id, visit_id)) is None:
         existing = _load_scene_bundle(
             scene=scene,
             institute_id=institute_id,
@@ -2729,6 +2766,7 @@ def load_or_assemble_scene_bundle(
     return bundle
 
 
+@_daily_bundle_owner
 def assemble_domain_bundle(
     *,
     execution_domain: str,
@@ -2892,6 +2930,7 @@ def _upsert_domain_bundle(
         )
 
 
+@_daily_bundle_owner
 def load_domain_bundle(
     *,
     execution_domain: str,
@@ -2900,6 +2939,9 @@ def load_domain_bundle(
     visit_id: str,
     schema: str = "public",
 ) -> dict[str, Any] | None:
+    if daily_material.manifest((institute_id, patient_id, visit_id)) is not None:
+        return assemble_domain_bundle(execution_domain=execution_domain, institute_id=institute_id,
+                                      patient_id=patient_id, visit_id=visit_id, source_schema="cdm")
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; domain bundle loading unavailable.")
     table_name = _DOMAIN_BUNDLE_TABLE.get(execution_domain)
@@ -2941,6 +2983,7 @@ def load_domain_bundle(
     return payload
 
 
+@_daily_bundle_owner
 def load_domain_bundle_document_index(
     *,
     execution_domain: str,
@@ -2950,6 +2993,9 @@ def load_domain_bundle_document_index(
     schema: str = "public",
 ) -> dict[str, Any] | None:
     """只读取 EMR 目录所需字段，避免把全部文书正文传入应用进程。"""
+    if daily_material.manifest((institute_id, patient_id, visit_id)) is not None:
+        return assemble_domain_bundle(execution_domain=execution_domain, institute_id=institute_id,
+                                      patient_id=patient_id, visit_id=visit_id, source_schema="cdm")
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; domain bundle loading unavailable.")
     table_name = _DOMAIN_BUNDLE_TABLE.get(execution_domain)
@@ -3030,6 +3076,7 @@ def load_domain_bundle_document_index(
     return payload
 
 
+@_daily_bundle_owner
 def load_domain_bundle_for_emr_render(
     *,
     execution_domain: str,
@@ -3041,6 +3088,9 @@ def load_domain_bundle_for_emr_render(
     schema: str = "public",
 ) -> dict[str, Any] | None:
     """在数据库内裁剪单篇文书，避免读取整个领域 Bundle。"""
+    if daily_material.manifest((institute_id, patient_id, visit_id)) is not None:
+        return assemble_domain_bundle(execution_domain=execution_domain, institute_id=institute_id,
+                                      patient_id=patient_id, visit_id=visit_id, source_schema="cdm")
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; domain bundle loading unavailable.")
     table_name = _DOMAIN_BUNDLE_TABLE.get(execution_domain)
@@ -3159,42 +3209,53 @@ def refresh_domain_bundles_for_rows(
             continue
         seen.add(key)
 
-        for execution_domain in target_domains:
-            if execution_domain not in _DOMAIN_DOC_PRIORITY:
-                if _pg_required_in_current_env():
-                    raise ValueError(f"Unsupported domain for bundle refresh: {execution_domain}")
-                continue
-            processed += 1
+        with ExitStack() as capture_context:
             try:
-                bundle = assemble_domain_bundle(
-                    execution_domain=execution_domain,
-                    source_schema=effective_source_schema,
-                    institute_id=institute_id,
-                    patient_id=patient_id,
-                    visit_id=visit_id,
-                    policy_version=policy_version,
-                )
-                _upsert_domain_bundle(
-                    execution_domain=execution_domain,
-                    bundle=bundle,
-                    bundle_schema=bundle_schema,
-                )
-                updated += 1
+                capture_context.enter_context(daily_material.live_context(key))
             except Exception as exc:
-                failed += 1
-                logger.warning(
-                    "domain bundle refresh failed domain=%s visit=(%s,%s,%s) source_schema=%s bundle_schema=%s trigger=%s error=%s",
-                    execution_domain,
-                    institute_id,
-                    patient_id,
-                    visit_id,
-                    effective_source_schema,
-                    bundle_schema,
-                    trigger_source,
-                    exc,
-                )
                 if not continue_on_error:
                     raise
+                valid_domains = [domain for domain in target_domains if domain in _DOMAIN_DOC_PRIORITY]
+                processed += len(valid_domains)
+                failed += len(valid_domains)
+                logger.warning("domain bundle material capture failed: %s", type(exc).__name__)
+                continue
+            for execution_domain in target_domains:
+                if execution_domain not in _DOMAIN_DOC_PRIORITY:
+                    if _pg_required_in_current_env():
+                        raise ValueError(f"Unsupported domain for bundle refresh: {execution_domain}")
+                    continue
+                processed += 1
+                try:
+                    bundle = assemble_domain_bundle(
+                        execution_domain=execution_domain,
+                        source_schema=effective_source_schema,
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                        policy_version=policy_version,
+                    )
+                    _upsert_domain_bundle(
+                        execution_domain=execution_domain,
+                        bundle=bundle,
+                        bundle_schema=bundle_schema,
+                    )
+                    updated += 1
+                except Exception as exc:
+                    failed += 1
+                    logger.warning(
+                        "domain bundle refresh failed domain=%s visit=(%s,%s,%s) source_schema=%s bundle_schema=%s trigger=%s error=%s",
+                        execution_domain,
+                        institute_id,
+                        patient_id,
+                        visit_id,
+                        effective_source_schema,
+                        bundle_schema,
+                        trigger_source,
+                        exc,
+                    )
+                    if not continue_on_error:
+                        raise
 
     return {"processed": processed, "updated": updated, "failed": failed, "skipped": skipped}
 
@@ -3286,109 +3347,130 @@ def refresh_all_bundle_variants_for_rows(
         seen.add(visit_key)
         processed_visits += 1
 
-        material_snapshot = _build_material_snapshot(
-            source_schema=effective_source_schema,
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            table_limits=material_limits,
-        )
-        material_reads += material_snapshot.material_reads
-
-        for scene in target_scenes:
-            counts = scene_counts[scene]
-            counts["processed"] += 1
+        with ExitStack() as capture_context:
             try:
-                bundle = _assemble_scene_bundle(
-                    scene=scene,
-                    source_schema=effective_source_schema,
-                    institute_id=institute_id,
-                    patient_id=patient_id,
-                    visit_id=visit_id,
-                    policy_version=policy_version,
-                    material_snapshot=material_snapshot,
-                )
-                _upsert_scene_bundle(
-                    scene=scene,
-                    bundle=bundle,
-                    bundle_schema=bundle_schema,
-                )
-                counts["updated"] += 1
-                if scene in {"running", "final", "frontpage", "coding"}:
-                    mark_bundle_refresh_success(
-                        scene=scene,
-                        institute_id=institute_id,
-                        patient_id=patient_id,
-                        visit_id=visit_id,
-                        resolved_by=str(trigger_source or "sync"),
-                        job_id=str(job_id or ""),
-                    )
+                capture_context.enter_context(daily_material.live_context(visit_key))
             except Exception as exc:
-                counts["failed"] += 1
-                logger.warning(
-                    "unified bundle refresh failed scene=%s visit=(%s,%s,%s) "
-                    "source_schema=%s bundle_schema=%s error=%s",
-                    scene,
-                    institute_id,
-                    patient_id,
-                    visit_id,
-                    effective_source_schema,
-                    bundle_schema,
-                    exc,
-                )
-                if scene in {"running", "final", "frontpage", "coding"}:
-                    record_bundle_refresh_failure(
+                if not continue_on_error:
+                    raise
+                for counts in (*scene_counts.values(), *domain_counts.values()):
+                    counts["processed"] += 1
+                    counts["failed"] += 1
+                for scene in target_scenes:
+                    if scene in {"running", "final", "frontpage", "coding"}:
+                        record_bundle_refresh_failure(
+                            scene=scene, institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+                            policy_version=str(policy_version or ""), source_schema=effective_source_schema,
+                            bundle_schema=bundle_schema, trigger_source=str(trigger_source or "sync"),
+                            error_stage="material_capture", error_message=type(exc).__name__,
+                            error_detail={"scene":scene,"trigger_source":trigger_source}, job_id=str(job_id or ""))
+                logger.warning("bundle material capture failed: %s", type(exc).__name__)
+                if progress_callback is not None:
+                    progress_callback({"completed":processed_visits,"total":progress_total,"remaining":max(progress_total-processed_visits,0)})
+                continue
+            material_snapshot = _build_material_snapshot(
+                source_schema=effective_source_schema,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                table_limits=material_limits,
+            )
+            material_reads += material_snapshot.material_reads
+
+            for scene in target_scenes:
+                counts = scene_counts[scene]
+                counts["processed"] += 1
+                try:
+                    bundle = _assemble_scene_bundle(
                         scene=scene,
-                        institute_id=institute_id,
-                        patient_id=patient_id,
-                        visit_id=visit_id,
-                        policy_version=str(policy_version or ""),
                         source_schema=effective_source_schema,
-                        bundle_schema=bundle_schema,
-                        trigger_source=str(trigger_source or "sync"),
-                        error_stage="assemble_or_upsert",
-                        error_message=str(exc),
-                        error_detail={"scene": scene, "trigger_source": trigger_source},
-                        job_id=str(job_id or ""),
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                        policy_version=policy_version,
+                        material_snapshot=material_snapshot,
                     )
-                if not continue_on_error:
-                    raise
+                    _upsert_scene_bundle(
+                        scene=scene,
+                        bundle=bundle,
+                        bundle_schema=bundle_schema,
+                    )
+                    counts["updated"] += 1
+                    if scene in {"running", "final", "frontpage", "coding"}:
+                        mark_bundle_refresh_success(
+                            scene=scene,
+                            institute_id=institute_id,
+                            patient_id=patient_id,
+                            visit_id=visit_id,
+                            resolved_by=str(trigger_source or "sync"),
+                            job_id=str(job_id or ""),
+                        )
+                except Exception as exc:
+                    counts["failed"] += 1
+                    logger.warning(
+                        "unified bundle refresh failed scene=%s visit=(%s,%s,%s) "
+                        "source_schema=%s bundle_schema=%s error=%s",
+                        scene,
+                        institute_id,
+                        patient_id,
+                        visit_id,
+                        effective_source_schema,
+                        bundle_schema,
+                        exc,
+                    )
+                    if scene in {"running", "final", "frontpage", "coding"}:
+                        record_bundle_refresh_failure(
+                            scene=scene,
+                            institute_id=institute_id,
+                            patient_id=patient_id,
+                            visit_id=visit_id,
+                            policy_version=str(policy_version or ""),
+                            source_schema=effective_source_schema,
+                            bundle_schema=bundle_schema,
+                            trigger_source=str(trigger_source or "sync"),
+                            error_stage="assemble_or_upsert",
+                            error_message=str(exc),
+                            error_detail={"scene": scene, "trigger_source": trigger_source},
+                            job_id=str(job_id or ""),
+                        )
+                    if not continue_on_error:
+                        raise
 
-        for execution_domain in target_domains:
-            counts = domain_counts[execution_domain]
-            counts["processed"] += 1
-            try:
-                bundle = assemble_domain_bundle(
-                    execution_domain=execution_domain,
-                    source_schema=effective_source_schema,
-                    institute_id=institute_id,
-                    patient_id=patient_id,
-                    visit_id=visit_id,
-                    policy_version=policy_version,
-                    material_snapshot=material_snapshot,
-                )
-                _upsert_domain_bundle(
-                    execution_domain=execution_domain,
-                    bundle=bundle,
-                    bundle_schema=bundle_schema,
-                )
-                counts["updated"] += 1
-            except Exception as exc:
-                counts["failed"] += 1
-                logger.warning(
-                    "unified domain bundle refresh failed domain=%s visit=(%s,%s,%s) "
-                    "source_schema=%s bundle_schema=%s trigger=%s error=%s",
-                    execution_domain,
-                    institute_id,
-                    patient_id,
-                    visit_id,
-                    effective_source_schema,
-                    bundle_schema,
-                    trigger_source,
-                    exc,
-                )
-                if not continue_on_error:
-                    raise
+            for execution_domain in target_domains:
+                counts = domain_counts[execution_domain]
+                counts["processed"] += 1
+                try:
+                    bundle = assemble_domain_bundle(
+                        execution_domain=execution_domain,
+                        source_schema=effective_source_schema,
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                        policy_version=policy_version,
+                        material_snapshot=material_snapshot,
+                    )
+                    _upsert_domain_bundle(
+                        execution_domain=execution_domain,
+                        bundle=bundle,
+                        bundle_schema=bundle_schema,
+                    )
+                    counts["updated"] += 1
+                except Exception as exc:
+                    counts["failed"] += 1
+                    logger.warning(
+                        "unified domain bundle refresh failed domain=%s visit=(%s,%s,%s) "
+                        "source_schema=%s bundle_schema=%s trigger=%s error=%s",
+                        execution_domain,
+                        institute_id,
+                        patient_id,
+                        visit_id,
+                        effective_source_schema,
+                        bundle_schema,
+                        trigger_source,
+                        exc,
+                    )
+                    if not continue_on_error:
+                        raise
 
         if progress_callback is not None:
             progress_callback(
@@ -3408,6 +3490,7 @@ def refresh_all_bundle_variants_for_rows(
     }
 
 
+@_daily_bundle_owner
 def load_or_assemble_domain_bundle(
     *,
     execution_domain: str,
@@ -3422,7 +3505,7 @@ def load_or_assemble_domain_bundle(
     ensure_domain_bundle_tables(schema=bundle_schema)
     from ..validation_material_source import is_material_copy
     # 仅改变副本的新任务取材；历史结果及显式历史Bundle读取仍保留。
-    if not force_refresh and not is_material_copy(patient_id, visit_id):
+    if not force_refresh and not is_material_copy(patient_id, visit_id) and daily_material.manifest((institute_id, patient_id, visit_id)) is None:
         existing = load_domain_bundle(
             execution_domain=execution_domain,
             institute_id=institute_id,

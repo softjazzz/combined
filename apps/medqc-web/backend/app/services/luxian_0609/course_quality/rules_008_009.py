@@ -746,6 +746,10 @@ def _rule_008_009_decision(
             )
         exceeded_interval = next(iter(interval_candidates), None)
         interval_exceeded = exceeded_interval is not None
+        if interval_exceeded and not materials.permits_absence("daily_course_record"):
+            return decision(applicability=ApplicabilityState.APPLICABLE,
+                            evidence_state=EvidenceState.DATA_GAP, qc_direction=QcDirection.UNKNOWN,
+                            reason_code="source_unavailable", refs=refs, confidence=None)
         if not interval_exceeded and horizon_date is None:
             return decision(
                 applicability=ApplicabilityState.APPLICABLE,
@@ -811,6 +815,10 @@ def _rule_008_009_decision(
     pending_dates.difference_update(expected_dates)
     expected_dates.update(pending_dates.intersection(timed_record_dates))
     missing_dates = tuple(sorted(expected_dates.difference(timed_record_dates)))
+    if missing_dates and not materials.permits_absence("daily_course_record"):
+        return decision(applicability=ApplicabilityState.APPLICABLE,
+                        evidence_state=EvidenceState.DATA_GAP, qc_direction=QcDirection.UNKNOWN,
+                        reason_code="source_unavailable", refs=refs, confidence=None)
     if missing_dates:
         return decision(
             applicability=ApplicabilityState.APPLICABLE,

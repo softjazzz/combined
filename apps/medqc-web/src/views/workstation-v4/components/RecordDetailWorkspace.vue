@@ -1,5 +1,6 @@
 <template>
   <div class="record-detail-workspace px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+    <div v-if="materialNotice" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">{{ materialNotice }}</div>
     <a-button
       v-if="selectedRecord"
       class="mq-btn"
@@ -192,6 +193,7 @@ const props = defineProps<{
     order_prescribed_doctor?: string
     order_status?: string
   }>
+  materialNotice?: string
   documentsLoading: boolean
   isSectionExpanded: (index: number) => boolean
 }>()

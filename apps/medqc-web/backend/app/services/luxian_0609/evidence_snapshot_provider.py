@@ -666,6 +666,7 @@ def build_luxian_0609_evidence_read_session(
             query_state=query_state,
             completeness=completeness,
             document_refs=refs,
+            material_scope=result.material_scope,
         )
         observation = SourceObservation.create(
             source_key=source_key,

@@ -54,6 +54,11 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                 from .clinical_source_contract import inspect_source
                 if not inspect_source(connection, check_rows=False)["ok"]:
                     raise material.MaterialSnapshotError("material_source_contract_incomplete")
+            from . import daily_material_projection as daily
+            if daily.enabled():
+                if not clinical.configured() or schema != "cdm":
+                    raise material.MaterialSnapshotError("daily_material_independent_cdm_required")
+                state["daily_material_manifest"] = daily.read_manifest(connection, identity)
             state.update(engine=engine, connection=connection)
             with material.recording(state):
                 limits = assembly._material_limits_for_variants(scenes=tuple(assembly._SCENE_DOC_PRIORITY), domains=tuple(assembly._DOMAIN_DOC_PRIORITY))

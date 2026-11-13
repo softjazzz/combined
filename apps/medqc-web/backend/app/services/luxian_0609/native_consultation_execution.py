@@ -2076,7 +2076,7 @@ async def execute_luxian_0609_native_consultation_rules(
                 rows_by_source[source_key] = [
                     dict(row) for row in evidence_materials.rows(source_key)
                 ]
-                source_complete[source_key] = True
+                source_complete[source_key] = evidence_materials.permits_absence(source_key)
             else:
                 rows_by_source[source_key] = read_luxian_0609_native_source_rows(
                     source_key=source_key,

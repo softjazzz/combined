@@ -641,13 +641,19 @@ def _flatten_inventory_items(
             strict_structured_source_limits=strict_structured_source_limits,
         )
 
+    def merge_captured(items, fallback_items):
+        if "daily_course_record" in bundle_payload.get("_material_scope", {}):
+            # 目录保留待核版本；正式程序输入仅使用本次捕获的选择集合。
+            items = [item for item in items if _item_source_table(item) != "daily_course_record"]
+        return _merge_fallback_items(items, fallback_items)
+
     inventory_items = _safe_list(bundle_payload.get("source_documents")) or _safe_list(structured.get("document_inventory"))
     if inventory_items:
         items = [_safe_dict(item) for item in inventory_items if _safe_dict(item)]
         fallback_items, fallback_meta = fetch_fallback_items()
         if fallback_meta:
             bundle_payload["_source_table_fallback_meta"] = fallback_meta
-        return _merge_fallback_items(items, fallback_items)
+        return merge_captured(items, fallback_items)
 
     flattened: list[dict[str, Any]] = []
     documents = _safe_dict(structured.get("documents"))
@@ -663,7 +669,7 @@ def _flatten_inventory_items(
         fallback_items, fallback_meta = fetch_fallback_items()
         if fallback_meta:
             bundle_payload["_source_table_fallback_meta"] = fallback_meta
-        return _merge_fallback_items(flattened, fallback_items)
+        return merge_captured(flattened, fallback_items)
     fallback_items, fallback_meta = fetch_fallback_items()
     if fallback_meta:
         bundle_payload["_source_table_fallback_meta"] = fallback_meta
@@ -687,6 +693,11 @@ def capture_programmatic_sources(state, cancellation_check):
         raise case_material.MaterialSnapshotError("programmatic_material_identity_missing")
     for table in (*_SOURCE_TABLES, "inpat_registration"):
         cancellation_check()
+        from . import daily_material_projection as daily
+        projected = daily.rows(tuple(state["identity"])) if table == "daily_course_record" else None
+        if projected is not None:
+            sources[table] = {"rows": projected, "material_scope": daily.scope(table)}
+            continue
         columns = state["columns"].get(table)
         if columns is None:
             raise case_material.MaterialSnapshotError("uncaptured_programmatic_columns")
@@ -739,6 +750,7 @@ def _frozen_source_table_fallback_items(bundle_payload, strict_limits):
         raise case_material.MaterialSnapshotError("uncaptured_programmatic_registration")
     registrations = registration_source.get("rows", [])
     metadata = {key: _safe_text(registrations[0].get(key)) for key in ("admission_datetime", "discharge_datetime")} if registrations else {}
+    bundle_payload["_material_scope"] = {key: source["material_scope"] for key, source in sources.items() if "material_scope" in source}
     bundle_payload["_source_table_readiness"] = readiness
     bundle_payload["_structured_source_readiness"] = structured_readiness
     bundle_payload["_structured_source_rows"] = structured_rows
@@ -755,7 +767,8 @@ def _project_fallback_rows(table_name, rows):
             {
                 "source_table": table_name,
                 "document_type": table_name,
-                "document_id": _safe_text(item.get("document_id")),
+                "document_id": _safe_text(item.get("source_version_key") or item.get("document_id")),
+                "source_version_key": item.get("source_version_key"),
                 "test_id": _safe_text(item.get("test_id")),
                 "test_no": _safe_text(item.get("test_no")),
                 "exam_id": _safe_text(item.get("exam_id")),
@@ -781,6 +794,9 @@ def _fetch_source_table_fallback_items(
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     if case_material.current() is not None:
         return _frozen_source_table_fallback_items(bundle_payload, strict_structured_source_limits)
+    from . import daily_material_projection as daily
+    identity = tuple(_safe_text(bundle_payload.get(key)) for key in ("institute_id", "patient_id", "visit_id"))
+    daily.manifest(identity)  # 开关开启的新材料必须已绑定捕获上下文；禁止悄悄回退当前库。
     institute_id = _safe_text(bundle_payload.get("institute_id"))
     visit_id = _safe_text(bundle_payload.get("visit_id"))
     patient_id = _safe_text(bundle_payload.get("patient_id"))
@@ -1075,6 +1091,7 @@ def build_programmatic_evidence_payload(
     bundle_payload.pop("_source_table_readiness", None)
     bundle_payload.pop("_structured_source_readiness", None)
     bundle_payload.pop("_structured_source_rows", None)
+    bundle_payload.pop("_material_scope", None)
     structured = _safe_dict(bundle_payload.get("structured_context"))
     inventory_items = _flatten_inventory_items(
         structured,
@@ -1164,6 +1181,7 @@ def build_programmatic_evidence_payload(
             "admission_time_trusted": admission_time_trusted,
             "discharge_time": discharge_time,
             "documents": documents,
+            "material_scope": dict(bundle_payload.get("_material_scope") or {}),
             "source_readiness": source_readiness,
             "structured_source_readiness": structured_source_readiness,
             "structured_source_rows": structured_source_rows,

@@ -51,6 +51,7 @@ def evaluate_predischarge_course_presence(
     daily_rows: Sequence[Mapping[str, Any]],
     senior_rows: Sequence[Mapping[str, Any]],
     clinical_body_states: Mapping[tuple[str, int], str] | None = None,
+    daily_scope_complete: bool = True,
 ) -> PredischargeCourseOutcome:
     """仅核对出院日及前一日的日常/上级医师病程。"""
 
@@ -146,6 +147,9 @@ def evaluate_predischarge_course_presence(
                 ],
             },
         )
+
+    if not present and not daily_scope_complete:
+        return PredischargeCourseOutcome("data_gap", "source_unavailable")
 
     source_document_refs: list[dict[str, str]] = []
     seen_document_refs: set[tuple[str, str]] = set()

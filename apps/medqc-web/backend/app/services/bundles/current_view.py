@@ -48,6 +48,11 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
         for domain in emr_view._DOMAIN_LOAD_ORDER
     }
     documents = emr_view.build_documents_from_domain_bundles(bundles)
+    from .. import daily_material_projection as daily
+    manifest = daily.manifest((institute_id, patient_id, visit_id))
+    if manifest is not None:
+        documents = [doc for doc in documents if doc.get("doc_type") != "daily_course_record"]
+        documents.extend(daily.project_documents(manifest))
     pdf_candidates = material_review_documents(**identity)
     frontpage = load_frontpage_document(**identity) if snapshot.rows_by_table.get("mr") else None
     if frontpage is not None:
@@ -70,6 +75,7 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
         discharge_rows=(), allow_date_fallback=False,
     )
     return {
+        "daily_material_status": daily.display_scope(manifest),
         "layout_version": "bundle_struct_v1",
         "visit_id": visit_id,
         "documents": documents,
@@ -102,9 +108,11 @@ def load_current_documents(*, institute_id: str, patient_id: str, visit_id: str)
             _pending[key] = future
     if owner:
         try:
-            future.set_result(_assemble_current_documents(
-                institute_id=key[0], patient_id=key[1], visit_id=key[2],
-            ))
+            from .. import daily_material_projection as daily
+            with daily.live_context(identity, allow_unbound_view=True):
+                future.set_result(_assemble_current_documents(
+                    institute_id=key[0], patient_id=key[1], visit_id=key[2],
+                ))
         except Exception as exc:
             future.set_exception(exc)
         finally:

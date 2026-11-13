@@ -909,6 +909,7 @@ class SnapshotSourceRows:
     rows: tuple[Mapping[str, Any], ...]
     truncated: bool
     limit_rows: int
+    material_scope: Mapping[str, Any] | None = None
 
     @classmethod
     def create(
@@ -918,6 +919,7 @@ class SnapshotSourceRows:
         rows: Any,
         truncated: bool,
         limit_rows: int,
+        material_scope: Mapping[str, Any] | None = None,
     ) -> SnapshotSourceRows:
         normalized_source = str(source_key or "").strip().lower()
         if normalized_source not in _SNAPSHOT_SOURCE_FIELDS:
@@ -939,7 +941,16 @@ class SnapshotSourceRows:
             rows=frozen_rows,
             truncated=truncated,
             limit_rows=limit_rows,
+            material_scope=_freeze_scope(material_scope),
         )
+
+
+def _freeze_scope(value):
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze_scope(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_scope(item) for item in value)
+    return value
 
 
 def canonical_source_evidence(value: Any) -> str:
@@ -1013,6 +1024,13 @@ def read_luxian_0609_course_round_timeline(
 
     raw_rows_by_source: dict[str, tuple[Mapping[str, Any], ...]] = {}
     for source_key in ("daily_course_record", "senior_course_record"):
+        from .. import daily_material_projection as daily
+        projected = daily.rows(coordinates) if source_key == "daily_course_record" else None
+        if projected is not None:
+            if len(projected) > _source_limit(source_key):
+                raise SourceEvidenceTruncated()
+            raw_rows_by_source[source_key] = tuple(projected)
+            continue
         columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
         required = {
             "institute_id",
@@ -1749,6 +1767,12 @@ def read_luxian_0609_native_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:
     """读取原生质控批准字段；字段白名单固定，调用方不能扩大正文范围。"""
+    from .. import daily_material_projection as daily
+    projected = daily.rule_rows((institute_id, patient_id, visit_id), _NATIVE_SOURCE_FIELDS[source_key]) if source_key == "daily_course_record" else None
+    if projected is not None:
+        if len(projected) > _source_limit(source_key):
+            raise SourceEvidenceTruncated()
+        return projected
     approved_fields = _NATIVE_SOURCE_FIELDS.get(str(source_key or "").strip())
     if approved_fields is None:
         raise SourceEvidenceUnavailable()
@@ -1942,6 +1966,13 @@ def read_luxian_0609_snapshot_source_rows(
 ) -> SnapshotSourceRows:
     """为 EvidenceSnapshot 执行一次 limit+1 三坐标有界读取。"""
 
+    from .. import daily_material_projection as daily
+    projected = daily.rule_rows((institute_id, patient_id, visit_id), _SNAPSHOT_SOURCE_FIELDS[source_key]) if source_key == "daily_course_record" else None
+    if projected is not None:
+        limit = _source_limit(source_key)
+        return SnapshotSourceRows.create(source_key=source_key, rows=projected[:limit],
+                                         truncated=len(projected) > limit, limit_rows=limit,
+                                         material_scope=daily.scope(source_key))
     coordinates = (institute_id, patient_id, visit_id)
     if not all(isinstance(value, str) and value.strip() for value in coordinates):
         raise SourceEvidenceUnavailable()

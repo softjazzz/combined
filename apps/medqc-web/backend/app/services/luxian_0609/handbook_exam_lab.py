@@ -292,7 +292,7 @@ def _read_source(snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609Evid
     if observation is None or observation.completeness is not SourceCompleteness.COMPLETE:
         return SourceRows((), False)
     try:
-        return SourceRows(materials.document_rows(key, snapshot=snapshot), True)
+        return SourceRows(materials.document_rows(key, snapshot=snapshot), materials.permits_absence(key))
     except (EvidenceMaterialUnavailable, ValueError):
         return SourceRows((), False)
 

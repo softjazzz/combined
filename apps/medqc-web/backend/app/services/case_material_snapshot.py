@@ -33,7 +33,7 @@ def encode(value):
     if isinstance(value, Decimal):
         return {"$decimal": str(value)}
     if type(value).__name__ == "SnapshotSourceRows":
-        return {"$source_rows": {"source_key": value.source_key, "rows": encode(value.rows), "truncated": value.truncated, "limit_rows": value.limit_rows}}
+        return {"$source_rows": {"source_key": value.source_key, "rows": encode(value.rows), "truncated": value.truncated, "limit_rows": value.limit_rows, **({"material_scope": encode(value.material_scope)} if value.material_scope is not None else {})}}
     if isinstance(value, Mapping):
         return {str(key): encode(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
@@ -70,6 +70,11 @@ def fingerprint(value):
 
 def current():
     return _active.get()
+
+
+def context():
+    """受控投影读取捕获或冻结上下文；禁止调用者修改状态。"""
+    return _active.get() if _active.get() is not None else _recording.get()
 
 
 @contextmanager

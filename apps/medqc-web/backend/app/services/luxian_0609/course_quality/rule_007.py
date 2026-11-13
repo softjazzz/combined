@@ -20,6 +20,7 @@ from ..evidence_material import (
     Luxian0609EvidenceMaterialStore,
     build_material_document_refs,
 )
+from ... import daily_material_projection
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
 from ..source_evidence_reader import (
     EVALUATION_HORIZON_SOURCE_KEY,
@@ -185,6 +186,11 @@ def evaluate_rule_007_legacy(
                 reason_code="unstable_patient_order_present",
             )
 
+        daily_scope_complete = (
+            evidence_materials.permits_absence("daily_course_record")
+            if evidence_materials is not None
+            else daily_material_projection.permits_absence("daily_course_record")
+        )
         record_times: set[datetime] = set()
         substantive_record_without_time = False
         for source_key in RULE_007_RECORD_SOURCES:
@@ -237,6 +243,11 @@ def evaluate_rule_007_legacy(
         return Rule007LegacyOutcome(
             status="data_gap",
             reason_code="authoritative_course_time_incomplete",
+        )
+    if interval_over_72h and not daily_scope_complete:
+        return Rule007LegacyOutcome(
+            status="data_gap",
+            reason_code="course_time_source_unavailable",
         )
     if interval_over_72h:
         return Rule007LegacyOutcome(
@@ -651,12 +662,19 @@ def evaluate_rule_007_typed(
         for document_refs in bounded_record_refs_by_time.values()
         for document_ref in document_refs
     )
+    def missing_scope_decision():
+        return decision(applicability=ApplicabilityState.APPLICABLE,
+                        evidence_state=EvidenceState.DATA_GAP, qc_direction=QcDirection.UNKNOWN,
+                        reason_code="source_unavailable", refs=refs, confidence=None)
+
     capacity_facts = _missing_time_capacity_exceeded(
         admission_time=admission_time, record_times=ordered_times,
         horizon_time=horizon_time, horizon_date=horizon_date,
         missing_time_count=missing_time_count,
     )
     if capacity_facts is not None:
+        if not materials.permits_absence("daily_course_record"):
+            return missing_scope_decision()
         refs.update(missing_time_refs)
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
@@ -686,6 +704,8 @@ def evaluate_rule_007_typed(
                 refs=refs,
                 confidence=None,
             )
+        if not materials.permits_absence("daily_course_record"):
+            return missing_scope_decision()
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -739,6 +759,8 @@ def evaluate_rule_007_typed(
                 refs=refs,
                 confidence=None,
             )
+        if not materials.permits_absence("daily_course_record"):
+            return missing_scope_decision()
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,

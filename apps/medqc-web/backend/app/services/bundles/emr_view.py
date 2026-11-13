@@ -375,7 +375,9 @@ def _normalize_source_document(
     record_time, record_time_source, record_time_note = _record_display_clock(raw_doc, doc_type, sort_time)
     group_key = _infer_group_key(doc_type)
     label = _friendly_doc_label(doc_type, doc_title)
-    doc_key = _build_doc_key(doc_type, doc_id, index)
+    doc_key = (f"{doc_type}::{raw_doc['source_record_identity']}::{raw_doc['version_id']}"
+               if raw_doc.get("source_record_identity") and raw_doc.get("version_id")
+               else _build_doc_key(doc_type, doc_id, index))
     normalized_id = doc_id or doc_key
 
     sections = list(raw_doc.get("sections") or [])
@@ -414,6 +416,9 @@ def _normalize_source_document(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
+    for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "daily_material", "daily_material_scope"):
+        if key in raw_doc:
+            normalized[key] = raw_doc[key]
     if raw_doc.get("chief_physician_sign_datetime") is not None:
         normalized["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     for field_name in INDEPENDENT_DOCUMENT_FIELDS.get(doc_type, ()):
@@ -905,6 +910,15 @@ def _normalize_source_document_summary(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
+    for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "material_source_label", "material_notice", "material_scope_notice"):
+        if key in raw_doc:
+            summary[key] = raw_doc[key]
+    if raw_doc.get("version_id") and raw_doc.get("source_record_identity"):
+        summary["doc_key"] = f"{doc_type}::{raw_doc['source_record_identity']}::{raw_doc['version_id']}"
+        item = raw_doc.get("daily_material", {})
+        summary["material_state"] = item.get("state")
+        summary["material_selected"] = item.get("selected")
+        summary["material_rule_usable"] = raw_doc.get("material_rule_usable", item.get("rule_usable"))
     if raw_doc.get("chief_physician_sign_datetime") is not None:
         summary["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     if doc_type in _ORDER_DOC_TYPES:
@@ -956,7 +970,7 @@ def _collapse_summary_only_documents(documents: list[dict[str, Any]]) -> list[di
     return [doc for doc in visible if doc.get("doc_type") != "labtest_master"] + [summary]
 
 
-def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_domain: str | None = None) -> dict[str, Any]:
+def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_domain: str | None = None, daily_material_status=None) -> dict[str, Any]:
     """沿原摘要owner投影冻结材料；目录响应不携带完整正文/章节/渲染块。"""
     summaries = []
     for index, document in enumerate(documents):
@@ -972,7 +986,7 @@ def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_dom
             if document.get(key) is not None:
                 summary[key] = document[key]
         summaries.append(summary)
-    return {"layout_version":"bundle_struct_v1", "documents":summaries, "documents_tree":[],
+    return {"daily_material_status":daily_material_status, "layout_version":"bundle_struct_v1", "documents":summaries, "documents_tree":[],
             "empty_reason":"" if summaries else "material_documents_empty"}
 
 
@@ -1175,6 +1189,13 @@ def pick_document(
 ) -> dict[str, Any] | None:
     wanted_id = _safe_text(doc_id)
     wanted_type = _safe_text(doc_type)
+
+    if wanted_id and any(doc.get("version_id") for doc in documents):
+        matches = [doc for doc in documents if (not wanted_type or _safe_text(doc.get("doc_type")) == wanted_type)
+                   and wanted_id in {_safe_text(doc.get(key)) for key in ("id", "doc_id", "document_id", "doc_key")}]
+        if len(matches) != 1:
+            return None
+        return matches[0]
 
     if wanted_id:
         if wanted_type:
@@ -1569,6 +1590,7 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
             "chief_physician_sign_datetime": _safe_text(document.get("chief_physician_sign_datetime")),
             "projection_incomplete": document.get("projection_incomplete") is True,
             "projection_notice": _safe_text(document.get("projection_notice")),
+            **{key: document[key] for key in ("source_namespace", "material_state", "material_selected", "material_rule_usable", "material_source_label", "material_notice", "material_scope_notice") if key in document},
             "source": "bundle",
         },
         "render_blocks": render_blocks,

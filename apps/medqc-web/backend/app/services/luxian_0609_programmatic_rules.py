@@ -338,6 +338,8 @@ def _evaluate_stable_round_3d(rule: dict[str, Any], timeline: dict[str, Any], te
         },
     ]
 
+    if gap_hours > 72 and not _daily_absence_proven(timeline):
+        return _daily_scope_gap(rule)
     if gap_hours > 72:
         return _text_result(
             rule,
@@ -621,6 +623,16 @@ def _course_events(timeline: dict[str, Any]) -> list[dict[str, Any]]:
     return events
 
 
+def _daily_absence_proven(timeline: dict[str, Any]) -> bool:
+    scope = (timeline.get("material_scope") or {}).get("daily_course_record")
+    return scope is None or scope.get("can_judge_clinical_absence") is True
+
+
+def _daily_scope_gap(rule: dict[str, Any]) -> dict[str, Any]:
+    return _result(rule=rule, status="data_gap", findings="日常病程供给范围尚未证实完整，无法依据缺失或间隔判断。",
+                   evidence="日常病程存在待核供给范围。", suggestion="请核实病程供给范围后复核。")
+
+
 def _evaluate_round(rule: dict[str, Any], timeline: dict[str, Any], *, role: str, hours: int) -> dict[str, Any]:
     admission_time = _parse_dt(timeline.get("admission_time"))
     if not admission_time:
@@ -635,6 +647,8 @@ def _evaluate_round(rule: dict[str, Any], timeline: dict[str, Any], *, role: str
         if parsed:
             candidates.append((parsed, event))
     if not candidates:
+        if not _daily_absence_proven(timeline):
+            return _daily_scope_gap(rule)
         reference_parts: list[str] = []
         if role == "attending":
             senior_refs = []
@@ -659,6 +673,8 @@ def _evaluate_round(rule: dict[str, Any], timeline: dict[str, Any], *, role: str
     record_time, record = candidates[0]
     delta = _hours_between(admission_time, record_time)
     status = "compliant" if 0 <= delta <= hours else "non_compliant"
+    if status != "compliant" and not _daily_absence_proven(timeline):
+        return _daily_scope_gap(rule)
     title = _norm(record.get("title")) or label
     return _result(
         rule=rule,

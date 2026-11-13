@@ -1413,6 +1413,8 @@ def _typed_basic_decisions(
             continue
         source_keys = ("daily_course_record", "senior_course_record")
         course_issue = source_issue(source_keys)
+        if course_issue is None and not materials.permits_absence("daily_course_record"):
+            course_issue = ("source_unavailable", False)
         try:
             course_events = tuple(
                 (source_key, event)
