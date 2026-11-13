@@ -182,6 +182,8 @@ export interface Luxian0609ReviewReport {
 }
 
 export interface SichuanBatchJobSummary {
+  material_failure?: { code: string; stage: 'material_capture'; message: string }
+  material_failed_record_count?: number
   result_count?: number
   first_result_latency?: number
   total_records: number

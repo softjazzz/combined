@@ -1,8 +1,6 @@
 """一次病历短只读事务；捕获既有投影和读合同，不新增临床判断。"""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-import os
 import time
 
 from sqlalchemy import inspect
@@ -20,13 +18,8 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
     if is_material_copy(identity[1], identity[2]):
         raise material.MaterialSnapshotError("pdf_case_material_snapshot_not_supported")
     if clinical.configured():
-        try:
-            until = datetime.fromisoformat(os.environ.get("QC_CDM_CAPTURE_WINDOW_UNTIL", "").replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            if until.tzinfo is None or not now < until <= now + timedelta(hours=24):
-                raise ValueError
-        except ValueError:
-            raise material.MaterialSnapshotError("cdm_publication_window_unconfirmed") from None
+        from .material_admission import require_publication_window
+        require_publication_window()
     coordinates = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
     schema = material_source_schema(default_schema=assembly._default_source_schema(), **coordinates)
     engine = assembly._source_engine(schema)

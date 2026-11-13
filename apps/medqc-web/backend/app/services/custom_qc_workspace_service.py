@@ -1201,6 +1201,11 @@ def project_customer_safe_batch_job(
             if item.get("status") == "non_compliant"
         ][:6],
     }
+    if isinstance(raw_summary.get("material_failure"), dict):
+        from .material_admission import safe_material_failure
+        safe_summary["material_failure"] = safe_material_failure(raw_summary["material_failure"].get("code"))
+        safe_summary["material_failed_record_count"] = _to_int(raw_summary.get("material_failed_record_count"))
+        safe_summary["failed_rule_count"] = _to_int(raw_summary.get("failed_rule_count"))
     live_state = _safe_live_execution_state(raw_summary.get("stream_state"))
     if live_state:
         safe_summary["stream_state"] = live_state
@@ -3188,6 +3193,8 @@ class CustomQCWorkspaceService:
                 base_filters["record_refs"]=[ref.as_dict() for ref in normalize_case_refs(record_refs)]
             from .clinical_sources import freeze
             freeze(base_filters)
+            from .material_admission import preflight_new_task
+            preflight_new_task(base_filters)
             if DISPATCH_FILTER_KEY in base_filters:
                 raise ValueError("qc_dispatch 由任务服务冻结，调用方不得注入")
             formal_0609 = base_filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY

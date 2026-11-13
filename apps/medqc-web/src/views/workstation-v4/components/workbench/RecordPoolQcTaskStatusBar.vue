@@ -294,7 +294,9 @@ const totalRules = computed(() =>
 
 const ruleProgressText = computed(() => {
   if (processedRules.value === null || totalRules.value === null) return ''
-  const prefix = (totalRecords.value ?? 0) > 1 ? '当前单份规则进度' : '已执行'
+  const prefix = currentJob.value?.summary?.material_failure
+    ? '已返回规则结果'
+    : (totalRecords.value ?? 0) > 1 ? '当前单份规则进度' : '已执行'
   return `${prefix} ${Math.min(processedRules.value, totalRules.value)} / ${totalRules.value} 个质控点`
 })
 
@@ -450,6 +452,9 @@ const terminalSummary = computed(() => {
   }
   if (!isBatchJobFinished(currentJob.value)) return ''
   const summary = currentJob.value?.summary
+  if (summary?.material_failure) {
+    return `${summary.material_failed_record_count ?? 0} 份病历资料准备失败，已保存的结果保留`
+  }
   const completed = finiteCount(summary?.completed_rule_count)
   const failed = finiteCount(summary?.failed_rule_count)
   if (completed === null || failed === null) return ''

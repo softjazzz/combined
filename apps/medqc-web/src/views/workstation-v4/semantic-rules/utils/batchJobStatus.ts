@@ -67,7 +67,15 @@ export function getBatchJobRetryMessage(job?: BatchJobPollingState | null): stri
       .toLowerCase() !== 'failed'
   )
     return ''
-  const retry = asRecord(asRecord(job?.summary).automatic_failed_rule_retry)
+  const summary = asRecord(job?.summary)
+  const failure = asRecord(summary.material_failure)
+  if (failure.stage === 'material_capture' && typeof failure.message === 'string') {
+    return failure.message
+  }
+  if (!summary.automatic_failed_rule_retry) {
+    return '任务失败；未返回自动补跑计划，请查看失败原因。'
+  }
+  const retry = asRecord(summary.automatic_failed_rule_retry)
   const status = String(retry.status || '')
     .trim()
     .toLowerCase()
