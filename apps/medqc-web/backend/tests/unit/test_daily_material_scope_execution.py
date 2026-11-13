@@ -185,3 +185,29 @@ def test_approved_status_is_required_for_real_first_round_positive(meaning,other
     rows = {"inpat_registration":[{"admission_datetime":"2026-01-01 08:00:00"}],"daily_course_record":projection.project_rows(value)}
     _, reduced = _reduce_typed_basic(session("LX0609-02-01-01",rows),("LX0609-02-01-01",))
     assert reduced[0].final_state.value == expected
+
+
+@pytest.mark.parametrize("scope_complete,within,missing_time,expected", [
+    (True, False, False, ("non_compliant", "course_record_interval_over_72h")),
+    (False, False, False, ("data_gap", "course_time_source_unavailable")),
+    (False, True, False, ("compliant", "course_record_interval_within_72h")),
+    (False, False, True, ("data_gap", "authoritative_course_time_incomplete")),
+])
+@pytest.mark.parametrize("use_materials", [False, True])
+def test_007_legacy_supply_scope_preserves_original_judgment(monkeypatch, scope_complete, within, missing_time, expected, use_materials):
+    from types import SimpleNamespace
+    from app.services.luxian_0609.course_quality import rule_007
+
+    rows = [{"record_time": "2026-01-01 08:00:00", "record_content": "病情稳定"},
+            {"record_time": "2026-01-03 08:00:00" if within else "2026-01-05 08:00:00", "record_content": "病情稳定"}]
+    if missing_time:
+        rows.append({"record_content": "病情稳定，继续观察"})
+    def read(source_key, **kwargs):
+        return rows if source_key == "daily_course_record" else []
+    monkeypatch.setattr(rule_007.daily_material_projection, "permits_absence", lambda source_key: scope_complete)
+    materials = SimpleNamespace(rows=read, permits_absence=lambda source_key: scope_complete) if use_materials else None
+    result = rule_007.evaluate_rule_007_legacy(
+        serious_state="absent", critical_state="absent", institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, unstable_order_reader=lambda **kwargs: False, source_row_reader=read,
+        source_row_limit=lambda source_key: 100, evidence_materials=materials)
+    assert (result.status, result.reason_code) == expected

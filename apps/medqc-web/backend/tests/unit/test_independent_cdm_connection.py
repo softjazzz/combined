@@ -196,10 +196,15 @@ def test_cdm_cache_needs_both_source_binding_and_fixed_material(monkeypatch, loa
     assert method(execution_domain="admission", **IDENTITY, **extra) is None
     business.rows[0]["structured_context"]["case_material_fingerprint"] = "fixed-content"
     business.rows[0]["case_material_fingerprint"] = "fixed-content"
-    with material.activate({"fingerprint": "different-content"}):
+    context = {"identity": [IDENTITY[key] for key in ("institute_id", "patient_id", "visit_id")], "binding": binding}
+    with material.activate({**context, "fingerprint": "different-content"}):
         assert method(execution_domain="admission", **IDENTITY, **extra) is None
-    with material.activate({"fingerprint": "fixed-content"}):
+    with material.activate({**context, "fingerprint": "fixed-content"}):
         assert method(execution_domain="admission", **IDENTITY, **extra) is not None
+    for mismatch in ({"identity": ["OTHER", "P", "V"]}, {"binding": "other-source"}):
+        with material.activate({**context, "fingerprint": "fixed-content", **mismatch}):
+            with pytest.raises(material.MaterialSnapshotError, match="material_identity_or_source_mismatch"):
+                method(execution_domain="admission", **IDENTITY, **extra)
     assert not cdm.calls
 
 

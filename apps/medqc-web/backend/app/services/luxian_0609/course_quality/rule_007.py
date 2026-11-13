@@ -20,6 +20,7 @@ from ..evidence_material import (
     Luxian0609EvidenceMaterialStore,
     build_material_document_refs,
 )
+from ... import daily_material_projection
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
 from ..source_evidence_reader import (
     EVALUATION_HORIZON_SOURCE_KEY,
@@ -185,6 +186,11 @@ def evaluate_rule_007_legacy(
                 reason_code="unstable_patient_order_present",
             )
 
+        daily_scope_complete = (
+            evidence_materials.permits_absence("daily_course_record")
+            if evidence_materials is not None
+            else daily_material_projection.permits_absence("daily_course_record")
+        )
         record_times: set[datetime] = set()
         substantive_record_without_time = False
         for source_key in RULE_007_RECORD_SOURCES:
@@ -233,12 +239,15 @@ def evaluate_rule_007_legacy(
         current - previous > _MAX_INTERVAL
         for previous, current in zip(ordered_times, ordered_times[1:])
     )
-    if interval_over_72h and not materials.permits_absence("daily_course_record"):
-        return missing_scope_decision()
     if interval_over_72h and substantive_record_without_time:
         return Rule007LegacyOutcome(
             status="data_gap",
             reason_code="authoritative_course_time_incomplete",
+        )
+    if interval_over_72h and not daily_scope_complete:
+        return Rule007LegacyOutcome(
+            status="data_gap",
+            reason_code="course_time_source_unavailable",
         )
     if interval_over_72h:
         return Rule007LegacyOutcome(
