@@ -292,6 +292,7 @@ class _TumorRuleOutcome:
     reason_code: str
     executor_type: str
     fact_refs: tuple[str, ...] = ()
+    positive_document_refs: tuple[str, ...] = ()
 
 
 def _typed_decision_from_outcome(
@@ -386,6 +387,7 @@ def _typed_decision_from_outcome(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=refs,
+        positive_document_refs=outcome.positive_document_refs,
         evaluator_version=_TYPED_EVALUATOR_VERSION,
         confidence=None,
     )
@@ -1536,6 +1538,7 @@ async def _typed_chemotherapy_comparison(
     course_records: SourceMaterial,
     llm_client: Any = None,
     extractions: list[Any] | None = None,
+    positive_rows: list[Mapping[str, Any]] | None = None,
 ) -> tuple[
     str,
     str,
@@ -1580,6 +1583,7 @@ async def _typed_chemotherapy_comparison(
             status, reason, facts, _active, course_rows = await _typed_chemotherapy_comparison(
                 orders=SourceMaterial(orders.state, tuple(row for row in orders.rows if id(row) not in pending_ids)),
                 course_records=course_records, llm_client=llm_client, extractions=extractions,
+                positive_rows=positive_rows,
             )
             if status not in {"compliant", "non_compliant", "not_applicable", "data_gap"}:
                 # 其余医嘱核查的技术失败（模型传输、无效输出等）原样保留状态与原因，
@@ -1768,6 +1772,14 @@ async def _typed_chemotherapy_comparison(
                 event_fields["route"] = "mismatched"
                 field_results["route"] = "mismatched"
             time_state = _chemotherapy_fact_time_state(event["prescribed"], row, fact)
+            # 只声明已唯一归属且原文明确记录的不一致；缺引用不能算正面证明。
+            if positive_rows is not None and (
+                time_state == "mismatched" or (time_state == "matched" and (
+                    (bool(fact.dose_quote) and event_fields.get("dose") == "mismatched")
+                    or (bool(fact.route_quote) and event_fields.get("route") == "mismatched")
+                ))
+            ):
+                positive_rows.append(row)
             if time_state == "unknown":
                 unknown_time_event_count += 1
             elif time_state == "mismatched" or "mismatched" in event_fields.values():
@@ -2063,6 +2075,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         executor_type: str,
         display_facts: Mapping[str, Any] | None = None,
         fact_refs: Sequence[str] = (),
+        positive_document_refs: Sequence[str] = (),
     ) -> None:
         if status == "technical_error":
             # 诊断日志：只记规则、原因码、是否类型化与出错代码行，不含病历或模型内容。
@@ -2076,6 +2089,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             reason_code=reason_code,
             executor_type=executor_type,
             fact_refs=tuple(dict.fromkeys(fact_refs)),
+            positive_document_refs=tuple(dict.fromkeys(positive_document_refs)),
         )
         if rule_id in typed_requested:
             assert evidence_snapshot is not None
@@ -2322,6 +2336,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     course_records=course_records,
                     llm_client=llm_client,
                     extractions=(chemo_extractions := []),
+                    positive_rows=(positive_course_rows := []),
                 )
                 for extraction in chemo_extractions:
                     llm_call_count += extraction.llm_call_count
@@ -2334,6 +2349,10 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     status,
                     reason_code,
                     executor_type="llm" if chemo_extractions else "program",
+                    positive_document_refs=typed_document_refs(
+                        ("inpat_drug_order", selected_order_rows),
+                        ("daily_course_record", tuple(positive_course_rows)),
+                    ) if status == "non_compliant" and positive_course_rows else (),
                     display_facts=display_facts,
                     fact_refs=typed_document_refs(
                         ("inpat_drug_order", selected_order_rows),

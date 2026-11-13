@@ -1242,6 +1242,11 @@ def finalize_luxian_0609_reduced_customer_result(
         raise ValueError("invalid customer display facts")
 
     rule_id = decision.rule_id
+    if (decision.evaluator_version == "cdm-auto-scope-v1"
+            and decision.reason_code == "source_readiness_unproven"):
+        # 自动取材范围不足的待核结果不能携带执行器原来的缺陷清单或完成计数。
+        return finalize_luxian_0609_canonical_result(render_luxian_0609_customer_result(
+            decision=decision, safe_customer_display_facts=None, trace_sink=trace_sink))
     safe_facts = None
     finalizer_owns_facts = finalizer_owns_executor_customer_display_facts(rule_id)
     if raw_customer_display_facts is not None:

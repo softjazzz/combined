@@ -71,7 +71,7 @@ def inspect_source(connection, *, check_rows=True):
     if not exists:
         return {"ok":False,"read_only":readonly,"schema":"cdm","dependencies":[
             {"table":name,"required":name not in OPTIONAL,"status":"table_missing","missing_columns":[],"publication":"unconfirmed"} for name in TABLES],
-            "publication_ready":None,"capture_requires_controlled_window":True,"account_read_only":False}
+            "publication_ready":None,"capture_requires_controlled_window":False,"account_read_only":False}
     schema_usage = connection.execute(text("SELECT has_schema_privilege(current_user,'cdm','USAGE')")).scalar_one()
     # 先枚举可 SET 的身份（含当前身份），再展开该身份立即继承的能力。
     # SET 和 USAGE 各自已经包含传递关系；不能只对当前账号分别取二者并集。
@@ -138,4 +138,4 @@ def inspect_source(connection, *, check_rows=True):
     bad = [r for r in rows if r["status"] not in {"structure_ready", "rows_present", "zero_rows"}
            and (r["required"] or r["status"] != "table_missing")]
     return {"ok": readonly and readonly_account and not bad, "read_only": readonly, "schema": "cdm", "dependencies": rows,
-            "publication_ready": None, "capture_requires_controlled_window": True, "account_read_only": readonly_account}
+            "publication_ready": None, "capture_requires_controlled_window": False, "account_read_only": readonly_account}

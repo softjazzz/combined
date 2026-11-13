@@ -637,7 +637,10 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
             "clause_id": clause.clause_id, "offset_unit": "unicode_codepoint",
         } for clause in clauses],
     } for position, order_position, order_status, issue, order_refs, clauses in sorted(order_bindings)]
-    return HandbookEvaluation(RULE_ID, status, reason, refs, display)
+    positive_refs = tuple(sorted({ref for finding in all_findings
+                                  if finding.issue == "order_course_conflict"
+                                  for ref in finding.refs}))
+    return HandbookEvaluation(RULE_ID, status, reason, refs, display, positive_refs)
 
 
 def validate_ct_display_facts(raw: Any) -> dict[str, Any] | None:

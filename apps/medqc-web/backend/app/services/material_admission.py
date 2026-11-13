@@ -11,6 +11,9 @@ MESSAGES = {
     "original_task_material_not_retained": "原任务材料快照未保留，不能用当前材料代替原轮次补跑。",
     "material_projection_failed": "材料快照装配失败，未开始执行该病历的质控规则。",
     "material_capture_failed": "病历材料捕获失败，未开始执行该病历的质控规则。",
+    "material_identity_or_source_mismatch": "病历身份或材料来源不一致，未开始执行质控规则。",
+    "material_publication_identity_conflict": "材料发布回执的身份关联存在冲突，未开始执行质控规则。",
+    "material_publication_version_conflict": "材料发布回执与当前发布版本不一致，未开始执行质控规则。",
 }
 
 
@@ -34,6 +37,7 @@ def require_publication_window():
 
 
 def preflight_new_task(filters):
-    # 来源由服务端 freeze 固定；材料专用入口仍使用原来源，不检查 CDM 窗口。
-    if (filters.get("clinical_source") or {}).get("id") == "independent_cdm":
-        require_publication_window()
+    # 来源由服务端 freeze 固定。正常任务自动在一致性事务中捕获材料；
+    # 人工截止时间不能证明发布完整，也不再作为建任务的前置条件。
+    # 身份、权限、连接与持久化错误在正式捕获阶段按任务级技术错误交付。
+    return None

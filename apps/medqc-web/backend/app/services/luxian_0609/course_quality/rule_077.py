@@ -310,6 +310,7 @@ def _decision(
     status: str,
     reason_code: str,
     criterion: CriterionResult | None = None,
+    positive_document_refs: tuple[str, ...] = (),
 ) -> RuleDecision:
     if status not in ALLOWED_RESULT_STATUSES:
         raise ValueError("LX0609-01-02-02 produced a status outside its rule contract")
@@ -354,6 +355,7 @@ def _decision(
         qc_direction=direction,
         reason_code=reason_code,
         fact_refs=refs,
+        positive_document_refs=positive_document_refs,
         evaluator_version="course-differential-relation-v1",
         confidence=confidence,
         criterion_results=(criterion,) if criterion is not None else (),
@@ -698,6 +700,8 @@ async def evaluate_rule_077(
             status=status,
             reason_code=reason_code,
             criterion=criterion,
+            positive_document_refs=tuple(ref for ref in refs if ref in snapshot.document_refs)
+            if state == "unrelated" else (),
         )
     return Rule077Execution(
         decision,

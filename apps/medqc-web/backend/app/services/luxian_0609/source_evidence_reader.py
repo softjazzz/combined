@@ -936,6 +936,9 @@ class SnapshotSourceRows:
         if not all(isinstance(row, Mapping) for row in raw_rows):
             raise TypeError("snapshot rows must contain mappings")
         frozen_rows = tuple(MappingProxyType(dict(row)) for row in raw_rows)
+        if material_scope is None:
+            from ..automatic_material_scope import source_scope
+            material_scope = source_scope(normalized_source)
         return cls(
             source_key=normalized_source,
             rows=frozen_rows,

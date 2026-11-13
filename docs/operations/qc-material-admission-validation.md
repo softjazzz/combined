@@ -1,5 +1,7 @@
 # 取材前置预检与失败展示：开发侧交付
 
+> 2026-11-13 后续修订：正常新任务已改为自动一致性读取，不再要求人工 `QC_CDM_CAPTURE_WINDOW_UNTIL`。下文保留为前一版验证/交接记录；当前方案以 [自动取材交付说明](qc-automatic-cdm-material.md) 为准。任务级技术失败和历史保护仍保留。
+
 基线：7ac3b0f3a；独立分支 codex/qc-material-preflight-20261113。
 
 ## 变更

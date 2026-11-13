@@ -4825,6 +4825,7 @@ def _decision(
     *, rule_id: str, status: str, reason_code: str,
     snapshot: Luxian0609EvidenceSnapshot,
     fact_refs: Sequence[str] = (),
+    positive_document_refs: Sequence[str] = (),
 ) -> RuleDecision:
     # 正式决策中，候选未能完整投递是资料不足，并非证据相互冲突。
     # 兼容入口的旧状态仍保留，typed 路径按本规则允许的资料不足合同交付。
@@ -4861,7 +4862,19 @@ def _decision(
         reason_code=reason_code,
         fact_refs=tuple(dict.fromkeys(str(reference) for reference in fact_refs if reference)),
         evaluator_version=_EVALUATOR_VERSION,
+        positive_document_refs=tuple(positive_document_refs),
     )
+
+
+def _positive_quality_refs(rule_id, status, episodes, documents):
+    """只有现存申请/意见的含糊正文证明缺陷；missing/absent 不是正面证据。"""
+    if status != "non_compliant" or rule_id not in {"LX0609-03-01-02", "LX0609-03-01-03"}:
+        return ()
+    prefix = "application" if rule_id == "LX0609-03-01-02" else "opinion"
+    refs = tuple(dict.fromkeys(ref for item in episodes
+                              if getattr(item, prefix + "_state") == "vague" and item.confidence == "high"
+                              for ref in getattr(item, prefix + "_refs")))
+    return material_refs_for_internal_refs(documents=documents, candidates=(), internal_refs=refs) if refs else ()
 
 
 def _finish(
@@ -5003,6 +5016,10 @@ def _finish_explicit_statuses(
                     reason_code=statuses[rule_id][1],
                     snapshot=evidence_snapshot,
                     fact_refs=fact_refs,
+                    # 本分支只来自显式全文规则；申请/意见含糊由所引正文直接证明，
+                    # 不依赖其他病程或未出现的会诊事件。普通模型分支不作此声明。
+                    positive_document_refs=(fact_refs if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}
+                                            and statuses[rule_id][0] == "non_compliant" else ()),
                 )
             )
     source_document_ids = tuple(
@@ -6286,6 +6303,7 @@ async def _execute_consultation_episode_rules(
                         else ()
                     ),
                 )
+                positive_refs = _positive_quality_refs(rule_id, statuses[rule_id][0], episodes, documents)
             except Exception as exc:
                 if not is_material_binding_error(exc):
                     raise
@@ -6306,6 +6324,7 @@ async def _execute_consultation_episode_rules(
                     reason_code=statuses[rule_id][1],
                     snapshot=evidence_snapshot,
                     fact_refs=fact_refs,
+                    positive_document_refs=positive_refs,
                 )
             )
     display_facts: list[tuple[str, Mapping[str, Any]]] = []

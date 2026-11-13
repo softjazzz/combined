@@ -34,15 +34,19 @@ def test_window_current(monkeypatch):
     require_publication_window()
 
 
-def test_create_rejects_before_insert(monkeypatch):
+def test_create_without_window_reaches_task_insert(monkeypatch):
     from app.services import custom_qc_workspace_service as ws, clinical_sources
 
     monkeypatch.delenv("QC_CDM_CAPTURE_WINDOW_UNTIL", raising=False)
+    class ReachedInsert(Exception):
+        pass
+    def insert(*args, **kwargs):
+        raise ReachedInsert()
     monkeypatch.setattr(
         ws,
         "_session",
         lambda: SimpleNamespace(
-            close=lambda: None, execute=lambda *a, **k: pytest.fail("task inserted")
+            close=lambda: None, execute=insert
         ),
     )
     monkeypatch.setattr(
@@ -51,9 +55,9 @@ def test_create_rejects_before_insert(monkeypatch):
         lambda f: f.update(clinical_source={"id": "independent_cdm"}),
     )
     service = object.__new__(ws.CustomQCWorkspaceService)
-    with pytest.raises(
-        material.MaterialSnapshotError, match="cdm_publication_window_unconfirmed"
-    ):
+    service._batch_job_table = SimpleNamespace(insert=lambda: SimpleNamespace(values=lambda **kw: kw))
+    # 用户新合同：建任务不再依赖人工窗口；不在这个用例中连接真实任务库。
+    with pytest.raises(ReachedInsert):
         service.create_batch_job(
             draft={},
             created_by="synthetic",

@@ -806,6 +806,7 @@ def _decision(
     document_refs: Sequence[str] = (),
     exact_document_refs: bool = False,
     criterion_results: Sequence[Any] = (),
+    positive_document_refs: Sequence[str] = (),
 ) -> RuleDecision:
     if final_state == "technical_error":
         # 诊断日志：只记规则、原因码与出错代码行，不含病历或模型内容。
@@ -858,6 +859,7 @@ def _decision(
             if exact_document_refs
             else tuple(dict.fromkeys((*_fact_refs(snapshot, source_keys), *document_refs)))
         ),
+        positive_document_refs=tuple(positive_document_refs),
         evaluator_version="extended-document-v2",
         confidence=None,
         criterion_results=tuple(criterion_results),
@@ -3815,6 +3817,7 @@ async def _execute_extended_document_group(
                 explicit_death or "死亡诊断" in authority_types
             )
             diagnosis_scope = None
+            positive_main_conflict = False
             consumed = []
             scope_sources = ("inpat_registration", "death_record", authority_source_key)
             if scope_conflict:
@@ -3970,6 +3973,7 @@ async def _execute_extended_document_group(
                         main_consistent = written_main == authority_main or (
                             (authority_main, written_main) in equivalent_pairs
                         )
+                        positive_main_conflict = not main_consistent
                         final_state = "compliant" if main_consistent else "non_compliant"
                         reason_code = "requirement_satisfied" if main_consistent else "requirement_violated"
                         display.append((rule_id, {
@@ -4032,6 +4036,8 @@ async def _execute_extended_document_group(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=() if consumed else (*scope_sources, "discharge_record", "discharge_record_diagnosis"),
                 document_refs=document_refs, exact_document_refs=bool(consumed),
+                positive_document_refs=tuple(ref for ref in document_refs if ref in evidence_snapshot.document_refs)
+                if positive_main_conflict and not binding_failed else (),
                 final_state="technical_error" if binding_failed else final_state,
                 reason_code="snapshot_mismatch" if binding_failed else reason_code,
             ))

@@ -250,11 +250,12 @@ def test_history_missing_or_current_conflict_is_explicit(existing, current_view)
     asyncio.run(read())
 
 
-def test_no_controlled_publication_window_never_connects(monkeypatch):
+def test_no_manual_window_still_rejects_unavailable_source(monkeypatch):
     from app.services.case_material_capture import capture
     monkeypatch.delenv("QC_CDM_CAPTURE_WINDOW_UNTIL",raising=False)
+    monkeypatch.setattr(assembly, "_source_engine", lambda _: None)
     with clinical.selected({"id":"independent_cdm","binding":"source"}):
-        with pytest.raises(material.MaterialSnapshotError,match="publication_window"):
+        with pytest.raises(material.MaterialSnapshotError,match="material_source_unavailable"):
             capture(identity=IDENTITY)
 
 
