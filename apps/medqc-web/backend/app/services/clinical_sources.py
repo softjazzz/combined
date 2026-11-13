@@ -182,6 +182,13 @@ def prepare_request(request: Request) -> None:
     from .validation_material_source import is_material_copy, material_source_schema
     identity = {key: request.query_params.get(key) or request.path_params.get(key) or ""
                 for key in ("institute_id", "patient_id", "visit_id")}
+    # 最新结果接口的 record_id 明确定义为就诊号，仅在这一条路由归一化。
+    record_id = request.path_params.get("record_id")
+    if (request.method == "GET" and record_id
+            and path == f"/api/v1/qc/sichuan/workspace/records/{record_id}/latest-result"):
+        if identity["visit_id"] and identity["visit_id"] != record_id:
+            raise HTTPException(422, "clinical_material_identity_unavailable")
+        identity["visit_id"] = record_id
     if request.method == "GET" and is_material_copy(identity["patient_id"], identity["visit_id"]):
         try:
             if not all(identity.values()):
