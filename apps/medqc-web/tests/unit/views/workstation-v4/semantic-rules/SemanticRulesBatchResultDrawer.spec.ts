@@ -12,6 +12,14 @@ import type {
   SichuanBatchJobDebugSnapshot,
 } from '@/views/workstation-v4/semantic-rules/types'
 
+// 病历标识仅用合成响应，抽屉测试不访问任何服务。
+vi.mock('@/services/sichuan-rule-workspace-service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/sichuan-rule-workspace-service')>()),
+  getSichuanWorkspaceBatchJobRecordIdentities: vi
+    .fn()
+    .mockResolvedValue({ success: true, data: { items: [] } }),
+}))
+
 const ADrawerStub = defineComponent({
   name: 'ADrawerStub',
   props: {
@@ -498,7 +506,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
   })
 
   it.each([
-    { retry: undefined, expected: '后台未确认自动补跑计划' },
+    { retry: undefined, expected: '任务失败；未返回自动补跑计划，请查看失败原因。' },
     {
       retry: { status: 'planned', should_retry: true },
       expected: '补跑计划尚未进入执行队列',
@@ -630,7 +638,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     await notice.find('button').trigger('click')
     expect(wrapper.text()).toContain('LX0609-06-01-05')
     expect(wrapper.text()).toContain('病例-失败-1')
-    expect(wrapper.text()).toContain('模型输出失败，未形成质控结论')
+    expect(wrapper.text()).toContain('执行失败，未形成质控结论')
   })
 
   it('泸县0609任务应展示复核建议并允许手动触发复核', async () => {

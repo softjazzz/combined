@@ -1030,6 +1030,12 @@ def _fetch_patient_profile(
     return profile
 
 
+def _validate_document_source_columns(schema: str, document_type: str) -> None:
+    """派生文书无物理表；其余来源仍严格校验本次捕获的列信息。"""
+    if document_type not in {_EXAM_ATTENTION_DOC_TYPE, _LAB_ATTENTION_DOC_TYPE}:
+        _get_table_columns(schema, document_type)
+
+
 def _build_structured_context(
     *,
     scene: str,
@@ -1061,7 +1067,7 @@ def _build_structured_context(
     summary_docs: dict[str, list[dict[str, Any]]] = {}
     text_available_tables: list[str] = []
     for table_name, rows in docs.items():
-        _columns = set(_get_table_columns(schema, table_name))
+        _validate_document_source_columns(schema, table_name)
         summary_docs[table_name] = []
         for row in rows[:3]:
             assembled = assemble_document(table_name, row)
@@ -2251,7 +2257,7 @@ def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str
     inventory.extend(lab_reports)
     inventory.extend(exam_reports)
     for table_name, rows in docs.items():
-        _get_table_columns(schema, table_name)
+        _validate_document_source_columns(schema, table_name)
         if table_name in {"labtest_item_report", "exam_item", "exam_item_report"}:
             continue
         for row_index, row in enumerate(rows or []):

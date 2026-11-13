@@ -1,0 +1,25 @@
+.batch-task-failure {
+  margin-bottom: var(--mq-space-4, 16px);
+  padding: var(--mq-space-4, 16px);
+  color: var(--mq-text-primary);
+}
+.batch-task-failure h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.batch-task-failure p {
+  margin: 8px 0;
+}
+.batch-task-failure ul {
+  padding-left: 20px;
+}
+.batch-task-failure li {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.batch-task-failure li > * {
+  margin-right: 12px;
+}
+.batch-task-failure summary {
+  cursor: pointer;
+}

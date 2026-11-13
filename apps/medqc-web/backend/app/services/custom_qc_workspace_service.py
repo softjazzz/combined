@@ -1095,6 +1095,27 @@ def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _safe_failed_task_diagnostic(item: Dict[str, Any]) -> Dict[str, str]:
+    """保留已定义的失败码与阶段；不返回原始异常、供应商响应或任意文本。"""
+    from .material_admission import MESSAGES
+
+    allowed_codes = set(MESSAGES) | {
+        "model_transport_error", "model_timeout", "model_invalid_output",
+        "model_parse_error", "record_execution_failed",
+    }
+    code = _safe_text(item.get("reason_code"))
+    if not code and item.get("error_phase") == "material_capture":
+        # 历史取材失败以 error 保存受控码，只允许精确命中材料错误合同。
+        candidate = _safe_text(item.get("error"))
+        if candidate in MESSAGES:
+            code = candidate
+    diagnostic = {"reason_code": code if code in allowed_codes else "record_execution_failed"}
+    phase = _safe_text(item.get("error_phase"))
+    if phase in {"material_capture", "material_assembly", "evaluate_document", "result_write"}:
+        diagnostic["error_phase"] = phase
+    return diagnostic
+
+
 def project_customer_safe_batch_job(
     job: Dict[str, Any],
     *,
@@ -1403,7 +1424,7 @@ def project_customer_safe_batch_job(
         {
             "record_ref": _customer_record_ref(item, hmac_key=hmac_key),
             "status": "technical_error",
-            "reason_code": "record_execution_failed",
+            **_safe_failed_task_diagnostic(item),
             "rule_id": _safe_text(item.get("rule_id")).upper()
             if re.fullmatch(r"LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}", _safe_text(item.get("rule_id")).upper()) else "",
         }
