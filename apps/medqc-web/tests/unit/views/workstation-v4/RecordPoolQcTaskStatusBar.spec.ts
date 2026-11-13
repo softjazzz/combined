@@ -376,3 +376,17 @@ describe('RecordPoolQcTaskStatusBar', () => {
     wrapper.unmount()
   })
 })
+
+it('材料准备失败显示根因与零执行，不显示76条已执行', () => {
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: { autoPoll:false, job:job({status:'failed',total_records:1, summary:{total_records:1,success_count:0,failed_count:1,issue_records:0,compliant_records:0,total_tokens:0,total_processing_time:0,rule_count:76, processed_rule_count:0,failed_rule_count:0, material_failed_record_count:1,
+      material_failure:{code:'cdm_publication_window_unconfirmed',stage:'material_capture',message:'CDM发布范围与取材窗口尚未确认，未开始执行该病历的质控规则。'},
+      progress:{step_key:'failed',processed_rule_count:0,rule_count:76,processed_records:1,total_records:1}}})},
+    global:{stubs:{AProgress:true}},
+  })
+  expect(wrapper.text()).toContain('取材窗口')
+  expect(wrapper.text()).toContain('0 / 76')
+  expect(wrapper.text()).not.toContain('已执行 76')
+  expect(wrapper.text()).not.toContain('补跑未确认')
+  wrapper.unmount()
+})

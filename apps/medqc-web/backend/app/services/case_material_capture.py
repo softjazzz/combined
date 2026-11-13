@@ -1,8 +1,6 @@
 """一次病历短只读事务；捕获既有投影和读合同，不新增临床判断。"""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-import os
 import time
 
 from sqlalchemy import inspect
@@ -19,14 +17,6 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
 
     if is_material_copy(identity[1], identity[2]):
         raise material.MaterialSnapshotError("pdf_case_material_snapshot_not_supported")
-    if clinical.configured():
-        try:
-            until = datetime.fromisoformat(os.environ.get("QC_CDM_CAPTURE_WINDOW_UNTIL", "").replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            if until.tzinfo is None or not now < until <= now + timedelta(hours=24):
-                raise ValueError
-        except ValueError:
-            raise material.MaterialSnapshotError("cdm_publication_window_unconfirmed") from None
     coordinates = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
     schema = material_source_schema(default_schema=assembly._default_source_schema(), **coordinates)
     engine = assembly._source_engine(schema)
@@ -52,8 +42,9 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
             connection.exec_driver_sql("SET LOCAL statement_timeout=10000")
             if clinical.configured() and schema == "cdm":
                 from .clinical_source_contract import inspect_source
-                if not inspect_source(connection, check_rows=False)["ok"]:
-                    raise material.MaterialSnapshotError("material_source_contract_incomplete")
+                from .automatic_material_scope import PROTOCOL, validate_read_contract
+                source_statuses = validate_read_contract(inspect_source(connection, check_rows=False))
+                state["automatic_material"] = {"protocol": PROTOCOL, "sources": {}}
             from . import daily_material_projection as daily
             if daily.enabled():
                 if not clinical.configured() or schema != "cdm":
@@ -70,12 +61,26 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                     state["columns"][table] = tuple(column["name"] for column in inspector.get_columns(table, schema=schema)) if inspector.has_table(table, schema=schema) else ()
                 for table in sorted(names):
                     check()
-                    rows = assembly._select_records(schema=schema, table=table, **coordinates, limit=10001)
+                    status = source_statuses.get(table, "structure_ready") if "automatic_material" in state else "structure_ready"
+                    # 不对缺列来源执行不完整 SQL；其他来源仍在本事务捕获。
+                    rows = [] if status == "columns_missing" else assembly._select_records(schema=schema, table=table, **coordinates, limit=10001)
                     if len(rows) >= 10001:
                         raise material.MaterialSnapshotError("material_table_capacity_exceeded")
                     state["tables"][table] = rows
+                    if "automatic_material" in state:
+                        from .automatic_material_scope import describe_source
+                        state["automatic_material"]["sources"][table] = describe_source(
+                            state["columns"][table], rows,
+                            status if state["columns"][table] else "table_missing")
                     if after_table_read:
                         after_table_read(table)
+                if "automatic_material" in state:
+                    from .cdm_publication_evidence import read_publication
+                    publication = read_publication(connection, state["tables"])
+                    state["automatic_material"]["publication"] = publication
+                    for table, scope in state["automatic_material"]["sources"].items():
+                        scope["publication_evidence"] = publication["rows"].get(table, [])
+                        scope["publication_metadata_status"] = publication["status"]
                 # 旧程序取证需要完整结构化行，不能以Bundle文本投影代替。
                 state["programmatic_sources"] = capture_programmatic_sources(state, check)
                 arguments = {**coordinates, "source_schema": schema}
@@ -107,7 +112,10 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                 # 调用原投影owner，历史文书直接使用该固定渲染材料而非最新公共Bundle。
                 state["documents"] = current_view._assemble_current_documents(**coordinates)
                 from .sichuan_qc_service import SichuanQCService
-                diagnosis = SichuanQCService._resolve_primary_diagnosis_context(**coordinates)
+                diagnosis = (SichuanQCService._resolve_primary_diagnosis_context(**coordinates)
+                             if state["columns"].get("diagnosis") and (
+                                 "automatic_material" not in state or source_statuses.get("diagnosis") == "structure_ready")
+                             else None)
                 if diagnosis:
                     departments = {str(row.get("dept_name") or "").strip() for row in state["tables"].get("first_course_record", ())}
                     for department in sorted(departments - {""}):

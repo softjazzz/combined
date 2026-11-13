@@ -1244,19 +1244,25 @@ async def create_workspace_batch_job(
             "scene": drafts[0].get("scene") or "final",
         }
 
-    job = workspace.create_batch_job(
-        draft=primary_draft,
-        created_by=created_by,
-        scope=payload.scope,
-        filters=_batch_job_payload_filters(payload),
-        record_ids=[item["visit_id"] for item in effective_record_refs],
-        record_refs=effective_record_refs,
-        total_records=len(records),
-        draft_ids=[str(item.get("id") or "") for item in drafts],
-        execution_mode=execution_mode,
-        run_mode=run_mode,
-        rule_count=len(drafts),
-    )
+    from ..services.case_material_snapshot import MaterialSnapshotError
+    from ..services.material_admission import safe_material_failure
+    try:
+        job = workspace.create_batch_job(
+            draft=primary_draft,
+            created_by=created_by,
+            scope=payload.scope,
+            filters=_batch_job_payload_filters(payload),
+            record_ids=[item["visit_id"] for item in effective_record_refs],
+            record_refs=effective_record_refs,
+            total_records=len(records),
+            draft_ids=[str(item.get("id") or "") for item in drafts],
+            execution_mode=execution_mode,
+            run_mode=run_mode,
+            rule_count=len(drafts),
+        )
+    except MaterialSnapshotError as exc:
+        failure = safe_material_failure(str(exc))
+        raise HTTPException(status_code=409, detail=f"{failure['message']}（{failure['code']}）") from None
     background_tasks.add_task(_run_workspace_batch_job, job["id"])
     return success_response(
         data={

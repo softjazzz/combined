@@ -279,6 +279,9 @@ class RuleDecision:
     evaluator_version: str
     confidence: float | None = None
     criterion_results: tuple[CriterionResult, ...] = ()
+    # 由判定 owner 明确声明：这些实际文书单独证明缺陷，不依赖未出现的材料。
+    # 空元组沿用旧合同；不能由 Binding 根据文案、reason 或 refs 非空推测。
+    positive_document_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.rule_id, str) or not _RULE_ID_PATTERN.fullmatch(
@@ -308,6 +311,10 @@ class RuleDecision:
         ):
             raise ValueError("invalid fact_refs")
         object.__setattr__(self, "fact_refs", tuple(sorted(self.fact_refs)))
+        if (type(self.positive_document_refs) is not tuple
+                or not set(self.positive_document_refs).issubset(self.fact_refs)
+                or len(self.positive_document_refs) != len(set(self.positive_document_refs))):
+            raise ValueError("invalid positive document proof")
         if not isinstance(
             self.evaluator_version, str
         ) or not _VERSION_PATTERN.fullmatch(
@@ -388,6 +395,7 @@ class RuleDecision:
             "criterion_results": [
                 item.to_safe_dict() for item in self.criterion_results
             ],
+            **({"positive_document_refs": list(self.positive_document_refs)} if self.positive_document_refs else {}),
         }
 
     def canonical_json(self) -> str:

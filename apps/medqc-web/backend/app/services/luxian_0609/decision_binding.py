@@ -284,6 +284,7 @@ def bind_and_reduce_luxian_0609_rule_decisions(
             decision.snapshot_hash == snapshot.snapshot_hash
             and set(decision.fact_refs).issubset(allowed_refs)
             and (not _requires_evidence_ref(decision) or bool(decision.fact_refs))
+            and set(decision.positive_document_refs).issubset(snapshot.document_refs)
         )
         if not snapshot_binding_valid:
             bound = _technical_decision(
@@ -298,7 +299,23 @@ def bind_and_reduce_luxian_0609_rule_decisions(
                 reason_code="decision_contract_violation",
             )
         else:
-            bound = decision
+            from ..automatic_material_scope import guard_decision
+            # 规则白名单包含备选来源；仅因未消费的备选表缺失，不能改判实际结论。
+            allowed_keys = _allowed_source_keys(decision.rule_id)
+            consumed_keys = set()
+            for observation in snapshot.observations:
+                if observation.source_key in allowed_keys and observation.snapshot_ref.removeprefix("sha256:") in decision.fact_refs:
+                    consumed_keys.add(observation.source_key)
+            for fact in snapshot.facts:
+                if fact.source_key in allowed_keys and fact.fact_id in decision.fact_refs:
+                    consumed_keys.add(fact.source_key)
+            # 文书引用已在上面的绑定阶段验证并缓存；来源引用无需扫描材料。
+            # 不重读失败材料，避免把既有技术错误变成未捕获异常。
+            for source_key, rows in document_rows_cache.items():
+                if source_key in allowed_keys and rows is not None:
+                    if any(ref in candidate_document_refs for ref, _ in rows):
+                        consumed_keys.add(source_key)
+            bound = guard_decision(decision, consumed_keys or allowed_keys)
         try:
             reduced.append(reduce_luxian_0609_rule_decision(bound))
         except (TypeError, ValueError):

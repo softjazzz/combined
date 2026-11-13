@@ -1,3 +1,5 @@
+from app.services.case_material_snapshot import MaterialSnapshotError
+from app.services.material_admission import safe_material_failure
 from typing import List, Dict, Any, Literal, Optional, Sequence
 
 import asyncio
@@ -2324,6 +2326,9 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
             rule_count=len(rule_ids),
             **({"scheduled_run_id": scheduled_origin["run_id"]} if scheduled_origin is not None else {}),
         )
+    except MaterialSnapshotError as exc:
+        failure = safe_material_failure(str(exc))
+        raise HTTPException(status_code=409, detail=f"{failure['message']}（{failure['code']}）") from None
     except QCDispatchSchemaUnavailable as exc:
         raise HTTPException(status_code=503, detail="质控任务调度存储尚未就绪") from exc
     if should_submit_detached_qc_task(job):

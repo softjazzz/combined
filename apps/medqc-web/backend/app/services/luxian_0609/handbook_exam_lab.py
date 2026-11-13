@@ -285,6 +285,7 @@ class HandbookEvaluation:
     reason_code: str
     refs: tuple[str, ...]
     display_facts: Mapping[str, Any]
+    positive_document_refs: tuple[str, ...] = ()
 
 
 def _read_source(snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609EvidenceMaterialStore, key: str) -> SourceRows:

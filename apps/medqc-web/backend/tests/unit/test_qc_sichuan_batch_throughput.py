@@ -537,9 +537,16 @@ class _WorkspaceStub:
         total_records: int,
         summary_patch: Optional[Dict[str, Any]] = None,
         progress_patch: Optional[Dict[str, Any]] = None,
+        items: Optional[List[Dict[str, Any]]] = None,
+        failed_records: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         if job_id != self.job["id"]:
             return
+        # 与真实进度保存接口一致，保留已完成病例结果。
+        if items is not None:
+            self.items = list(items)
+        if failed_records is not None:
+            self.failed_records = list(failed_records)
         progress = {
             "step_key": step_key,
             "rule_index": rule_index,

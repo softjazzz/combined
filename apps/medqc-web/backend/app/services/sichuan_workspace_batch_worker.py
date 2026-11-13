@@ -2156,7 +2156,7 @@ async def run_sichuan_workspace_batch_job(
             if is_failed_rule_retry:
                 rows, _ = merge_failed_rule_retry_results(
                     base_items=retry_base_items, base_failures=retry_base_failures,
-                    retry_items=rows, retry_failures=all_failed_records,
+                    retry_items=rows, retry_failures=[row for row in all_failed_records if row.get("error_phase") != "material_capture"],
                 )
             return rows
 
@@ -2405,6 +2405,7 @@ async def run_sichuan_workspace_batch_job(
                 }
                 for rule_id in result_rule_ids
             }
+            executed_rule_ids: set[str] = set()
             try:
                 used_bundle_path = False
                 bundle_fallback_reason = ""
@@ -2928,6 +2929,8 @@ async def run_sichuan_workspace_batch_job(
                         else ""
                     )
                     eval_item = eval_map.get(normalized_rule_id) or {}
+                    if eval_item and str(eval_item.get("status") or eval_item.get("result_status") or "") != "not_executed":
+                        executed_rule_ids.add(rule_id)
                     if not eval_item:
                         is_gate_only_missing = (
                             use_luxian_customer_results
@@ -3377,6 +3380,7 @@ async def run_sichuan_workspace_batch_job(
                     "items_by_rule": items_by_rule,
                     "failed_by_rule": failed_by_rule,
                     "rule_stats": rule_stats,
+                    "executed_rule_ids": sorted(executed_rule_ids),
                     "issue_record": has_issue,
                     "uncertain_record": has_uncertain,
                     "failed_record": any(bool(value) for value in failed_by_rule.values()),
@@ -3430,6 +3434,7 @@ async def run_sichuan_workspace_batch_job(
                     "items_by_rule": items_by_rule,
                     "failed_by_rule": failed_by_rule,
                     "rule_stats": rule_stats,
+                    "executed_rule_ids": sorted(executed_rule_ids),
                     "issue_record": False,
                     "uncertain_record": False,
                     "failed_record": True,
@@ -3455,6 +3460,20 @@ async def run_sichuan_workspace_batch_job(
                     ),
                     "luxian_0609_usage_unknown_executor_keys": sorted(record_usage_unknown_executor_keys),
                 }
+
+        material_failures: list[dict[str, Any]] = []
+        material_executed_rules: set[str] = set()
+
+        def _material_failed_record(record, identity, code):
+            from .material_admission import safe_material_failure
+            failure = safe_material_failure(code)
+            return {"record_id": identity[2], "visit_id": identity[2],
+                    "record_key": CaseRef(*identity).as_key(), "failed_record": True,
+                    "material_failure": failure, "_live_case": identity,
+                    "material_failure_record": {"institute_id": identity[0], "patient_id": identity[1],
+                        "visit_id": identity[2], "record_id": identity[2],
+                        "record_key": CaseRef(*identity).as_key(), "error_phase": "material_capture",
+                        "error": failure["code"]}}
 
         record_timing_attempts = list(
             (retry_base_summary.get("record_timing") or {}).get("attempts") or []
@@ -3509,7 +3528,7 @@ async def run_sichuan_workspace_batch_job(
                                         frozen = await asyncio.to_thread(obtain, root_job_id, identity,
                                             retry=is_failed_rule_retry, cancellation_check=_raise_if_cancelled)
                                     except materials.MaterialSnapshotError as error:
-                                        record = {**record, "_case_material_error": str(error)}
+                                        return _material_failed_record(record, identity, str(error))
                                 with materials.activate(frozen):
                                     if frozen is not None:
                                         scene = "final" if str(record.get("scope") or filters.get("query_scope") or current.get("scope")) == "final" else "running"
@@ -3518,7 +3537,7 @@ async def run_sichuan_workspace_batch_job(
                                                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
                                             record = {**record, "medical_text": inputs["medical_text"]}
                                         except Exception:
-                                            record = {**record, "_case_material_error": "material_projection_failed"}
+                                            return _material_failed_record(record, identity, "material_projection_failed")
                                     result = await _evaluate_single_record_impl(record)
                                     if frozen is not None:
                                         result["case_material_fingerprint"] = frozen["fingerprint"]
@@ -3673,6 +3692,12 @@ async def run_sichuan_workspace_batch_job(
                     state["failed_records"].append(failed)
                     all_failed_records.append(failed)
 
+            if record_result.get("material_failure"):
+                failure = record_result["material_failure_record"]
+                material_failures.append(failure)
+                all_failed_records.append(failure)
+            else:
+                material_executed_rules.update(record_result.get("executed_rule_ids") or [])
             live_buffer.finish(record_result.get("_live_case", ()))
             summary_patch = _build_progress_patch(processed_records_count)
             update_kwargs: Dict[str, Any] = {}
@@ -3684,7 +3709,7 @@ async def run_sichuan_workspace_batch_job(
                         base_items=retry_base_items,
                         base_failures=retry_base_failures,
                         retry_items=all_items,
-                        retry_failures=all_failed_records,
+                        retry_failures=[row for row in all_failed_records if row.get("error_phase") != "material_capture"],
                     )
                 summary_patch = {
                     **summary_patch,
@@ -3705,7 +3730,7 @@ async def run_sichuan_workspace_batch_job(
                 job_id=job_id,
                 **attempt_kwargs,
                 step_key="run",
-                rule_index=len(output_rule_ids) if output_rule_ids else 0,
+                rule_index=(len(material_executed_rules) if material_failures else len(output_rule_ids)),
                 rule_count=total_rules,
                 processed_records=processed_records_count,
                 total_records=total_records,
@@ -3836,6 +3861,28 @@ async def run_sichuan_workspace_batch_job(
                     active_records_state["count"] = 0
                 _merge_record_result(record_result, processed_index)
 
+        if material_failures:
+            from .material_admission import safe_material_failure
+            failure = safe_material_failure(material_failures[0]["error"])
+            preserved_items, preserved_failures = all_items, all_failed_records
+            if is_failed_rule_retry:
+                preserved_items, preserved_failures = merge_failed_rule_retry_results(
+                    base_items=retry_base_items, base_failures=retry_base_failures,
+                    retry_items=all_items, retry_failures=[row for row in all_failed_records if row.get("error_phase") != "material_capture"])
+            workspace.update_batch_job_progress(
+                job_id=job_id, **attempt_kwargs, step_key="failed",
+                rule_index=len(material_executed_rules), rule_count=total_rules,
+                processed_records=total_records, total_records=total_records,
+                items=preserved_items, failed_records=preserved_failures,
+                summary_patch={**_build_progress_patch(total_records),
+                    "material_failure": failure, "material_failed_record_count": len(material_failures),
+                    "processed_rule_count": len(material_executed_rules),
+                    "failed_rule_count": sum(bool(row.get("rule_id")) for row in preserved_failures),
+                    "automatic_failed_rule_retry": {"status": "not_retryable", "should_retry": False}},
+                progress_patch={**_record_runtime_progress(total_records),
+                                "processed_rule_count": len(material_executed_rules)})
+            raise ValueError(failure["message"] + " (" + failure["code"] + ")")
+
         rule_results = _build_rule_results_snapshot(
             processed_records_count=total_records,
             final=True,
@@ -3845,7 +3892,7 @@ async def run_sichuan_workspace_batch_job(
                 base_items=retry_base_items,
                 base_failures=retry_base_failures,
                 retry_items=all_items,
-                retry_failures=all_failed_records,
+                retry_failures=[row for row in all_failed_records if row.get("error_phase") != "material_capture"],
             )
             total_records = int(
                 retry_base_summary.get("total_records")

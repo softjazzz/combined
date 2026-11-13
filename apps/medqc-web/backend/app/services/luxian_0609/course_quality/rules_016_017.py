@@ -901,6 +901,7 @@ def _rule_017_decision(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=selected_refs,
+        positive_document_refs=selected_refs if qc_direction is QcDirection.DEFECT else (),
         evaluator_version="rule017-copy-similarity-v2",
         confidence=outcome.confidence,
     )

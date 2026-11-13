@@ -160,7 +160,7 @@ describe('后台终态与自动补跑说明', () => {
     ]) {
       const job = { status: 'failed', summary: { automatic_failed_rule_retry: retry } }
       expect(isBatchJobFinished(job)).toBe(true)
-      expect(getBatchJobRetryMessage(job)).toContain('后台未确认自动补跑计划')
+      expect(getBatchJobRetryMessage(job)).toContain(retry === undefined ? '未返回自动补跑计划' : '后台未确认自动补跑计划')
     }
   })
 
@@ -175,4 +175,15 @@ describe('后台终态与自动补跑说明', () => {
     }
     expect(isBatchJobFinished({ status: 'unknown' })).toBe(false)
   })
+})
+
+it('取材失败展示根因而不是补跑提示', () => {
+  const job = { status: 'failed', summary: { material_failure: {
+    code: 'cdm_publication_window_unconfirmed', stage: 'material_capture', message: 'CDM发布范围与取材窗口尚未确认或已过期，未开始执行质控规则。',
+  } } }
+  expect(getBatchJobRetryMessage(job)).toContain('取材窗口')
+  expect(getBatchJobRetryMessage(job)).not.toContain('补跑计划')
+})
+it('缺失补跑计划只说明没有返回计划', () => {
+  expect(getBatchJobRetryMessage({status:'failed',summary:{}})).toBe('任务失败；未返回自动补跑计划，请查看失败原因。')
 })

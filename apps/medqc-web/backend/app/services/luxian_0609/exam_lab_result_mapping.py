@@ -44,6 +44,7 @@ class ExamLabOutcome:
     status: str
     reason_code: str
     fact_refs: tuple[str, ...] = ()
+    positive_document_refs: tuple[str, ...] = ()
 
 
 EXAM_LAB_CUSTOMER_RULE_IDS = frozenset(
@@ -818,6 +819,7 @@ def build_exam_lab_rule_decision(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=refs,
+        positive_document_refs=outcome.positive_document_refs,
         evaluator_version=evaluator_version,
         confidence=None,
     )

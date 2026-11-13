@@ -693,10 +693,15 @@ def capture_programmatic_sources(state, cancellation_check):
         raise case_material.MaterialSnapshotError("programmatic_material_identity_missing")
     for table in (*_SOURCE_TABLES, "inpat_registration"):
         cancellation_check()
+        from .automatic_material_scope import source_scope
+        captured_scope = source_scope(table)
         from . import daily_material_projection as daily
         projected = daily.rows(tuple(state["identity"])) if table == "daily_course_record" else None
         if projected is not None:
             sources[table] = {"rows": projected, "material_scope": daily.scope(table)}
+            continue
+        if captured_scope and captured_scope["status"] in {"table_missing", "columns_missing"}:
+            sources[table] = {"unavailable": True, "material_scope": captured_scope}
             continue
         columns = state["columns"].get(table)
         if columns is None:
@@ -713,7 +718,8 @@ def capture_programmatic_sources(state, cancellation_check):
             ), parameters).mappings().all()
         if len(rows) >= 10001:
             raise case_material.MaterialSnapshotError("programmatic_material_capacity_exceeded")
-        sources[table] = {"rows": [dict(row) for row in rows]}
+        sources[table] = {"rows": [dict(row) for row in rows],
+                          **({"material_scope": captured_scope} if captured_scope else {})}
     return sources
 
 

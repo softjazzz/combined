@@ -1,0 +1,359 @@
+{
+  "admission_record": {
+    "interface": "web.admission_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id"
+    ]
+  },
+  "anesthesia_record": {
+    "interface": "web.anesthesia_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "bloodtrans_record": {
+    "interface": "web.bloodtrans_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "consultation_record": {
+    "interface": "web.consultation_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "crisis_value_record": {
+    "interface": "web.crisis_value_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "daily_admission_record": {
+    "interface": "web.daily_admission_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "daily_course_record": {
+    "interface": "web.daily_course_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "daily_death_record": {
+    "interface": "web.daily_death_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "death_discussion": {
+    "interface": "web.death_discussion",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "death_record": {
+    "interface": "web.death_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "diagnosis": {
+    "interface": "web.diagnosis",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "diagnosis_id"
+    ]
+  },
+  "discharge_record": {
+    "interface": "web.discharge_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id"
+    ]
+  },
+  "docpat_commu_record": {
+    "interface": "web.docpat_commu_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "exam_item_report": {
+    "interface": "web.exam_item_report",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "first_course_record": {
+    "interface": "web.first_course_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "inpat_drug_order": {
+    "interface": "web.inpat_drug_order",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "order_id"
+    ]
+  },
+  "inpat_nondrug_order": {
+    "interface": "web.inpat_nondrug_order",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "order_id"
+    ]
+  },
+  "labtest_item": {
+    "interface": "web.labtest_item",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "test_id",
+      "test_item_id"
+    ]
+  },
+  "labtest_item_report": {
+    "interface": "web.labtest_item_report",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "labtest_master": {
+    "interface": "web.labtest_master",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "test_id"
+    ]
+  },
+  "mr": {
+    "interface": "web.mr",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id"
+    ]
+  },
+  "mr_bloodtrans": {
+    "interface": "web.mr_bloodtrans",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "bloodtrans_id"
+    ]
+  },
+  "mr_customize": {
+    "interface": "web.mr_customize",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id"
+    ]
+  },
+  "mr_icu": {
+    "interface": "web.mr_icu",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "icu_id"
+    ]
+  },
+  "mr_surgery": {
+    "interface": "web.mr_surgery",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "surgery_id"
+    ]
+  },
+  "newborn_record": {
+    "interface": "web.newborn_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "nursing_record": {
+    "interface": "web.nursing_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "outpat_record": {
+    "interface": "web.outpat_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "pathology_exam_master": {
+    "interface": "web.pathology_exam_master",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "pathology_exam_id"
+    ]
+  },
+  "pathology_exam_report": {
+    "interface": "web.pathology_exam_report",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "pathology_exam_id"
+    ]
+  },
+  "postsurg_firstcourse_record": {
+    "interface": "web.postsurg_firstcourse_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "presurg_discussion": {
+    "interface": "web.presurg_discussion",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "presurg_summary": {
+    "interface": "web.presurg_summary",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "rescue_record": {
+    "interface": "web.rescue_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "senior_course_record": {
+    "interface": "web.senior_course_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "surgery_inventory_record": {
+    "interface": "web.surgery_inventory_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "surgery_risk_assessment": {
+    "interface": "web.surgery_risk_assessment",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "surgery_safecheck_record": {
+    "interface": "web.surgery_safecheck_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "transfer_in_record": {
+    "interface": "web.transfer_in_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  },
+  "transfer_out_record": {
+    "interface": "web.transfer_out_record",
+    "keys": [
+      "institute_id",
+      "patient_id",
+      "visit_id",
+      "document_id"
+    ]
+  }
+}

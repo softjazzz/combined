@@ -2790,6 +2790,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
         fact_refs: tuple[str, ...] = (),
         source_document_ids: Sequence[str] = (),
         display_facts: Mapping[str, Any] | None = None,
+        positive_document_refs: tuple[str, ...] = (),
     ) -> None:
         assert evidence_snapshot is not None
         if status == "technical_error":
@@ -2829,7 +2830,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
             customer_display_facts.append((rule_id, display_facts))
         decisions.append(
             _decision_from_outcome(
-                outcome=_ExamLabOutcome(rule_id, status, reason_code, fact_refs),
+                outcome=_ExamLabOutcome(rule_id, status, reason_code, fact_refs, positive_document_refs),
                 snapshot=evidence_snapshot,
             )
         )
@@ -3506,6 +3507,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 ct_evaluation.reason_code,
                 ct_evaluation.refs,
                 display_facts=ct_evaluation.display_facts,
+                positive_document_refs=ct_evaluation.positive_document_refs,
             )
         # 模型调用可以延后等待，但客户事实仍维持原执行顺序。
         if len(customer_display_facts) > display_count_before_ct:

@@ -166,7 +166,7 @@ describe('batchJobPresentation', () => {
     expect(model.isRunning).toBe(false)
     expect(model.statusLabel).toBe('部分执行失败')
     expect(model.phaseText).toContain('1 项质控执行未完成，已完成的 1 条结果仍可查看。')
-    expect(model.phaseText).toContain('后台未确认自动补跑计划')
+    expect(model.phaseText).toContain('未返回自动补跑计划')
     expect(model.overviewText).toBe(model.phaseText)
     expect(model.resultCount).toBe(1)
     expect(model.phaseText).not.toContain('无问题')

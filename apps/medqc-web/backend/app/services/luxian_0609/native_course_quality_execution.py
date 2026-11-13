@@ -595,6 +595,22 @@ def _course_semantic_decision(
             reason_code,
         )
     applicability, evidence_state, qc_direction, reason_code = dimensions
+    positive_refs = ()
+    from ..automatic_material_scope import source_scope
+    if (outcome.rule_id == "LX0609-01-01-02" and outcome.status == "non_compliant"
+            and source_scope("admission_record") is not None):
+        # 主诉长度由现有原文独立证明，不依赖诊断来源是否供给。
+        length = next((item for item in outcome.criterion_results
+                       if item.criterion_id == "chief_complaint_length"), None)
+        if length is not None and length.status is CriterionStatus.FAILED:
+            for document_ref, row in materials.document_rows("admission_record", snapshot=snapshot):
+                measured = _lx018_length_criterion_result({"admission_record": [dict(row)]})
+                if measured.actual_value is None:
+                    continue
+                if measured.status is CriterionStatus.FAILED and measured.actual_value == length.actual_value:
+                    positive_refs = (document_ref,)
+                break  # 与主诉抽取相同，只使用第一条具有主诉的原文。
+    refs = tuple(dict.fromkeys((*refs, *positive_refs)))
     return RuleDecision(
         rule_id=outcome.rule_id,
         snapshot_hash=snapshot.snapshot_hash,
@@ -603,6 +619,7 @@ def _course_semantic_decision(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=refs,
+        positive_document_refs=positive_refs,
         evaluator_version="course-semantic-v1",
         confidence=None,
         criterion_results=tuple(

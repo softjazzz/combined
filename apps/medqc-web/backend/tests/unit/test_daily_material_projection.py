@@ -173,7 +173,9 @@ def test_capture_to_real_provider_file_and_history_use_one_material_version(monk
     monkeypatch.setenv("QC_CDM_CAPTURE_WINDOW_UNTIL",(datetime.now(timezone.utc)+timedelta(hours=1)).isoformat())
     monkeypatch.setattr(clinical,"configured",lambda:True)
     monkeypatch.setattr(assembly,"_source_engine",lambda schema:engine)
-    monkeypatch.setattr(clinical_source_contract,"inspect_source",lambda *args,**kw:{"ok":True})
+    monkeypatch.setattr(clinical_source_contract,"inspect_source",lambda *args,**kw:{"ok":True,"read_only":True,"account_read_only":True,"dependencies":[]})
+    from app.services import cdm_publication_evidence
+    monkeypatch.setattr(cdm_publication_evidence,"read_publication",lambda *a:{"status":"metadata_unavailable","rows":{}})
     monkeypatch.setattr(capture,"inspect",lambda conn:SimpleNamespace(has_table=lambda *args,**kw:False))
     monkeypatch.setattr(SichuanQCService,"_resolve_primary_diagnosis_context",lambda **kw:None)
     def manifest(conn, identity):
