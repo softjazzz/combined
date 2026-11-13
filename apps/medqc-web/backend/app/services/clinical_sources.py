@@ -22,6 +22,8 @@ IDS = {"legacy_pg", "independent_cdm"}
 WORKSPACE_METADATA_GET_PATHS = frozenset({
     "/api/v1/qc/sichuan/workspace/rule-sets",
     "/api/v1/qc/sichuan/workspace/batch-jobs",
+    # 仅按已保存任务与脱敏记录引用读取反馈；/all 会补查当前病例，不在此列。
+    "/api/v1/qc/sichuan/workspace/result-feedback-demo",
 })
 
 
@@ -171,7 +173,7 @@ def prepare_request(request: Request) -> None:
             raise HTTPException(422, "clinical_source_selection_conflict")
         if (header or query) and (header or query) not in IDS:
             raise HTTPException(422, "unknown_clinical_source")
-        # 仅业务目录与账号历史列表，不读取临床材料，也不以旧库替代停用CDM。
+        # 仅业务目录、账号历史列表与已保存反馈，不以旧库替代停用CDM。
         request.state.clinical_source = legacy_snapshot()
         return
     job_detail = "/workspace/batch-jobs/" in path
