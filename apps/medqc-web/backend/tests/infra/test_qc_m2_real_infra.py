@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import os
@@ -29,6 +30,7 @@ from tests.scheduler_support.infra import (
 )
 from tests.scheduler_support.infra_runtime import (
     SessionLocal,
+    PROBE,
     archive_rows,
     bootstrap,
     canonical,
@@ -274,7 +276,7 @@ def test_publisher_kill_after_broker_confirm_republishes_after_lease_once(
     assert canonical(job_id)["job_id"] == job_id
 
 
-def test_worker_kill_after_claim_stale_scan_advances_generation(real_infra_spec):
+def test_worker_kill_after_claim_stale_scan_creates_successor(real_infra_spec):
     job_id, scope = new_job()
     _publish_actor(real_infra_spec, scope, job_id)
     process = spawn_actor(real_infra_spec, "worker-before", scope, job_id)
@@ -290,15 +292,24 @@ def test_worker_kill_after_claim_stale_scan_advances_generation(real_infra_spec)
     ).recover_stale_once(now=datetime.now(timezone.utc) + timedelta(minutes=10))
     assert outcomes[job_id] is RecoveryOutcome.RETRY_SCHEDULED
     dispatch = repo.get_dispatch(job_id)
-    assert dispatch.generation == 2
-    assert dispatch.status == "queued"
-    assert sorted(row["generation"] for row in outbox_rows(job_id)) == [1, 2]
-
-    _publish_actor(real_infra_spec, scope, job_id)
-    _worker_actor(real_infra_spec, scope, job_id)
-    assert repo.get_job_status(job_id) == "completed"
-    assert probe(job_id)["executions"] == 2
-    assert canonical(job_id)["job_id"] == job_id
+    assert dispatch.generation == 1 and dispatch.status == "failed"
+    successor_id = json.loads(dispatch.recovery_scope_json)["retry_job_id"]
+    assert successor_id != job_id
+    successor = repo.get_dispatch(successor_id)
+    assert successor.generation == 1 and successor.status == "queued"
+    assert successor.failure_count == dispatch.failure_count + 1
+    assert successor.failure_budget == dispatch.failure_budget
+    assert [row["generation"] for row in outbox_rows(job_id)] == [1]
+    assert [row["generation"] for row in outbox_rows(successor_id)] == [1]
+    with SessionLocal.begin() as session:
+        session.execute(PROBE.insert().values(job_id=successor_id, stage="created", executions=0))
+    _publish_actor(real_infra_spec, scope, successor_id)
+    _worker_actor(real_infra_spec, scope, successor_id)
+    assert repo.get_job_status(successor_id) == "completed"
+    assert repo.get_job_status(job_id) == "failed"
+    assert probe(job_id)["executions"] == probe(successor_id)["executions"] == 1
+    assert canonical(successor_id)["job_id"] == successor_id
+    assert envelope_count(job_id) == 0
 
 
 def test_worker_kill_after_commit_before_ack_redelivery_does_not_recompute(
@@ -318,7 +329,7 @@ def test_worker_kill_after_commit_before_ack_redelivery_does_not_recompute(
     assert canonical(job_id)["job_id"] == job_id
 
 
-def test_cancel_and_new_generation_reject_old_attempt_late_write(real_infra_spec):
+def test_cancel_and_new_job_reject_old_attempt_late_write(real_infra_spec):
     job_id, scope = new_job()
     _publish_actor(real_infra_spec, scope, job_id)
     process = spawn_actor(real_infra_spec, "worker-before", scope, job_id)
@@ -341,9 +352,12 @@ def test_cancel_and_new_generation_reject_old_attempt_late_write(real_infra_spec
         retry_delay_seconds=0,
     )
     assert retried["status"] == "queued"
-    assert repo.get_dispatch(job_id).generation == 2
+    assert retried["id"] != job_id
+    assert repo.get_dispatch(job_id).generation == 1
+    assert repo.get_dispatch(retried["id"]).generation == 1
     assert complete(workspace, job_id, attempt, fixed_item()) is False
-    assert envelope_count(job_id) == 0
+    assert complete(workspace, retried["id"], attempt, fixed_item()) is False
+    assert envelope_count(job_id) == envelope_count(retried["id"]) == 0
 
 
 @pytest.mark.asyncio
@@ -442,7 +456,7 @@ async def test_archive_preserves_pending_active_recovery_and_late_identity():
     assert delivery.acked is True
 
 
-def test_archive_and_retry_lock_competition_preserves_both_generations():
+def test_archive_and_retry_lock_competition_preserves_both_identities():
     job_id, _scope = new_job()
     repo, workspace = runtime()
     claimed = repo.claim_outbox("archive-retry", lease_seconds=30, limit=1)[0]
@@ -481,15 +495,15 @@ def test_archive_and_retry_lock_competition_preserves_both_generations():
 
     assert archive_result["archived_rows"] in {0, 1}
     assert retry_result["status"] == "queued"
-    assert repo.get_dispatch(job_id).generation == 2
+    successor_id = retry_result["id"]
+    assert successor_id != job_id
+    assert repo.get_dispatch(job_id).generation == 1
+    assert repo.get_dispatch(job_id).status == "canceled"
     assert repo.get_outbox(claimed.message_id).generation == 1
-    generation_two = [
-        row
-        for row in outbox_rows(job_id)
-        if row["generation"] == 2 and row["target"] == "main"
-    ]
-    assert len(generation_two) == 1
-    assert generation_two[0]["status"] == "pending"
+    successor_rows = outbox_rows(successor_id)
+    assert len(successor_rows) == 1
+    assert successor_rows[0]["generation"] == 1 and successor_rows[0]["target"] == "main"
+    assert successor_rows[0]["status"] == "pending"
 
 
 def test_missing_gateway_identity_cannot_create_job_or_outbox():

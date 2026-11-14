@@ -67,7 +67,7 @@ class ProviderHTTPError(ProviderError):
     def __init__(self, upstream_status: int) -> None:
         super().__init__(self.code)
         self.upstream_status = upstream_status
-        self.retryable = upstream_status == 429 or upstream_status >= 500
+        self.retryable = upstream_status in {408, 429} or 500 <= upstream_status <= 599
         self.status_code = 503 if self.retryable else 502
 
 

@@ -314,30 +314,65 @@ async def test_workspace_mq_schema_failure_is_controlled_and_not_submitted(
     assert submitted == []
 
 
+@pytest.fixture
+def retry_account_store(monkeypatch):
+    import sqlalchemy as sa
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.database import connection
+    from app.database.models.v36_reports import SysUser
+
+    engine = sa.create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SysUser.__table__.create(engine)
+    sessions = sessionmaker(bind=engine)
+    monkeypatch.setattr(connection, "SessionLocal", sessions)
+    with sessions.begin() as session:
+        session.add(SysUser(id="tester", username="tester", display_name="合成入口账号",
+                            role="qc_manager", institute_id="synthetic-institute", is_active=True))
+    yield
+    engine.dispose()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("persisted_mode", "expected_submit_count"),
     [("legacy", 1), ("rabbitmq", 0)],
 )
 async def test_retry_uses_persisted_task_mode(
-    monkeypatch,
+    monkeypatch, retry_account_store,
     persisted_mode: str,
     expected_submit_count: int,
 ) -> None:
-    filters = {"rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY}
+    filters = {"rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+               "record_refs": [{"institute_id": "synthetic-institute",
+                                "patient_id": "synthetic-patient", "visit_id": "synthetic-visit"}]}
     if persisted_mode == "rabbitmq":
         filters["qc_dispatch"] = {"schema_version": 1, "mode": "rabbitmq"}
     job = {
-        "id": "retry-job",
+        "id": "retry-successor",
         "draft_id": "sichuan-rule-library",
         "status": "queued",
         "job_kind": "leaf",
         "filters": filters,
     }
 
+    qc_service = _gateway_service()
+    accepted_runtime = qc_sichuan.capture_luxian_0609_task_runtime(qc_service)
+
     class _RetryWorkspace:
-        def retry_batch_job(self, **_kwargs: Any) -> dict[str, Any]:
+        def get_batch_job(self, *, job_id: str, created_by: str) -> dict[str, Any]:
+            assert (job_id, created_by) == ("retry-job", "tester")
+            return {**job, "id": "retry-job", "status": "failed"}
+
+        def retry_batch_job(self, **kwargs: Any) -> dict[str, Any]:
+            assert kwargs["job_id"] == "retry-job"
+            assert kwargs["task_runtime_snapshot"] == accepted_runtime
             return job
+
+    async def provider():
+        return qc_service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", provider)
 
     submitted: list[tuple[Any, ...]] = []
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", _RetryWorkspace)
@@ -355,6 +390,9 @@ async def test_retry_uses_persisted_task_mode(
 
     assert response["data"]["status"] == "queued"
     assert len(submitted) == expected_submit_count
+    assert response["data"]["id"] == "retry-successor"
+    if submitted:
+        assert submitted[0][2] == "retry-successor"
 
 
 def test_web_startup_resume_uses_repository_legacy_filter(monkeypatch) -> None:

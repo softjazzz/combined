@@ -13,6 +13,7 @@ from alembic.operations import Operations
 import sqlalchemy as sa
 
 from app.database.connection import engine, SessionLocal
+from app.database.models.v36_reports import SysUser
 from app.services.custom_qc_workspace_service import (
     CustomQCWorkspaceService, _batch_jobs_table, _drafts_table, _record_result_envelopes_table,
 )
@@ -65,6 +66,7 @@ def bootstrap() -> None:
                         spec.loader.exec_module(module)
                         module.upgrade()
         PROBE.create(engine, checkfirst=True)
+        SysUser.__table__.create(engine, checkfirst=True)
     finally:
         if original is None:
             os.environ.pop("DB_SCHEMA_MODE", None)
@@ -102,6 +104,10 @@ def reset_owned_tables() -> None:
         )
         for table in (*public_tables, *split_tables):
             connection.execute(table.delete())
+        connection.execute(SysUser.__table__.delete())
+        connection.execute(SysUser.__table__.insert().values(
+            id="synthetic-infra", username="synthetic-infra", display_name="合成基础设施账号",
+            role="qc_manager", institute_id="synthetic-institute", is_active=True))
 
 
 def close_runtime_connections() -> None:

@@ -1048,6 +1048,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { retryTargetJobId } from '@/utils/batchJobRetryIdentity'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
@@ -1999,9 +2000,11 @@ async function retryBatchJob(jobId: string) {
     if (!response.success || !response.data) {
       throw new Error(response.message || '重试任务失败')
     }
-    message.success('任务已重新入队')
-    await Promise.all([loadBatchJobs(), fetchBatchJobDetail(jobId, true)])
-    startBatchJobPolling(jobId)
+    const targetId = retryTargetJobId(jobId, response.data)
+    stopBatchJobPolling()
+    message.success(targetId === jobId ? '任务已重新入队' : '已创建独立重试任务，原任务与结果保留')
+    await Promise.all([loadBatchJobs(), fetchBatchJobDetail(targetId, true)])
+    startBatchJobPolling(targetId)
   } catch (error: any) {
     message.error(error?.message || '重试任务失败')
   } finally {

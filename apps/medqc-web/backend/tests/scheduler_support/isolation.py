@@ -32,7 +32,7 @@ _REAL_SOCKET_LISTEN = socket.socket.listen
 _REAL_SOCKET_ACCEPT = socket.socket.accept
 _REAL_SUBPROCESS_POPEN = subprocess.Popen
 _SOCKETPAIR_CODE = getattr(socket.socketpair, "__code__", None)
-_RESTART_PROBE_SHA256 = "8809de240999551e96f126836d9d8d65bf7bbe6dbd8a212d8719ba2f9def684f"
+_RESTART_PROBE_SHA256 = "a7cbb4691e10e7117fd4e0f659fb1dd8fb7561892450f0b86833fbbb69256b72"
 _COLD_START_PROBE_SHA256 = "4d81e240ee4f2ea71ddd0c20befef637d9264e5be8a4162c8d786ad74d91885c"
 _RESTART_PROBE_MODES = frozenset(
     {"create", "create-full", "run", "finish", "recover", "recover-full", "heartbeat"}

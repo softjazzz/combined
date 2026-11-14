@@ -230,14 +230,12 @@ async def test_generate_should_raise_clear_error_when_upstream_http_error(monkey
         await client.generate("ping")
 
     message = str(exc_info.value)
-    assert "upstream_http_error" in message
-    assert "upstream_http_status=400" in message
-    assert "provider_code=alibaba" in message
-    assert "model=qwen3.6-35b-a3b" in message
-    assert "endpoint_host=dashscope.aliyuncs.com" in message
-    assert "InvalidParameter" in message
-    assert "model not found" in message
-    assert "sk-test-secret" not in message
+    assert exc_info.value.reason_code == "model_http_error"
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.retryable is False
+    assert "拒绝请求" in message
+    for private in ("dashscope", "qwen3.6", "InvalidParameter", "model not found", "sk-test-secret", "req-123"):
+        assert private not in message
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ import hashlib
 import logging
 import re
 import time
+import httpx
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -587,6 +588,10 @@ class SichuanQCLLMClient:
                 raise terminal from None
             api_time = time.time() - api_start
             self._record_stats_delta(api_time=api_time, errors=1)
+            if isinstance(error, (httpx.HTTPError, TimeoutError, ConnectionError)):
+                from .qc_execution_errors import SafeExecutionError, safe_exception_failure
+                failure = safe_exception_failure(error)
+                raise SafeExecutionError(failure["reason_code"], retryable=failure["retryable"]) from None
             raise
 
     owns_context_attempt_budget = True
@@ -804,63 +809,14 @@ class SichuanQCLLMClient:
         except Exception:
             return ""
 
-    @staticmethod
-    def _summarize_upstream_body(body: Any, *, max_length: int = 600) -> str:
-        text = ""
-        if isinstance(body, dict):
-            parts: list[str] = []
-            for key in ("code", "message", "error", "request_id", "text"):
-                value = body.get(key)
-                if value:
-                    parts.append(f"{key}={value}")
-            nested_error = body.get("error")
-            if isinstance(nested_error, dict):
-                for key in ("code", "message", "type"):
-                    value = nested_error.get(key)
-                    if value:
-                        parts.append(f"error.{key}={value}")
-            text = "; ".join(parts) if parts else str(body)
-        else:
-            text = str(body)
-        text = re.sub(r"sk-[A-Za-z0-9_\-]{8,}", "sk-***", text)
-        return text[:max_length]
-
     def _raise_for_upstream_error(self, result: Dict[str, Any]) -> None:
         if not isinstance(result, dict) or result.get("__error__") is not True:
             return
-        from .luxian_0609.privacy_request_scope import is_luxian_0609_privacy_scope_active
+        from .qc_execution_errors import SafeExecutionError, http_failure
 
         status = result.get("__status__")
-        body = result.get("body")
-        if is_luxian_0609_privacy_scope_active():
-            # 响应正文不可信；只发布安全枚举，禁止把任意 code/message 当摘要。
-            safe_codes = {
-                "InvalidParameter": "invalid_parameter",
-                "invalid_request_error": "invalid_request",
-                "rate_limit_exceeded": "rate_limit",
-                "insufficient_quota": "quota_exceeded",
-                "model_not_found": "model_unavailable",
-                "authentication_error": "authentication_error",
-            }
-            code = body.get("code") if isinstance(body, dict) else None
-            if isinstance(body, dict) and isinstance(body.get("error"), dict):
-                code = body["error"].get("code") or body["error"].get("type")
-            summary = safe_codes.get(code, "upstream_response_error") if isinstance(code, str) else "upstream_response_error"
-            safe_status = status if type(status) is int and 100 <= status <= 599 else "unknown"
-            raise RuntimeError(
-                "upstream_http_error "
-                f"upstream_http_status={safe_status} "
-                f"upstream_error_summary={summary}"
-            ) from None
-        summary = self._summarize_upstream_body(body)
-        raise RuntimeError(
-            "upstream_http_error "
-            f"upstream_http_status={status} "
-            f"provider_code={self.provider_code or 'unknown'} "
-            f"model={self.model} "
-            f"endpoint_host={self._endpoint_host()} "
-            f"upstream_error_summary={summary}"
-        )
+        failure = http_failure(status)
+        raise SafeExecutionError(failure["reason_code"], status_code=status) from None
 
     def _is_thinking_model(self) -> bool:
         model = (self.model or "").lower()

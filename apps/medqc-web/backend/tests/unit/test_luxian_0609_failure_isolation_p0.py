@@ -227,7 +227,7 @@ def test_automatic_retry_selects_only_retryable_failures():
         (TimeoutError(), "model_timeout"),
         (httpx.ConnectTimeout("timeout"), "model_timeout"),
         (httpx.ConnectError("refused"), "model_transport_error"),
-        (RuntimeError("upstream_http_error upstream_http_status=503"), "model_transport_error"),
+        (RuntimeError("upstream_http_error upstream_http_status=503"), "model_upstream_error"),
         (ValueError("bad prompt"), "execution_program_error"),
         (KeyError("field"), "execution_program_error"),
     ],

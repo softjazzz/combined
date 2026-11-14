@@ -3,6 +3,7 @@
 import re
 from typing import Any, Dict, Optional
 
+from ..qc_execution_errors import safe_failure_projection
 from .canonical_result_store import (
     canonical_envelope_items_are_consistent,
     validated_customer_explanation,
@@ -124,8 +125,10 @@ def _build_luxian_execution_failure_record(
         "failure_status": str(raw_status or eval_item.get("status") or "execution_failed")
         .strip()
         .lower(),
-        "reason_code": _safe_luxian_failure_reason_code(eval_item, metadata),
-        "error": "规则执行未形成可交付结果",
+        **safe_failure_projection({
+            "reason_code": _safe_luxian_failure_reason_code(eval_item, metadata),
+            "retryable": eval_item.get("retryable", metadata.get("retryable")),
+        }),
     }
 
 

@@ -163,8 +163,14 @@ async def test_generate_keeps_unknown_usage_null_on_transport_failure(monkeypatc
         observability_recorder=LLMObservabilityRecorder(store=store),
     )
 
-    with pytest.raises(httpx.ReadTimeout):
+    from app.services.qc_execution_errors import SafeExecutionError
+
+    with pytest.raises(SafeExecutionError) as caught:
         await client.generate("private record")
+    assert caught.value.reason_code == "model_timeout"
+    assert caught.value.error_category == "model_timeout"
+    assert caught.value.retryable is True
+    assert "SECRET medical payload" not in str(caught.value)
 
     assert len(store.finished) == 1
     finished = store.finished[0]

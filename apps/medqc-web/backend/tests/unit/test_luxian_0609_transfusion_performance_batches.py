@@ -19,7 +19,7 @@ class BatchClient:
         docs = json.loads(prompt.split("INPUT_JSON=", 1)[1])["documents"]
         self.batches.append(docs)
         if len(self.batches) == self.fail_batch:
-            raise RuntimeError("synthetic transport failure")
+            raise ConnectionError("synthetic transport failure")
         items = [
             {"document_ref": doc["document_ref"], "state": "performed",
              "quote": "输注红细胞2U。", "start_time_quote": "09:00"}

@@ -17,6 +17,7 @@ import {
   retrySichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
+import { retryTargetJobId } from '@/utils/batchJobRetryIdentity'
 import {
   decidePollReadFailure,
   pollReadFailureMessage,
@@ -287,8 +288,12 @@ export function useSichuanBatchJobs() {
     latestBatchJobDetailRequest = requestId
     batchJobDetailLoading.value = true
     try {
+      const response = await getSichuanWorkspaceBatchJob(jobId)
+      if (response.success && response.data?.id !== jobId) {
+        throw new Error('任务详情身份不一致，已拒绝展示')
+      }
       return {
-        response: await getSichuanWorkspaceBatchJob(jobId),
+        response,
         requestId,
       }
     } catch (error) {
@@ -333,6 +338,7 @@ export function useSichuanBatchJobs() {
       if (!response.success || !response.data) {
         throw new Error(response.message || '获取任务调试快照失败')
       }
+      if (response.data.job_id !== jobId) throw new Error('任务调试快照身份不一致')
       if (!canAcceptResult()) return null
       batchJobDebugSnapshot.value = response.data
       return response.data
@@ -390,19 +396,26 @@ export function useSichuanBatchJobs() {
   async function executeRetryBatchJob(jobId: string) {
     if (!jobId || retryingBatchJobId.value) return
     retryingBatchJobId.value = jobId
+    stopBatchJobPolling()
+    const retrySession = batchJobPollSession
     try {
       const response = await retrySichuanWorkspaceBatchJob(jobId)
+      if (retrySession !== batchJobPollSession) return
       if (!response.success || !response.data) {
         throw new Error(response.message || '重试批量任务失败')
       }
-      if (batchJobDetail.value?.id === response.data.id) {
-        batchJobDetail.value = response.data
-      }
+      const targetId = retryTargetJobId(jobId, response.data)
+      latestBatchJobDetailRequest = ++batchJobDetailRequestSequence
+      latestBatchJobDebugRequest = ++batchJobDebugRequestSequence
+      batchJobDetail.value = response.data
+      batchJobDebugSnapshot.value = null
       await loadBatchJobs()
-      await fetchBatchJobDetail(jobId, { includeDebugSnapshot: true })
-      startBatchJobPolling(jobId)
+      if (retrySession !== batchJobPollSession) return
+      await fetchBatchJobDetail(targetId, { includeDebugSnapshot: true })
+      if (retrySession !== batchJobPollSession) return
+      startBatchJobPolling(targetId)
       message.success(
-        response.data.summary?.execution_status === 'partial_failed'
+        targetId !== jobId ? '已创建独立重试任务，原任务与结果保留' : response.data.summary?.execution_status === 'partial_failed'
           ? '失败项已重新入队，已有有效结果将继续保留'
           : '批量任务已重新入队',
       )

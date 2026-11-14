@@ -297,8 +297,13 @@ async def test_role_failure_does_not_call_default_or_cloud_fallback(client, setu
 
     monkeypatch.setattr(qc_llm_client, 'safe_post_json', unavailable)
     root = await saved_client(client, {'fact_extraction': spec()})
-    with pytest.raises(httpx.ConnectError):
+    from app.services.qc_execution_errors import SafeExecutionError
+
+    with pytest.raises(SafeExecutionError) as rejected:
         await root.for_task_role('fact_extraction').generate('合成材料')
+    assert rejected.value.reason_code == 'model_transport_error'
+    assert rejected.value.retryable is True
+    assert 'synthetic unavailable' not in str(rejected.value)
     assert calls == ['qwen3.6-35b-a3b']
     assert root.error_count == 1
 

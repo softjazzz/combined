@@ -123,6 +123,67 @@ def test_startup_queued_job_ensures_current_generation_delivery():
     assert repository.ensured == [("job-1", 3, "main")]
 
 
+@pytest.mark.parametrize("stage", ["registration", "terminal"])
+def test_manual_successor_wins_recovery_cas_without_stopping_owner(stage):
+    from types import SimpleNamespace
+    repository = _Repository(dispatch=_Dispatch(failure_budget=0 if stage == "terminal" else 2))
+    workspace = _Workspace(_job())
+    original_get = repository.get_dispatch
+
+    def lookup(job_id):
+        if job_id == "job-2":
+            return SimpleNamespace(job_id="job-2", mode="rabbitmq")
+        return original_get(job_id)
+
+    def manual_wins(*_args, **_kwargs):
+        repository.dispatch.recovery_reason_code = "retry_successor_created"
+        repository.dispatch.recovery_scope_json = json.dumps({"retry_job_id": "job-2"})
+        return False
+
+    repository.get_dispatch = lookup
+    if stage == "registration":
+        repository.register_recovery = manual_wins
+    else:
+        repository.record_terminal_failure = manual_wins
+    result = WorkerRecovery(repository=repository, workspace=workspace).recover_failed_job("job-1")
+    assert result == RecoveryOutcome.RETRY_SCHEDULED
+    assert workspace.retry_calls == []
+
+
+@pytest.mark.parametrize("status,expected", [(403, RecoveryOutcome.MANUAL_SCOPE_REQUIRED),
+                                             (503, RecoveryOutcome.SKIPPED),
+                                             ("retry_rule_scope_paused", RecoveryOutcome.MANUAL_SCOPE_REQUIRED),
+                                             ("retry_lineage_identity_mismatch", RecoveryOutcome.MANUAL_SCOPE_REQUIRED)])
+def test_permission_failure_does_not_stop_later_recovery_candidates(status, expected):
+    from fastapi import HTTPException
+    from types import SimpleNamespace
+    repository = _Repository()
+    repository.candidates = [SimpleNamespace(job_id="job-1"), SimpleNamespace(job_id="job-2")]
+    # 两个任务的持久恢复状态相互独立。
+    repository.register_recovery = lambda job_id, generation, **kwargs: (
+        repository.recoveries.append((job_id, generation, kwargs)) or True)
+
+    class Workspace:
+        def get_batch_job_for_processing(self, *, job_id):
+            return {**_job(), "id": job_id}
+        def list_record_result_case_refs(self, *, job_id):
+            return ()
+        def retry_batch_job(self, *, job_id, **kwargs):
+            if job_id == "job-1":
+                if isinstance(status, str):
+                    raise ValueError(status)
+                raise HTTPException(status, "controlled permission error")
+            return {"id": "new-job-2", "status": "queued"}
+
+    outcomes = WorkerRecovery(repository=repository, workspace=Workspace()).recover_failed_candidates()
+    assert outcomes == {"job-1": expected, "job-2": RecoveryOutcome.RETRY_SCHEDULED}
+    assert repository.terminal == []
+    if status == 403:
+        assert any(item[2].get("reason_code") == "retry_permission_revoked" for item in repository.recoveries)
+    if isinstance(status, str):
+        assert any(item[2].get("reason_code") == "retry_contract_rejected" for item in repository.recoveries)
+
+
 def test_startup_recovery_reopens_confirmed_delivery_with_same_message_id():
     engine = create_engine(
         "sqlite://",
@@ -376,3 +437,18 @@ def test_legacy_dispatch_is_not_recovered_by_independent_worker():
     assert outcome == RecoveryOutcome.SKIPPED
     assert workspace.retry_calls == []
     assert repository.recoveries == []
+
+
+@pytest.mark.parametrize("reason", ["task_settings_changed", "task_runtime_changed", "execution_program_error",
+                                   "model_timeout"])
+def test_saved_nonretryable_task_error_is_terminal_not_unstarted(reason):
+    repository = _Repository()
+    job = _job()
+    job["summary"] = {"execution_error": {"reason_code": reason, "retryable": False}}
+    workspace = _Workspace(job)
+    recovery = WorkerRecovery(repository=repository, workspace=workspace)
+    assert recovery.recover_failed_job("job-1") is RecoveryOutcome.TERMINAL_FAILURE
+    assert repository.recoveries == []
+    assert workspace.retry_calls == []
+    assert repository.terminal == [("job-1", 1, "worker_failed")]
+    assert job["summary"]["execution_error"] == {"reason_code": reason, "retryable": False}

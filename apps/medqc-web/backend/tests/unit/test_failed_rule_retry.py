@@ -151,8 +151,8 @@ def test_merge_keeps_valid_results_when_retry_still_fails() -> None:
     assert failures == [retry_failure]
 
 
-def test_auto_retry_plan_retries_contract_failures_until_limit() -> None:
-    failure = {**_row("LX0609-06-01-05"), "error_phase": "result_status"}
+def test_auto_retry_plan_retries_explicit_transient_failures_until_limit() -> None:
+    failure = {**_row("LX0609-06-01-05"), "error_phase": "result_status", "reason_code": "model_timeout"}
 
     first = build_failed_rule_auto_retry_plan(
         summary={"execution_status": "partial_failed"},
@@ -227,8 +227,9 @@ def test_mixed_terminal_and_transient_failures_retry_only_transient_and_retain_b
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("workspace_tables_without_database")
 @pytest.mark.parametrize("recovered", [True, False], ids=["recovered", "still_failed"])
+@pytest.mark.parametrize("independent", [False, True], ids=["legacy_same_id", "independent_attempt"])
 async def test_formal_worker_parent_retry_canonical_and_route_agree(
-    monkeypatch, recovered
+    monkeypatch, recovered, independent
 ):
     """实际 Worker 分类、定向补跑、父统计、内存保存及路由共用同一合成结果。"""
     import copy
@@ -268,6 +269,7 @@ async def test_formal_worker_parent_retry_canonical_and_route_agree(
     store = CanonicalResultStore(table)
     children = []
     calls = []
+    observation_roots = []
     snapshots = []
     parent = {
         "id": "synthetic-parent",
@@ -325,7 +327,7 @@ async def test_formal_worker_parent_retry_canonical_and_route_agree(
         child.job.update(
             id=f"synthetic-child-{index}",
             parent_job_id=parent["id"],
-            job_kind="leaf",
+            job_kind="child",
             total_records=1,
             created_by="tester",
             rule_code="LX0609",
@@ -340,6 +342,8 @@ async def test_formal_worker_parent_retry_canonical_and_route_agree(
     attempt = {"retry": False}
 
     async def evaluate(**kwargs):
+        from app.services.llm_observability import current_llm_observation_context
+        observation_roots.append(current_llm_observation_context().root_job_id)
         visit = kwargs["bundle"]["visit_id"]
         active = tuple(kwargs["rule_ids"])
         calls.append((visit, active))
@@ -450,6 +454,54 @@ async def test_formal_worker_parent_retry_canonical_and_route_agree(
         failed_child = children[1]
         scope, failures = build_failed_rule_retry_scope(failed_child.job)
         assert scope["pending_count"] == 1 and scope["rule_ids"] == [rule_id]
+        if independent:
+            import hashlib
+            import uuid
+            from app.services import case_material_capture, validation_material_source
+            from app.database import clinical_connection
+            source_job = copy.deepcopy(failed_child.job)
+            source_raw = json.dumps(source_job["filters"])
+            source_hash = hashlib.sha256(source_raw.encode()).hexdigest()
+            new_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"medqc:retry:v1:{source_job['id']}:{source_hash}"))
+            retry_child = Workspace()
+            retry_child.job = copy.deepcopy(source_job)
+            retry_child.job.update(id=new_id, parent_job_id=None,
+                                   status="queued", items=[], failed_records=[], summary={})
+            retry_child.job["filters"]["failed_rule_retry"] = scope
+            retry_child.job["filters"]["retry_lineage"] = {
+                "schema_version": "qc-retry-lineage-v1", "source_filters_sha256": source_hash,
+                "source_attempt": source_job["filters"].get("_lx0609_attempt_id") or "",
+                "source_job_id": source_job["id"], "root_job_id": source_job["id"],
+                "material_job_id": parent["id"], "attempt": 1, "trigger": "manual",
+            }
+            retry_child.job["_claim_filters_json"] = json.dumps(retry_child.job["filters"])
+            related_jobs = {source_job["id"]: {**source_job, "_claim_filters_json": source_raw},
+                            parent["id"]: parent, new_id: retry_child.job}
+            monkeypatch.setattr(retry_child, "get_batch_job_for_processing", lambda *, job_id: related_jobs.get(job_id))
+            material_calls = []
+            def frozen_material(job_id, identity, *, retry, cancellation_check):
+                material_calls.append((job_id, identity, retry))
+                return None
+            monkeypatch.setattr(case_material_capture, "obtain", frozen_material)
+            monkeypatch.setattr(clinical_connection, "configured", lambda: True)
+            monkeypatch.setattr(validation_material_source, "is_material_copy", lambda *_: False)
+            attempt["retry"] = True
+            await worker.run_sichuan_workspace_batch_job(
+                retry_child.job["id"], workspace=retry_child, qc_service_provider=provider)
+            assert failed_child.job == source_job
+            assert children[0].job == original_success
+            assert aggregate() == before
+            assert (await route())["data"]["items"] == before_route["items"]
+            assert len(retry_child.items) == int(recovered)
+            assert retry_child.summary["completed_rule_count"] == int(recovered)
+            assert retry_child.summary["failed_rule_count"] == int(not recovered)
+            assert retry_child.summary["total_records"] == 1
+            assert retry_child.summary["retry_recovered_count"] == int(recovered)
+            assert material_calls == [(parent["id"], tuple(source_job["filters"]["record_refs"][0][key]
+                for key in ("institute_id", "patient_id", "visit_id")), True)]
+            assert calls == [("visit-001", (rule_id,)), ("visit-002", (rule_id,)), ("visit-002", (rule_id,))]
+            assert observation_roots == [parent["id"], parent["id"], retry_child.job["id"]]
+            return
         failed_child.job["filters"]["failed_rule_retry"] = scope
         failed_child.job.update(status="queued", failed_records=failures)
         attempt["retry"] = True

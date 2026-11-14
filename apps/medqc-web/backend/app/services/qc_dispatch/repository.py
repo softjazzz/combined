@@ -186,6 +186,8 @@ class QCDispatchRepository:
                     self.dispatch_table.c.mode == "rabbitmq",
                     self.dispatch_table.c.status == "failed",
                     self.dispatch_table.c.last_failure_code.is_(None),
+                    or_(self.dispatch_table.c.recovery_reason_code.is_(None),
+                        self.dispatch_table.c.recovery_reason_code != "retry_successor_created"),
                     or_(
                         self.dispatch_table.c.recovery_kind.is_(None),
                         self.dispatch_table.c.recovery_kind != "manual_scope_required",
@@ -545,6 +547,8 @@ class QCDispatchRepository:
                         self.dispatch_table.c.job_id == job_id,
                         self.dispatch_table.c.generation == generation,
                         self.dispatch_table.c.mode == "rabbitmq",
+                        or_(self.dispatch_table.c.recovery_reason_code.is_(None),
+                            self.dispatch_table.c.recovery_reason_code != "retry_successor_created"),
                     )
                 )
                 .values(
@@ -565,6 +569,33 @@ class QCDispatchRepository:
         finally:
             if own:
                 active.close()
+
+    def link_retry_successor(
+        self, session: Session, *, source_job_id: str, source_generation: int,
+        successor_job_id: str, automatic: bool,
+    ) -> None:
+        """与新job/outbox同事务收口旧恢复记录，不重置旧业务结果。"""
+        source = self.get_dispatch(source_job_id, session=session)
+        if source is None or source.generation != source_generation:
+            raise ValueError("retry_source_dispatch_changed")
+        if automatic and source.failure_count >= source.failure_budget:
+            raise ValueError("retry_budget_exhausted")
+        changed = session.execute(update(self.dispatch_table).where(and_(
+            self.dispatch_table.c.job_id == source_job_id,
+            self.dispatch_table.c.generation == source_generation,
+        )).values(recovery_kind="failed_scope", recovery_reason_code="retry_successor_created",
+                  recovery_scope_json=json.dumps({"retry_job_id": successor_job_id}),
+                  recovery_registered_at=_utcnow(), updated_at=_utcnow()))
+        if getattr(changed, "rowcount", 0) != 1:
+            raise ValueError("retry_source_dispatch_changed")
+        changed = session.execute(update(self.dispatch_table).where(and_(
+            self.dispatch_table.c.job_id == successor_job_id,
+            self.dispatch_table.c.generation == 1,
+            self.dispatch_table.c.status == "queued",
+        )).values(failure_budget=source.failure_budget,
+                  failure_count=source.failure_count + 1 if automatic else 0))
+        if getattr(changed, "rowcount", 0) != 1:
+            raise ValueError("retry_successor_dispatch_changed")
 
     def advance_generation(
         self,
@@ -670,6 +701,8 @@ class QCDispatchRepository:
                         self.dispatch_table.c.job_id == job_id,
                         self.dispatch_table.c.generation == generation,
                         self.dispatch_table.c.mode == "rabbitmq",
+                        or_(self.dispatch_table.c.recovery_reason_code.is_(None),
+                            self.dispatch_table.c.recovery_reason_code != "retry_successor_created"),
                     )
                 )
                 .values(

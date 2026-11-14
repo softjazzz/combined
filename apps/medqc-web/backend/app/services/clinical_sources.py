@@ -269,6 +269,39 @@ async def bind_request(request: Request):
             yield
 
 
+def _require_retry_history_access(session, actor_id: str, identity: tuple[str, str, str], selection: dict) -> None:
+    """重试历史读取重新核对持久账号；任务创建者和请求角色不能替代当前授权。"""
+    from .defect_rectification_service import _person, RectificationError
+    from .saved_result_access import check_saved_result_institute
+
+    try:
+        person = _person(session, actor_id)
+    except RectificationError:
+        raise HTTPException(403, "账号或机构权限无效") from None
+    except Exception:
+        raise HTTPException(503, "账号机构权限来源暂不可用") from None
+    roles = person["roles"]
+    if roles & {"admin", "sync_admin", "super_admin"}:
+        return
+    institute_id = person["institute_id"]
+    if not isinstance(institute_id, str) or not institute_id.strip() or institute_id != institute_id.strip():
+        raise HTTPException(403, "账号缺少可信机构范围")
+    check_saved_result_institute(institute_id, identity[0])
+    if roles & {"qc_manager", "qc_staff"}:
+        return
+    if "doctor" in roles:
+        from ..database.connection import SessionLocal
+        from .doctor_case_scope import resolve_doctor_case_scope
+
+        # prepare_request 先于外层医生门禁；按已保存来源执行同一个个人范围owner。
+        with clinical.selected(selection):
+            scope = resolve_doctor_case_scope(actor_id, session_factory=SessionLocal)
+        if scope is not None:
+            scope.require_case(*identity)
+            return
+    raise HTTPException(403, "无权读取该任务病历材料")
+
+
 def source_for_saved_job(request: Request, job_id: str) -> dict:
     """历史文书读取只接受已保存任务的服务端来源，不能由URL提交端点或凭据。"""
     from ..database.connection import SessionLocal
@@ -276,24 +309,38 @@ def source_for_saved_job(request: Request, job_id: str) -> dict:
         raise PipelineError("clinical_source_job_unavailable", 503)
     try:
         with SessionLocal() as session:
-            row = session.execute(text("SELECT created_by,filters_json,parent_job_id FROM qc.custom_qc_batch_jobs WHERE id=:id"), {"id": job_id}).first()
-        if row is None:
-            raise PipelineError("clinical_source_job_not_found", 404)
-        actor = getattr(request.state, "current_user", {})
-        if row[0] != actor.get("id") and not set(actor.get("roles") or []) & {"admin", "sync_admin", "super_admin", "qc_manager", "qc_staff", "doctor"}:
-            raise PipelineError("clinical_source_job_forbidden", 403)
-        filters = json.loads(row[1] or "{}")
-        selection = saved_snapshot(filters)
-        request.state.material_root_job_id = str(row[2] or filters.get("parent_job_id") or job_id)
-        if TASK_KEY in filters:
-            identity = tuple(request.query_params.get(k) or request.path_params.get(k) or "" for k in ("institute_id", "patient_id", "visit_id"))
-            refs = filters.get("record_refs") or []
-            if not all(identity) or identity not in {
-                tuple(str(ref.get(k) or "") for k in ("institute_id", "patient_id", "visit_id")) for ref in refs if isinstance(ref, dict)
-            }:
-                raise PipelineError("clinical_source_job_case_mismatch", 403)
+            def lookup(saved_job_id):
+                return session.execute(text(
+                    "SELECT id,created_by,filters_json,parent_job_id,job_kind,child_job_ids_json "
+                    "FROM qc.custom_qc_batch_jobs WHERE id=:id"
+                ), {"id": saved_job_id}).mappings().first()
+            row = lookup(job_id)
+            if row is None:
+                raise PipelineError("clinical_source_job_not_found", 404)
+            actor = getattr(request.state, "current_user", {})
+            if row["created_by"] != actor.get("id") and not set(actor.get("roles") or []) & {"admin", "sync_admin", "super_admin", "qc_manager", "qc_staff", "doctor"}:
+                raise PipelineError("clinical_source_job_forbidden", 403)
+            filters = json.loads(row["filters_json"] or "{}")
+            selection = saved_snapshot(filters)
+            if TASK_KEY in filters or "retry_lineage" in filters:
+                identity = tuple(request.query_params.get(k) or request.path_params.get(k) or "" for k in ("institute_id", "patient_id", "visit_id"))
+                refs = filters.get("record_refs") or []
+                if not all(identity) or identity not in {
+                    tuple(str(ref.get(k) or "") for k in ("institute_id", "patient_id", "visit_id")) for ref in refs if isinstance(ref, dict)
+                }:
+                    raise PipelineError("clinical_source_job_case_mismatch", 403)
+                if "retry_lineage" in filters:
+                    _require_retry_history_access(session, str(actor.get("id") or ""), identity, selection)
+            from .material_job_lineage import resolve_material_job_id
+            try:
+                material_job_id = resolve_material_job_id(row, lookup)
+            except ValueError:
+                raise PipelineError("clinical_source_job_lineage_invalid", 409) from None
+        request.state.material_root_job_id = material_job_id
         return selection
     except PipelineError:
+        raise
+    except HTTPException:
         raise
     except Exception:
         raise PipelineError("clinical_source_job_unavailable", 503) from None
