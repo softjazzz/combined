@@ -66,13 +66,13 @@ _TYPED_EVALUATOR_VERSION = "surgery-presence-ruledecision-v3"
 _TYPED_RULE_SOURCE_KEYS = MappingProxyType(
     {
         "LX0609-04-01-01": frozenset(
-            {"presurg_summary", "surgery_record", "mr_surgery"}
+            {"presurg_summary", "surgery_record"}
         ),
         "LX0609-04-02-02": frozenset(
-            {"inpat_nondrug_order", "surgery_record", "mr_surgery", "evaluation_context.horizon"}
+            {"inpat_nondrug_order", "surgery_record", "evaluation_context.horizon"}
         ),
         "LX0609-04-03-01": frozenset(
-            {"surgery_safecheck_record", "surgery_record", "mr_surgery"}
+            {"surgery_safecheck_record", "surgery_record"}
         ),
     }
 )
@@ -467,57 +467,6 @@ def _selected_surgery_presence_fact_refs(
     return selected
 
 
-def _typed_030_front_page_trigger_refs(
-    *,
-    snapshot: Luxian0609EvidenceSnapshot,
-    materials: Luxian0609EvidenceMaterialStore,
-) -> tuple[tuple[str, ...], bool]:
-    """030 与 029 同一触发口径：首页确认的已实施手术也触发手术记录要求。
-
-    首页“手术及操作”同时含治疗性操作，只采用共用手术适用性解析器按院内
-    目录/手术等级确认为手术的行。来源完整时逐台检查，其他日期的记录不能
-    覆盖当前事件；缺时间或同日关联未决时保留原判定。
-    """
-
-    observation = next(
-        (item for item in snapshot.observations if item.source_key == "surgery_record"),
-        None,
-    )
-    if (
-        observation is None
-        or observation.query_state not in {QueryStatus.EMPTY, QueryStatus.AVAILABLE}
-        or observation.completeness is not SourceCompleteness.COMPLETE
-    ):
-        return (), False
-    applicability = resolve_surgery_applicability(
-        snapshot=snapshot, materials=materials, source_keys=("mr_surgery",)
-    )
-    if not applicability.is_performed_surgery:
-        return (), False
-    document_rows = materials.document_rows("mr_surgery", snapshot=snapshot)
-    performed = performed_surgery_rows(
-        source_key="mr_surgery", rows=tuple(row for _, row in document_rows)
-    )
-    record_rows = (
-        () if observation.query_state is QueryStatus.EMPTY
-        else tuple(materials.rows("surgery_record"))
-    )
-    missing = (
-        performed
-        if observation.query_state is QueryStatus.EMPTY
-        else definitely_uncovered_surgery_rows(performed, record_rows)
-    )
-    refs = tuple(
-        dict.fromkeys(
-            reference
-            for reference, row in document_rows
-            if any(row is candidate for candidate in missing)
-        )
-    )
-    # 同日多台而记录不足时不能回落为“有记录即合规”。
-    return refs, not refs and same_day_surgery_coverage_unresolved(performed, record_rows)
-
-
 def _surgery_order_obligation(*, snapshot: Luxian0609EvidenceSnapshot,
                             materials: Luxian0609EvidenceMaterialStore) -> tuple[str, str] | None:
     """030 与 029（仅医嘱触发、缺术前小结时）共用的安全门控；不从文本推定实施。"""
@@ -534,13 +483,13 @@ def _surgery_order_obligation(*, snapshot: Luxian0609EvidenceSnapshot,
                 in {"取消", "撤销", "作废", "已取消", "已撤销", "已作废"}
                 or row.get("canceled_datetime")]
     applicability = resolve_surgery_applicability(snapshot=snapshot, materials=materials,
-                                                source_keys=("surgery_record", "mr_surgery"))
+                                                source_keys=("surgery_record",))
     if applicability.is_performed_surgery:
         # 单事件同时有取消和实施的结构化证据，不能借另一类证据消除冲突。
         if len(orders) == 1 and canceled:
             return "data_gap", "association_failed"
         return None
-    for source in ("surgery_record", "mr_surgery"):
+    for source in ("surgery_record",):
         observation = next((item for item in snapshot.observations if item.source_key == source), None)
         if observation is None or observation.query_state is QueryStatus.UNAVAILABLE:
             return "data_gap", "source_readiness_unproven"
@@ -590,7 +539,7 @@ def _surgery_presence_display_trigger_facts(
         if (
             fact_type == "current_visit_surgery_confirmed"
             and source_key
-            in {"surgery_application", "surgery_record", "mr_surgery"}
+            in {"surgery_application", "surgery_record"}
             and any(
                 getattr(signal, "event_status", None) == "performed"
                 for signal in signals
@@ -765,7 +714,6 @@ def execute_luxian_0609_native_rules(
             final_state_by_rule_id["LX0609-04-03-01"], reason_by_rule_id[
                 "LX0609-04-03-01"
             ] = linkage_outcome
-    front_page_trigger_refs: tuple[str, ...] = ()
     if (
         "LX0609-04-02-02" in typed_selected
         and final_state_by_rule_id.get("LX0609-04-02-02") != "technical_error"
@@ -774,21 +722,10 @@ def execute_luxian_0609_native_rules(
     ):
         try:
             obligation = _surgery_order_obligation(snapshot=evidence_snapshot, materials=evidence_materials)
-            front_page_trigger_refs, same_day_unresolved = _typed_030_front_page_trigger_refs(
-                snapshot=evidence_snapshot, materials=evidence_materials
-            )
         except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
-            front_page_trigger_refs, same_day_unresolved = (), False
             obligation = ("data_gap", "candidate_scope_incomplete")
         if obligation is not None:
             final_state_by_rule_id["LX0609-04-02-02"], reason_by_rule_id["LX0609-04-02-02"] = obligation
-            front_page_trigger_refs = ()
-        elif front_page_trigger_refs:
-            final_state_by_rule_id["LX0609-04-02-02"] = "non_compliant"
-            reason_by_rule_id["LX0609-04-02-02"] = "required_document_missing"
-        elif same_day_unresolved and final_state_by_rule_id.get("LX0609-04-02-02") == "compliant":
-            final_state_by_rule_id["LX0609-04-02-02"] = "data_gap"
-            reason_by_rule_id["LX0609-04-02-02"] = "association_failed"
     all_results = tuple(
         build_luxian_0609_native_result(
             rule_id=result.rule_id,
@@ -805,9 +742,7 @@ def execute_luxian_0609_native_rules(
     if evidence_snapshot is not None and evidence_materials is not None:
         for rule_id in typed_set:
             try:
-                if rule_id == "LX0609-04-02-02" and front_page_trigger_refs:
-                    selected_fact_refs_by_rule[rule_id] = front_page_trigger_refs
-                elif (
+                if (
                     final_state_by_rule_id[rule_id] == "data_gap"
                     and reason_by_rule_id[rule_id] != "association_failed"
                 ):
@@ -862,16 +797,9 @@ def execute_luxian_0609_native_rules(
         target_document = target_documents.get(rule_id)
         if target_document is None:
             continue
-        trigger_facts = (
-            {
-                "surgery_trigger_kind": "performed_surgery",
-                "performed_surgery_confirmed": True,
-            }
-            if rule_id == "LX0609-04-02-02" and front_page_trigger_refs
-            else _surgery_presence_display_trigger_facts(
-                rule_id=rule_id,
-                provided=provided,
-            )
+        trigger_facts = _surgery_presence_display_trigger_facts(
+            rule_id=rule_id,
+            provided=provided,
         )
         if rule_id == "LX0609-04-02-02" and not trigger_facts:
             # 030 的判定结果没有可观察的已组装触发信号时，不能凭状态猜测

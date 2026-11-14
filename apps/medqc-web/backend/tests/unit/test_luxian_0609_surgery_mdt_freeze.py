@@ -40,7 +40,7 @@ from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 RULE_ID = "LX0609-04-01-03"
 _SOURCE_KEYS = (
-    "mr_surgery",
+    "surgery_record",
     "presurg_summary",
     "presurg_discussion",
     "consultation_record",
@@ -174,10 +174,11 @@ def _surgery(
     level: str = "四级",
 ) -> dict:
     return {
-        "surgery_id": document_id,
+        "document_id": document_id,
         "surgery_name": "测试手术",
         "surgical_level": level,
-        "surgery_begin_datetime": "2026-01-02T09:00:00",
+        "surgery_begin_time": "2026-01-02 09:00:00+08",
+        "record_time": "2026-01-02 09:00:00",
     }
 
 
@@ -234,7 +235,7 @@ def _evidence_coordinates(
         (
             "四级手术已完成多学科讨论",
             {
-                "mr_surgery": [_surgery(document_id="SURG-C")],
+                "surgery_record": [_surgery(document_id="SURG-C")],
                 "presurg_discussion": [
                     {
                         "document_id": "DISC-C",
@@ -248,9 +249,9 @@ def _evidence_coordinates(
             "",
             "compliant",
             "requirement_satisfied",
-            {"mr_surgery", "presurg_discussion"},
+            {"surgery_record", "presurg_discussion"},
             {
-                ("mr_surgery", "SURG-C", "", "2026-01-02 09:00:00"),
+                ("surgery_record", "SURG-C", "", "2026-01-02 09:00:00"),
                 (
                     "presurg_discussion",
                     "DISC-C",
@@ -269,13 +270,13 @@ def _evidence_coordinates(
         ),
         (
             "四级手术缺少讨论记录",
-            {"mr_surgery": [_surgery(document_id="SURG-NC")]},
+            {"surgery_record": [_surgery(document_id="SURG-NC")]},
             "",
             "",
             "non_compliant",
             "requirement_violated",
-            {"mr_surgery"},
-            {("mr_surgery", "SURG-NC", "", "2026-01-02 09:00:00")},
+            {"surgery_record"},
+            {("surgery_record", "SURG-NC", "", "2026-01-02 09:00:00")},
             {
                 "performed_surgery_confirmed": True,
                 "procedure_kind": "surgery",
@@ -286,13 +287,13 @@ def _evidence_coordinates(
         ),
         (
             "非四级手术不适用",
-            {"mr_surgery": [_surgery(document_id="SURG-NA", level="三级")]},
+            {"surgery_record": [_surgery(document_id="SURG-NA", level="三级")]},
             "",
             "",
             "not_applicable",
             "trigger_absent_complete",
-            {"mr_surgery"},
-            {("mr_surgery", "SURG-NA", "", "2026-01-02 09:00:00")},
+            {"surgery_record"},
+            {("surgery_record", "SURG-NA", "", "2026-01-02 09:00:00")},
             {
                 "performed_surgery_confirmed": True,
                 "procedure_kind": "surgery",
@@ -302,13 +303,13 @@ def _evidence_coordinates(
         ),
         (
             "讨论来源未接入",
-            {"mr_surgery": [_surgery(document_id="SURG-DG")]},
+            {"surgery_record": [_surgery(document_id="SURG-DG")]},
             "presurg_discussion",
             "",
             "data_gap",
             "source_unavailable",
-            {"mr_surgery"},
-            {("mr_surgery", "SURG-DG", "", "2026-01-02 09:00:00")},
+            {"surgery_record"},
+            {("surgery_record", "SURG-DG", "", "2026-01-02 09:00:00")},
             {
                 "performed_surgery_confirmed": True,
                 "procedure_kind": "surgery",
@@ -321,7 +322,7 @@ def _evidence_coordinates(
             "手术来源查询异常",
             {},
             "",
-            "mr_surgery",
+            "surgery_record",
             "technical_error",
             "source_query_error",
             set(),
@@ -371,7 +372,7 @@ async def test_surgery_mdt_current_canonical_results_are_frozen(
 async def test_surgery_mdt_emergency_lifesaving_exemption_is_publicly_projected():
     session = _session(
         {
-            "mr_surgery": [_surgery(document_id="SURG-EMERGENCY")],
+            "surgery_record": [_surgery(document_id="SURG-EMERGENCY")],
             "presurg_summary": [
                 {
                     "document_id": "SUMMARY-EMERGENCY",
@@ -393,11 +394,11 @@ async def test_surgery_mdt_emergency_lifesaving_exemption_is_publicly_projected(
         "trigger_absent_complete",
     )
     assert _fact_ref_source_keys(session, reduced.fact_refs) == {
-        "mr_surgery",
+        "surgery_record",
         "presurg_summary",
     }
     assert _evidence_coordinates(result) == {
-        ("mr_surgery", "SURG-EMERGENCY", "", "2026-01-02 09:00:00"),
+        ("surgery_record", "SURG-EMERGENCY", "", "2026-01-02 09:00:00"),
         ("presurg_summary", "SUMMARY-EMERGENCY", "record_content", ""),
     }
     assert result["customer_display_facts"] == {

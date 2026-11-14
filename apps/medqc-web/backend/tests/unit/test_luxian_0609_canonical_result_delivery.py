@@ -67,6 +67,29 @@ from app.services.luxian_0609.basic_timeliness_customer_projection import (
 pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
 
 
+@pytest.fixture
+def saved_result_account(monkeypatch):
+    """结果 HTTP 测试使用持久合成账号，执行真实 A2 机构授权。"""
+    from app.database import connection
+    from app.database.models.v36_reports import SysUser
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    )
+    SysUser.__table__.create(engine)
+    sessions = sessionmaker(bind=engine)
+    with sessions.begin() as session:
+        session.add(SysUser(
+            id="admin-001", username="synthetic-result-reviewer",
+            display_name="合成结果核对账号", password_hash="synthetic",
+            role="qc_manager", institute_id="inst-1", is_active=True,
+        ))
+    monkeypatch.setattr(connection, "SessionLocal", sessions)
+    yield
+    engine.dispose()
+
+
 class _Rows:
     def __init__(self, rows: list[dict[str, Any]]):
         self._rows = rows
@@ -2370,7 +2393,7 @@ def _published_pilot_item_for_read_boundary(rule_id: str) -> dict[str, Any]:
     ids=["new_pilots", "original_004", "original_001", "original_002_005_006"],
 )
 def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
-    monkeypatch, rule_ids,
+    monkeypatch, rule_ids, saved_result_account,
 ):
     """发布后的同一 Envelope 是反馈与三个导出格式的结果来源。"""
     import csv
@@ -2381,15 +2404,14 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     canonical_table = workspace_module._record_result_envelopes_table().to_metadata(
         MetaData(), schema=None,
     )
-    feedback_table = feedback_module._feedback_table().to_metadata(
-        MetaData(), schema=None,
-    )
     # TestClient 的线程池需要看到同一份隔离内存库。
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    monkeypatch.setattr(feedback_module, "engine", engine)
+    feedback_table = feedback_module._feedback_table().to_metadata(MetaData(), schema=None)
     canonical_table.metadata.create_all(engine)
     feedback_table.metadata.create_all(engine)
     store = CanonicalResultStore(canonical_table)
@@ -2591,7 +2613,7 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
         monkeypatch.setattr(
             records, "medical_records_db", SimpleNamespace(get=lambda _record_id: None),
         )
-        monkeypatch.setattr(records, "_load_bundle_payload_for_record", lambda _record_id: {})
+        monkeypatch.setattr(records, "_load_bundle_payload_for_record", lambda _record_id, **_kwargs: {})
         monkeypatch.setattr(
             records, "_luxian_0609_envelope_identities",
             lambda _record_id, **_kwargs: {("inst-1", "patient-1", "visit-1")},
@@ -2736,7 +2758,7 @@ def test_published_rules_keep_identity_through_sqlite_dto_feedback_and_exports(
     ],
 )
 def test_invalid_published_json_type_is_controlled_through_store_and_single_record_dto(
-    monkeypatch, rule_id, path, invalid,
+    monkeypatch, rule_id, path, invalid, saved_result_account,
 ):
     table = workspace_module._record_result_envelopes_table().to_metadata(
         MetaData(), schema=None,

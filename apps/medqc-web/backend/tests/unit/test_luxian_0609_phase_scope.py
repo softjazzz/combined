@@ -115,23 +115,13 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
     )
     assert entries["LX0609-01-01-02"].pending_criteria == ()
     assert entries["LX0609-01-01-02"].pending_reason_code == ""
-    assert {
-        rule_id
-        for rule_id, entry in entries.items()
-        if entry.phase_status == "pending_definition"
-    } == {
-        "LX0609-03-01-01",
-        "LX0609-03-01-02",
-        "LX0609-03-01-03",
-        "LX0609-04-02-04",
-        "LX0609-04-04-01",
-        # 访视来源缺失，与 04-04-01 同口径暂停（2026-10-10）。
-        "LX0609-04-04-02",
-        "LX0609-07-04-02",
-        # 056 已按院方重点抗菌药物七类清单恢复执行（2026-10-11）。
-        "LX0609-05-03-01",
-        "LX0609-06-03-01",
-    }
+    assert entries["LX0609-08-01-03"].phase_status == "pending_definition"
+    assert entries["LX0609-08-01-03"].pending_reason_code == "frontpage_comparison_policy_pending"
+    raw_pending = {raw["rule_id"] for raw in _raw_master()["rules"]
+                   if raw.get("phase_status") == "pending_definition"}
+    assert {rule_id for rule_id, entry in entries.items()
+            if entry.phase_status == "pending_definition"} == raw_pending
+
 
 
 @pytest.mark.parametrize(
@@ -139,6 +129,7 @@ def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_
     (
         ("LX0609-07-04-02", "charging_source_unavailable_customer_scope"),
         ("LX0609-05-03-01", "treatment_event_order_course_real_gold_pending"),
+        ("LX0609-08-01-03", "frontpage_comparison_policy_pending"),
     ),
 )
 def test_pending_definition_result_has_one_empty_evidence_contract(

@@ -1,7 +1,5 @@
 """根因B：一项/一台的未决（缺时间、正文未知、模型失败）不能掩盖另一项/一台已确认的缺陷。"""
 
-from datetime import datetime
-
 import pytest
 
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
@@ -36,7 +34,7 @@ def _labs(*, drop=(), no_time=()):
 )
 def test_missing_item_not_masked_by_other_item_missing_time(times):
     documents = {
-        "mr_bloodtrans": [{"transfution_datetime": value} for value in times],
+        "performed_transfusion_events": [{"transfusion_start_time": value} for value in times],
         "labtest_item_report": _labs(drop=("HIV抗体",), no_time=("丙肝抗体",)),
         "__logical_source_states__": {"labtest_item_report": "available"},
     }
@@ -47,7 +45,7 @@ def test_missing_item_not_masked_by_other_item_missing_time(times):
 
 def test_missing_time_alone_is_still_data_gap():
     documents = {
-        "mr_bloodtrans": [{"transfution_datetime": "2026-06-10 15:00:00"}],
+        "performed_transfusion_events": [{"transfusion_start_time": "2026-06-10 15:00:00"}],
         "labtest_item_report": _labs(no_time=("丙肝抗体",)),
         "__logical_source_states__": {"labtest_item_report": "available"},
     }
@@ -66,14 +64,16 @@ def isolated_freeze(monkeypatch, tmp_path):
 
 def _surgery(day):
     return {"surgery_code": "01.2400X013", "surgery_name": "硬脑膜外血肿清除术",
-            "surgery_begin_datetime": datetime(2026, 6, day, 8),
-            "surgery_end_datetime": datetime(2026, 6, day, 10), "surgeon": "张医生"}
+            "document_id": f"S{day}",
+            "surgery_begin_time": f"2026-06-{day:02d} 08:00:00+08:00",
+            "surgery_end_time": f"2026-06-{day:02d} 10:00:00+08:00", "surgeon": "张医生",
+            "surgery_process": "血肿已清除，手术完成。"}
 
 
 async def _run_065(senior_day, client):
     rows = {
         "inpat_registration": ({"admission_datetime": "2026-05-30 07:00:00"},),
-        "mr_surgery": (_surgery(1), _surgery(5)),
+        "surgery_record": (_surgery(1), _surgery(5)),
         "senior_course_record": ({
             "document_id": "SR", "record_time": f"2026-06-0{senior_day} 08:00:00",
             "author_name": "李主任", "record_content": UNKNOWN_BODY,
@@ -140,7 +140,7 @@ def test_utc_report_time_is_converted_before_comparison():
         if row["item_name"] == "HIV抗体":
             row["report_datetime"] = "2026-06-10T08:00:00+00:00"
     documents = {
-        "mr_bloodtrans": [{"transfution_datetime": "2026-06-10 15:00:00"}],
+        "performed_transfusion_events": [{"transfusion_start_time": "2026-06-10 15:00:00"}],
         "labtest_item_report": labs,
         "__logical_source_states__": {"labtest_item_report": "available"},
     }

@@ -322,7 +322,6 @@ def _with_consent_readiness_fact(session, *, complete: bool):
             source_key: session.materials.source(source_key)
             for source_key in (
                 "surgery_record",
-                "mr_surgery",
                 "surgery_inform_consent",
             )
         },
@@ -480,9 +479,11 @@ def test_003_exact_gaps_survive_customer_finalization(end, record, reason, missi
         assert "早于" in result["findings"]
 
 
-def test_003_multiple_candidate_end_times_report_association_gap():
+def test_003_unmatched_original_anesthesia_times_report_association_gap():
     from app.services.luxian_0609.surgery_gate_result_mapping import surgery_timeliness_gap_display
-    session = _typed_003_session(record_time=datetime(2026, 1, 1, 10), mr_surgery_times=(
+    session = _typed_003_session(surgery_begin_time="2026-01-01 07:00:00+08:00",
+        anesthesia_surgery_begin_time="2026-01-01 06:00:00+08:00",
+        anesthesia_surgery_end_time="2026-01-01 08:00:00+08:00", record_time=datetime(2026, 1, 1, 10), mr_surgery_times=(
         datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 9),
     ))
     facts = []
@@ -502,6 +503,8 @@ def _typed_003_session(
     anesthesia_surgery_begin_time: str | None = None,
     anesthesia_surgery_end_time: str | None = None,
     source_mode: str = "available",
+    anesthesia_mode: str = "available",
+    original_anesthesia_rows: tuple[dict, ...] | None = None,
     evaluation_as_of_date: str | None = None,
 ):
     def reader(**kwargs):
@@ -510,6 +513,8 @@ def _typed_003_session(
             raise SourceEvidenceUnavailable()
         if source_key == "surgery_record" and source_mode == "error":
             raise SourceEvidenceQueryError()
+        if source_key == "anesthesia_record" and anesthesia_mode == "unavailable":
+            raise SourceEvidenceUnavailable()
         rows = {
             "surgery_record": () if source_mode == "empty" else (
                 {
@@ -534,6 +539,7 @@ def _typed_003_session(
                 ({
                     "document_id": "anesthesia-record-003",
                     "record_content": (
+                        "本次手术已完成。"
                         f"手术开始时间：{anesthesia_surgery_begin_time} "
                         f"手术结束时间：{anesthesia_surgery_end_time}"
                     ),
@@ -542,10 +548,13 @@ def _typed_003_session(
                 else ()
             ),
         }.get(source_key, ())
+        if source_key == "anesthesia_record" and original_anesthesia_rows is not None:
+            rows = original_anesthesia_rows
         return SnapshotSourceRows.create(
             source_key=source_key,
             rows=rows,
-            truncated=(source_key == "surgery_record" and source_mode == "truncated"),
+            truncated=((source_key == "surgery_record" and source_mode == "truncated")
+                       or (source_key == "anesthesia_record" and anesthesia_mode == "truncated")),
             limit_rows=1 if source_mode == "truncated" else 50,
         )
 
@@ -582,7 +591,8 @@ async def test_typed_003_missing_document_uses_formal_horizon_after_independent_
     session = _typed_003_session(
         source_mode=source_mode,
         surgery_time=None,
-        mr_surgery_time=datetime(2026, 1, 1, 8, 0, 0),
+        anesthesia_surgery_begin_time="2026-01-01 01:00:00+08:00",
+        anesthesia_surgery_end_time="2026-01-01 08:00:00+08:00",
         evaluation_as_of_date=evaluation_as_of_date,
     )
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
@@ -609,10 +619,14 @@ async def test_typed_003_missing_document_uses_formal_horizon_after_independent_
     assert reduced[0].reason_code == expected_reason
     assert result.llm_call_count == result.total_tokens == 0
 
+    assert result.decisions[0].positive_document_refs == ()
+    if expected_state == "non_compliant":
+        assert set(result.decisions[0].fact_refs) >= {o.snapshot_ref.removeprefix("sha256:") for o in session.snapshot.observations if o.source_key == "surgery_record"}
+
 
 @pytest.mark.asyncio
-async def test_typed_003_same_start_components_with_same_end_prove_missing_record() -> None:
-    """主控代定口径（2026-10-18，待客户复核），基线003：同开始时间组件合台。"""
+async def test_typed_003_frontpage_components_do_not_prove_missing_record() -> None:
+    """首页同台组件不能替代原始实施证据，不能据此判缺手术记录。"""
 
     session = _typed_003_session(
         source_mode="empty",
@@ -642,8 +656,8 @@ async def test_typed_003_same_start_components_with_same_end_prove_missing_recor
         evidence_materials=session.materials,
     )
 
-    assert reduced[0].final_state.value == "non_compliant"
-    assert reduced[0].reason_code == "required_document_missing"
+    assert reduced[0].final_state.value == "not_applicable"
+    assert reduced[0].reason_code == "performed_event_absent"
     assert result.llm_call_count == result.total_tokens == 0
 
 @pytest.mark.asyncio
@@ -1143,11 +1157,13 @@ def test_031_does_not_hide_unsigned_surgery_behind_single_signed_record() -> Non
             {"surgeon": "李医师", "main_surgery_sign": ""},
         ),
         surgery_record_rows=(
-            {"surgeon": "张医师", "surgeon_sign": "张医师"},
+            {"document_id": "original-signed", "surgeon": "张医师", "surgeon_sign": "张医师"},
+            {"document_id": "original-unsigned", "surgeon": "李医师", "surgeon_sign": ""},
         ),
     )
 
-    assert (status, reason, facts) == ("data_gap", "required_field_missing", None)
+    assert (status, reason) == ("data_gap", "required_field_missing")
+    assert facts["surgery_events"][1]["missing_fields"] == ["surgeon_sign"]
 
 
 def test_031_checks_each_multi_surgery_signature_without_cross_table_row_count() -> None:
@@ -1198,13 +1214,14 @@ def test_031_falls_back_to_surgery_records_when_master_rows_have_no_signature_fi
     assert facts["surgery_events"][1]["missing_fields"] == ["surgeon_sign"]
 
 
-def test_031_single_event_fallback_requires_same_surgeon() -> None:
+def test_031_frontpage_surgeon_cannot_override_original_signature() -> None:
     status, reason, facts = surgery._resolve_surgery_signature_outcome(
         surgery_master_rows=({"surgeon": "张医师", "main_surgery_sign": ""},),
         surgery_record_rows=({"surgeon": "李医师", "surgeon_sign": "李医师"},),
     )
 
-    assert (status, reason, facts) == ("data_gap", "association_failed", None)
+    assert (status, reason) == ("compliant", "surgery_signature_confirmed")
+    assert facts["surgeon_signature_matches"] is True
 
 
 def test_031_multi_surgery_projects_each_signature_gap() -> None:
@@ -1631,7 +1648,7 @@ async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
 
 
 @pytest.mark.asyncio
-async def test_typed_028_alone_binds_both_surgery_sources_without_snapshot_mismatch() -> None:
+async def test_typed_028_ignores_frontpage_binds_original_source_without_snapshot_mismatch() -> None:
     def reader(**kwargs):
         rows = (
             ({"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)},)
@@ -1678,7 +1695,10 @@ async def test_typed_028_alone_binds_both_surgery_sources_without_snapshot_misma
     assert result.llm_call_count == result.total_tokens == 0
     assert reduced[0].final_state.value == "not_applicable"
     assert result.decisions[0].reason_code == "performed_event_absent"
-    assert len(result.decisions[0].fact_refs) == 2
+    assert set(result.decisions[0].fact_refs) == {
+        observation.snapshot_ref.removeprefix("sha256:") for observation in session.snapshot.observations
+        if observation.source_key == "surgery_record"
+    }
 
 
 @pytest.mark.asyncio
@@ -1811,7 +1831,7 @@ async def test_typed_003_preserves_time_and_source_boundaries(
 
 
 @pytest.mark.asyncio
-async def test_typed_003_uses_unique_mr_surgery_time_without_keyword_fallback():
+async def test_typed_003_does_not_fill_missing_time_from_frontpage_or_keyword():
     session = _typed_003_session(
         surgery_time=None,
         record_time=datetime(2026, 1, 2, 7, 59, 59),
@@ -1838,7 +1858,8 @@ async def test_typed_003_uses_unique_mr_surgery_time_without_keyword_fallback():
         evidence_materials=session.materials,
     )
 
-    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "authoritative_time_missing"
     assert result.llm_call_count == 0
     assert client.prompts == []
 
@@ -2142,20 +2163,10 @@ async def test_003_snapshot_path_never_falls_back_to_mr_surgery_reader(monkeypat
 
 @pytest.mark.asyncio
 async def test_strong_facts_execute_selected_rules_once_in_customer_order(monkeypatch):
-    monkeypatch.setattr(
-        surgery,
-        "read_luxian_0609_native_source_rows",
-        lambda **kwargs: (
-            [
-                {
-                    "surgery_begin_datetime": "2026-01-01 09:00:00+08",
-                    "surgical_level": "四级",
-                }
-            ]
-            if kwargs["source_key"] == "mr_surgery"
-            else []
-        ),
-    )
+    def no_frontpage_reads(**kwargs):
+        assert not kwargs["source_key"].startswith("mr_")
+        return []
+    monkeypatch.setattr(surgery, "read_luxian_0609_native_source_rows", no_frontpage_reads)
     facts = [
         _performed(),
         _fact(
@@ -2164,7 +2175,7 @@ async def test_strong_facts_execute_selected_rules_once_in_customer_order(monkey
         ),
         _fact("current_visit_surgical_implant_used", source_key="implant_usage"),
         _fact(
-            "current_visit_surgical_incision_class", source_key="mr_surgery", value="II"
+            "current_visit_surgical_incision_class", source_key="surgery_record", value="II"
         ),
         _fact(
             "current_visit_prophylactic_antimicrobial", source_key="inpat_drug_order"
@@ -2191,7 +2202,10 @@ async def test_strong_facts_execute_selected_rules_once_in_customer_order(monkey
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
         rule_ids=tuple(reversed(surgery.SURGERY_GATE_RULE_IDS)),
         wrapper_rules=[_wrapper(rule_id) for rule_id in surgery.SURGERY_GATE_RULE_IDS],
-        evidence_payload=_payload(facts=facts),
+        evidence_payload=_payload(facts=facts, surgery_record=[{
+            "record_time": "2026-01-01 10:00:00+08", "surgery_end_time": "2026-01-01 09:00:00+08",
+            "surgeon": "术者甲", "surgeon_sign": "术者甲",
+        }]),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -2310,7 +2324,9 @@ async def test_live_strict_surgery_time_supplies_performed_fact_once(monkeypatch
                     state="complete",
                     source_key="surgery_inform_consent",
                 )
-            ]
+            ],
+            surgery_record=[{"surgery_begin_time": "2026-01-01 09:00:00+08",
+                             "record_time": "2026-01-01 10:00:00+08", "surgeon": "术者甲", "surgeon_sign": "术者甲"}],
         ),
         institute_id="safe-institute",
         patient_id="safe-patient",
@@ -2914,3 +2930,66 @@ def test_028_requires_positive_i_or_ii_incision_fact_without_surgery_record():
             {"surgery_name": "受控手术", "surgical_incision_level": "II"},
         ),
     )
+
+
+@pytest.mark.parametrize("surgery_mode,anesthesia_mode,body,reason", [
+    ("unavailable", "available", "手术开始时间：2026-01-01 01:00:00+08:00 手术结束时间：2026-01-01 08:00:00+08:00", "source_unavailable"),
+    ("truncated", "available", "手术开始时间：2026-01-01 01:00:00+08:00 手术结束时间：2026-01-01 08:00:00+08:00", "source_truncated"),
+    ("empty", "unavailable", "", "source_unavailable"),
+    ("empty", "truncated", "手术开始时间：2026-01-01 01:00:00+08:00 手术结束时间：2026-01-01 08:00:00+08:00", "source_truncated"),
+    ("empty", "available", "麻醉评估：拟行全麻手术，尚未实施。", "authoritative_time_missing"),
+    ("empty", "available", "手术开始时间：2026-01-01T01:00:00 手术结束时间：2026-01-01T08:00:00", "authoritative_time_missing"),
+    ("empty", "available", "手术开始时间：2026-01-01 09:00:00+08:00 手术结束时间：2026-01-01 08:00:00+08:00", "authoritative_time_conflict"),
+])
+def test_003_missing_record_requires_complete_sources_and_confirmed_original_times(
+    surgery_mode, anesthesia_mode, body, reason,
+):
+    session = _typed_003_session(
+        source_mode=surgery_mode, anesthesia_mode=anesthesia_mode,
+        original_anesthesia_rows=({"document_id": "synthetic-anesthesia-003", "record_content": body},),
+        evaluation_as_of_date="2026-01-03",
+    )
+    decision = surgery._typed_003_decision(snapshot=session.snapshot, materials=session.materials)
+    assert decision.reason_code == reason
+    assert decision.evidence_state.value == "data_gap"
+    assert decision.positive_document_refs == ()
+
+
+@pytest.mark.parametrize("mode", ["empty_unconfirmed", "not_captured"])
+def test_003_mature_missing_record_keeps_automatic_coverage_guard(mode):
+    from app.services import case_material_snapshot as automatic_material
+
+    sources = {
+        key: {"status": "empty_confirmed", "can_judge_clinical_absence": True}
+        for key in ("surgery_record", "anesthesia_record", "surgery_application", "inpat_nondrug_order")
+    }
+    sources["surgery_record"] = {"status": mode, "can_judge_clinical_absence": False}
+    sources["anesthesia_record"] = {"status": "available", "can_judge_clinical_absence": False}
+    with automatic_material.activate({"automatic_material": {"protocol": "cdm-auto-v1", "sources": sources}}):
+        session = _typed_003_session(
+            source_mode="empty", evaluation_as_of_date="2026-01-03",
+            anesthesia_surgery_begin_time="2026-01-01 01:00:00+08:00",
+            anesthesia_surgery_end_time="2026-01-01 08:00:00+08:00",
+        )
+        decision = surgery._typed_003_decision(snapshot=session.snapshot, materials=session.materials)
+        reduced = bind_and_reduce_luxian_0609_rule_decisions(
+            decisions=(decision,), expected_rule_ids=(decision.rule_id,),
+            snapshot=session.snapshot, evidence_materials=session.materials,
+        )[0]
+        assert decision.positive_document_refs == ()
+        assert reduced.final_state.value == "data_gap"
+
+
+def test_003_multiple_original_anesthesia_events_do_not_prove_one_missing_record():
+    session = _typed_003_session(
+        source_mode="empty", evaluation_as_of_date="2026-01-04",
+        original_anesthesia_rows=tuple(
+            {"document_id": f"synthetic-anesthesia-{day}", "record_content":
+             f"手术开始时间：2026-01-0{day} 01:00:00+08:00 手术结束时间：2026-01-0{day} 08:00:00+08:00"}
+            for day in (1, 2)
+        ),
+    )
+    decision = surgery._typed_003_decision(snapshot=session.snapshot, materials=session.materials)
+    assert decision.reason_code == "association_failed"
+    assert decision.evidence_state.value == "data_gap"
+    assert decision.positive_document_refs == ()

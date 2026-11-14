@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..luxian_0609.clinical_material_policy import clinical_source_keys, primary_documents_only
+
 import json
 import logging
 import os
@@ -504,6 +506,8 @@ def _build_material_snapshot(
     snapshot = _MaterialSnapshot(
         key=(source_schema, institute_id, patient_id, visit_id),
     )
+    if primary_documents_only():
+        table_limits = {key: table_limits[key] for key in clinical_source_keys(table_limits)}
     for table_name in sorted(table_limits):
         limit = table_limits[table_name]
         snapshot.material_reads += 1
@@ -993,8 +997,9 @@ def _fetch_patient_profile(
     patient_id: str,
     visit_id: str,
     material_snapshot: _MaterialSnapshot | None = None,
+    allow_frontpage: bool = True,
 ) -> dict[str, str]:
-    candidates = ("patient_information", "mr")
+    candidates = ("patient_information",) if primary_documents_only() or not allow_frontpage else ("patient_information", "mr")
     profile = {
         "patient_name": "",
         "mobile": "",
@@ -2350,6 +2355,8 @@ def _assemble_scene_bundle(
         raise ValueError(f"Unsupported scene for bundle assembly: {scene}")
 
     priority = _SCENE_DOC_PRIORITY[scene]
+    if scene in {"running", "final"} or primary_documents_only():
+        priority = clinical_source_keys(priority)
     fetch_priority = tuple(
         dict.fromkeys(
             (
@@ -2362,6 +2369,8 @@ def _assemble_scene_bundle(
             )
         )
     )
+    if scene in {"running", "final"} or primary_documents_only():
+        fetch_priority = clinical_source_keys(fetch_priority)
     docs: dict[str, list[dict[str, Any]]] = {}
     scene_projection_per_source: dict[str, dict[str, Any]] = {}
     for table_name in fetch_priority:
@@ -2381,16 +2390,6 @@ def _assemble_scene_bundle(
             "has_more": len(fetched_rows) > _SCENE_SUMMARY_PROJECTION_LIMIT,
         }
     context_rows: dict[str, list[dict[str, Any]]] = {}
-    if scene == "final":
-        context_rows["mr"] = _material_rows(
-            material_snapshot=material_snapshot,
-            source_schema=source_schema,
-            table="mr",
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            limit=1,
-        )
     attention_docs, attention_timeline_facts = _build_scene_attention_artifacts(
         source_schema=source_schema,
         institute_id=institute_id,
@@ -2414,6 +2413,7 @@ def _assemble_scene_bundle(
         patient_id=patient_id,
         visit_id=visit_id,
         material_snapshot=material_snapshot,
+        allow_frontpage=scene not in {"running", "final"},
     )
     source_documents = _build_document_inventory(docs, source_schema)
     timeline_facts = _build_timeline_facts_from_docs(docs)
@@ -2794,6 +2794,8 @@ def assemble_domain_bundle(
     if _source_engine(effective_schema) is None:
         raise RuntimeError("DATABASE_URL is not configured; domain bundle assembly unavailable.")
     priority = _DOMAIN_DOC_PRIORITY[execution_domain]
+    if primary_documents_only():
+        priority = clinical_source_keys(priority)
     docs: dict[str, list[dict[str, Any]]] = {}
     domain_projection_per_source: dict[str, dict[str, Any]] = {}
     for table_name in priority:
@@ -2814,7 +2816,10 @@ def assemble_domain_bundle(
             "has_more": len(fetched_rows) > projection_limit,
         }
 
-    for table_name in _DOMAIN_ASSOCIATION_TABLES.get(execution_domain, ()):
+    associations = _DOMAIN_ASSOCIATION_TABLES.get(execution_domain, ())
+    if primary_documents_only():
+        associations = clinical_source_keys(associations)
+    for table_name in associations:
         projection_limit = _DOMAIN_FETCH_LIMITS.get(table_name, 50)
         fetched_rows = _material_rows(
             material_snapshot=material_snapshot,

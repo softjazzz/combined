@@ -80,7 +80,7 @@ def test_pretransfusion_items_complete_with_lab_item_name_only():
     names = ["*ABO血型鉴定", "*Rh血型鉴定", "不规则抗体筛查", "乙肝表面抗原", "乙肝表面抗体", "乙肝e抗原",
              "乙肝e抗体", "乙肝核心抗体", "丙肝抗体", "HIV抗体", "梅毒抗体"]
     documents = {
-        "mr_bloodtrans": [{"document_id": "synthetic-event", "transfution_datetime": "2026-06-05 14:20:00"}],
+        "performed_transfusion_events": [{"document_id": "synthetic-event", "transfusion_start_time": "2026-06-05 14:20:00"}],
         "labtest_item_report": [{"document_id": f"synthetic-lab-{i}", "lab_item_name": name, "result": "阴性",
                                  "report_datetime": "2026-06-05 10:00:00"} for i, name in enumerate(names)],
         "__logical_source_states__": {"labtest_item_report": "available"},
@@ -112,10 +112,16 @@ def test_stripped_system_gap_facts_pass_published_validation(rule_id):
 async def test_043_empty_lab_source_holds_customer_contract():
     """07-01-01 检验来源为空判资料不足，经收口后仍满足交付合同，不被改判技术错误。"""
     from app.services.luxian_0609.canonical_result_finalizer import luxian_0609_customer_result_contract_holds
-    from test_luxian_0609_transfusion_performance_043_047 import BLOOD_APPLICATION, STRUCTURED_EVENT, _run
+    from test_luxian_0609_transfusion_performance_043_047 import BLOOD_APPLICATION, _run
+    from transfusion_order_test_support import FrozenTransfusionProtocolClient
 
-    final = (await _run("LX0609-07-01-01", {"mr_bloodtrans": STRUCTURED_EVENT, "blood_application": BLOOD_APPLICATION,
-                                             "labtest_item_report": []}, {}))["final"]
+    body = "已输注红细胞2U。"
+    final = (await _run("LX0609-07-01-01", {
+        "bloodtrans_record": [{"document_id": "synthetic-event", "record_time": "2026-06-05 14:20:00",
+                               "record_content": body}],
+        "blood_application": BLOOD_APPLICATION, "labtest_item_report": [],
+    }, {body: "record"}, client=FrozenTransfusionProtocolClient(
+        course_labels={body: "record"}, performance_state="performed")))["final"]
     assert (final["status"], final["reason_code"]) == ("data_gap", "source_unavailable")
     assert luxian_0609_customer_result_contract_holds(final)
 

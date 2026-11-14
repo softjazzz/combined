@@ -201,12 +201,12 @@ async def test_043_regular_items_complete_before_structured_transfusion_is_compl
     result = await _run(
         RULE_043,
         {
-            "mr_bloodtrans": STRUCTURED_EVENT,
-            "bloodtrans_record": [{"document_id": "ACTUAL-043", "record_content": SHORT_ACTUAL}],
+                        "bloodtrans_record": [{"document_id": "ACTUAL-043", "record_content": SHORT_ACTUAL, "record_time": "2026-06-05 14:20:00"}],
             "blood_application": BLOOD_APPLICATION,
             "labtest_item_report": REGULAR_ITEM_LABS,
         },
         {SHORT_ACTUAL: "record"},
+        client=FrozenTransfusionProtocolClient(course_labels={SHORT_ACTUAL: "record"}, performance_state="performed"),
     )
 
     _assert_layers(result, "compliant", "requirement_satisfied")
@@ -214,8 +214,8 @@ async def test_043_regular_items_complete_before_structured_transfusion_is_compl
     assert len(facts["checked_items"]) == 11
     assert facts["latest_test_time"] == "2026-06-05 10:00:00"
     assert facts["transfusion_time"] == "2026-06-05 14:20:00"
-    # 结构化实际输注时间已证明实施，043 不需要再调用语义核验。
-    assert result["client"].protocol_calls == 0
+    # 原始文书先核验实际实施，再抽取实施时间；检查项目判定保持确定性。
+    assert result["client"].protocol_calls == 2
 
 
 @pytest.mark.asyncio
@@ -347,7 +347,7 @@ async def test_047_unknown_record_classification_is_not_silently_dropped() -> No
         horizon_date="2026-06-08",
     )
 
-    _assert_layers(result, "data_gap", "required_field_missing")
+    _assert_layers(result, "data_gap", "source_unavailable")
 
 
 def _actual_record(document_id: str, day: str, *, end: str | None) -> dict[str, str]:

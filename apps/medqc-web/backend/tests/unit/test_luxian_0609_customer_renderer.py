@@ -2066,7 +2066,7 @@ def test_029_missing_surgery_time_explains_confirmed_trigger_and_linkage_gap():
     )
 
 
-def test_029_association_gap_explains_confirmed_surgery_and_summary():
+def test_029_association_gap_explains_confirmed_surgery_and_summary(monkeypatch):
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
             rule_id="LX0609-04-01-01",
@@ -2080,7 +2080,15 @@ def test_029_association_gap_explains_confirmed_surgery_and_summary():
         )
     )
 
-    result = render_luxian_0609_customer_result(decision=decision)
+    from app.services.luxian_0609 import customer_remediation
+
+    # 回放历史发布时的整改元数据，保留原建议合同；不改变当前正式执行范围。
+    with monkeypatch.context() as historical:
+        historical.setattr(customer_remediation, "PENDING_RULE_IDS", customer_remediation.PENDING_RULE_IDS - {decision.rule_id})
+        result = render_luxian_0609_customer_result(decision=decision)
+    assert customer_remediation.build_customer_remediation_suggestion(
+        rule_id=decision.rule_id, status="data_gap", reason_code="association_failed",
+    ) == ""
 
     assert result["findings"] == (
         "已确认本次存在已实施手术且已读取术前小结，但现有资料无法确认术前小结"

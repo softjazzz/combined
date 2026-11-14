@@ -1,22 +1,26 @@
-"""合成医嘱经正式任务创建、Worker、保存、详情 API 与 HTML 导出回归。
+"""当前候选点不得创建任务；历史合成结果仍完整保存、读取和导出。
 
-仅冻结临床资料和模型协议；不替换执行、绑定校验或持久化函数。
-此测试证明接线和交付完整性，不证明模型语义准确率或浏览器渲染。
+底层临床组件独立离线验证，不经过当前启用门，不重新启用候选点。
 """
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime
+import json
+
+from fastapi import HTTPException
+from app.services.luxian_0609.native_transfusion_execution import execute_luxian_0609_native_transfusion_rules
+from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
+from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.services.custom_qc_workspace_service as storage
 from app.routers import qc_sichuan
-from app.services import sample_programmatic_evidence, sichuan_workspace_batch_worker as worker
-from app.services.luxian_0609 import execution
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows, build_luxian_0609_evidence_read_session,
 )
@@ -33,7 +37,7 @@ INVALID_COURSE = "拟输注红细胞2U，待家属同意后实施。"
 
 
 @pytest.mark.asyncio
-async def test_open_order_without_valid_record_survives_formal_persistence_api_and_export(
+async def test_paused_order_rules_reject_new_job_and_preserve_historical_persistence_api_export(
     monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest,
 ) -> None:
     settings = _settings(basic_timeliness=True).model_copy(update={
@@ -67,7 +71,7 @@ async def test_open_order_without_valid_record_survives_formal_persistence_api_a
     monkeypatch.setattr(workspace, "collect_records", collect_records)
     monkeypatch.setattr(workspace, "hydrate_records_with_medical_text", records.hydrate_records_with_medical_text)
 
-    model = FrozenTransfusionProtocolClient(course_labels={INVALID_COURSE: "not_record"})
+    model = FrozenTransfusionProtocolClient(course_labels={INVALID_COURSE: "not_record"}, performance_state="plan")
     for name in ("family_max_concurrency", "max_parallel_records", "provider_code", "model",
                  "api_endpoint", "temperature", "top_p", "max_tokens", "enable_thinking",
                  "thinking_budget", "reasoning_effort", "allow_mock_when_unconfigured"):
@@ -79,24 +83,46 @@ async def test_open_order_without_valid_record_survives_formal_persistence_api_a
     assert rule_set is not None
     monkeypatch.setattr(qc_sichuan, "get_sichuan_rule_set", lambda _: replace(rule_set, rule_ids=RULES))
     monkeypatch.setattr(qc_sichuan, "get_settings", lambda: settings)
-    monkeypatch.setattr(worker, "get_settings", lambda: settings)
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *_: None)
     api_request = SimpleNamespace(state=SimpleNamespace(trace_id="synthetic-transfusion-chain"))
     user = {"id": "tester", "role": "super_admin"}
-    response = await qc_sichuan.create_workspace_batch_job(
-        request=api_request,
-        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
-            rule_set_key="luxian_0609_qc_v1", scope="running", date_field="admission",
-            rule_ids=list(RULES), run_mode="serial",
-            record_refs=[{"institute_id": "I", "patient_id": "P", "visit_id": "V"}],
-        ), qc_service=service, current_user=user,
-    )
-    assert response["success"] is True
-    job_id = response["data"]["id"]
+    with pytest.raises(HTTPException) as error:
+        await qc_sichuan.create_workspace_batch_job(
+            request=api_request,
+            payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+                rule_set_key="luxian_0609_qc_v1", scope="running", date_field="admission",
+                rule_ids=list(RULES), run_mode="serial",
+                record_refs=[{"institute_id": "I", "patient_id": "P", "visit_id": "V"}],
+            ), qc_service=service, current_user=user,
+        )
+    assert error.value.status_code == 422
+    assert error.value.detail == "rule_ids 不能为空"
+    assert model.protocol_calls == 0
+    with Session(persisted_engine) as db:
+        assert db.scalar(select(func.count()).select_from(batch_table)) == 0
+
+    # 模拟升级前已经存在的历史任务，仅存入内存 SQLite，不调用新任务入口或 Worker。
+    job_id = "synthetic-historical-transfusion-job"
+    now = datetime(2026, 6, 9, 12)
+    filters = {"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+               "rule_ids": list(RULES), "selected_rule_ids": list(RULES),
+               "record_refs": [{"institute_id": "I", "patient_id": "P", "visit_id": "V"}]}
+    historical_job = {
+        "id": job_id, "draft_id": "sichuan-rule-library", "rule_code": RULES[0],
+        "rule_name": "历史输血规则", "scene": "running", "scope": "running", "status": "completed",
+        "filters_json": json.dumps(filters), "record_ids_json": json.dumps(["V"]),
+        "summary_json": json.dumps({"execution_status": "completed", "total": 3}),
+        "items_json": None, "failed_records_json": None, "created_by": "tester",
+        "created_at": now, "updated_at": now, "finished_at": now,
+        "total_records": 1, "success_count": 1, "failed_count": 0,
+        "issue_records": 1, "compliant_records": 0, "total_tokens": 0,
+        "total_processing_time": 0.0, "job_kind": "leaf",
+    }
+    with Session(persisted_engine) as db:
+        db.execute(batch_table.insert().values(**historical_job))
+        db.commit()
     admitted = workspace.get_batch_job_for_processing(job_id=job_id)
-    assert admitted["status"] == "queued"
-    assert admitted["filters"]["active_customer_rule_ids"] == list(RULES)
 
     source_rows = {
         "inpat_nondrug_order": [dict(OPEN_TRANSFUSION_ORDER)],
@@ -112,28 +138,32 @@ async def test_open_order_without_valid_record_survives_formal_persistence_api_a
             source_key=key, rows=source_rows.get(key, []), truncated=False, limit_rows=5000,
         )
 
-    # 冻结所有所需源为空/合成行，仍执行真实快照构造及完整性校验。
-    def read_session(**kwargs):
-        return build_luxian_0609_evidence_read_session(**kwargs, row_reader=read_rows)
-
-    monkeypatch.setattr(execution, "build_luxian_0609_evidence_read_session", read_session)
-    monkeypatch.setattr(worker, "get_product_activation_service", lambda: SimpleNamespace(enforce=lambda: None))
-    monkeypatch.setattr(worker, "load_running_final_bundle", lambda **kwargs: {
-        "scene": "running", "visit_id": kwargs["visit_id"], "institute_id": "I", "patient_id": "P",
-        "source_schema": "cdm", "medical_text": "合成资料", "structured_context": {},
-        "document_hits": {}, "text_available": True,
-    })
-    monkeypatch.setattr(sample_programmatic_evidence, "_fetch_source_table_fallback_items", lambda *_a, **_k: ([], {}))
-    monkeypatch.setattr(sample_programmatic_evidence, "_fetch_detail_service_fallback_items", lambda *_a, **_k: [])
-
-    async def service_provider():
-        return service
-
-    await worker.run_sichuan_workspace_batch_job(job_id, workspace=workspace, qc_service_provider=service_provider)
-    job = workspace.get_batch_job_for_processing(job_id=job_id)
-    assert job["status"] == "completed", job.get("error_message")
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=RULES, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, created_at="2026-06-09T12:00:00+08:00", row_reader=read_rows,
+    )
+    execution_result = await execute_luxian_0609_native_transfusion_rules(
+        rule_ids=RULES, wrapper_rules=[{"rule_id": rule} for rule in RULES],
+        evidence_payload=None, institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+        llm_client=model, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=RULES,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution_result.decisions, expected_rule_ids=RULES,
+        snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    results = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule} for rule in RULES], execution_results=[],
+        reduced_decisions=reduced, customer_display_facts=execution_result.customer_display_facts,
+        audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
+    )
+    historical_items = [{**item, "record_id": "V", "visit_id": "V", "patient_id": "P", "institute_id": "I"}
+                        for item in results]
+    with Session(persisted_engine) as db:
+        workspace._write_record_result_envelopes(db, job_row=historical_job, items=historical_items, now=now)
+        db.commit()
     assert {"inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record"} <= set(observed_sources)
-    assert model.protocol_calls == 2
+    assert model.protocol_calls == 3
     with Session(persisted_engine) as db:
         saved = CanonicalResultStore(envelope_table).load_selected(
             db, root_job_id=job_id, institute_id="I", patient_id="P", visit_id="V",

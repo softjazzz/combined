@@ -178,7 +178,7 @@ def evaluate_structured_pretransfusion_application(
     if not applications:
         return None
 
-    event_rows = _rows(documents, "mr_bloodtrans")
+    event_rows = _rows(documents, "performed_transfusion_events")
     event_times = sorted(
         {value for row in event_rows if (value := _event_time(row)) is not None}
     )
@@ -292,7 +292,7 @@ def build_pretransfusion_reason_candidate(
 ) -> PretransfusionReasonCandidate | None:
     """只为“指标已确定、申请理由待语义确认”的及时申请单生成单次模型输入。"""
 
-    event_rows = _rows(documents, "mr_bloodtrans")
+    event_rows = _rows(documents, "performed_transfusion_events")
     event_times = sorted(
         {value for row in event_rows if (value := _event_time(row)) is not None}
     )

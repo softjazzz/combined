@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, date
 import json
-from typing import Any, Dict, Optional, List
+from typing import Any, Callable, Dict, Optional, List
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query
@@ -179,22 +179,34 @@ def _safe_json_loads(value: Any, default: Any) -> Any:
 
 
 def _resolve_visit_identity(record_id: str) -> Dict[str, str]:
+    """单号仅在所有可用临床来源共同证明唯一完整三坐标时解析成功。"""
     if SessionLocal is None:
         return {}
-    with SessionLocal() as session:
-        for model in (MedicalRecordFrontpage, DischargeRecord, AdmissionRecord):
-            row = (
-                clinical_query(session, model)
-                .filter(or_(model.visit_id == record_id, model.mr_no == record_id))
-                .first()
-            )
-            if row:
-                return {
-                    "institute_id": str(getattr(row, "institute_id", "") or "").strip(),
-                    "patient_id": str(getattr(row, "patient_id", "") or "").strip(),
-                    "visit_id": str(getattr(row, "visit_id", "") or "").strip(),
-                }
-    return {}
+    keys = ("institute_id", "patient_id", "visit_id")
+    identities = set()
+    try:
+        with SessionLocal() as session:
+            for model in (MedicalRecordFrontpage, DischargeRecord, AdmissionRecord):
+                rows = (
+                    clinical_query(session, model)
+                    .with_entities(model.institute_id, model.patient_id, model.visit_id)
+                    .filter(or_(model.visit_id == record_id, model.mr_no == record_id))
+                    .distinct()
+                    .limit(2)
+                    .all()
+                )
+                for row in rows:
+                    identity = tuple(str(getattr(row, key, "") or "").strip() for key in keys)
+                    if not all(identity):
+                        return {}
+                    identities.add(identity)
+                if len(identities) > 1:
+                    return {}
+    except Exception as exc:
+        # 任一来源失败都不能把其他来源首行升级为唯一身份；不回显查询参数。
+        logger.warning("解析病历唯一身份失败（%s）", type(exc).__name__)
+        return {}
+    return dict(zip(keys, next(iter(identities)))) if len(identities) == 1 else {}
 
 
 def _load_bundle_payload_for_record(record_id: str, *, authorized_identity=None) -> Dict[str, Any]:
@@ -564,7 +576,9 @@ def _map_canonical_item_to_review_item(
     }
 
 
-def _load_luxian_0609_review_items_from_canonical(record_id: str) -> Dict[str, Any]:
+def _load_luxian_0609_review_items_from_canonical(
+    record_id: str, *, authorize_identity: Callable[[tuple[str, str, str]], None],
+) -> Dict[str, Any]:
     """0609 单病历复核项的唯一正式读取入口：只交付已发布 Canonical 结果。
 
     身份缺失/歧义或与 CDM 冲突、Envelope 缺失或损坏都收敛为“无 0609 结果”，
@@ -592,6 +606,8 @@ def _load_luxian_0609_review_items_from_canonical(record_id: str) -> Dict[str, A
         return {**empty, "state": state}
 
     institute_id, patient_id, visit_id = identity
+    # 身份解析不等于授权；未通过的请求不能进入 Canonical 结果查询。
+    authorize_identity(identity)
     try:
         result = CustomQCWorkspaceService().get_latest_luxian_0609_record_result(
             institute_id=institute_id,
@@ -1271,7 +1287,28 @@ async def get_record_qc_detail(
     }
     """
     own_identity = getattr(request.state, "doctor_case_identity", None)
-    supabase = None if own_identity else get_supabase()
+    authorized_identity = own_identity or None
+    if own_identity:
+        # 由全局医生病例归属守卫赋值，不来自请求参数；完整三坐标必须一致。
+        def authorize_identity(identity):
+            if tuple(own_identity.get(key) for key in ("institute_id", "patient_id", "visit_id")) != identity:
+                raise HTTPException(403, "仅可查看本人名下病历")
+    else:
+        from ..services.saved_result_access import check_saved_result_institute, saved_result_institute_scope
+        institute_scope = saved_result_institute_scope(str(current_user.get("id") or ""))
+        def authorize_identity(identity):
+            check_saved_result_institute(institute_scope, identity[0])
+            if authorized_identity is not None and tuple(
+                authorized_identity.get(key) for key in ("institute_id", "patient_id", "visit_id")
+            ) != identity:
+                raise HTTPException(403, "病历完整身份与授权范围不一致")
+        if institute_scope is not None:
+            authorized_identity = _resolve_visit_identity(record_id)
+            check_saved_result_institute(institute_scope, authorized_identity.get("institute_id"))
+    # 单号旧表、内存和全局批任务缺少可验证三坐标，不能把当前CDM身份补给它们。
+    # 作用域管理账号与医生只读取绑定完整授权身份的bundle和Canonical。
+    allow_legacy = authorized_identity is None
+    supabase = get_supabase() if allow_legacy else None
     settings = get_settings()
 
     payload: Dict[str, Any] = {
@@ -1383,7 +1420,7 @@ async def get_record_qc_detail(
                     payload["exists"] = True
             except Exception as exc:
                 logger.warning("查询文书内容失败: %s", exc)
-        elif own_identity is None:
+        elif allow_legacy:
             record = medical_records_db.get(record_id)
             if record:
                 payload["record"] = {**payload["record"], **record}
@@ -1392,8 +1429,8 @@ async def get_record_qc_detail(
                 payload["exists"] = True
 
         bundle_payload = (
-            _load_bundle_payload_for_record(record_id, authorized_identity=own_identity)
-            if own_identity else _load_bundle_payload_for_record(record_id)
+            _load_bundle_payload_for_record(record_id, authorized_identity=authorized_identity)
+            if authorized_identity else _load_bundle_payload_for_record(record_id)
         )
         bundle_docs = list(bundle_payload.get("documents") or [])
         if _should_prefer_bundle_documents(payload["documents"]["raw_documents"], bundle_docs):
@@ -1407,14 +1444,16 @@ async def get_record_qc_detail(
         if not payload["defects"]:
             # 正式 0609 结果只从已发布 Canonical Envelope 读取；raw items_json
             # 仅保留给非 0609 legacy 规则集。
-            canonical_payload = _load_luxian_0609_review_items_from_canonical(record_id)
+            canonical_payload = _load_luxian_0609_review_items_from_canonical(
+                record_id, authorize_identity=authorize_identity,
+            )
             canonical_items = list(canonical_payload.get("review_items") or [])
             canonical_state = _controlled_review_state(canonical_payload.get("state"))
             if canonical_items:
                 payload["review_items"] = canonical_items
                 payload["review_job"] = canonical_payload.get("review_job")
                 payload["review_result_state"] = canonical_state
-            elif own_identity is None:
+            elif allow_legacy:
                 review_payload = _load_review_items_from_latest_batch(record_id)
                 payload["review_items"] = list(review_payload.get("review_items") or [])
                 payload["review_job"] = review_payload.get("review_job")
@@ -1441,6 +1480,8 @@ async def get_record_qc_detail(
             message="获取病历质控详情成功",
             trace_id=get_trace_id(request),
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,

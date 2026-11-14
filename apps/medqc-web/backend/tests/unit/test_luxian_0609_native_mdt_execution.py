@@ -53,6 +53,22 @@ class _LLM:
         }
 
 
+def _performed_surgery(
+    *, document_id, begin_time, surgical_level, surgery_name="合成测试手术",
+    surgery_code=None,
+):
+    """离线合成的原始手术记录；时间与级别均由该文书提供。"""
+    return {
+        "document_id": document_id,
+        "surgery_name": surgery_name,
+        "surgery_code": surgery_code,
+        "surgical_level": surgical_level,
+        "surgery_begin_time": begin_time,
+        "record_time": begin_time,
+        "record_content": f"本次已实施{surgery_name}，手术级别：{surgical_level}。",
+    }
+
+
 def _reader(rows_by_source: dict[str, list[dict]]):
     def read(**kwargs):
         return [dict(row) for row in rows_by_source.get(kwargs["source_key"], [])]
@@ -141,13 +157,13 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
     marker = "PRIVATE-MDT-BODY-MARKER"
     session = _session(
         {
-            "mr_surgery": [
-                {
-                    "document_id": "surgery-40",
-                    "surgery_name": "测试手术",
-                    "surgical_level": "四级",
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+            "surgery_record": [
+                _performed_surgery(
+                    document_id="surgery-40",
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level="四级",
+                    surgery_name="测试手术",
+                )
             ],
             "presurg_discussion": [
                 {
@@ -192,7 +208,7 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
     assert decision.reason_code == "requirement_satisfied"
     expected_refs = _material_document_refs(
         session,
-        "mr_surgery",
+        "surgery_record",
         "presurg_discussion",
     )
     assert set(decision.fact_refs) == expected_refs
@@ -202,7 +218,7 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
     reduced, result = _aggregate_typed(session, execution)
     assert reduced.final_state == "compliant"
     assert _customer_evidence_coordinates(result) == {
-        ("mr_surgery", "surgery-40", "2026-01-02 09:00:00", ""),
+        ("surgery_record", "surgery-40", "2026-01-02 09:00:00+08:00", "record_content"),
         (
             "presurg_discussion",
             "discussion-40",
@@ -213,7 +229,7 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
 
 
 @pytest.mark.asyncio
-async def test_typed_mdt_replaces_midnight_placeholder_with_strict_formal_time():
+async def test_typed_mdt_uses_strict_formal_time_ignoring_frontpage_midnight():
     session = _session(
         {
             "mr_surgery": [
@@ -262,7 +278,6 @@ async def test_typed_mdt_replaces_midnight_placeholder_with_strict_formal_time()
     assert "骨科甲主任医师" in llm.prompts[0]
     assert set(execution.decisions[0].fact_refs) == _material_document_refs(
         session,
-        "mr_surgery",
         "surgery_record",
         "presurg_discussion",
     )
@@ -298,7 +313,7 @@ async def test_typed_mdt_replaces_midnight_placeholder_with_strict_formal_time()
         ),
     ),
 )
-async def test_typed_mdt_does_not_replace_midnight_for_unreliable_formal_association(
+async def test_typed_mdt_does_not_fill_original_grade_or_time_from_frontpage(
     formal_rows,
 ):
     session = _session(
@@ -336,8 +351,8 @@ async def test_typed_mdt_does_not_replace_midnight_for_unreliable_formal_associa
         decision_rule_ids=("LX0609-04-01-03",),
     )
 
-    assert execution.decisions[0].reason_code == "requirement_violated"
-    assert execution.decisions[0].qc_direction is QcDirection.DEFECT
+    assert execution.decisions[0].reason_code == "required_field_missing"
+    assert execution.decisions[0].qc_direction is QcDirection.UNKNOWN
     assert llm.calls == 0
 
 
@@ -470,14 +485,14 @@ async def test_typed_mdt_formal_level4_without_begin_time_is_data_gap():
 async def test_hospital_performance_level_promotes_catalog_surgery_to_level_four():
     session = _session(
         {
-            "mr_surgery": [
-                {
-                    "surgery_id": "surgery-event-1",
-                    "surgery_code": "01.2408",
-                    "surgery_name": "颅内血肿清除术",
-                    "surgical_level": "三级",
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+            "surgery_record": [
+                _performed_surgery(
+                    document_id='test_hospital_performance_level_promotes_catalog_surgery_to_level_four-1',
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level="三级",
+                    surgery_name="颅内血肿清除术",
+                    surgery_code="01.2408",
+                )
             ],
             "presurg_discussion": [
                 {
@@ -519,13 +534,14 @@ async def test_hospital_performance_level_promotes_catalog_surgery_to_level_four
 async def test_catalog_operation_never_triggers_level_four_mdt():
     session = _session(
         {
-            "mr_surgery": [
-                {
-                    "surgery_code": "00.5901",
-                    "surgery_name": "冠脉瞬时无波形比值检查[iFR检查]",
-                    "surgical_level": "四级",
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+            "surgery_record": [
+                _performed_surgery(
+                    document_id='test_catalog_operation_never_triggers_level_four_mdt-1',
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level="四级",
+                    surgery_name="冠脉瞬时无波形比值检查[iFR检查]",
+                    surgery_code="00.5901",
+                )
             ],
             "presurg_discussion": [],
             "consultation_record": [],
@@ -688,12 +704,12 @@ async def test_typed_mdt_missing_or_nonlevel_uses_only_trigger_surgery_evidence(
 ):
     session = _session(
         {
-            "mr_surgery": [
-                {
-                    "document_id": "surgery-trigger-40",
-                    "surgical_level": surgical_level,
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+            "surgery_record": [
+                _performed_surgery(
+                    document_id="surgery-trigger-40",
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level=surgical_level,
+                )
             ],
             "presurg_discussion": [],
             "consultation_record": [],
@@ -714,12 +730,12 @@ async def test_typed_mdt_missing_or_nonlevel_uses_only_trigger_surgery_evidence(
     assert execution.decisions[0].reason_code == expected_reason
     assert set(execution.decisions[0].fact_refs) == _material_document_refs(
         session,
-        "mr_surgery",
+        "surgery_record",
     )
     _, result = _aggregate_typed(session, execution)
     assert result["status"] == expected_status
     assert _customer_evidence_coordinates(result) == {
-        ("mr_surgery", "surgery-trigger-40", "2026-01-02 09:00:00", ""),
+        ("surgery_record", "surgery-trigger-40", "2026-01-02 09:00:00+08:00", "record_content"),
     }
     assert execution.llm_call_count == 0
 
@@ -728,13 +744,13 @@ async def test_typed_mdt_missing_or_nonlevel_uses_only_trigger_surgery_evidence(
 async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
     session = _session(
         {
-            "mr_surgery": [
-                {
-                    "document_id": "surgery-semantic-40",
-                    "surgery_name": "测试手术",
-                    "surgical_level": "四级",
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+            "surgery_record": [
+                _performed_surgery(
+                    document_id="surgery-semantic-40",
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level="四级",
+                    surgery_name="测试手术",
+                )
             ],
             "presurg_discussion": [
                 {
@@ -779,7 +795,7 @@ async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
     assert typed.total_tokens == raw.total_tokens == 132
     assert set(typed.decisions[0].fact_refs) == _material_document_refs(
         session,
-        "mr_surgery",
+        "surgery_record",
         "presurg_discussion",
     )
     _, result = _aggregate_typed(session, typed)
@@ -790,7 +806,7 @@ async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
             "2026-01-01 09:00:00",
             "discuss_staff",
         ),
-        ("mr_surgery", "surgery-semantic-40", "2026-01-02 09:00:00", ""),
+        ("surgery_record", "surgery-semantic-40", "2026-01-02 09:00:00+08:00", "record_content"),
     }
 
 
@@ -798,8 +814,8 @@ async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
 @pytest.mark.parametrize(
     ("failed_source", "unavailable", "evidence_state", "reason_code"),
     (
-        ("mr_surgery", True, EvidenceState.DATA_GAP, "source_unavailable"),
-        ("mr_surgery", False, EvidenceState.TECHNICAL_ERROR, "source_query_error"),
+        ("surgery_record", True, EvidenceState.DATA_GAP, "source_unavailable"),
+        ("surgery_record", False, EvidenceState.TECHNICAL_ERROR, "source_query_error"),
     ),
 )
 async def test_typed_mdt_preserves_source_failure_states(
@@ -833,12 +849,12 @@ async def test_typed_mdt_preserves_source_failure_states(
 async def test_typed_mdt_conditional_source_error_has_no_clinical_evidence():
     session = _session(
         {
-            "mr_surgery": [
-                {
-                    "document_id": "surgery-source-error-40",
-                    "surgical_level": "四级",
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+            "surgery_record": [
+                _performed_surgery(
+                    document_id="surgery-source-error-40",
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level="四级",
+                )
             ],
             "consultation_record": [],
         },
@@ -864,14 +880,15 @@ async def test_typed_mdt_conditional_source_error_has_no_clinical_evidence():
 
 @pytest.mark.asyncio
 async def test_typed_mdt_rejects_mixed_snapshot_and_material_store():
-    first = _session({"mr_surgery": []})
+    first = _session({"surgery_record": []})
     second = _session(
         {
-            "mr_surgery": [
-                {
-                    "surgical_level": "三级",
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+            "surgery_record": [
+                _performed_surgery(
+                    document_id='test_typed_mdt_rejects_mixed_snapshot_and_material_store-1',
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level="三级",
+                )
             ]
         }
     )
@@ -895,13 +912,14 @@ async def test_mdt_consumes_shared_material_without_live_reader(monkeypatch):
         source_key = kwargs["source_key"]
         rows = (
             [
-                {
-                    "surgery_name": "测试手术",
-                    "surgical_level": "三级",
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+                _performed_surgery(
+                    document_id='test_mdt_consumes_shared_material_without_live_reader-1',
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level="三级",
+                    surgery_name="测试手术",
+                )
             ]
-            if source_key == "mr_surgery"
+            if source_key == "surgery_record"
             else []
         )
         return SnapshotSourceRows.create(
@@ -920,7 +938,7 @@ async def test_mdt_consumes_shared_material_without_live_reader(monkeypatch):
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
         additional_source_keys=(
-            "mr_surgery",
+            "surgery_record",
             "presurg_discussion",
             "consultation_record",
         ),
@@ -954,12 +972,13 @@ async def test_mdt_body_cannot_short_circuit_staff_model(monkeypatch):
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgery_name": "测试手术",
-                        "surgical_level": "四级",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    }
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_mdt_body_cannot_short_circuit_staff_model-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="四级",
+                        surgery_name="测试手术",
+                    )
                 ],
                 "presurg_discussion": [
                     {
@@ -998,12 +1017,13 @@ async def test_body_anesthesiologist_cannot_override_single_department_staff(
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgery_name": "测试手术",
-                        "surgical_level": "四级",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    }
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_body_anesthesiologist_cannot_override_single_department_staff-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="四级",
+                        surgery_name="测试手术",
+                    )
                 ],
                 "presurg_discussion": [
                     {
@@ -1049,11 +1069,12 @@ async def test_anesthesia_plan_without_anesthesiologist_roster_does_not_shortcut
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgical_level": "四级",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    }
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_anesthesia_plan_without_anesthesiologist_roster_does_not_shortcut-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="四级",
+                    )
                 ],
                 "presurg_discussion": [
                     {
@@ -1104,11 +1125,12 @@ async def test_planned_or_placeholder_anesthesia_roster_does_not_shortcut(
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgical_level": "四级",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    }
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_planned_or_placeholder_anesthesia_roster_does_not_shortcut-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="四级",
+                    )
                 ],
                 "presurg_discussion": [
                     {
@@ -1146,12 +1168,13 @@ async def test_ordinary_preop_consult_is_not_a_staff_candidate(monkeypatch):
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgery_name": "测试手术",
-                        "surgical_level": "4",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    }
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_ordinary_preop_consult_is_not_a_staff_candidate-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="4",
+                        surgery_name="测试手术",
+                    )
                 ],
                 "presurg_discussion": [],
                 "consultation_record": [
@@ -1188,11 +1211,12 @@ async def test_missing_mdt_document_is_programmatic_non_compliant(monkeypatch):
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgical_level": "四级",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    }
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_missing_mdt_document_is_programmatic_non_compliant-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="四级",
+                    )
                 ],
                 "presurg_discussion": [],
                 "consultation_record": [],
@@ -1218,13 +1242,13 @@ async def test_missing_mdt_document_is_programmatic_non_compliant(monkeypatch):
 async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
     session = _session(
         {
-            "mr_surgery": [
-                {
-                    "document_id": "surgery-emergency-40",
-                    "surgery_name": "开颅血肿清除术",
-                    "surgical_level": "四级",
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+            "surgery_record": [
+                _performed_surgery(
+                    document_id="surgery-emergency-40",
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level="四级",
+                    surgery_name="开颅血肿清除术",
+                )
             ],
             "presurg_summary": [
                 {
@@ -1253,7 +1277,7 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
     assert execution.decisions[0].reason_code == "trigger_absent_complete"
     assert set(execution.decisions[0].fact_refs) == _material_document_refs(
         session,
-        "mr_surgery",
+        "surgery_record",
         "presurg_summary",
     )
     assert (
@@ -1290,7 +1314,7 @@ async def test_emergency_surgery_is_exempt_from_preoperative_mdt():
         "mdt_discussion_state": "exempt",
     }
     assert _customer_evidence_coordinates(result) == {
-        ("mr_surgery", "surgery-emergency-40", "2026-01-02 09:00:00", ""),
+        ("surgery_record", "surgery-emergency-40", "2026-01-02 09:00:00+08:00", "record_content"),
         ("presurg_summary", "summary-emergency-40", "", "record_content"),
     }
 
@@ -1304,17 +1328,19 @@ async def test_multiple_level4_sessions_without_operation_linkage_are_data_gap(
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgery_name": "第一次手术",
-                        "surgical_level": "四级",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    },
-                    {
-                        "surgery_name": "第二次手术",
-                        "surgical_level": "四级",
-                        "surgery_begin_datetime": "2026-01-05T09:00:00",
-                    },
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_multiple_level4_sessions_without_operation_linkage_are_data_gap-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="四级",
+                        surgery_name="第一次手术",
+                    ),
+                    _performed_surgery(
+                        document_id='test_multiple_level4_sessions_without_operation_linkage_are_data_gap-2',
+                        begin_time='2026-01-05 09:00:00+08:00',
+                        surgical_level="四级",
+                        surgery_name="第二次手术",
+                    ),
                 ],
                 "presurg_discussion": [
                     {
@@ -1352,11 +1378,12 @@ async def test_non_level4_surgery_is_not_applicable(monkeypatch):
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgical_level": "三级",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    }
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_non_level4_surgery_is_not_applicable-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="三级",
+                    )
                 ]
             }
         ),
@@ -1383,11 +1410,12 @@ async def test_ungraded_surgery_does_not_trigger_level4_mdt_rule(monkeypatch):
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgical_level": "未定级",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    }
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_ungraded_surgery_does_not_trigger_level4_mdt_rule-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="未定级",
+                    )
                 ]
             }
         ),
@@ -1412,11 +1440,12 @@ async def test_invalid_llm_output_is_technical_error(monkeypatch):
         "read_luxian_0609_native_source_rows",
         _reader(
             {
-                "mr_surgery": [
-                    {
-                        "surgical_level": "四级",
-                        "surgery_begin_datetime": "2026-01-02T09:00:00",
-                    }
+                "surgery_record": [
+                    _performed_surgery(
+                        document_id='test_invalid_llm_output_is_technical_error-1',
+                        begin_time='2026-01-02 09:00:00+08:00',
+                        surgical_level="四级",
+                    )
                 ],
                 "presurg_discussion": [
                     {
@@ -1448,12 +1477,12 @@ async def test_invalid_llm_output_is_technical_error(monkeypatch):
 async def test_typed_mdt_model_failure_keeps_only_prompt_candidate_evidence():
     session = _session(
         {
-            "mr_surgery": [
-                {
-                    "document_id": "surgery-llm-error-40",
-                    "surgical_level": "四级",
-                    "surgery_begin_datetime": "2026-01-02T09:00:00",
-                }
+            "surgery_record": [
+                _performed_surgery(
+                    document_id="surgery-llm-error-40",
+                    begin_time='2026-01-02 09:00:00+08:00',
+                    surgical_level="四级",
+                )
             ],
             "presurg_discussion": [
                 {
@@ -1481,12 +1510,12 @@ async def test_typed_mdt_model_failure_keeps_only_prompt_candidate_evidence():
     assert execution.decisions[0].reason_code == "model_invalid_output"
     assert set(execution.decisions[0].fact_refs) == _material_document_refs(
         session,
-        "mr_surgery",
+        "surgery_record",
         "presurg_discussion",
     )
     _, result = _aggregate_typed(session, execution)
     assert _customer_evidence_coordinates(result) == {
-        ("mr_surgery", "surgery-llm-error-40", "2026-01-02 09:00:00", ""),
+        ("surgery_record", "surgery-llm-error-40", "2026-01-02 09:00:00+08:00", "record_content"),
         (
             "presurg_discussion",
             "discussion-llm-error-40",
@@ -1543,8 +1572,12 @@ async def test_staff_field_contract_boundaries(
     monkeypatch, fields, state, expected, calls
 ):
     rows = {
-        "mr_surgery": [
-            {"surgical_level": "四级", "surgery_begin_datetime": "2026-01-02T09:00:00"}
+        "surgery_record": [
+            _performed_surgery(
+                document_id='test_staff_field_contract_boundaries-1',
+                begin_time='2026-01-02 09:00:00+08:00',
+                surgical_level="四级",
+            )
         ],
         "presurg_discussion": [
             {
@@ -1580,8 +1613,12 @@ async def test_separate_single_department_rosters_remain_separate_in_one_prompt(
     monkeypatch,
 ):
     rows = {
-        "mr_surgery": [
-            {"surgical_level": "四级", "surgery_begin_datetime": "2026-01-02T09:00:00"}
+        "surgery_record": [
+            _performed_surgery(
+                document_id='test_separate_single_department_rosters_remain_separate_in_one_prompt-1',
+                begin_time='2026-01-02 09:00:00+08:00',
+                surgical_level="四级",
+            )
         ],
         "presurg_discussion": [
             {"record_time": "2026-01-01T09:00:00", "discuss_staff": "骨科甲医师"},
@@ -1615,8 +1652,12 @@ async def test_total_staff_context_overflow_does_not_classify_truncated_rosters(
     monkeypatch,
 ):
     rows = {
-        "mr_surgery": [
-            {"surgical_level": "四级", "surgery_begin_datetime": "2026-01-02T09:00:00"}
+        "surgery_record": [
+            _performed_surgery(
+                document_id='test_total_staff_context_overflow_does_not_classify_truncated_rosters-1',
+                begin_time='2026-01-02 09:00:00+08:00',
+                surgical_level="四级",
+            )
         ],
         "presurg_discussion": [
             {"record_time": "2026-01-01T09:00:00", "discuss_staff": "甲" * 2200}
@@ -1711,10 +1752,12 @@ class _EmergencyConfirmClient:
 
 def _emergency_word_session(summary_text):
     return _session({
-        "mr_surgery": [{
-            "document_id": "surgery-40", "surgery_name": "开颅血肿清除术", "surgical_level": "四级",
-            "surgery_begin_datetime": "2026-01-02T09:00:00",
-        }],
+        "surgery_record": [_performed_surgery(
+            document_id="surgery-40",
+            begin_time='2026-01-02 09:00:00+08:00',
+            surgical_level="四级",
+            surgery_name="开颅血肿清除术",
+        )],
         "presurg_summary": [{"document_id": "summary-40", "record_content": summary_text}],
         "presurg_discussion": [],
         "consultation_record": [],
@@ -1751,3 +1794,28 @@ async def test_emergency_confirmation_quote_must_be_verbatim():
         decision_rule_ids=("LX0609-04-01-03",),
     )
     assert execution.decisions[0].reason_code == "model_invalid_output"
+
+
+@pytest.mark.parametrize("operation_source", ["surgery_record", "presurg_discussion"])
+def test_catalog_exclusion_keeps_unknown_document_fact_and_source_identity(operation_source):
+    from app.services.luxian_0609.surgery_applicability import resolve_surgery_applicability
+
+    unknown = _performed_surgery(
+        document_id="synthetic-shared-id", begin_time="2026-01-02 09:00:00+08:00",
+        surgical_level="四级", surgery_name="合成未命中目录术式",
+    )
+    operation = _performed_surgery(
+        document_id="synthetic-other-operation" if operation_source == "surgery_record" else "synthetic-shared-id",
+        begin_time="2026-01-02 10:00:00+08:00", surgical_level="四级",
+        surgery_name="冠脉瞬时无波形比值检查[iFR检查]", surgery_code="00.5901",
+    )
+    rows = {"surgery_record": [unknown]}
+    rows.setdefault(operation_source, []).append(operation)
+    session = _session(rows)
+    result = resolve_surgery_applicability(snapshot=session.snapshot, materials=session.materials)
+    retained = [fact.fact_id for fact in session.snapshot.facts
+                if fact.fact_type == "current_visit_surgery_confirmed"
+                and fact.source_key == "surgery_record" and fact.assertion.value == "affirmed"]
+    assert retained and set(retained) <= set(result.evidence_refs)
+    assert result.is_performed_surgery
+    assert result.effective_level == "四级"

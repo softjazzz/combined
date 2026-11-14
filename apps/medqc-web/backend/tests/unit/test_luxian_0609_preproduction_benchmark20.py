@@ -23,19 +23,12 @@ _SEMANTIC_RULE_IDS = frozenset(
 _DETERMINISTIC_RULE_IDS = frozenset(
     rule_id for rule_id in _RULE_IDS if _EXECUTOR_TYPES[rule_id] == "program"
 )
+# 以总表的暂停合同为独立输入，验证benchmark过滤和计数投影。
+from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
+
 _WITHHELD_RULE_IDS = frozenset(
-    {
-        "LX0609-03-01-01",
-        "LX0609-03-01-02",
-        "LX0609-03-01-03",
-        "LX0609-04-02-04",
-        "LX0609-04-04-01",
-        "LX0609-04-04-02",
-        "LX0609-07-04-02",
-        "LX0609-05-03-01",
-        # 075 已按院方 92 项有创操作目录恢复执行（2026-10-11）。
-        # 056 已按院方重点抗菌药物七类清单恢复执行（2026-10-11）。
-    }
+    entry.rule_id for entry in load_luxian_0609_rule_master()
+    if entry.implementation_status == "active" and entry.phase_status != "phase_1_target"
 )
 _CUSTOMER_EXCLUDED_RULE_IDS = frozenset(
     {
@@ -54,21 +47,22 @@ _CATALOG_RULE_IDS = tuple(
 def test_rule_attestations_use_authoritative_executable_phase_scope():
     rule_ids, executor_types = benchmark20._rule_attestations()
 
-    # 以当前规则合同目录为准（PR14新增4条验收规则：目录90条、验收可执行77条）。
+    # 当前目录身份不变，候选暂停只改变可执行范围。
     assert rule_ids == tuple(
         rule_id
         for rule_id in _CATALOG_RULE_IDS
         if rule_id not in _WITHHELD_RULE_IDS
         and rule_id not in _CUSTOMER_EXCLUDED_RULE_IDS
     )
-    assert len(rule_ids) == 77
+    assert len(rule_ids) == len(set(_CATALOG_RULE_IDS) - _WITHHELD_RULE_IDS - _CUSTOMER_EXCLUDED_RULE_IDS)
     assert not set(rule_ids).intersection(
         _WITHHELD_RULE_IDS | _CUSTOMER_EXCLUDED_RULE_IDS
     )
     assert set(executor_types) == set(rule_ids)
     # 006按客户口径改为纯程序判定，其余规则执行类型不变。
-    assert sum(item == "program" for item in executor_types.values()) == 44
-    assert sum(item == "llm" for item in executor_types.values()) == 33
+    contracts = {item.rule_id: item for item in benchmark20.load_luxian_0609_rule_contracts()}
+    for rule_id, kind in executor_types.items():
+        assert kind == ("program" if contracts[rule_id].decision_authority == "program_only" else "llm")
     assert executor_types["LX0609-02-01-02"] == "program"
 
 
@@ -155,8 +149,8 @@ def test_default_benchmark_output_exposes_full_customer_rule_scope() -> None:
     assert benchmark20._rule_scope_summary() == {
         "catalog_count": 90,
         "customer_delivery_count": 85,
-        "executable_count": 77,
-        "withheld_count": 8,
+        "executable_count": len(_RULE_IDS),
+        "withheld_count": len(_WITHHELD_RULE_IDS - _CUSTOMER_EXCLUDED_RULE_IDS),
     }
 
 
@@ -279,8 +273,8 @@ def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
     """锁定当前可执行规则的权威契约分类。"""
 
     rows = candidate["rows"]
-    assert len(_DETERMINISTIC_RULE_IDS) == 44
-    assert len(_SEMANTIC_RULE_IDS) == 33
+    assert _DETERMINISTIC_RULE_IDS.isdisjoint(_SEMANTIC_RULE_IDS)
+    assert _DETERMINISTIC_RULE_IDS | _SEMANTIC_RULE_IDS == set(_RULE_IDS)
     assert len(rows) == 20 * len(_RULE_IDS)
     decision_kinds = [row["decision_kind"] for row in rows]
     assert decision_kinds.count("deterministic") == (
@@ -376,7 +370,7 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
     assert batch["summary"]["latency_ms"]["p50"] == 10.5
     assert batch["summary"]["latency_ms"]["p95"] == 19.05
     assert batch["summary"]["rule_maturity"] == {
-        "rule_decision_count": 77,
+        "rule_decision_count": len(_RULE_IDS),
         "typed_shadow_adapter_count": 0,
         "legacy_projection_count": 0,
     }
@@ -384,8 +378,8 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         "mode": "full_customer",
         "catalog_count": 90,
         "customer_delivery_count": 85,
-        "executable_count": 77,
-        "withheld_count": 8,
+        "executable_count": len(_RULE_IDS),
+        "withheld_count": len(_WITHHELD_RULE_IDS - _CUSTOMER_EXCLUDED_RULE_IDS),
     }
     assert len(batch["selector_digest"]) == 64
     assert len(batch["rule_set_digest"]) == 64
@@ -662,21 +656,21 @@ async def test_benchmark20_selected_rules_run_only_canonical_subset_and_build_sa
         runner=fake_runner,
         llm_client=object(),
         base_settings=SimpleNamespace(),
-        selected_rule_ids=("LX0609-04-02-02", "LX0609-04-01-01"),
+        selected_rule_ids=("LX0609-01-02-01", "LX0609-01-01-01"),
     )
 
-    assert runner_calls == [("LX0609-04-01-01", "LX0609-04-02-02")] * 20
+    assert runner_calls == [("LX0609-01-01-01", "LX0609-01-02-01")] * 20
     assert batch["rule_scope"] == {
         "mode": "selected_subset",
-        "selected_rule_ids": ["LX0609-04-01-01", "LX0609-04-02-02"],
+        "selected_rule_ids": ["LX0609-01-01-01", "LX0609-01-02-01"],
     }
     assert batch["summary"]["judgment_count"] == 40
     assert batch["summary"]["selected_rule_count"] == 2
     assert all(
         tuple(case["evidence_attestations"])
-        == ("LX0609-04-01-01", "LX0609-04-02-02")
+        == ("LX0609-01-01-01", "LX0609-01-02-01")
         and [item["rule_id"] for item in case["response"]["results"]]
-        == ["LX0609-04-01-01", "LX0609-04-02-02"]
+        == ["LX0609-01-01-01", "LX0609-01-02-01"]
         for case in batch["cases"]
     )
     candidate = build_candidate_ledger(
@@ -686,8 +680,8 @@ async def test_benchmark20_selected_rules_run_only_canonical_subset_and_build_sa
     )
     assert candidate["candidate_count"] == 40
     assert {row["rule_id"] for row in candidate["rows"]} == {
-        "LX0609-04-01-01",
-        "LX0609-04-02-02",
+        "LX0609-01-01-01",
+        "LX0609-01-02-01",
     }
     assert all("private" not in repr(row).lower() for row in candidate["rows"])
 

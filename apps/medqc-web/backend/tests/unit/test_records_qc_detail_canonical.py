@@ -24,6 +24,14 @@ import pytest
 
 import app.routers.records as records
 
+pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
+
+
+@pytest.fixture(autouse=True)
+def global_account_scope(monkeypatch):
+    from app.services import saved_result_access
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _actor: None)
+
 
 MALICIOUS_TEXT = "恶意篡改文本-绝不应出现在客户结果"
 RULE_SET_KEY = "luxian_0609_qc_v1"
@@ -332,7 +340,7 @@ def test_canonical_ready_maps_published_fields_without_regeneration(
         {"state": "ready", "job_id": "job-canonical", "items": [_published_canonical_item()]},
     )
 
-    payload = records._load_luxian_0609_review_items_from_canonical("visit-1")
+    payload = records._load_luxian_0609_review_items_from_canonical("visit-1", authorize_identity=lambda _identity: None)
 
     assert calls and calls[0]["visit_id"] == "visit-1"
     assert payload["state"] == "ready"
@@ -374,7 +382,7 @@ def test_canonical_wider_status_is_passed_through_verbatim(
         },
     )
 
-    payload = records._load_luxian_0609_review_items_from_canonical("visit-1")
+    payload = records._load_luxian_0609_review_items_from_canonical("visit-1", authorize_identity=lambda _identity: None)
 
     assert payload["review_items"][0]["status"] == status
 
@@ -403,7 +411,7 @@ def test_canonical_ready_requires_published_fields_without_legacy_fallback(
         items = [_published_canonical_item(), broken_item]
     _patch_canonical_result(monkeypatch, {"state": "ready", "job_id": "job-x", "items": items})
 
-    payload = records._load_luxian_0609_review_items_from_canonical("visit-1")
+    payload = records._load_luxian_0609_review_items_from_canonical("visit-1", authorize_identity=lambda _identity: None)
 
     assert payload["review_items"] == []
     assert payload["state"] == "technical_error"
@@ -424,7 +432,7 @@ def test_canonical_not_ready_returns_no_0609_result(
     _patch_identity(monkeypatch)
     _patch_canonical_result(monkeypatch, {"state": state, "items": []})
 
-    payload = records._load_luxian_0609_review_items_from_canonical("visit-1")
+    payload = records._load_luxian_0609_review_items_from_canonical("visit-1", authorize_identity=lambda _identity: None)
 
     assert payload["review_items"] == []
     assert payload["review_job"] is None
@@ -442,7 +450,7 @@ def test_canonical_malformed_or_empty_result_is_contained(
     _patch_identity(monkeypatch)
     _patch_canonical_result(monkeypatch, result)
 
-    payload = records._load_luxian_0609_review_items_from_canonical("visit-1")
+    payload = records._load_luxian_0609_review_items_from_canonical("visit-1", authorize_identity=lambda _identity: None)
 
     assert payload["review_items"] == []
     assert payload["state"] in {"technical_error", "unavailable"}
@@ -455,7 +463,7 @@ def test_canonical_service_exception_is_contained_without_echoing_raw_text(
     _patch_identity(monkeypatch)
     _patch_canonical_result(monkeypatch, {}, raises=True)
 
-    payload = records._load_luxian_0609_review_items_from_canonical("visit-1")
+    payload = records._load_luxian_0609_review_items_from_canonical("visit-1", authorize_identity=lambda _identity: None)
 
     assert payload["review_items"] == []
     assert payload["state"] == "technical_error"
@@ -500,7 +508,7 @@ def test_no_current_envelope_cannot_be_accepted_as_ready(
         {"state": "ready", "job_id": "job-fake", "items": [_published_canonical_item()]},
     )
 
-    payload = records._load_luxian_0609_review_items_from_canonical("visit-1")
+    payload = records._load_luxian_0609_review_items_from_canonical("visit-1", authorize_identity=lambda _identity: None)
 
     assert payload["review_items"] == []
     assert payload["state"] == "identity_unresolved"
@@ -526,7 +534,7 @@ def test_identity_conflict_between_cdm_and_envelope_is_controlled(
     )
     calls = _patch_canonical_result(monkeypatch, {"state": "ready", "items": []})
 
-    payload = records._load_luxian_0609_review_items_from_canonical("visit-1")
+    payload = records._load_luxian_0609_review_items_from_canonical("visit-1", authorize_identity=lambda _identity: None)
 
     assert payload["review_items"] == []
     assert payload["state"] == "identity_conflict"
@@ -544,7 +552,7 @@ def test_ambiguous_envelope_identity_is_controlled(
     )
     calls = _patch_canonical_result(monkeypatch, {"state": "ready", "items": []})
 
-    payload = records._load_luxian_0609_review_items_from_canonical("visit-1")
+    payload = records._load_luxian_0609_review_items_from_canonical("visit-1", authorize_identity=lambda _identity: None)
 
     assert payload["review_items"] == []
     assert payload["state"] == "identity_ambiguous"

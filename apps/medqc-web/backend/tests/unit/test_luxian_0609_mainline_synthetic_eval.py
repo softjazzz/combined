@@ -82,8 +82,12 @@ def test_defined_only_matrix_excludes_current_pending_rules(tmp_path: Path) -> N
         rule_id for visit_rules in grouped.values() for rule_id in visit_rules
     }
 
-    # 截至 2026-10-12 合同文件，前 75 条中仍为 pending_definition 的 8 条。
-    assert len(selected_rule_ids) == 67
+    from app.services.luxian_0609.phase_scope import load_luxian_0609_phase_scope
+
+    # 合成矩阵消费当前执行范围，暂停规则仍在目录中但不得进入执行选择。
+    current = {entry.rule_id for entry in load_luxian_0609_phase_scope()
+               if entry.catalog_registered and entry.phase_status == "phase_1_target"}
+    assert selected_rule_ids == set(published_rule_ids(1, 75)) & current
     assert selected_rule_ids.isdisjoint(
         {
             "LX0609-03-01-01",
@@ -94,6 +98,7 @@ def test_defined_only_matrix_excludes_current_pending_rules(tmp_path: Path) -> N
             "LX0609-04-04-02",
             "LX0609-05-03-01",
             "LX0609-07-04-02",
+            "LX0609-08-01-03",
         }
     )
 

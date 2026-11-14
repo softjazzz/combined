@@ -144,9 +144,9 @@ def test_target_qualification_rejects_unapproved_policy_and_count_above_target_r
 @pytest.mark.parametrize(("status", "resolution", "readiness"), [(QueryStatus.AVAILABLE, TargetResolution.PRESENT, GateReadiness.READY), (QueryStatus.EMPTY, TargetResolution.EMPTY, GateReadiness.READY), (QueryStatus.UNAVAILABLE, TargetResolution.UNAVAILABLE, GateReadiness.BLOCKED), (QueryStatus.ERROR, TargetResolution.ERROR, GateReadiness.BLOCKED)])
 def test_a_matched_target_matrix(status, resolution, readiness):
     # 术后记录义务以已实施事实触发，计划医嘱不证明实施。
-    fact = _fact(fact_type="current_visit_surgery_confirmed", source_key="mr_surgery")
+    fact = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record")
     pair = (fact.fact_type, fact.source_key)
-    report = _gate(statuses={"surgery_record": status}, facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
+    report = _gate(rule_ids=("LX0609-04-03-01",), statuses={"surgery_safecheck_record": status}, facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
     assert (report.decisions[0].target_resolution, report.decisions[0].readiness) == (resolution, readiness)
 
 
@@ -235,7 +235,7 @@ def test_d_order_and_performed_semantics_and_e_positive_wins():
     assert report.decisions[0].trigger_resolution is TriggerResolution.MATCHED
 
 
-def test_typed_mr_surgery_fact_is_accepted_and_overrides_other_source_error():
+def test_typed_mr_surgery_fact_cannot_override_clinical_source_error():
     fact = _fact(
         fact_type="current_visit_surgery_confirmed",
         source_key="mr_surgery",
@@ -248,8 +248,8 @@ def test_typed_mr_surgery_fact_is_accepted_and_overrides_other_source_error():
         overrides={positive_pair: _observation(positive_pair, fact_ids=(fact.fact_id,))},
     )
 
-    assert report.decisions[0].trigger_resolution is TriggerResolution.MATCHED
-    assert report.decisions[0].matched_fact_refs[0].source_key == "mr_surgery"
+    assert report.decisions[0].trigger_resolution is TriggerResolution.SOURCE_ERROR
+    assert report.decisions[0].matched_fact_refs == ()
 
 
 def test_strict_surgery_record_fact_overrides_mr_surgery_source_error():
@@ -269,10 +269,10 @@ def test_strict_surgery_record_fact_overrides_mr_surgery_source_error():
     assert report.decisions[0].matched_fact_refs[0].source_key == "surgery_record"
 
 
-def test_mr_surgery_source_error_blocks_only_when_no_alternative_positive():
+def test_mr_surgery_source_error_is_outside_clinical_trigger_contract():
     report = _gate(statuses={"mr_surgery": QueryStatus.ERROR})
-    assert report.decisions[0].trigger_resolution is TriggerResolution.SOURCE_ERROR
-    assert report.decisions[0].readiness is GateReadiness.BLOCKED
+    assert report.decisions[0].trigger_resolution is TriggerResolution.ABSENT_COMPLETE
+    assert report.decisions[0].readiness is GateReadiness.NOT_TRIGGERED
 
 
 def test_gate_decision_rejects_unapproved_performed_source():

@@ -242,19 +242,17 @@ async def test_surgeon_signed_first_postoperative_course_counts_within_24_hours(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("pre_time,post_time,expected_pre,expected_post", (
-    # 只有首页手术日期：术前认前一日及当日，术后24小时认当日及次日。
-    ("2026-07-07 07:30:00", "2026-07-08 09:00:00", True, True),
-    ("2026-07-06 10:00:00", "2026-07-08 23:00:00", True, True),
-    ("2026-07-05 10:00:00", "2026-07-09 08:00:00", False, False),
+    # 临床记录的显式午夜时间仍按精确24小时判断，不能扩为自然日窗口。
+    ("2026-07-07 00:00:00", "2026-07-08 00:00:00", True, True),
+    ("2026-07-06 00:00:00", "2026-07-08 00:00:01", True, False),
+    ("2026-07-05 23:59:59", "2026-07-09 08:00:00", False, False),
 ))
-async def test_date_only_surgery_time_uses_calendar_day_windows(pre_time, post_time, expected_pre, expected_post):
-    from datetime import datetime
-
+async def test_explicit_midnight_clinical_time_uses_exact_windows(pre_time, post_time, expected_pre, expected_post):
     materials = _materials()
-    materials["surgery_record"] = ()
-    materials["mr_surgery"] = ({
+    materials["surgery_record"] = ({
         "document_id": "M1", "surgery_code": "47.0100", "surgery_name": "腹腔镜下阑尾切除术",
-        "surgery_begin_datetime": datetime(2026, 7, 7), "surgeon": "李明",
+        "surgery_begin_time": "2026-07-07 00:00:00+08",
+        "surgery_end_time": "2026-07-07 00:00:00+08", "surgeon": "李明",
     },)
     for row in materials["daily_course_record"]:
         row["author_name"] = "赵医生"
@@ -268,6 +266,22 @@ async def test_date_only_surgery_time_uses_calendar_day_windows(pre_time, post_t
     facts = dict(result.customer_display_facts)[RULE]
     assert facts["preop_surgeon_round_present"] is expected_pre
     assert facts["surgeon_round_present"] is expected_post
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("clock", ("2026-07-07", "2026-07-07 00:00:00", None))
+async def test_date_only_or_timezone_missing_clinical_time_cannot_borrow_other_event(clock):
+    materials = _materials()
+    materials["surgery_record"] += ({
+        "document_id": "MISSING-CLOCK", "surgery_name": "合成手术", "surgeon": "李明",
+        "surgery_begin_time": clock, "surgery_end_time": clock,
+    },)
+    result, reduced = await _evaluate(RULE, materials)
+    assert (reduced.final_state.value, reduced.reason_code) == (
+        "data_gap", "authoritative_time_missing",
+    )
+    facts = dict(result.customer_display_facts)[RULE]
+    assert facts["missing_surgery_end_events"] == ["MISSING-CLOCK"]
 
 
 @pytest.mark.asyncio

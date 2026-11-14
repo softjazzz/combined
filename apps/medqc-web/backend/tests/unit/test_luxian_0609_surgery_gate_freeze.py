@@ -116,6 +116,8 @@ def _rows() -> dict[str, list[dict[str, Any]]]:
         "surgery_record": [
             {
                 "document_id": "surgery-gate-1",
+                "surgery_name": "肺叶切除术",
+                "surgery_code": "32.4100",
                 "surgery_begin_time": "2026-01-01 08:00:00+08:00",
                 "surgery_end_time": "2026-01-01 10:00:00+08:00",
                 "record_time": "2026-01-01 12:00:00+08:00",
@@ -243,7 +245,7 @@ async def test_surgery_gate_freeze_real_chain_locks_states_facts_copy_and_eviden
     # 028（2026-10-11 程序判定）：抗菌药物医嘱无开始时间 → 资料不足。
     assert [item.final_state.value for item in reduced] == [
         "compliant", "compliant", "compliant", "data_gap", "compliant", "compliant"
-    ]
+    ], [(item.rule_id, item.final_state.value, item.reason_code) for item in reduced]
     assert [item.reason_code for item in reduced] == [
         "requirement_within_threshold", "requirement_satisfied", "requirement_satisfied",
         "required_field_missing", "requirement_satisfied", "requirement_satisfied",
@@ -349,8 +351,8 @@ async def test_surgery_gate_freeze_absent_and_source_error_remain_distinct() -> 
         "performed_event_absent"
     ] * len(RULE_IDS)
     assert [item.evaluator_version for item in absent_reduced] == [
-        "surgery-timeliness-003-ruledecision-v1",
-        *["surgery-gate-ruledecision-shadow-v2"] * 5,
+        "surgery-timeliness-003-ruledecision-v2",
+        *["surgery-gate-ruledecision-shadow-v3"] * 5,
     ]
     assert absent.llm_call_count == absent.total_tokens == 0
     absent_results = _aggregate(
@@ -407,12 +409,14 @@ async def test_surgery_gate_freeze_two_surgeries_do_not_hide_an_unsigned_event()
     assert [item.final_state.value for item in reduced] == ["data_gap"]
     assert [item.reason_code for item in reduced] == ["required_field_missing"]
     assert [item["status"] for item in customer_results] == ["data_gap"]
-    assert "surgery-gate-2" not in repr(customer_results)
+    assert {item["source_document_id"] for item in customer_results[0]["customer_evidence"]} == {
+        "surgery-gate-1", "surgery-gate-2",
+    }
 
 
 @pytest.mark.asyncio
 async def test_surgery_gate_freeze_031_only_projects_the_selected_signature_source() -> None:
-    """031 采用主表签名时，不得同时展示未参与判定的矛盾手术记录。"""
+    """031 只按原始手术记录签名判定，首页阳性签名不能掩盖矛盾。"""
 
     rows = _rows()
     rows["surgery_record"][0].update(
@@ -436,11 +440,11 @@ async def test_surgery_gate_freeze_031_only_projects_the_selected_signature_sour
     )
 
     assert execution.llm_call_count == execution.total_tokens == 0
-    assert [item.final_state.value for item in reduced] == ["compliant"]
+    assert [item.final_state.value for item in reduced] == ["non_compliant"]
     assert {
         (item["source_type"], item["source_document_id"])
         for item in customer_results[0]["customer_evidence"]
-    } == {("mr_surgery", "mr-surgery-gate-1")}
+    } == {("surgery_record", "surgery-gate-1")}
 
 
 @pytest.mark.asyncio

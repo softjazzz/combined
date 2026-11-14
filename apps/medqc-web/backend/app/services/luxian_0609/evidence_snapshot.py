@@ -19,6 +19,8 @@ from .source_manifest import QueryStatus, SourceManifestEntry
 
 
 EVIDENCE_SNAPSHOT_SCHEMA_VERSION = "lx0609-evidence-snapshot-v1"
+# 仅恢复已确认的冻结旧合同；保持原版本与摘要，不升级历史身份。
+_HISTORICAL_SOURCE_REGISTRY_VERSIONS = frozenset({"lx0609-source-registry-v38"})
 _CODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 
@@ -272,10 +274,20 @@ class Luxian0609EvidenceSnapshot:
             source_registry_version,
             max_length=48,
         )
-        from .source_registry import SOURCE_REGISTRY_VERSION
+        from .source_registry import SOURCE_REGISTRY_VERSION, _HISTORICAL_SOURCE_ENTRIES
 
-        if registry_version != SOURCE_REGISTRY_VERSION:
+        if registry_version not in {SOURCE_REGISTRY_VERSION, *_HISTORICAL_SOURCE_REGISTRY_VERSIONS}:
             raise ValueError("unsupported source registry version")
+        if registry_version in _HISTORICAL_SOURCE_REGISTRY_VERSIONS:
+            for observation in normalized_observations:
+                historical_versions = {
+                    entry.query_version
+                    for entry in _HISTORICAL_SOURCE_ENTRIES
+                    if observation.source_key == entry.document_type
+                    or observation.source_key in entry.source_keys
+                }
+                if historical_versions and observation.query_version not in historical_versions:
+                    raise ValueError("source query_version does not match historical registry")
         normalized_created_at = _validate_created_at(created_at)
         identity = {
             "document_refs": list(normalized_document_refs),

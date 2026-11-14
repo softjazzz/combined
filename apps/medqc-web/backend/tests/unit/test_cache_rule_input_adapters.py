@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 import json
 import re
+from types import SimpleNamespace
 
 import pytest
 
@@ -313,10 +314,14 @@ async def test_first_course_formal_rule_reads_parent_diagnosis_and_uses_fake_sem
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("source_label,expected", [("病案首页", "compliant"), ("未证实来源", "data_gap")])
-async def test_homepage_rule_requires_explicit_provenance_and_uses_no_fake_homepage(monkeypatch, source_label, expected):
-    from app.services.luxian_0609.native_extended_document_execution import execute_luxian_0609_native_extended_document_rules
-    install(monkeypatch, {
+@pytest.mark.parametrize("source_label", ["病案首页", "未证实来源"])
+async def test_homepage_comparison_stays_pending_without_reading_or_model(monkeypatch, source_label):
+    from app.services.luxian_0609.customer_rule_package import LUXIAN_0609_RULE_SET_KEY
+    from app.services.luxian_0609.execution import (
+        aggregate_luxian_0609_orchestrated_results, prepare_luxian_0609_execution,
+    )
+
+    db = install(monkeypatch, {
         "discharge_record": [{"document_id": "D", "record_content": "出院诊断：1、合成诊断"}],
         "diagnosis": [{"diagnosis_type": "出院诊断", "diagnosis_no": "1",
                        "diagnosis_name": "合成诊断", "diagnosis_source": source_label}],
@@ -324,13 +329,33 @@ async def test_homepage_rule_requires_explicit_provenance_and_uses_no_fake_homep
         "death_record": [],
     })
     rule = "LX0609-08-01-03"
-    context = session(rule)
-    execution = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=(rule,), decision_rule_ids=(rule,), evidence_snapshot=context.snapshot,
-        evidence_materials=context.materials, llm_client=None,
+
+    class ForbiddenClient:
+        async def generate(self, *_args, **_kwargs):
+            pytest.fail("暂停的首页比较规则不能调用模型")
+
+    executable, context = await prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY, prepared_rules=[{"rule_id": rule}],
+        medical_text="", evidence_payload=None, llm_client=ForbiddenClient(),
+        settings=SimpleNamespace(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+            LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+            LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
+        ),
+        selected_customer_rule_ids=(rule,), source_schema="cdm", **KEYS,
     )
-    assert reduce(execution, context, rule).final_state.value == expected
-    assert execution.llm_call_count == 0
+    assert executable == []
+    published = aggregate_luxian_0609_orchestrated_results(
+        orchestrated={"results": []}, context=context, visit_id=KEYS["visit_id"],
+        model_name="unused", evidence_payload=None,
+    )
+    assert len(published["results"]) == 1
+    result = published["results"][0]
+    assert (result["status"], result["reason_code"]) == ("not_executed", "policy_definition_pending")
+    assert result["evidence"] == [] and result["is_compliant"] is None
+    assert context.native_llm_call_count == 0
+    assert db.calls == []
 
 
 @pytest.mark.asyncio

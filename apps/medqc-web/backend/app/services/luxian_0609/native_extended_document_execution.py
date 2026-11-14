@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.execution_timing import measure_stage, timing_labels
 from .evaluation_horizon import frozen_window_is_mature
+from .phase_scope import build_luxian_0609_pending_definition_result
 
 from .decision_model import (
     ApplicabilityState,
@@ -50,7 +51,6 @@ from .extended_document.invasive_procedure_record import (
     RECORD_WINDOW_DAYS as INVASIVE_RECORD_WINDOW_DAYS,
     candidate_order_rows as _invasive_candidate_order_rows,
     check_invasive_procedure_records,
-    front_page_triggers as _invasive_front_page_triggers,
     map_orders_to_invasive_catalog,
     merge_triggers as _merge_invasive_triggers,
     order_triggers as _invasive_order_triggers,
@@ -191,7 +191,6 @@ EXTENDED_DOCUMENT_SOURCE_KEYS = (
     "daily_course_record",
     "senior_course_record",
     "postsurg_firstcourse_record",
-    "mr_surgery",
     "surgery_record",
     "anesthesia_record",
     "consultation_record",
@@ -208,7 +207,6 @@ EXTENDED_DOCUMENT_SOURCE_KEYS = (
     "labtest_master",
     "inpat_drug_order",
     "discharge_record_diagnosis",
-    "mr_bloodtrans",
     "bloodtrans_record",
 )
 
@@ -617,31 +615,30 @@ def _070_document_refs(
 ) -> tuple[str, ...]:
     """只返回 070 判定实际消费的、同一快照验证过的逐行引用。"""
 
+    bloodtrans_record_rows = []
+    for key in ("bloodtrans_record", "daily_course_record", "senior_course_record"):
+        try:
+            rows = materials.document_rows(key, snapshot=snapshot)
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+            # 未消费的辅助源不可用，不得清空已核验的专用文书引用。
+            continue
+        bloodtrans_record_rows.extend(
+            (reference, row) for reference, row in rows
+            if consumed_bloodtrans_rows is None or row in consumed_bloodtrans_rows
+        )
+    if consumed_bloodtrans_rows is not None and any(
+        not any(row == selected for _, row in bloodtrans_record_rows)
+        for selected in consumed_bloodtrans_rows
+    ):
+        return ()
+    if not include_pretransfusion_materials:
+        return tuple(dict.fromkeys(reference for reference, _ in bloodtrans_record_rows))
     try:
-        bloodtrans_record_rows = tuple(
-            item for key in ("bloodtrans_record", "daily_course_record", "senior_course_record")
-            for item in materials.document_rows(key, snapshot=snapshot)
-            if key == "bloodtrans_record" or (
-                consumed_bloodtrans_rows is not None and item[1] in consumed_bloodtrans_rows
-            )
-        )
-        if not include_pretransfusion_materials:
-            # 没有已确认实施事件时未核对九项，只引用实际用于抽取的专用资料。
-            return tuple(dict.fromkeys(
-                reference for reference, row in bloodtrans_record_rows
-                if consumed_bloodtrans_rows is None or row in consumed_bloodtrans_rows
-            ))
-        registration_rows = (
-            *materials.document_rows("inpat_registration", snapshot=snapshot),
-            *materials.document_rows("admission_record", snapshot=snapshot),
-        )
-        transfusion_rows = materials.document_rows(
-            "mr_bloodtrans", snapshot=snapshot
-        )
+        registration_rows = materials.document_rows("inpat_registration", snapshot=snapshot)
+        if not any(resolve_pretransfusion_admission_time(row) is not None for _, row in registration_rows):
+            registration_rows = materials.document_rows("admission_record", snapshot=snapshot)
         lab_rows = materials.document_rows("labtest_item_report", snapshot=snapshot)
     except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
-        # 既有规则已将受控来源不可用/截断映射为 data_gap；此时不能据部分材料
-        # 伪造逐行坐标。材料身份异常则保持 fail-fast，不吞掉技术错误。
         return ()
 
     registration_refs = (
@@ -656,7 +653,6 @@ def _070_document_refs(
     )
     refs = (
         *registration_refs,
-        *(reference for reference, _row in transfusion_rows),
         *(reference for reference, row in bloodtrans_record_rows
           if consumed_bloodtrans_rows is None or row in consumed_bloodtrans_rows),
         *lab_refs,
@@ -1971,22 +1967,8 @@ def _course_row_has_body(row: Mapping[str, Any]) -> bool:
     return bool(_clean(row.get("record_content")))
 
 
-def _qualified_surgery_rows(
-    mr_surgery_rows: Sequence[Mapping[str, Any]],
-    surgery_record_rows: Sequence[Mapping[str, Any]],
-) -> tuple[tuple[Mapping[str, Any], ...], tuple[Mapping[str, Any], ...]]:
-    return (
-        tuple(
-            row
-            for row in mr_surgery_rows
-            if catalog_surgery_state(row) is not False
-        ),
-        tuple(
-            row
-            for row in surgery_record_rows
-            if catalog_surgery_state(row) is not False
-        ),
-    )
+def _qualified_surgery_rows(surgery_record_rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+    return tuple(row for row in surgery_record_rows if catalog_surgery_state(row) is not False)
 
 
 def _surgery_applicability_outcome(
@@ -2001,49 +1983,6 @@ def _surgery_applicability_outcome(
     if applicability.state == "technical_error":
         return "technical_error", applicability.reason_code
     return "data_gap", applicability.reason_code
-
-
-def _performed_surgery_times(
-    mr_surgery_rows: Sequence[Mapping[str, Any]],
-    surgery_record_rows: Sequence[Mapping[str, Any]],
-) -> tuple[datetime, ...]:
-    values: list[datetime] = []
-    qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
-        mr_surgery_rows, surgery_record_rows
-    )
-    for source_key, rows in (
-        ("mr_surgery", qualified_mr_rows),
-        ("surgery_record", qualified_record_rows),
-    ):
-        for row in rows:
-            values.extend(
-                parsed
-                for value in trusted_performed_surgery_times(
-                    source_key=source_key, row=row
-                )
-                if (parsed := _parse_datetime(value)) is not None
-            )
-    return tuple(sorted(set(values)))
-
-
-def _performed_surgery_event_count(
-    mr_surgery_rows: Sequence[Mapping[str, Any]],
-    surgery_record_rows: Sequence[Mapping[str, Any]],
-) -> int:
-    """按权威手术主表优先计数，避免把同台手术的开始/结束时间算成两台。"""
-
-    qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
-        mr_surgery_rows, surgery_record_rows
-    )
-    # 正式手术记录是一台手术事件的主依据；mr_surgery 是操作目录补充，
-    # 同一台手术可包含多行操作，不能在正式记录存在时用它虚增台次。
-    authoritative_rows = qualified_record_rows or qualified_mr_rows
-    source_key = "surgery_record" if qualified_record_rows else "mr_surgery"
-    return sum(
-        1
-        for row in authoritative_rows
-        if trusted_performed_surgery_times(source_key=source_key, row=row)
-    )
 
 
 @dataclass(frozen=True)
@@ -2225,8 +2164,6 @@ def _actual_surgery_begin_time(
         if source_key == "surgery_record":
             if (parsed := parse_strict_performed_time(value)) is not None:
                 return parsed
-        elif source_key == "mr_surgery" and isinstance(value, datetime) and value.tzinfo is None:
-            return value
     return None
 
 
@@ -2240,87 +2177,29 @@ def _actual_surgery_end_time(
         if source_key == "surgery_record":
             if (parsed := parse_strict_performed_time(value)) is not None:
                 return parsed
-        elif source_key == "mr_surgery" and isinstance(value, datetime) and value.tzinfo is None:
-            return value
     return None
 
 
 def _postoperative_surgery_events(
-    *,
-    mr_surgery_rows: Sequence[Mapping[str, Any]],
-    surgery_record_rows: Sequence[Mapping[str, Any]],
+    *, surgery_record_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[_PostoperativeSurgeryEvent, ...]:
-    """正式手术记录优先；仅在正式记录缺失时兼容既有 mr_surgery 触发。"""
-
-    _qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
-        mr_surgery_rows, surgery_record_rows
-    )
-    source_key = "surgery_record" if qualified_record_rows else "mr_surgery"
-    source_rows = qualified_record_rows if qualified_record_rows else _qualified_mr_rows
+    """按原始手术记录逐文书建事件，首页不提供台次、术者或时间回退。"""
     events = []
-    for index, row in enumerate(source_rows, start=1):
-        end_time = _actual_surgery_end_time(source_key=source_key, row=row)
-        begin_time = _actual_surgery_begin_time(source_key=source_key, row=row)
-        surgeon_row = row
-        if source_key == "surgery_record" and not _surgery_event_surgeon_names(row) and begin_time is not None:
-            # 运行文书优先、病案首页回退：手术记录无术者时取首页同一手术日的术者。
-            # 0910 真实源库首页手术时间只精确到日，且一台手术常拆为多行术式；仅当
-            # 同日首页各行术者完全一致时采用，术者不一致或无同日记录保持缺失。
-            same_day = [
-                candidate
-                for candidate in _qualified_mr_rows
-                if (candidate_time := _actual_surgery_begin_time(source_key="mr_surgery", row=candidate)) is not None
-                and candidate_time.date() == begin_time.date()
-            ]
-            surgeon_sets = {_surgery_event_surgeon_names(candidate) for candidate in same_day}
-            if len(surgeon_sets) == 1 and next(iter(surgeon_sets)):
-                surgeon_row = same_day[0]
-        # 院方口径（2026-10-10）：0910 真实源库手术记录与病案首页均无结束时间，
-        # 缺结束时间时以同一行实际开始时间推算术后起点，并在客户结论中注明。
+    for index, row in enumerate(_qualified_surgery_rows(surgery_record_rows), start=1):
+        end_time = _actual_surgery_end_time(source_key="surgery_record", row=row)
+        begin_time = _actual_surgery_begin_time(source_key="surgery_record", row=row)
         events.append(_PostoperativeSurgeryEvent(
-            source_key=source_key,
-            row=row,
-            document_id=_clean(row.get("document_id") or row.get("id")) or f"{source_key}:{index}",
-            surgery_name=_clean(
-                row.get("surgery_name")
-                or row.get("operation_name")
-                or row.get("procedure_name")
-            ),
+            source_key="surgery_record", row=row, member_rows=(row,),
+            document_id=_clean(row.get("document_id") or row.get("id")) or f"surgery_record:{index}",
+            surgery_name=_clean(row.get("surgery_name") or row.get("operation_name") or row.get("procedure_name")),
             surgery_end_time=end_time if end_time is not None else begin_time,
-            surgeon_names=_surgery_event_surgeon_names(surgeon_row),
-            surgeon_tokens=_surgery_event_surgeon_tokens(surgeon_row),
+            surgeon_names=_surgery_event_surgeon_names(row),
+            surgeon_tokens=_surgery_event_surgeon_tokens(row),
             surgery_begin_time=begin_time,
             surgery_time_estimated=end_time is None and begin_time is not None,
-            surgery_time_date_only=(
-                source_key == "mr_surgery" and end_time is None and begin_time is not None
-                and begin_time.time() == datetime.min.time()
-            ),
+            surgery_time_date_only=False,
         ))
-    # 主控代定口径（2026-10-18，待客户复核），基线064/065/066：
-    # 仅首页同日同开始时间术式行合台；无开始时间的行独立保留，不猜测关联。
-    grouped: list[_PostoperativeSurgeryEvent] = []
-    for event in events:
-        matching_index = next((
-            index for index, existing in enumerate(grouped)
-            if event.source_key == existing.source_key == "mr_surgery"
-            and event.surgery_begin_time is not None
-            and existing.surgery_begin_time == event.surgery_begin_time
-        ), None)
-        if matching_index is None:
-            grouped.append(replace(event, member_rows=(event.row,)))
-            continue
-        existing = grouped[matching_index]
-        grouped[matching_index] = replace(
-            existing,
-            member_rows=(*existing.member_rows, event.row),
-            surgeon_names=tuple(dict.fromkeys((*existing.surgeon_names, *event.surgeon_names))),
-            surgeon_tokens=existing.surgeon_tokens | event.surgeon_tokens,
-            # 同台结束字段冲突时不擅自择一；后续按权威时间不足关闭。
-            surgery_end_time=(existing.surgery_end_time
-                              if existing.surgery_end_time == event.surgery_end_time else None),
-            surgery_time_estimated=existing.surgery_time_estimated or event.surgery_time_estimated,
-        )
-    return tuple(grouped)
+    return tuple(events)
 
 
 def _postoperative_document_refs(
@@ -2332,7 +2211,6 @@ def _postoperative_document_refs(
     """把064/065/066实际消费的事件或病程唯一绑定为逐文书证据。"""
 
     allowed_sources = (
-        "mr_surgery",
         "surgery_record",
         "daily_course_record",
         "senior_course_record",
@@ -2373,12 +2251,7 @@ def _link_postoperative_first_course_records(
     缺时间时无法做安全归属，保持数据不足而不猜测。
     """
 
-    if any(event.surgery_end_time is None for event in surgery_events) or (
-        len(surgery_events) > 1
-        and any(event.source_key == "mr_surgery" and event.surgery_begin_time is None
-                for event in surgery_events)
-    ):
-        # 主控代定口径（2026-10-18，待客户复核），基线066：缺开始时间的首页行不能证明台次关联。
+    if any(event.surgery_end_time is None for event in surgery_events):
         return (), "authoritative_time_missing"
     ordered_events = tuple(sorted(surgery_events, key=lambda item: item.surgery_end_time))
     if len({item.surgery_end_time for item in ordered_events}) != len(ordered_events):
@@ -2598,6 +2471,15 @@ async def execute_luxian_0609_native_extended_document_rules(
     if set(decision_rule_ids) != set(selected):
         raise ValueError("extended document rules require typed decisions")
 
+    # 暂停的首页对照规则仅交付政策待定结果，不进入临床决策或模型执行。
+    pending_results = tuple(
+        build_luxian_0609_pending_definition_result(rule_id)
+        for rule_id in selected if rule_id == "LX0609-08-01-03"
+    )
+    executable = tuple(rule_id for rule_id in selected if rule_id != "LX0609-08-01-03")
+    if not executable:
+        return NativeExtendedDocumentExecutionResult(pending_results, selected, ())
+
     # 054/057 共用一次理由抽取，055/056/058 也留在同组；其余文书不消费
     # 这些局部缓存。两组只读同一不可变材料仓，HTTP 仍走既有共享预算。
     antimicrobial = frozenset({
@@ -2605,8 +2487,8 @@ async def execute_luxian_0609_native_extended_document_rules(
         "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-05-03-01",
     })
     groups = tuple((label, rules) for label, rules in (
-        ("antimicrobial", tuple(rule for rule in selected if rule in antimicrobial)),
-        ("documents", tuple(rule for rule in selected if rule not in antimicrobial)),
+        ("antimicrobial", tuple(rule for rule in executable if rule in antimicrobial)),
+        ("documents", tuple(rule for rule in executable if rule not in antimicrobial)),
     ) if rules)
 
     async def run_group(label, rules):
@@ -2618,7 +2500,14 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
 
     if len(groups) == 1:
-        return await run_group(*groups[0])
+        part = await run_group(*groups[0])
+        if not pending_results:
+            return part
+        return replace(
+            part, results=tuple(sorted((*part.results, *pending_results),
+                                       key=lambda item: selected.index(item["rule_id"]))),
+            planned_rule_ids=selected,
+        )
     tasks = [asyncio.create_task(run_group(*group)) for group in groups]
     try:
         parts = await asyncio.gather(*tasks)
@@ -2631,7 +2520,7 @@ async def execute_luxian_0609_native_extended_document_rules(
 
     order = {rule_id: index for index, rule_id in enumerate(selected)}
     return NativeExtendedDocumentExecutionResult(
-        results=tuple(sorted((item for part in parts for item in part.results),
+        results=tuple(sorted((*pending_results, *(item for part in parts for item in part.results)),
                              key=lambda item: order[item["rule_id"]])),
         planned_rule_ids=selected,
         decisions=tuple(sorted((item for part in parts for item in part.decisions),
@@ -2770,9 +2659,6 @@ async def _execute_extended_document_group(
     postop_first_rows, postop_first_error = _source_rows(
         evidence_materials, "postsurg_firstcourse_record"
     )
-    mr_surgery_rows, mr_surgery_error = _source_rows(
-        evidence_materials, "mr_surgery"
-    )
     surgery_record_rows, surgery_record_error = _source_rows(
         evidence_materials, "surgery_record"
     )
@@ -2804,15 +2690,6 @@ async def _execute_extended_document_group(
         else ((), "")
     )
     diagnosis_rows, diagnosis_error = _source_rows(evidence_materials, "diagnosis")
-    mr_diagnosis_rows, mr_diagnosis_error = (
-        _source_rows(evidence_materials, "mr_diagnosis")
-        if "LX0609-08-01-03" in selected
-        else ((), "")
-    )
-    mr_diagnosis_observed = _has_source_observation(
-        evidence_snapshot,
-        "mr_diagnosis",
-    )
     # 074 的结构化变更声明只作为触发信号：该来源缺少诊断序号与诊断时间，
     # 绝不能挂成 diagnosis_rows。
     (
@@ -2840,9 +2717,6 @@ async def _execute_extended_document_group(
     )
     discharge_diagnosis_rows, discharge_diagnosis_error = _source_rows(
         evidence_materials, "discharge_record_diagnosis"
-    )
-    mr_bloodtrans_rows, mr_bloodtrans_error = _source_rows(
-        evidence_materials, "mr_bloodtrans"
     )
     bloodtrans_record_rows, bloodtrans_record_error = _source_rows(
         evidence_materials, "bloodtrans_record"
@@ -3785,267 +3659,11 @@ async def _execute_extended_document_group(
             continue
 
         if rule_id == "LX0609-08-01-03":
-            # mr观察存在时仍是唯一权威；旧快照才兼容diagnosis，不合并两源。
-            authority_source_key = "mr_diagnosis" if mr_diagnosis_observed else "diagnosis"
-            authority_error = mr_diagnosis_error if mr_diagnosis_observed else diagnosis_error
-            raw_authority_rows = mr_diagnosis_rows if mr_diagnosis_observed else diagnosis_rows
-            authority_types = {
-                _clean(row.get("diagnosis_type")) for row in raw_authority_rows
-                if _clean(row.get("diagnosis_type")) in _DISCHARGE_DIAGNOSIS_TYPES
-            }
-            death_registration_rows = tuple(
-                row for row in registration_rows if not registration_error and (
-                    any(marker in _registration_status((row,)) for marker in _DEATH_MARKERS)
-                    or _parse_datetime(row.get("death_datetime") or row.get("death_time")) is not None
-                )
-            )
-            alive_registration_rows = tuple(
-                row for row in registration_rows if not registration_error and (
-                    _registration_status((row,)) in {"在院", "住院", "存活"}
-                    or (not any(marker in _registration_status((row,)) for marker in _DEATH_MARKERS)
-                        and any(marker in _registration_status((row,)) for marker in _ALIVE_DISCHARGE_MARKERS))
-                )
-            )
-            explicit_death = bool(death_rows or death_registration_rows)
-            frozen_running = (
-                not horizon_error and len(horizon_rows) == 1
-                and horizon_rows[0].get("record_scene") == "running"
-            )
-            # 可信mr精确死亡类型本身证明范围；记录完成时间占位不反证死亡。
-            typed_death = mr_diagnosis_observed and authority_types == {"死亡诊断"}
-            scope_conflict = bool(alive_registration_rows) and (
-                explicit_death or "死亡诊断" in authority_types
-            )
-            diagnosis_scope = None
-            positive_main_conflict = False
-            consumed = []
-            scope_sources = ("inpat_registration", "death_record", authority_source_key)
-            if scope_conflict:
-                scope_gap = "scope_conflict"
-                consumed.extend(("inpat_registration", row) for row in alive_registration_rows)
-                consumed.extend((authority_source_key, row) for row in raw_authority_rows)
-            elif explicit_death or typed_death:
-                diagnosis_scope, scope_gap = "death", None
-                consumed.extend(("death_record", row) for row in death_rows)
-                consumed.extend(("inpat_registration", row) for row in death_registration_rows)
-            elif len(authority_types) > 1:
-                scope_gap = "scope_conflict"
-                consumed.extend((authority_source_key, row) for row in raw_authority_rows)
-            elif frozen_running and (discharge_rows or "出院诊断" in authority_types):
-                scope_gap = "scope_conflict"
-                consumed.extend(("evaluation_context.horizon", row) for row in horizon_rows)
-                consumed.extend(("discharge_record", row) for row in discharge_rows)
-                consumed.extend((authority_source_key, row) for row in raw_authority_rows)
-            elif frozen_running:
-                scope_gap = None
-                consumed.extend(("evaluation_context.horizon", row) for row in horizon_rows)
-            elif discharge_rows and not discharge_error:
-                diagnosis_scope, scope_gap = "discharge", None
-                consumed.extend(("discharge_record", row) for row in discharge_rows)
-            elif alive_registration_rows:
-                scope_gap = None
-                consumed.extend(("inpat_registration", row) for row in alive_registration_rows)
-            else:
-                scope_gap = "scope_unknown"
-
-            if frozen_running and diagnosis_scope is None and scope_gap is None:
-                final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif authority_error:
-                final_state, reason_code = "data_gap", authority_error
-            elif scope_conflict or scope_gap == "scope_conflict":
-                final_state, reason_code = "data_gap", "required_field_missing"
-                display.append((rule_id, {
-                    "verification_kind": "discharge_diagnosis_data_gap",
-                    "authoritative_gap": "scope_conflict", "written_gap": None,
-                }))
-            elif diagnosis_scope is None:
-                source_error = registration_error or death_error or discharge_error
-                if source_error:
-                    final_state, reason_code = "data_gap", source_error
-                elif scope_gap:
-                    final_state, reason_code = "data_gap", "required_field_missing"
-                    display.append((rule_id, {
-                        "verification_kind": "discharge_diagnosis_data_gap",
-                        "authoritative_gap": scope_gap, "written_gap": None,
-                    }))
-                else:
-                    final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif discharge_diagnosis_error:
-                final_state, reason_code = "data_gap", discharge_diagnosis_error
-            else:
-                authority_rows = _discharge_or_death_diagnosis_rows(
-                    raw_authority_rows, diagnosis_scope=diagnosis_scope,
-                    allow_untyped_legacy_rows=not mr_diagnosis_observed and diagnosis_scope == "discharge",
-                )
-                written_rows = _discharge_or_death_diagnosis_rows(
-                    discharge_diagnosis_rows, diagnosis_scope=diagnosis_scope,
-                    allow_untyped_legacy_rows=not mr_diagnosis_observed and diagnosis_scope == "discharge",
-                )
-                # 死亡病例的诊断行可能归属死亡记录；归属明确为死亡记录时以其为版本父文书。
-                version_parents = discharge_rows
-                if diagnosis_scope == "death":
-                    death_ids = {_clean(row.get("document_id")) for row in death_rows} - {""}
-                    child_ids = {_clean(row.get("document_id")) for row in written_rows} - {""}
-                    if child_ids and child_ids <= death_ids:
-                        version_parents = death_rows
-                written_rows, version_gap = _latest_written_diagnosis_version(written_rows, version_parents)
-                consumed.extend((authority_source_key, row) for row in authority_rows)
-                consumed.extend(("discharge_record_diagnosis", row) for row in written_rows)
-                authority, authority_gap = _diagnosis_sequence(authority_rows)
-                written, written_gap = _diagnosis_sequence(written_rows)
-                if version_gap:
-                    written_gap = version_gap
-                authority = split_numbered_diagnoses(authority)
-                written = split_numbered_diagnoses(written)
-                names_complete = (
-                    authority_gap not in {"diagnoses_missing", "name_missing"}
-                    and written_gap not in {"diagnoses_missing", "name_missing", "version_conflict"}
-                )
-                order_gap = {"order_missing", "order_invalid"}
-                order_comparable = authority_gap is None and written_gap is None
-                # 名称多重集保留重复数量；顺序不可靠时不以名称排序建立临床顺序。
-                if not names_complete:
-                    final_state, reason_code = "data_gap", "required_field_missing"
-                    display.append((rule_id, {
-                        "verification_kind": "discharge_diagnosis_data_gap",
-                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
-                        "authoritative_gap": authority_gap, "written_gap": written_gap,
-                    }))
-                else:
-                    # 顺序字段缺失不妨碍识别确定的错填或漏填：先比较名称
-                    # 多重集（保留重复数量），只有内容一致时才需要可靠顺序。
-                    content_consistent = sorted(authority) == sorted(written)
-                    equivalent_pairs: tuple[tuple[str, str], ...] = ()
-                    equivalence_state = "ready"
-                    authority_rest = list((Counter(authority) - Counter(written)).elements())
-                    written_rest = list((Counter(written) - Counter(authority)).elements())
-                    if not content_consistent and len(authority_rest) != len(written_rest):
-                        # 同义判定只做一对一配对：剩余条数不同时内容必不一致，不再调用模型
-                        # （第六轮 C07：21 对 23 条，模型偶发“无法判定”致缺陷被降为资料不足）。
-                        pass
-                    elif not content_consistent:
-                        # 院方口径（2026-10-10）：逐字未匹配的剩余名称交模型判同义，程序裁定。
-                        diagnosis_equivalence_extraction = await extract_discharge_diagnosis_equivalence(
-                            authority_rest, written_rest, llm_client,
-                        )
-                        equivalence_state = diagnosis_equivalence_extraction.state
-                        equivalent_pairs = diagnosis_equivalence_extraction.pairs
-                        content_consistent = (
-                            equivalence_state == "ready"
-                            and len(equivalent_pairs) == len(authority_rest) == len(written_rest)
-                        )
-                    mapped_written = _map_equivalent_diagnoses(written, equivalent_pairs)
-                    pair_facts = (
-                        {"equivalent_pairs": [list(pair) for pair in equivalent_pairs]}
-                        if equivalent_pairs
-                        else {}
-                    )
-                    if equivalence_state == "technical_error":
-                        final_state = "technical_error"
-                        reason_code = diagnosis_equivalence_extraction.reason_code or "model_invalid_output"
-                    elif equivalence_state == "unresolved":
-                        final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
-                        display.append((rule_id, {
-                            "verification_kind": "discharge_diagnosis_data_gap",
-                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
-                            "authoritative_gap": None,
-                            "written_gap": "equivalence_unresolved",
-                        }))
-                    elif not content_consistent:
-                        final_state, reason_code = "non_compliant", "requirement_violated"
-                        display.append((rule_id, {
-                            "verification_kind": "discharge_diagnosis_consistency_check",
-                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
-                            "authoritative_diagnoses": sorted(authority),
-                            "written_diagnoses": sorted(written),
-                            "diagnoses_consistent": False,
-                            "order_comparable": order_comparable,
-                            **pair_facts,
-                        }))
-                    elif (
-                        authority_gap is None
-                        and written_gap == "order_missing"
-                        and (written_main := _written_main_diagnosis(written_rows)) is not None
-                    ):
-                        # 院方口径（2026-10-10）：出院记录诊断无排列序号、仅有主诊断标记时，
-                        # 内容一致后只核对主诊断选择（病案首页第 1 诊断）。
-                        authority_main = authority[0]
-                        main_consistent = written_main == authority_main or (
-                            (authority_main, written_main) in equivalent_pairs
-                        )
-                        positive_main_conflict = not main_consistent
-                        final_state = "compliant" if main_consistent else "non_compliant"
-                        reason_code = "requirement_satisfied" if main_consistent else "requirement_violated"
-                        display.append((rule_id, {
-                            "verification_kind": "discharge_main_diagnosis_check",
-                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
-                            "authoritative_main": authority_main,
-                            "written_main": written_main,
-                            "main_consistent": main_consistent,
-                        }))
-                    elif authority_gap in order_gap or written_gap in order_gap:
-                        final_state, reason_code = "data_gap", "required_field_missing"
-                        display.append((rule_id, {
-                            "verification_kind": "discharge_diagnosis_data_gap",
-                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
-                            "authoritative_gap": authority_gap,
-                            "written_gap": written_gap,
-                        }))
-                    else:
-                        complete = list(authority) == mapped_written
-                        final_state = "compliant" if complete else "non_compliant"
-                        reason_code = (
-                            "requirement_satisfied"
-                            if complete
-                            else "requirement_violated"
-                        )
-                        display.append((rule_id, {
-                            "verification_kind": "discharge_diagnosis_consistency_check",
-                            **({"diagnosis_scope": "death"} if diagnosis_scope == "death" else {}),
-                            "authoritative_diagnoses": list(authority),
-                            "written_diagnoses": list(written),
-                            "diagnoses_consistent": complete,
-                            "order_comparable": True,
-                            **pair_facts,
-                        }))
-
-            # 只绑定实际消费的作用域与诊断行，另一终末场景不进入事实引用。
-            document_refs = []
-            binding_failed = False
-            for source_key in dict.fromkeys(source for source, _row in consumed):
-                selected_rows = tuple(row for source, row in consumed if source == source_key)
-                try:
-                    matched_rows = tuple(
-                        (ref, row) for ref, row in evidence_materials.document_rows(source_key, snapshot=evidence_snapshot)
-                        if row in selected_rows
-                    )
-                    # 内部诊断无文书ID只保留合法来源锚点；不伪造逐行文书坐标。
-                    matched_refs = tuple(
-                        ref if _clean(row.get("document_id") or row.get("id")) or source_key in {"inpat_registration", "evaluation_context.horizon"}
-                        else _fact_refs(evidence_snapshot, (source_key,))[0]
-                        for ref, row in matched_rows
-                    )
-                except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
-                    binding_failed = True
-                    break
-                if len(matched_refs) != len(selected_rows):
-                    binding_failed = True
-                    break
-                document_refs.extend(matched_refs)
-            decisions.append(_decision(
-                rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=() if consumed else (*scope_sources, "discharge_record", "discharge_record_diagnosis"),
-                document_refs=document_refs, exact_document_refs=bool(consumed),
-                positive_document_refs=tuple(ref for ref in document_refs if ref in evidence_snapshot.document_refs)
-                if positive_main_conflict and not binding_failed else (),
-                final_state="technical_error" if binding_failed else final_state,
-                reason_code="snapshot_mismatch" if binding_failed else reason_code,
-            ))
-            continue
+            raise ValueError("frontpage_comparison_policy_pending")
 
         if rule_id == "LX0609-07-01-03":
             source_keys = (
-                "inpat_registration", "admission_record", "mr_bloodtrans", "bloodtrans_record", "labtest_item_report",
+                "inpat_registration", "admission_record", "bloodtrans_record", "labtest_item_report",
                 "daily_course_record", "senior_course_record", "inpat_nondrug_order", "inpat_drug_order",
             )
             performance_rows = tuple(bloodtrans_record_rows)
@@ -4064,11 +3682,11 @@ async def _execute_extended_document_group(
                 for row in (*nondrug_order_rows, *drug_order_rows)
                 if not any(word in _clean(row.get("order_status")) for word in ("取消", "作废", "撤销", "未执行"))
             )
-            transfusion_source_error = mr_bloodtrans_error or bloodtrans_record_error
+            transfusion_source_error = bloodtrans_record_error
             # 无专用输血记录时实施事实靠病程兜底：病程读取失败不能当作“没有输血”或“全部已核”。
             course_fallback_error = "" if dedicated_performance_source else (daily_error or senior_error)
             order_source_error = nondrug_order_error or drug_order_error
-            actual_transfusion_rows = tuple(mr_bloodtrans_rows)
+            actual_transfusion_rows: tuple[Mapping[str, Any], ...] = ()
             consumed_bloodtrans_rows: list[Mapping[str, Any]] = []
             unconfirmed_record_count = 0
             extraction_reason = ""
@@ -4079,7 +3697,7 @@ async def _execute_extended_document_group(
                 final_state, reason_code = "technical_error", transfusion_course_extraction.reason_code or "model_invalid_output"
             elif transfusion_course_extraction is not None and transfusion_course_extraction.state == "data_gap":
                 final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
-            elif not mr_bloodtrans_rows and not performance_rows:
+            elif not performance_rows:
                 final_state, reason_code = (
                     ("data_gap", course_fallback_error) if course_fallback_error
                     else ("data_gap", "positive_assertion_not_explicit") if pending_order
@@ -4110,9 +3728,9 @@ async def _execute_extended_document_group(
                     elif state in {"performed", "unknown"}:
                         unconfirmed_record_count += 1
                         performed_time_missing = performed_time_missing or state == "performed"
-                actual_transfusion_rows = (*mr_bloodtrans_rows, *confirmed_records)
+                actual_transfusion_rows = tuple(confirmed_records)
                 extraction_failed = transfusion_performance_extraction.technical_failure
-                if extraction_failed and not mr_bloodtrans_rows:
+                if extraction_failed:
                     # 实施抽取的模型调用失败不代表病历资料缺失，不能要求医院补写实施事实。
                     final_state, reason_code = "technical_error", extraction_reason
                 elif not actual_transfusion_rows:
@@ -4131,7 +3749,7 @@ async def _execute_extended_document_group(
                             "inpat_registration": list(registration_rows) if any(
                                 resolve_pretransfusion_admission_time(row) is not None for row in registration_rows
                             ) else list(admission_rows),
-                            "mr_bloodtrans": list(actual_transfusion_rows),
+                            "performed_transfusion_events": list(actual_transfusion_rows),
                             "labtest_item_report": list(lab_item_rows),
                             "blood_application": [],
                             "__logical_source_states__": {
@@ -4163,7 +3781,7 @@ async def _execute_extended_document_group(
                         facts = None
                     elif final_state == "non_compliant" and unconfirmed_record_count and facts is not None:
                         facts = {**facts, "unconfirmed_record_count": unconfirmed_record_count}
-                    if final_state == "compliant" and course_fallback_error and not mr_bloodtrans_rows:
+                    if final_state == "compliant" and course_fallback_error:
                         # 读取失败的病程里可能还有未核对的输血事件，不能确认合规。
                         final_state, reason_code, facts = "data_gap", course_fallback_error, None
                     if facts is not None:
@@ -4172,7 +3790,7 @@ async def _execute_extended_document_group(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=source_keys,
                 final_state=final_state, reason_code=reason_code,
-                exact_document_refs=not actual_transfusion_rows and bool(consumed_bloodtrans_rows) and not transfusion_source_error,
+                exact_document_refs=bool(consumed_bloodtrans_rows) and not transfusion_source_error,
                 document_refs=(
                     _070_document_refs(snapshot=evidence_snapshot, materials=evidence_materials,
                         consumed_bloodtrans_rows=consumed_bloodtrans_rows,
@@ -4186,7 +3804,7 @@ async def _execute_extended_document_group(
         if rule_id == "LX0609-10-03-01":
             # 院方口径（2026-10-11）：有创操作目录为院方目录中的治疗性操作与介入治疗
             # 共 92 项。运行病历只看医嘱（模型把不规范的医嘱名称归入目录）；终末质控
-            # 有病案首页时同时按首页手术操作编码精确匹配。
+            # 以原始医嘱及文书记载核对；不以首页编码触发。
             final_state, reason_code = "", ""
             triggers: tuple[Any, ...] = ()
             order_rows = _invasive_candidate_order_rows(nondrug_order_rows)
@@ -4204,7 +3822,6 @@ async def _execute_extended_document_group(
                 else:
                     triggers = _merge_invasive_triggers((
                         *_invasive_order_triggers(order_rows, mapping.mapped),
-                        *(() if mr_surgery_error else _invasive_front_page_triggers(mr_surgery_rows)),
                     ))
                     if not triggers:
                         final_state, reason_code = "not_applicable", "trigger_absent_complete"
@@ -4274,7 +3891,7 @@ async def _execute_extended_document_group(
                 source_keys=(
                     "inpat_nondrug_order", "first_course_record", "daily_course_record",
                     "senior_course_record", "postsurg_firstcourse_record", "surgery_record",
-                    "mr_surgery", "evaluation_context.horizon",
+                    "evaluation_context.horizon",
                 ),
                 final_state=final_state, reason_code=reason_code,
             ))
@@ -4862,12 +4479,11 @@ async def _execute_extended_document_group(
                 final_state, reason_code = gate_outcome
             else:
                 surgery_events = _postoperative_surgery_events(
-                    mr_surgery_rows=mr_surgery_rows,
                     surgery_record_rows=surgery_record_rows,
                 )
                 if any(event.surgery_time_estimated for event in surgery_events):
                     postoperative_time_estimated_rules.add(rule_id)
-                linkage_error = postop_first_error
+                linkage_error = postop_first_error or ("authoritative_time_missing" if not surgery_events else "")
                 if not linkage_error:
                     linked_events, linkage_error = _link_postoperative_first_course_records(
                         surgery_events=surgery_events,
@@ -4919,7 +4535,7 @@ async def _execute_extended_document_group(
             ):
                 selected_postoperative_rows.extend(
                     row
-                    for row in mr_surgery_rows
+                    for row in surgery_record_rows
                     if catalog_surgery_state(row) is False
                 )
             if surgery_events:
@@ -4969,7 +4585,6 @@ async def _execute_extended_document_group(
             assert surgery_applicability is not None
             gate_outcome = _surgery_applicability_outcome(surgery_applicability)
             surgery_events = _postoperative_surgery_events(
-                mr_surgery_rows=mr_surgery_rows,
                 surgery_record_rows=surgery_record_rows,
             )
             if any(event.surgery_time_estimated for event in surgery_events):
@@ -4981,18 +4596,12 @@ async def _execute_extended_document_group(
             ):
                 selected_postoperative_rows.extend(
                     row
-                    for row in mr_surgery_rows
+                    for row in surgery_record_rows
                     if catalog_surgery_state(row) is False
                 )
             if gate_outcome is not None:
                 final_state, reason_code = gate_outcome
             elif not surgery_events:
-                final_state, reason_code = "data_gap", "authoritative_time_missing"
-            elif len(surgery_events) > 1 and any(
-                event.source_key == "mr_surgery" and event.surgery_begin_time is None
-                for event in surgery_events
-            ):
-                # 主控代定口径（2026-10-18，待客户复核），基线064/065：多首页行缺开始时间仍资料不足。
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
             elif any(event.surgery_end_time is None for event in surgery_events):
                 final_state, reason_code = "data_gap", "authoritative_time_missing"

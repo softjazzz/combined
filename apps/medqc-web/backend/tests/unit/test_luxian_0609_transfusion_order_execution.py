@@ -19,9 +19,18 @@ class FrozenOrderClient:
         self.cancelled = cancelled
         self.calls = 0
 
-    async def generate(self, prompt):
+    async def generate(self, prompt, **kwargs):
         self.calls += 1
         payload = json.loads(prompt.split("INPUT_JSON=", 1)[1])
+        if "documents" in payload:
+            return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({
+                "schema_version": "lx0609-transfusion-performance-v2",
+                "documents": [{"document_ref": row["document_ref"],
+                               "state": "performed" if self.record_kind == "record" else "unknown",
+                               "quote": row["body"] if self.record_kind == "record" else None,
+                               "start_time_quote": ("2026-06-05 10:00" if row["body"].startswith("输血前评估：存在输血指征") else None)}
+                              for row in payload["documents"]],
+            }, ensure_ascii=False)}}]}
         if "records" in payload:
             return {"content": json.dumps({
                 "schema_version": "lx0609-transfusion-course-presence-v1",
@@ -162,7 +171,7 @@ def test_invalid_course_is_missing_for_045_and_gap_for_046(text):
     execution, final = run_case(rows, client=client)
     assert final[RULES[1]]["status"] == "non_compliant"
     assert final[RULES[2]]["status"] == "data_gap"
-    assert client.calls == execution.llm_call_count == 2
+    assert client.calls == execution.llm_call_count == 3
     assert "performed_transfusion_confirmed" not in json.dumps(final[RULES[1:][0]])
 
 

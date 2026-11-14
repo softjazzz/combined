@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from typing import Any
 
 import pytest
@@ -20,6 +21,24 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
+
+
+class _SelectedEvidenceClient(FrozenTransfusionProtocolClient):
+    async def generate(self, prompt, **kwargs):
+        if "lx0609-transfusion-performance-v2" not in prompt:
+            return await super().generate(prompt, **kwargs)
+        inputs = json.loads(prompt.split("INPUT_JSON=", 1)[1])["documents"]
+        self.protocol_calls += 1
+        # 本套全部专用正文为人工写定的已实施输血；只给明确写入正文的开始时刻。
+        starts = {_complete_course(): "14:20", **{
+            f"于2026-06-{day} 14:20开始输入红细胞，2026-06-{day} 16:10输血结束。": f"2026-06-{day} 14:20"
+            for day in ("05", "06")}}
+        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({
+            "schema_version": "lx0609-transfusion-performance-v2",
+            "documents": [{"document_ref": row["document_ref"], "state": "performed",
+                           "quote": row["body"], "start_time_quote": starts.get(row["body"])}
+                          for row in inputs],
+        }, ensure_ascii=False)}}]}
 
 
 def _wrapper(rule_id: str) -> dict[str, str]:
@@ -70,7 +89,7 @@ async def _execute_typed(
     if governed and add_orders:
         rows_by_source["inpat_nondrug_order"] = [dict(OPEN_TRANSFUSION_ORDER, order_id="EVIDENCE-ORDER-1")]
         rows_by_source["inpat_drug_order"] = [dict(OPEN_TRANSFUSION_ORDER, order_id="EVIDENCE-ORDER-2")]
-    client = FrozenTransfusionProtocolClient(course_labels={
+    client = _SelectedEvidenceClient(course_labels={
         str(row["record_content"]): "record"
         for row in rows_by_source.get("bloodtrans_record", [])
     })

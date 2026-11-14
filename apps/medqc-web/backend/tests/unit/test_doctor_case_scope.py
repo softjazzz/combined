@@ -225,7 +225,7 @@ def test_qc_detail_uses_authorized_identity_and_never_legacy_unscoped_results(cl
         captured.update(authorized_identity)
         return {"documents": [{"doc_type": "admission_record", "content": "合成正文"}], "documents_tree": []}
     monkeypatch.setattr(records, "_load_bundle_payload_for_record", documents)
-    monkeypatch.setattr(records, "_load_luxian_0609_review_items_from_canonical", lambda *_: {
+    monkeypatch.setattr(records, "_load_luxian_0609_review_items_from_canonical", lambda *_, **_kw: {
         "review_items": [{"rule_id": "LX0609-01-02-02", "status": "compliant"}], "state": "ready",
     })
     def forbidden(*args, **kwargs):
@@ -236,7 +236,7 @@ def test_qc_detail_uses_authorized_identity_and_never_legacy_unscoped_results(cl
     assert response.status_code == 200
     assert captured == {"institute_id": "H-A", "patient_id": "P-own2", "visit_id": "V-own2"}
     assert response.json()["data"]["review_items"][0]["status"] == "compliant"
-    monkeypatch.setattr(records, "_load_luxian_0609_review_items_from_canonical", lambda *_: {
+    monkeypatch.setattr(records, "_load_luxian_0609_review_items_from_canonical", lambda *_, **_kw: {
         "review_items": [], "state": "technical_error",
     })
     response = client.get("/api/v1/records/V-own2/qc-detail", headers={"Authorization": "Bearer doctor-a"})

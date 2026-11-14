@@ -449,6 +449,10 @@ async def test_v3_020_mdt_executes_programmatically_as_compliant() -> None:
     rows_by_table: dict[str, list[dict]] = {}
     module.upgrade_full_validation_evidence(rows_by_table, cases)
     visit_id = "LX0609_0426_SYN_V3_020"
+    # 历史导出把级别只放在首页；本内核场景须在正式手术记录直接给出四级前提。
+    formal_surgery = next(row for row in rows_by_table["surgery_record"] if row.get("visit_id") == visit_id)
+    assert "四级胃癌根治术" in formal_surgery["record_content"]
+    formal_surgery["surgical_level"] = "4"
 
     def read(**kwargs):
         source_key = kwargs["source_key"]
@@ -472,7 +476,7 @@ async def test_v3_020_mdt_executes_programmatically_as_compliant() -> None:
         created_at="2026-08-03T09:00:00+08:00",
         row_reader=read,
         additional_source_keys=(
-            "mr_surgery",
+            "surgery_record",
             "presurg_discussion",
             "consultation_record",
         ),
@@ -860,9 +864,15 @@ def test_transfusion_complete_case_has_reviewable_process_and_24h_evaluation() -
     )
     assert event["transfution_datetime"]
     assert event["transfuse_variety"] == "悬浮红细胞"
+    # 直接内核消费人工确认的中间事件，开始时刻取专用记录逐字原文。
+    start_match = re.search(r"输血开始时间：([^；]+)", course["record_content"])
+    assert start_match is not None
+    confirmed_start = datetime.fromisoformat(start_match.group(1))
     status, reason, facts = transfusion.evaluate_pretransfusion_nine_items(
         {
-            "mr_bloodtrans": [event],
+            "performed_transfusion_events": [{
+                "transfusion_start_time": confirmed_start,
+            }],
             "labtest_item_report": [
                 row
                 for row in rows_by_table["labtest_item_report"]
@@ -913,11 +923,15 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
         if row.get("visit_id") == visit_ids[25]
     )
     assert "未记录输血前评估" in incomplete_assessment["record_content"]
+    # 缺评估变体保留实施正文但没有时刻；此处内核场景由作者显式补齐实际开始前提。
+    confirmed_start = module.V2._dt_for_case(cases[24], 1, 14)
     assessment_status = transfusion._programmatic_044_status(
         {
-            "mr_bloodtrans": [row for row in rows_by_table["mr_bloodtrans"]
-                              if row.get("visit_id") == visit_ids[25]],
-            "bloodtrans_record": [incomplete_assessment],
+            "bloodtrans_record": [{**incomplete_assessment,
+                "transfusion_start_time": confirmed_start}],
+            "performed_transfusion_events": [{
+                "transfusion_start_time": confirmed_start}],
+            "senior_course_record": [],
             "blood_application": [
                 row
                 for row in rows_by_table["blood_application"]
@@ -938,11 +952,8 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
     assert "missing_fields" not in assessment_status[2]
     missing_item_status = transfusion.evaluate_pretransfusion_nine_items(
         {
-            "mr_bloodtrans": [
-                row
-                for row in rows_by_table["mr_bloodtrans"]
-                if row.get("visit_id") == visit_ids[25]
-            ],
+            "performed_transfusion_events": [{
+                "transfusion_start_time": confirmed_start}],
             "labtest_item_report": [
                 row
                 for row in rows_by_table["labtest_item_report"]

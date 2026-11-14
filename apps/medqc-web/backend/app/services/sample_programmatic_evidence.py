@@ -580,7 +580,7 @@ def _resolve_admission_time(
             _extract_timeline_fact_datetime(
                 timeline_facts,
                 ("admission_time", "admission_datetime"),
-                source_tables=("mr", "inpat_registration", "admission_record"),
+                source_tables=("inpat_registration", "admission_record"),
             ),
             "timeline_primary_admission_datetime",
         ),
@@ -1159,7 +1159,8 @@ def build_programmatic_evidence_payload(
         _parse_datetime(structured.get("discharge_datetime"))
         or _parse_datetime(bundle_payload.get("discharge_datetime"))
         or _parse_datetime(fallback_meta.get("discharge_datetime"))
-        or _extract_timeline_fact_datetime(timeline_facts, ("discharge_time", "discharge_datetime", "death_time"))
+        or _extract_timeline_fact_datetime(timeline_facts, ("discharge_time", "discharge_datetime", "death_time"),
+                                           source_tables=("inpat_registration", "discharge_record", "death_record"))
         or _extract_datetime_by_labels(
             "\n".join(_safe_text(item.get("content")) for item in documents.get("discharge_record") or []),
             ("出院日期", "出院时间", "死亡时间"),

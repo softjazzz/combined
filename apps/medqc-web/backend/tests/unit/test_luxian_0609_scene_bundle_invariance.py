@@ -20,18 +20,18 @@ from app.services.sichuan_qc_service import SichuanQCService
 _CROSS_FAMILY_RULE_IDS = (
     "LX0609-12-01-01",  # 病程
     "LX0609-03-01-04",  # 会诊（020/021/022 因来源缺失暂停）
-    "LX0609-11-01-01",  # 手术
+    "LX0609-01-01-01",  # 基础时效
     "LX0609-06-01-05",  # 检查检验
-    "LX0609-07-02-01",  # 输血
+    "LX0609-06-02-02",  # 病理
     "LX0609-06-04-01",  # 扩展文书（危急值）
 )
 
 _FAMILY_REPRESENTATIVE_RULE_IDS = {
     "course": "LX0609-12-01-01",
     "consultation": "LX0609-03-01-04",
-    "surgery": "LX0609-11-01-01",
+    "basic": "LX0609-01-01-01",
     "exam_lab": "LX0609-06-01-05",
-    "transfusion": "LX0609-07-02-01",
+    "tumor_pathology": "LX0609-06-02-02",
     "extended": "LX0609-06-04-01",
 }
 
@@ -147,9 +147,9 @@ async def test_typed_native_mainline_is_invariant_to_scene_summary_projection_ac
     real_executors = {
         "course": execution.execute_luxian_0609_native_course_quality_rules,
         "consultation": execution.execute_luxian_0609_native_consultation_episode_rules,
-        "surgery": execution.execute_luxian_0609_native_surgery_gate_rules,
+        "basic": execution.execute_luxian_0609_native_basic_timeliness,
         "exam_lab": execution.execute_luxian_0609_native_exam_lab_rules,
-        "transfusion": execution.execute_luxian_0609_native_transfusion_rules,
+        "tumor_pathology": execution.execute_luxian_0609_native_tumor_pathology_rules,
         "extended": execution.execute_luxian_0609_native_extended_document_rules,
     }
     executor_calls: list[tuple[str, tuple[str, ...], bool, bool, dict[str, Any]]] = []
@@ -162,8 +162,7 @@ async def test_typed_native_mainline_is_invariant_to_scene_summary_projection_ac
     def _spy(name: str):
         real_executor = real_executors[name]
 
-        async def _wrapped(**kwargs: Any):
-            native_result = await real_executor(**kwargs)
+        def _capture(kwargs: dict[str, Any], native_result: Any):
             executor_calls.append(
                 (
                     name,
@@ -175,15 +174,25 @@ async def test_typed_native_mainline_is_invariant_to_scene_summary_projection_ac
             )
             return native_result
 
+        # 基础时效是同步执行器，其余族保留真实异步调用路径。
+        if name == "basic":
+            def _sync_wrapped(**kwargs: Any):
+                return _capture(kwargs, real_executor(**kwargs))
+
+            return _sync_wrapped
+
+        async def _wrapped(**kwargs: Any):
+            return _capture(kwargs, await real_executor(**kwargs))
+
         return _wrapped
 
     monkeypatch.setattr(execution, "datetime", _FrozenExecutionDatetime)
     monkeypatch.setattr(execution, "build_luxian_0609_evidence_read_session", _build_session)
     monkeypatch.setattr(execution, "execute_luxian_0609_native_course_quality_rules", _spy("course"))
     monkeypatch.setattr(execution, "execute_luxian_0609_native_consultation_episode_rules", _spy("consultation"))
-    monkeypatch.setattr(execution, "execute_luxian_0609_native_surgery_gate_rules", _spy("surgery"))
+    monkeypatch.setattr(execution, "execute_luxian_0609_native_basic_timeliness", _spy("basic"))
     monkeypatch.setattr(execution, "execute_luxian_0609_native_exam_lab_rules", _spy("exam_lab"))
-    monkeypatch.setattr(execution, "execute_luxian_0609_native_transfusion_rules", _spy("transfusion"))
+    monkeypatch.setattr(execution, "execute_luxian_0609_native_tumor_pathology_rules", _spy("tumor_pathology"))
     monkeypatch.setattr(execution, "execute_luxian_0609_native_extended_document_rules", _spy("extended"))
 
     service = SichuanQCService()

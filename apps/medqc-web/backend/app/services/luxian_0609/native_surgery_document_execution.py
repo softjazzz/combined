@@ -78,28 +78,26 @@ _TYPED_RULE_SOURCE_KEYS = {
         "presurg_summary",
         "inpat_nondrug_order",
         "surgery_record",
-        "mr_surgery",
     ),
-    "LX0609-11-02-01": ("anesthesia_record", "mr_surgery", "consent_form"),
-    "LX0609-11-02-02": ("anesthesia_record", "mr_surgery", "consent_form"),
+    "LX0609-11-02-01": ("anesthesia_record", "consent_form"),
+    "LX0609-11-02-02": ("anesthesia_record", "consent_form"),
     "LX0609-04-04-01": (
         "anesthesia_record",
-        "mr_surgery",
+        "surgery_record",
         "preane_surveil_record",
         "postane_surveil_record",
     ),
     "LX0609-04-04-02": (
         "anesthesia_record",
-        "mr_surgery",
+        "surgery_record",
         "consent_form",
         "preane_surveil_record",
         "postane_surveil_record",
     ),
     # 客户目录把038写成consent_form，但临床适用条件仍必须先有受控麻醉事实。
-    "LX0609-04-04-03": ("anesthesia_record", "mr_surgery", "consent_form"),
+    "LX0609-04-04-03": ("anesthesia_record", "surgery_record", "consent_form"),
     "LX0609-04-01-02": (
         "surgery_record",
-        "mr_surgery",
         "rescue_record",
         "presurg_discussion",
     ),
@@ -574,7 +572,7 @@ def _typed_anesthesia_trigger(
     """以同一快照材料确认麻醉事实，避免目标文书缺失时自证不适用。"""
 
     candidates: list[tuple[str, str, str]] = []
-    for source_key in ("mr_surgery", "anesthesia_record"):
+    for source_key in ("anesthesia_record",):
         state, method = _typed_fact_state(
             snapshot,
             fact_types=_ANESTHESIA_FACT_TYPES,
@@ -584,18 +582,14 @@ def _typed_anesthesia_trigger(
             candidates.append((state, method, source_key))
     if materials is not None:
         try:
-            surgery_rows = materials.rows("mr_surgery")
+            formal_rows = tuple(materials.rows("surgery_record"))
         except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
-            surgery_rows = ()
-        qualified_methods = {
-            _clean(row.get("anesthesia_method"))
-            for row in surgery_rows
-            if has_qualified_traditional_surgery_row(row)
-            and _clean(row.get("anesthesia_method"))
-        }
-        if len(qualified_methods) == 1:
-            candidates.append(("present", next(iter(qualified_methods)), "mr_surgery"))
-
+            formal_rows = ()
+        methods = {_clean(row.get("anesthesia_method")) for row in formal_rows if _clean(row.get("anesthesia_method"))}
+        if len(methods) == 1:
+            candidates.append(("present", next(iter(methods)), "surgery_record"))
+        elif formal_rows and not methods and _typed_observation_state(snapshot, "anesthesia_record") == "empty":
+            return "unknown", "", "surgery_record"
         # 麻醉记录本身存在即可证明实施过麻醉；其结构化方式字段可作为
         # 手术主表方式的同级受控来源，不能依赖下游文本猜测。
         try:
@@ -638,11 +632,7 @@ def _typed_anesthesia_trigger(
     if len(methods) > 1:
         return "unknown", "", ""
     method = next(iter(methods)) if methods else ""
-    source_key = (
-        "mr_surgery"
-        if any(item[2] == "mr_surgery" for item in candidates)
-        else candidates[0][2]
-    )
+    source_key = candidates[0][2]
     return "present", method, source_key
 
 
@@ -654,7 +644,7 @@ def _qualified_traditional_surgery_present(
     if materials is None:
         return None
     try:
-        rows = materials.rows("mr_surgery")
+        rows = materials.rows("surgery_record")
     except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
         return None
     return any(has_qualified_traditional_surgery_row(row) for row in rows)
@@ -720,7 +710,6 @@ def _surgery_and_discussion_people(
         return None
     try:
         formal_rows = tuple(materials.rows("surgery_record"))
-        mr_rows = tuple(materials.rows("mr_surgery"))
         discussion_rows = materials.rows("presurg_discussion")
     except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
         return None
@@ -733,24 +722,7 @@ def _surgery_and_discussion_people(
             return None
         surgeons = set().union(*formal_names_by_row)
     else:
-        levelled_rows = [
-            (normalize_surgery_level(row.get("surgical_level")), row)
-            for row in mr_rows
-        ]
-        recognised_levels = [rank for rank, _row in levelled_rows if rank]
-        if recognised_levels:
-            highest = max(recognised_levels)
-            selected_rows = [
-                row for rank, row in levelled_rows if rank == highest
-            ]
-        else:
-            selected_rows = list(mr_rows)
-        names_by_row = tuple(
-            _person_names(row.get("surgeon")) for row in selected_rows
-        )
-        if any(not names for names in names_by_row):
-            return None
-        surgeons = set().union(*names_by_row) if names_by_row else set()
+        return None
 
     return surgeons, _discussion_participants(discussion_rows)
 
@@ -969,7 +941,7 @@ def _typed_039_multiple_events_outcome(
     rule_id = "LX0609-04-01-02"
     # 单来源肯定事实的既有单台路径不因另一个可选手术来源不可读而改变。
     row_count = 0
-    for source in ("surgery_record", "mr_surgery"):
+    for source in ("surgery_record",):
         try:
             row_count += len(materials.rows(source))
         except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
@@ -1299,8 +1271,7 @@ def _surgery_times(
 ) -> tuple[tuple[datetime, datetime], ...] | None:
     """本次住院非局麻手术的 (开始, 结束) 时间；无法可靠取得时返回 None。
 
-    运行病历质控时病案首页（mr_surgery）通常尚未生成，优先用手术记录的起止时间；
-    手术记录缺失或任一份起止时间不全时，才回退到病案首页。
+    仅使用正式手术记录的实际起止时间；任一份时间不足时保持待核。
     """
 
     def rows(source_key: str) -> tuple[Mapping[str, Any], ...]:
@@ -1314,7 +1285,6 @@ def _surgery_times(
 
     candidates = (
         ("surgery_record", ("surgery_begin_time", "surgery_begin_datetime"), ("surgery_end_time", "surgery_end_datetime")),
-        ("mr_surgery", ("surgery_begin_datetime",), ("surgery_end_datetime",)),
     )
     for source_key, begin_fields, end_fields in candidates:
         surgeries = [
@@ -1512,8 +1482,7 @@ def _typed_038_session_outcome(
     try:
         rows = tuple(materials.rows("anesthesia_record"))
         master_rows = tuple(
-            row for row in materials.rows("mr_surgery")
-            if has_qualified_traditional_surgery_row(row)
+            row for row in materials.rows("surgery_record")
         )
     except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
         return None
@@ -1521,7 +1490,7 @@ def _typed_038_session_outcome(
     if not master_rows or (len(master_rows) <= 1 and len(rows) <= 1):
         return None
     rule_id = "LX0609-04-04-03"
-    groups = group_surgery_rows_by_start("mr_surgery", master_rows)
+    groups = group_surgery_rows_by_start("surgery_record", master_rows)
     if groups is None:
         return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
     required: set[int] = set()
@@ -1536,7 +1505,9 @@ def _typed_038_session_outcome(
             required.add(index)
     if not required:
         return _SurgeryDocumentOutcome(rule_id, "not_applicable", "local_anesthesia_exception", "program")
-    begins = [group[0]["surgery_begin_datetime"] for group in groups]
+    begins = [_anesthesia_surgery_begin_time(group[0])[0] for group in groups]
+    if any(begin is None for begin in begins):
+        return _SurgeryDocumentOutcome(rule_id, "data_gap", "association_failed", "program")
     covered: set[int] = set()
     for row in rows:
         begin, time_conflict = _anesthesia_surgery_begin_time(row)
@@ -1584,7 +1555,7 @@ def _typed_terminal_outcome(
     """typed 迁移首版只做受控事实/来源四态判定，绝不回读旧 payload。"""
 
     if rule_id == "LX0609-04-01-02":
-        performed_sources = ("surgery_record", "mr_surgery")
+        performed_sources = ("surgery_record",)
         binding_source_keys = _typed_binding_source_keys(rule_id)
         if not set(performed_sources).issubset(binding_source_keys):
             return _SurgeryDocumentOutcome(
@@ -1598,12 +1569,6 @@ def _typed_terminal_outcome(
                 source_key=source_key,
             )
             source_state_by_key[source_key] = fact_state
-        if (
-            source_state_by_key.get("surgery_record") == "absent"
-            and source_state_by_key.get("mr_surgery") == "present"
-            and _qualified_traditional_surgery_present(materials) is False
-        ):
-            source_state_by_key["mr_surgery"] = "absent"
         if "present" not in source_state_by_key.values():
             if isinstance(snapshot, Luxian0609EvidenceSnapshot):
                 applicability = resolve_surgery_applicability(
@@ -1649,7 +1614,7 @@ def _typed_terminal_outcome(
         if isinstance(snapshot, Luxian0609EvidenceSnapshot):
             emergency_states = {
                 state
-                for source_key in ("surgery_record", "mr_surgery", "rescue_record")
+                for source_key in ("surgery_record", "rescue_record")
                 if (
                     state := _typed_fact_state(
                         snapshot,
@@ -1786,7 +1751,7 @@ def _typed_terminal_outcome(
     # 构成受控资料链，查询失败不能被另一个来源掩盖。
     required_source_keys = ["anesthesia_record"]
     if rule_id in {"LX0609-04-04-01", "LX0609-04-04-02", "LX0609-04-04-03"}:
-        required_source_keys.append("mr_surgery")
+        required_source_keys.append("surgery_record")
     for source_key in required_source_keys:
         blocker = _typed_source_gate(
             rule_id=rule_id,
@@ -2050,7 +2015,7 @@ def _typed_terminal_outcome(
         )
     if (
         anesthesia_record_state == "empty"
-        and anesthesia_trigger_source == "mr_surgery"
+        and anesthesia_trigger_source == "surgery_record"
         and anesthesia_method
         and not is_local
     ):
@@ -2266,7 +2231,7 @@ def _typed_precise_terminal_refs(
         if facts.get("surgery_trigger_kind") == "performed_surgery":
             source_keys.extend(
                 source_key
-                for source_key in ("surgery_record", "mr_surgery")
+                for source_key in ("surgery_record",)
                 if _typed_fact_state(
                     snapshot,
                     fact_types=_SURGERY_FACT_TYPES,
@@ -2296,7 +2261,7 @@ def _typed_precise_terminal_refs(
             observation.snapshot_ref.removeprefix("sha256:")
             for observation in snapshot.observations
             if observation.source_key
-            in {"inpat_nondrug_order", "surgery_record", "mr_surgery"}
+            in {"inpat_nondrug_order", "surgery_record"}
         )
 
     if rule_id in {"LX0609-11-02-01", "LX0609-11-02-02", "LX0609-04-04-01", "LX0609-04-04-02"}:
@@ -2319,7 +2284,7 @@ def _typed_precise_terminal_refs(
         source_keys = (
             ("anesthesia_record",)
             if outcome.reason_code == "anesthesia_record_present"
-            else ("mr_surgery",)
+            else ("surgery_record",)
         )
         return _typed_precise_source_refs(
             snapshot=snapshot, materials=materials, source_keys=source_keys
@@ -2330,7 +2295,7 @@ def _typed_precise_terminal_refs(
             return outcome.fact_refs
         source_keys = [
             source_key
-            for source_key in ("surgery_record", "mr_surgery")
+            for source_key in ("surgery_record",)
             if _typed_fact_state(
                 snapshot,
                 fact_types=_SURGERY_FACT_TYPES,
@@ -2369,7 +2334,7 @@ _SURGICAL_SCOPE_PATTERN = re.compile(r"腹腔镜|胸腔镜|关节镜|宫腔镜|�
 
 def _only_endoscopic_procedures(materials: Luxian0609EvidenceMaterialStore) -> bool:
     names: list[str] = []
-    for source_key in ("surgery_record", "mr_surgery"):
+    for source_key in ("surgery_record",):
         try:
             rows = materials.rows(source_key)
         except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, KeyError, ValueError):

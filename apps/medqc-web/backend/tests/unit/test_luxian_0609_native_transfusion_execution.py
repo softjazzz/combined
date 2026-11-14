@@ -29,7 +29,9 @@ from app.services.luxian_0609.decision_binding import (
 
 # 人工审阅的历史病例协议标签；仅用于冻结模型oracle，不由产品函数推断。
 _COURSE_LABELS = {
-    "输注去白悬浮红细胞2U；2026年6月5日16:10输注完毕。输血后复查血红蛋白较前改善，未见输血不良反应。": "record",
+    "2026年6月5日14:20开始输注去白悬浮红细胞2U；2026年6月5日16:10输注完毕。输血后复查血红蛋白较前改善，未见输血不良反应。": "record",
+    "输注去白悬浮红细胞2U，过程平稳。PRIVATE_TRANSFUSION_PROXY_MARKER": "record",
+    "取消本次输血，未实施输注。": "not_record",
     "输注去白悬浮红细胞，输血过程平稳。": "record",
     "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，结束时间16:10。输血过程中严密观察，未见不良反应。输血后复查血红蛋白提升，治疗有效。": "record",
     "普通病程仅提到拟输血和备血。": "not_record",
@@ -153,6 +155,30 @@ def _protocol_calls(result) -> int:
     return _protocol_call_counts.get(id(result), 0)
 
 
+class _PerformanceProtocolClient(FrozenTransfusionProtocolClient):
+    async def generate(self, prompt, **kwargs):
+        if "lx0609-transfusion-performance-v2" in prompt and "INPUT_JSON=" in prompt:
+            payload = json.loads(prompt.split("INPUT_JSON=", 1)[1])
+            self.protocol_calls += 1
+            self.protocol_prompts.append(prompt)
+            documents = []
+            for doc in payload["documents"]:
+                label = _COURSE_LABELS[doc["body"]]
+                documents.append({"document_ref": doc["document_ref"],
+                                  "state": ("cancel" if doc["body"] == "取消本次输血，未实施输注。"
+                                            else "performed" if label == "record" else "plan"),
+                                  "quote": doc["body"], "start_time_quote": (
+                                      "2026年6月5日14:20" if doc["body"] in {
+                                          "2026年6月5日14:20开始输注去白悬浮红细胞2U；2026年6月5日16:10输注完毕。输血后复查血红蛋白较前改善，未见输血不良反应。",
+                                          "输血目的：纠正贫血；输血前评估：患者血红蛋白下降，存在输血指征，已说明输血风险。2026年6月5日14:20开始输注红细胞2U，2026年6月5日16:10输血结束。输血过程中严密观察，生命体征平稳，未见发热及输血不良反应。输血后复查血红蛋白改善。",
+                                      } else None)})
+            return {"choices": [{"message": {"content": json.dumps({
+                "schema_version": "lx0609-transfusion-performance-v2", "documents": documents,
+            }, ensure_ascii=False)}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
+        return await super().generate(prompt, **kwargs)
+
+
 async def _execute_order_contract(**kwargs):
     # 其他输血族规则仍使用原legacy资料合同，医嘱协议只给044/045/046新增来源状态。
     order_rules = {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
@@ -161,7 +187,7 @@ async def _execute_order_contract(**kwargs):
         documents = dict(payload["programmatic_timeline"]["documents"])
         documents.pop("__logical_source_states__", None)
         kwargs["evidence_payload"] = {"programmatic_timeline": {"documents": documents}}
-    client = FrozenTransfusionProtocolClient(
+    client = _PerformanceProtocolClient(
         kwargs.get("llm_client"), course_labels=_COURSE_LABELS,
         intraoperative=FrozenIntraoperativeClient(_INTRAOPERATIVE_LABELS),
     )
@@ -173,7 +199,7 @@ async def _execute_order_contract(**kwargs):
 
 def _documents(**overrides: list[dict]) -> dict:
     documents = {
-        "bloodtrans_record": [{"content": "输血记录正文，记录实际输注过程及观察情况。"}],
+        "bloodtrans_record": [{"document_id": "synthetic-transfusion-0", "content": "输血记录正文，记录实际输注过程及观察情况。"}],
         "consent_form": [{"content": "输血治疗知情同意书，已完成风险告知及签名。"}],
         "labtest_master": [{"content": "输血前常规检查资料。"}],
         "labtest_item_report": [],
@@ -624,7 +650,7 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
         # 旧 payload 故意始终给出强合规材料；typed 结果必须随 snapshot material 改变。
         "evidence_payload": _documents(
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "content": (
                         "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
                         "结束时间16:10。输血过程中严密观察，生命体征平稳，"
@@ -707,7 +733,7 @@ async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         # 与同一 session 材料冲突：旧 payload 明确声称缺少输血前评估。
         evidence_payload=_documents(
-            bloodtrans_record=[{"content": "明确未记录输血前评估。"}],
+            bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "content": "明确未记录输血前评估。"}],
             blood_application=[],
             daily_course_record=[],
         ),
@@ -754,7 +780,7 @@ async def test_typed_044_material_change_changes_state_snapshot_and_refs(monkeyp
         "rule_ids": ("LX0609-07-01-02",),
         "wrapper_rules": [_wrapper("LX0609-07-01-02")],
         "evidence_payload": _documents(
-            bloodtrans_record=[{"content": "输血前评估完整且风险已说明。"}]
+            bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "content": "输血前评估完整且风险已说明。"}]
         ),
         "institute_id": "I",
         "patient_id": "P",
@@ -820,7 +846,7 @@ async def test_typed_044_dedicated_fact_precedes_auxiliary_source_four_states(
                     {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
                 ],
                 "bloodtrans_record": [
-                    {
+                    {"document_id": "synthetic-transfusion-0", "record_time": datetime(2026, 1, 1, 14, 20),
                         "record_content": (
                             "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，"
                             "结束时间16:10。输血过程中严密观察，未见不良反应。"
@@ -882,14 +908,14 @@ async def test_typed_044_optional_llm_keeps_raw_call_token_and_state_semantics(
     grey_content = "输血前评估记录：患者存在输血指征，其他风险资料待结合判断。"
     session = _typed_decision_session(
         selected_rule_ids=("LX0609-07-01-02",),
-        bloodtrans_content=grey_content,
+        bloodtrans_content="输注红细胞2U，过程平稳。",
         daily_content="输血后继续观察。",
         source_rows={"daily_course_record": [{
             "document_id": "PRE-044", "document_title": "输血前评估",
             "record_time": "2026-01-01 09:00:00", "record_content": grey_content}]},
     )
     payload = _documents(
-        bloodtrans_record=[{"content": grey_content}],
+        bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "record_time": "2026-01-01 14:20:00", "content": "输注红细胞2U，过程平稳。"}],
         mr_bloodtrans=[{"transfution_datetime": "2026-01-01 14:20:00"}],
         blood_application=[],
         daily_course_record=[{"document_id": "PRE-044", "document_title": "输血前评估",
@@ -956,7 +982,7 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
                 {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
             ],
             "bloodtrans_record": [
-                {
+                {"document_id": "synthetic-transfusion-0", "record_time": datetime(2026, 1, 1, 14, 20),
                     "record_content": (
                         "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，"
                         "结束时间16:10。输血过程中严密观察，未见不良反应。"
@@ -1052,7 +1078,7 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
                 {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
             ],
             "bloodtrans_record": [
-                {
+                {"document_id": "synthetic-transfusion-0", "record_time": datetime(2026, 1, 1, 14, 20),
                     "record_content": (
                         "输注去白悬浮红细胞2U，过程平稳。"
                         f"{private_marker}"
@@ -1189,7 +1215,7 @@ async def test_remaining_typed_rules_surface_shared_trigger_query_error_without_
 
     def read(**kwargs):
         source_key = kwargs["source_key"]
-        if source_key == "mr_bloodtrans":
+        if source_key == "bloodtrans_record":
             raise SourceEvidenceQueryError(private_error)
         rows = (
             [{"record_content": "实际输血记录，输注红细胞2U。"}]
@@ -1262,7 +1288,7 @@ async def test_typed_transfusion_material_failures_do_not_fallback_to_payload(
                 {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
             ],
             "bloodtrans_record": [
-                {"record_content": "输血过程中患者生命体征平稳。"}
+                {"document_id": "synthetic-transfusion-0", "record_time": datetime(2026, 1, 1, 14, 20), "record_content": "输血过程中患者生命体征平稳。"}
             ],
             "daily_course_record": [
                 {"record_content": "输血后继续观察，患者生命体征平稳。"}
@@ -1345,7 +1371,7 @@ async def test_transfusion_trigger_consumes_shared_material_without_live_reader(
         source_schema=None,
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
-        additional_source_keys=("mr_bloodtrans", "bloodtrans_record"),
+        additional_source_keys=("bloodtrans_record",),
     )
     monkeypatch.setattr(
         transfusion,
@@ -1378,7 +1404,7 @@ async def test_transfusion_trigger_consumes_shared_material_without_live_reader(
 async def test_transfusion_truncated_shared_trigger_source_is_data_gap(monkeypatch):
     def read(**kwargs):
         source_key = kwargs["source_key"]
-        truncated = source_key == "mr_bloodtrans"
+        truncated = source_key == "bloodtrans_record"
         rows = ([{"transfution_datetime": None}] if truncated else [])
         return SnapshotSourceRows.create(
             source_key=source_key,
@@ -1395,7 +1421,7 @@ async def test_transfusion_truncated_shared_trigger_source_is_data_gap(monkeypat
         source_schema=None,
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
-        additional_source_keys=("mr_bloodtrans", "bloodtrans_record"),
+        additional_source_keys=("bloodtrans_record",),
     )
     monkeypatch.setattr(
         transfusion,
@@ -1478,9 +1504,9 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
             blood_application=[{"request_datetime": "2026-06-05 09:00:00",
                                 "content": "输血前评估：患者具有输血指征。"}],
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "content": (
-                        "输注去白悬浮红细胞2U；2026年6月5日16:10输注完毕。"
+                        "2026年6月5日14:20开始输注去白悬浮红细胞2U；2026年6月5日16:10输注完毕。"
                         "输血后复查血红蛋白较前改善，未见输血不良反应。"
                     ),
                     "record_time": "2026-06-05 16:20:00",
@@ -1524,7 +1550,7 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
     typed = await _execute_order_contract(
         rule_ids=("LX0609-07-02-01",),
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
-        evidence_payload=_documents(bloodtrans_record=[{"content": "空模板"}]),
+        evidence_payload=_documents(bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "content": "空模板"}]),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -1567,7 +1593,7 @@ async def test_045_substantive_dedicated_course_record_is_compliant_without_mode
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "content": (
                         "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
                         "结束时间16:10。输血过程中严密观察，生命体征平稳，"
@@ -1652,7 +1678,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
         wrapper_rules=[_wrapper("LX0609-07-02-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "content": (
                         "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
                         "结束时间16:10。输血过程中严密观察，生命体征平稳，"
@@ -1691,7 +1717,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "LX0609-07-02-01",
             _documents(
                 bloodtrans_record=[
-                    {
+                    {"document_id": "synthetic-transfusion-0",
                         "content": (
                             "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，"
                             "结束时间16:10。输血过程中严密观察，未见不良反应。"
@@ -1707,7 +1733,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "LX0609-07-02-01",
             _documents(
                 bloodtrans_record=[
-                    {"content": "患者已完成输血治疗，过程资料记录较为简略。"}
+                    {"document_id": "synthetic-transfusion-0", "content": "患者已完成输血治疗，过程资料记录较为简略。"}
                 ]
             ),
             [{"is_compliant": False}],
@@ -1716,7 +1742,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
         ),
         (
             "LX0609-07-02-01",
-            _documents(daily_course_record=[], bloodtrans_record=[{"content": "输注去白悬浮红细胞，输血过程平稳。"}]),
+            _documents(daily_course_record=[], bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "content": "输注去白悬浮红细胞，输血过程平稳。"}]),
             [],
             True,
             "compliant",
@@ -1725,7 +1751,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "LX0609-07-02-02",
             _documents(
                 bloodtrans_record=[
-                    {
+                    {"document_id": "synthetic-transfusion-0",
                         "content": (
                             "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，"
                             "结束时间16:10。输血过程中严密观察，未见不良反应。输血后复查血红蛋白提升，治疗有效。"
@@ -1741,7 +1767,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "LX0609-07-02-02",
             _documents(
                 bloodtrans_record=[
-                    {"content": "输血目的：纠正贫血；输注红细胞，过程平稳。"}
+                    {"document_id": "synthetic-transfusion-0", "content": "输血目的：纠正贫血；输注红细胞，过程平稳。"}
                 ]
             ),
             [{"is_compliant": False}],
@@ -1750,7 +1776,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
         ),
         (
             "LX0609-07-02-02",
-            _documents(daily_course_record=[], bloodtrans_record=[{"content": "输注去白悬浮红细胞，输血过程平稳。"}]),
+            _documents(daily_course_record=[], bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "content": "输注去白悬浮红细胞，输血过程平稳。"}]),
             [],
             True,
             "non_compliant",
@@ -1759,7 +1785,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "LX0609-07-03-01",
             _documents(
                 bloodtrans_record=[
-                    {
+                    {"document_id": "synthetic-transfusion-0",
                         "content": (
                             "2026-01-01 16:10 输血结束后评价未见异常，"
                             "生命体征平稳，无输血不良反应。"
@@ -1776,7 +1802,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             "LX0609-07-03-01",
             _documents(
                 bloodtrans_record=[
-                    {"content": "2026-01-01 16:10 输血结束。"}
+                    {"document_id": "synthetic-transfusion-0", "content": "2026-01-01 16:10 输血结束。"}
                 ],
                 daily_course_record=[{"content": "患者继续观察治疗。"}],
             ),
@@ -1787,7 +1813,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
         (
             "LX0609-07-03-01",
             _documents(
-                bloodtrans_record=[{"content": "输血结束，继续观察。"}],
+                bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "content": "输血结束，继续观察。"}],
             ),
             [],
             True,
@@ -1860,11 +1886,11 @@ async def test_typed_045_047_preserves_raw_state_order_and_model_usage(
     assert [item.rule_id for item in typed.decisions] == [rule_id]
     assert reduced.final_state.value == expected_status
     assert typed.planned_rule_ids == raw.planned_rule_ids == (rule_id,)
-    assert typed.llm_call_count == raw.llm_call_count
+    assert typed.llm_call_count - _protocol_calls(typed) == raw.llm_call_count - _protocol_calls(raw)
     assert typed.prompt_tokens == raw.prompt_tokens
     assert typed.completion_tokens == raw.completion_tokens
     assert typed.total_tokens == raw.total_tokens
-    assert typed.api_time == raw.api_time
+    assert typed.api_time - 0.2 * _protocol_calls(typed) == pytest.approx(raw.api_time - 0.2 * _protocol_calls(raw), abs=0.01)
     assert typed_client.prompts == raw_client.prompts
     assert "private" not in repr(typed.decisions).lower()
     assert "输血目的" not in repr(typed.decisions)
@@ -2033,7 +2059,7 @@ async def test_046_recognizes_complete_customer_narrative_wording(monkeypatch):
         wrapper_rules=[_wrapper("LX0609-07-02-02")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "content": (
                         '患者Hb 65g/L，因贫血予悬浮红细胞2U输注，08时开始，10时输毕，输注过程中生命体征平稳，未见不良反应。输血后复查血红蛋白提升，治疗有效。'
                     )
@@ -2075,7 +2101,7 @@ async def test_046_semantic_component_does_not_borrow_cross_record_fields(
                         '输血目的：纠正贫血；开始时间14:20，结束时间16:10。输血过程中严密观察，未见寒战及输血不良反应。输血后复查血红蛋白提升，治疗有效。'
                     )
                 },
-                {
+                {"document_id": "synthetic-transfusion-1",
                     "content": (
                         '输注去白悬浮红细胞2U，开始时间18:00，结束时间19:00。过程顺利，未见皮疹及输血反应。输血后复查血红蛋白提升，治疗有效。'
                     )
@@ -2487,7 +2513,7 @@ def test_045_explicit_missing_course_and_complete_empty_source_are_non_compliant
     explicit = transfusion._programmatic_045_status(
         {
             "bloodtrans_record": [
-                {"record_content": "未记录输血病程主要内容。"}
+                {"document_id": "synthetic-transfusion-0", "record_content": "未记录输血病程主要内容。"}
             ],
             "__logical_source_states__": {"bloodtrans_record": "available"},
         }
@@ -2509,7 +2535,7 @@ def test_046_explicit_incomplete_course_is_non_compliant_without_model():
             # 此内部字段检查的前置条件是course协议已确认实际记录。
             "__course_presence_verified__": True,
             "bloodtrans_record": [
-                {"record_content": "患者已输血，过程记录不完整。"}
+                {"document_id": "synthetic-transfusion-0", "record_content": "患者已输血，过程记录不完整。"}
             ]
         }
     ) == ("non_compliant", "transfusion_course_record_incomplete")
@@ -2519,7 +2545,7 @@ def test_047_explicit_missing_evaluation_uses_authoritative_end_time():
     assert transfusion._programmatic_047_status(
         {
             "bloodtrans_record": [
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "record_content": (
                         "2026-06-05 16:00:00输血结束；"
                         "未记录输血结束后评价。"
@@ -2561,7 +2587,7 @@ def test_047_daily_course_authored_at_with_record_time_basis_is_compliant():
     assert transfusion._programmatic_047_status(
         {
             "bloodtrans_record": [
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "record_content": "2026-06-05 16:00:00输血结束。",
                 }
             ],
@@ -2584,7 +2610,7 @@ def test_047_daily_course_non_authoritative_authored_at_stays_data_gap(time_basi
     assert transfusion._programmatic_047_status(
         {
             "bloodtrans_record": [
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "record_content": "2026-06-05 16:00:00输血结束。",
                 }
             ],
@@ -2603,7 +2629,7 @@ def test_047_late_authoritative_evaluation_is_non_compliant():
     assert transfusion._programmatic_047_status(
         {
             "bloodtrans_record": [
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "record_content": (
                         "2026-06-05 16:00:00输血结束；"
                         "输血后复查血红蛋白较前改善，未见输血不良反应。"
@@ -2661,14 +2687,14 @@ def test_047_multiple_transfusions_do_not_use_earlier_evaluation_for_later_end()
     assert transfusion._programmatic_047_status(
         {
             "bloodtrans_record": [
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "record_content": (
                         "2026-06-05 10:00:00输血结束；"
                         "输血后复查血红蛋白较前改善。"
                     ),
                     "record_time": "2026-06-05 10:20:00",
                 },
-                {
+                {"document_id": "synthetic-transfusion-1",
                     "record_content": (
                         "2026-06-05 16:00:00输血结束；"
                         "输血后复查凝血功能改善。"
@@ -2685,14 +2711,14 @@ def test_047_multiple_transfusions_with_same_end_time_require_each_evaluation():
     assert transfusion._programmatic_047_status(
         {
             "bloodtrans_record": [
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "record_content": (
                         "2026-06-05 16:00:00输血结束；"
                         "输血后复查血红蛋白较前改善。"
                     ),
                     "record_time": "2026-06-05 16:20:00",
                 },
-                {
+                {"document_id": "synthetic-transfusion-1",
                     "record_content": (
                         "2026-06-05 16:00:00输血结束；"
                         "输血后复查凝血功能改善。"
@@ -2716,7 +2742,7 @@ async def test_047_missing_authoritative_end_stays_data_gap_without_daily_projec
         rule_ids=("LX0609-07-03-01",),
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
-            bloodtrans_record=[{"content": "输血结束，继续观察，未见输血不良反应。"}],
+            bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "content": "输血结束，继续观察，未见输血不良反应。"}],
             daily_course_record=[],
         ),
         institute_id="safe-institute",
@@ -2789,7 +2815,7 @@ async def test_047_posttransfusion_evaluation_is_deterministic_without_model(mon
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "content": (
                         "2026年6月5日16:10输注完毕。"
                         "输血后复查血红蛋白较前改善，未见输血不良反应。"
@@ -2822,7 +2848,7 @@ async def test_047_posttransfusion_evaluation_is_deterministic_without_model(mon
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {"content": "2026-06-05 16:10输血结束，输注过程顺利。"}
+                {"document_id": "synthetic-transfusion-0", "content": "2026-06-05 16:10输血结束，输注过程顺利。"}
             ],
             daily_course_record=[
                 {"document_title": "输血后评价记录",
@@ -2861,7 +2887,7 @@ async def test_047_accepts_controlled_timezone_and_postposition_forms(
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "content": (
                         f"{end_text}，复查血红蛋白较前改善，"
                         "未见输血不良反应。"
@@ -2919,7 +2945,7 @@ async def test_047_allows_final_summary_but_preserves_explicit_missing_statement
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {"content": content, "record_time": datetime(2026, 6, 5, 16, 20)}
+                {"document_id": "synthetic-transfusion-0", "content": content, "record_time": datetime(2026, 6, 5, 16, 20)}
             ],
             daily_course_record=[{"document_title": "输血后评价记录", "content": "普通病程：继续观察。"}],
         ),
@@ -2956,7 +2982,7 @@ async def test_047_distinguishes_normal_evaluation_from_missing_documentation(
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "content": f"2026-06-05 16:10输血结束。{evaluation_text}",
                     "record_time": datetime(2026, 6, 5, 16, 20),
                 }
@@ -2985,7 +3011,7 @@ async def test_047_rejects_pre_end_or_unrelated_observation_and_requires_end_tim
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0",
                     "content": (
                         "2026年6月5日15:30观察生命体征平稳，"
                         "2026年6月5日16:10输注完毕。"
@@ -3016,7 +3042,7 @@ async def test_047_rejects_pre_end_or_unrelated_observation_and_requires_end_tim
         wrapper_rules=[_wrapper("LX0609-07-03-01")],
         evidence_payload=_documents(
             bloodtrans_record=[
-                {"content": "输注完毕后复查血红蛋白上升，症状改善。"}
+                {"document_id": "synthetic-transfusion-0", "content": "输注完毕后复查血红蛋白上升，症状改善。"}
             ],
             daily_course_record=[
                 {"document_title": "输血后评价记录",
@@ -3142,7 +3168,7 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         evidence_payload=_documents(
             mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0", "record_time": "2026-06-05 14:20:00",
                     "content": (
                         "输血记录：患者拟输注红细胞，输血过程中生命体征平稳，"
                         "记录血红蛋白检查结果，但未形成输血前评估。"
@@ -3168,7 +3194,7 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
-            bloodtrans_record=[{"content": "输血记录：按评估及医嘱完成输注。"}],
+            bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "record_time": "2026-06-05 14:20:00", "content": "输血记录：按评估及医嘱完成输注。"}],
             blood_application=[
                 {
                     "document_title": "输血前评估记录",
@@ -3198,7 +3224,7 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
-            bloodtrans_record=[{"content": "输血记录：已记录输血指征，输注过程平稳。"}],
+            bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "record_time": "2026-06-05 14:20:00", "content": "输血记录：已记录输血指征，输注过程平稳。"}],
             blood_application=[],
             daily_course_record=[{"content": "病程记录：患者贫血，拟输注红细胞。"}],
         ),
@@ -3221,7 +3247,7 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
-            bloodtrans_record=[{"content": "输血前评估：患者具有输血指征。"}],
+            bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "record_time": "2026-06-05 14:20:00", "content": "输注红细胞2U，过程平稳。"}],
             blood_application=[{"request_datetime": "2026-06-05 09:00:00", "content": "患者贫血，血红蛋白降低。"}],
             daily_course_record=[{"content": "既往无输血不良反应，已说明风险。"}],
         ),
@@ -3232,8 +3258,9 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         llm_client=split_client,
     )
     assert split.results[0]["status"] == "non_compliant"
-    assert split.results[0]["metadata"]["reason_code"] == "transfusion_customer_prompt"
-    assert split.llm_call_count == 1 + _protocol_calls(split)
+    assert split.results[0]["metadata"]["reason_code"] == "pretransfusion_assessment_incomplete"
+    assert split.llm_call_count == _protocol_calls(split)
+    assert split_client.prompts == []
 
     application_client = _Client([{"is_compliant": True}])
     application_gray = await _execute_order_contract(
@@ -3241,7 +3268,7 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
         evidence_payload=_documents(
             mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
-            bloodtrans_record=[{"content": "输血记录：按医嘱完成输注。"}],
+            bloodtrans_record=[{"document_id": "synthetic-transfusion-0", "record_time": "2026-06-05 14:20:00", "content": "输血记录：按医嘱完成输注。"}],
             blood_application=[
                 {
                     "document_title": "输血申请单",
@@ -3280,7 +3307,7 @@ async def test_044_same_record_purpose_without_assessment_marker_is_non_complian
         evidence_payload=_documents(
             mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[
-                {
+                {"document_id": "synthetic-transfusion-0", "record_time": "2026-06-05 14:20:00",
                     "content": (
                         "输血目的：纠正贫血；患者血红蛋白降低，"
                         "既往无输血不良反应，输注前生命体征平稳。"
@@ -3320,7 +3347,7 @@ async def test_044_transfusion_purpose_without_preassessment_is_non_compliant_wi
         evidence_payload=_documents(
             mr_bloodtrans=[{"transfution_datetime": "2026-06-05 14:20:00"}],
             bloodtrans_record=[
-                {"content": "输血目的：纠正贫血；患者血红蛋白降低。"}
+                {"document_id": "synthetic-transfusion-0", "record_time": "2026-06-05 14:20:00", "content": "输血目的：纠正贫血；患者血红蛋白降低。"}
             ],
             blood_application=[],
             daily_course_record=[{"content": "病程记录：继续观察治疗。"}],
@@ -3357,7 +3384,7 @@ async def test_044_uses_one_bounded_llm_call_for_legacy_application_reason(
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
-        evidence_payload=_documents(
+        evidence_payload=_documents(bloodtrans_record=[{"document_id": "synthetic-transfusion-event", "record_content": "输注红细胞2U，过程平稳。", "record_time": "2026-08-20 14:00:00"}],
             mr_bloodtrans=[
                 {"transfution_datetime": "2026-08-20 14:00:00"}
             ],
@@ -3404,7 +3431,7 @@ async def test_044_llm_uncertain_is_evaluation_unknown_not_model_error(monkeypat
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
-        evidence_payload=_documents(
+        evidence_payload=_documents(bloodtrans_record=[{"document_id": "synthetic-transfusion-event", "record_content": "输注红细胞2U，过程平稳。", "record_time": "2026-08-20 14:00:00"}],
             mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
             blood_application=[{
                 "application_id": "BA-UNKNOWN",
@@ -3443,7 +3470,7 @@ async def test_044_rejects_llm_reason_quote_outside_application_text(monkeypatch
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
-        evidence_payload=_documents(
+        evidence_payload=_documents(bloodtrans_record=[{"document_id": "synthetic-transfusion-event", "record_content": "输注红细胞2U，过程平稳。", "record_time": "2026-08-20 14:00:00"}],
             mr_bloodtrans=[
                 {"transfution_datetime": "2026-08-20 14:00:00"}
             ],
@@ -3552,7 +3579,7 @@ async def test_041_042_use_dedicated_consent_and_return_controlled_facts() -> No
                 {"transfution_datetime": datetime(2026, 6, 5, 14, 20)}
             ],
             "bloodtrans_record": [
-                {"record_content": "输注红细胞2U，过程平稳。"}
+                {"document_id": "synthetic-transfusion-0", "record_time": datetime(2026, 6, 5, 14, 20), "record_content": "输注红细胞2U，过程平稳。"}
             ],
             "consent_form": [
                 {
@@ -3692,7 +3719,7 @@ async def test_043_checks_regular_items_before_transfusion_and_returns_times() -
                 {"transfution_datetime": datetime(2026, 6, 5, 14, 20)}
             ],
             "bloodtrans_record": [
-                {"record_content": "输注红细胞2U，过程平稳。"}
+                {"document_id": "synthetic-transfusion-0", "record_time": datetime(2026, 6, 5, 14, 20), "record_content": "输注红细胞2U，过程平稳。"}
             ],
             "blood_application": [
                 {"patient_bloodtype_abo": "O", "patient_bloodtype_rhd": "阳性"}
@@ -3830,10 +3857,12 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
         raise RuntimeError(secret)
 
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _failed_reader)
+    payload = _documents(daily_course_record=[])
+    payload["programmatic_timeline"]["documents"].pop("bloodtrans_record")
     result = await _execute_order_contract(
         rule_ids=("LX0609-11-03-01", "LX0609-07-04-02"),
         wrapper_rules=[_wrapper("LX0609-11-03-01"), _wrapper("LX0609-07-04-02")],
-        evidence_payload=_documents(bloodtrans_record=[], daily_course_record=[{"document_id": "synthetic-course-shell", "content": "输血过程及输血后评价记录。"}]),
+        evidence_payload=payload,
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -3913,7 +3942,7 @@ async def test_044_empty_application_reason_checks_pretransfusion_course(monkeyp
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
-        evidence_payload=_documents(
+        evidence_payload=_documents(bloodtrans_record=[{"document_id": "synthetic-transfusion-event", "record_content": "输注红细胞2U，过程平稳。", "record_time": "2026-08-20 14:00:00"}],
             mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
             blood_application=[_empty_reason_application()],
             daily_course_record=[],
@@ -3946,7 +3975,7 @@ async def test_044_empty_application_reason_without_pretransfusion_course_stays_
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
-        evidence_payload=_documents(
+        evidence_payload=_documents(bloodtrans_record=[{"document_id": "synthetic-transfusion-event", "record_content": "输注红细胞2U，过程平稳。", "record_time": "2026-08-20 14:00:00"}],
             mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
             blood_application=[_empty_reason_application()],
             daily_course_record=[],
@@ -3979,7 +4008,7 @@ async def test_044_course_reason_quote_must_be_in_pretransfusion_course(monkeypa
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
-        evidence_payload=_documents(
+        evidence_payload=_documents(bloodtrans_record=[{"document_id": "synthetic-transfusion-event", "record_content": "输注红细胞2U，过程平稳。", "record_time": "2026-08-20 14:00:00"}],
             mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
             blood_application=[_empty_reason_application()],
             daily_course_record=[],
@@ -4011,7 +4040,7 @@ async def test_044_application_text_keeps_application_reason_prompt_even_with_co
     result = await _execute_order_contract(
         rule_ids=("LX0609-07-01-02",),
         wrapper_rules=[_wrapper("LX0609-07-01-02")],
-        evidence_payload=_documents(
+        evidence_payload=_documents(bloodtrans_record=[{"document_id": "synthetic-transfusion-event", "record_content": "输注红细胞2U，过程平稳。", "record_time": "2026-08-20 14:00:00"}],
             mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}],
             blood_application=[{**_empty_reason_application("BA-001"), "record_content": application_text}],
             daily_course_record=[],
@@ -4028,3 +4057,30 @@ async def test_044_application_text_keeps_application_reason_prompt_even_with_co
 
     assert result.results[0]["status"] == "compliant"
     assert "输血申请单正文" in client.prompts[0] and _PRE_COURSE not in client.prompts[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", (
+    "病程记录：患者贫血，拟输注红细胞。",
+    "取消本次输血，未实施输注。",
+))
+async def test_044_preassessment_does_not_turn_plan_or_cancellation_into_performed_event(body):
+    """独立前评估完整、专用文书有记录时间也不能把计划/取消变为实施。"""
+    session = _typed_decision_session(
+        selected_rule_ids=("LX0609-07-01-02",), bloodtrans_content=body,
+        source_rows={"daily_course_record": [{
+            "document_id": "PRE-044", "document_title": "输血前评估",
+            "record_time": "2026-01-01 09:00:00",
+            "record_content": "输血前评估：有输血指征，血红蛋白65g/L，已告知输血风险。",
+        }]},
+    )
+    result = await _execute_order_contract(
+        rule_ids=("LX0609-07-01-02",), wrapper_rules=[_wrapper("LX0609-07-01-02")],
+        evidence_payload=None, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=_Client([]), evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot, decision_rule_ids=("LX0609-07-01-02",),
+    )
+    reduced = reduce_luxian_0609_rule_decision(result.decisions[0])
+    assert reduced.final_state.value == "data_gap"
+    assert reduced.reason_code == "association_failed"
+    assert result.llm_call_count == _protocol_calls(result) == 2

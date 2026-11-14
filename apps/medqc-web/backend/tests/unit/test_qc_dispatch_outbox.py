@@ -666,9 +666,19 @@ def test_legacy_retry_without_m2_tables_never_selects_dispatch(
     engine = sessions.kw["bind"]
     tables.dispatch.metadata.drop_all(engine)
 
-    retried = service.retry_batch_job(job_id=job["id"], created_by="synthetic")
-    assert retried is not None
-    assert retried["status"] == "queued"
+    with sessions() as session:
+        before = dict(session.execute(
+            sa.select(service._batch_job_table).where(service._batch_job_table.c.id == job["id"])
+        ).mappings().one())
+    # 缺少精确失败范围的 legacy 重试必须保留原任务；也不能依赖已不存在的 M2 表。
+    with pytest.raises(ValueError, match="new_task_required_preserve_history"):
+        service.retry_batch_job(job_id=job["id"], created_by="synthetic")
+    with sessions() as session:
+        after = dict(session.execute(
+            sa.select(service._batch_job_table).where(service._batch_job_table.c.id == job["id"])
+        ).mappings().one())
+    assert after == before
+    assert after["status"] == "failed"
 
 
 def test_new_generation_clears_old_terminal_code_and_can_reenter_recovery(repository):

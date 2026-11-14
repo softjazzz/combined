@@ -16,6 +16,7 @@ from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
 from test_luxian_0609_death_record_timeliness import saved_roundtrip
+from test_luxian_0609_surgery_record_event_coverage_regression import anesthesia
 
 RESCUE = "LX0609-09-01-01"
 SURGERY = "LX0609-04-02-01"
@@ -240,7 +241,8 @@ async def test_surgery_end_alias_cannot_hide_conflict_or_invalid_precision(first
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["unavailable", "truncated"])
-async def test_single_timely_record_does_not_prove_coverage_with_unknown_master(mode):
+@pytest.mark.parametrize("source", ["surgery_record", "mr_surgery"])
+async def test_source_completeness_only_uses_clinical_surgery_records(mode, source):
     result = await pipeline(
         SURGERY,
         {
@@ -253,32 +255,28 @@ async def test_single_timely_record_does_not_prove_coverage_with_unknown_master(
                 },
             ),
         },
-        unavailable=("mr_surgery",) if mode == "unavailable" else (),
-        truncated=("mr_surgery",) if mode == "truncated" else (),
+        unavailable=(source,) if mode == "unavailable" else (),
+        truncated=(source,) if mode == "truncated" else (),
     )
-    assert result["status"] == "data_gap"
-    assert result["reason_code"] == "source_" + mode
+    if source == "surgery_record":
+        assert result["status"] == "data_gap"
+        assert result["reason_code"] == "source_" + mode
+    else:
+        assert result["status"] == "compliant"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("end", [None, date(2026, 1, 1), "2026-01-01"])
 async def test_missing_surgery_record_cannot_use_start_or_date_as_precise_end(end):
-    result = await pipeline(
-        SURGERY,
-        {
-            "mr_surgery": (
-                {
-                    "surgery_name": "硬脑膜外血肿清除术",
-                    "surgery_code": "01.2400X013",
-                    "surgeon": "甲",
-                    "surgical_level": "二级",
-                    "surgery_begin_datetime": START,
-                    "surgery_end_datetime": end,
-                },
-            )
-        },
+    row = anesthesia()
+    # 唯一麻醉文书仍必须显式提供完整结束时刻，开始时间及日期不能代替。
+    row["record_content"] = (
+        "本次手术已实施。手术开始时间：2026-01-01 08:00:00+08:00；"
+        f"手术结束时间：{end or ''}。"
     )
+    result = await pipeline(SURGERY, {"anesthesia_record": (row,)})
     assert result["status"] == "data_gap"
+    assert result["reason_code"] == "authoritative_time_missing"
 
 
 @pytest.mark.asyncio
@@ -319,25 +317,24 @@ async def test_accepted_subsecond_precision_survives_public_facts_and_saving(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("second_end", [None, START + timedelta(days=1, hours=2)])
 @pytest.mark.parametrize("independent", [False, True])
-async def test_missing_document_maturity_validates_whole_same_start_group(
-    second_end, independent
-):
-    first = {
-        "surgery_name": "硬脑膜外血肿清除术",
-        "surgery_code": "01.2400X013",
-        "surgery_begin_datetime": START,
-        "surgery_end_datetime": START + timedelta(hours=2),
-    }
-    rows = (first, {**first, "surgery_end_datetime": second_end})
+async def test_incomplete_group_does_not_hide_independent_late_record(second_end, independent):
+    from app.services.luxian_0609.native_surgery_gate_execution import _timeliness_group_end
+
+    # 保留历史同开始时刻组件的全组结束锚点校验，不能取第一行补齐缺值或冲突。
+    ends = ({"surgery_end_datetime": START + timedelta(hours=2)},
+            {"surgery_end_datetime": second_end})
+    anchor, issue = _timeliness_group_end(ends)
+    assert anchor is None
+    assert issue == ("authoritative_time_missing" if second_end is None else "authoritative_time_conflict")
+    rows = (surgery_row(identifier="S1"), surgery_row(identifier="S2", end=second_end))
     if independent:
-        rows += (
-            {
-                **first,
-                "surgery_begin_datetime": START - timedelta(days=10),
-                "surgery_end_datetime": START - timedelta(days=10) + timedelta(hours=2),
-            },
-        )
-    result = await pipeline(SURGERY, {"mr_surgery": rows})
+        rows += ({
+            **surgery_row(identifier="LATE"),
+            "surgery_begin_time": START - timedelta(days=10),
+            "surgery_end_time": START - timedelta(days=10) + timedelta(hours=2),
+            "record_time": START - timedelta(days=9) + timedelta(hours=3),
+        },)
+    result = await pipeline(SURGERY, {"surgery_record": rows})
     assert result["status"] == ("non_compliant" if independent else "data_gap")
     if independent:
-        assert result["customer_display_facts"]["surgery_time"].startswith("2025-12-22")
+        assert result["customer_display_facts"]["surgery_end_time"].startswith("2025-12-22")

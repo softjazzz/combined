@@ -277,6 +277,12 @@ class RuleSourceGuardError(RuntimeError):
 
 
 def _selected_luxian_0609_033_raw_rules(selected_rules: List[Dict[str, Any]]) -> bool:
+    from .luxian_0609.phase_scope import get_luxian_0609_phase_scope
+
+    scope = get_luxian_0609_phase_scope("LX0609-11-01-01")
+    # 当前暂停合同优先于旧来源 guard，不能读取来源或用“不适用”覆盖暂停。
+    if scope is None or not scope.catalog_registered or scope.phase_status == "pending_definition":
+        return False
     raw_rule_ids = {
         str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
         for rule in selected_rules

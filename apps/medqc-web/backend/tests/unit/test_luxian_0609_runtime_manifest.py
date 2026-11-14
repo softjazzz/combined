@@ -86,10 +86,12 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert not set(manifest["executable_rule_ids"]) & set(manifest["withheld_rule_ids"])
 
     by_rule = {item["rule_id"]: item for item in manifest["rules"]}
-    assert by_rule["LX0609-03-01-01"]["active_path"] == "compatibility"
-    assert by_rule["LX0609-04-01-01"]["active_path"] == "native"
-    assert by_rule["LX0609-04-02-02"]["active_path"] == "native"
-    assert by_rule["LX0609-04-03-01"]["active_path"] == "native"
+    from app.services.luxian_0609.phase_scope import load_luxian_0609_phase_scope
+    for scope in load_luxian_0609_phase_scope():
+        if scope.catalog_registered and scope.phase_status == "pending_definition":
+            assert by_rule[scope.rule_id]["active_path"] == "not_executed"
+            assert by_rule[scope.rule_id]["pending_reason_code"] == scope.pending_reason_code
+    assert by_rule["LX0609-01-01-01"]["active_path"] == "native"
     assert by_rule["LX0609-02-01-05"]["phase_status"] == "phase_1_target"
     assert by_rule["LX0609-02-01-05"]["active_criteria"] == []
     assert by_rule["LX0609-01-01-02"]["phase_status"] == "phase_1_target"
@@ -142,7 +144,7 @@ def test_runtime_manifest_honors_explicit_mainline_rollback_flags() -> None:
     )
 
     by_rule = {item["rule_id"]: item for item in manifest["rules"]}
-    assert by_rule["LX0609-04-01-01"]["active_path"] == "compatibility"
+    assert by_rule["LX0609-04-01-01"]["active_path"] == "not_executed"
     assert manifest["flags"]["unified_engine"] is False
     assert manifest["flags"]["rule_decision_surgery_document"] is False
 

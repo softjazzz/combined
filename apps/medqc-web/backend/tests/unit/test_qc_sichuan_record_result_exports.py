@@ -1,8 +1,21 @@
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.routers import qc_sichuan
+from app.database.models.v36_reports import SysUser
+from test_qc_record_read_permissions import persistent_accounts
+
+
+@pytest.fixture
+def client(persistent_accounts):
+    app = FastAPI()
+    app.include_router(qc_sichuan.router)
+    app.state.synthetic_sessions = persistent_accounts
+    with TestClient(app) as client:
+        yield client
 
 
 class _Workspace:
@@ -100,6 +113,11 @@ def _authorize(client, *, email="qc-admin@hospital.local", roles=None, is_demo_a
         return None
 
     user = {"id": "u-admin", "email": email, "roles": roles or ["admin"]}
+    with client.app.state.synthetic_sessions.begin() as session:
+        actor = session.get(SysUser, "u-admin")
+        actor.role = user["roles"][0]
+        actor.roles_json = None
+        actor.institute_id = "H-1"
     if is_demo_account is not None:
         user["is_demo_account"] = is_demo_account
     client.app.dependency_overrides[enforce_default_auth] = _auth_gate
@@ -331,3 +349,32 @@ def test_builtin_demo_doctor_still_cannot_export_record_results(client, monkeypa
 
     assert response.status_code == 403
     assert workspace.latest_calls == []
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_manager_export_rejects_foreign_institute_before_results(client, monkeypatch, selected):
+    _authorize(client, roles=["qc_manager"])
+    workspace = _Workspace()
+    if not selected:
+        workspace.collect_records = lambda **kwargs: [
+            {"institute_id": "H-2", "patient_id": "P", "visit_id": "V"}
+        ]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    payload = {"scope": "final", "date_field": "discharge"}
+    if selected:
+        payload["record_refs"] = [{"institute_id": "H-2", "patient_id": "P", "visit_id": "V"}]
+    response = client.post("/api/v1/qc/sichuan/workspace/records/export", json=payload)
+    assert response.status_code == 403
+    assert workspace.bulk_calls == workspace.latest_calls == []
+    if selected:
+        assert not hasattr(workspace, "collect_kwargs")
+
+
+def test_manager_can_export_own_institute(client, monkeypatch):
+    _authorize(client, roles=["qc_manager"])
+    workspace = _Workspace()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    response = client.post("/api/v1/qc/sichuan/workspace/records/export",
+                           json={"scope": "final", "date_field": "discharge"})
+    assert response.status_code == 200
+    assert len(workspace.bulk_calls) == 1

@@ -362,14 +362,8 @@ def provide_luxian_0609_runtime_shadow_inputs(
         for row in rows_by_source.get("surgery_record", ())
         for parsed in trusted_performed_surgery_times(source_key="surgery_record", row=row)
     )
-    mr_surgery_times = tuple(
-        parsed
-        for row in rows_by_source.get("mr_surgery", ())
-        if catalog_surgery_state(row) is not False
-        for parsed in trusted_performed_surgery_times(source_key="mr_surgery", row=row)
-    )
-    # 保留已验收的 surgery_record 时序语义；仅在其没有严格时间时回退 typed mr_surgery。
-    confirmed_surgery_times = surgery_record_times or mr_surgery_times
+    # 已实施时间只能来自原始手术文书，首页不作回退。
+    confirmed_surgery_times = surgery_record_times
     earliest_surgery_time = min(confirmed_surgery_times) if confirmed_surgery_times else None
     observation_by_source = {item.source_key: item for item in observations}
     qualifications: list[deterministic_gate.TargetQualification] = []

@@ -74,7 +74,6 @@ def test_zero_plan_does_not_read_downstream_inputs():
 def test_required_pairs_are_trigger_derived_not_targets_and_032_has_no_order_pair():
     assembly = _assemble(_plan("LX0609-04-03-01"))
     assert {(item.fact_type, item.source_key) for item in assembly.deterministic_coverage_outcomes} == {
-        ("current_visit_surgery_confirmed", "mr_surgery"),
         ("current_visit_surgery_confirmed", "surgery_application"),
         ("current_visit_surgery_confirmed", "surgery_record"),
     }

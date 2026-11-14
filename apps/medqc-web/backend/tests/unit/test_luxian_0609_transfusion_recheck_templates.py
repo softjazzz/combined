@@ -180,7 +180,8 @@ async def test_native_semantic_recheck_preserves_source_and_contract(monkeypatch
         app = {"application_id": "synthetic-application", "request_datetime": "2026-08-20 09:00:00",
                "reason_for_blood": "", "hemoglobin": "58", "record_content": body if source == "application" else ""}
         documents = support._documents(
-            mr_bloodtrans=[{"transfution_datetime": "2026-08-20 14:00:00"}], blood_application=[app],
+            bloodtrans_record=[{"document_id": "synthetic-actual", "record_content": "输注红细胞2U，过程平稳。",
+                                "record_time": "2026-08-20 14:00:00"}], blood_application=[app],
             daily_course_record=[], senior_course_record=[
                 {"document_id": "synthetic-course", "record_time": "2026-08-20 09:40:00", "content": body}])
         good = {"reason_state": "present", "evidence_quote": "因血红蛋白65g/L申请输注", "application_ref": "synthetic-application"}

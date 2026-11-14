@@ -38,7 +38,6 @@ _ORDER_PAIR = ("current_visit_surgery_order_confirmed", "inpat_nondrug_order")
 _PERFORMED_PAIRS = frozenset({
     ("current_visit_surgery_confirmed", "surgery_application"),
     ("current_visit_surgery_confirmed", "surgery_record"),
-    ("current_visit_surgery_confirmed", "mr_surgery"),
 })
 _RULE_CONTRACT = MappingProxyType({
     "LX0609-04-01-01": ("presurg_summary", (), (), frozenset({_ORDER_PAIR, *_PERFORMED_PAIRS})),

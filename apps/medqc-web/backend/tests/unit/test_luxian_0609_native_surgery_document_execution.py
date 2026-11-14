@@ -540,8 +540,9 @@ async def test_typed_029_same_time_multiple_surgeries_with_one_summary_requires_
 
 
 @pytest.mark.asyncio
-async def test_typed_029_cross_source_extra_surgery_requires_stable_event_coverage():
+async def test_typed_029_original_multiple_surgeries_require_stable_event_coverage():
     session = _typed_029_session(
+        surgery_mode="multi",
         summary_rows=({"record_content": "术前小结正文完整"},),
         mr_surgery_mode="multi_traditional",
     )
@@ -598,7 +599,7 @@ async def test_typed_029_cross_source_matched_code_name_and_times_is_one_event()
 
 
 @pytest.mark.asyncio
-async def test_typed_029_cross_source_one_to_two_events_requires_association():
+async def test_typed_029_frontpage_extra_event_does_not_change_original_event():
     session = _typed_029_session(
         surgery_mode="cross_matched_single",
         summary_rows=({"record_content": "术前小结正文完整"},),
@@ -621,8 +622,8 @@ async def test_typed_029_cross_source_one_to_two_events_requires_association():
         evidence_materials=session.materials,
     )
 
-    assert reduced[0].final_state.value == "data_gap"
-    assert reduced[0].reason_code == "association_failed"
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == result.total_tokens == 0
 
 
@@ -655,7 +656,7 @@ async def test_typed_029_duplicate_surgery_document_is_one_event():
 
 
 @pytest.mark.asyncio
-async def test_typed_029_c01_time_shell_remains_one_event():
+async def test_typed_029_distinct_original_times_cannot_be_merged_by_frontpage():
     session = _typed_029_session(
         surgery_mode="c01_time_shell",
         mr_surgery_mode="c01_anchor",
@@ -678,8 +679,8 @@ async def test_typed_029_c01_time_shell_remains_one_event():
         evidence_materials=session.materials,
     )
 
-    assert reduced[0].final_state.value == "compliant"
-    assert reduced[0].reason_code == "requirement_satisfied"
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "association_failed"
     assert result.llm_call_count == result.total_tokens == 0
 
 
@@ -716,16 +717,15 @@ async def test_typed_029_multiple_surgeries_and_empty_summary_is_non_compliant()
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("mr_surgery_mode", "expected_reason"),
+    "mr_surgery_mode",
     (
-        ("unavailable", "source_unavailable"),
-        ("error", "source_unavailable"),
-        ("truncated", "source_truncated"),
+        "unavailable",
+        "error",
+        "truncated",
     ),
 )
-async def test_typed_029_unavailable_second_surgery_source_blocks_single_event_conclusion(
+async def test_typed_029_unavailable_frontpage_does_not_block_original_event(
     mr_surgery_mode: str,
-    expected_reason: str,
 ):
     session = _typed_029_session(
         summary_rows=({"record_content": "本次手术术前评估及准备情况已记录。"},),
@@ -749,8 +749,8 @@ async def test_typed_029_unavailable_second_surgery_source_blocks_single_event_c
         evidence_materials=session.materials,
     )
 
-    assert reduced[0].final_state == "data_gap"
-    assert result.decisions[0].reason_code == expected_reason
+    assert reduced[0].final_state == "compliant"
+    assert result.decisions[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
@@ -952,7 +952,7 @@ def _typed_037_session(
     preanesthesia_content: str,
     anesthesia_method: str | None = "全身麻醉",
     anesthesia_record_content: str = "",
-    mr_surgery_mode: str = "empty",
+    surgery_mode: str = "empty",
     visit_mode: str | None = None,
     pre_visit_mode: str = "available",
     post_visit_mode: str = "available",
@@ -974,11 +974,11 @@ def _typed_037_session(
         ),
     }
 
-    if mr_surgery_mode == "with_end":
+    if surgery_mode == "with_end":
         # 术后访视（07-31 08:00）在手术结束后48小时内。
-        rows_by_source["mr_surgery"] = ({
+        rows_by_source["surgery_record"] = ({
             "surgery_id": "S-037", "anesthesia_method": anesthesia_method or "全身麻醉",
-            "surgery_begin_datetime": "2026-07-30 09:00:00", "surgery_end_datetime": "2026-07-30 11:00:00",
+            "surgery_begin_time": "2026-07-30 09:00:00+08:00", "surgery_end_time": "2026-07-30 11:00:00+08:00",
         },)
 
     visit_rows = {
@@ -1000,9 +1000,9 @@ def _typed_037_session(
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
-        if source_key == "mr_surgery" and mr_surgery_mode == "error":
+        if source_key == "surgery_record" and surgery_mode == "error":
             raise SourceEvidenceQueryError()
-        if source_key == "mr_surgery" and mr_surgery_mode == "unavailable":
+        if source_key == "surgery_record" and surgery_mode == "unavailable":
             raise SourceEvidenceUnavailable()
         if source_key in visit_modes:
             mode = visit_modes[source_key]
@@ -1084,7 +1084,7 @@ async def test_typed_037_public_executor_rejects_local_negated_assessments():
             "未见ASA分级；无气道评估（未作气道评估）；已核对禁食禁饮；"
             "否认麻醉史；未见麻醉风险告知。"
         ),
-        mr_surgery_mode="with_end",
+        surgery_mode="with_end",
     )
 
     result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
@@ -1152,13 +1152,13 @@ async def test_typed_037_public_executor_fails_closed_when_method_is_unknown():
 
 
 @pytest.mark.asyncio
-async def test_typed_037_public_executor_treats_mr_surgery_query_error_as_technical():
+async def test_typed_037_public_executor_treats_original_surgery_query_error_as_technical():
     session = _typed_037_session(
         preanesthesia_content=(
             "ASA II级，气道评估正常，禁食禁饮已核对，否认麻醉史，"
             "已完成麻醉风险告知。"
         ),
-        mr_surgery_mode="error",
+        surgery_mode="error",
     )
 
     result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
@@ -1647,8 +1647,8 @@ def test_typed_038_uses_independent_nonlocal_anesthesia_trigger_for_missing_reco
         surgery_doc,
         "_typed_fact_state",
         lambda _snapshot, *, fact_types, source_key: (
-            ("present", "全身麻醉")
-            if source_key == "mr_surgery"
+            ("absent", "")
+            if source_key == "anesthesia_record"
             else ("absent", "")
         ),
     )
@@ -1663,6 +1663,7 @@ def test_typed_038_uses_independent_nonlocal_anesthesia_trigger_for_missing_reco
     outcome = surgery_doc._typed_terminal_outcome(
         rule_id="LX0609-04-04-03",
         snapshot=object(),
+        materials=_RowsOnlyMaterials({"surgery_record": ({"document_id": "original-038", "surgery_begin_time": "2026-01-01T08:00:00+08:00", "anesthesia_method": "全身麻醉", "record_content": "全麻下本次手术已完成。"},)}),
     )
 
     assert outcome.status == "non_compliant"
@@ -1745,8 +1746,11 @@ def test_typed_anesthesia_trigger_uses_qualified_surgery_material(monkeypatch):
     )
     materials = _RowsOnlyMaterials(
         {
-            "mr_surgery": (
+            "surgery_record": (
                 {
+                    "document_id": "original-anesthesia-method",
+                    "record_content": "静吸复合全麻下已完成手术。",
+                    "surgery_begin_time": "2026-01-01T08:00:00+08:00",
                     "surgical_level": "3",
                     "anesthesia_method": "静吸复合全麻",
                 },
@@ -1763,7 +1767,7 @@ def test_typed_anesthesia_trigger_uses_qualified_surgery_material(monkeypatch):
     assert surgery_doc._typed_anesthesia_trigger(object(), materials) == (
         "present",
         "静吸复合全麻",
-        "mr_surgery",
+        "surgery_record",
     )
 
 
@@ -1963,7 +1967,7 @@ def test_typed_039_prefers_formal_surgeon_over_auxiliary_mr_rows(monkeypatch):
     assert outcome.reason_code == "surgeon_participation_confirmed"
 
 
-def test_typed_039_fallback_mr_uses_highest_level_only(monkeypatch):
+def test_typed_039_does_not_fill_original_surgeon_from_frontpage(monkeypatch):
     _patch_typed_039_unknown_emergency(monkeypatch)
     outcome = surgery_doc._typed_terminal_outcome(
         rule_id="LX0609-04-01-02",
@@ -1983,8 +1987,8 @@ def test_typed_039_fallback_mr_uses_highest_level_only(monkeypatch):
         ),
     )
 
-    assert outcome.status == "compliant"
-    assert outcome.reason_code == "surgeon_participation_confirmed"
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == "surgeon_participation_unresolved"
 
 
 def test_typed_039_fallback_mr_requires_all_surgeons_at_highest_level(monkeypatch):
@@ -2551,14 +2555,14 @@ def test_typed_anesthesia_method_state_matrix_fails_closed(
 
 
 @pytest.mark.parametrize("rule_id", ("LX0609-04-04-01", "LX0609-04-04-02", "LX0609-04-04-03"))
-def test_typed_anesthesia_mr_surgery_query_error_is_technical_error(
+def test_typed_anesthesia_original_surgery_query_error_is_technical_error(
     monkeypatch,
     rule_id: str,
 ):
     """麻醉触发所需的手术源查询失败不能伪装为不适用或临床缺陷。"""
 
     def source_gate(*, source_key: str, **_kwargs):
-        if source_key == "mr_surgery":
+        if source_key == "surgery_record":
             return surgery_doc._SurgeryDocumentOutcome(
                 rule_id,
                 "technical_error",
@@ -2832,7 +2836,7 @@ async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_re
     assert [item.rule_id for item in result.decisions] == list(
         surgery_doc.SURGERY_DOCUMENT_RULE_IDS
     )
-    # 029在当前快照中触发且术前小结为空，034-038来源契约不可用；
+    # 029 触发且术前小结为空，034-038 缺麻醉方式及实施事实；
     # 039有手术强事实但术者参与关联仍未获批准。
     assert [
         bind_and_reduce_luxian_0609_rule_decisions(
@@ -2844,11 +2848,11 @@ async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_re
         for decision in result.decisions
     ] == [
         "non_compliant",
-        "not_applicable",
-        "not_applicable",
-        "not_applicable",
-        "not_applicable",
-        "not_applicable",
+        "data_gap",
+        "data_gap",
+        "data_gap",
+        "data_gap",
+        "data_gap",
         "data_gap",
         "not_applicable",
         "not_applicable",
@@ -3055,7 +3059,7 @@ async def test_typed_039_source_query_error_is_technical_error_without_echo(monk
 
 
 @pytest.mark.asyncio
-async def test_typed_039_dual_source_failure_semantics_and_positive_precedence():
+async def test_typed_039_original_source_failure_cannot_be_overridden_by_frontpage():
     unavailable = _typed_session(
         surgery_mode="unavailable",
         mr_surgery_mode="empty",
@@ -3089,10 +3093,9 @@ async def test_typed_039_dual_source_failure_semantics_and_positive_precedence()
         evidence_materials=positive.materials,
         decision_rule_ids=("LX0609-04-01-02",),
     )
-    # mr_surgery 的可信肯定事实优先；后续仍因急救例外事实未解析而 DG，
-    # 不能被另一手术来源的查询失败覆盖成技术错误。
-    assert positive_result.decisions[0].evidence_state.value == "data_gap"
-    assert positive_result.decisions[0].reason_code == "applicability_source_gap"
+    # 首页阳性不能覆盖原始手术来源查询失败。
+    assert positive_result.decisions[0].evidence_state.value == "technical_error"
+    assert positive_result.decisions[0].reason_code == "source_query_error"
     assert positive_result.llm_call_count == positive_result.total_tokens == 0
 
 
@@ -3419,16 +3422,18 @@ class _NamedSurgeryMaterials:
         return self._rows[source_key]
 
 
-@pytest.mark.parametrize(("mr_names", "exempt"), [
+@pytest.mark.parametrize(("record_names", "exempt"), [
     (("纤维支气管镜检查", "支气管镜下肺活检"), True),
     (("内镜下胃息肉切除术",), True),
     (("腹腔镜下胆囊切除术",), False),
     (("内镜下胃息肉切除术", "腹股沟疝修补术"), False),
     ((), False),
 ])
-def test_029_endoscopic_only_procedures_need_no_preop_summary(mr_names, exempt):
+def test_029_endoscopic_only_procedures_need_no_preop_summary(record_names, exempt):
     """院方口径（2026-10-10）：自然腔道内镜操作不需要术前小结，镜下手术仍核对。"""
-    assert surgery_doc._only_endoscopic_procedures(_NamedSurgeryMaterials(mr_names=mr_names)) is exempt
+    assert surgery_doc._only_endoscopic_procedures(_NamedSurgeryMaterials(record_names=record_names)) is exempt
+
+    assert not surgery_doc._only_endoscopic_procedures(_NamedSurgeryMaterials(mr_names=record_names))
 
 
 @pytest.mark.asyncio

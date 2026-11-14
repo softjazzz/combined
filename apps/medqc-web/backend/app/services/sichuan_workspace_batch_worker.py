@@ -54,6 +54,7 @@ from .luxian_0609 import (
     load_luxian_0609_rules,
     resolve_package_rollback_execution_rule_ids,
 )
+from .luxian_0609.clinical_material_policy import apply_frozen_clinical_scene, frozen_clinical_scene
 from .luxian_0609.evaluation_horizon import (
     resolve_record_evaluation_horizon_policy,
     resolve_record_evaluation_horizon_unavailable_reason,
@@ -2223,6 +2224,9 @@ async def run_sichuan_workspace_batch_job(
                 or record_evaluation_snapshot_by_id.get(visit_id)
                 or record_evaluation_snapshot_by_id.get(record_id)
             )
+            frozen_scene = frozen_clinical_scene(record_evaluation_snapshot)
+            if frozen_scene is not None:
+                query_scope = frozen_scene if frozen_scene in {"running", "final"} else "all"
             if record_evaluation_snapshot is not None:
                 evaluation_horizon_policy = resolve_record_evaluation_horizon_policy(
                     record_evaluation_snapshot
@@ -3486,6 +3490,13 @@ async def run_sichuan_workspace_batch_job(
             visit_id = str(
                 record.get("visit_id") or record.get("record_id") or ""
             ).strip()
+            record_key = CaseRef(institute_id, patient_id, visit_id).as_key()
+            frozen_scene_snapshot = (
+                record_evaluation_snapshot_by_id.get(record_key)
+                or record_evaluation_snapshot_by_id.get(visit_id)
+                or record_evaluation_snapshot_by_id.get(str(record.get("record_id") or ""))
+            )
+            record = apply_frozen_clinical_scene(record, frozen_scene_snapshot)
             root_job_id = str(
                 current.get("parent_job_id")
                 or filters.get("parent_job_id")

@@ -512,8 +512,8 @@ def test_surgery_presence_freeze_safecheck_error_preserves_032_technical_error()
     }
 
 
-def test_030_front_page_performed_surgery_without_surgery_record_is_missing() -> None:
-    """030 与 029 同一触发口径：首页按院内目录确认的手术也要求手术记录。"""
+def test_030_front_page_performed_surgery_does_not_trigger_missing_record() -> None:
+    """首页即使命中手术目录，也不能替代原始文书触发运行期质控。"""
 
     session, execution, reduced, results = _execute_and_aggregate(
         rows_by_source={
@@ -531,17 +531,12 @@ def test_030_front_page_performed_surgery_without_surgery_record_is_missing() ->
 
     _assert_typed_native_without_llm(execution)
     assert [(item.final_state.value, item.reason_code) for item in reduced] == [
-        ("non_compliant", "required_document_missing"),
+        ("not_applicable", "trigger_absent_complete"),
         ("not_applicable", "trigger_absent_complete"),
     ]
-    assert set(reduced[0].fact_refs) == _material_refs(session, "mr_surgery")
-    assert results[0]["customer_display_facts"] == {
-        "failure_kind": "surgery_document_missing",
-        "target_document": "surgery_record",
-        "surgery_trigger_kind": "performed_surgery",
-        "performed_surgery_confirmed": True,
-    }
-    assert results[0]["findings"] == "已确认本次实施手术，但未找到对应手术记录"
+    assert "mr_surgery" not in {item.source_key for item in session.snapshot.observations}
+    assert results[0].get("customer_display_facts", {}) == {}
+    assert results[0]["findings"] == "本次未发现已实施手术，不要求形成手术记录"
 
 
 def test_030_front_page_therapeutic_procedure_does_not_trigger_surgery_record() -> None:

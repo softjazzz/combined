@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v38"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v39-primary-documents"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -154,15 +154,22 @@ _BOUNDED = SourceAccessMode.BOUNDED_SOURCE_V1
 _CONTROLLED = SourceAccessMode.CONTROLLED_FACT_V1
 _DERIVED = SourceAccessMode.DERIVED_PROJECTION_V1
 
+_HISTORICAL_SOURCE_ENTRIES = (
+    _entry("mr_diagnosis", "mr_diagnosis", access_mode=_BOUNDED,
+           derived_from_source_keys=("diagnosis",), query_version="snapshot-provider-mr_diagnosis-v2"),
+    _entry("surgery_record", "mr_surgery", access_mode=_BOUNDED, query_version="snapshot-provider-surgery_record-v2"),
+    _entry("bloodtrans_record", "mr_bloodtrans", access_mode=_BOUNDED, query_version="snapshot-provider-bloodtrans_record-v2"),
+    _entry("inpat_registration", "inpat_registration", "mr", access_mode=_BOUNDED, query_version="snapshot-provider-inpat_registration-v2"),
+    _entry("inpat_registration.discharge_horizon", access_mode=_BOUNDED, query_version="snapshot-provider-discharge-horizon-v2"),
+)
+
 _REGISTRY_ENTRIES = (
     _entry("admission_record", access_mode=_BOUNDED),
     _entry("anesthesia_record", access_mode=_BOUNDED),
     _entry(
         "bloodtrans_record",
-        "bloodtrans_record",
-        "mr_bloodtrans",
         access_mode=_BOUNDED,
-        query_version="snapshot-provider-bloodtrans_record-v2",
+        query_version="snapshot-provider-bloodtrans_record-v3",
     ),
     _entry(
         "consent_form",
@@ -228,10 +235,8 @@ _REGISTRY_ENTRIES = (
     _entry("summary_record", access_mode=_BOUNDED),
     _entry(
         "surgery_record",
-        "surgery_record",
-        "mr_surgery",
         access_mode=_BOUNDED,
-        query_version="snapshot-provider-surgery_record-v2",
+        query_version="snapshot-provider-surgery_record-v3",
     ),
     _entry("surgery_risk_assessment"),
     _entry("surgery_safecheck_record", access_mode=_BOUNDED),
@@ -250,14 +255,13 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("inpat_bill_item", access_mode=_BOUNDED),
     _entry("physician_change_event", access_mode=_BOUNDED),
     _entry("evaluation_context.horizon", access_mode=_BOUNDED),
-    # 登记资料优先；仅缺行/缺表时允许首页提供唯一住院时间上下文。
-    # 首页不证明登记全集完整，不提供住院/死亡状态；空首页仍为UNPROVEN。
+    # 当前质控只采用登记原始来源，不再以首页包装住院时间。
     _entry(
-        "inpat_registration", "inpat_registration", "mr", access_mode=_BOUNDED,
-        query_version="snapshot-provider-inpat_registration-v2",
+        "inpat_registration", "inpat_registration", access_mode=_BOUNDED,
+        query_version="snapshot-provider-inpat_registration-v3",
     ),
     _entry("inpat_registration.discharge_horizon", access_mode=_BOUNDED,
-           query_version="snapshot-provider-discharge-horizon-v2"),
+           query_version="snapshot-provider-discharge-horizon-v3"),
     _entry(
         "inpat_nondrug_order.severity_order",
         access_mode=_BOUNDED,
@@ -277,11 +281,6 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("admission_record_diagnosis", "admission_record_diagnosis", access_mode=_BOUNDED,
            derived_from_source_keys=("admission_record", "diagnosis"),
            query_version="snapshot-provider-admission_record_diagnosis-v2"),
-    # 063 的病案首页诊断是内部决策支持来源；客户适用文书仍由规则合同声明，
-    # 不把该来源提升为第二个同名客户事实所有者。
-    _entry("mr_diagnosis", "mr_diagnosis", access_mode=_BOUNDED,
-           derived_from_source_keys=("diagnosis",),
-           query_version="snapshot-provider-mr_diagnosis-v2"),
     _entry("surgery_application", access_mode=_BOUNDED),
     _entry("preane_surveil_record", access_mode=_BOUNDED),
     _entry("postane_surveil_record", access_mode=_BOUNDED),
@@ -293,14 +292,13 @@ _CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(
 
 _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 003 优先使用 surgery_record 自带时间；缺失时可用开始时间完全匹配的
-    # 唯一 anesthesia_record 明确手术结束时间，或唯一 mr_surgery 时间配对；
-    # 手术记录为空时，合格 mr_surgery 的结束时间是独立已实施手术事实，
-    # 必须以正式评价时点判断24小时窗口是否成熟；其余场景仍用申请与手术类
+    # 唯一 anesthesia_record 明确手术结束时间；首页不参与。
+    # 以正式评价时点判断24小时窗口是否成熟；其余场景仍用申请与手术类
     # 医嘱共同确认“确无手术”，避免把未同步误判为不适用。
     "LX0609-04-02-01": (
         "evaluation_context.horizon",
         "anesthesia_record",
-        "mr_surgery",
+        "surgery_record",
         "surgery_application",
         "inpat_nondrug_order",
     ),
@@ -360,7 +358,6 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
         "inpat_drug_order",
         "surgery_record",
-        "mr_surgery",
     ),
     "LX0609-09-01-02": ("rescue_record", "inpat_nondrug_order.rescue_order"),
     "LX0609-06-02-01": ("pathology_exam_master", "pathology_exam_report"),
@@ -460,21 +457,20 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     # 028 的客户文书范围只有病程，必须额外绑定严格已实施手术事实，
     # 禁止从病程关键词推断当前手术。
-    # mr_diagnosis 仅供院方“病种—术式”目录按 ICD 编码确认癌种，不送入模型。
     "LX0609-04-02-03": (
-        "surgery_record", "mr_surgery", "pathology_exam_master",
+        "surgery_record", "pathology_exam_master",
         "pathology_exam_report", "admission_record_diagnosis", "diagnosis",
         "discharge_record_diagnosis", "inpat_registration.discharge_horizon",
-        "discharge_record", "mr_diagnosis",
+        "discharge_record",
     ),
-    "LX0609-04-02-04": ("surgery_record", "mr_surgery", "daily_course_record"),
+    "LX0609-04-02-04": ("surgery_record", "daily_course_record"),
     "LX0609-05-01-01": (
-        "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
+        "surgery_record", "inpat_drug_order", "daily_course_record",
         "senior_course_record", "postsurg_firstcourse_record",
     ),
-    "LX0609-11-01-01": ("surgery_record", "mr_surgery", "surgery_inform_consent"),
+    "LX0609-11-01-01": ("surgery_record", "surgery_inform_consent"),
     # 029 的新增适用触发仅为结构化手术医嘱；严格已实施手术仍由执行器
-    # 复用既有 surgery_record/mr_surgery 事实。申请单不参与本次判定。
+    # 复用既有 surgery_record 事实。申请单不参与本次判定。
     # 仅医嘱触发、缺小结时与 030 共用评价终点判断计划是否到期（用户口径 2026-11-08）。
     "LX0609-04-01-01": ("inpat_nondrug_order", "evaluation_context.horizon", "inpat_registration", "inpat_registration.discharge_horizon"),
     # 030 以结构化手术医嘱触发“有医嘱但无手术记录”，必须在同一快照
@@ -482,19 +478,17 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-04-02-02": ("inpat_nondrug_order", "evaluation_context.horizon", "inpat_registration", "inpat_registration.discharge_horizon"),
     # 麻醉同意书、访视和记录单规则都必须先由结构化手术清单确认
     # 本次住院是否实施麻醉以及麻醉方式，才能正确处理局麻例外。
-    "LX0609-11-02-01": ("mr_surgery",),
-    "LX0609-11-02-02": ("mr_surgery",),
+    "LX0609-11-02-01": ("surgery_record", "anesthesia_record"),
+    "LX0609-11-02-02": ("surgery_record", "anesthesia_record"),
     # 036/037 术后访视时限按手术结束后24小时（院方口径）与评价截止时间核对；
-    # 运行病历优先手术记录，病案首页（mr_surgery）往往出院归档后才有，只作回退。
+    # 仅使用实际手术与麻醉文书，不以首页作前提或回退。
     "LX0609-04-04-01": (
-        "mr_surgery",
         "surgery_record",
         "evaluation_context.horizon",
         "preane_surveil_record",
         "postane_surveil_record",
     ),
     "LX0609-04-04-02": (
-        "mr_surgery",
         "surgery_record",
         "evaluation_context.horizon",
         "preane_surveil_record",
@@ -502,10 +496,10 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     # 038 的客户目录历史上误写为 consent_form；麻醉记录单本身是
     # 本规则的权威判定资料，必须在单规则 Evidence Session 中读取。
-    "LX0609-04-04-03": ("mr_surgery", "anesthesia_record"),
+    "LX0609-04-04-03": ("surgery_record", "anesthesia_record"),
     # 039 必须同时绑定严格手术事实与急救例外来源，不能只看术前讨论表。
     # 用户口径（2026-10-20）：急诊介入的“急诊”常只写在普通病程里（1019 C15）。
-    "LX0609-04-01-02": ("surgery_record", "mr_surgery", "rescue_record", "daily_course_record"),
+    "LX0609-04-01-02": ("surgery_record", "rescue_record", "daily_course_record"),
     # 020/023 的“复会诊是否执行”可由病程、医嘱、检查检验或手术记录体现。
     # 全部候选必须进入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
     "LX0609-03-01-01": (
@@ -545,19 +539,17 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 必须与手术等级一并进入同一证据快照，不能让执行器另行读取旧数据。
     "LX0609-04-01-03": (
         "surgery_record",
-        "mr_surgery",
         "presurg_summary",
         "presurg_discussion",
         "consultation_record",
     ),
     # 输血族逐规则绑定来源；044/045/046按开立且未取消的医嘱触发，
-    # 专用病程与首页输血信息仅供记录/字段/时序核验，不代替医嘱。
+    # 专用输血文书仅供记录/字段/时序核验，不代替医嘱。
     # 其他规则保留现有事件合同，各文书与收费仍保持独立来源。
-    "LX0609-11-03-01": ("bloodtrans_record", "mr_bloodtrans", "consent_form"),
-    "LX0609-11-03-02": ("bloodtrans_record", "mr_bloodtrans", "consent_form"),
+    "LX0609-11-03-01": ("bloodtrans_record", "consent_form"),
+    "LX0609-11-03-02": ("bloodtrans_record", "consent_form"),
     "LX0609-07-01-01": (
         "bloodtrans_record",
-        "mr_bloodtrans",
         "blood_application",
         "exam_master",
         "labtest_master",
@@ -567,19 +559,18 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_nondrug_order",
         "inpat_drug_order",
     ),
-    "LX0609-07-01-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "blood_application", "daily_course_record",
+    "LX0609-07-01-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "blood_application", "daily_course_record",
         "senior_course_record",
     ),
-    "LX0609-07-02-01": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record",
+    "LX0609-07-02-01": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "daily_course_record",
         "senior_course_record",
     ),
-    "LX0609-07-02-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "mr_bloodtrans", "daily_course_record",
+    "LX0609-07-02-02": ("inpat_nondrug_order", "inpat_drug_order", "bloodtrans_record", "daily_course_record",
         "senior_course_record",
     ),
     "LX0609-07-03-01": (
         "evaluation_context.horizon",
         "bloodtrans_record",
-        "mr_bloodtrans",
         "daily_course_record",
         "senior_course_record",
         "inpat_nondrug_order",
@@ -587,14 +578,12 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     "LX0609-07-04-01": (
         "bloodtrans_record",
-        "mr_bloodtrans",
         "surgery_record",
         "anesthesia_record",
         "postsurg_firstcourse_record",
     ),
     "LX0609-07-04-02": (
         "bloodtrans_record",
-        "mr_bloodtrans",
         "blood_application",
         "inpat_nondrug_order",
         "inpat_bill_item",
@@ -653,27 +642,26 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "daily_course_record",
         "senior_course_record",
     ),
-    # 063 比较病案首页与出院记录的出院/死亡诊断；mr_diagnosis 仅作为
-    # 规则内部决策支持来源，不改变客户适用文书范围。
+    # 063 已暂停；保留原始来源声明便于识别合同，不读取首页。
     "LX0609-08-01-03": (
-        "discharge_record", "mr_diagnosis", "inpat_registration", "death_record",
+        "discharge_record", "inpat_registration", "death_record",
         "evaluation_context.horizon",
     ),
     # 用户口径（2026-10-11）：重要住院事件按结构化来源由程序确定，不再读病程。
-    "LX0609-08-01-05": ("discharge_record", "surgery_record", "pathology_exam_report", "mr_bloodtrans",
+    "LX0609-08-01-05": ("discharge_record", "surgery_record", "pathology_exam_report",
                         "bloodtrans_record", "rescue_record", "transfer_out_record", "transfer_in_record",
                         "crisis_value_record", "inpat_nondrug_order", "discharge_record_diagnosis"),
     "LX0609-04-05-01": (
-        "evaluation_context.horizon", "mr_surgery", "postsurg_firstcourse_record",
+        "evaluation_context.horizon", "surgery_record", "postsurg_firstcourse_record",
     ),
-    "LX0609-04-05-02": ("evaluation_context.horizon", "mr_surgery"),
-    "LX0609-04-05-03": ("mr_surgery",),
+    "LX0609-04-05-02": ("evaluation_context.horizon", "surgery_record"),
+    "LX0609-04-05-03": ("surgery_record",),
     # 070 的九项必须属于本次住院、且早于每一笔实际输血；住院登记、输血事件
     # 与检验结果均需进入同一 Evidence Session。
     "LX0609-07-01-03": (
         "inpat_registration",
         "admission_record",
-        "mr_bloodtrans",
+        "bloodtrans_record",
         "labtest_item_report",
         "daily_course_record",
         "senior_course_record",
@@ -720,11 +708,11 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-06-03-05": ("inpat_registration", "evaluation_context.horizon", "inpat_registration.discharge_horizon", "labtest_item_report.routine_panel"),
     "LX0609-06-03-06": ("inpat_registration", "evaluation_context.horizon", "inpat_registration.discharge_horizon", "labtest_item_report.routine_panel"),
     "LX0609-12-02-01": ("diagnosis", "admission_record_diagnosis"),
-    # 075：医嘱触发（运行病历）＋病案首页编码触发（终末），操作记录核对病程与手术记录。
+    # 075：医嘱触发，操作记录核对病程与原始手术记录。
     "LX0609-10-03-01": (
         "evaluation_context.horizon",
         "inpat_nondrug_order", "first_course_record", "daily_course_record",
-        "senior_course_record", "postsurg_firstcourse_record", "surgery_record", "mr_surgery",
+        "senior_course_record", "postsurg_firstcourse_record", "surgery_record",
     ),
 })
 
@@ -765,14 +753,11 @@ def _entries_for_source_key(source_key: str) -> tuple[SourceRegistryEntry, ...]:
     normalized = str(source_key or "").strip().lower()
     if not normalized or not _SOURCE_KEY_PATTERN.fullmatch(normalized):
         return ()
-    return tuple(
-        entry
-        for entry in (
-            *load_luxian_0609_source_registry().values(),
-            *_INTERNAL_SOURCE_ENTRIES,
-        )
-        if normalized == entry.document_type or normalized in entry.source_keys
-    )
+    current = tuple(entry for entry in (*load_luxian_0609_source_registry().values(), *_INTERNAL_SOURCE_ENTRIES)
+                    if normalized == entry.document_type or normalized in entry.source_keys)
+    # 旧来源仍可用于历史结果的类型/版本校验，不重新加入当前取材范围。
+    return current or tuple(entry for entry in _HISTORICAL_SOURCE_ENTRIES
+                            if normalized == entry.document_type or normalized in entry.source_keys)
 
 
 def resolve_luxian_0609_controlled_fact_source_keys(
@@ -867,9 +852,17 @@ def resolve_luxian_0609_physical_source_entry(
     return matches[0]
 
 
+def _validation_entries_for_source_key(source_key: str) -> tuple[SourceRegistryEntry, ...]:
+    """历史版本只用于校验，不进入当前物理读取注册表。"""
+    normalized = str(source_key or "").strip().lower()
+    historical = tuple(entry for entry in _HISTORICAL_SOURCE_ENTRIES
+                       if normalized == entry.document_type or normalized in entry.source_keys)
+    return (*_entries_for_source_key(normalized), *historical)
+
+
 def source_key_accepts_query_version(source_key: str, query_version: str) -> bool:
     version = str(query_version or "").strip()
-    return any(version == entry.query_version for entry in _entries_for_source_key(source_key))
+    return any(version == entry.query_version for entry in _validation_entries_for_source_key(source_key))
 
 
 def source_key_supports_proven_completeness(source_key: str, query_version: str) -> bool:
@@ -878,5 +871,5 @@ def source_key_supports_proven_completeness(source_key: str, query_version: str)
     version = str(query_version or "").strip()
     return any(
         entry.complete_capable and version == entry.query_version
-        for entry in _entries_for_source_key(source_key)
+        for entry in _validation_entries_for_source_key(source_key)
     )

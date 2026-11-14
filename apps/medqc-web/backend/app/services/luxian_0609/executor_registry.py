@@ -135,12 +135,10 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
     ),
     "surgery_gate": ("surgery_record",),
     "surgery_mdt": (
-        "mr_surgery",
         "presurg_discussion",
         "consultation_record",
     ),
     "transfusion": (
-        "mr_bloodtrans",
         "bloodtrans_record",
     ),
     "extended_document": (
@@ -151,7 +149,6 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
         "daily_course_record",
         "senior_course_record",
         "postsurg_firstcourse_record",
-        "mr_surgery",
         "surgery_record",
         "anesthesia_record",
         "consultation_record",
@@ -250,7 +247,7 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
         "discharge_record",
     ),
     "LX0609-01-02-02": ("first_course_record_diagnosis",),
-    "LX0609-08-01-05": ("discharge_record", "surgery_record", "pathology_exam_report", "mr_bloodtrans",
+    "LX0609-08-01-05": ("discharge_record", "surgery_record", "pathology_exam_report",
                         "bloodtrans_record", "rescue_record", "transfer_out_record", "transfer_in_record",
                         "crisis_value_record", "inpat_nondrug_order"),
     "LX0609-04-01-04": ("presurg_summary", "surgery_record", "senior_course_record"),

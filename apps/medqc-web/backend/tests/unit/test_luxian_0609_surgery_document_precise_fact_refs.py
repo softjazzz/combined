@@ -40,8 +40,6 @@ def _rows_for(rule_id: str) -> dict[str, tuple[Mapping[str, Any], ...]]:
         "anesthesia_method": "全身麻醉",
         "record_content": "麻醉诱导和复苏记录完整",
     }
-    surgery = {**_surgery("mr-surgery-1"), "surgery_begin_datetime": "2026-09-01 16:00:00",
-               "surgery_end_datetime": "2026-09-01 17:00:00"}
     pre = {
         "document_id": "pre-1",
         "document_title": "麻醉术前访视记录",
@@ -71,28 +69,26 @@ def _rows_for(rule_id: str) -> dict[str, tuple[Mapping[str, Any], ...]]:
             ),
         }
     if rule_id == "LX0609-11-02-01":
-        return {"anesthesia_record": (anesthesia,), "mr_surgery": (surgery,)}
+        return {"anesthesia_record": (anesthesia,)}
     if rule_id == "LX0609-11-02-02":
         return {
             "anesthesia_record": (anesthesia,),
-            "mr_surgery": (surgery,),
             "consent_form": (consent,),
         }
     if rule_id == "LX0609-04-04-01":
         return {
             "anesthesia_record": (anesthesia,),
-            "mr_surgery": (surgery,),
             "preane_surveil_record": (pre,),
         }
     if rule_id == "LX0609-04-04-02":
         return {
             "anesthesia_record": (anesthesia,),
-            "mr_surgery": (surgery,),
+            "surgery_record": (_surgery(),),
             "preane_surveil_record": (pre,),
             "postane_surveil_record": (post,),
         }
     if rule_id == "LX0609-04-04-03":
-        return {"anesthesia_record": (anesthesia,), "mr_surgery": (surgery,)}
+        return {"anesthesia_record": (anesthesia,)}
     return {"surgery_record": (_surgery("surgery-1"), _surgery("surgery-2"))}
 
 
@@ -127,7 +123,7 @@ def _session(rule_id: str):
         ("LX0609-11-02-01", {("anesthesia_record", "anesthesia-1")} ),
         ("LX0609-11-02-02", {("anesthesia_record", "anesthesia-1"), ("consent_form", "consent-1")} ),
         ("LX0609-04-04-01", {("anesthesia_record", "anesthesia-1"), ("preane_surveil_record", "pre-1")} ),
-        ("LX0609-04-04-02", {("anesthesia_record", "anesthesia-1"), ("preane_surveil_record", "pre-1"), ("postane_surveil_record", "post-1")} ),
+        ("LX0609-04-04-02", {("surgery_record", "surgery-1"), ("preane_surveil_record", "pre-1"), ("postane_surveil_record", "post-1")} ),
         ("LX0609-04-04-03", {("anesthesia_record", "anesthesia-1")} ),
         ("LX0609-04-01-02", {("surgery_record", "surgery-1"), ("surgery_record", "surgery-2")} ),
     ),

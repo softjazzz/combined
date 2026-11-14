@@ -98,7 +98,7 @@ _CONSERVATIVE_DATA_GAP_REASONS = {
     "LX0609-07-04-02": "billing_linkage_source_unavailable",
 }
 
-_TRIGGER_SOURCES = ("mr_bloodtrans", "bloodtrans_record")
+_TRIGGER_SOURCES = ("bloodtrans_record",)
 _ORDER_TRIGGER_RULES = frozenset({"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"})
 _ORDER_TRIGGER_SOURCES = ("inpat_nondrug_order", "inpat_drug_order")
 
@@ -742,12 +742,6 @@ def _typed_documents_from_evidence_session(
 
     # 结构化输注事件只作为同次就诊内的关联锚点，不进入模型上下文。
     # 时间字段仅供后续时序检查，不能代替医嘱触发。
-    documents["mr_bloodtrans"] = []
-    if "mr_bloodtrans" in observation_by_source:
-        try:
-            documents["mr_bloodtrans"] = [dict(row) for row in materials.rows("mr_bloodtrans")]
-        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
-            pass
     for source_key in _trigger_sources(rule_id):
         if source_key in _ORDER_TRIGGER_SOURCES:
             documents[source_key] = [dict(row) for row in materials.rows(source_key)]
@@ -1051,7 +1045,7 @@ def _has_minute_precise_signed_time(row: Mapping[str, Any]) -> bool:
 
 
 def _transfusion_event_rows(documents: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    raw_rows = documents.get("mr_bloodtrans")
+    raw_rows = documents.get("performed_transfusion_events")
     rows = (
         [row for row in raw_rows if isinstance(row, Mapping)]
         if isinstance(raw_rows, list)
@@ -1279,7 +1273,7 @@ def evaluate_pretransfusion_nine_items(
         return "data_gap", "pretransfusion_item_contract_unavailable", None
     if state == "error":
         return "technical_error", "source_query_error", None
-    raw_event_rows = _source_document_rows(documents, "mr_bloodtrans")
+    raw_event_rows = _source_document_rows(documents, "performed_transfusion_events")
     event_times = sorted(
         {
             value
@@ -1569,7 +1563,7 @@ def _programmatic_044_status(
         scoped = dict(documents)
         scoped["bloodtrans_record"] = [record]
         # 使用同一证据会话已确认的实际开始时刻，不使用记录或提交时间猜测。
-        scoped["mr_bloodtrans"] = [{"transfution_datetime": event.start.isoformat(sep=" ")}]
+        scoped["performed_transfusion_events"] = [{"transfution_datetime": event.start.isoformat(sep=" ")}]
         for source in ("blood_application", "daily_course_record", "senior_course_record"):
             scoped[source] = [row for index, row in enumerate(_source_document_rows(documents, source))
                               if association_document_ref(source, row, index) in selected]
@@ -3429,9 +3423,9 @@ async def _performed_source_state(
         return rows
 
     def structured_performed() -> bool:
-        return any(_structured_transfusion_performed(row) for row in load("mr_bloodtrans"))
+        return any(_structured_transfusion_performed(row) for row in load("bloodtrans_record"))
 
-    if available_without_query("mr_bloodtrans") and structured_performed():
+    if available_without_query("bloodtrans_record") and structured_performed():
         return "present", ""
     record_rows = load("bloodtrans_record")
     if record_rows:
@@ -3755,7 +3749,7 @@ async def execute_luxian_0609_native_transfusion_rules(
         from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
 
         performance = await extract_transfusion_performance(
-            [{**row, "record_time": _authoritative_record_time(row)} for row in record_rows], llm_client,
+            [{**row, "record_content": _row_text(row), "record_time": _authoritative_record_time(row)} for row in record_rows], llm_client,
         )
         llm_call_count += performance.llm_call_count
         prompt_tokens += performance.prompt_tokens
@@ -4041,7 +4035,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                 if performance_state != "ok":
                     emit_outcome(rule_id, "data_gap", "transfusion_time_unavailable", executor_type="llm")
                     continue
-                documents = {**documents, "mr_bloodtrans": performance_value}
+                documents = {**documents, "performed_transfusion_events": performance_value}
             programmatic = {
                 "LX0609-11-03-01": _programmatic_041_status,
                 "LX0609-11-03-02": _programmatic_042_status,
@@ -4079,15 +4073,14 @@ async def execute_luxian_0609_native_transfusion_rules(
         # 各规则先尝试确定性判定；047只认专门后评价，输血记录仅作事件锚点，
         # 只有不能定论时才检查日常病程等辅助投影并进入裁剪模型。
         if rule_id == "LX0609-07-01-02":
-            # 首页输血表缺失时，按 07-01-01 同一实施抽取从专用输血记录正文取开始输注时间
+            # 按 07-01-01 同一实施抽取从专用输血记录正文取开始输注时间
             # （第六轮 C03、复验 C04/C08：输血记录写明开始时间仍判“缺实际输血时间”）。
             # 只用专用输血记录；同批记录与 07-01-01 共用一次抽取。抽不到时间时交由原评估判资料不足。
-            # 只有结构化申请单路径比较申请时间与输血时间，旧非结构化资料不触发抽取。
+            # 申请单和输血前病程都需要同一次实际输注的时间，统一核验原始文书。
             bloodtrans_rows = _source_document_rows(documents, "bloodtrans_record")
             if (
                 not _transfusion_event_rows(documents)
                 and bloodtrans_rows
-                and has_structured_pretransfusion_application(documents)
             ):
                 performance_state, performance_value = await resolve_performance_events(
                     bloodtrans_rows, dedicated_performance_source=True,
@@ -4096,7 +4089,7 @@ async def execute_luxian_0609_native_transfusion_rules(
                     emit_outcome(rule_id, "technical_error", performance_value, executor_type="llm")
                     continue
                 if performance_state == "ok":
-                    documents = {**documents, "mr_bloodtrans": performance_value}
+                    documents = {**documents, "performed_transfusion_events": performance_value}
             programmatic_status = _programmatic_044_status(documents)
             reason_candidate = build_pretransfusion_reason_candidate(documents)
             needs_reason_semantics = (

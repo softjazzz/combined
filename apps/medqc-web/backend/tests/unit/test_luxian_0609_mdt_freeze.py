@@ -29,7 +29,7 @@ from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 RULE_ID = "LX0609-04-01-03"
 _SOURCE_KEYS = (
-    "mr_surgery",
+    "surgery_record",
     "presurg_summary",
     "presurg_discussion",
     "consultation_record",
@@ -177,19 +177,20 @@ def _surgery(
     *,
     level: str = "四级",
     surgery_id: str = "SURGERY-040",
-    begin: str = "2026-01-02T09:00:00",
+    begin: str = "2026-01-02 09:00:00+08",
 ) -> dict:
     return {
-        "surgery_id": surgery_id,
+        "document_id": surgery_id,
         "surgery_name": "测试四级手术",
         "surgical_level": level,
-        "surgery_begin_datetime": begin,
+        "surgery_begin_time": begin,
+        "record_time": begin.removesuffix("+08"),
     }
 
 
 def _ordinary_preop_rows() -> dict[str, list[dict]]:
     return {
-        "mr_surgery": [_surgery()],
+        "surgery_record": [_surgery()],
         "presurg_discussion": [
             {
                 "document_id": "DISC-ORDINARY",
@@ -209,7 +210,7 @@ def _ordinary_preop_rows() -> dict[str, list[dict]]:
         ("无手术", {}, None, "not_applicable", "trigger_absent_complete", 0),
         (
             "非四级手术",
-            {"mr_surgery": [_surgery(level="三级")]},
+            {"surgery_record": [_surgery(level="三级")]},
             None,
             "not_applicable",
             "trigger_absent_complete",
@@ -218,7 +219,7 @@ def _ordinary_preop_rows() -> dict[str, list[dict]]:
         (
             "择期四级手术已完成MDT",
             {
-                "mr_surgery": [_surgery()],
+                "surgery_record": [_surgery()],
                 "presurg_discussion": [
                     {
                         "document_id": "DISC-MDT",
@@ -235,7 +236,7 @@ def _ordinary_preop_rows() -> dict[str, list[dict]]:
         ),
         (
             "择期四级手术缺MDT",
-            {"mr_surgery": [_surgery()]},
+            {"surgery_record": [_surgery()]},
             None,
             "non_compliant",
             "requirement_violated",
@@ -244,9 +245,9 @@ def _ordinary_preop_rows() -> dict[str, list[dict]]:
         (
             "多台四级手术",
             {
-                "mr_surgery": [
+                "surgery_record": [
                     _surgery(surgery_id="SURGERY-1"),
-                    _surgery(surgery_id="SURGERY-2", begin="2026-01-05T09:00:00"),
+                    _surgery(surgery_id="SURGERY-2", begin="2026-01-05 09:00:00+08"),
                 ]
             },
             None,
@@ -281,7 +282,7 @@ async def test_mdt_typed_registry_binding_and_public_projection_are_frozen(
 async def test_mdt_emergency_exemption_is_projected_by_current_public_facts_contract():
     session = _session(
         {
-            "mr_surgery": [_surgery()],
+            "surgery_record": [_surgery()],
             "presurg_summary": [{"record_content": "本次急诊抢救，为挽救生命立即手术。"}],
         }
     )
@@ -312,7 +313,7 @@ async def test_mdt_emergency_exemption_is_projected_by_current_public_facts_cont
 async def test_mdt_public_evidence_is_limited_to_trigger_surgery_coordinates():
     session = _session(
         {
-            "mr_surgery": [_surgery(surgery_id="SURGERY-EXACT")],
+            "surgery_record": [_surgery(surgery_id="SURGERY-EXACT")],
             "presurg_discussion": [
                 {
                     "document_id": "DISC-PRIVATE",
@@ -360,7 +361,7 @@ async def test_mdt_public_evidence_is_limited_to_trigger_surgery_coordinates():
         for item in result["customer_evidence"]
     }
     assert set(evidence_by_coordinate) == {
-        ("mr_surgery", "SURGERY-EXACT", "", "2026-01-02 09:00:00"),
+        ("surgery_record", "SURGERY-EXACT", "", "2026-01-02 09:00:00"),
         (
             "presurg_discussion",
             "DISC-PRIVATE",
@@ -440,7 +441,7 @@ async def test_mdt_model_transport_protocol_and_semantic_unknown_are_distinct(
 
 @pytest.mark.asyncio
 async def test_mdt_source_query_failure_remains_technical_error_through_binding():
-    session = _session({}, failed_source="mr_surgery")
+    session = _session({}, failed_source="surgery_record")
     envelope, reduced, result = await _execute_and_project(session, None)
 
     assert envelope.llm_call_count == 0
@@ -457,7 +458,7 @@ async def test_mdt_source_query_failure_remains_technical_error_through_binding(
 @pytest.mark.asyncio
 async def test_mdt_incomplete_discussion_source_is_data_gap_without_model_call():
     session = _session(
-        {"mr_surgery": [_surgery()]},
+        {"surgery_record": [_surgery()]},
         failed_source="presurg_discussion",
         unavailable=True,
     )

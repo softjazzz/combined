@@ -221,11 +221,7 @@ async def test_028_executor_end_to_end_with_synthetic_stop_time() -> None:
         "surgery_record": ({
             "document_id": "S1", "surgery_name": "腹腔镜胆囊切除术",
             "surgery_begin_time": "2026-06-01 08:00:00+08:00", "surgery_end_time": "2026-06-01 10:00:00+08:00",
-            "surgery_process": "手术顺利。",
-        },),
-        "mr_surgery": ({
-            "surgery_begin_datetime": datetime(2026, 6, 1, 8, 0), "surgery_end_datetime": datetime(2026, 6, 1, 10, 0),
-            "surgial_incision_level": "Ⅱ", "surgery_code": "51.2301", "surgery_name": "腹腔镜胆囊切除术",
+            "surgery_process": "手术顺利，切口等级：Ⅱ类。",
         },),
         "inpat_drug_order": (_order("注射用头孢呋辛钠", "2026-06-01 07:30:00", "2026-06-02 16:00:00"),),
         "senior_course_record": ({
@@ -267,12 +263,7 @@ async def test_028_public_entry_keeps_prophylaxis_check_after_excluding_linked_t
             "document_id": "S-MIXED", "surgery_name": "合成腹部手术",
             "surgery_begin_time": "2026-06-01 08:00:00+08:00",
             "surgery_end_time": "2026-06-01 10:00:00+08:00",
-            "surgery_process": "合成手术记录。",
-        },),
-        "mr_surgery": ({
-            "surgery_begin_datetime": datetime(2026, 6, 1, 8, 0),
-            "surgery_end_datetime": datetime(2026, 6, 1, 10, 0),
-            "surgial_incision_level": "Ⅱ", "surgery_code": "00.0000", "surgery_name": "合成腹部手术",
+            "surgery_process": "合成手术记录，切口等级：Ⅱ类。",
         },),
         "inpat_drug_order": (
             _order("注射用头孢呋辛钠", "2026-06-01 07:30:00", "2026-06-02 16:00:00"),

@@ -67,15 +67,16 @@ def test_document_time_reaches_the_unified_horizon_with_scoped_bounded_query(mon
 
 @pytest.mark.parametrize("registration,frontpage,expected", [
     ("2026-02-05 10:00:00", "2026-02-06 10:00:00", "2026-02-05 10:00:00"),
-    (None, "2026-02-06 10:00:00", "2026-02-06 10:00:00"),
+    (None, "2026-02-06 10:00:00", "2026-02-09 08:31:00"),
 ])
-def test_higher_authority_wins_without_consulting_document(monkeypatch, registration, frontpage, expected):
+def test_original_registration_or_document_wins_without_frontpage(monkeypatch, registration, frontpage, expected):
     result, calls = read_sources(monkeypatch,
         registration=[{"discharge_datetime": registration}],
         frontpage=[{"discharge_datetime": frontpage}],
         documents=[{"discharge_time": "2026-02-09 08:31:00"}])
     assert result.rows[0]["discharge_datetime"] == expected
-    assert not any('"discharge_record"' in sql for sql, _ in calls)
+    assert not any('"mr"' in sql for sql, _ in calls)
+    assert any('"discharge_record"' in sql for sql, _ in calls) is (registration is None)
 
 
 def test_duplicate_selected_source_remains_incomplete(monkeypatch):

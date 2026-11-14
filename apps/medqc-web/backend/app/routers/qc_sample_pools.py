@@ -1377,6 +1377,7 @@ async def run_sample_pool_intrinsic_validation(
     record_scene_snapshot = _build_workspace_record_scene_snapshot(
         selected_records,
         query_scope=effective_scope,
+        primary_documents_only=rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY,
     )
     task_frozen_date = (
         datetime.now().astimezone().date().isoformat()

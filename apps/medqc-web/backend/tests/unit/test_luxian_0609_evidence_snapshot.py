@@ -3,6 +3,8 @@ from __future__ import annotations
 from tests.luxian_0609_identity_test_support import published_rule_ids
 
 from dataclasses import replace
+from copy import deepcopy
+import hashlib
 import json
 
 import pytest
@@ -413,13 +415,127 @@ def test_consultation_execution_rules_bind_evaluation_horizon() -> None:
     assert "evaluation_context.horizon" in resolved
 
 
-def test_transfusion_rules_bind_both_event_sources_and_keep_billing_isolated() -> None:
+def test_transfusion_source_contract_uses_original_records_and_keeps_billing_isolated() -> None:
     clinical = resolve_luxian_0609_decision_support_source_keys(
         published_rule_ids(41, 48)
     )
     billing = resolve_luxian_0609_decision_support_source_keys(("LX0609-07-04-02",))
 
     assert "bloodtrans_record" in clinical
-    assert "mr_bloodtrans" in clinical
+    assert not {"mr", "mr_surgery", "mr_bloodtrans", "mr_diagnosis", "mr_cost"}.intersection(clinical)
     assert "inpat_bill_item" not in clinical
     assert "inpat_bill_item" in billing
+
+
+def _historical_registration_archive(*, source_key="inpat_registration",
+                                     query_version="snapshot-provider-inpat_registration-v2"):
+    """按旧合同冻结合成登记资料，独立计算身份，不借用当前新建工厂。"""
+    from app.services.luxian_0609.evidence_material import (
+        build_material_document_refs, build_material_snapshot_ref,
+    )
+    from app.services.luxian_0609.evidence_snapshot import build_luxian_0609_visit_ref
+
+    rows = ({
+        "inpat_registration": {
+            "admission_datetime": "2026-10-26 08:30:00", "source_table": "mr",
+        },
+        "mr_diagnosis": {"diagnosis_name": "合成诊断", "diagnosis_type": "出院诊断"},
+        "inpat_registration.discharge_horizon": {"discharge_datetime": "2026-10-28 15:00:00"},
+    }[source_key],)
+    refs = build_material_document_refs(source_key, rows)
+    observation = _observation(
+        source_key=source_key, query_version=query_version,
+        snapshot_ref=build_material_snapshot_ref(
+            source_key=source_key, query_version=query_version,
+            query_state=SourceQueryState.AVAILABLE,
+            completeness=SourceCompleteness.COMPLETE, document_refs=refs,
+        ),
+    )
+    identity = {
+        "document_refs": sorted(refs), "fact_ids": [],
+        "observations": [observation.to_dict()],
+        "snapshot_schema_version": "lx0609-evidence-snapshot-v1",
+        "source_registry_version": "lx0609-source-registry-v38",
+        "visit_ref": build_luxian_0609_visit_ref(institute_id="I", patient_id="P", visit_id="V"),
+    }
+    return {
+        "snapshot": {
+            **identity, "facts": [], "created_at": "2026-10-29T12:00:00+08:00",
+            "snapshot_hash": _archive_identity_hash(identity),
+        },
+        "sources": {source_key: {"rows": rows, "truncated": False, "limit_rows": 2}},
+        "selected_rule_ids": ("LX0609-01-01-01",), "evaluation_as_of_date": "2026-10-29",
+        "evaluation_horizon_policy": None, "horizon_unavailable_reason": None,
+    }
+
+
+def _archive_identity_hash(snapshot):
+    identity = {key: snapshot[key] for key in (
+        "document_refs", "fact_ids", "observations", "snapshot_schema_version",
+        "source_registry_version", "visit_ref",
+    )}
+    return hashlib.sha256(json.dumps(
+        identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")).hexdigest()
+
+
+@pytest.mark.parametrize("source_key,query_version", [
+    ("inpat_registration", "snapshot-provider-inpat_registration-v2"),
+    ("mr_diagnosis", "snapshot-provider-mr_diagnosis-v2"),
+    ("inpat_registration.discharge_horizon", "snapshot-provider-discharge-horizon-v2"),
+])
+def test_historical_registration_archive_restores_frozen_identity_without_reading(
+    monkeypatch, source_key, query_version,
+):
+    from app.services.luxian_0609 import evidence_snapshot_provider, source_evidence_reader
+    from app.services.qc_diagnostics.session_restore import restore_execution_session
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("历史恢复只能校验合成冻结资料，不能重新取材或执行规则")
+
+    monkeypatch.setattr(evidence_snapshot_provider, "build_luxian_0609_evidence_read_session", forbidden)
+    monkeypatch.setattr(source_evidence_reader, "read_luxian_0609_snapshot_source_rows", forbidden)
+    archive = _historical_registration_archive(source_key=source_key, query_version=query_version)
+    frozen = deepcopy(archive)
+    restored = restore_execution_session(archive, coordinates=("I", "P", "V"))
+
+    assert restored.snapshot.to_safe_dict() == frozen["snapshot"]
+    assert restored.snapshot.source_registry_version == "lx0609-source-registry-v38"
+    assert restored.snapshot.observations[0].query_version == query_version
+    assert restored.materials.rows(source_key) == frozen["sources"][source_key]["rows"]
+    assert archive == frozen
+
+
+@pytest.mark.parametrize("mutation", [
+    "unknown_registry", "unknown_query", "new_query_in_old_registry", "material", "snapshot_hash",
+])
+def test_historical_registration_archive_rejects_unknown_versions_and_changed_identity(mutation):
+    from app.services.qc_diagnostics.contracts import DiagnosticPackageError
+    from app.services.qc_diagnostics.session_restore import restore_execution_session
+
+    archive = _historical_registration_archive()
+    snapshot = archive["snapshot"]
+    if mutation == "unknown_registry":
+        snapshot["source_registry_version"] = "lx0609-source-registry-v999"
+    elif mutation in {"unknown_query", "new_query_in_old_registry"}:
+        from app.services.luxian_0609.evidence_material import build_material_snapshot_ref
+
+        observation = snapshot["observations"][0]
+        observation["query_version"] = (
+            "snapshot-provider-inpat_registration-v999" if mutation == "unknown_query"
+            else "snapshot-provider-inpat_registration-v3"
+        )
+        observation["snapshot_ref"] = build_material_snapshot_ref(
+            source_key=observation["source_key"], query_version=observation["query_version"],
+            query_state=SourceQueryState.AVAILABLE, completeness=SourceCompleteness.COMPLETE,
+            document_refs=tuple(snapshot["document_refs"]),
+        )
+    elif mutation == "material":
+        archive["sources"]["inpat_registration"]["rows"][0]["admission_datetime"] = "2026-10-27 08:30:00"
+    if mutation == "snapshot_hash":
+        snapshot["snapshot_hash"] = "0" * 64
+    else:
+        snapshot["snapshot_hash"] = _archive_identity_hash(snapshot)
+
+    with pytest.raises(DiagnosticPackageError, match="invalid_execution_session_archive"):
+        restore_execution_session(archive, coordinates=("I", "P", "V"))

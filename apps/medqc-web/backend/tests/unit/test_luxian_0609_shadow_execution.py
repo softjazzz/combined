@@ -28,32 +28,6 @@ def _zero(**overrides):
     selected = set(values["selected_rule_ids"])
     scoped = set(values["scoped_customer_rule_ids"])
     recorded = set(values["record_rule_map"].get(values["visit_ref"], ()))
-    effective = selected & scoped & recorded & {"LX0609-04-01-01", "LX0609-04-02-02", "LX0609-04-03-01"}
-    if effective and isinstance(values["source_query_observations"], (tuple, list)):
-        observations = tuple(values["source_query_observations"])
-        if not any(item.source_key == "mr_surgery" for item in observations):
-            values["source_query_observations"] = observations + (
-                SourceQueryObservation.create(
-                    source_key="mr_surgery", query_status="empty", query_version="query-v1",
-                ),
-            )
-    if (
-        effective
-        and isinstance(values["deterministic_coverage_outcomes"], (tuple, list))
-        and values["deterministic_coverage_outcomes"]
-        and all(isinstance(item, FactCoverageOutcomeInput) for item in values["deterministic_coverage_outcomes"])
-    ):
-        outcomes = tuple(values["deterministic_coverage_outcomes"])
-        if not any(
-            item.fact_type == "current_visit_surgery_confirmed" and item.source_key == "mr_surgery"
-            for item in outcomes
-        ):
-            values["deterministic_coverage_outcomes"] = outcomes + (
-                _outcome("current_visit_surgery_confirmed", "mr_surgery", processed=0),
-            )
-    if effective and isinstance(values["evidence_payload"], dict):
-        documents = values["evidence_payload"].setdefault("programmatic_timeline", {}).setdefault("documents", {})
-        documents.setdefault("mr_surgery", [])
     if "target_qualifications" not in overrides:
         targets = {"LX0609-04-01-01": "presurg_summary", "LX0609-04-03-01": "surgery_safecheck_record"}
         documents = values["evidence_payload"].get("programmatic_timeline", {}).get("documents", {}) if isinstance(values["evidence_payload"], dict) else {}

@@ -31,7 +31,7 @@ def _execute(contents=(), *, structured=False, failed=False, orders=False, cours
     client = FrozenTransfusionProtocolClient(course_labels={text: ("not_record" if text == CANCELLED else course_kind) for text in contents})
     def reader(**kwargs):
         source = kwargs["source_key"]
-        if failed and source == "mr_bloodtrans":
+        if failed and source == "bloodtrans_record":
             raise SourceEvidenceUnavailable()
         rows = []
         if source == "bloodtrans_record":
@@ -123,9 +123,12 @@ def test_documents_shortcut_uses_semantic_record_verification(monkeypatch, kind,
     assert seen == [[CANCELLED]]
 
 
-def test_structured_time_proves_performance_without_semantic_call():
+def test_frontpage_time_does_not_bypass_cancelled_original_document():
+    calls = []
+
     async def classify(rows):
-        raise AssertionError("结构化实际输注时间已足以证明实施")
+        calls.append(rows)
+        return TransfusionCoursePresenceResult("absent")
 
     state = asyncio.run(transfusion._performed_source_state(
         documents={"mr_bloodtrans": [{"transfution_datetime": "2026-07-16 12:00:00"}],
@@ -133,7 +136,8 @@ def test_structured_time_proves_performance_without_semantic_call():
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         classify_course_records=classify,
     ))
-    assert state == ("present", "")
+    assert state == ("data_gap", "")
+    assert len(calls) == 1
 
 
 def test_semantic_verification_failure_is_technical_error_not_absence():

@@ -598,6 +598,8 @@ class RecordRepository:
                 DischargeRecord.discharge_date,
                 DischargeRecord.discharge_time,
                 DischargeRecord.document_status,
+                InpatRegistration.admission_datetime,
+                AdmissionRecord.admission_datetime,
             )
             .outerjoin(
                 DischargeRecord,
@@ -706,6 +708,8 @@ class RecordRepository:
         effective_discharge_datetime = None
         effective_admission_datetime = None
         discharge_selection = None
+        qc_discharge_selection = None
+        qc_admission_datetime = None
         if isinstance(row, tuple) or (
             hasattr(row, "_mapping") and not hasattr(row, "visit_id")
         ):
@@ -721,6 +725,11 @@ class RecordRepository:
                     document_status=row[6],
                 )
                 effective_discharge_datetime = discharge_selection.value
+                qc_discharge_selection = select_discharge_time(
+                    registration=row[3], document_date=row[4], document_time=row[5], document_status=row[6],
+                )
+                if len(row) > 8:
+                    qc_admission_datetime = row[8] or row[7]
                 # 保留已有查询 DTO 的日期字符串格式；纯日期并不新增精确时刻证据。
                 if isinstance(effective_discharge_datetime, date) and not isinstance(effective_discharge_datetime, datetime):
                     effective_discharge_datetime = effective_discharge_datetime.isoformat()
@@ -758,6 +767,15 @@ class RecordRepository:
                 "discharge_horizon_conflict": discharge_selection.conflict}
                if discharge_selection is not None else {}),
             "status": "completed" if item_scope == "final" else "running",
+            # 列表展示可沿用首页，质控冻结显式使用原始登记/入出院文书。
+            "qc_scope": (
+                "final" if qc_discharge_selection and (qc_discharge_selection.value or qc_discharge_selection.conflict)
+                else "running" if qc_admission_datetime else "unknown"
+            ),
+            "qc_admission_datetime": _to_iso_datetime(qc_admission_datetime),
+            "qc_discharge_datetime": _to_iso_datetime(qc_discharge_selection.value if qc_discharge_selection else None),
+            "qc_discharge_horizon_source": qc_discharge_selection.source if qc_discharge_selection else "",
+            "qc_discharge_horizon_conflict": bool(qc_discharge_selection and qc_discharge_selection.conflict),
             "medical_text": _safe_text(source_row.record_content),
             "medical_text_length": len(_safe_text(source_row.record_content)),
         }

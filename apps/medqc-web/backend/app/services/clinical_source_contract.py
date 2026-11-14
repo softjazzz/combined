@@ -63,14 +63,16 @@ def read_columns(name, columns):
     return required, selected | (required & available)
 
 
-def inspect_source(connection, *, check_rows=True):
+def inspect_source(connection, *, check_rows=True, primary_documents_only=False):
     """逐个固定名字访问pg_catalog；无权限的表也不会从清单中消失。"""
+    from .luxian_0609.clinical_material_policy import clinical_source_keys
+    tables = clinical_source_keys(TABLES) if primary_documents_only else TABLES
     rows = []
     readonly = connection.execute(text("SHOW transaction_read_only")).scalar_one() == "on"
     exists = connection.execute(text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='cdm')")).scalar_one()
     if not exists:
         return {"ok":False,"read_only":readonly,"schema":"cdm","dependencies":[
-            {"table":name,"required":name not in OPTIONAL,"status":"table_missing","missing_columns":[],"publication":"unconfirmed"} for name in TABLES],
+            {"table":name,"required":name not in OPTIONAL,"status":"table_missing","missing_columns":[],"publication":"unconfirmed"} for name in tables],
             "publication_ready":None,"capture_requires_controlled_window":False,"account_read_only":False}
     schema_usage = connection.execute(text("SELECT has_schema_privilege(current_user,'cdm','USAGE')")).scalar_one()
     # 先枚举可 SET 的身份（含当前身份），再展开该身份立即继承的能力。
@@ -95,7 +97,7 @@ def inspect_source(connection, *, check_rows=True):
             ))
         )
     """), {"capability_roles": capability_roles}).scalar_one()
-    for name in TABLES:
+    for name in tables:
         metadata = connection.execute(text("""
             SELECT c.oid, (c.relowner = ANY(:capability_roles)) AS owns_object,
               has_table_privilege(current_user,c.oid,'SELECT') AS readable,
