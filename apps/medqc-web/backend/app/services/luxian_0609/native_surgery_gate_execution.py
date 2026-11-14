@@ -84,8 +84,8 @@ _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*
 _MAX_ROWS_PER_SOURCE = 6
 _MAX_ROW_CHARS = 1000
 _MAX_CONTEXT_CHARS = 12000
-_TYPED_003_EVALUATOR_VERSION = "surgery-timeliness-003-ruledecision-v1"
-_TYPED_SURGERY_GATE_EVALUATOR_VERSION = "surgery-gate-ruledecision-shadow-v2"
+_TYPED_003_EVALUATOR_VERSION = "surgery-timeliness-003-ruledecision-v2"
+_TYPED_SURGERY_GATE_EVALUATOR_VERSION = "surgery-gate-ruledecision-shadow-v3"
 _TYPED_DECISION_RULE_IDS = frozenset(SURGERY_GATE_RULE_IDS)
 _TEXT_FACT_RULE_IDS = frozenset(
     {"LX0609-04-02-03", "LX0609-04-02-04", "LX0609-05-01-01", "LX0609-11-01-01"}
@@ -1050,6 +1050,7 @@ def _typed_003_decision(
         reason_code: str,
         display_facts: Mapping[str, Any] | None = None,
         selected_document_refs: tuple[str, ...] = (),
+        positive_document_refs: tuple[str, ...] = (),
     ) -> RuleDecision:
         if display_facts is not None and customer_display_facts is not None:
             customer_display_facts.append(("LX0609-04-02-01", display_facts))
@@ -1087,7 +1088,9 @@ def _typed_003_decision(
             evidence_state=evidence_state,
             qc_direction=qc_direction,
             reason_code=reason_code,
-            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *refs))),
+            # 独立阳性分支只声明实际证明文书；查询过的备选来源不等于判据依赖。
+            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *(() if positive_document_refs else refs)))),
+            positive_document_refs=positive_document_refs,
             evaluator_version=_TYPED_003_EVALUATOR_VERSION,
             confidence=None,
         )
@@ -1486,6 +1489,7 @@ def _typed_003_decision(
             "threshold_exceeded",
             display_facts,
             document_refs,
+            positive_document_refs=document_refs,
         )
     if intervals and (not incomplete_performed_row or fallback_resolved):
         if observations["mr_surgery"].query_state.value == "unavailable":
@@ -1589,6 +1593,7 @@ def _typed_conservative_surgery_gate_decision(
         qc_direction: QcDirection,
         reason_code: str,
         selected_document_refs: tuple[str, ...] = (),
+        positive_document_refs: tuple[str, ...] = (),
     ) -> RuleDecision:
         return RuleDecision(
             rule_id=rule_id,
@@ -1597,7 +1602,8 @@ def _typed_conservative_surgery_gate_decision(
             evidence_state=evidence_state,
             qc_direction=qc_direction,
             reason_code=reason_code,
-            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *refs))),
+            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *(() if positive_document_refs else refs)))),
+            positive_document_refs=positive_document_refs,
             evaluator_version=_TYPED_SURGERY_GATE_EVALUATOR_VERSION,
             confidence=None,
         )
@@ -1721,6 +1727,8 @@ def _typed_conservative_surgery_gate_decision(
                 else reason_code
             ),
             selected_document_refs=selected_signature_refs,
+            # 只豁免已由现存文书证明的签署资格不符；缺字段/缺文书仍保持待核。
+            positive_document_refs=selected_signature_refs if final_state == "non_compliant" else (),
         )
 
     # 其余规则仍缺少可审计的恶性手术关联、植入物实际使用、预防用药

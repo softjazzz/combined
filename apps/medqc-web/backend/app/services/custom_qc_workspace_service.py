@@ -5218,6 +5218,18 @@ class CustomQCWorkspaceService:
                 retry_scope_result = build_failed_rule_retry_scope(current, automatic_only=True)
                 if retry_scope_result is None:
                     return None
+            if formal_0609 and dispatch_mode == "legacy" and (
+                retry_scope_result is None
+                or str(current.get("job_kind") or "").strip().lower() == "parent"
+            ):
+                # 全量 reset 会清空同一 job 的历史结果；父重试还会重置全部子任务。
+                # 没有独立历史 attempt 存储前，必须经现有创建入口取得新任务身份。
+                # 在任何 UPDATE、材料操作或调度前拒绝，精确叶子失败补跑保持原合同。
+                if automatic:
+                    return None
+                raise ValueError(
+                    "new_task_required_preserve_history：请新建质控任务，原任务、结果与材料已保留"
+                )
             if (
                 dispatch_record is not None
                 and str(current.get("job_kind") or "").strip().lower() != "parent"

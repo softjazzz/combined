@@ -1036,7 +1036,18 @@ def test_pool_and_worklist_show_same_partial_round_as_detail_and_export(
     assert home["kpis"]["qc_partial_failed_total" if delivered else "qc_failed_total"] == 1
 
 
-def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storage):
+def _insert_independent_full_task(engine, jobs):
+    """合成新建任务；全量再执行不再允许重置上一轮任务身份。"""
+    with engine.begin() as connection:
+        template = dict(connection.execute(sa.select(jobs).where(jobs.c.id == "rerun-job")).mappings().one())
+        template.update(id="new-full-job", status="queued", summary_json=None, items_json=None,
+                        failed_records_json=None, error_message=None, started_at=None, finished_at=None,
+                        success_count=0, failed_count=0,
+                        created_at=datetime(2027, 1, 1), updated_at=datetime(2027, 1, 1))
+        connection.execute(jobs.insert().values(**template))
+
+
+def test_new_full_task_preserves_previous_canonical_and_shows_current_partial(canonical_storage):
     service, engine, jobs, envelopes = canonical_storage
     first_claim = _complete_full_run(service)
     assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == [
@@ -1044,9 +1055,11 @@ def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storag
         ("test-vb", 2),
     ]
 
-    # 任务列表对 completed 的 0609 任务提供“重试”。
-    assert service.retry_batch_job(job_id="rerun-job", created_by="tester")["status"] == "queued"
-    rerun_claim = service.mark_batch_job_running(job_id="rerun-job")
+    previous_job = _load_job(engine, jobs, job_id="rerun-job")
+    with pytest.raises(ValueError, match="new_task_required_preserve_history"):
+        service.retry_batch_job(job_id="rerun-job", created_by="tester")
+    _insert_independent_full_task(engine, jobs)
+    rerun_claim = service.mark_batch_job_running(job_id="new-full-job")
     assert isinstance(rerun_claim, str) and rerun_claim != first_claim
     current_items = [
         _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
@@ -1054,7 +1067,7 @@ def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storag
         _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
     ]
     assert service.complete_batch_job(
-        job_id="rerun-job",
+        job_id="new-full-job",
         attempt_filters_json=rerun_claim,
         summary={**_partial_summary(total_records=2, delivered=3, failed_rules=[_RERUN_RULE_IDS[1]]),
                  "rule_results": [{"rule_code": rule, "items": [item for item in current_items
@@ -1063,10 +1076,12 @@ def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storag
         failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
     ) is True
 
-    job = _load_job(engine, jobs, job_id="rerun-job")
-    root_refs = _root_envelope_refs(engine, envelopes, root_job_id="rerun-job")
+    job = _load_job(engine, jobs, job_id="new-full-job")
+    root_refs = _root_envelope_refs(engine, envelopes, root_job_id="new-full-job")
     assert root_refs == [("test-va", 2)]
     assert len(root_refs) == job["success_count"] == 1
+    assert _load_job(engine, jobs, job_id="rerun-job") == previous_job
+    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == [("test-va", 2), ("test-vb", 2)]
 
     stale = service.build_latest_single_record_result_dto(
         institute_id=_RERUN_RECORD_B["institute_id"],
@@ -1078,7 +1093,7 @@ def test_root_leaf_rerun_replaces_published_canonical_envelopes(canonical_storag
     # 同次失败任务的有效项仍可查看；不能取回上轮该病例的第二条合规结果。
     assert stale["state"] == "ready"
     assert stale["data_origin"] == "saved_partial_task"
-    assert stale["job_id"] == "rerun-job"
+    assert stale["job_id"] == "new-full-job"
     assert stale["is_complete"] is False
     assert stale["completed_rule_count"] == 1
     assert stale["failed_rule_ids"] == [_RERUN_RULE_IDS[1]]
@@ -1411,14 +1426,15 @@ def test_bulk_latest_uses_same_full_partial_generation_as_single_record(canonica
 
 
 @pytest.mark.parametrize("complete_summary", [False, True])
-def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(canonical_storage, complete_summary):
+def test_new_failed_task_does_not_present_or_remove_previous_results(canonical_storage, complete_summary):
     service, engine, jobs, envelopes = canonical_storage
     _complete_full_run(service)
 
-    assert service.retry_batch_job(job_id="rerun-job", created_by="tester")["status"] == "queued"
-    rerun_claim = service.mark_batch_job_running(job_id="rerun-job")
+    previous_job = _load_job(engine, jobs, job_id="rerun-job")
+    _insert_independent_full_task(engine, jobs)
+    rerun_claim = service.mark_batch_job_running(job_id="new-full-job")
     assert service.complete_batch_job(
-        job_id="rerun-job",
+        job_id="new-full-job",
         attempt_filters_json=rerun_claim,
         summary={
             "total_records": 2,
@@ -1438,7 +1454,9 @@ def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(cano
         ],
     ) is True
 
-    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == []
+    assert _root_envelope_refs(engine, envelopes, root_job_id="new-full-job") == []
+    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == [("test-va", 2), ("test-vb", 2)]
+    assert _load_job(engine, jobs, job_id="rerun-job") == previous_job
     for record in (_RERUN_RECORD_A, _RERUN_RECORD_B):
         latest = service.build_latest_single_record_result_dto(
             institute_id=record["institute_id"],
@@ -1447,7 +1465,7 @@ def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(cano
             rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
             rule_set_version=workspace.RULE_SET_VERSION,
         )
-        assert latest["job_id"] == "rerun-job"
+        assert latest["job_id"] == "new-full-job"
         assert latest["data_origin"] == "saved_partial_task"
         assert latest["items"] == []
         assert latest["is_complete"] is False
@@ -1474,7 +1492,7 @@ def test_root_leaf_failed_attempt_without_delivery_removes_previous_results(cano
         else:
             assert bulk["state"] == "technical_error"
             assert bulk["reason_code"] == "saved_partial_result_invalid"
-    job = _load_job(engine, jobs, job_id="rerun-job")
+    job = _load_job(engine, jobs, job_id="new-full-job")
     with pytest.raises(ValueError, match="尚未形成可导出"):
         service._load_batch_job_export_items(job=job)
 
@@ -1483,11 +1501,12 @@ def test_late_root_leaf_attempt_failure_does_not_delete_published_canonical(cano
     service, engine, jobs, envelopes = canonical_storage
     first_claim = _complete_full_run(service)
 
-    assert service.retry_batch_job(job_id="rerun-job", created_by="tester")["status"] == "queued"
-    assert isinstance(service.mark_batch_job_running(job_id="rerun-job"), str)
-    # 旧代次迟到完成：CAS 未命中，既不能覆盖任务也不能删除当前 root 结果。
+    previous_job = _load_job(engine, jobs, job_id="rerun-job")
+    _insert_independent_full_task(engine, jobs)
+    assert isinstance(service.mark_batch_job_running(job_id="new-full-job"), str)
+    # 旧代次迟到完成：CAS 未命中，不能套用旧 claim 覆盖新任务或删除历史 root 结果。
     assert service.complete_batch_job(
-        job_id="rerun-job",
+        job_id="new-full-job",
         attempt_filters_json=first_claim,
         summary=_completed_summary(total_records=2, delivered=4),
         items=[
@@ -1503,7 +1522,8 @@ def test_late_root_leaf_attempt_failure_does_not_delete_published_canonical(cano
         ("test-va", 2),
         ("test-vb", 2),
     ]
-    assert _load_job(engine, jobs, job_id="rerun-job")["status"] == "running"
+    assert _load_job(engine, jobs, job_id="rerun-job") == previous_job
+    assert _load_job(engine, jobs, job_id="new-full-job")["status"] == "running"
 
 
 def test_precise_failed_rule_retry_keeps_other_records_in_canonical(canonical_storage):

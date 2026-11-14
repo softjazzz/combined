@@ -2577,6 +2577,8 @@ async def get_latest_workspace_record_result(
 ):
     """返回全院范围内、同一三坐标病历的最新 LX0609 保存结果。"""
 
+    from ..services.saved_result_access import require_saved_result_institute
+    await run_in_threadpool(require_saved_result_institute, _current_user_id(current_user), institute_id)
     workspace = _sichuan_workspace_service()
     result = await run_in_threadpool(
         workspace.get_latest_luxian_0609_record_result,
@@ -2613,6 +2615,8 @@ async def create_latest_workspace_record_remediation_draft(
     if not rule_id:
         raise HTTPException(status_code=400, detail="缺少规则编号")
 
+    from ..services.saved_result_access import require_saved_result_institute
+    await run_in_threadpool(require_saved_result_institute, _current_user_id(current_user), institute_id)
     workspace = _sichuan_workspace_service()
     result = await run_in_threadpool(
         workspace.get_latest_luxian_0609_record_result,
@@ -2741,6 +2745,8 @@ async def export_latest_workspace_record_result_html(
 
     if not _can_export_record_results(current_user):
         raise HTTPException(status_code=403, detail="当前账号无权导出质控结果")
+    from ..services.saved_result_access import require_saved_result_institute
+    await run_in_threadpool(require_saved_result_institute, _current_user_id(current_user), institute_id)
     workspace = _sichuan_workspace_service()
     result = workspace.get_latest_luxian_0609_record_result(
         institute_id=institute_id,
@@ -2811,6 +2817,8 @@ async def export_filtered_workspace_record_results(
 
     if not _can_export_record_results(current_user):
         raise HTTPException(status_code=403, detail="当前账号无权导出质控结果")
+    from ..services.saved_result_access import check_saved_result_institute, saved_result_institute_scope
+    institute_scope = await run_in_threadpool(saved_result_institute_scope, _current_user_id(current_user))
     workspace = _sichuan_workspace_service()
     filters = {
         "scope": payload.scope,
@@ -2831,6 +2839,8 @@ async def export_filtered_workspace_record_results(
             raise HTTPException(status_code=422, detail="所选病历存在重复，请重新勾选")
         if len(requested_record_refs) > 1000:
             raise HTTPException(status_code=422, detail="所选病历超过1000份，请缩小范围后导出")
+        for case_ref in requested_record_refs:
+            check_saved_result_institute(institute_scope, case_ref.institute_id)
 
     if requested_record_refs:
         record_refs = [case_ref.as_dict() for case_ref in requested_record_refs]
@@ -2866,6 +2876,8 @@ async def export_filtered_workspace_record_results(
     identities: set[tuple[str, str, str]] = set()
     canonical_record_refs: List[Dict[str, str]] = []
     for record in records:
+        # 批量入口同样先授权再读取结果，不能用导出绕过单份结果的机构保护。
+        check_saved_result_institute(institute_scope, record.get("institute_id"))
         identity = (
             str(record.get("institute_id") or "").strip(),
             str(record.get("patient_id") or "").strip(),

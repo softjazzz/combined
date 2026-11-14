@@ -15,6 +15,7 @@ from tests.unit.test_luxian_0609_canonical_result_delivery import _published_pil
 
 RULES = ["LX0609-01-01-01", "LX0609-09-01-01"]
 REF = {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}
+pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
 
 
 @pytest.fixture
