@@ -387,7 +387,9 @@ async def test_tc02_model_exception_is_one_call_technical_error_not_doctor_omiss
     # 调用异常按统一分类给出细分原因码，超时可补跑。
     assert final["reason_code"] == "model_timeout"
     assert execution.llm_call_count == len(client.calls) == 1
-    assert "不应要求医务人员据此补写临床记录" in final["suggestion"]
+    assert "技术" in final["suggestion"]
+    assert final["suggestion"] == "请在技术问题处理后重新评估。"
+    assert "补写" not in final["suggestion"]
 
 
 @pytest.mark.asyncio

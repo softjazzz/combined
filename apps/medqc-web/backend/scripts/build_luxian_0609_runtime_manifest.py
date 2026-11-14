@@ -188,7 +188,10 @@ def build_runtime_manifest(
             "family_name": item.family_name,
             "dependency_mode": item.execution_mode,
             "executor_key": item.executor_key,
-            "active_path": "native" if item.rule_id in native_ids else "compatibility",
+            "active_path": (
+                "not_executed" if item.rule_id in package_plan.not_executed_rule_ids
+                else "native" if item.rule_id in native_ids else "compatibility"
+            ),
             "rule_version": item.rule_version,
             "contract_version": contract_by_id[item.rule_id].contract_version,
             "decision_authority": contract_by_id[item.rule_id].decision_authority,

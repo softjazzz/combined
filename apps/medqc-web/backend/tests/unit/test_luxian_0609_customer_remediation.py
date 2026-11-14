@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.services.luxian_0609 import customer_remediation
 from app.services.luxian_0609.customer_remediation import (
     ACTIVE_FORMAL_RULE_IDS,
     PENDING_RULE_IDS,
@@ -199,18 +200,21 @@ def test_non_compliant_consultation_advice_does_not_mix_data_gap_instructions() 
     assert "不得直接写成已完成" not in suggestion
 
 
-def test_030_order_only_advice_requires_execution_check_before_record_remediation() -> None:
-    suggestion = build_customer_remediation_suggestion(
-        rule_id="LX0609-04-02-02",
-        status="non_compliant",
-        reason_code="required_document_missing",
-        facts={
-            "failure_kind": "surgery_document_missing",
-            "target_document": "surgery_record",
-            "surgery_trigger_kind": "surgery_order",
-            "surgery_order_confirmed": True,
-        },
-    )
+def test_030_order_only_advice_requires_execution_check_before_record_remediation(monkeypatch) -> None:
+    # 只回放发布时的整改元数据；不修改当前总表、调度或执行器启用状态。
+    with monkeypatch.context() as historical:
+        historical.setattr(customer_remediation, "PENDING_RULE_IDS", PENDING_RULE_IDS - {"LX0609-04-02-02"})
+        suggestion = build_customer_remediation_suggestion(
+            rule_id="LX0609-04-02-02",
+            status="non_compliant",
+            reason_code="required_document_missing",
+            facts={
+                "failure_kind": "surgery_document_missing",
+                "target_document": "surgery_record",
+                "surgery_trigger_kind": "surgery_order",
+                "surgery_order_confirmed": True,
+            },
+        )
 
     assert "请先核对该手术医嘱是否实际执行" in suggestion
     assert "如已实施，请补充对应手术记录" in suggestion
@@ -218,7 +222,8 @@ def test_030_order_only_advice_requires_execution_check_before_record_remediatio
     assert "每台已实施手术" not in suggestion
 
 
-def test_030_order_only_renderer_does_not_claim_surgery_was_performed() -> None:
+@pytest.mark.usefixtures("workspace_tables_without_database")
+def test_030_order_only_renderer_does_not_claim_surgery_was_performed(monkeypatch) -> None:
     facts = {
         "failure_kind": "surgery_document_missing",
         "target_document": "surgery_record",
@@ -238,15 +243,61 @@ def test_030_order_only_renderer_does_not_claim_surgery_was_performed() -> None:
         )
     )
 
-    result = render_luxian_0609_customer_result(
-        decision=decision,
-        safe_customer_display_facts=facts,
-    )
+    # 此处验证旧发布时的渲染合同，当前正式入口仍受暂停门禁约束。
+    with monkeypatch.context() as historical:
+        historical.setattr(customer_remediation, "PENDING_RULE_IDS", PENDING_RULE_IDS - {decision.rule_id})
+        result = render_luxian_0609_customer_result(
+            decision=decision,
+            safe_customer_display_facts=facts,
+        )
 
     assert result["findings"] == "已开立手术医嘱，但未找到对应手术记录"
     assert "当前仅确认手术医嘱触发" in result["evidence"]
     assert "请先核对该手术医嘱是否实际执行" in result["suggestion"]
     assert "每台已实施手术" not in result["suggestion"]
+
+    # 当前暂停元数据不再生成新整改，但既有 Canonical 建议必须原样可读。
+    assert decision.rule_id in customer_remediation.PENDING_RULE_IDS
+    assert build_customer_remediation_suggestion(
+        rule_id=decision.rule_id, status="non_compliant",
+        reason_code="required_document_missing", facts=facts,
+    ) == ""
+    import json
+    from datetime import datetime
+    from sqlalchemy import MetaData, create_engine
+    from sqlalchemy.orm import Session
+    from app.services.custom_qc_workspace_service import _record_result_envelopes_table
+    from app.services.qc_workspace.canonical_result_store import CanonicalResultStore, envelope_item_from_rule_result
+
+    table = _record_result_envelopes_table().to_metadata(MetaData(), schema=None)
+    engine = create_engine("sqlite://")
+    table.metadata.create_all(engine)
+    store = CanonicalResultStore(table)
+    try:
+        with Session(engine) as session:
+            store.replace_for_job(
+                session,
+                job_row={"id": "historical-order-only", "created_by": "synthetic-reviewer",
+                         "filters_json": json.dumps({"rule_set_key": "luxian_0609_qc_v1",
+                                                     "scoped_customer_rule_ids": [decision.rule_id]})},
+                items=[{**result, "customer_display_facts": facts,
+                        "institute_id": "I", "patient_id": "P", "visit_id": "V"}],
+                now=datetime(2026, 9, 1),
+                projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="unit-test-key"),
+                projection_key="unit-test-key",
+            )
+            session.commit()
+            saved = store.load_selected(
+                session, root_job_id="historical-order-only", institute_id="I", patient_id="P", visit_id="V",
+                rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+            )["items"][0]
+        assert saved["status"] == "non_compliant"
+        assert saved["suggestion"] == result["suggestion"]
+        assert "请先核对该手术医嘱是否实际执行" in saved["suggestion"]
+        assert "不得补写未发生的手术" in saved["suggestion"]
+        assert "每台已实施手术" not in saved["suggestion"]
+    finally:
+        engine.dispose()
 
 
 def test_controlled_missing_fields_are_named_without_echoing_raw_content() -> None:

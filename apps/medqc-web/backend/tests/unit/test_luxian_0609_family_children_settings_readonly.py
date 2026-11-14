@@ -70,14 +70,14 @@ class _FamilyWorkspace(_WorkspaceStub):
         return super().update_batch_job_progress(**kwargs)
 
 
-def _settings(*, trigger_gate: bool, native_transfusion: bool = True) -> Settings:
+def _settings(*, trigger_gate: bool, native_exam_lab: bool = True) -> Settings:
     return Settings(
         _env_file=None,
         JWT_SECRET="family-child-probe-only",
         LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
         LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED=True,
         LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
-        LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED=native_transfusion,
+        LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED=native_exam_lab,
         LUXIAN_0609_TRIGGER_GATE_ENABLED=trigger_gate,
     )
 
@@ -133,7 +133,7 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
     payload = qc_sample_pools.SamplePoolRunRequest(
         record_refs=[_run_record_ref()], sample_item_ids=["item-1"],
         rule_set_key="luxian_0609_qc_v1",
-        selected_rule_ids=["LX0609-01-01-01", "LX0609-07-01-01"],
+        selected_rule_ids=["LX0609-01-01-01", "LX0609-06-01-05"],
         group_by_luxian_family=True,
         **override,
     )
@@ -161,7 +161,7 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
     assert all(child["filters"]["rule_set_key"] == "luxian_0609_qc_v1" for child in children)
     assert all(child["filters"][key] == parent["filters"][key] for child in children for key in frozen_keys)
 
-    second_settings = _settings(trigger_gate=change == "gate", native_transfusion=change != "native")
+    second_settings = _settings(trigger_gate=change == "gate", native_exam_lab=change != "native")
     if change == "capacity":
         second_settings = second_settings.model_copy(update={"LUXIAN_0609_FAMILY_MAX_CONCURRENCY": 2})
     active_settings = first_settings
@@ -246,7 +246,7 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
     assert outputs[0]["items"] == [("LX0609-01-01-01", "data_gap", "authoritative_time_missing")]
     if accepted:
         assert outputs[1]["status"] == "completed"
-        assert outputs[1]["items"] == [("LX0609-07-01-01", "not_applicable", "trigger_absent_complete")]
+        assert outputs[1]["items"] == [("LX0609-06-01-05", "not_applicable", "trigger_absent_complete")]
     else:
         assert outputs[1]["status"] == "failed"
         assert not outputs[1]["items"]

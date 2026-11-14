@@ -1,5 +1,4 @@
 """N10新工程合同红测：医学事实人工预冻，原材料不足不冒称原例闭合。"""
-from datetime import datetime
 
 import pytest
 
@@ -19,7 +18,20 @@ CASES = tuple((body, "absent", None, "data_gap", "required_field_missing", True)
 
 
 def _rows(rule, body_rows):
-    rows = {"inpat_registration": ({"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},), "evaluation_context.horizon": ({"horizon_date": "2026-07-10", "basis": "evaluation_as_of"},), "mr_surgery": ({"document_id": "surgery-A", "surgery_code": "01.2400X013", "surgery_name": "硬脑膜外血肿清除术", "surgery_begin_datetime": datetime(2026, 7, 1, 8), "surgery_end_datetime": datetime(2026, 7, 1, 10)},)}
+    # 直接验证历史底层正文判定；正式候选入口仍保持暂停。
+    # 手术事件由临床原始记录给出，首页不参与触发或窗口锚定。
+    rows = {
+        "inpat_registration": ({"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},),
+        "evaluation_context.horizon": ({"horizon_date": "2026-07-10", "basis": "evaluation_as_of"},),
+        "surgery_record": ({
+            "document_id": "surgery-A",
+            "surgery_code": "01.2400X013",
+            "surgery_name": "硬脑膜外血肿清除术",
+            "surgery_begin_time": "2026-07-01 08:00:00+08:00",
+            "surgery_end_time": "2026-07-01 10:00:00+08:00",
+            "record_content": "已实施硬脑膜外血肿清除术。",
+        },),
+    }
     source = "senior_course_record" if rule == RULES[0] else "daily_course_record"
     rows[source] = tuple(body_rows)
     return rows

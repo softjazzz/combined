@@ -314,7 +314,6 @@ def _unproven_empty_consent_session():
         snapshot=snapshot,
         sources={
             "surgery_record": session.materials.source("surgery_record"),
-            "mr_surgery": session.materials.source("mr_surgery"),
         },
     )
     return snapshot, materials

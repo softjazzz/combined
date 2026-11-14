@@ -47,7 +47,7 @@ async def test_failed_family_without_envelope_does_not_claim_observed_zero_usage
     monkeypatch: pytest.MonkeyPatch,
     failure: BaseException,
 ) -> None:
-    selected = ("LX0609-04-02-02",)
+    selected = ("LX0609-01-01-01",)
     session = build_luxian_0609_evidence_read_session(
         selected_rule_ids=selected,
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
@@ -68,7 +68,7 @@ async def test_failed_family_without_envelope_does_not_claim_observed_zero_usage
         raise failure
 
     monkeypatch.setattr(
-        execution_module, "execute_luxian_0609_native_rules", fail_without_usage_envelope,
+        execution_module, "execute_luxian_0609_native_basic_timeliness", fail_without_usage_envelope,
     )
     _prepared, context = await execution_module.prepare_luxian_0609_execution(
         rule_set_key="luxian_0609_qc_v1", prepared_rules=[], visit_id="V",
@@ -79,7 +79,7 @@ async def test_failed_family_without_envelope_does_not_claim_observed_zero_usage
 
     assert calls == 1, context.native_results
     assert context.native_usage_attributions[0].llm_call_count == 0
-    assert context.native_usage_unknown_executor_keys == ("surgery_presence",)
+    assert context.native_usage_unknown_executor_keys == ("basic_timeliness",)
     assert context.native_llm_call_count == context.native_total_tokens == 0
 
 

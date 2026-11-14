@@ -181,22 +181,33 @@ def test_customer_policy_projection_uses_rule_master_without_mutating_execution_
 
 
 @pytest.mark.unit
-def test_formal_catalog_allows_not_executed_only_for_phase_pending_rules():
-    """阶段暂停是正式交付状态，且只能由唯一规则主表派生。"""
-
+def test_archived_formal_catalog_preserves_json_csv_status_contract():
+    """0602旧身份正式标准是历史归档，当前暂停范围不能反写该归档。"""
     catalog = _load_formal_catalog()
     csv_statuses = _load_formal_catalog_csv_statuses()
-    pending_rule_ids = {
-        entry.rule_id
-        for entry in load_luxian_0609_rule_master()
-        if entry.phase_status == "pending_definition" and entry.rule_id in catalog
-    }
-
-    assert pending_rule_ids
+    assert set(catalog) == set(csv_statuses)
     for rule_id, item in catalog.items():
         statuses = set(item["allowed_result_statuses"])
-        assert ("not_executed" in statuses) is (rule_id in pending_rule_ids)
-        assert csv_statuses[rule_id] == statuses
+        assert statuses == csv_statuses[rule_id]
+        assert statuses <= {"hit", "not_hit", "data_quality_gap", "needs_manual_review", "not_applicable", "not_executed"}
+        assert {"hit", "not_hit"} <= statuses
+
+
+def test_current_catalog_pending_status_is_derived_only_from_master():
+    from app.services.luxian_0609.phase_scope import build_luxian_0609_pending_definition_result
+
+    catalog_ids = {item["rule_id"] for item in load_luxian_0609_rules()}
+    for entry in load_luxian_0609_rule_master():
+        if entry.rule_id not in catalog_ids:
+            continue
+        if entry.phase_status == "pending_definition":
+            result = build_luxian_0609_pending_definition_result(entry.rule_id)
+            assert result["status"] == "not_executed"
+            assert result["metadata"]["pending_reason_code"] == entry.pending_reason_code
+            assert result["evidence"] == []
+        else:
+            with pytest.raises(ValueError, match="pending definition"):
+                build_luxian_0609_pending_definition_result(entry.rule_id)
 
 
 @pytest.mark.unit

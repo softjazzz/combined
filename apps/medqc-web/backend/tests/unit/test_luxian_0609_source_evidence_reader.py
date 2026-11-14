@@ -323,53 +323,46 @@ class _SeverityConnection:
 
 
 class _DischargeFallbackConnection:
-    def __init__(self, registration_rows=None):
-        self.calls: list[str] = []
+    def __init__(self, registration_rows=None, discharge_rows=None):
+        self.calls: list[tuple[str, dict]] = []
         self.registration_rows = registration_rows or []
+        self.discharge_rows = (
+            [{"discharge_date": "2026-07-15", "discharge_time": "2026-07-15 16:20:31"}]
+            if discharge_rows is None else discharge_rows
+        )
 
     def execute(self, statement, params):
         sql = str(statement)
-        self.calls.append(sql)
+        self.calls.append((sql, dict(params)))
         if '"inpat_registration"' in sql:
             return _Rows(list(self.registration_rows))
-        if '"mr"' in sql:
-            return _Rows([{"discharge_datetime": "2026-07-15 16:20:31"}])
+        if '"discharge_record"' in sql:
+            return _Rows(list(self.discharge_rows)[:params["limit_rows"]])
         raise AssertionError(f"unexpected source query: {sql}")
 
 
-def test_discharge_horizon_reader_falls_back_to_mr_when_registration_has_no_row(
+def test_discharge_horizon_reader_uses_original_document_when_registration_has_no_row(
     monkeypatch,
 ) -> None:
     connection = _DischargeFallbackConnection()
-    monkeypatch.setattr(
-        source_evidence_reader.bundle_assembly, "engine", _Engine(connection)
-    )
-    monkeypatch.setattr(
-        source_evidence_reader.bundle_assembly,
-        "_default_source_schema",
-        lambda: "cdm",
-    )
-    monkeypatch.setattr(
-        source_evidence_reader.bundle_assembly,
-        "_get_table_columns",
-        lambda _schema, table: (
-            ["institute_id", "patient_id", "visit_id", "discharge_datetime"]
-            if table in {"inpat_registration", "mr"}
-            else []
-        ),
-    )
-
-    result = source_evidence_reader.read_luxian_0609_discharge_horizon_rows(
-        institute_id="safe-institute",
-        patient_id="safe-patient",
-        visit_id="safe-visit",
-        source_schema=None,
-    )
+    result = _read_horizon_with(monkeypatch, connection)
 
     assert result.rows[0]["discharge_datetime"] == "2026-07-15 16:20:31"
+    assert result.rows[0]["time_source"] == "discharge_record.discharge_time"
+    assert result.rows[0]["row_ref"] == source_evidence_reader.digest_source_evidence((
+        source_evidence_reader.CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+        "discharge_record", connection.discharge_rows[0],
+    ))
     assert result.truncated is False
-    assert any('"inpat_registration"' in sql for sql in connection.calls)
-    assert any('"mr"' in sql for sql in connection.calls)
+    assert len(connection.calls) == 2
+    assert '"inpat_registration"' in connection.calls[0][0]
+    assert '"discharge_record"' in connection.calls[1][0]
+    for sql, params in connection.calls:
+        for key, value in (("institute_id", "safe-institute"), ("patient_id", "safe-patient"), ("visit_id", "safe-visit")):
+            assert f'"{key}" = :{key}' in sql
+            assert params[key] == value and value not in sql
+        assert params["limit_rows"] == 2
+        assert '"mr"' not in sql
 
 
 def _read_horizon_with(monkeypatch, connection):
@@ -382,11 +375,10 @@ def _read_horizon_with(monkeypatch, connection):
     monkeypatch.setattr(
         source_evidence_reader.bundle_assembly,
         "_get_table_columns",
-        lambda _schema, table: (
-            ["institute_id", "patient_id", "visit_id", "discharge_datetime"]
-            if table in {"inpat_registration", "mr"}
-            else []
-        ),
+        lambda _schema, table: {
+            "inpat_registration": ["institute_id", "patient_id", "visit_id", "discharge_datetime"],
+            "discharge_record": ["institute_id", "patient_id", "visit_id", "discharge_date", "discharge_time"],
+        }.get(table, []),
     )
     return source_evidence_reader.read_luxian_0609_discharge_horizon_rows(
         institute_id="safe-institute",
@@ -397,21 +389,37 @@ def _read_horizon_with(monkeypatch, connection):
 
 
 @pytest.mark.parametrize("blank", [None, "", "  "])
-def test_discharge_horizon_reader_falls_back_to_mr_when_registration_time_is_blank(
+def test_discharge_horizon_reader_uses_original_document_when_registration_time_is_blank(
     monkeypatch, blank
 ) -> None:
-    # 0910 真实样本：登记表有行但出院时间为空，曾让时间界限静默落回评价日。
+    # 登记有行但时间为空时，采用原始出院文书，不能静默落回评价日。
     connection = _DischargeFallbackConnection([{"discharge_datetime": blank}])
     result = _read_horizon_with(monkeypatch, connection)
     assert result.rows[0]["discharge_datetime"] == "2026-07-15 16:20:31"
-    assert any('"mr"' in sql for sql in connection.calls)
+    assert result.rows[0]["time_source"] == "discharge_record.discharge_time"
+    assert not any('"mr"' in sql for sql, _ in connection.calls)
 
 
 def test_discharge_horizon_reader_prefers_registration_time_when_present(monkeypatch) -> None:
     connection = _DischargeFallbackConnection([{"discharge_datetime": "2026-07-14 10:00:00"}])
     result = _read_horizon_with(monkeypatch, connection)
     assert result.rows[0]["discharge_datetime"] == "2026-07-14 10:00:00"
-    assert not any('"mr"' in sql for sql in connection.calls)
+    assert result.rows[0]["time_source"] == "inpat_registration.discharge_datetime"
+    assert len(connection.calls) == 1
+    assert not any('"mr"' in sql for sql, _ in connection.calls)
+
+
+@pytest.mark.parametrize("document_count", [0, 2])
+def test_discharge_horizon_reader_keeps_empty_or_ambiguous_original_source_without_homepage(
+    monkeypatch, document_count,
+) -> None:
+    row = {"discharge_date": "2026-07-15", "discharge_time": "2026-07-15 16:20:31"}
+    connection = _DischargeFallbackConnection(discharge_rows=[dict(row) for _ in range(document_count)])
+    result = _read_horizon_with(monkeypatch, connection)
+    assert len(result.rows) == min(document_count, 1)
+    assert result.truncated is (document_count > 1)
+    assert result.limit_rows == 1
+    assert not any('"mr"' in sql for sql, _ in connection.calls)
 
 
 def test_exam_lab_order_reader_filters_before_limit_so_unrelated_orders_cannot_hide_target(
