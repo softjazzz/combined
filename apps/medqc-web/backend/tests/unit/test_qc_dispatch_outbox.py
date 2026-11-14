@@ -316,6 +316,8 @@ def test_migration_schema_owner_matches_runtime_mode(monkeypatch):
 @pytest.fixture()
 def workspace_service(monkeypatch, tmp_path):
     from app.services import custom_qc_workspace_service as workspace_module
+    from app.database import connection as database_connection
+    from app.database.models.v36_reports import SysUser
 
     engine = sa.create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -325,6 +327,11 @@ def workspace_service(monkeypatch, tmp_path):
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(workspace_module, "engine", engine)
     monkeypatch.setattr(workspace_module, "SessionLocal", sessions)
+    monkeypatch.setattr(database_connection, "SessionLocal", sessions)
+    SysUser.__table__.create(engine)
+    with sessions.begin() as session:
+        session.add(SysUser(id="synthetic", username="synthetic", display_name="合成调度账号",
+                            role="qc_manager", institute_id="synthetic-institute", is_active=True))
     monkeypatch.setattr(workspace_module, "DB_SCHEMA_MODE", "single")
     monkeypatch.setattr(
         workspace_module,
@@ -366,7 +373,9 @@ def _create_workspace_job(service, *, kind: str = "leaf", parent_id: str | None 
         filters={
             "rule_set_key": "luxian_0609_qc_v1",
             "rule_set_version": "2026-06-09",
-            "rule_ids": ["LX0609-001"],
+            "rule_ids": ["LX0609-01-01-01"],
+            "record_refs": [{"institute_id": "synthetic-institute",
+                             "patient_id": "synthetic-patient", "visit_id": "synthetic-visit"}],
             "lx0609_task_runtime": {
                 role: {"dispatch_mode": "gateway", "gateway_profile": "alibaba_first_pass",
                        "gateway_endpoint_sha256": "a" * 64}
@@ -443,8 +452,9 @@ def test_workspace_dispatch_failure_rolls_back_job_insert(workspace_service, mon
         assert session.scalar(sa.select(sa.func.count()).select_from(tables.outbox)) == 0
 
 
-def test_mq_retry_without_failure_scope_preserves_success_and_requires_recovery(
-    workspace_service,
+@pytest.mark.parametrize("automatic", [False, True])
+def test_mq_retry_without_failure_scope_preserves_success_and_limits_automatic_replay(
+    workspace_service, automatic,
 ):
     _, service, sessions, _ = workspace_service
     job = _create_workspace_job(service)
@@ -461,7 +471,23 @@ def test_mq_retry_without_failure_scope_preserves_success_and_requires_recovery(
             )
         )
 
-    assert service.retry_batch_job(job_id=job["id"], created_by="synthetic") is None
+    with sessions() as session:
+        before = dict(session.execute(sa.select(service._batch_job_table).where(
+            service._batch_job_table.c.id == job["id"])).mappings().one())
+    retried = service.retry_batch_job(job_id=job["id"], created_by="synthetic", automatic=automatic,
+                                      expected_attempt_filters_json=before["filters_json"])
+    if automatic:
+        assert retried is None
+    else:
+        assert retried["id"] != job["id"] and retried["status"] == "queued"
+        assert retried["items"] == [] and retried["success_count"] == 0
+        assert service._qc_dispatch.get_dispatch(retried["id"]).generation == 1
+    with sessions() as session:
+        after = dict(session.execute(sa.select(service._batch_job_table).where(
+            service._batch_job_table.c.id == job["id"])).mappings().one())
+        assert session.scalar(sa.select(sa.func.count()).select_from(service._batch_job_table)) == (
+            1 if automatic else 2)
+    assert after == before
     saved = service.get_batch_job(job_id=job["id"], created_by="synthetic")
     assert saved["status"] == "failed"
     assert [(item["rule_id"], item["status"]) for item in saved["items"]] == [
@@ -469,14 +495,17 @@ def test_mq_retry_without_failure_scope_preserves_success_and_requires_recovery(
     ]
     dispatch = service._qc_dispatch.get_dispatch(job["id"])
     assert dispatch.generation == 1
-    assert dispatch.recovery_kind == "manual_scope_required"
+    if automatic:
+        assert dispatch.recovery_kind is None
+    else:
+        assert json.loads(dispatch.recovery_scope_json) == {"retry_job_id": retried["id"]}
 
 
-def test_parent_retry_only_requeues_failed_mq_child_and_preserves_completed_child(
+def test_parent_retry_is_rejected_without_changing_children_or_dispatch(
     workspace_service, monkeypatch,
 ):
     module, service, sessions, tables = workspace_service
-    # 合成历史父任务，仅覆盖原有恢复合同；生产新建入口明确禁止MQ父任务。
+    # 合成历史父任务；当前合同拒绝父重试，并保留全部原子任务与调度身份。
     with monkeypatch.context() as historical:
         historical.setattr(module, "assert_new_qc_task_dispatch_ready", lambda **_kwargs: "rabbitmq")
         parent = _create_workspace_job(service, kind="parent")
@@ -509,35 +538,20 @@ def test_parent_retry_only_requeues_failed_mq_child_and_preserves_completed_chil
             .values(status="failed")
         )
 
-    retried = service.retry_batch_job(
-        job_id=parent["id"], created_by="synthetic", retry_delay_seconds=3
-    )
-    assert retried is not None
-    completed_saved = service.get_batch_job(
-        job_id=completed["id"], created_by="synthetic"
-    )
-    failed_saved = service.get_batch_job(job_id=failed["id"], created_by="synthetic")
-    assert completed_saved["status"] == "completed"
-    assert [
-        (item["rule_id"], item["status"]) for item in completed_saved["items"]
-    ] == [("LX001", "compliant")]
-    assert service._qc_dispatch.get_dispatch(completed["id"]).generation == 1
-    assert failed_saved["status"] == "queued"
-    assert service._qc_dispatch.get_dispatch(failed["id"]).generation == 2
-    assert service._qc_dispatch.get_dispatch(parent["id"]).generation == 2
-    with sessions() as session:
-        parent_deliveries = session.scalar(
-            sa.select(sa.func.count())
-            .select_from(tables.outbox)
-            .where(tables.outbox.c.job_id == parent["id"])
-        )
-        failed_generations = session.execute(
-            sa.select(tables.outbox.c.generation)
-            .where(tables.outbox.c.job_id == failed["id"])
-            .order_by(tables.outbox.c.generation)
-        ).scalars().all()
-    assert parent_deliveries == 0
-    assert failed_generations == [1, 2]
+    def snapshots():
+        with sessions() as session:
+            return [[dict(row) for row in session.execute(sa.select(table).order_by(
+                next(iter(table.primary_key.columns)))).mappings()]
+                for table in (service._batch_job_table, tables.dispatch, tables.outbox)]
+
+    before = snapshots()
+    with pytest.raises(ValueError, match="new_task_required_preserve_history"):
+        service.retry_batch_job(job_id=parent["id"], created_by="synthetic", retry_delay_seconds=3)
+    assert snapshots() == before
+    assert service.get_batch_job(job_id=completed["id"], created_by="synthetic")["status"] == "completed"
+    assert service.get_batch_job(job_id=failed["id"], created_by="synthetic")["status"] == "failed"
+    assert all(service._qc_dispatch.get_dispatch(job["id"]).generation == 1
+               for job in (parent, completed, failed))
 
 
 def test_recovery_candidates_exclude_manual_scope_rows_before_limit(repository):
@@ -670,9 +684,10 @@ def test_legacy_retry_without_m2_tables_never_selects_dispatch(
         before = dict(session.execute(
             sa.select(service._batch_job_table).where(service._batch_job_table.c.id == job["id"])
         ).mappings().one())
-    # 缺少精确失败范围的 legacy 重试必须保留原任务；也不能依赖已不存在的 M2 表。
-    with pytest.raises(ValueError, match="new_task_required_preserve_history"):
-        service.retry_batch_job(job_id=job["id"], created_by="synthetic")
+    # 无精确失败范围也只能创建独立新身份；原行保持不变，且不依赖 M2 表。
+    retried = service.retry_batch_job(job_id=job["id"], created_by="synthetic")
+    assert retried["id"] != job["id"] and retried["status"] == "queued"
+    assert qc_dispatch_mode_from_filters(retried["filters"]) == "legacy"
     with sessions() as session:
         after = dict(session.execute(
             sa.select(service._batch_job_table).where(service._batch_job_table.c.id == job["id"])
