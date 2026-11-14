@@ -2,6 +2,8 @@
 
 审查模型：Astra 6 high，独立只读复审。原始基线 `3893a93c3193d6733c02a4425498fbc32ebe736c`，首次固定实现 `cdcf5eb46e2d998bac710ac34be2f86b8bb6e711`。
 
+**最终源码复核：`866cbca3dd272348fba627f0b25531b2a390f691`。三项发现均已关闭，未确认新增P1/P2；结合首次未改范围结论，本轮没有仍需阻断的已确认问题。** 结论只限代码及合成隔离证据，不等于真实临床或部署验收。
+
 ## 首次复审：有阻断
 
 | 级别 | 发现 | 首次固定提交下的位置 |
@@ -14,7 +16,7 @@
 
 ## 集中补修与复核
 
-三项已集中补修，等待固定新提交后的逐项复核；首次复审的阻断记录保留。
+三项已集中补修，并在固定 `866cbca3d` 下完成逐项复核；首次复审的阻断记录保留。
 
 - **P1**：单号身份解析先按完整三坐标去重并拒绝歧义/不完整/查询失败；已授权身份贯穿 bundle 与 Canonical。作用域管理账号和医生关闭无法证明归属的 Supabase、内存及全局 batch 回退，全局角色的原有读取合同保留。首页零行仍可由原始文书给出唯一身份。
 - **P2 时间**：麻醉补齐先检查起止顺序；倒序保持 `data_gap / authoritative_time_conflict`，只绑定实际冲突的两份原文书，阳性引用为空，不改通用 guard。
@@ -32,7 +34,17 @@ python -B apps/medqc-web/backend/scripts/run_pr8_offline_tests.py tests/unit/tes
 python -B apps/medqc-web/backend/scripts/run_pr8_offline_tests.py tests/unit/test_qc_detail_fix_wave.py tests/unit/test_003_anesthesia_time_fix_wave.py tests/unit/test_surgery_independent_positive_scope.py tests/unit/test_records_qc_detail_canonical.py tests/unit/test_qc_record_read_permissions.py::test_legacy_qc_detail_cannot_bypass_manager_institute tests/unit/test_qc_record_read_permissions.py::test_resolved_canonical_identity_is_authorized_before_dto tests/unit/test_doctor_case_scope.py::test_qc_detail_uses_authorized_identity_and_never_legacy_unscoped_results --tb=short
 ```
 
-逐项独立复核结论待补。
+### 逐项独立复核结论
+
+| 发现 | 裁定 | 固定补修提交下的依据 |
+| --- | --- | --- |
+| F1同号legacy越院读取 | ADDRESSED | `records.py:181` 完整身份唯一性；`:1289` 持久授权与完整身份；`:1310`、`:1423`、`:1456` 关闭scope legacy；`:1431` 完整身份传入bundle |
+| F2倒序时间阳性豁免 | ADDRESSED | `native_surgery_gate_execution.py:958` 起止顺序；`:1268` 冲突先于interval且exact refs、positive为空 |
+| F3预填/取消当实施 | ADDRESSED | 同文件`:950` 明确原文实施声明与冲突协议；`:1128`、`:1270` 两处借用一致使用 |
+
+复核只审查修复差异及必要相邻调用，读取测试和实际执行报告，核对固定HEAD、干净工作区及diff检查；没有重跑已通过集合。A3、070、目录汇总、新场景冻结和历史来源兼容未在补修差异改动，复用首次审查结论。未确认修复引入新P1/P2。
+
+保守行为明确：单号身份不完整/歧义/源失败时拒绝；原文不满足窄实施声明协议时待核。不能为了扩大可用性恢复首行猜测、给旧缓存补当前身份或仅凭时间标签推断实施。
 
 ## 范围说明
 

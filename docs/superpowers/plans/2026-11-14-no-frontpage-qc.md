@@ -29,4 +29,5 @@
 
 - A1/A2/A3 第一阶段提交 `90caba76a`；相邻 qc-detail 授权补修提交 `a448df3b3`。
 - Task 1 的手术规则改动已交接并收口；直接受影响的旧首页合同测试已迁移，保留临床与完整性断言。
-- Task 2 已完成，验证详见 `docs/reviews/2026-11-14-no-frontpage-validation.md`；最终提交后由独立代理复审。
+- Task 2 已完成，验证详见 `docs/reviews/2026-11-14-no-frontpage-validation.md`。
+- Task 3 已完成：首次固定 `cdcf5eb46` 的三项发现集中补修，源码 `866cbca3d` 定向独立复核全部关闭，未确认新增P1/P2；详见 `docs/reviews/2026-11-14-pro-fixes-independent-review.md`。
