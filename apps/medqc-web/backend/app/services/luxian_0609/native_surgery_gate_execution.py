@@ -947,6 +947,48 @@ def _labeled_anesthesia_surgery_time(
     return unique[0] if len(unique) == 1 else None
 
 
+def _confirmed_anesthesia_surgery_times(
+    row: Mapping[str, Any],
+) -> tuple[datetime | None, datetime | None, str]:
+    """只借用本次已实施声明且无计划/否定冲突的原文时间；不调用模型。
+
+    这是窄范围的明确声明协议，不从来源名、时间标签或普通“计划”词推断实施。
+    其他自由文本无法由此协议证明时保守待核；两个借用分支使用同一验证。
+    """
+    begin = _labeled_anesthesia_surgery_time(row, label="手术开始时间")
+    end = _labeled_anesthesia_surgery_time(row, label="手术结束时间")
+    if begin is None or end is None:
+        return begin, end, "authoritative_time_missing"
+    if end < begin:
+        return begin, end, "authoritative_time_conflict"
+
+    statements = [part.strip() for part in re.split(r"[。；;！？!?\n]+", str(row.get("record_content") or "")) if part.strip()]
+    affirmations = {
+        "本次手术已实施", "本次手术已完成", "本次手术已顺利完成",
+        "本次手术顺利完成", "本次手术按计划顺利实施并已完成",
+        "本次手术按计划顺利完成", "本次手术未取消已完成",
+        "实际手术状态已实施", "实际手术状态已完成",
+    }
+    confirmed = False
+    for statement in statements:
+        normalized = re.sub(r"[\s，,：:]", "", statement).replace("此次", "本次")
+        if normalized in affirmations:
+            confirmed = True
+        # “按计划完成”“未取消”不是否定；只识别本次手术的明确未实施，
+        # 或直接声明当前时间是排班/预填/非实际时间。既往句不替代本次事实。
+        if re.match(r"^(?:既往|上次|历史)", normalized):
+            continue
+        if (
+            re.search(r"手术(?:已|已经)?取消|取消(?:了)?(?:本次)?手术", normalized)
+            or re.search(r"手术[^。；;\n]{0,20}(?:尚未|未予|未实际|未)(?:实施|进行|开始|开展|完成)", normalized)
+            or re.search(r"(?:排班|预填)[^。；;\n]{0,20}(?:时间|预填)", normalized)
+            or re.search(r"(?<!按)(?:计划|预计)(?:手术)?(?:开始|结束)?时间", normalized)
+            or re.search(r"非实际(?:手术|实施)?时间", normalized)
+        ):
+            return begin, end, "semantic_extraction_unresolved"
+    return begin, end, "" if confirmed else "semantic_extraction_unresolved"
+
+
 def _surgery_record_missing_facts(*, end: datetime | None, begin: datetime | None) -> dict[str, Any]:
     """003 缺正式手术记录的受控展示事实；保存层要求确定问题必须可解释。"""
 
@@ -998,6 +1040,7 @@ def _typed_003_decision(
         display_facts: Mapping[str, Any] | None = None,
         selected_document_refs: tuple[str, ...] = (),
         positive_document_refs: tuple[str, ...] = (),
+        exact_document_refs: bool = False,
     ) -> RuleDecision:
         if display_facts is not None and customer_display_facts is not None:
             customer_display_facts.append(("LX0609-04-02-01", display_facts))
@@ -1035,8 +1078,8 @@ def _typed_003_decision(
             evidence_state=evidence_state,
             qc_direction=qc_direction,
             reason_code=reason_code,
-            # 独立阳性分支只声明实际证明文书；查询过的备选来源不等于判据依赖。
-            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *(() if positive_document_refs else refs)))),
+            # 独立阳性及已证时间冲突只绑定实际文书；缺失型结论仍保留来源覆盖引用。
+            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *(() if positive_document_refs or exact_document_refs else refs)))),
             positive_document_refs=positive_document_refs,
             evaluator_version=_TYPED_003_EVALUATOR_VERSION,
             confidence=None,
@@ -1082,12 +1125,9 @@ def _typed_003_decision(
         if anesthesia_rows:
             if len(anesthesia_rows) != 1:
                 return decision("data_gap", "association_failed")
-            begin = _labeled_anesthesia_surgery_time(anesthesia_rows[0], label="手术开始时间")
-            end = _labeled_anesthesia_surgery_time(anesthesia_rows[0], label="手术结束时间")
-            if begin is None or end is None:
-                return decision("data_gap", "authoritative_time_missing")
-            if end < begin:
-                return decision("data_gap", "authoritative_time_conflict")
+            begin, end, time_issue = _confirmed_anesthesia_surgery_times(anesthesia_rows[0])
+            if time_issue:
+                return decision("data_gap", time_issue)
             horizon_observation = observations["evaluation_context.horizon"]
             if horizon_observation.query_state.value == "empty":
                 return decision("data_gap", horizon_observation.reason_code or "authoritative_time_missing")
@@ -1227,12 +1267,24 @@ def _typed_003_decision(
     anesthesia_association_failed = False
     if not intervals and not explicit_end_issue and len(surgery_rows) == len(anesthesia_rows) == 1:
         surgery_begin_time = _authoritative_surgery_begin_time(surgery_rows[0])
-        anesthesia_begin_time = _labeled_anesthesia_surgery_time(
-            anesthesia_rows[0], label="手术开始时间"
-        )
-        anesthesia_end_time = _labeled_anesthesia_surgery_time(
-            anesthesia_rows[0], label="手术结束时间"
-        )
+        anesthesia_begin_time, anesthesia_end_time, anesthesia_issue = _confirmed_anesthesia_surgery_times(anesthesia_rows[0])
+        if anesthesia_issue == "authoritative_time_conflict":
+            conflict_refs = tuple(
+                _material_document_ref_for_row(
+                    materials=materials, snapshot=snapshot, source_key=key, selected_row=row,
+                )
+                for key, row in (("surgery_record", surgery_rows[0]), ("anesthesia_record", anesthesia_rows[0]))
+            )
+            if not all(conflict_refs):
+                return decision("technical_error", "snapshot_mismatch")
+            return decision("data_gap", anesthesia_issue, {
+                "failure_kind": "surgery_timeliness_data_gap",
+                "gap_reason": anesthesia_issue,
+                "missing_fields": [],
+                "conflicting_end_fields": True,
+            }, selected_document_refs=conflict_refs, exact_document_refs=True)
+        if anesthesia_issue == "semantic_extraction_unresolved":
+            return decision("data_gap", anesthesia_issue)
         record_time = _authoritative_record_time(authoritative_document_time_value(surgery_rows[0]))
         if (
             surgery_begin_time is not None

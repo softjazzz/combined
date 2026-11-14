@@ -539,6 +539,7 @@ def _typed_003_session(
                 ({
                     "document_id": "anesthesia-record-003",
                     "record_content": (
+                        "本次手术已完成。"
                         f"手术开始时间：{anesthesia_surgery_begin_time} "
                         f"手术结束时间：{anesthesia_surgery_end_time}"
                     ),
