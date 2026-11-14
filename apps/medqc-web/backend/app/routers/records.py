@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, date
 import json
-from typing import Any, Dict, Optional, List
+from typing import Any, Callable, Dict, Optional, List
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query
@@ -564,7 +564,9 @@ def _map_canonical_item_to_review_item(
     }
 
 
-def _load_luxian_0609_review_items_from_canonical(record_id: str) -> Dict[str, Any]:
+def _load_luxian_0609_review_items_from_canonical(
+    record_id: str, *, authorize_identity: Callable[[tuple[str, str, str]], None],
+) -> Dict[str, Any]:
     """0609 单病历复核项的唯一正式读取入口：只交付已发布 Canonical 结果。
 
     身份缺失/歧义或与 CDM 冲突、Envelope 缺失或损坏都收敛为“无 0609 结果”，
@@ -592,6 +594,8 @@ def _load_luxian_0609_review_items_from_canonical(record_id: str) -> Dict[str, A
         return {**empty, "state": state}
 
     institute_id, patient_id, visit_id = identity
+    # 身份解析不等于授权；未通过的请求不能进入 Canonical 结果查询。
+    authorize_identity(identity)
     try:
         result = CustomQCWorkspaceService().get_latest_luxian_0609_record_result(
             institute_id=institute_id,
@@ -1271,6 +1275,20 @@ async def get_record_qc_detail(
     }
     """
     own_identity = getattr(request.state, "doctor_case_identity", None)
+    if own_identity:
+        # 由全局医生病例归属守卫赋值，不来自请求参数；完整三坐标必须一致。
+        def authorize_identity(identity):
+            if tuple(own_identity.get(key) for key in ("institute_id", "patient_id", "visit_id")) != identity:
+                raise HTTPException(403, "仅可查看本人名下病历")
+    else:
+        from ..services.saved_result_access import check_saved_result_institute, saved_result_institute_scope
+        institute_scope = saved_result_institute_scope(str(current_user.get("id") or ""))
+        def authorize_identity(identity):
+            check_saved_result_institute(institute_scope, identity[0])
+        if institute_scope is not None:
+            # scoped 管理账号不得先读取不带机构条件的旧文书/缺陷缓存。
+            identity = _resolve_visit_identity(record_id)
+            check_saved_result_institute(institute_scope, identity.get("institute_id"))
     supabase = None if own_identity else get_supabase()
     settings = get_settings()
 
@@ -1407,7 +1425,9 @@ async def get_record_qc_detail(
         if not payload["defects"]:
             # 正式 0609 结果只从已发布 Canonical Envelope 读取；raw items_json
             # 仅保留给非 0609 legacy 规则集。
-            canonical_payload = _load_luxian_0609_review_items_from_canonical(record_id)
+            canonical_payload = _load_luxian_0609_review_items_from_canonical(
+                record_id, authorize_identity=authorize_identity,
+            )
             canonical_items = list(canonical_payload.get("review_items") or [])
             canonical_state = _controlled_review_state(canonical_payload.get("state"))
             if canonical_items:
@@ -1441,6 +1461,8 @@ async def get_record_qc_detail(
             message="获取病历质控详情成功",
             trace_id=get_trace_id(request),
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,

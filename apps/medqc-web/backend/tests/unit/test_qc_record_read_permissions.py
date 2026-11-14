@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.security import get_current_user
-from app.routers import emr_render, qc_sichuan
+from app.routers import emr_render, qc_sichuan, records
 from app.database import connection
 from app.database.models.v36_reports import SysUser
 
@@ -40,6 +40,7 @@ def _client_for_role(monkeypatch, role: str) -> tuple[TestClient, list[str]]:
     app = FastAPI()
     app.include_router(emr_render.router)
     app.include_router(qc_sichuan.router)
+    app.include_router(records.router)
     app.dependency_overrides[get_current_user] = lambda: {
         "id": f"u-{role}",
         "email": f"{role}@example.test",
@@ -63,6 +64,31 @@ def _client_for_role(monkeypatch, role: str) -> tuple[TestClient, list[str]]:
         lambda: _LatestResultWorkspace(),
     )
     return TestClient(app), document_loads
+
+
+def test_legacy_qc_detail_cannot_bypass_manager_institute(monkeypatch):
+    client, _ = _client_for_role(monkeypatch, "qc_manager")
+    monkeypatch.setattr(records, "_resolve_visit_identity", lambda _: {
+        "institute_id": "H2", "patient_id": "P1", "visit_id": "V1",
+    })
+    monkeypatch.setattr(records, "get_supabase", lambda: pytest.fail("跨院请求不得进入旧读取"))
+    response = client.get("/api/v1/records/V1/qc-detail")
+    assert response.status_code == 403
+
+
+def test_resolved_canonical_identity_is_authorized_before_dto(monkeypatch):
+    from app.services.saved_result_access import require_saved_result_institute
+    monkeypatch.setattr(records, "_resolve_luxian_0609_identity",
+                        lambda *_args, **_kwargs: (("H2", "P1", "V1"), "ready"))
+    from app.services import custom_qc_workspace_service as workspace
+    monkeypatch.setattr(workspace.CustomQCWorkspaceService, "get_latest_luxian_0609_record_result",
+                        lambda *_args, **_kwargs: pytest.fail("不得读取另一机构Canonical"))
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as caught:
+        records._load_luxian_0609_review_items_from_canonical(
+            "V1", authorize_identity=lambda identity: require_saved_result_institute("u-qc_manager", identity[0]),
+        )
+    assert caught.value.status_code == 403
 
 
 def test_manager_cannot_read_other_institute_before_result_lookup(monkeypatch):
