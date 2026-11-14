@@ -270,7 +270,7 @@ async def test_incomplete_record_rule_map_rejects_before_bundle_read(
     )
 
     assert workspace.job["status"] == "failed"
-    assert "逐病例规则范围不完整" in workspace.job["error_message"]
+    assert "病例规则范围不完整" in workspace.job["error_message"]
     assert bundle_calls == []
 
 
@@ -337,7 +337,7 @@ async def test_incomplete_record_rule_map_fails_persisted_task_without_results(
 
     persisted = workspace.get_batch_job_for_processing(job_id=job["id"])
     assert persisted["status"] == "failed"
-    assert "逐病例规则范围不完整" in persisted["error_message"]
+    assert "病例规则范围不完整" in persisted["error_message"]
     assert persisted["items"] == []
     assert bundle_calls == []
 
@@ -408,7 +408,7 @@ async def test_persisted_case_scope_cannot_shrink_after_record_recollection(
 
     persisted = workspace.get_batch_job_for_processing(job_id=job["id"])
     assert persisted["status"] == "failed"
-    assert "病例范围" in persisted["error_message"]
+    assert "病例规则范围不完整" in persisted["error_message"]
     assert persisted["items"] == []
     assert bundle_calls == []
 

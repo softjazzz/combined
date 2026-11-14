@@ -75,6 +75,7 @@ from .luxian_0609.shadow_audit_summary import (
     merge_luxian_0609_shadow_summaries,
 )
 from .qc_cancellation import QCJobCancelled, raise_if_cancelled
+from .task_execution_contract import TaskExecutionContractError
 from .qc_execution_errors import SafeExecutionError, safe_exception_failure, safe_failure_projection
 from .qc_llm_client_runtime import SichuanQCLLMClient
 from .llm_dispatch.provider_profiles import ProviderConfigurationError
@@ -1449,7 +1450,7 @@ async def run_sichuan_workspace_batch_job(
                 filters["scoped_customer_rule_ids"]
             )
         ):
-            raise ValueError("失败规则超出原任务冻结范围，请新建质控任务")
+            raise TaskExecutionContractError("task_scope_invalid", "失败规则超出原任务冻结范围，请新建质控任务")
         retry_lineage = filters.get("retry_lineage") if isinstance(filters.get("retry_lineage"), dict) else {}
         # 独立补跑只统计自身执行；仅旧的同 ID 重试恢复历史结果。
         merge_retry_history = is_failed_rule_retry and not retry_lineage.get("source_job_id")
@@ -1643,7 +1644,7 @@ async def run_sichuan_workspace_batch_job(
             accepted_refs = set(normalize_case_refs(persisted_record_refs))
             collected_refs = set(case_refs_from_records(records)) if records else set()
             if collected_refs != accepted_refs:
-                raise ValueError("已接纳病例范围与当前重取结果不一致，拒绝执行部分病历")
+                raise TaskExecutionContractError("task_scope_invalid", "已接纳病例范围与当前重取结果不一致，拒绝执行部分病历")
         workspace.update_batch_job_progress(
             job_id=job_id,
             **attempt_kwargs,
@@ -1872,7 +1873,7 @@ async def run_sichuan_workspace_batch_job(
                 if not any(
                     key in record_rule_map for key in (record_key, visit_id, record_id)
                 ):
-                    raise ValueError("LX0609任务逐病例规则范围不完整，拒绝回退为整批规则")
+                    raise TaskExecutionContractError("task_scope_invalid", "LX0609任务逐病例规则范围不完整，拒绝回退为整批规则")
         prefer_rule_level_visit_eval = (
             validation_mode == "sc"
             and (

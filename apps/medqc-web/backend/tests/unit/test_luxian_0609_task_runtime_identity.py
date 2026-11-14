@@ -336,6 +336,8 @@ async def test_formal_worker_checks_release_identity_before_record_read(
     monkeypatch.setattr(identity, "_PROCESS_RUNTIME_BUILD", resumed_release)
     resumed = SichuanQCService(config)
     errors: list[str] = []
+    gate_reached = []
+    failures = []
 
     class Activation:
         def enforce(self):
@@ -343,9 +345,11 @@ async def test_formal_worker_checks_release_identity_before_record_read(
 
     def fail_batch_job(**kwargs):
         errors.append(kwargs["error_message"])
+        failures.append(kwargs["execution_error"])
         workspace.job["status"] = "failed"
 
     def stop_after_runtime_gate(*_args, **_kwargs):
+        gate_reached.append(True)
         raise RuntimeError("passed-runtime-gate")
 
     monkeypatch.setattr(worker, "get_product_activation_service", lambda: Activation())
@@ -367,6 +371,11 @@ async def test_formal_worker_checks_release_identity_before_record_read(
     )
     assert len(errors) == 1
     if same_release:
-        assert errors == ["passed-runtime-gate"]
+        assert gate_reached == [True]
+        assert failures[0]["reason_code"] == "execution_program_error"
+        assert "passed-runtime-gate" not in errors[0]
     else:
+        assert gate_reached == []
+        assert failures[0]["reason_code"] == "task_runtime_changed"
+        assert failures[0]["retryable"] is False
         assert "模型或实现版本已变化" in errors[0]

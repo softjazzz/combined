@@ -7244,7 +7244,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
                 httpx.ReadTimeout("STAGE_TWO_TIMEOUT_SECRET"),
                 httpx.ReadTimeout("RETRY_TIMEOUT_SECRET"),
             ),
-            "timeout",
+            "model_timeout",
             True,
             3,
             "ReadTimeout",
@@ -7253,7 +7253,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
         (
             (RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET"),
              RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET")),
-            "upstream_429",
+            "model_rate_limit",
             True,
             3,
             "RuntimeError",
@@ -7261,7 +7261,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
         ),
         (
             (RuntimeError("LLM endpoint not configured CONFIGURATION_SECRET"),),
-            "configuration",
+            "model_configuration",
             False,
             2,
             "RuntimeError",
@@ -7269,7 +7269,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
         ),
         (
             (ValueError("UNCLASSIFIED_SECRET"),),
-            "program_error",
+            "execution",
             False,
             2,
             "ValueError",
@@ -7277,7 +7277,7 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
         ),
         (
             (_ExternalStageFailure("EXTERNAL_MODULE_SECRET"),),
-            "program_error",
+            "execution",
             False,
             2,
             "_ExternalStageFailure",
@@ -9643,7 +9643,7 @@ async def test_typed_consultation_stage_two_privacy_failure_is_legal_and_not_ret
     )
     decision = outcome.decisions[0]
     assert decision.evidence_state is episode.EvidenceState.TECHNICAL_ERROR
-    assert decision.reason_code == "executor_exception"
+    assert decision.reason_code == "privacy_guard_blocked"
     assert len(client.prompts) == 2
     plan = build_failed_rule_auto_retry_plan(
         summary={"execution_status": "failed"},

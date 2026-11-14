@@ -99,7 +99,9 @@ else:
         def enforce(self):
             return None
 
+    gate_reached = []
     def stop_after_runtime_gate(*_args, **_kwargs):
+        gate_reached.append(True)
         raise RuntimeError('passed-runtime-gate')
 
     worker.get_product_activation_service = lambda: Activation()
@@ -191,6 +193,7 @@ else:
             )
         canonical_statuses = [item['status'] for item in loaded['items']]
     print(json.dumps({
+        'gate_reached': bool(gate_reached),
         'status': job['status'],
         'error_message': job['error_message'],
         'attempt_id': persisted_filters.get(storage.LX0609_ATTEMPT_FILTER_KEY),
@@ -246,8 +249,10 @@ def test_persisted_formal_task_is_checked_by_a_new_worker_process(tmp_path, same
     assert resumed["status"] == "failed"
     assert isinstance(resumed["attempt_id"], str) and resumed["attempt_id"], resumed
     if same_release:
-        assert resumed["error_message"] == "passed-runtime-gate"
+        assert resumed["gate_reached"] is True
+        assert "passed-runtime-gate" not in resumed["error_message"]
     else:
+        assert resumed["gate_reached"] is False
         assert "模型或实现版本已变化" in str(resumed["error_message"])
 
 
@@ -281,8 +286,10 @@ def test_queued_formal_task_is_resubmitted_after_process_restart(tmp_path, same_
     assert recovered["status"] == "failed"
     assert isinstance(recovered["attempt_id"], str) and recovered["attempt_id"]
     if same_release:
-        assert recovered["error_message"] == "passed-runtime-gate"
+        assert recovered["gate_reached"] is True
+        assert "passed-runtime-gate" not in recovered["error_message"]
     else:
+        assert recovered["gate_reached"] is False
         assert "模型或实现版本已变化" in str(recovered["error_message"])
     assert _run_probe("recover", database_path, next_build, str(created["job_id"]))["resumed_count"] == 0
 
@@ -324,7 +331,8 @@ def test_restarted_worker_renews_persisted_attempt_during_wait(tmp_path):
     created = _run_probe("create", database_path, build_id)
     observed = _run_probe("heartbeat", database_path, build_id, str(created["job_id"]))
     assert observed["status"] == "failed"
-    assert observed["error_message"] == "passed-runtime-gate"
+    assert observed["gate_reached"] is True
+    assert "passed-runtime-gate" not in observed["error_message"]
     assert observed["renew_count"] >= 1
 
 

@@ -135,6 +135,7 @@ describe('useSichuanBatchJobs', () => {
   }
 
   beforeEach(() => {
+    vi.useFakeTimers()
     vi.clearAllMocks()
     getSichuanWorkspaceBatchJobMock.mockResolvedValue(batchJobResponse)
     getSichuanWorkspaceBatchJobDebugSnapshotMock.mockResolvedValue(debugResponse)
@@ -157,6 +158,7 @@ describe('useSichuanBatchJobs', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.useRealTimers()
   })
 
   it('fetchBatchJobDetail 开启 debug 快照时应同步拉取任务详情与调试快照', async () => {
@@ -182,7 +184,7 @@ describe('useSichuanBatchJobs', () => {
     retrySichuanWorkspaceBatchJobMock.mockResolvedValue({ success: true, data: nextJob })
     getSichuanWorkspaceBatchJobMock.mockResolvedValue({ success: true, data: nextJob })
     getSichuanWorkspaceBatchJobDebugSnapshotMock.mockResolvedValue({ success: true, data: { ...debugSnapshot, job_id: 'job-2' } })
-    const setIntervalSpy = vi.spyOn(window, 'setInterval').mockReturnValue(1)
+    const setIntervalSpy = vi.spyOn(window, 'setInterval')
     const state = useSichuanBatchJobs()
     state.batchJobDetail.value = baseJob
     await state.executeRetryBatchJob('job-1')
@@ -199,7 +201,7 @@ describe('useSichuanBatchJobs', () => {
     retrySichuanWorkspaceBatchJobMock.mockResolvedValue({ success: true, data: {
       ...baseJob, id: 'job-2', retry_lineage: { source_job_id: 'other-job', root_job_id: 'other-job', source_attempt: "a".repeat(32), attempt: 1 },
     } })
-    const timer = vi.spyOn(window, 'setInterval').mockReturnValue(1)
+    const timer = vi.spyOn(window, 'setInterval')
     const state = useSichuanBatchJobs()
     state.batchJobDetail.value = baseJob
     await state.executeRetryBatchJob('job-1')
@@ -214,7 +216,7 @@ describe('useSichuanBatchJobs', () => {
       ...baseJob, id: 'job-2', items: [], summary: null,
       retry_lineage: { source_job_id: 'job-1', root_job_id: 'job-1', source_attempt: "a".repeat(32), attempt: 1 },
     } })
-    vi.spyOn(window, 'setInterval').mockReturnValue(1)
+    vi.spyOn(window, 'setInterval')
     const state = useSichuanBatchJobs()
     await state.executeRetryBatchJob('job-1')
     expect(state.batchJobDetail.value?.id).toBe('job-2')
@@ -226,7 +228,7 @@ describe('useSichuanBatchJobs', () => {
   it('页面重置后迟到的重试响应不能恢复旧账号任务', async () => {
     let resolveRetry!: (value: unknown) => void
     retrySichuanWorkspaceBatchJobMock.mockReturnValue(new Promise(resolve => { resolveRetry = resolve }))
-    const timer = vi.spyOn(window, 'setInterval').mockReturnValue(1)
+    const timer = vi.spyOn(window, 'setInterval')
     const state = useSichuanBatchJobs()
     const pending = state.executeRetryBatchJob('job-1')
     state.resetBatchJobs()

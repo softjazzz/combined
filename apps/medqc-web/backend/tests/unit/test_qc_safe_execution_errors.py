@@ -208,3 +208,39 @@ async def test_automatic_retry_rejection_keeps_completed_source_untouched(monkey
     assert workspace.job == completed[0]
     assert mutations == []
     assert "SECRET" not in caplog.text
+
+
+@pytest.mark.parametrize("code", [
+    "task_settings_missing", "task_settings_changed", "task_runtime_missing",
+    "task_runtime_changed", "task_scope_invalid",
+])
+def test_task_contract_failure_preserves_only_typed_controlled_code(code):
+    from app.services.task_execution_contract import TaskExecutionContractError
+
+    failure = safe_exception_failure(TaskExecutionContractError(code, "SECRET"))
+    assert failure["reason_code"] == code
+    assert failure["error_category"] == "execution_contract"
+    assert failure["retryable"] is False
+    assert "SECRET" not in str(failure)
+    assert safe_exception_failure(ValueError(code))["reason_code"] == "execution_program_error"
+    assert safe_exception_failure(TaskExecutionContractError("SECRET", "SECRET"))["reason_code"] == "execution_program_error"
+
+
+@pytest.mark.parametrize("error_type", ["PatientPrivacyViolation", "PrivacyIdentityContextError"])
+def test_shared_model_boundary_preserves_privacy_guard_category(error_type):
+    from app.services.luxian_0609 import llm_prompt_privacy
+    from app.services.luxian_0609.model_failure import classify_model_failure
+
+    error = getattr(llm_prompt_privacy, error_type)("SECRET")
+    assert classify_model_failure(error) == ("privacy_guard", "privacy_guard_blocked", False)
+    assert "SECRET" not in str(safe_exception_failure(error))
+
+
+def test_executor_timeout_retry_budget_remains_bounded():
+    from app.services.qc_workspace.failed_rule_retry import build_failed_rule_auto_retry_plan
+    failure = {"reason_code": "executor_timeout", "error_phase": "result_status", "rule_id": "LX0609-01-01-01"}
+    summary = {"execution_status": "partial_failed"}
+    first = build_failed_rule_auto_retry_plan(summary=summary, failures=[failure])
+    last = build_failed_rule_auto_retry_plan(summary=summary, failures=[failure], retry_scope={"attempt": 3})
+    assert first["should_retry"] is True and first["next_attempt"] == 1
+    assert last["should_retry"] is False and last["status"] == "exhausted"

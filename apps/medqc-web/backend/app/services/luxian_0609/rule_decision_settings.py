@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..task_execution_contract import TaskExecutionContractError
+
 import hashlib
 import json
 from typing import Any, Mapping
@@ -69,11 +71,11 @@ def assert_luxian_0609_task_settings_match(
         or set(frozen["flags"]) != set(_LX0609_TASK_FLAG_NAMES)
         or any(type(value) is not bool for value in frozen["flags"].values())
     ):
-        raise ValueError("LX0609任务执行配置快照缺失或非法，请重新发起任务")
+        raise TaskExecutionContractError("task_settings_missing", "LX0609任务执行配置快照缺失或非法，请重新发起任务")
     current = capture_luxian_0609_task_settings(effective_settings)
     changed = [name for name in _LX0609_TASK_FLAG_NAMES if frozen["flags"][name] != current["flags"][name]]
     if changed:
-        raise ValueError(f"LX0609任务执行配置已变化，请重新发起任务：{', '.join(changed)}")
+        raise TaskExecutionContractError("task_settings_changed", f"LX0609任务执行配置已变化，请重新发起任务：{', '.join(changed)}")
 
 
 def _luxian_0609_model_identity(client: Any) -> dict[str, Any]:
@@ -167,11 +169,11 @@ def assert_luxian_0609_task_runtime_match(frozen: Any, qc_service: Any) -> None:
     if type(frozen) is not dict or set(frozen) != {
         "schema_version", "implementation", "first_pass", "adjudicator"
     } or type(frozen.get("schema_version")) is not int or frozen["schema_version"] not in {1, _LX0609_TASK_RUNTIME_VERSION}:
-        raise ValueError("LX0609任务运行身份快照缺失或非法，请重新发起任务")
+        raise TaskExecutionContractError("task_runtime_missing", "LX0609任务运行身份快照缺失或非法，请重新发起任务")
     try:
         serialized = json.dumps(frozen, ensure_ascii=False, sort_keys=True, allow_nan=False)
     except (TypeError, ValueError) as exc:
-        raise ValueError("LX0609任务运行身份快照缺失或非法，请重新发起任务") from exc
+        raise TaskExecutionContractError("task_runtime_missing", "LX0609任务运行身份快照缺失或非法，请重新发起任务") from exc
     current = capture_luxian_0609_task_runtime(qc_service)
     if frozen["schema_version"] == 1:
         # v1 尚无出口身份，只允许继续执行 direct；Gateway 必须由 v2 明确冻结。
@@ -179,7 +181,7 @@ def assert_luxian_0609_task_runtime_match(frozen: Any, qc_service: Any) -> None:
             current[role].get("dispatch_mode") != "direct"
             for role in ("first_pass", "adjudicator")
         ):
-            raise ValueError("LX0609旧任务缺少Gateway运行身份，请重新发起任务")
+            raise TaskExecutionContractError("task_runtime_missing", "LX0609旧任务缺少Gateway运行身份，请重新发起任务")
         current = {
             **current,
             "schema_version": 1,
@@ -199,7 +201,7 @@ def assert_luxian_0609_task_runtime_match(frozen: Any, qc_service: Any) -> None:
             },
         }
     if serialized != json.dumps(current, ensure_ascii=False, sort_keys=True, allow_nan=False):
-        raise ValueError("LX0609任务模型或实现版本已变化，请重新发起任务")
+        raise TaskExecutionContractError("task_runtime_changed", "LX0609任务模型或实现版本已变化，请重新发起任务")
 
 
 RULE_DECISION_ROLLOUT_GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (

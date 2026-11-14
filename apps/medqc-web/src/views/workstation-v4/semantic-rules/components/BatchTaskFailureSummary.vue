@@ -39,6 +39,7 @@ const props = defineProps<{ job?: SichuanBatchJob | null }>()
 const savedCount = computed(() => props.job?.items?.length ?? 0)
 const materialFailure = computed(() => props.job?.summary?.material_failure)
 const errorLabels: Record<string, string> = {
+  execution_contract: '任务冻结合同不满足', execution_timeout: '规则执行超时',
   model_timeout: '模型请求超时', model_connection: '模型连接失败',
   model_rate_limit: '模型服务限流', model_unavailable: '模型服务暂不可用',
   model_request: '模型请求被拒绝', model_configuration: '模型配置不可用',

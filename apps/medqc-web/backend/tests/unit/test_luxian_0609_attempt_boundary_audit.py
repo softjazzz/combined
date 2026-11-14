@@ -1,4 +1,4 @@
-"""原始 0609 同 ID 重试的执行尝试隔离回归。"""
+"""正式 0609 独立重试身份与迟到执行尝试隔离回归。"""
 
 from __future__ import annotations
 
@@ -6,12 +6,15 @@ import asyncio
 import json
 import threading
 from datetime import datetime, timedelta
-from fastapi import HTTPException
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
+
+from app.database import connection as database_connection
+from app.database.models.v36_reports import SysUser
 
 from app.routers import qc_sichuan
 from app.core.settings import Settings
@@ -33,12 +36,16 @@ from app.services.qc_workspace.canonical_result_store import CanonicalResultStor
 from tests.unit.test_qc_sichuan_batch_throughput import _ServiceStub, _WorkspaceStub
 
 
+RECORD_REFS = [{"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}]
+MQ_JOB_ID = "11111111-1111-4111-8111-111111111111"
+
+
 pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
 
 
 @pytest.fixture
 def storage(monkeypatch):
-    engine = sa.create_engine("sqlite://")
+    engine = sa.create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     monkeypatch.setattr(workspace_module, "engine", engine)
     monkeypatch.setattr(workspace_module, "_draft_schema", lambda: None)
     monkeypatch.setattr(workspace_module, "_sync_batch_job_parent_columns", lambda **_: None)
@@ -48,7 +55,12 @@ def storage(monkeypatch):
     metadata.create_all(engine)
     envelope_table = service._record_result_envelope_table.to_metadata(sa.MetaData(), schema=None)
     envelope_table.create(bind=engine)
+    SysUser.__table__.create(engine)
     factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(database_connection, "SessionLocal", factory)
+    with factory.begin() as session:
+        session.add(SysUser(id="tester", username="tester", display_name="合成审计账号",
+                            role="qc_manager", institute_id="inst-1", is_active=True))
     service._batch_job_table = table
     service._record_result_envelope_table = envelope_table
     monkeypatch.setattr(workspace_module, "_session", factory)
@@ -59,7 +71,7 @@ def storage(monkeypatch):
             total_records=1, created_at=datetime(2026, 9, 24),
             updated_at=datetime(2026, 9, 24),
             filters_json=json.dumps({
-                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS,
                 "rule_ids": ["LX0609-01-01-01"],
             }),
         ))
@@ -68,7 +80,7 @@ def storage(monkeypatch):
 
 
 def _finish_precise_retryable_failure(service, *, job_id="attempt-job"):
-    """通过真实完成入口产生精确失败范围，保留同 ID 补跑的 CAS 验证。"""
+    """通过真实完成入口产生精确失败范围，保留来源任务及新尝试的 CAS 验证。"""
     job = service.get_batch_job_for_processing(job_id=job_id)
     assert job is not None
     attempt = (
@@ -95,9 +107,9 @@ def _saved_rows(engine, table):
         ).mappings()]
 
 
-def _stale_failed_completion(service: CustomQCWorkspaceService, attempt: str) -> bool | None:
+def _stale_failed_completion(service: CustomQCWorkspaceService, attempt: str, *, job_id="attempt-job") -> bool | None:
     return service.complete_batch_job(
-        job_id="attempt-job",
+        job_id=job_id,
         attempt_filters_json=attempt,
         summary={
             "execution_status": "failed", "total_records": 1,
@@ -111,9 +123,9 @@ def _stale_failed_completion(service: CustomQCWorkspaceService, attempt: str) ->
     )
 
 
-def _status(engine, table) -> str:
+def _status(engine, table, job_id="attempt-job") -> str:
     with engine.connect() as connection:
-        return connection.execute(sa.select(table.c.status)).scalar_one()
+        return connection.execute(sa.select(table.c.status).where(table.c.id == job_id)).scalar_one()
 
 
 def test_restart_scan_selects_only_queued_luxian_leaves(storage):
@@ -271,9 +283,10 @@ def test_cancelled_terminal_rejects_late_completion_and_preserves_history(storag
     assert canceled is not None and canceled["status"] == "canceled"
     assert _stale_failed_completion(service, old_attempt) is False
     before = _saved_rows(engine, table)
-    with pytest.raises(ValueError, match="new_task_required_preserve_history"):
-        service.retry_batch_job(job_id="attempt-job", created_by="tester")
-    assert _saved_rows(engine, table) == before
+    retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
+    assert retried["id"] != "attempt-job"
+    assert [row for row in _saved_rows(engine, table) if row["id"] == "attempt-job"] == before
+    assert _stale_failed_completion(service, old_attempt) is False
 
 
 def test_precise_retry_rejects_previous_attempt_late_completion(storage):
@@ -281,12 +294,13 @@ def test_precise_retry_rejects_previous_attempt_late_completion(storage):
     old_attempt = service.mark_batch_job_running(job_id="attempt-job")
     _finish_precise_retryable_failure(service)
     retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
-    assert retried is not None and retried["id"] == "attempt-job"
+    assert retried is not None and retried["id"] != "attempt-job"
     assert retried["status"] == "queued"
-    new_attempt = service.mark_batch_job_running(job_id="attempt-job")
+    new_attempt = service.mark_batch_job_running(job_id=retried["id"])
     assert isinstance(new_attempt, str) and new_attempt != old_attempt
     assert _stale_failed_completion(service, old_attempt) is False
-    assert _status(engine, table) == "running"
+    assert _status(engine, table, retried["id"]) == "running"
+    assert _status(engine, table) == "failed"
 
 
 def test_cancel_running_luxian_attempt_marks_cost_observation_unknown(storage):
@@ -371,7 +385,7 @@ def test_nonformal_running_failure_keeps_its_existing_summary(storage):
     assert failed["summary"]["luxian_0609_usage_observation_complete"] is True
 
 
-def test_same_id_retry_preserves_original_luxian_settings_snapshot(storage):
+def test_new_identity_retry_preserves_original_luxian_settings_snapshot(storage):
     service, engine, table = storage
     original = capture_luxian_0609_task_settings(
         resolve_mainline_rule_decision_settings(Settings(_env_file=None, JWT_SECRET="synthetic-retry"))
@@ -381,7 +395,7 @@ def test_same_id_retry_preserves_original_luxian_settings_snapshot(storage):
         connection.execute(
             table.update().where(table.c.id == "attempt-job").values(
                 filters_json=json.dumps({
-                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS,
                     "rule_ids": ["LX0609-01-01-01"],
                     LX0609_TASK_SETTINGS_FILTER_KEY: original,
                     LX0609_TASK_RUNTIME_FILTER_KEY: accepted_runtime,
@@ -404,41 +418,29 @@ def test_running_job_can_be_claimed_by_two_workers(storage):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("precise_failure", [True, False])
-async def test_public_retry_route_requires_precise_scope(storage, monkeypatch, precise_failure):
+async def test_public_retry_route_creates_one_independent_successor(storage, monkeypatch, precise_failure):
     service, engine, table = storage
     if precise_failure:
         _finish_precise_retryable_failure(service)
     else:
         service.cancel_batch_job(job_id="attempt-job", created_by="tester")
+    before = _saved_rows(engine, table)
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
-    submitted: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        qc_sichuan, "submit_detached_task",
-        lambda name, func, job_id: submitted.append((name, job_id)),
-    )
+    async def provider():
+        return _ServiceStub()
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", provider)
+    submitted = []
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task",
+                        lambda name, func, job_id: submitted.append((name, job_id)))
     request = Request({"type": "http", "headers": []})
-    if not precise_failure:
-        before = _saved_rows(engine, table)
-        with pytest.raises(HTTPException) as rejected:
-            await qc_sichuan.retry_workspace_batch_job(
-                request, "attempt-job", current_user={"id": "tester"}
-            )
-        assert rejected.value.status_code == 409
-        assert "new_task_required_preserve_history" in rejected.value.detail
-        assert _saved_rows(engine, table) == before
-        assert submitted == []
-        return
-    await qc_sichuan.retry_workspace_batch_job(
-        request, "attempt-job", current_user={"id": "tester"}
-    )
-    with pytest.raises(HTTPException) as rejected:
-        await qc_sichuan.retry_workspace_batch_job(
-            request, "attempt-job", current_user={"id": "tester"}
-        )
-    assert rejected.value.status_code == 409
-    assert submitted == [
-        ("sichuan_workspace_batch_job_retry", "attempt-job"),
-    ]
+    first = await qc_sichuan.retry_workspace_batch_job(
+        request, "attempt-job", current_user={"id": "tester"})
+    second = await qc_sichuan.retry_workspace_batch_job(
+        request, "attempt-job", current_user={"id": "tester"})
+    new_id = first["data"]["id"]
+    assert new_id != "attempt-job" and second["data"]["id"] == new_id
+    assert submitted == [("sichuan_workspace_batch_job_retry", new_id)]
+    assert [row for row in _saved_rows(engine, table) if row["id"] == "attempt-job"] == before
 
 
 def test_detached_runner_has_no_job_id_deduplication():
@@ -459,14 +461,15 @@ def test_stale_progress_failure_retry_and_poll_do_not_take_new_attempt(storage, 
     old = service.mark_batch_job_running(job_id="attempt-job")
     assert isinstance(old, str)
     _finish_precise_retryable_failure(service)
-    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
-    new = service.mark_batch_job_running(job_id="attempt-job")
+    retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
+    new_id = retried["id"]
+    new = service.mark_batch_job_running(job_id=new_id)
     assert isinstance(new, str) and new != old
     with engine.connect() as connection:
-        started_at = connection.execute(sa.select(table.c.started_at)).scalar_one()
+        started_at = connection.execute(sa.select(table.c.started_at).where(table.c.id == new_id)).scalar_one()
     assert started_at == frozen
     assert service.is_batch_job_canceled_or_missing(job_id="attempt-job", attempt_filters_json=old)
-    assert not service.is_batch_job_canceled_or_missing(job_id="attempt-job", attempt_filters_json=new)
+    assert not service.is_batch_job_canceled_or_missing(job_id=new_id, attempt_filters_json=new)
     assert service.update_batch_job_progress(
         job_id="attempt-job", attempt_filters_json=old, step_key="run", rule_index=1,
         rule_count=1, processed_records=1, total_records=1,
@@ -474,12 +477,12 @@ def test_stale_progress_failure_retry_and_poll_do_not_take_new_attempt(storage, 
     ) is None
     service.fail_batch_job(job_id="attempt-job", error_message="stale", attempt_filters_json=old)
     assert service.retry_batch_job(
-        job_id="attempt-job", created_by="tester", automatic=True,
+        job_id=new_id, created_by="tester", automatic=True,
         expected_attempt_filters_json=old,
     ) is None
-    assert _status(engine, table) == "running"
+    assert _status(engine, table, new_id) == "running"
     with engine.connect() as connection:
-        row = connection.execute(sa.select(table.c.summary_json, table.c.error_message)).one()
+        row = connection.execute(sa.select(table.c.summary_json, table.c.error_message).where(table.c.id == new_id)).one()
     assert "stale" not in (row.summary_json or "")
     assert row.error_message is None
 
@@ -505,11 +508,12 @@ async def test_old_worker_exits_after_provider_wait_when_new_attempt_started(sto
     ))
     await asyncio.wait_for(entered.wait(), timeout=3)
     _finish_precise_retryable_failure(service)
-    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
-    assert isinstance(service.mark_batch_job_running(job_id="attempt-job"), str)
+    retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
+    assert retried is not None and retried["id"] != "attempt-job"
+    assert isinstance(service.mark_batch_job_running(job_id=retried["id"]), str)
     release.set()
     await asyncio.wait_for(old_worker, timeout=3)
-    assert _status(engine, service._batch_job_table) == "running"
+    assert _status(engine, service._batch_job_table, retried["id"]) == "running"
 
 
 def test_current_completed_attempt_cannot_be_reset_automatically(storage):
@@ -537,15 +541,15 @@ def test_current_precise_failure_can_retry_automatically_once(storage):
     service, engine, table = storage
     attempt = service.mark_batch_job_running(job_id="attempt-job")
     _finish_precise_retryable_failure(service)
-    assert service.retry_batch_job(
-        job_id="attempt-job", created_by="tester", automatic=True,
-        expected_attempt_filters_json=attempt,
-    ) is not None
-    assert service.retry_batch_job(
-        job_id="attempt-job", created_by="tester", automatic=True,
-        expected_attempt_filters_json=attempt,
-    ) is None
-    assert _status(engine, table) == "queued"
+    before = _saved_rows(engine, table)
+    first = service.retry_batch_job(job_id="attempt-job", created_by="tester", automatic=True,
+                                    expected_attempt_filters_json=attempt)
+    second = service.retry_batch_job(job_id="attempt-job", created_by="tester", automatic=True,
+                                     expected_attempt_filters_json=attempt)
+    assert first["id"] != "attempt-job" and second["id"] == first["id"]
+    assert second["idempotency_reused"] is True
+    assert _status(engine, table, first["id"]) == "queued"
+    assert [row for row in _saved_rows(engine, table) if row["id"] == "attempt-job"] == before
 
 
 def test_missing_attempt_cannot_write_claimed_formal_job_and_token_is_private(storage):
@@ -575,14 +579,14 @@ def test_preclaim_failure_cannot_fail_other_workers_running_attempt(storage):
     service.fail_batch_job(job_id="attempt-job", error_message="activation", queued_only=True)
     assert _status(engine, table) == "running"
     _finish_precise_retryable_failure(service)
-    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
-    queued = service.get_batch_job_for_processing(job_id="attempt-job")
+    retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
+    queued = service.get_batch_job_for_processing(job_id=retried["id"])
     assert queued is not None
     service.fail_batch_job(
-        job_id="attempt-job", error_message="activation", queued_only=True,
+        job_id=retried["id"], error_message="activation", queued_only=True,
         expected_queued_filters_json=queued["_claim_filters_json"],
     )
-    assert _status(engine, table) == "failed"
+    assert _status(engine, table, retried["id"]) == "failed"
 
 
 def test_preclaim_failure_uses_original_queued_snapshot(storage):
@@ -591,18 +595,19 @@ def test_preclaim_failure_uses_original_queued_snapshot(storage):
     assert first is not None
     original = first["_claim_filters_json"]
     _finish_precise_retryable_failure(service)
-    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+    retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
     service.fail_batch_job(
         job_id="attempt-job", error_message="late-activation", queued_only=True,
         expected_queued_filters_json=original,
     )
-    assert _status(engine, table) == "queued"
+    assert _status(engine, table, retried["id"]) == "queued"
+    assert _status(engine, table) == "failed"
 
 
 def test_parent_retry_preserves_each_child_snapshot(storage):
     service, engine, table = storage
     first_filters = {
-        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS,
         "rule_ids": ["LX0609-01-01-01", "LX0609-01-01-02"],
         "family_key": "admission", "department": "内科",
     }
@@ -612,7 +617,7 @@ def test_parent_retry_preserves_each_child_snapshot(storage):
         "attempt": 1,
     }
     second_filters = {
-        "rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-06-01-01"],
+        "rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS, "rule_ids": ["LX0609-06-01-01"],
         "family_key": "ct", "department": "外科",
     }
     with engine.begin() as connection:
@@ -644,7 +649,7 @@ def test_parent_retry_preserves_each_child_snapshot(storage):
             rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
             created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
             filters_json=json.dumps({
-                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS,
                 "rule_ids": ["LX0609-01-01-01", "LX0609-06-01-01"],
             }),
         ))
@@ -674,7 +679,7 @@ def test_parent_retry_rejects_running_child_without_partial_reset(storage):
             status="running", parent_job_id="parent-job", family_key="ct",
             rule_code="LX0609", rule_name="执行中子任务", scope="final", total_records=1,
             created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
-            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-06-01-01"]}),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS, "rule_ids": ["LX0609-06-01-01"]}),
         ))
         connection.execute(table.insert().values(
             id="parent-job", draft_id="sichuan-rule-library", created_by="tester",
@@ -682,7 +687,7 @@ def test_parent_retry_rejects_running_child_without_partial_reset(storage):
             child_job_ids_json='["attempt-job", "running-child"]',
             rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
             created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
-            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS, "rule_ids": ["LX0609-01-01-01"]}),
         ))
     before = _saved_rows(engine, table)
     with pytest.raises(ValueError, match="new_task_required_preserve_history"):
@@ -732,13 +737,13 @@ def test_parent_cancel_marks_running_child_usage_observation_incomplete(storage)
 
 @pytest.mark.parametrize("retry_target", ["parent-job", "attempt-job"])
 @pytest.mark.parametrize("claim_new_parent", [False, True])
-def test_parent_refresh_rejects_stale_aggregate_after_retry(
+def test_parent_refresh_keeps_original_children_after_independent_retry(
     storage, monkeypatch, retry_target, claim_new_parent,
 ):
     service, engine, table = storage
     with engine.begin() as connection:
         connection.execute(table.update().where(table.c.id == "attempt-job").values(
-            status="failed", parent_job_id="parent-job",
+            status="failed", job_kind="child", parent_job_id="parent-job",
             summary_json=json.dumps({"execution_status": "failed", "progress": {"step_key": "completed"}}),
             failed_records_json=json.dumps([{
                 "institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1",
@@ -751,7 +756,7 @@ def test_parent_refresh_rejects_stale_aggregate_after_retry(
             status="completed", job_kind="parent", child_job_ids_json='["attempt-job"]',
             rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
             created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
-            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS, "rule_ids": ["LX0609-01-01-01"]}),
             summary_json=json.dumps({"progress": {"step_key": "completed"}}),
         ))
     original = service._aggregate_parent_job
@@ -768,9 +773,10 @@ def test_parent_refresh_rejects_stale_aggregate_after_retry(
                 with pytest.raises(ValueError, match="new_task_required_preserve_history"):
                     service.retry_batch_job(job_id=retry_target, created_by="tester")
                 assert _saved_rows(engine, table) == before
-            assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
+            retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
+            assert retried["id"] != "attempt-job" and retried["parent_job_id"] == ""
             if claim_new_parent:
-                assert isinstance(service.mark_batch_job_running(job_id="parent-job"), str)
+                assert service.mark_batch_job_running(job_id="parent-job") is False
         return aggregate
 
     monkeypatch.setattr(service, "_aggregate_parent_job", aggregate_then_retry)
@@ -781,9 +787,13 @@ def test_parent_refresh_rejects_stale_aggregate_after_retry(
             table.c.id.in_(["parent-job", "attempt-job"])
         )).all()
     assert {row.id: row.status for row in rows} == {
-        "parent-job": "running" if claim_new_parent else "queued", "attempt-job": "queued",
+        "parent-job": "failed", "attempt-job": "failed",
     }
     assert writes == []
+    successors = [row for row in _saved_rows(engine, table)
+                  if row["id"] not in {"parent-job", "attempt-job"}]
+    assert len(successors) == 1 and successors[0]["status"] == "queued"
+    assert successors[0]["parent_job_id"] is None
 
 
 def test_two_parent_refreshes_cannot_apply_old_child_snapshot_last(storage, monkeypatch):
@@ -795,7 +805,7 @@ def test_two_parent_refreshes_cannot_apply_old_child_snapshot_last(storage, monk
             status="queued", job_kind="parent", child_job_ids_json='["attempt-job"]',
             rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
             created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
-            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS, "rule_ids": ["LX0609-01-01-01"]}),
             summary_json=json.dumps({"progress": {"step_key": "queued"}}),
         ))
     original = service._aggregate_parent_job
@@ -832,7 +842,7 @@ def test_parent_refresh_keeps_normal_completion_and_cancellation(storage, monkey
             status=parent_status, job_kind="parent", child_job_ids_json='["attempt-job"]',
             rule_code="LX0609", rule_name="父任务", scope="final", total_records=1,
             created_at=datetime(2026, 9, 24), updated_at=datetime(2026, 9, 24),
-            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
+            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS, "rule_ids": ["LX0609-01-01-01"]}),
         ))
     writes = []
     monkeypatch.setattr(service, "_write_record_result_envelopes", lambda *args, **kwargs: writes.append(kwargs))
@@ -856,7 +866,7 @@ def test_completed_parent_publishes_one_envelope_after_child_validation(storage)
     )
     assert facts is not None
     item = {
-        "record_id": "V", "visit_id": "V", "institute_id": "I", "patient_id": "P",
+        "record_id": "visit-1", **RECORD_REFS[0],
         "schema_version": "lx0609-customer-result-v2", "rule_id": "LX0609-01-01-01",
         "status": "compliant", "result_status": "compliant",
         "display_status": "compliant", "is_compliant": True,
@@ -875,7 +885,7 @@ def test_completed_parent_publishes_one_envelope_after_child_validation(storage)
             filters_json=json.dumps({
                 "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
                 "rule_ids": ["LX0609-01-01-01"],
-                "record_refs": [{"institute_id": "I", "patient_id": "P", "visit_id": "V"}],
+                "record_refs": RECORD_REFS,
             }),
         ))
 
@@ -894,8 +904,8 @@ def test_completed_parent_publishes_one_envelope_after_child_validation(storage)
             table.c.id == "parent-job"
         )).scalar_one()
         envelope = CanonicalResultStore(envelope_table).load_selected(
-            connection, root_job_id="parent-job", institute_id="I", patient_id="P",
-            visit_id="V", rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+            connection, root_job_id="parent-job", institute_id="inst-1", patient_id="patient-1",
+            visit_id="visit-1", rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
         )
     assert parent_status == "completed"
     assert len(rows) == 1
@@ -1112,13 +1122,14 @@ async def test_old_worker_result_after_qc_await_cannot_publish_to_new_attempt(st
     ))
     await asyncio.wait_for(entered.wait(), timeout=3)
     _finish_precise_retryable_failure(service)
-    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
-    assert isinstance(service.mark_batch_job_running(job_id="attempt-job"), str)
+    retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
+    assert retried is not None and retried["id"] != "attempt-job"
+    assert isinstance(service.mark_batch_job_running(job_id=retried["id"]), str)
     release.set()
     await asyncio.wait_for(old_worker, timeout=3)
-    assert _status(engine, table) == "running"
+    assert _status(engine, table, retried["id"]) == "running"
     with engine.connect() as connection:
-        assert json.loads(connection.execute(sa.select(table.c.items_json)).scalar_one()) == []
+        assert json.loads(connection.execute(sa.select(table.c.items_json).where(table.c.id == "attempt-job")).scalar_one()) == []
 
 
 def test_only_current_attempt_commits_real_canonical_envelope(storage):
@@ -1130,8 +1141,8 @@ def test_only_current_attempt_commits_real_canonical_envelope(storage):
     old = service.mark_batch_job_running(job_id="attempt-job")
     assert isinstance(old, str)
     _finish_precise_retryable_failure(service)
-    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
-    new = service.mark_batch_job_running(job_id="attempt-job")
+    retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
+    new = service.mark_batch_job_running(job_id=retried["id"])
     assert isinstance(new, str)
     payload = dict(
         job_id="attempt-job",
@@ -1154,14 +1165,17 @@ def test_only_current_attempt_commits_real_canonical_envelope(storage):
     assert service.complete_batch_job(**payload, attempt_filters_json=old) is False
     with engine.connect() as connection:
         assert connection.execute(sa.select(sa.func.count()).select_from(envelopes)).scalar_one() == 0
+    payload["job_id"] = retried["id"]
+    assert service.complete_batch_job(**payload, attempt_filters_json=old) is False
     assert service.complete_batch_job(**payload, attempt_filters_json=new) is True
-    assert _status(engine, table) == "completed"
+    assert _status(engine, table, retried["id"]) == "completed"
+    assert _status(engine, table) == "failed"
     with engine.connect() as connection:
         assert connection.execute(sa.select(sa.func.count()).select_from(envelopes)).scalar_one() == 1
     session = workspace_module._session()
     try:
         loaded = service._load_record_result_envelope_items(
-            session, root_job_id="attempt-job", institute_id="inst-1",
+            session, root_job_id=retried["id"], institute_id="inst-1",
             patient_id="patient-1", visit_id="visit-1",
             rule_set_key="luxian_0609_qc_v1", rule_set_version=workspace_module.RULE_SET_VERSION,
         )
@@ -1178,13 +1192,13 @@ async def test_formal_0609_worker_result_after_bundle_await_cannot_publish(stora
     service, engine, table = storage
     workspace = _WorkspaceStub()
     workspace.job["id"] = "attempt-job"
-    workspace.job["record_ids"] = ["visit-001"]
+    workspace.job["record_ids"] = ["visit-1"]
     rule_id = "LX0609-01-01-01"
     workspace.job["filters"] = {
         "rule_ids": [rule_id], "selected_rule_ids": [rule_id],
         "scoped_customer_rule_ids": [rule_id],
-        "record_rule_map": {"visit-001": [rule_id]},
-        "rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
+        "record_rule_map": {"visit-1": [rule_id]},
+        "rule_set_key": "luxian_0609_qc_v1", "record_refs": RECORD_REFS, "rule_set_version": "2026-06-09",
         "validation_mode": "programmatic",
     }
     workspace.mark_batch_job_running = service.mark_batch_job_running
@@ -1221,8 +1235,8 @@ async def test_formal_0609_worker_result_after_bundle_await_cannot_publish(stora
         LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
     ))
     monkeypatch.setattr(batch_worker, "load_running_final_bundle", lambda **kwargs: {
-        "scene": "final", "visit_id": kwargs.get("visit_id", "visit-001"),
-        "institute_id": "HOSP-001", "patient_id": "PAT-synthetic", "medical_text": "合成资料",
+        "scene": "final", "visit_id": kwargs.get("visit_id", "visit-1"),
+        "institute_id": "inst-1", "patient_id": "patient-1", "medical_text": "合成资料",
         "structured_context": {}, "document_hits": {}, "text_available": True,
     })
     monkeypatch.setattr(batch_worker, "build_programmatic_evidence_payload", lambda **_kwargs: {
@@ -1247,13 +1261,14 @@ async def test_formal_0609_worker_result_after_bundle_await_cannot_publish(stora
     ))
     await asyncio.wait_for(entered.wait(), timeout=5)
     _finish_precise_retryable_failure(service)
-    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
-    assert isinstance(service.mark_batch_job_running(job_id="attempt-job"), str)
+    retried = service.retry_batch_job(job_id="attempt-job", created_by="tester")
+    assert retried is not None and retried["id"] != "attempt-job"
+    assert isinstance(service.mark_batch_job_running(job_id=retried["id"]), str)
     release.set()
     await asyncio.wait_for(old_worker, timeout=5)
-    assert _status(engine, table) == "running"
+    assert _status(engine, table, retried["id"]) == "running"
     with engine.connect() as connection:
-        assert json.loads(connection.execute(sa.select(table.c.items_json)).scalar_one()) == []
+        assert json.loads(connection.execute(sa.select(table.c.items_json).where(table.c.id == "attempt-job")).scalar_one()) == []
 
 
 def test_submission_dedup_candidates_do_not_load_result_payloads(storage):
@@ -1273,3 +1288,89 @@ def test_submission_dedup_candidates_do_not_load_result_payloads(storage):
         assert service.list_recent_batch_job_candidates(created_by="tester", cutoff=datetime(2026, 9, 23)) == []
     finally:
         sa.event.remove(engine, "before_cursor_execute", capture)
+
+
+@pytest.fixture
+def mq_storage(storage):
+    from app.services.qc_dispatch.repository import QCDispatchRepository
+    service, engine, table = storage
+    repo = QCDispatchRepository(workspace_module._session, table, schema=None)
+    repo.dispatch_table.metadata.create_all(engine)
+    service._qc_dispatch = repo
+    with workspace_module._session.begin() as session:
+        filters = json.loads(session.execute(sa.select(table.c.filters_json)).scalar_one())
+        filters["qc_dispatch"] = {"schema_version": 1, "mode": "rabbitmq"}
+        session.execute(table.update().values(id=MQ_JOB_ID, filters_json=json.dumps(filters)))
+        repo.add_dispatch(session, job_id=MQ_JOB_ID, mode="rabbitmq")
+    return service, engine, table, repo
+
+
+def test_stale_mq_without_results_recovers_to_one_bounded_successor(mq_storage):
+    from app.qc_worker.recovery import WorkerRecovery, RecoveryOutcome
+    service, engine, table, repo = mq_storage
+    old = service.mark_batch_job_running(job_id=MQ_JOB_ID, expected_dispatch_generation=1)
+    assert isinstance(old, str)
+    recovery = WorkerRecovery(repository=repo, workspace=service, retry_delay_seconds=0)
+    outcomes = recovery.recover_stale_once(now=datetime.utcnow() + timedelta(hours=1))
+    assert outcomes == {MQ_JOB_ID: RecoveryOutcome.RETRY_SCHEDULED}
+    original = repo.get_dispatch(MQ_JOB_ID)
+    successor_id = json.loads(original.recovery_scope_json)["retry_job_id"]
+    successor = repo.get_dispatch(successor_id)
+    assert successor_id != MQ_JOB_ID
+    assert original.generation == successor.generation == 1
+    assert original.status == "failed" and successor.status == "queued"
+    assert successor.failure_count == original.failure_count + 1
+    assert successor.failure_budget == original.failure_budget
+    assert recovery.recover_failed_job(MQ_JOB_ID) is RecoveryOutcome.RETRY_SCHEDULED
+    assert len(_saved_rows(engine, table)) == 2
+    assert _stale_failed_completion(service, old, job_id=MQ_JOB_ID) is False
+    assert service.complete_batch_job(job_id=successor_id, attempt_filters_json=old,
+        summary={"execution_status": "completed"}, items=[], failed_records=[],
+        persist_record_envelopes=False) is False
+
+
+@pytest.mark.parametrize("boundary", ["no_registration", "request_forgery", "completed", "legacy",
+    "saved_items", "saved_summary", "saved_envelope", "exhausted_budget", "stale_attempt"])
+def test_unscoped_automatic_retry_requires_trusted_empty_mq_recovery(mq_storage, boundary):
+    service, engine, table, repo = mq_storage
+    old = service.mark_batch_job_running(job_id=MQ_JOB_ID, expected_dispatch_generation=1)
+    service.fail_batch_job(job_id=MQ_JOB_ID, attempt_filters_json=old, error_message="synthetic")
+    if boundary not in {"no_registration", "request_forgery"}:
+        assert repo.register_recovery(MQ_JOB_ID, 1, recovery_kind="unstarted",
+            reason_code="no_saved_results_after_stale_attempt")
+    with engine.begin() as connection:
+        values = {}
+        if boundary == "completed":
+            values["status"] = "completed"
+        elif boundary == "saved_items":
+            values["items_json"] = '[{"status":"compliant"}]'
+        elif boundary == "saved_summary":
+            values["summary_json"] = '{"completed_rule_count":1}'
+        elif boundary == "saved_envelope":
+            envelopes = service._record_result_envelope_table
+            connection.execute(envelopes.insert().values(
+                id="synthetic-envelope", job_id=MQ_JOB_ID, root_job_id=MQ_JOB_ID,
+                institute_id="inst-1", patient_id="patient-1", visit_id="visit-1",
+                rule_set_key="luxian_0609_qc_v1", rule_set_version="2026-06-09",
+                created_by="tester", record_id="visit-1", envelope_json="{}", created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()))
+        elif boundary == "exhausted_budget":
+            connection.execute(repo.dispatch_table.update().values(failure_count=3, failure_budget=3))
+        elif boundary in {"legacy", "request_forgery"}:
+            filters = json.loads(old)
+            if boundary == "legacy":
+                filters.pop("qc_dispatch")
+                connection.execute(repo.outbox_table.delete())
+                connection.execute(repo.dispatch_table.delete())
+            else:
+                filters["recovery_kind"] = "unstarted"
+                filters["recovery_reason_code"] = "no_saved_results_after_stale_attempt"
+            values["filters_json"] = json.dumps(filters)
+            old = values["filters_json"]
+        if values:
+            connection.execute(table.update().where(table.c.id == MQ_JOB_ID).values(**values))
+    before = _saved_rows(engine, table)
+    result = service.retry_batch_job(job_id=MQ_JOB_ID, created_by="tester", automatic=True,
+        expected_attempt_filters_json="stale" if boundary == "stale_attempt" else old)
+    assert result is None
+    assert _saved_rows(engine, table) == before

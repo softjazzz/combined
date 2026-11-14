@@ -5361,7 +5361,35 @@ class CustomQCWorkspaceService:
             now = _now_utc()
             retry_scope_result = build_failed_rule_retry_scope(current)
             if automatic and formal_0609 and retry_scope_result is None:
-                return None
+                # 仅持久恢复 owner 已登记的空产出 MQ 失败可自动完整重试。
+                # 请求 filters 不提供恢复权限；任务行锁与原始 attempt CAS 仍在上方裁决。
+                summary = current.get("summary") or {}
+                bounded_unstarted = (
+                    dispatch_record is not None
+                    and dispatch_record.status == "failed"
+                    and dispatch_record.recovery_kind == "unstarted"
+                    and dispatch_record.recovery_reason_code == "no_saved_results_after_stale_attempt"
+                    and dispatch_record.recovery_registered_at is not None
+                    and 0 <= dispatch_record.failure_count < dispatch_record.failure_budget
+                    and current.get("status") == "failed"
+                    and str(current.get("job_kind") or "").lower() != "parent"
+                    and not current.get("items")
+                    and not current.get("failed_records")
+                    and not current.get("rule_results")
+                    and not summary.get("rule_results")
+                    and int(current.get("success_count") or 0) == 0
+                    and int(summary.get("completed_rule_count") or 0) == 0
+                )
+                if not bounded_unstarted:
+                    return None
+                # 与新身份创建共用事务，直接查原信封，不能只凭 items_json 为空放行。
+                envelope = self._record_result_envelope_table
+                saved_envelope = session.execute(select(envelope.c.id).where(or_(
+                    envelope.c.job_id == job_id,
+                    envelope.c.root_job_id == (parent_job_id or job_id),
+                )).limit(1)).first()
+                if saved_envelope is not None:
+                    return None
             if automatic and retry_scope_result is not None:
                 retry_scope_result = build_failed_rule_retry_scope(current, automatic_only=True)
                 if retry_scope_result is None:

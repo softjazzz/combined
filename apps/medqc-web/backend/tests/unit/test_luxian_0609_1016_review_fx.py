@@ -35,7 +35,8 @@ def _visit_documents():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("client,reason", [
     (None, "model_transport_error"),
-    (_RaisingClient(RuntimeError("synthetic transport")), "model_transport_error"),
+    (_RaisingClient(ConnectionError("synthetic transport")), "model_transport_error"),
+    (_RaisingClient(RuntimeError("synthetic unknown")), "execution_program_error"),
     (_RaisingClient(TimeoutError()), "model_timeout"),
     (_BadOutputClient(), "model_invalid_output"),
 ])

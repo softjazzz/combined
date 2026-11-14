@@ -134,7 +134,8 @@ async def test_worker_rejects_bad_snapshot_before_plan_and_source(
     )
     assert workspace.job["status"] == "failed"
     assert failure_kwargs["attempt_filters_json"] == "attempt-1"
-    assert "LX0609任务执行配置" in workspace.job["error_message"]
+    assert failure_kwargs["execution_error"]["reason_code"] == ("task_settings_changed" if damage == "drift" else "task_settings_missing")
+    assert failure_kwargs["execution_error"]["retryable"] is False
     assert workspace.items == []
 
 
@@ -189,6 +190,7 @@ async def test_worker_rejects_runtime_identity_drift_before_plan_or_record_read(
     )
     assert workspace.job["status"] == "failed"
     assert failure_kwargs["attempt_filters_json"] == "attempt-identity"
-    expected_error = "LX0609任务运行身份" if change == "missing" else "LX0609任务模型或实现版本"
-    assert expected_error in workspace.job["error_message"]
+    expected_code = "task_runtime_missing" if change == "missing" else "task_runtime_changed"
+    assert failure_kwargs["execution_error"]["reason_code"] == expected_code
+    assert failure_kwargs["execution_error"]["retryable"] is False
     assert workspace.items == []

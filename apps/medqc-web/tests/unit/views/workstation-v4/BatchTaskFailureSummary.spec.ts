@@ -6,6 +6,8 @@ describe('失败任务的已保存结果和原因', () => {
   it.each([
     ['model_request', false, '模型请求被拒绝', '不会自动重试'],
     ['model_timeout', true, '模型请求超时', '具备自动重试条件'],
+    ['execution_contract', false, '任务冻结合同不满足', '不会自动重试'],
+    ['execution_timeout', true, '规则执行超时', '具备自动重试条件'],
     ['SECRET-CATEGORY', undefined, '执行未完成', '自动重试属性未确认'],
   ])('安全展示错误类别 %s 和自动重试属性', (category, retryable, label, retryLabel) => {
     const wrapper = mount(Summary, { props: { job: {
@@ -54,6 +56,13 @@ describe('失败任务的已保存结果和原因', () => {
           scope: 'all',
           total_records: 1,
           summary: {
+            total_records: 1,
+            success_count: 0,
+            failed_count: 1,
+            issue_records: 0,
+            compliant_records: 0,
+            total_tokens: 0,
+            total_processing_time: 0,
             material_failure: {
               code: 'uncaptured_material_columns',
               stage: 'material_capture',

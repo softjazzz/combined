@@ -53,8 +53,10 @@ class _FamilyWorkspace(_WorkspaceStub):
             or self.job["status"] != "running"
         )
 
-    def fail_batch_job(self, *, job_id, error_message, attempt_filters_json):
+    def fail_batch_job(self, *, job_id, error_message, attempt_filters_json, execution_error):
         assert attempt_filters_json == self.attempt_token
+        assert execution_error["reason_code"] in {"task_settings_changed", "task_runtime_changed"}
+        assert execution_error["retryable"] is False
         assert self.job["status"] == "running"
         return super().fail_batch_job(job_id=job_id, error_message=error_message)
 

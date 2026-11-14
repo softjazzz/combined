@@ -25,7 +25,17 @@ _ERRORS = {
     "privacy_guard_blocked": ("privacy_guard", False, "模型请求未通过隐私保护检查。"),
     "execution_program_error": ("execution", False, "规则执行异常，请联系管理员检查。"),
     "execution_failed": ("unknown", False, "规则执行未完成，请检查后重试。"),
+    "executor_timeout": ("execution_timeout", True, "规则执行超时，可稍后重试。"),
 }
+_TASK_CONTRACT_MESSAGES = {
+    "task_settings_missing": "LX0609任务缺少冻结执行配置，请重新创建任务。",
+    "task_settings_changed": "LX0609任务执行配置已变化，请重新创建任务。",
+    "task_runtime_missing": "LX0609任务缺少冻结运行身份，请重新创建任务。",
+    "task_runtime_changed": "LX0609任务模型或实现版本已变化，请重新创建任务。",
+    "task_scope_invalid": "LX0609任务病例规则范围不完整，请重新创建任务。",
+}
+for _code, _message in _TASK_CONTRACT_MESSAGES.items():
+    _ERRORS[_code] = ("execution_contract", False, _message)
 for _code in CONTEXT_FAILURE_REASON_CODES:
     _ERRORS[_code] = ("model_context", False, "模型执行上下文不满足要求，请检查配置或材料范围。")
 for _code in (
@@ -105,6 +115,14 @@ class SafeExecutionError(RuntimeError):
 def safe_exception_failure(error: BaseException, *, stage: str = "call") -> dict[str, Any]:
     if isinstance(error, SafeExecutionError):
         return safe_failure_projection({"reason_code": error.reason_code, "retryable": error.retryable})
+    from .task_execution_contract import TaskExecutionContractError
+    from .luxian_0609.llm_prompt_privacy import PatientPrivacyViolation, PrivacyIdentityContextError
+
+    if isinstance(error, TaskExecutionContractError):
+        reason = error.code if error.code in _TASK_CONTRACT_MESSAGES else "execution_program_error"
+        return safe_failure_projection({"reason_code": reason})
+    if isinstance(error, (PatientPrivacyViolation, PrivacyIdentityContextError)):
+        return safe_failure_projection({"reason_code": "privacy_guard_blocked"})
     code = getattr(error, "code", None)
     from .material_admission import MESSAGES as material_messages
     if type(error).__name__ == "MaterialSnapshotError" and str(error) in material_messages:

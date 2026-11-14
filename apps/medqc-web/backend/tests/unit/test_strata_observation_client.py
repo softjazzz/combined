@@ -16,6 +16,7 @@ from app.services import llm_observability, qc_llm_client
 from app.services.llm_dispatch import client as gateway_client
 from app.services.llm_dispatch.client import GatewayDispatchClient
 from app.services.strata_observation import capture_strata_observations
+from app.services.qc_execution_errors import SafeExecutionError
 
 
 def answer(*, cached=800, finish="stop"):
@@ -144,9 +145,13 @@ async def test_transport_exception_and_cancel_are_not_turned_into_a_clinical_pas
 
     monkeypatch.setattr(qc_llm_client, "safe_post_json", fail)
     with capture_strata_observations() as observed:
-        with pytest.raises(httpx.ConnectError) as caught:
+        with pytest.raises(SafeExecutionError) as caught:
             await client().generate("synthetic")
-    assert caught.value is error
+    assert caught.value.reason_code == "model_transport_error"
+    assert caught.value.error_category == "model_connection"
+    assert caught.value.retryable is True
+    assert caught.value.__suppress_context__ is True
+    assert "private endpoint" not in str(caught.value)
     assert observed.events[0]["status"] != "success"
     assert observed.events[0]["metrics"]["nominal_input_tokens"] is None
 
@@ -215,8 +220,11 @@ async def test_strata_disconnect_has_one_send_and_unknown_cost(monkeypatch):
     monkeypatch.setattr(core_http, "_is_allowed_host", lambda host: True)
     try:
         with capture_strata_observations() as observed:
-            with pytest.raises(httpx.RemoteProtocolError):
+            with pytest.raises(SafeExecutionError) as caught:
                 await client().generate("synthetic")
+        assert caught.value.reason_code == "model_transport_error"
+        assert caught.value.retryable is True
+        assert "Server disconnected" not in str(caught.value)
         assert len(sent) == 1
         metrics = observed.events[0]["metrics"]
         assert metrics["model_requests_started"] == 1
