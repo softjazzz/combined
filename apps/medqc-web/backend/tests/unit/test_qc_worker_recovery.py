@@ -437,3 +437,18 @@ def test_legacy_dispatch_is_not_recovered_by_independent_worker():
     assert outcome == RecoveryOutcome.SKIPPED
     assert workspace.retry_calls == []
     assert repository.recoveries == []
+
+
+@pytest.mark.parametrize("reason", ["task_settings_changed", "task_runtime_changed", "execution_program_error",
+                                   "model_timeout"])
+def test_saved_nonretryable_task_error_is_terminal_not_unstarted(reason):
+    repository = _Repository()
+    job = _job()
+    job["summary"] = {"execution_error": {"reason_code": reason, "retryable": False}}
+    workspace = _Workspace(job)
+    recovery = WorkerRecovery(repository=repository, workspace=workspace)
+    assert recovery.recover_failed_job("job-1") is RecoveryOutcome.TERMINAL_FAILURE
+    assert repository.recoveries == []
+    assert workspace.retry_calls == []
+    assert repository.terminal == [("job-1", 1, "worker_failed")]
+    assert job["summary"]["execution_error"] == {"reason_code": reason, "retryable": False}

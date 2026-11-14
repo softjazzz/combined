@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from app.services.luxian_0609 import LUXIAN_0609_RULE_SET_KEY
 from app.services.qc_dispatch.contracts import qc_dispatch_mode_from_filters
+from app.services.qc_execution_errors import task_error_blocks_automatic_retry
 
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,13 @@ class WorkerRecovery:
                 if self._has_retry_successor(job_id, generation):
                     return RecoveryOutcome.RETRY_SCHEDULED
                 raise RuntimeError("unsupported recovery task was not made terminal")
+            return RecoveryOutcome.TERMINAL_FAILURE
+        if task_error_blocks_automatic_retry(job.get("summary")):
+            # 正常终止的合同/配置/程序错误不是失联，不能登记为空产出恢复。
+            if not self._repository.record_terminal_failure(job_id, generation, error_code="worker_failed"):
+                if self._has_retry_successor(job_id, generation):
+                    return RecoveryOutcome.RETRY_SCHEDULED
+                raise RuntimeError("nonretryable task failure was not made terminal")
             return RecoveryOutcome.TERMINAL_FAILURE
         has_success = self._has_saved_success(job_id, job)
         has_failed_scope = self._has_explicit_failed_scope(job)

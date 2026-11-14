@@ -1374,3 +1374,23 @@ def test_unscoped_automatic_retry_requires_trusted_empty_mq_recovery(mq_storage,
         expected_attempt_filters_json="stale" if boundary == "stale_attempt" else old)
     assert result is None
     assert _saved_rows(engine, table) == before
+
+
+@pytest.mark.parametrize("reason", ["task_settings_changed", "task_runtime_changed", "execution_program_error",
+                                   "model_timeout"])
+def test_registered_unstarted_cannot_override_saved_nonretryable_error(mq_storage, reason):
+    service, engine, table, repo = mq_storage
+    old = service.mark_batch_job_running(job_id=MQ_JOB_ID, expected_dispatch_generation=1)
+    service.fail_batch_job(job_id=MQ_JOB_ID, attempt_filters_json=old, error_message="synthetic",
+                          execution_error={"reason_code": reason, "retryable": False})
+    assert repo.register_recovery(MQ_JOB_ID, 1, recovery_kind="unstarted",
+                                 reason_code="no_saved_results_after_stale_attempt")
+    before = _saved_rows(engine, table)
+    with engine.connect() as connection:
+        outbox_before = [dict(row) for row in connection.execute(sa.select(repo.outbox_table)).mappings()]
+    assert service.retry_batch_job(job_id=MQ_JOB_ID, created_by="tester", automatic=True,
+                                  expected_attempt_filters_json=old) is None
+    assert _saved_rows(engine, table) == before
+    with engine.connect() as connection:
+        assert [dict(row) for row in connection.execute(sa.select(repo.outbox_table)).mappings()] == outbox_before
+    assert repo.get_dispatch(MQ_JOB_ID).recovery_kind == "unstarted"

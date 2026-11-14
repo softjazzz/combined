@@ -5359,6 +5359,11 @@ class CustomQCWorkspaceService:
             rule_count = int(current.get("rule_count") or 1)
             total_records = int(current.get("total_records") or 0)
             now = _now_utc()
+            if automatic and formal_0609:
+                from .qc_execution_errors import task_error_blocks_automatic_retry
+                # 行锁内复核；已登记的恢复意图不能覆盖后保存的任务级拒绝。
+                if task_error_blocks_automatic_retry(current.get("summary")):
+                    return None
             retry_scope_result = build_failed_rule_retry_scope(current)
             if automatic and formal_0609 and retry_scope_result is None:
                 # 仅持久恢复 owner 已登记的空产出 MQ 失败可自动完整重试。

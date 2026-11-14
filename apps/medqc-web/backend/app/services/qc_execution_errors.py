@@ -83,6 +83,14 @@ def safe_failure_projection(value: Mapping[str, Any]) -> dict[str, Any]:
             "retryable": retryable, "error": message}
 
 
+def task_error_blocks_automatic_retry(summary: Any) -> bool:
+    """已保存的任务级拒绝优先；空产出不能覆盖安全投影的不可重试判定。"""
+    if not isinstance(summary, Mapping) or "execution_error" not in summary:
+        return False
+    error = summary["execution_error"]
+    return not isinstance(error, Mapping) or not safe_failure_projection(error)["retryable"]
+
+
 def http_failure(status: Any) -> dict[str, Any]:
     if type(status) is not int:
         reason = "execution_failed"
