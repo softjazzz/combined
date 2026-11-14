@@ -1,6 +1,6 @@
 """缺少文书与事件绑定时，不能由来源行数推断小结缺失。"""
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -15,10 +15,10 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 async def _run(days, *, summary_id="summary", missing_event_id=False):
     rule = "LX0609-04-01-01"
     rows = {
-        "mr_surgery": [
-            {"surgery_id": "" if missing_event_id else f"event-{i}",
+        "surgery_record": [
+            {"document_id": "" if missing_event_id else f"event-{i}",
              "surgery_name": "合成腹部手术", "surgical_level": "二级",
-             "surgery_begin_datetime": datetime(2026, 1, day, 8)}
+             "surgery_begin_datetime": datetime(2026, 1, day, 8, tzinfo=timezone(timedelta(hours=8)))}
             for i, day in enumerate(days)
         ],
         "presurg_summary": [{"document_id": summary_id,

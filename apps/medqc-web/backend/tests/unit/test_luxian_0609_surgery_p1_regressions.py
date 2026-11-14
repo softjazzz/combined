@@ -5,10 +5,11 @@ from datetime import datetime
 
 import pytest
 
-from test_luxian_0609_surgery_record_event_coverage_regression import master, record, run
+from test_luxian_0609_surgery_record_event_coverage_regression import anesthesia, master, record, run
 from test_luxian_0609_surgery_presence_freeze import _execute_and_aggregate
 from test_luxian_0609_rescue_surgery_timeliness_closure import pipeline
 from app.services.luxian_0609 import native_surgery_document_execution as document
+from app.services.luxian_0609.surgery_record_coverage import definitely_uncovered_surgery_rows
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
@@ -25,43 +26,53 @@ def presence_record():
         **record(), "surgery_code": "51.2300", "surgery_name": "腹腔镜胆囊切除术",
         "surgery_begin_time": "2026-01-01 08:00:00+08",
         "surgery_end_time": "2026-01-01 10:00:00+08",
+        "record_content": "本次已完成腹腔镜胆囊切除术，手术过程记录完整。",
     }
 
 
 @pytest.mark.parametrize("count,reason", [(1, "authoritative_time_missing"), (2, "association_failed")])
 def test_missing_record_without_end_clock_does_not_prove_24_hour_failure(count, reason):
-    rows = [confirmed_master(day=i + 1) for i in range(count)]
-    for row in rows:
-        row["surgery_end_datetime"] = None
+    rows = [anesthesia(day=i + 1, end="") for i in range(count)]
     # 09832以结束时刻判断成熟窗口；不以开始时刻补结束，也不混成记录存在性规则。
     # 复用正式执行到SQLite保存读取链，原关联字段提示保护用例保持不变。
-    result = asyncio.run(pipeline("LX0609-04-02-01", {"mr_surgery": rows}))
+    result = asyncio.run(pipeline("LX0609-04-02-01", {"anesthesia_record": rows}))
     assert (result["status"], result["reason_code"]) == ("data_gap", reason)
 
 
 @pytest.mark.parametrize("record_time", [datetime(2026, 1, 1, 8), "2026-01-01 08:00:00+08"])
 def test_missing_event_is_not_hidden_by_other_event_record(record_time):
     existing_record = {**record(), "surgery_begin_time": record_time}
+    missing = confirmed_master(3)
+    # 历史覆盖算法的确定缺失条件保留；当前执行只核对真实文书中的第二台字段。
+    assert definitely_uncovered_surgery_rows([confirmed_master(), missing], [existing_record]) == (missing,)
     result = asyncio.run(run(
-        {"mr_surgery": [confirmed_master(), confirmed_master(3)], "surgery_record": [existing_record]},
+        {"surgery_record": [existing_record, {**record(3), "record_time": None}]},
         "LX0609-04-02-01", "2026-01-10",
     ))
-    assert result == {"state": "non_compliant", "reason": "required_document_missing", "calls": 0}
+    assert result == {"state": "data_gap", "reason": "authoritative_time_missing", "calls": 0}
 
 
 def test_presence_checks_each_performed_event():
-    _, _, reduced, _ = _execute_and_aggregate(rows_by_source={
-        "mr_surgery": [confirmed_master(), confirmed_master(3)], "surgery_record": [presence_record()],
+    missing = confirmed_master(3)
+    assert definitely_uncovered_surgery_rows([confirmed_master(), missing], [presence_record()]) == (missing,)
+    session, _, reduced, _ = _execute_and_aggregate(rows_by_source={
+        "surgery_record": [presence_record(), {**presence_record(), **record(3), "document_id": "D3"}],
     })
     decision = next(x for x in reduced if x.rule_id == "LX0609-04-02-02")
-    assert decision.final_state.value == "non_compliant"
-    assert decision.reason_code == "required_document_missing"
+    assert decision.final_state.value == "compliant"
+    assert decision.reason_code == "requirement_satisfied"
+    expected_refs = {reference for reference, _ in session.materials.document_rows(
+        "surgery_record", snapshot=session.snapshot,
+    )}
+    assert len(expected_refs) == 2
+    assert set(decision.fact_refs) == expected_refs
 
 
 def test_record_without_event_time_does_not_prove_another_event_is_missing():
     existing = {**record(), "surgery_begin_time": None, "surgery_end_time": None}
+    assert definitely_uncovered_surgery_rows([confirmed_master(), confirmed_master(3)], [existing]) == ()
     result = asyncio.run(run(
-        {"mr_surgery": [confirmed_master(), confirmed_master(3)], "surgery_record": [existing]},
+        {"surgery_record": [existing]},
         "LX0609-04-02-01", "2026-01-10",
     ))
     assert result["state"] == "data_gap"
@@ -70,6 +81,7 @@ def test_record_without_event_time_does_not_prove_another_event_is_missing():
 
 def test_unknown_catalog_row_with_level_does_not_add_missing_record_defect():
     unknown = {**master(3), "surgery_name": "未分类操作", "surgical_level": "一级"}
+    assert definitely_uncovered_surgery_rows([confirmed_master(), unknown], [presence_record()]) == ()
     _, _, reduced, _ = _execute_and_aggregate(rows_by_source={
         "mr_surgery": [confirmed_master(), unknown], "surgery_record": [presence_record()],
     })
@@ -81,7 +93,7 @@ def test_unknown_catalog_row_with_level_does_not_add_missing_record_defect():
 def test_surgeon_in_staff_with_position_and_title_is_present(participant, expected):
     rule = "LX0609-04-01-02"
     rows = {
-        "mr_surgery": [{**master(), "surgeon": "甲某", "surgery_begin_datetime": datetime(2026, 1, 1, 8)}],
+        "surgery_record": [{**presence_record(), "surgeon": "甲某"}],
         "presurg_discussion": [{"document_id": "discussion", "discuss_staff": f"科主任{participant}副主任医师,乙某主治医师。"}],
     }
     def reader(**kw):
@@ -108,7 +120,7 @@ def test_missing_record_defect_carries_controlled_explanation_through_save_contr
     from app.services.luxian_0609.customer_renderer import customer_finding_from_controlled_facts
     from app.services.qc_workspace.canonical_result_store import validated_customer_explanation
 
-    rows = {"mr_surgery": [confirmed_master()]}
+    rows = {"anesthesia_record": [anesthesia()]}
 
     def reader(**kw):
         return SnapshotSourceRows.create(source_key=kw["source_key"], rows=rows.get(kw["source_key"], ()),

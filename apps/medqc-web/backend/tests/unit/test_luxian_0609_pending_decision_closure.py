@@ -26,8 +26,8 @@ from tests.unit.test_luxian_0609_cross_event_identity import (
     _ScriptedInvasiveModel,
     _course,
     _session as _cross_session,
-    _surgery_master,
-    _surgery_presence_final,
+    _performed_surgery,
+    _surgery_coverage_unresolved,
     _surgery_record,
     _two_day_rows,
 )
@@ -92,8 +92,8 @@ async def test_075_write_date_alone_does_not_prove_overlapping_occurrence(second
 
 # ---------- 2. 04-02-02：记录须能唯一关联到台次 ----------
 def _two_surgeries(*records):
-    return _surgery_presence_final({
-        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+    return _surgery_coverage_unresolved({
+        "performed_events": [_performed_surgery(2, 8), _performed_surgery(2, 20, surgeon="乙")],
         "surgery_record": list(records),
     })
 
@@ -102,28 +102,19 @@ def test_030_record_spanning_both_surgeries_proves_neither():
     spanning = {**_surgery_record(2, 8), "document_id": "SPAN",
                 "surgery_begin_time": "2026-06-02 08:30:00+08:00",
                 "surgery_end_time": "2026-06-02 21:00:00+08:00"}
-    final = _two_surgeries(_surgery_record(2, 8), spanning)
-    assert (_saved(final)["status"], final["reason_code"]) == ("data_gap", "association_failed")
+    assert _two_surgeries(_surgery_record(2, 8), spanning) is True
 
 
 def test_030_small_time_difference_with_overlapping_span_is_associated():
     early = {**_surgery_record(2, 8), "surgery_begin_time": "2026-06-02 07:55:00+08:00"}
-    final = _two_surgeries(early, _surgery_record(2, 20))
-    assert final["reason_code"] != "association_failed"
-    assert _saved(final)["status"] == "compliant"
+    assert _two_surgeries(early, _surgery_record(2, 20)) is False
 
 
 # ---------- 3. 08-01-03：死亡记录多版本 ----------
-async def _death_result(death_records, diagnoses):
-    from tests.unit.test_luxian_0609_death_diagnosis_scope_closure import evaluate
+def _death_version(death_records, diagnoses):
+    from app.services.luxian_0609.native_extended_document_execution import _latest_written_diagnosis_version
 
-    rows = {
-        "death_record": death_records,
-        "mr_diagnosis": [{"diagnosis_type": "死亡诊断", "diagnosis_no": 1, "diagnosis_name": "合成诊断甲"}],
-        "discharge_record_diagnosis": diagnoses,
-    }
-    *_ignored, result = await evaluate(rows)
-    return result
+    return _latest_written_diagnosis_version(diagnoses, death_records)
 
 
 def _death(doc, record_time):
@@ -140,32 +131,33 @@ def _dx(doc, name):
     ("合成诊断甲", "合成诊断乙", "non_compliant"),
 ], ids=["latest_matches", "latest_differs"])
 async def test_063_death_uses_latest_death_record(old, new, expected):
-    result = await _death_result(
+    selected, gap = _death_version(
         [_death("DEATH-1", "2026-10-01 09:00:00"), _death("DEATH-2", "2026-10-01 12:00:00")],
         [_dx("DEATH-1", old), _dx("DEATH-2", new)],
     )
-    assert result["status"] == expected
-    assert result["customer_display_facts"]["written_diagnoses"] == [new]
+    assert gap is None
+    assert [row["diagnosis_name"] for row in selected] == [new]
+    assert selected[0]["document_id"] == "DEATH-2"
 
 
 @pytest.mark.asyncio
 async def test_063_death_same_time_conflicting_versions_is_gap():
-    result = await _death_result(
+    selected, gap = _death_version(
         [_death("DEATH-1", "2026-10-01 09:00:00"), _death("DEATH-2", "2026-10-01 09:00:00")],
         [_dx("DEATH-1", "合成诊断甲"), _dx("DEATH-2", "合成诊断乙")],
     )
-    assert result["status"] == "data_gap"
-    assert result["customer_display_facts"]["written_gap"] == "version_conflict"
+    assert selected == ()
+    assert gap == "version_conflict"
 
 
 @pytest.mark.asyncio
 async def test_063_death_latest_without_diagnoses_does_not_borrow_older():
-    result = await _death_result(
+    selected, gap = _death_version(
         [_death("DEATH-1", "2026-10-01 09:00:00"), _death("DEATH-2", "2026-10-01 12:00:00")],
         [_dx("DEATH-1", "合成诊断甲")],
     )
-    assert result["status"] == "data_gap"
-    assert result["customer_display_facts"]["written_gap"] == "diagnoses_missing"
+    assert selected == ()
+    assert gap is None  # 最新版本确实没有诊断，不能借旧版本补齐。
 
 
 # ---------- 6. 04-01-01：未来手术计划不立即报缺术前小结 ----------
@@ -238,17 +230,17 @@ def test_029_performed_surgery_without_summary_is_still_defect():
 
 # ---------- 第六轮复核：结束时间冲突、缺报告正文的专项跳过 ----------
 def test_030_conflicting_known_ends_do_not_become_unbounded():
-    second = _surgery_master(2, 20, surgeon="乙")
+    second = _performed_surgery(2, 20, surgeon="乙")
     other_component = {**second, "surgery_name": "腹腔镜下肠粘连松解术", "surgery_code": "54.5101",
-                       "surgery_end_datetime": datetime(2026, 6, 2, 21)}
+                       "surgery_end_time": "2026-06-02 21:00:00+08:00"}
     late = {**_surgery_record(2, 20), "document_id": "LATE",
             "surgery_begin_time": "2026-06-02 23:00:00+08:00",
             "surgery_end_time": "2026-06-02 23:30:00+08:00", "record_time": "2026-06-02 23:45:00"}
-    final = _surgery_presence_final({
-        "mr_surgery": [_surgery_master(2, 8), second, other_component],
+    final = _surgery_coverage_unresolved({
+        "performed_events": [_performed_surgery(2, 8), second, other_component],
         "surgery_record": [_surgery_record(2, 8), late],
     })
-    assert (_saved(final)["status"], final["reason_code"]) == ("data_gap", "association_failed")
+    assert final is True
 
 
 @pytest.mark.asyncio

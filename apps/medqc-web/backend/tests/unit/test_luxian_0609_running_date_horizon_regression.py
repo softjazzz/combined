@@ -1,6 +1,7 @@
 """P1-R1：通过Provider真实在院冻结日期取材，不手工注入终点行。"""
 
 from datetime import datetime
+from luxian_0609_invasive_procedure_test_client import FrozenInvasiveProcedureClient
 
 import pytest
 
@@ -86,7 +87,9 @@ async def extended(rule, rows, *, day="2026-06-10", client=None, final_date_only
         decision_rule_ids=(rule,),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
-        llm_client=client or Reasons(),
+        llm_client=client or (FrozenInvasiveProcedureClient(mapping={
+            "经皮肝穿刺引流术": "经皮肝穿刺引流术", "脊神经根阻滞术": "脊神经根阻滞术",
+        }) if rule == "LX0609-10-03-01" else Reasons()),
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=native.decisions,
@@ -146,13 +149,13 @@ MISSING_CASES = [
     (
         "LX0609-10-03-01",
         {
-            "mr_surgery": (
+            "inpat_nondrug_order": (
                 {
-                    "surgery_id": "P75",
+                    "order_id": "P75",
                     "record_content": "有创操作已实施。",
                     "surgery_code": "50.9101",
-                    "surgery_name": "经皮肝穿刺引流术",
-                    "surgery_begin_datetime": datetime(2026, 6, 2, 10),
+                    "order_name": "经皮肝穿刺引流术",
+                    "planned_start_datetime": datetime(2026, 6, 2, 10),
                 },
             )
         },
@@ -413,19 +416,19 @@ async def test_mixed_pending_event_is_not_published_as_missing(rule, reverse):
         ]
         key, expected = "unmatched_special_antimicrobials", ["美罗培南"]
     elif rule == "LX0609-10-03-01":
-        source = "mr_surgery"
+        source = "inpat_nondrug_order"
         events = [
             {
-                "surgery_id": "P1",
+                "order_id": "P1",
                 "surgery_code": "50.9101",
-                "surgery_name": "经皮肝穿刺引流术",
-                "surgery_begin_datetime": datetime(2026, 6, 2, 10),
+                "order_name": "经皮肝穿刺引流术",
+                "planned_start_datetime": datetime(2026, 6, 2, 10),
             },
             {
-                "surgery_id": "P2",
+                "order_id": "P2",
                 "surgery_code": "03.9102",
-                "surgery_name": "脊神经根阻滞术",
-                "surgery_begin_datetime": datetime(2026, 6, 9, 10),
+                "order_name": "脊神经根阻滞术",
+                "planned_start_datetime": datetime(2026, 6, 9, 10),
             },
         ]
         key, expected = "missing_procedures", ["经皮肝穿刺引流术"]

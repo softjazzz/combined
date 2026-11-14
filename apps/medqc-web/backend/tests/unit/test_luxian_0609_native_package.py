@@ -446,16 +446,18 @@ def test_transfusion_family_flag_partitions_only_nine_customer_rules():
         native_transfusion_enabled=False,
     )
 
-    expected_executable = tuple(selected[:-1])
+    pending_ids = {raw["rule_id"] for raw in _raw_master_rules() if raw.get("phase_status") == "pending_definition"}
+    expected_executable = tuple(rule_id for rule_id in selected if rule_id not in pending_ids)
+    expected_pending = tuple(rule_id for rule_id in selected if rule_id in pending_ids)
     assert enabled.native_async_rule_ids == expected_executable
     assert enabled.compatibility_rule_ids == ()
-    assert enabled.native_executor_batches == (("transfusion", expected_executable),)
-    assert enabled.not_executed_rule_ids == ("LX0609-07-04-02",)
+    assert enabled.native_executor_batches == ((("transfusion", expected_executable),) if expected_executable else ())
+    assert enabled.not_executed_rule_ids == expected_pending
     assert "LX0609-07-04-02" in enabled.prepared_rule_ids_to_remove
     assert disabled.native_async_rule_ids == ()
     assert disabled.compatibility_rule_ids == expected_executable
-    assert disabled.not_executed_rule_ids == ("LX0609-07-04-02",)
-    assert "LX0609-11-03-01" not in disabled.prepared_rule_ids_to_remove
+    assert disabled.not_executed_rule_ids == expected_pending
+    assert all(rule_id in disabled.prepared_rule_ids_to_remove for rule_id in expected_pending)
     assert "LX0609-07-04-02" in disabled.prepared_rule_ids_to_remove
 
 
@@ -527,13 +529,15 @@ def test_remaining_family_flags_partition_only_their_customer_rules(
     enabled = build_luxian_0609_package_plan(**common, **{flag_name: True})
     disabled = build_luxian_0609_package_plan(**common, **{flag_name: False})
 
-    expected_executable = enabled.executable_rule_ids
+    expected_executable = tuple(raw["rule_id"] for raw in _raw_master_rules()
+                                if raw["rule_id"] in selected and raw.get("phase_status", "phase_1_target") == "phase_1_target")
+    assert enabled.executable_rule_ids == expected_executable
     expected_pending = tuple(
         rule_id for rule_id in selected if rule_id not in expected_executable
     )
     assert enabled.native_async_rule_ids == expected_executable
     assert enabled.compatibility_rule_ids == ()
-    assert enabled.native_executor_batches == ((executor_key, expected_executable),)
+    assert enabled.native_executor_batches == (((executor_key, expected_executable),) if expected_executable else ())
     assert enabled.not_executed_rule_ids == expected_pending
     assert disabled.native_async_rule_ids == ()
     assert disabled.compatibility_rule_ids == expected_executable
@@ -579,13 +583,14 @@ def test_mdt_and_extended_document_gates_are_independent(
         ),
     )
 
-    assert plan.native_async_rule_ids == expected_native
-    assert plan.not_executed_rule_ids == ("LX0609-05-03-01",)
+    pending_ids = {raw["rule_id"] for raw in _raw_master_rules() if raw.get("phase_status") == "pending_definition"}
+    current_native = tuple(rule_id for rule_id in expected_native if rule_id not in pending_ids)
+    assert plan.native_async_rule_ids == current_native
+    assert plan.not_executed_rule_ids == tuple(rule_id for rule_id in selected if rule_id in pending_ids)
     assert plan.compatibility_rule_ids == tuple(
-        rule_id
-        for rule_id in ("LX0609-04-01-03", "LX0609-03-02-01")
-        if rule_id not in expected_native
+        rule_id for rule_id in selected if rule_id not in pending_ids and rule_id not in current_native
     )
+    assert "LX0609-04-01-03" in plan.not_executed_rule_ids
 
 
 @pytest.mark.unit
@@ -650,7 +655,7 @@ def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path
 
 
 @pytest.mark.unit
-def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_exception():
+def test_all_enabled_native_families_keep_paused_029_out_of_compatibility_dispatch():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
@@ -675,12 +680,13 @@ def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_ex
     )
 
     _assert_full_catalog_plan_partition(plan, compatibility_exception="LX0609-04-01-01")
-    assert plan.compatibility_rule_ids == ("LX0609-04-01-01",)
-    assert plan.compatibility_execution_rule_ids == ("CL-181", "SC-081")
+    assert plan.compatibility_rule_ids == ()
+    assert plan.compatibility_execution_rule_ids == ()
+    assert "LX0609-04-01-01" in plan.not_executed_rule_ids
 
 
 @pytest.mark.unit
-def test_029_surgery_document_requires_its_explicit_unified_opt_in():
+def test_paused_029_cannot_be_reenabled_by_explicit_unified_opt_in():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
@@ -699,12 +705,12 @@ def test_029_surgery_document_requires_its_explicit_unified_opt_in():
         native_surgery_document_029_enabled=True,
     )
 
-    assert compatibility.compatibility_rule_ids == ("LX0609-04-01-01",)
-    assert compatibility.compatibility_execution_rule_ids == ("CL-181", "SC-081")
-    assert enabled.native_async_rule_ids == ("LX0609-04-01-01",)
-    assert enabled.native_executor_batches == (
-        ("surgery_document", ("LX0609-04-01-01",)),
-    )
+    for plan in (compatibility, enabled):
+        assert plan.compatibility_rule_ids == ()
+        assert plan.compatibility_execution_rule_ids == ()
+        assert plan.native_async_rule_ids == ()
+        assert plan.native_executor_batches == ()
+        assert plan.not_executed_rule_ids == ("LX0609-04-01-01",)
 
 
 @pytest.mark.unit
@@ -725,14 +731,12 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
 
     assert plan.selected_rule_ids == ("LX0609-01-01-01", "LX0609-04-01-01", "LX0609-04-01-03")
     assert plan.native_sync_rule_ids == ("LX0609-01-01-01",)
-    assert plan.native_async_rule_ids == ("LX0609-04-01-01",)
-    assert plan.compatibility_rule_ids == ("LX0609-04-01-03",)
-    assert plan.compatibility_execution_rule_ids == ("SC-083", "CL-108")
-    assert plan.bypassed_execution_rule_ids == ("SC-002", "CL-181", "SC-081")
-    assert plan.native_executor_batches == (
-        ("basic_timeliness", ("LX0609-01-01-01",)),
-        ("surgery_document", ("LX0609-04-01-01",)),
-    )
+    assert plan.native_async_rule_ids == ()
+    assert plan.compatibility_rule_ids == ()
+    assert plan.compatibility_execution_rule_ids == ()
+    assert plan.not_executed_rule_ids == ("LX0609-04-01-01", "LX0609-04-01-03")
+    assert plan.bypassed_execution_rule_ids == ("SC-002", "CL-181", "SC-081", "SC-083", "CL-108")
+    assert plan.native_executor_batches == (("basic_timeliness", ("LX0609-01-01-01",)),)
 
     with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
         build_luxian_0609_package_plan(

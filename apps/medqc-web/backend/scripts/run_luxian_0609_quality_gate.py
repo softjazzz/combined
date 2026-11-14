@@ -98,6 +98,7 @@ _PR_NO_MODEL_GATES = (
 # 扩展回归：前三个门之外的全部 LX0609 单元测试，以及与会诊回放、冻结诊断复原、
 # LLM 客户端相关的单元测试。按文件名自动收录，新增 0609 测试无需手工登记。
 _EXTENDED_EXTRA_TEST_FILES = (
+    "tests/unit/test_event_rules_candidate_pause.py",
     "tests/unit/test_verify_consultation_family_acceptance.py",
     "tests/unit/test_qc_diagnostic_session_restore.py",
     "tests/unit/test_qc_diagnostic_session_redaction.py",

@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.execution_timing import measure_stage, timing_labels
 from .evaluation_horizon import frozen_window_is_mature
+from .phase_scope import build_luxian_0609_pending_definition_result
 
 from .decision_model import (
     ApplicabilityState,
@@ -2470,6 +2471,15 @@ async def execute_luxian_0609_native_extended_document_rules(
     if set(decision_rule_ids) != set(selected):
         raise ValueError("extended document rules require typed decisions")
 
+    # 暂停的首页对照规则仅交付政策待定结果，不进入临床决策或模型执行。
+    pending_results = tuple(
+        build_luxian_0609_pending_definition_result(rule_id)
+        for rule_id in selected if rule_id == "LX0609-08-01-03"
+    )
+    executable = tuple(rule_id for rule_id in selected if rule_id != "LX0609-08-01-03")
+    if not executable:
+        return NativeExtendedDocumentExecutionResult(pending_results, selected, ())
+
     # 054/057 共用一次理由抽取，055/056/058 也留在同组；其余文书不消费
     # 这些局部缓存。两组只读同一不可变材料仓，HTTP 仍走既有共享预算。
     antimicrobial = frozenset({
@@ -2477,8 +2487,8 @@ async def execute_luxian_0609_native_extended_document_rules(
         "LX0609-05-01-05", "LX0609-05-01-06", "LX0609-05-03-01",
     })
     groups = tuple((label, rules) for label, rules in (
-        ("antimicrobial", tuple(rule for rule in selected if rule in antimicrobial)),
-        ("documents", tuple(rule for rule in selected if rule not in antimicrobial)),
+        ("antimicrobial", tuple(rule for rule in executable if rule in antimicrobial)),
+        ("documents", tuple(rule for rule in executable if rule not in antimicrobial)),
     ) if rules)
 
     async def run_group(label, rules):
@@ -2490,7 +2500,14 @@ async def execute_luxian_0609_native_extended_document_rules(
             )
 
     if len(groups) == 1:
-        return await run_group(*groups[0])
+        part = await run_group(*groups[0])
+        if not pending_results:
+            return part
+        return replace(
+            part, results=tuple(sorted((*part.results, *pending_results),
+                                       key=lambda item: selected.index(item["rule_id"]))),
+            planned_rule_ids=selected,
+        )
     tasks = [asyncio.create_task(run_group(*group)) for group in groups]
     try:
         parts = await asyncio.gather(*tasks)
@@ -2503,7 +2520,7 @@ async def execute_luxian_0609_native_extended_document_rules(
 
     order = {rule_id: index for index, rule_id in enumerate(selected)}
     return NativeExtendedDocumentExecutionResult(
-        results=tuple(sorted((item for part in parts for item in part.results),
+        results=tuple(sorted((*pending_results, *(item for part in parts for item in part.results)),
                              key=lambda item: order[item["rule_id"]])),
         planned_rule_ids=selected,
         decisions=tuple(sorted((item for part in parts for item in part.decisions),

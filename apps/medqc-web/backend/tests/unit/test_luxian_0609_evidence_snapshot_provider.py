@@ -658,7 +658,7 @@ def test_055_058_session_reads_each_executor_input_source() -> None:
     }
 
 
-def test_063_session_prefetches_mr_diagnosis_as_a_bounded_source() -> None:
+def test_063_session_does_not_prefetch_homepage_diagnoses() -> None:
     calls: list[str] = []
 
     def reader(**kwargs):
@@ -676,22 +676,23 @@ def test_063_session_prefetches_mr_diagnosis_as_a_bounded_source() -> None:
         row_reader=reader,
     )
 
-    assert calls.count("mr_diagnosis") == 1
+    assert not {"mr", "mr_diagnosis", "mr_surgery", "mr_bloodtrans", "mr_cost"}.intersection(calls)
+    assert calls.count("diagnosis") == 1
     observation = next(
         item for item in session.snapshot.observations
-        if item.source_key == "mr_diagnosis"
+        if item.source_key == "diagnosis"
     )
     assert observation.query_state is SourceQueryState.EMPTY
     assert observation.completeness is SourceCompleteness.COMPLETE
 
 
-def test_063_unavailable_mr_diagnosis_is_kept_as_unavailable_observation() -> None:
+def test_063_unavailable_original_diagnosis_is_kept_without_homepage_fallback() -> None:
     calls: list[str] = []
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         calls.append(source_key)
-        if source_key == "mr_diagnosis":
+        if source_key == "diagnosis":
             raise SourceEvidenceUnavailable()
         return _rows(source_key, [])
 
@@ -705,10 +706,11 @@ def test_063_unavailable_mr_diagnosis_is_kept_as_unavailable_observation() -> No
         row_reader=reader,
     )
 
-    assert calls.count("mr_diagnosis") == 1
+    assert not {"mr", "mr_diagnosis", "mr_surgery", "mr_bloodtrans", "mr_cost"}.intersection(calls)
+    assert calls.count("diagnosis") == 1
     observation = next(
         item for item in session.snapshot.observations
-        if item.source_key == "mr_diagnosis"
+        if item.source_key == "diagnosis"
     )
     assert observation.query_state is SourceQueryState.UNAVAILABLE
     assert observation.reason_code == "SOURCE_CAPABILITY_UNAVAILABLE"
@@ -792,7 +794,6 @@ def test_033_reads_only_surgery_record_and_surgery_consent_sources() -> None:
 
     assert calls == [
         "consent_form",
-        "mr_surgery",
         "surgery_inform_consent",
         "surgery_record",
     ]
@@ -1102,8 +1103,8 @@ def test_017_reads_only_its_whitelisted_copy_support_sources() -> None:
         "labtest_item_report",
         "inpat_drug_order",
         "surgery_record",
-        "mr_surgery",
     }.issubset(set(calls))
+    assert "mr_surgery" not in calls
     assert "postsurg_firstcourse_record" not in calls
     assert "treatment_course" not in calls
 
@@ -1140,8 +1141,6 @@ def test_surgery_record_builds_only_exact_performed_or_complete_empty_fact(
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         calls.append(source_key)
-        if source_key == "mr_surgery":
-            return _rows(source_key, [])
         if source_key != "surgery_record":
             return _rows(source_key, [])
         if mode == "exact":
@@ -1201,6 +1200,7 @@ def test_surgery_record_builds_only_exact_performed_or_complete_empty_fact(
     ):
         assert marker not in safe_output
     assert calls.count("surgery_record") == 1
+    assert "mr_surgery" not in calls
 
 
 @pytest.mark.parametrize(
@@ -1323,16 +1323,16 @@ def test_029_surgery_order_fact_is_one_source_aggregate_for_multiple_orders() ->
     assert facts[0].source_document_id == ""
 
 
-def test_039_mr_surgery_typed_time_builds_hash_only_performed_fact() -> None:
+def test_039_original_surgery_record_typed_time_builds_hash_only_performed_fact() -> None:
     calls: list[str] = []
-    typed_begin = datetime(2026, 1, 1, 8, 0, 0)
+    typed_begin = datetime.fromisoformat("2026-01-01T08:00:00+08:00")
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         calls.append(source_key)
         rows = (
-            ({"surgery_begin_datetime": typed_begin},)
-            if source_key == "mr_surgery"
+            ({"surgery_begin_time": typed_begin},)
+            if source_key == "surgery_record"
             else ()
         )
         return _rows(source_key, rows)
@@ -1350,15 +1350,16 @@ def test_039_mr_surgery_typed_time_builds_hash_only_performed_fact() -> None:
     observation = next(
         item
         for item in session.snapshot.observations
-        if item.source_key == "mr_surgery"
+        if item.source_key == "surgery_record"
     )
     fact = next(
         item
         for item in session.snapshot.facts
         if item.fact_type == "current_visit_surgery_confirmed"
-        and item.source_key == "mr_surgery"
+        and item.source_key == "surgery_record"
     )
-    assert calls.count("mr_surgery") == 1
+    assert calls.count("surgery_record") == 1
+    assert "mr_surgery" not in calls
     assert fact.assertion.value == "affirmed"
     assert fact.normalized_value == {"performed": True}
     assert fact.source_snapshot_hash == observation.snapshot_ref.removeprefix(
@@ -1501,7 +1502,6 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
         "inpat_nondrug_order",
         "inpat_registration",
         "inpat_registration.discharge_horizon",
-        "mr_surgery",
         "postsurg_firstcourse_record",
         "presurg_discussion",
         "presurg_summary",
@@ -1515,7 +1515,6 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
         "inpat_nondrug_order",
         "inpat_registration",
         "inpat_registration.discharge_horizon",
-        "mr_surgery",
         "postsurg_firstcourse_record",
         "presurg_discussion",
         "presurg_summary",
@@ -1532,7 +1531,7 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
         "surgery_risk_assessment",
     }
     assert all(item.completeness is SourceCompleteness.UNPROVEN for item in snapshot.observations if item.source_key in unavailable)
-    assert len(snapshot.document_refs) == 10
+    assert len(snapshot.document_refs) == 9
     order_facts = tuple(
         item
         for item in snapshot.facts
@@ -1569,11 +1568,10 @@ def test_provider_reads_anesthesia_and_visit_sources_for_034_to_038() -> None:
         "consent_form",
         # 036/037 术后24小时访视时限需评价截止时间（由住院登记派生）。
         "inpat_registration",
-        "mr_surgery",
         "postane_surveil_record",
         "preane_surveil_record",
         "surgery_inform_consent",
-        # 036/037 访视时限按手术记录起止时间核对（病案首页仅作回退）。
+        # 036/037 访视时限只按原始手术记录起止时间核对。
         "surgery_record",
     ]
     observations = {item.source_key: item for item in snapshot.observations}
@@ -1662,8 +1660,9 @@ def test_mdt_040_decision_support_includes_consultation_record() -> None:
 
     assert "consultation_record" in calls
     assert calls.count("consultation_record") == 1
-    assert "mr_surgery" in calls
-    assert calls.count("mr_surgery") == 1
+    assert "surgery_record" in calls
+    assert calls.count("surgery_record") == 1
+    assert "mr_surgery" not in calls
 
 
 def test_admission_record_body_is_private_material_and_never_safe_snapshot_output() -> None:
@@ -1783,9 +1782,9 @@ def test_all_raw_registered_contracts_query_each_bounded_source_once_and_never_q
             "preane_surveil_record",
             "surgery_application",
             "surgery_record",
-            "mr_diagnosis",
         }
     )
+    assert not {"mr", "mr_surgery", "mr_bloodtrans", "mr_diagnosis", "mr_cost"}.intersection(calls)
     assert len(calls) == len(set(calls))
     assert len(snapshot.observations) == len(
         {item.source_key for item in snapshot.observations}
@@ -1796,7 +1795,7 @@ def test_all_raw_registered_contracts_query_each_bounded_source_once_and_never_q
     assert all(item.query_state in SourceQueryState for item in snapshot.observations)
 
 
-def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sources() -> None:
+def test_snapshot_reader_whitelist_preserves_historical_fields_outside_current_physical_sources() -> None:
     registry = load_luxian_0609_source_registry()
     expected = {
         source_key
@@ -1804,8 +1803,12 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         if entry.access_mode is SourceAccessMode.BOUNDED_SOURCE_V1
         for source_key in entry.physical_source_keys
     }
+    historical = {"mr_surgery", "mr_bloodtrans", "mr_diagnosis"}
+    assert not expected.intersection(historical)
     assert set(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) == {
         *expected,
+        # 仅供历史冻结材料恢复，不重新注册为当前物理来源。
+        *historical,
         "inpat_prescription",
         "inpat_prescription_item",
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
@@ -1824,7 +1827,6 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         "postane_surveil_record",
         "preane_surveil_record",
         "diagnosis",
-        "mr_diagnosis",
         "exam_master",
         "inpat_drug_order",
         "inpat_nondrug_order",
@@ -1852,8 +1854,6 @@ def test_provider_preserves_query_and_completeness_states_without_echo(
 ) -> None:
     def reader(**kwargs):
         source_key = kwargs["source_key"]
-        if source_key == "mr_surgery":
-            return _rows(source_key, [])
         if mode == "available":
             return _rows(source_key, [{"record_content": "private body marker"}])
         if mode == "empty":
@@ -1889,8 +1889,6 @@ def test_provider_fingerprint_and_document_refs_are_stable_for_order_and_duplica
     reversed_order = False
 
     def reader(**kwargs):
-        if kwargs["source_key"] == "mr_surgery":
-            return _rows("mr_surgery", [])
         values = list(reversed(rows)) if reversed_order else list(rows)
         return _rows(kwargs["source_key"], values)
 
@@ -1907,8 +1905,6 @@ def test_provider_fingerprint_and_document_refs_are_stable_for_order_and_duplica
 
 def test_provider_does_not_hide_reader_contract_bug_as_query_error() -> None:
     def reader(**kwargs):
-        if kwargs["source_key"] == "mr_surgery":
-            return _rows("mr_surgery", [])
         return object()
 
     with pytest.raises(TypeError, match="invalid snapshot row reader result"):
@@ -2010,8 +2006,8 @@ def test_timeliness_snapshot_contract_keeps_authoritative_submit_time_aliases() 
         )
 
 
-def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
-    """070 必须保留输血事件的业务身份，供冻结逐行证据投影。"""
+def test_historical_snapshot_contract_preserves_mr_bloodtrans_document_id() -> None:
+    """历史输血来源继续保留业务身份，恢复时不改写冻结证据。"""
 
     assert "document_id" in source_evidence_reader._NATIVE_SOURCE_FIELDS[
         "mr_bloodtrans"
@@ -2022,8 +2018,8 @@ def test_070_snapshot_contract_projects_mr_bloodtrans_document_id() -> None:
 
 
 def test_source_registry_keeps_confirmed_handbook_identity_version() -> None:
-    # v38补同次文书诊断和出院栏目适配；阶段小结等其他来源query_version不变。
-    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v38"
+    # v39切换当前取材为原始文书；阶段小结等其他来源query_version不变。
+    assert SOURCE_REGISTRY_VERSION == "lx0609-source-registry-v39-primary-documents"
     entry = load_luxian_0609_source_registry()["summary_record"]
     assert entry.query_version == "snapshot-provider-summary_record-v1"
     assert entry.source_keys == ("summary_record",)
@@ -2032,8 +2028,8 @@ def test_source_registry_keeps_confirmed_handbook_identity_version() -> None:
 def test_bloodtrans_snapshot_projection_has_explicit_identity_version() -> None:
     entry = load_luxian_0609_source_registry()["bloodtrans_record"]
 
-    assert entry.query_version == "snapshot-provider-bloodtrans_record-v2"
-    assert entry.source_keys == ("bloodtrans_record", "mr_bloodtrans")
+    assert entry.query_version == "snapshot-provider-bloodtrans_record-v3"
+    assert entry.source_keys == ("bloodtrans_record",)
 
 
 @pytest.mark.parametrize("rows", [[{"match": 1}], []])

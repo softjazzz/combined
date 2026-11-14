@@ -1,7 +1,6 @@
 """根因C：多次同类事件不能合并，也不能互相借用证据（串账）。"""
 
 import json
-from datetime import datetime
 
 import pytest
 
@@ -79,7 +78,6 @@ async def _extended(rule, rows, client, *, final=False):
 
 # ---------- 10-03-01：同一操作不同日期各做一次 ----------
 INVASIVE_NAME = "经皮肝穿刺引流术"
-INVASIVE_CODE = "50.9101"
 DONE_TEXT = "已行经皮肝穿刺引流术"
 
 
@@ -109,33 +107,27 @@ class _LenientInvasiveModel:
         return _reply({"schema_version": "lx0609-invasive-procedure-record-v1", "items": items})
 
 
-def _invasive_rows(op_days, documented_day, source):
+def _invasive_rows(op_days, documented_day):
     rows = {"daily_course_record": ({
         "document_id": "D", "record_time": f"2026-06-{documented_day:02d} 15:00:00",
         "record_content": f"今日{DONE_TEXT}，过程顺利。",
     },)}
-    if source == "front":
-        rows["mr_surgery"] = tuple(
-            {"surgery_id": f"S{day}", "surgery_code": INVASIVE_CODE, "surgery_name": INVASIVE_NAME,
-             "surgery_begin_datetime": datetime(2026, 6, day, 10)}
-            for day in op_days
-        )
-    else:
-        rows["inpat_nondrug_order"] = tuple(
-            {"order_id": f"O{day}", "order_name": INVASIVE_NAME, "order_type": "治疗",
-             "order_status": "已执行", "planned_start_datetime": f"2026-06-{day:02d} 10:00:00"}
-            for day in op_days
-        )
+    # 运行与终末均使用已执行的原始操作医嘱，保留逐日台次；不以首页编码触发。
+    rows["inpat_nondrug_order"] = tuple(
+        {"order_id": f"O{day}", "order_name": INVASIVE_NAME, "order_type": "治疗",
+         "order_status": "已执行", "planned_start_datetime": f"2026-06-{day:02d} 10:00:00"}
+        for day in op_days
+    )
     return rows
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("source,final", [("orders", False), ("front", True)])
+@pytest.mark.parametrize("final", [False, True], ids=["running", "final"])
 @pytest.mark.parametrize("documented_day", [1, 6])
-async def test_075_same_code_on_two_dates_is_checked_per_occurrence(source, final, documented_day):
+async def test_075_same_code_on_two_dates_is_checked_per_occurrence(final, documented_day):
     model = _LenientInvasiveModel()
     item = await _extended(
-        "LX0609-10-03-01", _invasive_rows((1, 6), documented_day, source), model, final=final,
+        "LX0609-10-03-01", _invasive_rows((1, 6), documented_day), model, final=final,
     )
     assert model.procedure_counts == [2]
     assert (item.final_state.value, item.reason_code) == ("non_compliant", "required_document_missing")
@@ -144,7 +136,7 @@ async def test_075_same_code_on_two_dates_is_checked_per_occurrence(source, fina
 @pytest.mark.asyncio
 async def test_075_record_of_later_occurrence_does_not_prove_earlier_one():
     item = await _extended(
-        "LX0609-10-03-01", _invasive_rows((1, 3), 3, "front"), _LenientInvasiveModel(), final=True,
+        "LX0609-10-03-01", _invasive_rows((1, 3), 3), _LenientInvasiveModel(), final=True,
     )
     assert item.final_state.value != "compliant"
 
@@ -152,14 +144,14 @@ async def test_075_record_of_later_occurrence_does_not_prove_earlier_one():
 @pytest.mark.asyncio
 async def test_075_pending_second_occurrence_is_not_compliant():
     item = await _extended(
-        "LX0609-10-03-01", _invasive_rows((1, 9), 1, "orders"), _LenientInvasiveModel(),
+        "LX0609-10-03-01", _invasive_rows((1, 9), 1), _LenientInvasiveModel(),
     )
     assert (item.final_state.value, item.reason_code) == ("not_applicable", "evaluation_window_not_mature")
 
 
 @pytest.mark.asyncio
 async def test_075_each_occurrence_documented_is_compliant():
-    rows = _invasive_rows((1, 6), 1, "orders")
+    rows = _invasive_rows((1, 6), 1)
     rows["daily_course_record"] = (
         *rows["daily_course_record"],
         {"document_id": "D6", "record_time": "2026-06-06 15:00:00",
@@ -173,10 +165,10 @@ async def test_075_each_occurrence_documented_is_compliant():
 SURGERY_NAME = "腹腔镜下阑尾切除术"
 
 
-def _surgery_master(day, hour=8, *, surgeon="甲", name=SURGERY_NAME, code="47.0101"):
+def _performed_surgery(day, hour=8, *, surgeon="甲", name=SURGERY_NAME, code="47.0101"):
     return {"surgery_name": name, "surgery_code": code, "surgeon": surgeon, "main_surgery_sign": "",
-            "surgery_begin_datetime": datetime(2026, 6, day, hour),
-            "surgery_end_datetime": datetime(2026, 6, day, hour + 2),
+            "surgery_begin_time": f"2026-06-{day:02d} {hour:02d}:00:00+08:00",
+            "surgery_end_time": f"2026-06-{day:02d} {hour + 2:02d}:00:00+08:00",
             "surgical_level": "二级", "surgical_incision_level": "II", "surgial_incision_level": "II"}
 
 
@@ -189,133 +181,120 @@ def _surgery_record(day, hour=8):
             "surgery_process": "手术经过：顺利。", "record_content": "手术经过：顺利。"}
 
 
-def _surgery_presence_final(rows):
-    from app.services.luxian_0609 import native_execution
-    from app.services.luxian_0609.canonical_result_finalizer import (
-        finalize_luxian_0609_reduced_customer_result,
+def _surgery_coverage_unresolved(rows):
+    # 历史逐台关联组件回归：正式入口暂停期间仍保护时间/修订版本边界。
+    from app.services.luxian_0609.surgery_record_coverage import (
+        same_day_surgery_coverage_unresolved,
     )
 
-    rule = "LX0609-04-02-02"
-    session = _session(rule, rows, "surgery_presence", final=True)
-    native = native_execution.execute_luxian_0609_native_rules(
-        rule_ids=(rule,), visit_id="V", institute_id="I", patient_id="P", source_schema=None,
-        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
-        decision_rule_ids=(rule,),
-    )
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=native.decisions, expected_rule_ids=(rule,),
-        snapshot=session.snapshot, evidence_materials=session.materials,
-    )[0]
-    return finalize_luxian_0609_reduced_customer_result(
-        decision=reduced, raw_customer_display_facts=dict(native.customer_display_facts).get(rule),
-        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
-    )
+    return same_day_surgery_coverage_unresolved(rows["performed_events"], rows["surgery_record"])
 
 
 @pytest.mark.parametrize("reverse", [False, True])
-def test_030_same_day_two_surgeries_one_record_is_not_compliant(reverse):
+def test_030_historical_coverage_same_day_two_surgeries_one_record_is_unresolved(reverse):
+    events = [_performed_surgery(2, 8), _performed_surgery(2, 20, surgeon="乙")]
+    unresolved = _surgery_coverage_unresolved({
+        "performed_events": events[::-1] if reverse else events,
+        "surgery_record": [_surgery_record(2, 8)],
+    })
+    assert unresolved is True
+
+
+def test_030_historical_association_gap_roundtrip_preserves_frozen_result():
+    """旧版本已落盘结论只校验读回，不通过暂停后的执行器重算。"""
     from tests.unit.test_luxian_0609_death_record_timeliness import saved_roundtrip
 
-    masters = [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")]
-    final = _surgery_presence_final({
-        "mr_surgery": masters[::-1] if reverse else masters,
+    historical = {
+        "rule_id": "LX0609-04-02-02", "rule_code": "LX0609-04-02-02",
+        "rule_version": "2026-06-09", "status": "data_gap", "result_status": "data_gap",
+        "display_status": "data_gap", "is_compliant": None, "reason_code": "association_failed",
+        "conclusion": "同日两台手术仅有一份记录，无法确认逐台对应关系。",
+        "suggestion": "核对各台手术与手术记录的对应关系。",
+        "evidence": [{"source_type": "surgery_record", "source_document_id": "historical-R28"}],
+    }
+    saved = saved_roundtrip(historical)
+    assert (saved["status"], saved["reason_code"], saved["rule_version"]) == (
+        "data_gap", "association_failed", "2026-06-09",
+    )
+    assert saved["conclusion"] == historical["conclusion"]
+    assert saved["suggestion"] == historical["suggestion"]
+    assert saved["record_ref"].startswith("rec_")
+    assert saved["evidence"][0]["source_ref"].startswith("src_")
+    assert "source_document_id" not in saved["evidence"][0]
+
+
+def test_030_historical_coverage_split_rows_of_one_surgery_share_one_record():
+    unresolved = _surgery_coverage_unresolved({
+        "performed_events": [_performed_surgery(2), _performed_surgery(2, name="腹腔镜下肠粘连松解术", code="54.5101")],
         "surgery_record": [_surgery_record(2, 8)],
     })
-    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
-    saved = saved_roundtrip(final)
-    assert (saved["status"], saved["reason_code"]) == ("data_gap", "association_failed")
+    assert unresolved is False
 
 
-def test_030_split_rows_of_one_surgery_share_one_record():
-    final = _surgery_presence_final({
-        "mr_surgery": [_surgery_master(2), _surgery_master(2, name="腹腔镜下肠粘连松解术", code="54.5101")],
-        "surgery_record": [_surgery_record(2, 8)],
-    })
-    assert final["status"] == "compliant"
-
-
-def test_030_same_day_two_surgeries_two_records_is_compliant():
-    final = _surgery_presence_final({
-        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+def test_030_historical_coverage_same_day_two_surgeries_two_records_is_resolved():
+    unresolved = _surgery_coverage_unresolved({
+        "performed_events": [_performed_surgery(2, 8), _performed_surgery(2, 20, surgeon="乙")],
         "surgery_record": [_surgery_record(2, 8), _surgery_record(2, 20)],
     })
-    assert final["status"] == "compliant"
+    assert unresolved is False
 
 
 # ---------- 08-01-03：多版本出院记录的诊断不合并比对 ----------
-class _NoCallModel:
-    async def generate(self, *args, **kwargs):
-        raise AssertionError("本用例不应调用模型")
-
-
 def _diagnoses(doc, names):
     return tuple({"document_id": doc, "diagnosis_type": "出院诊断", "diagnosis_name": name,
                   "diagnosis_no": index} for index, name in enumerate(names, 1))
 
 
 def _discharge_rows(first_names, second_names, *, second_time="2026-06-11 09:00:00"):
-    names = ("社区获得性肺炎", "2型糖尿病")
     return {
         "discharge_record": (
             {"document_id": "D1", "record_time": "2026-06-10 15:00:00", "record_content": "出院记录"},
             {"document_id": "D2", "record_time": second_time, "record_content": "出院记录（修订）"},
         ),
         "discharge_record_diagnosis": _diagnoses("D1", first_names) + _diagnoses("D2", second_names),
-        "mr_diagnosis": tuple({"diagnosis_type": "出院诊断", "diagnosis_name": name, "diagnosis_no": index}
-                              for index, name in enumerate(names, 1)),
         "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00",
                                 "discharge_datetime": "2026-06-10 12:00:00", "status": "出院"},),
     }
 
 
-async def _063_final(rows):
-    from app.services.luxian_0609.canonical_result_finalizer import (
-        finalize_luxian_0609_reduced_customer_result,
-    )
+def _063_version(rows):
+    # 063 正式路径不再消费首页；直接保护历史版本选择组件，避免重新激活该规则。
     from app.services.luxian_0609.native_extended_document_execution import (
-        execute_luxian_0609_native_extended_document_rules,
+        _latest_written_diagnosis_version,
     )
 
-    rule = "LX0609-08-01-03"
-    session = _session(rule, rows, "extended_document", final=True)
-    native = await execute_luxian_0609_native_extended_document_rules(
-        rule_ids=(rule,), decision_rule_ids=(rule,), evidence_snapshot=session.snapshot,
-        evidence_materials=session.materials, llm_client=_NoCallModel(),
+    return _latest_written_diagnosis_version(
+        rows["discharge_record_diagnosis"], rows["discharge_record"],
     )
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=native.decisions, expected_rule_ids=(rule,),
-        snapshot=session.snapshot, evidence_materials=session.materials,
-    )[0]
-    return finalize_luxian_0609_reduced_customer_result(
-        decision=reduced, raw_customer_display_facts=dict(native.customer_display_facts).get(rule),
-        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
-    )
+
+
+def _063_sequence(rows):
+    from app.services.luxian_0609.native_extended_document_execution import _diagnosis_sequence
+
+    selected, gap = _063_version(rows)
+    return ((), gap) if gap else _diagnosis_sequence(selected)
 
 
 NAMES = ("社区获得性肺炎", "2型糖尿病")
 
 
-@pytest.mark.asyncio
-async def test_063_identical_versions_are_compared_once():
-    final = await _063_final(_discharge_rows(NAMES, NAMES))
-    assert final["status"] == "compliant"
+def test_063_historical_version_identical_versions_are_compared_once():
+    names, gap = _063_sequence(_discharge_rows(NAMES, NAMES))
+    assert (names, gap) == (NAMES, None)
 
 
-@pytest.mark.asyncio
-async def test_063_latest_version_is_used():
+def test_063_historical_version_latest_version_is_used():
     # 初写版漏了糖尿病，修订版完整：以修订版为准。
-    final = await _063_final(_discharge_rows(NAMES[:1], NAMES))
-    assert final["status"] == "compliant"
-    # 反过来：修订版漏写，初写完整，以修订版为准判不合规。
-    final = await _063_final(_discharge_rows(NAMES, NAMES[:1]))
-    assert final["status"] == "non_compliant"
+    names, gap = _063_sequence(_discharge_rows(NAMES[:1], NAMES))
+    assert (names, gap) == (NAMES, None)
+    # 反过来：修订版漏写，初写完整，不能借用初写版补全。
+    names, gap = _063_sequence(_discharge_rows(NAMES, NAMES[:1]))
+    assert (names, gap) == (NAMES[:1], None)
 
 
-@pytest.mark.asyncio
-async def test_063_conflicting_versions_without_unique_latest_is_data_gap():
-    final = await _063_final(_discharge_rows(NAMES[:1], NAMES, second_time="2026-06-10 15:00:00"))
-    assert final["status"] == "data_gap"
-    assert final["customer_display_facts"]["written_gap"] == "version_conflict"
+def test_063_historical_version_conflicting_versions_without_unique_latest_is_data_gap():
+    names, gap = _063_sequence(_discharge_rows(NAMES[:1], NAMES, second_time="2026-06-10 15:00:00"))
+    assert (names, gap) == ((), "version_conflict")
 
 
 # ---------- 复核补充：同类事件证据归属与版本边界 ----------
@@ -345,7 +324,7 @@ class _ScriptedInvasiveModel:
 
 
 def _two_day_rows(*records):
-    rows = _invasive_rows((1, 2), 2, "front")
+    rows = _invasive_rows((1, 2), 2)
     rows["daily_course_record"] = tuple(records)
     return rows
 
@@ -356,7 +335,7 @@ def _course(doc, day, hour, text):
 
 @pytest.mark.asyncio
 async def test_075_same_document_from_two_sources_is_one_record():
-    rows = _invasive_rows((1, 2), 2, "front")
+    rows = _invasive_rows((1, 2), 2)
     rows["senior_course_record"] = rows["daily_course_record"]
     model = _ScriptedInvasiveModel({
         "2026-06-01": (lambda r: True, DONE_TEXT), "2026-06-02": (lambda r: True, DONE_TEXT),
@@ -406,25 +385,22 @@ async def test_075_one_document_recording_each_dated_occurrence_is_compliant():
     assert item.final_state.value == "compliant"
 
 
-def test_030_versions_of_first_surgery_do_not_cover_second():
+def test_030_historical_coverage_versions_of_first_surgery_do_not_cover_second():
     first = _surgery_record(2, 8)
     revised = {**first, "document_id": "R28-revised", "record_time": "2026-06-02 12:00:00"}
-    final = _surgery_presence_final({
-        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+    unresolved = _surgery_coverage_unresolved({
+        "performed_events": [_performed_surgery(2, 8), _performed_surgery(2, 20, surgeon="乙")],
         "surgery_record": [first, revised],
     })
-    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
+    assert unresolved is True
 
 
-@pytest.mark.asyncio
-async def test_063_latest_version_without_diagnoses_does_not_borrow_older():
-    final = await _063_final(_discharge_rows(NAMES, ()))
-    assert final["status"] == "data_gap"
-    assert final["customer_display_facts"]["written_gap"] == "diagnoses_missing"
+def test_063_historical_version_latest_version_without_diagnoses_does_not_borrow_older():
+    names, gap = _063_sequence(_discharge_rows(NAMES, ()))
+    assert (names, gap) == ((), "diagnoses_missing")
 
 
-@pytest.mark.asyncio
-async def test_063_latest_main_flag_change_is_used():
+def test_063_historical_version_latest_main_flag_change_is_used():
     rows = _discharge_rows(NAMES, NAMES)
     diagnoses = []
     for doc, main in (("D1", NAMES[0]), ("D2", NAMES[1])):
@@ -432,9 +408,10 @@ async def test_063_latest_main_flag_change_is_used():
             diagnoses.append({**{k: v for k, v in row.items() if k != "diagnosis_no"},
                               "diagnosis_main": "是" if row["diagnosis_name"] == main else "否"})
     rows["discharge_record_diagnosis"] = tuple(diagnoses)
-    final = await _063_final(rows)
-    assert final["status"] == "non_compliant"
-    assert final["customer_display_facts"]["written_main"] == NAMES[1]
+    selected, gap = _063_version(rows)
+    assert gap is None
+    assert {row["document_id"] for row in selected} == {"D2"}
+    assert [row["diagnosis_name"] for row in selected if row["diagnosis_main"] == "是"] == [NAMES[1]]
 
 
 # ---------- 第二轮复核：明示日期优先、缺时刻记录与父子身份 ----------
@@ -484,47 +461,43 @@ async def test_075_previous_year_history_does_not_prove_this_year():
     {"surgery_begin_time": None},
     {"surgery_begin_time": "2026-06-02 09:00:00+08:00"},
 ], ids=["undated", "inexact_begin_before_second"])
-def test_030_revision_of_first_surgery_cannot_cover_second(revision):
+def test_030_historical_coverage_revision_of_first_surgery_cannot_cover_second(revision):
     first = {**_surgery_record(2, 8), "surgery_begin_time": "2026-06-02 08:30:00+08:00"}
     revised = {**first, "document_id": "R28-revised", "record_time": "2026-06-02 12:00:00", **revision}
-    final = _surgery_presence_final({
-        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+    unresolved = _surgery_coverage_unresolved({
+        "performed_events": [_performed_surgery(2, 8), _performed_surgery(2, 20, surgeon="乙")],
         "surgery_record": [first, revised],
     })
-    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
+    assert unresolved is True
 
 
-def test_030_each_surgery_with_own_inexact_record_is_not_association_gap():
+def test_030_historical_coverage_each_surgery_with_own_inexact_record_is_not_association_gap():
     records = [
         {**_surgery_record(2, 8), "surgery_begin_time": "2026-06-02 08:20:00+08:00"},
         {**_surgery_record(2, 20), "surgery_begin_time": "2026-06-02 20:15:00+08:00"},
     ]
-    final = _surgery_presence_final({
-        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+    unresolved = _surgery_coverage_unresolved({
+        "performed_events": [_performed_surgery(2, 8), _performed_surgery(2, 20, surgeon="乙")],
         "surgery_record": records,
     })
-    assert final["reason_code"] != "association_failed"
+    assert unresolved is False
 
 
-@pytest.mark.asyncio
-async def test_063_diagnoses_not_linked_to_any_discharge_version_is_gap():
+def test_063_historical_version_diagnoses_not_linked_to_any_discharge_version_is_gap():
     rows = _discharge_rows(NAMES, ())
     rows["discharge_record_diagnosis"] = _diagnoses("OTHER", NAMES)
-    final = await _063_final(rows)
-    assert final["status"] == "data_gap"
-    assert final["customer_display_facts"]["written_gap"] == "version_conflict"
+    names, gap = _063_sequence(rows)
+    assert (names, gap) == ((), "version_conflict")
 
 
-@pytest.mark.asyncio
-async def test_063_later_discharge_record_without_id_cannot_borrow_older():
+def test_063_historical_version_later_discharge_record_without_id_cannot_borrow_older():
     rows = _discharge_rows(NAMES, ())
     rows["discharge_record"] = (
         rows["discharge_record"][0],
         {k: v for k, v in rows["discharge_record"][1].items() if k != "document_id"},
     )
-    final = await _063_final(rows)
-    assert final["status"] == "data_gap"
-    assert final["customer_display_facts"]["written_gap"] == "version_conflict"
+    names, gap = _063_sequence(rows)
+    assert (names, gap) == ((), "version_conflict")
 
 
 # ---------- 第三轮复核：摘录所在句、末台结束边界、单份文书显式编号冲突 ----------
@@ -544,33 +517,30 @@ async def test_075_short_quote_is_judged_with_its_sentence(second_text, expected
     assert item.final_state.value == expected
 
 
-def test_030_record_after_last_surgery_ended_cannot_cover_it():
+def test_030_historical_coverage_record_after_last_surgery_ended_cannot_cover_it():
     late = {**_surgery_record(2, 8), "document_id": "LATE",
             "surgery_begin_time": "2026-06-02 23:00:00+08:00",
             "surgery_end_time": "2026-06-02 23:30:00+08:00", "record_time": "2026-06-02 23:45:00"}
-    final = _surgery_presence_final({
-        "mr_surgery": [_surgery_master(2, 8), _surgery_master(2, 20, surgeon="乙")],
+    unresolved = _surgery_coverage_unresolved({
+        "performed_events": [_performed_surgery(2, 8), _performed_surgery(2, 20, surgeon="乙")],
         "surgery_record": [_surgery_record(2, 8), late],
     })
-    assert (final["status"], final["reason_code"]) == ("data_gap", "association_failed")
+    assert unresolved is True
 
 
-@pytest.mark.asyncio
-async def test_063_single_discharge_record_with_foreign_diagnosis_id_is_gap():
+def test_063_historical_version_single_discharge_record_with_foreign_diagnosis_id_is_gap():
     rows = _discharge_rows(NAMES, ())
     rows["discharge_record"] = (rows["discharge_record"][1],)
     rows["discharge_record_diagnosis"] = _diagnoses("D1", NAMES)
-    final = await _063_final(rows)
-    assert final["status"] == "data_gap"
-    assert final["customer_display_facts"]["written_gap"] == "version_conflict"
+    names, gap = _063_sequence(rows)
+    assert (names, gap) == ((), "version_conflict")
 
 
-@pytest.mark.asyncio
-async def test_063_single_discharge_record_with_unbound_legacy_diagnoses_is_compared():
+def test_063_historical_version_single_discharge_record_with_unbound_legacy_diagnoses_is_compared():
     rows = _discharge_rows(NAMES, ())
     rows["discharge_record"] = (rows["discharge_record"][1],)
     rows["discharge_record_diagnosis"] = tuple(
         {k: v for k, v in row.items() if k != "document_id"} for row in _diagnoses("D1", NAMES)
     )
-    final = await _063_final(rows)
-    assert final["status"] == "compliant"
+    names, gap = _063_sequence(rows)
+    assert (names, gap) == (NAMES, None)

@@ -170,13 +170,11 @@ def test_pair_expansion_uses_trigger_requirements_not_query_union_or_target_sour
     plan_029 = _plan(("LX0609-04-01-01",))
     plan_032 = _plan(("LX0609-04-03-01",))
     assert _pairs(plan_029) == (
-        ("current_visit_surgery_confirmed", "mr_surgery"),
         ("current_visit_surgery_confirmed", "surgery_application"),
         ("current_visit_surgery_confirmed", "surgery_record"),
         ("current_visit_surgery_order_confirmed", "inpat_nondrug_order"),
     )
     assert _pairs(plan_032) == (
-        ("current_visit_surgery_confirmed", "mr_surgery"),
         ("current_visit_surgery_confirmed", "surgery_application"),
         ("current_visit_surgery_confirmed", "surgery_record"),
     )
@@ -206,13 +204,13 @@ def test_available_complete_zero_facts_is_distinct_from_partial_not_run_and_erro
     manifest = _manifest()
     pairs = _pairs(plan)
     complete = _build(plan=plan, manifest=manifest, observations=tuple(_observation(pair) for pair in pairs))
-    assert complete.summary_dict()["complete_pair_count"] == 3
+    assert complete.summary_dict()["complete_pair_count"] == 2
     partial = tuple(_observation(pair, state=ExtractionCoverageState.PARTIAL, processed=1, reason="partial_budget_limit") for pair in pairs)
     not_run = tuple(_observation(pair, state=ExtractionCoverageState.NOT_RUN, processed=0, reason="extractor_not_run") for pair in pairs)
     errors = tuple(_observation(pair, state=ExtractionCoverageState.ERROR, processed=0, reason="extraction_error", error="extractor_timeout") for pair in pairs)
-    assert _build(plan=plan, manifest=manifest, observations=partial).summary_dict()["partial_pair_count"] == 3
-    assert _build(plan=plan, manifest=manifest, observations=not_run).summary_dict()["not_run_pair_count"] == 3
-    assert _build(plan=plan, manifest=manifest, observations=errors).summary_dict()["error_pair_count"] == 3
+    assert _build(plan=plan, manifest=manifest, observations=partial).summary_dict()["partial_pair_count"] == 2
+    assert _build(plan=plan, manifest=manifest, observations=not_run).summary_dict()["not_run_pair_count"] == 2
+    assert _build(plan=plan, manifest=manifest, observations=errors).summary_dict()["error_pair_count"] == 2
 
 
 @pytest.mark.parametrize(
@@ -248,7 +246,7 @@ def test_observations_must_exactly_match_required_pairs() -> None:
     pairs = _pairs(plan)
     with pytest.raises(ValueError, match="exactly cover"):
         _build(plan=plan, observations=(_observation(pairs[0]),))
-    with pytest.raises(ValueError, match="exactly cover"):
+    with pytest.raises(ValueError, match="exactly match required pairs"):
         _build(plan=plan, observations=(_observation(pairs[0]), _observation(pairs[0])))
     extra = _observation(("current_visit_surgery_order_confirmed", "inpat_nondrug_order"))
     with pytest.raises(ValueError, match="exactly cover"):

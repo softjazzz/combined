@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from tests.luxian_0609_identity_test_support import published_rule_ids
 from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
+from app.services.luxian_0609.phase_scope import partition_luxian_0609_rule_scope
 
 import asyncio
 from types import SimpleNamespace
@@ -77,21 +78,10 @@ def test_full_mainline_selects_only_currently_executable_typed_decisions() -> No
         native_async_rule_ids=selected,
     )
 
-    assert resolved == tuple(
-        rule_id
-        for rule_id in selected
-        if rule_id
-        not in {
-            "LX0609-03-01-01",
-            "LX0609-03-01-02",
-            "LX0609-03-01-03",
-            "LX0609-04-02-04",
-            "LX0609-04-04-01",
-            "LX0609-04-04-02",
-            "LX0609-07-04-02",
-            "LX0609-05-03-01",
-        }
-    )
+    executable, _ = partition_luxian_0609_rule_scope(selected)
+    assert resolved == executable
+    assert "LX0609-08-01-03" not in resolved
+
 
 
 def test_all_catalog_rules_have_one_contract_executor_and_registered_material_sources() -> None:
@@ -145,11 +135,10 @@ def test_unified_engine_off_keeps_only_always_typed_extended_rules() -> None:
         native_async_rule_ids=_rule_ids(1, 77),
     )
 
-    assert resolved == tuple(
-        rule_id
-        for rule_id in _rule_ids(50, 77)
-        if rule_id not in {"LX0609-05-03-01"}
-    )
+    executable, _ = partition_luxian_0609_rule_scope(_rule_ids(50, 77))
+    assert resolved == executable
+    assert "LX0609-08-01-03" not in resolved
+
 
 
 def test_consultation_typed_decisions_require_native_dispatch() -> None:
@@ -196,6 +185,7 @@ def test_disabled_rollout_flag_only_removes_its_group() -> None:
     (
         ("LX0609-07-04-02", "charging_source_unavailable_customer_scope"),
         ("LX0609-05-03-01", "treatment_event_order_course_real_gold_pending"),
+        ("LX0609-08-01-03", "frontpage_comparison_policy_pending"),
     ),
 )
 def test_public_execution_returns_controlled_not_executed_for_pending_rule(
@@ -250,8 +240,12 @@ def test_public_execution_returns_controlled_not_executed_for_pending_rule(
     assert result["evidence"] == []
     assert result["metadata"]["reason_code"] == "policy_definition_pending"
     assert result["metadata"]["pending_reason_code"] == pending_reason_code
-    assert result["findings"] == "本质控点当前不参与正式结论，未生成合规或问题判定。"
-    assert result["suggestion"] == "待院方确认并发布业务口径后再启用本质控点。"
+    if rule_id == "LX0609-08-01-03":
+        assert result["findings"] == "本质控点原首页对照口径已暂停，当前未启用，未生成合规或问题判定。"
+        assert result["suggestion"] == "待确认基于原始临床文书的对照口径后再启用；无需为质控补充首页。"
+    else:
+        assert result["findings"] == "本质控点当前不参与正式结论，未生成合规或问题判定。"
+        assert result["suggestion"] == "待院方确认并发布业务口径后再启用本质控点。"
 
 
 def test_formal_execution_wraps_llm_client_at_single_egress_boundary(monkeypatch) -> None:

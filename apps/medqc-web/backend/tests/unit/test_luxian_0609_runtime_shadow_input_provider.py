@@ -141,8 +141,8 @@ def test_provider_does_not_use_qualified_mr_surgery_without_formal_surgery_recor
     )
 
     assert seen == sorted(seen)
-    mr_outcome = next(item for item in result.extraction_inputs if item.source_key == "mr_surgery")
-    assert mr_outcome.positive_signals == ()
+    assert "mr_surgery" not in seen
+    assert all(item.source_key != "mr_surgery" and not item.positive_signals for item in result.extraction_inputs)
     assert "2026-01-01" not in repr(result)
 
 
@@ -165,10 +165,7 @@ def test_provider_does_not_treat_ungraded_mr_operation_as_surgery_trigger(monkey
         visit_id=VISIT,
     )
 
-    mr_outcome = next(
-        item for item in result.extraction_inputs if item.source_key == "mr_surgery"
-    )
-    assert mr_outcome.positive_signals == ()
+    assert all(item.source_key != "mr_surgery" and not item.positive_signals for item in result.extraction_inputs)
 
 
 @pytest.mark.parametrize(
@@ -188,9 +185,7 @@ def test_provider_does_not_promote_untyped_or_descriptive_mr_surgery_rows(monkey
         plan=_plan("LX0609-04-02-02"), institute_id="i", patient_id="p", visit_id=VISIT,
     )
 
-    outcome = next(item for item in result.extraction_inputs if item.source_key == "mr_surgery")
-    assert outcome.state == "complete"
-    assert outcome.positive_signals == ()
+    assert all(item.source_key != "mr_surgery" and item.state == "complete" and not item.positive_signals for item in result.extraction_inputs)
 
 
 @pytest.mark.parametrize("mode,status,code", [
@@ -285,7 +280,7 @@ def test_provider_029_uses_earliest_confirmed_surgery_time_independent_of_row_or
     assert result.target_qualifications[0].qualified_document_count == 1
 
 
-def test_provider_029_qualification_uses_typed_mr_surgery_time_when_surgery_record_is_empty(monkeypatch):
+def test_provider_029_qualification_cannot_borrow_mr_surgery_time_when_clinical_record_is_empty(monkeypatch):
     def _reader(**kwargs):
         if kwargs["source_key"] == "mr_surgery":
             return [{"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)}]
@@ -301,7 +296,7 @@ def test_provider_029_qualification_uses_typed_mr_surgery_time_when_surgery_reco
         plan=_plan("LX0609-04-01-01"), institute_id="i", patient_id="p", visit_id=VISIT,
     )
 
-    assert result.target_qualifications[0].qualified_document_count == 1
+    assert result.target_qualifications[0].qualified_document_count == 0
 
 
 def test_provider_029_keeps_strict_surgery_record_time_priority_over_earlier_mr_surgery(monkeypatch):
@@ -490,24 +485,24 @@ def test_row_refs_are_order_independent_duplicate_safe_and_visit_scoped(monkeypa
     assert VISIT not in repr(first) and "visit-provider-002" not in repr(other)
 
 
-def test_mr_surgery_rows_are_order_independent_and_time_changes_identity(monkeypatch):
+def test_clinical_surgery_record_rows_are_order_independent_and_time_changes_identity(monkeypatch):
     rows = [
         {
-            "surgery_begin_datetime": datetime(2026, 1, 2, 8, 0),
+            "surgery_begin_time": "2026-01-02 08:00:00+08",
             "surgical_level": "三级",
         },
         {
-            "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+            "surgery_begin_time": "2026-01-01 08:00:00+08",
             "surgical_level": "三级",
         },
         {
-            "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+            "surgery_begin_time": "2026-01-01 08:00:00+08",
             "surgical_level": "三级",
         },
     ]
 
     def _reader_reversed(**kwargs):
-        return list(reversed(rows)) if kwargs["source_key"] == "mr_surgery" else []
+        return list(reversed(rows)) if kwargs["source_key"] == "surgery_record" else []
 
     monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader_reversed)
     first = provider.provide_luxian_0609_runtime_shadow_inputs(
@@ -515,7 +510,7 @@ def test_mr_surgery_rows_are_order_independent_and_time_changes_identity(monkeyp
     )
 
     def _reader_forward(**kwargs):
-        return list(rows) if kwargs["source_key"] == "mr_surgery" else []
+        return list(rows) if kwargs["source_key"] == "surgery_record" else []
 
     monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader_forward)
     second = provider.provide_luxian_0609_runtime_shadow_inputs(
@@ -526,22 +521,22 @@ def test_mr_surgery_rows_are_order_independent_and_time_changes_identity(monkeyp
     refs = [
         row["row_ref"]
         for row in first.evidence_payload["programmatic_timeline"]["documents"][
-            "mr_surgery"
+            "surgery_record"
         ]
     ]
     assert len(refs) == len(set(refs)) == 3
 
-    changed_rows = [*rows[:-1], {"surgery_begin_datetime": datetime(2026, 1, 3, 8, 0)}]
+    changed_rows = [*rows[:-1], {"surgery_begin_time": "2026-01-03 08:00:00+08"}]
 
     def _reader_changed(**kwargs):
-        return changed_rows if kwargs["source_key"] == "mr_surgery" else []
+        return changed_rows if kwargs["source_key"] == "surgery_record" else []
 
     monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader_changed)
     changed = provider.provide_luxian_0609_runtime_shadow_inputs(
         plan=_plan("LX0609-04-02-02"), institute_id="i", patient_id="p", visit_id=VISIT,
     )
     assert first.evidence_payload != changed.evidence_payload
-    assert first.extraction_inputs == changed.extraction_inputs
+    assert first.extraction_inputs != changed.extraction_inputs
     assert "2026-01-0" not in repr(first)
 
 
@@ -679,7 +674,6 @@ def test_provider_reuses_single_snapshot_materials_without_family_self_query(mon
     }
     assert status_by_source == {
         "inpat_nondrug_order": QueryStatus.AVAILABLE,
-        "mr_surgery": QueryStatus.EMPTY,
         "presurg_summary": QueryStatus.AVAILABLE,
         "surgery_application": QueryStatus.AVAILABLE,
         "surgery_record": QueryStatus.AVAILABLE,

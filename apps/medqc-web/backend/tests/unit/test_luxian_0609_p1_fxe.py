@@ -197,14 +197,27 @@ async def test_nine_items_order_without_performance_is_unresolved():
 async def test_pretransfusion_assessment_reads_full_senior_course_body(title, expected):
     from transfusion_order_test_support import OPEN_TRANSFUSION_ORDER
     from test_luxian_0609_transfusion_performance_043_047 import _run, FIRST_RECORD
+    from transfusion_order_test_support import FrozenTransfusionProtocolClient
 
     assessment = "一般情况记录。" * 250 + "输血前评估：存在输血指征，贫血，输血风险已评估，既往无不良反应。"
+
+    class Client(FrozenTransfusionProtocolClient):
+        async def generate(self, prompt, **kwargs):
+            response = await super().generate(prompt, **kwargs)
+            if SCHEMA_VERSION in prompt:
+                payload = json.loads(response["choices"][0]["message"]["content"])
+                for document in payload["documents"]:
+                    document["start_time_quote"] = "14:20"
+                response["choices"][0]["message"]["content"] = json.dumps(payload, ensure_ascii=False)
+            return response
+
     result = await _run("LX0609-07-01-02", {
         "inpat_nondrug_order": [OPEN_TRANSFUSION_ORDER], "inpat_drug_order": [],
         "bloodtrans_record": [{"document_id": "synthetic-blood", "record_time": "2026-06-05 17:00:00",
                                "transfusion_start_time": "2026-06-05 14:20:00", "record_content": FIRST_RECORD}],
         "senior_course_record": [{"document_title": title, "document_id": "synthetic-full-senior", "record_time": "2026-06-05 09:00:00", "record_content": assessment}],
-    }, {FIRST_RECORD: "record"})
+    }, {FIRST_RECORD: "record"}, client=Client(
+        course_labels={FIRST_RECORD: "record"}, performance_state="performed"))
     assert result["final"]["status"] == expected, result["final"]
 
 
@@ -275,13 +288,15 @@ def test_pretransfusion_labs_accept_standard_long_names_and_abbreviations(name, 
 async def test_nine_items_use_admission_document_when_registration_lacks_admission_time():
     from test_luxian_0609_native_extended_document_execution import _evaluate_selected
     from test_luxian_0609_transfusion_performance_043_047 import NINE_ITEM_LABS
+    from transfusion_order_test_support import FrozenTransfusionProtocolClient
 
     _, _, result, reduced = await _evaluate_selected(("LX0609-07-01-03",), {
         "inpat_registration": [{"discharge_datetime": "2026-06-06 12:00:00"}],
         "admission_record": [{"document_id": "synthetic-admission", "admission_datetime": "2026-06-01 10:00:00"}],
-        "mr_bloodtrans": [{"document_id": "synthetic-event", "transfution_datetime": "2026-06-05 14:20:00"}],
+        "bloodtrans_record": [{"document_id": "synthetic-event", "record_time": "2026-06-05 14:20:00",
+                               "record_content": "已输注红细胞2U。"}],
         "labtest_item_report": NINE_ITEM_LABS,
-    })
+    }, llm_client=FrozenTransfusionProtocolClient(performance_state="performed"))
     assert reduced[0].final_state.value == "compliant", result.decisions
 
 

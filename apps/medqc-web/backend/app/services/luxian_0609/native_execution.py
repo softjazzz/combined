@@ -797,16 +797,9 @@ def execute_luxian_0609_native_rules(
         target_document = target_documents.get(rule_id)
         if target_document is None:
             continue
-        trigger_facts = (
-            {
-                "surgery_trigger_kind": "performed_surgery",
-                "performed_surgery_confirmed": True,
-            }
-            if rule_id == "LX0609-04-02-02" and front_page_trigger_refs
-            else _surgery_presence_display_trigger_facts(
-                rule_id=rule_id,
-                provided=provided,
-            )
+        trigger_facts = _surgery_presence_display_trigger_facts(
+            rule_id=rule_id,
+            provided=provided,
         )
         if rule_id == "LX0609-04-02-02" and not trigger_facts:
             # 030 的判定结果没有可观察的已组装触发信号时，不能凭状态猜测

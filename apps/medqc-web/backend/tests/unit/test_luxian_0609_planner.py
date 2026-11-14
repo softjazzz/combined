@@ -226,7 +226,6 @@ def test_rule_metadata_declares_exact_sources_facts_and_dependency() -> None:
     assert safecheck.dependency_reason_codes == ("informational_parent_only",)
     assert safecheck.independent_target_source is True
     assert safecheck.required_source_keys == (
-        "mr_surgery",
         "surgery_application",
         "surgery_record",
         "surgery_safecheck_record",
@@ -235,14 +234,12 @@ def test_rule_metadata_declares_exact_sources_facts_and_dependency() -> None:
     assert safecheck.trigger_source_keys != ("surgery_record",)
     assert items["LX0609-04-01-01"].required_source_keys == (
         "inpat_nondrug_order",
-        "mr_surgery",
         "presurg_summary",
         "surgery_application",
         "surgery_record",
     )
     assert items["LX0609-04-02-02"].required_source_keys == (
         "inpat_nondrug_order",
-        "mr_surgery",
         "surgery_application",
         "surgery_record",
     )
@@ -261,7 +258,7 @@ def test_trigger_requirements_bind_fact_source_scope_assertion_and_event_status(
     }
     expected_performed = {
         "allowed_event_statuses": ["performed"],
-        "allowed_source_keys": ["surgery_application", "surgery_record", "mr_surgery"],
+        "allowed_source_keys": ["surgery_application", "surgery_record"],
         "assertion": "affirmed",
         "current_visit_relevance": "relevant",
         "fact_type": "current_visit_surgery_confirmed",
@@ -285,7 +282,6 @@ def test_trigger_requirements_bind_fact_source_scope_assertion_and_event_status(
     ]
     assert "inpat_nondrug_order" not in safecheck.trigger_source_keys
     assert safecheck.required_source_keys == (
-        "mr_surgery",
         "surgery_application",
         "surgery_record",
         "surgery_safecheck_record",

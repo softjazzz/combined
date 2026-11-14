@@ -14,17 +14,10 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 
 def _reader_with_nonlocal_anesthesia(calls: list[str]):
     rows_by_source = {
-        "mr_surgery": (
-            {
-                "document_id": "surgery-038",
-                "surgery_begin_datetime": "2026-09-01 08:00:00+08:00",
-                "surgical_level": "三级",
-                "anesthesia_method": "全身麻醉",
-            },
-        ),
         "anesthesia_record": (
             {
                 "document_id": "anesthesia-038",
+                "anesthesia_method": "全身麻醉",
                 "record_time": "2026-09-01 08:00:00+08:00",
                 "record_content": "全身麻醉记录单已完成。",
             },

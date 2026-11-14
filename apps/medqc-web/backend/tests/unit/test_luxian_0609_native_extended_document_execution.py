@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from test_luxian_0609_tc02_performed_event_contract import PerformanceFake
 import json
 
 import pytest
@@ -220,6 +221,14 @@ class _AntimicrobialActionClient:
                 "total_tokens": 15,
             },
         }
+
+
+async def _evaluate_pending_063(rule_id, rows_by_source, *, unavailable_sources=frozenset(), **_kwargs):
+    snapshot, materials = _session(rows_by_source, unavailable_sources=unavailable_sources)
+    return await execute_luxian_0609_native_extended_document_rules(
+        rule_ids=(rule_id,), evidence_snapshot=snapshot, evidence_materials=materials,
+        decision_rule_ids=(rule_id,),
+    )
 
 
 async def _evaluate(
@@ -543,8 +552,10 @@ def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sourc
         ("LX0609-04-05-01", "LX0609-04-05-02", "LX0609-04-05-03", "LX0609-07-01-03")
     )
 
-    assert "mr_surgery" in sources
-    assert "mr_bloodtrans" in sources
+    assert "surgery_record" in sources
+    assert "bloodtrans_record" in sources
+    assert "mr_bloodtrans" not in sources
+    assert "mr_surgery" not in sources
     assert "inpat_registration" in sources
     assert "labtest_item_report" in sources
 
@@ -1707,12 +1718,12 @@ async def test_064_requires_three_dates_and_surgeon_round() -> None:
     _, reduced = await _evaluate(
         "LX0609-04-05-01",
         _with_064_surgeon_rounds({
-            "mr_surgery": (
+            "surgery_record": (
                 {
                     "surgery_code": "01.2400X013",
                     "surgery_name": "硬脑膜外血肿清除术",
-                    "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
-                    "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                    "surgery_begin_time": datetime(2026, 7, 1, 8, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
+                    "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                     "surgeon": "张医生",
                 },
             ),
@@ -1734,12 +1745,12 @@ async def test_064_does_not_count_dated_course_rows_with_empty_body() -> None:
     _, reduced = await _evaluate(
         "LX0609-04-05-01",
         {
-            "mr_surgery": (
+            "surgery_record": (
                 {
                     "surgery_code": "01.2400X013",
                     "surgery_name": "硬脑膜外血肿清除术",
-                    "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
-                    "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                    "surgery_begin_time": datetime(2026, 7, 1, 8, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
+                    "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                     "surgeon": "张医生",
                 },
             ),
@@ -1811,12 +1822,12 @@ async def test_064_uses_postoperative_calendar_days_not_72_hour_cutoff() -> None
     _, reduced = await _evaluate(
         "LX0609-04-05-01",
         _with_064_surgeon_rounds({
-            "mr_surgery": (
+            "surgery_record": (
                 {
                     "surgery_code": "01.2400X013",
                     "surgery_name": "硬脑膜外血肿清除术",
-                    "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
-                    "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                    "surgery_begin_time": datetime(2026, 7, 1, 8, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
+                    "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                     "surgeon": "张医生",
                 },
             ),
@@ -1937,12 +1948,12 @@ async def test_065_binds_surgery_senior_round_and_evaluation_horizon_sources() -
     _, reduced = await _evaluate(
         "LX0609-04-05-02",
         {
-            "mr_surgery": (
+            "surgery_record": (
                 {
                     "surgery_code": "01.2400X013",
                     "surgery_name": "硬脑膜外血肿清除术",
-                    "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
-                    "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                    "surgery_begin_time": datetime(2026, 7, 1, 8, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
+                    "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                     "surgeon": "张医生",
                 },
             ),
@@ -3871,19 +3882,19 @@ async def test_multiple_surgeries_without_document_linkage_are_data_gap() -> Non
     _, reduced = await _evaluate(
         "LX0609-04-05-01",
         {
-            "mr_surgery": (
+            "surgery_record": (
                 {
                     "surgery_code": "01.2400X013",
                     "surgery_name": "硬脑膜外血肿清除术",
-                    "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
-                    "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                    "surgery_begin_time": datetime(2026, 7, 1, 8, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
+                    "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                     "surgeon": "张医生",
                 },
                 {
                     "surgery_code": "01.2400X013",
                     "surgery_name": "硬脑膜外血肿清除术",
-                    "surgery_begin_datetime": datetime(2026, 7, 5, 8, 0),
-                    "surgery_end_datetime": datetime(2026, 7, 5, 10, 0),
+                    "surgery_begin_time": datetime(2026, 7, 5, 8, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
+                    "surgery_end_time": datetime(2026, 7, 5, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                     "surgeon": "张医生",
                 },
             ),
@@ -4488,8 +4499,8 @@ def _064_begin_time_rows(*, mr_rows, course_dates):
 
 
 @pytest.mark.asyncio
-async def test_064_surgeon_falls_back_to_unique_mr_surgery_with_same_begin_time() -> None:
-    """运行文书优先、病案首页回退：手术记录无术者时取同一开始时间首页手术的术者。"""
+async def test_064_does_not_borrow_surgeon_from_frontpage_with_same_begin_time() -> None:
+    """手术记录缺术者时不得借用病案首页的同日术者。"""
     _s, _m, result, _reduced = await _evaluate_selected(
         ("LX0609-04-05-01",),
         _064_begin_time_rows(
@@ -4502,7 +4513,7 @@ async def test_064_surgeon_falls_back_to_unique_mr_surgery_with_same_begin_time(
         ),
     )
     facts = dict(result.customer_display_facts)["LX0609-04-05-01"]
-    assert facts["surgery_events"][0]["surgeon_names"] == ["韩平"]
+    assert facts["surgery_events"][0]["surgeon_names"] == []
 
 
 @pytest.mark.asyncio
@@ -7271,8 +7282,8 @@ async def test_058_cross_timezone_same_instant_support_is_compliant() -> None:
 
 
 @pytest.mark.asyncio
-async def test_063_matching_authoritative_and_discharge_diagnoses_is_compliant() -> None:
-    _, reduced = await _evaluate(
+async def test_063_matching_authoritative_and_discharge_diagnoses_is_compliant_is_policy_pending() -> None:
+    result = await _evaluate_pending_063(
         "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
@@ -7284,7 +7295,12 @@ async def test_063_matching_authoritative_and_discharge_diagnoses_is_compliant()
             },),
         },
     )
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+    assert result.results[0]["status"] == "not_executed"
+    assert result.results[0]["reason_code"] == "policy_definition_pending"
+    assert result.decisions == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
@@ -7302,7 +7318,7 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
             ),
-            "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
+            "bloodtrans_record": ({"record_content": "已输注红细胞2U。", "record_time": "2026-06-02 14:00:00"},),
             "labtest_item_report": tuple(
                 {
                     "item_code": code,
@@ -7313,6 +7329,7 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
                 for code, name in names
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert reduced.reason_code == "requirement_satisfied"
@@ -7394,7 +7411,7 @@ async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
             ),
-            "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
+            "bloodtrans_record": ({"record_content": "已输注红细胞2U。", "record_time": "2026-06-02 14:00:00"},),
             "labtest_item_report": tuple(
                 {
                     "item_code": code,
@@ -7407,12 +7424,13 @@ async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
                 for code, name in names
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert dict(result.customer_display_facts)["LX0609-07-01-03"]["late_items"] == ["hiv"]
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -7423,14 +7441,15 @@ async def test_070_without_authoritative_transfusion_time_is_data_gap() -> None:
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
             ),
-            "mr_bloodtrans": ({"record_content": "已输注红细胞2U"},),
+            "bloodtrans_record": ({"record_content": "已输注红细胞2U。"},),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "authoritative_time_missing"
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -7448,9 +7467,9 @@ async def test_070_reuses_same_stay_nine_items_for_each_later_transfusion() -> N
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
             ),
-            "mr_bloodtrans": (
-                {"transfution_datetime": "2026-06-02 14:00:00"},
-                {"transfution_datetime": "2026-06-04 14:00:00"},
+            "bloodtrans_record": (
+                {"record_content": "已输注红细胞2U。", "record_time": "2026-06-02 14:00:00"},
+                {"record_content": "已输注红细胞2U。", "record_time": "2026-06-04 14:00:00"},
             ),
             "labtest_item_report": tuple(
                 {
@@ -7462,6 +7481,7 @@ async def test_070_reuses_same_stay_nine_items_for_each_later_transfusion() -> N
                 for code, name in names
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
@@ -7471,8 +7491,8 @@ async def test_070_reuses_same_stay_nine_items_for_each_later_transfusion() -> N
         "2026-06-02 14:00:00",
         "2026-06-04 14:00:00",
     ]
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -7492,14 +7512,14 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
                 "document_id": "admission-070",
                 "admission_datetime": "2026-06-01 08:00:00",
             },),
-            "mr_bloodtrans": (
+            "bloodtrans_record": (
                 {
                     "document_id": "transfusion-record-070",
-                    "transfution_datetime": "2026-06-02 14:00:00",
+                    "record_content": "已输注红细胞2U。", "record_time": "2026-06-02 14:00:00",
                 },
                 {
                     "document_id": "transfusion-record-070",
-                    "transfution_datetime": "2026-06-04 14:00:00",
+                    "record_content": "已输注红细胞2U。", "record_time": "2026-06-04 14:00:00",
                 },
             ),
             "labtest_item_report": tuple(
@@ -7523,6 +7543,7 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
                 },
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     canonical = _canonical_extended_result(
@@ -7538,7 +7559,7 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
         reference
         for source_key in (
             "inpat_registration",
-            "mr_bloodtrans",
+            "bloodtrans_record",
             "bloodtrans_record",
             "labtest_item_report",
         )
@@ -7551,14 +7572,14 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
         if observation.source_key
         in {
             "inpat_registration",
-            "mr_bloodtrans",
+            "bloodtrans_record",
             "bloodtrans_record",
             "labtest_item_report",
             "admission_record", "daily_course_record", "senior_course_record", "inpat_nondrug_order", "inpat_drug_order",
         }
     }
     assert set(execution.decisions[0].fact_refs) == (
-        source_snapshot_refs | selected_document_refs
+        selected_document_refs
     )
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert canonical["status"] == "compliant"
@@ -7612,14 +7633,14 @@ async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evid
         for item in canonical["customer_evidence"]
     } == {
         ("inpat_registration", "admission-070"),
-        ("mr_bloodtrans", "transfusion-record-070"),
+        ("bloodtrans_record", "transfusion-record-070"),
         ("labtest_item_report", "lab-report-070-a"),
         ("labtest_item_report", "lab-report-070-b"),
     }
-    assert execution.llm_call_count == 0
-    assert execution.prompt_tokens == 0
-    assert execution.completion_tokens == 0
-    assert execution.total_tokens == 0
+    assert execution.llm_call_count == 1
+    assert execution.prompt_tokens == 10
+    assert execution.completion_tokens == 5
+    assert execution.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -7631,7 +7652,7 @@ async def test_070_trigger_absent_does_not_project_registration_or_lab_documents
                 "document_id": "admission-no-transfusion-070",
                 "admission_datetime": "2026-06-01 08:00:00",
             },),
-            "mr_bloodtrans": (),
+            "bloodtrans_record": (),
             "labtest_item_report": (
                 {
                     "document_id": "lab-nine-item-no-transfusion-070",
@@ -7649,6 +7670,7 @@ async def test_070_trigger_absent_does_not_project_registration_or_lab_documents
                 },
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     canonical = _canonical_extended_result(
@@ -7665,7 +7687,7 @@ async def test_070_trigger_absent_does_not_project_registration_or_lab_documents
         if observation.source_key
         in {
             "inpat_registration",
-            "mr_bloodtrans",
+            "bloodtrans_record",
             "bloodtrans_record",
             "labtest_item_report",
             "admission_record", "daily_course_record", "senior_course_record", "inpat_nondrug_order", "inpat_drug_order",
@@ -7693,9 +7715,9 @@ async def test_070_does_not_use_nine_items_reported_after_earlier_transfusion() 
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
             ),
-            "mr_bloodtrans": (
-                {"transfution_datetime": "2026-06-02 14:00:00"},
-                {"transfution_datetime": "2026-06-04 14:00:00"},
+            "bloodtrans_record": (
+                {"record_content": "已输注红细胞2U。", "record_time": "2026-06-02 14:00:00"},
+                {"record_content": "已输注红细胞2U。", "record_time": "2026-06-04 14:00:00"},
             ),
             "labtest_item_report": tuple(
                 {
@@ -7707,13 +7729,14 @@ async def test_070_does_not_use_nine_items_reported_after_earlier_transfusion() 
                 for code, name in names
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     facts = dict(result.customer_display_facts)["LX0609-07-01-03"]
     assert facts["failed_transfusion_times"] == ["2026-06-02 14:00:00"]
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -7731,7 +7754,7 @@ async def test_070_rejects_nine_items_from_before_current_admission() -> None:
             "inpat_registration": (
                 {"admission_datetime": "2026-06-02 08:00:00"},
             ),
-            "mr_bloodtrans": ({"transfution_datetime": "2026-06-03 14:00:00"},),
+            "bloodtrans_record": ({"record_content": "已输注红细胞2U。", "record_time": "2026-06-03 14:00:00"},),
             "labtest_item_report": tuple(
                 {
                     "item_code": code,
@@ -7742,6 +7765,7 @@ async def test_070_rejects_nine_items_from_before_current_admission() -> None:
                 for code, name in names
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
@@ -7759,7 +7783,7 @@ async def test_070_without_authoritative_admission_time_is_data_gap() -> None:
     result, reduced = await _evaluate(
         "LX0609-07-01-03",
         {
-            "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
+            "bloodtrans_record": ({"record_content": "已输注红细胞2U。", "record_time": "2026-06-02 14:00:00"},),
             "labtest_item_report": tuple(
                 {
                     "item_code": code,
@@ -7770,12 +7794,13 @@ async def test_070_without_authoritative_admission_time_is_data_gap() -> None:
                 for code, name in names
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "authoritative_time_missing"
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -7793,7 +7818,7 @@ async def test_070_without_authoritative_nine_item_report_time_is_data_gap() -> 
             "inpat_registration": (
                 {"admission_datetime": "2026-06-01 08:00:00"},
             ),
-            "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
+            "bloodtrans_record": ({"record_content": "已输注红细胞2U。", "record_time": "2026-06-02 14:00:00"},),
             "labtest_item_report": tuple(
                 {
                     "item_code": code,
@@ -7804,14 +7829,15 @@ async def test_070_without_authoritative_nine_item_report_time_is_data_gap() -> 
                 for code, name in names
             ),
         },
+        llm_client=PerformanceFake("performed"),
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "authoritative_time_missing"
     facts = dict(result.customer_display_facts)["LX0609-07-01-03"]
     assert facts["missing_time_items"] == ["hiv"]
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 15
 
 
 @pytest.mark.asyncio
@@ -7993,8 +8019,8 @@ async def test_062_unstructured_instruction_without_client_is_technical_error() 
 
 
 @pytest.mark.asyncio
-async def test_063_mismatched_discharge_diagnoses_are_non_compliant() -> None:
-    result, reduced = await _evaluate(
+async def test_063_mismatched_discharge_diagnoses_are_non_compliant_is_policy_pending() -> None:
+    result = await _evaluate_pending_063(
         "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
@@ -8017,16 +8043,16 @@ async def test_063_mismatched_discharge_diagnoses_are_non_compliant() -> None:
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
-    assert facts["diagnoses_consistent"] is False
-    assert facts["authoritative_diagnoses"] != facts["written_diagnoses"]
+    assert result.results[0]["status"] == "not_executed"
+    assert result.results[0]["reason_code"] == "policy_definition_pending"
+    assert result.decisions == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == 0
 
 
-def test_063_declares_mr_diagnosis_as_internal_decision_support_source() -> None:
+def test_063_excludes_frontpage_diagnosis_from_decision_support_sources() -> None:
     assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-08-01-03",))) == {
         "discharge_record",
-        "mr_diagnosis",
         "inpat_registration",
         "death_record",
         "evaluation_context.horizon",
@@ -8034,7 +8060,7 @@ def test_063_declares_mr_diagnosis_as_internal_decision_support_source() -> None
 
 
 @pytest.mark.asyncio
-async def test_063_prefers_mr_diagnosis_when_diagnosis_is_empty() -> None:
+async def test_063_prefers_mr_diagnosis_when_diagnosis_is_empty_is_policy_pending() -> None:
     rows_by_source = {
         "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
         "diagnosis": (),
@@ -8083,31 +8109,17 @@ async def test_063_prefers_mr_diagnosis_when_diagnosis_is_empty() -> None:
             },
         ),
     }
-    result, reduced = await _evaluate("LX0609-08-01-03", rows_by_source)
-    expected_snapshot, _ = _session(rows_by_source)
+    result = await _evaluate_pending_063("LX0609-08-01-03", rows_by_source)
 
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
-    assert facts["authoritative_diagnoses"] == ["社区获得性肺炎", "高血压病"]
-    assert facts["written_diagnoses"] == ["社区获得性肺炎", "高血压病"]
-    assert all("阶段诊断" not in name for name in facts["authoritative_diagnoses"])
-    assert all("初步诊断" not in name for name in facts["written_diagnoses"])
-    mr_ref = next(
-        observation.snapshot_ref.removeprefix("sha256:")
-        for observation in expected_snapshot.observations
-        if observation.source_key == "mr_diagnosis"
-    )
-    diagnosis_ref = next(
-        observation.snapshot_ref.removeprefix("sha256:")
-        for observation in expected_snapshot.observations
-        if observation.source_key == "diagnosis"
-    )
-    assert mr_ref in result.decisions[0].fact_refs
-    assert diagnosis_ref not in result.decisions[0].fact_refs
+    assert result.results[0]["status"] == "not_executed"
+    assert result.results[0]["reason_code"] == "policy_definition_pending"
+    assert result.decisions == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
-async def test_063_single_mr_diagnosis_is_naturally_ordered_without_sequence() -> None:
+async def test_063_single_mr_diagnosis_is_naturally_ordered_without_sequence_is_policy_pending() -> None:
     rows_by_source = {
         "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
         "diagnosis": (),
@@ -8125,23 +8137,18 @@ async def test_063_single_mr_diagnosis_is_naturally_ordered_without_sequence() -
             },
         ),
     }
-    result, reduced = await _evaluate("LX0609-08-01-03", rows_by_source)
+    result = await _evaluate_pending_063("LX0609-08-01-03", rows_by_source)
 
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert reduced.reason_code == "requirement_satisfied"
-    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
-    assert facts == {
-        "verification_kind": "discharge_diagnosis_consistency_check",
-        "authoritative_diagnoses": ["社区获得性肺炎"],
-        "written_diagnoses": ["社区获得性肺炎"],
-        "diagnoses_consistent": True,
-        "order_comparable": True,
-    }
+    assert result.results[0]["status"] == "not_executed"
+    assert result.results[0]["reason_code"] == "policy_definition_pending"
+    assert result.decisions == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
-async def test_063_mr_diagnosis_content_mismatch_is_defect_even_when_written_order_missing() -> None:
-    result, reduced = await _evaluate(
+async def test_063_mr_diagnosis_content_mismatch_is_defect_even_when_written_order_missing_is_policy_pending() -> None:
+    result = await _evaluate_pending_063(
         "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
@@ -8172,16 +8179,16 @@ async def test_063_mr_diagnosis_content_mismatch_is_defect_even_when_written_ord
         llm_client=DiagnosisEquivalenceClient(),
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert reduced.reason_code == "requirement_violated"
-    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
-    assert facts["diagnoses_consistent"] is False
-    assert facts["order_comparable"] is False
+    assert result.results[0]["status"] == "not_executed"
+    assert result.results[0]["reason_code"] == "policy_definition_pending"
+    assert result.decisions == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
-async def test_063_compares_death_diagnoses() -> None:
-    result, reduced = await _evaluate(
+async def test_063_compares_death_diagnoses_is_policy_pending() -> None:
+    result = await _evaluate_pending_063(
         "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
@@ -8199,15 +8206,16 @@ async def test_063_compares_death_diagnoses() -> None:
         },
     )
 
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-    facts = dict(result.customer_display_facts)["LX0609-08-01-03"]
-    assert facts["authoritative_diagnoses"] == ["重症肺炎"]
-    assert facts["written_diagnoses"] == ["重症肺炎"]
+    assert result.results[0]["status"] == "not_executed"
+    assert result.results[0]["reason_code"] == "policy_definition_pending"
+    assert result.decisions == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
-async def test_063_mr_diagnosis_unavailable_does_not_fallback_to_diagnosis() -> None:
-    result, reduced = await _evaluate(
+async def test_063_mr_diagnosis_unavailable_does_not_fallback_to_diagnosis_is_policy_pending() -> None:
+    result = await _evaluate_pending_063(
         "LX0609-08-01-03",
         {
             "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
@@ -8229,9 +8237,11 @@ async def test_063_mr_diagnosis_unavailable_does_not_fallback_to_diagnosis() -> 
         unavailable_sources={"mr_diagnosis"},
     )
 
-    assert reduced.final_state is CustomerFinalState.DATA_GAP
-    assert reduced.reason_code == "source_unavailable"
-    assert dict(result.customer_display_facts).get("LX0609-08-01-03") is None
+    assert result.results[0]["status"] == "not_executed"
+    assert result.results[0]["reason_code"] == "policy_definition_pending"
+    assert result.decisions == ()
+    assert result.customer_display_facts == ()
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
@@ -8239,11 +8249,11 @@ async def test_064_missing_postoperative_day_is_non_compliant() -> None:
     result, reduced = await _evaluate(
         "LX0609-04-05-01",
         {
-            "mr_surgery": ({
+            "surgery_record": ({
                 "surgery_code": "01.2400X013",
                 "surgery_name": "硬脑膜外血肿清除术",
-                "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
-                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgery_begin_time": datetime(2026, 7, 1, 8, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
+                "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                 "surgeon": "张医生",
             },),
             "daily_course_record": (
@@ -8264,11 +8274,11 @@ async def test_065_missing_postoperative_senior_round_is_non_compliant() -> None
     result, reduced = await _evaluate(
         "LX0609-04-05-02",
         {
-            "mr_surgery": ({
+            "surgery_record": ({
                 "surgery_code": "01.2400X013",
                 "surgery_name": "硬脑膜外血肿清除术",
-                "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
-                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgery_begin_time": datetime(2026, 7, 1, 8, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
+                "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                 "surgeon": "张医生",
             },),
             "daily_course_record": ({
@@ -8289,10 +8299,10 @@ async def test_065_does_not_report_missing_senior_round_before_72_hour_window_ma
     result, reduced = await _evaluate(
         "LX0609-04-05-02",
         {
-            "mr_surgery": ({
+            "surgery_record": ({
                 "surgery_code": "01.2400X013",
                 "surgery_name": "硬脑膜外血肿清除术",
-                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                 "surgeon": "张医生",
             },),
             "senior_course_record": (),
@@ -8316,10 +8326,10 @@ async def test_065_reports_missing_senior_round_at_exact_72_hour_deadline() -> N
     _, reduced = await _evaluate(
         "LX0609-04-05-02",
         {
-            "mr_surgery": ({
+            "surgery_record": ({
                 "surgery_code": "01.2400X013",
                 "surgery_name": "硬脑膜外血肿清除术",
-                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                 "surgeon": "张医生",
             },),
             "senior_course_record": (),
@@ -8378,10 +8388,10 @@ async def test_065_requires_evaluation_horizon_before_missing_senior_round_is_re
     _, reduced = await _evaluate(
         "LX0609-04-05-02",
         {
-            "mr_surgery": ({
+            "surgery_record": ({
                 "surgery_code": "01.2400X013",
                 "surgery_name": "硬脑膜外血肿清除术",
-                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgery_end_time": datetime(2026, 7, 1, 10, 0),
                 "surgeon": "张医生",
             },),
             "senior_course_record": (),
@@ -8398,10 +8408,10 @@ async def test_065_rejects_conflicting_evaluation_horizon_before_missing_senior_
     _, reduced = await _evaluate(
         "LX0609-04-05-02",
         {
-            "mr_surgery": ({
+            "surgery_record": ({
                 "surgery_code": "01.2400X013",
                 "surgery_name": "硬脑膜外血肿清除术",
-                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                 "surgeon": "张医生",
             },),
             "senior_course_record": (),
@@ -8558,11 +8568,11 @@ async def test_066_missing_postoperative_first_course_is_non_compliant() -> None
     result, reduced = await _evaluate(
         "LX0609-04-05-03",
         {
-            "mr_surgery": ({
+            "surgery_record": ({
                 "surgery_code": "01.2400X013",
                 "surgery_name": "硬脑膜外血肿清除术",
-                "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
-                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgery_begin_time": datetime(2026, 7, 1, 8, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
+                "surgery_end_time": datetime(2026, 7, 1, 10, 0).strftime("%Y-%m-%d %H:%M:%S+08"),
                 "surgeon": "张医生",
             },),
         },
@@ -8878,18 +8888,18 @@ async def test_postoperative_not_applicable_binds_catalog_confirmed_operation_re
     snapshot, materials, execution, reduced = await _evaluate_selected(
         (rule_id,),
         {
-            "mr_surgery": ({
+            "surgery_record": ({
                 "document_id": f"OP-{rule_id}-{surgery_code}",
                 "surgery_code": surgery_code,
                 "surgery_name": surgery_name,
-                "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
+                "surgery_begin_time": datetime(2026, 7, 1, 8, 0),
             },),
         },
     )
 
     operation_ref = next(
         reference
-        for reference, _row in materials.document_rows("mr_surgery", snapshot=snapshot)
+        for reference, _row in materials.document_rows("surgery_record", snapshot=snapshot)
     )
 
     assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
@@ -9421,7 +9431,7 @@ async def test_075_record_outside_three_day_window_is_defect_without_second_call
 
 
 @pytest.mark.asyncio
-async def test_075_front_page_code_triggers_without_orders() -> None:
+async def test_075_front_page_code_does_not_trigger_without_raw_orders() -> None:
     client = FrozenInvasiveProcedureClient(records={"经皮肝穿刺引流术": "not_documented"})
     _result, reduced = await _evaluate(
         "LX0609-10-03-01",
@@ -9440,8 +9450,8 @@ async def test_075_front_page_code_triggers_without_orders() -> None:
         llm_client=client,
     )
 
-    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert len(client.prompts) == 1
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert len(client.prompts) == 0
 
 
 @pytest.mark.asyncio
@@ -10547,3 +10557,36 @@ def test_057_prophylaxis_is_judged_on_the_antimicrobial_item(clause, expected) -
 
 
 _TRANSFER_PLAN = "予以气管插管呼吸机辅助呼吸，予以哌拉西林他唑巴坦抗感染，完善痰培养。"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rules", (
+    ("LX0609-08-01-03", "LX0609-04-05-01"),
+    ("LX0609-08-01-01", "LX0609-08-01-03", "LX0609-04-05-01"),
+    ("LX0609-05-01-02", "LX0609-08-01-03", "LX0609-04-05-01"),
+))
+async def test_pending_063_keeps_mixed_group_result_order_without_clinical_decision(monkeypatch, rules):
+    """仅验证分组汇总：063位于前部/中部时均不派发到临床执行组。"""
+    called = []
+
+    async def group(**kwargs):
+        selected = kwargs["rule_ids"]
+        assert "LX0609-08-01-03" not in selected
+        called.extend(selected)
+        return module.NativeExtendedDocumentExecutionResult(
+            tuple({"rule_id": rule} for rule in selected), selected, (),
+        )
+
+    monkeypatch.setattr(module, "_execute_extended_document_group", group)
+    snapshot, materials = _session({})
+    result = await execute_luxian_0609_native_extended_document_rules(
+        rule_ids=rules, evidence_snapshot=snapshot, evidence_materials=materials,
+        decision_rule_ids=rules,
+    )
+    assert tuple(item["rule_id"] for item in result.results) == rules
+    pending = next(item for item in result.results if item["rule_id"] == "LX0609-08-01-03")
+    assert pending["status"] == "not_executed"
+    assert pending["reason_code"] == "policy_definition_pending"
+    assert result.decisions == ()
+    assert result.llm_call_count == 0
+    assert set(called) == set(rules) - {"LX0609-08-01-03"}

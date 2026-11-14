@@ -69,7 +69,6 @@ def test_063_declares_derived_horizon_as_decision_support() -> None:
         "discharge_record",
         EVALUATION_HORIZON_SOURCE_KEY,
         "inpat_registration",
-        "mr_diagnosis",
     }
 
 

@@ -1269,7 +1269,8 @@ def test_native_core_mr_surgery_only_does_not_trigger_030_or_032(monkeypatch):
     )
 
     assert seen == sorted(seen)
-    assert len(seen) == len(set(seen)) == 5
+    assert len(seen) == len(set(seen)) == 4
+    assert "mr_surgery" not in seen
     assert [item["rule_id"] for item in result.results] == list(native_execution.NATIVE_RULE_IDS)
     assert [item["status"] for item in result.results] == ["not_applicable"] * 2
     assert all(item["metadata"]["total_tokens"] == 0 for item in result.results)
@@ -1421,8 +1422,11 @@ def test_native_032_safecheck_blank_rows_emit_blank_display_fact(monkeypatch):
     )
 
 
-def test_native_core_mr_surgery_error_without_alternative_positive_is_fail_closed(monkeypatch):
+def test_native_core_does_not_query_mr_surgery_error_outside_clinical_contract(monkeypatch):
+    seen: list[str] = []
+
     def _reader(**kwargs):
+        seen.append(kwargs["source_key"])
         if kwargs["source_key"] == "mr_surgery":
             raise RuntimeError("raw_mr_error")
         return []
@@ -1440,7 +1444,8 @@ def test_native_core_mr_surgery_error_without_alternative_positive_is_fail_close
         source_schema=None,
     )
 
-    assert [item["status"] for item in result.results] == ["technical_error"] * 2
+    assert "mr_surgery" not in seen
+    assert [item["status"] for item in result.results] == ["not_applicable"] * 2
     assert {item["metadata"]["total_tokens"] for item in result.results} == {0}
     assert "raw_mr_error" not in repr(result)
 

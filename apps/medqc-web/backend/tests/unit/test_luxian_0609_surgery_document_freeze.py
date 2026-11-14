@@ -286,7 +286,6 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "LX0609-04-01-01",
             {
                 "surgery_record": _rows(_surgery()),
-                "mr_surgery": _rows(_mr_surgery("mr-surgery-1")),
                 "presurg_summary": _rows(
                     {
                         "document_id": "summary-1",
@@ -318,7 +317,6 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "LX0609-11-02-01",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
-                "mr_surgery": _rows(_surgery("mr-surgery-1")),
             },
             "non_compliant",
             "required_document_missing",
@@ -328,15 +326,14 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "consent_state": "missing",
                 "checked_sources": ["consent_form"],
             },
-            (("material", "mr_surgery", "mr-surgery-1"),),
-            {("mr_surgery", "mr-surgery-1")},
+            (("material", "anesthesia_record", "anesthesia-1"),),
+            {("anesthesia_record", "anesthesia-1")},
             "已实施麻醉，但未找到对应的麻醉知情同意书",
         ),
         (
             "LX0609-11-02-02",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
-                "mr_surgery": _rows(_surgery("mr-surgery-1")),
                 "consent_form": _rows(_consent(complete=False)),
             },
             "non_compliant",
@@ -347,12 +344,12 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "missing_fields": ["patient_signature", "patient_signature_time"],
             },
             (
-                ("material", "mr_surgery", "mr-surgery-1"),
+                ("material", "anesthesia_record", "anesthesia-1"),
                 ("material", "consent_form", "consent-1"),
             ),
             {
                 ("consent_form", "consent-1"),
-                ("mr_surgery", "mr-surgery-1"),
+                ("anesthesia_record", "anesthesia-1"),
             },
             "发现质控问题",
         ),
@@ -360,7 +357,6 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "LX0609-04-04-01",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
-                "mr_surgery": _rows(_surgery("mr-surgery-1")),
                 "preane_surveil_record": _rows(_visit("pre-visit-1", post=False)),
             },
             "non_compliant",
@@ -371,11 +367,11 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 "missing_visit_sources": ["postane_surveil_record"],
             },
             (
-                ("material", "mr_surgery", "mr-surgery-1"),
+                ("material", "anesthesia_record", "anesthesia-1"),
                 ("material", "preane_surveil_record", "pre-visit-1"),
             ),
             {
-                ("mr_surgery", "mr-surgery-1"),
+                ("anesthesia_record", "anesthesia-1"),
                 ("preane_surveil_record", "pre-visit-1"),
             },
             "已实施麻醉，但缺少麻醉术前或术后访视记录",
@@ -384,7 +380,7 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "LX0609-04-04-02",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
-                "mr_surgery": _rows(_mr_surgery("mr-surgery-1")),
+                "surgery_record": _rows(_surgery("surgery-1")),
                 "preane_surveil_record": _rows(_visit("pre-visit-1", post=False)),
                 "postane_surveil_record": _rows(_visit("post-visit-1", post=True)),
             },
@@ -420,13 +416,14 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
                 },
             },
             (
-                # 内容寻址引用按摘要排序；病案首页手术行带权威结束时间后摘要随之变化。
+                # 逐份冻结实际临床手术及访视材料坐标。
+                ("fact", "current_visit_surgery_confirmed", "surgery_record", "affirmed", "performed"),
                 ("material", "preane_surveil_record", "pre-visit-1"),
-                ("material", "mr_surgery", "mr-surgery-1"),
+                ("material", "surgery_record", "surgery-1"),
                 ("material", "postane_surveil_record", "post-visit-1"),
             ),
             {
-                ("mr_surgery", "mr-surgery-1"),
+                ("surgery_record", "surgery-1"),
                 ("postane_surveil_record", "post-visit-1"),
                 ("preane_surveil_record", "pre-visit-1"),
             },
@@ -440,7 +437,6 @@ def _fact_ref_coordinates(session: Any, fact_refs: Sequence[str]) -> tuple[tuple
             "LX0609-04-04-03",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
-                "mr_surgery": _rows(_surgery("mr-surgery-1")),
             },
             "compliant",
             "requirement_satisfied",
@@ -514,7 +510,8 @@ async def test_surgery_document_family_freezes_native_binding_aggregate_outputs(
     assert result["customer_display_facts"] == display_facts
     assert result["findings"] == findings
     assert _evidence_coordinates(result) == evidence
-    assert _fact_ref_coordinates(session, decision.fact_refs) == fact_ref_coordinates
+    # 内容寻址引用的摘要顺序随快照变化；逐项比较语义坐标并保留重复数。
+    assert sorted(_fact_ref_coordinates(session, decision.fact_refs)) == sorted(fact_ref_coordinates)
 
     if rule_id == "LX0609-04-04-02":
         assert execution.llm_call_count == 1

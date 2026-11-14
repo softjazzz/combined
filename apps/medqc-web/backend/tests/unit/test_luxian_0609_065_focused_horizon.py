@@ -1,7 +1,5 @@
 """LX0609-04-05-02 单选入口必须在同一 Evidence Session 消费冻结终点。"""
 
-from datetime import datetime
-
 import pytest
 
 from luxian_0609_course_body_test_facts import FrozenCourseBodyClient
@@ -51,12 +49,14 @@ async def test_065_single_rule_entry_executes_with_known_surgery_end_and_frozen_
             CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: (
                 {"discharge_datetime": "2026-08-01 12:00:00"},
             ),
-            "mr_surgery": (
+            "surgery_record": (
                 {
                     "surgery_code": "01.2400X013",
                     "surgery_name": "硬脑膜外血肿清除术",
-                    "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
-                    "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                    "document_id": "S-065",
+                    "surgery_begin_time": "2026-07-01 08:00:00+08:00",
+                    "surgery_end_time": "2026-07-01 10:00:00+08:00",
+                    "surgery_process": "血肿已清除，手术完成。",
                     "surgeon": "张医生",
                 },
             ),

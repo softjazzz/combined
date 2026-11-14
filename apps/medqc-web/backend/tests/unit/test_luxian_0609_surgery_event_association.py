@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 
 from app.services.luxian_0609.surgery_event_association import (
+    _is_single_composite_event,
     associate_preop_document_to_surgery_event,
     build_performed_surgery_events,
     count_associated_performed_surgery_events,
@@ -139,14 +140,13 @@ def test_running_event_builder_does_not_use_mr_anchor_to_remove_different_time_s
                 surgery_id="mr-cholecystectomy",
                 name="腹腔镜胆囊切除术",
                 code="51.2300",
-                # mr_surgery 在真实数据中常只有手术自然日；与手术记录的
-                # 具体时分不一致，但仍可作为同日实质记录的唯一锚点。
+                # 首页日期不能参与当前计数或抹除另一开始时刻的临床记录。
                 begin=datetime(2026, 1, 1, 0, 0),
             ),
         ),
     )
 
-    assert count_associated_performed_surgery_events(materials) == (1, "")
+    assert count_associated_performed_surgery_events(materials) == (2, "")
     events, reason = build_performed_surgery_events(materials)
     assert reason == "" and events is not None and len(events) == 2
 
@@ -544,10 +544,11 @@ def test_two_substantive_surgery_records_still_fail_association() -> None:
         ),
     )
 
-    assert count_associated_performed_surgery_events(materials) == (
-        None,
-        "association_failed",
+    # 保留历史跨来源关联的拒绝边界；当前临床文书计数不再受首页影响。
+    assert not _is_single_composite_event(
+        materials.rows("surgery_record"), materials.rows("mr_surgery"),
     )
+    assert count_associated_performed_surgery_events(materials) == (2, "")
 
 
 def test_component_on_different_natural_day_fails_association() -> None:
@@ -568,10 +569,11 @@ def test_component_on_different_natural_day_fails_association() -> None:
         ),
     )
 
-    assert count_associated_performed_surgery_events(materials) == (
-        None,
-        "association_failed",
+    # 保留历史跨来源关联的拒绝边界；当前临床文书计数不再受首页影响。
+    assert not _is_single_composite_event(
+        materials.rows("surgery_record"), materials.rows("mr_surgery"),
     )
+    assert count_associated_performed_surgery_events(materials) == (1, "")
 
 
 def test_component_name_dictionary_difference_does_not_block_unique_record() -> None:
@@ -635,10 +637,11 @@ def test_missing_component_time_fails_association() -> None:
         ),
     )
 
-    assert count_associated_performed_surgery_events(materials) == (
-        None,
-        "association_failed",
+    # 保留历史跨来源关联的拒绝边界；当前临床文书计数不再受首页影响。
+    assert not _is_single_composite_event(
+        materials.rows("surgery_record"), materials.rows("mr_surgery"),
     )
+    assert count_associated_performed_surgery_events(materials) == (1, "")
 
 
 def _timed_events(*specs):

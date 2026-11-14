@@ -36,6 +36,10 @@ _DEFAULT_PENDING_DEFINITION_MESSAGES = (
 )
 # 暂停原因的客户文案只在此处声明；总表只提供原因码，避免第二份暂停清单。
 _PENDING_DEFINITION_CUSTOMER_MESSAGES: dict[str, tuple[str, str]] = {
+    "event_quality_control_paused_current_release": (
+        "本质控点按当前版本安排暂未启用，未生成合规或问题判定。",
+        "后续版本启用后可新建任务执行本质控点；历史结果保持原结论。",
+    ),
     "frontpage_comparison_policy_pending": (
         "本质控点原首页对照口径已暂停，当前未启用，未生成合规或问题判定。",
         "待确认基于原始临床文书的对照口径后再启用；无需为质控补充首页。",

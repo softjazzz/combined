@@ -118,6 +118,12 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     assert exam_course.phase_status == "phase_1_target"
     assert exam_course.pending_reason_code == ""
 
+    diagnosis = contracts["LX0609-08-01-03"]
+    assert diagnosis.phase_status == "pending_definition"
+    assert diagnosis.pending_reason_code == "frontpage_comparison_policy_pending"
+    assert diagnosis.max_llm_calls_per_rule == 0
+    assert "mr_diagnosis" not in diagnosis.data_dependencies
+
     implant = contracts["LX0609-04-02-04"]
     assert implant.phase_status == "pending_definition"
     assert implant.pending_reason_code == "implant_five_field_real_gold_pending"
@@ -166,7 +172,6 @@ def test_009_decision_support_loads_daily_coverage_and_minimal_change_sources() 
 def test_025_decision_support_loads_surgery_and_course_record_sources() -> None:
     assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-04-02-04",))) == {
         "surgery_record",
-        "mr_surgery",
         "daily_course_record",
     }
 

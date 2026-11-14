@@ -39,6 +39,18 @@ def load_luxian_0609_engine_judgment() -> dict[str, Any]:
         payload = json.load(file)
     if payload.get("schema_version") != "lx0609-engine-judgment-v1":
         raise ValueError("unsupported LX0609 engine judgment schema")
+    # 当前规则页只由唯一总表决定暂停，不让旧静态判定步骤误报为已启用。
+    # 此投影不参与已发布结果读取或已冻结任务范围的恢复。
+    rules = payload.setdefault("rules", {})
+    for entry in load_luxian_0609_rule_master():
+        if entry.implementation_status == "active" and entry.phase_status == "pending_definition":
+            excluded = bool((rules.get(entry.rule_id) or {}).get("excluded"))
+            rules[entry.rule_id] = {
+                "withheld": True,
+                "withheld_reason": entry.pending_definition_note or "本质控点暂不执行。",
+            }
+            if excluded:
+                rules[entry.rule_id]["excluded"] = True
     return payload
 
 
@@ -52,7 +64,10 @@ def build_luxian_0609_engine_judgment(
     if entry.get("excluded"):
         return {"withheld": True, "withheld_reason": "本质控点不在本次客户交付范围，不参与正式判定。"}
     if entry.get("withheld"):
-        return {"withheld": True, "withheld_reason": pending_note or "本质控点暂不执行。"}
+        return {
+            "withheld": True,
+            "withheld_reason": pending_note or entry.get("withheld_reason") or "本质控点暂不执行。",
+        }
     common = payload.get("common") or {}
     return {
         "withheld": False,

@@ -1,5 +1,7 @@
 """多台手术、交接和有创实际断点的正式链复现。"""
 
+from datetime import date
+
 import pytest
 
 from tests.unit.test_luxian_0609_native_extended_document_execution import (
@@ -217,6 +219,29 @@ async def test_complete_explicit_shift_still_works_without_change_table(
     assert result["status"] == state
 
 
+async def check_confirmed_invasive_fixture(rows, *, client=None):
+    """历史/合成底层接口保护：已确认操作事实由测试显式给定，不代表正式触发。
+
+    不再把首页、医嘱或计划解释成实施事实；只检验既有记录核对器的候选完整性、
+    原文摘录与操作日窗口。正式 prepare gate 的暂停不应跳过这些边界。
+    """
+    from app.services.luxian_0609.extended_document.invasive_procedure_record import (
+        ProcedureTrigger, check_invasive_procedure_records, load_invasive_procedure_catalog,
+    )
+
+    catalog = {item.code: item for item in load_invasive_procedure_catalog()}
+    triggers = tuple(ProcedureTrigger(
+        catalog[row["surgery_code"]],
+        date.fromisoformat(row["surgery_begin_datetime"][:10]),
+    ) for row in rows["confirmed_operation"])
+    result = await check_invasive_procedure_records(triggers, rows["daily_course_record"], client)
+    if client is None:
+        assert result.llm_call_count == result.total_tokens == 0
+    else:
+        assert result.llm_call_count == len(client.prompts) == 1
+    return result
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "row,reason",
@@ -236,10 +261,9 @@ async def test_complete_explicit_shift_still_works_without_change_table(
     ],
 )
 async def test_incomplete_invasive_candidate_is_not_a_missing_record(row, reason):
-    result = await pipeline(
-        "LX0609-10-03-01",
+    result = await check_confirmed_invasive_fixture(
         {
-            "mr_surgery": (
+            "confirmed_operation": (
                 {
                     "surgery_code": "50.9101",
                     "surgery_name": "经皮肝穿刺引流术",
@@ -249,12 +273,12 @@ async def test_incomplete_invasive_candidate_is_not_a_missing_record(row, reason
             "daily_course_record": (row,),
         },
     )
-    assert result["status"] == "data_gap"
-    assert result["reason_code"] == reason
+    assert result.state == "unresolved"
+    assert result.reason_code == reason
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("documented,state", [(True, "compliant"), (False, "data_gap")])
+@pytest.mark.parametrize("documented,state", [(True, "ready"), (False, "unresolved")])
 async def test_incomplete_other_record_only_blocks_unproven_missing_claim(
     documented, state
 ):
@@ -266,10 +290,9 @@ async def test_incomplete_other_record_only_blocks_unproven_missing_claim(
             "经皮肝穿刺引流术": ("documented", text) if documented else "not_documented"
         }
     )
-    result = await pipeline(
-        "LX0609-10-03-01",
+    result = await check_confirmed_invasive_fixture(
         {
-            "mr_surgery": (
+            "confirmed_operation": (
                 {
                     "surgery_code": "50.9101",
                     "surgery_begin_datetime": "2026-06-02 08:00:00",
@@ -286,16 +309,15 @@ async def test_incomplete_other_record_only_blocks_unproven_missing_claim(
         },
         client=client,
     )
-    assert result["status"] == state
+    assert result.state == state
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("clock", ["invalid", "2026-06-02not-a-clock"])
 async def test_invalid_primary_record_clock_does_not_borrow_submit_clock(clock):
-    result = await pipeline(
-        "LX0609-10-03-01",
+    result = await check_confirmed_invasive_fixture(
         {
-            "mr_surgery": (
+            "confirmed_operation": (
                 {
                     "surgery_code": "50.9101",
                     "surgery_begin_datetime": "2026-06-02 08:00:00",
@@ -311,8 +333,8 @@ async def test_invalid_primary_record_clock_does_not_borrow_submit_clock(clock):
             ),
         },
     )
-    assert result["status"] == "data_gap"
-    assert result["reason_code"] == "authoritative_time_missing"
+    assert result.state == "unresolved"
+    assert result.reason_code == "authoritative_time_missing"
 
 
 @pytest.mark.asyncio
@@ -322,10 +344,9 @@ async def test_incomplete_candidate_reason_is_independent_of_row_order(reverse):
         {"document_id": "EMPTY", "record_time": "2026-06-02 10:00:00"},
         {"document_id": "NO-TIME", "record_content": "操作正文。"},
     )
-    result = await pipeline(
-        "LX0609-10-03-01",
+    result = await check_confirmed_invasive_fixture(
         {
-            "mr_surgery": (
+            "confirmed_operation": (
                 {
                     "surgery_code": "50.9101",
                     "surgery_begin_datetime": "2026-06-02 08:00:00",
@@ -334,14 +355,14 @@ async def test_incomplete_candidate_reason_is_independent_of_row_order(reverse):
             "daily_course_record": tuple(reversed(rows)) if reverse else rows,
         },
     )
-    assert result["status"] == "data_gap"
-    assert result["reason_code"] == "authoritative_time_missing"
+    assert result.state == "unresolved"
+    assert result.reason_code == "authoritative_time_missing"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "clock,state",
-    [("2026-06-04T15:59:59Z", "compliant"), ("2026-06-04T16:00:00Z", "non_compliant")],
+    [("2026-06-04T15:59:59Z", "documented"), ("2026-06-04T16:00:00Z", "not_documented")],
 )
 async def test_invasive_three_day_window_uses_hospital_day_for_utc_submit_clock(
     clock, state
@@ -353,13 +374,12 @@ async def test_invasive_three_day_window_uses_hospital_day_for_utc_submit_clock(
         FrozenInvasiveProcedureClient(
             records={"经皮肝穿刺引流术": ("documented", text)}
         )
-        if state == "compliant"
+        if state == "documented"
         else None
     )
-    result = await pipeline(
-        "LX0609-10-03-01",
+    result = await check_confirmed_invasive_fixture(
         {
-            "mr_surgery": (
+            "confirmed_operation": (
                 {
                     "surgery_code": "50.9101",
                     "surgery_begin_datetime": "2026-06-02 08:00:00",
@@ -375,4 +395,5 @@ async def test_invasive_three_day_window_uses_hospital_day_for_utc_submit_clock(
         },
         client=client,
     )
-    assert result["status"] == state
+    assert result.state == "ready"
+    assert [value for _, value in result.states] == [state]

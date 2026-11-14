@@ -157,10 +157,10 @@ async def test_037_different_document_ids_without_event_keys_keep_single_event_c
 
 def _surgery():
     return {
-        "mr_surgery": [{"document_id": "surgery-A", "surgery_code": "01.2400X013",
+        "surgery_record": [{"document_id": "surgery-A", "surgery_code": "01.2400X013",
             "surgery_name": "硬脑膜外血肿清除术",
-            "surgery_begin_datetime": datetime(2026, 7, 1, 8),
-            "surgery_end_datetime": datetime(2026, 7, 1, 10)}],
+            "surgery_begin_time": "2026-07-01 08:00:00+08:00",
+            "surgery_end_time": "2026-07-01 10:00:00+08:00"}],
         "evaluation_context.horizon": [{"horizon_date": "2026-07-10", "basis": "evaluation_as_of"}],
     }
 

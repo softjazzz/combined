@@ -1,4 +1,4 @@
-"""已同步首页时间进入正式证据源；数据均虚构，不连接医院或模型。"""
+"""当前登记时间与历史首页投影合同；数据均虚构，不连接医院或模型。"""
 
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -72,21 +72,16 @@ def read():
 
 
 @pytest.mark.parametrize("has_registration", [True, False])
-def test_empty_or_absent_registration_reads_unique_mr_with_bound_three_keys(monkeypatch, has_registration):
+def test_empty_or_absent_registration_never_falls_back_to_homepage(monkeypatch, has_registration):
     connection = install(monkeypatch, has_registration=has_registration)
-    result = read()
-    assert result.source_key == "inpat_registration" and not result.truncated
-    assert result.rows[0]["admission_datetime"] == datetime(2026, 10, 26, 8, 30)
-    assert result.rows[0]["discharge_datetime"] == datetime(2026, 10, 28, 15)
-    assert set(result.rows[0]) == {
-        "admission_datetime", "discharge_datetime", "row_ref", "source_table",
-    }
-    assert result.rows[0]["source_table"] == "mr"
-    sql, params = connection.calls[-1]
-    for key in KEYS:
-        assert f'"{key}" = :{key}' in sql
-    assert params == dict(zip(KEYS, ("fictional-I", "fictional-P", "fictional-V")), limit_rows=2)
-    assert "fictional" not in sql
+    if has_registration:
+        result = read()
+        assert result.source_key == "inpat_registration" and not result.truncated
+        assert result.rows == ()
+    else:
+        with pytest.raises(reader.SourceEvidenceUnavailable):
+            read()
+    assert not any('"mr"' in sql for sql, _ in connection.calls)
 
 
 def test_existing_registration_is_preserved_without_mr_merge(monkeypatch):
@@ -95,6 +90,15 @@ def test_existing_registration_is_preserved_without_mr_merge(monkeypatch):
     result = read()
     assert dict(result.rows[0]) == original
     assert not any('"mr"' in sql for sql, _ in connection.calls)
+    assert len(connection.calls) == 1
+    sql, params = connection.calls[0]
+    for key in KEYS:
+        assert f'"{key}" = :{key}' in sql
+    assert {key: params[key] for key in KEYS} == dict(
+        zip(KEYS, ("fictional-I", "fictional-P", "fictional-V"))
+    )
+    assert params["limit_rows"] == result.limit_rows + 1
+    assert "fictional" not in sql
 
 
 def test_primary_query_error_is_not_hidden_by_fallback(monkeypatch):
@@ -105,10 +109,10 @@ def test_primary_query_error_is_not_hidden_by_fallback(monkeypatch):
 
 
 @pytest.mark.parametrize("values", [[], [dict(TIMES), dict(TIMES)]])
-def test_missing_or_multiple_homepages_are_unavailable_not_complete_empty(monkeypatch, values):
-    install(monkeypatch, mr=values)
-    with pytest.raises(reader.SourceEvidenceUnavailable):
-        read()
+def test_homepage_cardinality_does_not_change_empty_registration(monkeypatch, values):
+    connection = install(monkeypatch, mr=values)
+    assert read().rows == ()
+    assert not any('"mr"' in sql for sql, _ in connection.calls)
 
 
 @pytest.mark.parametrize("admission", ["2026-10-26", date(2026, 10, 26), "1840-12-31 00:00:00", None])
@@ -135,8 +139,8 @@ def test_invalid_or_reversed_discharge_is_rejected(discharge):
     assert project_mr_visit_times([{**TIMES, "discharge_datetime": discharge}]) is None
 
 
-def test_formal_rule_anchor_and_session_receive_homepage_time(monkeypatch):
-    install(monkeypatch)
+def test_formal_rule_anchor_and_session_receive_registration_time(monkeypatch):
+    install(monkeypatch, registration=[dict(TIMES)])
     material = read()
     anchor = extract_admission_anchor(
         registration_rows=material.rows, admission_rows=(), discharge_rows=(),
@@ -159,10 +163,10 @@ def test_formal_rule_anchor_and_session_receive_homepage_time(monkeypatch):
         row_reader=row_reader,
     )
     entry = resolve_luxian_0609_physical_source_entry("inpat_registration")
-    assert entry.query_version == "snapshot-provider-inpat_registration-v2"
-    assert "mr" in entry.physical_source_keys
+    assert entry.query_version == "snapshot-provider-inpat_registration-v3"
+    assert entry.physical_source_keys == ("inpat_registration",)
     assert session.materials.rows("inpat_registration")[0]["admission_datetime"] == (
-        datetime(2026, 10, 26, 8, 30)
+        TIMES["admission_datetime"]
     )
     observation = next(o for o in session.snapshot.observations
                        if o.source_key == "inpat_registration")
@@ -174,13 +178,13 @@ def test_formal_rule_anchor_and_session_receive_homepage_time(monkeypatch):
     ("2026-10-27 08:30:00", "compliant"),
     ("2026-10-27 08:30:01", "non_compliant"),
 ])
-def test_homepage_time_drives_formal_admission_rule_without_model(monkeypatch, completion, expected):
+def test_registration_time_drives_formal_admission_rule_without_model(monkeypatch, completion, expected):
     from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
     from app.services.luxian_0609.native_basic_timeliness import (
         execute_luxian_0609_native_basic_timeliness,
     )
 
-    install(monkeypatch)
+    install(monkeypatch, registration=[dict(TIMES)])
 
     def row_reader(**kwargs):
         key = kwargs["source_key"]

@@ -1,6 +1,6 @@
 {
   "schema_version": "lx0609-rule-master-v2",
-  "master_version": "2026-11-14-primary-documents-v1",
+  "master_version": "2026-11-14-event-rules-paused-v1",
   "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
   "rule_set_key": "luxian_0609_qc_v1",
   "description": "泸县0609客户质控点唯一业务总表。active 表示规则已纳入客户工作台；是否参与当前正式结论由同版本 phase_scope 唯一决定。",
@@ -26,6 +26,9 @@
       "source_document": "手术记录",
       "qc_point": "手术后24小时内是否完成",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -204,6 +207,9 @@
       "source_document": "手术记录",
       "qc_point": "恶性肿瘤手术记录未书写淋巴结清扫情况",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -239,6 +245,9 @@
       "source_document": "抗菌药物使用记录",
       "qc_point": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "院方口径（2026-10-11，依据《抗菌药物临床应用指导原则（2015年版）》）：Ⅰ类切口心脏手术预防用药不超过48小时，其余Ⅰ、Ⅱ类切口不超过24小时；超过时限仍用药且病程记录感染证据的视为转为治疗用药，未记录的不合规。时长自手术结束至围术期连续用药最后停用，长期医嘱须有停止时间。"
     },
@@ -247,6 +256,9 @@
       "source_document": "术前小结",
       "qc_point": "有手术医嘱但无术前小结",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《术前小结》质控点执行；新增或变更口径须单独验收。"
     },
@@ -255,6 +267,9 @@
       "source_document": "手术记录",
       "qc_point": "有手术医嘱但无手术记录",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -263,6 +278,9 @@
       "source_document": "手术记录",
       "qc_point": "手术记录非手术者签字（核对术者及签名医生）",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -271,6 +289,9 @@
       "source_document": "手术安全核查表",
       "qc_point": "有手术记录但无手术安全核查表",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《手术安全核查表》质控点执行；新增或变更口径须单独验收。"
     },
@@ -279,6 +300,9 @@
       "source_document": "手术知情同意书",
       "qc_point": "有手术记录但无手术知情同意书",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《手术知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
@@ -287,6 +311,9 @@
       "source_document": "麻醉知情同意书",
       "qc_point": "有麻醉记录但无麻醉知情同意书",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《麻醉知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
@@ -295,6 +322,9 @@
       "source_document": "麻醉知情同意书",
       "qc_point": "填写不规范（无患者或医生签名、签名时间未精确到分钟）",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《麻醉知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
@@ -323,6 +353,9 @@
       "source_document": "麻醉记录单",
       "qc_point": "无麻醉记录单（局麻除外）",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《麻醉记录单》质控点执行；新增或变更口径须单独验收。"
     },
@@ -331,6 +364,9 @@
       "source_document": "术前讨论记录",
       "qc_point": "除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《术前讨论记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -339,6 +375,9 @@
       "source_document": "术前多学科讨论记录",
       "qc_point": "四级手术术前讨论未开展多学科讨论",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed", "hospital_local_extension"],
       "policy_summary": "四级手术按院内手术目录判定，院内绩效优先国家目录，“条件四级”按四级处理。"
     },
@@ -347,6 +386,9 @@
       "source_document": "输血知情同意书",
       "qc_point": "无输血知情同意书",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《输血知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
@@ -355,6 +397,9 @@
       "source_document": "输血知情同意书",
       "qc_point": "输血知情同意书填写或签名不完整",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《输血知情同意书》质控点执行；新增或变更口径须单独验收。"
     },
@@ -363,6 +408,9 @@
       "source_document": "输血前辅助检查",
       "qc_point": "输血前常规检查不完整",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《输血前辅助检查》质控点执行；新增或变更口径须单独验收。"
     },
@@ -371,6 +419,9 @@
       "source_document": "输血前评估",
       "qc_point": "无输血前评估记录或记录不完整",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["sichuan_2026_handbook", "sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "已实施输血时，输血申请单在实际输血前记录申请理由及至少一项客观评估指标，即认定完成输血前评估，不强制另写病程；缺任一项为不完整，申请晚于输血为时间冲突，关键时间不可读为资料不足。"
     },
@@ -379,6 +430,9 @@
       "source_document": "输血记录",
       "qc_point": "无输血病程记录",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["sichuan_2026_handbook", "sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "输血前评估、输血病程、输血后评价细分规则保持独立；汇总仅提示三项未同时齐备，不改单条状态。"
     },
@@ -387,6 +441,9 @@
       "source_document": "输血记录",
       "qc_point": "输血病程记录不完整或不规范",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["sichuan_2026_handbook", "sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "输血前评估、输血病程、输血后评价细分规则保持独立；汇总仅提示三项未同时齐备，不改单条状态。"
     },
@@ -395,6 +452,9 @@
       "source_document": "输血后评价",
       "qc_point": "无输血后评价",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["sichuan_2026_handbook", "sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "输血前评估、输血病程、输血后评价细分规则保持独立；汇总仅提示三项未同时齐备，不改单条状态。"
     },
@@ -403,6 +463,9 @@
       "source_document": "输血记录",
       "qc_point": "有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容不一致",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《输血记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -539,6 +602,9 @@
       "source_document": "术后连续三天查房记录",
       "qc_point": "术后三天无连续病程记录（包含术后术者查房记录）",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《术后连续三天查房记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -547,6 +613,9 @@
       "source_document": "术后三天内上级医师查房记录",
       "qc_point": "无术后三天内上级医师查看病人记录",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《术后三天内上级医师查房记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -555,6 +624,9 @@
       "source_document": "术后首次病程记录",
       "qc_point": "无术后首次病程记录",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《术后首次病程记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -587,9 +659,11 @@
       "source_document": "输血前评估",
       "qc_point": "未做输血前相关九项检查",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "已执行：输血前九项为乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶；每笔输血均核对本次住院内且早于该笔输血的结果，任一笔不满足即不合规。",
-      "pending_definition_note": "急诊补检规则尚未由客户确认，需补充受控口径后接入。"
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。急诊补检规则尚未由客户确认，需补充受控口径后接入。"
     },
     {
       "rule_id": "LX0609-10-01-01",
@@ -629,7 +703,7 @@
       "qc_point": "有创操作医嘱但无有创操作记录",
       "implementation_status": "active",
       "policy_sources": ["customer_confirmed"],
-      "policy_summary": "院方口径（2026-10-11）：有创操作目录为院方《2026年三四级手术及有创操作目录》中的治疗性操作与介入治疗共92项。运行病历只看医嘱，由模型把不规范的医嘱名称归入目录、程序校验目录项；终末质控有病案首页时同时按首页手术操作编码精确匹配。操作当日起3天内的病程或手术记录须明确写明已实施该操作。"
+      "policy_summary": "院方口径（2026-10-11）：有创操作目录为院方《2026年三四级手术及有创操作目录》中的治疗性操作与介入治疗共92项。运行及终末质控均核对原始医嘱与临床文书，由模型把不规范的医嘱名称归入目录、程序校验目录项；不以首页编码触发或回退。操作当日起3天内的病程或手术记录须明确写明已实施该操作。"
     },
     {
       "rule_id": "LX0609-04-02-08",
@@ -652,6 +726,9 @@
       "source_document": "术前小结",
       "qc_point": "术前小结内容不完整",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "以SC-081为来源证明，仅核对已存在且有实质正文的术前小结内容；文书存在性由LX0609-04-01-01单独交付。用户口径（2026-10-11）：术者术前查看患者一项认可同一台手术、手术开始前完成的术前主刀医师查房记录，时限由LX0609-04-05-01核对。"
     },
@@ -660,6 +737,9 @@
       "source_document": "术前讨论记录",
       "qc_point": "术前讨论记录内容不完整",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "event_quality_control_paused_current_release",
+      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
       "policy_summary": "以SC-085为来源证明，仅核对已存在且有可核验结构字段与正文内容的术前讨论记录；文书存在性及术者参加由LX0609-04-01-02单独交付。"
     },

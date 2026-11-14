@@ -77,7 +77,7 @@ def _material_coordinates(
             frozenset(),
             "not_applicable",
             set(),
-            {"anesthesia_record", "consent_form", "mr_surgery"},
+            {"anesthesia_record", "consent_form"},
         ),
         (
             "LX0609-11-02-01",
@@ -98,37 +98,35 @@ def _material_coordinates(
             frozenset({"anesthesia_record"}),
             "technical_error",
             set(),
-            {"anesthesia_record", "consent_form", "mr_surgery"},
+            {"anesthesia_record", "consent_form"},
         ),
-        # 036：麻醉主表触发，术前/术后访视为目标。
+        # 036：实际麻醉记录触发，术前/术后访视为目标。
         (
             "LX0609-04-04-01",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
-                "mr_surgery": _rows(_surgery("mr-1")),
                 "preane_surveil_record": _rows(_visit("pre-1", post=False)),
                 "postane_surveil_record": _rows(_visit("post-1", post=True)),
             },
             frozenset(),
             "compliant",
             {
-                ("mr_surgery", "mr-1"),
+                ("anesthesia_record", "anesthesia-1"),
                 ("preane_surveil_record", "pre-1"),
                 ("postane_surveil_record", "post-1"),
             },
-            {"mr_surgery", "preane_surveil_record", "postane_surveil_record"},
+            {"anesthesia_record", "preane_surveil_record", "postane_surveil_record"},
         ),
         (
             "LX0609-04-04-01",
             {
                 "anesthesia_record": _rows(_anesthesia_record()),
-                "mr_surgery": _rows(_surgery("mr-1")),
                 "preane_surveil_record": _rows(_visit("pre-1", post=False)),
             },
             frozenset(),
             "non_compliant",
-            {("mr_surgery", "mr-1"), ("preane_surveil_record", "pre-1")},
-            {"mr_surgery", "preane_surveil_record"},
+            {("anesthesia_record", "anesthesia-1"), ("preane_surveil_record", "pre-1")},
+            {"anesthesia_record", "preane_surveil_record"},
         ),
         (
             "LX0609-04-04-01",
@@ -136,12 +134,11 @@ def _material_coordinates(
                 "anesthesia_record": _rows(
                     {**_anesthesia_record(), "anesthesia_method": "局部麻醉"}
                 ),
-                "mr_surgery": _rows(_surgery("mr-1", anesthesia_method="局部麻醉")),
             },
             frozenset(),
             "not_applicable",
-            {("mr_surgery", "mr-1")},
-            {"mr_surgery"},
+            {("anesthesia_record", "anesthesia-1")},
+            {"anesthesia_record"},
         ),
         (
             "LX0609-04-04-01",
@@ -149,7 +146,6 @@ def _material_coordinates(
                 "anesthesia_record": _rows(
                     {"document_id": "anesthesia-no-method", "record_content": "麻醉记录"}
                 ),
-                "mr_surgery": _rows(_surgery("mr-no-method", anesthesia_method="")),
             },
             frozenset(),
             "data_gap",
@@ -159,7 +155,7 @@ def _material_coordinates(
         (
             "LX0609-04-04-01",
             {"anesthesia_record": _rows(_anesthesia_record())},
-            frozenset({"mr_surgery"}),
+            frozenset({"surgery_record"}),
             "technical_error",
             {("anesthesia_record", "anesthesia-1")},
             {"anesthesia_record"},
@@ -202,7 +198,7 @@ def _material_coordinates(
             frozenset(),
             "not_applicable",
             set(),
-            {"surgery_record", "mr_surgery", "rescue_record", "presurg_discussion"},
+            {"surgery_record", "rescue_record", "presurg_discussion"},
         ),
         # 院方口径（2026-10-10）：文书未写急诊即视为非急诊，无术前讨论判不合规。
         (

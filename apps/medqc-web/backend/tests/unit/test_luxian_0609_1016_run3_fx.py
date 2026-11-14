@@ -15,6 +15,7 @@ from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_
 from tests.unit.test_luxian_0609_course_quality_freeze import _run_chain
 from tests.unit.test_luxian_0609_native_extended_document_execution import _evaluate_selected
 from test_luxian_0609_transfusion_performance_043_047 import _run as run_transfusion
+from transfusion_order_test_support import FrozenTransfusionProtocolClient
 
 R018 = "LX0609-01-01-02"
 R043 = "LX0609-07-01-01"
@@ -102,7 +103,8 @@ LAB_NAMES = ["*ABO血型鉴定", "*Rh血型鉴定", "不规则抗体筛查", "�
 
 def transfusion_rows(names=LAB_NAMES):
     return {
-        "mr_bloodtrans": [{"document_id": "synthetic-event", "transfution_datetime": "2026-06-05 14:20:00"}],
+        "bloodtrans_record": [{"document_id": "synthetic-event", "record_time": "2026-06-05 14:20:00",
+                               "record_content": "已输注红细胞2U。"}],
         "inpat_registration": [{"document_id": "synthetic-registration", "admission_datetime": "2026-06-01 08:00:00"}],
         "labtest_item_report": [{"document_id": f"synthetic-lab-{i}", "item_name": name,
                                   "result": "阴性", "report_datetime": "2026-06-05 10:00:00"}
@@ -115,9 +117,11 @@ def transfusion_rows(names=LAB_NAMES):
 async def test_empty_lab_source_is_data_gap(rule):
     rows = transfusion_rows([])
     if rule == R043:
-        final = (await run_transfusion(rule, rows, {}))["final"]
+        final = (await run_transfusion(rule, rows, {}, client=FrozenTransfusionProtocolClient(
+            default_course_label="record", performance_state="performed")))["final"]
     else:
-        snapshot, materials, execution, reduced = await _evaluate_selected((rule,), rows)
+        snapshot, materials, execution, reduced = await _evaluate_selected(
+            (rule,), rows, llm_client=FrozenTransfusionProtocolClient(performance_state="performed"))
         final = finalize(decision=reduced[0], evidence_snapshot=snapshot, evidence_materials=materials,
                          raw_customer_display_facts=dict(execution.customer_display_facts).get(rule))
     assert final["status"] == "data_gap"
@@ -130,7 +134,8 @@ async def test_empty_lab_source_is_data_gap(rule):
     ([n for n in LAB_NAMES if n != "不规则抗体筛查"], "non_compliant"),
     ([n for n in LAB_NAMES if not n.startswith("乙肝")], "non_compliant")])
 async def test_043_eleven_items_without_alt(names, status):
-    result = await run_transfusion(R043, transfusion_rows(names), {})
+    result = await run_transfusion(R043, transfusion_rows(names), {}, client=FrozenTransfusionProtocolClient(
+        default_course_label="record", performance_state="performed"))
     assert result["final"]["status"] == status
     if status == "compliant":
         assert len(result["facts"]["checked_items"]) == 11
@@ -192,14 +197,16 @@ async def test_018_legacy_model_failure(failure, reason, long):
 async def test_043_does_not_require_current_stay():
     rows = transfusion_rows()
     rows["inpat_registration"][0]["admission_datetime"] = "2026-06-05 12:00:00"
-    result = await run_transfusion(R043, rows, {})
+    result = await run_transfusion(R043, rows, {}, client=FrozenTransfusionProtocolClient(
+        default_course_label="record", performance_state="performed"))
     assert result["final"]["status"] == "compliant"
 
 
 @pytest.mark.asyncio
 async def test_070_still_requires_alt_and_does_not_require_blood_typing():
     names = LAB_NAMES[3:] + ["谷丙转氨酶"]
-    snapshot, materials, execution, reduced = await _evaluate_selected((R070,), transfusion_rows(names))
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        (R070,), transfusion_rows(names), llm_client=FrozenTransfusionProtocolClient(performance_state="performed"))
     final = finalize(decision=reduced[0], evidence_snapshot=snapshot, evidence_materials=materials,
                      raw_customer_display_facts=dict(execution.customer_display_facts).get(R070))
     assert final["status"] == "compliant"
@@ -209,6 +216,8 @@ async def test_070_still_requires_alt_and_does_not_require_blood_typing():
 def test_zero_readable_lab_rows_is_data_gap_even_when_state_available():
     documents = transfusion_rows()
     documents["labtest_item_report"] = [None, "unreadable"]
+    # 此处只测项目核对内核，实施前提由测试作者直接提供已确认事件。
+    documents["performed_transfusion_events"] = [{"transfusion_start_time": "2026-06-05 14:20:00"}]
     documents["__logical_source_states__"] = {"labtest_item_report": "available"}
     assert transfusion.evaluate_pretransfusion_nine_items(documents) == (
         "data_gap", "pretransfusion_lab_results_absent", None)
@@ -250,7 +259,9 @@ async def test_018_real_missing_material_remains_data_gap(missing):
 
 @pytest.mark.asyncio
 async def test_070_missing_hepatitis_items_with_other_labs_is_defect():
-    snapshot, materials, execution, reduced = await _evaluate_selected((R070,), transfusion_rows(["谷丙转氨酶"]))
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        (R070,), transfusion_rows(["谷丙转氨酶"]),
+        llm_client=FrozenTransfusionProtocolClient(performance_state="performed"))
     final = finalize(decision=reduced[0], evidence_snapshot=snapshot, evidence_materials=materials,
                      raw_customer_display_facts=dict(execution.customer_display_facts).get(R070))
     assert final["status"] == "non_compliant"
@@ -299,20 +310,28 @@ async def test_performance_extraction_reports_precise_technical_reason(client, r
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("missing,status", [(None, "technical_error"), ("HIV抗体", "non_compliant")])
-async def test_070_structured_event_keeps_verdict_when_performance_extraction_fails(monkeypatch, missing, status):
-    """结构化输注已可核对时，抽取失败只阻止判合规，不丢弃已成立的不合规。"""
+@pytest.mark.parametrize("missing", [None, "HIV抗体"])
+async def test_070_frontpage_cannot_confirm_event_when_performance_extraction_fails(monkeypatch, missing):
+    """实施抽取失败时，首页行不能证明事件，也不能据此发布医学缺项。"""
     async def extract(*args, **kwargs):
         return PerformanceExtraction(("unknown",), "model_invalid_output", event_times=(None,))
     monkeypatch.setattr(extended, "extract_transfusion_performance", extract)
     rows = transfusion_rows([name for name in NINE_LAB_NAMES if name != missing])
-    rows["bloodtrans_record"] = [{"document_id": "synthetic-performance", "record_content": "今日输注红细胞2U。"}]
+    rows["mr_bloodtrans"] = [{"document_id": "untrusted-frontpage-event", "transfution_datetime": "2026-06-05 14:20:00"}]
     snapshot, materials, execution, reduced = await _evaluate_selected((R070,), rows)
     final = finalize(decision=reduced[0], evidence_snapshot=snapshot, evidence_materials=materials,
                      raw_customer_display_facts=dict(execution.customer_display_facts).get(R070))
-    assert final["status"] == status
-    if status == "technical_error":
-        assert final["reason_code"] == "model_invalid_output"
+    assert (final["status"], final["reason_code"]) == ("technical_error", "model_invalid_output")
+
+
+def test_070_confirmed_event_keeps_missing_hiv_as_medical_defect():
+    """纯核对内核仍须对已人工确认的实施事件报告缺项，不削弱医学预期。"""
+    documents = transfusion_rows([name for name in NINE_LAB_NAMES if name != "HIV抗体"])
+    documents["performed_transfusion_events"] = [{"transfusion_start_time": "2026-06-05 14:20:00"}]
+    documents["__logical_source_states__"] = {"labtest_item_report": "available"}
+    status, reason, facts = transfusion.evaluate_pretransfusion_nine_items(documents)
+    assert (status, reason) == ("non_compliant", "pretransfusion_items_incomplete")
+    assert facts["missing_items"] == ["hiv"]
 
 
 @pytest.mark.asyncio
@@ -325,7 +344,6 @@ async def test_043_performance_extraction_failure_is_technical_error(monkeypatch
     monkeypatch.setattr(performance, "extract_transfusion_performance", extract)
     body = "今日输注红细胞2U。"
     rows = transfusion_rows()
-    rows.pop("mr_bloodtrans")
     rows["bloodtrans_record"] = [{"document_id": "synthetic-performance", "record_content": body,
                                   "record_time": "2026-06-05 15:00:00"}]
     final = (await run_transfusion(R043, rows, {body: "record"}))["final"]

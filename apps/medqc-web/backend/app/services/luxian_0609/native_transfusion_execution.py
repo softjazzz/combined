@@ -3749,7 +3749,7 @@ async def execute_luxian_0609_native_transfusion_rules(
         from .extended_document.transfusion_performance_extraction import extract_transfusion_performance
 
         performance = await extract_transfusion_performance(
-            [{**row, "record_time": _authoritative_record_time(row)} for row in record_rows], llm_client,
+            [{**row, "record_content": _row_text(row), "record_time": _authoritative_record_time(row)} for row in record_rows], llm_client,
         )
         llm_call_count += performance.llm_call_count
         prompt_tokens += performance.prompt_tokens
@@ -4076,12 +4076,11 @@ async def execute_luxian_0609_native_transfusion_rules(
             # 按 07-01-01 同一实施抽取从专用输血记录正文取开始输注时间
             # （第六轮 C03、复验 C04/C08：输血记录写明开始时间仍判“缺实际输血时间”）。
             # 只用专用输血记录；同批记录与 07-01-01 共用一次抽取。抽不到时间时交由原评估判资料不足。
-            # 只有结构化申请单路径比较申请时间与输血时间，旧非结构化资料不触发抽取。
+            # 申请单和输血前病程都需要同一次实际输注的时间，统一核验原始文书。
             bloodtrans_rows = _source_document_rows(documents, "bloodtrans_record")
             if (
                 not _transfusion_event_rows(documents)
                 and bloodtrans_rows
-                and has_structured_pretransfusion_application(documents)
             ):
                 performance_state, performance_value = await resolve_performance_events(
                     bloodtrans_rows, dedicated_performance_source=True,

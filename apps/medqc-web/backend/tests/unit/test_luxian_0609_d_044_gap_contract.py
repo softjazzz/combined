@@ -24,6 +24,24 @@ from app.services.luxian_0609.native_transfusion_execution import (
 
 RULE = "LX0609-07-01-02"
 
+
+class _ActualTransfusionClient(FrozenTransfusionProtocolClient):
+    """合成原始输血记录的人工实施标注，明确开始时间不借用首页。"""
+
+    async def generate(self, prompt, **kwargs):
+        response = await super().generate(prompt, **kwargs)
+        if "INPUT_JSON=" in prompt:
+            payload = json.loads(prompt.split("INPUT_JSON=", 1)[1])
+            if set(payload) == {"documents"} and self.performance_state == "performed":
+                content = json.loads(response["choices"][0]["message"]["content"])
+                for result, document in zip(content["documents"], payload["documents"]):
+                    # 本文件作者明确标注的开始时刻；缺少该原文则不编造时刻。
+                    if "10:00" in document["body"]:
+                        result["start_time_quote"] = "10:00"
+                response["choices"][0]["message"]["content"] = json.dumps(content, ensure_ascii=False)
+        return response
+
+
 @pytest.fixture(autouse=True)
 def reject_network_and_non_sqlite(monkeypatch):
     import httpx
@@ -53,7 +71,7 @@ def sources():
         }],
         "bloodtrans_record": [{
             "document_id": "D1", "record_time": "2026-07-16 12:10:00",
-            "record_content": "输血指征为贫血Hb65g/L，已输注红细胞2U。开始时间10:00，结束时间12:00。生命体征平稳，无输血反应。",
+            "record_content": "输血指征为贫血Hb65g/L，已输注红细胞2U。2026年07月16日10:00开始输血，结束时间12:00。生命体征平稳，无输血反应。",
         }],
         "blood_application": [{
             "application_id": "A1", "request_datetime": "2026-07-16 09:00:00",
@@ -77,14 +95,19 @@ async def formal(rows, *, unavailable=None, truncated=None, forged_facts=None):
         selected_rule_ids=(RULE,), institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2026-07-20T12:00:00+08:00", row_reader=reader,
     )
+    client = _ActualTransfusionClient(performance_state="performed")
     execution = await execute_luxian_0609_native_transfusion_rules(
         rule_ids=(RULE,), wrapper_rules=[{"rule_id": RULE}], evidence_payload=None,
         institute_id="I", patient_id="P", visit_id="V", source_schema=None,
-        llm_client=FrozenTransfusionProtocolClient(), evidence_materials=session.materials,
+        llm_client=client, evidence_materials=session.materials,
         evidence_snapshot=session.snapshot, decision_rule_ids=(RULE,),
     )
-    # 仅一次输血医嘱分类；申请/评估判定本身不调用模型。
-    assert execution.llm_call_count == 1
+    # 医嘱分类一次；需核对实际时间时追加一次原始记录实施抽取。
+    protocol_keys = [set(json.loads(prompt.split("INPUT_JSON=", 1)[1]))
+                     for prompt in client.protocol_prompts]
+    assert protocol_keys.count({"orders"}) == 1
+    assert protocol_keys.count({"documents"}) <= 1
+    assert execution.llm_call_count == len(protocol_keys)
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions, expected_rule_ids=(RULE,),
         snapshot=session.snapshot, evidence_materials=session.materials,
@@ -295,7 +318,7 @@ async def test_independent_course_preassessment_can_satisfy_empty_application_so
         "record_content": "输血前评估：输血指征为贫血Hb65g/L，既往无输血不良反应，患者生命体征平稳。",
     }]
     final, _ = await formal(rows)
-    assert final["status"] == "compliant"
+    assert final["status"] == "compliant", final
     assert final["customer_display_facts"]["verification_kind"] == "pretransfusion_assessment_complete"
 
 
@@ -327,7 +350,7 @@ async def _execute_without_event_table(rows, *, performance_state, rule_ids=(RUL
         selected_rule_ids=rule_ids, institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, created_at="2026-07-20T12:00:00+08:00", row_reader=reader,
     )
-    client = FrozenTransfusionProtocolClient(performance_state=performance_state)
+    client = _ActualTransfusionClient(performance_state=performance_state)
     execution = await execute_luxian_0609_native_transfusion_rules(
         rule_ids=rule_ids, wrapper_rules=[{"rule_id": rule_id} for rule_id in rule_ids],
         evidence_payload=None, institute_id="I", patient_id="P", visit_id="V",
@@ -361,7 +384,7 @@ def _rows_without_event_table():
 
 @pytest.mark.asyncio
 async def test_missing_event_table_uses_dedicated_record_performance_time():
-    # 申请 09:00 早于专用输血记录的实施时间 12:10，按结构化申请单判定，不再判缺实际输血时间。
+    # 申请 09:00 早于专用输血记录的明确开始时间 10:00，按结构化申请单判定，不再判缺实际输血时间。
     statuses, performance_calls = await _execute_without_event_table(
         _rows_without_event_table(), performance_state="performed",
     )
@@ -406,9 +429,9 @@ async def test_missing_event_table_extraction_is_shared_with_043():
 
 
 @pytest.mark.asyncio
-async def test_event_table_present_does_not_call_performance_extraction():
+async def test_homepage_event_does_not_replace_record_performance_extraction():
     statuses, performance_calls = await _execute_without_event_table(
-        sources(), performance_state=None,
+        sources(), performance_state="performed",
     )
     assert statuses[RULE]["status"] == "compliant"
-    assert performance_calls == 0
+    assert performance_calls == 1

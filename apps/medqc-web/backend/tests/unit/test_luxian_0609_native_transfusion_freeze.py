@@ -230,10 +230,10 @@ async def test_transfusion_freeze_no_event_and_source_error_keep_distinct_states
     error_execution, error_reduced, error_results, error_session = await _execute_and_aggregate(
         rule_ids=selected,
         rows_by_source={},
-        failing_sources=frozenset({"mr_bloodtrans"}),
+        failing_sources=frozenset({"bloodtrans_record"}),
     )
     assert error_execution.results == ()
-    # 044–046 按输血医嘱触发，不读取 mr_bloodtrans；其余规则的实施门控查询失败必须是技术错误。
+    # 044–046 按输血医嘱触发，无医嘱时不执行实施核验；其余规则的实施门控查询失败必须是技术错误。
     order_rules = {"LX0609-07-01-02", "LX0609-07-02-01", "LX0609-07-02-02"}
     expected_states = [
         ("not_applicable", "trigger_absent_complete")
@@ -247,7 +247,7 @@ async def test_transfusion_freeze_no_event_and_source_error_keep_distinct_states
     error_ref = next(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in error_session.snapshot.observations
-        if observation.source_key == "mr_bloodtrans"
+        if observation.source_key == "bloodtrans_record"
     )
     # 技术失败仍引用同一次 session 中发生异常的触发来源，供审计定位；不伪造文书坐标。
     error_items = [item for item in error_reduced if item.rule_id not in order_rules]

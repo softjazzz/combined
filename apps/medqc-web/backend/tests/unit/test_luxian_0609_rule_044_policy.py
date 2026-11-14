@@ -29,7 +29,7 @@ def _documents(
     if transfusion_time is not None:
         event["transfution_datetime"] = transfusion_time
     return {
-        "mr_bloodtrans": [event],
+        "performed_transfusion_events": [event],
         "bloodtrans_record": [{"record_content": "已实际输注红细胞2U。"}],
         "blood_application": applications or [],
         "daily_course_record": [],
@@ -234,7 +234,7 @@ async def test_044_projects_application_and_transfusion_record_locators() -> Non
         patient_id="044-evidence-patient",
         visit_id="044-evidence-visit",
         source_schema=None,
-        llm_client=FrozenTransfusionProtocolClient(),
+        llm_client=FrozenTransfusionProtocolClient(performance_state="performed"),
         evidence_materials=session.materials,
         evidence_snapshot=session.snapshot,
         decision_rule_ids=("LX0609-07-01-02",),
