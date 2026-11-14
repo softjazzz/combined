@@ -23,11 +23,13 @@ FIELDS = {
 
 
 @lru_cache(maxsize=8)
-def catalog(engine):
+def catalog(engine, *, include_frontpage=True):
     metadata = MetaData()
     queries = []
-    # mr可为空；住院登记及入院记录同样进入目录，不以首页是否生成作为病例存在门槛。
+    # 首页仅供展示目录选择；普通质控的身份、时间与筛选直接来自原始临床源。
     for priority, name in enumerate(REQUIRED_TABLES):
+        if name == "mr" and not include_frontpage:
+            continue
         if name == "inpat_registration" and not inspect(engine).has_table(name, schema="cdm"):
             continue
         table = Table(name, metadata, schema="cdm", autoload_with=engine)
@@ -39,8 +41,8 @@ def catalog(engine):
             candidates = [func.nullif(func.trim(cast(table.c[key], String)) if field == "discharge"
                                       else cast(table.c[key], String), "")
                           for key in aliases if key in table.c]
-            # 主治医生只接受首页权威字段；不把任何文书签名当负责人。
-            if field == "doctor" and name != "mr":
+            # 展示目录使用首页主治签名；原始目录使用入院主治签名，不把提交人当负责人。
+            if field == "doctor" and name != "mr" and (include_frontpage or name != "admission_record"):
                 candidates = []
             value = func.coalesce(*candidates) if len(candidates) > 1 else candidates[0] if candidates else literal(None, String)
             if field == "discharge" and name == "discharge_record":
@@ -55,17 +57,22 @@ def catalog(engine):
     for field in FIELDS:
         # 按来源优先级而非跨源SQL JOIN，保证整个查询只读CDM。
         # 候选日期筛选必须与正式取材一致，否则被提前筛掉的病例无法在冻结阶段补回。
-        order = (1, 0, 3) if field == "discharge" else (0, 1, 2, 3)
+        order = ((1, 0, 3) if field == "discharge" else (0, 1, 2, 3)) if include_frontpage else (
+            (1, 3) if field == "discharge" else (2, 1) if field == "admission" else
+            (3, 1, 2) if field == "department" else (1, 2, 3))
         fields.append(func.coalesce(*[func.max(rows.c[field]).filter(rows.c.priority == p) for p in order]).label(field))
-    return select(*[rows.c[key] for key in KEYS], *fields, func.max(case((rows.c.priority == 0, 1), else_=0)).label("has_frontpage")).where(
+    result = select(*[rows.c[key] for key in KEYS], *fields, func.max(case((rows.c.priority == 0, 1), else_=0)).label("has_frontpage")).where(
         *[rows.c[key].is_not(None) & (rows.c[key] != "") for key in KEYS]
-    ).group_by(*[rows.c[key] for key in KEYS]).subquery()
+    ).group_by(*[rows.c[key] for key in KEYS])
+    if not include_frontpage:
+        result = result.having(func.max(case((rows.c.priority.in_((1, 2)), 1), else_=0)) == 1)
+    return result.subquery()
 
 
-def resolve_identity(record_id: str, *, patient_id: str | None = None, institute_id: str | None = None) -> dict:
+def resolve_identity(record_id: str, *, patient_id: str | None = None, institute_id: str | None = None, include_frontpage: bool = False) -> dict:
     try:
         engine = clinical.get_engine()
-        source = catalog(engine)
+        source = catalog(engine, include_frontpage=include_frontpage)
         condition = or_(source.c.visit_id == record_id, source.c.mr_no == record_id)
         if patient_id:
             condition &= source.c.patient_id == patient_id
@@ -136,7 +143,7 @@ def case_identities(*, scope="all", department=None, doctor=None, keyword=None, 
     from .case_identity import CaseRef
     try:
         engine = clinical.get_engine()
-        source = catalog(engine)
+        source = catalog(engine, include_frontpage=False)
         clauses = _predicates(source, dept=department, doctor=doctor, keyword=keyword,
             start_date=datetime.fromisoformat(start_date[:10]).date() if start_date else None,
             end_date=datetime.fromisoformat(end_date[:10]).date() if end_date else None,
@@ -159,7 +166,7 @@ def schedule_options(*, scope, institute_id=None):
     """计划选项与正式取材使用同一目录、状态语义；失联时不回退业务库。"""
     try:
         engine = clinical.get_engine()
-        source = catalog(engine)
+        source = catalog(engine, include_frontpage=False)
         predicates = _predicates(source,
             hospital_status={"running": "inpatient", "final": "discharged"}[scope])
         with engine.connect() as connection:

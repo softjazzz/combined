@@ -83,7 +83,7 @@ def get_frontpage_qc_store(user: Dict[str, Any] = Depends(require_frontpage_qc_u
 def get_record_repository():
     from app.services.qc_workspace.record_repository import RecordRepository
 
-    return RecordRepository(session_factory=_cdm_session_factory())
+    return RecordRepository(session_factory=_cdm_session_factory(), frontpage_display=True)
 
 
 _HOME_INSTITUTE_TTL = timedelta(minutes=5)

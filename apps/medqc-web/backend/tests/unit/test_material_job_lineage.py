@@ -171,8 +171,11 @@ def test_history_rejects_unrelated_material_and_unauthorized_identity(saved, fai
     saved(rows.values())
     req = request({**REF, "institute_id": "OTHER"} if failure == "wrong_case" else REF,
                   actor="other-owner" if failure == "wrong_owner" else "synthetic-owner")
-    with pytest.raises(PipelineError):
+    expected = HTTPException if failure == "wrong_owner" else PipelineError
+    with pytest.raises(expected) as caught:
         clinical_sources.source_for_saved_job(req, last["id"])
+    if failure == "wrong_owner":
+        assert caught.value.status_code == 403
     assert not getattr(req.state, "material_root_job_id", "")
 
 

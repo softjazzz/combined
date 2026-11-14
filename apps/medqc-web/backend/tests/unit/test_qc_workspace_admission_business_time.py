@@ -28,6 +28,7 @@ def _collect(*, entry="query", frontpage=None, admission=None, registration=ADMI
             session.add(module.MedicalRecordFrontpage(
                 **identity, admission_datetime=frontpage,
                 discharge_datetime=DISCHARGE, update_time=SYNC, mr_datetime=SYNC))
+            session.add(module.DischargeRecord(**identity, document_id="D", discharge_time=DISCHARGE))
             session.add(module.AdmissionRecord(
                 **identity, admission_datetime=admission,
                 update_time=SYNC, record_datetime=SYNC))
@@ -61,7 +62,7 @@ def test_registration_business_admission_resolves_frozen_final_horizon(entry):
 
 
 @pytest.mark.parametrize("frontpage,admission,expected", [
-    (datetime(2026, 2, 1, 8), datetime(2026, 2, 3, 9), "2026-02-01 08:00:00"),
+    (datetime(2026, 2, 1, 8), datetime(2026, 2, 3, 9), "2026-02-03 09:00:00"),
     (None, datetime(2026, 2, 3, 9), "2026-02-03 09:00:00"),
 ])
 def test_registration_does_not_override_higher_priority_business_sources(frontpage, admission, expected):
@@ -77,7 +78,7 @@ def test_missing_business_admission_does_not_use_update_or_record_time():
     assert rows[0]["admission_date"] == ""
 
 
-@pytest.mark.parametrize("source", ["frontpage", "admission", "registration"])
+@pytest.mark.parametrize("source", ["admission", "registration"])
 def test_true_business_admission_after_discharge_remains_time_conflict(source):
     rows = _collect(**{source: datetime(2026, 2, 10, 9)})
     frozen = build_record_evaluation_horizon_snapshot(rows, task_frozen_date="2026-09-09")[0]
@@ -86,7 +87,7 @@ def test_true_business_admission_after_discharge_remains_time_conflict(source):
 
 @pytest.mark.parametrize("foreign", [{"institute_id": "OTHER"}, {"patient_id": "OTHER"}])
 def test_registration_from_another_case_with_same_visit_is_not_used(foreign):
-    rows = _collect(registration=None, foreign=foreign)
+    rows = _collect(entry="ref", registration=None, foreign=foreign)
     assert len(rows) == 1
     assert rows[0]["admission_datetime"] == ""
 
@@ -96,3 +97,9 @@ def test_admission_date_filter_uses_registration_business_date():
     assert len(rows) == 1
     assert rows[0]["admission_date"] == "2026-02-02"
     assert _collect(start="2026-09-09", end="2026-09-09") == []
+
+
+def test_frontpage_time_does_not_create_raw_business_time_conflict():
+    rows = _collect(frontpage=datetime(2026, 2, 10, 9))
+    frozen = build_record_evaluation_horizon_snapshot(rows, task_frozen_date="2026-09-09")[0]
+    assert frozen["resolution_status"] == "resolved"

@@ -27,7 +27,7 @@ def repo():
             )
         )
     session.commit()
-    yield module.RecordRepository(session_factory=lambda: session)
+    yield module.RecordRepository(session_factory=lambda: session, frontpage_display=True)
     session.close()
     engine.dispose()
 

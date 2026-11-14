@@ -54,7 +54,10 @@ def _luxian_native_settings(**overrides: Any) -> SimpleNamespace:
         "LUXIAN_0609_RUNTIME_SHADOW_ENABLED": False,
     }
     values.update(overrides)
-    return SimpleNamespace(**values)
+    # 冻结配置须完整；只读取模型默认值，不加载环境或 dotenv。
+    defaults = Settings.model_construct().model_dump()
+    defaults.update(values)
+    return SimpleNamespace(**defaults)
 
 
 @pytest.mark.asyncio
