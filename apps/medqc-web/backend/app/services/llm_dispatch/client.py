@@ -41,10 +41,16 @@ class GatewayDispatchError(RuntimeError):
 
     def __init__(self, code: str, *, retryable: bool, cache_trace: GatewayCacheTrace | None = None,
                  cache_trace_invalid: bool = False, request_observation=None,
-                 request_observation_invalid: bool = False) -> None:
+                 request_observation_invalid: bool = False, status_code: int | None = None) -> None:
         safe_code = code if code in _SAFE_GATEWAY_ERROR_CODES else "gateway_error"
         self.code = safe_code
+        self.status_code = status_code if type(status_code) is int and 100 <= status_code <= 599 else None
         self.retryable = bool(retryable)
+        from ..qc_execution_errors import safe_exception_failure
+        failure = safe_exception_failure(self)
+        self.reason_code = failure["reason_code"]
+        self.error_category = failure["error_category"]
+        self.retryable = failure["retryable"]
         self.cache_trace = cache_trace.model_dump(mode="json") if cache_trace is not None else None
         self.cache_trace_invalid = cache_trace_invalid
         self.request_observation = request_observation
@@ -77,7 +83,7 @@ class GatewayDispatchClient:
         except Exception as exc:
             raise GatewayDispatchError(
                 "gateway_invalid_request", retryable=False
-            ) from exc
+            ) from None
         if (
             parsed.scheme not in {"http", "https"}
             or not parsed.hostname
@@ -145,7 +151,7 @@ class GatewayDispatchClient:
         except (ValidationError, ValueError, TypeError) as exc:
             raise GatewayDispatchError(
                 "gateway_invalid_request", retryable=False
-            ) from exc
+            ) from None
 
         try:
             timeout = httpx.Timeout(request_remaining)
@@ -169,18 +175,19 @@ class GatewayDispatchClient:
         except (asyncio.TimeoutError, httpx.TimeoutException) as exc:
             raise GatewayDispatchError(
                 "gateway_request_timeout", retryable=True
-            ) from exc
+            ) from None
         except httpx.HTTPError as exc:
             raise GatewayDispatchError(
                 "gateway_transport_error", retryable=True
-            ) from exc
+            ) from None
 
         try:
             body = response.json()
         except (ValueError, TypeError) as exc:
             raise GatewayDispatchError(
-                "gateway_invalid_response", retryable=response.status_code >= 500
-            ) from exc
+                "gateway_invalid_response", retryable=response.status_code in {408, 429} or response.status_code >= 500,
+                status_code=response.status_code
+            ) from None
         if response.status_code < 200 or response.status_code >= 300:
             trace, trace_invalid = self._validated_cache_trace(
                 body.get("detail", {}).get("cache_trace")
@@ -200,11 +207,13 @@ class GatewayDispatchClient:
                 error = GatewayErrorResponse.model_validate(safe_body).detail
             except (ValidationError, TypeError, ValueError):
                 raise GatewayDispatchError(
-                    "gateway_error", retryable=response.status_code >= 500
+                    "gateway_error", retryable=response.status_code in {408, 429} or response.status_code >= 500,
+                    status_code=response.status_code
                 ) from None
             raise GatewayDispatchError(error.code, retryable=error.retryable,
                                        cache_trace=trace, cache_trace_invalid=trace_invalid,
-                                       request_observation=receipt, request_observation_invalid=receipt_invalid)
+                                       request_observation=receipt, request_observation_invalid=receipt_invalid,
+                                       status_code=response.status_code)
         if not isinstance(body, dict):
             raise GatewayDispatchError("gateway_invalid_response", retryable=False)
         try:
@@ -212,7 +221,7 @@ class GatewayDispatchClient:
         except (ValidationError, TypeError, ValueError) as exc:
             raise GatewayDispatchError(
                 "gateway_invalid_response", retryable=False
-            ) from exc
+            ) from None
         # 收据必须来自当前Gateway请求；坏观测不改变已成功的医学响应。
         receipt = body.pop("_gateway_request_observation", None)
         parsed, invalid = self._validated_request_observation(receipt if observe_request else None, request.request_id)

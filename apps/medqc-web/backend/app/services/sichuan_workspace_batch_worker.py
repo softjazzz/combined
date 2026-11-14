@@ -75,6 +75,7 @@ from .luxian_0609.shadow_audit_summary import (
     merge_luxian_0609_shadow_summaries,
 )
 from .qc_cancellation import QCJobCancelled, raise_if_cancelled
+from .qc_execution_errors import SafeExecutionError, safe_exception_failure, safe_failure_projection
 from .qc_llm_client_runtime import SichuanQCLLMClient
 from .llm_dispatch.provider_profiles import ProviderConfigurationError
 from .qc_input_adapters import evaluate_running_final_bundle
@@ -122,14 +123,15 @@ def _enqueue_automatic_failed_rule_retry(
     created_by: str,
     expected_attempt_filters_json: str | None,
     retry_delay_seconds: float | None = None,
+    preserve_terminal_job: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """实际入队成功后才发布 queued；失败用同代次 CAS 撤销 planned。"""
+    """独立尝试入队失败不改原终态；旧同 ID 路径仍用 CAS 撤销 planned。"""
 
     retry_method = getattr(workspace, "retry_batch_job", None)
     mark_failed = getattr(workspace, "mark_failed_rule_auto_retry_enqueue_failed", None)
 
     def _mark_failed() -> None:
-        if callable(mark_failed) and expected_attempt_filters_json is not None:
+        if not preserve_terminal_job and callable(mark_failed) and expected_attempt_filters_json is not None:
             mark_failed(
                 job_id=job_id,
                 expected_attempt_filters_json=expected_attempt_filters_json,
@@ -1350,8 +1352,9 @@ def _renew_luxian_0609_lease_until_stopped(
                 job_id=job_id, attempt_filters_json=attempt_filters_json,
             ):
                 return
-        except Exception:
-            logger.exception("LX0609 任务续约失败: job_id=%s", job_id)
+        except Exception as error:
+            logger.error("LX0609 任务续约失败: job_id=%s reason_code=%s", job_id,
+                         safe_exception_failure(error)["reason_code"])
 
 
 @observe_worker_timing
@@ -1420,6 +1423,12 @@ async def run_sichuan_workspace_batch_job(
             return
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
+        validated_material_job_id = None
+        if filters.get("retry_lineage") is not None:
+            from .material_job_lineage import resolve_material_job_id
+            validated_material_job_id = resolve_material_job_id(
+                current, lambda source_id: workspace.get_batch_job_for_processing(job_id=source_id),
+            )
         if filters.get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
             filters["scoped_customer_rule_ids"] = frozen_luxian_0609_delivery_scope(filters)
         filters.pop(LX0609_ATTEMPT_FILTER_KEY, None)
@@ -1441,12 +1450,15 @@ async def run_sichuan_workspace_batch_job(
             )
         ):
             raise ValueError("失败规则超出原任务冻结范围，请新建质控任务")
-        retry_base_items = list(current.get("items") or []) if is_failed_rule_retry else []
+        retry_lineage = filters.get("retry_lineage") if isinstance(filters.get("retry_lineage"), dict) else {}
+        # 独立补跑只统计自身执行；仅旧的同 ID 重试恢复历史结果。
+        merge_retry_history = is_failed_rule_retry and not retry_lineage.get("source_job_id")
+        retry_base_items = list(current.get("items") or []) if merge_retry_history else []
         retry_base_failures = (
-            list(current.get("failed_records") or []) if is_failed_rule_retry else []
+            list(current.get("failed_records") or []) if merge_retry_history else []
         )
         retry_base_summary = (
-            dict(current.get("summary") or {}) if is_failed_rule_retry else {}
+            dict(current.get("summary") or {}) if merge_retry_history else {}
         )
         record_evaluation_snapshot_by_id = {
             str(item.get("record_key") or item.get("record_id") or "").strip(): dict(item)
@@ -2154,7 +2166,7 @@ async def run_sichuan_workspace_batch_job(
 
         def _live_items():
             rows = live_buffer.combine(all_items)
-            if is_failed_rule_retry:
+            if merge_retry_history:
                 rows, _ = merge_failed_rule_retry_results(
                     base_items=retry_base_items, base_failures=retry_base_failures,
                     retry_items=rows, retry_failures=[row for row in all_failed_records if row.get("error_phase") != "material_capture"],
@@ -2282,7 +2294,7 @@ async def run_sichuan_workspace_batch_job(
                     )
                 except Exception:
                     # 阶段展示仅是安全旁路；无法生成批次计划时不影响质控主链。
-                    logger.exception("LX0609 执行阶段计划解析失败: job_id=%s", job_id)
+                    logger.error("LX0609 执行阶段计划解析失败: job_id=%s", job_id)
                     executor_batches = ()
 
                 trace_state = {
@@ -2380,7 +2392,7 @@ async def run_sichuan_workspace_batch_job(
                         )
                     except Exception:
                         # 回调数据库失败不能反向影响原生执行或客户结果。
-                        logger.exception("LX0609 执行阶段回写失败: job_id=%s", job_id)
+                        logger.error("LX0609 执行阶段回写失败: job_id=%s", job_id)
 
                 execution_trace_sink = _execution_trace_sink
 
@@ -2807,26 +2819,24 @@ async def run_sichuan_workspace_batch_job(
                         if prefer_rule_level_visit_eval and len(active_rule_ids) == 1:
                             try:
                                 used_bundle_path = await _evaluate_rule_level_visit_bundle()
-                                bundle_fallback_reason = f"scene bundle 评估失败，已回退 rule_for_visit: {bundle_exc}"
+                                bundle_fallback_reason = "scene bundle 评估失败，已回退 rule_for_visit: " + safe_exception_failure(bundle_exc)["reason_code"]
                             except Exception:
                                 used_bundle_path = False
-                                bundle_fallback_reason = f"bundle 一次性评估失败: {bundle_exc}"
+                                bundle_fallback_reason = "bundle 一次性评估失败: " + safe_exception_failure(bundle_exc)["reason_code"]
                                 logger.warning(
                                     "批量任务 %s 病历 %s bundle 一次性评估失败(scene=%s)，规则级 visit 回退也失败，最终回退长文本评估",
                                     job_id,
                                     record_id or visit_id or "unknown",
                                     bundle_scene,
-                                    exc_info=True,
                                 )
                         else:
                             used_bundle_path = False
-                            bundle_fallback_reason = f"bundle 一次性评估失败: {bundle_exc}"
+                            bundle_fallback_reason = "bundle 一次性评估失败: " + safe_exception_failure(bundle_exc)["reason_code"]
                             logger.warning(
                                 "批量任务 %s 病历 %s bundle 一次性评估失败(scene=%s)，回退长文本评估",
                                 job_id,
                                 record_id or visit_id or "unknown",
                                 bundle_scene,
-                                exc_info=True,
                             )
                 elif (
                     not native_direct_enabled
@@ -3411,10 +3421,7 @@ async def run_sichuan_workspace_batch_job(
             except QCJobCancelled:
                 raise
             except Exception as exc:
-                failure_error = str(exc)
-                failure_rule_id = str(getattr(exc, "rule_id", "") or "").strip().upper()
-                if re.fullmatch(r"LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2}", failure_rule_id):
-                    failure_error = f"{failure_error} [{failure_rule_id}]"
+                failure = safe_exception_failure(exc)
                 for rule_id in result_rule_ids:
                     state = result_rule_states[rule_id]
                     failed_by_rule[rule_id].append(
@@ -3428,7 +3435,10 @@ async def run_sichuan_workspace_batch_job(
                             "patient_name": str(record.get("patient_name") or ""),
                             "department": str(record.get("department") or ""),
                             "error_phase": "evaluate_document",
-                            "error": failure_error,
+                            **failure,
+                            "record_key": record_key,
+                            "institute_id": institute_id,
+                            "patient_id": patient_id,
                         }
                     )
                 return {
@@ -3477,6 +3487,7 @@ async def run_sichuan_workspace_batch_job(
                     "material_failure_record": {"institute_id": identity[0], "patient_id": identity[1],
                         "visit_id": identity[2], "record_id": identity[2],
                         "record_key": CaseRef(*identity).as_key(), "error_phase": "material_capture",
+                        **safe_failure_projection({"reason_code": failure["code"]}),
                         "error": failure["code"]}}
 
         record_timing_attempts = list(
@@ -3502,6 +3513,7 @@ async def run_sichuan_workspace_batch_job(
                 or filters.get("parent_job_id")
                 or job_id
             ).strip()
+            material_job_id = str(validated_material_job_id or root_job_id).strip()
             identity_scope = (
                 luxian_0609_case_identity_scope(
                     case_coordinates=(institute_id, patient_id, visit_id),
@@ -3536,8 +3548,8 @@ async def run_sichuan_workspace_batch_job(
                                 frozen = None
                                 if all(identity) and not is_material_copy(patient_id, visit_id) and (material_clinical.configured() or backed_by_pg):
                                     try:
-                                        frozen = await asyncio.to_thread(obtain, root_job_id, identity,
-                                            retry=is_failed_rule_retry, cancellation_check=_raise_if_cancelled)
+                                        frozen = await asyncio.to_thread(obtain, material_job_id, identity,
+                                            retry=bool(retry_lineage) or is_failed_rule_retry, cancellation_check=_raise_if_cancelled)
                                     except materials.MaterialSnapshotError as error:
                                         return _material_failed_record(record, identity, str(error))
                                 with materials.activate(frozen):
@@ -3717,7 +3729,7 @@ async def run_sichuan_workspace_batch_job(
             if enable_incremental_results:
                 progress_items = live_buffer.combine(all_items)
                 progress_failures = list(all_failed_records)
-                if is_failed_rule_retry:
+                if merge_retry_history:
                     progress_items, progress_failures = merge_failed_rule_retry_results(
                         base_items=retry_base_items,
                         base_failures=retry_base_failures,
@@ -3878,7 +3890,7 @@ async def run_sichuan_workspace_batch_job(
             from .material_admission import safe_material_failure
             failure = safe_material_failure(material_failures[0]["error"])
             preserved_items, preserved_failures = all_items, all_failed_records
-            if is_failed_rule_retry:
+            if merge_retry_history:
                 preserved_items, preserved_failures = merge_failed_rule_retry_results(
                     base_items=retry_base_items, base_failures=retry_base_failures,
                     retry_items=all_items, retry_failures=[row for row in all_failed_records if row.get("error_phase") != "material_capture"])
@@ -3894,13 +3906,13 @@ async def run_sichuan_workspace_batch_job(
                     "automatic_failed_rule_retry": {"status": "not_retryable", "should_retry": False}},
                 progress_patch={**_record_runtime_progress(total_records),
                                 "processed_rule_count": len(material_executed_rules)})
-            raise ValueError(failure["message"] + " (" + failure["code"] + ")")
+            raise SafeExecutionError(failure["code"]) from None
 
         rule_results = _build_rule_results_snapshot(
             processed_records_count=total_records,
             final=True,
         )
-        if is_failed_rule_retry:
+        if merge_retry_history:
             all_items, all_failed_records = merge_failed_rule_retry_results(
                 base_items=retry_base_items,
                 base_failures=retry_base_failures,
@@ -3977,12 +3989,10 @@ async def run_sichuan_workspace_batch_job(
                 for failure in all_failed_records
             )
         ):
-            first_failure_error = str(
-                all_failed_records[0].get("error") or ""
-            ).strip()
+            first_failure = safe_failure_projection(all_failed_records[0])
             # 正式客户结果在任一病例失败时必须停止进入 Canonical，但不能丢失
             # 失败定位信息；否则任务只会留下一个无法调试的“执行失败”。
-            failure_diagnostics: list[dict[str, str]] = []
+            failure_diagnostics: list[dict[str, Any]] = []
             seen_failure_diagnostics: set[tuple[str, str, str]] = set()
             for failed in all_failed_records:
                 diagnostic = {
@@ -3990,7 +4000,7 @@ async def run_sichuan_workspace_batch_job(
                     "visit_id": str(failed.get("visit_id") or "").strip(),
                     "rule_id": str(failed.get("rule_id") or "").strip().upper(),
                     "error_phase": str(failed.get("error_phase") or "").strip(),
-                    "error": str(failed.get("error") or "").strip()[:240],
+                    **safe_failure_projection(failed),
                 }
                 key = (
                     diagnostic["record_id"],
@@ -4019,23 +4029,11 @@ async def run_sichuan_workspace_batch_job(
                 progress_patch=_record_runtime_progress(total_records),
             )
             logger.error(
-                "LX0609正式质控未形成可交付结果，停止进入Canonical: first_error=%s",
-                first_failure_error or "unknown",
+                "LX0609正式质控未形成可交付结果，停止进入Canonical: reason_code=%s",
+                first_failure["reason_code"],
             )
-            invalid_facts_match = re.fullmatch(
-                r"invalid customer display facts(?: \[(LX0609-(?!00)\d{2}-(?!00)\d{2}-(?!00)\d{2})\])?",
-                first_failure_error,
-            )
-            customer_safe_reason = "规则执行失败"
-            if invalid_facts_match:
-                customer_safe_reason = (
-                    "客户展示事实不符合交付合同（invalid customer display facts）"
-                )
-                if invalid_facts_match.group(1):
-                    customer_safe_reason += f"；质控点 {invalid_facts_match.group(1)}"
-            raise ValueError(
-                f"病历质控未形成可交付结果：{customer_safe_reason}"
-            )
+            raise SafeExecutionError(first_failure["reason_code"], retryable=first_failure["retryable"]) from None
+
 
         postprocess_summary = summarize_postprocessed_results(all_items) if should_postprocess_job else {}
         display_status_counts = dict(postprocess_summary.get("display_status_counts") or {})
@@ -4294,13 +4292,20 @@ async def run_sichuan_workspace_batch_job(
             is_rabbitmq_dispatch = (
                 qc_dispatch_mode_from_filters(filters) == "rabbitmq"
             )
-            retried_job = _enqueue_automatic_failed_rule_retry(
-                workspace=workspace,
-                job_id=job_id,
-                created_by=created_by,
-                expected_attempt_filters_json=attempt_filters_json,
-                retry_delay_seconds=(delay_seconds if is_rabbitmq_dispatch else None),
-            )
+            try:
+                retried_job = _enqueue_automatic_failed_rule_retry(
+                    workspace=workspace,
+                    job_id=job_id,
+                    created_by=created_by,
+                    expected_attempt_filters_json=attempt_filters_json,
+                    retry_delay_seconds=(delay_seconds if is_rabbitmq_dispatch else None),
+                    preserve_terminal_job=formal_0609_job,
+                )
+            except Exception:
+                # 原轮次已经保存终态；补跑权限/来源准入或入队故障属于新尝试，
+                # 不能冒泡到外层 fail_batch_job 覆盖原结果及失败原因。
+                logger.warning("自动补跑未入队: job_id=%s reason_code=retry_enqueue_failed", job_id)
+                return
             if not retried_job or str(retried_job.get("status") or "") != "queued":
                 logger.error(
                     "部分失败任务无法自动补跑: job_id=%s created_by_present=%s",
@@ -4327,12 +4332,12 @@ async def run_sichuan_workspace_batch_job(
             if delay_seconds:
                 await asyncio.sleep(delay_seconds)
             await run_sichuan_workspace_batch_job(
-                job_id,
+                str(retried_job.get("id") or job_id),
                 workspace=workspace,
                 qc_service_provider=qc_service_provider,
                 record_concurrency_limit=record_concurrency_limit,
                 external_cancellation_check=external_cancellation_check,
-                expected_dispatch_generation=expected_dispatch_generation,
+                expected_dispatch_generation=None if str(retried_job.get("id") or job_id) != job_id else expected_dispatch_generation,
             )
     except QCJobCancelled:
         logger.info("四川规则批量任务 %s 已取消，后台执行已停止", job_id)
@@ -4341,9 +4346,10 @@ async def run_sichuan_workspace_batch_job(
         # 失败后继续消费，也不能回退另一个云 Provider。
         raise
     except Exception as exc:
-        logger.exception("四川规则批量任务执行失败: %s", exc)
+        failure = safe_exception_failure(exc)
+        logger.error("四川规则批量任务执行失败: reason_code=%s", failure["reason_code"])
         workspace.fail_batch_job(
-            job_id=job_id, error_message=str(exc),
+            job_id=job_id, error_message=failure["error"], execution_error=failure,
             **(
                 attempt_kwargs if attempt_filters_json is not None
                 else {

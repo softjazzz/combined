@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ..case_identity import CaseRef
+from ..qc_execution_errors import safe_failure_projection
 from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
 
 
@@ -56,7 +57,7 @@ def _automatic_retryable_failure(failure: Mapping[str, Any]) -> bool:
         "model_configuration_error", "execution_program_error",
     }:
         return False
-    return True
+    return safe_failure_projection(failure)["retryable"] is True
 
 
 def build_failed_rule_auto_retry_plan(

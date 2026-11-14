@@ -3050,8 +3050,18 @@ async def retry_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
 ):
     workspace = _sichuan_workspace_service()
+    existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not _is_workspace_batch_job(existing):
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     try:
-        job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+        runtime_snapshot = None
+        if (existing.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY:
+            from ..services.saved_result_access import require_retry_record_institutes
+            await run_in_threadpool(require_retry_record_institutes, _current_user_id(current_user),
+                                    existing["filters"].get("record_refs"))
+            runtime_snapshot = capture_luxian_0609_task_runtime(await get_qc_service())
+        job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user),
+                                        task_runtime_snapshot=runtime_snapshot)
     except QCDispatchSchemaUnavailable as exc:
         raise HTTPException(status_code=503, detail="质控任务调度存储尚未就绪") from exc
     except ValueError as exc:
@@ -3063,11 +3073,12 @@ async def retry_workspace_batch_job(
         ):
             raise HTTPException(status_code=409, detail="任务已在排队或执行中，不能重复入队")
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
-    submit_legacy = should_submit_detached_qc_task(job)
+    new_job_id = str(job["id"])
+    submit_legacy = should_submit_detached_qc_task(job) and not job.get("idempotency_reused")
     if submit_legacy and str(job.get("job_kind") or "").strip().lower() == "parent":
         child_jobs = list(job.get("child_jobs") or job.get("children") or [])
         if not child_jobs:
-            child_jobs = workspace.get_child_batch_jobs(parent_job_id=job_id, created_by=_current_user_id(current_user))
+            child_jobs = workspace.get_child_batch_jobs(parent_job_id=new_job_id, created_by=_current_user_id(current_user))
         if not all(should_submit_detached_qc_task(child_job) for child_job in child_jobs):
             raise HTTPException(status_code=503, detail="父子任务调度身份不一致")
         for child_job in child_jobs:
@@ -3082,7 +3093,7 @@ async def retry_workspace_batch_job(
         submit_detached_task(
             "sichuan_workspace_batch_job_retry",
             _run_sichuan_workspace_batch_job,
-            job_id,
+            new_job_id,
         )
     return success_response(
         data=_workspace_batch_response_item(job),

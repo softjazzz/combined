@@ -174,6 +174,71 @@ describe('useSichuanBatchJobs', () => {
     expect(batchJobDebugSnapshot.value).toEqual(debugSnapshot)
   })
 
+  it('独立重试应读取并轮询新任务，保留原任务结果', async () => {
+    const nextJob = {
+      ...baseJob, id: 'job-2', status: 'queued' as const, items: [],
+      retry_lineage: { source_job_id: 'job-1', root_job_id: 'job-1', source_attempt: "a".repeat(32), attempt: 1 },
+    }
+    retrySichuanWorkspaceBatchJobMock.mockResolvedValue({ success: true, data: nextJob })
+    getSichuanWorkspaceBatchJobMock.mockResolvedValue({ success: true, data: nextJob })
+    getSichuanWorkspaceBatchJobDebugSnapshotMock.mockResolvedValue({ success: true, data: { ...debugSnapshot, job_id: 'job-2' } })
+    const setIntervalSpy = vi.spyOn(window, 'setInterval').mockReturnValue(1)
+    const state = useSichuanBatchJobs()
+    state.batchJobDetail.value = baseJob
+    await state.executeRetryBatchJob('job-1')
+    expect(getSichuanWorkspaceBatchJobMock).toHaveBeenCalledWith('job-2')
+    expect(getSichuanWorkspaceBatchJobMock).not.toHaveBeenCalledWith('job-1')
+    expect(state.batchJobDetail.value?.id).toBe('job-2')
+    expect(baseJob.id).toBe('job-1')
+    expect(baseJob.summary?.total_tokens).toBe(1200)
+    expect(setIntervalSpy).toHaveBeenCalled()
+    state.stopBatchJobPolling()
+  })
+
+  it('重试响应关联其他任务时拒绝切换和轮询', async () => {
+    retrySichuanWorkspaceBatchJobMock.mockResolvedValue({ success: true, data: {
+      ...baseJob, id: 'job-2', retry_lineage: { source_job_id: 'other-job', root_job_id: 'other-job', source_attempt: "a".repeat(32), attempt: 1 },
+    } })
+    const timer = vi.spyOn(window, 'setInterval').mockReturnValue(1)
+    const state = useSichuanBatchJobs()
+    state.batchJobDetail.value = baseJob
+    await state.executeRetryBatchJob('job-1')
+    expect(getSichuanWorkspaceBatchJobMock).not.toHaveBeenCalled()
+    expect(timer).not.toHaveBeenCalled()
+    expect(state.batchJobDetail.value?.id).toBe('job-1')
+    expect(messageErrorMock).toHaveBeenCalled()
+  })
+
+  it('重试后的详情响应属于旧任务时不展示旧结果', async () => {
+    retrySichuanWorkspaceBatchJobMock.mockResolvedValue({ success: true, data: {
+      ...baseJob, id: 'job-2', items: [], summary: null,
+      retry_lineage: { source_job_id: 'job-1', root_job_id: 'job-1', source_attempt: "a".repeat(32), attempt: 1 },
+    } })
+    vi.spyOn(window, 'setInterval').mockReturnValue(1)
+    const state = useSichuanBatchJobs()
+    await state.executeRetryBatchJob('job-1')
+    expect(state.batchJobDetail.value?.id).toBe('job-2')
+    expect(state.batchJobDetail.value?.summary).toBeNull()
+    expect(messageErrorMock).toHaveBeenCalled()
+    state.stopBatchJobPolling()
+  })
+
+  it('页面重置后迟到的重试响应不能恢复旧账号任务', async () => {
+    let resolveRetry!: (value: unknown) => void
+    retrySichuanWorkspaceBatchJobMock.mockReturnValue(new Promise(resolve => { resolveRetry = resolve }))
+    const timer = vi.spyOn(window, 'setInterval').mockReturnValue(1)
+    const state = useSichuanBatchJobs()
+    const pending = state.executeRetryBatchJob('job-1')
+    state.resetBatchJobs()
+    resolveRetry({ success: true, data: { ...baseJob, id: 'job-2',
+      retry_lineage: { source_job_id: 'job-1', root_job_id: 'job-1', source_attempt: 'a'.repeat(32), attempt: 1 },
+    } })
+    await pending
+    expect(state.batchJobDetail.value).toBeNull()
+    expect(getSichuanWorkspaceBatchJobMock).not.toHaveBeenCalled()
+    expect(timer).not.toHaveBeenCalled()
+  })
+
   it('executeRetryBatchJob 应重新入队并刷新详情与调试快照', async () => {
     const fakeTimer = {} as ReturnType<typeof window.setInterval>
     const setIntervalSpy = vi.spyOn(window, 'setInterval').mockReturnValue(fakeTimer)

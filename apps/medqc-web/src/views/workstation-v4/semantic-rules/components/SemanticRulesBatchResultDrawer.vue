@@ -74,6 +74,10 @@
       </div>
 
       <div class="drawer-body">
+        <p v-if="batchJobDetail?.retry_lineage" class="mq-soft" data-testid="retry-lineage">
+          第 {{ batchJobDetail.retry_lineage.attempt }} 次重试 · 来源任务 {{ batchJobDetail.retry_lineage.source_job_id }}。
+          本次结果独立保存，原任务结果保留。
+        </p>
         <BatchTaskFailureSummary :job="batchJobDetail" />
         <BatchResultOverview :model="resultReviewOverviewModel" />
 

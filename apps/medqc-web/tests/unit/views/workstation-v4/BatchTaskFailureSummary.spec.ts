@@ -3,6 +3,19 @@ import { describe, expect, it } from 'vitest'
 import Summary from '@/views/workstation-v4/semantic-rules/components/BatchTaskFailureSummary.vue'
 
 describe('失败任务的已保存结果和原因', () => {
+  it.each([
+    ['model_request', false, '模型请求被拒绝', '不会自动重试'],
+    ['model_timeout', true, '模型请求超时', '具备自动重试条件'],
+    ['SECRET-CATEGORY', undefined, '执行未完成', '自动重试属性未确认'],
+  ])('安全展示错误类别 %s 和自动重试属性', (category, retryable, label, retryLabel) => {
+    const wrapper = mount(Summary, { props: { job: {
+      id: 'failed', status: 'failed', rule_code: 'LX0609', rule_name: '合成', scope: 'all',
+      failed_records: [{ error_category: category, retryable, error: 'SECRET-RAW-ERROR' }],
+    } } })
+    expect(wrapper.text()).toContain(label)
+    expect(wrapper.text()).toContain(retryLabel)
+    expect(wrapper.text()).not.toContain('SECRET')
+  })
   it('无通知或信封也展示部分结果数量和模型传输错误', () => {
     const wrapper = mount(Summary, {
       props: {

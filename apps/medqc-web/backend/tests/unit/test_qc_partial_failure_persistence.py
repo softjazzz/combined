@@ -19,8 +19,23 @@ from app.services.qc_dispatch.repository import QCDispatchRepository
 pytestmark = pytest.mark.usefixtures("workspace_tables_without_database")
 
 
+def _install_retry_account(monkeypatch):
+    from app.database import connection
+    from app.database.models.v36_reports import SysUser
+    from sqlalchemy.pool import StaticPool
+    engine = sa.create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SysUser.__table__.create(engine)
+    sessions = sessionmaker(bind=engine)
+    with sessions.begin() as session:
+        session.add(SysUser(id="tester", username="synthetic-retry-owner", display_name="合成重试账号",
+                            password_hash="synthetic", role="qc_manager", institute_id="test-i", is_active=True))
+    monkeypatch.setattr(connection, "SessionLocal", sessions)
+    return engine
+
+
 @pytest.fixture
 def storage(monkeypatch):
+    account_engine = _install_retry_account(monkeypatch)
     service = workspace.CustomQCWorkspaceService()
     metadata = sa.MetaData()
     table = service._batch_job_table.to_metadata(metadata, schema=None)
@@ -50,6 +65,7 @@ def storage(monkeypatch):
     monkeypatch.setattr(service, "_write_record_result_envelopes", no_canonical)
     yield service, engine, table
     engine.dispose()
+    account_engine.dispose()
 
 
 def _payload():
@@ -454,17 +470,15 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
 
     assert retried is not None
     assert retried["status"] == "queued"
-    assert len(retried["items"]) == 1
-    assert retried["items"][0]["rule_id"] == "LX0609-06-01-04"
-    assert retried["items"][0]["status"] == "compliant"
-    assert retried["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
+    assert retried["id"] != "partial-job"
+    assert retried["items"] == retried["failed_records"] == []
     retry_scope = retried["filters"]["failed_rule_retry"]
     assert retry_scope["rule_ids"] == ["LX0609-06-01-05"]
     assert retry_scope["record_refs"] == [
         {"institute_id": "test-i", "patient_id": "test-p", "visit_id": "test-v"}
     ]
     assert retry_scope["pending_count"] == 1
-    assert retried["summary"]["execution_status"] == "partial_failed"
+    assert "execution_status" not in retried["summary"]
 
 
     assert retried["summary"]["retry_status"] == "queued"
@@ -473,13 +487,12 @@ def test_retry_partial_failure_preserves_valid_items_and_queues_only_failed_rule
         retried,
         hmac_key="synthetic-test-key",
     )
-    assert len(safe["items"]) == 1
-    assert safe["items"][0]["rule_id"] == "LX0609-06-01-04"
-    assert safe["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
+    assert safe["items"] == safe["failed_records"] == []
+    assert safe["retry_of_job_id"] == "partial-job"
     with engine.connect() as connection:
-        row = dict(connection.execute(sa.select(table)).mappings().one())
+        row = dict(connection.execute(sa.select(table).where(table.c.id == "partial-job")).mappings().one())
     assert json.loads(row["items_json"]) == items
-    assert json.loads(row["failed_records_json"])[0]["record_key"] == '["test-i","test-p","test-v"]'
+    assert json.loads(row["failed_records_json"]) == failures
 
 
 @pytest.mark.parametrize("enqueue_outcome", ["queued", "none", "raise"])
@@ -547,11 +560,25 @@ def test_mq_auto_retry_preserves_success_and_delays_only_one_next_generation(
         outbox = session.execute(sa.select(repository.outbox_table)).mappings().all()
     dispatch = repository.get_dispatch(job_id)
     if enqueue_outcome == "queued":
-        assert after["status"] == "queued"
-        assert after["summary"]["automatic_failed_rule_retry"]["status"] == "queued"
-        assert dispatch.generation == 2
+        assert after["status"] == "failed"
+        assert result["id"] != job_id
+        assert result["summary"]["automatic_failed_rule_retry"]["status"] == "queued"
+        assert result["items"] == result["failed_records"] == []
+        assert dispatch.generation == 1
+        assert dispatch.recovery_reason_code == "retry_successor_created"
+        successor = repository.get_dispatch(result["id"])
+        assert successor.generation == 1
+        assert successor.failure_count == dispatch.failure_count + 1
+        assert successor.failure_budget == dispatch.failure_budget
+        assert all(candidate.job_id != job_id for candidate in repository.list_recovery_candidates())
+        from app.qc_worker.recovery import WorkerRecovery, RecoveryOutcome
+        assert WorkerRecovery(repository=repository, workspace=service).recover_failed_job(job_id) == RecoveryOutcome.RETRY_SCHEDULED
+        # 旧扫描器持有的分类写入不能撤销已提交的独立重试关联。
+        assert repository.register_recovery(job_id, dispatch.generation, recovery_kind="unstarted",
+                                             reason_code="stale_scan") is False
+        assert repository.record_terminal_failure(job_id, dispatch.generation, error_code="worker_failed") is False
         assert len(outbox) == 2
-        next_delivery = next(row for row in outbox if row["generation"] == 2)
+        next_delivery = next(row for row in outbox if row["job_id"] == result["id"])
         assert next_delivery["available_at"] == now + timedelta(seconds=17)
     else:
         assert after["status"] == "failed"
@@ -590,19 +617,19 @@ def test_automatic_retry_announces_queued_only_after_retry_cas_succeeds(storage)
     assert queued["summary"]["automatic_failed_rule_retry"]["should_retry"] is True
     queued_items = list(queued["items"])
     queued_failures = list(queued["failed_records"])
-    running_claim = service.mark_batch_job_running(job_id="partial-job")
+    running_claim = service.mark_batch_job_running(job_id=queued["id"])
     assert isinstance(running_claim, str)
-    running = service.get_batch_job_for_processing(job_id="partial-job")
+    running = service.get_batch_job_for_processing(job_id=queued["id"])
     assert running["summary"]["automatic_failed_rule_retry"]["status"] == "running"
     assert running["items"] == queued_items
     assert running["failed_records"] == queued_failures
 
     service.fail_batch_job(
-        job_id="partial-job",
+        job_id=queued["id"],
         attempt_filters_json=running_claim,
         error_message="synthetic retry execution interruption",
     )
-    interrupted = service.get_batch_job(job_id="partial-job", created_by="tester")
+    interrupted = service.get_batch_job(job_id=queued["id"], created_by="tester")
     interrupted_plan = interrupted["summary"]["automatic_failed_rule_retry"]
     assert interrupted["status"] == "failed"
     assert interrupted_plan["status"] == "interrupted"
@@ -655,29 +682,29 @@ def test_queued_auto_retry_failure_terminates_only_the_exact_queued_generation(
     assert queued is not None and queued["status"] == "queued"
     with engine.connect() as connection:
         queued_filters = connection.execute(
-            sa.select(table.c.filters_json).where(table.c.id == "partial-job")
+            sa.select(table.c.filters_json).where(table.c.id == queued["id"])
         ).scalar_one()
     queued_items = list(queued["items"])
     queued_failures = list(queued["failed_records"])
 
     running_claim = None
     if late_after_claim:
-        running_claim = service.mark_batch_job_running(job_id="partial-job")
+        running_claim = service.mark_batch_job_running(job_id=queued["id"])
         assert isinstance(running_claim, str)
     service.fail_batch_job(
-        job_id="partial-job",
+        job_id=queued["id"],
         queued_only=True,
         expected_queued_filters_json=queued_filters,
         error_message="synthetic queued start failure",
     )
-    current = service.get_batch_job(job_id="partial-job", created_by="tester")
+    current = service.get_batch_job(job_id=queued["id"], created_by="tester")
     assert current["items"] == queued_items
     assert current["failed_records"] == queued_failures
     if late_after_claim:
         assert current["status"] == "running"
         assert current["summary"]["automatic_failed_rule_retry"]["status"] == "running"
         service.fail_batch_job(
-            job_id="partial-job",
+            job_id=queued["id"],
             attempt_filters_json=running_claim,
             error_message="cleanup current generation",
         )
@@ -780,8 +807,10 @@ def test_automatic_retry_skips_terminal_pair_without_losing_it_or_successful_ite
                                      expected_attempt_filters_json=expected)
     assert retried["filters"]["failed_rule_retry"]["rule_ids"] == [transient["rule_id"]]
     assert retried["filters"]["failed_rule_retry"]["pending_count"] == 1
-    assert len(retried["failed_records"]) == 2
-    assert retried["items"][0]["rule_id"] == items[0]["rule_id"]
+    assert retried["failed_records"] == retried["items"] == []
+    original = service.get_batch_job(job_id="partial-job", created_by="tester")
+    assert len(original["failed_records"]) == 2
+    assert original["items"][0]["rule_id"] == items[0]["rule_id"]
 
 
 def test_automatic_terminal_retry_does_not_fall_back_to_full_batch(storage):
@@ -815,6 +844,9 @@ async def test_retry_route_returns_customer_safe_partial_result(storage, monkeyp
     )
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
     monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args, **kwargs: None)
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", AsyncMock(return_value=object()))
+    monkeypatch.setattr(qc_sichuan, "capture_luxian_0609_task_runtime", lambda _: {"synthetic": True})
 
     response = await qc_sichuan.retry_workspace_batch_job(
         request=SimpleNamespace(state=SimpleNamespace()),
@@ -823,9 +855,9 @@ async def test_retry_route_returns_customer_safe_partial_result(storage, monkeyp
     )
 
     payload = response["data"]
-    assert payload["summary"]["execution_status"] == "partial_failed"
-    assert payload["items"][0]["rule_id"] == "LX0609-06-01-04"
-    assert payload["failed_records"][0]["rule_id"] == "LX0609-06-01-05"
+    assert payload["status"] == "queued"
+    assert payload["retry_of_job_id"] == "partial-job"
+    assert payload["items"] == payload["failed_records"] == []
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "test-p" not in serialized
     assert "test-v" not in serialized
@@ -915,6 +947,7 @@ def _load_job(engine, jobs, *, job_id: str) -> dict:
 def canonical_storage(monkeypatch):
     """叶子根任务的正式 Canonical 写入：任务表与结果表都落在隔离 SQLite。"""
 
+    account_engine = _install_retry_account(monkeypatch)
     service = workspace.CustomQCWorkspaceService()
     metadata = sa.MetaData()
     jobs = service._batch_job_table.to_metadata(metadata, schema=None)
@@ -948,6 +981,7 @@ def canonical_storage(monkeypatch):
         ))
     yield service, engine, jobs, envelopes
     engine.dispose()
+    account_engine.dispose()
 
 
 def _complete_full_run(service) -> str:
@@ -1056,10 +1090,8 @@ def test_new_full_task_preserves_previous_canonical_and_shows_current_partial(ca
     ]
 
     previous_job = _load_job(engine, jobs, job_id="rerun-job")
-    with pytest.raises(ValueError, match="new_task_required_preserve_history"):
-        service.retry_batch_job(job_id="rerun-job", created_by="tester")
-    _insert_independent_full_task(engine, jobs)
-    rerun_claim = service.mark_batch_job_running(job_id="new-full-job")
+    new_id = service.retry_batch_job(job_id="rerun-job", created_by="tester")["id"]
+    rerun_claim = service.mark_batch_job_running(job_id=new_id)
     assert isinstance(rerun_claim, str) and rerun_claim != first_claim
     current_items = [
         _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
@@ -1067,7 +1099,7 @@ def test_new_full_task_preserves_previous_canonical_and_shows_current_partial(ca
         _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
     ]
     assert service.complete_batch_job(
-        job_id="new-full-job",
+        job_id=new_id,
         attempt_filters_json=rerun_claim,
         summary={**_partial_summary(total_records=2, delivered=3, failed_rules=[_RERUN_RULE_IDS[1]]),
                  "rule_results": [{"rule_code": rule, "items": [item for item in current_items
@@ -1076,8 +1108,8 @@ def test_new_full_task_preserves_previous_canonical_and_shows_current_partial(ca
         failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
     ) is True
 
-    job = _load_job(engine, jobs, job_id="new-full-job")
-    root_refs = _root_envelope_refs(engine, envelopes, root_job_id="new-full-job")
+    job = _load_job(engine, jobs, job_id=new_id)
+    root_refs = _root_envelope_refs(engine, envelopes, root_job_id=new_id)
     assert root_refs == [("test-va", 2)]
     assert len(root_refs) == job["success_count"] == 1
     assert _load_job(engine, jobs, job_id="rerun-job") == previous_job
@@ -1093,7 +1125,7 @@ def test_new_full_task_preserves_previous_canonical_and_shows_current_partial(ca
     # 同次失败任务的有效项仍可查看；不能取回上轮该病例的第二条合规结果。
     assert stale["state"] == "ready"
     assert stale["data_origin"] == "saved_partial_task"
-    assert stale["job_id"] == "new-full-job"
+    assert stale["job_id"] == new_id
     assert stale["is_complete"] is False
     assert stale["completed_rule_count"] == 1
     assert stale["failed_rule_ids"] == [_RERUN_RULE_IDS[1]]
@@ -1106,7 +1138,7 @@ def test_new_full_task_preserves_previous_canonical_and_shows_current_partial(ca
 
 
 def test_precise_retry_interruption_keeps_authoritative_success_items_readable(canonical_storage):
-    """补跑启动清空派生规则视图后，顶层成功项仍是同轮只读结果的权威来源。"""
+    """精确新尝试不冒充原全量交付，较完整原任务仍按其身份只读。"""
 
     service, engine, jobs, _ = canonical_storage
     first_claim = service.mark_batch_job_running(job_id="rerun-job")
@@ -1136,59 +1168,42 @@ def test_precise_retry_interruption_keeps_authoritative_success_items_readable(c
         failed_records=[_rule_failure(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])],
     ) is True
 
+    source_id = "rerun-job"
+    original = _load_job(engine, jobs, job_id=source_id)
     for interruption in range(2):
-        retried = service.retry_batch_job(job_id="rerun-job", created_by="tester")
+        retried = service.retry_batch_job(job_id=source_id, created_by="tester")
         assert retried is not None and retried["status"] == "queued"
-        retry_claim = service.mark_batch_job_running(job_id="rerun-job")
+        source_id = retried["id"]
+        retry_claim = service.mark_batch_job_running(job_id=source_id)
         assert isinstance(retry_claim, str)
-        # 与 worker 补跑启动路径一致：只清空派生摘要副本，不改 items_json/失败清单。
         service.update_batch_job_progress(
-            job_id="rerun-job",
-            attempt_filters_json=retry_claim,
-            step_key="run",
-            rule_index=0,
-            rule_count=1,
-            processed_records=0,
-            total_records=1,
+            job_id=source_id, attempt_filters_json=retry_claim, step_key="run",
+            rule_index=0, rule_count=1, processed_records=0, total_records=1,
             summary_patch={"rule_results": []},
         )
-        service.fail_batch_job(
-            job_id="rerun-job",
-            attempt_filters_json=retry_claim,
-            error_message=f"synthetic retry interruption {interruption + 1}",
-        )
-
+        service.fail_batch_job(job_id=source_id, attempt_filters_json=retry_claim,
+                               error_message=f"synthetic retry interruption {interruption + 1}")
+        # 原任务仍提供其真实部分交付；新中断任务不携带旧成功项。
+        assert _load_job(engine, jobs, job_id="rerun-job") == original
+        persisted = _load_job(engine, jobs, job_id=source_id)
+        assert persisted["items"] == []
+        assert persisted["summary"]["rule_results"] == []
         latest = service.build_latest_single_record_result_dto(
-            institute_id=_RERUN_RECORD_B["institute_id"],
-            patient_id=_RERUN_RECORD_B["patient_id"],
-            visit_id=_RERUN_RECORD_B["visit_id"],
-            rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+            institute_id=_RERUN_RECORD_B["institute_id"], patient_id=_RERUN_RECORD_B["patient_id"],
+            visit_id=_RERUN_RECORD_B["visit_id"], rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
             rule_set_version=workspace.RULE_SET_VERSION,
         )
-        assert latest["state"] == "ready"
-        assert latest["data_origin"] == "saved_partial_task"
-        assert latest["execution_status"] == "partial_failed"
-        assert latest["is_complete"] is False
-        assert latest["failed_rule_ids"] == [_RERUN_RULE_IDS[1]]
+        assert latest["job_id"] == "rerun-job"
         assert [item["rule_id"] for item in latest["items"]] == [_RERUN_RULE_IDS[0]]
+        assert latest["state"] == "ready"
+        assert latest["is_complete"] is False
         bulk = service.build_latest_luxian_0609_record_result_dtos(
-            record_refs=[_RERUN_RECORD_B],
-            rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+            record_refs=[_RERUN_RECORD_B], rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
             rule_set_version=workspace.RULE_SET_VERSION,
         )[tuple(CaseRef.from_mapping(_RERUN_RECORD_B))]
-        assert bulk["state"] == "ready"
-        assert bulk["data_origin"] == "saved_partial_task"
-        assert bulk["execution_status"] == "partial_failed"
-        assert bulk["failed_rule_ids"] == [_RERUN_RULE_IDS[1]]
+        assert bulk["job_id"] == "rerun-job"
         assert [item["rule_id"] for item in bulk["items"]] == [_RERUN_RULE_IDS[0]]
-
-        persisted = _load_job(engine, jobs, job_id="rerun-job")
-        assert persisted["summary"]["rule_results"] == []
-        assert [item["rule_id"] for item in persisted["items"]] == [
-            _RERUN_RULE_IDS[0],
-            _RERUN_RULE_IDS[1],
-            _RERUN_RULE_IDS[0],
-        ]
+        assert bulk["state"] == "ready"
 
 
 @pytest.mark.parametrize(
@@ -1276,17 +1291,17 @@ def test_canceled_precise_retry_rejects_late_failure_and_completion_callbacks(ca
     ) is True
     retry_baseline = service.retry_batch_job(job_id="rerun-job", created_by="tester")
     assert retry_baseline["status"] == "queued"
-    retry_claim = service.mark_batch_job_running(job_id="rerun-job")
-    canceled = service.cancel_batch_job(job_id="rerun-job", created_by="tester")
+    retry_claim = service.mark_batch_job_running(job_id=retry_baseline["id"])
+    canceled = service.cancel_batch_job(job_id=retry_baseline["id"], created_by="tester")
     assert canceled["status"] == "canceled"
 
     service.fail_batch_job(
-        job_id="rerun-job",
+        job_id=retry_baseline["id"],
         attempt_filters_json=retry_claim,
         error_message="late failure",
     )
     assert service.complete_batch_job(
-        job_id="rerun-job",
+        job_id=retry_baseline["id"],
         attempt_filters_json=retry_claim,
         summary=_completed_summary(total_records=2, delivered=4),
         items=[
@@ -1296,10 +1311,11 @@ def test_canceled_precise_retry_rejects_late_failure_and_completion_callbacks(ca
         failed_records=[],
     ) is False
 
-    persisted = _load_job(engine, jobs, job_id="rerun-job")
+    persisted = _load_job(engine, jobs, job_id=retry_baseline["id"])
     assert persisted["status"] == "canceled"
     assert persisted["items"] == retry_baseline["items"]
     assert persisted["failed_records"] == retry_baseline["failed_records"]
+
 
 
 def test_bulk_latest_uses_same_full_partial_generation_as_single_record(canonical_storage):
@@ -1546,29 +1562,21 @@ def test_precise_failed_rule_retry_keeps_other_records_in_canonical(canonical_st
     retry_scope = retried["filters"]["failed_rule_retry"]
     assert retry_scope["rule_ids"] == [_RERUN_RULE_IDS[1]]
     assert retry_scope["record_refs"] == [_RERUN_RECORD_B]
-    assert [item["visit_id"] for item in retried["items"]] == ["test-va", "test-va"]
-
-    rerun_claim = service.mark_batch_job_running(job_id="rerun-job")
+    assert retried["items"] == []
+    new_id = retried["id"]
+    original = _load_job(engine, jobs, job_id="rerun-job")
+    rerun_claim = service.mark_batch_job_running(job_id=new_id)
     assert service.complete_batch_job(
-        job_id="rerun-job",
-        attempt_filters_json=rerun_claim,
-        summary=_completed_summary(total_records=2, delivered=4),
-        items=[
-            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[0]),
-            _canonical_item(_RERUN_RECORD_A, _RERUN_RULE_IDS[1]),
-            _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[0]),
-            _canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[1]),
-        ],
-        failed_records=[],
+        job_id=new_id, attempt_filters_json=rerun_claim,
+        summary=_completed_summary(total_records=1, delivered=1),
+        items=[_canonical_item(_RERUN_RECORD_B, _RERUN_RULE_IDS[1])], failed_records=[],
     ) is True
-
-    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == [
-        ("test-va", 2),
-        ("test-vb", 2),
-    ]
-    job = _load_job(engine, jobs, job_id="rerun-job")
-    assert job["success_count"] == 2
-    assert len(service._load_batch_job_export_items(job=job)) == 4
+    assert _root_envelope_refs(engine, envelopes, root_job_id="rerun-job") == [("test-va", 2)]
+    assert _root_envelope_refs(engine, envelopes, root_job_id=new_id) == [("test-vb", 1)]
+    assert _load_job(engine, jobs, job_id="rerun-job") == original
+    job = _load_job(engine, jobs, job_id=new_id)
+    assert job["success_count"] == 1
+    assert len(service._load_batch_job_export_items(job=job)) == 1
 
 
 def test_child_leaf_completion_does_not_delete_root_published_canonical(canonical_storage):

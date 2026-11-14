@@ -563,7 +563,7 @@ def test_explicit_malformed_role_override_fails_but_unconfigured_role_does_not()
 def test_gateway_error_is_safe_and_marks_retry_owner():
     error = GatewayDispatchError("untrusted_remote_text", retryable=True)
     assert str(error) == "gateway_error"
-    assert error.retryable is True
+    assert error.retryable is False
     assert error.transport_retry_managed is True
 
 

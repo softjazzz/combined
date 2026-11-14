@@ -474,38 +474,20 @@ def _accepts_temperature(delegate: Any) -> bool:
 # 用户口径（2026-10-12）：重试次数由 1 次增至 2 次（真实跑批中 SSL 断连重试 1 次仍偶发失败）。
 TRANSPORT_RETRY_DELAY_SECONDS = 2.0
 TRANSPORT_RETRY_ATTEMPTS = 2
-_RETRYABLE_UPSTREAM_STATUS = re.compile(r"upstream_http_status=(?:429|5\d\d|unknown)(?!\w)")
-
-
 def _is_transient_transport_error(error: BaseException) -> bool:
-    """只认定超时、连接失败和上游 429/5xx；参数、隐私、4xx 等确定性错误不重试。"""
-    if isinstance(error, (httpx.TransportError, TimeoutError, asyncio.TimeoutError, ConnectionError)):
-        return True
-    return (
-        isinstance(error, RuntimeError)
-        and str(error).startswith("upstream_http_error")
-        and _RETRYABLE_UPSTREAM_STATUS.search(str(error)) is not None
-    )
+    """只重试已确认的瞬时故障，未知错误和确定性拒绝不能消耗重试预算。"""
+    from ..qc_execution_errors import safe_exception_failure
 
-
-# 程序自身缺陷（构造提示词、参数校验等）；同样输入重跑仍会失败。
-_PROGRAM_ERROR_TYPES = (TypeError, ValueError, LookupError, AttributeError, AssertionError)
+    return safe_exception_failure(error)["retryable"] is True
 
 
 def classify_luxian_0609_llm_call_failure(error: BaseException) -> str:
-    """把模型调用处捕获的异常归为受控原因码，避免一律记成传输错误。
-
-    隐私护栏拦截与程序缺陷都是确定性失败，补跑不会改变结果；超时与上游/网络
-    错误仍按模型传输类原因交给既有补跑策略。
-    """
+    """保留模型边界安全类别，不把参数、鉴权或未知错误误判成网络失败。"""
+    from ..qc_execution_errors import safe_exception_failure
 
     if isinstance(error, (PatientPrivacyViolation, PrivacyIdentityContextError)):
         return "privacy_guard_blocked"
-    if isinstance(error, (TimeoutError, asyncio.TimeoutError, httpx.TimeoutException)):
-        return "model_timeout"
-    if isinstance(error, _PROGRAM_ERROR_TYPES):
-        return "execution_program_error"
-    return "model_transport_error"
+    return safe_exception_failure(error)["reason_code"]
 
 
 def describe_luxian_0609_llm_parse_failure(error: BaseException, response: Any) -> str:

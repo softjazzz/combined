@@ -43,3 +43,15 @@ def check_saved_result_institute(scope: str | None, institute_id: str) -> None:
 
 def require_saved_result_institute(actor_id: str, institute_id: str) -> None:
     check_saved_result_institute(saved_result_institute_scope(actor_id), institute_id)
+
+
+def require_retry_record_institutes(actor_id: str, record_refs: object) -> None:
+    """每次重试重新读取账号权限；旧任务创建者身份不等于当前机构授权。"""
+    scope = saved_result_institute_scope(actor_id)
+    if not isinstance(record_refs, list) or not record_refs:
+        raise HTTPException(403, "重试任务缺少可信病历范围")
+    for ref in record_refs:
+        if not isinstance(ref, dict) or not all(isinstance(ref.get(key), str) and ref[key].strip()
+                for key in ("institute_id", "patient_id", "visit_id")):
+            raise HTTPException(403, "重试任务缺少可信病历范围")
+        check_saved_result_institute(scope, ref["institute_id"])

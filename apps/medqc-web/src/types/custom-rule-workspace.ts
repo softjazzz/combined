@@ -297,6 +297,7 @@ export interface CustomRuleBatchFailedRecord extends CustomRuleBatchFailedRecord
 }
 
 export interface CustomRuleBatchJob {
+  retry_lineage?: import('@/utils/batchJobRetryIdentity').BatchJobRetryLineage | null
   id: string
   draft_id: string
   draft_ids?: string[]

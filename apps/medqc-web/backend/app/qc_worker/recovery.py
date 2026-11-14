@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta
 from enum import Enum
 import logging
 from typing import Any
+from fastapi import HTTPException
 
 from app.services.luxian_0609 import LUXIAN_0609_RULE_SET_KEY
 from app.services.qc_dispatch.contracts import qc_dispatch_mode_from_filters
@@ -115,6 +117,9 @@ class WorkerRecovery:
         generation = int(getattr(dispatch, "generation", 0) or 0)
         if generation <= 0:
             return RecoveryOutcome.SKIPPED
+        if self._has_retry_successor(job_id, generation):
+            # 独立新身份与其Outbox已提交；旧attempt只保留追溯，不重复扫描/分类。
+            return RecoveryOutcome.RETRY_SCHEDULED
         if str(getattr(dispatch, "recovery_kind", "") or "") == (
             "manual_scope_required"
         ):
@@ -138,6 +143,8 @@ class WorkerRecovery:
                 generation,
                 error_code="worker_failed",
             ):
+                if self._has_retry_successor(job_id, generation):
+                    return RecoveryOutcome.RETRY_SCHEDULED
                 raise RuntimeError("unsupported recovery task was not made terminal")
             return RecoveryOutcome.TERMINAL_FAILURE
         has_success = self._has_saved_success(job_id, job)
@@ -151,6 +158,8 @@ class WorkerRecovery:
                 reason_code="saved_results_without_provable_scope",
                 scope={"saved_result_count": self._saved_result_count(job_id, job)},
             ):
+                if self._has_retry_successor(job_id, generation):
+                    return RecoveryOutcome.RETRY_SCHEDULED
                 raise RuntimeError("manual recovery state was not persisted")
             return RecoveryOutcome.MANUAL_SCOPE_REQUIRED
 
@@ -162,6 +171,8 @@ class WorkerRecovery:
                 generation,
                 error_code="retry_budget_exhausted",
             ):
+                if self._has_retry_successor(job_id, generation):
+                    return RecoveryOutcome.RETRY_SCHEDULED
                 raise RuntimeError("terminal recovery state was not persisted")
             return RecoveryOutcome.TERMINAL_FAILURE
 
@@ -181,15 +192,46 @@ class WorkerRecovery:
                 "failed_item_count": len(job.get("failed_records") or []),
             },
         ):
+            if self._has_retry_successor(job_id, generation):
+                return RecoveryOutcome.RETRY_SCHEDULED
             raise RuntimeError("recovery registration lost its generation CAS")
 
-        retried = self._workspace.retry_batch_job(
-            job_id=job_id,
-            created_by=str(job.get("created_by") or ""),
-            automatic=True,
-            expected_attempt_filters_json=job.get("_claim_filters_json"),
-            retry_delay_seconds=self._retry_delay_seconds,
-        )
+        try:
+            retried = self._workspace.retry_batch_job(
+                job_id=job_id,
+                created_by=str(job.get("created_by") or ""),
+                automatic=True,
+                expected_attempt_filters_json=job.get("_claim_filters_json"),
+                retry_delay_seconds=self._retry_delay_seconds,
+            )
+        except HTTPException as exc:
+            if self._has_retry_successor(job_id, generation):
+                return RecoveryOutcome.RETRY_SCHEDULED
+            if exc.status_code == 503:
+                # 权限owner暂不可用，保留失败候选；后续扫描可重试，不能停整个消费者。
+                return RecoveryOutcome.SKIPPED
+            if exc.status_code == 403:
+                if not self._repository.register_recovery(
+                    job_id, generation, recovery_kind="manual_scope_required",
+                    reason_code="retry_permission_revoked",
+                ):
+                    if self._has_retry_successor(job_id, generation):
+                        return RecoveryOutcome.RETRY_SCHEDULED
+                    raise RuntimeError("permission recovery state was not persisted") from None
+                return RecoveryOutcome.MANUAL_SCOPE_REQUIRED
+            raise
+        except ValueError:
+            # 暂停范围、失效lineage等受控合同拒绝只阻止本任务恢复，不终止owner。
+            if self._has_retry_successor(job_id, generation):
+                return RecoveryOutcome.RETRY_SCHEDULED
+            if not self._repository.register_recovery(
+                job_id, generation, recovery_kind="manual_scope_required",
+                reason_code="retry_contract_rejected",
+            ):
+                if self._has_retry_successor(job_id, generation):
+                    return RecoveryOutcome.RETRY_SCHEDULED
+                raise RuntimeError("rejected retry recovery state was not persisted") from None
+            return RecoveryOutcome.MANUAL_SCOPE_REQUIRED
         if retried and str(retried.get("status") or "") == "queued":
             return RecoveryOutcome.RETRY_SCHEDULED
 
@@ -208,8 +250,27 @@ class WorkerRecovery:
             generation,
             error_code="worker_failed",
         ):
+            if self._has_retry_successor(job_id, generation):
+                return RecoveryOutcome.RETRY_SCHEDULED
             raise RuntimeError("failed recovery could not be made terminal")
         return RecoveryOutcome.TERMINAL_FAILURE
+
+    def _has_retry_successor(self, job_id: str, generation: int) -> bool:
+        """CAS竞争后仅认可已持久化的新调度身份，不吞掉真实存储失败。"""
+        source = self._repository.get_dispatch(job_id)
+        if (source is None or source.generation != generation
+                or getattr(source, "recovery_reason_code", None) != "retry_successor_created"):
+            return False
+        try:
+            scope = json.loads(source.recovery_scope_json or "{}")
+            successor_id = scope.get("retry_job_id")
+        except (ValueError, TypeError, AttributeError):
+            return False
+        if not isinstance(successor_id, str) or not successor_id or successor_id == job_id:
+            return False
+        successor = self._repository.get_dispatch(successor_id)
+        return (successor is not None and getattr(successor, "job_id", None) == successor_id
+                and successor.mode == "rabbitmq")
 
     async def run(self) -> None:
         self.recover_startup_queued()

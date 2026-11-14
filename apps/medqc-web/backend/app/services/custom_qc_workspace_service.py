@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import hashlib
 import json
 import re
 import uuid
@@ -1095,21 +1096,32 @@ def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _safe_failed_task_diagnostic(item: Dict[str, Any]) -> Dict[str, str]:
+def _safe_retry_lineage(filters: Mapping[str, Any]) -> Dict[str, Any]:
+    raw = filters.get("retry_lineage")
+    if not isinstance(raw, dict) or raw.get("schema_version") != "qc-retry-lineage-v1":
+        return {}
+    source = _safe_text(raw.get("source_job_id"))
+    root = _safe_text(raw.get("root_job_id"))
+    if not all(re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value) for value in (source, root)):
+        return {}
+    return {"source_job_id": source, "root_job_id": root,
+            "source_attempt": _safe_text(raw.get("source_attempt"))
+            if re.fullmatch(r"[0-9a-f]{32}", _safe_text(raw.get("source_attempt"))) else "",
+            "attempt": max(1, _to_int(raw.get("attempt"), 1))}
+
+
+def _safe_failed_task_diagnostic(item: Dict[str, Any]) -> Dict[str, Any]:
     """保留已定义的失败码与阶段；不返回原始异常、供应商响应或任意文本。"""
     from .material_admission import MESSAGES
 
-    allowed_codes = set(MESSAGES) | {
-        "model_transport_error", "model_timeout", "model_invalid_output",
-        "model_parse_error", "record_execution_failed",
-    }
+    from .qc_execution_errors import safe_failure_projection
     code = _safe_text(item.get("reason_code"))
     if not code and item.get("error_phase") == "material_capture":
         # 历史取材失败以 error 保存受控码，只允许精确命中材料错误合同。
         candidate = _safe_text(item.get("error"))
         if candidate in MESSAGES:
             code = candidate
-    diagnostic = {"reason_code": code if code in allowed_codes else "record_execution_failed"}
+    diagnostic = safe_failure_projection({**item, "reason_code": code})
     phase = _safe_text(item.get("error_phase"))
     if phase in {"material_capture", "material_assembly", "evaluate_document", "result_write"}:
         diagnostic["error_phase"] = phase
@@ -1457,8 +1469,16 @@ def project_customer_safe_batch_job(
     execution_scope_hash = _safe_text(filters.get("execution_scope_hash")).lower()
     if not re.fullmatch(r"[0-9a-f]{64}", execution_scope_hash):
         execution_scope_hash = ""
+    retry_lineage = _safe_retry_lineage(filters)
+    if isinstance(raw_summary.get("execution_error"), dict):
+        from .qc_execution_errors import safe_failure_projection
+        safe_summary["execution_error"] = safe_failure_projection(raw_summary["execution_error"])
     return {
         "schema_version": "customer-qc-job-v1",
+        "retry_lineage": retry_lineage or None,
+        "retry_of_job_id": retry_lineage.get("source_job_id", ""),
+        "retry_root_job_id": retry_lineage.get("root_job_id", ""),
+        "retry_attempt": retry_lineage.get("attempt", 0),
         "acceptance_only_rule_ids": acceptance_rule_ids,
         "id": _safe_text(job.get("id")),
         "job_id": _safe_text(job.get("id")),
@@ -3210,6 +3230,8 @@ class CustomQCWorkspaceService:
             normalized_run_mode = _normalize_run_mode(run_mode)
             normalized_job_kind = _safe_text(job_kind, "leaf").lower() or "leaf"
             base_filters = dict(filters or {})
+            if "retry_lineage" in base_filters:
+                raise ValueError("retry_lineage 由任务服务生成，调用方不得注入")
             if record_refs:
                 base_filters["record_refs"]=[ref.as_dict() for ref in normalize_case_refs(record_refs)]
             from .clinical_sources import freeze
@@ -5154,6 +5176,126 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def _create_retry_attempt(
+        self, session: Session, *, row: Mapping[str, Any], current: Dict[str, Any],
+        retry_scope_result: Optional[tuple[Dict[str, Any], List[Dict[str, Any]]]],
+        automatic: bool, retry_delay_seconds: float,
+        task_runtime_snapshot: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """新尝试只保存本轮产出；原任务、材料及结果信封保持不变。"""
+        if _safe_text(current.get("job_kind")) == "parent":
+            raise ValueError("new_task_required_preserve_history：父任务请新建，原任务、结果与材料已保留")
+        from .material_job_lineage import resolve_material_job_id
+        def lookup_material_job(candidate_id):
+            candidate = session.execute(select(self._batch_job_table).where(
+                self._batch_job_table.c.id == candidate_id)).mappings().first()
+            return dict(candidate) if candidate is not None else None
+        material_job_id = resolve_material_job_id(row, lookup_material_job)
+        source_id = str(row["id"])
+        source_hash = hashlib.sha256(str(row["filters_json"]).encode("utf-8")).hexdigest()
+        # 同一个源尝试只能派生一个后继；再次重试应针对返回的新任务。
+        new_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"medqc:retry:v1:{source_id}:{source_hash}"))
+        existing = session.execute(select(self._batch_job_table).where(
+            self._batch_job_table.c.id == new_id)).mappings().first()
+        if existing:
+            if existing["created_by"] != row["created_by"]:
+                raise ValueError("retry_identity_owner_mismatch")
+            return {**_row_to_batch_job(dict(existing)), "idempotency_reused": True}
+        filters = dict(current["filters"])
+        previous = filters.get("retry_lineage")
+        previous = previous or {}
+        lineage = {
+            "schema_version": "qc-retry-lineage-v1",
+            "source_job_id": source_id,
+            "root_job_id": previous.get("root_job_id") or source_id,
+            "material_job_id": material_job_id,
+            "source_attempt": _safe_json_loads(row["filters_json"], {}).get(LX0609_ATTEMPT_FILTER_KEY) or "",
+            "source_filters_sha256": source_hash,
+            "attempt": max(0, _to_int(previous.get("attempt"))) + 1,
+            "trigger": "automatic" if automatic else "manual",
+        }
+        filters["retry_lineage"] = lineage
+        filters[LX0609_ATTEMPT_FILTER_KEY] = uuid.uuid4().hex
+        filters.pop(LX0609_LEASE_FILTER_KEY, None)
+        filters.pop("parent_job_id", None)
+        # 重试不是新的每日计划回执，也不继承旧聚合/范围哈希。
+        filters.pop("daily_schedule", None)
+        filters.pop("execution_scope_hash", None)
+        filters.pop("deduplicated", None)
+        if task_runtime_snapshot is not None:
+            filters[LX0609_TASK_RUNTIME_FILTER_KEY] = task_runtime_snapshot
+        if retry_scope_result is not None:
+            retry_scope, _ = retry_scope_result
+            if not set(retry_scope["rule_ids"]).issubset(filters["scoped_customer_rule_ids"]):
+                raise ValueError("失败规则超出原任务冻结范围，请新建质控任务")
+            filters[FAILED_RULE_RETRY_FILTER_KEY] = retry_scope
+            filters["record_refs"] = retry_scope["record_refs"]
+            filters["rule_ids"] = retry_scope["rule_ids"]
+            filters["selected_rule_ids"] = retry_scope["rule_ids"]
+            filters["record_rule_map"] = retry_scope["record_rule_map"]
+            filters["scoped_customer_rule_ids"] = retry_scope["rule_ids"]
+            filters["paused_customer_rule_ids"] = []
+            filters["gate_only_customer_rule_ids"] = []
+        else:
+            filters.pop(FAILED_RULE_RETRY_FILTER_KEY, None)
+        refs = normalize_case_refs(filters.get("record_refs") or [])
+        if not refs:
+            raise ValueError("重试任务缺少原始病历三坐标，请新建质控任务")
+        from .luxian_0609.phase_scope import get_luxian_0609_phase_scope
+        paused_ids = []
+        for rule_id in filters["scoped_customer_rule_ids"]:
+            phase = get_luxian_0609_phase_scope(rule_id)
+            if phase is None:
+                raise ValueError("重试规则范围无法恢复，请新建质控任务")
+            if phase.phase_status == "pending_definition":
+                paused_ids.append(rule_id)
+        if retry_scope_result is not None and len(paused_ids) == len(filters["scoped_customer_rule_ids"]):
+            raise ValueError("retry_rule_scope_paused：失败规则当前已暂停，请按当前可执行范围新建任务")
+        # 保留交付范围，暂停项由当前执行器交付“未启用”，不能借旧冻结范围执行。
+        filters["paused_customer_rule_ids"] = paused_ids
+        now = _now_utc()
+        rule_count = len(filters["scoped_customer_rule_ids"])
+        summary = {"rule_count": rule_count, "total_records": len(refs),
+                   "retry_status": "queued", "retry_attempt": lineage["attempt"],
+                   "retry_trigger": lineage["trigger"],
+                   "progress": {"step_key": "queued", "rule_index": 0,
+                                "rule_count": rule_count, "processed_records": 0, "total_records": len(refs)},
+                   "updated_at": now.isoformat()}
+        auto_plan = (current.get("summary") or {}).get("automatic_failed_rule_retry")
+        if automatic and isinstance(auto_plan, dict):
+            summary["automatic_failed_rule_retry"] = {**auto_plan, "status": "queued", "queued_at": now.isoformat()}
+        payload = dict(row)
+        payload.update(id=new_id, filters_json=_safe_json_dumps(filters), status="queued",
+                       record_ids_json=_safe_json_dumps([ref.visit_id for ref in refs]),
+                       summary_json=_safe_json_dumps(summary), items_json=None, failed_records_json=None,
+                       error_message=None, created_at=now, updated_at=now, started_at=None, finished_at=None,
+                       total_records=len(refs), success_count=0, failed_count=0, issue_records=0,
+                       compliant_records=0, total_tokens=0, total_processing_time=0.0,
+                       job_kind="leaf", parent_job_id=None, child_job_ids_json="[]", child_summary_json="{}")
+        try:
+            session.execute(self._batch_job_table.insert().values(**payload))
+        except sa.exc.IntegrityError:
+            # SQLite无行锁；唯一主键同样裁决并发创建，失败事务不得留下半个attempt。
+            session.rollback()
+            winner = session.execute(select(self._batch_job_table).where(and_(
+                self._batch_job_table.c.id == new_id,
+                self._batch_job_table.c.created_by == row["created_by"],
+            ))).mappings().first()
+            if winner is None:
+                raise
+            return {**_row_to_batch_job(dict(winner)), "idempotency_reused": True}
+        if qc_dispatch_mode_from_filters(filters) == "rabbitmq":
+            self._qc_dispatch.assert_ready(session)
+            self._qc_dispatch.add_dispatch(session, job_id=new_id, mode="rabbitmq", enqueue_leaf=True,
+                                           available_at=now + timedelta(seconds=retry_delay_seconds))
+            source_dispatch = self._qc_dispatch.get_dispatch(source_id, session=session)
+            self._qc_dispatch.link_retry_successor(
+                session, source_job_id=source_id, source_generation=source_dispatch.generation,
+                successor_job_id=new_id, automatic=automatic,
+            )
+        session.commit()
+        return _row_to_batch_job(payload)
+
     def retry_batch_job(
         self,
         *,
@@ -5162,6 +5304,7 @@ class CustomQCWorkspaceService:
         automatic: bool = False,
         expected_attempt_filters_json: str | None = None,
         retry_delay_seconds: float = 0.0,
+        task_runtime_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         if retry_delay_seconds < 0:
             raise ValueError("retry_delay_seconds must not be negative")
@@ -5170,7 +5313,7 @@ class CustomQCWorkspaceService:
             row = session.execute(
                 select(self._batch_job_table).where(
                     and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
-                )
+                ).with_for_update()
             ).mappings().first()
             if not row:
                 return None
@@ -5191,6 +5334,9 @@ class CustomQCWorkspaceService:
                     raise ValueError("MQ任务持久调度身份损坏，禁止回退legacy重试")
             current = _row_to_batch_job(dict(row))
             formal_0609 = (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
+            if formal_0609:
+                from .saved_result_access import require_retry_record_institutes
+                require_retry_record_institutes(created_by, current["filters"].get("record_refs"))
             dispatch_mode = (
                 persisted_mode
                 if formal_0609
@@ -5214,21 +5360,19 @@ class CustomQCWorkspaceService:
             total_records = int(current.get("total_records") or 0)
             now = _now_utc()
             retry_scope_result = build_failed_rule_retry_scope(current)
+            if automatic and formal_0609 and retry_scope_result is None:
+                return None
             if automatic and retry_scope_result is not None:
                 retry_scope_result = build_failed_rule_retry_scope(current, automatic_only=True)
                 if retry_scope_result is None:
                     return None
-            if formal_0609 and dispatch_mode == "legacy" and (
-                retry_scope_result is None
-                or str(current.get("job_kind") or "").strip().lower() == "parent"
-            ):
-                # 全量 reset 会清空同一 job 的历史结果；父重试还会重置全部子任务。
-                # 没有独立历史 attempt 存储前，必须经现有创建入口取得新任务身份。
-                # 在任何 UPDATE、材料操作或调度前拒绝，精确叶子失败补跑保持原合同。
-                if automatic:
+            if formal_0609:
+                if automatic and str(current.get("job_kind") or "").lower() == "parent":
                     return None
-                raise ValueError(
-                    "new_task_required_preserve_history：请新建质控任务，原任务、结果与材料已保留"
+                return self._create_retry_attempt(
+                    session, row=row, current=current, retry_scope_result=retry_scope_result,
+                    automatic=automatic, retry_delay_seconds=retry_delay_seconds,
+                    task_runtime_snapshot=task_runtime_snapshot,
                 )
             if (
                 dispatch_record is not None
@@ -6308,6 +6452,7 @@ class CustomQCWorkspaceService:
     def fail_batch_job(
         self, *, job_id: str, error_message: str,
         attempt_filters_json: str | None = None, queued_only: bool = False,
+        execution_error: Optional[Mapping[str, Any]] = None,
         expected_queued_filters_json: str | None = None,
     ) -> None:
         session = _session()
@@ -6332,6 +6477,9 @@ class CustomQCWorkspaceService:
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
                 current_summary = {}
+            if execution_error is not None:
+                from .qc_execution_errors import safe_failure_projection
+                current_summary["execution_error"] = safe_failure_projection(execution_error)
             failed_running_luxian_attempt = (
                 row.get("status") == "running"
                 and (_safe_json_loads(row.get("filters_json"), {}) or {}).get("rule_set_key")

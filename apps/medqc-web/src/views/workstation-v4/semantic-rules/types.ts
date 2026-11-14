@@ -182,6 +182,7 @@ export interface Luxian0609ReviewReport {
 }
 
 export interface SichuanBatchJobSummary {
+  execution_error?: { reason_code: string; error_category: string; retryable: boolean }
   material_failure?: { code: string; stage: 'material_capture'; message: string }
   material_failed_record_count?: number
   result_count?: number
@@ -504,6 +505,8 @@ export interface SichuanBatchIssueItem {
 }
 
 export interface SichuanBatchFailedItem {
+  error_category?: string
+  retryable?: boolean
   rule_job_id?: string
   rule_id?: string
   record_id?: string
@@ -605,6 +608,7 @@ export interface SichuanBatchJobResultTrace {
 }
 
 export interface SichuanBatchJob {
+  retry_lineage?: import('@/utils/batchJobRetryIdentity').BatchJobRetryLineage | null
   acceptance_only_rule_ids?: string[]
   id: string
   read_only?: boolean

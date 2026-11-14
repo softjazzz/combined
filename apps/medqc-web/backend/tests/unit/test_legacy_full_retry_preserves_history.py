@@ -1,4 +1,4 @@
-"""无精确规则范围的旧任务不得原地清空；仅合成内存事务。"""
+"""独立重试身份保留旧任务快照；仅合成内存事务。"""
 
 import pytest
 import sqlalchemy as sa
@@ -38,11 +38,19 @@ def test_full_retry_keeps_original_task_envelope_and_material(canonical_storage,
     arguments = dict(job_id="rerun-job", created_by="tester", automatic=automatic)
     if automatic:
         arguments["expected_attempt_filters_json"] = before_jobs[0]["filters_json"]
-        assert service.retry_batch_job(**arguments) is None
-    else:
-        with pytest.raises(ValueError, match="new_task_required_preserve_history"):
-            service.retry_batch_job(**arguments)
-    assert _rows(engine, jobs) == before_jobs
+    retried = service.retry_batch_job(**arguments)
+    if automatic:
+        assert retried is None
+        assert _rows(engine, jobs) == before_jobs
+        assert _rows(engine, envelopes) == before_envelopes
+        assert {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before_material
+        return
+    assert retried["id"] != "rerun-job"
+    assert retried["items"] == []
+    assert retried["failed_records"] == []
+    assert retried["success_count"] == 0
+    assert retried["filters"]["retry_lineage"]["material_job_id"] == "rerun-job"
+    assert [row for row in _rows(engine, jobs) if row["id"] == "rerun-job"] == before_jobs
     assert _rows(engine, envelopes) == before_envelopes
     assert {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before_material
 
@@ -78,21 +86,28 @@ def test_parent_retry_cannot_reset_children_even_with_exact_failed_scope(canonic
 
 
 @pytest.mark.asyncio
-async def test_full_retry_route_returns_controlled_conflict_without_submission(canonical_storage, monkeypatch):
-    from fastapi import HTTPException, Request
+async def test_full_retry_route_submits_only_new_identity_once(canonical_storage, monkeypatch):
+    from fastapi import Request
     from app.routers import qc_sichuan
     service, engine, jobs, envelopes = canonical_storage
     _complete_full_run(service)
     before_jobs, before_envelopes = _rows(engine, jobs), _rows(engine, envelopes)
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: service)
-    monkeypatch.setattr(qc_sichuan, "submit_detached_task",
-                        lambda *_args, **_kwargs: pytest.fail("被拒重试不得提交执行"))
-    with pytest.raises(HTTPException) as caught:
-        await qc_sichuan.retry_workspace_batch_job(
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", AsyncMock(return_value=object()))
+    monkeypatch.setattr(qc_sichuan, "capture_luxian_0609_task_runtime", lambda _: {"synthetic": "new-model"})
+    submitted = []
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args: submitted.append(args))
+    for _ in range(2):
+        response = await qc_sichuan.retry_workspace_batch_job(
             Request({"type": "http", "method": "POST", "path": "/", "headers": []}),
             job_id="rerun-job", current_user={"id": "tester"},
         )
-    assert caught.value.status_code == 409
-    assert "new_task_required_preserve_history" in caught.value.detail
-    assert _rows(engine, jobs) == before_jobs
+    assert len(submitted) == 1
+    new_id = submitted[0][-1]
+    assert new_id != "rerun-job"
+    assert response["data"]["id"] == new_id
+    assert response["data"]["retry_of_job_id"] == "rerun-job"
+    assert service.get_batch_job(job_id=new_id, created_by="tester")["filters"]["lx0609_task_runtime"] == {"synthetic": "new-model"}
+    assert [row for row in _rows(engine, jobs) if row["id"] == "rerun-job"] == before_jobs
     assert _rows(engine, envelopes) == before_envelopes
