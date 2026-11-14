@@ -73,7 +73,7 @@ def _session(
 ):
     source_reason_codes = source_reason_codes or {}
     bloodtrans_query_version = resolve_luxian_0609_physical_source_entry(
-        "mr_bloodtrans"
+        "bloodtrans_record"
     ).query_version
     query_versions = {
         "inpat_registration": resolve_luxian_0609_physical_source_entry(
@@ -88,7 +88,7 @@ def _session(
         "senior_course_record": "snapshot-provider-senior_course_record-v1",
         "postsurg_firstcourse_record": "snapshot-provider-postsurg_firstcourse_record-v1",
         "mr_surgery": "snapshot-provider-surgery_record-v2",
-        "surgery_record": "snapshot-provider-surgery_record-v2",
+        "surgery_record": resolve_luxian_0609_physical_source_entry("surgery_record").query_version,
         "anesthesia_record": "snapshot-provider-anesthesia_record-v1",
         "consultation_record": "snapshot-provider-consultation_record-v1",
         "handoff_record": "snapshot-provider-handoff_record-v1",
@@ -103,7 +103,7 @@ def _session(
         # 063 的病案首页出院/死亡诊断决策支持来源；保持与旧 diagnosis
         # 兼容夹具独立，避免两份来源在测试中被隐式合并。
         **(
-            {"mr_diagnosis": resolve_luxian_0609_physical_source_entry("mr_diagnosis").query_version}
+            {"mr_diagnosis": "snapshot-provider-mr_diagnosis-v2"}
             if "mr_diagnosis" in rows_by_source
             else {}
         ),
@@ -115,7 +115,7 @@ def _session(
         "discharge_record_diagnosis": resolve_luxian_0609_physical_source_entry(
             "discharge_record_diagnosis"
         ).query_version,
-        "mr_bloodtrans": bloodtrans_query_version,
+        "mr_bloodtrans": "snapshot-provider-bloodtrans_record-v2",
         "bloodtrans_record": bloodtrans_query_version,
         "evaluation_context.horizon": "snapshot-provider-evaluation_context.horizon-v1",
         # 08-01-05 结构化住院事件来源（病理结果、抢救）；夹具默认可读且为空。

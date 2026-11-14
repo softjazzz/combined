@@ -12,6 +12,7 @@ from ..database import clinical_connection as clinical
 def capture(*, identity, cancellation_check=None, after_table_read=None):
     from .bundles import assembly, current_view, emr_view
     from .luxian_0609 import source_evidence_reader as reader
+    from .luxian_0609.clinical_material_policy import CLINICAL_MATERIAL_POLICY_VERSION, clinical_source_keys
     from .sample_programmatic_evidence import capture_programmatic_sources, _SOURCE_TABLES
     from .validation_material_source import material_source_schema, is_material_copy
 
@@ -23,7 +24,8 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
     if engine is None:
         raise material.MaterialSnapshotError("material_source_unavailable")
     state = {"protocol": material.PROTOCOL, "identity": list(identity), "binding": clinical.source_binding(),
-             "schema": schema, "columns": {}, "tables": {}, "queries": {}}
+             "schema": schema, "columns": {}, "tables": {}, "queries": {},
+             "clinical_material_policy": CLINICAL_MATERIAL_POLICY_VERSION}
     started = time.monotonic()
     last_cancel_check = 0.0
 
@@ -43,7 +45,7 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
             if clinical.configured() and schema == "cdm":
                 from .clinical_source_contract import inspect_source
                 from .automatic_material_scope import PROTOCOL, validate_read_contract
-                source_statuses = validate_read_contract(inspect_source(connection, check_rows=False))
+                source_statuses = validate_read_contract(inspect_source(connection, check_rows=False, primary_documents_only=True))
                 state["automatic_material"] = {"protocol": PROTOCOL, "sources": {}}
             from . import daily_material_projection as daily
             if daily.enabled():
@@ -54,6 +56,7 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
             with material.recording(state):
                 limits = assembly._material_limits_for_variants(scenes=tuple(assembly._SCENE_DOC_PRIORITY), domains=tuple(assembly._DOMAIN_DOC_PRIORITY))
                 names = set(limits) | set(reader._NATIVE_SOURCE_FIELDS) | set(_SOURCE_TABLES) | {"mr", "mr_diagnosis", "mr_cost", "mr_surgery", "diagnosis", "inpat_registration"}
+                names = set(clinical_source_keys(names))
                 inspector = inspect(connection)
                 # 目录元数据也来自本事务；缺表不与权限错误混为一谈。
                 for table in sorted(names):
@@ -103,7 +106,7 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                     (reader.read_luxian_0609_native_source_rows, tuple(reader._NATIVE_SOURCE_FIELDS)),
                     (reader.read_luxian_0609_runtime_source_rows, ("surgery_record", "mr_surgery", "presurg_summary", "surgery_safecheck_record")),
                 ):
-                    for key in keys:
+                    for key in clinical_source_keys(keys):
                         check()
                         try:
                             function(source_key=key, **arguments)

@@ -40,7 +40,7 @@ from .surgery_procedure_catalog import (
 
 RULE_ID = "LX0609-04-01-03"
 LEGACY_RULE_IDS = ("SC-083", "CL-108")
-_SURGERY_TRIGGER_SOURCE_KEYS = ("surgery_record", "mr_surgery")
+_SURGERY_TRIGGER_SOURCE_KEYS = ("surgery_record",)
 _COMPLETED_MDT_PATTERN = re.compile(
     r"多学科会诊记录|经多学科(?:讨论|会诊)[^。；]{0,160}(?:一致认为|讨论后|会诊后)|"
     r"MDT讨论[^。；]{0,160}(?:一致认为|可手术|结论)",
@@ -220,8 +220,7 @@ def _formal_level4_surgeries(
 ) -> tuple[tuple[tuple[Mapping[str, Any], datetime], ...], bool]:
     """从正式手术记录取四级手术及其开始时间。
 
-    运行病历质控时病案首页多未生成，手术时间与等级须先取运行文书；首页只作
-    回退。返回（有严格开始时间的四级手术，是否存在缺开始时间的四级手术）。
+    返回（有严格开始时间的四级手术，是否存在缺开始时间的四级手术）。
     """
 
     observation = next(
@@ -589,7 +588,7 @@ def _emergency_exception_rows(
     """
 
     candidates: list[tuple[tuple[str, ...], str]] = []
-    for source_key in ("presurg_summary", "mr_surgery"):
+    for source_key in ("presurg_summary", "surgery_record"):
         try:
             rows = materials.rows(source_key)
         except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
@@ -937,8 +936,8 @@ async def execute_luxian_0609_native_mdt_rule(
                 blocker_refs = _selected_material_fact_refs(
                     materials=evidence_materials,
                     snapshot=evidence_snapshot,
-                    source_key="mr_surgery",
-                    rows=tuple(evidence_materials.rows("mr_surgery")),
+                    source_key="surgery_record",
+                    rows=tuple(evidence_materials.rows("surgery_record")),
                     fallback_to_source=True,
                 )
             except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
@@ -1072,8 +1071,8 @@ async def execute_luxian_0609_native_mdt_rule(
                             *_selected_material_fact_refs(
                                 materials=evidence_materials,
                                 snapshot=evidence_snapshot,
-                                source_key="mr_surgery",
-                                rows=tuple(evidence_materials.rows("mr_surgery")),
+                                source_key="surgery_record",
+                                rows=tuple(evidence_materials.rows("surgery_record")),
                                 fallback_to_source=True,
                             ),
                             *exemption_refs,
@@ -1094,10 +1093,10 @@ async def execute_luxian_0609_native_mdt_rule(
         )
     try:
         surgeries = (
-            tuple(evidence_materials.rows("mr_surgery"))
+            tuple(evidence_materials.rows("surgery_record"))
             if evidence_materials is not None
             else read_luxian_0609_native_source_rows(
-                source_key="mr_surgery",
+                source_key="surgery_record",
                 institute_id=institute_id,
                 patient_id=patient_id,
                 visit_id=visit_id,
@@ -1130,19 +1129,6 @@ async def execute_luxian_0609_native_mdt_rule(
             source_key="surgery_record",
             rows=tuple(level4),
             fallback_to_source=True,
-        ) + _selected_material_fact_refs(
-            # 首页若已生成且能按编码/名称对应同一手术，一并作为触发证据。
-            materials=evidence_materials,
-            snapshot=evidence_snapshot,
-            source_key="mr_surgery",
-            rows=tuple(
-                target
-                for target in surgeries
-                if any(
-                    _formal_surgery_matches_target(target=target, formal=formal)
-                    for formal in level4
-                )
-            ),
         )
         level4_session_times = {start for _, start in formal_level4}
         if len(level4_session_times) > 1:
@@ -1157,7 +1143,7 @@ async def execute_luxian_0609_native_mdt_rule(
         performed = [
             row
             for row in surgeries
-            if _parse_datetime(row.get("surgery_begin_datetime")) is not None
+            if _strict_formal_surgery_begin(row) is not None
             and catalog_surgery_state(row) is not False
         ]
         if not performed and formal_level4_untimed:
@@ -1179,7 +1165,7 @@ async def execute_luxian_0609_native_mdt_rule(
                     _selected_material_fact_refs(
                         materials=evidence_materials,
                         snapshot=evidence_snapshot,
-                        source_key="mr_surgery",
+                        source_key="surgery_record",
                         rows=surgeries,
                         fallback_to_source=True,
                     )
@@ -1203,7 +1189,7 @@ async def execute_luxian_0609_native_mdt_rule(
                     _selected_material_fact_refs(
                         materials=evidence_materials,
                         snapshot=evidence_snapshot,
-                        source_key="mr_surgery",
+                        source_key="surgery_record",
                         rows=performed,
                         fallback_to_source=True,
                     )
@@ -1215,7 +1201,7 @@ async def execute_luxian_0609_native_mdt_rule(
             _selected_material_fact_refs(
                 materials=evidence_materials,
                 snapshot=evidence_snapshot,
-                source_key="mr_surgery",
+                source_key="surgery_record",
                 rows=level4,
                 fallback_to_source=True,
             )
@@ -1225,7 +1211,7 @@ async def execute_luxian_0609_native_mdt_rule(
         level4_session_times = {
             start
             for row in level4
-            if (start := _parse_datetime(row.get("surgery_begin_datetime"))) is not None
+            if (start := _strict_formal_surgery_begin(row)) is not None
         }
         if len(level4_session_times) > 1:
             return finish(

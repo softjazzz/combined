@@ -118,7 +118,7 @@ def resolve_surgery_applicability(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore | None = None,
-    source_keys: tuple[str, ...] = ("surgery_record", "mr_surgery"),
+    source_keys: tuple[str, ...] = ("surgery_record",),
 ) -> SurgeryApplicability:
     """统一判断当前就诊是否存在已实施手术。
 
@@ -134,7 +134,7 @@ def resolve_surgery_applicability(
     if (
         not source_keys
         or len(source_keys) != len(set(source_keys))
-        or not set(source_keys).issubset({"surgery_record", "mr_surgery"})
+        or not set(source_keys).issubset({"surgery_record"})
     ):
         raise ValueError("unsupported surgery applicability source scope")
     observations = {
@@ -152,6 +152,28 @@ def resolve_surgery_applicability(
         if rows is not None:
             performed_rows.extend(_performed_rows(source_key=source_key, rows=rows))
 
+    # 原始记录的严格时间可产生通用实施事实；若同一文书已被院内目录
+    # 明确认定为非手术操作，该事实不能反过来绕过原行的目录分类。
+    non_surgical_documents = {
+        (source_key, str(row["document_id"]))
+        for source_key, rows in rows_by_source.items()
+        for row in (rows or ())
+        if row.get("document_id")
+        and (classification := classify_surgery_row(row)) is not None
+        and not classification.is_surgery
+    }
+    non_surgical_source_hashes = {
+        (source_key, observations[source_key].snapshot_ref.removeprefix("sha256:"))
+        for source_key, rows in rows_by_source.items()
+        if rows and source_key in observations
+        and observations[source_key].query_state is QueryStatus.AVAILABLE
+        and observations[source_key].completeness is SourceCompleteness.COMPLETE
+        and all(
+            (classification := classify_surgery_row(row)) is not None
+            and not classification.is_surgery
+            for row in rows
+        )
+    }
     performed_facts = tuple(
         fact
         for fact in snapshot.facts
@@ -159,14 +181,11 @@ def resolve_surgery_applicability(
         and fact.assertion is Assertion.AFFIRMED
         and fact.event_status is EventStatus.PERFORMED
         and fact.source_key in source_keys
-        and (
-            fact.source_key != "mr_surgery"
-            or bool(
-                _performed_rows(
-                    source_key="mr_surgery",
-                    rows=rows_by_source.get("mr_surgery") or (),
-                )
-            )
+        and (fact.source_key, fact.source_document_id) not in non_surgical_documents
+        and not (
+            not fact.source_document_id
+            and fact.extractor_version == "snapshot-provider-surgery-record-v1"
+            and (fact.source_key, fact.source_snapshot_hash) in non_surgical_source_hashes
         )
     )
     if performed_rows or performed_facts:
@@ -221,19 +240,6 @@ def resolve_surgery_applicability(
         )
 
     all_rows = tuple(row for rows in rows_by_source.values() for row in (rows or ()))
-    surgery_record_rows = rows_by_source.get("surgery_record", ())
-    mr_surgery_rows = rows_by_source.get("mr_surgery", ())
-    if (
-        surgery_record_rows == ()
-        and mr_surgery_rows
-        and not any(has_qualified_traditional_surgery_row(row) for row in mr_surgery_rows)
-    ):
-        return SurgeryApplicability(
-            "not_applicable",
-            "performed_event_absent",
-            "non_surgical_operation",
-            evidence_refs=refs,
-        )
     classifications = tuple(
         item for row in all_rows if (item := classify_surgery_row(row)) is not None
     )

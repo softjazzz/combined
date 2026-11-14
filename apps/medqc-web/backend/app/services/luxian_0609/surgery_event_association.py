@@ -254,78 +254,11 @@ def count_associated_performed_surgery_events(
 ) -> tuple[int | None, str]:
     """返回可逐台计数的已实施手术数及无法计数时的受控原因。
 
-    单来源先按稳定主键去重，再按同一开始时间合并组件。两来源仍须证明
-    事件对应，禁止用同日掩盖不同开始时间或来源日期冲突。
+    正式手术记录先按稳定主键去重，再按同一开始时间合并组件。
     """
 
-    try:
-        surgery_record_rows = tuple(materials.rows("surgery_record"))
-    except EvidenceMaterialTruncated:
-        return None, "source_truncated"
-    except EvidenceMaterialUnavailable:
-        return None, "source_unavailable"
-
-    surgery_record_events = tuple(
-        row
-        for row in surgery_record_rows
-        if has_trusted_performed_surgery(source_key="surgery_record", row=row)
-    )
-    try:
-        mr_surgery_rows = tuple(materials.rows("mr_surgery"))
-    except EvidenceMaterialTruncated:
-        return None, "source_truncated"
-    except EvidenceMaterialUnavailable:
-        return None, "source_unavailable"
-    qualified_mr_surgery_rows = tuple(
-        row
-        for row in mr_surgery_rows
-        if has_qualified_traditional_surgery_row(row)
-    )
-    mr_surgery_events = tuple(
-        row
-        for row in qualified_mr_surgery_rows
-        if has_trusted_performed_surgery(source_key="mr_surgery", row=row)
-    )
-
-    surgery_records = _deduplicated_source_events(
-        "surgery_record",
-        _remove_duplicate_time_shells(surgery_record_events),
-    )
-    mr_surgeries = _deduplicated_source_events("mr_surgery", mr_surgery_events)
-    if surgery_records is None or mr_surgeries is None:
-        return None, "association_failed"
-    if surgery_records and mr_surgeries:
-        surgery_records = _remove_confirmed_unmatched_sparse_time_shells(
-            surgery_records, mr_surgeries
-        )
-    record_groups = group_surgery_rows_by_start("surgery_record", surgery_records)
-    mr_groups = group_surgery_rows_by_start("mr_surgery", mr_surgeries)
-    if record_groups is None or mr_groups is None:
-        return None, "association_failed"
-    surgery_records = tuple(merge_surgery_component_rows(group) for group in record_groups)
-    mr_surgeries = tuple(merge_surgery_component_rows(group) for group in mr_groups)
-    trusted_mr_ids = {
-        _clean(row.get("surgery_id")) for row in mr_surgery_events
-    }
-    if any(
-        not has_trusted_performed_surgery(source_key="mr_surgery", row=row)
-        and not (
-            (identity := _clean(row.get("surgery_id")))
-            and identity in trusted_mr_ids
-        )
-        for row in qualified_mr_surgery_rows
-    ):
-        return None, "association_failed"
-    if not surgery_records:
-        return len(mr_surgeries), ""
-    if not mr_surgeries:
-        return len(surgery_records), ""
-    if _has_strict_cross_source_bijection(surgery_records, mr_surgeries):
-        return len(surgery_records), ""
-
-    if _is_single_composite_event(surgery_records, mr_surgeries):
-        return 1, ""
-    return None, "association_failed"
+    events, reason = build_performed_surgery_events(materials)
+    return (len(events), "") if events is not None else (None, reason)
 
 
 def group_surgery_rows_by_start(
@@ -371,29 +304,8 @@ def merge_surgery_component_rows(
 def build_surgery_document_events(
     materials: Luxian0609EvidenceMaterialStore,
 ) -> tuple[tuple[SurgeryEvent, ...] | None, str]:
-    """029 使用经过跨来源一致性核对的台次；运行期078仍仅读正式手术记录。"""
-    count, reason = count_associated_performed_surgery_events(materials)
-    if count is None:
-        return None, reason
-    events, reason = build_performed_surgery_events(materials)
-    if events is None:
-        return None, reason
-    if len(events) == count:
-        return events, ""
-    rows = tuple(
-        row for row in materials.rows("mr_surgery")
-        if has_qualified_traditional_surgery_row(row)
-        and has_trusted_performed_surgery(source_key="mr_surgery", row=row)
-    )
-    deduplicated = _deduplicated_source_events("mr_surgery", rows)
-    groups = group_surgery_rows_by_start("mr_surgery", deduplicated or ())
-    if groups is None or len(groups) != count:
-        return None, "association_failed"
-    return tuple(
-        SurgeryEvent(event_index=index, source_key="mr_surgery",
-                     row=merge_surgery_component_rows(group), component_rows=group)
-        for index, group in enumerate(groups, start=1)
-    ), ""
+    """029/039/078 共用正式手术记录的实际台次。"""
+    return build_performed_surgery_events(materials)
 
 
 def build_performed_surgery_events(

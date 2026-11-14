@@ -16,7 +16,7 @@ from typing import Any, Mapping
 
 
 LUXIAN_0609_RULE_MASTER_SCHEMA_VERSION = "lx0609-rule-master-v2"
-LUXIAN_0609_RULE_MASTER_VERSION = "2026-09-22-identity-v1"
+LUXIAN_0609_RULE_MASTER_VERSION = "2026-11-14-primary-documents-v1"
 LUXIAN_0609_RULE_DEFINITION_VERSION = "lx0609-defined-scope-2026-09-22-identity-v1"
 
 _MASTER_PATH = (

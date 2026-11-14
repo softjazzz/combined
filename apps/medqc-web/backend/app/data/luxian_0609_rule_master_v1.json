@@ -1,6 +1,6 @@
 {
   "schema_version": "lx0609-rule-master-v2",
-  "master_version": "2026-09-22-identity-v1",
+  "master_version": "2026-11-14-primary-documents-v1",
   "definition_version": "lx0609-defined-scope-2026-09-22-identity-v1",
   "rule_set_key": "luxian_0609_qc_v1",
   "description": "泸县0609客户质控点唯一业务总表。active 表示规则已纳入客户工作台；是否参与当前正式结论由同版本 phase_scope 唯一决定。",
@@ -528,6 +528,9 @@
       "source_document": "出院记录",
       "qc_point": "出院诊断或死亡诊断错填、漏填、顺序错误",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "frontpage_comparison_policy_pending",
+      "pending_definition_note": "当前所有质控以无首页为默认；原首页诊断对照口径暂停，待原始文书判据确认。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《出院记录》质控点执行；新增或变更口径须单独验收。"
     },

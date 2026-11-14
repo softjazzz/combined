@@ -157,6 +157,28 @@ class PerformanceFake:
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
 
 
+CONFIRMED_BODY = "合成已确认原始记录：14:00开始输注红细胞2U，输注完毕。"
+
+
+def add_confirmed_original_record(case):
+    """把旧测试的已确认实施前提显式写入原始文书，不从首页产生事实。"""
+    case["rows"]["bloodtrans_record"].append({"document_id": "synthetic-confirmed-record",
+        "record_time": "2026-06-02 14:00:00", "record_content": CONFIRMED_BODY})
+    case["confirmed_original"] = True
+
+
+class ConfirmedPerformanceFake(PerformanceFake):
+    """冻结标签绑定确切合成正文，支持分批、倒序；不调用产品判断。"""
+    def __init__(self, other_state):
+        super().__init__(other_state)
+        self.other_state = other_state
+
+    async def generate(self, prompt, **kwargs):
+        self.state = ["performed" if doc["body"] == CONFIRMED_BODY else self.other_state
+                      for doc in read_sent_documents(prompt)]
+        return await super().generate(prompt, **kwargs)
+
+
 
 async def run_case(case, reverse=False, *, client_override=None):
     rows = {key: tuple(reversed(value)) if reverse else tuple(value) for key, value in case["rows"].items()}
@@ -169,7 +191,8 @@ async def run_case(case, reverse=False, *, client_override=None):
         selected_rule_ids=(RULE,), institute_id="synthetic-I", patient_id="synthetic-P", visit_id="synthetic-V",
         source_schema=None, created_at="2026-10-08T10:00:00+08:00", row_reader=read,
         additional_source_keys=resolve_legacy_executor_material_source_keys(("extended_document",), selected_rule_ids=(RULE,)))
-    client = client_override if client_override is not None else PerformanceFake(case["state"])
+    client = client_override if client_override is not None else (
+        ConfirmedPerformanceFake(case["state"]) if case.get("confirmed_original") else PerformanceFake(case["state"]))
     execution = await native.execute_luxian_0609_native_extended_document_rules(
         rule_ids=(RULE,), decision_rule_ids=(RULE,), llm_client=client,
         evidence_snapshot=session.snapshot, evidence_materials=session.materials)
@@ -320,17 +343,17 @@ async def test_tc02_invalid_model_output_is_one_call_technical_error(corrupt, ca
 @pytest.mark.asyncio
 @pytest.mark.parametrize("unknown_count", [1, 9])
 @pytest.mark.parametrize("known_nc", [False, True])
-async def test_tc02_known_mr_with_unknown_records_preserves_nc_but_cannot_publish_all_c(unknown_count, known_nc):
+async def test_tc02_known_original_with_unknown_records_preserves_nc_but_cannot_publish_all_c(unknown_count, known_nc):
     case = actual_case()
-    case["rows"]["mr_bloodtrans"] = [{"document_id": "synthetic-actual-MR", "transfution_datetime": "2026-06-02 14:00:00"}]
     case["rows"]["bloodtrans_record"] = [{"document_id": f"synthetic-unknown-{i}", "record_time": "2026-06-02 16:00:00",
                                            "record_content": "本次输血实施信息尚待核实。"} for i in range(unknown_count)]
     if known_nc:
         case["rows"]["labtest_item_report"] = [{"document_id": "synthetic-other-lab",
             "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
-    execution, _, final, client = await run_case(case, client_override=PerformanceFake("unknown"))
+    add_confirmed_original_record(case)
+    execution, _, final, client = await run_case(case, client_override=ConfirmedPerformanceFake("unknown"))
     assert final["status"] == ("non_compliant" if known_nc else "data_gap")
-    # 超过单批 8 份时分批完整核验（9 份为 2 批），不再以 0 次调用直接判范围不足。
+    # 已确认原始文书也参与抽取；2份为1批，10份为2批。
     assert execution.llm_call_count == len(client.calls) == (2 if unknown_count == 9 else 1)
     if known_nc:
         facts = final["customer_display_facts"]
@@ -371,8 +394,6 @@ async def test_tc02_model_exception_is_one_call_technical_error_not_doctor_omiss
 @pytest.mark.parametrize("reverse", [False, True])
 async def test_tc02_confirmed_event_before_stay_tests_stays_nc_at_public_delivery(reverse):
     case = actual_case()
-    case["rows"]["mr_bloodtrans"] = [{"document_id": "synthetic-MR", "transfution_datetime": "2026-06-02 14:00:00"}]
-    case["rows"]["bloodtrans_record"] = []
     for row in case["rows"]["labtest_item_report"]:
         row["report_time"] = "2026-05-31 10:00:00"
     execution, reduced, final, client = await run_case(case, reverse)
@@ -382,7 +403,7 @@ async def test_tc02_confirmed_event_before_stay_tests_stays_nc_at_public_deliver
     assert reduced.final_state.value == "non_compliant"
     assert final["status"] == "non_compliant"
     assert final["customer_display_facts"]["failure_kind"] == "pretransfusion_tests_outside_current_stay"
-    assert execution.llm_call_count == len(client.calls) == 0
+    assert execution.llm_call_count == len(client.calls) == 1
 
 
 @pytest.mark.asyncio
@@ -485,7 +506,7 @@ async def test_tc02_synthetic_sqlite_new_instance_preserves_status_scope_and_rea
     if scenario == "cancel_gap":
         case = deepcopy(CASES[1])
     elif scenario == "known_nc_unknown":
-        case["rows"]["mr_bloodtrans"] = [{"document_id": "synthetic-MR-confirmed", "transfution_datetime": "2026-06-02 14:00:00"}]
+        add_confirmed_original_record(case)
         case["rows"]["bloodtrans_record"][0]["record_content"] = "本次实施事实尚待核实。"
         case["rows"]["labtest_item_report"] = [{"document_id": "synthetic-other-lab",
             "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
@@ -529,8 +550,8 @@ async def test_tc02_synthetic_sqlite_new_instance_preserves_status_scope_and_rea
                 assert dedicated["evidence_excerpt"] == row["record_content"]
                 if scenario == "known_nc_unknown":
                     assert projected["customer_display_facts"]["unconfirmed_record_count"] == 1
-                    confirmed = next(e for e in evidence if e.get("source_ref") == keyed_ref("src", "synthetic-MR-confirmed", hmac_key="test-key"))
-                    assert confirmed["source_type"] == "mr_bloodtrans"
+                    confirmed = next(e for e in evidence if e.get("source_ref") == keyed_ref("src", "synthetic-confirmed-record", hmac_key="test-key"))
+                    assert confirmed["source_type"] == "bloodtrans_record"
                     assert projected["customer_display_facts"]["checked_transfusion_times"] == ["2026-06-02 14:00:00"]
             assert "event_time" not in projected.get("customer_display_facts", {})
             assert execution.llm_call_count == len(client.calls) == 1
@@ -548,10 +569,10 @@ async def test_tc02_store_rejects_reserved_count_status_or_type_before_persistin
     from app.services.qc_workspace.canonical_result_store import CanonicalResultStore, envelope_item_from_rule_result
 
     case = actual_case()
-    case["rows"]["mr_bloodtrans"] = [{"document_id": "synthetic-actual-MR", "transfution_datetime": "2026-06-02 14:00:00"}]
     case["rows"]["labtest_item_report"] = [{"document_id": "synthetic-other-lab",
             "item_name": "血红蛋白", "result": "80", "report_datetime": "2026-06-01 10:00:00"}]
     case["state"] = "unknown"
+    add_confirmed_original_record(case)
     _, _, final, _ = await run_case(case)
     assert final["status"] == "non_compliant"
     item = {**final, "status": status, "is_compliant": True if status == "compliant" else False if status == "non_compliant" else None,
@@ -599,33 +620,15 @@ async def test_tc02_no_confirmed_event_refs_only_consumed_dedicated_materials(st
 @pytest.mark.asyncio
 @pytest.mark.parametrize("state", ["cancel", "unknown"])
 @pytest.mark.parametrize("reverse", [False, True])
-async def test_tc02_known_mr_keeps_evaluated_registration_and_lab_refs(state, reverse):
+async def test_tc02_known_original_keeps_only_evaluated_original_refs(state, reverse):
     case = actual_case()
     case["state"] = state
-    case["rows"]["mr_bloodtrans"] = [{"document_id": "synthetic-actual-MR", "transfution_datetime": "2026-06-02 14:00:00"}]
+    add_confirmed_original_record(case)
     execution, _, final, client = await run_case(case, reverse)
-    expected = {ref for source, rows in case["rows"].items()
+    expected = {ref for source, rows in case["rows"].items() if source != "mr_bloodtrans"
                 for ref in build_material_document_refs(source, rows)}
     assert len(expected) == 12
-    # 旧已确认实施路径保留四来源快照摘要，独立从冻结材料建立快照计算。
-    def read(**kwargs):
-        key = kwargs["source_key"]
-        return SnapshotSourceRows.create(source_key=key, rows=tuple(case["rows"].get(key, ())),
-                                         truncated=False, limit_rows=50)
-
-    expected_session = build_luxian_0609_evidence_read_session(
-        selected_rule_ids=(RULE,), institute_id="synthetic-I", patient_id="synthetic-P", visit_id="synthetic-V",
-        source_schema=None, created_at="2026-10-08T10:00:00+08:00", row_reader=read,
-        additional_source_keys=resolve_legacy_executor_material_source_keys(("extended_document",), selected_rule_ids=(RULE,)))
-    # 07-01-03 的判定来源含入院记录锚点及实施确认用的病程/医嘱；
-    # 已注册且实际读取的来源即使为空，也以快照观察摘要入账。
-    consulted = set(resolve_luxian_0609_decision_support_source_keys((RULE,)))
-    source_refs = {observation.snapshot_ref.removeprefix("sha256:")
-                   for observation in expected_session.snapshot.observations
-                   if observation.source_key in case["rows"] or observation.source_key in consulted}
-    assert len(source_refs) == 9
-    expected |= source_refs
-    assert len(expected) == 21
+    # 精确绑定原始入院/输血/九项文书，不混入未消费的来源摘要或首页。
     assert set(execution.decisions[0].fact_refs) == expected
     assert final["status"] == ("compliant" if state == "cancel" else "data_gap")
     assert execution.llm_call_count == len(client.calls) == 1

@@ -156,7 +156,7 @@ def test_rule_master_preserves_frozen_migration_and_approved_extensions():
         "total": len(raw_rules),
         **{status: statuses[status] for status in ("active", "contract_ready", "pending_definition")},
     }
-    assert LUXIAN_0609_RULE_MASTER_VERSION == payload["master_version"] == "2026-09-22-identity-v1"
+    assert LUXIAN_0609_RULE_MASTER_VERSION == payload["master_version"] == "2026-11-14-primary-documents-v1"
     assert LUXIAN_0609_RULE_DEFINITION_VERSION == payload["definition_version"] == "lx0609-defined-scope-2026-09-22-identity-v1"
 
 

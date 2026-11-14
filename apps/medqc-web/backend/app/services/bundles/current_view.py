@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Any
 
 from . import assembly, emr_view
+from ..luxian_0609.clinical_material_policy import primary_documents_only
 from .. import case_material_snapshot as case_material
 from .frontpage_view import load_frontpage_document
 from ..luxian_0609.basic_timeliness_facts import extract_admission_anchor
@@ -54,7 +55,7 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
         documents = [doc for doc in documents if doc.get("doc_type") != "daily_course_record"]
         documents.extend(daily.project_documents(manifest))
     pdf_candidates = material_review_documents(**identity)
-    frontpage = load_frontpage_document(**identity) if snapshot.rows_by_table.get("mr") else None
+    frontpage = load_frontpage_document(**identity) if not primary_documents_only() and snapshot.rows_by_table.get("mr") else None
     if frontpage is not None:
         # 仅替换当前查看的首页条目；历史 Bundle 和规则输入仍由原有 owner 读取。
         documents = [document for document in documents if document.get("doc_type") != "mr"]

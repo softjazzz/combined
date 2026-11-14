@@ -731,9 +731,7 @@ def build_luxian_0609_evidence_read_session(
                     known_upstream_fact_ids=(),
                 )
             )
-        if source_key == "surgery_record" or (
-            source_key == "mr_surgery" and "LX0609-04-01-02" in selected_rule_ids
-        ):
+        if source_key == "surgery_record":
             performed = any(
                 has_trusted_performed_surgery(source_key=source_key, row=row)
                 for row in result.rows
@@ -776,7 +774,7 @@ def build_luxian_0609_evidence_read_session(
                         known_upstream_fact_ids=(),
                     )
                 )
-        if source_key in {"surgery_record", "mr_surgery", "rescue_record"}:
+        if source_key in {"surgery_record", "rescue_record"}:
             emergency_rescue = _explicit_emergency_rescue_state(result.rows)
             if emergency_rescue is not None:
                 facts.append(

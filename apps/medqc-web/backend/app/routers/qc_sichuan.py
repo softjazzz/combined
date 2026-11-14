@@ -272,14 +272,17 @@ def _build_workspace_record_scene_snapshot(
     records: Sequence[Dict[str, Any]],
     *,
     query_scope: str,
+    primary_documents_only: bool = False,
 ) -> List[Dict[str, str]]:
+    from ..services.luxian_0609.clinical_material_policy import clinical_record_scene
     snapshot: List[Dict[str, str]] = []
     for record in records:
         record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
         if not record_id:
             continue
         record_ref = CaseRef.from_mapping(record)
-        normalized_record_scene = str(record.get("scope") or "").strip().lower()
+        normalized_record_scene = (clinical_record_scene(record) if primary_documents_only
+                                   else str(record.get("scope") or "").strip().lower())
         record_scene = (
             normalized_record_scene
             if normalized_record_scene in {"running", "final"}
@@ -297,12 +300,13 @@ def _build_workspace_record_scene_snapshot(
                     else {}
                 ),
                 "record_scene": record_scene,
-                "resolved_scene": _resolve_workspace_bundle_scene(
-                    query_scope=query_scope,
-                    record_scope=normalized_record_scene,
+                "resolved_scene": (
+                    record_scene if primary_documents_only
+                    else _resolve_workspace_bundle_scene(query_scope=query_scope, record_scope=normalized_record_scene)
                 ),
                 "discharge_snapshot": str(
-                    record.get("discharge_datetime") or record.get("discharge_date") or ""
+                    (record.get("qc_discharge_datetime") if primary_documents_only and "qc_admission_datetime" in record
+                     else record.get("discharge_datetime") or record.get("discharge_date")) or ""
                 ).strip(),
             }
         )
@@ -2139,6 +2143,7 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
     record_scene_snapshot = _build_workspace_record_scene_snapshot(
         records,
         query_scope=normalized_scope,
+        primary_documents_only=is_direct_native_selection,
     )
     task_frozen_date = (
         datetime.now().astimezone().date().isoformat()

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 import app.services.luxian_0609.surgery_applicability as surgery_applicability
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
@@ -64,11 +62,13 @@ def test_no_surgery_is_not_applicable_only_after_complete_empty_sources():
 def test_non_surgical_operation_does_not_trigger_surgery_rules():
     session = _session(
         {
-            "mr_surgery": (
+            "surgery_record": (
                 {
                     "surgery_code": "00.5901",
                     "surgery_name": "冠脉瞬时无波形比值检查[iFR检查]",
-                    "surgery_begin_datetime": datetime(2026, 8, 1, 9, 0),
+                    "document_id": "synthetic-original-0900",
+                    "record_content": "本次原始操作记录，实施经过已记录。",
+                    "surgery_begin_time": "2026-08-01 09:00:00+08:00",
                     "surgical_level": "四级",
                 },
             )
@@ -86,23 +86,29 @@ def test_non_surgical_operation_does_not_trigger_surgery_rules():
 def test_c29_bronchoscopy_operations_do_not_trigger_surgery_rules():
     session = _session(
         {
-            "mr_surgery": (
+            "surgery_record": (
                 {
                     "surgery_code": "33.2200X003",
                     "surgery_name": "纤维支气管镜检查",
-                    "surgery_begin_datetime": datetime(2026, 8, 1, 9, 0),
+                    "document_id": "synthetic-original-0900",
+                    "record_content": "本次原始操作记录，实施经过已记录。",
+                    "surgery_begin_time": "2026-08-01 09:00:00+08:00",
                     "surgical_level": "二级",
                 },
                 {
                     "surgery_code": "33.2403",
                     "surgery_name": "纤维支气管镜检查伴肺泡灌洗术",
-                    "surgery_begin_datetime": datetime(2026, 8, 1, 9, 30),
+                    "document_id": "synthetic-original-0930",
+                    "record_content": "本次支气管镜检查伴肺泡灌洗原始记录。",
+                    "surgery_begin_time": "2026-08-01 09:30:00+08:00",
                     "surgical_level": "二级",
                 },
                 {
                     "surgery_code": "33.2700X001",
                     "surgery_name": "支气管镜下肺活检",
-                    "surgery_begin_datetime": datetime(2026, 8, 1, 10, 0),
+                    "document_id": "synthetic-original-1000",
+                    "record_content": "本次支气管镜下肺活检原始记录。",
+                    "surgery_begin_time": "2026-08-01 10:00:00+08:00",
                     "surgical_level": "二级",
                 },
             )
@@ -121,11 +127,13 @@ def test_c29_bronchoscopy_operations_do_not_trigger_surgery_rules():
 def test_performed_level_four_surgery_uses_approved_catalog_level_and_source():
     session = _session(
         {
-            "mr_surgery": (
+            "surgery_record": (
                 {
                     "surgery_code": "01.2400X013",
                     "surgery_name": "硬脑膜外血肿清除术",
-                    "surgery_begin_datetime": datetime(2026, 8, 1, 9, 0),
+                    "document_id": "synthetic-original-0900",
+                    "record_content": "本次原始操作记录，实施经过已记录。",
+                    "surgery_begin_time": "2026-08-01 09:00:00+08:00",
                 },
             )
         }

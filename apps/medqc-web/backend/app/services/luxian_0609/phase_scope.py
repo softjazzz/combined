@@ -36,6 +36,10 @@ _DEFAULT_PENDING_DEFINITION_MESSAGES = (
 )
 # 暂停原因的客户文案只在此处声明；总表只提供原因码，避免第二份暂停清单。
 _PENDING_DEFINITION_CUSTOMER_MESSAGES: dict[str, tuple[str, str]] = {
+    "frontpage_comparison_policy_pending": (
+        "本质控点原首页对照口径已暂停，当前未启用，未生成合规或问题判定。",
+        "待确认基于原始临床文书的对照口径后再启用；无需为质控补充首页。",
+    ),
     "anesthesia_visit_sources_unavailable_customer_scope": (
         "麻醉术前、术后访视记录数据源暂不可用，本质控点已暂停，未生成合规或问题判定。",
         "待访视记录数据源接入并验收后再启用本质控点；当前不要求据此补写记录。",

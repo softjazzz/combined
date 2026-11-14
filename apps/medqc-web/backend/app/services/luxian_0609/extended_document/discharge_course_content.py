@@ -21,7 +21,6 @@ FIELDS = stages.FIELDS
 EVENT_SOURCES = {
     "surgery_record": ("surgery", "actual_procedure", "实际手术"),
     "pathology_exam_report": ("test", "diagnostic_basis", "病理结果"),
-    "mr_bloodtrans": ("treatment", "major_treatment", "输血"),
     "bloodtrans_record": ("treatment", "major_treatment", "输血"),
     "rescue_record": ("treatment", "major_treatment", "抢救"),
     "transfer_out_record": ("change", "major_change", "转科"),
@@ -34,7 +33,7 @@ EVENT_SOURCES = {
 TRANSFER_DOCUMENT_SOURCES = ("transfer_out_record", "transfer_in_record")
 SOURCES = ("discharge_record", *EVENT_SOURCES, "discharge_record_diagnosis")
 # 历史已发布事实曾含病程来源（旧阶段 B），交付校验仍须可读。
-PUBLISHED_SOURCES = (*SOURCES, "daily_course_record", "senior_course_record")
+PUBLISHED_SOURCES = (*SOURCES, "mr_bloodtrans", "daily_course_record", "senior_course_record")
 PROTOCOL_ATTEMPTS = 2
 MAX_INPUT_CHARS = 60000
 MAX_DOCUMENTS = 80
@@ -68,7 +67,6 @@ def _text(row: Mapping[str, Any], source: str) -> str:
         "discharge_record_diagnosis": ("diagnosis_type", "diagnosis_name", "diagnosis_code"),
         "surgery_record": ("surgery_name", "surgery_process", "record_content", "surgery_begin_time", "surgery_end_time"),
         "pathology_exam_report": ("specimen_name", "diagnosis", "microscope_findings", "record_content", "report_datetime"),
-        "mr_bloodtrans": ("transfuse_variety", "blood_transfusion_volume", "blood_transfusion_unit", "transfution_datetime"),
         "transfer_out_record": ("document_title", "transferout_department", "transferin_department",
                                 "transfer_purpose", "transfer_date", "submit_datetime", "record_content"),
         "transfer_in_record": ("document_title", "transferout_department", "transferin_department",

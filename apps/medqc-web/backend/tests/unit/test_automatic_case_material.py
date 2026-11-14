@@ -666,20 +666,20 @@ def test_empty_generic_body_does_not_erase_valid_structured_field_result():
         assert guard_decision(decision, ("admission_record",)) == decision
 
 
-@pytest.mark.asyncio
-async def test_main_diagnosis_positive_conflict_with_unknown_publication_coverage():
-    from test_luxian_0609_discharge_diagnosis_order import (
-        test_unordered_written_diagnoses_check_main_selection_only,
+def test_main_diagnosis_pending_keeps_saved_positive_conflict_readable():
+    from app.services.luxian_0609.phase_scope import (
+        partition_luxian_0609_rule_scope, build_luxian_0609_pending_definition_result,
     )
+    from app.services.luxian_0609.discharge_result_mapping import validate_published_discharge_facts
 
-    scopes = {
-        key: {"status": "available", "can_judge_clinical_absence": False}
-        for key in ("diagnosis", "discharge_record", "discharge_record_diagnosis")
-    }
-    with material.activate({"automatic_material": {"sources": scopes}}):
-        await test_unordered_written_diagnoses_check_main_selection_only(
-            "高血压", "non_compliant"
-        )
+    rule = "LX0609-08-01-03"
+    saved = {"verification_kind": "discharge_main_diagnosis_check",
+             "authoritative_main": "高血压", "written_main": "糖尿病", "main_consistent": False}
+    with material.activate({"automatic_material": {"sources": {}}}):
+        assert partition_luxian_0609_rule_scope((rule,)) == ((), (rule,))
+        pending = build_luxian_0609_pending_definition_result(rule)
+        assert (pending["status"], pending["reason_code"]) == ("not_executed", "policy_definition_pending")
+        assert validate_published_discharge_facts(rule_id=rule, raw=saved) == saved
 
 
 def test_source_observation_cannot_impersonate_positive_document_proof():

@@ -5,6 +5,7 @@ from datetime import date, datetime
 from typing import Any, Mapping, TYPE_CHECKING
 
 from ..case_identity import CaseRef
+from .clinical_material_policy import CLINICAL_MATERIAL_POLICY_VERSION, clinical_record_scene
 from ..discharge_time import DISCHARGE_TIME_POLICY, hospital_business_time
 
 if TYPE_CHECKING:
@@ -392,6 +393,20 @@ def build_record_evaluation_horizon_snapshot(
     """``record_frozen_dates`` 按 record_key 覆盖冻结日，仅供自建测试病例固定评价时间点。"""
     snapshots = []
     for record in records:
+        if "qc_admission_datetime" in record:
+            # 列表场景可沿用首页；新任务场景与时刻一并采用原始来源，不能
+            # 仅清空首页时间却继续用首页“已出院”标记要求终末评价终点。
+            qc_scene = clinical_record_scene(record)
+            record = {
+                **record,
+                "scope": qc_scene,
+                "admission_datetime": record["qc_admission_datetime"],
+                "admission_date": "",
+                "discharge_datetime": record.get("qc_discharge_datetime"),
+                "discharge_date": "",
+                "discharge_horizon_source": record.get("qc_discharge_horizon_source"),
+                "discharge_horizon_conflict": record.get("qc_discharge_horizon_conflict", False),
+            }
         record_id = _normalized_text(record.get("record_id") or record.get("visit_id"))
         if not record_id:
             continue
@@ -430,6 +445,7 @@ def build_record_evaluation_horizon_snapshot(
                 discharge_datetime=local_value(discharge_value),
                 task_frozen_date=frozen_date,
             ).to_dict()
+        snapshot["clinical_material_policy"] = CLINICAL_MATERIAL_POLICY_VERSION
         if record.get("discharge_horizon_source"):
             snapshot["discharge_horizon_source"] = record["discharge_horizon_source"]
             snapshot["discharge_horizon_policy"] = DISCHARGE_TIME_POLICY

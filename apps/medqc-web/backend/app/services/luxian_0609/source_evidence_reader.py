@@ -1595,7 +1595,7 @@ def read_luxian_0609_discharge_horizon_rows(
     visit_id: str,
     source_schema: str | None,
 ) -> SnapshotSourceRows:
-    """登记 > 首页 > 有效出院文书；只有缺失/空值才下降优先级。"""
+    """登记 > 有效出院文书；不以首页作为取材前提或时间回退。"""
 
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
@@ -1610,7 +1610,7 @@ def read_luxian_0609_discharge_horizon_rows(
     raw_rows: list[Mapping[str, Any]] = []
     selected_table = ""
     readable_source_found = False
-    for table_name in ("inpat_registration", "mr", "discharge_record"):
+    for table_name in ("inpat_registration", "discharge_record"):
         try:
             columns = set(
                 bundle_assembly._get_table_columns(trusted_schema, table_name)
@@ -1658,8 +1658,7 @@ def read_luxian_0609_discharge_horizon_rows(
         except Exception:
             # 权限/连接失败不等于空来源，不能用低优先级时间掩盖。
             raise SourceEvidenceQueryError() from None
-        # 登记表有行但出院时间为空（客户 CDM 常见）与缺行同样回退病案首页；
-        # 否则时间界限会静默落回评价日，已出院病例被按“至今未查房”误判。
+        # 登记缺失时间时继续读取实际出院文书，首页不参与判断。
         candidate_rows = [
             row for row in candidate_rows
             if any(str(row.get(field) or "").strip() for field in time_fields)
@@ -1674,7 +1673,6 @@ def read_luxian_0609_discharge_horizon_rows(
     for row in raw_rows[:1]:
         selected = select_discharge_time(
             registration=row.get("discharge_datetime") if selected_table == "inpat_registration" else None,
-            frontpage=row.get("discharge_datetime") if selected_table == "mr" else None,
             document_date=row.get("discharge_date"), document_time=row.get("discharge_time"),
         )
         value = (selected.value.isoformat(sep=" ")
@@ -1920,44 +1918,6 @@ def _read_cache_diagnosis_source(
     )
 
 
-def _read_mr_visit_time_context(
-    *, trusted_schema: str, institute_id: str, patient_id: str, visit_id: str,
-) -> SnapshotSourceRows:
-    """登记源缺行/缺表时仅读首页时间，不合并登记行、不替代状态或死亡字段。"""
-    from .cache_visit_time_source import project_mr_visit_times
-
-    columns = set(bundle_assembly._get_table_columns(trusted_schema, "mr"))
-    if not {"institute_id", "patient_id", "visit_id", "admission_datetime"}.issubset(columns):
-        raise SourceEvidenceUnavailable()
-    selected = [field for field in ("admission_datetime", "discharge_datetime") if field in columns]
-    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected)
-    sql = (
-        f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, 'mr')} "
-        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
-        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
-        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id LIMIT :limit_rows"
-    )
-    try:
-        with case_material.source_connection(bundle_assembly._source_engine(trusted_schema)) as connection:
-            raw_rows = connection.execute(bundle_assembly.text(sql), {
-                "institute_id": institute_id, "patient_id": patient_id,
-                "visit_id": visit_id, "limit_rows": 2,
-            }).mappings().all()
-    except Exception:
-        raise SourceEvidenceQueryError() from None
-    projected = project_mr_visit_times(raw_rows)
-    if projected is None:
-        # 首页按出院窗口取得。没有首页不证明没有住院登记，不将其标为完整空源。
-        raise SourceEvidenceUnavailable()
-    return SnapshotSourceRows.create(
-        source_key="inpat_registration", rows=({
-            **projected,
-            "source_table": "mr",
-            "row_ref": digest_source_evidence(("mr-visit-time-context-v1", projected)),
-        },), truncated=False, limit_rows=1,
-    )
-
-
 @case_material.material_query
 def read_luxian_0609_snapshot_source_rows(
     *,
@@ -2045,11 +2005,6 @@ def read_luxian_0609_snapshot_source_rows(
                 source_key=normalized_source, institute_id=institute_id,
                 patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
             )
-        if normalized_source == "inpat_registration":
-            return _read_mr_visit_time_context(
-                trusted_schema=trusted_schema, institute_id=institute_id,
-                patient_id=patient_id, visit_id=visit_id,
-            )
         raise SourceEvidenceUnavailable()
     selected = [field for field in approved_fields if field in columns]
     selected, document_status_column = _with_document_status_projection(
@@ -2130,11 +2085,6 @@ def read_luxian_0609_snapshot_source_rows(
         return _read_cache_diagnosis_source(
             source_key=normalized_source, institute_id=institute_id,
             patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
-        )
-    if normalized_source == "inpat_registration" and not raw_rows:
-        return _read_mr_visit_time_context(
-            trusted_schema=trusted_schema, institute_id=institute_id,
-            patient_id=patient_id, visit_id=visit_id,
         )
     truncated = len(raw_rows) > limit_rows
     return SnapshotSourceRows.create(

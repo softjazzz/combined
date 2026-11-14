@@ -92,7 +92,7 @@ _TEXT_FACT_RULE_IDS = frozenset(
 )
 _TYPED_TEXT_SOURCES = {
     "LX0609-04-02-03": (
-        "surgery_record", "mr_surgery", "pathology_exam_master",
+        "surgery_record", "pathology_exam_master",
         "pathology_exam_report", "admission_record_diagnosis", "diagnosis",
         "discharge_record_diagnosis", "inpat_registration.discharge_horizon",
         "discharge_record",
@@ -103,7 +103,7 @@ _TYPED_TEXT_SOURCES = {
     # 028（2026-10-11 院方口径）：程序判定时长，超时后核对术后病程感染证据；
     # 0910 源库病程多记在上级医师查房记录，一并读取。
     "LX0609-05-01-01": (
-        "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
+        "surgery_record", "inpat_drug_order", "daily_course_record",
         "senior_course_record", "postsurg_firstcourse_record",
     ),
     # 033 只需要“已实施手术锚点 + 本次手术同意书”；mr_surgery 既不提供
@@ -764,7 +764,7 @@ def _resolve_surgery_signature_outcome(
     surgery_master_rows: Sequence[Mapping[str, Any]],
     surgery_record_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[str, str, Mapping[str, Any] | None]:
-    """优先采用手术主表签名；仅对唯一且术者一致的事件使用文书表回退。"""
+    """仅采用正式手术记录的签署事实。"""
 
     outcome, _source_key, _selected_rows = _resolve_surgery_signature_selection(
         surgery_master_rows=surgery_master_rows,
@@ -784,58 +784,6 @@ def _resolve_surgery_signature_selection(
 ]:
     """返回签名判定及其实际采用的唯一来源行。"""
 
-    if not surgery_master_rows:
-        return (
-            _surgery_signature_outcome(surgery_record_rows),
-            "surgery_record",
-            tuple(surgery_record_rows),
-        )
-    master_outcome = _surgery_signature_outcome(surgery_master_rows)
-    if master_outcome[0] == "non_compliant":
-        return master_outcome, "mr_surgery", tuple(surgery_master_rows)
-    if not surgery_record_rows:
-        return ("data_gap", "required_field_missing", None), "", ()
-    if len(surgery_master_rows) != len(surgery_record_rows) or (
-        len(surgery_master_rows) > 1 and master_outcome[0] == "data_gap"
-    ):
-        # 术式拆行可以共用同台记录，但须以受控时间证明事件覆盖。
-        # 主表已有部分签名时仍保留逐行缺口，不能被文书回退覆盖。
-        master_signature_fields = (
-            "main_surgery_sign",
-            "surgeon_sign",
-            "physician_sign",
-            "signer",
-        )
-        master_has_signature_fact = any(
-            _clean(row.get(field))
-            for row in surgery_master_rows
-            for field in master_signature_fields
-        )
-        if not master_has_signature_fact:
-            record_outcome = _surgery_signature_outcome(surgery_record_rows)
-            if record_outcome[0] != "data_gap" and not _surgery_records_cover_master_rows(
-                surgery_master_rows, surgery_record_rows
-            ):
-                return ("data_gap", "association_failed", None), "", ()
-            return record_outcome, "surgery_record", tuple(surgery_record_rows)
-        if master_outcome[0] in {"compliant", "non_compliant"}:
-            return master_outcome, "mr_surgery", tuple(surgery_master_rows)
-        return ("data_gap", "required_field_missing", None), "", ()
-    if len(surgery_master_rows) != 1:
-        return master_outcome, "mr_surgery", tuple(surgery_master_rows)
-    if master_outcome[0] != "data_gap":
-        return master_outcome, "mr_surgery", tuple(surgery_master_rows)
-
-    master_surgeon = re.sub(
-        r"[\s,，、;；:：]+", "", _clean(surgery_master_rows[0].get("surgeon"))
-    )
-    record_surgeon = re.sub(
-        r"[\s,，、;；:：]+", "", _clean(surgery_record_rows[0].get("surgeon"))
-    )
-    if (
-        master_surgeon and record_surgeon and master_surgeon != record_surgeon
-    ) or not _surgery_records_cover_master_rows(surgery_master_rows, surgery_record_rows):
-        return ("data_gap", "association_failed", None), "", ()
     return (
         _surgery_signature_outcome(surgery_record_rows),
         "surgery_record",
@@ -1030,7 +978,6 @@ def _typed_003_decision(
     source_keys = (
         "surgery_record",
         "anesthesia_record",
-        "mr_surgery",
         "surgery_application",
         "inpat_nondrug_order",
         "evaluation_context.horizon",
@@ -1128,145 +1075,63 @@ def _typed_003_decision(
         except EvidenceMaterialUnavailable:
             return decision("technical_error", "snapshot_mismatch")
 
-    mr_rows = support_rows["mr_surgery"]
-    # 先核对正式记录覆盖。已有一份记录或另一台时间缺失，均不能遮蔽已证实的缺失。
-    missing_rows = definitely_uncovered_surgery_rows(mr_rows, surgery_rows)
-    horizon_rows = support_rows["evaluation_context.horizon"]
-    if missing_rows and len(horizon_rows) == 1:
-        try:
-            horizon_date = datetime.fromisoformat(str(horizon_rows[0]["horizon_date"])).date()
-            horizon_value = horizon_rows[0].get("horizon_datetime")
-            horizon_time = datetime.fromisoformat(str(horizon_value)) if horizon_value else None
-        except (KeyError, TypeError, ValueError):
-            horizon_date, horizon_time = None, None
-        if horizon_time is not None and (horizon_time.tzinfo is not None or horizon_time.date() != horizon_date):
-            horizon_date, horizon_time = None, None
-        for row in missing_rows:
-            same_start_rows = tuple(
-                other for other in missing_rows
-                if (pair := group_surgery_rows_by_start("mr_surgery", (row, other))) is not None
-                and len(pair) == 1
-            )
-            end, end_issue = _timeliness_group_end(same_start_rows)
-            begin = surgery_event_time(row)
-            mature = False
-            if end is not None and not end_issue and horizon_date is not None:
-                mature = (
-                    horizon_time.tzinfo is None and horizon_time - end >= timedelta(hours=24)
-                    if horizon_time is not None
-                    else horizon_date > (end + timedelta(hours=24)).date()
-                )
-            if mature:
-                reference = _material_document_ref_for_row(
-                    materials=materials, snapshot=snapshot,
-                    source_key="mr_surgery", selected_row=row,
-                )
-                return decision(
-                    "non_compliant", "required_document_missing",
-                    _surgery_record_missing_facts(end=end, begin=begin),
-                    selected_document_refs=(reference,) if reference else (),
-                )
     if not surgery_rows:
-        qualified_mr_rows = tuple(
-            row for row in mr_rows if _qualified_traditional_surgery_present((row,))
-        )
-        if qualified_mr_rows:
-            # 主控代定口径（2026-10-18，待客户复核），基线003：同开始时间组件
-            # 先合为一台；结束时间缺失仍不能计算24小时窗口。
-            groups = group_surgery_rows_by_start("mr_surgery", qualified_mr_rows)
-            if groups is None:
+        # 唯一原始麻醉记录明确记载本次手术起止时间时，继续核对缺记录的
+        # 24 小时时限。缺失型结论保留全部来源完整性引用，不走独立阳性豁免。
+        anesthesia_rows = support_rows["anesthesia_record"]
+        if anesthesia_rows:
+            if len(anesthesia_rows) != 1:
                 return decision("data_gap", "association_failed")
-            # 003 缺正式手术记录时，只能由唯一一台主表手术形成“应有记录”的
-            # 结论。同一结束时间不能把不同开始时间的手术压成一个时间点。
-            if len(groups) != 1:
-                return decision("data_gap", "association_failed")
-            selected_mr_ref = _material_document_ref_for_row(
-                materials=materials,
-                snapshot=snapshot,
-                source_key="mr_surgery",
-                selected_row=qualified_mr_rows[0],
-            )
-            surgery_end_time, end_issue = _timeliness_group_end(groups[0])
-            if end_issue == "authoritative_time_conflict":
-                return decision("data_gap", "authoritative_time_conflict", {
-                    "failure_kind": "surgery_timeliness_data_gap", "gap_reason": "authoritative_time_conflict",
-                    "missing_fields": [], "conflicting_end_fields": True,
-                })
-            if surgery_end_time is None:
+            begin = _labeled_anesthesia_surgery_time(anesthesia_rows[0], label="手术开始时间")
+            end = _labeled_anesthesia_surgery_time(anesthesia_rows[0], label="手术结束时间")
+            if begin is None or end is None:
                 return decision("data_gap", "authoritative_time_missing")
+            if end < begin:
+                return decision("data_gap", "authoritative_time_conflict")
             horizon_observation = observations["evaluation_context.horizon"]
             if horizon_observation.query_state.value == "empty":
-                return decision(
-                    "data_gap",
-                    horizon_observation.reason_code or "authoritative_time_missing",
-                )
-            if horizon_observation.query_state.value != "available":
+                return decision("data_gap", horizon_observation.reason_code or "authoritative_time_missing")
+            horizon_rows = support_rows["evaluation_context.horizon"]
+            if horizon_observation.query_state.value != "available" or len(horizon_rows) != 1:
                 return decision("technical_error", "snapshot_mismatch")
             try:
-                horizon_rows = tuple(materials.rows("evaluation_context.horizon"))
-            except EvidenceMaterialTruncated:
-                return decision("technical_error", "snapshot_mismatch")
-            except EvidenceMaterialUnavailable:
-                return decision("technical_error", "snapshot_mismatch")
-            if len(horizon_rows) != 1:
-                return decision("technical_error", "snapshot_mismatch")
-            horizon_row = horizon_rows[0]
-            try:
-                horizon_date = datetime.fromisoformat(
-                    str(horizon_row["horizon_date"])
-                ).date()
+                horizon_date = datetime.fromisoformat(str(horizon_rows[0]["horizon_date"])).date()
+                raw_time = horizon_rows[0].get("horizon_datetime")
+                horizon_time = datetime.fromisoformat(str(raw_time)) if raw_time is not None else None
             except (KeyError, TypeError, ValueError):
                 return decision("technical_error", "snapshot_mismatch")
-            raw_horizon_datetime = horizon_row.get("horizon_datetime")
-            try:
-                horizon_datetime = (
-                    datetime.fromisoformat(str(raw_horizon_datetime))
-                    if raw_horizon_datetime is not None
-                    else None
-                )
-            except ValueError:
-                return decision("technical_error", "snapshot_mismatch")
-            if horizon_datetime is not None:
-                if horizon_datetime.tzinfo is not None:
+            if horizon_time is not None:
+                if horizon_time.tzinfo is not None:
                     return decision("technical_error", "snapshot_mismatch")
-                if horizon_datetime.date() != horizon_date:
+                if horizon_time.date() != horizon_date or horizon_time < end:
                     return decision("data_gap", "authoritative_time_conflict")
-                if horizon_datetime < surgery_end_time:
-                    return decision("data_gap", "authoritative_time_conflict")
-                mature = horizon_datetime - surgery_end_time >= timedelta(hours=24)
+                mature = horizon_time - end >= timedelta(hours=24)
             else:
-                if horizon_date < surgery_end_time.date():
+                if horizon_date < end.date():
                     return decision("data_gap", "authoritative_time_conflict")
-                mature = horizon_date > (surgery_end_time + timedelta(hours=24)).date()
+                mature = horizon_date > (end + timedelta(hours=24)).date()
+            reference = _material_document_ref_for_row(
+                materials=materials, snapshot=snapshot,
+                source_key="anesthesia_record", selected_row=anesthesia_rows[0],
+            )
+            if not reference:
+                return decision("technical_error", "snapshot_mismatch")
             return decision(
                 "non_compliant" if mature else "data_gap",
-                "required_document_missing"
-                if mature
-                else "evaluation_window_not_mature",
-                _surgery_record_missing_facts(end=surgery_end_time, begin=None) if mature else None,
-                selected_document_refs=(
-                    (selected_mr_ref,) if mature and selected_mr_ref else ()
-                ),
+                "required_document_missing" if mature else "evaluation_window_not_mature",
+                _surgery_record_missing_facts(end=end, begin=begin) if mature else None,
+                selected_document_refs=(reference,),
             )
-        if (
-            observations["mr_surgery"].query_state.value == "available"
-            and observations["mr_surgery"].completeness.value == "complete"
-            and mr_rows
-            and not _qualified_traditional_surgery_present(mr_rows)
-        ):
-            return decision(
-                "not_applicable",
-                "performed_event_absent",
-                {
-                    "failure_kind": "qualified_surgery_absent",
-                    "performed_surgery_confirmed": False,
-                },
-            )
+        anesthesia_observation = observations["anesthesia_record"]
+        if anesthesia_observation.query_state.value == "unavailable":
+            return decision("data_gap", "source_unavailable")
+        if anesthesia_observation.completeness.value == "truncated":
+            return decision("data_gap", "source_truncated")
         application_observation = observations["surgery_application"]
         order_observation = observations["inpat_nondrug_order"]
         if any(
             item.completeness.value == "truncated"
-            for item in (observations["mr_surgery"], application_observation, order_observation)
+            for item in (application_observation, order_observation)
         ):
             return decision("data_gap", "source_truncated")
         if any(
@@ -1290,8 +1155,7 @@ def _typed_003_decision(
             for row in support_rows["inpat_nondrug_order"]
         )
         if (
-            not mr_rows
-            and not support_rows["surgery_application"]
+            not support_rows["surgery_application"]
             and not has_surgery_order
         ):
             return decision(
@@ -1355,55 +1219,7 @@ def _typed_003_decision(
             )
         )
 
-    # 当 surgery_record 自身没有批准手术时间时，仅允许唯一 mr_surgery 时间
-    # 与唯一手术记录时间配对；多记录无关联键时必须保守为数据不足。
     mr_end_times = record_times = ()
-    if not intervals and not explicit_end_issue:
-        mr_end_times = tuple(
-            sorted({
-                time
-                for row in mr_rows
-                if (time := _authoritative_surgery_end_time(
-                    source_key="mr_surgery", row=row
-                )) is not None
-            })
-        )
-        record_times = tuple(
-            sorted({
-                parsed
-                for row in surgery_rows
-                if (parsed := _authoritative_record_time(authoritative_document_time_value(row)))
-                is not None
-            })
-        )
-        if (
-            len(mr_rows) == 1
-            and len(surgery_rows) == 1
-            and len(mr_end_times) == 1
-            and len(record_times) == 1
-        ):
-            interval = record_times[0] - mr_end_times[0]
-            if interval.total_seconds() >= 0:
-                document_id = (
-                    str(surgery_rows[0].get("document_id") or "").strip() or None
-                )
-                document_ref = _material_document_ref_for_row(
-                    materials=materials,
-                    snapshot=snapshot,
-                    source_key="surgery_record",
-                    selected_row=surgery_rows[0],
-                )
-                intervals.append(
-                    (
-                        interval,
-                        mr_end_times[0],
-                        record_times[0],
-                        document_id,
-                        (document_ref,) if document_ref else (),
-                    )
-                )
-                fallback_resolved = True
-
     # 源合同已将 anesthesia_record 列为 003 的判定资料。只有唯一手术记录
     # 与唯一麻醉记录的结构化/明确标注开始时间完全相同时，才允许用麻醉记录
     # 中明确标注的手术结束时间补齐锚点，避免跨手术串用。
@@ -1438,6 +1254,8 @@ def _typed_003_decision(
                     source_key="anesthesia_record",
                     selected_row=anesthesia_rows[0],
                 )
+                if not surgery_ref or not anesthesia_ref:
+                    return decision("technical_error", "snapshot_mismatch")
                 document_id = (
                     str(surgery_rows[0].get("document_id") or "").strip() or None
                 )
@@ -1492,19 +1310,6 @@ def _typed_003_decision(
             positive_document_refs=document_refs,
         )
     if intervals and (not incomplete_performed_row or fallback_resolved):
-        if observations["mr_surgery"].query_state.value == "unavailable":
-            return decision("data_gap", "source_unavailable")
-        if observations["mr_surgery"].completeness.value == "truncated":
-            return decision("data_gap", "source_truncated")
-        qualified_mr_rows = tuple(
-            row for row in mr_rows if _qualified_traditional_surgery_present((row,))
-        )
-        if not _surgery_records_cover_master_rows(qualified_mr_rows, surgery_rows):
-            return decision("data_gap", "association_failed", {
-                "failure_kind": "surgery_timeliness_data_gap",
-                "gap_reason": "association_failed",
-                "missing_fields": ["surgery_record_association"],
-            })
         (
             interval,
             surgery_end_time,
@@ -1530,11 +1335,6 @@ def _typed_003_decision(
             display_facts,
             document_refs,
         )
-    mr_observation = observations["mr_surgery"]
-    if mr_observation.query_state.value == "unavailable":
-        return decision("data_gap", "source_unavailable")
-    if mr_observation.completeness.value == "truncated":
-        return decision("data_gap", "source_truncated")
     # 只报告本次实际未能完成核对的字段，不把所有可能原因混成一句话。
     reason = "authoritative_time_missing"
     if conflicting_end_fields or (time_conflict and not missing_time_fields):
@@ -1543,14 +1343,6 @@ def _typed_003_decision(
         reason = "association_failed"
         missing_time_fields.discard("surgery_end_time")
         missing_time_fields.add("surgery_record_association")
-    elif not intervals and mr_end_times and (len(mr_rows) != 1 or len(surgery_rows) != 1):
-        reason = "association_failed"
-        missing_time_fields.discard("surgery_end_time")
-        missing_time_fields.add("surgery_record_association")
-    elif not intervals and len(mr_rows) == len(surgery_rows) == 1 and mr_end_times:
-        missing_time_fields.discard("surgery_end_time")
-        if record_times and record_times[0] < mr_end_times[0]:
-            reason = "authoritative_time_conflict"
     return decision("data_gap", reason, {
         "failure_kind": "surgery_timeliness_data_gap",
         "gap_reason": reason,
@@ -1572,7 +1364,7 @@ def _typed_conservative_surgery_gate_decision(
         raise ValueError("unsupported typed surgery gate rule")
     if materials.snapshot_hash != snapshot.snapshot_hash:
         raise ValueError("typed surgery gate requires one evidence session")
-    source_keys = ("surgery_record", "mr_surgery")
+    source_keys = ("surgery_record",)
     observation_by_source = {
         item.source_key: item
         for item in snapshot.observations
@@ -1662,7 +1454,7 @@ def _typed_conservative_surgery_gate_decision(
         selected_signature_rows: tuple[Mapping[str, Any], ...] = ()
         try:
             surgery_record_rows = tuple(materials.rows("surgery_record"))
-            surgery_master_rows = tuple(materials.rows("mr_surgery"))
+            surgery_master_rows = ()
         except EvidenceMaterialTruncated:
             final_state, reason_code, display_facts = (
                 "data_gap",
@@ -2197,52 +1989,20 @@ _028_COURSE_SOURCES = ("daily_course_record", "senior_course_record", "postsurg_
 def _028_surgery_events(
     surgery_rows: Sequence[Mapping[str, Any]], mr_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[_ProphylaxisSurgeryEvent, ...]:
-    """手术记录优先形成事件，无手术记录时用病案首页；切口等级优先取同日首页。"""
-
-    def mr_date(row: Mapping[str, Any]) -> Any:
-        value = _prophylaxis_time(row.get("surgery_begin_datetime")) or _prophylaxis_time(
-            row.get("surgery_end_datetime")
-        )
-        return value.date() if value is not None else None
-
-    def incision_for(day: Any, text: Any) -> str:
-        values = {
-            incision_class_value(row.get("surgial_incision_level") or row.get("surgical_incision_level"))
-            for row in mr_rows
-            if day is not None and mr_date(row) == day
-        } - {"unknown"}
-        if len(values) == 1:
-            return next(iter(values))
-        return incision_class_from_text(text) if not values else "unknown"
+    """仅从正式手术记录提取事件、切口等级与心脏手术事实。"""
 
     events: list[_ProphylaxisSurgeryEvent] = []
     for row in surgery_rows:
-        begin = _authoritative_surgery_begin_time(row)
-        end = _authoritative_surgery_end_time(source_key="surgery_record", row=row)
-        anchor = begin or end
-        day = anchor.date() if anchor is not None else None
-        same_day_mr = [item for item in mr_rows if day is not None and mr_date(item) == day]
         events.append(_ProphylaxisSurgeryEvent(
-            begin=begin,
-            end=end,
-            incision_class=incision_for(
-                day, " ".join(str(row.get(key) or "") for key in ("record_content", "surgery_process"))
+            begin=_authoritative_surgery_begin_time(row),
+            end=_authoritative_surgery_end_time(source_key="surgery_record", row=row),
+            incision_class=incision_class_value(
+                row.get("surgial_incision_level") or row.get("surgical_incision_level")
+            ) if row.get("surgial_incision_level") or row.get("surgical_incision_level") else incision_class_from_text(
+                " ".join(str(row.get(key) or "") for key in ("record_content", "surgery_process"))
             ),
-            cardiac=is_cardiac_surgery(
-                (row.get("surgery_code"), *(item.get("surgery_code") for item in same_day_mr)),
-                (row.get("surgery_name"), *(item.get("surgery_name") for item in same_day_mr)),
-            ),
+            cardiac=is_cardiac_surgery((row.get("surgery_code"),), (row.get("surgery_name"),)),
         ))
-    if not events:
-        for row in mr_rows:
-            events.append(_ProphylaxisSurgeryEvent(
-                begin=_prophylaxis_time(row.get("surgery_begin_datetime")),
-                end=_prophylaxis_time(row.get("surgery_end_datetime")),
-                incision_class=incision_class_value(
-                    row.get("surgial_incision_level") or row.get("surgical_incision_level")
-                ),
-                cardiac=is_cardiac_surgery((row.get("surgery_code"),), (row.get("surgery_name"),)),
-            ))
     return tuple(events)
 
 
@@ -2260,12 +2020,12 @@ async def _typed_028_outcome(
             source_key=source_key, snapshot=snapshot, materials=materials,
         )
     zero = (0, 0, 0, 0, 0.0)
-    for source_key in ("surgery_record", "mr_surgery", "inpat_drug_order"):
+    for source_key in ("surgery_record", "inpat_drug_order"):
         if states[source_key] == "error":
             return _SurgeryTextOutcome(rule_id, "technical_error", "source_query_error"), zero
         if states[source_key] not in {"available", "empty"}:
             return _SurgeryTextOutcome(rule_id, "data_gap", "required_field_missing"), zero
-    events = _028_surgery_events(rows["surgery_record"], rows["mr_surgery"])
+    events = _028_surgery_events(rows["surgery_record"], ())
     course_ok = all(states[key] in {"available", "empty"} for key in _028_COURSE_SOURCES)
     course_rows = tuple(
         (f"{key}:{index}", row)
@@ -2501,30 +2261,7 @@ def _terminal_status(
         rows = _source_rows(documents, "surgery_record") + _source_rows(
             documents, "anesthesia_record"
         )
-        if (
-            not _has_exact_time(rows)
-            and evidence_snapshot is None
-            and institute_id
-            and patient_id
-            and visit_id
-        ):
-            try:
-                rows = tuple(
-                    read_luxian_0609_native_source_rows(
-                        source_key="mr_surgery",
-                        institute_id=institute_id,
-                        patient_id=patient_id,
-                        visit_id=visit_id,
-                        source_schema=source_schema,
-                    )
-                )
-            except Exception:
-                return "data_gap", "surgery_time_source_error"
         if not _has_exact_time(rows):
-            if evidence_snapshot is not None and _snapshot_source_failed(
-                evidence_snapshot, "mr_surgery"
-            ):
-                return "data_gap", "surgery_time_source_error"
             return "data_gap", "surgery_time_unavailable"
     elif rule_id == "LX0609-04-02-05":
         if not _has_signature(_source_rows(documents, "surgery_record")):
@@ -2689,10 +2426,9 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             if (
                 rule_id == "LX0609-04-02-03"
                 and states_by_source.get("surgery_record") in {"available", "empty"}
-                and states_by_source.get("mr_surgery") in {"available", "empty"}
                 and procedures_outside_catalog(
                     surgery_rows=rows_by_source["surgery_record"],
-                    mr_surgery_rows=rows_by_source["mr_surgery"],
+                    mr_surgery_rows=(),
                 )
             ):
                 # 院方目录（2026-10-11）外的术式无论是否恶性均不适用，无需恶性判定。
@@ -2774,7 +2510,6 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     states_by_source[source_key]
                     for source_key in (
                         "surgery_record",
-                        "mr_surgery",
                         "pathology_exam_master",
                         "pathology_exam_report",
                     )
@@ -2800,10 +2535,9 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 or (
                     rule_id == "LX0609-05-01-01"
                     and states_by_source.get("surgery_record") == "empty"
-                    and states_by_source.get("mr_surgery") == "available"
                     and _structured_028_not_applicable(
                         surgery_rows=rows_by_source["surgery_record"],
-                        mr_surgery_rows=rows_by_source["mr_surgery"],
+                        mr_surgery_rows=(),
                     )
                 )
             )
@@ -2818,20 +2552,14 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             ):
                 # 院方口径（2026-10-11）：只有“病种—术式”目录内的恶性肿瘤手术
                 # 要求核对淋巴结处理记录，其余恶性肿瘤手术不适用本条。
-                _mr_diagnosis_state, mr_diagnosis_rows = _typed_source_rows(
-                    source_key="mr_diagnosis",
-                    snapshot=evidence_snapshot,
-                    materials=evidence_materials,
-                )
                 lymph_node_gate = evaluate_lymph_node_catalog_gate(
                     surgery_rows=rows_by_source["surgery_record"],
-                    mr_surgery_rows=rows_by_source["mr_surgery"],
+                    mr_surgery_rows=(),
                     diagnosis_rows=(
                         *rows_by_source["admission_record_diagnosis"],
                         *rows_by_source["diagnosis"],
                         *rows_by_source["discharge_record_diagnosis"],
                         *rows_by_source["pathology_exam_report"],
-                        *mr_diagnosis_rows,
                     ),
                     pathology_rows=rows_by_source["pathology_exam_report"],
                     discharge_rows=rows_by_source["discharge_record"],

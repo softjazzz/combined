@@ -1,6 +1,7 @@
 """合成冻结材料：备选来源缺口不得抵消已独立证明的手术缺陷。"""
 
 from dataclasses import replace
+from datetime import datetime
 
 import pytest
 
@@ -30,7 +31,7 @@ def _reduce(session, decision):
 def test_independent_late_surgery_stays_defect_with_empty_alternatives():
     with material.activate(_auto_state()):
         session = _typed_003_session(
-            surgery_document_id="SYNTHETIC-S1", surgery_begin_time="2026-01-01 08:00:00+08",
+            surgery_document_id="SYNTHETIC-S1", surgery_begin_time="2026-01-01 08:00:00+08:00",
             surgery_time="2026-01-01 10:00:00+08", record_time="2026-01-02 11:00:00",
         )
         facts = []
@@ -95,3 +96,53 @@ def test_independent_signature_defect_stays_defect_with_missing_master():
         )
         assert decision.qc_direction.value == "defect"
         assert _reduce(session, decision).final_state.value == "non_compliant"
+
+
+@pytest.mark.parametrize("fallback", ["anesthesia_record"])
+def test_late_fallback_preserves_both_actual_evidence_sources(fallback):
+    state = _auto_state()
+    state["automatic_material"]["sources"][fallback]["status"] = "available"
+    with material.activate(state):
+        session = _typed_003_session(
+            surgery_document_id="SYNTHETIC-S1", surgery_begin_time="2026-01-01 08:00:00+08",
+            record_time=datetime(2026, 1, 2, 11),
+            **({"mr_surgery_time": datetime(2026, 1, 1, 10)} if fallback == "mr_surgery" else {
+                "anesthesia_surgery_begin_time": "2026-01-01 08:00:00+08:00",
+                "anesthesia_surgery_end_time": "2026-01-01 10:00:00+08:00",
+            }),
+        )
+        facts = []
+        decision = surgery._typed_003_decision(
+            snapshot=session.snapshot, materials=session.materials, customer_display_facts=facts,
+        )
+        expected_refs = {
+            ref for key in ("surgery_record", fallback)
+            for ref, _row in session.materials.document_rows(key, snapshot=session.snapshot)
+        }
+        assert len(expected_refs) == 2
+        assert set(decision.fact_refs) == set(decision.positive_document_refs) == expected_refs
+        reduced = _reduce(session, decision)
+        assert (reduced.final_state.value, reduced.reason_code) == ("non_compliant", "threshold_exceeded")
+        from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
+        result = finalize_luxian_0609_reduced_customer_result(
+            decision=reduced, raw_customer_display_facts=facts[0][1],
+            evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        )
+        assert {row["source_type"] for row in result["customer_evidence"]} == {"surgery_record", fallback}
+
+
+@pytest.mark.parametrize("record_time", ["2026-01-01 11:00:00", "2026-01-02 11:00:00"])
+def test_003_requires_only_real_sources_without_frontpage_observation(record_time):
+    session = _typed_003_session(
+        surgery_document_id="SYNTHETIC-S1", surgery_time="2026-01-01 10:00:00+08",
+        record_time=record_time,
+    )
+    decision = surgery._typed_003_decision(snapshot=session.snapshot, materials=session.materials)
+    assert decision.reason_code == ("threshold_exceeded" if "02 11" in record_time else "requirement_within_threshold")
+
+
+def test_signature_selection_ignores_conflicting_frontpage():
+    record = {"surgeon": "术者甲", "surgeon_sign": "术者甲", "record_content": "合成记录"}
+    master = {"surgeon": "术者甲", "surgeon_sign": "错误签名"}
+    actual = surgery._resolve_surgery_signature_selection(surgery_master_rows=(master,), surgery_record_rows=(record,))
+    assert actual == surgery._resolve_surgery_signature_selection(surgery_master_rows=(), surgery_record_rows=(record,))

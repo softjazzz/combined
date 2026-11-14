@@ -118,7 +118,7 @@ _TRIGGER_REQUIREMENT_SPECS = MappingProxyType(
         ),
         "current_visit_surgery_confirmed": MappingProxyType(
             {
-                "allowed_source_keys": ("surgery_application", "surgery_record", "mr_surgery"),
+                "allowed_source_keys": ("surgery_application", "surgery_record"),
                 "trigger_scope": "current_visit",
                 "current_visit_relevance": "relevant",
                 "assertion": "affirmed",
