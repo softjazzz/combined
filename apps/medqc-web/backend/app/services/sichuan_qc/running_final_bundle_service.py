@@ -298,11 +298,22 @@ async def evaluate_running_final_bundle_input(
                 bundle=bundle,
                 rules=list(slot.get("rules") or []),
             )
+            from ..diagnosis_auxiliary import gap_result
+            gap_rules = set(per_doc_evidence_payload.get("diagnosis_auxiliary_gap_rules") or [])
+            runnable = []
+            for rule in slot.get("rules") or []:
+                rule_id = str(rule.get("rule_id") or rule.get("rule_code") or "").upper()
+                if rule_id == "CL-276" and rule_id in gap_rules:
+                    result_items.append(gap_result(rule))
+                else:
+                    runnable.append(rule)
+            if not runnable:
+                continue
             per_doc_orchestrated = await host._evaluate_rules_orchestrated(
                 document_id=f"{document_id}:{primary_document.get('source_table') or primary_type}",
                 content=primary_content,
                 document_type=primary_type,
-                rules=list(slot.get("rules") or []),
+                rules=runnable,
                 evidence_source="bundle",
                 evidence_payload=per_doc_evidence_payload,
                 bucket_strategy=bucket_strategy,

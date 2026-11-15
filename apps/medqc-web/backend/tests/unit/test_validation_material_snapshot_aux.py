@@ -169,6 +169,10 @@ def test_pdf_diagnosis_and_peer_capture_use_transaction_schema_then_replay(monke
     state = state_for(aux)
     engine = object()
     state.update(connection=connection, engine=engine)
+    state["columns"].update({
+        "diagnosis": ("institute_id", "patient_id", "visit_id", "diagnosis_no", "diagnosis_type", "diagnosis_code", "diagnosis_name", "dept_name", "diagnosis_datetime"),
+        "first_course_record": ("institute_id", "patient_id", "visit_id", "name", "dept_name", "record_content"),
+    })
     queries = []
 
     class Query:
@@ -193,15 +197,16 @@ def test_pdf_diagnosis_and_peer_capture_use_transaction_schema_then_replay(monke
 
         def all(self):
             if self.model is qc.Diagnosis:
-                return [SimpleNamespace(diagnosis_type="主要", diagnosis_no="1", diagnosis_code="SYN", diagnosis_name="合成诊断", visit_id="pdfv_peer")]
+                return [SimpleNamespace(diagnosis_type="主要", diagnosis_no="1", diagnosis_code="SYN", diagnosis_name="合成诊断", patient_id="pdfp_peer", visit_id="pdfv_peer")]
             return [SimpleNamespace(patient_id="pdfp_peer", visit_id="pdfv_peer", name="合成对照", dept_name="合成科", record_content="合成对照正文")]
 
     class Session:
         def __init__(self, bound):
             assert bound is connection
 
-        def query(self, model):
-            return Query(model)
+        def query(self, *columns):
+            assert all(column.key not in {"main_diag_flag", "update_time"} for column in columns)
+            return Query(columns[0].class_)
 
         def close(self):
             pass

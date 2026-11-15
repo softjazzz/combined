@@ -58,9 +58,11 @@ def test_pdf_retry_replays_original_without_reopening_current_source(monkeypatch
         capture.obtain("pdf-old-without-snapshot", IDENTITY, retry=True)
 
 
-@pytest.mark.parametrize("missing_identity_column", [False, True])
-@pytest.mark.parametrize("row_identity_valid", [True, False])
-def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monkeypatch, business_source, missing_identity_column, row_identity_valid):
+@pytest.mark.parametrize("missing_identity_column,row_identity_valid,diagnosis_without_value", [
+    (False, True, False), (True, True, False), (False, False, False), (True, False, False),
+    (False, True, True),
+])
+def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monkeypatch, business_source, missing_identity_column, row_identity_valid, diagnosis_without_value):
     from app.services import case_material_capture as capture, validation_material_source as registry
     from app.services import sample_programmatic_evidence as evidence, daily_material_projection as daily
     from app.services.bundles import assembly, current_view
@@ -95,9 +97,10 @@ def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monke
     monkeypatch.setattr(registry, "capture_validation_material", register, raising=False)
     monkeypatch.setattr(registry, "material_source_schema", lambda **_: pytest.fail("登记不能先读当前连接"))
     monkeypatch.setattr(capture, "inspect", lambda conn: SimpleNamespace(
-        has_table=lambda table, schema: table in {"daily_course_record", "patient_information"},
+        has_table=lambda table, schema: table in {"daily_course_record", "patient_information"} or (diagnosis_without_value and table == "diagnosis"),
         get_columns=lambda table, schema: [{"name": key} for key in (
-            ("institute_id", "patient_id", "patient_name") if table == "patient_information"
+            ("institute_id", "patient_id", "visit_id", "diagnosis_no", "diagnosis_type") if table == "diagnosis"
+            else ("institute_id", "patient_id", "patient_name") if table == "patient_information"
             else ("institute_id", "patient_id", "visit_id", "document_id", "record_content"))
             if not (missing_identity_column and key == "institute_id")]))
     def select(**kwargs):
@@ -133,6 +136,9 @@ def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monke
     assert frozen["programmatic_sources"]["daily_course_record"]["rows"][0]["record_content"] == "v1"
     assert frozen["read_contract"]["table_identity_columns"]["patient_information"] == ["institute_id", "patient_id"]
     with material.activate(frozen):
+        # 无diagnosis表的缺口已保留，不阻断其他正文保存或回查当前库。
+        with pytest.raises(reader.SourceEvidenceUnavailable):
+            SichuanQCService._resolve_primary_diagnosis_context(**dict(zip(("institute_id", "patient_id", "visit_id"), IDENTITY)))
         rows = material.frozen_rows(frozen["schema"], "patient_information", IDENTITY, 1)
     assert rows[0]["patient_name"] == "合成患者" and "visit_id" not in rows[0]
 

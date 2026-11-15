@@ -134,19 +134,24 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                 # 调用原投影owner，历史文书直接使用该固定渲染材料而非最新公共Bundle。
                 state["documents"] = current_view._assemble_current_documents(**coordinates)
                 from .sichuan_qc_service import SichuanQCService
-                diagnosis = (SichuanQCService._resolve_primary_diagnosis_context(**coordinates)
-                             if state["columns"].get("diagnosis") and (
-                                 "automatic_material" not in state or source_statuses.get("diagnosis") == "structure_ready")
-                             else None)
+                # 辅助查询也必须保存缺口回执；不能因缺诊断字段中断其他材料，
+                # 也不能跳过捕获后让相关规则回查当前库。权限/连接/身份异常仍抛出。
+                try:
+                    diagnosis = SichuanQCService._resolve_primary_diagnosis_context(**coordinates)
+                except reader.SourceEvidenceUnavailable:
+                    diagnosis = None
                 if diagnosis:
                     departments = {str(row.get("dept_name") or "").strip() for row in state["tables"].get("first_course_record", ())}
                     for department in sorted(departments - {""}):
                         check()
                         # 复用原有最多10份的同病种对照，不新选队列、不改变相似度规则。
-                        SichuanQCService._load_same_disease_first_course_candidates(
-                            institute_id=identity[0],current_patient_id=identity[1],current_visit_id=identity[2],
-                            dept_name=department,diagnosis_code=str(diagnosis.get("diagnosis_code") or ""),
-                            diagnosis_name=str(diagnosis.get("diagnosis_name") or ""),limit=10)
+                        try:
+                            SichuanQCService._load_same_disease_first_course_candidates(
+                                institute_id=identity[0],current_patient_id=identity[1],current_visit_id=identity[2],
+                                dept_name=department,diagnosis_code=str(diagnosis.get("diagnosis_code") or ""),
+                                diagnosis_name=str(diagnosis.get("diagnosis_name") or ""),limit=10)
+                        except reader.SourceEvidenceUnavailable:
+                            pass  # material_query已保存该调用的缺口，其他文书继续捕获。
                 state["domain_names"] = list(emr_view._DOMAIN_LOAD_ORDER)
                 check()
             state.pop("engine")
