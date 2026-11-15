@@ -115,10 +115,11 @@ def test_fact_event_basis_preserves_only_safe_references_and_enums(assertion):
 
 
 @pytest.mark.asyncio
-async def test_real_empty_consultation_branch_retains_checked_observation_without_model():
+@pytest.mark.parametrize("rule", [RULE, "LX0609-03-01-05"])
+async def test_real_empty_consultation_branch_retains_checked_observation_without_model(rule):
     from app.services.luxian_0609.native_consultation_episode_execution import execute_luxian_0609_native_consultation_episode_rules
     snapshot, store, _ = _case()
-    execution = await execute_luxian_0609_native_consultation_episode_rules(rule_ids=(RULE,), institute_id="SYN-I", patient_id="SYN-P", visit_id="SYN-V", source_schema=None, llm_client=None, evidence_snapshot=snapshot, evidence_materials=store, decision_rule_ids=(RULE,))
+    execution = await execute_luxian_0609_native_consultation_episode_rules(rule_ids=(rule,), institute_id="SYN-I", patient_id="SYN-P", visit_id="SYN-V", source_schema=None, llm_client=None, evidence_snapshot=snapshot, evidence_materials=store, decision_rule_ids=(rule,))
     assert execution.decisions[0].fact_refs == (snapshot.observations[0].snapshot_ref.removeprefix("sha256:"),)
     assert _reduce(snapshot, store, execution.decisions[0]).final_state.value == "not_applicable"
 
@@ -131,7 +132,27 @@ def test_nested_material_scope_is_projected_without_raw_manifest():
     assert "secret" not in json.dumps(receipt)
 
 
-@pytest.mark.parametrize("change", [{"depended_on": False}, {"record_count": 2}, {"query_state": "error"}, {"completeness": "unproven"}])
+@pytest.mark.asyncio
+async def test_disposition_unbound_document_is_controlled_technical_failure(monkeypatch):
+    from app.services.luxian_0609 import native_consultation_episode_execution as episode
+    from app.services.luxian_0609.consultation_disposition_record import DispositionRecordOutcome
+    snapshot, store, _ = _case("available")
+    # 模拟未携带材料绑定的异常输入，不代表正常Store.create能生成此形状。
+    monkeypatch.setattr(episode, "_read_rows", lambda **_: [{"document_id": "SYNTHETIC-ONLY", "record_content": "合成非适用"}])
+    async def checked(**_):
+        return DispositionRecordOutcome("not_applicable", "trigger_absent_complete")
+    monkeypatch.setattr(episode, "check_disposition_record", checked)
+    execution = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-03-01-05",), institute_id="SYN-I", patient_id="SYN-P", visit_id="SYN-V",
+        source_schema=None, llm_client=None, evidence_snapshot=snapshot, evidence_materials=store,
+        decision_rule_ids=("LX0609-03-01-05",),
+    )
+    decision = _reduce(snapshot, store, execution.decisions[0])
+    assert decision.final_state.value == "technical_error" and decision.reason_code == "snapshot_mismatch"
+    assert decision.fact_refs == ()
+
+
+@pytest.mark.parametrize("change", [{"depended_on": False}, {"record_count": 2}, {"query_state": "error"}, {"completeness": "unproven"}, {"query_version": "unregistered-v1"}])
 def test_receipt_validator_rejects_unproven_or_contradictory_absence(change):
     from app.services.luxian_0609.applicability_receipt import build_applicability_receipt, validate_applicability_receipt
     snapshot, store, decision = _case()

@@ -12,7 +12,7 @@ from .evidence_material import EvidenceMaterialUnavailable
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .fact_schema import Assertion, CurrentVisitRelevance, EventStatus, TriggerScope
 from .source_manifest import QueryStatus
-from .source_registry import is_registered_luxian_0609_source_key, source_key_accepts_query_version
+from . import source_registry
 
 
 SCHEMA_VERSION = "lx0609-applicability-receipt-v1"
@@ -153,7 +153,7 @@ def validate_applicability_receipt(raw):
     for check in checks:
         keys(check, {"source_key", "query_state", "completeness", "record_count", "query_version", "snapshot_ref", "depended_on"}, {"scope"})
         source = check["source_key"]
-        require(isinstance(source, str) and source in allowed and is_registered_luxian_0609_source_key(source) and source not in seen)
+        require(isinstance(source, str) and source in allowed and source_registry.is_registered_luxian_0609_source_key(source) and source not in seen)
         seen.add(source)
         require(isinstance(check["query_state"], str) and check["query_state"] in {item.value for item in QueryStatus})
         require(isinstance(check["completeness"], str) and check["completeness"] in {item.value for item in SourceCompleteness})
@@ -165,7 +165,7 @@ def validate_applicability_receipt(raw):
             require(count is not None and count > 0)
         else:
             require(count is None and check["completeness"] == "unproven")
-        require(isinstance(check["query_version"], str) and check["query_version"] == check["query_version"].strip() and source_key_accepts_query_version(source, check["query_version"]))
+        require(isinstance(check["query_version"], str) and check["query_version"] == check["query_version"].strip() and source_registry.source_key_accepts_query_version(source, check["query_version"]))
         ref = check["snapshot_ref"]
         require(isinstance(ref, str) and ref.startswith("sha256:"))
         digest(ref.removeprefix("sha256:"))

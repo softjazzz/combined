@@ -6606,7 +6606,22 @@ async def _execute_disposition_rule(
         outcome = await check_disposition_record(documents=documents, llm_client=llm_client)
         # 计数来自已核验的文书条目；一份文书可能映射到多个材料引用。
         unspecific_document_count = len(outcome.fact_refs)
-        if DISPOSITION_RECORD_RULE_ID in typed and outcome.fact_refs:
+        if DISPOSITION_RECORD_RULE_ID in typed and outcome.status == "not_applicable" and not outcome.fact_refs:
+            # 全部文书已核验为非适用，保留实际文书；零行只保留来源观察。
+            if documents:
+                from .consultation_decision_evidence import material_refs_for_internal_refs
+                try:
+                    refs = material_refs_for_internal_refs(
+                        documents=documents, candidates=(), internal_refs=tuple(item["ref"] for item in documents),
+                    )
+                    outcome = replace(outcome, fact_refs=refs)
+                except ValueError:
+                    outcome = replace(outcome, status="technical_error", reason="snapshot_mismatch", fact_refs=())
+            else:
+                refs = tuple(item.snapshot_ref.removeprefix("sha256:")
+                             for item in evidence_snapshot.observations if item.source_key == _SOURCE_KEY) if evidence_snapshot is not None else ()
+                outcome = replace(outcome, fact_refs=refs)
+        elif DISPOSITION_RECORD_RULE_ID in typed and outcome.fact_refs:
             from .consultation_decision_evidence import material_refs_for_internal_refs
 
             try:

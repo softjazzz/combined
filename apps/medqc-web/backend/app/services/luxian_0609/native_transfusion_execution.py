@@ -526,6 +526,12 @@ def _typed_decision_from_outcome(
     allowed_source_keys = _typed_rule_source_keys(outcome.rule_id).intersection(
         binding_source_keys
     )
+    if status == "not_applicable" and outcome.reason_code in {"transfusion_order_absent", "transfusion_fact_absent"}:
+        # 无事件短路只依赖已核验的触发来源，不消费尚不需要的出院时间或评价正文。
+        checked_sources = set(_trigger_sources(outcome.rule_id))
+        if outcome.reason_code == "transfusion_fact_absent" and outcome.rule_id in {"LX0609-07-01-01", "LX0609-07-03-01"}:
+            checked_sources.update(("daily_course_record", "senior_course_record", *_ORDER_TRIGGER_SOURCES))
+        allowed_source_keys = allowed_source_keys.intersection(checked_sources)
     source_refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
