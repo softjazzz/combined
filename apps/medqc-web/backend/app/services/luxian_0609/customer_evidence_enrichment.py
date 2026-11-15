@@ -586,3 +586,61 @@ def enrich_customer_evidence(
             )
         enriched_rows.append(evidence)
     return enriched_rows
+
+
+def trace_customer_evidence(
+    evidence: Mapping[str, Any], source_rows: Sequence[Mapping[str, Any]],
+) -> str:
+    """按 ``enrich_customer_evidence`` 的正式合同逆向核验一条已保存证据。
+
+    只用同一份冻结材料行，不回查当前库、不做近似匹配。返回受控状态：
+
+    - ``verified_document_excerpt``：文书级依据，等于该文书正文字段的归一化开头摘录
+      （空白折叠为单空格、超 300 字截断加“…”），是导航摘录而非命中片段；
+    - ``verified_field_excerpt``：字段级依据，等于指定字段值（或讨论记录内容字段）；
+    - ``reference_only``：仅有文书引用、无摘录；
+    - ``unresolved_identity`` / ``ambiguous_identity``：引用无法唯一定位到材料行；
+    - ``excerpt_mismatch``：摘录不等于合同生成方式，不能视为该文书依据。
+
+    原样子串匹配不适用于文书级依据（空白已归一、可能截断），不能据此认定伪造。
+    """
+
+    document_id = _text(evidence.get("source_document_id"))
+    matches = [
+        row for row in source_rows
+        if isinstance(row, Mapping) and document_id and _row_has_identity(row, document_id)
+    ]
+    if not matches:
+        return "unresolved_identity"
+    if len(matches) != 1:
+        return "ambiguous_identity"
+    row = matches[0]
+    excerpt = _text(evidence.get("evidence_excerpt"))
+    if not excerpt:
+        return "reference_only"
+    kind = _text(evidence.get("excerpt_kind"))
+    source_type = _text(evidence.get("source_type")).lower()
+    field_path = _text(evidence.get("field_path"))
+    if kind == "字段级依据":
+        candidates: list[str] = []
+        if source_type == "presurg_discussion":
+            candidates.append(_discussion_excerpt(row, field_path=field_path)[1])
+        if field_path:
+            value: Any = row.get(field_path)
+            if field_path.startswith("v2_schema."):
+                schema = row.get("v2_schema")
+                if isinstance(schema, str):
+                    try:
+                        schema = json.loads(schema)
+                    except (TypeError, ValueError):
+                        schema = None
+                value = schema.get(field_path.removeprefix("v2_schema.")) if isinstance(schema, Mapping) else None
+            field_excerpt = _text(value)[:300]
+            candidates.append(field_excerpt or "参与人员字段为空或未取得")
+        return "verified_field_excerpt" if excerpt in candidates else "excerpt_mismatch"
+    if kind == "文书级依据":
+        expected = (
+            _discussion_excerpt(row)[1] if source_type == "presurg_discussion" else _excerpt(row)[1]
+        )
+        return "verified_document_excerpt" if expected and excerpt == expected else "excerpt_mismatch"
+    return "excerpt_mismatch"

@@ -1268,10 +1268,13 @@ def finalize_luxian_0609_reduced_customer_result(
         from .applicability_receipt import build_applicability_receipt
         from .evidence_snapshot import Luxian0609EvidenceSnapshot
 
-        if isinstance(evidence_snapshot, Luxian0609EvidenceSnapshot):
-            result["applicability_receipt"] = build_applicability_receipt(
-                decision=decision, snapshot=evidence_snapshot, materials=evidence_materials,
-            )
+        # 不适用必须带可审计回执；缺少冻结快照时不得静默交付无依据的不适用，
+        # 由聚合器按单条合同失败隔离为技术错误（同病例其他结果照常交付）。
+        if not isinstance(evidence_snapshot, Luxian0609EvidenceSnapshot):
+            raise ValueError("applicability receipt requires evidence snapshot")
+        result["applicability_receipt"] = build_applicability_receipt(
+            decision=decision, snapshot=evidence_snapshot, materials=evidence_materials,
+        )
     if safe_facts is not None:
         result["customer_display_facts"] = safe_facts
         precise_findings = customer_finding_from_controlled_facts(

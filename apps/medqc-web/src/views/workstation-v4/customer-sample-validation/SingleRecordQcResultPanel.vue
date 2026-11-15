@@ -206,6 +206,13 @@
           />
 
           <section class="result-detail">
+            <p
+              v-if="item.status === 'not_applicable' && item.audit_evidence_status === 'not_retained'"
+              class="audit-evidence-note"
+              data-testid="single-record-audit-evidence-not-retained"
+            >
+              {{ item.audit_evidence_message || '本次不适用判定的历史审计依据未保留，原结论未改写。' }}
+            </p>
             <div
               v-if="
                 isCompliantResult(item) &&
@@ -1974,6 +1981,14 @@ watch(
   color: rgba(29, 29, 31, 0.48) !important;
   font-size: 11px !important;
   line-height: 17px !important;
+}
+
+/* 历史不适用结果缺审计回执：弱提示，不改结论样式。 */
+.audit-evidence-note {
+  margin: 0 0 8px;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .medical-analysis summary {

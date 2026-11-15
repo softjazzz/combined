@@ -24,6 +24,24 @@ def retained_fields(item):
     return result
 
 
+# 结果在服务投影、任务装配等边界按固定字段重建时必须随行搬运的审计字段。
+# 唯一定义处；新增审计字段只改这里，避免多个白名单各自遗漏（1026 回执剥离根因）。
+AUDIT_RETAINED_KEYS = ("case_material_fingerprint", "applicability_receipt")
+
+
+def carry_retained_fields(source, target):
+    """把 source 已有的审计字段搬到重建后的 target，并按 target 最终结论校验。
+
+    只搬运、不生成：source 没有回执时 target 也没有，不补造。回执与 target 的
+    规则、状态或原因码不一致（如生成回执后结论被改写）时拒绝，不静默丢弃。
+    """
+    carried = {key: deepcopy(source[key]) for key in AUDIT_RETAINED_KEYS if key in source}
+    if carried:
+        retained_fields({**target, **carried})
+        target.update(carried)
+    return target
+
+
 def read_projection(item):
     result = retained_fields(item)
     result["material_evidence_status"] = "retained" if result.get("case_material_fingerprint") else "not_retained"

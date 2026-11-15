@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 import json
+import logging
 from pathlib import Path
 import re
 from time import perf_counter
@@ -51,6 +52,46 @@ _DATA_PATH = (
     Path(__file__).resolve().parents[3] / "data" / "luxian_0609_invasive_procedure_catalog_2026.csv"
 )
 _ORDER_TIME_FIELDS = ("planned_start_datetime", "prescribed_datetime")
+
+logger = logging.getLogger(__name__)
+
+# 解析拒绝的固定诊断分类：只记本地合同在哪一层拒绝，不记模型内容或病历。
+# 1026 验收未留存原响应，无法区分供应商格式错误与本地合同拒绝；此后单病例
+# 验收可据日志分类定位。拒绝本身仍为 model_invalid_output、不可重试、不放宽。
+_PARSE_FAILURE_CATEGORIES = {
+    "incomplete response": "provider_incomplete",
+    "invalid response text": "response_not_text",
+    "duplicate response key": "json_duplicate_key",
+    "invalid mapping schema": "root_schema",
+    "invalid record schema": "root_schema",
+    "invalid mapping item": "item_shape",
+    "invalid record item": "item_shape",
+    "invalid order binding": "id_binding",
+    "catalog item outside catalog": "catalog_binding",
+    "invalid procedure binding": "id_binding",
+    "procedure without operation date": "trigger_without_date",
+    "invalid documented binding": "record_binding",
+    "ungrounded documented quote": "quote_grounding",
+    "record only allowed for documented": "state_fields",
+    "invalid record state": "state_value",
+    "incomplete procedure coverage": "coverage",
+}
+
+
+def _parse_failure_category(error: Exception) -> str:
+    if isinstance(error, json.JSONDecodeError):
+        return "json_syntax"
+    if type(error) is ValueError and str(error) in _PARSE_FAILURE_CATEGORIES:
+        return _PARSE_FAILURE_CATEGORIES[str(error)]
+    # 其他异常只记类型名（固定代码标识），不记异常文本。
+    return f"unexpected_{type(error).__name__}"
+
+
+def _log_parse_rejection(step: str, error: Exception) -> None:
+    logger.warning(
+        "LX0609 有创操作模型输出未通过合同: step=%s category=%s",
+        step, _parse_failure_category(error),
+    )
 
 
 @dataclass(frozen=True)
@@ -317,7 +358,8 @@ async def map_orders_to_invasive_catalog(
     usage = _usage_tuple(response, elapsed)
     try:
         mapped = _parse_mapping(response, names)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
+        _log_parse_rejection("order_mapping", error)
         return OrderMappingResult("technical_error", "model_invalid_output", 1, *usage)
     return OrderMappingResult("ready", "", 1, *usage, mapped=mapped)
 
@@ -618,7 +660,8 @@ async def check_invasive_procedure_records(
     usage = _usage_tuple(response, elapsed)
     try:
         states = _parse_records(response, triggers, records, texts)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
+        _log_parse_rejection("record_documentation", error)
         return RecordDocumentationResult("technical_error", "model_invalid_output", 1, *usage)
     if candidate_issue and any(state != "documented" for _, state in states):
         return RecordDocumentationResult("unresolved", candidate_issue, 1, *usage)
