@@ -628,15 +628,16 @@ def _emergency_confirm_prompt(texts: Sequence[str]) -> str:
 async def _confirm_emergency_surgery(
     texts: Sequence[str], llm_client: MdtLLMClient,
 ) -> tuple[str, int, tuple[int, int, int, float]]:
-    """返回（emergency/not_emergency/unclear/invalid/transport, 调用次数, 用量）。"""
+    """返回（emergency/not_emergency/unclear/invalid/transport/privacy_guard_blocked, 调用次数, 用量）。"""
 
     redacted = [redact_luxian_0609_patient_privacy(text) for text in texts]
     try:
         response = await llm_client.generate(
             _emergency_confirm_prompt(texts), **structured_output_kwargs(llm_client)
         )
-    except Exception:
-        return "transport", 1, (0, 0, 0, 0.0)
+    except Exception as error:
+        # 隐私护栏拒绝是确定性失败，不得记为可重试的 transport。
+        return luxian_0609_llm_call_failure_reason(error, "transport"), 1, (0, 0, 0, 0.0)
     if not isinstance(response, Mapping):
         return "invalid", 1, (0, 0, 0, 0.0)
     try:
@@ -720,6 +721,7 @@ def _typed_decision_from_outcome(
                 "snapshot_mismatch",
                 "model_transport_error",
                 "model_invalid_output",
+                "privacy_guard_blocked",
             }
             else "executor_exception"
         )
@@ -1038,11 +1040,12 @@ async def execute_luxian_0609_native_mdt_rule(
             extra_usage[0] += calls
             for index, value in enumerate(usage, start=1):
                 extra_usage[index] += value
-            if state in {"transport", "invalid"}:
+            if state in {"transport", "invalid", "privacy_guard_blocked"}:
                 return finish(
                     _MdtRuleOutcome(
                         "technical_error", "technical_failure",
-                        "model_transport_error" if state == "transport" else "model_invalid_output", "llm",
+                        {"transport": "model_transport_error", "invalid": "model_invalid_output"}.get(state, state),
+                        "llm",
                     ),
                     selected_fact_refs=candidate_refs,
                 )

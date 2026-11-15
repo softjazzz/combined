@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..llm_token_budget import budget_guarded_executor
 
 from dataclasses import dataclass
@@ -2130,6 +2131,8 @@ def _decision_from_surgery_outcome(
         # 共享恶性肿瘤判定的失败原因按传输/输出无效分别报告。
         "malignancy_llm_invalid": "model_invalid_output",
         "malignancy_llm_transport_error": "model_transport_error",
+        # 隐私护栏拦截是确定性拒绝，保留不可重试码，不能落入传输错误默认值。
+        "privacy_guard_blocked": "privacy_guard_blocked",
     }.get(outcome.reason_code, "model_transport_error")
     from ..llm_token_budget import CONTEXT_REASON_CODES
     if outcome.reason_code in CONTEXT_REASON_CODES.values():
@@ -2865,12 +2868,15 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                                 max_completion_tokens=_JOINT_TEXT_FACT_MAX_COMPLETION_TOKENS,
                                 allow_length_retry=False,
                             )
-                        except Exception:
+                        except Exception as error:
                             response = None
+                            call_failure = luxian_0609_llm_call_failure_reason(error, "surgery_llm_failure")
+                        else:
+                            call_failure = "surgery_llm_failure"
                         if response is None:
                             for rule_id in model_rule_ids:
                                 pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                                    rule_id, "technical_error", "surgery_llm_failure"
+                                    rule_id, "technical_error", call_failure
                                 )
                         else:
                             prompt, completion, total, elapsed = _usage(response)

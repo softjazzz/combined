@@ -11,6 +11,7 @@ import math
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from .llm_prompt_privacy import describe_luxian_0609_llm_parse_failure
 from .structured_output import structured_output_kwargs
 
@@ -494,7 +495,9 @@ class MalignancyFactResolver:
         except Exception as error:
             logger.warning("LX0609 恶性诊断判定调用失败: error_kind=%s", type(error).__name__)
             # 传输失败与输出无效分开报告，避免下游归为执行器异常。
-            return MalignancyResolution("technical_error", "malignancy_llm_transport_error"), usage
+            return MalignancyResolution(
+                "technical_error", luxian_0609_llm_call_failure_reason(error, "malignancy_llm_transport_error")
+            ), usage
         try:
             usage = _strict_usage(response)
             parsed = _expand_resolution(

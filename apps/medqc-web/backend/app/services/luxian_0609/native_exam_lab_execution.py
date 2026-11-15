@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..llm_token_budget import budget_guarded_executor
 from .exam_token_budget import active as token_split_active, exam_recovery_executor
 
@@ -2291,6 +2292,9 @@ async def _extract_exam_lab_batch_uncached(
         if is_budget_error(error):
             budget_rule_failures = dict.fromkeys(eligible_rule_ids, error.code)
             llm_call_count -= int(not getattr(error, "request_started", False))
+        elif luxian_0609_llm_call_failure_reason(error, fallback=""):
+            # 隐私护栏拦截走逐规则失败码通道（优先于传输兜底），保持不可重试。
+            budget_rule_failures = dict.fromkeys(eligible_rule_ids, luxian_0609_llm_call_failure_reason(error))
         response = None
     if response is None:
         return _ExamLabBatchResult(

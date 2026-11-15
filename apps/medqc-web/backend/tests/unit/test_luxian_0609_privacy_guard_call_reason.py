@@ -112,8 +112,53 @@ def test_no_generate_handler_hardcodes_transport_error():
                 for inner in ast.walk(handler):
                     if (
                         isinstance(inner, ast.Constant)
-                        and inner.value == "model_transport_error"
+                        and inner.value in _TRANSPORT_ALIASES
                         and id(inner) not in allowed
                     ):
-                        offenders.append(f"{path.relative_to(LUXIAN_ROOT)}:{inner.lineno}")
+                        key = (path.relative_to(LUXIAN_ROOT).as_posix(), inner.value)
+                        if key not in _EXEMPT:
+                            offenders.append(f"{key[0]}:{inner.lineno} {inner.value}")
     assert offenders == []
+
+
+# 会被下游映射为可重试传输错误的各族别名（含 MDT 急诊确认的 "transport" 状态）。
+_TRANSPORT_ALIASES = frozenset({
+    "model_transport_error", "transport", "tumor_llm_failure",
+    "malignancy_llm_transport_error", "surgery_llm_failure", "exam_lab_llm_failure",
+    "llm_transport_error", "surgery_document_llm_failure", "consultation_llm_failure",
+    "course_llm_failure",
+})
+# 豁免：状态为 data_gap（不进入可重试分支，改为 technical_error 会改变结果状态合同），
+# 或影子审计独立码空间，不参与正式重试。
+_EXEMPT = frozenset({
+    ("native_consultation_execution.py", "consultation_llm_failure"),
+    ("native_course_quality_execution.py", "course_llm_failure"),
+    ("native_exam_lab_execution.py", "exam_lab_llm_failure"),
+    ("native_surgery_document_execution.py", "surgery_document_llm_failure"),
+    ("native_surgery_gate_execution.py", "surgery_llm_failure"),
+    ("native_treatment_order_consistency.py", "llm_transport_error"),
+})
+
+
+def test_mdt_emergency_confirm_privacy_block_is_not_transport():
+    from app.services.luxian_0609.native_mdt_execution import _confirm_emergency_surgery
+
+    state, calls, _usage = asyncio.run(_confirm_emergency_surgery(["合成急诊文本"], _ViolationClient()))
+    assert state == "privacy_guard_blocked" and calls == 1
+
+
+def test_malignancy_resolver_privacy_block_is_not_transport():
+    from app.services.luxian_0609.malignancy_fact import MalignancyFactResolver, MalignancySource
+
+    rows = ({"document_id": "synthetic", "diagnosis_name": "合成诊断"},)
+    resolution, _ = asyncio.run(
+        MalignancyFactResolver(_ViolationClient())._resolve_uncached(
+            (MalignancySource("diagnosis", "available", rows),)
+        )
+    ) if hasattr(MalignancyFactResolver, "_resolve_uncached") else (
+        asyncio.run(MalignancyFactResolver(_ViolationClient()).resolve(
+            (MalignancySource("diagnosis", "available", rows),)
+        )), None,
+    )
+    assert resolution.state == "technical_error"
+    _assert_privacy_blocked(resolution.reason_code)
