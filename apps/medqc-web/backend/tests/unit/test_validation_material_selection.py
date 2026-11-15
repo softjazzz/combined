@@ -75,6 +75,7 @@ class ReadEngine:
 def source(monkeypatch):
     rows = [
         dict(
+            **IDENTITY,
             document_id=id_,
             document_title="合成文书",
             record_content="合成正文",
@@ -92,7 +93,7 @@ def source(monkeypatch):
     monkeypatch.setattr(selection, "_registered_schema", lambda *_: SCHEMA)
     monkeypatch.setattr(db, "engine", engine)
     monkeypatch.setattr(assembly, "engine", engine)
-    monkeypatch.setattr(assembly, "_get_table_columns", lambda *_: set(rows[0]) | set(IDENTITY))
+    monkeypatch.setattr(assembly, "_get_table_columns", lambda *_: set(rows[0]))
     monkeypatch.setattr(reader, "_source_limit", lambda _: 2)
     return engine
 
@@ -117,6 +118,7 @@ def test_all_bounded_document_reads_apply_same_selection_before_limit(source, en
             rows = result
     if rows is not None:
         assert [row["document_id"] for row in rows] == ["PG", "UNIQUE"]
+        assert all({key: row[key] for key in IDENTITY} == IDENTITY for row in rows)
     for sql, params in source.calls:
         if "limit_rows" in params:
             assert sql.index("material_excluded_ids") < sql.index("LIMIT")
