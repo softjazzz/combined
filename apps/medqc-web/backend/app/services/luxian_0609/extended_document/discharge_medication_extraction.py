@@ -10,6 +10,7 @@ import re
 from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol, Sequence
 
+from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..judgement_examples import DISCHARGE_MEDICATION_DOSE_EXAMPLES
 from ..llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from ...llm_observability import safe_status_for_exception
@@ -504,7 +505,7 @@ async def extract_discharge_medications(text: str, llm_client: MedicationLLMClie
                     api_time + perf_counter() - started, field_assertions=field_assertions,
                 )
             is_timeout = isinstance(error, TimeoutError) or safe_status_for_exception(error)[0] == "timeout"
-            return Extraction("technical_error", "model_timeout" if is_timeout else "model_transport_error", (), calls, *totals, api_time + perf_counter() - started)
+            return Extraction("technical_error", "model_timeout" if is_timeout else luxian_0609_llm_call_failure_reason(error), (), calls, *totals, api_time + perf_counter() - started)
         call_time = perf_counter() - started
         content = None
         try:

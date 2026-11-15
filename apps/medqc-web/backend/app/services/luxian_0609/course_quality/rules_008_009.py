@@ -9,6 +9,7 @@ import logging
 import re
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
+from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..course_row_material import course_row_has_material
 from ..basic_timeliness_facts import parse_authoritative_datetime, parse_authoritative_date
 from ..decision_model import (
@@ -1898,11 +1899,14 @@ async def evaluate_rules_008_009_typed(
                         "请重新核对本批全部候选，仅按约定结构返回完整JSON对象，不得遗漏候选。"
                     )
                 response = await llm_client.generate(semantic_prompt)
-            except Exception:
+            except Exception as error:
                 return Rule008009TypedExecution(
                     decision=_rule_009_semantic_decision(
                         base_decision=base_decision,
-                        error_reason="model_invalid_output" if attempt else "model_transport_error",
+                        error_reason=luxian_0609_llm_call_failure_reason(
+                            error,
+                            "model_invalid_output" if attempt else "model_transport_error",
+                        ),
                     ),
                     customer_display_facts=tuple(base_display_facts), **usage,
                 )

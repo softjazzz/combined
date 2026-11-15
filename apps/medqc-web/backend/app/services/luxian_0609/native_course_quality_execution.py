@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..llm_token_budget import budget_guarded_executor, budget_rule_scope
 
 from dataclasses import dataclass, replace
@@ -1009,9 +1010,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                         else {}
                     ),
                 )
-            except Exception:
+            except Exception as error:
                 unresolved_semantic = (
-                    _lx018_unknown_semantic_result("model_transport_error")
+                    _lx018_unknown_semantic_result(luxian_0609_llm_call_failure_reason(error))
                     if rule_id == "LX0609-01-01-02"
                     else None
                 )
@@ -1030,9 +1031,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                             "requirement_violated"
                             if length_result is not None
                             and length_result.status is CriterionStatus.FAILED
-                            else "model_transport_error"
-                            if rule_id == "LX0609-01-01-02"
-                            else "model_transport_error"
+                            else luxian_0609_llm_call_failure_reason(error)
                         ),
                         executor_type="llm",
                         criterion_results=(
@@ -1393,9 +1392,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                     else {}
                 ),
             )
-        except Exception:
+        except Exception as error:
             unresolved_semantic = (
-                _lx018_unknown_semantic_result("model_transport_error")
+                _lx018_unknown_semantic_result(luxian_0609_llm_call_failure_reason(error))
                 if rule_id == "LX0609-01-01-02"
                 else None
             )
@@ -1414,7 +1413,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         "requirement_violated"
                         if length_result is not None
                         and length_result.status is CriterionStatus.FAILED
-                        else "model_transport_error"
+                        else luxian_0609_llm_call_failure_reason(error)
                         if rule_id == "LX0609-01-01-02"
                         else "course_llm_failure"
                     ),

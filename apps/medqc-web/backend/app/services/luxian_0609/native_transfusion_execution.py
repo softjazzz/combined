@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..llm_token_budget import budget_guarded_executor, budget_rule_scope
 from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
 
@@ -2108,8 +2109,8 @@ async def _recheck_transfusion_semantics(
     for attempt in range(2):
         try:
             response = await llm_client.generate(attempt_prompt)
-        except Exception:
-            return _SemanticRecheck(None, "model_transport_error", attempt + 1,
+        except Exception as error:
+            return _SemanticRecheck(None, luxian_0609_llm_call_failure_reason(error), attempt + 1,
                 (prompt_tokens, completion_tokens, total_tokens, api_time))
         usage = _usage(response)
         prompt_tokens += usage[0]
@@ -4456,11 +4457,11 @@ async def execute_luxian_0609_native_transfusion_rules(
         llm_call_count += 1
         try:
             response = await llm_client.generate(_prompt(wrapper, context=context))
-        except Exception:
+        except Exception as error:
             emit_outcome(
                 rule_id,
                 "technical_error",
-                "model_transport_error",
+                luxian_0609_llm_call_failure_reason(error),
                 executor_type="llm",
             )
             continue

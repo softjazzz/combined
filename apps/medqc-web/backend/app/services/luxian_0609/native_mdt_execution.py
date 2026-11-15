@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..llm_token_budget import budget_guarded_executor
 
 from dataclasses import dataclass
@@ -1342,10 +1343,10 @@ async def execute_luxian_0609_native_mdt_rule(
             _prompt(surgery_names=names, context=context),
             **structured_output_kwargs(llm_client),
         )
-    except Exception:
+    except Exception as error:
         return finish(
             _MdtRuleOutcome(
-                "technical_error", "technical_failure", "model_transport_error", "llm"
+                "technical_error", "technical_failure", luxian_0609_llm_call_failure_reason(error), "llm"
             ),
             selected_fact_refs=semantic_candidate_refs,
             llm_call_count=1,

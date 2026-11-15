@@ -29,6 +29,7 @@ import re
 from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol, Sequence
 
+from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ...llm_observability import safe_status_for_exception
 from ..llm_prompt_privacy import (
     describe_luxian_0609_llm_parse_failure,
@@ -495,7 +496,7 @@ async def _run_extraction(
             note_budget_failure(error)
             timeout = isinstance(error, TimeoutError) or safe_status_for_exception(error)[0] == "timeout"
             return AntimicrobialReasonExtraction(
-                "technical_error", "model_timeout" if timeout else "model_transport_error",
+                "technical_error", "model_timeout" if timeout else luxian_0609_llm_call_failure_reason(error),
                 (), calls, *usage, api_time + perf_counter() - started,
             )
         api_time += perf_counter() - started

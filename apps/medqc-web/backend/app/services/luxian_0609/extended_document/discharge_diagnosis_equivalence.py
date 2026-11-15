@@ -14,6 +14,7 @@ import re
 from time import perf_counter
 from typing import Any, Literal
 
+from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import _json_response_object, _usage
@@ -249,10 +250,10 @@ async def extract_discharge_diagnosis_equivalence(
                 allow_length_retry=False,
                 **structured_output_kwargs(llm_client),
             )
-        except Exception:
+        except Exception as error:
             return DiagnosisEquivalenceResult(
                 "technical_error", (), attempt, *totals[:3], totals[3] + perf_counter() - started,
-                reason_code="model_transport_error",
+                reason_code=luxian_0609_llm_call_failure_reason(error),
             )
         elapsed = perf_counter() - started
         try:

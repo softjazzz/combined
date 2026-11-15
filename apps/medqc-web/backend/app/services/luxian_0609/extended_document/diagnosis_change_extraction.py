@@ -16,6 +16,7 @@ import re
 from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol, Sequence, cast
 
+from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import _json_response_object
@@ -372,7 +373,7 @@ async def _extract_once(
         note_budget_failure(error)
         return DiagnosisChangeExtraction(
             "technical_error",
-            "model_transport_error",
+            luxian_0609_llm_call_failure_reason(error),
             llm_call_count=1,
             api_time=perf_counter() - started,
         ), error, None
