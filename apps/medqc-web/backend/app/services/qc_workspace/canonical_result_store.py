@@ -159,6 +159,11 @@ def canonical_envelope_items_are_consistent(items: Any) -> bool:
             or item.get("is_compliant") is not expected_is_compliant
         ):
             return False
+        from ..history_evidence_audit import retained_fields
+        try:
+            retained_fields(item)
+        except ValueError:
+            return False
         delivered_rule_ids.add(rule_id)
     return True
 
@@ -468,6 +473,8 @@ def envelope_item_from_rule_result(
         for key in allowed_keys
         if key in item and (item.get(key) is not None or key == "is_compliant")
     }
+    from ..history_evidence_audit import retained_fields
+    result.update(retained_fields(item))
     _validate_recommendation_evidence_facts(result.get("customer_display_facts"))
     if not isinstance(result.get("decision_facts"), dict) and isinstance(
         result.get("customer_display_facts"), dict
@@ -796,6 +803,11 @@ class CanonicalResultStore:
             item.pop(_DEPRECATED_TEXT_SEAL_FIELD, None)
             rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
             safe_customer_display_facts(item, rule_id=rule_id)
+            from ..history_evidence_audit import retained_fields
+            try:
+                retained_fields(item)
+            except ValueError:
+                raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR) from None
         return envelope
 
     def load_root_job_items(

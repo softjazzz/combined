@@ -225,6 +225,11 @@ async def test_transfusion_freeze_no_event_and_source_error_keep_distinct_states
     assert [item["status"] for item in absent_results] == ["not_applicable"] * 9
     assert all(item["criterion_results"] == [] for item in absent_results)
     assert all("customer_evidence" not in item for item in absent_results)
+    checks = absent_results[-1]["applicability_receipt"]["source_checks"]
+    assert not any(item["depended_on"] for item in checks if item["source_key"] in {
+        "inpat_registration.discharge_horizon", "evaluation_context.horizon",
+    })
+    assert any(item["depended_on"] and item["source_key"] == "bloodtrans_record" for item in checks)
     assert absent_results[0]["findings"] == "本次未实施输血，不要求形成输血知情同意书"
 
     error_execution, error_reduced, error_results, error_session = await _execute_and_aggregate(

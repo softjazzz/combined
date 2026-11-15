@@ -4999,7 +4999,12 @@ async def test_023_measure_refinement_distinguishes_declined_from_unmet_conditio
         decision=decision, raw_customer_display_facts=facts,
         evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
-    assert final["status"] == decision.final_state.value == ("compliant" if declined else "not_applicable")
+    assert final["status"] == decision.final_state.value == ("compliant" if declined else "not_applicable"), (decision.reason_code, decision.fact_refs)
+    if not declined:
+        assert decision.fact_refs
+        assert final["applicability_receipt"]["fact_refs"] == list(decision.fact_refs)
+        assert any(item["depended_on"] and item["source_key"] == "consultation_record"
+                   for item in final["applicability_receipt"]["source_checks"])
 
 
 @pytest.mark.asyncio

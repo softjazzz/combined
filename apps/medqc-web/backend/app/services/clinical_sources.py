@@ -162,10 +162,44 @@ def ordinary_snapshot():
     return snapshot(configuration(), "independent_cdm")
 
 
+async def prepare_task_material_request(request: Request) -> None:
+    """认证后仅为明确登记的PDF任务绑定来源，不改变普通病例默认源。"""
+    if request.method != "POST" or request.url.path != "/api/v1/qc/sichuan/workspace/batch-jobs":
+        return
+    try:
+        payload = await request.json()
+    except ValueError:
+        return  # 请求体合同仍交由路由校验。
+    refs = payload.get("record_refs") if isinstance(payload, dict) else None
+    from .validation_material_source import is_material_copy
+    if not isinstance(refs, list) or not any(
+        isinstance(ref, dict) and is_material_copy(ref.get("patient_id", ""), ref.get("visit_id", "")) for ref in refs
+    ):
+        return
+    try:
+        if not refs or any(not isinstance(ref, dict) or not all(isinstance(ref.get(k), str) and ref[k].strip()
+                for k in ("institute_id", "patient_id", "visit_id"))
+                or not is_material_copy(ref["patient_id"], ref["visit_id"]) for ref in refs):
+            raise ValueError("invalid_or_mixed")
+        from starlette.concurrency import run_in_threadpool
+        if not await run_in_threadpool(_local_material_filters, {"record_refs": refs}):
+            raise ValueError("unregistered")
+    except (ValueError, PipelineError):
+        raise HTTPException(422, "clinical_material_identity_not_registered") from None
+    if any(value not in (None, "legacy_pg") for value in (
+        request.headers.get("x-clinical-source"), request.query_params.get("source_id")
+    )):
+        raise HTTPException(422, "clinical_source_selection_conflict")
+    request.state.registered_pdf_task_source = legacy_snapshot()
+
+
 def prepare_request(request: Request) -> None:
     paths = ("/api/medical-records", "/api/v1/medical-records", "/api/v1/records", "/api/v1/emr", "/api/v1/qc/sichuan/workspace")
     # 样本集和其它业务API仍属业务库，不让全局默认改变1026或管理操作。
     path = request.url.path
+    if request.method == "POST" and path == "/api/v1/qc/sichuan/workspace/batch-jobs" and getattr(request.state, "registered_pdf_task_source", None):
+        request.state.clinical_source = request.state.registered_pdf_task_source
+        return
     if request.method == "GET" and path in WORKSPACE_METADATA_GET_PATHS:
         header = request.headers.get("x-clinical-source")
         query = request.query_params.get("source_id")
@@ -192,19 +226,20 @@ def prepare_request(request: Request) -> None:
             raise HTTPException(422, "clinical_material_identity_unavailable")
         identity["visit_id"] = record_id
     if request.method == "GET" and is_material_copy(identity["patient_id"], identity["visit_id"]):
-        try:
-            if not all(identity.values()):
-                raise ValueError
-            material_source_schema(default_schema="cdm", **identity)
-        except Exception:
-            raise HTTPException(422, "clinical_material_identity_unavailable") from None
         job_id = request.query_params.get("job_id") if path.startswith("/api/v1/emr/") else None
+        if not all(identity.values()):
+            raise HTTPException(422, "clinical_material_identity_unavailable")
+        if not job_id:
+            try:
+                material_source_schema(default_schema="cdm", **identity)
+            except Exception:
+                raise HTTPException(422, "clinical_material_identity_unavailable") from None
         if job_id:
             selection = source_for_saved_job(request, job_id)
             if selection["id"] != "legacy_pg":
                 raise HTTPException(409, "clinical_material_job_source_mismatch")
-            # 用户指定PDF副本沿用原读取链，不要求或生成新的任务材料快照。
-            request.state.material_root_job_id = ""
+            # 历史原文必须来自该任务材料；缺失时由 bind_request 明确拒绝，
+            # 不能把当前登记副本冒充历史。已保存结果仍可只读显示缺失标记。
         request.state.clinical_source = legacy_snapshot()
         return
     if fixed_cdm() and request.method=="GET" and identity["institute_id"]=="CUSTOMER_TEST" and not request.query_params.get("job_id"):
@@ -400,10 +435,27 @@ def bound_job(function):
                 workspace.fail_batch_job(job_id=job_id, error_message="clinical_source_snapshot_invalid",
                     queued_only=True, expected_queued_filters_json=raw)
             return None
-        if fixed_cdm() and source["id"]=="legacy_pg" and not _local_material_filters((job or {}).get("filters") or {}):
-            # 历史普通旧源任务保持原状；不自动执行、不改绑或改写其状态。
-            return None
         with clinical.selected(source):
+            if fixed_cdm() and source["id"] == "legacy_pg":
+                from .case_material_capture import pdf_retry_materials
+                from .case_material_snapshot import MaterialSnapshotError
+                try:
+                    retry_materials = pdf_retry_materials(job or {}, lambda source_id: workspace.get_batch_job_for_processing(job_id=source_id))
+                except MaterialSnapshotError as error:
+                    # worker尚未认领；只终结同一排队快照，迟到错误不得覆盖新尝试或终态。
+                    from .material_admission import safe_material_failure
+                    failure = safe_material_failure(str(error))
+                    raw = (job or {}).get("_claim_filters_json")
+                    if raw is not None and job.get("status") == "queued":
+                        workspace.fail_batch_job(
+                            job_id=job_id, error_message=failure["code"], queued_only=True,
+                            expected_queued_filters_json=raw,
+                            execution_error={"reason_code": failure["code"], "retryable": False},
+                        )
+                    return None
+                if retry_materials is None and not _local_material_filters((job or {}).get("filters") or {}):
+                    # 历史普通旧源任务保持原状；不自动执行、不改绑或改写其状态。
+                    return None
             return await function(job_id, workspace=workspace, **kwargs)
     return run
 

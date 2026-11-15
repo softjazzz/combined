@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from functools import lru_cache
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 COPY_PATIENT_PREFIX = "pdfp_"
 COPY_VISIT_PREFIX = "pdfv_"
@@ -116,6 +117,88 @@ def is_material_copy(patient_id: str, visit_id: str) -> bool:
     return str(patient_id).startswith(COPY_PATIENT_PREFIX) or str(visit_id).startswith(COPY_VISIT_PREFIX)
 
 
+def _captured_validation_material(institute_id: str, patient_id: str, visit_id: str):
+    """冻结和捕获上下文都只接受本轮三坐标登记，不回查当前登记表。"""
+    from . import case_material_snapshot as material
+
+    state = material.context()
+    if state is None:
+        return None
+    identity = (institute_id, patient_id, visit_id)
+    material.identity_check(state, identity)
+    captured = state.get("validation_material")
+    if not isinstance(captured, dict):
+        raise material.MaterialSnapshotError("uncaptured_validation_material")
+    if captured.get("identity") != list(identity):
+        raise material.MaterialSnapshotError("validation_material_identity_mismatch")
+    schema = captured.get("schema")
+    if not isinstance(schema, str) or not MATERIAL_SCHEMA.fullmatch(schema) or schema != state.get("schema"):
+        raise material.MaterialSnapshotError("validation_material_schema_mismatch")
+    return captured
+
+
+def capture_validation_material(connection, identity) -> dict[str, Any]:
+    """在调用方的只读一致性事务内捕获可信登记、原PG身份与PDF复核辅助资料。"""
+    institute_id, patient_id, visit_id = identity
+    if not (str(patient_id).startswith(COPY_PATIENT_PREFIX) and str(visit_id).startswith(COPY_VISIT_PREFIX)):
+        raise ValueError("validation_material_identity_incomplete")
+    parameters = {"institute": institute_id, "patient": patient_id, "visit": visit_id}
+    registered = connection.execute(text(
+        "SELECT b.storage_schema,c.identity_map FROM qc.validation_material_copies c "
+        "JOIN qc.validation_material_batches b ON b.id=c.batch_id "
+        "WHERE c.institute_id=:institute AND c.patient_id=:patient AND c.visit_id=:visit "
+        "AND b.state IN ('material_ready','ready')"
+    ), parameters).mappings().first()
+    if registered is None or not isinstance(registered["storage_schema"], str) or not MATERIAL_SCHEMA.fullmatch(registered["storage_schema"]):
+        raise ValueError("validation_material_identity_not_registered")
+    schema = registered["storage_schema"]
+    mapping = deepcopy(registered["identity_map"])
+    if not isinstance(mapping, dict) or not isinstance(mapping.get("entities", {}), dict):
+        raise ValueError("validation_material_identity_map_invalid")
+    originals = set((mapping.get("entities") or {}).values())
+    documents = [dict(row) for row in connection.execute(text(
+        "SELECT d.candidate_id,d.title,d.record_time_text,d.content,d.state,d.file_id,d.page_start,d.page_end,"
+        "d.target_table,d.target_document_id,d.provenance "
+        "FROM qc.validation_material_documents d JOIN qc.validation_material_copies c ON c.id=d.copy_id "
+        "WHERE c.institute_id=:institute AND c.patient_id=:patient AND c.visit_id=:visit "
+        "ORDER BY d.file_id,d.page_start,d.candidate_id LIMIT 10001"
+    ), parameters).mappings().all()]
+    if len(documents) >= 10001:
+        from .case_material_snapshot import MaterialSnapshotError
+        raise MaterialSnapshotError("validation_material_capacity_exceeded")
+    reviews_by_table = {}
+    for row in documents:
+        review = (row.get("provenance") or {}).get("pg_preference_review")
+        if row["state"] == "new_candidate" and review and review.get("decision") == "remove_pdf_duplicate":
+            table = row["target_table"]
+            if not isinstance(table, str) or not re.fullmatch(r"[a-z_][a-z0-9_]*", table):
+                raise ValueError("validation_material_table_invalid")
+            reviews_by_table.setdefault(table, {})[row["candidate_id"]] = {
+                **review, "pdf_document_id": row["target_document_id"],
+            }
+    excluded = {}
+    inspector = inspect(connection)
+    for table, reviews in reviews_by_table.items():
+        parents = sorted({parent for review in reviews.values() for parent in review.get("original_pg_ids", []) if parent in originals})
+        if not parents or not inspector.has_table(table_name=table, schema=schema):
+            continue
+        columns = {column["name"] for column in inspector.get_columns(table_name=table, schema=schema)}
+        if not {"institute_id", "patient_id", "visit_id", "document_id"}.issubset(columns):
+            continue
+        validity_filter, validity_params = _document_validity_sql_filter(source_table=table, source_columns=columns)
+        available = set(connection.execute(text(
+            f'SELECT document_id FROM "{schema}"."{table}" '
+            "WHERE institute_id=:institute AND patient_id=:patient AND visit_id=:visit "
+            f"AND document_id=ANY(:parent_ids){validity_filter}"
+        ), {**parameters, **validity_params, "parent_ids": parents}).scalars().all())
+        excluded[table] = sorted(reviewed_pdf_document_exclusions(
+            reviews=reviews, original_document_ids=originals, available_document_ids=available,
+        ))
+    return {"identity": list(identity), "schema": schema, "identity_map": mapping,
+            "original_document_ids": sorted(originals), "documents": deepcopy(documents),
+            "excluded_document_ids": excluded}
+
+
 @lru_cache(maxsize=256)
 def _registered_schema(institute_id: str, patient_id: str, visit_id: str) -> str:
     from ..database.connection import engine
@@ -143,7 +226,8 @@ def material_source_schema(*, default_schema: str, institute_id: str, patient_id
         return requested_schema or default_schema
     if not (str(patient_id).startswith(COPY_PATIENT_PREFIX) and str(visit_id).startswith(COPY_VISIT_PREFIX)):
         raise ValueError("validation_material_identity_incomplete")
-    schema = _registered_schema(institute_id, patient_id, visit_id)
+    captured = _captured_validation_material(institute_id, patient_id, visit_id)
+    schema = captured["schema"] if captured is not None else _registered_schema(institute_id, patient_id, visit_id)
     if requested_schema not in (None, default_schema, schema):
         raise ValueError("validation_material_schema_mismatch")
     return schema
@@ -184,6 +268,13 @@ def material_document_sql_filter(
         institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
     if not re.fullmatch(r"[a-z_][a-z0-9_]*", source_table):
         raise ValueError("validation_material_table_invalid")
+    captured = _captured_validation_material(institute_id, patient_id, visit_id)
+    if captured is not None:
+        excluded = captured["excluded_document_ids"].get(source_table, [])
+        if not excluded:
+            return validity_filter, validity_params
+        return (validity_filter + ' AND ("document_id" IS NULL OR NOT ("document_id"=ANY(:material_excluded_ids)))',
+                {**validity_params, "material_excluded_ids": list(excluded)})
     from ..database.connection import engine
 
     identity = {"institute": institute_id, "patient": patient_id, "visit": visit_id}
@@ -225,6 +316,9 @@ def material_original_document_ids(*, institute_id: str, patient_id: str, visit_
     """副本原PG实体白名单，防止把新补入的PDF误当作原PG文书。"""
     if not is_material_copy(patient_id, visit_id):
         return None
+    captured = _captured_validation_material(institute_id, patient_id, visit_id)
+    if captured is not None:
+        return set(captured["original_document_ids"])
     from ..database.connection import engine
 
     _registered_schema(institute_id, patient_id, visit_id)
@@ -240,6 +334,13 @@ def material_pg_preference_reviews(*, institute_id: str, patient_id: str, visit_
     """当前副本已核对的PG优先展示决定；不改变临床行或质控材料。"""
     if not is_material_copy(patient_id, visit_id):
         return {}
+    captured = _captured_validation_material(institute_id, patient_id, visit_id)
+    if captured is not None:
+        return {row["candidate_id"]: {**deepcopy(row["provenance"]["pg_preference_review"]),
+                "pdf_document_id": row["target_document_id"] if row["state"] == "new_candidate" else "",
+                "pdf_document_type": row["target_table"], "source_file_id": row["file_id"],
+                "source_pages": [row["page_start"], row["page_end"]]}
+                for row in captured["documents"] if (row.get("provenance") or {}).get("pg_preference_review")}
     from ..database.connection import engine
 
     _registered_schema(institute_id, patient_id, visit_id)
@@ -262,18 +363,22 @@ def material_review_documents(*, institute_id: str, patient_id: str, visit_id: s
     """仅用于当前查看；未启用的PDF候选永不进入质控Bundle。"""
     if not is_material_copy(patient_id, visit_id):
         return []
-    from ..database.connection import engine
+    captured = _captured_validation_material(institute_id, patient_id, visit_id)
+    if captured is not None:
+        rows = deepcopy([row for row in captured["documents"] if row["state"] in {"version_review", "held"}])
+    else:
+        from ..database.connection import engine
 
-    # 先核对登记，避免仅凭前缀读到其他材料。
-    _registered_schema(institute_id, patient_id, visit_id)
-    with engine.connect() as connection:
-        rows = connection.execute(text(
-            "SELECT d.candidate_id,d.title,d.record_time_text,d.content,d.state,d.file_id,d.page_start,d.page_end,"
-            "d.target_table,d.target_document_id,d.provenance "
-            "FROM qc.validation_material_documents d JOIN qc.validation_material_copies c ON c.id=d.copy_id "
-            "WHERE c.institute_id=:institute AND c.patient_id=:patient AND c.visit_id=:visit "
-            "AND d.state IN ('version_review','held') ORDER BY d.file_id,d.page_start,d.candidate_id"
-        ), {"institute": institute_id, "patient": patient_id, "visit": visit_id}).mappings().all()
+        # 先核对登记，避免仅凭前缀读到其他材料。
+        _registered_schema(institute_id, patient_id, visit_id)
+        with engine.connect() as connection:
+            rows = connection.execute(text(
+                "SELECT d.candidate_id,d.title,d.record_time_text,d.content,d.state,d.file_id,d.page_start,d.page_end,"
+                "d.target_table,d.target_document_id,d.provenance "
+                "FROM qc.validation_material_documents d JOIN qc.validation_material_copies c ON c.id=d.copy_id "
+                "WHERE c.institute_id=:institute AND c.patient_id=:patient AND c.visit_id=:visit "
+                "AND d.state IN ('version_review','held') ORDER BY d.file_id,d.page_start,d.candidate_id"
+            ), {"institute": institute_id, "patient": patient_id, "visit": visit_id}).mappings().all()
     return [dict(
         id=row["candidate_id"], doc_key="pdf_candidate::"+row["candidate_id"],
         document_id=row["candidate_id"], doc_type="pdf_candidate", group_key="pdf_supplement",
@@ -292,6 +397,20 @@ def material_review_documents(*, institute_id: str, patient_id: str, visit_id: s
 def material_copy_display(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, str]:
     if not is_material_copy(patient_id, visit_id):
         return {}
+    captured = _captured_validation_material(institute_id, patient_id, visit_id)
+    if captured is not None:
+        from . import case_material_snapshot as material
+        from .luxian_0609.clinical_material_policy import primary_documents_only
+        sources = {}
+        tables = ("inpat_registration", "admission_record", "discharge_record")
+        if not primary_documents_only():
+            tables = ("mr", *tables)
+        for table in tables:
+            rows = material.frozen_rows(captured["schema"], table, (institute_id, patient_id, visit_id), 1)
+            if rows is None:
+                raise material.MaterialSnapshotError("uncaptured_validation_material_display")
+            sources[table] = rows[0] if rows else {}
+        return project_copy_display(sources)
     from ..database.connection import engine
 
     schema = _registered_schema(institute_id, patient_id, visit_id)

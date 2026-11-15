@@ -315,7 +315,12 @@ def bind_and_reduce_luxian_0609_rule_decisions(
                 if source_key in allowed_keys and rows is not None:
                     if any(ref in candidate_document_refs for ref, _ in rows):
                         consumed_keys.add(source_key)
-            bound = guard_decision(decision, consumed_keys or allowed_keys)
+            from .applicability_receipt import guard_not_applicable_sources
+            bound = guard_not_applicable_sources(
+                decision, snapshot=snapshot, materials=evidence_materials,
+                source_keys=consumed_keys,
+            )
+            bound = guard_decision(bound, consumed_keys or allowed_keys)
         try:
             reduced.append(reduce_luxian_0609_rule_decision(bound))
         except (TypeError, ValueError):

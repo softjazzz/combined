@@ -20,6 +20,17 @@ class _ControlledClient:
         }
 
 
+def test_synthetic_chain_retains_no_application_audit_basis():
+    from scripts import verify_consultation_family_acceptance as verify
+    path = Path(__file__).parents[1] / "fixtures" / "luxian_0609" / "consultation-family-replay.json"
+    fixture = verify._load_fixture(path)
+    report = asyncio.run(verify.run_formal_synthetic_chain(
+        path, llm_client=_ControlledClient(fixture["responses"]),
+    ))
+    item = next(item for item in report["results"] if item["rule_id"] == "LX0609-03-01-02")
+    assert item["status"] == "not_applicable" and item["fact_ref_count"] > 0
+
+
 def test_synthetic_benchmark_runs_one_warmup_and_ten_formal_rounds() -> None:
     from scripts import run_luxian_0609_consultation_synthetic_benchmark10 as benchmark
     from scripts import verify_consultation_family_acceptance as verify
@@ -39,7 +50,7 @@ def test_synthetic_benchmark_runs_one_warmup_and_ten_formal_rounds() -> None:
         )
     )
 
-    assert report["formal_round_count"] == 10
+    assert report["formal_round_count"] == 10, (report["warmup"]["failure_kind"], report["warmup"]["status_by_rule"], report["warmup"]["gate"])
     assert report["formal_rounds_completed"] == 10
     assert report["benchmark_passed"] is True
     assert report["warmup"]["round"] == 0

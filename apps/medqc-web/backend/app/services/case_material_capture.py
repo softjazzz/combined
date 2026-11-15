@@ -16,14 +16,14 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
     from .sample_programmatic_evidence import capture_programmatic_sources, _SOURCE_TABLES
     from .validation_material_source import material_source_schema, is_material_copy
 
-    if is_material_copy(identity[1], identity[2]):
-        raise material.MaterialSnapshotError("pdf_case_material_snapshot_not_supported")
+    pdf_copy = is_material_copy(identity[1], identity[2])
     coordinates = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
-    schema = material_source_schema(default_schema=assembly._default_source_schema(), **coordinates)
-    engine = assembly._source_engine(schema)
+    # 副本登记与正文必须来自同一个一致性事务，不能先用缓存或另一连接解析schema。
+    schema = None if pdf_copy else material_source_schema(default_schema=assembly._default_source_schema(), **coordinates)
+    engine = assembly.engine if pdf_copy else assembly._source_engine(schema)
     if engine is None:
         raise material.MaterialSnapshotError("material_source_unavailable")
-    state = {"protocol": material.PROTOCOL, "identity": list(identity), "binding": clinical.source_binding(),
+    state = {"protocol": material.PROTOCOL, "identity": list(identity), "binding": material.source_binding(identity),
              "schema": schema, "columns": {}, "tables": {}, "queries": {},
              "clinical_material_policy": CLINICAL_MATERIAL_POLICY_VERSION}
     started = time.monotonic()
@@ -42,17 +42,28 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
         with connection.begin():
             connection.exec_driver_sql("SET TRANSACTION READ ONLY")
             connection.exec_driver_sql("SET LOCAL statement_timeout=10000")
+            state.update(engine=engine, connection=connection)
+            if pdf_copy:
+                from .validation_material_source import capture_validation_material
+                with material.recording(state):
+                    state["validation_material"] = capture_validation_material(connection, identity)
+                schema = state["validation_material"]["schema"]
+                state["schema"] = schema
+            state["read_contract"] = {"schema": schema, "read_only": True,
+                                      "isolation_level": "REPEATABLE READ",
+                                      "identity_columns": list(coordinates)}
             if clinical.configured() and schema == "cdm":
                 from .clinical_source_contract import inspect_source
                 from .automatic_material_scope import PROTOCOL, validate_read_contract
-                source_statuses = validate_read_contract(inspect_source(connection, check_rows=False, primary_documents_only=True))
+                report = inspect_source(connection, check_rows=False, primary_documents_only=True)
+                source_statuses = validate_read_contract(report)
+                state["read_contract"]["source_report"] = report
                 state["automatic_material"] = {"protocol": PROTOCOL, "sources": {}}
             from . import daily_material_projection as daily
-            if daily.enabled():
+            if not pdf_copy and daily.enabled():
                 if not clinical.configured() or schema != "cdm":
                     raise material.MaterialSnapshotError("daily_material_independent_cdm_required")
                 state["daily_material_manifest"] = daily.read_manifest(connection, identity)
-            state.update(engine=engine, connection=connection)
             with material.recording(state):
                 limits = assembly._material_limits_for_variants(scenes=tuple(assembly._SCENE_DOC_PRIORITY), domains=tuple(assembly._DOMAIN_DOC_PRIORITY))
                 names = set(limits) | set(reader._NATIVE_SOURCE_FIELDS) | set(_SOURCE_TABLES) | {"mr", "mr_diagnosis", "mr_cost", "mr_surgery", "diagnosis", "inpat_registration"}
@@ -62,6 +73,8 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                 for table in sorted(names):
                     check()
                     state["columns"][table] = tuple(column["name"] for column in inspector.get_columns(table, schema=schema)) if inspector.has_table(table, schema=schema) else ()
+                    if pdf_copy and state["columns"][table] and not set(coordinates).issubset(state["columns"][table]):
+                        raise material.MaterialSnapshotError("material_identity_or_source_mismatch")
                 for table in sorted(names):
                     check()
                     status = source_statuses.get(table, "structure_ready") if "automatic_material" in state else "structure_ready"
@@ -150,3 +163,50 @@ def obtain(job_id, identity, *, retry=False, cancellation_check=None):
         if type(error).__name__ == "QCJobCancelled":
             raise
         raise material.MaterialSnapshotError("material_capture_failed") from None
+
+
+def pdf_retry_materials(job, lookup):
+    """PDF重试准入只依赖已保存任务链、可信三键及原快照，不查询当前登记。"""
+    from .material_job_lineage import MaterialLineageError
+
+    try:
+        return _pdf_retry_materials(job, lookup)
+    except MaterialLineageError:
+        # 不暴露内部链字段；仅转换解析器自身的合同拒绝，不吞任意ValueError。
+        raise material.MaterialSnapshotError("material_retry_lineage_invalid") from None
+
+
+def _pdf_retry_materials(job, lookup):
+    from .material_job_lineage import _filters, _refs, resolve_material_job_id
+    from .qc_workspace.failed_rule_retry import FAILED_RULE_RETRY_FILTER_KEY, FAILED_RULE_RETRY_SCHEMA_VERSION
+    from .validation_material_source import is_material_copy, material_source_schema
+
+    filters, _ = _filters(job)
+    retry_scope = filters.get(FAILED_RULE_RETRY_FILTER_KEY)
+    failed_retry = isinstance(retry_scope, dict) and retry_scope.get("schema_version") == FAILED_RULE_RETRY_SCHEMA_VERSION
+    if filters.get("retry_lineage") is None and not failed_retry:
+        return None
+    raw_refs = filters.get("record_refs") or []
+    if not any(isinstance(ref, dict) and is_material_copy(ref.get("patient_id", ""), ref.get("visit_id", "")) for ref in raw_refs):
+        return None
+    accepted = _refs(filters)
+    from .clinical_sources import saved_snapshot
+    if saved_snapshot(filters)["id"] != "legacy_pg":
+        raise material.MaterialSnapshotError("material_identity_or_source_mismatch")
+    selected = _refs(retry_scope) if failed_retry else accepted
+    if not selected.issubset(accepted) or not all(
+        patient.startswith("pdfp_") and visit.startswith("pdfv_") for _, patient, visit in accepted
+    ):
+        raise material.MaterialSnapshotError("material_identity_or_source_mismatch")
+    owner = resolve_material_job_id(job, lookup)
+    result = {}
+    for identity in sorted(selected):
+        frozen = material.load(owner, identity)
+        if frozen is None:
+            raise material.MaterialSnapshotError("original_task_material_not_retained")
+        # 冻结登记也必须是该完整身份/schema；只存在同名任务文件并不足够。
+        with material.activate(frozen):
+            material_source_schema(default_schema=frozen["schema"], requested_schema=frozen["schema"],
+                                   **dict(zip(("institute_id", "patient_id", "visit_id"), identity)))
+        result[identity] = frozen
+    return result

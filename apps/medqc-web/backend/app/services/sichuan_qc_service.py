@@ -2695,14 +2695,17 @@ class SichuanQCService:
     ) -> Optional[Dict[str, Any]]:
         from ..database.clinical_connection import get_engine
         from sqlalchemy.orm import Session
-        source_engine = get_engine()
+        material_state = case_material.context()
+        source_engine = material_state["engine"] if material_state is not None else get_engine()
         if source_engine is None and SessionLocal is None:
             return None
         material_bind = case_material.session_bind(source_engine)
         session = Session(material_bind) if material_bind is not None else SessionLocal()
         try:
+            query = (session.query(Diagnosis).execution_options(schema_translate_map={None: material_state["schema"]})
+                     if material_state is not None else clinical_query(session, Diagnosis))
             rows = (
-                clinical_query(session, Diagnosis)
+                query
                 .filter(
                     Diagnosis.institute_id == institute_id,
                     Diagnosis.patient_id == patient_id,
@@ -2742,13 +2745,15 @@ class SichuanQCService:
     ) -> List[Dict[str, Any]]:
         from ..database.clinical_connection import get_engine
         from sqlalchemy.orm import Session
-        source_engine = get_engine()
+        material_state = case_material.context()
+        source_engine = material_state["engine"] if material_state is not None else get_engine()
         if not dept_name or source_engine is None and SessionLocal is None:
             return []
         material_bind = case_material.session_bind(source_engine)
         session = Session(material_bind) if material_bind is not None else SessionLocal()
         try:
-            diagnosis_query = clinical_query(session, Diagnosis).filter(
+            diagnosis_query = (session.query(Diagnosis).execution_options(schema_translate_map={None: material_state["schema"]})
+                               if material_state is not None else clinical_query(session, Diagnosis)).filter(
                 Diagnosis.institute_id == institute_id,
                 Diagnosis.dept_name == dept_name,
                 Diagnosis.visit_id != current_visit_id,
@@ -2763,8 +2768,10 @@ class SichuanQCService:
             visit_ids = [str(item.visit_id or "").strip() for item in diagnosis_rows if str(item.visit_id or "").strip()]
             if not visit_ids:
                 return []
+            first_course_query = (session.query(FirstCourseRecord).execution_options(schema_translate_map={None: material_state["schema"]})
+                                  if material_state is not None else clinical_query(session, FirstCourseRecord))
             first_course_rows = (
-                clinical_query(session, FirstCourseRecord)
+                first_course_query
                 .filter(
                     FirstCourseRecord.institute_id == institute_id,
                     FirstCourseRecord.visit_id.in_(visit_ids),

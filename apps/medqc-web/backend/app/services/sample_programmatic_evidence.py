@@ -711,11 +711,16 @@ def capture_programmatic_sources(state, cancellation_check):
             continue
         if not set(parameters).issubset(columns):
             raise case_material.MaterialSnapshotError("programmatic_material_visit_keys_missing")
+        from .validation_material_source import is_material_copy, material_document_sql_filter
+        document_filter, document_parameters = (material_document_sql_filter(
+            source_schema=state["schema"], source_table=table, source_columns=set(columns), **parameters,
+        ) if is_material_copy(parameters["patient_id"], parameters["visit_id"]) else ("", {}))
         with case_material.source_connection(state["engine"]) as connection:
             rows = connection.execute(text(
                 f'SELECT * FROM "{state["schema"]}"."{table}" '
-                'WHERE institute_id=:institute_id AND patient_id=:patient_id AND visit_id=:visit_id LIMIT 10001'
-            ), parameters).mappings().all()
+                'WHERE institute_id=:institute_id AND patient_id=:patient_id AND visit_id=:visit_id'
+                f'{document_filter} LIMIT 10001'
+            ), {**parameters, **document_parameters}).mappings().all()
         if len(rows) >= 10001:
             raise case_material.MaterialSnapshotError("programmatic_material_capacity_exceeded")
         sources[table] = {"rows": [dict(row) for row in rows],

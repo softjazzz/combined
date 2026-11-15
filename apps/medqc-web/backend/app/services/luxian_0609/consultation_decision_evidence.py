@@ -142,8 +142,8 @@ def select_consultation_rule_material_refs(
 
     if status in {"data_gap", "technical_error"}:
         return ()
-    if status == "not_applicable" and reason_code != "eligibility_not_met":
-        return ()
+    # 不适用仍需保存已核验的意见依据；无事件的来源观察由执行入口单独绑定，
+    # 不能把“没有缺陷文书”解释成“没有审计依据”。
     if rule_id in {"LX0609-03-01-02", "LX0609-03-01-03"}:
         state_field = "application_state" if rule_id == "LX0609-03-01-02" else "opinion_state"
         ref_field = "application_refs" if rule_id == "LX0609-03-01-02" else "opinion_refs"
@@ -156,7 +156,7 @@ def select_consultation_rule_material_refs(
                 if _clean(reference)
             )
         )
-        if not selected_refs and episodes:
+        if not selected_refs and episodes and status != "not_applicable":
             return ()
         if not selected_refs:
             # 显式短路还没有 episode；执行器已判定的本次会诊文书即为事实来源。
