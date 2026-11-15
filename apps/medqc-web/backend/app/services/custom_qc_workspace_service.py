@@ -6556,6 +6556,10 @@ class CustomQCWorkspaceService:
                     self._batch_job_table, job_id=job_id, attempt_filters_json=attempt_filters_json,
                     observed_filters_json=row.get("filters_json"), queued_only=queued_only,
                 ))
+                .where(
+                    self._batch_job_table.c.filters_json == expected_queued_filters_json
+                    if queued_only and expected_queued_filters_json is not None else sa.true()
+                )
                 .values(
                     status="failed",
                     summary_json=_safe_json_dumps(

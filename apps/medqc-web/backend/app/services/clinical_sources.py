@@ -438,7 +438,21 @@ def bound_job(function):
         with clinical.selected(source):
             if fixed_cdm() and source["id"] == "legacy_pg":
                 from .case_material_capture import pdf_retry_materials
-                retry_materials = pdf_retry_materials(job or {}, lambda source_id: workspace.get_batch_job_for_processing(job_id=source_id))
+                from .case_material_snapshot import MaterialSnapshotError
+                try:
+                    retry_materials = pdf_retry_materials(job or {}, lambda source_id: workspace.get_batch_job_for_processing(job_id=source_id))
+                except MaterialSnapshotError as error:
+                    # worker尚未认领；只终结同一排队快照，迟到错误不得覆盖新尝试或终态。
+                    from .material_admission import safe_material_failure
+                    failure = safe_material_failure(str(error))
+                    raw = (job or {}).get("_claim_filters_json")
+                    if raw is not None and job.get("status") == "queued":
+                        workspace.fail_batch_job(
+                            job_id=job_id, error_message=failure["code"], queued_only=True,
+                            expected_queued_filters_json=raw,
+                            execution_error={"reason_code": failure["code"], "retryable": False},
+                        )
+                    return None
                 if retry_materials is None and not _local_material_filters((job or {}).get("filters") or {}):
                     # 历史普通旧源任务保持原状；不自动执行、不改绑或改写其状态。
                     return None
