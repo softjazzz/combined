@@ -555,7 +555,10 @@ def _map_canonical_item_to_review_item(
     evidence = customer_evidence_summary(
         list(item.get("evidence") or []), facts=item.get("customer_display_facts")
     )
+    from ..services.history_evidence_audit import read_projection
+    audit = read_projection(item)
     return {
+        **audit,
         "id": f"canonical:{job_id}:{rule_id or index}",
         "source": "canonical_result_envelope",
         "job_id": job_id,

@@ -117,6 +117,34 @@ from .qc_dispatch.contracts import qc_dispatch_mode_from_filters
 logger = logging.getLogger(__name__)
 
 
+def _bind_item_material(item, fingerprint):
+    """保存前绑定本轮材料和审计回执，既有不同绑定不得被覆盖。"""
+    from .case_material_snapshot import MaterialSnapshotError
+    if item.get("case_material_fingerprint") not in (None, fingerprint):
+        raise MaterialSnapshotError("material_identity_or_source_mismatch")
+    bound = {**item, "case_material_fingerprint": fingerprint}
+    if "applicability_receipt" in item:
+        receipt = item["applicability_receipt"]
+        if not isinstance(receipt, dict) or receipt.get("material_fingerprint") not in (None, fingerprint):
+            raise MaterialSnapshotError("material_identity_or_source_mismatch")
+        bound["applicability_receipt"] = {**deepcopy(receipt), "material_fingerprint": fingerprint}
+    return bound
+
+
+def _capture_frozen_pdf_identities(collector, identity, frozen):
+    """重放原始身份防护字段，仅从已冻结完整行恢复请求内存中的脱敏集合。"""
+    from types import SimpleNamespace
+    from .case_material_snapshot import MaterialSnapshotError
+    for table in ("inpat_registration", "admission_record", "discharge_record"):
+        source = frozen.get("programmatic_sources", {}).get(table)
+        if not isinstance(source, dict) or ("rows" not in source and not source.get("unavailable")):
+            raise MaterialSnapshotError("uncaptured_programmatic_source")
+        for row in source.get("rows", ()):
+            if tuple(row.get(key) for key in ("institute_id", "patient_id", "visit_id")) != identity:
+                raise MaterialSnapshotError("material_identity_or_source_mismatch")
+            collector.capture(table, SimpleNamespace(**row))
+
+
 def _enqueue_automatic_failed_rule_retry(
     *,
     workspace: CustomQCWorkspaceService,
@@ -1628,18 +1656,35 @@ async def run_sichuan_workspace_batch_job(
             raise ValueError(
                 "样本池任务缺少 filters.record_refs，拒绝按 record_ids 回退"
             )
-        records = workspace.collect_records(
-            scope=str(current.get("scope") or "all"),
-            department=filters.get("department"),
-            doctor=filters.get("doctor"),
-            date_field=filters.get("date_field") or "admission",
-            start_date=filters.get("start_date"),
-            end_date=filters.get("end_date"),
-            keyword=filters.get("keyword"),
-            record_ids=None if has_persisted_record_refs else current.get("record_ids") or None,
-            record_refs=persisted_record_refs if has_persisted_record_refs else None,
-            **({"_private_identity_collector": identity_collector.capture} if identity_collector is not None else {}),
-        )
+        from .case_material_capture import pdf_retry_materials
+        retry_pdf = pdf_retry_materials(current, lambda source_id: workspace.get_batch_job_for_processing(job_id=source_id))
+        if retry_pdf is not None:
+            from . import case_material_snapshot as materials
+            from .validation_material_source import material_copy_display
+            records = []
+            for identity, frozen in retry_pdf.items():
+                coordinates = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
+                with materials.activate(frozen):
+                    display = material_copy_display(**coordinates)
+                if identity_collector is not None:
+                    _capture_frozen_pdf_identities(identity_collector, identity, frozen)
+                records.append({**display, **coordinates, "record_id": identity[2],
+                    "record_key": CaseRef(*identity).as_key(), "scope": str(current.get("scope") or "all"),
+                    "admission_datetime": display["admission_time"], "discharge_datetime": display["discharge_time"],
+                    "medical_text": ""})
+        else:
+            records = workspace.collect_records(
+                scope=str(current.get("scope") or "all"),
+                department=filters.get("department"),
+                doctor=filters.get("doctor"),
+                date_field=filters.get("date_field") or "admission",
+                start_date=filters.get("start_date"),
+                end_date=filters.get("end_date"),
+                keyword=filters.get("keyword"),
+                record_ids=None if has_persisted_record_refs else current.get("record_ids") or None,
+                record_refs=persisted_record_refs if has_persisted_record_refs else None,
+                **({"_private_identity_collector": identity_collector.capture} if identity_collector is not None else {}),
+            )
         if rule_set_key == LUXIAN_0609_RULE_SET_KEY and has_persisted_record_refs:
             accepted_refs = set(normalize_case_refs(persisted_record_refs))
             collected_refs = set(case_refs_from_records(records)) if records else set()
@@ -1658,7 +1703,7 @@ async def run_sichuan_workspace_batch_job(
                 "total_records": len(records),
             },
         )
-        hydrated_records = workspace.hydrate_records_with_medical_text(records)
+        hydrated_records = records if retry_pdf is not None else workspace.hydrate_records_with_medical_text(records)
         if identity_collector is not None:
             for record in hydrated_records:
                 identity_collector.capture_hydrated_record(record)
@@ -2191,6 +2236,10 @@ async def run_sichuan_workspace_batch_job(
                         or raw.get("status") in {"technical_error", "uncertain"}):
                     continue
                 validated_customer_explanation(raw, rule_id=rule_id, status=raw["status"])
+                from .case_material_snapshot import current as current_material
+                frozen = current_material()
+                if frozen is not None:
+                    raw = _bind_item_material(raw, frozen["fingerprint"])
                 rows.append({**deepcopy(raw), "record_id": record_id, "record_key": case.as_key(),
                     "institute_id": case.institute_id, "patient_id": case.patient_id, "visit_id": case.visit_id,
                     "patient_name": str(record.get("patient_name") or ""),
@@ -3547,7 +3596,7 @@ async def run_sichuan_workspace_batch_job(
                                 identity = (institute_id, patient_id, visit_id)
                                 backed_by_pg = getattr(getattr(material_assembly.engine, "dialect", None), "name", "") == "postgresql"
                                 frozen = None
-                                if all(identity) and not is_material_copy(patient_id, visit_id) and (material_clinical.configured() or backed_by_pg):
+                                if all(identity) and (is_material_copy(patient_id, visit_id) or material_clinical.configured() or backed_by_pg):
                                     try:
                                         frozen = await asyncio.to_thread(obtain, material_job_id, identity,
                                             retry=bool(retry_lineage) or is_failed_rule_retry, cancellation_check=_raise_if_cancelled)
@@ -3712,6 +3761,8 @@ async def run_sichuan_workspace_batch_job(
                     stats.get("executor_native") or 0
                 )
                 for item in list(items_by_rule.get(rule_id) or []):
+                    if record_result.get("case_material_fingerprint"):
+                        item = _bind_item_material(item, record_result["case_material_fingerprint"])
                     state["items"].append(item)
                     all_items.append(item)
                 for failed in list(failed_by_rule.get(rule_id) or []):

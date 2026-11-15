@@ -375,15 +375,16 @@ def test_catalog_no_registration_keeps_unknown_and_date_only(monkeypatch):
 
 
 
-def test_pdf_material_copy_is_not_snapshotted():
+def test_pdf_material_copy_without_business_source_fails_closed(monkeypatch):
     from app.services.case_material_capture import capture
-    with pytest.raises(material.MaterialSnapshotError,match="pdf_case_material_snapshot_not_supported"):
+    monkeypatch.setattr(assembly, "engine", None)
+    with pytest.raises(material.MaterialSnapshotError,match="material_source_unavailable"):
         capture(identity=("I","pdfp_P","pdfv_V"))
     assert material.load("pdf-task", ("I","pdfp_P","pdfv_V")) is None
 
 
 @pytest.mark.asyncio
-async def test_pdf_history_does_not_require_material_snapshot(monkeypatch):
+async def test_pdf_history_without_material_is_rejected_not_reloaded(monkeypatch):
     from starlette.requests import Request
     from app.services import clinical_sources, validation_material_source
     monkeypatch.setattr(validation_material_source,"_registered_schema",lambda *_:"pdfmat_012345abcdef")
@@ -394,12 +395,15 @@ async def test_pdf_history_does_not_require_material_snapshot(monkeypatch):
     request = Request({"type":"http","method":"GET","path":"/api/v1/emr/pdfv_V/documents",
         "query_string":b"institute_id=I&patient_id=pdfp_P&visit_id=pdfv_V&job_id=PDF-JOB","headers":[]})
     clinical_sources.prepare_request(request)
+    monkeypatch.setattr(material, "load", lambda *_: None)
     generator = clinical_sources.bind_request(request)
+    from fastapi import HTTPException
     try:
-        await generator.__anext__()
-        assert material.current() is None
+        with pytest.raises(HTTPException, match="historical_material_snapshot_not_retained"):
+            await generator.__anext__()
     finally:
         await generator.aclose()
+
 
 
 

@@ -102,6 +102,8 @@ def source_connection(engine):
     if state is not None and engine is state["engine"]:
         with state["connection"].begin_nested():
             yield state["connection"]
+    elif state is not None:
+        raise MaterialSnapshotError("material_identity_or_source_mismatch")
     elif current() is not None:
         raise MaterialSnapshotError("uncaptured_source_query_forbidden")
     else:
@@ -109,9 +111,22 @@ def source_connection(engine):
             yield connection
 
 
+def source_binding(identity):
+    """副本绑定业务库身份，普通病历保持既有独立CDM绑定；不读取口令。"""
+    from .validation_material_source import is_material_copy
+    if is_material_copy(identity[1], identity[2]):
+        from ..database.connection import engine
+        if engine is None:
+            raise MaterialSnapshotError("material_source_unavailable")
+        url = engine.url
+        return "pdf-material-v1:" + fingerprint(
+            [url.drivername, url.host, url.port, url.database, url.username])
+    from ..database.clinical_connection import source_binding as clinical_binding
+    return clinical_binding()
+
+
 def identity_check(value, identity):
-    from ..database.clinical_connection import source_binding
-    if value["identity"] != list(identity) or value["binding"] != source_binding():
+    if value["identity"] != list(identity) or value["binding"] != source_binding(identity):
         raise MaterialSnapshotError("material_identity_or_source_mismatch")
 
 
@@ -274,6 +289,8 @@ def session_bind(engine):
     state = _recording.get()
     if state is not None and (engine is None or engine is state["engine"]):
         return state["connection"]
+    if state is not None:
+        raise MaterialSnapshotError("material_identity_or_source_mismatch")
     if current() is not None:
         raise MaterialSnapshotError("uncaptured_source_session_forbidden")
     return engine

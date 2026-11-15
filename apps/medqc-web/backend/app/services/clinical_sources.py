@@ -226,19 +226,20 @@ def prepare_request(request: Request) -> None:
             raise HTTPException(422, "clinical_material_identity_unavailable")
         identity["visit_id"] = record_id
     if request.method == "GET" and is_material_copy(identity["patient_id"], identity["visit_id"]):
-        try:
-            if not all(identity.values()):
-                raise ValueError
-            material_source_schema(default_schema="cdm", **identity)
-        except Exception:
-            raise HTTPException(422, "clinical_material_identity_unavailable") from None
         job_id = request.query_params.get("job_id") if path.startswith("/api/v1/emr/") else None
+        if not all(identity.values()):
+            raise HTTPException(422, "clinical_material_identity_unavailable")
+        if not job_id:
+            try:
+                material_source_schema(default_schema="cdm", **identity)
+            except Exception:
+                raise HTTPException(422, "clinical_material_identity_unavailable") from None
         if job_id:
             selection = source_for_saved_job(request, job_id)
             if selection["id"] != "legacy_pg":
                 raise HTTPException(409, "clinical_material_job_source_mismatch")
-            # 用户指定PDF副本沿用原读取链，不要求或生成新的任务材料快照。
-            request.state.material_root_job_id = ""
+            # 历史原文必须来自该任务材料；缺失时由 bind_request 明确拒绝，
+            # 不能把当前登记副本冒充历史。已保存结果仍可只读显示缺失标记。
         request.state.clinical_source = legacy_snapshot()
         return
     if fixed_cdm() and request.method=="GET" and identity["institute_id"]=="CUSTOMER_TEST" and not request.query_params.get("job_id"):
@@ -434,10 +435,13 @@ def bound_job(function):
                 workspace.fail_batch_job(job_id=job_id, error_message="clinical_source_snapshot_invalid",
                     queued_only=True, expected_queued_filters_json=raw)
             return None
-        if fixed_cdm() and source["id"]=="legacy_pg" and not _local_material_filters((job or {}).get("filters") or {}):
-            # 历史普通旧源任务保持原状；不自动执行、不改绑或改写其状态。
-            return None
         with clinical.selected(source):
+            if fixed_cdm() and source["id"] == "legacy_pg":
+                from .case_material_capture import pdf_retry_materials
+                retry_materials = pdf_retry_materials(job or {}, lambda source_id: workspace.get_batch_job_for_processing(job_id=source_id))
+                if retry_materials is None and not _local_material_filters((job or {}).get("filters") or {}):
+                    # 历史普通旧源任务保持原状；不自动执行、不改绑或改写其状态。
+                    return None
             return await function(job_id, workspace=workspace, **kwargs)
     return run
 

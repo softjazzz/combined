@@ -1264,6 +1264,14 @@ def finalize_luxian_0609_reduced_customer_result(
         safe_customer_display_facts=safe_facts,
         trace_sink=trace_sink,
     )
+    if decision.final_state.value == "not_applicable":
+        from .applicability_receipt import build_applicability_receipt
+        from .evidence_snapshot import Luxian0609EvidenceSnapshot
+
+        if isinstance(evidence_snapshot, Luxian0609EvidenceSnapshot):
+            result["applicability_receipt"] = build_applicability_receipt(
+                decision=decision, snapshot=evidence_snapshot, materials=evidence_materials,
+            )
     if safe_facts is not None:
         result["customer_display_facts"] = safe_facts
         precise_findings = customer_finding_from_controlled_facts(

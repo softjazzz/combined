@@ -5153,7 +5153,15 @@ async def _execute_consultation_episode_rules(
     except _SourceTechnical:
         return _finish(selected=selected, status="technical_error", reason_code="source_query_error", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     if not documents:
-        return _finish(selected=selected, status="not_applicable", reason_code="trigger_absent_complete", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+        # 无会诊事件没有原文；实际读取来源的观察摘要用于证明完整检查，不能丢失。
+        checked_refs = tuple(
+            item.snapshot_ref.removeprefix("sha256:")
+            for item in evidence_snapshot.observations
+            if item.source_key == _SOURCE_KEY
+        ) if evidence_snapshot is not None else ()
+        return _finish(selected=selected, status="not_applicable", reason_code="trigger_absent_complete",
+                       evidence_snapshot=evidence_snapshot, decision_rule_ids=typed,
+                       fact_refs_by_rule={rule_id: checked_refs for rule_id in selected})
     if _documents_are_explicit_non_target(documents):
         try:
             non_target_refs = material_refs_for_internal_refs(

@@ -748,6 +748,9 @@ def project_customer_safe_result_item(
         "customer_suggestion": suggestion,
         "evidence": _safe_evidence_rows(raw, hmac_key=hmac_key),
     }
+    if is_luxian:
+        from .history_evidence_audit import read_projection
+        projected.update(read_projection(raw))
     if customer_display_facts:
         projected["customer_display_facts"] = customer_display_facts
     if criterion_results:
@@ -765,6 +768,8 @@ def _customer_filtered_saved_text(
     安全检查和回退选择，不重生成、不截断正常文本。"""
 
     filtered = dict(item)
+    from .history_evidence_audit import read_projection
+    filtered.update(read_projection(item))
     generic = _GENERIC_CUSTOMER_TEXT.get(_canonical_customer_status(item))
     if generic is None:
         return filtered

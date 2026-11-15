@@ -186,7 +186,7 @@ def test_snapshot_or_ref_mismatch_is_isolated_technical_error(decision):
     assert reduced[0].fact_refs == ()
 
 
-def test_complete_absent_trigger_does_not_require_a_fabricated_document_ref():
+def test_absent_trigger_without_consultation_observation_remains_gap():
     snapshot = _snapshot()
     decision = RuleDecision(
         rule_id="LX0609-03-01-01",
@@ -205,8 +205,8 @@ def test_complete_absent_trigger_does_not_require_a_fabricated_document_ref():
         snapshot=snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
-    assert reduced[0].reason_code == "trigger_absent_complete"
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "source_readiness_unproven"
     assert reduced[0].fact_refs == ()
 
 
