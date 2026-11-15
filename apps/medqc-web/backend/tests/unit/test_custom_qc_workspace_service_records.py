@@ -112,7 +112,7 @@ def test_explicit_anchor_date_filter_uses_preferred_admission_time(
     assert len(rows) == expected_count
 
 
-def test_explicit_anchor_keeps_frontpage_admission_time_priority(explicit_anchor_database):
+def test_explicit_anchor_uses_raw_admission_time_despite_frontpage(explicit_anchor_database):
     identity = dict(institute_id="I", patient_id="P", visit_id="V")
     with Session(explicit_anchor_database) as session:
         session.add(record_repository_module.MedicalRecordFrontpage(
@@ -124,7 +124,7 @@ def test_explicit_anchor_keeps_frontpage_admission_time_priority(explicit_anchor
         session.commit()
     rows = _collect_explicit_anchor(explicit_anchor_database, identity)
     assert len(rows) == 1
-    assert rows[0]["admission_datetime"] == "2026-07-03 11:00:00"
+    assert rows[0]["admission_datetime"] == "2026-07-01 09:00:00"
 
 
 def test_serialize_record_row_should_include_programmatic_execution_keys():
@@ -475,13 +475,13 @@ def test_collect_records_today_inpatient_requires_today_verified_projection() ->
     with Session(engine) as session:
         session.add_all(
             [
-                record_repository_module.MedicalRecordFrontpage(
+                record_repository_module.InpatRegistration(
                     institute_id="H1",
                     patient_id="P1",
                     visit_id="TODAY-INPATIENT",
                     admission_datetime=now - timedelta(days=2),
                 ),
-                record_repository_module.MedicalRecordFrontpage(
+                record_repository_module.InpatRegistration(
                     institute_id="H1",
                     patient_id="P2",
                     visit_id="STALE-INPATIENT",
@@ -613,7 +613,7 @@ def test_collect_records_today_inpatient_includes_filtered_visit_index_anchors()
     assert all(item["doctor"] == "王医师" for item in records)
 
 
-def test_collect_records_excludes_frontpage_with_incomplete_case_identity() -> None:
+def test_collect_records_excludes_raw_anchor_with_incomplete_case_identity() -> None:
     engine = create_engine("sqlite:///:memory:")
     for model in (
         record_repository_module.MedicalRecordFrontpage,
@@ -627,12 +627,12 @@ def test_collect_records_excludes_frontpage_with_incomplete_case_identity() -> N
     with Session(engine) as session:
         session.add_all(
             [
-                record_repository_module.MedicalRecordFrontpage(
+                record_repository_module.InpatRegistration(
                     institute_id="H1",
                     patient_id="P1",
                     visit_id="VALID",
                 ),
-                record_repository_module.MedicalRecordFrontpage(
+                record_repository_module.InpatRegistration(
                     institute_id="H1",
                     patient_id="",
                     visit_id="INVALID",

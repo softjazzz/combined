@@ -256,10 +256,14 @@ def test_same_key_current_document_requests_do_not_coalesce_across_sources(profi
 
 def test_historical_document_source_comes_from_job_not_current_default(settings_store, profile, monkeypatch):
     from app.database import connection as owner
+    from app.database.models.v36_reports import SysUser
     value = sources.snapshot(profile, "independent_cdm")
     filters = {"record_refs": [REF], "clinical_source": value}
     settings_store.execute(text("CREATE TABLE qc.custom_qc_batch_jobs(id TEXT,created_by TEXT,filters_json TEXT,parent_job_id TEXT,job_kind TEXT,child_job_ids_json TEXT)"))
     settings_store.execute(text("INSERT INTO qc.custom_qc_batch_jobs VALUES('saved','owner',:filters,NULL,'leaf','[]')"), {"filters": json.dumps(filters)})
+    SysUser.__table__.create(settings_store.get_bind())
+    settings_store.add(SysUser(id="manager", username="manager", display_name="合成管理者",
+                              institute_id=REF["institute_id"], role="qc_manager", roles_json='["qc_manager"]', is_active=True))
     settings_store.commit()
     monkeypatch.setattr(owner, "SessionLocal", lambda: Session(settings_store.get_bind()))
     monkeypatch.setattr(sources, "configuration", lambda: pytest.fail("历史任务不按当前默认源重新解释"))

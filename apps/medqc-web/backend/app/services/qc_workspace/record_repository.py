@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from sqlalchemy import String, and_, asc, cast, desc, exists, func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from ...database.models.cdm import (
     AdmissionRecord,
@@ -154,8 +154,10 @@ class WorkspaceListResult:
 class RecordRepository:
     """工作区病历池的唯一只读查询与正文水合实现。"""
 
-    def __init__(self, *, session_factory: Callable[[], Session], _material_schema: str | None = None) -> None:
+    def __init__(self, *, session_factory: Callable[[], Session], _material_schema: str | None = None,
+                 frontpage_display: bool = False) -> None:
         self._session_factory = session_factory
+        self._frontpage_display = frontpage_display
         if _material_schema:
             from ..validation_material_source import MATERIAL_SCHEMA
             if not MATERIAL_SCHEMA.fullmatch(_material_schema):
@@ -179,158 +181,52 @@ class RecordRepository:
             session.close()
             raise
 
+    def _raw_case_refs(
+        self, session: Session, *, record_ids: Optional[Sequence[str]] = None,
+        institute_id: Optional[str] = None, sync_scope: Optional[str] = None,
+    ) -> List[CaseRef]:
+        """只从原始住院登记/入院文书发现身份，旧 visit 入口必须唯一。"""
+        refs: set[CaseRef] = set()
+        for model in (InpatRegistration, AdmissionRecord):
+            query = session.query(model.institute_id, model.patient_id, model.visit_id)
+            if record_ids:
+                query = query.filter(model.visit_id.in_(record_ids))
+            if institute_id:
+                query = query.filter(model.institute_id == institute_id)
+            if _safe_text(sync_scope).lower() == "today_inpatient":
+                query = query.filter(exists().where(and_(
+                    HospitalizationStatusProjection.institute_id == model.institute_id,
+                    HospitalizationStatusProjection.patient_id == model.patient_id,
+                    HospitalizationStatusProjection.visit_id == model.visit_id,
+                    HospitalizationStatusProjection.status == "inpatient",
+                    func.date(HospitalizationStatusProjection.verified_at) == date.today(),
+                )))
+            for row in query.distinct().all():
+                ref = CaseRef(_safe_text(row.institute_id), _safe_text(row.patient_id), _safe_text(row.visit_id))
+                if all(ref):
+                    refs.add(ref)
+        if record_ids:
+            by_visit: Dict[str, set[CaseRef]] = {}
+            for ref in refs:
+                by_visit.setdefault(ref.visit_id, set()).add(ref)
+            if any(len(values) > 1 for values in by_visit.values()):
+                raise ValueError("clinical_case_identity_ambiguous_or_missing")
+        return sorted(refs)
+
     def _collect_explicit_anchor_records(
-        self,
-        session: Session,
-        *,
-        record_ids: Sequence[str],
-        excluded_record_ids: set[str],
-        scope: str,
-        department: Optional[str],
-        doctor: Optional[str],
-        date_field: str,
-        start_date: Optional[str],
-        end_date: Optional[str],
-        keyword: Optional[str],
+        self, session: Session, *, record_ids: Sequence[str], excluded_record_ids: set[str],
+        scope: str, department: Optional[str], doctor: Optional[str], date_field: str,
+        start_date: Optional[str], end_date: Optional[str], keyword: Optional[str],
         _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
-        """为没有病案首页的在院病例补充本地执行锚点。"""
-        missing_ids = list(
-            dict.fromkeys(
-                _safe_text(record_id)
-                for record_id in record_ids
-                if _safe_text(record_id)
-                and _safe_text(record_id) not in excluded_record_ids
-            )
-        )
-        if not missing_ids:
-            return []
-
-        discharge_rows = (
-            session.query(DischargeRecord)
-            .filter(DischargeRecord.visit_id.in_(missing_ids))
-            .all()
-        )
-        discharge_by_visit = {
-            _safe_text(row.visit_id): row
-            for row in discharge_rows
-            if _safe_text(getattr(row, "visit_id", ""))
-        }
-        registration_rows = (
-            session.query(InpatRegistration)
-            .filter(InpatRegistration.visit_id.in_(missing_ids))
-            .all()
-        )
-        admission_rows = (
-            session.query(AdmissionRecord)
-            .filter(AdmissionRecord.visit_id.in_(missing_ids))
-            .all()
-        )
-        admission_by_identity = {
-            CaseRef.from_mapping(row.__dict__): row for row in admission_rows
-        }
-
-        _capture_private_orm_identities(_private_identity_collector, "discharge_record", discharge_rows)
-        _capture_private_orm_identities(_private_identity_collector, "inpat_registration", registration_rows)
-        _capture_private_orm_identities(_private_identity_collector, "admission_record", admission_rows)
-
-        anchor_by_visit: Dict[str, Any] = {}
-        for row in registration_rows:
-            visit_id = _safe_text(getattr(row, "visit_id", ""))
-            if visit_id and visit_id not in anchor_by_visit:
-                anchor_by_visit[visit_id] = row
-        for row in admission_rows:
-            visit_id = _safe_text(getattr(row, "visit_id", ""))
-            if visit_id and visit_id not in anchor_by_visit:
-                anchor_by_visit[visit_id] = row
-
-        scope_value = _normalize_scope(scope)
-        date_field_value = _normalize_date_field(date_field)
-        start = _as_date(start_date)
-        end = _as_date(end_date)
-        records: List[Dict[str, Any]] = []
-        for visit_id in missing_ids:
-            source = anchor_by_visit.get(visit_id)
-            if source is None:
-                continue
-            discharge_source = discharge_by_visit.get(visit_id)
-            discharge_selection = select_discharge_time(
-                registration=getattr(source, "discharge_datetime", None),
-                document_date=getattr(discharge_source, "discharge_date", None),
-                document_time=getattr(discharge_source, "discharge_time", None),
-                document_status=getattr(discharge_source, "document_status", None),
-            )
-            discharge_datetime = discharge_selection.value
-            item_scope = "final" if discharge_datetime else "running"
-            if scope_value != "all" and item_scope != scope_value:
-                continue
-
-            item_department = _safe_text(
-                getattr(source, "discharge_dept_name", None)
-                or getattr(source, "admission_dept_name", None)
-                or getattr(source, "dept_name", None)
-                or getattr(discharge_source, "dept_name", None)
-            )
-            item_doctor = _safe_text(
-                getattr(source, "attending_physician_sign", None)
-                or getattr(source, "submitter", None)
-            )
-            if department and item_department != department:
-                continue
-            if doctor and item_doctor != doctor:
-                continue
-            if keyword:
-                normalized_keyword = keyword.strip().lower()
-                searchable_values = (
-                    visit_id,
-                    _safe_text(getattr(source, "name", "")),
-                    _safe_text(getattr(source, "mr_no", "")),
-                    _safe_text(getattr(source, "inpat_no", "")),
-                )
-                if normalized_keyword and not any(
-                    normalized_keyword in value.lower()
-                    for value in searchable_values
-                    if value
-                ):
-                    continue
-
-            admission_datetime = getattr(
-                admission_by_identity.get(CaseRef.from_mapping(source.__dict__)), "admission_datetime", None
-            ) or getattr(source, "admission_datetime", None)
-            if not _record_dates_match_range(
-                date_field=date_field_value,
-                admission_datetime=admission_datetime,
-                discharge_datetime=discharge_datetime,
-                start=start,
-                end=end,
-            ):
-                continue
-
-            medical_text = _safe_text(getattr(source, "record_content", None))
-            records.append(
-                {
-                    "institute_id": _safe_text(getattr(source, "institute_id", "")),
-                    "patient_id": _safe_text(getattr(source, "patient_id", "")),
-                    "record_id": visit_id,
-                    "visit_id": visit_id,
-                    "patient_name": _safe_text(getattr(source, "name", "")),
-                    "mr_no": _safe_text(getattr(source, "mr_no", "")),
-                    "inpat_no": _safe_text(getattr(source, "inpat_no", "")),
-                    "scope": item_scope,
-                    "department": item_department,
-                    "doctor": item_doctor,
-                    "admission_date": _to_iso_date(admission_datetime),
-                    "discharge_date": _to_iso_date(discharge_datetime),
-                    "admission_datetime": _to_iso_datetime(admission_datetime),
-                    "discharge_datetime": _to_iso_datetime(discharge_datetime),
-                    "discharge_horizon_source": discharge_selection.source,
-                    "discharge_horizon_conflict": discharge_selection.conflict,
-                    "status": "completed" if item_scope == "final" else "running",
-                    "medical_text": medical_text,
-                    "medical_text_length": len(medical_text),
-                }
-            )
-        return records
+        ids = [_safe_text(value) for value in record_ids if _safe_text(value) not in excluded_record_ids]
+        refs = self._raw_case_refs(session, record_ids=ids) if ids else []
+        return self._collect_explicit_anchor_records_by_refs(
+            session, record_refs=refs, excluded_record_refs=set(), scope=scope,
+            department=department, doctor=doctor, date_field=date_field,
+            start_date=start_date, end_date=end_date, keyword=keyword,
+            _private_identity_collector=_private_identity_collector,
+        ) if refs else []
 
     def _collect_explicit_anchor_records_by_refs(
         self,
@@ -345,9 +241,10 @@ class RecordRepository:
         start_date: Optional[str],
         end_date: Optional[str],
         keyword: Optional[str],
+        _metadata_only: bool = False,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
     ) -> List[Dict[str, Any]]:
-        """按三坐标补充没有病案首页的执行锚点，禁止按 visit 串病例。"""
+        """按三坐标读取原始临床执行锚点，禁止按 visit 串病例。"""
         missing_refs = [
             ref for ref in normalize_case_refs(record_refs) if ref not in excluded_record_refs
         ]
@@ -366,11 +263,20 @@ class RecordRepository:
                 )
             )
 
-        discharge_rows = session.query(DischargeRecord).filter(exact_clause(DischargeRecord)).all()
-        registration_rows = (
-            session.query(InpatRegistration).filter(exact_clause(InpatRegistration)).all()
-        )
-        admission_rows = session.query(AdmissionRecord).filter(exact_clause(AdmissionRecord)).all()
+        def source_rows(model: Any, fields: Sequence[str]):
+            query = session.query(model).filter(exact_clause(model))
+            if _metadata_only:
+                # 目录计数/分页只加载元数据；正文仅在选定病例后读取。
+                query = query.options(load_only(*(getattr(model, field) for field in fields)))
+            return query.all()
+
+        discharge_rows = source_rows(DischargeRecord, ("institute_id", "patient_id", "visit_id",
+            "dept_name", "discharge_date", "discharge_time", "document_status"))
+        registration_rows = source_rows(InpatRegistration, ("institute_id", "patient_id", "visit_id",
+            "name", "mr_no", "inpat_no", "discharge_dept_name", "admission_dept_name",
+            "admission_datetime", "discharge_datetime"))
+        admission_rows = source_rows(AdmissionRecord, ("institute_id", "patient_id", "visit_id",
+            "name", "mr_no", "inpat_no", "dept_name", "attending_physician_sign", "admission_datetime"))
         _capture_private_orm_identities(_private_identity_collector, "discharge_record", discharge_rows)
         _capture_private_orm_identities(_private_identity_collector, "inpat_registration", registration_rows)
         _capture_private_orm_identities(_private_identity_collector, "admission_record", admission_rows)
@@ -419,7 +325,7 @@ class RecordRepository:
                 document_status=getattr(discharge_source, "document_status", None),
             )
             discharge_datetime = discharge_selection.value
-            item_scope = "final" if discharge_datetime else "running"
+            item_scope = "final" if discharge_datetime or discharge_selection.conflict else "running"
             if scope_value != "all" and item_scope != scope_value:
                 continue
             item_department = _safe_text(
@@ -429,7 +335,7 @@ class RecordRepository:
                 )
             )
             item_doctor = _safe_text(
-                first_anchor_value("attending_physician_sign", "submitter")
+                first_anchor_value("attending_physician_sign")
             )
             if department and item_department != department:
                 continue
@@ -461,7 +367,7 @@ class RecordRepository:
                 end=end,
             ):
                 continue
-            medical_text = _safe_text(first_anchor_value("record_content"))
+            medical_text = "" if _metadata_only else _safe_text(first_anchor_value("record_content"))
             records.append(
                 {
                     **ref.as_dict(),
@@ -480,76 +386,16 @@ class RecordRepository:
                     "discharge_horizon_source": discharge_selection.source,
                     "discharge_horizon_conflict": discharge_selection.conflict,
                     "status": "completed" if item_scope == "final" else "running",
+                    "qc_scope": "final" if discharge_datetime or discharge_selection.conflict else "running" if admission_datetime else "unknown",
+                    "qc_admission_datetime": _to_iso_datetime(admission_datetime),
+                    "qc_discharge_datetime": _to_iso_datetime(discharge_datetime),
+                    "qc_discharge_horizon_source": discharge_selection.source,
+                    "qc_discharge_horizon_conflict": discharge_selection.conflict,
                     "medical_text": medical_text,
                     "medical_text_length": len(medical_text),
                 }
             )
         return records
-
-    def _collect_filtered_indexed_anchor_records(
-        self,
-        session: Session,
-        *,
-        excluded_record_refs: set[CaseRef],
-        scope: str,
-        department: Optional[str],
-        doctor: Optional[str],
-        date_field: str,
-        start_date: Optional[str],
-        end_date: Optional[str],
-        keyword: Optional[str],
-        _private_identity_collector: Callable[[str, Any], None] | None = None,
-    ) -> List[Dict[str, Any]]:
-        """复用病历池口径补齐今日核验在院、但尚无病案首页的病例。"""
-
-        # 病历池已经负责 visit_index、住院状态投影及登记/入院记录的统一筛选。
-        # 此处复用同一口径，避免列表可见范围与“质控当前筛选”再次分叉。
-        from ..medical_records.query_service import (
-            _filter_indexed_registration_records,
-            _load_hospitalization_projection_map,
-            _load_indexed_registration_records,
-        )
-
-        indexed_records = _filter_indexed_registration_records(
-            _load_indexed_registration_records(session),
-            dept=department,
-            doctor=doctor,
-            keyword=keyword,
-            start_date=_as_date(start_date),
-            end_date=_as_date(end_date),
-            date_field=date_field,
-            hospital_status="inpatient",
-            sync_scope="today_inpatient",
-            hospitalization_projection_map=_load_hospitalization_projection_map(session),
-        )
-        record_refs = [
-            CaseRef(
-                _safe_text(getattr(record, "institute_id", "")),
-                _safe_text(getattr(record, "patient_id", "")),
-                _safe_text(getattr(record, "visit_id", "")),
-            )
-            for record in indexed_records
-        ]
-        record_refs = [
-            ref for ref in record_refs if all(ref) and ref not in excluded_record_refs
-        ]
-        if not record_refs:
-            return []
-        # 上面的病历池筛选已完整应用科室、医师、日期和关键字；这里仅负责
-        # 将同一组三坐标水合为现有批量执行记录，避免重复筛选时字段来源不一致。
-        return self._collect_explicit_anchor_records_by_refs(
-            session,
-            record_refs=record_refs,
-            excluded_record_refs=excluded_record_refs,
-            scope=scope,
-            department=None,
-            doctor=None,
-            date_field=date_field,
-            start_date=None,
-            end_date=None,
-            keyword=None,
-            _private_identity_collector=_private_identity_collector,
-        )
 
     def _build_records_query(
         self,
@@ -780,7 +626,7 @@ class RecordRepository:
             "medical_text_length": len(_safe_text(source_row.record_content)),
         }
 
-    def list_records(
+    def _list_frontpage_records(
         self,
         *,
         scope: str,
@@ -794,15 +640,6 @@ class RecordRepository:
         page_size: int,
         institute_id: Optional[str] = None,
     ) -> WorkspaceListResult:
-        from ...database.clinical_connection import configured
-        if configured() and not self._material_schema:
-            from ..clinical_case_catalog import case_identities
-            filters = dict(scope=scope, department=department, doctor=doctor, date_field=date_field,
-                start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id)
-            refs = case_identities(**filters, page=page, page_size=page_size)
-            total = case_identities(**filters, count_only=True)
-            items = self.collect_records(**filters, record_refs=refs) if refs else []
-            return WorkspaceListResult(items=items, total=total, page=page, page_size=page_size)
         session = self._open_session()
         try:
             query = self._build_records_query(
@@ -831,7 +668,7 @@ class RecordRepository:
         finally:
             session.close()
 
-    def get_record_filters(
+    def _get_frontpage_record_filters(
         self,
         *,
         scope: str,
@@ -897,6 +734,53 @@ class RecordRepository:
         finally:
             session.close()
 
+    def list_records(
+        self,
+        *,
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+        page: int,
+        page_size: int,
+        institute_id: Optional[str] = None,
+    ) -> WorkspaceListResult:
+        if self._frontpage_display:
+            return self._list_frontpage_records(scope=scope, department=department, doctor=doctor,
+                date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
+                page=page, page_size=page_size, institute_id=institute_id)
+        records = self.collect_records(
+            scope=scope, department=department, doctor=doctor, date_field=date_field,
+            start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id,
+            _metadata_only=True,
+        )
+        offset = max(page - 1, 0) * page_size
+        selected = records[offset:offset + page_size]
+        items = self.collect_records(scope=scope, department=department, doctor=doctor, date_field=date_field,
+            start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id,
+            record_refs=[CaseRef.from_mapping(item) for item in selected]) if selected else []
+        return WorkspaceListResult(items=items, total=len(records), page=page, page_size=page_size)
+
+    def get_record_filters(
+        self, *, scope: str, department: Optional[str], institute_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if self._frontpage_display:
+            return self._get_frontpage_record_filters(scope=scope, department=department, institute_id=institute_id)
+        records = self.collect_records(scope=scope, department=None, doctor=None,
+            date_field="admission", start_date=None, end_date=None, keyword=None, institute_id=institute_id, _metadata_only=True)
+        def bounds(field: str) -> Dict[str, str]:
+            values = [item[field] for item in records if item.get(field)]
+            return {"min": min(values) if values else "", "max": max(values) if values else ""}
+        return {
+            "departments": sorted({item["department"] for item in records if item.get("department")}),
+            "doctors": sorted({item["doctor"] for item in records if item.get("doctor")
+                               and (not department or item["department"] == department)}),
+            "date_bounds": {"admission": bounds("admission_date"), "discharge": bounds("discharge_date")},
+        }
+
     def collect_records(
         self,
         *,
@@ -910,6 +794,7 @@ class RecordRepository:
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
         sync_scope: Optional[str] = None,
+        _metadata_only: bool = False,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
         institute_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
@@ -925,111 +810,52 @@ class RecordRepository:
                     groups.setdefault(schema, []).append(ref)
                 collected = []
                 for schema, group in groups.items():
-                    repository = RecordRepository(session_factory=self._session_factory, _material_schema=schema)
+                    repository = RecordRepository(session_factory=self._session_factory, _material_schema=schema,
+                                                  frontpage_display=self._frontpage_display)
                     collected.extend(repository.collect_records(scope=scope, department=department, doctor=doctor,
                         date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
-                        record_refs=group, sync_scope=sync_scope, _private_identity_collector=_private_identity_collector))
+                        record_refs=group, sync_scope=sync_scope, _private_identity_collector=_private_identity_collector,
+                        institute_id=institute_id, _metadata_only=_metadata_only))
                 return collected
         if record_ids and any(str(value).startswith("pdfv_") for value in record_ids):
             raise ValueError("material_copy_requires_complete_case_refs")
+        if self._frontpage_display:
+            session = self._open_session()
+            try:
+                rows = self._build_records_query(session, scope=scope, department=department, doctor=doctor,
+                    date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
+                    record_ids=record_ids, record_refs=record_refs, sync_scope=sync_scope,
+                    institute_id=institute_id).all()
+                return [self._serialize_record_row(row) for row in rows]
+            finally:
+                session.close()
         from ...database.clinical_connection import configured
         if configured() and not self._material_schema and not record_refs and not record_ids:
-            from ..clinical_case_catalog import case_identities
             if sync_scope not in (None, "all"):
                 from ..data_pipeline_settings import PipelineError
                 raise PipelineError("clinical_source_live_status_not_supported", 422)
-            refs = case_identities(scope=scope, department=department, doctor=doctor, date_field=date_field,
-                start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id)
-            if not refs:
+            # 发布目录不能仅凭无出院文书证明当前在院。
+            if _normalize_scope(scope) == "running":
                 return []
-            collected = []
-            for offset in range(0, len(refs), 128):
-                collected.extend(self.collect_records(scope=scope, department=department, doctor=doctor, date_field=date_field,
-                    start_date=start_date, end_date=end_date, keyword=keyword, record_refs=refs[offset:offset+128],
-                    _private_identity_collector=_private_identity_collector, institute_id=institute_id))
-            return collected
         session = self._open_session()
         try:
-            query = self._build_records_query(
-                session,
-                scope=scope,
-                department=department,
-                doctor=doctor,
-                date_field=date_field,
-                start_date=start_date,
-                end_date=end_date,
-                keyword=keyword,
-                record_ids=record_ids,
-                record_refs=record_refs,
-                sync_scope=sync_scope,
-                institute_id=institute_id,
-            )
-            rows = query.order_by(
-                desc(MedicalRecordFrontpage.discharge_datetime),
-                desc(MedicalRecordFrontpage.admission_datetime),
-            ).all()
-            _capture_private_orm_identities(_private_identity_collector, "mr", rows)
-            records = [self._serialize_record_row(row) for row in rows]
-            if record_refs:
-                records.extend(
-                    self._collect_explicit_anchor_records_by_refs(
-                        session,
-                        record_refs=record_refs,
-                        excluded_record_refs={
-                            CaseRef.from_mapping(item)
-                            for item in records
-                            if all(CaseRef.from_mapping(item))
-                        },
-                        scope=scope,
-                        department=department,
-                        doctor=doctor,
-                        date_field=date_field,
-                        start_date=start_date,
-                        end_date=end_date,
-                        keyword=keyword,
-                        _private_identity_collector=_private_identity_collector,
-                    )
-                )
-            elif record_ids:
-                records.extend(
-                    self._collect_explicit_anchor_records(
-                        session,
-                        record_ids=record_ids,
-                        excluded_record_ids={
-                            _safe_text(item.get("visit_id"))
-                            for item in records
-                            if _safe_text(item.get("visit_id"))
-                        },
-                        scope=scope,
-                        department=department,
-                        doctor=doctor,
-                        date_field=date_field,
-                        start_date=start_date,
-                        end_date=end_date,
-                        keyword=keyword,
-                        _private_identity_collector=_private_identity_collector,
-                    )
-                )
-            elif _safe_text(sync_scope).lower() == "today_inpatient":
-                records.extend(
-                    self._collect_filtered_indexed_anchor_records(
-                        session,
-                        excluded_record_refs={
-                            CaseRef.from_mapping(item)
-                            for item in records
-                            if all(CaseRef.from_mapping(item))
-                        },
-                        scope=scope,
-                        department=department,
-                        doctor=doctor,
-                        date_field=date_field,
-                        start_date=start_date,
-                        end_date=end_date,
-                        keyword=keyword,
-                        _private_identity_collector=_private_identity_collector,
-                    )
-                )
-            return records
+            refs = list(normalize_case_refs(record_refs)) if record_refs else self._raw_case_refs(
+                session, record_ids=record_ids, institute_id=institute_id, sync_scope=sync_scope)
+            if institute_id:
+                refs = [ref for ref in refs if ref.institute_id == _safe_text(institute_id)]
+            if record_refs and _safe_text(sync_scope).lower() == "today_inpatient":
+                verified = set(self._raw_case_refs(session, institute_id=institute_id, sync_scope=sync_scope))
+                refs = [ref for ref in refs if ref in verified]
+            records = []
+            for offset in range(0, len(refs), 128):
+                records.extend(self._collect_explicit_anchor_records_by_refs(
+                    session, record_refs=refs[offset:offset + 128], excluded_record_refs=set(),
+                    scope=scope, department=department, doctor=doctor, date_field=date_field,
+                    start_date=start_date, end_date=end_date, keyword=keyword,
+                    _private_identity_collector=_private_identity_collector, _metadata_only=_metadata_only,
+                ))
+            return sorted(records, key=lambda item: (item["discharge_datetime"], item["admission_datetime"],
+                                                     item["record_key"]), reverse=True)
         finally:
             session.close()
 
@@ -1046,183 +872,41 @@ class RecordRepository:
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
     ) -> int:
-        if record_ids or record_refs:
-            records = self.collect_records(
-                scope=scope,
-                department=department,
-                doctor=doctor,
-                date_field=date_field,
-                start_date=start_date,
-                end_date=end_date,
-                keyword=keyword,
-                record_ids=record_ids,
-                record_refs=record_refs,
-            )
-            return len(
-                {
-                    CaseRef.from_mapping(item)
-                    for item in records
-                    if all(CaseRef.from_mapping(item))
-                }
-            )
-
-        from ...database.clinical_connection import configured
-        if configured() and not self._material_schema and not record_refs and not record_ids:
-            from ..clinical_case_catalog import case_identities
-            return case_identities(scope=scope, department=department, doctor=doctor, date_field=date_field,
-                start_date=start_date, end_date=end_date, keyword=keyword, count_only=True)
-        session = self._open_session()
-        try:
-            query = self._build_records_query(
-                session,
-                scope=scope,
-                department=department,
-                doctor=doctor,
-                date_field=date_field,
-                start_date=start_date,
-                end_date=end_date,
-                keyword=keyword,
-                record_ids=record_ids,
-                record_refs=record_refs,
-            )
-            identity_rows = (
-                query.with_entities(
-                    MedicalRecordFrontpage.institute_id,
-                    MedicalRecordFrontpage.patient_id,
-                    MedicalRecordFrontpage.visit_id,
-                )
-                .distinct()
-                .subquery()
-            )
-            return int(session.query(func.count()).select_from(identity_rows).scalar() or 0)
-        finally:
-            session.close()
+        return len(self.collect_records(
+            scope=scope, department=department, doctor=doctor, date_field=date_field,
+            start_date=start_date, end_date=end_date, keyword=keyword,
+            record_ids=record_ids, record_refs=record_refs, _metadata_only=True,
+        ))
 
     def hydrate_records_with_medical_text(
         self,
         records: Sequence[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        from ..validation_material_source import is_material_copy, material_source_schema
-        if not self._material_schema and any(is_material_copy(str(item.get("patient_id") or ""),
-                str(item.get("visit_id") or "")) for item in records):
-            hydrated = []
-            for item in records:
-                ref = CaseRef.from_mapping(item)
-                if not all(ref):
-                    raise ValueError("material_copy_requires_complete_case_refs")
-                schema = (material_source_schema(default_schema="cdm", institute_id=ref.institute_id,
-                    patient_id=ref.patient_id, visit_id=ref.visit_id)
-                    if is_material_copy(ref.patient_id, ref.visit_id) else None)
-                repository = RecordRepository(session_factory=self._session_factory, _material_schema=schema)
-                hydrated.extend(repository.hydrate_records_with_medical_text([item]))
-            return hydrated
-        visit_ids = {
-            _safe_text(item.get("visit_id") or item.get("record_id"))
-            for item in records
-            if _safe_text(item.get("visit_id") or item.get("record_id"))
-        }
-        if not visit_ids:
-            return []
-
-        exact_refs = {
-            CaseRef.from_mapping(item)
-            for item in records
-            if all(CaseRef.from_mapping(item))
-        }
-        use_exact_refs = bool(records) and all(
-            all(CaseRef.from_mapping(item)) for item in records
-        )
-
-        session = self._open_session()
-        try:
-            dept_expr = func.coalesce(
-                MedicalRecordFrontpage.discharge_dept_name,
-                MedicalRecordFrontpage.admission_dept_name,
-            )
-            query = session.query(
-                MedicalRecordFrontpage.institute_id,
-                MedicalRecordFrontpage.patient_id,
-                MedicalRecordFrontpage.visit_id,
-                MedicalRecordFrontpage.name,
-                dept_expr.label("department"),
-                MedicalRecordFrontpage.attending_physician_sign,
-                MedicalRecordFrontpage.record_content,
-            )
-            if use_exact_refs:
-                query = query.filter(
-                    or_(
-                        *(
-                            and_(
-                                MedicalRecordFrontpage.institute_id == ref.institute_id,
-                                MedicalRecordFrontpage.patient_id == ref.patient_id,
-                                MedicalRecordFrontpage.visit_id == ref.visit_id,
-                            )
-                            for ref in exact_refs
-                        )
-                    )
-                )
-            else:
-                query = query.filter(MedicalRecordFrontpage.visit_id.in_(visit_ids))
-            rows = query.all()
-            row_map: Dict[CaseRef, Any] = {
-                CaseRef(str(row.institute_id), str(row.patient_id), str(row.visit_id)): row
-                for row in rows
-            }
-            legacy_rows: Dict[str, List[Any]] = {}
-            for row in rows:
-                legacy_rows.setdefault(str(row.visit_id), []).append(row)
-        finally:
-            session.close()
-
+        filters = dict(scope="all", department=None, doctor=None, date_field="admission",
+                       start_date=None, end_date=None, keyword=None)
+        full_refs = [CaseRef.from_mapping(item) for item in records if all(CaseRef.from_mapping(item))]
+        sources = self.collect_records(**filters, record_refs=full_refs) if full_refs else []
+        source_by_ref = {CaseRef.from_mapping(item): item for item in sources}
+        legacy_groups: Dict[str, set[str]] = {}
+        for item in records:
+            ref = CaseRef.from_mapping(item)
+            if ref.visit_id and not all(ref):
+                legacy_groups.setdefault(ref.institute_id, set()).add(ref.visit_id)
+        legacy_sources = {}
+        for institute, visit_ids in legacy_groups.items():
+            for item in self.collect_records(**filters, record_ids=sorted(visit_ids), institute_id=institute or None):
+                legacy_sources[(institute, item["visit_id"])] = item
         hydrated: List[Dict[str, Any]] = []
         for item in records:
-            visit_id = _safe_text(item.get("visit_id") or item.get("record_id"))
-            item_ref = CaseRef.from_mapping(item)
-            source = row_map.get(item_ref) if all(item_ref) else None
-            if source is None and not all(item_ref):
-                candidates = legacy_rows.get(visit_id) or []
-                source = candidates[0] if len(candidates) == 1 else None
-            medical_text = _safe_text(item.get("medical_text"))
-            if not medical_text and source is not None:
-                medical_text = _safe_text(source.record_content)
+            ref = CaseRef.from_mapping(item)
+            if not ref.visit_id:
+                continue
+            source = source_by_ref.get(ref) if all(ref) else legacy_sources.get((ref.institute_id, ref.visit_id))
+            if source is not None and any(given and given != actual for given, actual in zip(ref, CaseRef.from_mapping(source))):
+                raise ValueError("clinical_case_identity_ambiguous_or_missing")
             hydrated_item = dict(item)
-            hydrated_item.update(
-                {
-                    "institute_id": _safe_text(
-                        item.get("institute_id") or (source.institute_id if source else "")
-                    ),
-                    "patient_id": _safe_text(
-                        item.get("patient_id") or (source.patient_id if source else "")
-                    ),
-                    "record_id": _safe_text(item.get("record_id") or visit_id),
-                    "visit_id": visit_id,
-                    "record_key": (
-                        CaseRef(
-                            _safe_text(
-                                item.get("institute_id")
-                                or (source.institute_id if source else "")
-                            ),
-                            _safe_text(
-                                item.get("patient_id")
-                                or (source.patient_id if source else "")
-                            ),
-                            visit_id,
-                        ).as_key()
-                        if visit_id
-                        else ""
-                    ),
-                    "patient_name": _safe_text(
-                        item.get("patient_name") or (source.name if source else "")
-                    ),
-                    "department": _safe_text(
-                        item.get("department") or (source.department if source else "")
-                    ),
-                    "doctor": _safe_text(
-                        item.get("doctor")
-                        or (source.attending_physician_sign if source else "")
-                    ),
-                    "medical_text": medical_text,
-                }
-            )
+            for key in ("institute_id", "patient_id", "record_id", "visit_id", "record_key",
+                        "patient_name", "department", "doctor", "medical_text"):
+                hydrated_item[key] = _safe_text(item.get(key) or (source or {}).get(key))
             hydrated.append(hydrated_item)
         return hydrated

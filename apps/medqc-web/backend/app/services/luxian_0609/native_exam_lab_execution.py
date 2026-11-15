@@ -3474,8 +3474,15 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 completion_tokens += used_completion
                 total_tokens += used_total
                 api_time += used_time
-            except Exception:  # noqa: BLE001
-                ct_model_failure = "exam_lab_llm_failure"
+            except Exception as error:  # noqa: BLE001
+                from ..llm_token_budget import is_budget_error
+                from ..qc_execution_errors import safe_exception_failure
+
+                # 上下文预算由任务层处理；其他异常仅保留安全分类，不能将确定性
+                # 错误统一提升成可重试连接错误，也不能保存原始异常正文。
+                if is_budget_error(error):
+                    raise
+                ct_model_failure = safe_exception_failure(error)["reason_code"]
             if ct_model_failure is None:
                 try:
                     ct_payload = json.loads(_response_text(ct_response))

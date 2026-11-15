@@ -813,7 +813,12 @@ def test_fixed_cdm_options_override_management_legacy_context(environment, monke
         connection.execute(sa.text("INSERT INTO catalog VALUES ('CDM-A','CDM-dept','2026-11-01'), ('UNKNOWN','unknown',NULL)"))
     monkeypatch.setenv("MEDQC_CLINICAL_SOURCE_MODE", "fixed_donghua_cdm")
     monkeypatch.setattr(sources, "ordinary_snapshot", lambda: {"id": "independent_cdm", "binding": "synthetic"})
-    monkeypatch.setattr(catalog, "catalog", lambda _: source)
+    def raw_catalog(selected, *, include_frontpage):
+        assert selected is engine
+        assert include_frontpage is False
+        return source
+
+    monkeypatch.setattr(catalog, "catalog", raw_catalog)
 
     def selected_engine():
         assert clinical.current_selection()["id"] == "independent_cdm"

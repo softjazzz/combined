@@ -143,6 +143,13 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
             "source_query_error",
             "model_transport_error",
             "model_timeout",
+            "model_rate_limited",
+            "model_upstream_error",
+            "model_http_error",
+            "model_configuration_error",
+            # 安全投影将显式不可重试写入原因码，防止后续仅传 reason 时重新放开。
+            "model_retry_stopped",
+            "execution_failed",
             "model_parse_error",
             "model_invalid_output",
             "executor_timeout",

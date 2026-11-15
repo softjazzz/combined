@@ -13,6 +13,7 @@ import re
 from typing import Any, Collection, Mapping, Sequence
 
 from .decision_model import (
+    ALLOWED_REASON_CODES_BY_FINAL_STATE,
     ApplicabilityState,
     EvidenceState,
     QcDirection,
@@ -775,9 +776,9 @@ def build_exam_lab_rule_decision(
             "semantic_output_unknown",
         )
     elif outcome.status == "technical_error":
-        from ..llm_context_contract import CONTEXT_FAILURE_REASON_CODES
         reason_code = (
-            outcome.reason_code if outcome.reason_code in CONTEXT_FAILURE_REASON_CODES else
+            outcome.reason_code
+            if outcome.reason_code in ALLOWED_REASON_CODES_BY_FINAL_STATE["technical_error"] else
             "source_query_error"
             if outcome.reason_code == "source_query_error"
             else "model_invalid_output"

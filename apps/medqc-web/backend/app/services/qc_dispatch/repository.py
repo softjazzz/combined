@@ -574,7 +574,7 @@ class QCDispatchRepository:
         self, session: Session, *, source_job_id: str, source_generation: int,
         successor_job_id: str, automatic: bool,
     ) -> None:
-        """与新job/outbox同事务收口旧恢复记录，不重置旧业务结果。"""
+        """与新job/outbox同事务收口旧恢复记录，人工后继保留累计自动预算。"""
         source = self.get_dispatch(source_job_id, session=session)
         if source is None or source.generation != source_generation:
             raise ValueError("retry_source_dispatch_changed")
@@ -593,7 +593,7 @@ class QCDispatchRepository:
             self.dispatch_table.c.generation == 1,
             self.dispatch_table.c.status == "queued",
         )).values(failure_budget=source.failure_budget,
-                  failure_count=source.failure_count + 1 if automatic else 0))
+                  failure_count=source.failure_count + 1 if automatic else source.failure_count))
         if getattr(changed, "rowcount", 0) != 1:
             raise ValueError("retry_successor_dispatch_changed")
 

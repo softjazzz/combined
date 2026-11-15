@@ -269,8 +269,8 @@ async def bind_request(request: Request):
             yield
 
 
-def _require_retry_history_access(session, actor_id: str, identity: tuple[str, str, str], selection: dict) -> None:
-    """重试历史读取重新核对持久账号；任务创建者和请求角色不能替代当前授权。"""
+def _require_saved_history_access(session, actor_id: str, identity: tuple[str, str, str], selection: dict) -> None:
+    """所有代际历史读取均核对持久账号；创建者和请求角色不能替代当前授权。"""
     from .defect_rectification_service import _person, RectificationError
     from .saved_result_access import check_saved_result_institute
 
@@ -318,19 +318,16 @@ def source_for_saved_job(request: Request, job_id: str) -> dict:
             if row is None:
                 raise PipelineError("clinical_source_job_not_found", 404)
             actor = getattr(request.state, "current_user", {})
-            if row["created_by"] != actor.get("id") and not set(actor.get("roles") or []) & {"admin", "sync_admin", "super_admin", "qc_manager", "qc_staff", "doctor"}:
-                raise PipelineError("clinical_source_job_forbidden", 403)
             filters = json.loads(row["filters_json"] or "{}")
             selection = saved_snapshot(filters)
-            if TASK_KEY in filters or "retry_lineage" in filters:
-                identity = tuple(request.query_params.get(k) or request.path_params.get(k) or "" for k in ("institute_id", "patient_id", "visit_id"))
-                refs = filters.get("record_refs") or []
-                if not all(identity) or identity not in {
-                    tuple(str(ref.get(k) or "") for k in ("institute_id", "patient_id", "visit_id")) for ref in refs if isinstance(ref, dict)
-                }:
-                    raise PipelineError("clinical_source_job_case_mismatch", 403)
-                if "retry_lineage" in filters:
-                    _require_retry_history_access(session, str(actor.get("id") or ""), identity, selection)
+            identity = tuple(request.query_params.get(k) or request.path_params.get(k) or "" for k in ("institute_id", "patient_id", "visit_id"))
+            refs = filters.get("record_refs")
+            # 无来源标记的旧任务也须有可信保存引用，不能借创建者身份读取任意材料。
+            if not all(identity) or not isinstance(refs, list) or identity not in {
+                tuple(str(ref.get(k) or "") for k in ("institute_id", "patient_id", "visit_id")) for ref in refs if isinstance(ref, dict)
+            }:
+                raise PipelineError("clinical_source_job_case_mismatch", 403)
+            _require_saved_history_access(session, str(actor.get("id") or ""), identity, selection)
             from .material_job_lineage import resolve_material_job_id
             try:
                 material_job_id = resolve_material_job_id(row, lookup)

@@ -441,7 +441,7 @@ async def test_timeout_only_fails_new_rule_and_keeps_report_result_without_retry
         evidence_snapshot=snapshot, evidence_materials=material,
     )
     by_rule = {item.rule_id: item for item in result.decisions}
-    assert by_rule[RULE_ID].reason_code == "model_transport_error"
+    assert by_rule[RULE_ID].reason_code == "model_timeout"
     assert by_rule[REPORT_RULE_ID].reason_code == "requirement_satisfied"
     assert client.calls == result.llm_call_count == 1
 

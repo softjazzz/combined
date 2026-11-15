@@ -87,7 +87,7 @@ def get_frontpage_by_mr_no(mr_no: str) -> Optional[dict[str, Any]]:
     from ...database.clinical_connection import configured
     if configured():
         from ..clinical_case_catalog import resolve_identity
-        return repo.get_frontpage(**resolve_identity(mr_no))
+        return repo.get_frontpage(**resolve_identity(mr_no, include_frontpage=True))
     result = repo.list_patients(keyword=mr_no, page_size=1)
     if not result["items"]:
         raise MedicalRecordsNotFoundError(f"病案号未找到: {mr_no}")
