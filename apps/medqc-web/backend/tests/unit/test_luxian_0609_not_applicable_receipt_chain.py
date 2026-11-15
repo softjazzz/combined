@@ -144,13 +144,15 @@ async def test_partial_failed_task_reads_saved_items_with_receipts_through_contr
     [saved] = failed_job["items"]
     _assert_bound_receipt(saved, material=material)
 
-    # 任务详情：病例不完整，不形成 Envelope，按合同交付 0 条（非数据丢失）。
+    # 任务详情：病例不完整、无 Envelope；按 job_id 只读本任务已保存成功项及回执。
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: chain.workspace)
     response = await qc_sichuan.get_workspace_batch_job(
         request=SimpleNamespace(state=SimpleNamespace(trace_id="receipt-partial")),
         job_id=chain.job_id, current_user={"id": "tester"},
     )
-    assert response["data"]["items"] == []
+    [detail_item] = response["data"]["items"]
+    assert detail_item["applicability_receipt"]["material_fingerprint"] == material
+    assert response["data"]["summary"]["execution_status"] == "partial_failed"
 
     # 单病历读取：受控部分结果合同交付已保存成功项及回执，失败规则只暴露身份。
     record = chain.workspace.get_latest_luxian_0609_record_result(
