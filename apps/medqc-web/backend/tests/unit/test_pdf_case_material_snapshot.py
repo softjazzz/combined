@@ -248,6 +248,21 @@ def test_ordinary_retry_does_not_enter_pdf_snapshot_bypass(monkeypatch):
         "record_refs": [{"institute_id": "I", "patient_id": "P", "visit_id": "V"}]}}, lambda _: None) is None
 
 
+def test_pdf_retry_does_not_relabel_unknown_lookup_value_error():
+    from app.services.case_material_capture import pdf_retry_materials
+    from test_material_job_lineage import retry
+    import json
+    origin = {"id": "synthetic-origin", "created_by": "synthetic-owner", "filters_json": json.dumps({
+        "record_refs": [dict(zip(("institute_id", "patient_id", "visit_id"), IDENTITY))],
+        "_lx0609_attempt_id": "a" * 32}), "parent_job_id": "", "job_kind": "leaf"}
+    error = ValueError("retry_lineage_source_unavailable")
+    def unexpected(_):
+        raise error
+    with pytest.raises(ValueError) as caught:
+        pdf_retry_materials(retry(origin), unexpected)
+    assert caught.value is error and not isinstance(caught.value, material.MaterialSnapshotError)
+
+
 @pytest.mark.parametrize("wrong_identity", [False, True])
 def test_pdf_retry_restores_private_identity_only_from_frozen_full_rows(wrong_identity):
     from app.services.sichuan_workspace_batch_worker import _capture_frozen_pdf_identities

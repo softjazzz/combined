@@ -11,6 +11,7 @@ MESSAGES = {
     "material_source_contract_incomplete": "临床材料读取合同不完整，病历资料准备失败。",
     "material_source_unavailable": "临床材料来源不可用，病历资料准备失败。",
     "original_task_material_not_retained": "原任务材料快照未保留，不能用当前材料代替原轮次补跑。",
+    "material_retry_lineage_invalid": "原任务材料来源链校验失败，未开始执行补跑，请联系管理员核查。",
     "material_integrity_failed": "原任务材料完整性校验失败，不能执行补跑。",
     "material_reference_corrupt": "原任务材料索引损坏，不能执行补跑。",
     "material_object_unavailable": "原任务材料对象不可用，不能执行补跑。",

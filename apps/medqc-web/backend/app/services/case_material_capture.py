@@ -167,6 +167,16 @@ def obtain(job_id, identity, *, retry=False, cancellation_check=None):
 
 def pdf_retry_materials(job, lookup):
     """PDF重试准入只依赖已保存任务链、可信三键及原快照，不查询当前登记。"""
+    from .material_job_lineage import MaterialLineageError
+
+    try:
+        return _pdf_retry_materials(job, lookup)
+    except MaterialLineageError:
+        # 不暴露内部链字段；仅转换解析器自身的合同拒绝，不吞任意ValueError。
+        raise material.MaterialSnapshotError("material_retry_lineage_invalid") from None
+
+
+def _pdf_retry_materials(job, lookup):
     from .material_job_lineage import _filters, _refs, resolve_material_job_id
     from .qc_workspace.failed_rule_retry import FAILED_RULE_RETRY_FILTER_KEY, FAILED_RULE_RETRY_SCHEMA_VERSION
     from .validation_material_source import is_material_copy, material_source_schema

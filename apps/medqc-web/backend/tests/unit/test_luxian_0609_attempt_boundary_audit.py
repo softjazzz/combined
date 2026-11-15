@@ -700,6 +700,70 @@ def test_nonformal_pdf_preclaim_failure_cas_covers_select_update_race(storage, m
         assert row["summary_json"] is None
 
 
+@pytest.mark.parametrize("fault", ["missing", "identity", "case", "owner"])
+@pytest.mark.parametrize("late", [None, "running", "completed", "filters"])
+def test_real_pdf_lineage_rejection_finishes_only_same_queued_retry(storage, monkeypatch, fault, late):
+    from app.services import clinical_sources as sources, case_material_capture as capture
+    from tests.unit.test_material_job_lineage import job as source_job, retry
+
+    service, engine, table = storage
+    origin = source_job("synthetic-origin")
+    origin["created_by"] = "tester"
+    filters = json.loads(origin["filters_json"])
+    filters.update(rule_set_key="luxian_0609_qc_v1", record_refs=[{
+        "institute_id": "inst-1", "patient_id": "pdfp_synthetic", "visit_id": "pdfv_synthetic",
+    }])
+    origin["filters_json"] = json.dumps(filters)
+    child = retry(origin)
+    child_filters = json.loads(child["filters_json"])
+    if fault == "identity":
+        child_filters["retry_lineage"]["source_filters_sha256"] = "f" * 64
+    elif fault == "case":
+        child_filters["record_refs"][0]["visit_id"] = "pdfv_other"
+    elif fault == "owner":
+        origin["created_by"] = "other-owner"
+    with engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == "attempt-job").values(
+            id=child["id"], filters_json=json.dumps(child_filters),
+        ))
+        if fault != "missing":
+            connection.execute(table.insert().values(
+                **origin, status="failed", draft_id="sichuan-rule-library", rule_code="LX0609",
+                rule_name="合成来源任务", created_at=datetime(2026, 11, 15), updated_at=datetime(2026, 11, 15),
+            ))
+        before_origin = connection.execute(sa.select(table).where(table.c.id == origin["id"])).mappings().first()
+        before_origin = dict(before_origin) if before_origin is not None else None
+    monkeypatch.setattr(sources, "fixed_cdm", lambda: True)
+    monkeypatch.setattr(capture.material, "load", lambda *a, **k: pytest.fail("来源链未通过不得读取材料或当前副本"))
+    get_job = service.get_batch_job_for_processing
+    preserved = {}
+    def lookup(*, job_id):
+        if job_id == origin["id"] and late:
+            updates = {"status": late} if late != "filters" else {"filters_json": '{"new_attempt":true}'}
+            updates["summary_json"] = '{"preserved":true}'
+            with engine.begin() as connection:
+                connection.execute(table.update().where(table.c.id == child["id"]).values(**updates))
+                preserved.update(dict(connection.execute(sa.select(table).where(table.c.id == child["id"])).mappings().one()))
+        return get_job(job_id=job_id)
+    monkeypatch.setattr(service, "get_batch_job_for_processing", lookup)
+    @sources.bound_job
+    async def execute(job_id, *, workspace):
+        pytest.fail("来源链拒绝不得进入worker")
+    assert asyncio.run(execute(child["id"], workspace=service)) is None
+    with engine.connect() as connection:
+        row = dict(connection.execute(sa.select(table).where(table.c.id == child["id"])).mappings().one())
+        after_origin = connection.execute(sa.select(table).where(table.c.id == origin["id"])).mappings().first()
+        assert (dict(after_origin) if after_origin is not None else None) == before_origin
+    if late:
+        assert row == preserved
+    else:
+        assert row["status"] == "failed" and row["error_message"] == "material_retry_lineage_invalid"
+        error = json.loads(row["summary_json"])["execution_error"]
+        assert error["reason_code"] == "material_retry_lineage_invalid"
+        assert error["error_category"] == "material" and error["retryable"] is False
+        assert "retry_lineage_source_unavailable" not in row["summary_json"]
+
+
 def test_parent_retry_preserves_each_child_snapshot(storage):
     service, engine, table = storage
     first_filters = {
