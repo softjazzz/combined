@@ -162,10 +162,44 @@ def ordinary_snapshot():
     return snapshot(configuration(), "independent_cdm")
 
 
+async def prepare_task_material_request(request: Request) -> None:
+    """认证后仅为明确登记的PDF任务绑定来源，不改变普通病例默认源。"""
+    if request.method != "POST" or request.url.path != "/api/v1/qc/sichuan/workspace/batch-jobs":
+        return
+    try:
+        payload = await request.json()
+    except ValueError:
+        return  # 请求体合同仍交由路由校验。
+    refs = payload.get("record_refs") if isinstance(payload, dict) else None
+    from .validation_material_source import is_material_copy
+    if not isinstance(refs, list) or not any(
+        isinstance(ref, dict) and is_material_copy(ref.get("patient_id", ""), ref.get("visit_id", "")) for ref in refs
+    ):
+        return
+    try:
+        if not refs or any(not isinstance(ref, dict) or not all(isinstance(ref.get(k), str) and ref[k].strip()
+                for k in ("institute_id", "patient_id", "visit_id"))
+                or not is_material_copy(ref["patient_id"], ref["visit_id"]) for ref in refs):
+            raise ValueError("invalid_or_mixed")
+        from starlette.concurrency import run_in_threadpool
+        if not await run_in_threadpool(_local_material_filters, {"record_refs": refs}):
+            raise ValueError("unregistered")
+    except (ValueError, PipelineError):
+        raise HTTPException(422, "clinical_material_identity_not_registered") from None
+    if any(value not in (None, "legacy_pg") for value in (
+        request.headers.get("x-clinical-source"), request.query_params.get("source_id")
+    )):
+        raise HTTPException(422, "clinical_source_selection_conflict")
+    request.state.registered_pdf_task_source = legacy_snapshot()
+
+
 def prepare_request(request: Request) -> None:
     paths = ("/api/medical-records", "/api/v1/medical-records", "/api/v1/records", "/api/v1/emr", "/api/v1/qc/sichuan/workspace")
     # 样本集和其它业务API仍属业务库，不让全局默认改变1026或管理操作。
     path = request.url.path
+    if request.method == "POST" and path == "/api/v1/qc/sichuan/workspace/batch-jobs" and getattr(request.state, "registered_pdf_task_source", None):
+        request.state.clinical_source = request.state.registered_pdf_task_source
+        return
     if request.method == "GET" and path in WORKSPACE_METADATA_GET_PATHS:
         header = request.headers.get("x-clinical-source")
         query = request.query_params.get("source_id")
