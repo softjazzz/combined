@@ -49,5 +49,5 @@ def read_projection(item):
         retained = bool(result.get("applicability_receipt"))
         result["audit_evidence_status"] = "retained" if retained else "not_retained"
         if not retained:
-            result["audit_evidence_message"] = "本次不适用判定的历史审计依据未保留，原结论未改写。"
+            result["audit_evidence_message"] = "本次不适用判定的审计依据当时未保留，原结论未改写。"
     return result

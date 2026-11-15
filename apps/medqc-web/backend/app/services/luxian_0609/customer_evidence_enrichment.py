@@ -603,6 +603,11 @@ def trace_customer_evidence(
     - ``excerpt_mismatch``：摘录不等于合同生成方式，不能视为该文书依据。
 
     原样子串匹配不适用于文书级依据（空白已归一、可能截断），不能据此认定伪造。
+
+    调用方须传入该证据 ``source_type`` 对应来源的冻结行（与生成时
+    ``evidence_materials.rows(source_type)`` 相同），不得混入其他来源。执行器自带的
+    摘录不经本合同生成，返回 ``excerpt_mismatch`` 仅表示“不能按本合同核验”，
+    需按该执行器自己的引用合同另行核对，不等于伪造。
     """
 
     document_id = _text(evidence.get("source_document_id"))

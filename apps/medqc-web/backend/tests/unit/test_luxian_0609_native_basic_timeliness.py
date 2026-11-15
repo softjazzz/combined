@@ -124,6 +124,8 @@ def test_004_complete_empty_rescue_records_and_orders_are_not_applicable() -> No
         execution_results=[],
         reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts,
+        # 正式链路携带冻结快照；不适用结果据此生成审计回执。
+        audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
         format_evidence=False,
     )[0]
 

@@ -232,6 +232,17 @@ def test_023_initial_finalizer_projection_is_called_once(monkeypatch):
            "specific_execution_count": 0, "generic_execution_count": 0,
            "missing_execution_count": 0, "relation_state": "not_triggered",
            "source_document_ids": ["SYNTHETIC-INTERNAL"], "recommendation_evidence": []}
+    # 正式入口对无冻结快照的不适用拒绝交付（不得无审计回执）；投影只在入口内调用一次。
+    with pytest.raises(ValueError, match="applicability receipt requires evidence snapshot"):
+        finalize_luxian_0609_reduced_customer_result(
+            decision=decision, raw_customer_display_facts=raw,
+            evidence_snapshot=None, evidence_materials=None,
+        )
+    assert calls == [RULE_023]
+    calls.clear()
+    # 本用例只检查投影次数与幂等性；回执附加另有端到端回归，这里隔离该出口步骤。
+    import app.services.luxian_0609.canonical_result_finalizer as finalizer_module
+    monkeypatch.setattr(finalizer_module, "_with_applicability_receipt", lambda published, **_: published)
     result = finalize_luxian_0609_reduced_customer_result(
         decision=decision, raw_customer_display_facts=raw,
         evidence_snapshot=None, evidence_materials=None,

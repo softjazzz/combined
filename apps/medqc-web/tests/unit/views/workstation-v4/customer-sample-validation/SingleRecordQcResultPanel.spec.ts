@@ -204,7 +204,7 @@ describe('SingleRecordQcResultPanel', () => {
     ['not_retained', true],
     ['retained', false],
   ] as const)('不适用结果审计依据%s时按后端状态标注，不补造依据', async (auditStatus, noted) => {
-    const message = '本次不适用判定的历史审计依据未保留，原结论未改写。'
+    const message = '本次不适用判定的审计依据当时未保留，原结论未改写。'
     const item = {
       rule_id: 'LX0609-04-02-01',
       rule_name: '手术记录：手术后24小时内是否完成',

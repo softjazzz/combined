@@ -174,7 +174,7 @@ export interface SingleRecordQcResultItem {
   data_gap_details?: SingleRecordQcDataGapDetails
   /** 不适用判定的审计回执是否随结果保存；旧任务未保留时只标注，不回填、不改结论。 */
   audit_evidence_status?: 'retained' | 'not_retained'
-  /** 后端固定说明文案（如“历史审计依据未保留”），前端原样展示。 */
+  /** 后端固定说明文案（如“审计依据当时未保留”），前端原样展示。 */
   audit_evidence_message?: string
 }
 

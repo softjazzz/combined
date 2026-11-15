@@ -211,7 +211,7 @@
               class="audit-evidence-note"
               data-testid="single-record-audit-evidence-not-retained"
             >
-              {{ item.audit_evidence_message || '本次不适用判定的历史审计依据未保留，原结论未改写。' }}
+              {{ item.audit_evidence_message || '本次不适用判定的审计依据当时未保留，原结论未改写。' }}
             </p>
             <div
               v-if="

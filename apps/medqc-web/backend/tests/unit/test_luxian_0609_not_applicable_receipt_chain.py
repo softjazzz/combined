@@ -183,4 +183,26 @@ def test_carry_never_fabricates_missing_receipt_and_history_reads_not_retained()
     assert "applicability_receipt" not in rebuilt
     projected = read_projection(rebuilt)
     assert projected["audit_evidence_status"] == "not_retained"
-    assert projected["audit_evidence_message"] == "本次不适用判定的历史审计依据未保留，原结论未改写。"
+    assert projected["audit_evidence_message"] == "本次不适用判定的审计依据当时未保留，原结论未改写。"
+
+
+def test_not_applicable_rewritten_to_contract_failure_drops_receipt_and_isolates_one_rule() -> None:
+    """复审发现：不适用结果事实合同失败改判技术错误后仍带回执，会使服务投影整例失败。"""
+    from app.services.history_evidence_audit import carry_retained_fields
+    from app.services.luxian_0609.canonical_result_finalizer import (
+        finalize_luxian_0609_executor_customer_display_facts,
+    )
+    from tests.unit.test_history_audit_projection import _receipt_item
+
+    na_result = _receipt_item()
+    failed, handled = finalize_luxian_0609_executor_customer_display_facts(
+        result=na_result, raw_facts=None, contract_failure=True,
+    )
+    assert handled is True
+    assert (failed["status"], failed["reason_code"]) == ("technical_error", "model_invalid_output")
+    assert "applicability_receipt" not in failed
+    # 服务投影对该条只搬运材料指纹，不因回执不一致而抛出、不影响同病例其他规则。
+    projected = carry_retained_fields(failed, {
+        "rule_id": failed["rule_id"], "status": failed["status"], "reason_code": failed["reason_code"],
+    })
+    assert "applicability_receipt" not in projected
