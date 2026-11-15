@@ -52,6 +52,8 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
             state["read_contract"] = {"schema": schema, "read_only": True,
                                       "isolation_level": "REPEATABLE READ",
                                       "identity_columns": list(coordinates)}
+            if pdf_copy:
+                state["read_contract"]["table_identity_columns"] = {}
             if clinical.configured() and schema == "cdm":
                 from .clinical_source_contract import inspect_source
                 from .automatic_material_scope import PROTOCOL, validate_read_contract
@@ -73,8 +75,10 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                 for table in sorted(names):
                     check()
                     state["columns"][table] = tuple(column["name"] for column in inspector.get_columns(table, schema=schema)) if inspector.has_table(table, schema=schema) else ()
-                    if pdf_copy and state["columns"][table] and not set(coordinates).issubset(state["columns"][table]):
-                        raise material.MaterialSnapshotError("material_identity_or_source_mismatch")
+                    if pdf_copy and state["columns"][table]:
+                        from .clinical_source_contract import material_identity_columns
+                        material.validate_table_identity(table, state["columns"][table], identity, ())
+                        state["read_contract"]["table_identity_columns"][table] = list(material_identity_columns(table, state["columns"][table]))
                 for table in sorted(names):
                     check()
                     status = source_statuses.get(table, "structure_ready") if "automatic_material" in state else "structure_ready"
@@ -82,6 +86,8 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                     rows = [] if status == "columns_missing" else assembly._select_records(schema=schema, table=table, **coordinates, limit=10001)
                     if len(rows) >= 10001:
                         raise material.MaterialSnapshotError("material_table_capacity_exceeded")
+                    if pdf_copy and state["columns"][table]:
+                        material.validate_table_identity(table, state["columns"][table], identity, rows)
                     state["tables"][table] = rows
                     if "automatic_material" in state:
                         from .automatic_material_scope import describe_source

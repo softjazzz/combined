@@ -59,7 +59,8 @@ def test_pdf_retry_replays_original_without_reopening_current_source(monkeypatch
 
 
 @pytest.mark.parametrize("missing_identity_column", [False, True])
-def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monkeypatch, business_source, missing_identity_column):
+@pytest.mark.parametrize("row_identity_valid", [True, False])
+def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monkeypatch, business_source, missing_identity_column, row_identity_valid):
     from app.services import case_material_capture as capture, validation_material_source as registry
     from app.services import sample_programmatic_evidence as evidence, daily_material_projection as daily
     from app.services.bundles import assembly, current_view
@@ -85,7 +86,7 @@ def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monke
     connection = Connection()
     business_source.connect = lambda: connection
     monkeypatch.setattr(assembly, "engine", business_source)
-    monkeypatch.setattr(assembly, "_material_limits_for_variants", lambda **_: {"daily_course_record": 10})
+    monkeypatch.setattr(assembly, "_material_limits_for_variants", lambda **_: {"daily_course_record": 10, "patient_information": 1})
     def register(conn, identity):
         assert conn is connection and identity == IDENTITY
         assert "SET TRANSACTION READ ONLY" in events
@@ -94,14 +95,18 @@ def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monke
     monkeypatch.setattr(registry, "capture_validation_material", register, raising=False)
     monkeypatch.setattr(registry, "material_source_schema", lambda **_: pytest.fail("登记不能先读当前连接"))
     monkeypatch.setattr(capture, "inspect", lambda conn: SimpleNamespace(
-        has_table=lambda table, schema: table == "daily_course_record",
-        get_columns=lambda table, schema: [{"name": key} for key in ("institute_id", "patient_id", "visit_id", "document_id", "record_content")
-                                           if not (missing_identity_column and key == "institute_id")]))
+        has_table=lambda table, schema: table in {"daily_course_record", "patient_information"},
+        get_columns=lambda table, schema: [{"name": key} for key in (
+            ("institute_id", "patient_id", "patient_name") if table == "patient_information"
+            else ("institute_id", "patient_id", "visit_id", "document_id", "record_content"))
+            if not (missing_identity_column and key == "institute_id")]))
     def select(**kwargs):
         assert events[-1] == "registry"
         assert material.context()["connection"] is connection
         assert kwargs["schema"] == "pdfmat_012345abcdef"
-        return [{"document_id": "SYNTHETIC-D", "record_content": "v1"}] if kwargs["table"] == "daily_course_record" else []
+        if kwargs["table"] == "patient_information":
+            return [{"institute_id": IDENTITY[0] if row_identity_valid else "OTHER-I", "patient_id": IDENTITY[1], "patient_name": "合成患者"}]
+        return [{**dict(zip(("institute_id", "patient_id", "visit_id"), IDENTITY)), "document_id": "SYNTHETIC-D", "record_content": "v1"}] if kwargs["table"] == "daily_course_record" else []
     monkeypatch.setattr(assembly, "_select_records", select)
     monkeypatch.setattr(evidence, "capture_programmatic_sources", lambda state, check: {"daily_course_record": {"rows": state["tables"]["daily_course_record"]}})
     monkeypatch.setattr(current_view, "_assemble_current_documents", lambda **_: {"documents": [{"content": "v1"}]})
@@ -113,7 +118,7 @@ def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monke
                  "read_luxian_0609_runtime_source_rows"):
         monkeypatch.setattr(reader, name, lambda **_: None)
     with clinical.selected({"id": "independent_cdm", "binding": "unrelated-source"}):
-        if missing_identity_column:
+        if missing_identity_column or not row_identity_valid:
             with pytest.raises(material.MaterialSnapshotError, match="source_mismatch"):
                 capture.obtain("pdf-captured", IDENTITY)
             assert material.load("pdf-captured", IDENTITY) is None
@@ -126,6 +131,10 @@ def test_pdf_capture_validates_registry_in_the_single_readonly_transaction(monke
     assert "daily_material_manifest" not in frozen
     assert "connection" not in frozen and "engine" not in frozen
     assert frozen["programmatic_sources"]["daily_course_record"]["rows"][0]["record_content"] == "v1"
+    assert frozen["read_contract"]["table_identity_columns"]["patient_information"] == ["institute_id", "patient_id"]
+    with material.activate(frozen):
+        rows = material.frozen_rows(frozen["schema"], "patient_information", IDENTITY, 1)
+    assert rows[0]["patient_name"] == "合成患者" and "visit_id" not in rows[0]
 
 
 @pytest.mark.asyncio

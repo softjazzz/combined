@@ -150,7 +150,31 @@ def frozen_rows(schema, table, identity, limit):
     identity_check(value, identity)
     if schema != value["schema"] or table not in value["tables"]:
         raise MaterialSnapshotError("uncaptured_material_table")
+    contracts = value.get("read_contract", {}).get("table_identity_columns")
+    if contracts is not None:
+        from .clinical_source_contract import material_identity_columns
+        columns = value.get("columns", {}).get(table, ())
+        if not isinstance(contracts, dict):
+            raise MaterialSnapshotError("material_identity_or_source_mismatch")
+        if columns:
+            if contracts.get(table) != list(material_identity_columns(table, columns)):
+                raise MaterialSnapshotError("material_identity_or_source_mismatch")
+            validate_table_identity(table, columns, identity, value["tables"][table])
+        elif value["tables"][table]:
+            raise MaterialSnapshotError("material_identity_or_source_mismatch")
     return deepcopy(value["tables"][table][:limit])
+
+
+def validate_table_identity(table, columns, identity, rows):
+    """不改行内容，不伪造就诊键；临床表不得借患者级表合同放行。"""
+    from .clinical_source_contract import KEYS, material_identity_columns
+    keys = material_identity_columns(table, columns)
+    if len(identity) != 3 or not all(isinstance(item, str) and item.strip() for item in identity) or not set(keys).issubset(columns):
+        raise MaterialSnapshotError("material_identity_or_source_mismatch")
+    expected = dict(zip(KEYS, identity))
+    for row in rows:
+        if not isinstance(row, Mapping) or any(row.get(key) != expected[key] for key in keys):
+            raise MaterialSnapshotError("material_identity_or_source_mismatch")
 
 
 def query_key(name, arguments, schema):
