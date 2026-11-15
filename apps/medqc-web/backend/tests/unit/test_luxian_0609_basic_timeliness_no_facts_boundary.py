@@ -52,6 +52,8 @@ def test_native_binding_published_sqlite_read_accepts_legal_absent_facts(rule_id
     canonical = aggregate_luxian_0609_results(
         wrapper_rules=_rules(rule_id), execution_results=[], reduced_decisions=reduced,
         customer_display_facts=execution.customer_display_facts, format_evidence=False,
+        # 正式链路同样携带冻结快照；不适用结果据此生成审计回执。
+        audit_context={"evidence_snapshot": session.snapshot, "evidence_materials": session.materials},
     )[0]
     assert execution.customer_display_facts == ()
     assert (canonical["status"], canonical["reason_code"]) == expected

@@ -302,6 +302,28 @@ def customer_safe_projection_key() -> str:
     return secret
 
 
+def _normalize_read_item(
+    raw_item: Mapping[str, Any], *, record_ref: str, case_ref: CaseRef,
+) -> Dict[str, Any]:
+    """读取侧统一补齐：条目 schema、病历引用及本病例坐标（供客户投影过滤，输出不含）。"""
+
+    normalized_item = {
+        **raw_item,
+        "schema_version": CUSTOMER_SCHEMA_VERSION,
+        "record_ref": record_ref,
+        # 保存时已移除病例坐标；读取时按本行补回，供客户投影既有的
+        # 本病例身份值过滤使用。投影输出不包含这些字段。
+        "institute_id": case_ref.institute_id,
+        "patient_id": case_ref.patient_id,
+        "visit_id": case_ref.visit_id,
+    }
+    if not _safe_text(normalized_item.get("rule_version")):
+        catalog_rule = get_luxian_0609_rule(_safe_text(normalized_item.get("rule_id")))
+        if catalog_rule is not None:
+            normalized_item["rule_version"] = _safe_text(catalog_rule.get("rule_version"))
+    return normalized_item
+
+
 def keyed_ref(prefix: str, value: Any, *, hmac_key: str) -> str:
     secret = _safe_text(hmac_key)
     if not secret:
@@ -810,6 +832,61 @@ class CanonicalResultStore:
                 raise ValueError(LX0609_CUSTOMER_RESULT_CONTRACT_ERROR) from None
         return envelope
 
+    @staticmethod
+    def load_saved_partial_items(
+        *,
+        job: Dict[str, Any],
+        delivered_items: Sequence[Mapping[str, Any]],
+        projection_key: str,
+    ) -> List[Dict[str, Any]]:
+        """部分失败任务中缺 Envelope 的病例：只读本任务自身已保存的成功项。
+
+        与单病历 latest-result 的部分读取使用同一合同（``read_saved_partial_record``：
+        同病例、同冻结规则范围、成功与失败规则互斥且覆盖范围、逐条客户合同）。
+        只用本任务行的 items/failed_records，不跨任务取数、不写 Envelope、不改状态。
+        没有任何已保存成功项的病例（整例失败）没有可展示内容，保持只暴露失败记录；
+        有成功项但校验不通过属完整性错误，抛出 ``ValueError`` 由调用方明确拒绝。
+        """
+
+        from .partial_record_read import read_saved_partial_record, saved_record_rule_scope
+
+        status = _safe_text(job.get("status"))
+        summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+        if status != "failed" or _safe_text(summary.get("execution_status")) != "partial_failed":
+            return []
+        filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+        items = job.get("items") if isinstance(job.get("items"), list) else []
+        delivered = {CaseRef.from_mapping(item) for item in delivered_items}
+        saved_refs = {
+            CaseRef.from_mapping(item) for item in items if isinstance(item, Mapping)
+        }
+        pending_refs: List[CaseRef] = []
+        for raw_ref in list(filters.get("record_refs") or []):
+            ref = CaseRef.from_mapping(raw_ref) if isinstance(raw_ref, Mapping) else None
+            if (ref is not None and all(ref) and ref not in pending_refs
+                    and ref not in delivered and ref in saved_refs):
+                pending_refs.append(ref)
+        if not pending_refs:
+            return []
+        # 只有确实要读取某病例时才要求失败记录可解析；缺失即完整性错误，不静默放行。
+        failures = job.get("failed_records")
+        if not isinstance(failures, list):
+            raise ValueError("saved_partial_failure_invalid")
+        partial_items: List[Dict[str, Any]] = []
+        for ref in pending_refs:
+            partial = read_saved_partial_record(
+                summary=summary, items=items, failures=failures, ref=ref,
+                expected_rules=saved_record_rule_scope(filters, ref),
+                projection_key=projection_key,
+                # 与写入 Envelope 及单病历部分读取使用同一投影。
+                projector=lambda item: envelope_item_from_rule_result(item, hmac_key=projection_key),
+            )
+            for raw_item in partial["items"]:
+                partial_items.append(
+                    _normalize_read_item(raw_item, record_ref=partial["record_ref"], case_ref=ref)
+                )
+        return partial_items
+
     def load_root_job_items(
         self,
         *,
@@ -893,25 +970,9 @@ class CanonicalResultStore:
                 # Envelope 已通过 schema、delivery_mode 和逐项状态合同校验；
                 # 旧候选包的条目级 schema 标记曾在批任务落盘时被遗漏。读取时
                 # 只继承已验证的 Envelope 合同，不重新解释任何业务状态。
-                normalized_item = {
-                    **raw_item,
-                    "schema_version": CUSTOMER_SCHEMA_VERSION,
-                    "record_ref": record_ref,
-                    # 保存时已移除病例坐标；读取时按本行补回，供客户投影既有的
-                    # 本病例身份值过滤使用。投影输出不包含这些字段。
-                    "institute_id": case_ref.institute_id,
-                    "patient_id": case_ref.patient_id,
-                    "visit_id": case_ref.visit_id,
-                }
-                if not _safe_text(normalized_item.get("rule_version")):
-                    catalog_rule = get_luxian_0609_rule(
-                        _safe_text(normalized_item.get("rule_id"))
-                    )
-                    if catalog_rule is not None:
-                        normalized_item["rule_version"] = _safe_text(
-                            catalog_rule.get("rule_version")
-                        )
-                canonical_items.append(normalized_item)
+                canonical_items.append(
+                    _normalize_read_item(raw_item, record_ref=record_ref, case_ref=case_ref)
+                )
 
         actual_refs = set(rows_by_ref)
         if expected_refs and (

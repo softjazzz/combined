@@ -200,6 +200,29 @@ beforeEach(async () => {
 })
 
 describe('SingleRecordQcResultPanel', () => {
+  it.each([
+    ['not_retained', true],
+    ['retained', false],
+  ] as const)('不适用结果审计依据%s时按后端状态标注，不补造依据', async (auditStatus, noted) => {
+    const message = '本次不适用判定的审计依据当时未保留，原结论未改写。'
+    const item = {
+      rule_id: 'LX0609-04-02-01',
+      rule_name: '手术记录：手术后24小时内是否完成',
+      status: 'not_applicable',
+      conclusion: '本次住院未识别到已实施手术。',
+      audit_evidence_status: auditStatus,
+      ...(auditStatus === 'not_retained' ? { audit_evidence_message: message } : {}),
+    } satisfies SingleRecordQcResultItem
+    const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [item] } })
+    await wrapper.get('[data-testid="single-record-result-tab-not_applicable"]').trigger('click')
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+    const note = wrapper.find('[data-testid="single-record-audit-evidence-not-retained"]')
+    expect(note.exists()).toBe(noted)
+    if (noted) expect(note.text()).toBe(message)
+    expect(wrapper.text()).toContain(item.conclusion)
+    wrapper.unmount()
+  })
+
   it.each([undefined, null, ''])('缺少规则名称(%s)仍能查看保存结果，不改原始条目', async (name) => {
     const source = Object.freeze({ ...items[0]!, rule_name: name })
     const wrapper = mount(SingleRecordQcResultPanel, {

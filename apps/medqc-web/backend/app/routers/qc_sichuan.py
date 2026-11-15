@@ -747,6 +747,20 @@ def _hydrate_luxian_canonical_batch_job_or_409(
             job=job,
             allow_partial=allow_partial,
         )
+        if allow_partial:
+            # 任务详情：缺 Envelope 的病例按 job_id 只读本任务已保存成功项（与单病历
+            # 部分读取同一合同），不跨任务、不写 Envelope、不改状态。导出仍只含已交付
+            # 的完整病例（既有导出合同），失败规则由 failed_records 展示。
+            from ..services.qc_workspace.canonical_result_store import CanonicalResultStore
+
+            canonical_items = [
+                *canonical_items,
+                *CanonicalResultStore.load_saved_partial_items(
+                    job=job,
+                    delivered_items=canonical_items,
+                    projection_key=customer_safe_projection_key(),
+                ),
+            ]
     except ValueError as exc:
         raise HTTPException(
             status_code=409,

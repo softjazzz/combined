@@ -3349,6 +3349,9 @@ async def run_sichuan_workspace_batch_job(
                     model_analysis = eval_item.get("model_analysis") or eval_item.get("medical_analysis")
                     if isinstance(model_analysis, str) and model_analysis.strip():
                         issue_item["model_analysis"] = model_analysis
+                    # 任务装配按字段重建结果：审计字段与服务投影共用同一搬运与校验入口。
+                    from .history_evidence_audit import carry_retained_fields
+                    carry_retained_fields(eval_item, issue_item)
                     if should_postprocess_formal_results:
                         issue_item = postprocess_qc_result(
                             issue_item,

@@ -1634,9 +1634,12 @@ class SichuanQCService:
         )
         compliance_rate = (compliant_rules / compliance_denominator * 100.0) if compliance_denominator else 100.0
 
+        from .history_evidence_audit import carry_retained_fields
+
         evaluation_results = []
         for item in rule_results:
-            evaluation_results.append({
+            # 固定字段投影不得剥离审计字段（不适用回执、材料指纹），统一由共享入口搬运并校验。
+            evaluation_results.append(carry_retained_fields(item, {
                 # Finalizer 正式发布（v2 合同）的结论与建议原样搬运，不重生成。
                 **({key: item[key] for key in (
                     "conclusion", "customer_conclusion", "customer_suggestion",
@@ -1697,7 +1700,7 @@ class SichuanQCService:
                 "review": item.get("review"),
                 "review_status": item.get("review_status"),
                 "audit": item.get("audit"),
-            })
+            }))
 
         logger.info(
             f"质控评估完成: {compliant_rules}/{compliance_denominator} 条适用规则符合，"

@@ -1192,6 +1192,8 @@ def finalize_luxian_0609_executor_customer_display_facts(
         "evidence",
         "suggestion",
         "evidence_items",
+        # 不适用回执只证明原不适用结论；改判技术错误后不再适用，随结论一并撤下。
+        "applicability_receipt",
     ):
         finalized.pop(key, None)
     finalized["status"] = "technical_error"
@@ -1208,6 +1210,34 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
         finalized["reason_code"] = "model_invalid_output"
     return finalized, True
+
+
+def _with_applicability_receipt(
+    published: dict[str, Any],
+    *,
+    decision: "ReducedRuleDecision",
+    evidence_snapshot: Any,
+    evidence_materials: Any,
+) -> dict[str, Any]:
+    """在已裁决结果的出口附加不适用审计回执；只证明最终交付的不适用结论。
+
+    事实合同失败等改判为技术错误的结果不带回执（避免回执与结论不一致）。
+    缺少冻结快照时不得静默交付无依据的不适用：Canonical 交付由聚合器隔离为
+    单条技术错误，legacy 兼容模式沿用既有 fail-closed。生产中归约裁决只在
+    快照存在时产生。
+    """
+
+    if decision.final_state.value != "not_applicable" or published.get("status") != "not_applicable":
+        return published
+    from .applicability_receipt import build_applicability_receipt
+    from .evidence_snapshot import Luxian0609EvidenceSnapshot
+
+    if not isinstance(evidence_snapshot, Luxian0609EvidenceSnapshot):
+        raise ValueError("applicability receipt requires evidence snapshot")
+    published["applicability_receipt"] = build_applicability_receipt(
+        decision=decision, snapshot=evidence_snapshot, materials=evidence_materials,
+    )
+    return published
 
 
 def finalize_luxian_0609_reduced_customer_result(
@@ -1264,14 +1294,6 @@ def finalize_luxian_0609_reduced_customer_result(
         safe_customer_display_facts=safe_facts,
         trace_sink=trace_sink,
     )
-    if decision.final_state.value == "not_applicable":
-        from .applicability_receipt import build_applicability_receipt
-        from .evidence_snapshot import Luxian0609EvidenceSnapshot
-
-        if isinstance(evidence_snapshot, Luxian0609EvidenceSnapshot):
-            result["applicability_receipt"] = build_applicability_receipt(
-                decision=decision, snapshot=evidence_snapshot, materials=evidence_materials,
-            )
     if safe_facts is not None:
         result["customer_display_facts"] = safe_facts
         precise_findings = customer_finding_from_controlled_facts(
@@ -1305,7 +1327,10 @@ def finalize_luxian_0609_reduced_customer_result(
             ),
         )
         if handled and "customer_display_facts" not in result:
-            return finalize_luxian_0609_canonical_result(result)
+            return _with_applicability_receipt(
+        finalize_luxian_0609_canonical_result(result),
+        decision=decision, evidence_snapshot=evidence_snapshot, evidence_materials=evidence_materials,
+    )
 
     selected_document_evidence = project_selected_document_evidence(
         decision=decision,
@@ -1353,7 +1378,10 @@ def finalize_luxian_0609_reduced_customer_result(
             result, _ = finalize_luxian_0609_executor_customer_display_facts(
                 result=result, raw_facts=None, contract_failure=True,
             )
-            return finalize_luxian_0609_canonical_result(result)
+            return _with_applicability_receipt(
+        finalize_luxian_0609_canonical_result(result),
+        decision=decision, evidence_snapshot=evidence_snapshot, evidence_materials=evidence_materials,
+    )
     if customer_evidence:
         result["customer_evidence"] = customer_evidence
     if (
@@ -1371,7 +1399,10 @@ def finalize_luxian_0609_reduced_customer_result(
         result["customer_conclusion"] = (
             f"{base_conclusion}{LX0609_074_NO_EVIDENCE_LOCATION_NOTE}"
         )
-    return finalize_luxian_0609_canonical_result(result)
+    return _with_applicability_receipt(
+        finalize_luxian_0609_canonical_result(result),
+        decision=decision, evidence_snapshot=evidence_snapshot, evidence_materials=evidence_materials,
+    )
 
 
 def _missing_sources_from_customer_facts(result: Mapping[str, Any]) -> list[str]:
