@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from app.constants.doc_types import DOC_TYPE_CN_TO_EN, DOC_TYPE_FULL_MAP
-from .clinical_read import clinical_query
+from .diagnosis_auxiliary import projected_query
 from ..core.settings import Settings, get_settings
 from ..core.http import safe_post_json
 from ..core.supabase_client import get_supabase
@@ -2194,11 +2194,25 @@ class SichuanQCService:
                     "hit": bool(item.get("hit")),
                 }
             )
+        evidence_rules = list(rules or [])
+        diagnosis_gaps = []
+        peer_signals = []
+        if any(str(rule.get("rule_id") or rule.get("rule_code") or "").upper() == "CL-276" for rule in evidence_rules):
+            # 仅隔离同病种辅助材料缺口；其他来源/身份/权限异常不能降级。
+            try:
+                peer = self._build_same_disease_reasoning_peer_signal(
+                    primary_document=primary_document, source_documents=all_documents)
+                if peer:
+                    peer_signals.append(peer)
+            except source_evidence_reader.SourceEvidenceUnavailable:
+                diagnosis_gaps.append("CL-276")
+            evidence_rules = [rule for rule in evidence_rules
+                              if str(rule.get("rule_id") or rule.get("rule_code") or "").upper() != "CL-276"]
         derived_signals = self._build_copy_content_similarity_signals(
             primary_document=primary_document,
             source_documents=all_documents,
-            rule_ids=[str(item.get("rule_id") or item.get("rule_code") or "") for item in list(rules or [])],
-        )
+            rule_ids=[str(item.get("rule_id") or item.get("rule_code") or "") for item in evidence_rules],
+        ) + peer_signals
         from .sample_programmatic_evidence import build_programmatic_evidence_payload
 
         programmatic_payload = build_programmatic_evidence_payload(
@@ -2212,6 +2226,7 @@ class SichuanQCService:
             "document_hits": dict(bundle.get("document_hits") or {}),
             "data_quality_flags": list(bundle.get("data_quality_flags") or []),
             "derived_signals": derived_signals,
+            "diagnosis_auxiliary_gap_rules": diagnosis_gaps,
             "programmatic_timeline": dict(programmatic_payload.get("programmatic_timeline") or {}),
         }
 
@@ -2628,7 +2643,7 @@ class SichuanQCService:
             visit_id=visit_id,
         )
         if not diagnosis_context:
-            return None
+            raise source_evidence_reader.SourceEvidenceUnavailable()
 
         peer_documents = cls._load_same_disease_first_course_candidates(
             institute_id=institute_id,
@@ -2639,6 +2654,8 @@ class SichuanQCService:
             diagnosis_name=str(diagnosis_context.get("diagnosis_name") or ""),
             limit=10,
         )
+        if not peer_documents:
+            raise source_evidence_reader.SourceEvidenceUnavailable()
         best_signal: Optional[Dict[str, Any]] = None
         for item in peer_documents:
             peer_content = str(item.get("record_content") or "").strip()
@@ -2702,8 +2719,8 @@ class SichuanQCService:
         material_bind = case_material.session_bind(source_engine)
         session = Session(material_bind) if material_bind is not None else SessionLocal()
         try:
-            query = (session.query(Diagnosis).execution_options(schema_translate_map={None: material_state["schema"]})
-                     if material_state is not None else clinical_query(session, Diagnosis))
+            query = projected_query(session, Diagnosis, ("diagnosis_no", "diagnosis_type"),
+                optional=("diagnosis_code", "diagnosis_name"), require_any=("diagnosis_code", "diagnosis_name"))
             rows = (
                 query
                 .filter(
@@ -2752,8 +2769,12 @@ class SichuanQCService:
         material_bind = case_material.session_bind(source_engine)
         session = Session(material_bind) if material_bind is not None else SessionLocal()
         try:
-            diagnosis_query = (session.query(Diagnosis).execution_options(schema_translate_map={None: material_state["schema"]})
-                               if material_state is not None else clinical_query(session, Diagnosis)).filter(
+            match_column = "diagnosis_code" if diagnosis_code else "diagnosis_name"
+            if not (diagnosis_code or diagnosis_name):
+                return []
+            diagnosis_query = projected_query(session, Diagnosis, (
+                "institute_id", "patient_id", "visit_id", "dept_name", "diagnosis_datetime", match_column,
+            )).filter(
                 Diagnosis.institute_id == institute_id,
                 Diagnosis.dept_name == dept_name,
                 Diagnosis.visit_id != current_visit_id,
@@ -2765,16 +2786,20 @@ class SichuanQCService:
             else:
                 return []
             diagnosis_rows = diagnosis_query.order_by(Diagnosis.diagnosis_datetime.desc()).limit(max(1, int(limit))).all()
-            visit_ids = [str(item.visit_id or "").strip() for item in diagnosis_rows if str(item.visit_id or "").strip()]
-            if not visit_ids:
+            peer_keys = {(str(item.patient_id or "").strip(), str(item.visit_id or "").strip())
+                         for item in diagnosis_rows}
+            if any(not patient or not visit for patient, visit in peer_keys):
+                raise case_material.MaterialSnapshotError("material_identity_or_source_mismatch")
+            if not peer_keys:
                 return []
-            first_course_query = (session.query(FirstCourseRecord).execution_options(schema_translate_map={None: material_state["schema"]})
-                                  if material_state is not None else clinical_query(session, FirstCourseRecord))
+            from sqlalchemy import tuple_
+            first_course_query = projected_query(session, FirstCourseRecord,
+                ("institute_id", "patient_id", "visit_id", "record_content"), optional=("name", "dept_name"))
             first_course_rows = (
                 first_course_query
                 .filter(
                     FirstCourseRecord.institute_id == institute_id,
-                    FirstCourseRecord.visit_id.in_(visit_ids),
+                    tuple_(FirstCourseRecord.patient_id, FirstCourseRecord.visit_id).in_(sorted(peer_keys)),
                 )
                 .all()
             )
