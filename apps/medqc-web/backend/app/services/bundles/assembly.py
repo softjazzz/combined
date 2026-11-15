@@ -902,6 +902,7 @@ def _select_records(
     if projected is not None:
         return projected
     from ..validation_material_source import (
+        is_material_copy,
         material_document_status_column,
         material_source_schema,
     )
@@ -915,23 +916,21 @@ def _select_records(
     if not columns:
         return []
 
+    if table == "patient_information" or is_material_copy(patient_id, visit_id):
+        case_material.validate_table_identity(table, columns, (institute_id, patient_id, visit_id), ())
+
     selected = sorted(source_projection_columns(table, columns))
     document_status_column = material_document_status_column(source_table=table, source_columns=columns)
     if not selected:
         return []
 
-    if {"institute_id", "patient_id", "visit_id"}.issubset(columns):
-        where_sql = (
-            f"{_quote_ident('institute_id')} = :institute_id AND "
-            f"{_quote_ident('patient_id')} = :patient_id AND "
-            f"{_quote_ident('visit_id')} = :visit_id"
-        )
-        params = {
-            "institute_id": institute_id,
-            "patient_id": patient_id,
-            "visit_id": visit_id,
-            "limit_rows": max(1, int(limit)),
-        }
+    if table == "patient_information" or {"institute_id", "patient_id", "visit_id"}.issubset(columns):
+        from ..clinical_source_contract import material_identity_columns
+        keys = material_identity_columns(table, columns)
+        where_sql = " AND ".join(f"{_quote_ident(key)} = :{key}" for key in keys)
+        params = {key: value for key, value in zip(("institute_id", "patient_id", "visit_id"),
+                                                   (institute_id, patient_id, visit_id)) if key in keys}
+        params["limit_rows"] = max(1, int(limit))
     elif "visit_id" in columns:
         if clinical_connection.configured() and schema == "cdm":
             raise ValueError("independent_cdm_visit_keys_missing")
@@ -967,6 +966,8 @@ def _select_records(
 
     with case_material.source_connection(read_engine) as conn:
         rows = conn.execute(text(sql), params).mappings().all()
+    if table == "patient_information" or is_material_copy(patient_id, visit_id):
+        case_material.validate_table_identity(table, columns, (institute_id, patient_id, visit_id), rows)
     return [{**dict(row), "__document_type": table} for row in rows]
 
 

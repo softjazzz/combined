@@ -33,14 +33,16 @@ REQUIRED_COLUMNS = {
 
 
 
+def material_identity_columns(name, columns):
+    """仅登记的患者主索引允许两键；有就诊列时继续精确限定就诊。"""
+    if name == "patient_information" and "visit_id" not in columns:
+        return KEYS[:2]
+    return KEYS
+
+
 def read_columns(name, columns):
     """复用正式投影和ORM映射；返回实际会引用的列，不扩大到所有别名。"""
     available = set(columns)
-    if name == "patient_information" and "visit_id" not in available:
-        # 两键主索引不会进入三键文书取材；本轮只有EXISTS/身份键权限探针。
-        # 若未来增加真实消费者或visit_id，仍走下方实际投影检查，不能永久豁免。
-        required = set(REQUIRED_COLUMNS[name])
-        return required, required & available
     from .bundles import assembly
     from .sample_programmatic_evidence import _SOURCE_TABLES
     from .luxian_0609 import source_evidence_reader as reader
@@ -52,6 +54,8 @@ def read_columns(name, columns):
            "admission_record": cdm.AdmissionRecord, "discharge_record": cdm.DischargeRecord,
            "first_course_record": cdm.FirstCourseRecord, "inpat_registration": cdm.InpatRegistration}
     required = set(REQUIRED_COLUMNS.get(name, KEYS))
+    if name == "patient_information":
+        required.update(material_identity_columns(name, available))
     if name in orm:
         required.update(column.name for column in orm[name].__table__.columns)
     selected = set(available) if name in full_rows else assembly.source_projection_columns(name, available)
