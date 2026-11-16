@@ -141,7 +141,7 @@ def test_unified_engine_off_keeps_only_always_typed_extended_rules() -> None:
 
 
 
-def test_consultation_typed_decisions_require_native_dispatch() -> None:
+def test_paused_consultation_never_enters_typed_decisions_even_with_native_dispatch() -> None:
     selected = ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04")
 
     resolved = resolve_typed_decision_rule_ids(
@@ -152,8 +152,30 @@ def test_consultation_typed_decisions_require_native_dispatch() -> None:
         native_async_rule_ids=("LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04"),
     )
 
-    # 020/021/022 暂停后不再进入 Typed Decision 范围，023 仍要求 native 派发。
-    assert resolved == ("LX0609-03-01-04",)
+    # 020–023全部暂停，native派发参数不能越过真实阶段门。
+    assert resolved == ()
+
+
+@pytest.mark.parametrize("native_dispatch", [False, True])
+def test_internal_consultation_typed_contract_still_requires_native_dispatch(monkeypatch, native_dispatch):
+    from app.services.luxian_0609 import rule_decision_settings
+
+    selected = ("LX0609-03-01-04",)
+
+    def allow_selected_only(rule_ids):
+        # 仅隔离原生派发条件；正式暂停合同由上一个测试使用真实分区保护。
+        assert tuple(rule_ids) == selected
+        return selected, ()
+
+    monkeypatch.setattr(rule_decision_settings, "partition_luxian_0609_rule_scope", allow_selected_only)
+    resolved = resolve_typed_decision_rule_ids(
+        selected_rule_ids=selected,
+        settings=_settings(),
+        unified_engine_enabled=True,
+        always_typed_rule_ids=(),
+        native_async_rule_ids=selected if native_dispatch else (),
+    )
+    assert resolved == (selected if native_dispatch else ())
 
 
 def test_new_native_rule_without_legacy_rollout_group_uses_its_typed_contract() -> None:

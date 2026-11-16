@@ -1192,7 +1192,12 @@ def _typed_003_decision(
         ):
             return decision("data_gap", "authoritative_time_missing")
         order_assertion, _ = classify_current_visit_surgery_order_rows(
-            rows=support_rows["inpat_nondrug_order"],
+            # 已确认的非手术类型不产生术后文书义务，其状态缺失不能反推手术未知。
+            # 未知类型已在上方拒绝；仅手术类型继续严格校验有效/取消/未知状态。
+            rows=tuple(
+                row for row in support_rows["inpat_nondrug_order"]
+                if _clean(row.get("order_type")) == "手术"
+            ),
             completeness=order_observation.completeness,
         )
         if order_assertion == "uncertain":

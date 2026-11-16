@@ -1012,8 +1012,8 @@ def test_withheld_consultation_rules_no_longer_deliver_rule_specific_template() 
     assert withheld["suggestion"] == "请按质控要求核对并完善相关记录。"
 
 
-def test_surviving_consultation_rule_keeps_structured_action() -> None:
-    """023 保留为会诊族唯一可执行规则，模板中写明会诊意见来自正文语义提取。"""
+def test_paused_consultation_historical_defect_keeps_its_conclusion() -> None:
+    """023 暂停新执行，渲染已有裁决时仍保留历史结论，不交付正式整改模板。"""
 
     result = render_luxian_0609_customer_result(
         decision=_defect_decision("LX0609-03-01-04")
@@ -1025,9 +1025,8 @@ def test_surviving_consultation_rule_keeps_structured_action() -> None:
     assert "照抄" not in result["findings"]
     assert "照抄" not in result["evidence"]
     assert "照抄" not in result["suggestion"]
-    for section in ("修改对象：", "需要补充：", "推荐写法：", "注意事项："):
-        assert section in result["suggestion"]
-    assert "请不晚于会诊记录当天按会诊建议开立对应医嘱" in result["suggestion"]
+    assert "修改对象：" not in result["suggestion"]
+    assert result["is_compliant"] is False
 
 
 def _023_facts(*states: str) -> dict:
@@ -2066,7 +2065,7 @@ def test_029_missing_surgery_time_explains_confirmed_trigger_and_linkage_gap():
     )
 
 
-def test_029_association_gap_explains_confirmed_surgery_and_summary(monkeypatch):
+def test_029_association_gap_explains_confirmed_surgery_and_summary():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
             rule_id="LX0609-04-01-01",
@@ -2082,13 +2081,10 @@ def test_029_association_gap_explains_confirmed_surgery_and_summary(monkeypatch)
 
     from app.services.luxian_0609 import customer_remediation
 
-    # 回放历史发布时的整改元数据，保留原建议合同；不改变当前正式执行范围。
-    with monkeypatch.context() as historical:
-        historical.setattr(customer_remediation, "PENDING_RULE_IDS", customer_remediation.PENDING_RULE_IDS - {decision.rule_id})
-        result = render_luxian_0609_customer_result(decision=decision)
+    result = render_luxian_0609_customer_result(decision=decision)
     assert customer_remediation.build_customer_remediation_suggestion(
         rule_id=decision.rule_id, status="data_gap", reason_code="association_failed",
-    ) == ""
+    ) == result["suggestion"]
 
     assert result["findings"] == (
         "已确认本次存在已实施手术且已读取术前小结，但现有资料无法确认术前小结"
@@ -2123,11 +2119,6 @@ def test_029_association_gap_explains_confirmed_surgery_and_summary(monkeypatch)
             "LX0609-08-01-01",
             "权威出院时间与出院记录完成时间",
             "核对住院登记中的权威出院时间",
-        ),
-        (
-            "LX0609-04-02-07",
-            "每次会诊申请与对应会诊记录的业务关联、申请时间及完成时间",
-            "逐次核对会诊申请与会诊记录",
         ),
     ),
 )

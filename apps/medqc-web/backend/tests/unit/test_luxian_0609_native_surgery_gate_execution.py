@@ -736,6 +736,8 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
         ("order_type_missing", "data_gap", "authoritative_time_missing"),
         ("order_type_empty", "data_gap", "authoritative_time_missing"),
         ("order_type_nonstandard", "data_gap", "authoritative_time_missing"),
+        ("surgery_status_unknown", "data_gap", "authoritative_time_missing"),
+        ("cancelled_surgery_order", "not_applicable", "performed_event_absent"),
     ],
 )
 async def test_typed_003_uses_independent_negative_gate_when_terminal_mr_source_is_unavailable(
@@ -757,10 +759,13 @@ async def test_typed_003_uses_independent_negative_gate_when_terminal_mr_source_
                 "order_type_empty": "",
                 "order_type_nonstandard": "手术医嘱",
                 "order_type_disposal": "处置治疗",
+                "surgery_status_unknown": "手术",
+                "cancelled_surgery_order": "手术",
             }.get(positive_source, "检查")
             rows = (
                 {
                     "order_id": "order-ref",
+                    **({"order_status": "取消"} if positive_source == "cancelled_surgery_order" else {}),
                     **(
                         {}
                         if positive_source == "order_type_missing"

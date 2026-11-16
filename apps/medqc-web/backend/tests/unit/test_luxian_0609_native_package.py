@@ -128,7 +128,7 @@ _PRE_DISCHARGE_COMPATIBILITY_DEPENDENCIES = (
 )
 
 
-def _assert_full_catalog_plan_partition(plan, *, compatibility_exception: str) -> None:
+def _assert_full_catalog_plan_partition(plan, *, compatibility_exception: str | None = None) -> None:
     raw_active = tuple(raw for raw in _raw_master_rules() if raw["implementation_status"] == "active")
     expected_selected = tuple(raw["rule_id"] for raw in raw_active)
     expected_pending = tuple(
@@ -148,8 +148,9 @@ def _assert_full_catalog_plan_partition(plan, *, compatibility_exception: str) -
     assert tuple(rule_id for rule_id in expected_selected if rule_id in sync_ids) == plan.native_sync_rule_ids
     assert tuple(rule_id for rule_id in expected_selected if rule_id in async_ids) == plan.native_async_rule_ids
     assert set(expected_native).isdisjoint(expected_pending)
-    assert set(expected_native).isdisjoint({compatibility_exception})
-    assert set(expected_native) | set(expected_pending) | {compatibility_exception} == set(expected_selected)
+    expected_compatibility = {compatibility_exception} if compatibility_exception else set()
+    assert set(expected_native).isdisjoint(expected_compatibility)
+    assert set(expected_native) | set(expected_pending) | expected_compatibility == set(expected_selected)
 
 
 @pytest.mark.unit
@@ -621,7 +622,7 @@ def test_unknown_native_async_executor_is_not_implicitly_enabled():
 
 
 @pytest.mark.unit
-def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path():
+def test_stage_one_consultation_flags_keep_paused_rules_out_of_all_dispatch():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
@@ -645,17 +646,14 @@ def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path
         native_surgery_document_029_enabled=True,
     )
 
-    _assert_full_catalog_plan_partition(plan, compatibility_exception="LX0609-03-01-04")
-    assert plan.compatibility_rule_ids == ("LX0609-03-01-04",)
-    assert plan.compatibility_execution_rule_ids == (
-        "CL-248",
-        "CL-250",
-        "CL-071",
-    )
+    _assert_full_catalog_plan_partition(plan)
+    assert plan.compatibility_rule_ids == ()
+    assert plan.compatibility_execution_rule_ids == ()
+    assert "LX0609-03-01-04" in plan.not_executed_rule_ids
 
 
 @pytest.mark.unit
-def test_all_enabled_native_families_keep_paused_029_out_of_compatibility_dispatch():
+def test_restored_029_requires_explicit_native_opt_in():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
@@ -680,13 +678,15 @@ def test_all_enabled_native_families_keep_paused_029_out_of_compatibility_dispat
     )
 
     _assert_full_catalog_plan_partition(plan, compatibility_exception="LX0609-04-01-01")
-    assert plan.compatibility_rule_ids == ()
-    assert plan.compatibility_execution_rule_ids == ()
-    assert "LX0609-04-01-01" in plan.not_executed_rule_ids
+    assert plan.compatibility_rule_ids == ("LX0609-04-01-01",)
+    assert plan.compatibility_execution_rule_ids == ("CL-181", "SC-081")
+    assert "LX0609-04-01-01" not in plan.not_executed_rule_ids
+    with pytest.raises(ValueError, match="正式质控禁止兼容执行"):
+        assert_luxian_0609_formal_package_plan_native_only(plan, context="test")
 
 
 @pytest.mark.unit
-def test_paused_029_cannot_be_reenabled_by_explicit_unified_opt_in():
+def test_restored_029_explicit_opt_in_selects_native_without_legacy_fallback():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
@@ -705,12 +705,15 @@ def test_paused_029_cannot_be_reenabled_by_explicit_unified_opt_in():
         native_surgery_document_029_enabled=True,
     )
 
-    for plan in (compatibility, enabled):
-        assert plan.compatibility_rule_ids == ()
-        assert plan.compatibility_execution_rule_ids == ()
-        assert plan.native_async_rule_ids == ()
-        assert plan.native_executor_batches == ()
-        assert plan.not_executed_rule_ids == ("LX0609-04-01-01",)
+    assert compatibility.compatibility_rule_ids == ("LX0609-04-01-01",)
+    assert compatibility.compatibility_execution_rule_ids == ("CL-181", "SC-081")
+    assert compatibility.not_executed_rule_ids == ()
+    assert enabled.compatibility_rule_ids == ()
+    assert enabled.compatibility_execution_rule_ids == ()
+    assert enabled.native_async_rule_ids == ("LX0609-04-01-01",)
+    assert enabled.native_executor_batches == (("surgery_document", ("LX0609-04-01-01",)),)
+    assert enabled.not_executed_rule_ids == ()
+    assert_luxian_0609_formal_package_plan_native_only(enabled, context="test")
 
 
 @pytest.mark.unit
@@ -731,12 +734,15 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
 
     assert plan.selected_rule_ids == ("LX0609-01-01-01", "LX0609-04-01-01", "LX0609-04-01-03")
     assert plan.native_sync_rule_ids == ("LX0609-01-01-01",)
-    assert plan.native_async_rule_ids == ()
+    assert plan.native_async_rule_ids == ("LX0609-04-01-01",)
     assert plan.compatibility_rule_ids == ()
     assert plan.compatibility_execution_rule_ids == ()
-    assert plan.not_executed_rule_ids == ("LX0609-04-01-01", "LX0609-04-01-03")
+    assert plan.not_executed_rule_ids == ("LX0609-04-01-03",)
     assert plan.bypassed_execution_rule_ids == ("SC-002", "CL-181", "SC-081", "SC-083", "CL-108")
-    assert plan.native_executor_batches == (("basic_timeliness", ("LX0609-01-01-01",)),)
+    assert plan.native_executor_batches == (
+        ("basic_timeliness", ("LX0609-01-01-01",)),
+        ("surgery_document", ("LX0609-04-01-01",)),
+    )
 
     with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
         build_luxian_0609_package_plan(
@@ -779,11 +785,11 @@ def test_package_plan_keeps_pending_rules_visible_but_never_dispatches_them():
 @pytest.mark.parametrize(
     ("native_consultation_enabled", "execution_link_enabled", "expected_native", "expected_compatibility"),
     (
-        # 020/021/022 因会诊来源缺失暂停，只剩 023 参与本族包计划。
-        (False, False, (), ("LX0609-03-01-04",)),
-        (False, True, (), ("LX0609-03-01-04",)),
-        (True, False, (), ("LX0609-03-01-04",)),
-        (True, True, ("LX0609-03-01-04",), ()),
+        # 020–023 全部暂停，任意开关组合都不得派发。
+        (False, False, (), ()),
+        (False, True, (), ()),
+        (True, False, (), ()),
+        (True, True, (), ()),
     ),
 )
 def test_consultation_two_stage_package_dispatch(
@@ -817,9 +823,11 @@ def test_consultation_two_stage_package_dispatch(
         assert plan.native_executor_batches == (("consultation_quality", expected_native),)
     else:
         assert plan.native_executor_batches == ()
-    if not execution_link_enabled:
-        assert "CL-250" not in plan.bypassed_execution_rule_ids
-        assert "CL-248" not in plan.bypassed_execution_rule_ids
+    assert plan.not_executed_rule_ids == (
+        "LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04",
+    )
+    assert plan.compatibility_execution_rule_ids == ()
+    assert {"CL-250", "CL-248"} <= set(plan.bypassed_execution_rule_ids)
 
 
 @pytest.mark.unit

@@ -160,7 +160,7 @@ def _consultation_row(
 
 
 def test_consultation_family_registry_is_episode_executor_and_excludes_069() -> None:
-    """四个会诊客户规则只能形成一个 consultation_quality 正式批次。"""
+    """会诊执行器登记保留，暂停规则不得形成正式批次。"""
 
     inventory = load_luxian_0609_dependency_inventory()
     dependencies = {
@@ -178,12 +178,14 @@ def test_consultation_family_registry_is_episode_executor_and_excludes_069() -> 
     assert {item.executor_key for item in dependencies.values()} == {
         "consultation_quality"
     }
-    # 020/021/022 因会诊来源缺失暂停，本族只派发 023。
-    assert plan.native_rule_ids_for_executor("consultation_quality") == ("LX0609-03-01-04",)
+    # 020–023 及069均因会诊来源缺失暂停。
+    assert plan.native_rule_ids_for_executor("consultation_quality") == ()
     assert plan.not_executed_rule_ids == (
         "LX0609-03-01-01",
         "LX0609-03-01-02",
         "LX0609-03-01-03",
+        "LX0609-03-01-04",
+        "LX0609-04-02-07",
     )
     assert "LX0609-04-02-07" not in plan.native_rule_ids_for_executor(
         "consultation_quality"
@@ -198,10 +200,10 @@ def test_consultation_family_registry_is_episode_executor_and_excludes_069() -> 
 async def test_formal_unified_chain_delivers_paused_consultation_rules_without_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """正式链必须在执行器之前交付020至022的暂停结果。"""
+    """正式链必须在执行器之前交付020至023的暂停结果。"""
 
     client = RecordingClient(RuntimeError("paused rules must not call the model"))
-    selected_rule_ids = ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03")
+    selected_rule_ids = CONSULTATION_RULE_IDS
     context, delivered = await _run_formal_chain(
         monkeypatch,
         selected_rule_ids=selected_rule_ids,

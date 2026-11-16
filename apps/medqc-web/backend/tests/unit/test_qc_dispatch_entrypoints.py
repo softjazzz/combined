@@ -529,7 +529,7 @@ async def test_sample_mq_family_rejected_before_parent_insert(monkeypatch) -> No
                 record_refs=[_run_record_ref()],
                 sample_item_ids=["item-1"],
                 rule_set_key=qc_sample_pools.LUXIAN_0609_QC_RULE_SET_KEY,
-                selected_rule_ids=["LX0609-01-01-01", "LX0609-03-01-04"],
+                selected_rule_ids=["LX0609-01-01-01", "LX0609-06-01-05"],
                 group_by_luxian_family=True,
             ),
             current_user={"id": "tester"},
