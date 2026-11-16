@@ -7,8 +7,9 @@ import json
 import logging
 import math
 import re
+import unicodedata
 from time import perf_counter
-from typing import Any, Literal, Mapping, Protocol, Sequence
+from typing import Any, Literal, Mapping, NoReturn, Protocol, Sequence
 
 from ...llm_observability import safe_status_for_exception
 from ..llm_prompt_privacy import (
@@ -134,6 +135,54 @@ def _prompt(documents: Sequence[DischargeApprovalInput]) -> str:
     )
 
 
+def _reject_output(detail: str, reason: str, local_doc_id: str | None = None) -> NoReturn:
+    """只记录固定类别和本次调用内的编号，不记录引文、原文或输出中的未知 ID。"""
+    safe_id = (
+        local_doc_id if isinstance(local_doc_id, str)
+        and re.fullmatch(r"doc_[0-9]{2}", local_doc_id) else "-"
+    )
+    logger.warning(
+        "LX0609 discharge_approval_rejected reason=%s local_doc_id=%s",
+        reason, safe_id,
+    )
+    raise ValueError(detail)
+
+
+def _quote_rejection_reason(
+    quote: str, document: DischargeApprovalInput, documents: Sequence[DischargeApprovalInput],
+) -> str:
+    """归一化仅解释拒绝原因，绝不作为引文验证通过或改绑文书的依据。"""
+    if not quote.strip():
+        return "quote_empty"
+    if any(item.local_doc_id != document.local_doc_id and quote in item.text for item in documents):
+        return "quote_found_in_other_document"
+
+    def normalize(text: str, whitespace: bool, punctuation: bool) -> str:
+        # 数字相邻标点可能是小数点、负号或比例符号，不归为普通文字标点差异。
+        result = []
+        for index, char in enumerate(text):
+            if whitespace and char.isspace():
+                continue
+            next_to_number = (
+                index > 0 and text[index - 1].isdecimal()
+                or index + 1 < len(text) and text[index + 1].isdecimal()
+            )
+            if punctuation and unicodedata.category(char).startswith("P") and not next_to_number:
+                continue
+            result.append(char)
+        return "".join(result)
+
+    for whitespace, punctuation, reason in (
+        (True, False, "quote_whitespace_difference"),
+        (False, True, "quote_punctuation_difference"),
+        (True, True, "quote_whitespace_punctuation_difference"),
+    ):
+        candidate = normalize(quote, whitespace, punctuation)
+        if candidate and candidate in normalize(document.text, whitespace, punctuation):
+            return reason
+    return "quote_source_mismatch"
+
+
 def _parse(
     content: str,
     documents: Sequence[DischargeApprovalInput],
@@ -145,7 +194,7 @@ def _parse(
         raise ValueError("invalid extraction schema")
     items = payload["items"]
     if len(items) != len(documents):
-        raise ValueError("incomplete extraction mapping")
+        _reject_output("incomplete extraction mapping", "document_mapping_count_mismatch")
     documents_by_id = {item.local_doc_id: item for item in documents}
     assertions: dict[str, DischargeApprovalAssertion] = {}
     for item in items:
@@ -156,11 +205,12 @@ def _parse(
         local_doc_id = item["local_doc_id"]
         opinion = item["opinion"]
         quote = item["quote"]
+        if not isinstance(local_doc_id, str) or local_doc_id not in documents_by_id:
+            _reject_output("invalid assertion value", "document_reference_unknown")
+        if local_doc_id in assertions:
+            _reject_output("invalid assertion value", "document_reference_duplicate", local_doc_id)
         if (
-            not isinstance(local_doc_id, str)
-            or local_doc_id not in documents_by_id
-            or local_doc_id in assertions
-            or not isinstance(opinion, str)
+            not isinstance(opinion, str)
             or opinion not in _OPINIONS
             or not isinstance(quote, str)
         ):
@@ -169,9 +219,15 @@ def _parse(
         if opinion == "unknown":
             if quote != "":
                 if not quote.strip() or quote not in document.text:
-                    raise ValueError("unverified opinion quote")
+                    _reject_output(
+                        "unverified opinion quote",
+                        _quote_rejection_reason(quote, document, documents), local_doc_id,
+                    )
         elif not quote.strip() or quote not in document.text:
-            raise ValueError("unverified opinion quote")
+            _reject_output(
+                "unverified opinion quote",
+                _quote_rejection_reason(quote, document, documents), local_doc_id,
+            )
         role: Literal["senior", "other", "unknown"] = (
             "senior" if document.source_type == "senior_course_record" else "unknown"
         )
@@ -195,7 +251,7 @@ def _parse(
             role_quote=None,
         )
     if set(assertions) != set(documents_by_id):
-        raise ValueError("incomplete extraction mapping")
+        _reject_output("incomplete extraction mapping", "document_mapping_incomplete")
     return tuple(assertions[item.local_doc_id] for item in documents)
 
 
