@@ -184,6 +184,57 @@ def _quote_rejection_reason(
     return "quote_source_mismatch"
 
 
+def _restore_unique_whitespace_quote(quote: str, document: DischargeApprovalInput) -> str:
+    """仅以排版空白定位同文书唯一连续片段；返回原文，不返回归一化文本。"""
+    if not quote.strip() or quote in document.text:
+        return quote
+    layout_space = " \t\r\n\u00a0\u3000"
+    source_positions = [index for index, char in enumerate(document.text) if char not in layout_space]
+    quote_positions = [index for index, char in enumerate(quote) if char not in layout_space]
+    candidate = "".join(quote[index] for index in quote_positions)
+    if not candidate:
+        return quote
+    source = "".join(document.text[index] for index in source_positions)
+    start = source.find(candidate)
+    if start < 0:
+        return quote
+    if source.find(candidate, start + 1) >= 0:
+        _reject_output("unverified opinion quote", "quote_whitespace_ambiguous", document.local_doc_id)
+    end = start + len(candidate)
+    original_start, original_end = source_positions[start], source_positions[end - 1] + 1
+    restored = document.text[original_start:original_end]
+
+    # 不从否定词后截取肯定片段，也不截掉逗号后尚未完成的条件。
+    # ASCII句点可能属于小数，不能拿它作为分句边界。
+    terminators = "。！？!?；;"
+    prefix = document.text[:original_start].rstrip(layout_space)
+    suffix = document.text[original_end:].lstrip(layout_space)
+    if ((prefix and prefix[-1] not in terminators + "：:")
+            or (suffix and restored[-1] not in terminators and suffix[0] not in terminators)):
+        _reject_output("unverified opinion quote", "quote_whitespace_incomplete_span", document.local_doc_id)
+    numeric_marks = ".．,，+-−﹣－/／％%‰≤≥<>=±eE_＿"
+
+    def token_char(char: str) -> bool:
+        # 汉字间常见排版空白可定位；非汉字字母/数字及组合标记不能被拼成新词元。
+        han = unicodedata.name(char, "").startswith(("CJK UNIFIED IDEOGRAPH", "CJK COMPATIBILITY IDEOGRAPH"))
+        return (char.isnumeric() or char.isalpha() and not han
+                or unicodedata.category(char).startswith("M") or char in numeric_marks)
+
+    for index in range(1, len(candidate)):
+        left, right = candidate[index - 1:index + 1]
+        original_gap = document.text[source_positions[start + index - 1] + 1:source_positions[start + index]]
+        proposed_gap = quote[quote_positions[index - 1] + 1:quote_positions[index]]
+        token_boundary = (
+            left.isascii() and right.isascii() and (left.isalnum() or right.isalnum())
+            or token_char(left) and token_char(right)
+        )
+        if bool(original_gap) != bool(proposed_gap) and token_boundary:
+            _reject_output("unverified opinion quote", "quote_whitespace_token_boundary", document.local_doc_id)
+    safe_id = document.local_doc_id if re.fullmatch(r"doc_[0-9]{2}", document.local_doc_id) else "-"
+    logger.info("LX0609 discharge_approval_quote_restored local_doc_id=%s", safe_id)
+    return restored
+
+
 def _response_format(documents: Sequence[DischargeApprovalInput]) -> dict[str, Any]:
     """约束只使用本次局部编号；文书映射、条件与原文引文仍在本地严格复核。"""
     return {"type": "json_schema", "json_schema": {
@@ -260,6 +311,7 @@ def _parse(
         ):
             raise ValueError("invalid assertion value")
         document = documents_by_id[local_doc_id]
+        quote = _restore_unique_whitespace_quote(quote, document)
         if opinion == "unknown":
             if quote != "":
                 if not quote.strip() or quote not in document.text:
