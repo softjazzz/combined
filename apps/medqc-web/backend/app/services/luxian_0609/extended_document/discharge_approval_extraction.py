@@ -212,14 +212,21 @@ def _restore_unique_whitespace_quote(quote: str, document: DischargeApprovalInpu
     if ((prefix and prefix[-1] not in terminators + "：:")
             or (suffix and restored[-1] not in terminators and suffix[0] not in terminators)):
         _reject_output("unverified opinion quote", "quote_whitespace_incomplete_span", document.local_doc_id)
+    numeric_marks = ".．,，+-−﹣－/／％%‰≤≥<>=±eE_＿"
+
+    def token_char(char: str) -> bool:
+        # 汉字间常见排版空白可定位；非汉字字母/数字及组合标记不能被拼成新词元。
+        han = unicodedata.name(char, "").startswith(("CJK UNIFIED IDEOGRAPH", "CJK COMPATIBILITY IDEOGRAPH"))
+        return (char.isnumeric() or char.isalpha() and not han
+                or unicodedata.category(char).startswith("M") or char in numeric_marks)
+
     for index in range(1, len(candidate)):
         left, right = candidate[index - 1:index + 1]
         original_gap = document.text[source_positions[start + index - 1] + 1:source_positions[start + index]]
         proposed_gap = quote[quote_positions[index - 1] + 1:quote_positions[index]]
-        numeric_marks = ".．,，+-−﹣－/／％%‰≤≥<>=±eE"
         token_boundary = (
             left.isascii() and right.isascii() and (left.isalnum() or right.isalnum())
-            or (left.isdecimal() or left in numeric_marks) and (right.isdecimal() or right in numeric_marks)
+            or token_char(left) and token_char(right)
         )
         if bool(original_gap) != bool(proposed_gap) and token_boundary:
             _reject_output("unverified opinion quote", "quote_whitespace_token_boundary", document.local_doc_id)

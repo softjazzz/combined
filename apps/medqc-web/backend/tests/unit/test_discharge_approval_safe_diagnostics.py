@@ -175,6 +175,8 @@ async def test_unique_whitespace_location_returns_original_span_once(source, quo
     ("主任医师记录数值１ ０后同意\n出院。", "主任医师记录数值１０后同意出院。", "quote_whitespace_token_boundary"),
     ("主任医师记录数值− 3后同意\n出院。", "主任医师记录数值−3后同意出院。", "quote_whitespace_token_boundary"),
     ("主任医师记录no fever后同意\n出院。", "主任医师记录nofever后同意出院。", "quote_whitespace_token_boundary"),
+    ("主任医师记录Ａ Ｂ后同意\n出院。", "主任医师记录ＡＢ后同意出院。", "quote_whitespace_token_boundary"),
+    ("主任医师记录α β后同意\n出院。", "主任医师记录αβ后同意出院。", "quote_whitespace_token_boundary"),
 ])
 async def test_whitespace_recovery_rejects_ambiguous_or_unsafe_spans(source, quote, reason, caplog):
     client = FixedReply([item("doc_01", quote)])
