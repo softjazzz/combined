@@ -3135,6 +3135,26 @@ class CustomQCWorkspaceService:
             **({"_private_identity_collector": _private_identity_collector} if _private_identity_collector is not None else {}),
         )
 
+    def collect_records_for_admission(self, **filters: Any) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """只读预检：不先丢弃场景不符病例，不创建任务；返回逐选择项受控原因。"""
+        from .clinical_scene_admission import scene_rejection
+        from .luxian_0609.clinical_material_policy import clinical_record_scene
+        scope = filters["scope"]
+        records = self.collect_records(**{**filters, "scope": "all"})
+        requested = list(normalize_case_refs(filters["record_refs"])) if filters.get("record_refs") else []
+        positions = {ref: index for index, ref in enumerate(requested)}
+        rejections = []
+        for index, record in enumerate(records):
+            code = scene_rejection(record, scope)
+            if code:
+                rejections.append({"selection_index": positions.get(CaseRef.from_mapping(record), index),
+                    "code": code, "scene": clinical_record_scene(record) if record.get("qc_scope") in {"unknown", "running", "final"} else "unknown",
+                    "discharge_state": (record.get("qc_discharge_state")
+                        if record.get("qc_discharge_state") in {"inpatient", "discharged"} else "unknown"),
+                    "discharge_time_status": (record.get("qc_discharge_time_status")
+                        if record.get("qc_discharge_time_status") in {"missing", "present", "conflict"} else "unknown")})
+        return records, rejections
+
     def count_records(
         self,
         *,

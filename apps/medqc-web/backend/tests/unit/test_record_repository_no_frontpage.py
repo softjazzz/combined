@@ -194,11 +194,18 @@ async def test_create_route_collects_real_raw_repository_without_frontpage(raw_s
     from tests.unit.test_qc_sichuan_batch_throughput import _WorkspaceStub, _ServiceStub, _luxian_native_settings
     from app.routers import qc_sichuan
     from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+    from app.services.qc_workspace.record_repository import HospitalizationStatusProjection
+    HospitalizationStatusProjection.__table__.create(raw_source)
+    with Session(raw_source) as session:
+        session.add(HospitalizationStatusProjection(**REF.as_dict(), status="inpatient",
+            source="source_active_scope", verified_at=datetime.now()))
+        session.commit()
     repository = RecordRepository(session_factory=lambda: Session(raw_source))
     owner = CustomQCWorkspaceService.__new__(CustomQCWorkspaceService)
     monkeypatch.setattr(owner, "_record_repository", lambda: repository)
     workspace = _WorkspaceStub()
     workspace.collect_records = owner.collect_records
+    workspace.collect_records_for_admission = owner.collect_records_for_admission
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
     monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *_args: None)

@@ -50,6 +50,7 @@ class DischargeApprovalLLMClient(Protocol):
         *,
         max_completion_tokens: int,
         allow_length_retry: bool,
+        response_format: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -183,11 +184,54 @@ def _quote_rejection_reason(
     return "quote_source_mismatch"
 
 
+def _response_format(documents: Sequence[DischargeApprovalInput]) -> dict[str, Any]:
+    """约束只使用本次局部编号；文书映射、条件与原文引文仍在本地严格复核。"""
+    return {"type": "json_schema", "json_schema": {
+        "name": "discharge_approval", "strict": True,
+        "schema": {
+            "type": "object", "additionalProperties": False,
+            "required": ["schema_version", "items"],
+            "properties": {
+                "schema_version": {"type": "string", "enum": [SCHEMA_VERSION]},
+                "items": {"type": "array", "minItems": len(documents), "maxItems": len(documents),
+                    "items": {"type": "object", "additionalProperties": False,
+                        "required": ["local_doc_id", "opinion", "quote"],
+                        "properties": {
+                            "local_doc_id": {"type": "string", "enum": [doc.local_doc_id for doc in documents]},
+                            "opinion": {"type": "string", "enum": sorted(_OPINIONS)},
+                            "quote": {"type": "string"},
+                        }}},
+            },
+        },
+    }}
+
+
+def _log_json_rejection(error: json.JSONDecodeError, content: str) -> None:
+    """不输出 error、msg、doc、引文或响应；只输出有限类别及数字位置。"""
+    reason = "json_decode_error"
+    if not content.strip():
+        reason = "json_empty"
+    elif error.msg == "Extra data":
+        reason = "json_extra_data"
+    elif error.msg.startswith("Unterminated string"):
+        reason = "json_unterminated_string"
+    fenced = bool(re.fullmatch(r"\s*```(?:json)?[ \t]*\r?\n[\s\S]*\r?\n```\s*", content))
+    logger.warning(
+        "LX0609 discharge_approval_json_rejected reason=%s json_line=%d json_column=%d "
+        "json_position=%d content_length=%d complete_code_fence=%s",
+        reason, error.lineno, error.colno, error.pos, len(content), str(fenced).lower(),
+    )
+
+
 def _parse(
     content: str,
     documents: Sequence[DischargeApprovalInput],
 ) -> tuple[DischargeApprovalAssertion, ...]:
-    payload = json.loads(content, object_pairs_hook=_unique_object)
+    try:
+        payload = json.loads(content, object_pairs_hook=_unique_object)
+    except json.JSONDecodeError as error:
+        _log_json_rejection(error, content)
+        raise
     if not isinstance(payload, dict) or set(payload) != {"schema_version", "items"}:
         raise ValueError("invalid extraction fields")
     if payload["schema_version"] != SCHEMA_VERSION or not isinstance(payload["items"], list):
@@ -304,6 +348,10 @@ async def _extract_discharge_approval_once(
         return DischargeApprovalExtraction("technical_error", "model_transport_error")
     started = perf_counter()
     try:
+        options = {}
+        supports_schema = getattr(llm_client, "supports_strict_json_schema", None)
+        if callable(supports_schema) and supports_schema():
+            options["response_format"] = _response_format(safe_documents)
         response = await llm_client.generate(
             _prompt(safe_documents) + (
                 "\n纠正上一轮事实抽取：不能将‘出院医嘱’栏目标题或其下的休息、复查等嘱咐"
@@ -325,6 +373,7 @@ async def _extract_discharge_approval_once(
             ),
             max_completion_tokens=MAX_COMPLETION_TOKENS,
             allow_length_retry=False,
+            **options,
         )
     except Exception as error:
         is_timeout = isinstance(error, TimeoutError) or safe_status_for_exception(error)[0] == "timeout"
