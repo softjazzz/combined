@@ -13,6 +13,7 @@ from .settings import get_settings
 from .llm_http_proxy import LLMHTTPProxyPolicy
 from .execution_timing import measure_stage, record_stage_duration, track_http_future
 from .http_attempt_observation import current_http_attempt_observation
+from .llm_transport_diagnostics import log_transport_failure
 
 
 T = TypeVar("T")
@@ -248,16 +249,24 @@ def _post_json(
     *, allow_disconnect_retry: bool = True, reject_redirects: bool = False,
 ) -> Dict[str, Any]:
     observation = current_http_attempt_observation()
+    transport_attempt = 0
 
     def send_once():
+        nonlocal transport_attempt
+        transport_attempt += 1
         if observation is not None:
             observation.sending()
-        response = client.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=timeout_seconds,
-        )
+        try:
+            response = client.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=timeout_seconds,
+            )
+        except httpx.RequestError as error:
+            log_transport_failure(error, timeout_seconds=timeout_seconds,
+                                  transport_attempt=transport_attempt)
+            raise
         if observation is not None:
             observation.received()
         return response
