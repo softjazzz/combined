@@ -18,17 +18,19 @@ from app.services.luxian_0609_rule_catalog import (
 )
 
 
-# 独立按业务语义验收，04 中死亡及会诊四项不能被前缀暂停。
+# 按逐项验收和来源合同暂停，不能按手术或会诊前缀批量扩展范围。
 EVENT_RULE_IDS = tuple("LX0609-" + item for item in (
-    "04-01-01", "04-01-02", "04-01-03", "04-01-04", "04-01-05",
-    "04-02-01", "04-02-02", "04-02-03", "04-02-04", "04-02-05",
+    "03-01-04",
+    "04-01-02", "04-01-03", "04-01-04", "04-01-05",
+    "04-02-02", "04-02-03", "04-02-04", "04-02-05",
     "04-03-01", "04-04-01", "04-04-02", "04-04-03",
-    "04-05-01", "04-05-02", "04-05-03", "05-01-01",
+    "04-05-01", "04-05-02", "05-01-01",
     "11-01-01", "11-02-01", "11-02-02",
     "07-01-01", "07-01-02", "07-01-03", "07-02-01", "07-02-02",
     "07-03-01", "07-04-01", "07-04-02", "11-03-01", "11-03-02",
 ))
 PREVIOUS_REASONS = {
+    "LX0609-03-01-04": "consultation_source_document_unavailable_customer_scope",
     "LX0609-04-02-04": "implant_five_field_real_gold_pending",
     "LX0609-04-04-01": "anesthesia_visit_sources_unavailable_customer_scope",
     "LX0609-04-04-02": "anesthesia_visit_sources_unavailable_customer_scope",
@@ -47,7 +49,7 @@ def test_event_rule_cannot_enter_formal_execution(rule_id):
 
 
 def test_death_consultation_and_other_existing_pauses_are_preserved():
-    kept = tuple("LX0609-04-02-" + suffix for suffix in ("06", "07", "08", "09"))
+    kept = tuple("LX0609-04-02-" + suffix for suffix in ("06", "08", "09"))
     executable, paused = partition_luxian_0609_rule_scope(kept)
     assert set(executable) == set(kept)
     assert paused == ()
@@ -111,7 +113,7 @@ def test_saved_task_scope_is_not_reinterpreted_using_current_pauses():
     assert saved["paused_customer_rule_ids"] == []
 
 
-@pytest.mark.parametrize("rule_id", ("LX0609-07-02-01", "LX0609-04-02-01"))
+@pytest.mark.parametrize("rule_id", ("LX0609-07-02-01", "LX0609-04-02-01", "LX0609-03-01-04"))
 @pytest.mark.parametrize("status,is_compliant", (("compliant", True), ("non_compliant", False)))
 def test_saved_event_results_keep_frozen_conclusion_at_read_boundary(rule_id, status, is_compliant):
     from app.services.qc_workspace.canonical_result_store import (

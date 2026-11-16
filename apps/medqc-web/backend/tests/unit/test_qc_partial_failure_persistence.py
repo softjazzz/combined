@@ -793,7 +793,7 @@ def test_automatic_retry_skips_terminal_pair_without_losing_it_or_successful_ite
     service, engine, table = storage
     summary, items, failures = _payload()
     terminal = {**failures[0], "rule_id": "LX0609-05-01-03", "reason_code": "model_invalid_output"}
-    transient = {**failures[0], "rule_id": "LX0609-03-01-04", "reason_code": "model_timeout"}
+    transient = {**failures[0], "rule_id": "LX0609-06-01-05", "reason_code": "model_timeout"}
     summary.update(failed_rule_count=2, failed_rule_ids=[terminal["rule_id"], transient["rule_id"]])
     with engine.begin() as conn:
         filters = json.loads(conn.execute(sa.select(table.c.filters_json)).scalar_one())
@@ -813,10 +813,40 @@ def test_automatic_retry_skips_terminal_pair_without_losing_it_or_successful_ite
     assert original["items"][0]["rule_id"] == items[0]["rule_id"]
 
 
+@pytest.mark.parametrize("rule_id", ("LX0609-03-01-04", "LX0609-04-02-07", "LX0609-12-02-01"))
+@pytest.mark.parametrize("automatic", (False, True))
+def test_paused_rule_retry_stops_new_attempt_and_preserves_history(storage, rule_id, automatic):
+    """暂停后不再创建重试任务，已保存的成功项和失败事实保持不变。"""
+    service, engine, table = storage
+    summary, items, failures = _payload()
+    failure = {**failures[0], "rule_id": rule_id, "reason_code": "model_timeout"}
+    summary.update(failed_rule_ids=[rule_id])
+    with engine.begin() as conn:
+        filters = json.loads(conn.execute(sa.select(table.c.filters_json)).scalar_one())
+        filters["rule_ids"] = [items[0]["rule_id"], rule_id]
+        conn.execute(table.update().values(filters_json=json.dumps(filters)))
+    service.complete_batch_job(job_id="partial-job", summary=summary, items=items,
+                               failed_records=[failure])
+    with engine.connect() as conn:
+        before = [dict(row) for row in conn.execute(sa.select(table)).mappings()]
+
+    with pytest.raises(ValueError, match="retry_rule_scope_paused"):
+        service.retry_batch_job(job_id="partial-job", created_by="tester", automatic=automatic,
+                                expected_attempt_filters_json=before[0]["filters_json"])
+
+    with engine.connect() as conn:
+        after = [dict(row) for row in conn.execute(sa.select(table)).mappings()]
+    assert after == before
+    original = service.get_batch_job(job_id="partial-job", created_by="tester")
+    assert original["items"][0]["rule_id"] == items[0]["rule_id"]
+    assert original["failed_records"][0]["rule_id"] == rule_id
+    assert original["failed_records"][0]["reason_code"] == "model_timeout"
+
+
 def test_automatic_terminal_retry_does_not_fall_back_to_full_batch(storage):
     service, engine, table = storage
     summary, items, failures = _payload()
-    failure = {**failures[0], "rule_id": "LX0609-03-01-04", "reason_code": "execution_program_error"}
+    failure = {**failures[0], "rule_id": "LX0609-06-01-05", "reason_code": "execution_program_error"}
     with engine.begin() as conn:
         filters = json.loads(conn.execute(sa.select(table.c.filters_json)).scalar_one())
         filters["rule_ids"] = [items[0]["rule_id"], failure["rule_id"]]

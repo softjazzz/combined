@@ -144,7 +144,8 @@ def test_runtime_manifest_honors_explicit_mainline_rollback_flags() -> None:
     )
 
     by_rule = {item["rule_id"]: item for item in manifest["rules"]}
-    assert by_rule["LX0609-04-01-01"]["active_path"] == "not_executed"
+    assert by_rule["LX0609-04-01-01"]["active_path"] == "compatibility"
+    assert by_rule["LX0609-03-01-04"]["active_path"] == "not_executed"
     assert manifest["flags"]["unified_engine"] is False
     assert manifest["flags"]["rule_decision_surgery_document"] is False
 

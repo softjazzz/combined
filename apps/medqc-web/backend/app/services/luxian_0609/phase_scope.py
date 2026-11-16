@@ -36,6 +36,10 @@ _DEFAULT_PENDING_DEFINITION_MESSAGES = (
 )
 # 暂停原因的客户文案只在此处声明；总表只提供原因码，避免第二份暂停清单。
 _PENDING_DEFINITION_CUSTOMER_MESSAGES: dict[str, tuple[str, str]] = {
+    "diagnosis_change_policy_pending_hospital_confirmation": (
+        "修正或补充诊断质控暂未启用，未生成合规或问题判定。",
+        "待与院方确认诊断变更来源及核查口径后再启用；历史结果保留原结论。",
+    ),
     "event_quality_control_paused_current_release": (
         "本质控点按当前版本安排暂未启用，未生成合规或问题判定。",
         "后续版本启用后可新建任务执行本质控点；历史结果保持原结论。",
@@ -52,7 +56,7 @@ _PENDING_DEFINITION_CUSTOMER_MESSAGES: dict[str, tuple[str, str]] = {
         "系统内的会诊文书实际为请会诊执行记录，缺少可核查的会诊申请单或会诊记录单，"
         "本质控点已暂停，未生成合规或问题判定。",
         "待院方提供会诊申请单或会诊记录单来源并完成口径验收后再启用本质控点；"
-        "会诊执行记录自身的规范性由 LX0609-03-01-04 单独核对。",
+        "LX0609-03-01-04 同样等待院方确认正式会诊意见来源及其与执行记录的关联合同。",
     ),
 }
 

@@ -94,9 +94,16 @@ def test_phase_scope_projects_each_raw_master_rule_in_declared_order() -> None:
 def test_phase_scope_uses_latest_confirmed_contract_and_freezes_only_unresolved_rules() -> None:
     entries = {entry.rule_id: entry for entry in load_luxian_0609_phase_scope()}
 
-    for rule_id in ("LX0609-02-01-05", "LX0609-06-01-02", "LX0609-12-01-02", "LX0609-03-01-04"):
+    for rule_id in ("LX0609-02-01-05", "LX0609-06-01-02", "LX0609-12-01-02",
+                    "LX0609-04-02-01", "LX0609-04-05-03", "LX0609-04-01-01"):
         assert entries[rule_id].phase_status == "phase_1_target"
         assert entries[rule_id].pending_reason_code == ""
+
+    for rule_id in ("LX0609-03-01-04", "LX0609-04-02-07"):
+        assert entries[rule_id].phase_status == "pending_definition"
+        assert entries[rule_id].pending_reason_code == "consultation_source_document_unavailable_customer_scope"
+    assert entries["LX0609-12-02-01"].phase_status == "pending_definition"
+    assert entries["LX0609-12-02-01"].pending_reason_code == "diagnosis_change_policy_pending_hospital_confirmation"
 
     assert entries["LX0609-04-02-04"].phase_status == "pending_definition"
     assert (
@@ -188,13 +195,14 @@ def test_phase_scope_partitions_customer_selection_in_catalog_order() -> None:
     assert pending == ("LX0609-07-04-02", "LX0609-05-03-01")
 
 
-def test_consultation_family_keeps_only_023_executable() -> None:
-    """会诊申请单/会诊记录单来源缺失，020/021/022 暂停，只保留 023。"""
+def test_consultation_source_rules_including_023_and_069_are_withheld() -> None:
+    """正式会诊来源尚未确认，建议执行证据及会诊时限均不进入新任务。"""
 
     entries = {entry.rule_id: entry for entry in load_luxian_0609_phase_scope()}
 
-    assert entries["LX0609-03-01-04"].phase_status == "phase_1_target"
-    for rule_id in ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"):
+    rule_ids = ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03",
+                "LX0609-03-01-04", "LX0609-04-02-07")
+    for rule_id in rule_ids:
         assert entries[rule_id].phase_status == "pending_definition"
         assert (
             entries[rule_id].pending_reason_code
@@ -203,14 +211,16 @@ def test_consultation_family_keeps_only_023_executable() -> None:
         result = build_luxian_0609_pending_definition_result(rule_id)
         assert result["status"] == "not_executed"
         assert result["is_compliant"] is None
+        assert result["facts"] == {}
+        assert result["evidence"] == []
         assert "请会诊执行记录" in result["findings"]
         assert "LX0609-03-01-04" in result["suggestion"]
 
     executable, withheld = partition_luxian_0609_rule_scope(
-        ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03", "LX0609-03-01-04")
+        rule_ids
     )
-    assert executable == ("LX0609-03-01-04",)
-    assert withheld == ("LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03")
+    assert executable == ()
+    assert withheld == rule_ids
 
 
 def test_customer_delivery_excludes_registration_only_handbook_rules() -> None:
@@ -239,7 +249,8 @@ def test_customer_delivery_excludes_registration_only_handbook_rules() -> None:
     assert len(set(delivery)) == len(delivery)
     assert "LX0609-04-04-01" in withheld
     assert {"LX0609-03-01-01", "LX0609-03-01-02", "LX0609-03-01-03"}.issubset(withheld)
-    assert "LX0609-03-01-04" in executable
+    assert {"LX0609-03-01-04", "LX0609-04-02-07", "LX0609-12-02-01"}.issubset(withheld)
+    assert {"LX0609-04-02-01", "LX0609-04-05-03", "LX0609-04-01-01"}.issubset(executable)
     assert "LX0609-06-03-01" not in delivery
     assert "LX0609-06-01-01" in executable
     with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):

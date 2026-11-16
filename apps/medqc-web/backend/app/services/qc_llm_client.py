@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from ..core.http import safe_post_json
 from ..core.http_attempt_observation import http_attempt_observation_scope
+from ..core.llm_transport_diagnostics import transport_diagnostic_scope
 from ..core.settings import get_settings
 from .llm_observability import (
     LLMObservabilityRecorder,
@@ -659,7 +660,7 @@ class SichuanQCLLMClient:
             from .luxian_0609.execution_time_budget import request_timeout
 
             timeout_seconds = request_timeout(self.timeout_seconds)
-            with http_attempt_observation_scope(
+            with transport_diagnostic_scope(event_id), http_attempt_observation_scope(
                 enabled=(getattr(self, "strata_observation_mode", "off") in {"observe", "prefix"}
                          or getattr(self, "request_observation_enabled", False)),
             ) as transport_observation:

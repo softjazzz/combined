@@ -144,7 +144,7 @@ def test_non_terminal_states_have_action_semantics(
     expected: str,
 ) -> None:
     suggestion = build_customer_remediation_suggestion(
-        rule_id="LX0609-03-01-04",
+        rule_id="LX0609-06-01-05",
         status=status,
         reason_code=reason_code,
     )
@@ -186,18 +186,15 @@ def test_controlled_episode_facts_identify_the_consultations_to_revise() -> None
     assert suggestion == ""
 
 
-def test_non_compliant_consultation_advice_does_not_mix_data_gap_instructions() -> None:
+@pytest.mark.parametrize("status", ("non_compliant", "data_gap", "evaluation_unknown", "technical_error"))
+def test_paused_consultation_advice_has_no_new_remediation(status: str) -> None:
     suggestion = build_customer_remediation_suggestion(
         rule_id="LX0609-03-01-04",
-        status="non_compliant",
+        status=status,
         reason_code="requirement_violated",
     )
 
-    assert "修改对象：会诊建议对应的住院医嘱" in suggestion
-    assert "请依据本次实际诊疗事实补充" in suggestion
-    assert "不要编造未核实事实" in suggestion
-    assert "资料不足时应标记待核实" not in suggestion
-    assert "不得直接写成已完成" not in suggestion
+    assert suggestion == ""
 
 
 def test_030_order_only_advice_requires_execution_check_before_record_remediation(monkeypatch) -> None:
@@ -354,14 +351,14 @@ def test_renderer_structures_non_terminal_state_actions(
 ) -> None:
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
-            rule_id="LX0609-03-01-04",
+            rule_id="LX0609-01-01-01",
             snapshot_hash=SNAPSHOT_HASH,
             applicability=applicability,
             evidence_state=evidence_state,
             qc_direction=QcDirection.UNKNOWN,
             reason_code=reason_code,
             fact_refs=(FACT_REF,),
-            evaluator_version="native-consultation-v1",
+            evaluator_version="basic-timeliness-v1",
         )
     )
 
