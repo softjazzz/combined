@@ -36,6 +36,10 @@ _DEFAULT_PENDING_DEFINITION_MESSAGES = (
 )
 # 暂停原因的客户文案只在此处声明；总表只提供原因码，避免第二份暂停清单。
 _PENDING_DEFINITION_CUSTOMER_MESSAGES: dict[str, tuple[str, str]] = {
+    "antimicrobial_reason_quote_validation_pending": (
+        "抗菌药物用药理由质控的引文校验稳定性待验收，本质控点暂未启用，未生成合规或问题判定。",
+        "待引文定位、来源关联及严格引用完成验收后再启用；历史结果保持原结论，当前不要求据此补写用药理由。",
+    ),
     "diagnosis_change_policy_pending_hospital_confirmation": (
         "修正或补充诊断质控暂未启用，未生成合规或问题判定。",
         "待与院方确认诊断变更来源及核查口径后再启用；历史结果保留原结论。",
