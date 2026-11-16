@@ -857,15 +857,25 @@ class CanonicalResultStore:
         filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
         items = job.get("items") if isinstance(job.get("items"), list) else []
         delivered = {CaseRef.from_mapping(item) for item in delivered_items}
-        saved_refs = {
-            CaseRef.from_mapping(item) for item in items if isinstance(item, Mapping)
-        }
-        pending_refs: List[CaseRef] = []
+        frozen_refs: List[CaseRef] = []
         for raw_ref in list(filters.get("record_refs") or []):
             ref = CaseRef.from_mapping(raw_ref) if isinstance(raw_ref, Mapping) else None
-            if (ref is not None and all(ref) and ref not in pending_refs
-                    and ref not in delivered and ref in saved_refs):
-                pending_refs.append(ref)
+            if ref is not None and all(ref) and ref not in frozen_refs:
+                frozen_refs.append(ref)
+        undelivered_refs = [ref for ref in frozen_refs if ref not in delivered]
+        if not undelivered_refs:
+            # 冻结范围全部已由 Envelope 交付：保持完整病例既有边界，不读取顶层条目。
+            return []
+        # 存在未交付病例时，先校验每条顶层成功项的身份属于冻结范围，再取交集：缺键、
+        # 不可解析或范围外的身份属于已保存条目损坏，必须明确拒绝，不能当作“该病例
+        # 没有部分结果”静默漏项。
+        saved_refs: set = set()
+        for item in items:
+            item_ref = CaseRef.from_mapping(item) if isinstance(item, Mapping) else None
+            if item_ref is None or not all(item_ref) or item_ref not in frozen_refs:
+                raise ValueError("saved_partial_result_invalid")
+            saved_refs.add(item_ref)
+        pending_refs = [ref for ref in undelivered_refs if ref in saved_refs]
         if not pending_refs:
             return []
         # 只有确实要读取某病例时才要求失败记录可解析；缺失即完整性错误，不静默放行。
