@@ -32,6 +32,7 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     authoritative_document_time_value,
@@ -1867,7 +1868,7 @@ def _typed_decision_from_outcome(
     elif status == "technical_error":
         reason_code = (
             outcome.reason_code
-            if outcome.reason_code in {"source_query_error", "snapshot_mismatch"}
+            if outcome.reason_code in {"source_query_error", "snapshot_mismatch", "privacy_guard_blocked"}
             else "executor_exception"
         )
         dimensions = (
@@ -2234,7 +2235,10 @@ async def execute_luxian_0609_native_consultation_rules(
                     rule_id: _ConsultationRuleOutcome(
                         rule_id,
                         "technical_error",
-                        "consultation_llm_failure",
+                        # 并发汇总收到的隐私拒绝保持不可重试原因码。
+                        luxian_0609_llm_call_failure_reason(
+                            response, fallback="consultation_llm_failure"
+                        ),
                         "llm",
                     )
                     for rule_id in rule_ids
@@ -2247,6 +2251,7 @@ async def execute_luxian_0609_native_consultation_rules(
         total_tokens += usage[2]
         api_time += usage[3]
         parse_succeeded = False
+        retry_privacy_reason = ""
         for attempt in range(2):
             try:
                 payload = _restore_projection_refs(
@@ -2311,7 +2316,10 @@ async def execute_luxian_0609_native_consultation_rules(
                 llm_call_count += 1
                 try:
                     response = await llm_client.generate(prompt_text)
-                except BaseException:
+                except BaseException as error:
+                    retry_privacy_reason = luxian_0609_llm_call_failure_reason(
+                        error, fallback=""
+                    )
                     break
                 retry_usage = _usage(response)
                 prompt_tokens += retry_usage[0]
@@ -2324,14 +2332,17 @@ async def execute_luxian_0609_native_consultation_rules(
             # 阻断为 technical_error；保留 model_invalid_output 原因码，便于
             # 诊断和证据链追踪。语义阶段（021/022）维持原有错误语义。
             fallback_status = (
-                "evaluation_unknown" if kind == "execution" else "technical_error"
+                "technical_error"
+                if retry_privacy_reason
+                else "evaluation_unknown" if kind == "execution" else "technical_error"
             )
             outcomes_by_rule.update(
                 {
                     rule_id: _ConsultationRuleOutcome(
                         rule_id,
                         fallback_status,
-                        "model_invalid_output",
+                        # 补问被隐私护栏拒绝不是模型输出问题。
+                        retry_privacy_reason or "model_invalid_output",
                         "llm",
                         "low" if fallback_status == "evaluation_unknown" else None,
                     )
@@ -2541,7 +2552,9 @@ async def execute_luxian_0609_native_consultation_rules(
                 course_source_complete=course_source_complete,
             )
         )
-    except Exception:
+    except Exception as error:
+        # 隐私护栏拒绝不是资料缺口：未由程序判定的规则闭合为不可重试技术错误。
+        privacy_reason = luxian_0609_llm_call_failure_reason(error, fallback="")
         return finalize(
             tuple(
                 _ConsultationRuleOutcome(
@@ -2549,9 +2562,11 @@ async def execute_luxian_0609_native_consultation_rules(
                     (
                         _REASON_STATUS[rule_id][programmatic_reasons[rule_id]]
                         if rule_id in programmatic_reasons
-                        else "data_gap"
+                        else "technical_error" if privacy_reason else "data_gap"
                     ),
-                    programmatic_reasons.get(rule_id, "consultation_llm_failure"),
+                    programmatic_reasons.get(
+                        rule_id, privacy_reason or "consultation_llm_failure"
+                    ),
                     (
                         "program" if rule_id in programmatic_reasons else "llm"
                     ),

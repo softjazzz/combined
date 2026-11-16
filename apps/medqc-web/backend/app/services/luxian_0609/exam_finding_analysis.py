@@ -850,7 +850,9 @@ async def _check_batch(
             )
         except Exception as error:
             from ..llm_token_budget import is_budget_error
-            if is_budget_error(error):
+            from .llm_prompt_privacy import is_luxian_0609_privacy_block
+            if is_budget_error(error) or is_luxian_0609_privacy_block(error):
+                # 隐私拒绝与预算失败同等上抛，由批次按逐规则失败码闭合，不回退主抽取。
                 raise
             if analysed:
                 break

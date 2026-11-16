@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
+from .llm_prompt_privacy import is_luxian_0609_privacy_block, luxian_0609_llm_call_failure_reason
 from ..llm_token_budget import budget_guarded_executor
 from .exam_token_budget import active as token_split_active, exam_recovery_executor
 
@@ -2389,7 +2389,11 @@ async def _extract_exam_lab_batch_uncached(
                             completion_tokens += retry_completion
                             total_tokens += retry_total
                             api_time += retry_elapsed
-                        if recovery.failure_kind is None:
+                        if recovery.failure_kind == "privacy_guard_blocked":
+                            # 逐事件补核被隐私护栏拒绝：走逐规则失败码通道，保持不可重试。
+                            isolated_rule_failures[rule_id] = "value"
+                            budget_rule_failures[rule_id] = recovery.failure_kind
+                        elif recovery.failure_kind is None:
                             text_facts = tuple((*text_facts, *recovery.facts))
                             isolated_rule_failures.pop(rule_id, None)
                             recovered_rule_count += 1
@@ -2448,6 +2452,9 @@ async def _extract_exam_lab_batch_uncached(
                                 rule_id,
                                 getattr(retry_exc, "failure_kind", "value"),
                             )
+                            if is_luxian_0609_privacy_block(retry_exc):
+                                # 局部补核被隐私护栏拒绝不是模型无效输出。
+                                budget_rule_failures[rule_id] = luxian_0609_llm_call_failure_reason(retry_exc)
         except (ExamLabFactParseError, ValueError) as exc:
             # 顶层 JSON/schema、规则/事件身份、引用范围错误，以及
             # 非受控 ValueError，仍按原合同让整批进入一次重试。
@@ -2491,9 +2498,14 @@ async def _extract_exam_lab_batch_uncached(
                 isolated_rule_failures = dict(retry_partition.rule_failures)
                 parse_failure_kinds.extend(isolated_rule_failures.values())
                 recovered_rule_count += len(eligible_rule_ids) - len(isolated_rule_failures)
-            except Exception:  # noqa: BLE001
+            except Exception as retry_exc:  # noqa: BLE001
                 logger.warning("exam_lab_fact_retry_failed")
                 text_facts = None
+                if is_luxian_0609_privacy_block(retry_exc):
+                    # 整批补核被隐私护栏拒绝：逐规则闭合为不可重试，不落为 model_invalid_output。
+                    budget_rule_failures = dict.fromkeys(
+                        eligible_rule_ids, luxian_0609_llm_call_failure_reason(retry_exc)
+                    )
         result_conflicts: Mapping[int, tuple[str, ...]] = {}
         analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = {}
         incomplete_specialty_rule_ids: set[str] = set()
@@ -2531,7 +2543,7 @@ async def _extract_exam_lab_batch_uncached(
                         try:
                             outcome = await check
                         except Exception as error:
-                            if not is_budget_error(error):
+                            if not (is_budget_error(error) or is_luxian_0609_privacy_block(error)):
                                 raise
                             return None, [error]
                         return outcome, failures
@@ -2545,7 +2557,10 @@ async def _extract_exam_lab_batch_uncached(
                         api_time += check_outcome.api_time
                     budget_reason = getattr(check_outcome, "budget_failure_reason", None)
                     if failures or budget_reason:
-                        budget_rule_failures[rule_id] = budget_reason or failures[0].code
+                        budget_rule_failures[rule_id] = budget_reason or (
+                            luxian_0609_llm_call_failure_reason(failures[0], fallback="")
+                            or failures[0].code
+                        )
                         isolated_rule_failures[rule_id] = "value"
                         incomplete_specialty_rule_ids.add(rule_id)
                         # 能力失败不能采用主抽取回退形成临床结论；其他规则继续。

@@ -52,7 +52,7 @@ from .extended_document.shared import _parse_datetime
 from .consultation_response_freeze import FrozenResponseClient
 from .execution_time_budget import CONSULTATION_RULE_BUDGET_SECONDS, execution_time_budget, follow_up_fits
 from .judgement_examples import CONSULTATION_SCOPE_EXAMPLES
-from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .llm_prompt_privacy import is_luxian_0609_privacy_block, redact_luxian_0609_patient_privacy
 from .model_failure import classify_model_failure, log_model_failure
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
@@ -5878,6 +5878,9 @@ async def _execute_consultation_episode_rules(
                                                 api_time += (
                                                     time.perf_counter() - missing_started
                                                 )
+                                            if is_luxian_0609_privacy_block(error):
+                                                # 隐私拒绝交外层第二阶段处理器闭合为 privacy_guard_blocked。
+                                                raise
                                             if isinstance(error, _SemanticInvalid):
                                                 logger.warning("consultation_missing_repair_invalid kind=%s exception_line=%s",
                                                                error.kind.value, _exception_line(error))
@@ -6009,10 +6012,12 @@ async def _execute_consultation_episode_rules(
                                             else item
                                             for item in execution_assessments
                                         )
-                                    except Exception:
+                                    except Exception as error:
                                         # 语义复核只用于提升个别低信心事实；其失败
-                                        # 不得覆盖首轮可交付的其他建议。
-                                        pass
+                                        # 不得覆盖首轮可交付的其他建议。隐私拒绝除外：
+                                        # 交外层第二阶段处理器闭合为 privacy_guard_blocked。
+                                        if is_luxian_0609_privacy_block(error):
+                                            raise
                             except _SemanticInvalid as semantic_error:
                                 logger.warning(
                                     "consultation_stage_two_invalid "
