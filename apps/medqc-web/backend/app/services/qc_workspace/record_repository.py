@@ -16,6 +16,8 @@ from ...database.models.cdm import (
 )
 from ..case_identity import CaseRef, CaseRefInput, normalize_case_refs
 from ..discharge_time import select_discharge_time
+from ..clinical_scene_admission import resolve_scene
+from ..validation_material_source import is_explicitly_invalid_document_status
 
 
 def _capture_private_orm_identities(collector: Callable[[str, Any], None] | None, source_key: str, rows: Sequence[Any]) -> None:
@@ -319,13 +321,19 @@ class RecordRepository:
 
             discharge_source = discharge_by_ref.get(ref)
             discharge_selection = select_discharge_time(
-                registration=getattr(source, "discharge_datetime", None),
+                registration=getattr(registration_source, "discharge_datetime", None),
                 document_date=getattr(discharge_source, "discharge_date", None),
                 document_time=getattr(discharge_source, "discharge_time", None),
                 document_status=getattr(discharge_source, "document_status", None),
             )
             discharge_datetime = discharge_selection.value
-            item_scope = "final" if discharge_datetime or discharge_selection.conflict else "running"
+            scene = resolve_scene(discharge=discharge_selection, document_present=discharge_source is not None,
+                document_invalid=is_explicitly_invalid_document_status(
+                    getattr(discharge_source, "document_status", None)))
+            # 旧住院投影可能含首页/排除法推断，不能作为新质控的正向状态证据。
+            scene["qc_scene_source"] = discharge_selection.source
+            scene["qc_scene_verified_at"] = ""
+            item_scope = scene["qc_scope"]
             if scope_value != "all" and item_scope != scope_value:
                 continue
             item_department = _safe_text(
@@ -385,8 +393,8 @@ class RecordRepository:
                     "discharge_datetime": _to_iso_datetime(discharge_datetime),
                     "discharge_horizon_source": discharge_selection.source,
                     "discharge_horizon_conflict": discharge_selection.conflict,
-                    "status": "completed" if item_scope == "final" else "running",
-                    "qc_scope": "final" if discharge_datetime or discharge_selection.conflict else "running" if admission_datetime else "unknown",
+                    "status": "completed" if item_scope == "final" else item_scope,
+                    **scene,
                     "qc_admission_datetime": _to_iso_datetime(admission_datetime),
                     "qc_discharge_datetime": _to_iso_datetime(discharge_datetime),
                     "qc_discharge_horizon_source": discharge_selection.source,
@@ -834,9 +842,7 @@ class RecordRepository:
             if sync_scope not in (None, "all"):
                 from ..data_pipeline_settings import PipelineError
                 raise PipelineError("clinical_source_live_status_not_supported", 422)
-            # 发布目录不能仅凭无出院文书证明当前在院。
-            if _normalize_scope(scope) == "running":
-                return []
+            # 后续统一决策只承认明确状态；缺出院文书不能证明当前在院。
         session = self._open_session()
         try:
             refs = list(normalize_case_refs(record_refs)) if record_refs else self._raw_case_refs(

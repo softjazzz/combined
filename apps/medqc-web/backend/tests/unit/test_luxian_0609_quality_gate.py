@@ -193,6 +193,8 @@ def test_pr_no_model_gates_cover_every_luxian_0609_unit_test_file_exactly_once()
     extended = next(gate for gate in _PR_NO_MODEL_GATES if gate.name == "extended_regression")
     assert "tests/unit/test_verify_consultation_family_acceptance.py" in extended.args
     assert extended.args.count("tests/unit/test_discharge_approval_safe_diagnostics.py") == 1
+    assert extended.args.count("tests/unit/test_discharge_approval_structured_output.py") == 1
+    assert extended.args.count("tests/unit/test_clinical_scene_admission.py") == 1
     assert extended.args[-2:] == ("-k", "not endpoint")
 
 

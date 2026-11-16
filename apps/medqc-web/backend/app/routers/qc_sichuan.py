@@ -300,6 +300,13 @@ def _build_workspace_record_scene_snapshot(
                     else {}
                 ),
                 "record_scene": record_scene,
+                **({"scene_policy": record["qc_scene_policy"],
+                    "scene_reason": record["qc_scene_reason"],
+                    "scene_source": record["qc_scene_source"],
+                    "scene_verified_at": record["qc_scene_verified_at"],
+                    "discharge_state": record["qc_discharge_state"],
+                    "discharge_time_status": record["qc_discharge_time_status"]}
+                   if "qc_scene_policy" in record else {}),
                 "resolved_scene": (
                     record_scene if primary_documents_only
                     else _resolve_workspace_bundle_scene(query_scope=query_scope, record_scope=normalized_record_scene)
@@ -2125,7 +2132,17 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
         collect_kwargs["sync_scope"] = payload.sync_scope
     if scheduled_origin is not None:
         collect_kwargs["institute_id"] = scheduled_origin["institute_id"]
-    records = workspace.collect_records(**collect_kwargs)
+    admission_reader = getattr(workspace, "collect_records_for_admission", None)
+    if is_direct_native_selection and callable(admission_reader):
+        records, scene_rejections = admission_reader(**collect_kwargs)
+        if scene_rejections:
+            raise HTTPException(status_code=422, detail={
+                "code": "case_scene_admission_failed",
+                "message": "所选病例场景未确认或与质控范围不符，请核对逐项原因。",
+                "cases": scene_rejections,
+            })
+    else:
+        records = workspace.collect_records(**collect_kwargs)
     if scheduled_origin is not None:
         if any(str(record.get("institute_id") or "") != scheduled_origin["institute_id"] for record in records):
             raise HTTPException(403, "定时计划候选机构不匹配")

@@ -100,6 +100,8 @@ _PR_NO_MODEL_GATES = (
 _EXTENDED_EXTRA_TEST_FILES = (
     # 08-02-02 引文安全诊断：文件名不在 LX0609 通配范围内，显式加入零模型门。
     "tests/unit/test_discharge_approval_safe_diagnostics.py",
+    "tests/unit/test_discharge_approval_structured_output.py",
+    "tests/unit/test_clinical_scene_admission.py",
     "tests/unit/test_event_rules_candidate_pause.py",
     "tests/unit/test_verify_consultation_family_acceptance.py",
     "tests/unit/test_qc_diagnostic_session_restore.py",
