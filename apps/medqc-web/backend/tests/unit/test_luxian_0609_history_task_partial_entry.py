@@ -170,3 +170,80 @@ async def test_history_task_detail_rejects_tampered_saved_partial_results(
     with pytest.raises(HTTPException) as rejected:
         await _detail(chain.job_id, "tester")
     assert rejected.value.status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("corruption", ["out_of_scope", "missing_key", "blank_value", "non_text_value"])
+async def test_history_task_detail_rejects_saved_item_identity_outside_frozen_scope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request: pytest.FixtureRequest, corruption: str,
+) -> None:
+    """成功项身份损坏（范围外、缺键、空值、非文本值）必须 409，不能当作“无部分结果”静默漏项。
+
+    冻结 record_refs 与失败记录保持原样，只损坏顶层成功项身份。非字典条目在任务行
+    解码（``_row_to_batch_job``）时即被丢弃，不属于本函数边界。
+    """
+
+    chain = await _partial_task_a(monkeypatch, tmp_path, request)
+    table = chain.workspace._batch_job_table
+    with chain.engine.connect() as connection:
+        [saved] = json.loads(connection.execute(
+            select(table.c.items_json).where(table.c.id == chain.job_id)).scalar_one())
+    if corruption == "out_of_scope":
+        corrupted: object = {**saved, "patient_id": "SYN-OTHER"}
+    elif corruption == "missing_key":
+        corrupted = {key: value for key, value in saved.items() if key != "patient_id"}
+    elif corruption == "blank_value":
+        corrupted = {**saved, "patient_id": "   "}
+    else:
+        corrupted = {**saved, "patient_id": ["P"]}
+    with chain.engine.begin() as connection:
+        connection.execute(table.update().where(table.c.id == chain.job_id).values(
+            items_json=json.dumps([corrupted], ensure_ascii=False)))
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: chain.workspace)
+    with pytest.raises(HTTPException) as rejected:
+        await _detail(chain.job_id, "tester")
+    assert rejected.value.status_code == 409
+
+
+def _mixed_job(saved_items: list) -> dict:
+    refs = [{"institute_id": "I", "patient_id": p, "visit_id": f"V-{p}"} for p in ("FULL", "PART", "DEAD")]
+    return {
+        "status": "failed",
+        "summary": {"execution_status": "partial_failed", "rule_results": []},
+        "filters": {"record_refs": refs},
+        "items": saved_items,
+        "failed_records": [
+            {**refs[1], "rule_id": "LX0609-10-03-01"},
+            {**refs[2], "rule_id": "LX0609-10-03-01"},
+            {**refs[2], "rule_id": "LX0609-01-01-01"},
+        ],
+    }
+
+
+def test_mixed_task_rejects_partial_item_identity_outside_frozen_scope() -> None:
+    """评审复现：完整病例（已交付）+ 部分失败病例 + 整例失败病例，只改部分病例成功项身份。"""
+
+    from app.services.qc_workspace.canonical_result_store import CanonicalResultStore
+
+    full = {"institute_id": "I", "patient_id": "FULL", "visit_id": "V-FULL"}
+    saved = [
+        {**full, "rule_id": "LX0609-01-01-01"},
+        {**full, "rule_id": "LX0609-10-03-01"},
+        {"institute_id": "I", "patient_id": "SYN-OTHER", "visit_id": "V-PART", "rule_id": "LX0609-01-01-01"},
+    ]
+    with pytest.raises(ValueError, match="saved_partial_result_invalid"):
+        CanonicalResultStore.load_saved_partial_items(
+            job=_mixed_job(saved), delivered_items=[full], projection_key="synthetic-key",
+        )
+
+
+def test_fully_delivered_task_keeps_envelope_boundary_without_reading_top_level_items() -> None:
+    """冻结范围已全部经 Envelope 交付：不读取顶层条目，保持既有完整病例边界。"""
+
+    from app.services.qc_workspace.canonical_result_store import CanonicalResultStore
+
+    job = _mixed_job([{"rule_id": "LX0609-01-01-01", "status": "technical_error"}])
+    delivered = list(job["filters"]["record_refs"])
+    assert CanonicalResultStore.load_saved_partial_items(
+        job=job, delivered_items=delivered, projection_key="synthetic-key",
+    ) == []
