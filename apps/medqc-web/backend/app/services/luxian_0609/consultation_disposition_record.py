@@ -9,6 +9,7 @@ import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from .execution_time_budget import follow_up_fits
 from .llm_prompt_privacy import describe_luxian_0609_llm_parse_failure, redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
@@ -672,9 +673,9 @@ async def check_disposition_record(
                 redact_luxian_0609_patient_privacy(prompt),
                 **structured_output_kwargs(llm_client),
             )
-        except Exception:
+        except Exception as error:
             elapsed += perf_counter() - started
-            return extraction_failure(calls + 1, "model_transport_error")
+            return extraction_failure(calls + 1, luxian_0609_llm_call_failure_reason(error))
         calls += 1
         elapsed += perf_counter() - started
         try:

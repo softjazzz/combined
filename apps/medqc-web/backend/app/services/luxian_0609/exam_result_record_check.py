@@ -39,7 +39,7 @@ from .exam_lab_fact_extraction import (
     _course_refs_for_rule_event,
     events_for_family,
 )
-from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .llm_prompt_privacy import is_luxian_0609_privacy_block, redact_luxian_0609_patient_privacy
 from .structured_output import structured_output_kwargs
 from .exam_output_batching import CallBudget, partition_targets, bisect_targets
 from .transfusion_order_trigger import _json_response_object, _usage
@@ -569,6 +569,11 @@ async def _check_result_batch(projection, llm_client, targets, budget: CallBudge
                 budget_failure = error.code
                 state = "budget_failed"
                 calls -= int(not getattr(error, "request_started", False))  # 仅发送前拒绝不算调用。
+            elif is_luxian_0609_privacy_block(error):
+                # 隐私护栏发送前拒绝：经能力失败通道闭合为不可重试，不按未核实回退主抽取。
+                budget_failure = "privacy_guard_blocked"
+                state = "budget_failed"
+                calls -= 1
             if route is not None:
                 route.observe("request_finished", target=target, reason=budget_failure or "technical_failure", state="failed",
                               logical_calls=int(not budget_failure or getattr(error, "request_started", False)), elapsed_seconds=perf_counter() - started)

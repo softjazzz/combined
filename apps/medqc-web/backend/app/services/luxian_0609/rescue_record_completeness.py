@@ -9,6 +9,7 @@ import re
 import time
 from typing import Any, Awaitable, Mapping, Protocol
 
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from .basic_timeliness_customer_projection import RESCUE_CONTENT_FIELDS
 from .basic_timeliness_facts import extract_rescue_events
 from .decision_model import ApplicabilityState, EvidenceState, QcDirection, RuleDecision
@@ -386,8 +387,8 @@ def execute_rescue_record_completeness(
             if callable(supports) and supports():
                 kwargs["response_format"] = _response_format(len(candidates))
             response = await llm_client.generate(_prompt(candidates), **kwargs)
-        except Exception:
-            return _result(snapshot, documents=documents, failure="model_transport_error", usage=(1, 0, 0, 0, time.perf_counter() - started))
+        except Exception as error:
+            return _result(snapshot, documents=documents, failure=luxian_0609_llm_call_failure_reason(error), usage=(1, 0, 0, 0, time.perf_counter() - started))
         try:
             raw_usage = response.get("usage") or {}
             prompt = int(raw_usage.get("prompt_tokens") or 0)

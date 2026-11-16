@@ -11,6 +11,7 @@ import re
 from time import perf_counter
 from typing import Any, Literal, Protocol
 
+from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..structured_output import structured_output_kwargs
 from ..llm_prompt_privacy import (
     describe_luxian_0609_llm_parse_failure,
@@ -490,9 +491,9 @@ async def extract_diagnosis_scope(
         try:
             response = await llm_client.generate(attempt_prompt, max_completion_tokens=max_completion_tokens, allow_length_retry=False,
                                                  **structured_output_kwargs(llm_client))
-        except Exception:
+        except Exception as error:
             return DiagnosisScopeResult("technical_error", (), calls, *totals[:3], totals[3] + perf_counter() - started,
-                                        reason_code="model_transport_error")
+                                        reason_code=luxian_0609_llm_call_failure_reason(error))
         elapsed = perf_counter() - started
         try:
             if not isinstance(response, Mapping) or not isinstance(response.get("usage"), Mapping):

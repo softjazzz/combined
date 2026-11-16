@@ -13,6 +13,7 @@ from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol, Sequence
 from zoneinfo import ZoneInfo
 
+from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ...llm_observability import safe_status_for_exception
 from ..llm_prompt_privacy import (
     describe_luxian_0609_llm_parse_failure,
@@ -763,7 +764,7 @@ async def extract_antimicrobial_actions(
         )
         return AntimicrobialActionExtraction(
             "technical_error",
-            "model_timeout" if is_timeout else "model_transport_error",
+            "model_timeout" if is_timeout else luxian_0609_llm_call_failure_reason(error),
             llm_call_count=1,
             api_time=perf_counter() - started,
         )

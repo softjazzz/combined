@@ -172,6 +172,7 @@ def _controlled_rescue_content_facts(
         "model_unavailable",
         "model_transport_error",
         "model_invalid_output",
+        "privacy_guard_blocked",
     }:
         return None
 

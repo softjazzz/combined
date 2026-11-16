@@ -27,7 +27,10 @@ from time import perf_counter
 from typing import Any, Literal
 import unicodedata
 
-from ..llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from ..llm_prompt_privacy import (
+    luxian_0609_llm_call_failure_reason,
+    redact_luxian_0609_patient_privacy,
+)
 from ..structured_output import structured_output_kwargs
 from ..transfusion_order_trigger import _json_response_object, _usage
 from ..source_evidence_reader import authoritative_document_time_value
@@ -268,6 +271,10 @@ async def _call(llm_client: Any, prompt: str) -> tuple[Mapping[str, Any] | None,
         except Exception as error:
             if is_budget_error(error):
                 raise
+            reason = luxian_0609_llm_call_failure_reason(error, fallback="")
+            if reason:
+                # 隐私护栏拒绝是确定性失败，不能落入下方“无响应=传输错误”的可重试分支。
+                response = {"_call_failure": reason}
     if errors:
         response = {"_context_failure": errors[0].code,
                     "_request_started": bool(getattr(errors[0], "request_started", False))}
@@ -353,6 +360,8 @@ async def map_orders_to_invasive_catalog(
     response, elapsed = await _call(llm_client, _mapping_prompt(names))
     if response is None:
         return OrderMappingResult("technical_error", "model_transport_error", 1, api_time=elapsed)
+    if response.get("_call_failure"):
+        return OrderMappingResult("technical_error", response["_call_failure"], 1, api_time=elapsed)
     if response.get("_context_failure"):
         return OrderMappingResult("technical_error", response["_context_failure"], int(response["_request_started"]), api_time=elapsed)
     usage = _usage_tuple(response, elapsed)
@@ -655,6 +664,8 @@ async def check_invasive_procedure_records(
     response, elapsed = await _call(llm_client, prompt)
     if response is None:
         return RecordDocumentationResult("technical_error", "model_transport_error", 1, api_time=elapsed)
+    if response.get("_call_failure"):
+        return RecordDocumentationResult("technical_error", response["_call_failure"], 1, api_time=elapsed)
     if response.get("_context_failure"):
         return RecordDocumentationResult("technical_error", response["_context_failure"], int(response["_request_started"]), api_time=elapsed)
     usage = _usage_tuple(response, elapsed)

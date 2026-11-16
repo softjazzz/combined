@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..llm_token_budget import budget_guarded_executor
 
 from dataclasses import dataclass
@@ -367,6 +368,8 @@ def _typed_decision_from_outcome(
             if outcome.reason_code in {"tumor_llm_invalid_output", "malignancy_llm_invalid"}
             else "model_transport_error"
             if outcome.reason_code in {"tumor_llm_failure", "malignancy_llm_transport_error"}
+            else "privacy_guard_blocked"
+            if outcome.reason_code == "privacy_guard_blocked"
             else "executor_exception"
         )
         dimensions = (
@@ -2959,11 +2962,11 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         llm_call_count += 1
         try:
             response = await llm_client.generate(_prompt(wrapper, context=context))
-        except Exception:
+        except Exception as error:
             emit_outcome(
                 rule_id,
                 "technical_error",
-                "tumor_llm_failure",
+                luxian_0609_llm_call_failure_reason(error, "tumor_llm_failure"),
                 executor_type="llm",
                 fact_refs=(
                     typed_context_document_refs(context_sources, materials)

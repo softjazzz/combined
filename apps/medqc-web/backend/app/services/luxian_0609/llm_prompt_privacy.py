@@ -481,6 +481,25 @@ def _is_transient_transport_error(error: BaseException) -> bool:
     return safe_exception_failure(error)["retryable"] is True
 
 
+def is_luxian_0609_privacy_block(error: BaseException) -> bool:
+    """隐私护栏发送前拒绝；补核/二次调用据此与预算失败同等闭合，不回退为无效输出。"""
+
+    return isinstance(error, (PatientPrivacyViolation, PrivacyIdentityContextError))
+
+
+def luxian_0609_llm_call_failure_reason(
+    error: BaseException, fallback: str = "model_transport_error"
+) -> str:
+    """模型调用点共享失败码：隐私护栏拦截固定为不可重试，其余异常保留调用点原回退码。
+
+    隐私拦截是确定性拒绝，若记为传输错误会被重试并误导为网络故障。
+    """
+
+    if is_luxian_0609_privacy_block(error):
+        return "privacy_guard_blocked"
+    return fallback
+
+
 def classify_luxian_0609_llm_call_failure(error: BaseException) -> str:
     """保留模型边界安全类别，不把参数、鉴权或未知错误误判成网络失败。"""
     from ..qc_execution_errors import safe_exception_failure
