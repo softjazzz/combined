@@ -5,7 +5,7 @@ describe('材料来源提示纯投影', () => {
   it('目录显示已选来源及完整版本，保留旧文书标题', () => {
     const doc = { type: 'daily_course_record', label: '日常病程记录', version_id: 'clinical-v1', material_source_label: 'clinical', material_selected: true, material_rule_usable: true }
     expect(resolveMaterialDisplayNotice(doc)).toContain('clinical · 版本：clinical-v1 · 已选中')
-    expect(resolveDocDisplayTitle({ type: 'daily_course_record', label: '日常病程记录' })).toBe('日常病程记录')
+    expect(resolveDocDisplayTitle({ type: 'daily_course_record', label: '日常病程记录', content: '' })).toBe('日常病程记录')
   })
 
   it('直接显示冲突及HELD提示，不把可见材料当成已选事实', () => {

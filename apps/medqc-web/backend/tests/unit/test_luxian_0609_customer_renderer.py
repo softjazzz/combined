@@ -2101,11 +2101,6 @@ def test_029_association_gap_explains_confirmed_surgery_and_summary():
     ("rule_id", "expected_required", "expected_recommendation"),
     (
         (
-            "LX0609-05-01-02",
-            "每条抗菌药物医嘱对应的使用或调整动作、理由及关联时间",
-            "逐条核对抗菌药物医嘱与病程",
-        ),
-        (
             "LX0609-05-01-03",
             "每条抗菌药物的计划开始/启用时间及对应的48至72小时效果评价",
             "核对每条抗菌药物的计划开始/启用时间",
@@ -2134,11 +2129,7 @@ def test_priority_data_gap_rules_explain_event_or_time_gap(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.DATA_GAP,
             qc_direction=QcDirection.UNKNOWN,
-            reason_code=(
-                "association_failed"
-                if rule_id in {"LX0609-05-01-02", "LX0609-04-02-07"}
-                else "authoritative_time_missing"
-            ),
+            reason_code="authoritative_time_missing",
             fact_refs=(FACT_REF,),
             evaluator_version="customer-gap-copy-v1",
         )
@@ -2149,6 +2140,41 @@ def test_priority_data_gap_rules_explain_event_or_time_gap(
     assert f"需要补充：{expected_required}" in suggestion
     assert expected_recommendation in suggestion
     assert "完整可读取的文书、权威时间及必要关联字段" not in suggestion
+
+
+def test_paused_050102_notice_does_not_reclassify_historical_data_gap() -> None:
+    from app.services.luxian_0609.phase_scope import build_luxian_0609_pending_definition_result
+
+    # 新任务使用正式暂停出口，不再要求按未执行结果补写用药理由。
+    paused = build_luxian_0609_pending_definition_result("LX0609-05-01-02")
+    assert paused["status"] == "not_executed"
+    assert paused["is_compliant"] is None
+    assert paused["evidence"] == []
+    assert "引文校验稳定性待验收" in paused["findings"]
+    assert "暂未启用" in paused["findings"]
+    assert "历史结果保持原结论" in paused["suggestion"]
+    assert "当前不要求据此补写用药理由" in paused["suggestion"]
+    assert "需要补充：" not in paused["suggestion"]
+    assert paused["metadata"]["pending_reason_code"] == "antimicrobial_reason_quote_validation_pending"
+
+    # 已有决策仍按冻结状态渲染，不因当前暂停改成not_executed或新临床结论。
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-05-01-02",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="association_failed",
+            fact_refs=(FACT_REF,),
+            evaluator_version="customer-gap-copy-v1",
+        )
+    )
+    historical = render_luxian_0609_customer_result(decision=decision)
+    assert historical["status"] == historical["result_status"] == "data_gap"
+    assert historical["is_compliant"] is None
+    assert historical["reason_code"] == "association_failed"
+    assert historical["suggestion"] == "请确认抗菌药物医嘱和相关病程已完整同步后重新评估。"
 
 
 def test_rule_009_candidate_scope_gap_has_rule_and_reason_specific_message() -> None:
