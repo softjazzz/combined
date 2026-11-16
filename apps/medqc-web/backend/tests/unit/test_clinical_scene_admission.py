@@ -153,6 +153,21 @@ def test_filter_based_creation_without_explicit_refs_uses_same_admission(source,
     assert len(records) == 1 and records[0]["qc_scope"] == "final" and rejected == []
 
 
+def test_filter_based_final_selection_does_not_admit_or_reject_unselected_unknown_cases(source, monkeypatch):
+    from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+    engine, repository = source
+    add_projection(engine)
+    with Session(engine) as session:
+        session.add(repo_module.InpatRegistration(institute_id="SYNTHETIC_ORG", patient_id="UNSELECTED",
+            visit_id="UNSELECTED", admission_datetime=datetime(2026, 1, 1)))
+        session.commit()
+    owner = CustomQCWorkspaceService.__new__(CustomQCWorkspaceService)
+    monkeypatch.setattr(owner, "_record_repository", lambda: repository)
+    records, rejected = owner.collect_records_for_admission(**{**FILTERS, "scope": "final", "record_refs": None})
+    assert [CaseRef.from_mapping(record) for record in records] == [REF]
+    assert rejected == []
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scope,confirmed,allowed", [("final", True, True), ("running", True, False),
                                                    ("final", False, False), ("all", False, False)])

@@ -3140,7 +3140,9 @@ class CustomQCWorkspaceService:
         from .clinical_scene_admission import scene_rejection
         from .luxian_0609.clinical_material_policy import clinical_record_scene
         scope = filters["scope"]
-        records = self.collect_records(**{**filters, "scope": "all"})
+        # 显式选择才保留不匹配行作逐例解释；纯筛选任务不能纳入范围外病例。
+        read_scope = "all" if filters.get("record_refs") or filters.get("record_ids") else scope
+        records = self.collect_records(**{**filters, "scope": read_scope})
         requested = list(normalize_case_refs(filters["record_refs"])) if filters.get("record_refs") else []
         positions = {ref: index for index, ref in enumerate(requested)}
         rejections = []
