@@ -49,7 +49,11 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
         for domain in emr_view._DOMAIN_LOAD_ORDER
     }
     documents = emr_view.build_documents_from_domain_bundles(bundles)
-    from .. import daily_material_projection as daily
+    from .. import daily_material_projection as daily, primary_material_projection as primary
+    primary_manifest = primary.manifest((institute_id, patient_id, visit_id))
+    if primary_manifest is not None:
+        documents = [doc for doc in documents if doc.get("doc_type") not in primary.KINDS]
+        documents.extend(primary.project_documents(primary_manifest))
     manifest = daily.manifest((institute_id, patient_id, visit_id))
     if manifest is not None:
         documents = [doc for doc in documents if doc.get("doc_type") != "daily_course_record"]
@@ -77,6 +81,7 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
     )
     return {
         "daily_material_status": daily.display_scope(manifest),
+        "primary_material_status": primary.display_scope(primary_manifest),
         "layout_version": "bundle_struct_v1",
         "visit_id": visit_id,
         "documents": documents,
@@ -109,8 +114,8 @@ def load_current_documents(*, institute_id: str, patient_id: str, visit_id: str)
             _pending[key] = future
     if owner:
         try:
-            from .. import daily_material_projection as daily
-            with daily.live_context(identity, allow_unbound_view=True):
+            from .. import primary_material_projection as primary
+            with primary.live_context(identity, allow_unbound_view=True):
                 future.set_result(_assemble_current_documents(
                     institute_id=key[0], patient_id=key[1], visit_id=key[2],
                 ))

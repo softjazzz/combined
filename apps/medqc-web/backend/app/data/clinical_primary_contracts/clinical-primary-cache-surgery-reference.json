@@ -1,0 +1,283 @@
+{
+  "version": "surgery-record-candidate-v1",
+  "interface": "web.surgery_record",
+  "procedure": "web.surgery_record",
+  "argument_count": 1,
+  "probe_zip_sha256": "e7a7aa134dba026db6dd099d0859201e0e1851d04725abafcd5f3101971a8368",
+  "probe_driver": "unknown",
+  "probe_date": "2023-01-08",
+  "source_state": "single_day_probe_success_not_production_approved",
+  "historical_vendor_blocked": "historical_manual_label_root_cause_unknown",
+  "date_semantics": "UNCONFIRMED",
+  "state_semantics": "UNCONFIRMED",
+  "real_key_value_uniqueness": "UNCONFIRMED",
+  "source_columns": [
+    "institute_id",
+    "patient_id",
+    "name",
+    "sex",
+    "inpatno",
+    "mrno",
+    "visit_id",
+    "visit_type",
+    "dept_name",
+    "ward_name",
+    "ward_no",
+    "bed_no",
+    "admission_date",
+    "id_card_type",
+    "id_card_no",
+    "discharge_date",
+    "inpatient_duration",
+    "application_id",
+    "surgeon",
+    "first_assistant",
+    "second_assistant",
+    "surgery_name",
+    "surgery_code",
+    "surgery_level",
+    "anesthesia_method",
+    "anesthesiologist",
+    "document_id",
+    "document_title",
+    "document_status",
+    "submitter",
+    "submitter_id",
+    "submit_datetime",
+    "presurg_summary",
+    "surgery_begin_datetime",
+    "surgery_end_datetime",
+    "surgery_history",
+    "whether_infected",
+    "blood_loss",
+    "infusion_volume",
+    "blood_transfusion_volume",
+    "surgery_process",
+    "surgial_incision_level",
+    "surgical_incisionheal_level",
+    "intraoperative_treatment",
+    "record_content",
+    "record_datetime",
+    "last_modifier",
+    "last_modifier_id",
+    "last_modified_datetime"
+  ],
+  "key_fields": [
+    "institute_id",
+    "patient_id",
+    "visit_id",
+    "document_id"
+  ],
+  "target": "cdm.surgery_record",
+  "field_mappings": [
+    {
+      "source": "institute_id",
+      "target": "institute_id",
+      "target_type": "text"
+    },
+    {
+      "source": "patient_id",
+      "target": "patient_id",
+      "target_type": "text"
+    },
+    {
+      "source": "name",
+      "target": "name",
+      "target_type": "text"
+    },
+    {
+      "source": "sex",
+      "target": "sex",
+      "target_type": "text"
+    },
+    {
+      "source": "inpatno",
+      "target": "inpat_no",
+      "target_type": "text"
+    },
+    {
+      "source": "mrno",
+      "target": "mr_no",
+      "target_type": "text"
+    },
+    {
+      "source": "visit_id",
+      "target": "visit_id",
+      "target_type": "text"
+    },
+    {
+      "source": "visit_type",
+      "target": "visit_type",
+      "target_type": "text"
+    },
+    {
+      "source": "dept_name",
+      "target": "dept_name",
+      "target_type": "text"
+    },
+    {
+      "source": "ward_name",
+      "target": "ward_name",
+      "target_type": "text"
+    },
+    {
+      "source": "surgeon",
+      "target": "surgeon",
+      "target_type": "text"
+    },
+    {
+      "source": "first_assistant",
+      "target": "first_assistant",
+      "target_type": "text"
+    },
+    {
+      "source": "second_assistant",
+      "target": "second_assistant",
+      "target_type": "text"
+    },
+    {
+      "source": "surgery_name",
+      "target": "surgery_name",
+      "target_type": "text"
+    },
+    {
+      "source": "surgery_code",
+      "target": "surgery_code",
+      "target_type": "text"
+    },
+    {
+      "source": "surgery_level",
+      "target": "surgery_level",
+      "target_type": "text"
+    },
+    {
+      "source": "anesthesia_method",
+      "target": "anesthesia_method",
+      "target_type": "text"
+    },
+    {
+      "source": "anesthesiologist",
+      "target": "anesthesiologist",
+      "target_type": "text"
+    },
+    {
+      "source": "document_id",
+      "target": "document_id",
+      "target_type": "text"
+    },
+    {
+      "source": "document_title",
+      "target": "document_title",
+      "target_type": "text"
+    },
+    {
+      "source": "document_status",
+      "target": "document_status",
+      "target_type": "text"
+    },
+    {
+      "source": "submitter",
+      "target": "submitter",
+      "target_type": "text"
+    },
+    {
+      "source": "submitter_id",
+      "target": "submitter_id",
+      "target_type": "text"
+    },
+    {
+      "source": "submit_datetime",
+      "target": "submit_datetime",
+      "target_type": "datetime"
+    },
+    {
+      "source": "presurg_summary",
+      "target": "presurg_summary",
+      "target_type": "text"
+    },
+    {
+      "source": "surgery_begin_datetime",
+      "target": "surgery_begin_time",
+      "target_type": "timestamptz"
+    },
+    {
+      "source": "surgery_end_datetime",
+      "target": "surgery_end_time",
+      "target_type": "timestamptz"
+    },
+    {
+      "source": "surgery_history",
+      "target": "surgery_history",
+      "target_type": "text"
+    },
+    {
+      "source": "blood_loss",
+      "target": "blood_loss",
+      "target_type": "text"
+    },
+    {
+      "source": "surgery_process",
+      "target": "surgery_process",
+      "target_type": "text"
+    },
+    {
+      "source": "surgical_incisionheal_level",
+      "target": "surgical_incisionheal_level",
+      "target_type": "text"
+    },
+    {
+      "source": "intraoperative_treatment",
+      "target": "intraoperative_treatment",
+      "target_type": "text"
+    },
+    {
+      "source": "record_content",
+      "target": "record_content",
+      "target_type": "text"
+    },
+    {
+      "source": "record_datetime",
+      "target": "record_datetime",
+      "target_type": "datetime"
+    },
+    {
+      "source": "last_modifier",
+      "target": "last_modifier",
+      "target_type": "text"
+    },
+    {
+      "source": "last_modifier_id",
+      "target": "last_modifier_id",
+      "target_type": "text"
+    },
+    {
+      "source": "last_modified_datetime",
+      "target": "last_modified_datetime",
+      "target_type": "datetime"
+    }
+  ],
+  "raw_only_columns": [
+    "ward_no",
+    "bed_no",
+    "admission_date",
+    "id_card_type",
+    "id_card_no",
+    "discharge_date",
+    "inpatient_duration",
+    "application_id",
+    "whether_infected",
+    "infusion_volume",
+    "blood_transfusion_volume",
+    "surgial_incision_level"
+  ],
+  "new_columns": {
+    "record_datetime": "timestamp without time zone",
+    "surgery_history": "text",
+    "intraoperative_treatment": "text"
+  },
+  "required_clinical_revision": "20261111_000062",
+  "automatic_incremental": false,
+  "scheduled": false,
+  "production_enabled": false,
+  "datetime_policy": "full timestamp only; date-only rejected; no implicit timezone; timestamptz requires explicit offset, datetime requires no offset"
+}

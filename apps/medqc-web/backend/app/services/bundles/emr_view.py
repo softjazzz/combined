@@ -15,6 +15,13 @@ from .assembly import (
 )
 from .contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 
+# 只搬运业务 owner 已判定的展示字段；完整材料留在冻结副本内。
+_MATERIAL_DISPLAY_FIELDS: tuple[str, ...] = (
+    "source_version_key", "version_id", "source_record_identity", "source_namespace", "source_object",
+    "material_state", "material_selected", "material_rule_usable", "material_source_label",
+    "material_notice", "material_scope_notice",
+)
+
 _DOMAIN_LOAD_ORDER: tuple[str, ...] = (
     "admission",
     "course",
@@ -416,7 +423,7 @@ def _normalize_source_document(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
-    for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "daily_material", "daily_material_scope"):
+    for key in (*_MATERIAL_DISPLAY_FIELDS, "daily_material", "daily_material_scope", "primary_material", "primary_material_scope"):
         if key in raw_doc:
             normalized[key] = raw_doc[key]
     if raw_doc.get("chief_physician_sign_datetime") is not None:
@@ -910,15 +917,15 @@ def _normalize_source_document_summary(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
-    for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "material_source_label", "material_notice", "material_scope_notice"):
+    for key in _MATERIAL_DISPLAY_FIELDS:
         if key in raw_doc:
             summary[key] = raw_doc[key]
     if raw_doc.get("version_id") and raw_doc.get("source_record_identity"):
         summary["doc_key"] = f"{doc_type}::{raw_doc['source_record_identity']}::{raw_doc['version_id']}"
         item = raw_doc.get("daily_material", {})
-        summary["material_state"] = item.get("state")
-        summary["material_selected"] = item.get("selected")
-        summary["material_rule_usable"] = raw_doc.get("material_rule_usable", item.get("rule_usable"))
+        for key, field in (("material_state", "state"), ("material_selected", "selected"), ("material_rule_usable", "rule_usable")):
+            if key not in summary and field in item:
+                summary[key] = item[field]
     if raw_doc.get("chief_physician_sign_datetime") is not None:
         summary["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     if doc_type in _ORDER_DOC_TYPES:
@@ -970,7 +977,7 @@ def _collapse_summary_only_documents(documents: list[dict[str, Any]]) -> list[di
     return [doc for doc in visible if doc.get("doc_type") != "labtest_master"] + [summary]
 
 
-def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_domain: str | None = None, daily_material_status=None) -> dict[str, Any]:
+def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_domain: str | None = None, daily_material_status=None, primary_material_status=None) -> dict[str, Any]:
     """沿原摘要owner投影冻结材料；目录响应不携带完整正文/章节/渲染块。"""
     summaries = []
     for index, document in enumerate(documents):
@@ -986,7 +993,7 @@ def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_dom
             if document.get(key) is not None:
                 summary[key] = document[key]
         summaries.append(summary)
-    return {"daily_material_status":daily_material_status, "layout_version":"bundle_struct_v1", "documents":summaries, "documents_tree":[],
+    return {"daily_material_status":daily_material_status, "primary_material_status":primary_material_status, "layout_version":"bundle_struct_v1", "documents":summaries, "documents_tree":[],
             "empty_reason":"" if summaries else "material_documents_empty"}
 
 
@@ -1590,7 +1597,7 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
             "chief_physician_sign_datetime": _safe_text(document.get("chief_physician_sign_datetime")),
             "projection_incomplete": document.get("projection_incomplete") is True,
             "projection_notice": _safe_text(document.get("projection_notice")),
-            **{key: document[key] for key in ("source_namespace", "material_state", "material_selected", "material_rule_usable", "material_source_label", "material_notice", "material_scope_notice") if key in document},
+            **{key: document[key] for key in _MATERIAL_DISPLAY_FIELDS if key in document},
             "source": "bundle",
         },
         "render_blocks": render_blocks,

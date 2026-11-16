@@ -18,6 +18,7 @@ from ...database.connection import DB_SCHEMA_MODE, engine
 from ...database import clinical_connection
 from .. import case_material_snapshot as case_material
 from .. import daily_material_projection as daily_material
+from .. import primary_material_projection as primary_material
 from ..document_assembly import (
     assemble_document,
     build_document_select_columns,
@@ -39,9 +40,9 @@ def _daily_bundle_owner(function):
     @wraps(function)
     def wrapped(**kwargs):
         identity = tuple(kwargs[key] for key in ("institute_id", "patient_id", "visit_id"))
-        owns_capture = daily_material.enabled() and case_material.context() is None
-        with daily_material.live_context(identity):
-            if owns_capture and "material_snapshot" in kwargs and daily_material.manifest(identity) is not None:
+        owns_capture = (primary_material.enabled() or daily_material.enabled()) and case_material.context() is None
+        with primary_material.live_context(identity):
+            if owns_capture and "material_snapshot" in kwargs and (primary_material.manifest(identity) is not None or daily_material.manifest(identity) is not None):
                 kwargs["material_snapshot"] = None
             return function(**kwargs)
     return wrapped
@@ -536,6 +537,9 @@ def _material_rows(
     visit_id: str,
     limit: int,
 ) -> list[dict[str, Any]]:
+    projected = primary_material.rows((institute_id, patient_id, visit_id), table, limit=limit)
+    if projected is not None:
+        return projected
     if table == "daily_course_record":
         projected = daily_material.rows((institute_id, patient_id, visit_id), limit=limit)
         if projected is not None:
@@ -897,6 +901,9 @@ def _select_records(
     visit_id: str,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
+    projected = primary_material.rows((institute_id, patient_id, visit_id), table, limit=limit)
+    if projected is not None:
+        return projected
     from .. import daily_material_projection as daily
     projected = daily.rows((institute_id, patient_id, visit_id), limit=limit) if table == "daily_course_record" else None
     if projected is not None:
@@ -2272,7 +2279,7 @@ def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str
             if table_name == "exam_master" and row_index in consumed_exam_masters:
                 continue
             entry = _inventory_entry(table_name=table_name, row=row)
-            for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "daily_material", "daily_material_scope"):
+            for key in ("version_id", "source_record_identity", "source_namespace", "source_object", "daily_material", "daily_material_scope", "primary_material", "primary_material_scope"):
                 if key in row:
                     entry[key] = row[key]
             inventory.append(entry)
@@ -2728,7 +2735,7 @@ def load_or_assemble_scene_bundle(
 
     from ..validation_material_source import is_material_copy
     # 独立验证材料可补入/替换/撤回文书，新任务不能复用去重前的旧Bundle。
-    if not force_refresh and not is_material_copy(patient_id, visit_id) and daily_material.manifest((institute_id, patient_id, visit_id)) is None:
+    if not force_refresh and not is_material_copy(patient_id, visit_id) and primary_material.manifest((institute_id, patient_id, visit_id)) is None and daily_material.manifest((institute_id, patient_id, visit_id)) is None:
         existing = _load_scene_bundle(
             scene=scene,
             institute_id=institute_id,
@@ -2951,7 +2958,7 @@ def load_domain_bundle(
     visit_id: str,
     schema: str = "public",
 ) -> dict[str, Any] | None:
-    if daily_material.manifest((institute_id, patient_id, visit_id)) is not None:
+    if primary_material.manifest((institute_id, patient_id, visit_id)) is not None or daily_material.manifest((institute_id, patient_id, visit_id)) is not None:
         return assemble_domain_bundle(execution_domain=execution_domain, institute_id=institute_id,
                                       patient_id=patient_id, visit_id=visit_id, source_schema="cdm")
     if engine is None:
@@ -3005,7 +3012,7 @@ def load_domain_bundle_document_index(
     schema: str = "public",
 ) -> dict[str, Any] | None:
     """只读取 EMR 目录所需字段，避免把全部文书正文传入应用进程。"""
-    if daily_material.manifest((institute_id, patient_id, visit_id)) is not None:
+    if primary_material.manifest((institute_id, patient_id, visit_id)) is not None or daily_material.manifest((institute_id, patient_id, visit_id)) is not None:
         return assemble_domain_bundle(execution_domain=execution_domain, institute_id=institute_id,
                                       patient_id=patient_id, visit_id=visit_id, source_schema="cdm")
     if engine is None:
@@ -3100,7 +3107,7 @@ def load_domain_bundle_for_emr_render(
     schema: str = "public",
 ) -> dict[str, Any] | None:
     """在数据库内裁剪单篇文书，避免读取整个领域 Bundle。"""
-    if daily_material.manifest((institute_id, patient_id, visit_id)) is not None:
+    if primary_material.manifest((institute_id, patient_id, visit_id)) is not None or daily_material.manifest((institute_id, patient_id, visit_id)) is not None:
         return assemble_domain_bundle(execution_domain=execution_domain, institute_id=institute_id,
                                       patient_id=patient_id, visit_id=visit_id, source_schema="cdm")
     if engine is None:
@@ -3223,7 +3230,7 @@ def refresh_domain_bundles_for_rows(
 
         with ExitStack() as capture_context:
             try:
-                capture_context.enter_context(daily_material.live_context(key))
+                capture_context.enter_context(primary_material.live_context(key))
             except Exception as exc:
                 if not continue_on_error:
                     raise
@@ -3361,7 +3368,7 @@ def refresh_all_bundle_variants_for_rows(
 
         with ExitStack() as capture_context:
             try:
-                capture_context.enter_context(daily_material.live_context(visit_key))
+                capture_context.enter_context(primary_material.live_context(visit_key))
             except Exception as exc:
                 if not continue_on_error:
                     raise
@@ -3517,7 +3524,7 @@ def load_or_assemble_domain_bundle(
     ensure_domain_bundle_tables(schema=bundle_schema)
     from ..validation_material_source import is_material_copy
     # 仅改变副本的新任务取材；历史结果及显式历史Bundle读取仍保留。
-    if not force_refresh and not is_material_copy(patient_id, visit_id) and daily_material.manifest((institute_id, patient_id, visit_id)) is None:
+    if not force_refresh and not is_material_copy(patient_id, visit_id) and primary_material.manifest((institute_id, patient_id, visit_id)) is None and daily_material.manifest((institute_id, patient_id, visit_id)) is None:
         existing = load_domain_bundle(
             execution_domain=execution_domain,
             institute_id=institute_id,

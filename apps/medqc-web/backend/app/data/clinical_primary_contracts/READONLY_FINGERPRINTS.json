@@ -1,0 +1,487 @@
+{
+  "source_commit": "cb437e611e802c5117f212c1e9743d2748ec4127",
+  "candidate_zip_sha256": "850431143ace082038cef1b653238be56ff0262b97b7b2d9d0e7d57523d0aae4",
+  "fingerprint_algorithm": "SHA256(ast.get_source_segment UTF-8), decorators excluded",
+  "source_files": {
+    "domain.py": {
+      "sha256": "caf85bcca019c87ab0b8fe8460c13cd9498ccab3300f9fe97a0f45f7e428f0b7",
+      "definitions": {
+        "ERROR_KINDS": "28a1c676fb428098aab0491d167a106e2433275fbef1ddbeb2011002d50844ae",
+        "ErrorKind": "2ae1d302f13e47e14d7f0c039aa2ae763c9c13bef350e0928dade16ac1b6bd74",
+        "IngestError": "1264d4e3c547f2262600348f32ac33e6d8761e478cef5972e55de083f526cd0d",
+        "FieldMapping": "95194da06482fa5aa0113b1121d12f902e881a3d39a3c372587afc6ebf6eb08e",
+        "DerivedDocumentId": "18666069efc7be846c1aee66b77813f1babfd1ad7bb1b9be5f983ce8b5b30666",
+        "PublishSpec": "77c5c1475599860e45dfe3be3e94df13064bc62166321ae27afda9a7708c05b6",
+        "InterfaceSpec": "0f926c98d5c4dd617e28a608e9a6c86bdacb272094c288e81ee37fef141ab435",
+        "canonical_json": "cbef3cf5439cdc28ffbe82520b352fc1d6915816c0891957a89a5009cb5fdbd8",
+        "sha256_hex": "353da17f4d8198502350fd523db93a2bddfcaa3e282640443f266f61e95454eb",
+        "normalize": "28818319649598b3c5b9412b3fcddd853df572660b6062613d7b504daf9569e3"
+      },
+      "class_methods": {
+        "IngestError.__init__": "f0f02fab54d857807b9e1cdda406a702d1d355307e86e498cb616f32cdccb4c5",
+        "PublishSpec.qualified_name": "7e13cf8f752bec64580cf9c32f36c6cdadbb2730764fb791c2b1fc7a13ab6bd8",
+        "PublishSpec.target_columns": "3e9bedb99723d3fdcc8ef3e39698a340d9d7255496b788ac695de6b3f6db3436",
+        "PublishSpec.source_key_fields": "85362df2372acbbbcc30aa3cff4d5a0c5ff145774efc9fd52f1cb84b360712c1"
+      }
+    },
+    "daily_materials.py": {
+      "sha256": "5beecf7f706c32edb1447085c3dce0614c0464861a5ee2f06949ced4172b546a",
+      "definitions": {
+        "digest": "55e798fcc4fe6a952ae6992dd930f584959353d16c01c4d1d41519639787a9be"
+      },
+      "class_methods": {}
+    },
+    "clinical_daily.py": {
+      "sha256": "c808742ed84f0bfb69c057d3f3e4d9e637ff71f41cb36460a65e7dae66242b79",
+      "definitions": {
+        "KEYS": "c20f88f1ecb3b9cd0678cb744eb16109989b9bc0ffaa1613a33187df07db2e07",
+        "COLUMNS": "bea2cfd94a5d9d225d7f23f35d32f14f61b3254f023badcce9df192e62446607",
+        "require": "3312fd2d4ee16aeb47cc1422336099c6e4143acd696f20cd69a4f7aa43395d0c",
+        "ClinicalContract": "669b33369bf198ced9581c4c2fbe84d760a67dfa6125f5f3fc05c0832992c108"
+      },
+      "class_methods": {
+        "ClinicalContract.__post_init__": "06d29ab823ff72ab27246d11b43ef74b7d72507a10b550f29d8e607972105bfd",
+        "ClinicalContract.digest": "52b3407d567fe9e97019f85a26d16bcbf5928c896951dae205a9c3d834c3d03e",
+        "ClinicalContract.spec": "1e110852e74b3813bf82ffd2558bd8184eb942707d5d415638ecaa314b91c75d"
+      }
+    },
+    "clinical_primary.py": {
+      "sha256": "6409e93585bbaebfeae9e152eb5bb4fa988cf39018bb1482434bef61245fdc4a",
+      "definitions": {
+        "CONTRACT": "006a8c820a0602e3aacd9df9e388e90796147c47b373a139ec41d6200ae07c46",
+        "KINDS": "846600618e30887b786646286cb51cdb657bda7c2c5cfcaebd1cf17183fe9967",
+        "SURGERY_FIELDS": "dffb8b88605eeea7bb308f8bdd53c6e3da84de826279089bf36402d473de10de",
+        "TARGETS": "94682bfa7d39370072475f1cbda656fb0cdec7318019b6df96e7757c6624577e",
+        "PrimaryContract": "1b8eda6757ad275874fa96d7385d3e3768d06b1474e9376b40f33529b1031852",
+        "PrimaryPolicy": "ec1bfcde5b84d82bc94d3c0437492092a73dd3b4aeb7cee1c3d87ad936f2db76",
+        "select_materials": "b99b66ef968e8f5bed61089cf26af27468d3b4b00cab33bbf4e99de073191514"
+      },
+      "class_methods": {
+        "PrimaryContract.output_columns": "472f2cd413bf15ac4582f244e312f2f267e2f44fbc728ef54d43f06524a45873",
+        "PrimaryContract.body_field": "c6466c0f67d9d8cf9fee246f3e9cde9c18b5bec3b7c215ef4fbd80c3eed9758b",
+        "PrimaryContract.__post_init__": "a0f94673899a4ba8745b1bc24032573b72a5392a478ff3cfec187de47d50b4ae",
+        "PrimaryContract.digest": "caa4a4f83f2935d210c56cafced93b5162b0de7e12d0cf663acdb801a1f9d3ad",
+        "PrimaryContract.spec": "5033085985168075779c25e272529d247eb95dc684669f654976efcdece48091",
+        "PrimaryContract.refresh_publication": "04863ec3a26c529a87cf5c12e150ce4283a16b434a5be44548c025f1723889e5",
+        "PrimaryPolicy.validate": "fac18cfb33e4c1d562e7feba2b19989cd6251af9cd30cf304688637743fd1927",
+        "PrimaryPolicy.policy_hash": "7d535620953131c444f260eedef021ff0ec187c46e77e761b9a301100fb68442",
+        "PrimaryPolicy.case_id": "d65fee8f81e93716a093cae0167a886e9b6dcda5d2d3678fa8d95a72575b953c",
+        "PrimaryPolicy.health_case_id": "75c29125edd47ea1dbaab2bd6c877d510046d2534a8eb4681f0ead97d23f6313",
+        "PrimaryPolicy.from_dict": "b412967fc8f88e8e3d43cff712ef5f58827f43ed10b18634ce3ae542ff1f079d"
+      }
+    },
+    "primary_metadata.py": {
+      "sha256": "af04e9123e71fff9d9ecca3809d9758b2ae392bc12a2ca1924dace159448a9e2",
+      "definitions": {
+        "REVISION": "30073717f11aaf3d3ffb92e4d067076113263686abf62c5fffeef3c87b80e053",
+        "METADATA_SHA256": "af5a1e0c8cc23f3308e02a01fb84ceca48c613802db3eaf53bf8fd31cc6de3bc",
+        "metadata_document": "40bf5a802f7c188b2ee17f01b76cb0670f8d71b686eefd1438dc3808702378e4",
+        "_mappings": "08bbe5e0a6b397d33b25516cdf45d1bce89403dc690d43eb4d31e30bf78db295",
+        "MetadataContract": "12469985b6e309a64953578d5189ba4731b8b10310386ee16deb6a54f92b8a78",
+        "real_contracts": "1d65be9b72894ba195450a8fb1ed21131995432b61129a93c94ca6d391ba223b"
+      },
+      "class_methods": {
+        "MetadataContract.__post_init__": "a328251ffa2cabed3c484b3a0ae6faaa03dc716a42f7240a4e75fd471d02c097",
+        "MetadataContract.native_primary_key": "0aecf556935f9a3b17f2aceb5c29c32517934373a59ac912c0fc4f3cf7df291b",
+        "MetadataContract.validate_native_metadata": "47254a5438102c80078c849a002e94959f5f0d69ac907074ef02a7973d6f1d73",
+        "MetadataContract.lifecycle_admission": "60cf946851a0d6c4bce687065ae0abff76063995b05354ccb44977a3746af74b",
+        "MetadataContract.validate_lifecycle": "803b0e1a441cf66a91b111c59a5abfd703c589fbf018b957996b31f4a1f72fbd",
+        "MetadataContract.material_metadata": "4c1c83ab061aa16b4dd99d12478ce679070d677ecad4bdd3ad05e17c2045cbb2"
+      }
+    },
+    "control/models.py": {
+      "sha256": "01c37e68e3d5b0441e75ac834de461c5183ba802a73ac728b9bc262edc124271",
+      "definitions": {
+        "ControlError": "7fb8567f441ada9fbc302d2ff352111925390a934c33dfb9669dfa8993f8eb3c"
+      },
+      "class_methods": {
+        "ControlError.__init__": "5d8ed8d319a4b7b36e17eec5053d7597eaba0fa770cc70018ef203af344ab1dd"
+      }
+    },
+    "control/profiles.py": {
+      "sha256": "0f753c4c4e271e22a937b5ed7c197882a1fe8def618aef7f9bb1e9c175bed9e4",
+      "definitions": {
+        "Profile": "871142d5912e9d90102140d85698a84265725ffe182a7a74b93a63353ef56713",
+        "ProfileCatalog": "ed60fb2baf2585eab97411befe111d14f0e9553bb2449e0e73af57035c47bbd5"
+      },
+      "class_methods": {
+        "Profile.interfaces": "3369e9ab04b5990c4977738a7793094be81577f55ed1e26498d839b44b48bbbc",
+        "ProfileCatalog.__init__": "cb55b7f91dfbb8f8673c9bbd378f77fb341a090ca51bdfe718772089011b513f",
+        "ProfileCatalog._approved": "2ab50ec718a8d6721331ba5405d7da560ad4c02e6e1d951bd8bd79928b83a055",
+        "ProfileCatalog.get": "d9757db79b1396fe7b15fd5f6e0a3518619b968c9ecdc3748647b56df855e491",
+        "ProfileCatalog.resolve_spec": "4379adc62ff8476a00d7477036829ce64e43a0eeb10785e75af908f8b2f03969",
+        "ProfileCatalog.source_contract": "d74ba679456e49001629d9df4d0d47fdd635ce85fbcb224693083a8fb9cd0385",
+        "ProfileCatalog.validate": "2b2cfd8908c4f9cb5272de3940e319e8c86224c6d204fc1261a9fdc9048dd5c8",
+        "ProfileCatalog.describe": "0c689dfd46e37a2ce9053a47baa55503ebeef23a87e8d6537453ff91b1337b07"
+      }
+    },
+    "control/accepted.py": {
+      "sha256": "f804e4a5c9dbebfe9fd2b9f750db1431a54d817e1a1231ecc387d1487fe22f25",
+      "definitions": {
+        "PROFILE": "1186c8fa1fca81d16d7db54acae57191cdeba23b2dcebdd58c233fd6f7cdc5af",
+        "CONTRACT_SHA": "a611c922df10c2af46b66ffa1d9072cdc1d11a828ea7f284057dc7981c1ab83d",
+        "FINANCIAL": "13b4282a13f443ae2ec16c1f4c063a3c857b18ee01c67a6c097458db9dc16468",
+        "contract_path": "4a835ef305f3d52344da19c5aab338395357e3d5ab447668359cfd6d835da553",
+        "AcceptedManualCatalog": "6069b1f00609b4eb74d10443f02b0c9baf23eef3cc217a9ff16973e85e7c6040"
+      },
+      "class_methods": {
+        "AcceptedManualCatalog.__init__": "ae0f768316297ef6d1f5ccfcdcca958bdcf454dc617ee4a955e4b91e33a10b33",
+        "AcceptedManualCatalog.get": "e86643009ed9b4dff879ad3fdd43564bc6419d427f5d3c1f3d1f6ad2efe63c63",
+        "AcceptedManualCatalog.validate": "b25407977b32948380e164222d220d89ad24c2cf5bdf36a536117bec1f274278",
+        "AcceptedManualCatalog.source_contract": "9986a36a056b74325f048dd36dcd228e0db3af389a7af8b81f7d193b4ff3b64f",
+        "AcceptedManualCatalog.describe": "83164ede373e885606904b14db1f95f91ee03868e89b8d6af70d7c5b9b8a9911"
+      }
+    },
+    "repositories/postgres.py": {
+      "sha256": "ee697a3bdb78126607b01f6c0f5922d120083dcdd0b3ede383bae230cc513be3",
+      "definitions": {
+        "_ident": "6b716efa220999613471f4f93356468d9eb8a8c90d84b0d65fef220773212f95"
+      },
+      "class_methods": {}
+    },
+    "primary_store.py": {
+      "sha256": "bb187a5b447684cddfd7bef197db5be66c2983e9e2cddb4e8283863982ac689f",
+      "definitions": {
+        "SURGERY_REFERENCE_SHA": "b8e0788878c6990d8b37b92a6df98a85054b3607fa0a568e53bcbe36544cccb6",
+        "cache_spec": "0de88226d4e2ea05ca751701e462cd871a07836c08f4b4466b7c975b8246b597",
+        "_registered": "814383ea556112124e01709386b6af7fc04175a4c935861fbbc09632d0fb1005",
+        "_target": "dfb38c2bc9714934a425417f4193d9a5e9ec7b0c8f527cda6c9a9d48e4af2885",
+        "_receipt": "e7a5292a1aad554b8f6fa26643ebe6d93670104063fd5272eb61eeae169eb013",
+        "_health": "8f81db97e25f81b255f17419038afba91ce206ee88fd8755b373b10d3b3c5182",
+        "read_in_transaction": "0735eabc647bec761ef22c6ebf247a9a4b63826479794cd076df7665aadf11c9"
+      },
+      "class_methods": {}
+    }
+  },
+  "runtime_definitions": {
+    "ErrorKind": {
+      "source": "domain.py:ErrorKind",
+      "source_sha256": "2ae1d302f13e47e14d7f0c039aa2ae763c9c13bef350e0928dade16ac1b6bd74",
+      "adaptation": null,
+      "sha256": "2ae1d302f13e47e14d7f0c039aa2ae763c9c13bef350e0928dade16ac1b6bd74"
+    },
+    "IngestError": {
+      "source": "domain.py:IngestError",
+      "source_sha256": "1264d4e3c547f2262600348f32ac33e6d8761e478cef5972e55de083f526cd0d",
+      "adaptation": null,
+      "sha256": "1264d4e3c547f2262600348f32ac33e6d8761e478cef5972e55de083f526cd0d"
+    },
+    "FieldMapping": {
+      "source": "domain.py:FieldMapping",
+      "source_sha256": "95194da06482fa5aa0113b1121d12f902e881a3d39a3c372587afc6ebf6eb08e",
+      "adaptation": null,
+      "sha256": "95194da06482fa5aa0113b1121d12f902e881a3d39a3c372587afc6ebf6eb08e"
+    },
+    "DerivedDocumentId": {
+      "source": "domain.py:DerivedDocumentId",
+      "source_sha256": "18666069efc7be846c1aee66b77813f1babfd1ad7bb1b9be5f983ce8b5b30666",
+      "adaptation": null,
+      "sha256": "18666069efc7be846c1aee66b77813f1babfd1ad7bb1b9be5f983ce8b5b30666"
+    },
+    "PublishSpec": {
+      "source": "domain.py:PublishSpec",
+      "source_sha256": "77c5c1475599860e45dfe3be3e94df13064bc62166321ae27afda9a7708c05b6",
+      "adaptation": null,
+      "sha256": "77c5c1475599860e45dfe3be3e94df13064bc62166321ae27afda9a7708c05b6"
+    },
+    "InterfaceSpec": {
+      "source": "domain.py:InterfaceSpec",
+      "source_sha256": "0f926c98d5c4dd617e28a608e9a6c86bdacb272094c288e81ee37fef141ab435",
+      "adaptation": null,
+      "sha256": "0f926c98d5c4dd617e28a608e9a6c86bdacb272094c288e81ee37fef141ab435"
+    },
+    "canonical_json": {
+      "source": "domain.py:canonical_json",
+      "source_sha256": "cbef3cf5439cdc28ffbe82520b352fc1d6915816c0891957a89a5009cb5fdbd8",
+      "adaptation": null,
+      "sha256": "cbef3cf5439cdc28ffbe82520b352fc1d6915816c0891957a89a5009cb5fdbd8"
+    },
+    "sha256_hex": {
+      "source": "domain.py:sha256_hex",
+      "source_sha256": "353da17f4d8198502350fd523db93a2bddfcaa3e282640443f266f61e95454eb",
+      "adaptation": null,
+      "sha256": "353da17f4d8198502350fd523db93a2bddfcaa3e282640443f266f61e95454eb"
+    },
+    "normalize": {
+      "source": "domain.py:normalize",
+      "source_sha256": "28818319649598b3c5b9412b3fcddd853df572660b6062613d7b504daf9569e3",
+      "adaptation": null,
+      "sha256": "28818319649598b3c5b9412b3fcddd853df572660b6062613d7b504daf9569e3"
+    },
+    "digest": {
+      "source": "daily_materials.py:digest",
+      "source_sha256": "55e798fcc4fe6a952ae6992dd930f584959353d16c01c4d1d41519639787a9be",
+      "adaptation": null,
+      "sha256": "55e798fcc4fe6a952ae6992dd930f584959353d16c01c4d1d41519639787a9be"
+    },
+    "require": {
+      "source": "clinical_daily.py:require",
+      "source_sha256": "3312fd2d4ee16aeb47cc1422336099c6e4143acd696f20cd69a4f7aa43395d0c",
+      "adaptation": null,
+      "sha256": "3312fd2d4ee16aeb47cc1422336099c6e4143acd696f20cd69a4f7aa43395d0c"
+    },
+    "ClinicalContract": {
+      "source": "clinical_daily.py:ClinicalContract",
+      "source_sha256": "669b33369bf198ced9581c4c2fbe84d760a67dfa6125f5f3fc05c0832992c108",
+      "adaptation": "裁剪类，仅保留方法 ",
+      "sha256": "a0e331666db1520933729c40827e86382f3d3591c1b701453f89d68113bd5acf"
+    },
+    "PrimaryContract": {
+      "source": "clinical_primary.py:PrimaryContract",
+      "source_sha256": "1b8eda6757ad275874fa96d7385d3e3768d06b1474e9376b40f33529b1031852",
+      "adaptation": "裁剪类，仅保留方法 __post_init__,body_field,digest,output_columns,spec",
+      "sha256": "ed16d3e541bf225560bb60ac97862a58db4224e2f5e10a0c6310fd91ef035ea1"
+    },
+    "PrimaryPolicy": {
+      "source": "clinical_primary.py:PrimaryPolicy",
+      "source_sha256": "ec1bfcde5b84d82bc94d3c0437492092a73dd3b4aeb7cee1c3d87ad936f2db76",
+      "adaptation": null,
+      "sha256": "ec1bfcde5b84d82bc94d3c0437492092a73dd3b4aeb7cee1c3d87ad936f2db76"
+    },
+    "select_materials": {
+      "source": "clinical_primary.py:select_materials",
+      "source_sha256": "b99b66ef968e8f5bed61089cf26af27468d3b4b00cab33bbf4e99de073191514",
+      "adaptation": null,
+      "sha256": "b99b66ef968e8f5bed61089cf26af27468d3b4b00cab33bbf4e99de073191514"
+    },
+    "metadata_document": {
+      "source": "primary_metadata.py:metadata_document",
+      "source_sha256": "40bf5a802f7c188b2ee17f01b76cb0670f8d71b686eefd1438dc3808702378e4",
+      "adaptation": "仅固定 JSON 路径改为业务随包目录，删除外部路径回退",
+      "sha256": "79c0d87a4c7311f9862bf46d3562261d93f7fe4f9c96480f36385268fc6f8da6"
+    },
+    "_mappings": {
+      "source": "primary_metadata.py:_mappings",
+      "source_sha256": "08bbe5e0a6b397d33b25516cdf45d1bce89403dc690d43eb4d31e30bf78db295",
+      "adaptation": null,
+      "sha256": "08bbe5e0a6b397d33b25516cdf45d1bce89403dc690d43eb4d31e30bf78db295"
+    },
+    "MetadataContract": {
+      "source": "primary_metadata.py:MetadataContract",
+      "source_sha256": "12469985b6e309a64953578d5189ba4731b8b10310386ee16deb6a54f92b8a78",
+      "adaptation": "裁剪类，仅保留方法 __post_init__,lifecycle_admission,native_primary_key,validate_lifecycle",
+      "sha256": "33c85d21b7ae6c32830d94f4514a7ff7f2f529898e2e6006074b67d53d209d32"
+    },
+    "real_contracts": {
+      "source": "primary_metadata.py:real_contracts",
+      "source_sha256": "1d65be9b72894ba195450a8fb1ed21131995432b61129a93c94ca6d391ba223b",
+      "adaptation": null,
+      "sha256": "1d65be9b72894ba195450a8fb1ed21131995432b61129a93c94ca6d391ba223b"
+    },
+    "ControlError": {
+      "source": "control/models.py:ControlError",
+      "source_sha256": "7fb8567f441ada9fbc302d2ff352111925390a934c33dfb9669dfa8993f8eb3c",
+      "adaptation": null,
+      "sha256": "7fb8567f441ada9fbc302d2ff352111925390a934c33dfb9669dfa8993f8eb3c"
+    },
+    "Profile": {
+      "source": "control/profiles.py:Profile",
+      "source_sha256": "871142d5912e9d90102140d85698a84265725ffe182a7a74b93a63353ef56713",
+      "adaptation": null,
+      "sha256": "871142d5912e9d90102140d85698a84265725ffe182a7a74b93a63353ef56713"
+    },
+    "ProfileCatalog": {
+      "source": "control/profiles.py:ProfileCatalog",
+      "source_sha256": "ed60fb2baf2585eab97411befe111d14f0e9553bb2449e0e73af57035c47bbd5",
+      "adaptation": "裁剪类，仅保留方法 resolve_spec",
+      "sha256": "3214747f5074f33a6f86c84776b361a1c5c3e6dadf7d8c6503cf0230d515a403"
+    },
+    "contract_path": {
+      "source": "control/accepted.py:contract_path",
+      "source_sha256": "4a835ef305f3d52344da19c5aab338395357e3d5ab447668359cfd6d835da553",
+      "adaptation": "固定 baseline 路径，拒绝可选出院时间分支，防止扩展本次四类范围",
+      "sha256": "43aeffb4b0a98cc2726818d4cd6c68a9c4e9c739a75b71068eddde19c4af7cf1"
+    },
+    "AcceptedManualCatalog": {
+      "source": "control/accepted.py:AcceptedManualCatalog",
+      "source_sha256": "6069b1f00609b4eb74d10443f02b0c9baf23eef3cc217a9ff16973e85e7c6040",
+      "adaptation": "仅保留构造/get，构造固定 baseline；删除出院时间 overlay 和调度/同步控制方法",
+      "sha256": "2741f447ec6415d03236aff75b4f2e8a560506346fd57651bff092ae4dd41b62"
+    },
+    "_ident": {
+      "source": "repositories/postgres.py:_ident",
+      "source_sha256": "6b716efa220999613471f4f93356468d9eb8a8c90d84b0d65fef220773212f95",
+      "adaptation": null,
+      "sha256": "6b716efa220999613471f4f93356468d9eb8a8c90d84b0d65fef220773212f95"
+    },
+    "cache_spec": {
+      "source": "primary_store.py:cache_spec",
+      "source_sha256": "0de88226d4e2ea05ca751701e462cd871a07836c08f4b4466b7c975b8246b597",
+      "adaptation": "仅手术固定 JSON 路径改为业务随包目录，删除外部路径回退",
+      "sha256": "4cb569ce106ec7265d6534f3fa4e9ffa498847331f30f47ac62c1dced99eda4a"
+    },
+    "_registered": {
+      "source": "primary_store.py:_registered",
+      "source_sha256": "814383ea556112124e01709386b6af7fc04175a4c935861fbbc09632d0fb1005",
+      "adaptation": null,
+      "sha256": "814383ea556112124e01709386b6af7fc04175a4c935861fbbc09632d0fb1005"
+    },
+    "_target": {
+      "source": "primary_store.py:_target",
+      "source_sha256": "dfb38c2bc9714934a425417f4193d9a5e9ec7b0c8f527cda6c9a9d48e4af2885",
+      "adaptation": null,
+      "sha256": "dfb38c2bc9714934a425417f4193d9a5e9ec7b0c8f527cda6c9a9d48e4af2885"
+    },
+    "_receipt": {
+      "source": "primary_store.py:_receipt",
+      "source_sha256": "e7a5292a1aad554b8f6fa26643ebe6d93670104063fd5272eb61eeae169eb013",
+      "adaptation": null,
+      "sha256": "e7a5292a1aad554b8f6fa26643ebe6d93670104063fd5272eb61eeae169eb013"
+    },
+    "_health": {
+      "source": "primary_store.py:_health",
+      "source_sha256": "8f81db97e25f81b255f17419038afba91ce206ee88fd8755b373b10d3b3c5182",
+      "adaptation": null,
+      "sha256": "8f81db97e25f81b255f17419038afba91ce206ee88fd8755b373b10d3b3c5182"
+    },
+    "read_in_transaction": {
+      "source": "primary_store.py:read_in_transaction",
+      "source_sha256": "0735eabc647bec761ef22c6ebf247a9a4b63826479794cd076df7665aadf11c9",
+      "adaptation": null,
+      "sha256": "0735eabc647bec761ef22c6ebf247a9a4b63826479794cd076df7665aadf11c9"
+    },
+    "primary_objects_available": {
+      "source": "business SQLAlchemy bridge",
+      "adaptation": "新增只借连接桥",
+      "sha256": "95398edb416b9323069597a2e798702cc5b3a77ff744224eb896a8db244bc717"
+    },
+    "read_primary_in_transaction": {
+      "source": "business SQLAlchemy bridge",
+      "adaptation": "新增只借连接桥",
+      "sha256": "800a8840e781b307671927b284eef05c3fd33a00be5d827f30c76272ccaefc4d"
+    }
+  },
+  "json_files": {
+    "accepted-manual-contract.json": "dd8c921621f39febc62590278a9a0d053309bb68e1531ba5b5c413d7dc3d3ce8",
+    "clinical-primary-cache-surgery-reference.json": "10ced4c76f284def467e50cf4acb5d4d9d3b8e3422553c0d35b380dd90def145",
+    "clinical-primary-real-fields-v2.json": "c72892a31b427ad825173e29d581026510f24b4c2de43f3e9f87b02eb45c1e69"
+  },
+  "runtime_methods": {
+    "IngestError.__init__": {
+      "source": "domain.py:IngestError.__init__",
+      "source_sha256": "f0f02fab54d857807b9e1cdda406a702d1d355307e86e498cb616f32cdccb4c5",
+      "sha256": "f0f02fab54d857807b9e1cdda406a702d1d355307e86e498cb616f32cdccb4c5"
+    },
+    "PublishSpec.qualified_name": {
+      "source": "domain.py:PublishSpec.qualified_name",
+      "source_sha256": "7e13cf8f752bec64580cf9c32f36c6cdadbb2730764fb791c2b1fc7a13ab6bd8",
+      "sha256": "7e13cf8f752bec64580cf9c32f36c6cdadbb2730764fb791c2b1fc7a13ab6bd8"
+    },
+    "PublishSpec.target_columns": {
+      "source": "domain.py:PublishSpec.target_columns",
+      "source_sha256": "3e9bedb99723d3fdcc8ef3e39698a340d9d7255496b788ac695de6b3f6db3436",
+      "sha256": "3e9bedb99723d3fdcc8ef3e39698a340d9d7255496b788ac695de6b3f6db3436"
+    },
+    "PublishSpec.source_key_fields": {
+      "source": "domain.py:PublishSpec.source_key_fields",
+      "source_sha256": "85362df2372acbbbcc30aa3cff4d5a0c5ff145774efc9fd52f1cb84b360712c1",
+      "sha256": "85362df2372acbbbcc30aa3cff4d5a0c5ff145774efc9fd52f1cb84b360712c1"
+    },
+    "PrimaryContract.output_columns": {
+      "source": "clinical_primary.py:PrimaryContract.output_columns",
+      "source_sha256": "472f2cd413bf15ac4582f244e312f2f267e2f44fbc728ef54d43f06524a45873",
+      "sha256": "472f2cd413bf15ac4582f244e312f2f267e2f44fbc728ef54d43f06524a45873"
+    },
+    "PrimaryContract.body_field": {
+      "source": "clinical_primary.py:PrimaryContract.body_field",
+      "source_sha256": "c6466c0f67d9d8cf9fee246f3e9cde9c18b5bec3b7c215ef4fbd80c3eed9758b",
+      "sha256": "c6466c0f67d9d8cf9fee246f3e9cde9c18b5bec3b7c215ef4fbd80c3eed9758b"
+    },
+    "PrimaryContract.__post_init__": {
+      "source": "clinical_primary.py:PrimaryContract.__post_init__",
+      "source_sha256": "a0f94673899a4ba8745b1bc24032573b72a5392a478ff3cfec187de47d50b4ae",
+      "sha256": "a0f94673899a4ba8745b1bc24032573b72a5392a478ff3cfec187de47d50b4ae"
+    },
+    "PrimaryContract.digest": {
+      "source": "clinical_primary.py:PrimaryContract.digest",
+      "source_sha256": "caa4a4f83f2935d210c56cafced93b5162b0de7e12d0cf663acdb801a1f9d3ad",
+      "sha256": "caa4a4f83f2935d210c56cafced93b5162b0de7e12d0cf663acdb801a1f9d3ad"
+    },
+    "PrimaryContract.spec": {
+      "source": "clinical_primary.py:PrimaryContract.spec",
+      "source_sha256": "5033085985168075779c25e272529d247eb95dc684669f654976efcdece48091",
+      "sha256": "5033085985168075779c25e272529d247eb95dc684669f654976efcdece48091"
+    },
+    "PrimaryPolicy.validate": {
+      "source": "clinical_primary.py:PrimaryPolicy.validate",
+      "source_sha256": "fac18cfb33e4c1d562e7feba2b19989cd6251af9cd30cf304688637743fd1927",
+      "sha256": "fac18cfb33e4c1d562e7feba2b19989cd6251af9cd30cf304688637743fd1927"
+    },
+    "PrimaryPolicy.policy_hash": {
+      "source": "clinical_primary.py:PrimaryPolicy.policy_hash",
+      "source_sha256": "7d535620953131c444f260eedef021ff0ec187c46e77e761b9a301100fb68442",
+      "sha256": "7d535620953131c444f260eedef021ff0ec187c46e77e761b9a301100fb68442"
+    },
+    "PrimaryPolicy.case_id": {
+      "source": "clinical_primary.py:PrimaryPolicy.case_id",
+      "source_sha256": "d65fee8f81e93716a093cae0167a886e9b6dcda5d2d3678fa8d95a72575b953c",
+      "sha256": "d65fee8f81e93716a093cae0167a886e9b6dcda5d2d3678fa8d95a72575b953c"
+    },
+    "PrimaryPolicy.health_case_id": {
+      "source": "clinical_primary.py:PrimaryPolicy.health_case_id",
+      "source_sha256": "75c29125edd47ea1dbaab2bd6c877d510046d2534a8eb4681f0ead97d23f6313",
+      "sha256": "75c29125edd47ea1dbaab2bd6c877d510046d2534a8eb4681f0ead97d23f6313"
+    },
+    "PrimaryPolicy.from_dict": {
+      "source": "clinical_primary.py:PrimaryPolicy.from_dict",
+      "source_sha256": "b412967fc8f88e8e3d43cff712ef5f58827f43ed10b18634ce3ae542ff1f079d",
+      "sha256": "b412967fc8f88e8e3d43cff712ef5f58827f43ed10b18634ce3ae542ff1f079d"
+    },
+    "MetadataContract.__post_init__": {
+      "source": "primary_metadata.py:MetadataContract.__post_init__",
+      "source_sha256": "a328251ffa2cabed3c484b3a0ae6faaa03dc716a42f7240a4e75fd471d02c097",
+      "sha256": "a328251ffa2cabed3c484b3a0ae6faaa03dc716a42f7240a4e75fd471d02c097"
+    },
+    "MetadataContract.native_primary_key": {
+      "source": "primary_metadata.py:MetadataContract.native_primary_key",
+      "source_sha256": "0aecf556935f9a3b17f2aceb5c29c32517934373a59ac912c0fc4f3cf7df291b",
+      "sha256": "0aecf556935f9a3b17f2aceb5c29c32517934373a59ac912c0fc4f3cf7df291b"
+    },
+    "MetadataContract.lifecycle_admission": {
+      "source": "primary_metadata.py:MetadataContract.lifecycle_admission",
+      "source_sha256": "60cf946851a0d6c4bce687065ae0abff76063995b05354ccb44977a3746af74b",
+      "sha256": "60cf946851a0d6c4bce687065ae0abff76063995b05354ccb44977a3746af74b"
+    },
+    "MetadataContract.validate_lifecycle": {
+      "source": "primary_metadata.py:MetadataContract.validate_lifecycle",
+      "source_sha256": "803b0e1a441cf66a91b111c59a5abfd703c589fbf018b957996b31f4a1f72fbd",
+      "sha256": "803b0e1a441cf66a91b111c59a5abfd703c589fbf018b957996b31f4a1f72fbd"
+    },
+    "ControlError.__init__": {
+      "source": "control/models.py:ControlError.__init__",
+      "source_sha256": "5d8ed8d319a4b7b36e17eec5053d7597eaba0fa770cc70018ef203af344ab1dd",
+      "sha256": "5d8ed8d319a4b7b36e17eec5053d7597eaba0fa770cc70018ef203af344ab1dd"
+    },
+    "Profile.interfaces": {
+      "source": "control/profiles.py:Profile.interfaces",
+      "source_sha256": "3369e9ab04b5990c4977738a7793094be81577f55ed1e26498d839b44b48bbbc",
+      "sha256": "3369e9ab04b5990c4977738a7793094be81577f55ed1e26498d839b44b48bbbc"
+    },
+    "ProfileCatalog.resolve_spec": {
+      "source": "control/profiles.py:ProfileCatalog.resolve_spec",
+      "source_sha256": "4379adc62ff8476a00d7477036829ce64e43a0eeb10785e75af908f8b2f03969",
+      "sha256": "4379adc62ff8476a00d7477036829ce64e43a0eeb10785e75af908f8b2f03969"
+    },
+    "AcceptedManualCatalog.__init__": {
+      "source": "control/accepted.py:AcceptedManualCatalog.__init__",
+      "source_sha256": "ae0f768316297ef6d1f5ccfcdcca958bdcf454dc617ee4a955e4b91e33a10b33",
+      "sha256": "af1daf0199c86519a003fbf6a960e9675d5a3d598278e5007b2bd6f0f07996c1"
+    },
+    "AcceptedManualCatalog.get": {
+      "source": "control/accepted.py:AcceptedManualCatalog.get",
+      "source_sha256": "e86643009ed9b4dff879ad3fdd43564bc6419d427f5d3c1f3d1f6ad2efe63c63",
+      "sha256": "e86643009ed9b4dff879ad3fdd43564bc6419d427f5d3c1f3d1f6ad2efe63c63"
+    }
+  },
+  "excluded_capabilities": [
+    "migration",
+    "poll",
+    "extract",
+    "publication write",
+    "source metadata queries",
+    "connection factories"
+  ],
+  "audit_only_source_definitions": {
+    "clinical_primary.py:make_material": "5a5aed83553f3d2aac81b4bb65f892e460aed54be75d7488e6cefbd3b4928d21"
+  }
+}

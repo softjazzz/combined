@@ -34,6 +34,10 @@ def validate_read_contract(report):
 
 
 def source_scope(source_key):
+    from . import primary_material_projection as primary
+    selected_scope = primary.scope(source_key)
+    if selected_scope is not None:
+        return selected_scope
     state = material.context()
     automatic = (state or {}).get("automatic_material")
     if automatic is None:

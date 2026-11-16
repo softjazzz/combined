@@ -416,6 +416,7 @@ import {
   parseDocSortTime,
   resolveDocDisplayTitle,
   resolveDocGroupKey,
+  resolveMaterialScopeNotice,
 } from './utils/documentDisplay'
 import {
   ANALYTICS_STATS_PATH,
@@ -1855,8 +1856,7 @@ function buildDocumentRequestParams(
 
 function applyDocumentSummaryPayload(payload: Record<string, unknown>, requestSequence: number) {
   if (requestSequence !== documentsRequestSequence) return
-  const scope = payload.daily_material_status
-  dailyMaterialNotice.value = scope && typeof scope === 'object' ? pickText(scope as Record<string, unknown>, ['notice']) : ''
+  dailyMaterialNotice.value = resolveMaterialScopeNotice(payload)
   const docsRaw = Array.isArray(payload.documents) ? payload.documents : []
   const docs = docsRaw.map((item, index) => normalizeDocItem(item, index))
   documentsList.value = docs
@@ -1880,6 +1880,7 @@ async function loadRemainingDocuments(visitId: string, requestSequence: number):
     })
     if (requestSequence !== documentsRequestSequence) return
     const payload = (data?.data || data || {}) as Record<string, unknown>
+    dailyMaterialNotice.value = resolveMaterialScopeNotice(payload) || dailyMaterialNotice.value
     const docsRaw = Array.isArray(payload.documents) ? payload.documents : []
     const existingKeys = new Set(documentsList.value.map((doc) => docIdentityKey(doc)))
     for (const [index, item] of docsRaw.entries()) {

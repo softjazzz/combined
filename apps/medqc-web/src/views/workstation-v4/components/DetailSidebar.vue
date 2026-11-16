@@ -132,6 +132,10 @@
                           {{ renderTreeNodePrimary(node) }}
                         </span>
                         <span
+                          v-if="resolveNodeMaterialNotice(node)"
+                          class="mt-0.5 block break-words text-[10px] leading-4 text-slate-500"
+                        >{{ resolveNodeMaterialNotice(node) }}</span>
+                        <span
                           v-if="!hasDocContent(resolveDocByNode(node))"
                           class="mt-0.5 block text-[10px] font-semibold text-slate-300"
                         >
@@ -187,6 +191,10 @@
                       {{ renderTreeNodePrimary(node) }}
                     </span>
                     <span
+                      v-if="resolveNodeMaterialNotice(node)"
+                      class="mt-0.5 block break-words text-[10px] leading-4 text-slate-500"
+                    >{{ resolveNodeMaterialNotice(node) }}</span>
+                    <span
                       v-if="!hasDocContent(resolveDocByNode(node))"
                       class="mt-0.5 block text-[10px] font-semibold text-slate-300"
                     >
@@ -241,16 +249,22 @@
                 >
                   <FileTextOutlined />
                 </span>
-                <span
-                  :class="
-                    hasDocContent(doc)
-                      ? isActive(doc)
-                        ? 'truncate text-[12px] font-bold text-[#0a6cff]'
-                        : 'truncate text-[12px] font-semibold text-slate-700'
-                      : 'truncate text-[12px]'
-                  "
-                >
-                  {{ resolveDocLabel(doc) }}
+                <span class="min-w-0">
+                  <span
+                    :class="
+                      hasDocContent(doc)
+                        ? isActive(doc)
+                          ? 'truncate text-[12px] font-bold text-[#0a6cff]'
+                          : 'truncate text-[12px] font-semibold text-slate-700'
+                        : 'truncate text-[12px]'
+                    "
+                  >
+                    {{ resolveDocLabel(doc) }}
+                  </span>
+                  <span
+                    v-if="resolveMaterialDisplayNotice(doc)"
+                    class="mt-0.5 block break-words text-[10px] leading-4 text-slate-500"
+                  >{{ resolveMaterialDisplayNotice(doc) }}</span>
                 </span>
               </span>
 
@@ -289,7 +303,7 @@ import {
   CaretRightOutlined,
 } from '@ant-design/icons-vue'
 import type { PatientRecord, DocItem, DocTreeGroup, DocTreeNode } from '../types'
-import { formatDocSortTime, resolveDocDisplayTitle } from '../utils/documentDisplay'
+import { formatDocSortTime, resolveDocDisplayTitle, resolveMaterialDisplayNotice } from '../utils/documentDisplay'
 
 const props = defineProps<{
   record: PatientRecord | undefined
@@ -368,6 +382,10 @@ function hasDocContent(doc?: DocItem): boolean {
 
 function resolveDocLabel(doc: DocItem): string {
   return resolveDocDisplayTitle(doc)
+}
+
+function resolveNodeMaterialNotice(node: DocTreeNode): string {
+  return resolveMaterialDisplayNotice(resolveDocByNode(node) || {})
 }
 
 function normalizeMatchText(value: string | null | undefined): string {
