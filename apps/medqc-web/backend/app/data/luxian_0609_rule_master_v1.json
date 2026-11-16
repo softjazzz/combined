@@ -26,9 +26,6 @@
       "source_document": "手术记录",
       "qc_point": "手术后24小时内是否完成",
       "implementation_status": "active",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "event_quality_control_paused_current_release",
-      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《手术记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -256,9 +253,6 @@
       "source_document": "术前小结",
       "qc_point": "有手术医嘱但无术前小结",
       "implementation_status": "active",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "event_quality_control_paused_current_release",
-      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《术前小结》质控点执行；新增或变更口径须单独验收。"
     },
@@ -624,9 +618,6 @@
       "source_document": "术后首次病程记录",
       "qc_point": "无术后首次病程记录",
       "implementation_status": "active",
-      "phase_status": "pending_definition",
-      "pending_reason_code": "event_quality_control_paused_current_release",
-      "pending_definition_note": "输血、手术及相关麻醉事件质控点按当前版本安排暂未启用；仅影响新任务执行，历史结果保持原结论。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《术后首次病程记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -651,6 +642,9 @@
       "source_document": "会诊记录",
       "qc_point": "会诊记录单未在会诊申请发出后24小时内完成",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "consultation_source_document_unavailable_customer_scope",
+      "pending_definition_note": "现有请会诊执行记录不能替代正式会诊记录，待院方确认申请、记录与时间字段口径后启用。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《会诊记录》质控点执行；新增或变更口径须单独验收。"
     },

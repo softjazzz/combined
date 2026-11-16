@@ -20,10 +20,10 @@ from app.services.luxian_0609_rule_catalog import (
 
 # 独立按业务语义验收，04 中死亡及会诊四项不能被前缀暂停。
 EVENT_RULE_IDS = tuple("LX0609-" + item for item in (
-    "04-01-01", "04-01-02", "04-01-03", "04-01-04", "04-01-05",
-    "04-02-01", "04-02-02", "04-02-03", "04-02-04", "04-02-05",
+    "04-01-02", "04-01-03", "04-01-04", "04-01-05",
+    "04-02-02", "04-02-03", "04-02-04", "04-02-05",
     "04-03-01", "04-04-01", "04-04-02", "04-04-03",
-    "04-05-01", "04-05-02", "04-05-03", "05-01-01",
+    "04-05-01", "04-05-02", "05-01-01",
     "11-01-01", "11-02-01", "11-02-02",
     "07-01-01", "07-01-02", "07-01-03", "07-02-01", "07-02-02",
     "07-03-01", "07-04-01", "07-04-02", "11-03-01", "11-03-02",
@@ -47,7 +47,7 @@ def test_event_rule_cannot_enter_formal_execution(rule_id):
 
 
 def test_death_consultation_and_other_existing_pauses_are_preserved():
-    kept = tuple("LX0609-04-02-" + suffix for suffix in ("06", "07", "08", "09"))
+    kept = tuple("LX0609-04-02-" + suffix for suffix in ("06", "08", "09"))
     executable, paused = partition_luxian_0609_rule_scope(kept)
     assert set(executable) == set(kept)
     assert paused == ()
