@@ -694,6 +694,9 @@
       "source_document": "病程记录",
       "qc_point": "修正或补充诊断时，未记录修改或补充理由及诊断依据",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "diagnosis_change_policy_pending_hospital_confirmation",
+      "pending_definition_note": "暂停诊断变更判定，待院方确认变更历史来源、触发条件及理由与依据的核查口径；保留历史结果。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《病程记录》质控点执行；新增或变更口径须单独验收。"
     },
