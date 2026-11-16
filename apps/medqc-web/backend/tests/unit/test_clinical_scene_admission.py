@@ -59,24 +59,30 @@ def test_missing_optional_projection_never_requires_new_source_table(source):
     assert row["qc_scope"] == "unknown"
 
 
-def test_projection_permission_error_cannot_be_downgraded_to_missing_material(source):
+def test_legacy_projection_cannot_confirm_scene_or_introduce_new_read_dependency(source):
     engine, repository = source
+    add_projection(engine, source="inpat_registration")
 
     def deny_projection(conn, cursor, statement, params, context, many):
         if statement.lstrip().startswith("SELECT") and "hospitalization_status_projection" in statement:
             raise OperationalError("synthetic access denied", {}, None)
 
     event.listen(engine, "before_cursor_execute", deny_projection)
-    with pytest.raises(OperationalError, match="synthetic access denied"):
-        repository.collect_records(**FILTERS)
+    [row] = repository.collect_records(**FILTERS)
+    assert row["qc_scope"] == "unknown"
 
 
 def test_confirmed_discharge_without_time_is_final_with_missing_time_horizon(source):
     from app.routers.qc_sichuan import _build_workspace_record_scene_snapshot
     from app.services.luxian_0609.evaluation_horizon import build_record_evaluation_horizon_snapshot
-    engine, repository = source
-    add_projection(engine)
-    [row] = repository.collect_records(**{**FILTERS, "scope": "final"})
+    from app.services.clinical_scene_admission import resolve_scene
+    from app.services.discharge_time import DischargeTime
+    # 只验证纯合同：现有legacy投影没有可信状态依据，生产仓库不把它传入此参数。
+    row = {**REF.as_dict(), "record_id": REF.visit_id, "scope": "final",
+        "qc_admission_datetime": "2026-01-01", "qc_discharge_datetime": "", "discharge_datetime": "",
+        "qc_scene_source": "synthetic_confirmed_state", "qc_scene_verified_at": "",
+        **resolve_scene(discharge=DischargeTime(), document_present=True, document_invalid=False,
+                        verified_status="discharged")}
     assert row["scope"] == row["qc_scope"] == "final"
     assert row["qc_discharge_state"] == "discharged"
     assert row["qc_discharge_time_status"] == "missing"
@@ -84,7 +90,7 @@ def test_confirmed_discharge_without_time_is_final_with_missing_time_horizon(sou
     [scene] = _build_workspace_record_scene_snapshot([row], query_scope="all", primary_documents_only=True)
     assert scene["record_scene"] == scene["resolved_scene"] == "final"
     assert scene["scene_reason"] == "verified_discharge_state"
-    assert scene["scene_source"] == "hospitalization_status_projection" and scene["scene_verified_at"]
+    assert scene["scene_source"] == "synthetic_confirmed_state" and scene["scene_verified_at"] == ""
     assert scene["discharge_snapshot"] == ""
     [horizon] = build_record_evaluation_horizon_snapshot([row], task_frozen_date="2026-11-16")
     assert horizon["evaluation_horizon"] == ""
@@ -119,15 +125,14 @@ def test_stale_cross_identity_or_unproven_projection_never_confirms_scene(source
     assert row["qc_scope"] == "unknown"
 
 
-def test_confirmed_inpatient_is_running_but_positive_discharge_conflict_is_not_hidden(source):
-    engine, repository = source
-    add_projection(engine, status="inpatient")
-    [row] = repository.collect_records(**{**FILTERS, "scope": "running"})
+def test_confirmed_inpatient_contract_does_not_hide_positive_discharge_conflict():
+    from app.services.clinical_scene_admission import resolve_scene
+    from app.services.discharge_time import DischargeTime
+    row = resolve_scene(discharge=DischargeTime(), document_present=False,
+                        document_invalid=False, verified_status="inpatient")
     assert row["qc_scope"] == "running"
-    with Session(engine) as session:
-        session.query(repo_module.InpatRegistration).update({"discharge_datetime": datetime(2026, 1, 3)})
-        session.commit()
-    [row] = repository.collect_records(**FILTERS)
+    row = resolve_scene(discharge=DischargeTime(datetime(2026, 1, 3), "inpat_registration.discharge_datetime"),
+                        document_present=False, document_invalid=False, verified_status="inpatient")
     assert row["qc_scope"] == "unknown" and row["qc_scene_reason"] == "discharge_state_conflict"
 
 
@@ -146,7 +151,9 @@ def test_old_frozen_scene_is_not_reclassified_using_new_source_policy():
 def test_filter_based_creation_without_explicit_refs_uses_same_admission(source, monkeypatch):
     from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
     engine, repository = source
-    add_projection(engine)
+    with Session(engine) as session:
+        session.query(repo_module.InpatRegistration).update({"discharge_datetime": datetime(2026, 1, 3)})
+        session.commit()
     owner = CustomQCWorkspaceService.__new__(CustomQCWorkspaceService)
     monkeypatch.setattr(owner, "_record_repository", lambda: repository)
     records, rejected = owner.collect_records_for_admission(**{**FILTERS, "scope": "final", "record_refs": None})
@@ -156,7 +163,9 @@ def test_filter_based_creation_without_explicit_refs_uses_same_admission(source,
 def test_filter_based_final_selection_does_not_admit_or_reject_unselected_unknown_cases(source, monkeypatch):
     from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
     engine, repository = source
-    add_projection(engine)
+    with Session(engine) as session:
+        session.query(repo_module.InpatRegistration).update({"discharge_datetime": datetime(2026, 1, 3)})
+        session.commit()
     with Session(engine) as session:
         session.add(repo_module.InpatRegistration(institute_id="SYNTHETIC_ORG", patient_id="UNSELECTED",
             visit_id="UNSELECTED", admission_datetime=datetime(2026, 1, 1)))
@@ -178,7 +187,9 @@ async def test_creation_uses_same_admission_as_candidates_and_freezes_reason(sou
     from tests.unit.test_qc_sichuan_batch_throughput import _WorkspaceStub, _ServiceStub, _luxian_native_settings
     engine, repository = source
     if confirmed:
-        add_projection(engine)
+        with Session(engine) as session:
+            session.query(repo_module.InpatRegistration).update({"discharge_datetime": datetime(2026, 1, 3)})
+            session.commit()
     owner = CustomQCWorkspaceService.__new__(CustomQCWorkspaceService)
     monkeypatch.setattr(owner, "_record_repository", lambda: repository)
     workspace = _WorkspaceStub()
@@ -197,7 +208,7 @@ async def test_creation_uses_same_admission_as_candidates_and_freezes_reason(sou
         result = await qc_sichuan.create_workspace_batch_job(**args)
         assert result["success"]
         [scene] = workspace.created_job["filters"]["record_scene_snapshot"]
-        assert scene["resolved_scene"] == "final" and scene["discharge_snapshot"] == ""
+        assert scene["resolved_scene"] == "final" and scene["discharge_snapshot"] == "2026-01-03 00:00:00"
     else:
         with pytest.raises(HTTPException) as error:
             await qc_sichuan.create_workspace_batch_job(**args)

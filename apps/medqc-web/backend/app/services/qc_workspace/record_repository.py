@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from sqlalchemy import String, and_, asc, cast, desc, exists, func, inspect, or_
+from sqlalchemy import String, and_, asc, cast, desc, exists, func, or_
 from sqlalchemy.orm import Session, load_only
 
 from ...database.models.cdm import (
@@ -279,24 +279,6 @@ class RecordRepository:
             "admission_datetime", "discharge_datetime"))
         admission_rows = source_rows(AdmissionRecord, ("institute_id", "patient_id", "visit_id",
             "name", "mr_no", "inpat_no", "dept_name", "attending_physician_sign", "admission_datetime"))
-        # 投影不是新的必需源表；缺表不能被解释为仍在院，读取/权限错误不降级。
-        connection = session.connection()
-        source_schema = (connection.get_execution_options().get("schema_translate_map") or {}).get(None)
-        projections = []
-        if inspect(connection).has_table(HospitalizationStatusProjection.__tablename__, schema=source_schema):
-            projections = session.query(HospitalizationStatusProjection).filter(
-                exact_clause(HospitalizationStatusProjection)).options(load_only(
-                    HospitalizationStatusProjection.institute_id, HospitalizationStatusProjection.patient_id,
-                    HospitalizationStatusProjection.visit_id, HospitalizationStatusProjection.status,
-                    HospitalizationStatusProjection.verified_at, HospitalizationStatusProjection.source,
-                )).all()
-        now = datetime.now()
-        verified_by_ref = {
-            CaseRef.from_mapping(row.__dict__): row for row in projections
-            if row.status in {"inpatient", "discharged"} and _safe_text(row.source)
-            and isinstance(row.verified_at, datetime) and row.verified_at.date() == now.date()
-            and row.verified_at <= now
-        }
         _capture_private_orm_identities(_private_identity_collector, "discharge_record", discharge_rows)
         _capture_private_orm_identities(_private_identity_collector, "inpat_registration", registration_rows)
         _capture_private_orm_identities(_private_identity_collector, "admission_record", admission_rows)
@@ -345,14 +327,12 @@ class RecordRepository:
                 document_status=getattr(discharge_source, "document_status", None),
             )
             discharge_datetime = discharge_selection.value
-            verified = verified_by_ref.get(ref)
             scene = resolve_scene(discharge=discharge_selection, document_present=discharge_source is not None,
                 document_invalid=is_explicitly_invalid_document_status(
-                    getattr(discharge_source, "document_status", None)),
-                verified_status=verified.status if verified is not None else "")
-            scene["qc_scene_source"] = ("hospitalization_status_projection" if verified is not None
-                                         else discharge_selection.source)
-            scene["qc_scene_verified_at"] = _to_iso_datetime(verified.verified_at) if verified is not None else ""
+                    getattr(discharge_source, "document_status", None)))
+            # 旧住院投影可能含首页/排除法推断，不能作为新质控的正向状态证据。
+            scene["qc_scene_source"] = discharge_selection.source
+            scene["qc_scene_verified_at"] = ""
             item_scope = scene["qc_scope"]
             if scope_value != "all" and item_scope != scope_value:
                 continue
