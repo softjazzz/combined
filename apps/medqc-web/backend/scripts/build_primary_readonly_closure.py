@@ -9,13 +9,13 @@ from pathlib import Path
 import zipfile
 
 
-SOURCE_COMMIT = "7a8c4bb424189a10e97f49e2df7d4b5c1a8abafe"
-ZIP_SHA256 = "ce63db287061bc9e479c7bb833879ba7a1c52e6f47c0b064ef468e3cae89cab3"
+SOURCE_COMMIT = "913421639fe3cfb5459909973503f87e14b4802d"
+ZIP_SHA256 = "e876ddcb5e44a9d0d012cc574c730e16af23c83774c5548cff9541bb62501c2f"
 ROOT = Path(__file__).resolve().parents[1]
 DESTINATION = ROOT / "app/services/primary_material_readonly.py"
 DATA = ROOT / "app/data/clinical_primary_contracts"
 
-HEADER = '''"""固定 7a8c4bb42 的四类合同只读定义闭包。
+HEADER = '''"""固定 913421639 的四类合同只读定义闭包。
 
 由 scripts/build_primary_readonly_closure.py 提取；来源及裁剪见固定指纹清单。
 只借调用者的独立 CDM 只读 RR 连接；不携带同步连接工厂或写入口。
@@ -36,7 +36,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-SOURCE_COMMIT = "7a8c4bb424189a10e97f49e2df7d4b5c1a8abafe"
+SOURCE_COMMIT = "913421639fe3cfb5459909973503f87e14b4802d"
 CONTRACT_DIRECTORY = Path(__file__).resolve().parents[1] / "data/clinical_primary_contracts"
 '''
 

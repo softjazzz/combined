@@ -175,7 +175,7 @@ def database_with_materials(m, p, materials):
 
 def test_fixed_contracts_and_dependencies():
     m = module()
-    assert m.SOURCE_COMMIT == "7a8c4bb424189a10e97f49e2df7d4b5c1a8abafe"
+    assert m.SOURCE_COMMIT == "913421639fe3cfb5459909973503f87e14b4802d"
     assert m.CONTRACT == "clinical-primary-four-v1"
     assert m.METADATA_REVISION == "clinical-primary-real-fields-v2"
     contracts = m.real_contracts()

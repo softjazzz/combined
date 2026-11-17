@@ -1,6 +1,6 @@
 {
-  "source_commit": "7a8c4bb424189a10e97f49e2df7d4b5c1a8abafe",
-  "candidate_zip_sha256": "ce63db287061bc9e479c7bb833879ba7a1c52e6f47c0b064ef468e3cae89cab3",
+  "source_commit": "913421639fe3cfb5459909973503f87e14b4802d",
+  "candidate_zip_sha256": "e876ddcb5e44a9d0d012cc574c730e16af23c83774c5548cff9541bb62501c2f",
   "fingerprint_algorithm": "SHA256(ast.get_source_segment UTF-8), decorators excluded",
   "source_files": {
     "domain.py": {
@@ -155,7 +155,7 @@
       "class_methods": {}
     },
     "primary_store.py": {
-      "sha256": "4fb9dbbb4cfc8007a7b796e59a2ad6baba4384f5b5ec4f24e7083ce7a32b8fea",
+      "sha256": "69aab31391db4be884d8bc3d09441773933af18a9e872704a9559f9e5e5e60f2",
       "definitions": {
         "SURGERY_REFERENCE_SHA": "b8e0788878c6990d8b37b92a6df98a85054b3607fa0a568e53bcbe36544cccb6",
         "cache_spec": "0de88226d4e2ea05ca751701e462cd871a07836c08f4b4466b7c975b8246b597",
@@ -393,7 +393,7 @@
     "accepted-manual-contract.json": "dd8c921621f39febc62590278a9a0d053309bb68e1531ba5b5c413d7dc3d3ce8",
     "clinical-primary-cache-surgery-reference.json": "10ced4c76f284def467e50cf4acb5d4d9d3b8e3422553c0d35b380dd90def145",
     "clinical-primary-real-fields-v2.json": "c72892a31b427ad825173e29d581026510f24b4c2de43f3e9f87b02eb45c1e69",
-    "SOURCE_FINGERPRINTS.json": "ac1b2f59f9165bc04662bf9e32169ffb5748bdc9271286b96be99556abb9723e"
+    "SOURCE_FINGERPRINTS.json": "90f3b5fa4a112bdf95945ceae44181bfeabcd222c6eaa0570865498b8c3d9586"
   },
   "runtime_methods": {
     "IngestError.__init__": {
@@ -560,7 +560,7 @@
     }
   },
   "runtime_constants": {
-    "SOURCE_COMMIT": "37d404f416aea165405c4d02243859114e2ae96d0081f23765df3ea8d72ead4e",
+    "SOURCE_COMMIT": "57bae511d7bf0ed8e8d7e8176f35c9e9b127ab716c53d71c619c13b314d1f9ba",
     "CONTRACT_DIRECTORY": "51320fa91f424c333b4a58897dba582139a5d722f0b3088633b49f9ffc25aab7",
     "ERROR_KINDS": "28a1c676fb428098aab0491d167a106e2433275fbef1ddbeb2011002d50844ae",
     "KEYS": "c20f88f1ecb3b9cd0678cb744eb16109989b9bc0ffaa1613a33187df07db2e07",
