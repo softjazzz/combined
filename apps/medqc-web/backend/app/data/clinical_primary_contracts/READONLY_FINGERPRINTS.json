@@ -1,6 +1,6 @@
 {
-  "source_commit": "cb437e611e802c5117f212c1e9743d2748ec4127",
-  "candidate_zip_sha256": "850431143ace082038cef1b653238be56ff0262b97b7b2d9d0e7d57523d0aae4",
+  "source_commit": "913421639fe3cfb5459909973503f87e14b4802d",
+  "candidate_zip_sha256": "e876ddcb5e44a9d0d012cc574c730e16af23c83774c5548cff9541bb62501c2f",
   "fingerprint_algorithm": "SHA256(ast.get_source_segment UTF-8), decorators excluded",
   "source_files": {
     "domain.py": {
@@ -15,7 +15,8 @@
         "InterfaceSpec": "0f926c98d5c4dd617e28a608e9a6c86bdacb272094c288e81ee37fef141ab435",
         "canonical_json": "cbef3cf5439cdc28ffbe82520b352fc1d6915816c0891957a89a5009cb5fdbd8",
         "sha256_hex": "353da17f4d8198502350fd523db93a2bddfcaa3e282640443f266f61e95454eb",
-        "normalize": "28818319649598b3c5b9412b3fcddd853df572660b6062613d7b504daf9569e3"
+        "normalize": "28818319649598b3c5b9412b3fcddd853df572660b6062613d7b504daf9569e3",
+        "denormalize": "0dc042da985568ce646b7567c3d614bcc21361447322c540a1ca315d98b0b692"
       },
       "class_methods": {
         "IngestError.__init__": "f0f02fab54d857807b9e1cdda406a702d1d355307e86e498cb616f32cdccb4c5",
@@ -32,7 +33,7 @@
       "class_methods": {}
     },
     "clinical_daily.py": {
-      "sha256": "c808742ed84f0bfb69c057d3f3e4d9e637ff71f41cb36460a65e7dae66242b79",
+      "sha256": "a5ca2e3057dd410e9e2d4283df0e1eaeaec605aff0d2581e678b3b3c13ffe836",
       "definitions": {
         "KEYS": "c20f88f1ecb3b9cd0678cb744eb16109989b9bc0ffaa1613a33187df07db2e07",
         "COLUMNS": "bea2cfd94a5d9d225d7f23f35d32f14f61b3254f023badcce9df192e62446607",
@@ -46,7 +47,7 @@
       }
     },
     "clinical_primary.py": {
-      "sha256": "6409e93585bbaebfeae9e152eb5bb4fa988cf39018bb1482434bef61245fdc4a",
+      "sha256": "afad4b6a1aab1623dc8bd35dcf5309ba175704d5880a7432b57bff8a057496a3",
       "definitions": {
         "CONTRACT": "006a8c820a0602e3aacd9df9e388e90796147c47b373a139ec41d6200ae07c46",
         "KINDS": "846600618e30887b786646286cb51cdb657bda7c2c5cfcaebd1cf17183fe9967",
@@ -54,7 +55,7 @@
         "TARGETS": "94682bfa7d39370072475f1cbda656fb0cdec7318019b6df96e7757c6624577e",
         "PrimaryContract": "1b8eda6757ad275874fa96d7385d3e3768d06b1474e9376b40f33529b1031852",
         "PrimaryPolicy": "ec1bfcde5b84d82bc94d3c0437492092a73dd3b4aeb7cee1c3d87ad936f2db76",
-        "select_materials": "b99b66ef968e8f5bed61089cf26af27468d3b4b00cab33bbf4e99de073191514"
+        "select_materials": "ed2a7f78d4d1becb0f28d106097178c617ef56c54db3712e5c73ab3b29a38af9"
       },
       "class_methods": {
         "PrimaryContract.output_columns": "472f2cd413bf15ac4582f244e312f2f267e2f44fbc728ef54d43f06524a45873",
@@ -87,6 +88,20 @@
         "MetadataContract.lifecycle_admission": "60cf946851a0d6c4bce687065ae0abff76063995b05354ccb44977a3746af74b",
         "MetadataContract.validate_lifecycle": "803b0e1a441cf66a91b111c59a5abfd703c589fbf018b957996b31f4a1f72fbd",
         "MetadataContract.material_metadata": "4c1c83ab061aa16b4dd99d12478ce679070d677ecad4bdd3ad05e17c2045cbb2"
+      }
+    },
+    "record_lifecycle.py": {
+      "sha256": "98892c719426b3daee8cf2c0166ded130a179afd7eb8c2991a13451e4fc0c284",
+      "definitions": {
+        "MODE": "6a8919f92c4ddcc0ebbd9e15006c644443360c7732d944590b84487106026b8f",
+        "REVISION": "e7232c894a8a6ead7846f5b33a325f19f328bbd27cbbeddafb382ea36ae3974b",
+        "RecordLifecycleContract": "9e37f1fbb52ba37ee48da5485a90475ab2c5b6d9d6a45fd946efadbb0af831f8",
+        "record_contracts": "7453e31477037d77ffd110af280b99abc06d0030b3510fbd1bfb7e7f587be8fa"
+      },
+      "class_methods": {
+        "RecordLifecycleContract.__post_init__": "dd1eb98762b4864065eeafff5fd9b9736f86968d84bb9ecd643562ff6961c115",
+        "RecordLifecycleContract.lifecycle_admission": "2b04a684cff23990c068fdfe4124bdf656210da23ef6c9a01e671759f8e609eb",
+        "RecordLifecycleContract.material_metadata": "a71e96bbae2d3d472f725e6d8c6e3a4ed0bc0d3cc5d21a617b816ebb8fecb309"
       }
     },
     "control/models.py": {
@@ -140,14 +155,14 @@
       "class_methods": {}
     },
     "primary_store.py": {
-      "sha256": "bb187a5b447684cddfd7bef197db5be66c2983e9e2cddb4e8283863982ac689f",
+      "sha256": "69aab31391db4be884d8bc3d09441773933af18a9e872704a9559f9e5e5e60f2",
       "definitions": {
         "SURGERY_REFERENCE_SHA": "b8e0788878c6990d8b37b92a6df98a85054b3607fa0a568e53bcbe36544cccb6",
         "cache_spec": "0de88226d4e2ea05ca751701e462cd871a07836c08f4b4466b7c975b8246b597",
         "_registered": "814383ea556112124e01709386b6af7fc04175a4c935861fbbc09632d0fb1005",
         "_target": "dfb38c2bc9714934a425417f4193d9a5e9ec7b0c8f527cda6c9a9d48e4af2885",
         "_receipt": "e7a5292a1aad554b8f6fa26643ebe6d93670104063fd5272eb61eeae169eb013",
-        "_health": "8f81db97e25f81b255f17419038afba91ce206ee88fd8755b373b10d3b3c5182",
+        "_health": "015e6ede20f1cef9855588471c67c6d4e63884294b1f4cbbf549bfc668bdb333",
         "read_in_transaction": "0735eabc647bec761ef22c6ebf247a9a4b63826479794cd076df7665aadf11c9"
       },
       "class_methods": {}
@@ -208,6 +223,12 @@
       "adaptation": null,
       "sha256": "28818319649598b3c5b9412b3fcddd853df572660b6062613d7b504daf9569e3"
     },
+    "denormalize": {
+      "source": "domain.py:denormalize",
+      "source_sha256": "0dc042da985568ce646b7567c3d614bcc21361447322c540a1ca315d98b0b692",
+      "adaptation": null,
+      "sha256": "0dc042da985568ce646b7567c3d614bcc21361447322c540a1ca315d98b0b692"
+    },
     "digest": {
       "source": "daily_materials.py:digest",
       "source_sha256": "55e798fcc4fe6a952ae6992dd930f584959353d16c01c4d1d41519639787a9be",
@@ -240,9 +261,9 @@
     },
     "select_materials": {
       "source": "clinical_primary.py:select_materials",
-      "source_sha256": "b99b66ef968e8f5bed61089cf26af27468d3b4b00cab33bbf4e99de073191514",
+      "source_sha256": "ed2a7f78d4d1becb0f28d106097178c617ef56c54db3712e5c73ab3b29a38af9",
       "adaptation": null,
-      "sha256": "b99b66ef968e8f5bed61089cf26af27468d3b4b00cab33bbf4e99de073191514"
+      "sha256": "ed2a7f78d4d1becb0f28d106097178c617ef56c54db3712e5c73ab3b29a38af9"
     },
     "metadata_document": {
       "source": "primary_metadata.py:metadata_document",
@@ -259,14 +280,26 @@
     "MetadataContract": {
       "source": "primary_metadata.py:MetadataContract",
       "source_sha256": "12469985b6e309a64953578d5189ba4731b8b10310386ee16deb6a54f92b8a78",
-      "adaptation": "裁剪类，仅保留方法 __post_init__,lifecycle_admission,native_primary_key,validate_lifecycle",
-      "sha256": "33c85d21b7ae6c32830d94f4514a7ff7f2f529898e2e6006074b67d53d209d32"
+      "adaptation": "裁剪类，仅保留方法 __post_init__,lifecycle_admission,material_metadata,native_primary_key,validate_lifecycle",
+      "sha256": "8ebc1f37ff962c453b093925e2d8a2dd48bfd2e8a7b676a8ee97a946972b5845"
     },
     "real_contracts": {
       "source": "primary_metadata.py:real_contracts",
       "source_sha256": "1d65be9b72894ba195450a8fb1ed21131995432b61129a93c94ca6d391ba223b",
       "adaptation": null,
       "sha256": "1d65be9b72894ba195450a8fb1ed21131995432b61129a93c94ca6d391ba223b"
+    },
+    "RecordLifecycleContract": {
+      "source": "record_lifecycle.py:RecordLifecycleContract",
+      "source_sha256": "9e37f1fbb52ba37ee48da5485a90475ab2c5b6d9d6a45fd946efadbb0af831f8",
+      "adaptation": "原record_lifecycle.REVISION改名LIFECYCLE_REVISION，避免覆盖metadata.REVISION",
+      "sha256": "3d457e29cd72e17eeec1a81fea9b3ccf137f64556c791ea9af0d640617b3b77c"
+    },
+    "record_contracts": {
+      "source": "record_lifecycle.py:record_contracts",
+      "source_sha256": "7453e31477037d77ffd110af280b99abc06d0030b3510fbd1bfb7e7f587be8fa",
+      "adaptation": null,
+      "sha256": "7453e31477037d77ffd110af280b99abc06d0030b3510fbd1bfb7e7f587be8fa"
     },
     "ControlError": {
       "source": "control/models.py:ControlError",
@@ -330,15 +363,20 @@
     },
     "_health": {
       "source": "primary_store.py:_health",
-      "source_sha256": "8f81db97e25f81b255f17419038afba91ce206ee88fd8755b373b10d3b3c5182",
+      "source_sha256": "015e6ede20f1cef9855588471c67c6d4e63884294b1f4cbbf549bfc668bdb333",
       "adaptation": null,
-      "sha256": "8f81db97e25f81b255f17419038afba91ce206ee88fd8755b373b10d3b3c5182"
+      "sha256": "015e6ede20f1cef9855588471c67c6d4e63884294b1f4cbbf549bfc668bdb333"
     },
     "read_in_transaction": {
       "source": "primary_store.py:read_in_transaction",
       "source_sha256": "0735eabc647bec761ef22c6ebf247a9a4b63826479794cd076df7665aadf11c9",
       "adaptation": null,
       "sha256": "0735eabc647bec761ef22c6ebf247a9a4b63826479794cd076df7665aadf11c9"
+    },
+    "contracts_for_mode": {
+      "source": "business SQLAlchemy bridge",
+      "adaptation": "新增只借连接桥",
+      "sha256": "619984fa47703a7882b1289fa4e3199d37fbd98873d05a50754d5f41da16f2fe"
     },
     "primary_objects_available": {
       "source": "business SQLAlchemy bridge",
@@ -354,124 +392,193 @@
   "json_files": {
     "accepted-manual-contract.json": "dd8c921621f39febc62590278a9a0d053309bb68e1531ba5b5c413d7dc3d3ce8",
     "clinical-primary-cache-surgery-reference.json": "10ced4c76f284def467e50cf4acb5d4d9d3b8e3422553c0d35b380dd90def145",
-    "clinical-primary-real-fields-v2.json": "c72892a31b427ad825173e29d581026510f24b4c2de43f3e9f87b02eb45c1e69"
+    "clinical-primary-real-fields-v2.json": "c72892a31b427ad825173e29d581026510f24b4c2de43f3e9f87b02eb45c1e69",
+    "SOURCE_FINGERPRINTS.json": "90f3b5fa4a112bdf95945ceae44181bfeabcd222c6eaa0570865498b8c3d9586"
   },
   "runtime_methods": {
     "IngestError.__init__": {
       "source": "domain.py:IngestError.__init__",
       "source_sha256": "f0f02fab54d857807b9e1cdda406a702d1d355307e86e498cb616f32cdccb4c5",
+      "adaptation": null,
       "sha256": "f0f02fab54d857807b9e1cdda406a702d1d355307e86e498cb616f32cdccb4c5"
     },
     "PublishSpec.qualified_name": {
       "source": "domain.py:PublishSpec.qualified_name",
       "source_sha256": "7e13cf8f752bec64580cf9c32f36c6cdadbb2730764fb791c2b1fc7a13ab6bd8",
+      "adaptation": null,
       "sha256": "7e13cf8f752bec64580cf9c32f36c6cdadbb2730764fb791c2b1fc7a13ab6bd8"
     },
     "PublishSpec.target_columns": {
       "source": "domain.py:PublishSpec.target_columns",
       "source_sha256": "3e9bedb99723d3fdcc8ef3e39698a340d9d7255496b788ac695de6b3f6db3436",
+      "adaptation": null,
       "sha256": "3e9bedb99723d3fdcc8ef3e39698a340d9d7255496b788ac695de6b3f6db3436"
     },
     "PublishSpec.source_key_fields": {
       "source": "domain.py:PublishSpec.source_key_fields",
       "source_sha256": "85362df2372acbbbcc30aa3cff4d5a0c5ff145774efc9fd52f1cb84b360712c1",
+      "adaptation": null,
       "sha256": "85362df2372acbbbcc30aa3cff4d5a0c5ff145774efc9fd52f1cb84b360712c1"
     },
     "PrimaryContract.output_columns": {
       "source": "clinical_primary.py:PrimaryContract.output_columns",
       "source_sha256": "472f2cd413bf15ac4582f244e312f2f267e2f44fbc728ef54d43f06524a45873",
+      "adaptation": null,
       "sha256": "472f2cd413bf15ac4582f244e312f2f267e2f44fbc728ef54d43f06524a45873"
     },
     "PrimaryContract.body_field": {
       "source": "clinical_primary.py:PrimaryContract.body_field",
       "source_sha256": "c6466c0f67d9d8cf9fee246f3e9cde9c18b5bec3b7c215ef4fbd80c3eed9758b",
+      "adaptation": null,
       "sha256": "c6466c0f67d9d8cf9fee246f3e9cde9c18b5bec3b7c215ef4fbd80c3eed9758b"
     },
     "PrimaryContract.__post_init__": {
       "source": "clinical_primary.py:PrimaryContract.__post_init__",
       "source_sha256": "a0f94673899a4ba8745b1bc24032573b72a5392a478ff3cfec187de47d50b4ae",
+      "adaptation": null,
       "sha256": "a0f94673899a4ba8745b1bc24032573b72a5392a478ff3cfec187de47d50b4ae"
     },
     "PrimaryContract.digest": {
       "source": "clinical_primary.py:PrimaryContract.digest",
       "source_sha256": "caa4a4f83f2935d210c56cafced93b5162b0de7e12d0cf663acdb801a1f9d3ad",
+      "adaptation": null,
       "sha256": "caa4a4f83f2935d210c56cafced93b5162b0de7e12d0cf663acdb801a1f9d3ad"
     },
     "PrimaryContract.spec": {
       "source": "clinical_primary.py:PrimaryContract.spec",
       "source_sha256": "5033085985168075779c25e272529d247eb95dc684669f654976efcdece48091",
+      "adaptation": null,
       "sha256": "5033085985168075779c25e272529d247eb95dc684669f654976efcdece48091"
     },
     "PrimaryPolicy.validate": {
       "source": "clinical_primary.py:PrimaryPolicy.validate",
       "source_sha256": "fac18cfb33e4c1d562e7feba2b19989cd6251af9cd30cf304688637743fd1927",
+      "adaptation": null,
       "sha256": "fac18cfb33e4c1d562e7feba2b19989cd6251af9cd30cf304688637743fd1927"
     },
     "PrimaryPolicy.policy_hash": {
       "source": "clinical_primary.py:PrimaryPolicy.policy_hash",
       "source_sha256": "7d535620953131c444f260eedef021ff0ec187c46e77e761b9a301100fb68442",
+      "adaptation": null,
       "sha256": "7d535620953131c444f260eedef021ff0ec187c46e77e761b9a301100fb68442"
     },
     "PrimaryPolicy.case_id": {
       "source": "clinical_primary.py:PrimaryPolicy.case_id",
       "source_sha256": "d65fee8f81e93716a093cae0167a886e9b6dcda5d2d3678fa8d95a72575b953c",
+      "adaptation": null,
       "sha256": "d65fee8f81e93716a093cae0167a886e9b6dcda5d2d3678fa8d95a72575b953c"
     },
     "PrimaryPolicy.health_case_id": {
       "source": "clinical_primary.py:PrimaryPolicy.health_case_id",
       "source_sha256": "75c29125edd47ea1dbaab2bd6c877d510046d2534a8eb4681f0ead97d23f6313",
+      "adaptation": null,
       "sha256": "75c29125edd47ea1dbaab2bd6c877d510046d2534a8eb4681f0ead97d23f6313"
     },
     "PrimaryPolicy.from_dict": {
       "source": "clinical_primary.py:PrimaryPolicy.from_dict",
       "source_sha256": "b412967fc8f88e8e3d43cff712ef5f58827f43ed10b18634ce3ae542ff1f079d",
+      "adaptation": null,
       "sha256": "b412967fc8f88e8e3d43cff712ef5f58827f43ed10b18634ce3ae542ff1f079d"
     },
     "MetadataContract.__post_init__": {
       "source": "primary_metadata.py:MetadataContract.__post_init__",
       "source_sha256": "a328251ffa2cabed3c484b3a0ae6faaa03dc716a42f7240a4e75fd471d02c097",
+      "adaptation": null,
       "sha256": "a328251ffa2cabed3c484b3a0ae6faaa03dc716a42f7240a4e75fd471d02c097"
     },
     "MetadataContract.native_primary_key": {
       "source": "primary_metadata.py:MetadataContract.native_primary_key",
       "source_sha256": "0aecf556935f9a3b17f2aceb5c29c32517934373a59ac912c0fc4f3cf7df291b",
+      "adaptation": null,
       "sha256": "0aecf556935f9a3b17f2aceb5c29c32517934373a59ac912c0fc4f3cf7df291b"
     },
     "MetadataContract.lifecycle_admission": {
       "source": "primary_metadata.py:MetadataContract.lifecycle_admission",
       "source_sha256": "60cf946851a0d6c4bce687065ae0abff76063995b05354ccb44977a3746af74b",
+      "adaptation": null,
       "sha256": "60cf946851a0d6c4bce687065ae0abff76063995b05354ccb44977a3746af74b"
     },
     "MetadataContract.validate_lifecycle": {
       "source": "primary_metadata.py:MetadataContract.validate_lifecycle",
       "source_sha256": "803b0e1a441cf66a91b111c59a5abfd703c589fbf018b957996b31f4a1f72fbd",
+      "adaptation": null,
       "sha256": "803b0e1a441cf66a91b111c59a5abfd703c589fbf018b957996b31f4a1f72fbd"
+    },
+    "MetadataContract.material_metadata": {
+      "source": "primary_metadata.py:MetadataContract.material_metadata",
+      "source_sha256": "4c1c83ab061aa16b4dd99d12478ce679070d677ecad4bdd3ad05e17c2045cbb2",
+      "adaptation": null,
+      "sha256": "4c1c83ab061aa16b4dd99d12478ce679070d677ecad4bdd3ad05e17c2045cbb2"
+    },
+    "RecordLifecycleContract.__post_init__": {
+      "source": "record_lifecycle.py:RecordLifecycleContract.__post_init__",
+      "source_sha256": "dd1eb98762b4864065eeafff5fd9b9736f86968d84bb9ecd643562ff6961c115",
+      "adaptation": null,
+      "sha256": "dd1eb98762b4864065eeafff5fd9b9736f86968d84bb9ecd643562ff6961c115"
+    },
+    "RecordLifecycleContract.lifecycle_admission": {
+      "source": "record_lifecycle.py:RecordLifecycleContract.lifecycle_admission",
+      "source_sha256": "2b04a684cff23990c068fdfe4124bdf656210da23ef6c9a01e671759f8e609eb",
+      "adaptation": null,
+      "sha256": "2b04a684cff23990c068fdfe4124bdf656210da23ef6c9a01e671759f8e609eb"
+    },
+    "RecordLifecycleContract.material_metadata": {
+      "source": "record_lifecycle.py:RecordLifecycleContract.material_metadata",
+      "source_sha256": "a71e96bbae2d3d472f725e6d8c6e3a4ed0bc0d3cc5d21a617b816ebb8fecb309",
+      "adaptation": "原record_lifecycle.REVISION改名LIFECYCLE_REVISION，避免覆盖metadata.REVISION",
+      "sha256": "15e4d467c04ea16add1114e60b97d2d7bc62bc71b18f36222ab9aa226516f300"
     },
     "ControlError.__init__": {
       "source": "control/models.py:ControlError.__init__",
       "source_sha256": "5d8ed8d319a4b7b36e17eec5053d7597eaba0fa770cc70018ef203af344ab1dd",
+      "adaptation": null,
       "sha256": "5d8ed8d319a4b7b36e17eec5053d7597eaba0fa770cc70018ef203af344ab1dd"
     },
     "Profile.interfaces": {
       "source": "control/profiles.py:Profile.interfaces",
       "source_sha256": "3369e9ab04b5990c4977738a7793094be81577f55ed1e26498d839b44b48bbbc",
+      "adaptation": null,
       "sha256": "3369e9ab04b5990c4977738a7793094be81577f55ed1e26498d839b44b48bbbc"
     },
     "ProfileCatalog.resolve_spec": {
       "source": "control/profiles.py:ProfileCatalog.resolve_spec",
       "source_sha256": "4379adc62ff8476a00d7477036829ce64e43a0eeb10785e75af908f8b2f03969",
+      "adaptation": null,
       "sha256": "4379adc62ff8476a00d7477036829ce64e43a0eeb10785e75af908f8b2f03969"
     },
     "AcceptedManualCatalog.__init__": {
       "source": "control/accepted.py:AcceptedManualCatalog.__init__",
       "source_sha256": "ae0f768316297ef6d1f5ccfcdcca958bdcf454dc617ee4a955e4b91e33a10b33",
+      "adaptation": "仅保留构造/get，构造固定 baseline；删除出院时间 overlay 和调度/同步控制方法",
       "sha256": "af1daf0199c86519a003fbf6a960e9675d5a3d598278e5007b2bd6f0f07996c1"
     },
     "AcceptedManualCatalog.get": {
       "source": "control/accepted.py:AcceptedManualCatalog.get",
       "source_sha256": "e86643009ed9b4dff879ad3fdd43564bc6419d427f5d3c1f3d1f6ad2efe63c63",
+      "adaptation": null,
       "sha256": "e86643009ed9b4dff879ad3fdd43564bc6419d427f5d3c1f3d1f6ad2efe63c63"
     }
+  },
+  "runtime_constants": {
+    "SOURCE_COMMIT": "57bae511d7bf0ed8e8d7e8176f35c9e9b127ab716c53d71c619c13b314d1f9ba",
+    "CONTRACT_DIRECTORY": "51320fa91f424c333b4a58897dba582139a5d722f0b3088633b49f9ffc25aab7",
+    "ERROR_KINDS": "28a1c676fb428098aab0491d167a106e2433275fbef1ddbeb2011002d50844ae",
+    "KEYS": "c20f88f1ecb3b9cd0678cb744eb16109989b9bc0ffaa1613a33187df07db2e07",
+    "COLUMNS": "bea2cfd94a5d9d225d7f23f35d32f14f61b3254f023badcce9df192e62446607",
+    "CONTRACT": "006a8c820a0602e3aacd9df9e388e90796147c47b373a139ec41d6200ae07c46",
+    "KINDS": "846600618e30887b786646286cb51cdb657bda7c2c5cfcaebd1cf17183fe9967",
+    "SURGERY_FIELDS": "dffb8b88605eeea7bb308f8bdd53c6e3da84de826279089bf36402d473de10de",
+    "TARGETS": "94682bfa7d39370072475f1cbda656fb0cdec7318019b6df96e7757c6624577e",
+    "REVISION": "30073717f11aaf3d3ffb92e4d067076113263686abf62c5fffeef3c87b80e053",
+    "METADATA_SHA256": "af5a1e0c8cc23f3308e02a01fb84ceca48c613802db3eaf53bf8fd31cc6de3bc",
+    "MODE": "6a8919f92c4ddcc0ebbd9e15006c644443360c7732d944590b84487106026b8f",
+    "LIFECYCLE_REVISION": "cf11820c038e1f1e89bb6b5f474a2ed40f5055f94f61f095f36e6f769a10b139",
+    "PROFILE": "1186c8fa1fca81d16d7db54acae57191cdeba23b2dcebdd58c233fd6f7cdc5af",
+    "CONTRACT_SHA": "a611c922df10c2af46b66ffa1d9072cdc1d11a828ea7f284057dc7981c1ab83d",
+    "FINANCIAL": "13b4282a13f443ae2ec16c1f4c063a3c857b18ee01c67a6c097458db9dc16468",
+    "SURGERY_REFERENCE_SHA": "b8e0788878c6990d8b37b92a6df98a85054b3607fa0a568e53bcbe36544cccb6",
+    "METADATA_REVISION": "8f5925c1a1a9e81e98f45f2543823c58f9c5b48400eac7404bc7729ee866c107",
+    "PRIMARY_REQUIRED_OBJECTS": "dfb765fe7231dad2359e997749e8605103d512585d4ceb240566034ab10a7819"
   },
   "excluded_capabilities": [
     "migration",

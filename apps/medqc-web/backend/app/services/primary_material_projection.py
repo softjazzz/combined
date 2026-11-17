@@ -26,8 +26,8 @@ def enabled():
     return os.getenv("QC_PRIMARY_FOUR_MATERIAL_ENABLED", "").strip().lower() == "true"
 
 
-def load_policy(identity):
-    """仅接受部署者显式提供的批准文件；数据库管理表不构成批准输入。"""
+def load_read_plan(identity):
+    """一次读取显式批准，绑定病例与合同；缺省仍使用旧 strict 语义。"""
     from ..database import clinical_connection as clinical
     from . import primary_material_readonly as readonly
     path = Path(os.getenv("QC_PRIMARY_FOUR_POLICY_FILE", ""))
@@ -49,12 +49,23 @@ def load_policy(identity):
                     or entry["source_binding"] != clinical.source_binding()
                     or not any(native[0] == "cache" for native in policy.native_cases)):
                 raise ValueError
-            matches.append(policy)
+            # 缺少 mode 是旧合同；显式空值不是批准，不静默降级。
+            if "lifecycle_mode" in entry and not isinstance(entry["lifecycle_mode"], str):
+                raise ValueError
+            contracts = readonly.contracts_for_mode(
+                entry.get("lifecycle_mode"), entry.get("lifecycle_approvals"),
+            )
+            matches.append((policy, contracts))
         if len(matches) != 1:
             raise ValueError
         return matches[0]
-    except (OSError, ValueError, TypeError, KeyError):
+    except (OSError, ValueError, TypeError, KeyError, readonly.IngestError):
         raise material.MaterialSnapshotError("primary_material_approved_policy_required") from None
+
+
+def load_policy(identity):
+    """旧调用者仍只取得已批准病例映射。"""
+    return load_read_plan(identity)[0]
 
 
 def read_manifest(connection, identity):
@@ -62,10 +73,10 @@ def read_manifest(connection, identity):
     from . import primary_material_readonly as readonly
     if not readonly.primary_objects_available(connection):
         return None
-    policy = load_policy(identity)
+    policy, contracts = load_read_plan(identity)
     if tuple(policy.canonical_case) != tuple(identity):
         raise material.MaterialSnapshotError("primary_material_identity_mismatch")
-    result = readonly.read_primary_in_transaction(connection, policy, readonly.real_contracts())
+    result = readonly.read_primary_in_transaction(connection, policy, contracts)
     if result.get("case_id") != policy.case_id or result.get("policy_hash") != policy.policy_hash:
         raise material.MaterialSnapshotError("primary_material_identity_mismatch")
     _index(result)
@@ -75,6 +86,7 @@ def read_manifest(connection, identity):
         "canonical_case": list(policy.canonical_case), "native_cases": [list(case) for case in policy.native_cases],
         "source_binding": clinical.source_binding(), "policy_hash": policy.policy_hash,
         "reader_source_commit": readonly.SOURCE_COMMIT,
+        "lifecycle_mode": getattr(next(iter(contracts.values())), "lifecycle_mode", "strict"),
     }}
 
 
@@ -180,6 +192,7 @@ def _row(entry, item, value, *, for_rules=True):
             "version_id", "record_identity", "source_namespace", "document_type", "native_key",
             "source_status", "record_status", "time_availability", "time_role_status", "publication",
             "source_metadata_revision", "source_metadata_sha256", "native_primary_key", "lifecycle_admission",
+            "source_lifecycle_revision",
         ) if key in entry}
     row.update({
         "source_version_key": "::".join((kind, entry["record_identity"], entry["version_id"])),
@@ -238,7 +251,10 @@ def display_scope(value):
         held_count = sum(item["document_type"] == kind and item["selected_version"] is None for item in value["items"])
         kinds[kind] = {"status": scope_value["status"].upper(), "selected_count": selected_count,
                        "held_count": held_count, "can_judge_clinical_absence": False,
-                       "notice": _SCOPE_NOTICE}
+                       "coverage": deepcopy(scope_value["coverage"]),
+                       "notice": ("存在已知HOLD未投递记录，不表示全量已发布；" + _SCOPE_NOTICE
+                                  if scope_value["coverage"].get("coverage") == "OBSERVED_WITH_HELD_UNPUBLISHED"
+                                  else _SCOPE_NOTICE)}
     return {"contract": CONTRACT, "selection_id": value.get("selection_id"), "policy_hash": value.get("policy_hash"),
             "notice": "已按批准清单选取整份版本；来源覆盖与时间语义待核", "kinds": kinds}
 

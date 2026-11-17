@@ -24,6 +24,9 @@ def main():
         "test_latest_clinical_block_keeps_reliable_cache_and_full_alternatives",
         "test_missing_optional_metadata_keeps_base_transaction_and_denial_is_not_empty",
         "test_conflict_limits_only_related_body_and_keeps_display_versions",
+        "test_record_lifecycle_29_usable_and_held_full_business_chain",
+        "test_latest_hold_pending_failure_and_restore_keep_frozen_business_copy",
+        "test_record_lifecycle_stale_version_and_denial_never_become_empty_success",
     ))
     args = parser.parse_args()
     if not 55000 <= args.port <= 55999:

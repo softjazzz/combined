@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import ast
+import builtins
 import copy
 import hashlib
 import importlib
 import json
+import symtable
 from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +15,60 @@ from types import SimpleNamespace
 import pytest
 
 from tests.fixtures.primary_material_fixtures import policy, synthetic_material, selection_fixture
+
+
+def test_explicit_mode_factory_keeps_legacy_contract_digest_and_adds_record_mode():
+    m = module()
+    legacy = m.contracts_for_mode()
+    assert [c.digest for c in legacy.values()] == [
+        "6efd230d7a9c007949d026d8ed77a593ada71206bc9d24ace8e911f29128f0ce",
+        "ccef831c41f6db9981f9cd1fa82c41a598f343033c16b575868f131068297bfb",
+        "825a163b88375ed5b0a3178622c52dd767fa5c0d196c2b512986e0b5b7c6f539",
+        "1bbb97936000418e7baf0c5349701504dc004ed083310729f9c7c12ead8e67cd",
+    ]
+    records = m.contracts_for_mode("record-hold-v1", {
+        "surgery_record": [["is_deleted", '"0"', "USABLE", "synthetic-only"]],
+    })
+    assert all(type(c) is m.MetadataContract and "lifecycle_mode" not in asdict(c)
+               for c in legacy.values())
+    assert all(type(c) is m.RecordLifecycleContract for c in records.values())
+    assert all(c.lifecycle_mode == m.MODE for c in records.values())
+    assert all(c.digest != legacy[k].digest for k, c in records.items())
+    assert sum(len(c.columns) for c in records.values()) == 199
+    c = records["surgery_record"]
+    native = dict.fromkeys(c.columns)
+    native.update(is_deleted="0", record_status=None)
+    metadata = c.material_metadata(native)
+    assert metadata["source_metadata_revision"] == m.METADATA_REVISION
+    assert metadata["source_lifecycle_revision"] == m.LIFECYCLE_REVISION
+    assert metadata["lifecycle_admission"]["action"] == "USABLE"
+    native["record_status"] = ""
+    assert c.material_metadata(native)["lifecycle_admission"]["action"] == "HOLD"
+    with pytest.raises(m.IngestError, match="clinical_is_deleted_semantics_unconfirmed"):
+        legacy["surgery_record"].material_metadata(native)
+
+
+@pytest.mark.parametrize("mode", ["", "strict", "unknown", False, 1])
+def test_mode_factory_rejects_unrecognized_mode(mode):
+    m = module()
+    with pytest.raises(m.IngestError, match="primary_lifecycle_mode"):
+        m.contracts_for_mode(mode)
+
+
+@pytest.mark.parametrize("approvals", [[], {"unknown": []}, {"surgery_record": "bad"},
+                                      {"surgery_record": [["is_deleted", '"0"', "USABLE"]]}])
+def test_mode_factory_rejects_approval_shape(approvals):
+    m = module()
+    with pytest.raises(m.IngestError, match="primary_lifecycle_approvals"):
+        m.contracts_for_mode("record-hold-v1", approvals)
+
+
+def test_mode_factory_delegates_approval_semantics_to_metadata_contract():
+    m = module()
+    with pytest.raises(m.IngestError, match="clinical_lifecycle_approval_native_type"):
+        m.contracts_for_mode("record-hold-v1", {
+            "surgery_record": [["is_deleted", "0", "USABLE", "synthetic-only"]],
+        })
 
 
 def module():
@@ -48,7 +104,9 @@ class Cursor:
         elif "primary_manifest" in sql:
             self.rows = [(copy.deepcopy(self.db.manifest),)] if self.db.manifest else []
         elif "primary_coverage" in sql:
-            self.rows = [({"publication_health": {"state": "READY_FOR_INSPECTION"}},)]
+            self.rows = [(copy.deepcopy(self.db.coverage.get(params[0], {
+                "publication_health": {"state": "READY_FOR_INSPECTION"},
+            })),)]
         elif "sync_delivery.receipt" in sql:
             ref = next(v["publication"] for v in self.db.manifest["materials"]
                        if v["publication"]["interface"] == params[0]
@@ -88,6 +146,7 @@ class Database:
         self.failure = None
         self.tables = {}
         self.extra_keys = {}
+        self.coverage = {}
 
     def cursor(self):
         return Cursor(self)
@@ -116,7 +175,7 @@ def database_with_materials(m, p, materials):
 
 def test_fixed_contracts_and_dependencies():
     m = module()
-    assert m.SOURCE_COMMIT == "cb437e611e802c5117f212c1e9743d2748ec4127"
+    assert m.SOURCE_COMMIT == "913421639fe3cfb5459909973503f87e14b4802d"
     assert m.CONTRACT == "clinical-primary-four-v1"
     assert m.METADATA_REVISION == "clinical-primary-real-fields-v2"
     contracts = m.real_contracts()
@@ -286,6 +345,11 @@ def test_fingerprints_cover_runtime_definitions_and_fixed_json():
     source = root.read_text(encoding="utf-8")
     manifest = json.loads((m.CONTRACT_DIRECTORY / "READONLY_FINGERPRINTS.json").read_text(encoding="utf-8"))
     assert manifest["source_commit"] == m.SOURCE_COMMIT
+    constants = {node.targets[0].id: node for node in ast.parse(source).body
+                 if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
+    assert set(constants) == set(manifest["runtime_constants"])
+    for name, node in constants.items():
+        assert hashlib.sha256(ast.get_source_segment(source, node).encode()).hexdigest() == manifest["runtime_constants"][name]
     definitions = {node.name: node for node in ast.parse(source).body
                    if isinstance(node, (ast.ClassDef, ast.FunctionDef))}
     assert set(definitions) == set(manifest["runtime_definitions"])
@@ -298,16 +362,69 @@ def test_fingerprints_cover_runtime_definitions_and_fixed_json():
                     info = manifest["runtime_methods"][node.name + "." + member.name]
                     actual = hashlib.sha256(ast.get_source_segment(source, member).encode()).hexdigest()
                     assert actual == info["sha256"]
-                    if node.name != "AcceptedManualCatalog" or member.name != "__init__":
+                    if (node.name, member.name) not in {
+                        ("AcceptedManualCatalog", "__init__"),
+                        ("RecordLifecycleContract", "material_metadata"),
+                    }:
                         assert actual == info["source_sha256"]
+                    elif node.name == "RecordLifecycleContract":
+                        original = ast.get_source_segment(source, member).replace("LIFECYCLE_REVISION", "REVISION")
+                        assert hashlib.sha256(original.encode()).hexdigest() == info["source_sha256"]
     for name, expected in manifest["json_files"].items():
         assert hashlib.sha256((m.CONTRACT_DIRECTORY / name).read_bytes()).hexdigest() == expected
     for name in ("PrimaryContract", "MetadataContract", "ClinicalContract", "AcceptedManualCatalog"):
         assert manifest["runtime_definitions"][name]["adaptation"]
     assert manifest["runtime_definitions"]["read_in_transaction"]["sha256"] == "0735eabc647bec761ef22c6ebf247a9a4b63826479794cd076df7665aadf11c9"
-    assert manifest["runtime_definitions"]["select_materials"]["sha256"] == "b99b66ef968e8f5bed61089cf26af27468d3b4b00cab33bbf4e99de073191514"
+    assert manifest["runtime_definitions"]["select_materials"]["sha256"] == "ed2a7f78d4d1becb0f28d106097178c617ef56c54db3712e5c73ab3b29a38af9"
+    assert manifest["runtime_definitions"]["_health"]["sha256"] == "015e6ede20f1cef9855588471c67c6d4e63884294b1f4cbbf549bfc668bdb333"
     assert "PrimaryContract.refresh_publication" not in manifest["runtime_methods"]
     assert "MetadataContract.validate_native_metadata" not in manifest["runtime_methods"]
     assert "PrimaryContract.refresh_publication" in manifest["source_files"]["clinical_primary.py"]["class_methods"]
     assert "MetadataContract.validate_native_metadata" in manifest["source_files"]["primary_metadata.py"]["class_methods"]
     assert not any(word in source for word in ("import medqc_ingest", "frozen_replay", "def poll(", "def extract("))
+
+
+def test_dependency_closure_has_no_unresolved_global_or_external_runtime_import():
+    m = module()
+    source = Path(m.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            assert node.level == 0 and node.module.split(".")[0] in {
+                "__future__", "collections", "dataclasses", "datetime", "decimal", "enum", "pathlib", "types", "typing",
+            }
+        elif isinstance(node, ast.Import):
+            assert all(n.name in {"base64", "hashlib", "json", "math", "re"} for n in node.names)
+    table = symtable.symtable(source, m.__file__, "exec")
+    available = {s.get_name() for s in table.get_symbols() if s.is_assigned() or s.is_imported()}
+    available |= set(vars(builtins)) | {"__file__"}
+    pending = [table]
+    while pending:
+        scope = pending.pop()
+        assert not {s.get_name() for s in scope.get_symbols()
+                    if s.is_global() and s.is_referenced()} - available
+        pending.extend(scope.get_children())
+
+
+@pytest.mark.parametrize("capture_state", ["PENDING", "COMPLETE"])
+def test_latest_coverage_protects_same_document_cache_without_transaction_ownership(capture_state):
+    m = module()
+    p = policy(m)
+    kind = "surgery_record"
+    same = synthetic_material(m, kind, "cache", document_id="held-document")
+    independent = synthetic_material(m, kind, "cache", document_id="independent-document")
+    db = database_with_materials(m, p, [same, independent])
+    db.coverage[p.health_case_id(kind)] = {
+        "publication_health": {"state": "READY_FOR_INSPECTION", "held_unpublished": True},
+        "record_lifecycle": {"mode": "record-hold-v1", "capture_state": capture_state,
+                             "held_document_ids": ["held-document"], "evidence_hash": "synthetic-only"},
+    }
+    result = m.read_primary_in_transaction(sqlalchemy_connection(db), p, m.record_contracts())
+    selected = {item["selected_version"] for item in result["items"] if item["selected_version"]}
+    assert same["version_id"] not in selected
+    assert (independent["version_id"] in selected) is (capture_state == "COMPLETE")
+    assert result["coverage"][kind]["coverage"] == "OBSERVED_WITH_HELD_UNPUBLISHED"
+    assert result["coverage"][kind]["record_lifecycle"]["capture_state"] == capture_state
+    assert db.cursors_closed == 1
+    assert all(sql.startswith("SELECT ") for sql, _ in db.statements)
+    assert not any("primary_attempt" in sql or "raw_" in sql or "ingest" in sql for sql, _ in db.statements)

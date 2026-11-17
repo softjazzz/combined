@@ -1,4 +1,4 @@
-"""固定 cb437e611 的四类合同只读定义闭包。
+"""固定 913421639 的四类合同只读定义闭包。
 
 由 scripts/build_primary_readonly_closure.py 提取；来源及裁剪见固定指纹清单。
 只借调用者的独立 CDM 只读 RR 连接；不携带同步连接工厂或写入口。
@@ -11,7 +11,7 @@ import json
 import math
 import re
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -19,7 +19,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-SOURCE_COMMIT = "cb437e611e802c5117f212c1e9743d2748ec4127"
+SOURCE_COMMIT = "913421639fe3cfb5459909973503f87e14b4802d"
 CONTRACT_DIRECTORY = Path(__file__).resolve().parents[1] / "data/clinical_primary_contracts"
 
 
@@ -171,6 +171,19 @@ def normalize(value: Any) -> Any:
     if isinstance(value, date):
         return {"$type": "date", "iso": value.isoformat()}
     return {"$type": "str", "text": str(value)}
+
+
+# 固定源：domain.py:denormalize
+def denormalize(value: Any) -> Any:
+    """仅解码发布合同允许的标量；二进制值拒绝隐式发布。"""
+    if not isinstance(value, dict) or "$type" not in value:
+        return value
+    kind = value.get("$type")
+    if kind in {"decimal", "date", "datetime", "str"}:
+        return value.get("text") if kind in {"decimal", "str"} else value.get("iso")
+    if kind == "float":
+        raise IngestError(ErrorKind.PUBLISH_CONTRACT, "non_finite_publish_value")
+    raise IngestError(ErrorKind.PUBLISH_CONTRACT, "unsupported_publish_value")
 
 
 # 固定源：daily_materials.py:digest
@@ -415,11 +428,38 @@ def select_materials(
     statuses = {(s, v): a for s, v, a in policy.status_rules}
     for key, group in sorted(groups.items()):
         kind = key[0]
+        record_state = health.get(kind, {}).get("record_lifecycle", {})
+        held_ids = (
+            set(record_state.get("held_document_ids", []))
+            if record_state.get("mode") == "record-hold-v1"
+            else set()
+        )
+        pending = (
+            record_state.get("mode") == "record-hold-v1"
+            and record_state.get("capture_state") == "PENDING"
+        )
+        protected = any(
+            v["source_namespace"] == "clinical"
+            and v.get("lifecycle_admission", {}).get("mode") == "record-hold-v1"
+            and (
+                v.get("lifecycle_admission", {}).get("action") == "HOLD"
+                or v.get("publication_stale")
+                or statuses.get(("clinical", v["source_status"])) != "USABLE"
+                or not policy.lifecycle_null_approved
+            )
+            for v in group
+        )
         reasons: dict[str, list[str]] = {}
         usable = []
         for value in group:
             issues = []
             source = value["source_namespace"]
+            if (pending or protected or value["native_key"][3] in held_ids) and (
+                source == "clinical"
+                or kind in policy.shared_document_ids
+                and kind in policy.approved_types
+            ):
+                issues.append("DOCUMENT_LIFECYCLE_HELD_OR_STALE")
             if value.get("publication_stale"):
                 issues.append("PUBLICATION_STALE")
             if source == "clinical" and kind not in policy.approved_types:
@@ -586,6 +626,43 @@ class MetadataContract(PrimaryContract):
     def validate_lifecycle(self, original: dict[str, Any]) -> None:
         self.lifecycle_admission(original)
 
+    def material_metadata(self, native: dict[str, Any]) -> dict[str, Any]:
+        meta = json.loads(self.metadata_json)
+        times = {}
+        for column in meta["columns"]:
+            if not column["formatted_type"].startswith(("timestamp", "date")):
+                continue
+            name = column["name"]
+            value = denormalize(native[name])
+            if isinstance(value, (datetime, date)):
+                value = value.isoformat()
+            require(value is None or isinstance(value, str), "clinical_source_time_type")
+            times[name] = {
+                "value": value,
+                "pg_type": column["formatted_type"],
+                "comment": column["comment"],
+                "role_evidence": "COMMENT_CONFIRMED" if column["comment"] else "UNCONFIRMED",
+                "business_semantics_approved": False,
+            }
+        original = {"columns": self.columns, "values": [native[n] for n in self.columns]}
+        return {
+            "source_metadata_revision": REVISION,
+            "source_metadata_sha256": METADATA_SHA256,
+            "native_primary_key": {k: denormalize(native[k]) for k in self.native_primary_key},
+            "source_times": times,
+            "time_role_status": dict.fromkeys(
+                (
+                    "record_time",
+                    "submit_time",
+                    "modified_time",
+                    "surgery_begin_time",
+                    "surgery_end_time",
+                ),
+                "UNCONFIRMED",
+            ),
+            "lifecycle_admission": self.lifecycle_admission(original),
+        }
+
 
 # 固定源：primary_metadata.py:real_contracts
 def real_contracts() -> dict[str, MetadataContract]:
@@ -599,6 +676,70 @@ def real_contracts() -> dict[str, MetadataContract]:
         )
         for kind in KINDS
     }
+
+
+# 固定源：record_lifecycle.py:MODE
+MODE = "record-hold-v1"
+
+
+# 固定源：record_lifecycle.py:REVISION
+LIFECYCLE_REVISION = "clinical-primary-record-lifecycle-v1"
+
+
+# 固定源：record_lifecycle.py:RecordLifecycleContract
+@dataclass(frozen=True)
+class RecordLifecycleContract(MetadataContract):
+    lifecycle_mode: str = MODE
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        require(self.lifecycle_mode == MODE, "clinical_record_lifecycle_mode")
+
+    def lifecycle_admission(self, original: dict[str, Any]) -> dict[str, Any]:
+        require(
+            original.get("columns") == list(self.columns)
+            or original.get("columns") == self.columns,
+            "clinical_record_status_evidence_missing",
+        )
+        require(
+            isinstance(original.get("values"), list)
+            and len(original["values"]) == len(self.columns),
+            "clinical_record_status_evidence_missing",
+        )
+        native = dict(zip(self.columns, original["values"], strict=True))
+        value, status = native["is_deleted"], native["record_status"]
+        matched = [
+            (action, proof)
+            for field, encoded, action, proof in self.lifecycle_approvals
+            if field == "is_deleted" and type(value) is str and encoded == canonical_json(value)
+        ]
+        reasons = []
+        if status is not None:
+            # 包括删除、撤回、空串及未知值；仅作保守HOLD，不推断源端临床含义。
+            reasons.append("RECORD_STATUS_NON_NULL_HELD")
+        if type(value) is not str or value not in {"0", "1"}:
+            reasons.append("IS_DELETED_NATIVE_TYPE_UNCONFIRMED")
+        elif not matched:
+            reasons.append("IS_DELETED_SEMANTICS_UNCONFIRMED")
+        elif matched[0][0] == "HOLD":
+            reasons.append("IS_DELETED_APPROVED_HOLD")
+        return {
+            "mode": MODE,
+            "field": "is_deleted",
+            "raw_value": value,
+            "record_status": status,
+            "action": "HOLD" if reasons else "USABLE",
+            "evidence": matched[0][1] if matched else None,
+            "reasons": reasons,
+        }
+
+    def material_metadata(self, native: dict[str, Any]) -> dict[str, Any]:
+        return {**super().material_metadata(native), "source_lifecycle_revision": LIFECYCLE_REVISION}
+
+
+# 固定源：record_lifecycle.py:record_contracts
+def record_contracts() -> dict[str, RecordLifecycleContract]:
+    return {kind: RecordLifecycleContract(**asdict(c)) for kind, c in real_contracts().items()}
 
 
 # 固定源：control/models.py:ControlError
@@ -819,10 +960,15 @@ def _health(q: Any, policy: PrimaryPolicy, kind: str) -> dict[str, Any]:
         "state": "READY" if managed.get("state") == "READY_FOR_INSPECTION" else "BLOCKED",
         "token": managed.get("token"),
         "evidence": value,
-        "coverage": "OBSERVED_PUBLISHED"
+        "coverage": (
+            "OBSERVED_WITH_HELD_UNPUBLISHED"
+            if managed.get("held_unpublished")
+            else "OBSERVED_PUBLISHED"
+        )
         if managed.get("state") == "READY_FOR_INSPECTION"
         else "UNCONFIRMED",
         "clinical_absence_confirmed": False,
+        **({"record_lifecycle": value["record_lifecycle"]} if "record_lifecycle" in value else {}),
     }
 
 
@@ -918,6 +1064,26 @@ def read_in_transaction(
 
 
 METADATA_REVISION = REVISION
+
+def contracts_for_mode(
+    lifecycle_mode: str | None = None,
+    lifecycle_approvals: dict[str, list | tuple] | None = None,
+) -> dict[str, MetadataContract]:
+    """显式选合同；缺省保留旧strict，审批仅用于固定四类并交原合同校验。"""
+    require(lifecycle_mode is None or lifecycle_mode == MODE, "primary_lifecycle_mode")
+    approvals = {} if lifecycle_approvals is None else lifecycle_approvals
+    require(isinstance(approvals, dict) and set(approvals) <= set(KINDS),
+            "primary_lifecycle_approvals")
+    for rows in approvals.values():
+        require(isinstance(rows, (list, tuple)) and all(
+            isinstance(row, (list, tuple)) and len(row) == 4
+            and all(isinstance(value, str) for value in row) for row in rows
+        ), "primary_lifecycle_approvals")
+    contracts = real_contracts() if lifecycle_mode is None else record_contracts()
+    return {kind: replace(contract, lifecycle_approvals=tuple(
+        tuple(row) for row in approvals.get(kind, ())
+    )) for kind, contract in contracts.items()}
+
 
 PRIMARY_REQUIRED_OBJECTS = (
     "sync_material.primary_policy",
