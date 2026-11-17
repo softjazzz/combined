@@ -685,17 +685,18 @@ def _is_effective_physician_change_order(row: Mapping[str, Any]) -> bool:
     text = " ".join(_clean(row.get(field)) for field in ("order_name", "record_content"))
     if not text.strip():
         text = _clean(row.get("order_type"))
-    # 情态覆盖局部修饰语；紧邻动作的“已/现”将实际变更与前置原因划开。
-    pending_action = re.compile(
-        r"(?:拟|计划|准备|考虑|建议|待|暂缓|未|不|取消|撤销|作废)"
-        r"(?:(?!(?:已(?:经)?|现(?:已|行)?)\s*$).)*$"
-    )
+    # 按局部情态先后区分否定原因与实际变更；后续否定/计划优先于先前肯定。
+    pending_action = re.compile(r"拟|计划|准备|考虑|建议|待|暂缓|未|不|取消|撤销|作废")
+    # “已”后允许动作修饰；发现/出现等复合词尾字不属于独立现行事实。
+    completed_action = re.compile(r"已经?|(?<![发出体实呈表再显])现(?:行)?\s*$")
     history = re.compile(r"既往|此前|曾经|曾")
     current_scope = re.compile(r"本次|此次|今日|目前|现在|现")
     for clause in re.split(r"[，,。；;\n]", text):
         for match in _PHYSICIAN_CHANGE_ORDER_PATTERN.finditer(clause):
             prefix = clause[:match.start()]
-            if pending_action.search(prefix):
+            pending = tuple(pending_action.finditer(prefix))
+            completed = tuple(completed_action.finditer(prefix))
+            if pending and (not completed or pending[-1].start() > completed[-1].start()):
                 continue
             histories = tuple(history.finditer(prefix))
             currents = tuple(current_scope.finditer(prefix))

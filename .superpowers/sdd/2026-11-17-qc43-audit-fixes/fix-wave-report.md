@@ -80,3 +80,25 @@ python -B scripts/run_pr8_offline_tests.py tests/unit/test_qc43_review_regressio
 输出：`35 passed, 1 warning in 2.05s`，退出码 0；包括上一波 R2/R3 肯定对照、真实未/拟/取消、纯历史保护和本次 N1/N2。仅既有 `app/core/settings.py:59` 的 Pydantic 弃用警告及数据库未配置提示。没有真实数据、数据库操作、模型请求、质控运行、全量测试或新代理。
 
 根目录 `git diff --check` 无输出、退出码 0；本次四个变更文件的严格 UTF-8 解码、无 BOM、无 CR、LF 结尾检查输出 `UTF-8/no-BOM/LF: 4 files passed`。局部明确完成谓词是有限合同，复杂嵌套和跨句指代仍未验证；不得据此推导真实临床效果或整体医学验收结论。
+
+## 2026-11-17 C1/C2 局部情态顺序收尾
+
+基线：`4525234be1c5105eacc54af63d72ed24fbeec69e`。按 `final-closeout-review.md` 纳入 C1 两项直接回归及根协调明确授权的 C2。复用临时反例 `C:/Users/Coldplay/AppData/Local/Temp/test_qc43_closeout_direct_regression.py` 已记录的 RED：C1 `2 failed, 1 warning in 8.40s`，C2 `1 failed, 1 warning in 8.31s`；本轮将这些字面反例并入已有测试集合，不重复运行临时文件。
+
+仍仅修改两个函数内的情态识别：分别定位否定/拟/取消与明确完成标志，比较最后位置。`已/已经` 之后可以出现动作修饰；后来的未/拟/计划/取消覆盖早先肯定。单字“现”只接受紧邻目标动作的现行形式，并排除“发现/出现/体现/实现/呈现/表现/再现/显现”复合词尾字；这些是词形消歧，不是电话/完成等动作修饰白名单。历史判断、状态门禁、F3及其他生产逻辑未改，没有引入共享语言解析框架。
+
+三类相互区分的合成证据：
+
+- 否定原因后已发生：`因患者不愿继续住院已电话请示上级医师` 命中自动出院路径；`因原医师不在岗已完成更换经治医师` 触发实际变更并按成熟缺交接记录返回不合规。
+- 肯定后又否定/计划：`已知尚未正式请示上级医师`、`已计划明日请示上级医师` 均拒绝自动出院路径；`已计划明日更换经治医师`、`已取消更换经治医师` 均不触发实际变更。
+- 否定观察动词：`未发现请示上级医师` 拒绝自动出院路径；`未发现更换经治医师` 经正式医师交接判定返回不适用。没有把“发现”的末字当现行事实。
+
+在 `apps/medqc-web/backend` 执行：
+
+```powershell
+python -B scripts/run_pr8_offline_tests.py tests/unit/test_qc43_review_regressions.py::test_automatic_discharge_action_scope tests/unit/test_qc43_review_regressions.py::test_automatic_discharge_requires_current_signature tests/unit/test_qc43_review_regressions.py::test_automatic_discharge_actual_executor tests/unit/test_qc43_review_regressions.py::test_physician_change_action_scope tests/unit/test_qc43_deterministic_regressions.py::test_automatic_discharge_requires_affirmative_consult tests/unit/test_qc43_deterministic_regressions.py::test_cancelled_or_planned_physician_change_is_not_an_actual_event tests/unit/test_qc43_extended_regressions.py::test_discharge_approval_empty_window_body_is_gap tests/unit/test_luxian_0609_physician_handoff.py::test_071_explicit_change_with_complete_empty_handoff_is_non_compliant
+```
+
+输出：`43 passed, 1 warning in 1.94s`，退出码 0；包含 N1/N2、原 R2/R3、取消状态与纯历史等上一轮保护。唯一警告仍为既有 Pydantic 弃用提醒。F3 没有改动或重跑；没有数据库操作、真实材料、模型、质控、全量测试或新代理。根目录 `git diff --check` 通过，四个变更文件 UTF-8/无 BOM/LF 检查通过。
+
+局部情态顺序不是完整语法树；本次没有验证嵌套引述、否定观察句内部再嵌入另一个已发生谓词、跨句指代或真实临床效果。这些限制不改变本节已列明反例的通过结论，也不构成43项整体医学验收结论。

@@ -28,9 +28,13 @@ async def test_follow_up_denial_scope(body, expected):
 
 @pytest.mark.parametrize("action,expected", [
     ("因患者不愿继续住院已请示上级医师", "automatic_discharge"),
+    ("因患者不愿继续住院已电话请示上级医师", "automatic_discharge"),
     ("因患者未同意继续住院现已请示上级医师", "automatic_discharge"),
     ("未能及时请示上级医师", None),
     ("尚未正式请示上级医师", None),
+    ("已知尚未正式请示上级医师", None),
+    ("已计划明日请示上级医师", None),
+    ("未发现请示上级医师", None),
     ("拟于明日请示上级医师", None),
     ("拟行请示上级医师", None),
     ("取消请示上级医师", None),
@@ -53,7 +57,11 @@ def test_automatic_discharge_requires_current_signature(signed):
 @pytest.mark.parametrize("name,status,expected", [
     ("因原医师未到岗现更换经治医师", "执行", "non_compliant"),
     ("因原医师不在岗已更换经治医师", "执行", "non_compliant"),
+    ("因原医师不在岗已完成更换经治医师", "执行", "non_compliant"),
     ("未更换经治医师", "执行", "not_applicable"),
+    ("未发现更换经治医师", "执行", "not_applicable"),
+    ("已计划明日更换经治医师", "执行", "not_applicable"),
+    ("已取消更换经治医师", "执行", "not_applicable"),
     ("拟于明日更换经治医师", "执行", "not_applicable"),
     ("拟明日更换经治医师", "执行", "not_applicable"),
     ("拟行更换经治医师", "执行", "not_applicable"),

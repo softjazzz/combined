@@ -316,17 +316,18 @@ def _discharge_approval_path(
 
 def _affirmative_discharge_clause(text: str, pattern: re.Pattern[str]) -> bool:
     """只接受同分句已发生事实，否定、计划及既往叙述不能证明本次已完成。"""
-    # 情态覆盖局部修饰语，仅由紧邻动作的明确“已/现”完成谓词划开作用域。
-    pending_action = re.compile(
-        r"(?:未|无|不|拒绝|拟|计划|准备|待|取消|撤销)"
-        r"(?:(?!(?:已(?:经)?|现(?:已|行)?)\s*$).)*$"
-    )
+    # 比较局部情态的先后，允许“已”后有方式修饰，后续否定/计划仍覆盖肯定。
+    pending_action = re.compile(r"未|无|不|拒绝|拟|计划|准备|待|取消|撤销")
+    # “现”只接受动作前的现行表达，不将发现/出现等复合词尾字视为时态。
+    completed_action = re.compile(r"已经?|(?<![发出体实呈表再显])现(?:行)?\s*$")
     history = re.compile(r"既往|此前|曾经|曾")
     current_scope = re.compile(r"本次|此次|今日|目前|现在|现")
     for clause in re.split(r"[，,。；;\n]|但是|但|然而|不过", text):
         for match in pattern.finditer(clause):
             prefix = clause[:match.start()]
-            if pending_action.search(prefix):
+            pending = tuple(pending_action.finditer(prefix))
+            completed = tuple(completed_action.finditer(prefix))
+            if pending and (not completed or pending[-1].start() > completed[-1].start()):
                 continue
             histories = tuple(history.finditer(prefix))
             currents = tuple(current_scope.finditer(prefix))
