@@ -1906,19 +1906,22 @@ def _is_future_discharge_follow_up_clause(clause: str) -> bool:
     if (_DISCHARGE_PLAN_CONDITIONAL_PATTERN.search(clause)
             or not _DISCHARGE_PLAN_FUTURE_PATTERN.search(clause)):
         return False
-    negative = re.compile(
-        r"(?:未制定|未安排|未建立|尚未制定|暂未安排|没有|暂无|未予|无需|不需|不再|取消|拒绝|不建议|未|无|不)"
-        r"(?:出院后|后续|定期|门诊|进行|制定|安排|的|任何|相关)*\s*(?:随访|复查|复诊)"
-        r"|(?:随访|复查|复诊)(?:计划|安排)?(?:尚未|未|没有|暂无|取消)"
+    # 转折开始新谓词域；并列的“及/和”继续继承同一否定。
+    scope_boundary = re.compile(r"[，,]|但是|但|然而|不过|而")
+    negative_prefix = re.compile(
+        r"(?:未|没有|暂无|无|不|取消|拒绝)"
+        # 允许专科、疾病、频率等宾语修饰，不逐项枚举；不跨独立动作。
+        r"(?:(?!已|现已|现行|仍|住院|请示|签署).)*$"
     )
+    negative_suffix = re.compile(r"^\s*(?:计划|安排)?(?:尚未|未|没有|暂无|取消)")
     history = re.compile(r"既往|此前|曾经|曾|入院后|住院期间|住院中|住院后|本次住院|已完成|已结束")
     future_scope = re.compile(r"出院后|离院后|后续|下次")
     for follow_up in _DISCHARGE_PLAN_FOLLOW_UP_PATTERN.finditer(clause):
-        # 否定只约束所在逗号分句，避免“暂不化疗，定期复查”误伤有效随访。
-        start = max(clause.rfind("，", 0, follow_up.start()), clause.rfind(",", 0, follow_up.start())) + 1
-        ends = [index for mark in ("，", ",") if (index := clause.find(mark, follow_up.end())) >= 0]
-        segment = clause[start:min(ends) if ends else len(clause)]
-        if negative.search(segment):
+        boundaries = tuple(scope_boundary.finditer(clause))
+        start = max((item.end() for item in boundaries if item.end() <= follow_up.start()), default=0)
+        end = min((item.start() for item in boundaries if item.start() >= follow_up.end()), default=len(clause))
+        if (negative_prefix.search(clause[start:follow_up.start()])
+                or negative_suffix.search(clause[follow_up.end():end])):
             continue
         prefix = clause[:follow_up.start()]
         histories = [item.start() for item in history.finditer(prefix)]

@@ -316,10 +316,23 @@ def _discharge_approval_path(
 
 def _affirmative_discharge_clause(text: str, pattern: re.Pattern[str]) -> bool:
     """只接受同分句已发生事实，否定、计划及既往叙述不能证明本次已完成。"""
-    for clause in re.split(r"[，,。；;\n]", text):
+    # 情态必须紧邻目标动作；原因中的“不愿住院”不约束后面的“已请示”。
+    pending_action = re.compile(
+        r"(?:未|无|不|拒绝|拟|计划|准备|待|取消|撤销)"
+        r"(?:能|予|行|了|曾|及时|立即|继续|进行|完成|再|要|需|需要|\s|于(?:今日|明日|明天|次日|出院前|稍后))*$"
+    )
+    history = re.compile(r"既往|此前|曾经|曾")
+    current_scope = re.compile(r"本次|此次|今日|目前|现在|现")
+    for clause in re.split(r"[，,。；;\n]|但是|但|然而|不过", text):
         for match in pattern.finditer(clause):
-            if not re.search(r"未|无|不|拒绝|拟|计划|准备|待|既往|曾经", clause[:match.start()]):
-                return True
+            prefix = clause[:match.start()]
+            if pending_action.search(prefix):
+                continue
+            histories = tuple(history.finditer(prefix))
+            currents = tuple(current_scope.finditer(prefix))
+            if histories and (not currents or currents[-1].start() < histories[-1].start()):
+                continue
+            return True
     return False
 
 
