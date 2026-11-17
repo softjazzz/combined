@@ -8,7 +8,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.engine import make_url
 
-from tests.fixtures.primary_material_fixtures import selection_fixture, synthetic_material
+from tests.fixtures.primary_material_fixtures import lifecycle_fixture, selection_fixture, synthetic_material
 
 
 pytestmark = pytest.mark.skipif(
@@ -101,7 +101,7 @@ def _schema(connection, fixture):
 
 
 @pytest.fixture
-def owned(monkeypatch, tmp_path):
+def owned(monkeypatch, tmp_path, request):
     url = make_url(os.environ["PRIMARY_MATERIAL_PG_TEST_URL"])
     assert url.host == "127.0.0.1" and url.port == int(os.environ["PRIMARY_MATERIAL_PG_TEST_PORT"])
     assert re.fullmatch(r"delivery_cdm_[a-f0-9]{12}", url.database or "")
@@ -109,12 +109,14 @@ def owned(monkeypatch, tmp_path):
     with admin.connect() as connection:
         assert connection.exec_driver_sql("SHOW server_version_num").scalar().startswith("16")
         assert connection.exec_driver_sql("SHOW cluster_name").scalar() == os.environ["PRIMARY_MATERIAL_PG_CLUSTER"]
-    fixture = selection_fixture()
+    scenario = getattr(request, "param", "strict")
+    fixture = (lifecycle_fixture(held=scenario == "lifecycle_held")
+               if scenario.startswith("lifecycle_") else selection_fixture())
     with admin.begin() as connection:
         _schema(connection, fixture)
     reader = sa.create_engine(url.set(username="primary_reader"))
     from app.services import primary_material_projection as primary
-    monkeypatch.setattr(primary, "load_policy", lambda identity: fixture["policy"])
+    monkeypatch.setattr(primary, "load_read_plan", lambda identity: (fixture["policy"], fixture["contracts"]))
     monkeypatch.setenv("QC_PRIMARY_FOUR_MATERIAL_ENABLED", "true")
     monkeypatch.setenv("QC_CASE_MATERIAL_DIR", str(tmp_path / "materials"))
     try:
@@ -260,3 +262,146 @@ def test_conflict_limits_only_related_body_and_keeps_display_versions(owned):
             docs=primary.project_documents(value)
             assert any(d["content"].find("不同的合成正文")>=0 for d in docs)
             assert any(d["material_selected"] and "差异" in d["material_notice"] for d in docs)
+
+
+def _capture_lifecycle(engine):
+    """真实只读RR连接取材，离开事务前去掉连接引用供全文快照保存。"""
+    from app.database import clinical_connection as clinical
+    from app.services import primary_material_projection as primary, case_material_snapshot as material
+    with engine.connect().execution_options(isolation_level="REPEATABLE READ") as connection:
+        with connection.begin():
+            connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+            before = connection.exec_driver_sql("SELECT pg_backend_pid()").scalar()
+            state = {"protocol": material.PROTOCOL, "identity": ["i", "p", "v"],
+                     "binding": clinical.source_binding(), "schema": "cdm", "engine": engine,
+                     "connection": connection, "columns": {}, "tables": {}, "queries": {}}
+            primary.capture_into(state, connection, ("i", "p", "v"))
+            assert before == connection.exec_driver_sql("SELECT pg_backend_pid()").scalar()
+            assert connection.in_transaction() and not connection.closed
+            _assert_lifecycle_inputs(state)
+            state.pop("engine")
+            state.pop("connection")
+            return state
+
+
+def _assert_lifecycle_inputs(state):
+    from app.services import primary_material_projection as primary, case_material_snapshot as material
+    from app.services.bundles import assembly
+    from app.services.luxian_0609 import source_evidence_reader as reader
+    value = state["primary_material_manifest"]
+    with material.recording(state):
+        for kind in primary.KINDS:
+            expected = [row["version_id"] for row in primary.project_rows(value, kind)]
+            bundle = assembly._select_records(schema="cdm", table=kind, institute_id="i", patient_id="p", visit_id="v", limit=100)
+            source = reader.read_luxian_0609_snapshot_source_rows(
+                source_key=kind, institute_id="i", patient_id="p", visit_id="v", source_schema="cdm")
+            assert [row["version_id"] for row in bundle] == expected
+            assert [row["version_id"] for row in source.rows] == expected
+            assert not source.material_scope["can_judge_clinical_absence"]
+        docs = primary.project_documents(value)
+        assert {doc["version_id"] for doc in docs} == {entry["version_id"] for entry in value["materials"]}
+        assert {doc["version_id"] for doc in docs if doc["material_rule_usable"]} == {
+            item["selected_version"] for item in value["items"] if item["selected_version"] is not None}
+
+
+def _set_lifecycle_coverage(admin, fixture, *, state="READY_FOR_INSPECTION", capture="COMPLETE", held=("daily-29",)):
+    value = {"publication_health": {"state": state}, "record_lifecycle": {
+        "mode": "record-hold-v1", "capture_state": capture, "held_document_ids": list(held)}}
+    with admin.begin() as connection:
+        connection.exec_driver_sql(
+            "UPDATE sync_material.primary_coverage SET coverage_json=%s::jsonb WHERE case_id=%s",
+            (json.dumps(value), fixture["policy"].health_case_id("daily_course_record")),
+        )
+
+
+@pytest.mark.parametrize("owned", ["lifecycle_held"], indirect=True)
+def test_record_lifecycle_29_usable_and_held_full_business_chain(owned):
+    from app.services import primary_material_projection as primary, case_material_snapshot as material
+    _, engine, _ = owned
+    state = _capture_lifecycle(engine)
+    value = state["primary_material_manifest"]
+    daily = primary.project_rows(value, "daily_course_record")
+    assert sum(row["source_namespace"] == "clinical" for row in daily) == 29
+    assert {row["document_id"] for row in daily} == {f"daily-{i:02d}" for i in range(29)} | {"cache-independent"}
+    held = next(item for item in value["items"] if item["association_key"][-1] == "daily-29")
+    assert held["selected_version"] is None and len(held["alternatives"]) == 2
+    docs = primary.project_documents(value)
+    assert len(docs) == 33 and sum(doc["material_rule_usable"] for doc in docs) == 31
+    assert any(entry["lifecycle_admission"]["action"] == "HOLD" and entry["body"] == "合成正文"
+               for entry in value["materials"] if entry["source_namespace"] == "clinical")
+    saved = material.persist("synthetic-record-lifecycle-held", state)
+    loaded = material.load("synthetic-record-lifecycle-held", ("i", "p", "v"))
+    assert loaded["fingerprint"] == saved["fingerprint"]
+    with material.activate(loaded):
+        assert primary.manifest() == value
+        assert primary.rows(("i", "p", "v"), "daily_course_record") == daily
+
+
+@pytest.mark.parametrize("owned", ["lifecycle_usable"], indirect=True)
+def test_latest_hold_pending_failure_and_restore_keep_frozen_business_copy(owned):
+    from app.services import primary_material_projection as primary, primary_material_readonly as m, case_material_snapshot as material
+    admin, engine, fixture = owned
+    initial = _capture_lifecycle(engine)
+    original = material.persist("synthetic-record-lifecycle-original", initial)
+    original_version = next(entry["version_id"] for entry in initial["primary_material_manifest"]["materials"]
+                            if entry["source_namespace"] == "clinical" and entry["native_key"][-1] == "daily-29")
+    for state, capture in (("READY_FOR_INSPECTION", "COMPLETE"), ("BLOCKED", "PENDING"),
+                           ("BLOCKED", "FAILED"), ("READY_FOR_INSPECTION", "COMPLETE")):
+        # 失败或漏返的最新证据保留HOLD id；业务层不能从旧manifest复活它。
+        _set_lifecycle_coverage(admin, fixture, state=state, capture=capture)
+        current = _capture_lifecycle(engine)["primary_material_manifest"]
+        rows = primary.project_rows(current, "daily_course_record")
+        assert "daily-29" not in {row["document_id"] for row in rows}
+        if capture == "PENDING":
+            assert rows == []
+        else:
+            assert "cache-independent" in {row["document_id"] for row in rows}
+        assert primary.project_rows(current, "presurg_summary")[0]["document_id"] == "other-kind-independent"
+        assert any(entry["version_id"] == original_version for entry in current["materials"])
+    restored = deepcopy(fixture["selection"]["materials"])
+    restored = [synthetic_material(m, "daily_course_record", document_id="daily-29",
+                                  contracts=fixture["contracts"], generation=2)
+                if entry["source_namespace"] == "clinical" and entry["native_key"][-1] == "daily-29"
+                else entry for entry in restored]
+    with admin.begin() as writer:
+        published = _write_selection(writer, fixture, restored)
+    _set_lifecycle_coverage(admin, fixture, held=())
+    latest = _capture_lifecycle(engine)["primary_material_manifest"]
+    row = next(row for row in primary.project_rows(latest, "daily_course_record") if row["document_id"] == "daily-29")
+    assert row["source_namespace"] == "clinical" and row["version_id"] != original_version
+    assert latest["selection_id"] != initial["primary_material_manifest"]["selection_id"]
+    with admin.connect() as connection:
+        assert connection.exec_driver_sql("SELECT selection_id FROM sync_material.primary_head WHERE case_id=%s",
+                                          (fixture["policy"].case_id,)).scalar() == published["selection_id"]
+    loaded = material.load("synthetic-record-lifecycle-original", ("i", "p", "v"))
+    assert loaded["fingerprint"] == original["fingerprint"]
+    with material.activate(loaded):
+        assert primary.manifest() == initial["primary_material_manifest"]
+        assert next(row["version_id"] for row in primary.rows(("i", "p", "v"), "daily_course_record")
+                    if row["document_id"] == "daily-29") == original_version
+
+
+@pytest.mark.parametrize("owned", ["lifecycle_usable"], indirect=True)
+def test_record_lifecycle_stale_version_and_denial_never_become_empty_success(owned):
+    from app.services import primary_material_projection as primary, primary_material_readonly as m
+    admin, engine, fixture = owned
+    with engine.connect().execution_options(isolation_level="REPEATABLE READ") as connection:
+        with connection.begin():
+            connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+            before = m.read_primary_in_transaction(connection, fixture["policy"], fixture["contracts"])
+            with admin.begin() as writer:
+                writer.exec_driver_sql("UPDATE sync_delivery.receipt SET generation=generation+1 WHERE interface_name=%s",
+                                      (fixture["contracts"]["daily_course_record"].spec.name,))
+            assert m.read_primary_in_transaction(connection, fixture["policy"], fixture["contracts"]) == before
+    stale = _capture_lifecycle(engine)["primary_material_manifest"]
+    assert primary.project_rows(stale, "daily_course_record")[0]["document_id"] == "cache-independent"
+    assert len(primary.project_rows(stale, "daily_course_record")) == 1
+    assert sum(entry.get("publication_stale", False) for entry in stale["materials"]) == 30
+    with admin.begin() as writer:
+        writer.exec_driver_sql("REVOKE SELECT ON sync_material.primary_coverage FROM primary_reader")
+    with engine.connect().execution_options(isolation_level="REPEATABLE READ") as connection:
+        with connection.begin():
+            connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+            with pytest.raises(Exception) as error:
+                primary.read_manifest(connection, ("i", "p", "v"))
+            assert getattr(error.value, "pgcode", None) == "42501"

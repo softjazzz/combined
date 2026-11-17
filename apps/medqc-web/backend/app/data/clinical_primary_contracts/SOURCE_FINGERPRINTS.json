@@ -1,15 +1,15 @@
 {
   "clinical_primary.py": {
-    "sha256": "6409e93585bbaebfeae9e152eb5bb4fa988cf39018bb1482434bef61245fdc4a",
+    "sha256": "afad4b6a1aab1623dc8bd35dcf5309ba175704d5880a7432b57bff8a057496a3",
     "definitions": {
       "PrimaryContract": "1b8eda6757ad275874fa96d7385d3e3768d06b1474e9376b40f33529b1031852",
       "PrimaryPolicy": "ec1bfcde5b84d82bc94d3c0437492092a73dd3b4aeb7cee1c3d87ad936f2db76",
       "make_material": "5a5aed83553f3d2aac81b4bb65f892e460aed54be75d7488e6cefbd3b4928d21",
-      "select_materials": "b99b66ef968e8f5bed61089cf26af27468d3b4b00cab33bbf4e99de073191514"
+      "select_materials": "ed2a7f78d4d1becb0f28d106097178c617ef56c54db3712e5c73ab3b29a38af9"
     }
   },
   "primary_store.py": {
-    "sha256": "bb187a5b447684cddfd7bef197db5be66c2983e9e2cddb4e8283863982ac689f",
+    "sha256": "4fb9dbbb4cfc8007a7b796e59a2ad6baba4384f5b5ec4f24e7083ce7a32b8fea",
     "definitions": {
       "cache_spec": "0de88226d4e2ea05ca751701e462cd871a07836c08f4b4466b7c975b8246b597",
       "apply_schema": "e837c1dcc8fd180a5d9ecc4b4aa450e579024ab05361a1f1c94c5bc2af037d44",
@@ -17,22 +17,23 @@
       "set_policy": "3821e3453673fbe639987718218d921dc7d77220950986abde766cb9813fca3f",
       "_registered": "814383ea556112124e01709386b6af7fc04175a4c935861fbbc09632d0fb1005",
       "_health_policy": "f1d8a25ae642fef1ecf6201ce798f8fe215c0ec64eab9b9f12f5ec8162d76ccf",
-      "_invalidate": "6cadd0ee630c043703f766e82e983d488ab7a6877343fc3b5491de8b8b75fc37",
-      "extract": "a12b81fe02cb0d52a1d7b28b54c81695d4ef58ac114de33e1da424a1df7dac2e",
-      "_sync_health": "a19912c34a2c997ade82a8f14156b3b598e16351cf9464debeed05b90ae087a7",
+      "_invalidate": "9877c6053c47f37ba956f88c6b193ce1256397043927bd0d386d593d2b2784ef",
+      "extract": "6d63dd1d14f1b105e208add762976500e0dd5016e6afcc1dcde7422f2c11adaa",
+      "_record_lifecycle_evidence": "2717ab7ca0d0e67425f47561881332c6401c267f077971ced702a511e693ea16",
+      "_sync_health": "5dadfa0b03d1f06e979134c9c2722b501b7b5a77a07769c7f9bf0315e9a6937d",
       "refresh_publication": "2d3a8cbcfd6494be9549920dafa9da29cad850166a333a87f5f3145ae51a1cec",
       "_target": "dfb38c2bc9714934a425417f4193d9a5e9ec7b0c8f527cda6c9a9d48e4af2885",
       "_receipt": "e7a5292a1aad554b8f6fa26643ebe6d93670104063fd5272eb61eeae169eb013",
       "_collect": "e7fc2100089d328a65e4acb3e17bb02d9cf9cacafb2e04781953bca61bac13a5",
-      "_health": "8f81db97e25f81b255f17419038afba91ce206ee88fd8755b373b10d3b3c5182",
+      "_health": "015e6ede20f1cef9855588471c67c6d4e63884294b1f4cbbf549bfc668bdb333",
       "poll": "7da49fadc0a4740dea7c94232d8522587bfc60ca16b12b051f1dae1bde1e3016",
       "read_in_transaction": "0735eabc647bec761ef22c6ebf247a9a4b63826479794cd076df7665aadf11c9"
     }
   },
   "primary_cli.py": {
-    "sha256": "c566f155b931a80ceaad99d1a05980c8e8da95379a7238c177d570ef848f1e39",
+    "sha256": "e6c600297ad9ec44d4a0c6f5d2525e854d8b3b645cbb56b16b3a2ca139c01740",
     "definitions": {
-      "load_plan": "f0e53002e506a402c6cd7fa6ad83939a16f267dbc1293d9a8542116e766f02cb",
+      "load_plan": "bed6bc1c83a63419c2cd76147db44d2f09baafd773d3e7193de8745e31c80e27",
       "preflight": "b53ba1f8c33a14ad675ad34656faf27a0c9638552889a25322989332c941bc51",
       "main": "0c22fd963558b7b5fef81b9bfa250196578e2e9d114869f450d8d0882a9a475a"
     }
@@ -46,8 +47,15 @@
       "real_contracts": "1d65be9b72894ba195450a8fb1ed21131995432b61129a93c94ca6d391ba223b"
     }
   },
+  "record_lifecycle.py": {
+    "sha256": "98892c719426b3daee8cf2c0166ded130a179afd7eb8c2991a13451e4fc0c284",
+    "definitions": {
+      "RecordLifecycleContract": "9e37f1fbb52ba37ee48da5485a90475ab2c5b6d9d6a45fd946efadbb0af831f8",
+      "record_contracts": "7453e31477037d77ffd110af280b99abc06d0030b3510fbd1bfb7e7f587be8fa"
+    }
+  },
   "clinical_daily.py": {
-    "sha256": "c808742ed84f0bfb69c057d3f3e4d9e637ff71f41cb36460a65e7dae66242b79",
+    "sha256": "a5ca2e3057dd410e9e2d4283df0e1eaeaec605aff0d2581e678b3b3c13ffe836",
     "definitions": {
       "require": "3312fd2d4ee16aeb47cc1422336099c6e4143acd696f20cd69a4f7aa43395d0c",
       "independent_database": "20648a45471236f0e9b2ed9683f3d76560ffc0176e02fce42a617e8f892cd529",
@@ -57,13 +65,13 @@
       "ClinicalAudit": "bc2d81fda46fed85a9676bb24a77adb051684ba99e1efb97692310852ff30efc",
       "ClinicalPgSource": "d11f6b44a15af044df4ac3b3c6f669366fb4c5a1b1e862965c2af9297b8ecb4e",
       "extract_clinical": "0ef629b24b8cc15e1c9a0fec72418b040e219ad783c0d4ec579c03e125e0cefc",
-      "validate_record_status": "4dbaa05c59670a88de614eae26ee58885c1e0549cc0ca795e3c914b507fd3372",
+      "validate_record_status": "76b7fa58833254f2c90b9648230ef74225dd7a1d490d58ac17519aff0a32f5d8",
       "_ClinicalTarget": "2cf061150e5c44f579dbf1aa9146cf133764040bacf2a882a7e68915b2396105",
       "publish_clinical": "53fdc97c7eb289b1ed4fe985f470e4a3e3b207e2cf5d6a7b51f062952c1a497a"
     }
   },
   "daily_reconcile.py": {
-    "sha256": "f08b75f6ad09caa4f06605dbf68fc643242b948b2fb0bf7e28a0a7de534118b1",
+    "sha256": "402cd9d033cc271a70cb407ceb6a26b8a107d29ebe2e998fcfb5b1598827cac7",
     "definitions": {
       "_publish": "c668e273f493fd58338d5e859e60a677353a3d461ff0e7d1841ee40f7ef181d6",
       "_transaction": "f7c0ae1efdd85657b8e3bc2e5bf5c45041dc1907c63138460c69bb80d65b5812",
@@ -71,7 +79,7 @@
       "set_policy": "b1b38c0b4bb6e251cd884c5d01945f3d6c73e40b00d270640aa959a15f3e5ea9",
       "set_coverage": "e0e9d82edff1eedc1fdfac33554fae490b7ae065274b59eddb2e559b01faba71",
       "_store_material": "9589fd74e748ba75c7bbe3ec4734b57e2a0e9a4d9685ff18a0b5d94dfd7515f6",
-      "_sync_publication_health": "60052787cf0b48c32c67c361ef14d957e3d806e519944e4e76a96980393c0f22",
+      "_sync_publication_health": "897c41b45fcaf0f6c9a59101921e457711258ae97c1ef2daca26ada596173417",
       "refresh_clinical_publication": "ac24d347254106694c2354e9df910209fd988a4f0babb72712891e2df18e21cf",
       "poll_confirmed": "3f6686cae71e1060bb3db7197ae2634f96937017be5350f97c967001ab816293",
       "_inputs": "840885a8a061ef4c009d04637e2afcf06929eba88db59cc1a3317c43700525c3",
@@ -82,6 +90,22 @@
       "read_manifest_in_transaction": "5292dc9e31d17e927bc68a825137dae2c73ead7c8cc49111bc33e1442afa8edc",
       "read_manifest": "91f69364bb63baf141b0488c2891f3668218f82eefbd6891127e7e06a072c2af",
       "_read_manifest": "c59ab6749a3843393f398cd37c59374fc86111ba10408df5bbf1b9566f15bfaf"
+    }
+  },
+  "daily_materials.py": {
+    "sha256": "5beecf7f706c32edb1447085c3dce0614c0464861a5ee2f06949ced4172b546a",
+    "definitions": {
+      "digest": "55e798fcc4fe6a952ae6992dd930f584959353d16c01c4d1d41519639787a9be",
+      "CasePolicy": "3fb1c6a1614f6479df4c35aa45a9541b15ee4ef724c8b9970e9d509e70faf794",
+      "material": "876dd5f0d99d6e804a53b22984925a47cb26ad547694f65b04bdec3680c74a7d",
+      "time_equal": "7b736085219c97d829644d38d3a838fc4d1f10b5e6f73acccf2b5e87ff5fbf6a",
+      "confirmation_basis": "9b2f36a1c541f469b8206ad6598631cf13ad2738cebc63fa352c1e4648c11407",
+      "input_hash": "a0b7445179a18c2f7f242c6c35d2b94d4431044e7cba911d014bb7c8e59fffc6",
+      "body_relation_hint": "2ffe5f849b42ab98f266448e3cd016c72b224c78d0f58441059db52314a4a0b2",
+      "coverage_scope": "0657975842501dc47a0870e0c8ad94f1bcc4133b3302e81b7c3a372fdae50f7c",
+      "coverage_complete": "2419bdeadc82cf22033c6b853c89e312f3d452afade372cfe2dc26a128da183d",
+      "guard_publication": "c80ddf1658ecba59a9c81c30e9310588a556b9633ee9cf670642100312fdaab2",
+      "reconcile": "6d907eed2c78c91fead699076253ebc44a16c6014405adba5ee6796a1d53096b"
     }
   }
 }

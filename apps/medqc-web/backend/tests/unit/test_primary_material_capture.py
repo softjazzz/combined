@@ -97,7 +97,7 @@ def test_not_deployed_is_distinct_from_permissions_and_bad_manifest(monkeypatch)
     from app.services import primary_material_projection as primary, primary_material_readonly as readonly
     connection = object()
     monkeypatch.setattr(readonly, "primary_objects_available", lambda actual: actual is not connection)
-    monkeypatch.setattr(primary, "load_policy", lambda identity: pytest.fail("undeployed read policy"))
+    monkeypatch.setattr(primary, "load_read_plan", lambda identity: pytest.fail("undeployed read policy"))
     captured = {}
     primary.capture_into(captured, connection, ("I", "P", "V"))
     assert captured["primary_material_manifest"] is None
@@ -153,7 +153,7 @@ def test_approved_native_identity_projects_canonical_without_rewriting_original(
     value.update(case_id=policy.case_id, policy_hash=policy.policy_hash)
     for entry in value["materials"]:
         entry["target_payload"].update(institute_id="I", patient_id="P", visit_id="V")
-    monkeypatch.setattr(primary, "load_policy", lambda identity: policy)
+    monkeypatch.setattr(primary, "load_read_plan", lambda identity: (policy, readonly.real_contracts()))
     monkeypatch.setattr(readonly, "primary_objects_available", lambda connection: True)
     monkeypatch.setattr(readonly, "read_primary_in_transaction", lambda *args: deepcopy(value))
     with clinical.selected({"id": "independent_cdm", "binding": "synthetic"}):

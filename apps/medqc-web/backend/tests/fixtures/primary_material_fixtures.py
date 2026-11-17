@@ -1,5 +1,6 @@
 """四类只读材料链的全合成夹具；不表示真实准入批准，不调用同步构造器。"""
 from dataclasses import asdict
+import json
 
 
 def policy(m=None):
@@ -16,9 +17,10 @@ def policy(m=None):
 
 
 
-def synthetic_material(m, kind, source="clinical", *, body="合成正文", document_id="doc-1"):
+def synthetic_material(m, kind, source="clinical", *, body="合成正文", document_id="doc-1",
+                       contracts=None, generation=1, lifecycle_values=None):
     """供四类材料链联验复用的合成 DTO；不作为真实批准或同步构造器。"""
-    contract = m.real_contracts()[kind]
+    contract = (contracts if contracts is not None else m.real_contracts())[kind]
     spec = contract.spec if source == "clinical" else m.cache_spec(kind)
     key = ["i", "p", "v", document_id]
     payload = dict.fromkeys(spec.publish.target_columns)
@@ -28,7 +30,7 @@ def synthetic_material(m, kind, source="clinical", *, body="合成正文", docum
     publication = {
         "source_namespace": source, "interface": spec.name,
         "source_key_hash": m.digest([spec.name, key]),
-        "source_epoch": "00000000-0000-0000-0000-000000000001", "generation": 1,
+        "source_epoch": "00000000-0000-0000-0000-000000000001", "generation": generation,
         "mapping_hash": "synthetic-map", "activation": 1, "operation": "UPSERT",
         "spec_hash": m.digest(asdict(spec)),
     }
@@ -40,6 +42,7 @@ def synthetic_material(m, kind, source="clinical", *, body="合成正文", docum
         for target, column in contract.mappings:
             if column is not None:
                 native[column] = payload[target]
+        native.update(lifecycle_values or {})
         payload["source_payload"] = m.canonical_json({
             "columns": list(contract.columns), "values": [native[name] for name in contract.columns],
         })
@@ -69,6 +72,12 @@ def synthetic_material(m, kind, source="clinical", *, body="合成正文", docum
                         native_primary_key={"institute_id": "i", "document_id": document_id},
                         source_times=source_times, time_role_status=dict.fromkeys(material["times"], "UNCONFIRMED"),
                         lifecycle_admission={"field": "is_deleted", "raw_value": "0", "action": "USABLE", "evidence": "synthetic-only"})
+        if getattr(contract, "lifecycle_mode", None) == "record-hold-v1":
+            material.update(
+                record_status=native["record_status"],
+                lifecycle_admission=contract.lifecycle_admission(json.loads(payload["source_payload"])),
+                source_lifecycle_revision="clinical-primary-record-lifecycle-v1",
+            )
     return material
 
 
@@ -102,3 +111,32 @@ def selection_fixture():
     return {"policy": p, "contracts": contracts,
             "selection": m.select_materials(p, materials, health),
             "target_rows": target_rows, "receipts": receipts, "coverage_rows": coverage_rows}
+
+
+def lifecycle_fixture(*, held=True):
+    """业务读取夹具：30份临床原文及关联/独立缓存，不执行同步构造器。"""
+    from app.services import primary_material_readonly as m
+
+    fixture = selection_fixture()
+    contracts = m.contracts_for_mode("record-hold-v1", {
+        kind: (("is_deleted", '"0"', "USABLE", "SYNTHETIC_ONLY"),) for kind in m.KINDS
+    })
+    materials = [synthetic_material(
+        m, "daily_course_record", document_id=f"daily-{index:02d}", contracts=contracts,
+        lifecycle_values={"record_status": "SYNTHETIC_HELD"} if held and index == 29 else {},
+    ) for index in range(30)]
+    materials.extend([
+        synthetic_material(m, "daily_course_record", "cache", document_id="daily-29"),
+        synthetic_material(m, "daily_course_record", "cache", document_id="cache-independent"),
+        synthetic_material(m, "presurg_summary", "cache", document_id="other-kind-independent"),
+    ])
+    fixture["contracts"] = contracts
+    fixture["selection"] = m.select_materials(fixture["policy"], materials, {
+        kind: {"state": "READY", "coverage": "OBSERVED_PUBLISHED",
+               "clinical_absence_confirmed": False} for kind in m.KINDS
+    })
+    fixture["target_rows"] = [
+        {"spec": contracts[kind].spec if source == "clinical" else m.cache_spec(kind)}
+        for kind in m.KINDS for source in ("clinical", "cache")
+    ]
+    return fixture

@@ -9,13 +9,13 @@ from pathlib import Path
 import zipfile
 
 
-SOURCE_COMMIT = "cb437e611e802c5117f212c1e9743d2748ec4127"
-ZIP_SHA256 = "850431143ace082038cef1b653238be56ff0262b97b7b2d9d0e7d57523d0aae4"
+SOURCE_COMMIT = "7a8c4bb424189a10e97f49e2df7d4b5c1a8abafe"
+ZIP_SHA256 = "ce63db287061bc9e479c7bb833879ba7a1c52e6f47c0b064ef468e3cae89cab3"
 ROOT = Path(__file__).resolve().parents[1]
 DESTINATION = ROOT / "app/services/primary_material_readonly.py"
 DATA = ROOT / "app/data/clinical_primary_contracts"
 
-HEADER = '''"""固定 cb437e611 的四类合同只读定义闭包。
+HEADER = '''"""固定 7a8c4bb42 的四类合同只读定义闭包。
 
 由 scripts/build_primary_readonly_closure.py 提取；来源及裁剪见固定指纹清单。
 只借调用者的独立 CDM 只读 RR 连接；不携带同步连接工厂或写入口。
@@ -28,7 +28,7 @@ import json
 import math
 import re
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -36,11 +36,31 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-SOURCE_COMMIT = "cb437e611e802c5117f212c1e9743d2748ec4127"
+SOURCE_COMMIT = "7a8c4bb424189a10e97f49e2df7d4b5c1a8abafe"
 CONTRACT_DIRECTORY = Path(__file__).resolve().parents[1] / "data/clinical_primary_contracts"
 '''
 
 BRIDGE = '''
+def contracts_for_mode(
+    lifecycle_mode: str | None = None,
+    lifecycle_approvals: dict[str, list | tuple] | None = None,
+) -> dict[str, MetadataContract]:
+    """显式选合同；缺省保留旧strict，审批仅用于固定四类并交原合同校验。"""
+    require(lifecycle_mode is None or lifecycle_mode == MODE, "primary_lifecycle_mode")
+    approvals = {} if lifecycle_approvals is None else lifecycle_approvals
+    require(isinstance(approvals, dict) and set(approvals) <= set(KINDS),
+            "primary_lifecycle_approvals")
+    for rows in approvals.values():
+        require(isinstance(rows, (list, tuple)) and all(
+            isinstance(row, (list, tuple)) and len(row) == 4
+            and all(isinstance(value, str) for value in row) for row in rows
+        ), "primary_lifecycle_approvals")
+    contracts = real_contracts() if lifecycle_mode is None else record_contracts()
+    return {kind: replace(contract, lifecycle_approvals=tuple(
+        tuple(row) for row in approvals.get(kind, ())
+    )) for kind, contract in contracts.items()}
+
+
 PRIMARY_REQUIRED_OBJECTS = (
     "sync_material.primary_policy",
     "sync_material.primary_head",
@@ -74,13 +94,14 @@ def read_primary_in_transaction(
 # 逐项列出所需定义，避免导入源模块时拖入同步写仓储。
 SELECTION = {
     "domain.py": ["ERROR_KINDS", "ErrorKind", "IngestError", "FieldMapping", "DerivedDocumentId",
-                  "PublishSpec", "InterfaceSpec", "canonical_json", "sha256_hex", "normalize"],
+                  "PublishSpec", "InterfaceSpec", "canonical_json", "sha256_hex", "normalize", "denormalize"],
     "daily_materials.py": ["digest"],
     "clinical_daily.py": ["KEYS", "COLUMNS", "require", "ClinicalContract"],
     "clinical_primary.py": ["CONTRACT", "KINDS", "SURGERY_FIELDS", "TARGETS", "PrimaryContract",
                             "PrimaryPolicy", "select_materials"],
     "primary_metadata.py": ["REVISION", "METADATA_SHA256", "metadata_document", "_mappings",
                             "MetadataContract", "real_contracts"],
+    "record_lifecycle.py": ["MODE", "REVISION", "RecordLifecycleContract", "record_contracts"],
     "control/models.py": ["ControlError"],
     "control/profiles.py": ["Profile", "ProfileCatalog"],
     "control/accepted.py": ["PROFILE", "CONTRACT_SHA", "FINANCIAL", "contract_path", "AcceptedManualCatalog"],
@@ -111,9 +132,13 @@ def prune_methods(source, node, retained):
     return "\n".join(lines)
 
 
-def adapt(source, name):
+def adapt(source, name, filename):
     note = None
-    if name == "metadata_document":
+    if filename == "record_lifecycle.py" and name in {"REVISION", "RecordLifecycleContract"}:
+        # 合并原模块命名空间时只改全局名称；保留旧元数据REVISION及其摘要。
+        source = source.replace("REVISION", "LIFECYCLE_REVISION")
+        note = "原record_lifecycle.REVISION改名LIFECYCLE_REVISION，避免覆盖metadata.REVISION"
+    elif name == "metadata_document":
         start = source.index('    path = Path(')
         end = source.index('    content = path.read_bytes()')
         source = source[:start] + '    path = CONTRACT_DIRECTORY / "clinical-primary-real-fields-v2.json"\n' + source[end:]
@@ -148,7 +173,7 @@ def build(path):
     manifest = {"source_commit": SOURCE_COMMIT, "candidate_zip_sha256": ZIP_SHA256,
                 "fingerprint_algorithm": "SHA256(ast.get_source_segment UTF-8), decorators excluded",
                 "source_files": {}, "runtime_definitions": {}, "json_files": {},
-                "runtime_methods": {},
+                "runtime_methods": {}, "runtime_constants": {},
                 "excluded_capabilities": ["migration", "poll", "extract", "publication write",
                                           "source metadata queries", "connection factories"],
                 "audit_only_source_definitions": {}}
@@ -156,10 +181,15 @@ def build(path):
     origins = {}
     method_origins = {}
     with zipfile.ZipFile(path) as z:
+        source_fingerprints = json.loads(z.read("SOURCE_FINGERPRINTS.json"))
         for filename, names in SELECTION.items():
             original = z.read("runtime/medqc_ingest/" + filename)
+            if filename in source_fingerprints and sha(original) != source_fingerprints[filename]["sha256"]:
+                raise ValueError("primary_readonly_source_fingerprint:" + filename)
             source = original.decode("utf-8")
             tree = ast.parse(source)
+            if set(names) - {node_name(node) for node in tree.body}:
+                raise ValueError("primary_readonly_definition_missing:" + filename)
             manifest["source_files"][filename] = {"sha256": sha(original), "definitions": {}, "class_methods": {}}
             for node in tree.body:
                 name = node_name(node)
@@ -179,7 +209,7 @@ def build(path):
                     retain = {
                         "ClinicalContract": set(),
                         "PrimaryContract": {"output_columns", "body_field", "__post_init__", "digest", "spec"},
-                        "MetadataContract": {"__post_init__", "native_primary_key", "lifecycle_admission", "validate_lifecycle"},
+                        "MetadataContract": {"__post_init__", "native_primary_key", "lifecycle_admission", "validate_lifecycle", "material_metadata"},
                         "ProfileCatalog": {"resolve_spec"},
                         "AcceptedManualCatalog": {"__init__", "get"},
                     }.get(name)
@@ -191,7 +221,7 @@ def build(path):
                         note = "裁剪类，仅保留方法 " + ",".join(sorted(retain))
                     if node.decorator_list:
                         segment = "\n".join("@" + ast.get_source_segment(source, d) for d in node.decorator_list) + "\n" + segment
-                segment, adapted = adapt(segment, name)
+                segment, adapted = adapt(segment, name, filename)
                 note = adapted or note
                 sections.append("# 固定源：" + filename + ":" + name + "\n" + segment)
                 if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
@@ -203,14 +233,17 @@ def build(path):
                     if isinstance(node, ast.FunctionDef) and node.name == "make_material":
                         manifest["audit_only_source_definitions"][filename + ":" + node.name] = sha(ast.get_source_segment(source, node).encode())
         for name in ("accepted-manual-contract.json", "clinical-primary-cache-surgery-reference.json",
-                     "clinical-primary-real-fields-v2.json"):
-            content = z.read("contracts/" + name)
+                     "clinical-primary-real-fields-v2.json", "SOURCE_FINGERPRINTS.json"):
+            content = z.read(name if name == "SOURCE_FINGERPRINTS.json" else "contracts/" + name)
             (DATA / name).write_bytes(content)
             manifest["json_files"][name] = sha(content)
-        (DATA / "SOURCE_FINGERPRINTS.json").write_bytes(z.read("SOURCE_FINGERPRINTS.json"))
     sections.append('METADATA_REVISION = REVISION\n' + BRIDGE)
     runtime = "\n\n\n".join(sections).rstrip() + "\n"
     for node in ast.parse(runtime).body:
+        if isinstance(node, ast.Assign) and node_name(node):
+            manifest["runtime_constants"][node_name(node)] = sha(
+                ast.get_source_segment(runtime, node).encode()
+            )
         if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
             manifest["runtime_definitions"][node.name] = {
                 **origins.get(node.name, {"source": "business SQLAlchemy bridge", "adaptation": "新增只借连接桥"}),
@@ -222,6 +255,11 @@ def build(path):
                         qualified = node.name + "." + member.name
                         manifest["runtime_methods"][qualified] = {
                             **method_origins[qualified],
+                            "adaptation": (
+                                origins[node.name]["adaptation"]
+                                if sha(ast.get_source_segment(runtime, member).encode())
+                                != method_origins[qualified]["source_sha256"] else None
+                            ),
                             "sha256": sha(ast.get_source_segment(runtime, member).encode()),
                         }
     DESTINATION.write_text(runtime, encoding="utf-8", newline="\n")
