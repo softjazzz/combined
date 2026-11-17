@@ -11,7 +11,7 @@ import json
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure, redact_luxian_0609_patient_privacy
 from .native_preop_content_execution import _usage
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object
@@ -165,8 +165,8 @@ async def extract_course_body_facts(documents: Sequence[CourseBodyDocument], llm
         try:
             response = await llm_client.generate(attempt_prompt, max_completion_tokens=MAX_COMPLETION_TOKENS,
                                                  allow_length_retry=False, **structured_output_kwargs(llm_client))
-        except Exception:
-            return CourseBodyExtraction("data_gap", "semantic_extraction_unresolved", llm_call_count=calls,
+        except Exception as error:
+            return CourseBodyExtraction("technical_error", classify_luxian_0609_llm_call_failure(error), llm_call_count=calls,
                 prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,
                 api_time=api_time or perf_counter() - started)
         try:
@@ -179,7 +179,7 @@ async def extract_course_body_facts(documents: Sequence[CourseBodyDocument], llm
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError) as error:
             if attempt + 1 == PROTOCOL_ATTEMPTS:
-                return CourseBodyExtraction("data_gap", "semantic_extraction_unresolved", llm_call_count=calls,
+                return CourseBodyExtraction("technical_error", "model_invalid_output", llm_call_count=calls,
                     prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,
                     api_time=api_time or perf_counter() - started)
             # 提示放在输入资料之前，资料仍在末尾。

@@ -678,6 +678,20 @@ def _mature_handoff_outcome(
     return ("not_applicable", "evaluation_window_not_mature", None) if pending else (state, reason, facts)
 
 
+def _is_effective_physician_change_order(row: Mapping[str, Any]) -> bool:
+    if any(marker in _clean(row.get("order_status")) for marker in ("取消", "作废", "撤销", "未执行")):
+        return False
+    # 不将类别字段中的“变更”覆盖正文的拟行/取消语义。
+    text = " ".join(_clean(row.get(field)) for field in ("order_name", "record_content"))
+    if not text.strip():
+        text = _clean(row.get("order_type"))
+    for clause in re.split(r"[，,。；;\n]", text):
+        for match in _PHYSICIAN_CHANGE_ORDER_PATTERN.finditer(clause):
+            if not re.search(r"拟|计划|准备|考虑|建议|待|暂缓|未|不予|取消|撤销|既往", clause[:match.start()]):
+                return True
+    return False
+
+
 def evaluate_physician_handoff(
     *,
     physician_change_rows: Sequence[Mapping[str, Any]],
@@ -699,12 +713,7 @@ def evaluate_physician_handoff(
     explicit_change_orders = tuple(
         row
         for row in nondrug_order_rows
-        if _PHYSICIAN_CHANGE_ORDER_PATTERN.search(
-            " ".join(
-                _clean(row.get(field))
-                for field in ("order_name", "order_type", "record_content")
-            )
-        )
+        if _is_effective_physician_change_order(row)
     )
     change_source_key = "physician_change_event"
     effective_change_rows = physician_change_rows

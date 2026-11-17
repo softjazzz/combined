@@ -2436,6 +2436,9 @@ async def _typed_029_outcome(
     if target_gate is not None:
         return replace(target_gate, fact_refs=order_refs), 0, 0, 0, 0, 0.0
     if _typed_observation_state(snapshot, "presurg_summary") == "empty":
+        if not materials.permits_absence("presurg_summary"):
+            return (_SurgeryDocumentOutcome("LX0609-04-01-01", "data_gap",
+                    "preop_summary_source_unavailable", "program", None, order_refs), 0, 0, 0, 0, 0.0)
         order_gate = _typed_029_order_only_gate(
             snapshot=snapshot, materials=materials,
             performed_triggered=performed_triggered, fact_refs=order_refs,
@@ -2515,6 +2518,9 @@ async def _typed_029_outcome(
         if associated_counts is not None:
             performed_event_count, associated_summary_count = associated_counts
             if associated_summary_count < performed_event_count:
+                if not materials.permits_absence("presurg_summary"):
+                    return (_SurgeryDocumentOutcome("LX0609-04-01-01", "data_gap",
+                            "preop_summary_source_unavailable", "program", None, selected_refs), 0, 0, 0, 0, 0.0)
                 return (
                     _SurgeryDocumentOutcome(
                         "LX0609-04-01-01",
@@ -2568,14 +2574,10 @@ async def _typed_029_outcome(
     return (
         _SurgeryDocumentOutcome(
             "LX0609-04-01-01",
-            "non_compliant",
-            "preop_summary_blank",
+            "data_gap",
+            "required_field_missing",
             "program",
-            {
-                "failure_kind": "surgery_document_blank",
-                "target_document": "presurg_summary",
-                **trigger_display_facts,
-            },
+            None,
             selected_refs,
         ),
         0, 0, 0, 0, 0.0,

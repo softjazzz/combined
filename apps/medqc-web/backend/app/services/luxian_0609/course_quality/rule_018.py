@@ -202,6 +202,9 @@ def _lx018_primary_diagnosis_resolution(
     unordered_labels_by_source: dict[str, list[str]] = {}
     for source_key in LX018_DIAGNOSIS_SOURCES:
         for row in _source_rows(documents, source_key, limit=None):
+            from ..cache_document_source_adapter import is_homepage_diagnosis
+            if is_homepage_diagnosis(row):
+                continue
             diagnosis_type = _clean(row.get("diagnosis_type"))
             if not _is_admission_first_diagnosis_type(diagnosis_type):
                 continue

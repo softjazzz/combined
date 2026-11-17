@@ -166,7 +166,7 @@ def _severity_active_date_intervals(
             end_time = local_datetime(row.get("planned_end_datetime"))
             if end_time is None or end_time < event_time:
                 return None
-            events.append((end_time, 1, index, "end"))
+            events.append((end_time, 1, index, "own_end"))
     # 不同医嘱行在同一权威时刻解除和重开时，无法证明先后；不能让
     # start/end 类型排序把重开静默丢弃。复用既有时间资料不足合同。
     # 同一 stopped 行自身的开始/结束则有明确生命周期关系，仍可配对。
@@ -180,15 +180,22 @@ def _severity_active_date_intervals(
             return None
 
     active_start: date | None = None
+    active_orders: set[int] = set()
     intervals: list[tuple[date, date | None]] = []
-    for event_time, _kind_order, _index, event_kind in sorted(events):
+    for event_time, _kind_order, index, event_kind in sorted(events):
         event_date = event_time.date()
         if horizon_date is not None and event_date > horizon_date:
             continue
         if event_kind == "start":
             if active_start is None:
                 active_start = event_date
-        elif active_start is not None:
+            active_orders.add(index)
+        elif event_kind == "own_end":
+            active_orders.discard(index)
+        else:
+            # 明确解除等级的独立事件可结束该等级；某一医嘱停止仅结束自身。
+            active_orders.clear()
+        if not active_orders and active_start is not None:
             intervals.append((active_start, event_date))
             active_start = None
     if active_start is not None:

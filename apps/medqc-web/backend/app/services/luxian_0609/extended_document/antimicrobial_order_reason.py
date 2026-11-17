@@ -29,8 +29,7 @@ import re
 from time import perf_counter
 from typing import Any, Literal, Mapping, Protocol, Sequence
 
-from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
-from ...llm_observability import safe_status_for_exception
+from ..llm_prompt_privacy import classify_luxian_0609_llm_call_failure
 from ..llm_prompt_privacy import (
     describe_luxian_0609_llm_parse_failure,
     redact_luxian_0609_patient_privacy,
@@ -494,9 +493,8 @@ async def _run_extraction(
         except Exception as error:  # noqa: BLE001 - 失败语义统一映射，不吞成资料缺口
             from ...llm_token_budget import note_budget_failure
             note_budget_failure(error)
-            timeout = isinstance(error, TimeoutError) or safe_status_for_exception(error)[0] == "timeout"
             return AntimicrobialReasonExtraction(
-                "technical_error", "model_timeout" if timeout else luxian_0609_llm_call_failure_reason(error),
+                "technical_error", classify_luxian_0609_llm_call_failure(error),
                 (), calls, *usage, api_time + perf_counter() - started,
             )
         api_time += perf_counter() - started

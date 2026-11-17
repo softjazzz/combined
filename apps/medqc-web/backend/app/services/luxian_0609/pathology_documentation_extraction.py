@@ -14,7 +14,7 @@ import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
+from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .native_preop_content_execution import _usage
 from .structured_output import structured_output_kwargs
@@ -193,7 +193,7 @@ async def extract_pathology_documentation_facts(
         )
     except Exception as error:
         return PathologyDocumentationExtraction(
-            "technical_error", luxian_0609_llm_call_failure_reason(error, "tumor_llm_failure"), llm_call_count=1, api_time=perf_counter() - started,
+            "technical_error", classify_luxian_0609_llm_call_failure(error), llm_call_count=1, api_time=perf_counter() - started,
         )
     try:
         usage = _usage(response)

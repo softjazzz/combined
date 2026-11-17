@@ -75,6 +75,7 @@ def document_diagnoses(
             raise ValueError("diagnosis_parent_identity_missing")
         bound = [r for r in diagnoses
                  if str(r.get("document_id") or "").strip() == document_id
+                 and not is_homepage_diagnosis(r)
                  and str(r.get("diagnosis_type") or "").strip() in labels]
         if bound:
             for row in bound:
@@ -105,7 +106,12 @@ def document_diagnoses(
 def homepage_diagnoses(diagnoses: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], ...]:
     """只接受源字段显式声明首页；通用出院诊断不冒充首页诊断。"""
     return tuple({**dict(row), "source_table": "diagnosis"} for row in diagnoses
-                 if str(row.get("diagnosis_source") or "").strip() in {"病案首页", "首页", "mr"})
+                 if is_homepage_diagnosis(row))
+
+
+def is_homepage_diagnosis(row: Mapping[str, Any]) -> bool:
+    """仅识别明确来源，不把通用诊断或原文诊断猜成首页。"""
+    return str(row.get("diagnosis_source") or "").strip() in {"病案首页", "首页", "mr"}
 
 
 def enrich_discharge_document(row: Mapping[str, Any]) -> dict[str, Any]:

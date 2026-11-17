@@ -1371,6 +1371,13 @@ def _typed_003_decision(
             positive_document_refs=document_refs,
         )
     if intervals and (not incomplete_performed_row or fallback_resolved):
+        # 一份及时手术记录只能覆盖对应事件，不能代表另一台明确已实施手术。
+        # 沿用麻醉原文的窄实施合同；仅有行数/排班时间不新增手术事实。
+        documented_begins = {_authoritative_surgery_begin_time(row) for row in surgery_rows}
+        for row in anesthesia_rows:
+            begin, _end, issue = _confirmed_anesthesia_surgery_times(row)
+            if not issue and begin not in documented_begins:
+                return decision("data_gap", "association_failed")
         (
             interval,
             surgery_end_time,

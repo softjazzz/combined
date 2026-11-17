@@ -1256,6 +1256,10 @@ def _typed_basic_decisions(
                 if missing_decision is not None:
                     decisions.append(missing_decision)
                     continue
+                if admission_rows:
+                    # 行已存在但实质正文未供给，不能据此断言临床没有入院记录。
+                    decisions.append(gap(rule_id, "required_field_missing"))
+                    continue
                 decision = conclusive(
                     rule_id,
                     QcDirection.DEFECT,
@@ -1441,6 +1445,8 @@ def _typed_basic_decisions(
         qualifying_events: list[tuple[datetime, str | None, str, Mapping[str, Any]]] = []
         qualifying_missing_time = False
         ambiguous_round = False
+        ambiguous_before_deadline = False
+        threshold = timedelta(hours=48 if rule_id == "LX0609-02-01-01" else 72)
         for source_key, event in course_events:
             event_time = event.observed_time
             if not within_frozen_horizon(event_time):
@@ -1462,6 +1468,13 @@ def _typed_basic_decisions(
                     )
             elif role is CourseRoundRole.AMBIGUOUS:
                 ambiguous_round = True
+                ambiguous_before_deadline |= (
+                    event_time is None
+                    or (anchor is not None and anchor <= event_time <= anchor + threshold)
+                    or (anchor is None and anchor_date is not None and
+                        _elapsed_state_from_date_range(event_time=event_time, admission_date=anchor_date,
+                                                       threshold=threshold) in {"within", "ambiguous"})
+                )
 
         threshold = timedelta(hours=48 if rule_id == "LX0609-02-01-01" else 72)
         qualifying_times = tuple(value for value, *_ in qualifying_events)
@@ -1550,6 +1563,8 @@ def _typed_basic_decisions(
             )
         elif "ambiguous" in elapsed_states:
             decisions.append(gap(rule_id, "authoritative_time_missing"))
+        elif ambiguous_before_deadline:
+            decisions.append(gap(rule_id, "required_field_missing"))
         elif elapsed_states:
             observed, source_document_id, selected_source_key, selected_row = min(
                 (

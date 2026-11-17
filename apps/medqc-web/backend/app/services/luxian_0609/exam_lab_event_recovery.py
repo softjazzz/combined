@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 import re
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
-from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
+from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure
 from .exam_lab_fact_extraction import (
     CULTURE_RULE_IDS,
     EXAM_RULE_IDS,
@@ -181,9 +181,11 @@ async def recover_exam_lab_rule_by_event(
             rule_id=rule_id,
             event_position=original_position,
         )
+        response_received = False
         try:
             attempted_call_count += 1
             response = await generate_response((rule_id,), event_projection)
+            response_received = True
             responses.append(response)
             partition = parse_exam_lab_fact_response_isolated(
                 response=response,
@@ -196,9 +198,8 @@ async def recover_exam_lab_rule_by_event(
                 facts=(),
                 responses=tuple(responses),
                 attempted_call_count=attempted_call_count,
-                failure_kind=luxian_0609_llm_call_failure_reason(
-                    exc, fallback=getattr(exc, "failure_kind", "value")
-                ),
+                failure_kind=(getattr(exc, "failure_kind", "value") if response_received
+                              else classify_luxian_0609_llm_call_failure(exc)),
             )
         if partition.rule_failures or len(partition.facts) != 1:
             return ExamLabEventRecoveryResult(

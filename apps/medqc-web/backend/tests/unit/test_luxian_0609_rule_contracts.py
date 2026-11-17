@@ -110,9 +110,9 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     assert basic_senior_round.max_llm_calls_per_rule == 0
 
     repeated_course = contracts["LX0609-12-01-02"]
-    assert repeated_course.contract_version == "v7"
-    assert repeated_course.decision_authority == "program_then_optional_llm"
-    assert repeated_course.max_llm_calls_per_rule == 1
+    assert repeated_course.contract_version == "v8"
+    assert repeated_course.decision_authority == "program_only"
+    assert repeated_course.max_llm_calls_per_rule == 0
 
     exam_course = contracts["LX0609-06-01-02"]
     assert exam_course.phase_status == "phase_1_target"
@@ -245,6 +245,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
     }
 
     assert program_only == {
+        "LX0609-12-01-02",
         "LX0609-06-03-05", "LX0609-06-03-06",
         "LX0609-10-04-01",
         "LX0609-04-02-09",
@@ -274,7 +275,6 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-05-01-02",
         "LX0609-05-01-04",
         "LX0609-05-01-05",
-        "LX0609-05-01-06",
         "LX0609-08-01-03",
         "LX0609-04-02-08",
         "LX0609-04-01-01",
@@ -283,10 +283,8 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-09-02-01",
         "LX0609-04-02-06",
         "LX0609-08-01-01",
-        "LX0609-08-01-02",
         "LX0609-04-05-01",
         "LX0609-04-05-03",
-        "LX0609-08-02-02",
         "LX0609-04-02-07",
         "LX0609-10-01-01",
         "LX0609-10-02-01",
@@ -407,7 +405,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         if contract.decision_authority == "program_only"
         else contract.max_llm_calls_per_rule
         == (2 if contract.rule_id in {
-            "LX0609-03-01-04", "LX0609-03-01-05", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01", "LX0609-05-01-03",
+            "LX0609-03-01-04", "LX0609-03-01-05", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01", "LX0609-05-01-03", "LX0609-08-01-02",
         } else 1)
         and bool(contract.prompt_version)
         for contract in contracts

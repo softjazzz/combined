@@ -14,6 +14,7 @@ from typing import Any, Mapping, Protocol, Sequence
 from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from .llm_prompt_privacy import describe_luxian_0609_llm_parse_failure
 from .structured_output import structured_output_kwargs
+from .cache_document_source_adapter import is_homepage_diagnosis
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +106,11 @@ def build_malignancy_sources(
 ) -> tuple[MalignancySource, ...]:
     """诊断是完整阴性结论的必需来源；病理仅作为可选阳性证据。"""
 
+    retained_rows = tuple(row for row in diagnosis_rows if not is_homepage_diagnosis(row))
+    if diagnosis_rows and not retained_rows and diagnosis_state in {"present", "available"}:
+        diagnosis_state = "unavailable"
     sources = [
-        MalignancySource(diagnosis_source_key, diagnosis_state, tuple(diagnosis_rows), True)
+        MalignancySource(diagnosis_source_key, diagnosis_state, retained_rows, True)
     ]
     meaningful_pathology_rows = tuple(
         row
@@ -171,9 +175,13 @@ def build_stage_malignancy_sources(
     if visit_stage != "discharged":
         raise ValueError("malignancy diagnosis source requires known visit stage")
 
+    def original_candidate(source, state, rows):
+        retained = tuple(row for row in rows if not is_homepage_diagnosis(row))
+        return (source, "unavailable" if rows and not retained and state in {"present", "available"} else state, retained)
+
     diagnosis_candidates = (
-        ("diagnosis", diagnosis_state, tuple(diagnosis_rows)),
-        ("discharge_record_diagnosis", discharge_diagnosis_state, tuple(discharge_diagnosis_rows)),
+        original_candidate("diagnosis", diagnosis_state, diagnosis_rows),
+        original_candidate("discharge_record_diagnosis", discharge_diagnosis_state, discharge_diagnosis_rows),
     )
     selected_source, selected_state, selected_rows = next(
         (

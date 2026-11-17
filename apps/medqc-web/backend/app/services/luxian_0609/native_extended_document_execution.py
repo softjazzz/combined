@@ -304,14 +304,23 @@ def _discharge_approval_path(
 
     if (
         _AUTOMATIC_DISCHARGE_PATTERN.search(text)
-        and _SENIOR_PHYSICIAN_CONSULTED_PATTERN.search(text)
-        and _AUTOMATIC_DISCHARGE_SIGNED_PATTERN.search(text)
+        and _affirmative_discharge_clause(text, _SENIOR_PHYSICIAN_CONSULTED_PATTERN)
+        and _affirmative_discharge_clause(text, _AUTOMATIC_DISCHARGE_SIGNED_PATTERN)
         and not _AUTOMATIC_DISCHARGE_UNSIGNED_PATTERN.search(text)
     ):
         return "automatic_discharge"
 
     # 上级同意出院一律交模型抽取，不再由正则直接认定（用户口径 2026-10-22）。
     return None
+
+
+def _affirmative_discharge_clause(text: str, pattern: re.Pattern[str]) -> bool:
+    """只接受同分句已发生事实，否定、计划及既往叙述不能证明本次已完成。"""
+    for clause in re.split(r"[，,。；;\n]", text):
+        for match in pattern.finditer(clause):
+            if not re.search(r"未|无|不|拒绝|拟|计划|准备|待|既往|曾经", clause[:match.start()]):
+                return True
+    return False
 
 
 def _source_rows(
@@ -805,6 +814,9 @@ def _decision(
     positive_document_refs: Sequence[str] = (),
 ) -> RuleDecision:
     if final_state == "technical_error":
+        from .decision_model import ALLOWED_REASON_CODES_BY_FINAL_STATE
+        if reason_code not in ALLOWED_REASON_CODES_BY_FINAL_STATE["technical_error"]:
+            reason_code = "execution_program_error"
         # 诊断日志：只记规则、原因码与出错代码行，不含病历或模型内容。
         logger.warning(
             "LX0609 扩展文书族技术错误: rule_id=%s reason_code=%s call_line=%s",
@@ -3204,7 +3216,7 @@ async def _execute_extended_document_group(
                 excluded_antimicrobial_evidence
             )
             source_error = drug_order_error or (
-                "" if rule_id == "LX0609-05-01-06" else daily_error or senior_error
+                "" if rule_id in {"LX0609-05-01-04", "LX0609-05-01-06"} else daily_error or senior_error
             )
             if rule_id in {"LX0609-05-01-02", "LX0609-05-01-05"}:
                 source_error = source_error or first_course_error or transfer_in_error
@@ -3869,6 +3881,11 @@ async def _execute_extended_document_group(
                     final_state, reason_code = "data_gap", antimicrobial_horizon_error or "authoritative_time_missing"
                 elif missing and not mature_missing:
                     final_state, reason_code = "not_applicable", "evaluation_window_not_mature"
+                elif missing and not all(evidence_materials.permits_absence(source) for source in (
+                    "first_course_record", "daily_course_record", "senior_course_record",
+                    "postsurg_firstcourse_record", "surgery_record",
+                )):
+                    final_state, reason_code = "data_gap", "source_unavailable"
                 elif missing:
                     final_state, reason_code = "non_compliant", "required_document_missing"
                     display.append((rule_id, {
@@ -4389,7 +4406,7 @@ async def _execute_extended_document_group(
                     continue
             if medication_error:
                 final_state, reason_code = "data_gap", medication_error
-            elif not medications:
+            elif not medications and not formal_prescription_medications and not formal_prescription_error:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             else:
                 required_groups = _DISCHARGE_MEDICATION_REQUIRED_GROUPS
@@ -4503,6 +4520,8 @@ async def _execute_extended_document_group(
                         if not unmet_events
                         else "required_document_missing"
                     )
+                    if unmet_events and not evidence_materials.permits_absence("postsurg_firstcourse_record"):
+                        final_state, reason_code = "data_gap", "source_unavailable"
             if gate_outcome is None:
                 display.append((rule_id, {
                     "verification_kind": "postoperative_first_course_presence_check",
@@ -4784,7 +4803,7 @@ async def _execute_extended_document_group(
                             "required_document_missing",
                         )
                     elif body_issue:
-                        final_state, reason_code = "data_gap", body_issue
+                        final_state, reason_code = ("technical_error" if extraction.state == "technical_error" else "data_gap"), body_issue
                     elif unresolved_senior_semantics:
                         final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
                     elif unresolved_senior_time:
@@ -5161,7 +5180,7 @@ async def _execute_extended_document_group(
                 daily_scope_complete=daily_scope_complete,
             )
             if body_issue:
-                outcome = PredischargeCourseOutcome("data_gap", body_issue)
+                outcome = PredischargeCourseOutcome("technical_error" if extraction.state == "technical_error" else "data_gap", body_issue)
             selected_course_document_ids: tuple[tuple[str, str], ...] = ()
             if outcome.display_facts is not None:
                 display_facts = dict(outcome.display_facts)
@@ -5421,6 +5440,9 @@ async def _execute_extended_document_group(
                     )
                     if present:
                         final_state, reason_code = "compliant", "requirement_satisfied"
+                    elif any(not _row_text(row) for rows in (daily_rows, senior_rows) for row in rows
+                             if _row_time(row) is not None and _row_time(row).date() in valid_dates):
+                        final_state, reason_code = "data_gap", "required_field_missing"
                     elif window_course_count and llm_client is None:
                         # 上级同意只能由模型抽取确认；无模型时不能据未读到意见判缺。
                         window_course_count = 0

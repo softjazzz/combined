@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .llm_prompt_privacy import is_luxian_0609_privacy_block, luxian_0609_llm_call_failure_reason
+from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure, is_luxian_0609_privacy_block, luxian_0609_llm_call_failure_reason
 from ..llm_token_budget import budget_guarded_executor
 from .exam_token_budget import active as token_split_active, exam_recovery_executor
 
@@ -34,6 +34,7 @@ from .exam_lab_course_time import (
     scan_unplaced_time_state,
 )
 from .exam_lab_event_recovery import recover_exam_lab_rule_by_event
+from .decision_model import ALLOWED_REASON_CODES_BY_FINAL_STATE
 from .exam_lab_projection_batching import (
     ExamLabProjectionBatch,
     build_exam_lab_projection_batches,
@@ -2292,9 +2293,9 @@ async def _extract_exam_lab_batch_uncached(
         if is_budget_error(error):
             budget_rule_failures = dict.fromkeys(eligible_rule_ids, error.code)
             llm_call_count -= int(not getattr(error, "request_started", False))
-        elif luxian_0609_llm_call_failure_reason(error, fallback=""):
-            # 隐私护栏拦截走逐规则失败码通道（优先于传输兜底），保持不可重试。
-            budget_rule_failures = dict.fromkeys(eligible_rule_ids, luxian_0609_llm_call_failure_reason(error))
+        else:
+            # 安全失败码优先于旧传输兜底；显式停止重试也编码在原因中，贯穿后续投影。
+            budget_rule_failures = dict.fromkeys(eligible_rule_ids, classify_luxian_0609_llm_call_failure(error))
         response = None
     if response is None:
         return _ExamLabBatchResult(
@@ -2389,8 +2390,8 @@ async def _extract_exam_lab_batch_uncached(
                             completion_tokens += retry_completion
                             total_tokens += retry_total
                             api_time += retry_elapsed
-                        if recovery.failure_kind == "privacy_guard_blocked":
-                            # 逐事件补核被隐私护栏拒绝：走逐规则失败码通道，保持不可重试。
+                        if recovery.failure_kind in ALLOWED_REASON_CODES_BY_FINAL_STATE["technical_error"]:
+                            # 补核调用失败保留安全原因，不降级成模型格式错误。
                             isolated_rule_failures[rule_id] = "value"
                             budget_rule_failures[rule_id] = recovery.failure_kind
                         elif recovery.failure_kind is None:
@@ -2406,6 +2407,7 @@ async def _extract_exam_lab_batch_uncached(
                             )
                 else:
                     llm_call_count += 1
+                    retry_response_received = False
                     try:
                         # 只重问失败规则，并指明各规则失败位置、附上次输出中这些规则的事实。
                         retry_response = await _generate_exam_lab_fact_response(
@@ -2423,6 +2425,7 @@ async def _extract_exam_lab_batch_uncached(
                                 rule_ids=retry_rule_ids,
                             ),
                         )
+                        retry_response_received = True
                         retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
                         prompt_tokens += retry_prompt
                         completion_tokens += retry_completion
@@ -2452,9 +2455,8 @@ async def _extract_exam_lab_batch_uncached(
                                 rule_id,
                                 getattr(retry_exc, "failure_kind", "value"),
                             )
-                            if is_luxian_0609_privacy_block(retry_exc):
-                                # 局部补核被隐私护栏拒绝不是模型无效输出。
-                                budget_rule_failures[rule_id] = luxian_0609_llm_call_failure_reason(retry_exc)
+                            if not retry_response_received:
+                                budget_rule_failures[rule_id] = classify_luxian_0609_llm_call_failure(retry_exc)
         except (ExamLabFactParseError, ValueError) as exc:
             # 顶层 JSON/schema、规则/事件身份、引用范围错误，以及
             # 非受控 ValueError，仍按原合同让整批进入一次重试。
@@ -2470,6 +2472,7 @@ async def _extract_exam_lab_batch_uncached(
                 failure_kind,
             )
             llm_call_count += 1
+            retry_response_received = False
             try:
                 # 整批补核不再原样重发：指明失败类别与位置，附脱敏后的上次输出。
                 retry_response = await _generate_exam_lab_fact_response(
@@ -2483,6 +2486,7 @@ async def _extract_exam_lab_batch_uncached(
                         rule_ids=eligible_rule_ids,
                     ),
                 )
+                retry_response_received = True
                 retry_prompt, retry_completion, retry_total, retry_elapsed = _usage(retry_response)
                 prompt_tokens += retry_prompt
                 completion_tokens += retry_completion
@@ -2501,10 +2505,9 @@ async def _extract_exam_lab_batch_uncached(
             except Exception as retry_exc:  # noqa: BLE001
                 logger.warning("exam_lab_fact_retry_failed")
                 text_facts = None
-                if is_luxian_0609_privacy_block(retry_exc):
-                    # 整批补核被隐私护栏拒绝：逐规则闭合为不可重试，不落为 model_invalid_output。
+                if not retry_response_received:
                     budget_rule_failures = dict.fromkeys(
-                        eligible_rule_ids, luxian_0609_llm_call_failure_reason(retry_exc)
+                        eligible_rule_ids, classify_luxian_0609_llm_call_failure(retry_exc)
                     )
         result_conflicts: Mapping[int, tuple[str, ...]] = {}
         analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = {}

@@ -4844,15 +4844,6 @@ def _decision(
     else:
         dimensions = (ApplicabilityState.ERROR, EvidenceState.TECHNICAL_ERROR, QcDirection.UNKNOWN)
     applicability, evidence_state, direction = dimensions
-    if status == "technical_error":
-        # 模型诊断码保留在兼容结果；typed 决策只映射已知分类，不放行未知码。
-        reason_code = {
-            "model_rate_limited": "model_transport_error",
-            "model_upstream_error": "model_transport_error",
-            "model_http_error": "executor_exception",
-            "model_configuration_error": "executor_exception",
-            "execution_program_error": "executor_exception",
-        }.get(reason_code, reason_code)
     return RuleDecision(
         rule_id=rule_id,
         snapshot_hash=snapshot.snapshot_hash,
