@@ -64,3 +64,19 @@ python -B scripts/run_pr8_offline_tests.py tests/unit/test_qc43_review_regressio
 ## 剩余风险与未验证项
 
 局部规则覆盖本次明确反例和直接保护用例，不构成通用中文语义解析器；复杂嵌套、罕见情态/时间插入及跨句指代仍需具体标注反例验证。没有连接 PG、调用真实模型、读取真实临床材料、运行质控任务、测试 API/页面或全量测试。没有擅改复审保留的医学合同争议；这些定向工程结果不能作为 43 项整体医学验收通过的依据。
+
+## 2026-11-17 N1/N2 最后收尾
+
+基线：`340f5614eb21044d440a2f5bb4f81014f18d12ec`。按 `final-rereview.md` 收尾两项新增回归：尚未正式请示不可充当已完成请示，拟明日更换经治医师不可充当实际变更。复用该复核已取得的 `2 failed, 1 warning in 8.77s` RED 证据，不重复执行临时反例文件。
+
+只修改 `_affirmative_discharge_clause` 和 `_is_effective_physician_change_order` 的 `pending_action` 条件及相邻说明，去除情态后的修饰词白名单。情态覆盖任意局部修饰，只有紧邻目标动作的明确“已/已经/现/现已/现行”谓词结束该作用域；“尚未正式”“拟明日”保持未发生，“因患者不愿继续住院已请示”“因原医师未到岗现更换”仍保留实际动作。现有历史判断、状态门禁、结构化优先级及其余生产代码没有改动。两项合成反例加入现有参数集合，未修改 F3 或重跑其集合。
+
+在 `apps/medqc-web/backend` 执行：
+
+```powershell
+python -B scripts/run_pr8_offline_tests.py tests/unit/test_qc43_review_regressions.py::test_automatic_discharge_action_scope tests/unit/test_qc43_review_regressions.py::test_automatic_discharge_requires_current_signature tests/unit/test_qc43_review_regressions.py::test_automatic_discharge_actual_executor tests/unit/test_qc43_review_regressions.py::test_physician_change_action_scope tests/unit/test_qc43_deterministic_regressions.py::test_automatic_discharge_requires_affirmative_consult tests/unit/test_qc43_deterministic_regressions.py::test_cancelled_or_planned_physician_change_is_not_an_actual_event tests/unit/test_qc43_extended_regressions.py::test_discharge_approval_empty_window_body_is_gap tests/unit/test_luxian_0609_physician_handoff.py::test_071_explicit_change_with_complete_empty_handoff_is_non_compliant
+```
+
+输出：`35 passed, 1 warning in 2.05s`，退出码 0；包括上一波 R2/R3 肯定对照、真实未/拟/取消、纯历史保护和本次 N1/N2。仅既有 `app/core/settings.py:59` 的 Pydantic 弃用警告及数据库未配置提示。没有真实数据、数据库操作、模型请求、质控运行、全量测试或新代理。
+
+根目录 `git diff --check` 无输出、退出码 0；本次四个变更文件的严格 UTF-8 解码、无 BOM、无 CR、LF 结尾检查输出 `UTF-8/no-BOM/LF: 4 files passed`。局部明确完成谓词是有限合同，复杂嵌套和跨句指代仍未验证；不得据此推导真实临床效果或整体医学验收结论。

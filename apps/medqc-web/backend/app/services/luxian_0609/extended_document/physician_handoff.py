@@ -685,10 +685,10 @@ def _is_effective_physician_change_order(row: Mapping[str, Any]) -> bool:
     text = " ".join(_clean(row.get(field)) for field in ("order_name", "record_content"))
     if not text.strip():
         text = _clean(row.get("order_type"))
-    # 仅将紧邻变更动作的情态作为未发生依据，不让原因中的“未到岗”扩散。
+    # 情态覆盖局部修饰语；紧邻动作的“已/现”将实际变更与前置原因划开。
     pending_action = re.compile(
         r"(?:拟|计划|准备|考虑|建议|待|暂缓|未|不|取消|撤销|作废)"
-        r"(?:能|予|行|了|曾|及时|立即|继续|进行|完成|再|要|需|需要|\s|于(?:今日|明日|明天|次日|出院前|稍后))*$"
+        r"(?:(?!(?:已(?:经)?|现(?:已|行)?)\s*$).)*$"
     )
     history = re.compile(r"既往|此前|曾经|曾")
     current_scope = re.compile(r"本次|此次|今日|目前|现在|现")
