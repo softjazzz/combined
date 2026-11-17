@@ -61,8 +61,12 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                 source_statuses = validate_read_contract(report)
                 state["read_contract"]["source_report"] = report
                 state["automatic_material"] = {"protocol": PROTOCOL, "sources": {}}
-            from . import daily_material_projection as daily
-            if not pdf_copy and daily.enabled():
+            from . import daily_material_projection as daily, primary_material_projection as primary
+            if not pdf_copy and primary.enabled():
+                if not clinical.configured() or schema != "cdm":
+                    raise material.MaterialSnapshotError("primary_material_independent_cdm_required")
+                primary.capture_into(state, connection, identity)
+            elif not pdf_copy and daily.enabled():
                 if not clinical.configured() or schema != "cdm":
                     raise material.MaterialSnapshotError("daily_material_independent_cdm_required")
                 state["daily_material_manifest"] = daily.read_manifest(connection, identity)
@@ -83,7 +87,7 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
                     check()
                     status = source_statuses.get(table, "structure_ready") if "automatic_material" in state else "structure_ready"
                     # 不对缺列来源执行不完整 SQL；其他来源仍在本事务捕获。
-                    rows = [] if status == "columns_missing" else assembly._select_records(schema=schema, table=table, **coordinates, limit=10001)
+                    rows = [] if status == "columns_missing" and primary.scope(table) is None else assembly._select_records(schema=schema, table=table, **coordinates, limit=10001)
                     if len(rows) >= 10001:
                         raise material.MaterialSnapshotError("material_table_capacity_exceeded")
                     if pdf_copy and state["columns"][table]:

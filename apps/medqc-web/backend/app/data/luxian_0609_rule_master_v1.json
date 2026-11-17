@@ -513,6 +513,9 @@
       "source_document": "抗菌药物使用记录",
       "qc_point": "使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "antimicrobial_reason_quote_validation_pending",
+      "pending_definition_note": "理由抽取的引文校验稳定性待验收，按用户要求暂不启用；保留既有任务和结果，不据此判定临床未说明用药理由。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
     },
@@ -537,6 +540,9 @@
       "source_document": "抗菌药物使用记录",
       "qc_point": "经验用药时未说明理由，无样可采时未注明原因",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "antimicrobial_reason_quote_validation_pending",
+      "pending_definition_note": "理由抽取的引文校验稳定性待验收，按用户要求暂不启用；保留既有任务和结果，不据此判定临床未说明用药理由。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "当前按客户已确认的《抗菌药物使用记录》质控点执行；新增或变更口径须单独验收。"
     },

@@ -145,11 +145,15 @@ def _load_document_summaries_from_bundle(
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
         return _project_customer_safe_source_refs(summarize_frozen_documents(
-            documents=deepcopy(frozen["documents"]["documents"]), execution_domain=execution_domain, daily_material_status=frozen["documents"].get("daily_material_status")))
+            documents=deepcopy(frozen["documents"]["documents"]), execution_domain=execution_domain,
+            daily_material_status=frozen["documents"].get("daily_material_status"),
+            primary_material_status=frozen["documents"].get("primary_material_status")))
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
     if current is not None:
         return _project_customer_safe_source_refs(summarize_frozen_documents(
-            documents=current["documents"], execution_domain=execution_domain, daily_material_status=current.get("daily_material_status")))
+            documents=current["documents"], execution_domain=execution_domain,
+            daily_material_status=current.get("daily_material_status"),
+            primary_material_status=current.get("primary_material_status")))
     normalized_visit_id = _resolve_bundle_visit_id(record_id, visit_id)
     normalized_institute_id = str(institute_id or "").strip()
     normalized_patient_id = str(patient_id or "").strip()

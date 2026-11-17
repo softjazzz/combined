@@ -1,0 +1,27 @@
+-- DRAFT / NOT_APPROVED / NOT_EXECUTED。所有语句均注释化，不会执行授权。
+-- 来源 cb437e611；由实际 read_in_transaction 闭包及固定 target_columns 推导。
+-- ROLE_NAME 是待院方批准的既有业务 CDM 只读角色占位，不创建账号。
+-- 不撤销既有基础CDM必要权限；以下仅是四类扩展所需对象/列。
+-- GRANT CONNECT ON DATABASE medqc_sync_cdm TO ROLE_NAME;
+-- GRANT USAGE ON SCHEMA cdm, sync_material, sync_delivery TO ROLE_NAME;
+-- GRANT SELECT ("case_id", "policy_hash") ON sync_material.primary_policy TO ROLE_NAME;
+-- GRANT SELECT ("case_id", "selection_id") ON sync_material.primary_head TO ROLE_NAME;
+-- GRANT SELECT ("selection_id", "result_json") ON sync_material.primary_manifest TO ROLE_NAME;
+-- GRANT SELECT ("case_id", "source_namespace", "coverage_json") ON sync_material.primary_coverage TO ROLE_NAME;
+-- GRANT SELECT ("interface_name", "source_epoch", "mapping_hash", "activation") ON sync_delivery.contract TO ROLE_NAME;
+-- GRANT SELECT ("interface_name", "source_key_hash", "source_epoch", "generation", "mapping_hash", "activation", "target_key_hash") ON sync_delivery.receipt TO ROLE_NAME;
+-- GRANT SELECT ("institute_id", "patient_id", "visit_id", "document_id", "document_title", "record_content", "record_time", "submit_time", "modified_time", "source_status", "source_payload") ON sync_material.clinical_daily_current TO ROLE_NAME;
+-- GRANT SELECT ("institute_id", "patient_id", "visit_id", "visit_type", "name", "sex", "inpat_no", "mr_no", "document_id", "document_title", "document_status", "submitter", "submitter_id", "submit_datetime", "record_content", "last_modifier", "last_modifier_id", "last_modified_datetime", "update_time", "record_datetime", "age_year", "physician_sign", "physician_sign_datetime") ON cdm.daily_course_record TO ROLE_NAME;
+-- GRANT SELECT ("institute_id", "patient_id", "visit_id", "document_id", "document_title", "record_content", "record_time", "submit_time", "modified_time", "source_status", "source_payload") ON sync_material.clinical_presurg_summary_current TO ROLE_NAME;
+-- GRANT SELECT ("institute_id", "patient_id", "visit_id", "document_id", "visit_type", "record_content", "last_modifier", "last_modifier_id", "last_modified_datetime", "update_time", "document_title", "document_status", "submitter", "submitter_id", "submit_datetime", "inpat_no", "mr_no", "name", "sex", "age_year", "record_datetime") ON cdm.presurg_summary TO ROLE_NAME;
+-- GRANT SELECT ("institute_id", "patient_id", "visit_id", "document_id", "document_title", "record_content", "record_time", "submit_time", "modified_time", "source_status", "surgery_process", "surgery_begin_time", "surgery_end_time", "source_payload") ON sync_material.clinical_surgery_record_current TO ROLE_NAME;
+-- GRANT SELECT ("institute_id", "patient_id", "name", "sex", "inpat_no", "mr_no", "visit_id", "visit_type", "dept_name", "ward_name", "surgeon", "first_assistant", "second_assistant", "surgery_name", "surgery_code", "surgery_level", "anesthesia_method", "anesthesiologist", "document_id", "document_title", "document_status", "submitter", "submitter_id", "submit_datetime", "presurg_summary", "surgery_begin_time", "surgery_end_time", "surgery_history", "blood_loss", "surgery_process", "surgical_incisionheal_level", "intraoperative_treatment", "record_content", "record_datetime", "last_modifier", "last_modifier_id", "last_modified_datetime") ON cdm.surgery_record TO ROLE_NAME;
+-- GRANT SELECT ("institute_id", "patient_id", "visit_id", "document_id", "document_title", "record_content", "record_time", "submit_time", "modified_time", "source_status", "source_payload") ON sync_material.clinical_postsurg_firstcourse_record_current TO ROLE_NAME;
+-- GRANT SELECT ("institute_id", "patient_id", "visit_id", "document_id", "visit_type", "record_content", "last_modifier", "last_modifier_id", "last_modified_datetime", "update_time", "document_title", "document_status", "submitter", "submitter_id", "submit_datetime", "inpat_no", "mr_no", "name", "sex") ON cdm.postsurg_firstcourse_record TO ROLE_NAME;
+-- 不授予 primary_attempt、primary_binding、primary_policy_version、源库、raw/ingest/control对象。
+-- 不授予 INSERT/UPDATE/DELETE/TRUNCATE/CREATE/所有权/角色继承/未来对象默认权限。
+-- manifest.result_json/source_payload包含原文及原生字段；列级授权不能替代病例机构授权。
+-- 同步侧发布后才启用：同事务 to_regclass 只探测能力，不创建缺失对象。
+-- 只读RR事务由业务连接所有者创建，statement_timeout=10s；禁止开启写事务。
+-- 现场联验调用 ordinary_snapshot 复用现有来源设置，另需既有业务账号只读
+-- qc.sync_config_registry(namespace,config_key,payload_json)，不新增临床写通道。

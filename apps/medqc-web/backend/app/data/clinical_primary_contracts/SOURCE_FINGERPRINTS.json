@@ -1,0 +1,87 @@
+{
+  "clinical_primary.py": {
+    "sha256": "6409e93585bbaebfeae9e152eb5bb4fa988cf39018bb1482434bef61245fdc4a",
+    "definitions": {
+      "PrimaryContract": "1b8eda6757ad275874fa96d7385d3e3768d06b1474e9376b40f33529b1031852",
+      "PrimaryPolicy": "ec1bfcde5b84d82bc94d3c0437492092a73dd3b4aeb7cee1c3d87ad936f2db76",
+      "make_material": "5a5aed83553f3d2aac81b4bb65f892e460aed54be75d7488e6cefbd3b4928d21",
+      "select_materials": "b99b66ef968e8f5bed61089cf26af27468d3b4b00cab33bbf4e99de073191514"
+    }
+  },
+  "primary_store.py": {
+    "sha256": "bb187a5b447684cddfd7bef197db5be66c2983e9e2cddb4e8283863982ac689f",
+    "definitions": {
+      "cache_spec": "0de88226d4e2ea05ca751701e462cd871a07836c08f4b4466b7c975b8246b597",
+      "apply_schema": "e837c1dcc8fd180a5d9ecc4b4aa450e579024ab05361a1f1c94c5bc2af037d44",
+      "_schema_columns": "d3d6fe44b0f973967d5bf2b419dcd88e656dcc32b3e9a1a280b038af4e65aeb1",
+      "set_policy": "3821e3453673fbe639987718218d921dc7d77220950986abde766cb9813fca3f",
+      "_registered": "814383ea556112124e01709386b6af7fc04175a4c935861fbbc09632d0fb1005",
+      "_health_policy": "f1d8a25ae642fef1ecf6201ce798f8fe215c0ec64eab9b9f12f5ec8162d76ccf",
+      "_invalidate": "6cadd0ee630c043703f766e82e983d488ab7a6877343fc3b5491de8b8b75fc37",
+      "extract": "a12b81fe02cb0d52a1d7b28b54c81695d4ef58ac114de33e1da424a1df7dac2e",
+      "_sync_health": "a19912c34a2c997ade82a8f14156b3b598e16351cf9464debeed05b90ae087a7",
+      "refresh_publication": "2d3a8cbcfd6494be9549920dafa9da29cad850166a333a87f5f3145ae51a1cec",
+      "_target": "dfb38c2bc9714934a425417f4193d9a5e9ec7b0c8f527cda6c9a9d48e4af2885",
+      "_receipt": "e7a5292a1aad554b8f6fa26643ebe6d93670104063fd5272eb61eeae169eb013",
+      "_collect": "e7fc2100089d328a65e4acb3e17bb02d9cf9cacafb2e04781953bca61bac13a5",
+      "_health": "8f81db97e25f81b255f17419038afba91ce206ee88fd8755b373b10d3b3c5182",
+      "poll": "7da49fadc0a4740dea7c94232d8522587bfc60ca16b12b051f1dae1bde1e3016",
+      "read_in_transaction": "0735eabc647bec761ef22c6ebf247a9a4b63826479794cd076df7665aadf11c9"
+    }
+  },
+  "primary_cli.py": {
+    "sha256": "c566f155b931a80ceaad99d1a05980c8e8da95379a7238c177d570ef848f1e39",
+    "definitions": {
+      "load_plan": "f0e53002e506a402c6cd7fa6ad83939a16f267dbc1293d9a8542116e766f02cb",
+      "preflight": "b53ba1f8c33a14ad675ad34656faf27a0c9638552889a25322989332c941bc51",
+      "main": "0c22fd963558b7b5fef81b9bfa250196578e2e9d114869f450d8d0882a9a475a"
+    }
+  },
+  "primary_metadata.py": {
+    "sha256": "af04e9123e71fff9d9ecca3809d9758b2ae392bc12a2ca1924dace159448a9e2",
+    "definitions": {
+      "metadata_document": "40bf5a802f7c188b2ee17f01b76cb0670f8d71b686eefd1438dc3808702378e4",
+      "_mappings": "08bbe5e0a6b397d33b25516cdf45d1bce89403dc690d43eb4d31e30bf78db295",
+      "MetadataContract": "12469985b6e309a64953578d5189ba4731b8b10310386ee16deb6a54f92b8a78",
+      "real_contracts": "1d65be9b72894ba195450a8fb1ed21131995432b61129a93c94ca6d391ba223b"
+    }
+  },
+  "clinical_daily.py": {
+    "sha256": "c808742ed84f0bfb69c057d3f3e4d9e637ff71f41cb36460a65e7dae66242b79",
+    "definitions": {
+      "require": "3312fd2d4ee16aeb47cc1422336099c6e4143acd696f20cd69a4f7aa43395d0c",
+      "independent_database": "20648a45471236f0e9b2ed9683f3d76560ffc0176e02fce42a617e8f892cd529",
+      "clinical_source_database": "37159e04a385a5b18923349b932dc8c479c1d48eafb195ecc13dada4b55132bc",
+      "ClinicalContract": "669b33369bf198ced9581c4c2fbe84d760a67dfa6125f5f3fc05c0832992c108",
+      "ClinicalScope": "7efe9c2062893bc3a0c4e269393b43e7744bb3658187fa9d3dc214fd3d208b4f",
+      "ClinicalAudit": "bc2d81fda46fed85a9676bb24a77adb051684ba99e1efb97692310852ff30efc",
+      "ClinicalPgSource": "d11f6b44a15af044df4ac3b3c6f669366fb4c5a1b1e862965c2af9297b8ecb4e",
+      "extract_clinical": "0ef629b24b8cc15e1c9a0fec72418b040e219ad783c0d4ec579c03e125e0cefc",
+      "validate_record_status": "4dbaa05c59670a88de614eae26ee58885c1e0549cc0ca795e3c914b507fd3372",
+      "_ClinicalTarget": "2cf061150e5c44f579dbf1aa9146cf133764040bacf2a882a7e68915b2396105",
+      "publish_clinical": "53fdc97c7eb289b1ed4fe985f470e4a3e3b207e2cf5d6a7b51f062952c1a497a"
+    }
+  },
+  "daily_reconcile.py": {
+    "sha256": "f08b75f6ad09caa4f06605dbf68fc643242b948b2fb0bf7e28a0a7de534118b1",
+    "definitions": {
+      "_publish": "c668e273f493fd58338d5e859e60a677353a3d461ff0e7d1841ee40f7ef181d6",
+      "_transaction": "f7c0ae1efdd85657b8e3bc2e5bf5c45041dc1907c63138460c69bb80d65b5812",
+      "_pending": "c583db10fb0ed1e9b11efa16c07c8dbeee76495c36aa5db87d0a14f34b1320e8",
+      "set_policy": "b1b38c0b4bb6e251cd884c5d01945f3d6c73e40b00d270640aa959a15f3e5ea9",
+      "set_coverage": "e0e9d82edff1eedc1fdfac33554fae490b7ae065274b59eddb2e559b01faba71",
+      "_store_material": "9589fd74e748ba75c7bbe3ec4734b57e2a0e9a4d9685ff18a0b5d94dfd7515f6",
+      "_sync_publication_health": "60052787cf0b48c32c67c361ef14d957e3d806e519944e4e76a96980393c0f22",
+      "refresh_clinical_publication": "ac24d347254106694c2354e9df910209fd988a4f0babb72712891e2df18e21cf",
+      "poll_confirmed": "3f6686cae71e1060bb3db7197ae2634f96937017be5350f97c967001ab816293",
+      "_inputs": "840885a8a061ef4c009d04637e2afcf06929eba88db59cc1a3317c43700525c3",
+      "run_reconciliation": "320a86f2da2514249fd277f1aa40a0044f8191235cfe2ff8f1e811451dbb9b78",
+      "pending_cases": "4bce5a9b9bceedca991a4f6e154a077787600f2e1d701ec681f6308d1a503b03",
+      "_target_current": "32a6c1d89e1d84d7e5c7955647b15ae10928dbe1255e6e20872f614756c44d6e",
+      "_independent_prior_items": "3a0ab18a96c42df7f1879874ce29064c3b082c92251214e41c686de39040973a",
+      "read_manifest_in_transaction": "5292dc9e31d17e927bc68a825137dae2c73ead7c8cc49111bc33e1442afa8edc",
+      "read_manifest": "91f69364bb63baf141b0488c2891f3668218f82eefbd6891127e7e06a072c2af",
+      "_read_manifest": "c59ab6749a3843393f398cd37c59374fc86111ba10408df5bbf1b9566f15bfaf"
+    }
+  }
+}

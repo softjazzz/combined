@@ -1,0 +1,1652 @@
+{
+  "revision": "clinical-primary-real-fields-v2",
+  "source_database": "clinical_data",
+  "metadata_only": true,
+  "contains_phi": false,
+  "input_zip_sha256": {
+    "three_table": "7317971b78ed418a5f223248c8287ebb7c7b435df98540d18fe779daedcee9d1",
+    "alignment": "416fe3d6ff84564b15abf18f772b9c8a9534882074104885f45e2c0db066b9f4"
+  },
+  "tables": {
+    "daily_course_record": {
+      "schema": "public",
+      "table": "daily_course_record",
+      "native_primary_key": [
+        "institute_id",
+        "document_id"
+      ],
+      "columns": [
+        {
+          "name": "v2_schema",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 1
+        },
+        {
+          "name": "is_deleted",
+          "formatted_type": "bit(1)",
+          "nullable": false,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 2
+        },
+        {
+          "name": "institute_id",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 3
+        },
+        {
+          "name": "patient_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 4
+        },
+        {
+          "name": "visit_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 5
+        },
+        {
+          "name": "visit_type",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 6
+        },
+        {
+          "name": "document_id",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 7
+        },
+        {
+          "name": "document_title",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 8
+        },
+        {
+          "name": "document_status",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 9
+        },
+        {
+          "name": "submitter",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 10
+        },
+        {
+          "name": "submitter_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 11
+        },
+        {
+          "name": "submit_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 12
+        },
+        {
+          "name": "inpat_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 13
+        },
+        {
+          "name": "mr_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 14
+        },
+        {
+          "name": "dept_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 15
+        },
+        {
+          "name": "ward_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 16
+        },
+        {
+          "name": "ward_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 17
+        },
+        {
+          "name": "bed_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 18
+        },
+        {
+          "name": "name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 19
+        },
+        {
+          "name": "sex",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 20
+        },
+        {
+          "name": "age_year",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 21
+        },
+        {
+          "name": "age_month",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 22
+        },
+        {
+          "name": "age",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 23
+        },
+        {
+          "name": "tcm_diagnosis_summary",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 24
+        },
+        {
+          "name": "record_content",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 25
+        },
+        {
+          "name": "note",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 26
+        },
+        {
+          "name": "record_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 27
+        },
+        {
+          "name": "physician_sign",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 28
+        },
+        {
+          "name": "physician_sign_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 29
+        },
+        {
+          "name": "last_modifier",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 30
+        },
+        {
+          "name": "last_modifier_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 31
+        },
+        {
+          "name": "last_modified_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 32
+        },
+        {
+          "name": "update_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 33
+        },
+        {
+          "name": "sys_index_id",
+          "formatted_type": "bigint",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 34
+        },
+        {
+          "name": "record_status",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 35
+        },
+        {
+          "name": "sys_source_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "NOT_RECORDED_IN_ALIGNMENT",
+          "ordinal": 36
+        }
+      ],
+      "business_semantics_approved": false,
+      "lifecycle_semantics_approved": false
+    },
+    "presurg_summary": {
+      "schema": "public",
+      "table": "presurg_summary",
+      "native_primary_key": [
+        "institute_id",
+        "document_id"
+      ],
+      "columns": [
+        {
+          "name": "v2_schema",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "该单据二级结构化",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 1
+        },
+        {
+          "name": "is_deleted",
+          "formatted_type": "bit(1)",
+          "nullable": false,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 2
+        },
+        {
+          "name": "institute_id",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "comment": "机构号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 3
+        },
+        {
+          "name": "patient_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "患者号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 4
+        },
+        {
+          "name": "visit_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "就诊号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 5
+        },
+        {
+          "name": "visit_type",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "就诊类型",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 6
+        },
+        {
+          "name": "document_id",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "comment": "文档编号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 7
+        },
+        {
+          "name": "document_title",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档标题",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 8
+        },
+        {
+          "name": "document_status",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档状态",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 9
+        },
+        {
+          "name": "submitter",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档提交人",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 10
+        },
+        {
+          "name": "submitter_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档提交人ID",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 11
+        },
+        {
+          "name": "submit_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "文档提交时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 12
+        },
+        {
+          "name": "inpat_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "住院号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 13
+        },
+        {
+          "name": "mr_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病案号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 14
+        },
+        {
+          "name": "name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "患者姓名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 15
+        },
+        {
+          "name": "sex",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "患者性别",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 16
+        },
+        {
+          "name": "age_year",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "年龄(年)",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 17
+        },
+        {
+          "name": "age_month",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "年龄(月)",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 18
+        },
+        {
+          "name": "age",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "年龄",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 19
+        },
+        {
+          "name": "dept_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "科室名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 20
+        },
+        {
+          "name": "ward_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病区名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 21
+        },
+        {
+          "name": "ward_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病房号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 22
+        },
+        {
+          "name": "bed_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病床号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 23
+        },
+        {
+          "name": "summary_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "小结时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 24
+        },
+        {
+          "name": "condition_summary",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "病情摘要",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 25
+        },
+        {
+          "name": "diagnose_based_on",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "诊断依据",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 26
+        },
+        {
+          "name": "allergy_sign",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "过敏史标志",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 27
+        },
+        {
+          "name": "allergy_history",
+          "formatted_type": "character varying(2000)",
+          "nullable": true,
+          "comment": "过敏史",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 28
+        },
+        {
+          "name": "assist_exam",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "辅助检查",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 29
+        },
+        {
+          "name": "surgery_indication",
+          "formatted_type": "character varying(2000)",
+          "nullable": true,
+          "comment": "手术指征",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 30
+        },
+        {
+          "name": "surgery_contraindication",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "手术禁忌症",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 31
+        },
+        {
+          "name": "consultation_suggestion",
+          "formatted_type": "character varying(2000)",
+          "nullable": true,
+          "comment": "会诊意见",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 32
+        },
+        {
+          "name": "planned_surgery_code",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "拟实施手术操作编码",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 33
+        },
+        {
+          "name": "planned_surgery_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "拟实施手术操作名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 34
+        },
+        {
+          "name": "planned_surgery_position_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "拟实施手术操作目标部位名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 35
+        },
+        {
+          "name": "planned_surgery_time",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "拟实施手术操作时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 36
+        },
+        {
+          "name": "planned_anesthesia_method",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "拟实施麻醉方法",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 37
+        },
+        {
+          "name": "note",
+          "formatted_type": "character varying(2000)",
+          "nullable": true,
+          "comment": "注意事项",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 38
+        },
+        {
+          "name": "surgery_point",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "手术要点",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 39
+        },
+        {
+          "name": "surgery_preparation",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "术前准备",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 40
+        },
+        {
+          "name": "postsurg_operation",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "术后处理",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 41
+        },
+        {
+          "name": "postsurg_complication",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "术后可能发生的并发症",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 42
+        },
+        {
+          "name": "record_content",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "记录内容",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 43
+        },
+        {
+          "name": "participants",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "参加人员名单",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 44
+        },
+        {
+          "name": "surgeon_sign",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术医师签名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 45
+        },
+        {
+          "name": "recorder_sign",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "记录人签名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 46
+        },
+        {
+          "name": "recorder_sign_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "记录人签名时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 47
+        },
+        {
+          "name": "last_modifier",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "最新修改人",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 48
+        },
+        {
+          "name": "last_modifier_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "最新修改人id",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 49
+        },
+        {
+          "name": "last_modified_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "最新修改时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 50
+        },
+        {
+          "name": "update_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "数据更新时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 51
+        },
+        {
+          "name": "sys_index_id",
+          "formatted_type": "bigint",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 52
+        },
+        {
+          "name": "record_status",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 53
+        },
+        {
+          "name": "record_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 54
+        },
+        {
+          "name": "sys_source_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 55
+        }
+      ],
+      "business_semantics_approved": false,
+      "lifecycle_semantics_approved": false
+    },
+    "surgery_record": {
+      "schema": "public",
+      "table": "surgery_record",
+      "native_primary_key": [
+        "institute_id",
+        "document_id"
+      ],
+      "columns": [
+        {
+          "name": "v2_schema",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "该单据二级结构化",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 1
+        },
+        {
+          "name": "is_deleted",
+          "formatted_type": "bit(1)",
+          "nullable": false,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 2
+        },
+        {
+          "name": "institute_id",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "comment": "机构号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 3
+        },
+        {
+          "name": "patient_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "患者号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 4
+        },
+        {
+          "name": "visit_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "就诊号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 5
+        },
+        {
+          "name": "visit_type",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "就诊类型",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 6
+        },
+        {
+          "name": "document_id",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "comment": "文档编号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 7
+        },
+        {
+          "name": "document_title",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档标题",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 8
+        },
+        {
+          "name": "document_status",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档状态",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 9
+        },
+        {
+          "name": "submitter",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档提交人",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 10
+        },
+        {
+          "name": "submitter_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档提交人ID",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 11
+        },
+        {
+          "name": "submit_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "文档提交时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 12
+        },
+        {
+          "name": "application_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "申请号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 13
+        },
+        {
+          "name": "inpat_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "住院号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 14
+        },
+        {
+          "name": "mr_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病案号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 15
+        },
+        {
+          "name": "name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "患者姓名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 16
+        },
+        {
+          "name": "sex",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "患者性别",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 17
+        },
+        {
+          "name": "age_year",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "年龄(年)",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 18
+        },
+        {
+          "name": "age_month",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "年龄(月)",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 19
+        },
+        {
+          "name": "age",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "年龄",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 20
+        },
+        {
+          "name": "ethnicity",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "民族",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 21
+        },
+        {
+          "name": "dept_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "科室名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 22
+        },
+        {
+          "name": "ward_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病区名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 23
+        },
+        {
+          "name": "ward_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病房号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 24
+        },
+        {
+          "name": "bed_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病床号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 25
+        },
+        {
+          "name": "remark",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "备注",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 26
+        },
+        {
+          "name": "presurg_summary",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "术前小结",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 27
+        },
+        {
+          "name": "surgery_begin_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "手术操作开始时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 28
+        },
+        {
+          "name": "surgery_end_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "手术操作结束时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 29
+        },
+        {
+          "name": "surgery_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术操作名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 30
+        },
+        {
+          "name": "surgery_code",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术操作编码",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 31
+        },
+        {
+          "name": "surgery_level",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术级别",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 32
+        },
+        {
+          "name": "surgery_history",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术史",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 33
+        },
+        {
+          "name": "whether_infected",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "是否感染",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 34
+        },
+        {
+          "name": "blood_loss",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "失血量",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 35
+        },
+        {
+          "name": "infusion_volume",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "输液量",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 36
+        },
+        {
+          "name": "blood_transfusion_volume",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "输血量",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 37
+        },
+        {
+          "name": "surgeon",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术医师姓名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 38
+        },
+        {
+          "name": "first_assistant",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术助手1姓名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 39
+        },
+        {
+          "name": "second_assistant",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术助手2姓名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 40
+        },
+        {
+          "name": "anesthesia_method",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "麻醉方法",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 41
+        },
+        {
+          "name": "anesthesiologist",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "麻醉医师姓名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 42
+        },
+        {
+          "name": "surgery_process",
+          "formatted_type": "character varying(2000)",
+          "nullable": true,
+          "comment": "手术过程",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 43
+        },
+        {
+          "name": "surgial_incision_level",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术切口分级",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 44
+        },
+        {
+          "name": "surgical_incisionheal_level",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术切口愈合分级",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 45
+        },
+        {
+          "name": "intraoperative_treatment",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "术中出现的情况及处理",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 46
+        },
+        {
+          "name": "record_content",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "记录内容",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 47
+        },
+        {
+          "name": "planned_surgery",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "拟施手术",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 48
+        },
+        {
+          "name": "performed_surgery",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "实施手术",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 49
+        },
+        {
+          "name": "record_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "记录时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 50
+        },
+        {
+          "name": "last_modifier",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "最新修改人",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 51
+        },
+        {
+          "name": "last_modifier_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "最新修改人id",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 52
+        },
+        {
+          "name": "last_modified_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "最新修改时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 53
+        },
+        {
+          "name": "update_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "数据更新时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 54
+        },
+        {
+          "name": "sys_index_id",
+          "formatted_type": "bigint",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 55
+        },
+        {
+          "name": "record_status",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 56
+        },
+        {
+          "name": "other_content",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 57
+        },
+        {
+          "name": "sys_source_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 58
+        },
+        {
+          "name": "surgeon_sign",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 59
+        }
+      ],
+      "business_semantics_approved": false,
+      "lifecycle_semantics_approved": false
+    },
+    "postsurg_firstcourse_record": {
+      "schema": "public",
+      "table": "postsurg_firstcourse_record",
+      "native_primary_key": [
+        "institute_id",
+        "document_id"
+      ],
+      "columns": [
+        {
+          "name": "v2_schema",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "该单据二级结构化",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 1
+        },
+        {
+          "name": "is_deleted",
+          "formatted_type": "bit(1)",
+          "nullable": false,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 2
+        },
+        {
+          "name": "institute_id",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "comment": "机构号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 3
+        },
+        {
+          "name": "patient_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "患者号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 4
+        },
+        {
+          "name": "visit_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "就诊号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 5
+        },
+        {
+          "name": "visit_type",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "就诊类型",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 6
+        },
+        {
+          "name": "document_id",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "comment": "文档编号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 7
+        },
+        {
+          "name": "document_title",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档标题",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 8
+        },
+        {
+          "name": "document_status",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档状态",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 9
+        },
+        {
+          "name": "submitter",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档提交人",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 10
+        },
+        {
+          "name": "submitter_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "文档提交人ID",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 11
+        },
+        {
+          "name": "submit_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "文档提交时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 12
+        },
+        {
+          "name": "inpat_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "住院号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 13
+        },
+        {
+          "name": "mr_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病案号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 14
+        },
+        {
+          "name": "name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "患者姓名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 15
+        },
+        {
+          "name": "sex",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "患者性别",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 16
+        },
+        {
+          "name": "age_year",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "年龄(年)",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 17
+        },
+        {
+          "name": "age_month",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "年龄(月)",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 18
+        },
+        {
+          "name": "age",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "年龄",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 19
+        },
+        {
+          "name": "dept_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "科室名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 20
+        },
+        {
+          "name": "ward_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病区名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 21
+        },
+        {
+          "name": "ward_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病房号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 22
+        },
+        {
+          "name": "bed_no",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "病床号",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 23
+        },
+        {
+          "name": "remark",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "备注",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 24
+        },
+        {
+          "name": "surgery_name",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术操作名称",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 25
+        },
+        {
+          "name": "surgery_code",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术操作编码",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 26
+        },
+        {
+          "name": "surgery_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "手术时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 27
+        },
+        {
+          "name": "anesthesia_method",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "麻醉方法",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 28
+        },
+        {
+          "name": "surgery_method",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "手术方式",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 29
+        },
+        {
+          "name": "brief_course",
+          "formatted_type": "character varying(2048)",
+          "nullable": true,
+          "comment": "手术简要经过",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 30
+        },
+        {
+          "name": "substance_drained",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "引流物",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 31
+        },
+        {
+          "name": "implant",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "植入物",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 32
+        },
+        {
+          "name": "blood_transfusion",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "输血情况",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 33
+        },
+        {
+          "name": "postsurg_treatment",
+          "formatted_type": "character varying(2048)",
+          "nullable": true,
+          "comment": "术后处理措施",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 34
+        },
+        {
+          "name": "postsurg_note",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "术后注意事项",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 35
+        },
+        {
+          "name": "postsurg_duration",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "术后天数",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 36
+        },
+        {
+          "name": "record_content",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": "记录内容",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 37
+        },
+        {
+          "name": "record_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "记录时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 38
+        },
+        {
+          "name": "physician_sign",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "医师签名",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 39
+        },
+        {
+          "name": "physician_sign_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "医师签名时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 40
+        },
+        {
+          "name": "last_modifier",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "最新修改人",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 41
+        },
+        {
+          "name": "last_modifier_id",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": "最新修改人id",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 42
+        },
+        {
+          "name": "last_modified_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "最新修改时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 43
+        },
+        {
+          "name": "update_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": "数据更新时间",
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 44
+        },
+        {
+          "name": "sys_index_id",
+          "formatted_type": "bigint",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 45
+        },
+        {
+          "name": "record_status",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 46
+        },
+        {
+          "name": "sys_source_time",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 47
+        },
+        {
+          "name": "postsurg_diagnosis",
+          "formatted_type": "text",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 48
+        },
+        {
+          "name": "surgeon_sign",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "comment": null,
+          "comment_status": "CATALOG_CAPTURED",
+          "ordinal": 49
+        }
+      ],
+      "business_semantics_approved": false,
+      "lifecycle_semantics_approved": false
+    }
+  }
+}

@@ -96,7 +96,35 @@ export interface DocumentSignature {
   source_field?: string
 }
 
-export interface DocItem {
+export interface MaterialDisplay {
+  source_version_key?: string
+  version_id?: string
+  source_record_identity?: string
+  source_namespace?: string
+  source_object?: string
+  material_state?: string
+  material_selected?: boolean
+  material_rule_usable?: boolean
+  material_source_label?: string
+  material_notice?: string
+  material_scope_notice?: string
+}
+
+export interface PrimaryMaterialStatus {
+  contract: string
+  selection_id?: string
+  policy_hash?: string
+  notice: string
+  kinds: Partial<Record<'daily_course_record' | 'presurg_summary' | 'surgery_record' | 'postsurg_firstcourse_record', {
+    status: 'NOT_DEPLOYED' | 'AVAILABLE' | 'HELD' | 'EMPTY_UNCONFIRMED'
+    notice: string
+    selected_count: number
+    held_count: number
+    can_judge_clinical_absence: false
+  }>>
+}
+
+export interface DocItem extends MaterialDisplay {
   id?: string
   doc_id?: string
   doc_key?: string

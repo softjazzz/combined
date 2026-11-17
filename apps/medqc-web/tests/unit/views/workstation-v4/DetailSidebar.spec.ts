@@ -84,6 +84,15 @@ const mockTree: DocTreeGroup[] = [
 ]
 
 describe('DetailSidebar', () => {
+  it('目录在标题下显示后端来源版本与未选限制，保持版本定位键', async () => {
+    const doc = { ...mockDocuments[1], doc_key: 'surgery_record::R::held-v1', version_id: 'held-v1', material_source_label: 'clinical', material_selected: false, material_rule_usable: false, material_notice: '状态待核（HELD）' }
+    const tree = [{ ...mockTree[1], children: [{ ...mockTree[1].children[0], doc_key: doc.doc_key }] }]
+    const wrapper = mount(DetailSidebar, { props: { record: mockRecord, documents: [doc], documentsTree: tree, documentsLoading: false, activeDocType: '' }, global: { stubs: { SyncOutlined: true, FileTextOutlined: true, EyeOutlined: true, CaretRightOutlined: true } } })
+    expect(wrapper.text()).toContain('clinical · 版本：held-v1 · 仅展示，未选用 · 规则暂不可用 · 状态待核（HELD）')
+    await wrapper.findAll('button').find(button => button.text().includes('版本：held-v1'))?.trigger('click')
+    expect(wrapper.emitted('preview-doc')?.[0]?.[0]).toMatchObject({ doc_key: doc.doc_key, material_selected: false })
+  })
+
   it('优先渲染分组树并展示节点', () => {
     const wrapper = mount(DetailSidebar, {
       props: {

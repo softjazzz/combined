@@ -28,7 +28,10 @@
           @click="handleSwitchDoc(doc)"
         >
           {{ displayDocName(doc) }}
-          <span v-if="doc.material_notice" class="ml-1 text-xs">（{{ doc.material_source_label }} · {{ doc.material_notice }}）</span>
+          <span
+            v-if="resolveMaterialDisplayNotice(doc)"
+            class="ml-1 text-xs"
+          >（{{ resolveMaterialDisplayNotice(doc) }}）</span>
         </button>
       </div>
     </div>
@@ -182,9 +185,9 @@
       class="flex h-64 flex-col items-center justify-center text-gray-400"
     >
       <FileTextOutlined class="mb-3 text-4xl" />
-      <p>暂无文书内容</p>
+      <p>{{ documentReadError || (documentEmptyReason === 'document_not_found' ? '暂无文书内容（未找到当前文书）' : loadedDocKey ? '本文书正文为空' : '暂无文书内容') }}</p>
       <p class="text-xs">
-        请在左侧选择病历
+        {{ loadedDocKey ? '当前显示仅代表材料读取状态' : '请在左侧选择病历' }}
       </p>
     </div>
 
@@ -254,12 +257,8 @@ import { useDefectHighlight } from '@/composables/useDefectHighlight'
 import type { DefectAnnotation } from '@/composables/useDefectHighlight'
 import { getAccessToken } from '@/utils/auth-token'
 import { resolveMedicalFieldLabel } from '@/utils/medicalFieldLabels'
-
-interface MaterialDisplay {
-  material_source_label?: string
-  material_notice?: string
-  material_scope_notice?: string
-}
+import { resolveMaterialDisplayNotice, resolveMaterialScopeNotice } from '@/views/workstation-v4/utils/documentDisplay'
+import type { MaterialDisplay } from '@/views/workstation-v4/types'
 
 interface EmrDocumentSummary extends MaterialDisplay {
   version_id?: string
@@ -351,9 +350,11 @@ const rawContent = ref('')
 const contentType = ref<'text' | 'html'>('text')
 const metadata = ref<EmrDocumentMetadata>({})
 const documentScopeNotice = ref('')
+const documentReadError = ref('')
+const documentEmptyReason = ref('')
 const activeMaterial = computed(() => documentItems.value.find(doc => docIdentityKey(doc) === loadedDocKey.value))
 const materialStatusNotice = computed(() => props.materialNotice || documentScopeNotice.value || metadata.value.material_scope_notice || activeMaterial.value?.material_scope_notice || '')
-const activeMaterialNotice = computed(() => [metadata.value.material_source_label || activeMaterial.value?.material_source_label, metadata.value.material_notice || activeMaterial.value?.material_notice].filter(Boolean).join(' · '))
+const activeMaterialNotice = computed(() => resolveMaterialDisplayNotice({ ...activeMaterial.value, ...metadata.value }))
 const annotations = ref<DefectAnnotation[]>([])
 const documentItems = ref<EmrDocumentSummary[]>([])
 const loadedDocKey = ref('')
@@ -688,6 +689,8 @@ function docIdentityKey(doc: EmrDocumentSummary): string {
 }
 
 function resetViewerState() {
+  documentReadError.value = ''
+  documentEmptyReason.value = ''
   rawContent.value = ''
   contentType.value = 'text'
   metadata.value = {}
@@ -774,7 +777,7 @@ async function fetchDocuments() {
       return
     }
     const payload = result?.data || {}
-    documentScopeNotice.value = String(payload.daily_material_status?.notice || '')
+    documentScopeNotice.value = resolveMaterialScopeNotice(payload)
     const docList = Array.isArray(payload.documents)
       ? payload.documents
       : Array.isArray(payload)
@@ -826,6 +829,13 @@ async function loadDocument(doc?: EmrDocumentSummary) {
   const controller = beginRequest()
   loading.value = true
   loadedDocKey.value = docIdentityKey(doc)
+  rawContent.value = ''
+  metadata.value = {}
+  annotations.value = []
+  layoutVersion.value = ''
+  renderBlocks.value = []
+  documentReadError.value = ''
+  documentEmptyReason.value = ''
   try {
     const extraParams: Record<string, string> = {}
     if (doc.doc_type) extraParams.doc_type = doc.doc_type
@@ -844,15 +854,18 @@ async function loadDocument(doc?: EmrDocumentSummary) {
     })
     const result = await response.json()
     if (response.status === 401 || response.status === 403) {
+      documentReadError.value = '无权读取本文书'
       emit('error', 'unauthorized')
       return
     }
-    if (result?.success === false || !result?.data) {
+    if (response.status >= 400 || result?.success === false || !result?.data) {
+      documentReadError.value = '文书内容读取失败，请稍后重试'
       emit('error', readEnvelopeMessage(result, 'load-document-failed'))
       return
     }
 
     const data = result.data
+    documentEmptyReason.value = String(data.empty_reason || '')
     rawContent.value = data.content || ''
     contentType.value = data.content_type || 'text'
     metadata.value = data.metadata && typeof data.metadata === 'object' ? data.metadata : {}
@@ -873,6 +886,7 @@ async function loadDocument(doc?: EmrDocumentSummary) {
     })
   } catch (err) {
     if (isAbortError(err)) return
+    documentReadError.value = '文书内容读取失败，请稍后重试'
     console.error('加载文书内容失败:', err)
     emit('error', 'load-document-failed')
   } finally {

@@ -14,6 +14,31 @@ describe('EMRViewer', () => {
     vi.unstubAllGlobals()
   })
 
+  it('全文搬运来源版本与HELD限制，空正文不显示技术失败', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ content: '', metadata: { material_source_label: 'clinical', version_id: 'v-held', material_selected: false, material_rule_usable: false, material_notice: '状态待核（HELD）' }, empty_reason: 'document_empty', render_blocks: [] })))
+    const wrapper = mount(EMRViewer, {
+      props: { visitId: 'V', patientId: 'P', instituteId: 'I', documentsManaged: true, documents: [{ id: 'D', doc_type: 'surgery_record', doc_name: '手术记录', doc_key: 'surgery_record::R::v-held', version_id: 'v-held' }] },
+      global: { stubs: { 'a-spin': true, FileTextOutlined: true } },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('clinical · 版本：v-held · 仅展示，未选用 · 规则暂不可用 · 状态待核（HELD）')
+    expect(wrapper.text()).toContain('本文书正文为空')
+    expect(wrapper.text()).not.toContain('读取失败')
+  })
+
+  it('技术读取失败清除上一版本正文并区别于空正文', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ content: '上一版本正文', metadata: {}, render_blocks: [] })).mockResolvedValueOnce({ status: 503, json: async () => ({ success: false, message: 'clinical_source_read_unavailable' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const documents = [{ id: 'A', doc_type: 'surgery_record', doc_name: '手术记录', doc_key: 'surgery_record::R::a', version_id: 'a' }, { id: 'B', doc_type: 'surgery_record', doc_name: '手术记录', doc_key: 'surgery_record::R::b', version_id: 'b' }]
+    const wrapper = mount(EMRViewer, { props: { visitId: 'V', patientId: 'P', instituteId: 'I', documentsManaged: true, documents, activeDocKey: documents[0].doc_key }, global: { stubs: { 'a-spin': true, FileTextOutlined: true } } })
+    await flushPromises()
+    await wrapper.setProps({ activeDocKey: documents[1].doc_key })
+    await flushPromises()
+    expect(wrapper.text()).toContain('文书内容读取失败，请稍后重试')
+    expect(wrapper.text()).not.toContain('上一版本正文')
+    expect(wrapper.text()).not.toContain('本文书正文为空')
+  })
+
   it('同源类型同号文书使用完整版本键请求全文', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ content: '合成版本正文', content_type: 'text', metadata: {}, defect_annotations: [], render_blocks: [] }))
     vi.stubGlobal('fetch', fetchMock)

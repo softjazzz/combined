@@ -642,9 +642,13 @@ def _flatten_inventory_items(
         )
 
     def merge_captured(items, fallback_items):
-        if "daily_course_record" in bundle_payload.get("_material_scope", {}):
-            # 目录保留待核版本；正式程序输入仅使用本次捕获的选择集合。
-            items = [item for item in items if _item_source_table(item) != "daily_course_record"]
+        from . import primary_material_projection as primary
+        scopes = bundle_payload.get("_material_scope", {})
+        owned = {key for key in primary.KINDS if scopes.get(key, {}).get("contract") == primary.CONTRACT}
+        if "daily_course_record" in scopes:
+            owned.add("daily_course_record")
+        # 目录保留替代/待核版本；正式程序输入仅使用本次捕获的选择集合。
+        items = [item for item in items if _item_source_table(item) not in owned]
         return _merge_fallback_items(items, fallback_items)
 
     inventory_items = _safe_list(bundle_payload.get("source_documents")) or _safe_list(structured.get("document_inventory"))
@@ -695,7 +699,11 @@ def capture_programmatic_sources(state, cancellation_check):
         cancellation_check()
         from .automatic_material_scope import source_scope
         captured_scope = source_scope(table)
-        from . import daily_material_projection as daily
+        from . import daily_material_projection as daily, primary_material_projection as primary
+        projected = primary.rows(tuple(state["identity"]), table)
+        if projected is not None:
+            sources[table] = {"rows": projected, "material_scope": primary.scope(table)}
+            continue
         projected = daily.rows(tuple(state["identity"])) if table == "daily_course_record" else None
         if projected is not None:
             sources[table] = {"rows": projected, "material_scope": daily.scope(table)}
@@ -728,9 +736,9 @@ def capture_programmatic_sources(state, cancellation_check):
     return sources
 
 
-def _frozen_source_table_fallback_items(bundle_payload, strict_limits):
+def _frozen_source_table_fallback_items(bundle_payload, strict_limits, *, state=None):
     """仅投影已捕获的补充材料，缺捕获项与已确认缺表/零行分别处理。"""
-    state = case_material.current()
+    state = state if state is not None else case_material.current()
     case_material.identity_check(state, tuple(_safe_text(bundle_payload.get(key)) for key in ("institute_id", "patient_id", "visit_id")))
     sources = state.get("programmatic_sources", {})
     names = (*_SOURCE_TABLES, "inpat_registration")
@@ -773,7 +781,10 @@ def _project_fallback_rows(table_name, rows):
     for row in rows:
         item = dict(row)
         display_time = _safe_text(item.get("record_time") or item.get("submit_datetime") or item.get("update_time"))
-        row_text = _safe_text(item.get("record_content")) or _item_text(item)
+        row_text = (_safe_text(item.get("surgery_process")) if table_name == "surgery_record" and "primary_material" in item
+                    else _safe_text(item.get("record_content")) or _item_text(item))
+        if "body" in item.get("primary_material", {}).get("selection", {}).get("uncertain_fields", ()):
+            row_text = ""
         fallback_items.append(
             {
                 "source_table": table_name,
@@ -807,7 +818,19 @@ def _fetch_source_table_fallback_items(
         return _frozen_source_table_fallback_items(bundle_payload, strict_structured_source_limits)
     from . import daily_material_projection as daily
     identity = tuple(_safe_text(bundle_payload.get(key)) for key in ("institute_id", "patient_id", "visit_id"))
+    from . import primary_material_projection as primary
+    primary.manifest(identity)
     daily.manifest(identity)  # 开关开启的新材料必须已绑定捕获上下文；禁止悄悄回退当前库。
+    state = case_material.context()
+    if state is not None and "primary_material_manifest" in state:
+        # 独立Bundle的实时捕获也只能借同一CDM事务；未部署时保留该事务的基础材料。
+        if "programmatic_sources" not in state:
+            from .bundles import assembly
+            for table in (*_SOURCE_TABLES, "inpat_registration"):
+                if table not in state["columns"]:
+                    state["columns"][table] = assembly._get_table_columns(state["schema"], table)
+            state["programmatic_sources"] = capture_programmatic_sources(state, lambda: None)
+        return _frozen_source_table_fallback_items(bundle_payload, strict_structured_source_limits, state=state)
     institute_id = _safe_text(bundle_payload.get("institute_id"))
     visit_id = _safe_text(bundle_payload.get("visit_id"))
     patient_id = _safe_text(bundle_payload.get("patient_id"))

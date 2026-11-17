@@ -1027,8 +1027,10 @@ def read_luxian_0609_course_round_timeline(
 
     raw_rows_by_source: dict[str, tuple[Mapping[str, Any], ...]] = {}
     for source_key in ("daily_course_record", "senior_course_record"):
-        from .. import daily_material_projection as daily
-        projected = daily.rows(coordinates) if source_key == "daily_course_record" else None
+        from .. import daily_material_projection as daily, primary_material_projection as primary
+        projected = primary.rows(coordinates, source_key)
+        if projected is None:
+            projected = daily.rows(coordinates) if source_key == "daily_course_record" else None
         if projected is not None:
             if len(projected) > _source_limit(source_key):
                 raise SourceEvidenceTruncated()
@@ -1702,6 +1704,13 @@ def read_luxian_0609_runtime_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:
     """显式、有界、参数化的读侧查询；调用时才访问数据库。"""
+    from .. import primary_material_projection as primary
+    approved_fields = SURGERY_TIME_FIELDS if source_key == "surgery_record" else ("record_content", *AUTHORITATIVE_DOCUMENT_TIME_FIELDS)
+    projected = primary.rule_rows((institute_id, patient_id, visit_id), source_key, approved_fields)
+    if projected is not None:
+        if len(projected) > _source_limit(source_key):
+            raise SourceEvidenceTruncated()
+        return projected
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
     engine = bundle_assembly._source_engine(trusted_schema)
@@ -1768,8 +1777,10 @@ def read_luxian_0609_native_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:
     """读取原生质控批准字段；字段白名单固定，调用方不能扩大正文范围。"""
-    from .. import daily_material_projection as daily
-    projected = daily.rule_rows((institute_id, patient_id, visit_id), _NATIVE_SOURCE_FIELDS[source_key]) if source_key == "daily_course_record" else None
+    from .. import daily_material_projection as daily, primary_material_projection as primary
+    projected = primary.rule_rows((institute_id, patient_id, visit_id), source_key, _NATIVE_SOURCE_FIELDS.get(source_key, ()))
+    if projected is None:
+        projected = daily.rule_rows((institute_id, patient_id, visit_id), _NATIVE_SOURCE_FIELDS[source_key]) if source_key == "daily_course_record" else None
     if projected is not None:
         if len(projected) > _source_limit(source_key):
             raise SourceEvidenceTruncated()
@@ -1929,13 +1940,15 @@ def read_luxian_0609_snapshot_source_rows(
 ) -> SnapshotSourceRows:
     """为 EvidenceSnapshot 执行一次 limit+1 三坐标有界读取。"""
 
-    from .. import daily_material_projection as daily
-    projected = daily.rule_rows((institute_id, patient_id, visit_id), _SNAPSHOT_SOURCE_FIELDS[source_key]) if source_key == "daily_course_record" else None
+    from .. import daily_material_projection as daily, primary_material_projection as primary
+    projected = primary.rule_rows((institute_id, patient_id, visit_id), source_key, _SNAPSHOT_SOURCE_FIELDS.get(source_key, ()))
+    if projected is None:
+        projected = daily.rule_rows((institute_id, patient_id, visit_id), _SNAPSHOT_SOURCE_FIELDS[source_key]) if source_key == "daily_course_record" else None
     if projected is not None:
         limit = _source_limit(source_key)
         return SnapshotSourceRows.create(source_key=source_key, rows=projected[:limit],
                                          truncated=len(projected) > limit, limit_rows=limit,
-                                         material_scope=daily.scope(source_key))
+                                         material_scope=primary.scope(source_key) or daily.scope(source_key))
     coordinates = (institute_id, patient_id, visit_id)
     if not all(isinstance(value, str) and value.strip() for value in coordinates):
         raise SourceEvidenceUnavailable()

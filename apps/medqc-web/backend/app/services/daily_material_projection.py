@@ -85,6 +85,9 @@ def manifest(identity=None):
     if identity is not None and is_material_copy(identity[1], identity[2]):
         return None
     state = material.context()
+    # 新四类合同掌管本轮选择；旧v3不重读、不覆盖。
+    if state is not None and "primary_material_manifest" in state:
+        return None
     if state is None and enabled():
         raise material.MaterialSnapshotError("daily_material_capture_required")
     if state is None or "daily_material_manifest" not in state:
@@ -243,6 +246,11 @@ def _decode_scalar(value):
 def live_context(identity, *, allow_unbound_view=False):
     """普通查看与任务捕获共用投影；整次当前目录在同一RR中组装。"""
     from .validation_material_source import is_material_copy
+    from . import primary_material_projection as primary
+    if primary.enabled() and material.context() is None:
+        with primary.live_context(identity, allow_unbound_view=allow_unbound_view):
+            yield
+        return
     state = material.context()
     if state is not None:
         material.identity_check(state, identity)
