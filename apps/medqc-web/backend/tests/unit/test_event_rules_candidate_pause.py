@@ -20,7 +20,7 @@ from app.services.luxian_0609_rule_catalog import (
 
 # 按逐项验收和来源合同暂停，不能按手术或会诊前缀批量扩展范围。
 EVENT_RULE_IDS = tuple("LX0609-" + item for item in (
-    "03-01-04",
+    "03-01-04", "03-02-01",
     "05-01-02", "05-01-05",
     "04-01-02", "04-01-03", "04-01-04", "04-01-05",
     "04-02-02", "04-02-03", "04-02-04", "04-02-05",
@@ -32,6 +32,7 @@ EVENT_RULE_IDS = tuple("LX0609-" + item for item in (
 ))
 SPECIFIC_REASONS = {
     "LX0609-03-01-04": "consultation_source_document_unavailable_customer_scope",
+    "LX0609-03-02-01": "difficult_discussion_source_validation_pending",
     "LX0609-04-02-04": "implant_five_field_real_gold_pending",
     "LX0609-04-04-01": "anesthesia_visit_sources_unavailable_customer_scope",
     "LX0609-04-04-02": "anesthesia_visit_sources_unavailable_customer_scope",
@@ -118,6 +119,8 @@ def test_all_event_rules_return_not_executed_before_material_or_model_access(mon
         assert item["is_compliant"] is None
         assert item["evidence"] == []
         assert item["metadata"]["pending_reason_code"] == SPECIFIC_REASONS.get(item["rule_id"], NEW_REASON)
+        if item["rule_id"] == "LX0609-03-02-01":
+            assert "疑难病例讨论记录尚未通过同步验收" in item["findings"]
         if item["rule_id"] not in SPECIFIC_REASONS:
             assert "按当前版本安排暂未启用" in item["findings"]
 
@@ -138,7 +141,10 @@ def test_saved_task_scope_is_not_reinterpreted_using_current_pauses():
     assert saved["paused_customer_rule_ids"] == []
 
 
-@pytest.mark.parametrize("rule_id", ("LX0609-07-02-01", "LX0609-04-02-01", "LX0609-03-01-04", "LX0609-05-01-02", "LX0609-05-01-05"))
+@pytest.mark.parametrize("rule_id", (
+    "LX0609-07-02-01", "LX0609-04-02-01", "LX0609-03-01-04",
+    "LX0609-03-02-01", "LX0609-05-01-02", "LX0609-05-01-05",
+))
 @pytest.mark.parametrize("status,is_compliant", (("compliant", True), ("non_compliant", False)))
 def test_saved_event_results_keep_frozen_conclusion_at_read_boundary(rule_id, status, is_compliant):
     from app.services.qc_workspace.canonical_result_store import (

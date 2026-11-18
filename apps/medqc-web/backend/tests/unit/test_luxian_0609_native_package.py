@@ -598,9 +598,10 @@ def test_mdt_and_extended_document_gates_are_independent(
 def test_unknown_native_async_executor_is_not_implicitly_enabled():
     """新增 executor 必须显式获得自己的门控，不能复用 MDT 兜底。"""
 
+    active_rule_id = "LX0609-08-02-02"
     inventory = tuple(
         replace(item, executor_key="future_async_executor")
-        if item.rule_id == "LX0609-03-02-01"
+        if item.rule_id == active_rule_id
         else item
         for item in build_luxian_0609_dependency_inventory(
             rules=load_luxian_0609_rules(),
@@ -610,14 +611,14 @@ def test_unknown_native_async_executor_is_not_implicitly_enabled():
 
     plan = build_luxian_0609_package_plan(
         inventory=inventory,
-        selected_rule_ids=("LX0609-03-02-01",),
+        selected_rule_ids=(active_rule_id,),
         native_sync_enabled=True,
         native_mdt_enabled=True,
         native_extended_document_enabled=True,
     )
 
     assert plan.native_async_rule_ids == ()
-    assert plan.compatibility_rule_ids == ("LX0609-03-02-01",)
+    assert plan.compatibility_rule_ids == (active_rule_id,)
     assert plan.native_executor_batches == ()
 
 

@@ -481,6 +481,9 @@
       "source_document": "疑难病历讨论记录",
       "qc_point": "诊断不明确（入院后7天）未书写疑难病历讨论",
       "implementation_status": "active",
+      "phase_status": "pending_definition",
+      "pending_reason_code": "difficult_discussion_source_validation_pending",
+      "pending_definition_note": "东华 Caché 的独立疑难病例讨论记录尚未通过同步验收，本质控点暂未启用。",
       "policy_sources": ["customer_confirmed"],
       "policy_summary": "沿用项目入院满7天阈值，核对仍未解决的当前诊断或治疗疑难；另一诊断明确不豁免当前疑难，局部待查的诊疗范围无法确认时按资料不足处理。"
     },
