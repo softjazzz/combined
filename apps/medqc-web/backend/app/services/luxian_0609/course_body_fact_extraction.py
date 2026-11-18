@@ -11,6 +11,7 @@ import json
 import logging
 import re
 from time import perf_counter
+import unicodedata
 from typing import Any, Mapping, Sequence
 
 from .llm_prompt_privacy import (
@@ -158,6 +159,44 @@ class CourseBodyExtraction:
     api_time: float = 0.0
 
 
+_TOKEN_MARKS = ".．,，+-−﹣－/／％%‰≤≥<>=±eE_＿"
+
+
+def _token_char(char: str) -> bool:
+    han = unicodedata.name(char, "").startswith(("CJK UNIFIED IDEOGRAPH", "CJK COMPATIBILITY IDEOGRAPH"))
+    return (char.isnumeric() or char.isalpha() and not han
+            or unicodedata.category(char).startswith("M") or char in _TOKEN_MARKS)
+
+
+def _restore_whitespace_quote(quote: str, body: str) -> str | None:
+    """仅排版空白差异时，按同份发送正文唯一连续片段还原原文（沿用08-02-02合同）。
+
+    模型抄写多行病程时常增删空格/换行（C20、C22 实测）。非空白字符必须在本份正文中
+    唯一、连续出现；空白增删不得拼合或拆开字母、数字等词元。返回的是正文原片段，
+    不是归一化文本；无法唯一定位时返回 None，仍按引用不成立处理。
+    """
+    if quote in body:
+        return quote
+    source_positions = [index for index, char in enumerate(body) if not char.isspace()]
+    quote_positions = [index for index, char in enumerate(quote) if not char.isspace()]
+    candidate = "".join(quote[index] for index in quote_positions)
+    if len(candidate) < 2:
+        return None
+    source = "".join(body[index] for index in source_positions)
+    start = source.find(candidate)
+    if start < 0 or source.find(candidate, start + 1) >= 0:
+        return None
+    for offset in range(1, len(candidate)):
+        left, right = candidate[offset - 1], candidate[offset]
+        original_gap = source_positions[start + offset] - source_positions[start + offset - 1] > 1
+        proposed_gap = quote_positions[offset] - quote_positions[offset - 1] > 1
+        boundary = (left.isascii() and right.isascii() and (left.isalnum() or right.isalnum())
+                    or _token_char(left) and _token_char(right))
+        if original_gap != proposed_gap and boundary:
+            return None
+    return body[source_positions[start]:source_positions[start + len(candidate) - 1] + 1]
+
+
 def _quote_grounded_in_original(quote: str, original: str) -> bool:
     """引用须是原文中唯一一段；仅本系统脱敏占位可对应原文中被替换的有界片段。
 
@@ -208,9 +247,9 @@ def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any
         doc = expected[ref]
         state, quote = atom["state"], atom["quote"]
         if state == "present":
-            # 引用须逐字出现在该份材料实际发送正文中，并能唯一回到同一份原文。
-            if (not isinstance(quote, str) or not quote.strip()
-                    or quote not in doc["body"] or not _quote_grounded_in_original(quote, doc["original_body"])):
+            # 引用须出自该份材料实际发送正文（仅排版空白可按唯一连续片段还原），并能唯一回到同一份原文。
+            restored = _restore_whitespace_quote(quote, doc["body"]) if isinstance(quote, str) and quote.strip() else None
+            if restored is None or not _quote_grounded_in_original(restored, doc["original_body"]):
                 issues.append(("invalid same-material quotation", location + ".clinical_body.quote", quote))
                 quote_kinds.append((_quote_mismatch_kind(quote, doc, inputs),
                                     len(quote) if isinstance(quote, str) else 0))

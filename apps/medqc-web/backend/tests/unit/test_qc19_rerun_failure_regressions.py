@@ -261,14 +261,39 @@ async def test_placeholder_quote_from_other_material_is_still_rejected():
 
 # ---- 08-02-01：引文失配安全诊断（仅类别与字数，不改变通过判定） ----
 
-_MULTILINE = "今日查房：\n患者咳嗽减轻，  精神可。\n查体：双肺呼吸音清，未闻及啰音。"
+_MULTILINE = "今日查房：\n患者咳嗽减轻，  精神可。\n查体：体温36.5℃，双肺呼吸音清，未闻及啰音。"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote", [
+    "患者咳嗽减轻，精神可。",  # 删去行内空格
+    "今日查房：患者咳嗽减轻，精神可。",  # 合并换行
+    "患者 咳嗽减轻，  精神可。",  # 汉字间多加空格
+    "查体：体温 36.5℃，双肺呼吸音清",  # 汉字与数字之间的排版空格
+])
+async def test_layout_whitespace_quote_is_restored_to_same_material_span(quote):
+    client = _QuoteClient(lambda body, docs: quote)
+    result = await extract_course_body_facts([CourseBodyDocument("doc-a", "daily_course_record", _MULTILINE)], client)
+    assert (result.state, result.states) == ("ready", {"doc-a": "present"})
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body,quote", [
+    (_MULTILINE, "查体：体温3 6.5℃"),  # 空白拆开数字词元
+    ("精神可。\n精神可。", "精 神可。"),  # 同份正文两处，不能唯一定位
+    (_MULTILINE, "患者咳嗽减轻 精神可"),  # 删去标点不是空白差异
+])
+async def test_whitespace_restoration_keeps_token_and_uniqueness_protection(body, quote):
+    client = _QuoteClient(lambda _body, docs: quote)
+    result = await extract_course_body_facts([CourseBodyDocument("doc-a", "daily_course_record", body)], client)
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("quote,kind", [
-    ("患者咳嗽减轻，精神可。", "whitespace_difference"),
+    ("查体：体温3 6.5℃", "whitespace_difference"),
     ("患者咳嗽减轻  精神可", "punctuation_difference"),
-    ("今日查房：患者咳嗽减轻，精神可。", "whitespace_difference"),
     ("患者咳嗽减轻，未闻及啰音", "fragments_spliced"),
     ("患者咳嗽明显好转。", "not_in_sent_body"),
     ("今日诉腹痛。", "other_document"),
