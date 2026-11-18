@@ -136,17 +136,66 @@ def _prompt(documents: Sequence[DischargeApprovalInput]) -> str:
     )
 
 
-def _reject_output(detail: str, reason: str, local_doc_id: str | None = None) -> NoReturn:
+def _reject_output(
+    detail: str, reason: str, local_doc_id: str | None = None, *, boundary: str = "",
+) -> NoReturn:
     """只记录固定类别和本次调用内的编号，不记录引文、原文或输出中的未知 ID。"""
     safe_id = (
         local_doc_id if isinstance(local_doc_id, str)
         and re.fullmatch(r"doc_[0-9]{2}", local_doc_id) else "-"
     )
+    # boundary 仅由 _boundary_diagnostic 生成的固定枚举与计数组成。
     logger.warning(
-        "LX0609 discharge_approval_rejected reason=%s local_doc_id=%s",
-        reason, safe_id,
+        "LX0609 discharge_approval_rejected reason=%s local_doc_id=%s%s",
+        reason, safe_id, (" " + boundary) if boundary else "",
     )
     raise ValueError(detail)
+
+
+_SENTENCE_TERMINATORS = "。！？!?；;"
+_CLOSING_MARKS = "”’\"）)】」』］]"
+# 编号列表项：编号紧跟在句末或冒号之后（不跨换行），编号本身不是条件或否定。
+_LIST_MARKER_AFTER_BOUNDARY = re.compile(
+    r"[。！？!?；;：:][ \t]*(?:\d{1,2}|[一二三四五六七八九十]{1,3})[、.．)）][ \t]*$"
+)
+# 前一句已在引号/括号内以句末标点结束，如“……。”或（……。）。
+_CLOSED_SENTENCE = re.compile(r"[。！？!?；;][" + re.escape(_CLOSING_MARKS) + r"]+$")
+
+
+def _prefix_is_clause_start(prefix: str) -> bool:
+    return (not prefix or prefix[-1] in _SENTENCE_TERMINATORS + "：:"
+            or _CLOSED_SENTENCE.search(prefix) is not None
+            or _LIST_MARKER_AFTER_BOUNDARY.search(prefix) is not None)
+
+
+def _char_kind(char: str) -> str:
+    if not char:
+        return "none"
+    if char in "，,、":
+        return "comma"
+    if char in _SENTENCE_TERMINATORS + "：:":
+        return "terminator"
+    if char in _CLOSING_MARKS:
+        return "closing_mark"
+    if char in "“‘（(【「『［[":
+        return "opening_mark"
+    if char.isdigit():
+        return "digit"
+    if char.isascii() and char.isalpha():
+        return "ascii_letter"
+    if unicodedata.name(char, "").startswith(("CJK UNIFIED IDEOGRAPH", "CJK COMPATIBILITY IDEOGRAPH")):
+        return "han"
+    if unicodedata.category(char).startswith("P"):
+        return "other_punct"
+    return "other"
+
+
+def _boundary_diagnostic(prefix_bad: bool, suffix_bad: bool, prefix: str, suffix: str, restored: str) -> str:
+    """只输出边界位置、字符类别与字数，不输出任何原文字符。"""
+    boundary = "both" if prefix_bad and suffix_bad else "prefix" if prefix_bad else "suffix"
+    return (f"boundary={boundary} prefix_kind={_char_kind(prefix[-1:])} "
+            f"suffix_kind={_char_kind(suffix[:1])} restored_end_kind={_char_kind(restored[-1:])} "
+            f"restored_chars={len(restored)}")
 
 
 def _quote_rejection_reason(
@@ -206,12 +255,16 @@ def _restore_unique_whitespace_quote(quote: str, document: DischargeApprovalInpu
 
     # 不从否定词后截取肯定片段，也不截掉逗号后尚未完成的条件。
     # ASCII句点可能属于小数，不能拿它作为分句边界。
-    terminators = "。！？!?；;"
+    # 前边界另接受“句末标点+闭合引号/括号”与“句末或冒号后的编号”，两者都不能藏条件或否定；
+    # 单凭换行、逗号、括号内容或无标点的标题行仍不能证明分句完整。
+    terminators = _SENTENCE_TERMINATORS
     prefix = document.text[:original_start].rstrip(layout_space)
     suffix = document.text[original_end:].lstrip(layout_space)
-    if ((prefix and prefix[-1] not in terminators + "：:")
-            or (suffix and restored[-1] not in terminators and suffix[0] not in terminators)):
-        _reject_output("unverified opinion quote", "quote_whitespace_incomplete_span", document.local_doc_id)
+    prefix_bad = not _prefix_is_clause_start(prefix)
+    suffix_bad = bool(suffix) and restored[-1] not in terminators and suffix[0] not in terminators
+    if prefix_bad or suffix_bad:
+        _reject_output("unverified opinion quote", "quote_whitespace_incomplete_span", document.local_doc_id,
+                       boundary=_boundary_diagnostic(prefix_bad, suffix_bad, prefix, suffix, restored))
     numeric_marks = ".．,，+-−﹣－/／％%‰≤≥<>=±eE_＿"
 
     def token_char(char: str) -> bool:

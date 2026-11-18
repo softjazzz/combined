@@ -188,6 +188,35 @@ class _GroundingIssue:
     nearest: str = ""
 
 
+_GROUNDING_FIELD = {
+    "quote not uniquely grounded": "quote",
+    "problem not uniquely grounded": "problem",
+    "uncertainty quote not uniquely grounded": "uncertainty",
+    "uncertainty quote missing marker": "uncertainty_marker",
+    "missing uncertainty quote": "uncertainty_missing",
+    "unproven problem identity": "problem_identity",
+    "duplicate assertion": "duplicate",
+    "missing quote": "quote_missing",
+}
+
+
+def _grounding_diagnostic(error: BaseException, limit: int = 12) -> str:
+    """定位失败的安全摘要：字段:命中计数档:文书序号:断言序号，不含引文或病名。
+
+    命中计数沿用定位时已算的 count：quote 为发送正文内次数，problem 为所属引文内次数；
+    uncertainty 只在所属引文中零次时记录。断言序号相同表示失败来自同一条断言。
+    """
+    if not isinstance(error, _GroundingViolation):
+        return "-"
+    identities: dict[tuple[int, str, str], int] = {}
+    parts = []
+    for issue in error.issues[:limit]:
+        claim = identities.setdefault((issue.row_index, issue.quote, issue.problem_quote), len(identities))
+        bucket = "zero" if issue.count <= 0 else "one" if issue.count == 1 else "multiple"
+        parts.append(f"{_GROUNDING_FIELD.get(issue.reason, 'other')}:{bucket}:r{issue.row_index}:a{claim}")
+    return ",".join(parts) + (f",+{len(error.issues) - limit}" if len(error.issues) > limit else "")
+
+
 class _GroundingViolation(ValueError):
     """引文定位失败；收集同一应答的全部失败项供定向补核，str 仍为首个失败原因。"""
 
@@ -518,8 +547,8 @@ async def extract_diagnosis_scope(
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
             # 仅记录程序定义的校验类别，不记录引文、问题名称或完整模型输出。
             checks = sorted({issue.reason for issue in error.issues}) if isinstance(error, _GroundingViolation) else []
-            logger.warning("LX0609 diagnosis_scope_invalid attempt=%s checks=%s %s", attempt + 1,
-                           checks, describe_luxian_0609_llm_parse_failure(error, response))
+            logger.warning("LX0609 diagnosis_scope_invalid attempt=%s checks=%s grounding=%s %s", attempt + 1,
+                           checks, _grounding_diagnostic(error), describe_luxian_0609_llm_parse_failure(error, response))
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 return DiagnosisScopeResult("technical_error", (), calls, *totals, reason_code="model_invalid_output")
             attempt_prompt = _retry_prompt(prompt, error, _response_content(response))
