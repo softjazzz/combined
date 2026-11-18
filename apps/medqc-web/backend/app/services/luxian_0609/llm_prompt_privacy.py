@@ -119,6 +119,21 @@ LUXIAN_0609_REDACTION_PLACEHOLDER = re.compile(
 )
 
 
+def locate_luxian_0609_redacted_quote(quote: str, original: str) -> tuple[int, int] | None:
+    """把含本系统脱敏占位的引文唯一回映到原文，返回原文区间；不含占位或不唯一时返回 None。
+
+    模型只看到脱敏正文，含占位的逐字引文不可能出现在原文里。占位外的文字必须按原顺序
+    紧邻出现，占位只对应不跨标点/换行、不超过64字的片段，整段在原文中只能匹配一处。
+    调用方仍须另行要求引文逐字出自同一份实际发送正文，不能据此接受改写或他文书借用。
+    """
+    parts = LUXIAN_0609_REDACTION_PLACEHOLDER.split(quote)
+    if len(parts) < 2 or not any(part.strip() for part in parts):
+        return None
+    pattern = re.compile(r"[^\n\r，,。；;]{1,64}?".join(re.escape(part) for part in parts))
+    matches = list(pattern.finditer(original))
+    return matches[0].span() if len(matches) == 1 else None
+
+
 def _replace_labelled(pattern: re.Pattern[str], text: str, placeholder: str) -> str:
     return pattern.sub(
         lambda match: f"{match.group('label')}{placeholder}",

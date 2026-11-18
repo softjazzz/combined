@@ -15,6 +15,7 @@ from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..structured_output import structured_output_kwargs
 from ..llm_prompt_privacy import (
     describe_luxian_0609_llm_parse_failure,
+    locate_luxian_0609_redacted_quote,
     redact_luxian_0609_patient_privacy,
 )
 from ..transfusion_order_trigger import _json_response_object, _usage
@@ -323,7 +324,15 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
             # 定位规则不变（逐字、唯一）；失败项继续收集，补核时一次指明全部失败位置。
             try:
                 _unique_position(bodies[row], quote)
-                start = _unique_position(originals[row], quote)
+                # 模型只看到脱敏正文；含本系统占位的引文按共用合同唯一回映到原文区间，
+                # 其余引文仍须在原文逐字唯一。病名坐标在回映后的原文片段内定位。
+                if quote in originals[row]:
+                    start, located = _unique_position(originals[row], quote), quote
+                else:
+                    span = locate_luxian_0609_redacted_quote(quote, originals[row])
+                    if span is None:
+                        raise ValueError("quote not uniquely grounded")
+                    start, located = span[0], originals[row][span[0]:span[1]]
             except ValueError as error:
                 count = _occurrences(bodies[row], quote)
                 issues.append(_GroundingIssue(str(error), row, quote, problem, count,
@@ -332,16 +341,16 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
             problem_start = None
             if association == "explicit":
                 try:
-                    problem_start = start + _unique_position(quote, problem)
+                    problem_start = start + _unique_position(located, problem)
                 except ValueError:
-                    problem_start = _anchor_problem_by_uncertainty(quote, problem, claim.get("uncertainty_quote"))
-                    if problem_start is None and _is_self_qualified_repeat(quote, problem):
+                    problem_start = _anchor_problem_by_uncertainty(located, problem, claim.get("uncertainty_quote"))
+                    if problem_start is None and _is_self_qualified_repeat(located, problem):
                         # 病程常把报告结论粘贴后在分析里再复述一遍（C08“…粘液栓可能”两处）。problem 原话
                         # 自带不确定性标记时每处含义相同，下游只按状态/范围判定、不用病名坐标，取首处不改变
                         # 结论；不带标记、靠上下文定性的病名（如“不排除X……明确是否存在X”）仍须唯一定位。
-                        problem_start = quote.index(problem)
+                        problem_start = located.index(problem)
                     if problem_start is None:
-                        count = _occurrences(quote, problem)
+                        count = _occurrences(located, problem)
                         issues.append(_GroundingIssue("problem not uniquely grounded", row, quote, problem, count,
                                                       nearest="" if count else _nearest_verbatim(quote, problem)))
                         continue
@@ -375,7 +384,7 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
                 continue
             seen_claims.add(identity)
             assertions.append(DiagnosisScopeAssertion(scope, state, polarity, temporal, association,
-                quote, problem, start, start + len(quote), problem_start,
+                quote, problem, start, start + len(located), problem_start,
                 None if problem_start is None else problem_start + len(problem), uncertainty))
         seen_rows.add(row)
         result.append(DiagnosisScopeDocument(row, coverage, tuple(assertions)))

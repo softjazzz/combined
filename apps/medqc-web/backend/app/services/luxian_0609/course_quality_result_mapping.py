@@ -101,6 +101,12 @@ def _course_007_exact_time(value: Any) -> str:
     return value if _course_007_time(value) else ""
 
 
+def _recorded_dates_omission_justified(raw: Mapping[str, Any]) -> bool:
+    """02-01-03 仅在病程份数超过展示上限64时省略记录日期；不能借此丢掉可展示的明细。"""
+    count = raw.get("record_count")
+    return type(count) is int and count > 64
+
+
 def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("failure_kind")
     if kind == "course_interval_source_gap":
@@ -144,13 +150,17 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or end_source not in _COURSE_SOURCES | {"evaluation_context.horizon"}
         or start_source == "evaluation_context.horizon" or end_source == "inpat_registration"
         or not _course_007_time(raw.get("interval_start_time")) or raw.get("threshold_hours") != 72
-        or not isinstance(dates, list) or len(dates) > 64 or not all(_date(item) for item in dates)
+        # 记录日期为展示明细：长期住院超出上限时执行器整列省略；给出时仍须不超过64条且格式合法。
+        or ("recorded_dates" in raw and (
+            not isinstance(dates, list) or len(dates) > 64 or not all(_date(item) for item in dates)))
     ):
+        return None
+    if "recorded_dates" not in raw and not _recorded_dates_omission_justified(raw):
         return None
     facts: dict[str, Any] = {
         "failure_kind": kind, "interval_start_source": start_source,
         "interval_end_source": end_source, "interval_start_time": raw["interval_start_time"],
-        "threshold_hours": 72, "recorded_dates": list(dates),
+        "threshold_hours": 72, **({"recorded_dates": list(dates)} if "recorded_dates" in raw else {}),
     }
     date_only = raw.get("interval_end_precision") == "date"
     if date_only:
@@ -188,7 +198,8 @@ def _safe_007(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if any(key in raw for key in enhanced):
         start, end, count = (enhanced[key] for key in (
             "interval_start_position", "interval_end_position", "record_count"))
-        if not all(type(value) is int for value in (start, end, count)) or not 0 <= start < end <= count + 1 or end != start + 1 or count != len(dates):
+        if (not all(type(value) is int for value in (start, end, count)) or not 0 <= start < end <= count + 1
+                or end != start + 1 or (dates is not None and count != len(dates))):
             return None
         if date_only:
             if enhanced["interval_seconds"] is not None or enhanced["overdue_seconds"] is not None or end != count + 1:
@@ -255,7 +266,7 @@ def validate_published_course_007_facts(raw: Any) -> dict[str, Any] | None:
     if kind not in {"course_record_interval_over_72h", "course_record_interval_within_72h"}:
         return None
     base = {"failure_kind", "interval_start_source", "interval_end_source", "interval_start_time",
-            "threshold_hours", "recorded_dates"}
+            "threshold_hours"} | ({"recorded_dates"} if "recorded_dates" in keys else set())
     dated = base | {"interval_end_date", "interval_end_precision"}
     timed = base | {"interval_end_time", "interval_hours"}
     enhanced = {"interval_start_position", "interval_end_position", "record_count",
@@ -268,8 +279,9 @@ def validate_published_course_007_facts(raw: Any) -> dict[str, Any] | None:
             or type(end_source) is not str or end_source not in _COURSE_SOURCES | {"evaluation_context.horizon"}
             or not _course_007_time(raw.get("interval_start_time"))
             or type(raw.get("threshold_hours")) is not int or raw["threshold_hours"] != 72
-            or not isinstance(dates, list) or len(dates) > 64
-            or not all(_date(item) for item in dates)):
+            or ("recorded_dates" in keys and (not isinstance(dates, list) or len(dates) > 64
+                                              or not all(_date(item) for item in dates)))
+            or ("recorded_dates" not in keys and not _recorded_dates_omission_justified(raw))):
         return None
     date_only = "interval_end_date" in keys
     if date_only:

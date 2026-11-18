@@ -310,3 +310,117 @@ async def test_quote_mismatch_is_classified_without_logging_text(caplog, quote, 
     assert f"quote_kinds={kind} quote_chars={len(quote)}" in caplog.text
     for text in (quote, "咳嗽", "腹痛", "doc-a"):
         assert text not in caplog.text
+
+
+# ---- 02-01-03：长期住院病程记录日期超过展示上限（D） ----
+
+def _round_rows(start: date, days: int, *, skip: set[int] = frozenset()):
+    rows = [{"document_id": f"course-{offset}", "record_time": (start + timedelta(days=offset)).isoformat() + " 08:00:00",
+             "record_content": "今日查房，继续观察。"} for offset in range(days) if offset not in skip]
+    # 测试读取器每个来源上限50行；日常与上级病程分摊，合计记录日期超过展示上限64。
+    return {"daily_course_record": tuple(rows[0::2]), "senior_course_record": tuple(rows[1::2])}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("skip,status,reason", [
+    ({40, 41, 42, 43}, "non_compliant", "threshold_exceeded"),
+    (set(), "compliant", "requirement_within_threshold"),
+])
+async def test_long_stay_stable_course_survives_delivery_beyond_date_display_cap(skip, status, reason):
+    from test_luxian_0609_course_quality_freeze import _run_chain
+    rows = {"inpat_registration": ({"document_id": "admission", "admission_datetime": "2026-01-01 07:00:00"},),
+            **_round_rows(date(2026, 1, 1), 80, skip=skip)}
+    _, _, _, item = await _run_chain("LX0609-02-01-03", rows, evaluation_as_of_date="2026-03-22")
+    assert (item["status"], item["reason_code"]) == (status, reason)
+    facts = item.get("customer_display_facts") or {}
+    assert "recorded_dates" not in facts
+    if status == "non_compliant":
+        assert facts["failure_kind"] == "course_record_interval_over_72h"
+
+
+def test_stable_course_recorded_dates_cap_and_format_still_enforced():
+    from app.services.luxian_0609.course_quality_result_mapping import validate_published_course_007_facts
+    base = {"failure_kind": "course_record_interval_over_72h", "interval_start_source": "daily_course_record",
+            "interval_end_source": "daily_course_record", "interval_start_time": "2026-01-01 08:00:00",
+            "interval_end_time": "2026-01-05 08:00:00", "interval_hours": 96.0, "threshold_hours": 72}
+    oversized = {**base, "recorded_dates": [(date(2026, 1, 1) + timedelta(days=i)).isoformat() for i in range(65)]}
+    malformed = {**base, "recorded_dates": ["2026/01/01"]}
+    for facts in (oversized, malformed):
+        result, _ = finalize_luxian_0609_executor_customer_display_facts(
+            result={"rule_id": "LX0609-02-01-03", "status": "non_compliant"}, raw_facts=facts)
+        assert result["status"] == "technical_error"
+        assert validate_published_course_007_facts(facts) is None
+    assert validate_published_course_007_facts({**base, "recorded_dates": ["2026-01-01", "2026-01-05"]}) is not None
+
+
+# ---- 03-02-01：诊断状态引文含脱敏占位（B2） ----
+
+_SCOPE_BODY = "患者张三，男，79岁，发热原因待查。今日复查血常规。主治医师：李四。"
+
+
+class _ScopeClient:
+    def __init__(self, choose):
+        self.choose = choose
+        self.prompts = []
+
+    async def generate(self, prompt, **_kwargs):
+        from app.services.luxian_0609.extended_document.diagnosis_scope_extraction import SCHEMA_VERSION as SCOPE_SCHEMA
+        self.prompts.append(prompt)
+        inputs = json.loads(prompt.split("\nINPUT_JSON=", 1)[1])["documents"]
+        documents = []
+        for doc in inputs:
+            quote, problem, uncertainty = self.choose(doc["body"])
+            documents.append({"row_index": doc["row_index"], "coverage": "complete", "assertions": [{
+                "scope": "diagnosis", "diagnosis_state": "unresolved", "polarity": "affirmed",
+                "temporal_scope": "current", "association": "explicit", "quote": quote,
+                "problem_quote": problem, "uncertainty_quote": uncertainty}]})
+        content = json.dumps({"schema_version": SCOPE_SCHEMA, "documents": documents}, ensure_ascii=False)
+        return {"content": content, "finish_reason": "stop",
+                "usage": {"prompt_tokens": 11, "completion_tokens": 13, "total_tokens": 24}}
+
+
+async def _scope(choose, body=_SCOPE_BODY):
+    from app.services.luxian_0609.extended_document.diagnosis_scope_extraction import extract_diagnosis_scope
+    client = _ScopeClient(choose)
+    result = await extract_diagnosis_scope([{"record_content": body}], client,
+                                           max_prompt_bytes=65536, max_completion_tokens=16384)
+    return result, client
+
+
+@pytest.mark.asyncio
+async def test_scope_quote_with_redaction_placeholder_maps_to_original_span():
+    result, client = await _scope(lambda body: (body.split("。")[0] + "。", "发热原因", "待查"))
+    assert "张三" not in client.prompts[0]
+    assert result.state == "ready"
+    fact = result.documents[0].assertions[0]
+    assert _SCOPE_BODY[fact.quote_start:fact.quote_end] == "患者张三，男，79岁，发热原因待查。"
+    assert _SCOPE_BODY[fact.problem_start:fact.problem_end] == "发热原因"
+    assert "张三" not in fact.quote  # 断言保留模型所见脱敏文本，坐标指向原文
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("choose,body", [
+    (lambda body: ("[患者姓名已脱敏]，男，79岁，发热原因不明。", "发热原因", "不明"), _SCOPE_BODY),  # 改写
+    (lambda body: ("[就诊标识已脱敏]，男，79岁，发热原因待查。", "发热原因", "待查"), _SCOPE_BODY),  # 占位类别不符
+    (lambda body: ("[患者姓名已脱敏]", "发热原因", "待查"), _SCOPE_BODY),  # 只有占位
+    (lambda body: ("[患者姓名已脱敏]，男，79岁，发热原因待查。", "发热原因", "待查"),
+     _SCOPE_BODY + "患者张三，男，79岁，发热原因待查。"),  # 原文两处，不能唯一定位
+])
+async def test_scope_placeholder_quote_protections_still_reject(choose, body):
+    result, _ = await _scope(choose, body)
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
+
+
+@pytest.mark.parametrize("count", [None, 3, 64])
+def test_stable_course_dates_cannot_be_omitted_below_display_cap(count):
+    from app.services.luxian_0609.course_quality_result_mapping import validate_published_course_007_facts
+    facts = {"failure_kind": "course_record_interval_over_72h", "interval_start_source": "daily_course_record",
+             "interval_end_source": "daily_course_record", "interval_start_time": "2026-01-01 08:00:00",
+             "interval_end_time": "2026-01-05 08:00:00", "interval_hours": 96.0, "threshold_hours": 72}
+    if count is not None:
+        facts.update(interval_start_position=1, interval_end_position=2, record_count=count,
+                     interval_seconds=345600, overdue_seconds=86400)
+    result, _ = finalize_luxian_0609_executor_customer_display_facts(
+        result={"rule_id": "LX0609-02-01-03", "status": "non_compliant"}, raw_facts=facts)
+    assert result["status"] == "technical_error"
+    assert validate_published_course_007_facts(facts) is None

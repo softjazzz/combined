@@ -17,6 +17,7 @@ from typing import Any, Mapping, Sequence
 from .llm_prompt_privacy import (
     LUXIAN_0609_REDACTION_PLACEHOLDER,
     classify_luxian_0609_llm_call_failure,
+    locate_luxian_0609_redacted_quote,
     redact_luxian_0609_patient_privacy,
 )
 from .native_preop_content_execution import _usage
@@ -198,19 +199,11 @@ def _restore_whitespace_quote(quote: str, body: str) -> str | None:
 
 
 def _quote_grounded_in_original(quote: str, original: str) -> bool:
-    """引用须是原文中唯一一段；仅本系统脱敏占位可对应原文中被替换的有界片段。
+    """引用须出现在原文中；含本系统脱敏占位时须唯一回映到原文有界片段（共用回映射合同）。
 
-    模型只看到脱敏正文，含“[患者姓名已脱敏]”的逐字引用不可能出现在原文里。占位外的
-    文字必须按原顺序紧邻出现，占位只对应不跨标点/换行的短片段，整段在原文中唯一。
     调用方另行要求引用逐字出现在同一份实际发送正文中，不能借用其他材料或改写。
     """
-    if quote in original:
-        return True
-    parts = LUXIAN_0609_REDACTION_PLACEHOLDER.split(quote)
-    if len(parts) < 2 or not any(part.strip() for part in parts):
-        return False
-    pattern = r"[^\n\r，,。；;]{1,64}?".join(re.escape(part) for part in parts)
-    return len(re.findall(pattern, original)) == 1
+    return quote in original or locate_luxian_0609_redacted_quote(quote, original) is not None
 
 
 def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any]]) -> dict[str, str]:
