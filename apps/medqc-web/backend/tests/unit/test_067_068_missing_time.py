@@ -14,7 +14,7 @@ from app.services.luxian_0609.native_extended_document_execution import (
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
 from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
-    SCHEMA_VERSION as DISCHARGE_APPROVAL_SCHEMA_VERSION,
+    PASSAGE_SCHEMA_VERSION as DISCHARGE_APPROVAL_SCHEMA_VERSION,
 )
 
 
@@ -34,7 +34,8 @@ class _ApprovalClient:
             {
                 "local_doc_id": doc["local_doc_id"],
                 "opinion": "approved",
-                "quote": next(quote for quote in self._QUOTES if quote in doc["text"]),
+                "passage_id": next(part["id"] for part in doc["passages"] if part["text"] in self._QUOTES),
+                "role": "senior",
             }
             for doc in payload
         ]

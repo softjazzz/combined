@@ -5308,6 +5308,7 @@ async def _execute_extended_document_group(
             )
             approval_match: tuple[str, str, Mapping[str, Any]] | None = None
             selected_course_document_ids: tuple[tuple[str, str], ...] = ()
+            passage_facts: dict[str, Any] = {}
             render_display = False
             if source_error:
                 final_state, reason_code = "data_gap", source_error
@@ -5368,7 +5369,7 @@ async def _execute_extended_document_group(
                             _row_time(row) is None
                             or _row_time(row).date() in valid_dates
                         )
-                        if (text := _clean(row.get("record_content")))
+                        if isinstance(text := row.get("record_content"), str) and text.strip()
                     )
                     if semantic_candidates:
                         discharge_approval_extraction = (
@@ -5380,7 +5381,7 @@ async def _execute_extended_document_group(
                                     for index, (source_key, _row, _time, text)
                                     in enumerate(semantic_candidates, start=1)
                                 ),
-                                llm_client,
+                                llm_client, numbered_passages=True,
                             )
                         )
                         if discharge_approval_extraction.state == "ready":
@@ -5392,6 +5393,15 @@ async def _execute_extended_document_group(
                                     discharge_approval_extraction.assertions,
                                 )
                             )
+                            passage_spans = tuple(
+                                (source_key, version, *assertion.source_span)
+                                for source_key, row, _, assertion in extracted_candidates
+                                if assertion.source_span and (version := _clean(
+                                    row.get("source_version_key") or row.get("document_id") or row.get("id")
+                                ))
+                            )
+                            if passage_spans:
+                                passage_facts["_approval_passages"] = passage_spans
                             semantic_match = next(
                                 (
                                     (source_key, "senior_approval", row)
@@ -5450,6 +5460,7 @@ async def _execute_extended_document_group(
                         "discharge_date": discharge_time.date().isoformat(),
                         "checked_dates": tuple(sorted(item.isoformat() for item in valid_dates)),
                         "missing_time_count": len(undated_approvals),
+                        **passage_facts,
                     }))
                 else:
                     # 院方口径（2026-10-10）：出院当天或前一天已有病程记录却无上级医师
@@ -5524,6 +5535,7 @@ async def _execute_extended_document_group(
                                 ),
                                 "approval_present": present,
                                 **approval_facts,
+                                **passage_facts,
                                 **(
                                     {"window_course_count": window_course_count}
                                     if not present and window_course_count

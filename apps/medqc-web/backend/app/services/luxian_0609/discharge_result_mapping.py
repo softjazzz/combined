@@ -536,6 +536,8 @@ def _safe_067(raw: Mapping[str, Any]) -> dict[str, Any] | None:
 
 def _safe_068(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     """复制活跃 068 合同；仅接受执行器已判定的批准路径及时间缺口。"""
+    if "_approval_passages" in raw:
+        raw = {key: value for key, value in raw.items() if key != "_approval_passages"}
     if raw.get("failure_kind") == "senior_discharge_approval_time_missing":
         return _safe_course_time_gap(raw)
 

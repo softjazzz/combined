@@ -9,11 +9,9 @@ from __future__ import annotations
 import json
 
 import pytest
+from test_luxian_0609_discharge_approval_extraction import numbered_reply
 
 from app.services.luxian_0609.decision_reducer import CustomerFinalState
-from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
-    SCHEMA_VERSION,
-)
 from tests.unit.test_luxian_0609_native_extended_document_execution import (
     _canonical_extended_result,
     _evaluate,
@@ -30,10 +28,7 @@ class _Client:
         self.calls.append((prompt, kwargs))
         return {
             "choices": [{
-                "message": {"content": json.dumps({
-                    "schema_version": SCHEMA_VERSION,
-                    "items": self.items,
-                })},
+                "message": {"content": json.dumps(numbered_reply(prompt, self.items))},
                 "finish_reason": "stop",
             }],
             "usage": {

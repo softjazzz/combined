@@ -23,6 +23,8 @@ class RecoveringClient(Client):
             raise ConnectionError('合成传输失败')
         if self.calls and not self.repeated:
             self.payload = _payload(_item('doc_01', opinion='unknown', quote=''))
+        elif 'lx0609_discharge_approval_passages_v1' in prompt:
+            self.payload = _payload(_item('doc_01', quote='出院医嘱：注意休息，定期复查。'))
         return await super().generate(prompt, **kwargs)
 
 

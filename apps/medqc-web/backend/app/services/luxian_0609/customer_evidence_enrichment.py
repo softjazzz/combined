@@ -503,12 +503,21 @@ def _discussion_excerpt(
     return "", ""
 
 
+def _approval_excerpt(row: Mapping[str, Any], start: int, end: int) -> str:
+    text = row.get("record_content")
+    if not isinstance(text, str) or not 0 <= start < end <= len(text):
+        return ""
+    compact = re.sub(r"\\s+", " ", text[start:end]).strip()
+    return compact[:300] + ("…" if len(compact) > 300 else "")
+
+
 def enrich_customer_evidence(
     evidence_rows: Sequence[Mapping[str, Any]],
     *,
     evidence_materials: Any,
     preferred_source_fields: Mapping[str, str] | None = None,
     strict_course_record_time: bool = False,
+    approval_passages: Sequence[tuple[str, str, int, int]] = (),
 ) -> list[dict[str, Any]]:
     """从本次执行的冻结材料中补充精确证据时间和短摘录。
 
@@ -575,6 +584,17 @@ def enrich_customer_evidence(
             evidence["field_path"] = field_path
             evidence["evidence_excerpt"] = excerpt or "参与人员字段为空或未取得"
             evidence["excerpt_kind"] = "字段级依据"
+        if approval_passages and source_type in {"daily_course_record", "senior_course_record"}:
+            version = _text(evidence["source_document_id"])
+            locations = [(start, end) for source, doc, start, end in approval_passages
+                         if (source, doc) == (source_type, version)]
+            if len(locations) == 1:
+                start, end = locations[0]
+                selected = _approval_excerpt(matched, start, end)
+                if not selected:
+                    raise ValueError("invalid discharge approval passage")
+                evidence.update(field_path=f"record_content_span_{start}_{end}",
+                                evidence_excerpt=selected, excerpt_kind="字段级依据")
         if record_time and not _text(evidence.get("record_time")):
             evidence["record_time"] = record_time
         if excerpt and not _text(evidence.get("evidence_excerpt")):
@@ -627,6 +647,10 @@ def trace_customer_evidence(
     source_type = _text(evidence.get("source_type")).lower()
     field_path = _text(evidence.get("field_path"))
     if kind == "字段级依据":
+        span = re.fullmatch(r"record_content_span_([0-9]{1,5})_([0-9]{1,5})", field_path)
+        if span and source_type in {"daily_course_record", "senior_course_record"}:
+            expected = _approval_excerpt(row, int(span[1]), int(span[2]))
+            return "verified_field_excerpt" if expected and expected == excerpt else "excerpt_mismatch"
         candidates: list[str] = []
         if source_type == "presurg_discussion":
             candidates.append(_discussion_excerpt(row, field_path=field_path)[1])

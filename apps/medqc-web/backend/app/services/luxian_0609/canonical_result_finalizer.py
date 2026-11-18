@@ -1352,6 +1352,10 @@ def finalize_luxian_0609_reduced_customer_result(
     customer_evidence = enrich_customer_evidence(
         customer_evidence,
         evidence_materials=evidence_materials,
+        approval_passages=(
+            (raw_customer_display_facts or {}).get("_approval_passages", ())
+            if rule_id == "LX0609-08-02-02" and selected_document_evidence is not None else ()
+        ),
         strict_course_record_time=rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"},
         preferred_source_fields=(
             {"surgery_record": "surgery_name"}

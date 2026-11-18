@@ -1,0 +1,76 @@
+"""068 只使用合成病程与固定模型返回；贯通冻结取材、证据投影和页面 DTO。"""
+import json
+
+import pytest
+
+from app.services.custom_qc_workspace_service import _safe_evidence_rows
+from app.services.luxian_0609.customer_evidence_enrichment import trace_customer_evidence
+from app.services.luxian_0609.extended_document import discharge_approval_extraction as approval
+from tests.unit.test_luxian_0609_native_extended_document_execution import (
+    _canonical_extended_result, _evaluate_selected,
+)
+
+RULE = "LX0609-08-02-02"
+
+
+class PassageClient:
+    def __init__(self, reply):
+        self.reply = reply
+        self.calls = []
+
+    def supports_strict_json_schema(self):
+        return True
+
+    async def generate(self, prompt, **options):
+        import jsonschema
+        self.calls.append(prompt)
+        payload = {"schema_version": approval.PASSAGE_SCHEMA_VERSION, "items": self.reply}
+        schema = options["response_format"]["json_schema"]["schema"]
+        assert "quote" not in schema["properties"]["items"]["items"]["properties"]
+        jsonschema.validate(payload, schema)
+        assert options["allow_length_retry"] is False
+        return {"choices": [{"message": {"content": json.dumps(payload)}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("sentence", "opinion", "role", "status"), [
+    ("一般情况好转主任医师查看后今日可办理出院。", "approved", "senior", "compliant"),
+    ("主任医师不同意今日出院。", "denied", "senior", "non_compliant"),
+    ("出院前提：1、主任医师表示若复查正常，可以出院。", "conditional", "senior", "non_compliant"),
+    ("患者要求回家，主任医师在场，记录称今日可出院。", "approved", "unknown", "non_compliant"),
+])
+async def test_numbered_passage_reaches_authorized_result(sentence, opinion, role, status):
+    row = {"document_id": "synthetic-doc", "source_version_key": "synthetic-version-1",
+           "record_time": "2026-07-03 08:00:00", "record_content": "既往经过。"+sentence+"继续随访。"}
+    client = PassageClient([{"local_doc_id": "doc_01", "opinion": opinion, "role": role,
+                             "passage_id": "doc_01:2"}])
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        (RULE,), {"inpat_registration": ({"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},),
+                  "daily_course_record": (row,)}, llm_client=client)
+    assert len(client.calls) == 1
+    assert reduced[0].final_state.value == status
+    canonical = _canonical_extended_result(rule_id=RULE, snapshot=snapshot, materials=materials,
+                                            result=result, reduced=reduced)
+    evidence, = canonical["customer_evidence"]
+    assert evidence["source_document_id"] == row["source_version_key"]
+    assert evidence["evidence_excerpt"] == sentence
+    assert trace_customer_evidence(evidence, (row,)) == "verified_field_excerpt"
+    assert trace_customer_evidence(evidence, ({**row, "source_version_key": "newer"},)) == "unresolved_identity"
+    assert "_approval_passages" not in canonical["customer_display_facts"]
+    public, = _safe_evidence_rows(canonical, hmac_key="synthetic-key")
+    assert public["evidence_excerpt"] == sentence and public["source_ref"].startswith("src_")
+
+
+@pytest.mark.asyncio
+async def test_cross_document_passage_is_rejected_without_retry_or_text_in_logs(caplog):
+    docs = (approval.DischargeApprovalInput("doc_01", "daily_course_record", "姓名：张测试；主任医师同意出院。"),
+            approval.DischargeApprovalInput("doc_02", "senior_course_record", "主任医师不同意出院。"))
+    client = PassageClient([
+        {"local_doc_id": "doc_01", "opinion": "approved", "role": "senior", "passage_id": "doc_02:1"},
+        {"local_doc_id": "doc_02", "opinion": "unknown", "role": "unknown", "passage_id": ""},
+    ])
+    result = await approval.extract_discharge_approval(docs, client, numbered_passages=True)
+    assert result.reason_code == "model_invalid_output" and not result.assertions
+    assert len(client.calls) == 1 and "张测试" not in client.calls[0]
+    assert "passage_reference_invalid" in caplog.text and "张测试" not in caplog.text

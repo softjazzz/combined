@@ -8,6 +8,7 @@ import pytest
 
 from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
     MAX_COMPLETION_TOKENS,
+    PASSAGE_SCHEMA_VERSION,
     SCHEMA_VERSION,
     DischargeApprovalInput,
     extract_discharge_approval,
@@ -39,6 +40,20 @@ def _payload(*items: dict[str, object]) -> dict[str, object]:
     return {"schema_version": SCHEMA_VERSION, "items": list(items)}
 
 
+def numbered_reply(prompt, items):
+    """按夹具预定的证据文本选择请求中的段落；从不发模型请求。"""
+    docs, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("[{"):])
+    answers = []
+    for item in items:
+        doc_id, quote = item["local_doc_id"], item["quote"]
+        doc = next((d for d in docs if d["local_doc_id"] == doc_id), {})
+        parts = [p for p in doc.get("passages", ()) if quote and quote in p["text"]]
+        role = "unknown" if not quote else "other" if item["opinion"] == "patient_request" else "senior"
+        answers.append({"local_doc_id": doc_id, "opinion": item["opinion"], "role": role,
+                        "passage_id": parts[0]["id"] if len(parts) == 1 else "invalid" if quote else ""})
+    return {"schema_version": PASSAGE_SCHEMA_VERSION, "items": answers}
+
+
 class Client:
     def __init__(self, payload: object, *, error: Exception | None = None):
         self.payload = payload
@@ -49,6 +64,10 @@ class Client:
         self.calls.append((prompt, kwargs))
         if self.error is not None:
             raise self.error
+        if PASSAGE_SCHEMA_VERSION in prompt and isinstance(self.payload, dict):
+            return {"choices": [{"message": {"content": json.dumps(numbered_reply(prompt, self.payload["items"]))},
+                                 "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 80, "completion_tokens": 20, "total_tokens": 100}}
         content = self.payload if isinstance(self.payload, str) else json.dumps(self.payload)
         return {
             "choices": [{"message": {"content": content}, "finish_reason": "stop"}],
