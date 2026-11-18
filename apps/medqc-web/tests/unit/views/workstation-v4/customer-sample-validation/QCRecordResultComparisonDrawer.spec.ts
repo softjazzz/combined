@@ -147,7 +147,7 @@ describe('QCRecordResultComparisonDrawer', () => {
     workbenchProps = null
   })
 
-  it.each(['sync_admin', UserRole.ADMIN] as const)('部分失败时保留已完成结果和失败提示（%s）', async (role) => {
+  it.each(['sync_admin', UserRole.ADMIN] as const)('部分失败时保留已完成结果并隐藏失败横幅（%s）', async (role) => {
     vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
       success: true, data: { id: 'test-viewer', roles: [role], is_demo_account: true },
     })
@@ -171,9 +171,7 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(workbenchProps?.jobId).toBe('latest-partial-full')
     expect(workbenchProps?.singleRecordItems).toEqual(partial.items)
     expect(workbenchProps?.feedbackAvailable).toBe(false)
-    expect(wrapper.get('[data-testid="record-result-partial-failure"]').text()).toContain('已保留 75 项有效结果')
-    expect(wrapper.text()).toContain('1 项执行失败')
-    expect(wrapper.text()).toContain('LX0609-01-02-02')
+    expect(wrapper.text()).not.toContain('本次质控未全部完成')
     expect(wrapper.text()).not.toContain('自动重试')
     expect(wrapper.get('.customer-record-result-title__qc-time').text()).toContain('质控结束时间：')
   })

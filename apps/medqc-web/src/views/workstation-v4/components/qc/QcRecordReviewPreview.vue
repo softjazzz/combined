@@ -106,18 +106,6 @@
         暂无已保存质控结果，请先运行质控
       </div>
       <template v-else>
-        <section
-          v-if="loadedResult?.execution_status === 'partial_failed' || loadedResult?.execution_status === 'failed'"
-          class="preview-state preview-failure"
-          role="alert"
-          data-testid="preview-execution-failure"
-        >
-          <strong>本次质控未全部完成</strong>
-          <p>已保留 {{ loadedResult.result_rule_count }} 项有效结果；{{ loadedResult.failed_rule_count ?? loadedResult.failed_rule_ids?.length ?? '未返回' }} 项执行失败，未形成质控结论。</p>
-          <p v-if="loadedResult.failed_rule_ids?.length">
-            失败项：{{ loadedResult.failed_rule_ids.join('、') }}
-          </p>
-        </section>
         <div class="status-tabs">
           <span>问题预览</span>
           <div class="status-select">
@@ -137,7 +125,7 @@
           aria-live="polite"
         >
           <p
-            v-if="!filteredItems.length && (viewItems.length || !loadedResult?.execution_status)"
+            v-if="!filteredItems.length"
             class="preview-state"
           >
             该状态暂无质控项
@@ -667,15 +655,6 @@ summary {
 }
 .preview-state p {
   margin: 0;
-}
-.preview-failure {
-  padding: 12px 20px;
-  color: var(--mq-warning-text, #9d6412);
-  background: var(--mq-warning-bg, #fff7e6);
-  overflow-wrap: anywhere;
-}
-.preview-failure p {
-  margin-top: 4px;
 }
 .preview-footer {
   display: grid;

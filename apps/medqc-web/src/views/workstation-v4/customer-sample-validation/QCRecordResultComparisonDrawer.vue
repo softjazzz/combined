@@ -49,19 +49,7 @@
 
     <a-spin :spinning="loading">
       <section
-        v-if="latestResult?.execution_status === 'partial_failed' || latestResult?.execution_status === 'failed'"
-        role="alert"
-        class="customer-record-result-warning"
-        data-testid="record-result-partial-failure"
-      >
-        <strong>本次质控未全部完成</strong>
-        <p>已保留 {{ latestResult.result_rule_count }} 项有效结果；{{ latestResult.failed_rule_count }} 项执行失败，未形成质控结论。</p>
-        <p v-if="latestResult.failed_rule_ids?.length">
-          失败项：{{ latestResult.failed_rule_ids.join('、') }}
-        </p>
-      </section>
-      <section
-        v-else-if="latestResult?.result_scope === 'targeted'"
+        v-if="latestResult?.result_scope === 'targeted' && !latestResult.execution_status"
         role="status"
         class="customer-record-result-warning"
       >
@@ -299,9 +287,6 @@ watch(
   border: 1px solid #fde68a;
   border-radius: 12px;
   overflow-wrap: anywhere;
-}
-.customer-record-result-warning p {
-  margin: 4px 0 0;
 }
 .customer-record-result-drawer :deep(.ant-drawer-close) {
   display: grid;
