@@ -429,7 +429,7 @@ describe('SingleRecordQcResultPanel', () => {
     }
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [item] } })
 
-    expect(wrapper.get('.rule-name').text()).toBe('主诉能导出第一诊断')
+    expect(wrapper.get('.rule-name').text()).toBe(item.rule_name)
     expect(wrapper.get('.rule-name').attributes('title')).toBe(item.rule_name)
     await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
     expect(wrapper.find('[data-testid="single-record-rule-fulltext"]').exists()).toBe(false)
@@ -465,8 +465,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.emitted('submit-feedback')).toBeUndefined()
   })
 
-  it('短标题：冒号前唯一时取冒号前，同一文书有多条规则时取冒号后，不修改原始规则名称', () => {
-    const surgeryItems = [
+  it('结果卡在默认收起时展示完整规则名称，包含文书名和具体要求', () => {
+    const resultItems = [
       { ...items[0]!, source_document: '手术记录', rule_name: '手术记录：完成时限核对' },
       {
         ...items[0]!,
@@ -475,16 +475,22 @@ describe('SingleRecordQcResultPanel', () => {
         rule_name: '手术记录：术者签名核对',
       },
       { ...items[0]!, rule_id: 'LX0609-04-01-01', rule_name: '术前小结：无术前小结（有手术医嘱）' },
+      {
+        ...items[0]!,
+        rule_id: 'LX0609-02-01-05',
+        source_document: '查房记录',
+        rule_name: '查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程',
+      },
     ]
     for (const presentationMode of ['flat', 'grouped'] as const) {
       const wrapper = mount(SingleRecordQcResultPanel, {
-        props: { items: surgeryItems, presentationMode },
+        props: { items: resultItems, presentationMode },
       })
       const names = wrapper.findAll('.rule-name')
-      expect(names.map((name) => name.text())).toEqual(['完成时限核对', '术者签名核对', '术前小结'])
+      expect(names.map((name) => name.text())).toEqual(resultItems.map((item) => item.rule_name))
       expect(names[0]!.attributes('title')).toBe('手术记录：完成时限核对')
+      wrapper.unmount()
     }
-    expect(surgeryItems[0]!.rule_name).toBe('手术记录：完成时限核对')
   })
 
   it('收起时结论只占一行，展开后完整展示，操作栏位于所有详情之后', async () => {

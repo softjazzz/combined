@@ -130,7 +130,7 @@
               <span v-if="isCompliantResult(item)" class="status-cell compliant-dot">
                 <span class="visually-hidden">合规</span>
               </span>
-              <strong class="rule-name" :title="displayRuleName(item)">{{ shortRuleTitle(item) }}</strong>
+              <strong class="rule-name" :title="displayRuleName(item)">{{ displayRuleName(item) }}</strong>
               <span v-if="isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
                 shortRuleCode(item.rule_id)
               }}</span>
@@ -1074,35 +1074,6 @@ function displayRuleName(item: Pick<SingleRecordQcResultViewItem, 'rule_name' | 
   return typeof item.rule_name === 'string' && item.rule_name.trim() ? item.rule_name : item.rule_id
 }
 
-function splitRuleTitle(title: string): { head: string; tail: string } | null {
-  const index = title.search(/[：:]/)
-  if (index <= 0) return null
-  const head = title.slice(0, index).trim()
-  const tail = title.slice(index + 1).trim()
-  return head && tail ? { head, tail } : null
-}
-
-// 规则名多为「文书：具体要求」，同一文书下有多条规则；冒号前只在不重复时才能区分规则。
-const ruleTitleHeadCounts = computed(() => {
-  const counts = new Map<string, number>()
-  viewItems.value.forEach((item) => {
-    const head = splitRuleTitle(displayRuleName(item))?.head
-    if (head) counts.set(head, (counts.get(head) || 0) + 1)
-  })
-  return counts
-})
-
-/**
- * 卡片短标题：冒号前在本病历结果中唯一时取冒号前，否则取冒号后（分组标题已给出文书名）。
- * 完整规则名放在 title 与「规则全文」中，不修改原始规则名称。
- */
-function shortRuleTitle(item: SingleRecordQcResultViewItem): string {
-  const name = displayRuleName(item)
-  const parts = splitRuleTitle(name)
-  if (!parts) return name
-  return (ruleTitleHeadCounts.value.get(parts.head) || 0) > 1 ? parts.tail : parts.head
-}
-
 /** 同一页面的规则都属于同一目录，编号去掉目录前缀，完整编号放在 title 中。 */
 function shortRuleCode(ruleId: string): string {
   return ruleId.replace(/^[A-Z]+\d+-(?=\d)/, '')
@@ -1711,15 +1682,10 @@ watch(
   font-weight: 750;
 }
 
-.result-row:not(.is-expanded) .rule-name,
 .result-row:not(.is-expanded) .rule-conclusion {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-}
-
-.result-row:not(.is-expanded) .rule-name {
-  -webkit-line-clamp: 2;
 }
 
 .result-detail {
