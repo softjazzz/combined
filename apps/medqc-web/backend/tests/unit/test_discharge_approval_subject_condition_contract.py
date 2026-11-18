@@ -40,8 +40,9 @@ class SequencedClient:
 @pytest.mark.asyncio
 async def test_future_senior_consultation_uses_one_recheck_and_keeps_conditional():
     body = "患者要求出院，请示上级医师后可办理出院"
+    # approved 引文须为整句（2026-11-18 合同变更）；本测验证补核一次后保留 conditional，替身首轮改给整句。
     client = SequencedClient(
-        _payload("approved", "请示上级医师后可办理出院"),
+        _payload("approved", body),
         _payload("conditional", body),
     )
 

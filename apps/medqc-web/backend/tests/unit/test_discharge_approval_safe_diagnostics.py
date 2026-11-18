@@ -96,7 +96,8 @@ async def test_unknown_document_reference_is_not_echoed(bad_id, caplog):
 async def test_duplicate_document_reference_is_identified(caplog):
     documents = tuple(DischargeApprovalInput(f"doc_{i:02d}", "senior_course_record", "主任医师同意出院。")
                       for i in (1, 2))
-    client = FixedReply([item("doc_01", "同意出院"), item("doc_01", "同意出院")])
+    # approved 引文须为整句（2026-11-18 合同变更）；本测验证重复文书引用，替身改给整句。
+    client = FixedReply([item("doc_01", "主任医师同意出院。"), item("doc_01", "主任医师同意出院。")])
     result = await extract_discharge_approval(documents, client)
     rejected_once(result, client)
     assert "reason=document_reference_duplicate local_doc_id=doc_01" in caplog.text

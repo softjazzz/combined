@@ -21,7 +21,8 @@ from app.services.luxian_0609.extended_document.discharge_approval_extraction im
 class _ApprovalClient:
     """068 上级同意出院以模型抽取为准（用户口径 2026-10-22）：受控 Fake 逐份判为上级同意。"""
 
-    _QUOTES = ("同意明日出院", "同意今日出院")
+    # approved 引文须为整句（2026-11-18 合同变更）；本组只验证时间/窗口语义，替身改给整句合法回答。
+    _QUOTES = ("上级医师查看患者，同意明日出院。", "上级医师查看患者，同意今日出院。")
 
     def __init__(self):
         self.calls = []

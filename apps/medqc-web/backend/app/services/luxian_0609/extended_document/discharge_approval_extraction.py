@@ -122,6 +122,9 @@ def _prompt(documents: Sequence[DischargeApprovalInput]) -> str:
         "opinion为unknown且未提取到意见时quote用空字符串，无需编造引用；"
         "若unknown仍提供非空quote，也必须是对应原文的连续片段；"
         "其他opinion的quote必须为对应文书中支持意见的完整连续分句，必须保留其中的条件、否定和意见主体，不能只摘取‘出院’等词片段。"
+        "opinion为approved时，quote必须是包含该意见的完整句子：从上一个句号、分号、问号或叹号（或文书开头）之后开始，"
+        "到本句句末标点为止；冒号、编号、逗号和换行都不算断句，句中的标题、前提条件、否定和意见主体必须一并保留。"
+        "是否附有条件、是否否定，由你阅读完整文书后判断并体现在opinion中。"
         "daily_course_record的quote必须同时包含意见主体和意见的完整条件、否定及结论，"
         "意见主体必须与本次出院意见位于同一连续分句，不能挪用同文书其他句子的上级医师角色；"
         "‘请示上级医师后才可出院’表示尚待请示，不能仅因含上级称谓就视为上级已经批准；"
@@ -154,60 +157,43 @@ def _reject_output(
 
 _SENTENCE_TERMINATORS = "。！？!?；;"
 _CLOSING_MARKS = "”’\"）)】」』］]"
+_OPENING_MARKS = "“‘（(【「『［["
 # 前一句已在引号/括号内以句末标点结束，如“……。”或（……。）。
 _CLOSED_SENTENCE = re.compile(r"[。！？!?；;][" + re.escape(_CLOSING_MARKS) + r"]+$")
-# 以下词表只用于“拒绝”：无法证明引文边界之外没有支配本意见的条件或否定时，沿用受控拒绝。
-# 不据关键词判断同意与否（意见仍以模型为准，用户口径 2026-10-22）；漏列只会少拒，不会把拒绝变成同意。
-# 条件/前提：同一句内出现在引文之前（含冒号标题、编号列表标题、逗号前置分句）或之后。
-_CONDITION_MARKERS = re.compile(
-    r"若|如果|假如|倘若|假使|万一|如(?![下上此前期何实常])|待|仅在|仅当|只有|只要|除非|前提|条件|"
-    r"方可|才可|才能|后可|后方|后再|一旦|是否|暂不|暂缓|未[^，,。；;：:\n]{0,8}前"
+# 编号紧跟在句末标点之后时只是列表序号（如“。2. ”），不改变句子起点；冒号后的编号不是句子起点。
+_LIST_MARKER_AFTER_TERMINATOR = re.compile(
+    r"[。！？!?；;][ \t\r\n\u00a0\u3000]*(?:\d{1,2}|[一二三四五六七八九十]{1,3})[、.．)）][ \t]*$"
 )
-# 紧贴引文开头的否定（如“不/同意出院”“暂缓/出院”）；分句内更早的“未见异常”等检查所见不在此列。
-_NEGATION_TAIL = re.compile(r"(?:不|未|勿|拒绝?|暂缓|暂不|无需|无须|不宜|不予|禁止?|否)[ \t\r\n\u00a0\u3000]*$")
-# 引文之后同一句内的转折或否决，可能推翻引文中的同意。
-_SUFFIX_TURN = re.compile(r"但|但是|然而|不过|否则|拒|暂缓|暂不|不同意|不宜|不予")
-_OPENING_MARKS = "“‘（(【「『［["
 
 
-def _sentence_head(prefix: str) -> str:
-    """引文所在句中位于引文之前的部分：上一句末之后（不以换行为界，换行不能证明分句结束）。"""
-    return prefix[max(prefix.rfind(mark) for mark in _SENTENCE_TERMINATORS) + 1:]
+def _prefix_is_sentence_start(prefix: str) -> bool:
+    """approved 整句起点：只按句末标点判断，不看词义；冒号、编号、逗号、换行都不能切掉上文。"""
+    return (not prefix or prefix[-1] in _SENTENCE_TERMINATORS
+            or _CLOSED_SENTENCE.search(prefix) is not None
+            or _LIST_MARKER_AFTER_TERMINATOR.search(prefix) is not None)
 
 
 def _prefix_is_clause_start(prefix: str) -> bool:
-    if not prefix or prefix[-1] in _SENTENCE_TERMINATORS or _CLOSED_SENTENCE.search(prefix):
-        return True
-    if prefix[-1] in _OPENING_MARKS:
-        return False
-    if prefix[-1] in _CLOSING_MARKS:
-        # 括号/引号内容未以句末结束（如“（复查正常后）”）可能就是限定条件。
-        return False
-    if _NEGATION_TAIL.search(prefix):
-        return False
-    # 冒号标题、编号列表标题或逗号前置分句：编号与标点只证明从哪里开始，标题中的条件仍支配本项。
-    return _CONDITION_MARKERS.search(_sentence_head(prefix)) is None
+    """非 approved 意见沿用原合同（8d0e5c43f）：句末标点或冒号之后即可起句。"""
+    return not prefix or prefix[-1] in _SENTENCE_TERMINATORS + "：:"
 
 
 def _suffix_is_clause_end(restored: str, suffix: str) -> bool:
-    if not suffix or restored[-1] in _SENTENCE_TERMINATORS or suffix[0] in _SENTENCE_TERMINATORS:
-        return True
-    cut = min((index for index in (suffix.find(mark) for mark in _SENTENCE_TERMINATORS) if index >= 0),
-              default=len(suffix))
-    rest = suffix[:cut]
-    return _CONDITION_MARKERS.search(rest) is None and _SUFFIX_TURN.search(rest) is None
+    return not suffix or restored[-1] in _SENTENCE_TERMINATORS or suffix[0] in _SENTENCE_TERMINATORS
 
 
-def _clause_boundary_issue(text: str, start: int, end: int) -> str:
-    """原文区间的前后边界不能证明未截掉否定或条件时返回安全诊断；否则返回空串。
+def _clause_boundary_issue(text: str, start: int, end: int, *, whole_sentence: bool) -> str:
+    """原文区间边界不完整时返回安全诊断；否则返回空串。
 
-    逐字命中与空白还原两条路径共用；只输出边界位置与字符类别。
+    只做结构核对、不看词义：条件、否定等语义由模型阅读完整文书判断。whole_sentence 仅用于
+    approved（2026-11-18 合同变更）：引文须从句子起点到句末，逐字命中与空白还原共用；
+    其他意见的空白还原沿用原分句边界。
     """
     layout_space = " \t\r\n\u00a0\u3000"
     restored = text[start:end]
     prefix = text[:start].rstrip(layout_space)
     suffix = text[end:].lstrip(layout_space)
-    prefix_bad = not _prefix_is_clause_start(prefix)
+    prefix_bad = not (_prefix_is_sentence_start(prefix) if whole_sentence else _prefix_is_clause_start(prefix))
     suffix_bad = not _suffix_is_clause_end(restored, suffix)
     if prefix_bad or suffix_bad:
         return _boundary_diagnostic(prefix_bad, suffix_bad, prefix, suffix, restored)
@@ -215,10 +201,10 @@ def _clause_boundary_issue(text: str, start: int, end: int) -> str:
 
 
 def _check_verbatim_approval_boundaries(quote: str, document: "DischargeApprovalInput") -> None:
-    """逐字命中的同意引文同样不得截自否定或删去前/后置条件；每处命中都须是完整分句。"""
+    """逐字命中的 approved 引文同样须是完整句子，避免截掉句中的否定或条件；每处命中都须完整。"""
     position = document.text.find(quote)
     while position >= 0:
-        issue = _clause_boundary_issue(document.text, position, position + len(quote))
+        issue = _clause_boundary_issue(document.text, position, position + len(quote), whole_sentence=True)
         if issue:
             _reject_output("unverified opinion quote", "quote_verbatim_incomplete_span", document.local_doc_id,
                            boundary=issue)
@@ -290,7 +276,7 @@ def _quote_rejection_reason(
     return "quote_source_mismatch"
 
 
-def _restore_unique_whitespace_quote(quote: str, document: DischargeApprovalInput) -> str:
+def _restore_unique_whitespace_quote(quote: str, document: DischargeApprovalInput, opinion: str = "") -> str:
     """仅以排版空白定位同文书唯一连续片段；返回原文，不返回归一化文本。"""
     if not quote.strip() or quote in document.text:
         return quote
@@ -314,7 +300,8 @@ def _restore_unique_whitespace_quote(quote: str, document: DischargeApprovalInpu
     # ASCII句点可能属于小数，不能拿它作为分句边界。
     # 前边界另接受“句末标点+闭合引号/括号”与“句末或冒号后的编号”，两者都不能藏条件或否定；
     # 单凭换行、逗号、括号内容或无标点的标题行仍不能证明分句完整。
-    boundary_issue = _clause_boundary_issue(document.text, original_start, original_end)
+    boundary_issue = _clause_boundary_issue(document.text, original_start, original_end,
+                                            whole_sentence=opinion == "approved")
     if boundary_issue:
         _reject_output("unverified opinion quote", "quote_whitespace_incomplete_span", document.local_doc_id,
                        boundary=boundary_issue)
@@ -417,7 +404,7 @@ def _parse(
         ):
             raise ValueError("invalid assertion value")
         document = documents_by_id[local_doc_id]
-        quote = _restore_unique_whitespace_quote(quote, document)
+        quote = _restore_unique_whitespace_quote(quote, document, opinion)
         if opinion == "unknown":
             if quote != "":
                 if not quote.strip() or quote not in document.text:

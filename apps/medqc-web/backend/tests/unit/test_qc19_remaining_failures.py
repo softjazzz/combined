@@ -21,8 +21,8 @@ async def _approval(source, quote, opinion="approved"):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source,quote,expected", [
-    # 编号列表项：编号前是冒号/句末，编号本身不是条件。
-    ("上级医师意见：1、同意今日\n出院。", "同意今日出院。", "同意今日\n出院。"),
+    # 整句引用（含冒号标题和编号）；句末标点后的编号只是序号。
+    ("上级医师意见：1、同意今日\n出院。", "上级医师意见：1、同意今日出院。", "上级医师意见：1、同意今日\n出院。"),
     ("查房意见如下。2. 主任医师同意\n出院。", "主任医师同意出院。", "主任医师同意\n出院。"),
     # 前一句已在引号/括号内以句末标点结束。
     ("患者诉“无不适。”主任医师同意\n出院。", "主任医师同意出院。", "主任医师同意\n出院。"),
@@ -295,9 +295,9 @@ async def test_verbatim_approved_quote_still_checks_negation_and_condition_bound
 @pytest.mark.parametrize("source,quote,expected", [
     ("主任医师同意出院。", "主任医师同意出院。", "主任医师同意出院。"),
     ("主任医师同意出院。", "主任医师同意出院", "主任医师同意出院"),
-    ("上级医师意见：1、同意今日\n出院。", "同意今日出院。", "同意今日\n出院。"),
-    ("上级医师意见：1、同意今日出院。", "同意今日出院。", "同意今日出院。"),
-    ("主任医师查房意见：同意出院。", "同意出院。", "同意出院。"),
+    ("上级医师意见：1、同意今日\n出院。", "上级医师意见：1、同意今日出院。", "上级医师意见：1、同意今日\n出院。"),
+    ("上级医师意见：1、同意今日出院。", "上级医师意见：1、同意今日出院。", "上级医师意见：1、同意今日出院。"),
+    ("主任医师查房意见：同意出院。", "主任医师查房意见：同意出院。", "主任医师查房意见：同意出院。"),
 ])
 async def test_complete_verbatim_or_labelled_opinion_still_accepted(source, quote, expected):
     result, _ = await _approval(source, quote)
@@ -330,13 +330,17 @@ async def test_scope_grounding_uses_original_assertion_index(caplog):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source,quote,accepted", [
-    ("经主任医师查房，同意今日出院。", "同意今日出院。", True),  # 逗号前置分句无条件：常见合法引法
-    ("复查血常规未见异常，主任医师同意出院。", "主任医师同意出院。", True),  # 检查所见中的“未”不是否定意见
-    ("体温平稳后可出院，经主任医师查房同意今日出院。", "经主任医师查房同意今日出院。", False),  # 前置分句含条件
-    ("主任医师同意出院，但家属要求继续观察。", "主任医师同意出院", False),  # 后置转折
-    ("主任医师暂缓出院。", "出院。", False),  # 紧贴的否定
+    # 程序只按句末标点核对整句，不看词义：半句不论前文是什么都拒绝，整句交模型判断。
+    ("经主任医师查房，同意今日出院。", "同意今日出院。", False),
+    ("经主任医师查房，同意今日出院。", "经主任医师查房，同意今日出院。", True),
+    ("复查血常规未见异常，主任医师同意出院。", "主任医师同意出院。", False),
+    ("复查血常规未见异常，主任医师同意出院。", "复查血常规未见异常，主任医师同意出院。", True),
+    ("体温平稳后可出院，经主任医师查房同意今日出院。", "经主任医师查房同意今日出院。", False),
+    ("主任医师同意出院，但家属要求继续观察。", "主任医师同意出院", False),
+    ("主任医师暂缓出院。", "出院。", False),
+    ("病情稳定。2、主任医师同意\n出院。", "主任医师同意出院。", True),  # 句末后的编号只是序号
 ])
-async def test_comma_and_mid_clause_boundaries_only_reject_unproven_condition_or_negation(source, quote, accepted):
+async def test_approved_quote_must_be_whole_sentence_without_keyword_semantics(source, quote, accepted):
     result, client = await _approval(source, quote)
     if accepted:
         assert result.state == "ready" and result.assertions[0].opinion == "approved"
