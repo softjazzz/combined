@@ -346,3 +346,59 @@ async def test_approved_quote_must_be_whole_sentence_without_keyword_semantics(s
         assert result.state == "ready" and result.assertions[0].opinion == "approved"
     else:
         rejected_once(result, client)
+
+
+# ---- 08-02-02 复审 P2：整句引文首尾排版空白；角色补核提示与整句要求一致 ----
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source,quote,expected", [
+    ("主任医师同意出院。\n继续观察。", "主任医师同意出院。\n", "主任医师同意出院。\n"),  # 逐字命中带尾随换行
+    ("主任医师同意出院。\n继续观察。", "主任医师同意出院。", "主任医师同意出院。"),
+    ("病情稳定。\n主任医师同意出院。", "\n主任医师同意出院。", "\n主任医师同意出院。"),  # 前导换行
+    ("主任医师同意\n出院。\n继续观察。", "主任医师同意出院。 ", "主任医师同意\n出院。"),  # 空白还原带尾随空格
+])
+async def test_whole_sentence_with_edge_layout_whitespace_is_accepted(source, quote, expected):
+    result, _ = await _approval(source, quote)
+    assert result.state == "ready" and result.assertions[0].quote == expected
+    assert result.assertions[0].opinion == "approved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source,quote", [
+    ("主任医师不\n同意出院。", "\n同意出院。"),  # 换行不是断句依据，截掉否定仍拒绝
+    ("若复查正常，\n主任医师同意出院。", "\n主任医师同意出院。"),  # 截掉前置条件
+    ("主任医师同意出院\n，前提是复查正常。", "主任医师同意出院\n"),  # 截掉后置条件
+])
+async def test_edge_whitespace_never_turns_half_sentence_into_whole(source, quote):
+    result, client = await _approval(source, quote)
+    rejected_once(result, client)
+
+
+_ROLE_TEXT = "患者要求出院，主任医师评估后同意出院。"
+
+
+@pytest.mark.asyncio
+async def test_role_recheck_prompt_keeps_whole_sentence_and_unknown_role():
+    from test_discharge_approval_subject_condition_contract import SequencedClient, _payload as _seq_payload
+    client = SequencedClient(_seq_payload("approved", _ROLE_TEXT), _seq_payload("approved", _ROLE_TEXT))
+    result = await extract_discharge_approval(
+        (DischargeApprovalInput("doc_01", "daily_course_record", _ROLE_TEXT),), client,
+    )
+    assert result.llm_call_count == len(client.calls) == 2
+    second = client.calls[1][0]
+    assert "纠正上一轮多个主体" in second
+    assert "返回approved时仍须引用完整原句" in second
+    assert "不得为单独摘出" in second
+    assert result.state == "ready"
+    assert (result.assertions[0].opinion, result.assertions[0].role) == ("approved", "unknown")
+
+
+@pytest.mark.asyncio
+async def test_role_recheck_half_sentence_is_rejected_without_extra_call():
+    from test_discharge_approval_subject_condition_contract import SequencedClient, _payload as _seq_payload
+    client = SequencedClient(_seq_payload("approved", _ROLE_TEXT), _seq_payload("approved", "主任医师评估后同意出院。"))
+    result = await extract_discharge_approval(
+        (DischargeApprovalInput("doc_01", "daily_course_record", _ROLE_TEXT),), client,
+    )
+    assert result.llm_call_count == len(client.calls) == 2
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")

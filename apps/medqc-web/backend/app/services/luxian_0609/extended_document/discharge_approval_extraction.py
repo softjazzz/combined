@@ -190,6 +190,14 @@ def _clause_boundary_issue(text: str, start: int, end: int, *, whole_sentence: b
     其他意见的空白还原沿用原分句边界。
     """
     layout_space = " \t\r\n\u00a0\u3000"
+    # \u4ec5\u5224\u65ad\u8fb9\u754c\u65f6\u5ffd\u7565\u5f15\u6587\u9996\u5c3e\u7684\u6392\u7248\u7a7a\u767d\uff08\u5982\u6574\u53e5\u540e\u5e26\u51fa\u7684\u6362\u884c\uff09\uff1b\u5f15\u6587\u4e0e\u5b9a\u4f4d\u672c\u8eab\u4e0d\u6539\u3002
+    # \u7a7a\u767d\u53ea\u88ab\u8df3\u8fc7\u3001\u4e0d\u88ab\u5f53\u4f5c\u65ad\u53e5\u4f9d\u636e\uff1a\u524d\u540e\u8fb9\u754c\u4ecd\u6309\u53e5\u672b\u6807\u70b9\u5224\u65ad\u3002
+    while start < end and text[start] in layout_space:
+        start += 1
+    while end > start and text[end - 1] in layout_space:
+        end -= 1
+    if start == end:
+        return _boundary_diagnostic(True, True, text[:start], text[end:], "")
     restored = text[start:end]
     prefix = text[:start].rstrip(layout_space)
     suffix = text[end:].lstrip(layout_space)
@@ -510,6 +518,9 @@ async def _extract_discharge_approval_once(
                 "\n纠正上一轮多个主体或多个出院表达混入同一quote的问题：重读完整文书，"
                 "仅引用与本次意见直接绑定的主体及完整连续分句，不能借用其他主体的意见。"
                 "必须保留该分句中的条件和否定；不能仅为获得上级角色而删掉条件或改写原文。"
+                "返回approved时仍须引用完整原句（见上方approved整句要求），"
+                "不得为单独摘出上级医师主体而截取逗号后的半句；"
+                "整句含多个主体或多个出院表达、无法安全归属主体时仍引用整句，主体按未定处理。"
                 if role_correction else ""
             ) + (
                 "\n补核处置完成情况：‘检查、治疗后出院’仍须区分未来条件与已完成事实；上级医师直接指示予换药、拆线或拔管后出院的记为approved。"
