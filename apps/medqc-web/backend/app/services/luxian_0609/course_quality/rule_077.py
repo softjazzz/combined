@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 import re
 from typing import Any, Mapping, Protocol
@@ -23,11 +23,11 @@ from ..evidence_material import (
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
 from ..llm_prompt_privacy import (
     classify_luxian_0609_llm_call_failure,
-    locate_luxian_0609_redacted_quote,
     redact_luxian_0609_patient_privacy,
 )
 from ..structured_output import structured_output_kwargs
-from .shared import clean_text, response_json_payload, response_text
+from ..transfusion_order_trigger import _json_response_object
+from .shared import clean_text, response_text
 
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,9 @@ _FIRST_DIAGNOSIS_IN_BODY = re.compile(
 _MAX_DIFFERENTIAL_CHARS = 5000
 _MAX_DIAGNOSIS_CHARS = 1600
 _MAX_CONTEXT_CHARS = 12000
+_MIN_PASSAGE_CHARS = 8
+_MAX_PASSAGE_CHARS = 100
+_RESPONSE_FIELDS = frozenset({"relation_state", "rationale_code", "medical_analysis", "evidence_id"})
 _NUMBERED_DIAGNOSIS_ITEM_PATTERN = re.compile(
     r"(?:^|(?=\d+\s*[、.．,，]))\d+\s*[、.．,，]\s*"
     r"(.*?)(?=\d+\s*[、.．,，]|$)"
@@ -93,6 +96,12 @@ class _FirstDiagnosisEvidence:
     reason_code: str = ""
 
 
+@dataclass(frozen=True)
+class _EvidencePassage:
+    document_ref: str
+    text: str = field(repr=False)
+
+
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
     usage = response.get("usage")
     usage = usage if isinstance(usage, Mapping) else {}
@@ -111,15 +120,17 @@ def _row_text(row: Mapping[str, Any]) -> str:
 
 
 def _differential_text(row: Mapping[str, Any]) -> str:
-    structured = clean_text(
+    structured = str(
         row.get("differential_diagnosis")
         or row.get("differential_diagnoses")
         or row.get("differential_diagnosis_content")
-    )
+        or ""
+    ).strip()
     if structured:
         return structured[:_MAX_DIFFERENTIAL_CHARS]
-    match = _DIFFERENTIAL_SECTION.search(_row_text(row))
-    return clean_text(match.group("body"))[:_MAX_DIFFERENTIAL_CHARS] if match else ""
+    body = str(row.get("record_content") or row.get("content") or "")
+    match = _DIFFERENTIAL_SECTION.search(body)
+    return match.group("body").strip()[:_MAX_DIFFERENTIAL_CHARS] if match else ""
 
 
 def _diagnosis_items(value: Any) -> tuple[str, ...]:
@@ -360,39 +371,70 @@ def _decision(
         reason_code=reason_code,
         fact_refs=refs,
         positive_document_refs=positive_document_refs,
-        evaluator_version="course-differential-relation-v1",
+        evaluator_version="course-differential-relation-v2",
         confidence=confidence,
         criterion_results=(criterion,) if criterion is not None else (),
     )
 
 
-def _clinical_background(rows: tuple[Mapping[str, Any], ...]) -> tuple[str, bool]:
+def _background_fields(
+    pairs: tuple[tuple[str, Mapping[str, Any]], ...],
+) -> list[tuple[str, str, str]]:
     """只取已绑定的同份首次病程，不借用其他文书推断临床背景。"""
-    parts: list[str] = []
+    parts: list[tuple[str, str, str]] = []
     seen: set[str] = set()
-    for row in rows:
+    for ref, row in pairs:
         for field, label in (
             ("case_characteristic", "病例特点"),
             ("diagnose_based_on", "诊断依据"),
         ):
-            value = clean_text(row.get(field))
-            if value and value not in seen:
-                seen.add(value)
-                parts.append(f"{label}：{value}")
+            value = str(row.get(field) or "").strip()
+            normalized = clean_text(value)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                parts.append((ref, label, value))
     if not parts:
-        for row in rows:
-            value = _row_text(row)
-            if value and value not in seen:
-                seen.add(value)
-                parts.append(f"首次病程正文：{value}")
-    full_text = "\n".join(parts)
-    return full_text[:_MAX_CONTEXT_CHARS], len(full_text) > _MAX_CONTEXT_CHARS
+        for ref, row in pairs:
+            value = str(row.get("record_content") or row.get("content") or "").strip()
+            normalized = clean_text(value)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                parts.append((ref, "首次病程正文", value))
+    return parts
+
+
+def _evidence_passages(fields: list[tuple[str, str]]) -> dict[str, _EvidencePassage]:
+    """只从本次已绑定的冻结字段切连续段，保留标点和段内排版。"""
+    passages: dict[str, _EvidencePassage] = {}
+    for ref, text in fields:
+        raw_parts: list[str] = []
+        for sentence in re.split(r"(?<=[。！？!?])", text):
+            for start in range(0, len(sentence), _MAX_PASSAGE_CHARS):
+                part = sentence[start:start + _MAX_PASSAGE_CHARS]
+                if raw_parts and len(raw_parts[-1]) + len(part) <= _MAX_PASSAGE_CHARS and (
+                    len(raw_parts[-1].strip()) < _MIN_PASSAGE_CHARS or len(part.strip()) < _MIN_PASSAGE_CHARS
+                ):
+                    raw_parts[-1] += part
+                else:
+                    raw_parts.append(part)
+        safe_parts = [redact_luxian_0609_patient_privacy(part) for part in raw_parts]
+        whole_safe = redact_luxian_0609_patient_privacy(text)
+        if "".join(safe_parts) != whole_safe:
+            # 分段可能切开脱敏上下文。仅当整段可作引文时才保留整段。
+            safe_parts = [whole_safe]
+        for part in safe_parts:
+            quote = part.strip()
+            if _MIN_PASSAGE_CHARS <= len(quote) <= _MAX_PASSAGE_CHARS and "\x00" not in quote:
+                passages[f"p{len(passages) + 1:02d}"] = _EvidencePassage(ref, quote)
+    return passages
 
 
 def _prompt(
     *, first_diagnosis: str, full_diagnosis: str, differential: str,
     clinical_background: str = "",
+    evidence_passages: Mapping[str, _EvidencePassage] | None = None,
 ) -> str:
+    choices = "\n".join(f"[{key}] {part.text}" for key, part in (evidence_passages or {}).items())
     return f"""你是病历质控中的鉴别诊断关联性核对器。
 
 只判断首次病程记录中已经写出的鉴别诊断，是否是用于解释相同主诉、体征、检查发现或同一临床问题的合理备选诊断。不要判断诊断是否正确，不要补充病历中不存在的诊断。疾病系统相同本身不是充分条件，跨系统也不是否决条件。只要有任一项鉴别诊断围绕第一诊断的临床问题展开即判 related，其余项围绕其他诊断或其他问题不影响；只有全部鉴别诊断都明显不能解释第一诊断的临床问题且正文未说明关联时才判 unrelated。
@@ -407,17 +449,20 @@ def _prompt(
 鉴别诊断：{differential}
 同份首次病程临床背景：{clinical_background or '未提供额外背景'}
 
+可引用的同份冻结文书原文片段：
+{choices or '无可引用片段'}
+
 relation_state 只能是 related、unrelated、unknown：
 - related：至少一项鉴别诊断与第一诊断或其同一临床问题存在合理临床关联；
 - unrelated：没有任何一项与第一诊断的临床问题相关，且正文未解释关联；
 - unknown：信息存在但无法可靠判断。
 rationale_code 必须与 relation_state 成对：related 对应 same_clinical_problem；unrelated 对应 no_related_item；unknown 对应 insufficient_information。
 
-medical_analysis 用不超过240字说明具体关联或不相关依据，点明诊断及临床问题，不得只重复“未围绕第一诊断展开”。unrelated 的 medical_analysis 必须为20至240字，解释为什么所有已写的鉴别均不能解释该临床问题，并在 evidence_quote 引用上述材料中8至100字的连续原文；不得编造，不得拼接不相邻的片段。四个字段均使用字符串，说明或引文不得输出数组或对象。信息不足以支持明确不相关时填 unknown。不要输出人员姓名或身份信息。
-只输出 JSON：{{"relation_state":"related|unrelated|unknown","rationale_code":"same_clinical_problem|no_related_item|insufficient_information","medical_analysis":"具体依据","evidence_quote":"连续原文"}}。"""
+medical_analysis 用不超过240字说明具体关联或不相关依据，点明诊断及临床问题，不得只重复“未围绕第一诊断展开”。unrelated 的 medical_analysis 必须为20至240字，解释为什么所有已写的鉴别均不能解释该临床问题，并在 evidence_id 选择上面一个支持结论的片段编号。不要抄写、改写或拼接引文，也不要拼接编号。related 或 unknown 无需引用时填空字符串。信息不足以支持明确不相关时填 unknown。四个字段均使用字符串。不要输出人员姓名或身份信息。
+只输出 JSON：{{"relation_state":"related|unrelated|unknown","rationale_code":"same_clinical_problem|no_related_item|insufficient_information","medical_analysis":"具体依据","evidence_id":"一个候选编号或空字符串"}}。"""
 
 
-def _output_options(llm_client: Rule077LLMClient) -> dict[str, Any]:
+def _output_options(llm_client: Rule077LLMClient, evidence_passages: Mapping[str, _EvidencePassage]) -> dict[str, Any]:
     # 复用0609既有能力探测，不改变全局模型配置或不支持此能力的客户端。
     options = structured_output_kwargs(llm_client)
     if not options:
@@ -425,7 +470,7 @@ def _output_options(llm_client: Rule077LLMClient) -> dict[str, Any]:
     options["response_format"] = {
         "type": "json_schema",
         "json_schema": {
-            "name": "first_course_differential_relation",
+            "name": "first_course_differential_relation_passages",
             "strict": True,
             "schema": {
                 "type": "object",
@@ -433,10 +478,10 @@ def _output_options(llm_client: Rule077LLMClient) -> dict[str, Any]:
                     "relation_state": {"type": "string", "enum": sorted(_RELATION_STATES)},
                     "rationale_code": {"type": "string", "enum": sorted(_RATIONALE_CODES)},
                     "medical_analysis": {"type": "string"},
-                    "evidence_quote": {"type": "string"},
+                    "evidence_id": {"type": "string", "enum": ["", *evidence_passages]},
                 },
                 "required": [
-                    "relation_state", "rationale_code", "medical_analysis", "evidence_quote",
+                    "relation_state", "rationale_code", "medical_analysis", "evidence_id",
                 ],
                 "additionalProperties": False,
             },
@@ -513,9 +558,9 @@ async def evaluate_rule_077(
         first_course_diagnosis_pairs,
     )
     refs = diagnosis_evidence.refs
-    differential = next(
-        (value for row in first_course_rows if (value := _differential_text(row))),
-        "",
+    differential_ref, differential = next(
+        ((ref, value) for ref, row in first_course_pairs if (value := _differential_text(row))),
+        ("", ""),
     )
     if diagnosis_evidence.state != "available" or not differential:
         reason_code = (
@@ -555,18 +600,25 @@ async def evaluate_rule_077(
             )
         )
 
-    clinical_background, context_truncated = _clinical_background(first_course_rows)
+    background_fields = _background_fields(first_course_pairs)
+    clinical_background = "\n".join(f"{label}：{clean_text(value)}" for _, label, value in background_fields)
+    context_truncated = len(clinical_background) > _MAX_CONTEXT_CHARS
+    evidence_fields = [(differential_ref, differential)]
+    if not context_truncated:
+        evidence_fields.extend((ref, value) for ref, _, value in background_fields)
+    evidence_passages = _evidence_passages(evidence_fields)
     try:
         response = await llm_client.generate(
             _prompt(
                 first_diagnosis=diagnosis_evidence.first,
                 full_diagnosis=diagnosis_evidence.full_text,
                 differential=differential,
-                clinical_background=clinical_background,
+                clinical_background=clinical_background[:_MAX_CONTEXT_CHARS],
+                evidence_passages=evidence_passages,
             ),
             max_completion_tokens=768,
             allow_length_retry=False,
-            **_output_options(llm_client),
+            **_output_options(llm_client, evidence_passages),
         )
     except TimeoutError:
         criterion = _criterion(
@@ -605,27 +657,17 @@ async def evaluate_rule_077(
         )
 
     prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
-    payload = response_json_payload(response)
+    try:
+        payload = _json_response_object(response_text(response))
+    except (ValueError, RecursionError):
+        payload = None
+    payload = payload if isinstance(payload, Mapping) else None
     state = clean_text(payload.get("relation_state")) if payload else ""
     rationale = clean_text(payload.get("rationale_code")) if payload else ""
     analysis = clean_text(payload.get("medical_analysis")) if payload else ""
-    quote = clean_text(payload.get("evidence_quote")) if payload else ""
-    # quote 已经由 clean_text 合并空白；材料必须使用同一规则，避免真实的
-    # 相邻换行引文被误判为编造。保留标点和顺序，不跨片段拼接或模糊匹配。
-    source_texts = tuple(
-        clean_text(value)
-        for value in (diagnosis_evidence.full_text, differential, clinical_background)
-    )
-    # 本规则不本地脱敏，模型看到的是发送包装器脱敏后的文本；含本系统占位的逐字引文
-    # 只按共用合同在单个来源片段内唯一回映，仍不跨片段、不模糊匹配。
-    # 占位类别与位置须与本系统对同一片段的脱敏结果逐字一致；本地脱敏少于包装器时只会误拒。
-    quote_in_source = bool(quote) and any(
-        quote in text or (
-            locate_luxian_0609_redacted_quote(quote, text) is not None
-            and quote in clean_text(redact_luxian_0609_patient_privacy(text))
-        )
-        for text in source_texts
-    )
+    evidence_id = payload.get("evidence_id") if payload else None
+    selected_passage = evidence_passages.get(evidence_id) if isinstance(evidence_id, str) else None
+    quote = selected_passage.text if selected_passage else ""
     rationale_matches_state = {
         "related": "same_clinical_problem",
         "unrelated": "no_related_item",
@@ -635,9 +677,13 @@ async def evaluate_rule_077(
     if payload is None:
         validation_errors.append("json_payload_invalid")
     else:
-        for field in ("relation_state", "rationale_code", "medical_analysis", "evidence_quote"):
+        if payload.keys() != _RESPONSE_FIELDS:
+            validation_errors.append("json_payload_fields_invalid")
+        for field in sorted(_RESPONSE_FIELDS):
             if field in payload and not isinstance(payload[field], str):
                 validation_errors.append(f"{field}_type_invalid")
+    if isinstance(evidence_id, str) and evidence_id and selected_passage is None:
+        validation_errors.append("evidence_id_unknown")
     if state not in _RELATION_STATES:
         validation_errors.append("relation_state_invalid")
     if rationale not in _RATIONALE_CODES:
@@ -651,10 +697,8 @@ async def evaluate_rule_077(
     if state == "unrelated":
         if len(analysis) < 20:
             validation_errors.append("analysis_too_short")
-        if not 8 <= len(quote) <= 100:
-            validation_errors.append("quote_length_invalid")
-        if quote and not quote_in_source:
-            validation_errors.append("quote_not_in_source")
+        if not evidence_id:
+            validation_errors.append("evidence_id_required")
         if context_truncated:
             validation_errors.append("clinical_context_truncated")
     if validation_errors:
@@ -703,7 +747,7 @@ async def evaluate_rule_077(
             refs=refs,
             actual=state,
             medical_analysis=(
-                f"{analysis}\n原文依据：{quote}" if analysis and quote_in_source
+                f"{analysis}\n原文依据：{quote}" if analysis and selected_passage
                 else analysis
             ),
         )
@@ -713,8 +757,8 @@ async def evaluate_rule_077(
             status=status,
             reason_code=reason_code,
             criterion=criterion,
-            positive_document_refs=tuple(ref for ref in refs if ref in snapshot.document_refs)
-            if state == "unrelated" else (),
+            positive_document_refs=(selected_passage.document_ref,)
+            if state == "unrelated" and selected_passage else (),
         )
     return Rule077Execution(
         decision,

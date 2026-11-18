@@ -205,9 +205,7 @@ async def test_scope_valid_response_unchanged():
     assert result.state == "ready" and result.llm_call_count == 1
 
 
-# ---- C05 · 01-02-02 引文经发送包装器脱敏后含占位 ----
-
-import re as _re
+# ---- C05 · 01-02-02 从冻结正文选片段，解析及保存不信任模型引文 ----
 
 from app.services.luxian_0609.llm_prompt_privacy import wrap_luxian_0609_llm_client
 
@@ -219,25 +217,20 @@ class _RelationClient:
 
     async def generate(self, prompt, **_kwargs):
         self.prompts.append(prompt)
-        quote = self.choose(prompt)
+        fields = self.choose(prompt)
         return {"content": _json.dumps({"relation_state": "unrelated", "rationale_code": "no_related_item",
                                         "medical_analysis": "鉴别诊断所列胆囊炎与第一诊断急性胰腺炎不属同一临床问题的鉴别。",
-                                        "evidence_quote": quote}, ensure_ascii=False)}
+                                        **fields}, ensure_ascii=False)}
 
 
 _077_ROWS = {
     "first_course_record": [{"document_id": "course",
-                             "diagnose_based_on": "1、急性胰腺炎：患者张三，男，79岁，腹痛伴淀粉酶升高。",
+                             "diagnose_based_on": "1、急性胰腺炎：患者张三，男，79岁，\n腹痛伴淀粉酶升高。",
+                             "source_version_key": "synthetic-first-course-v1",
                              "differential_diagnosis": "胆囊炎：也可上腹疼痛。"}],
     "first_course_record_diagnosis": [
         {"document_id": "course", "diagnosis_type": "初步诊断", "diagnosis_main": "是", "diagnosis_name": "急性胰腺炎"}],
 }
-
-
-def _sent_sentence(prompt):
-    match = _re.search(r"\[患者姓名已脱敏\]，男，79岁，腹痛伴淀粉酶升高", prompt)
-    assert match, "发送包装器应已把已知姓名替换为占位"
-    return match.group(0)
 
 
 async def _077(choose):
@@ -249,21 +242,41 @@ async def _077(choose):
 
 
 @pytest.mark.asyncio
-async def test_077_verbatim_quote_of_redacted_source_is_grounded():
-    client, reduced, result = await _077(_sent_sentence)
-    assert "张三" not in client.prompts[0]
+async def test_077_numbered_passage_returns_frozen_text_with_privacy():
+    client, reduced, result = await _077(lambda prompt: {"evidence_id": "p02"})
+    prompt, = client.prompts
+    assert "张三" not in prompt
+    assert "[p02]" in prompt and "[患者姓名已脱敏]" in prompt
     assert (result["status"], reduced.reason_code) == ("non_compliant", "requirement_violated")
+    analysis = result["criterion_results"][0]["medical_analysis"]
+    assert "原文依据：1、急性胰腺炎：患者[患者姓名已脱敏]，男，79岁，\n腹痛伴淀粉酶升高。" in analysis
+    assert "张三" not in analysis
+    course_evidence, = [item for item in result["customer_evidence"] if item["source_type"] == "first_course_record"]
+    assert course_evidence["source_document_id"] == "synthetic-first-course-v1"
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("choose", [
-    lambda prompt: "[患者姓名已脱敏]，男，79岁，腹痛伴脂肪酶升高",  # 改写
-    lambda prompt: "[就诊标识已脱敏]，男，79岁，腹痛伴淀粉酶升高",  # 占位类别不符
-    lambda prompt: "腹痛伴淀粉酶升高。胆囊炎：也可上腹疼痛",  # 跨片段拼接
+@pytest.mark.parametrize("fields", [
+    {"evidence_id": "p99"},
+    {"evidence_id": "p01,p02"},
+    {"evidence_id": ""},
+    {"evidence_id": "p01", "evidence_quote": "腹痛伴淀粉酶升高。胆囊炎：也可上腹疼痛"},
 ])
-async def test_077_placeholder_quote_protections_still_reject(choose):
-    _, _, result = await _077(choose)
+async def test_077_rejects_unbound_or_spliced_passage(fields):
+    client, _, result = await _077(lambda _: fields)
     assert (result["status"], result["reason_code"]) == ("technical_error", "model_invalid_output")
+    assert len(client.prompts) == 1
+
+
+def test_077_keeps_adjacent_short_sentences_in_one_frozen_field():
+    from app.services.luxian_0609.course_quality.rule_077 import _evidence_passages
+
+    first = "急性阑尾炎。急性胆囊炎。"
+    second = "影像检查提示异常。"
+    passages = _evidence_passages([("first", first), ("second", second)])
+    assert [(part.document_ref, part.text) for part in passages.values()] == [
+        ("first", first), ("second", second),
+    ]
 
 
 # ---- Codex 复审反例（ad02cb1b8）：编号标题条件、逐字命中边界、断言原始序号 ----

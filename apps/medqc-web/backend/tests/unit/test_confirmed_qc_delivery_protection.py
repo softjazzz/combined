@@ -35,7 +35,7 @@ async def first_course_with_clinical_context():
     class Client:
         async def generate(self, prompt, **kwargs):
             assert "头部包块及短暂意识改变" in prompt and "不要求鉴别诊断与第一诊断逐病名" in prompt
-            return {"content": json.dumps({"relation_state": "related", "rationale_code": "same_clinical_problem", "medical_analysis": "首诊为肢体骨折，同次外伤存在头部包块及意识改变，鉴别脑出血解释相关临床问题。", "evidence_quote": "头部包块及短暂意识改变"}), "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
+            return {"content": json.dumps({"relation_state": "related", "rationale_code": "same_clinical_problem", "medical_analysis": "首诊为肢体骨折，同次外伤存在头部包块及意识改变，鉴别脑出血解释相关临床问题。", "evidence_id": "p02"}), "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
     result = await evaluate_rule_077(snapshot=session.snapshot, materials=session.materials, llm_client=Client())
     return finalize_luxian_0609_reduced_customer_result(decision=reduce_luxian_0609_rule_decision(result.decision), raw_customer_display_facts=None, evidence_snapshot=session.snapshot, evidence_materials=session.materials)
 

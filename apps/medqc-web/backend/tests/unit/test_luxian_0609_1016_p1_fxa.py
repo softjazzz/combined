@@ -45,7 +45,7 @@ class RelationClient:
 
     async def generate(self, prompt, **kwargs):
         self.prompts.append(prompt)
-        return {"content": '{"relation_state":"related","rationale_code":"same_clinical_problem"}'}
+        return {"content": '{"relation_state":"related","rationale_code":"same_clinical_problem","medical_analysis":"","evidence_id":""}'}
 
 
 @pytest.mark.asyncio

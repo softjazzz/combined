@@ -303,7 +303,7 @@ async def test_first_course_formal_rule_reads_parent_diagnosis_and_uses_fake_sem
             return {"content": json.dumps({
                 "relation_state": "related", "rationale_code": "same_clinical_problem",
                 "medical_analysis": "所列鉴别用于解释同一腹痛临床问题。",
-                "evidence_quote": "消化性溃疡穿孔；急性胰腺炎",
+                "evidence_id": "p01",
             }, ensure_ascii=False)}
 
     context = session("LX0609-01-02-02")
