@@ -154,18 +154,75 @@ def _reject_output(
 
 _SENTENCE_TERMINATORS = "。！？!?；;"
 _CLOSING_MARKS = "”’\"）)】」』］]"
-# 编号列表项：编号紧跟在句末或冒号之后（不跨换行），编号本身不是条件或否定。
-_LIST_MARKER_AFTER_BOUNDARY = re.compile(
-    r"[。！？!?；;：:][ \t]*(?:\d{1,2}|[一二三四五六七八九十]{1,3})[、.．)）][ \t]*$"
-)
 # 前一句已在引号/括号内以句末标点结束，如“……。”或（……。）。
 _CLOSED_SENTENCE = re.compile(r"[。！？!?；;][" + re.escape(_CLOSING_MARKS) + r"]+$")
+# 以下词表只用于“拒绝”：无法证明引文边界之外没有支配本意见的条件或否定时，沿用受控拒绝。
+# 不据关键词判断同意与否（意见仍以模型为准，用户口径 2026-10-22）；漏列只会少拒，不会把拒绝变成同意。
+# 条件/前提：同一句内出现在引文之前（含冒号标题、编号列表标题、逗号前置分句）或之后。
+_CONDITION_MARKERS = re.compile(
+    r"若|如果|假如|倘若|假使|万一|如(?![下上此前期何实常])|待|仅在|仅当|只有|只要|除非|前提|条件|"
+    r"方可|才可|才能|后可|后方|后再|一旦|是否|暂不|暂缓|未[^，,。；;：:\n]{0,8}前"
+)
+# 紧贴引文开头的否定（如“不/同意出院”“暂缓/出院”）；分句内更早的“未见异常”等检查所见不在此列。
+_NEGATION_TAIL = re.compile(r"(?:不|未|勿|拒绝?|暂缓|暂不|无需|无须|不宜|不予|禁止?|否)[ \t\r\n\u00a0\u3000]*$")
+# 引文之后同一句内的转折或否决，可能推翻引文中的同意。
+_SUFFIX_TURN = re.compile(r"但|但是|然而|不过|否则|拒|暂缓|暂不|不同意|不宜|不予")
+_OPENING_MARKS = "“‘（(【「『［["
+
+
+def _sentence_head(prefix: str) -> str:
+    """引文所在句中位于引文之前的部分：上一句末之后（不以换行为界，换行不能证明分句结束）。"""
+    return prefix[max(prefix.rfind(mark) for mark in _SENTENCE_TERMINATORS) + 1:]
 
 
 def _prefix_is_clause_start(prefix: str) -> bool:
-    return (not prefix or prefix[-1] in _SENTENCE_TERMINATORS + "：:"
-            or _CLOSED_SENTENCE.search(prefix) is not None
-            or _LIST_MARKER_AFTER_BOUNDARY.search(prefix) is not None)
+    if not prefix or prefix[-1] in _SENTENCE_TERMINATORS or _CLOSED_SENTENCE.search(prefix):
+        return True
+    if prefix[-1] in _OPENING_MARKS:
+        return False
+    if prefix[-1] in _CLOSING_MARKS:
+        # 括号/引号内容未以句末结束（如“（复查正常后）”）可能就是限定条件。
+        return False
+    if _NEGATION_TAIL.search(prefix):
+        return False
+    # 冒号标题、编号列表标题或逗号前置分句：编号与标点只证明从哪里开始，标题中的条件仍支配本项。
+    return _CONDITION_MARKERS.search(_sentence_head(prefix)) is None
+
+
+def _suffix_is_clause_end(restored: str, suffix: str) -> bool:
+    if not suffix or restored[-1] in _SENTENCE_TERMINATORS or suffix[0] in _SENTENCE_TERMINATORS:
+        return True
+    cut = min((index for index in (suffix.find(mark) for mark in _SENTENCE_TERMINATORS) if index >= 0),
+              default=len(suffix))
+    rest = suffix[:cut]
+    return _CONDITION_MARKERS.search(rest) is None and _SUFFIX_TURN.search(rest) is None
+
+
+def _clause_boundary_issue(text: str, start: int, end: int) -> str:
+    """原文区间的前后边界不能证明未截掉否定或条件时返回安全诊断；否则返回空串。
+
+    逐字命中与空白还原两条路径共用；只输出边界位置与字符类别。
+    """
+    layout_space = " \t\r\n\u00a0\u3000"
+    restored = text[start:end]
+    prefix = text[:start].rstrip(layout_space)
+    suffix = text[end:].lstrip(layout_space)
+    prefix_bad = not _prefix_is_clause_start(prefix)
+    suffix_bad = not _suffix_is_clause_end(restored, suffix)
+    if prefix_bad or suffix_bad:
+        return _boundary_diagnostic(prefix_bad, suffix_bad, prefix, suffix, restored)
+    return ""
+
+
+def _check_verbatim_approval_boundaries(quote: str, document: "DischargeApprovalInput") -> None:
+    """逐字命中的同意引文同样不得截自否定或删去前/后置条件；每处命中都须是完整分句。"""
+    position = document.text.find(quote)
+    while position >= 0:
+        issue = _clause_boundary_issue(document.text, position, position + len(quote))
+        if issue:
+            _reject_output("unverified opinion quote", "quote_verbatim_incomplete_span", document.local_doc_id,
+                           boundary=issue)
+        position = document.text.find(quote, position + 1)
 
 
 def _char_kind(char: str) -> str:
@@ -177,7 +234,7 @@ def _char_kind(char: str) -> str:
         return "terminator"
     if char in _CLOSING_MARKS:
         return "closing_mark"
-    if char in "“‘（(【「『［[":
+    if char in _OPENING_MARKS:
         return "opening_mark"
     if char.isdigit():
         return "digit"
@@ -257,14 +314,10 @@ def _restore_unique_whitespace_quote(quote: str, document: DischargeApprovalInpu
     # ASCII句点可能属于小数，不能拿它作为分句边界。
     # 前边界另接受“句末标点+闭合引号/括号”与“句末或冒号后的编号”，两者都不能藏条件或否定；
     # 单凭换行、逗号、括号内容或无标点的标题行仍不能证明分句完整。
-    terminators = _SENTENCE_TERMINATORS
-    prefix = document.text[:original_start].rstrip(layout_space)
-    suffix = document.text[original_end:].lstrip(layout_space)
-    prefix_bad = not _prefix_is_clause_start(prefix)
-    suffix_bad = bool(suffix) and restored[-1] not in terminators and suffix[0] not in terminators
-    if prefix_bad or suffix_bad:
+    boundary_issue = _clause_boundary_issue(document.text, original_start, original_end)
+    if boundary_issue:
         _reject_output("unverified opinion quote", "quote_whitespace_incomplete_span", document.local_doc_id,
-                       boundary=_boundary_diagnostic(prefix_bad, suffix_bad, prefix, suffix, restored))
+                       boundary=boundary_issue)
     numeric_marks = ".．,，+-−﹣－/／％%‰≤≥<>=±eE_＿"
 
     def token_char(char: str) -> bool:
@@ -377,6 +430,9 @@ def _parse(
                 "unverified opinion quote",
                 _quote_rejection_reason(quote, document, documents), local_doc_id,
             )
+        elif opinion == "approved":
+            # 同意是无条件证据：逐字命中也须核对否定与前/后置条件边界（空白还原路径已同样核对）。
+            _check_verbatim_approval_boundaries(quote, document)
         role: Literal["senior", "other", "unknown"] = (
             "senior" if document.source_type == "senior_course_record" else "unknown"
         )

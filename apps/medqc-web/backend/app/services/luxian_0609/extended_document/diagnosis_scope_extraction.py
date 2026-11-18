@@ -186,6 +186,8 @@ class _GroundingIssue:
     uncertainty_quote: str = ""
     # 仅在引文找不到时填写：发送正文（或所属 quote）里最接近的逐字原文片段。
     nearest: str = ""
+    # 模型响应中该文书 assertions 数组的原始下标；诊断按此编号，不按失败项重排。
+    claim_index: int = -1
 
 
 _GROUNDING_FIELD = {
@@ -200,20 +202,23 @@ _GROUNDING_FIELD = {
 }
 
 
+def _claim_issue(claim_index: int, *args: Any, **kwargs: Any) -> "_GroundingIssue":
+    return _GroundingIssue(*args, **kwargs, claim_index=claim_index)
+
+
 def _grounding_diagnostic(error: BaseException, limit: int = 12) -> str:
     """定位失败的安全摘要：字段:命中计数档:文书序号:断言序号，不含引文或病名。
 
     命中计数沿用定位时已算的 count：quote 为发送正文内次数，problem 为所属引文内次数；
-    uncertainty 只在所属引文中零次时记录。断言序号相同表示失败来自同一条断言。
+    uncertainty 只在所属引文中零次时记录。断言序号取模型响应中该文书 assertions 的原始下标，相同即同一条断言。
     """
     if not isinstance(error, _GroundingViolation):
         return "-"
-    identities: dict[tuple[int, str, str], int] = {}
     parts = []
     for issue in error.issues[:limit]:
-        claim = identities.setdefault((issue.row_index, issue.quote, issue.problem_quote), len(identities))
         bucket = "zero" if issue.count <= 0 else "one" if issue.count == 1 else "multiple"
-        parts.append(f"{_GROUNDING_FIELD.get(issue.reason, 'other')}:{bucket}:r{issue.row_index}:a{claim}")
+        claim = f"a{issue.claim_index}" if issue.claim_index >= 0 else "a-"
+        parts.append(f"{_GROUNDING_FIELD.get(issue.reason, 'other')}:{bucket}:r{issue.row_index}:{claim}")
     return ",".join(parts) + (f",+{len(error.issues) - limit}" if len(error.issues) > limit else "")
 
 
@@ -337,7 +342,7 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
             raise ValueError("invalid coverage")
         assertions = []
         seen_claims: set[tuple[str, ...]] = set()
-        for claim in claims:
+        for claim_index, claim in enumerate(claims):
             if (not isinstance(claim, dict) or set(claim) not in (fields, fields | {"uncertainty_quote"})
                     or any(not isinstance(claim[key], str) for key in fields)):
                 raise ValueError("invalid assertion schema")
@@ -364,7 +369,7 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
                     start, located = span[0], originals[row][span[0]:span[1]]
             except ValueError as error:
                 count = _occurrences(bodies[row], quote)
-                issues.append(_GroundingIssue(str(error), row, quote, problem, count,
+                issues.append(_claim_issue(claim_index, str(error), row, quote, problem, count,
                                               nearest="" if count else _nearest_verbatim(bodies[row], quote)))
                 continue
             problem_start = None
@@ -380,36 +385,36 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
                         problem_start = located.index(problem)
                     if problem_start is None:
                         count = _occurrences(located, problem)
-                        issues.append(_GroundingIssue("problem not uniquely grounded", row, quote, problem, count,
+                        issues.append(_claim_issue(claim_index, "problem not uniquely grounded", row, quote, problem, count,
                                                       nearest="" if count else _nearest_verbatim(quote, problem)))
                         continue
                     problem_start += start
             elif problem:
-                issues.append(_GroundingIssue("unproven problem identity", row, quote, problem, 0))
+                issues.append(_claim_issue(claim_index, "unproven problem identity", row, quote, problem, 0))
                 continue
             uncertainty = claim.get("uncertainty_quote", "")
             needs_uncertainty = (state in {"unresolved", "undetermined"}
                                  or (state == "explicit" and polarity == "negated"))
             if not isinstance(uncertainty, str) or (needs_uncertainty and not uncertainty.strip()):
-                issues.append(_GroundingIssue("missing uncertainty quote", row, quote, problem, 0))
+                issues.append(_claim_issue(claim_index, "missing uncertainty quote", row, quote, problem, 0))
                 continue
             if uncertainty:
                 # 主控代定口径（2026-10-18，待客户复核）：作为未明确证据只须逐字存在于所属 quote，
                 # 不要求唯一；用作病名定位坐标时由 _anchor_problem_by_uncertainty 另行要求唯一。
                 if _occurrences(quote, uncertainty) == 0:
-                    issues.append(_GroundingIssue("uncertainty quote not uniquely grounded", row, quote, problem,
+                    issues.append(_claim_issue(claim_index, "uncertainty quote not uniquely grounded", row, quote, problem,
                                                   0, uncertainty))
                     continue
                 if not _has_uncertainty_marker(uncertainty):
                     extended = _extend_suffix_marker(quote, uncertainty)
                     if extended is None:
-                        issues.append(_GroundingIssue("uncertainty quote missing marker", row, quote, problem, 1,
+                        issues.append(_claim_issue(claim_index, "uncertainty quote missing marker", row, quote, problem, 1,
                                                       uncertainty))
                         continue
                     uncertainty = extended
             identity = (scope, state, polarity, temporal, association, quote, problem)
             if identity in seen_claims:
-                issues.append(_GroundingIssue("duplicate assertion", row, quote, problem, 2))
+                issues.append(_claim_issue(claim_index, "duplicate assertion", row, quote, problem, 2))
                 continue
             seen_claims.add(identity)
             assertions.append(DiagnosisScopeAssertion(scope, state, polarity, temporal, association,

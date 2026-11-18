@@ -264,3 +264,81 @@ async def test_077_verbatim_quote_of_redacted_source_is_grounded():
 async def test_077_placeholder_quote_protections_still_reject(choose):
     _, _, result = await _077(choose)
     assert (result["status"], result["reason_code"]) == ("technical_error", "model_invalid_output")
+
+
+# ---- Codex 复审反例（ad02cb1b8）：编号标题条件、逐字命中边界、断言原始序号 ----
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source,quote", [
+    ("仅在复查正常后可执行以下计划：1、主任医师同意\n出院。", "主任医师同意出院。"),  # 复审反例1
+    ("仅在复查正常后可执行以下计划：1、主任医师同意出院。", "主任医师同意出院。"),  # 同一前提，逐字命中路径
+    ("若体温平稳：主任医师同意\n出院。", "主任医师同意出院。"),  # 冒号标题本身是条件
+    ("复查结果未回报前暂不安排以下事项：2. 主任医师同意出院。", "主任医师同意出院。"),
+])
+async def test_list_or_colon_item_cannot_drop_governing_heading_condition(source, quote):
+    result, client = await _approval(source, quote)
+    rejected_once(result, client)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source,quote", [
+    ("主任医师不同意出院。", "同意出院。"),  # 复审反例2：逐字命中但截出否定
+    ("若复查正常，主任医师同意出院。", "主任医师同意出院。"),  # 删掉前置条件
+    ("主任医师同意出院，前提是复查正常。", "主任医师同意出院"),  # 删掉后置条件
+])
+async def test_verbatim_approved_quote_still_checks_negation_and_condition_boundaries(source, quote):
+    result, client = await _approval(source, quote)
+    rejected_once(result, client)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source,quote,expected", [
+    ("主任医师同意出院。", "主任医师同意出院。", "主任医师同意出院。"),
+    ("主任医师同意出院。", "主任医师同意出院", "主任医师同意出院"),
+    ("上级医师意见：1、同意今日\n出院。", "同意今日出院。", "同意今日\n出院。"),
+    ("上级医师意见：1、同意今日出院。", "同意今日出院。", "同意今日出院。"),
+    ("主任医师查房意见：同意出院。", "同意出院。", "同意出院。"),
+])
+async def test_complete_verbatim_or_labelled_opinion_still_accepted(source, quote, expected):
+    result, _ = await _approval(source, quote)
+    assert result.state == "ready"
+    assert (result.assertions[0].role, result.assertions[0].opinion, result.assertions[0].quote) == (
+        "senior", "approved", expected)
+
+
+@pytest.mark.asyncio
+async def test_scope_grounding_uses_original_assertion_index(caplog):
+    # 第0条成功；第1、2条主引文与病名相同，不确定性引文不同，均零命中。
+    text = "发热原因待查，继续观察。"
+    client = _ScopeClient([
+        _scope_claim("发热原因待查，", "发热原因", "待查"),
+        _scope_claim("发热原因待查，", "发热原因", "未明确"),
+        _scope_claim("发热原因待查，", "发热原因", "不清楚"),
+    ])
+    with caplog.at_level("WARNING"):
+        result = await extract_diagnosis_scope([{"record_content": text}], client,
+                                               max_prompt_bytes=65536, max_completion_tokens=16384)
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
+    assert result.llm_call_count == len(client.prompts) == 2
+    lines = [r.getMessage() for r in caplog.records if "diagnosis_scope_invalid" in r.getMessage()]
+    assert len(lines) == 2
+    for line in lines:
+        assert "grounding=uncertainty:zero:r0:a1,uncertainty:zero:r0:a2 " in line
+        for word in ("发热", "待查", "未明确", "不清楚", "观察"):
+            assert word not in line
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source,quote,accepted", [
+    ("经主任医师查房，同意今日出院。", "同意今日出院。", True),  # 逗号前置分句无条件：常见合法引法
+    ("复查血常规未见异常，主任医师同意出院。", "主任医师同意出院。", True),  # 检查所见中的“未”不是否定意见
+    ("体温平稳后可出院，经主任医师查房同意今日出院。", "经主任医师查房同意今日出院。", False),  # 前置分句含条件
+    ("主任医师同意出院，但家属要求继续观察。", "主任医师同意出院", False),  # 后置转折
+    ("主任医师暂缓出院。", "出院。", False),  # 紧贴的否定
+])
+async def test_comma_and_mid_clause_boundaries_only_reject_unproven_condition_or_negation(source, quote, accepted):
+    result, client = await _approval(source, quote)
+    if accepted:
+        assert result.state == "ready" and result.assertions[0].opinion == "approved"
+    else:
+        rejected_once(result, client)
