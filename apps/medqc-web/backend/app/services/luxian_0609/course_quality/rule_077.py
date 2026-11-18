@@ -21,7 +21,11 @@ from ..evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from ..evidence_snapshot import Luxian0609EvidenceSnapshot
-from ..llm_prompt_privacy import classify_luxian_0609_llm_call_failure
+from ..llm_prompt_privacy import (
+    classify_luxian_0609_llm_call_failure,
+    locate_luxian_0609_redacted_quote,
+    redact_luxian_0609_patient_privacy,
+)
 from ..structured_output import structured_output_kwargs
 from .shared import clean_text, response_json_payload, response_text
 
@@ -612,7 +616,16 @@ async def evaluate_rule_077(
         clean_text(value)
         for value in (diagnosis_evidence.full_text, differential, clinical_background)
     )
-    quote_in_source = bool(quote) and any(quote in text for text in source_texts)
+    # 本规则不本地脱敏，模型看到的是发送包装器脱敏后的文本；含本系统占位的逐字引文
+    # 只按共用合同在单个来源片段内唯一回映，仍不跨片段、不模糊匹配。
+    # 占位类别与位置须与本系统对同一片段的脱敏结果逐字一致；本地脱敏少于包装器时只会误拒。
+    quote_in_source = bool(quote) and any(
+        quote in text or (
+            locate_luxian_0609_redacted_quote(quote, text) is not None
+            and quote in clean_text(redact_luxian_0609_patient_privacy(text))
+        )
+        for text in source_texts
+    )
     rationale_matches_state = {
         "related": "same_clinical_problem",
         "unrelated": "no_related_item",

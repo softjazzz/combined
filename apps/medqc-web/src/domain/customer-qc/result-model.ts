@@ -236,7 +236,7 @@ export interface CustomerDisplayFacts {
   severityCourseGap?: {
     severity: 'serious'
     anchorDate: string
-    horizonDate: string
+    horizonDate?: string
     gapStartDate: string
     gapEndDate: string
     gapDays: number

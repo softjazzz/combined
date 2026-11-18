@@ -8,10 +8,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import logging
+import re
 from time import perf_counter
+import unicodedata
 from typing import Any, Mapping, Sequence
 
-from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
+from .llm_prompt_privacy import (
+    LUXIAN_0609_REDACTION_PLACEHOLDER,
+    classify_luxian_0609_llm_call_failure,
+    locate_luxian_0609_redacted_quote,
+    redact_luxian_0609_patient_privacy,
+)
 from .native_preop_content_execution import _usage
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object
@@ -24,15 +32,92 @@ MAX_COMPLETION_TOKENS = 4096
 PROTOCOL_ATTEMPTS = 2
 _ATOM_KEYS = {"state", "quote"}
 _STATES = frozenset({"present", "absent", "unknown"})
+logger = logging.getLogger(__name__)
+
+
+def _log_parse_rejection(error: Exception, response: Any, *, stage: str, attempt: int) -> None:
+    """只记录固定分类和数值；禁止输出 issues、原异常、引文、标识及响应正文。"""
+    choices = response.get("choices") if isinstance(response, Mapping) else None
+    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], Mapping) else {}
+    message = choice.get("message")
+    content = message.get("content") if isinstance(message, Mapping) else None
+    finish = choice.get("finish_reason")
+    safe_finish = finish if type(finish) is str and finish in {"stop", "length", "content_filter", "tool_calls"} else "other"
+    category = "response_shape"
+    if stage == "usage":
+        category = "usage_invalid"
+    elif isinstance(error, json.JSONDecodeError):
+        category = "json_syntax"
+    elif isinstance(error, _BodyViolation):
+        # 多处违规时优先保留关联/引用原因，不把串文书误写成仅漏返。
+        reasons = {item[0] for item in error.issues}
+        category = next((code for reason, code in (
+            ("invalid document reference", "document_binding"),
+            ("invalid same-material quotation", "same_material_quote"),
+            ("absent or unknown must not quote", "unexpected_quote"),
+            ("invalid document coverage", "document_coverage"),
+        ) if reason in reasons), "response_shape")
+    elif type(error) is ValueError and len(error.args) == 1 and type(error.args[0]) is str:
+        category = {
+            "incomplete response": "output_truncated" if safe_finish == "length" else "incomplete_response",
+            "duplicate response key": "duplicate_key",
+            "invalid response text": "response_text",
+            "invalid response schema": "schema",
+            "invalid response document": "document_schema",
+            "invalid document coverage": "document_coverage",
+            "invalid document reference": "document_binding",
+            "invalid atom": "atom_schema",
+        }.get(error.args[0], "response_shape")
+    # 引文失配只记固定类别与字数，供区分改写/拼接/空白/他文书/脱敏回映射，不记引文本身。
+    quote_kinds = getattr(error, "quote_kinds", ())
+    logger.warning(
+        "course_body parse rejected category=%s stage=%s attempt=%d finish=%s content_length=%d json_position=%d"
+        " quote_kinds=%s quote_chars=%s",
+        category, stage, attempt, safe_finish, len(content) if isinstance(content, str) else 0,
+        error.pos if isinstance(error, json.JSONDecodeError) else -1,
+        ",".join(kind for kind, _ in quote_kinds) or "-",
+        ",".join(str(chars) for _, chars in quote_kinds) or "-",
+    )
+
+
+_DIAGNOSTIC_SPACE = re.compile(r"\s+")
+_DIAGNOSTIC_PUNCT = re.compile(r"[，,。．.；;：:、！!？?“”\"'‘’（）()【】\[\]《》<>\-—…·/\\]")
+
+
+def _quote_mismatch_kind(quote: Any, doc: Mapping[str, Any], inputs: Sequence[Mapping[str, Any]]) -> str:
+    """仅用于诊断日志的失配分类；不参与通过判定，不放宽任何引用校验。"""
+    if not isinstance(quote, str) or not quote.strip():
+        return "empty"
+    body = doc["body"]
+    if quote in body:
+        return "original_mapping_failed"
+    if any(other is not doc and quote in other["body"] for other in inputs):
+        return "other_document"
+    squash = lambda text: _DIAGNOSTIC_SPACE.sub("", text)
+    unpunct = lambda text: _DIAGNOSTIC_PUNCT.sub("", text)
+    if squash(quote) and squash(quote) in squash(body):
+        return "whitespace_difference"
+    if unpunct(quote) and unpunct(quote) in unpunct(body):
+        return "punctuation_difference"
+    if unpunct(squash(quote)) and unpunct(squash(quote)) in unpunct(squash(body)):
+        return "whitespace_punctuation_difference"
+    if LUXIAN_0609_REDACTION_PLACEHOLDER.search(quote):
+        return "placeholder_not_in_sent_body"
+    pieces = [piece for piece in re.split(r"[，,。；;：:、\s]+", quote) if len(piece) >= 2]
+    if len(pieces) >= 2 and all(piece in body for piece in pieces):
+        return "fragments_spliced"
+    return "not_in_sent_body"
 
 
 class _BodyViolation(ValueError):
     """保留首个失败原因，同时带回同批全部可修正位置。"""
 
-    def __init__(self, issues: Sequence[tuple[str, str, Any]]) -> None:
+    def __init__(self, issues: Sequence[tuple[str, str, Any]],
+                 quote_kinds: Sequence[tuple[str, int]] = ()) -> None:
         # 失败项为空时沿用通用覆盖失败原因，避免构造异常本身出错。
         super().__init__(issues[0][0] if issues else "incomplete coverage")
         self.issues = tuple(issues)
+        self.quote_kinds = tuple(quote_kinds)
 
 
 def _retry_prompt(prompt: str, error: Exception, response: Mapping[str, Any]) -> str:
@@ -75,6 +160,52 @@ class CourseBodyExtraction:
     api_time: float = 0.0
 
 
+_TOKEN_MARKS = ".．,，+-−﹣－/／％%‰≤≥<>=±eE_＿"
+
+
+def _token_char(char: str) -> bool:
+    han = unicodedata.name(char, "").startswith(("CJK UNIFIED IDEOGRAPH", "CJK COMPATIBILITY IDEOGRAPH"))
+    return (char.isnumeric() or char.isalpha() and not han
+            or unicodedata.category(char).startswith("M") or char in _TOKEN_MARKS)
+
+
+def _restore_whitespace_quote(quote: str, body: str) -> str | None:
+    """仅排版空白差异时，按同份发送正文唯一连续片段还原原文（沿用08-02-02合同）。
+
+    模型抄写多行病程时常增删空格/换行（C20、C22 实测）。非空白字符必须在本份正文中
+    唯一、连续出现；空白增删不得拼合或拆开字母、数字等词元。返回的是正文原片段，
+    不是归一化文本；无法唯一定位时返回 None，仍按引用不成立处理。
+    """
+    if quote in body:
+        return quote
+    source_positions = [index for index, char in enumerate(body) if not char.isspace()]
+    quote_positions = [index for index, char in enumerate(quote) if not char.isspace()]
+    candidate = "".join(quote[index] for index in quote_positions)
+    if len(candidate) < 2:
+        return None
+    source = "".join(body[index] for index in source_positions)
+    start = source.find(candidate)
+    if start < 0 or source.find(candidate, start + 1) >= 0:
+        return None
+    for offset in range(1, len(candidate)):
+        left, right = candidate[offset - 1], candidate[offset]
+        original_gap = source_positions[start + offset] - source_positions[start + offset - 1] > 1
+        proposed_gap = quote_positions[offset] - quote_positions[offset - 1] > 1
+        boundary = (left.isascii() and right.isascii() and (left.isalnum() or right.isalnum())
+                    or _token_char(left) and _token_char(right))
+        if original_gap != proposed_gap and boundary:
+            return None
+    return body[source_positions[start]:source_positions[start + len(candidate) - 1] + 1]
+
+
+def _quote_grounded_in_original(quote: str, original: str) -> bool:
+    """引用须出现在原文中；含本系统脱敏占位时须唯一回映到原文有界片段（共用回映射合同）。
+
+    调用方另行要求引用逐字出现在同一份实际发送正文中，不能借用其他材料或改写。
+    """
+    return quote in original or locate_luxian_0609_redacted_quote(quote, original) is not None
+
+
 def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any]]) -> dict[str, str]:
     choice = response["choices"][0]
     if choice.get("finish_reason") != "stop":
@@ -87,6 +218,7 @@ def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any
     if not isinstance(items, list):
         raise ValueError("invalid document coverage")
     issues = []
+    quote_kinds: list[tuple[str, int]] = []
     if len(items) != len(expected):
         issues.append(("invalid document coverage", "documents", f"应为{list(expected)}，实际{len(items)}项"))
     result: dict[str, str] = {}
@@ -108,17 +240,19 @@ def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any
         doc = expected[ref]
         state, quote = atom["state"], atom["quote"]
         if state == "present":
-            # 引用须逐字出现在该份材料实际发送正文与原文中。
-            if (not isinstance(quote, str) or not quote.strip()
-                    or quote not in doc["body"] or quote not in doc["original_body"]):
+            # 引用须出自该份材料实际发送正文（仅排版空白可按唯一连续片段还原），并能唯一回到同一份原文。
+            restored = _restore_whitespace_quote(quote, doc["body"]) if isinstance(quote, str) and quote.strip() else None
+            if restored is None or not _quote_grounded_in_original(restored, doc["original_body"]):
                 issues.append(("invalid same-material quotation", location + ".clinical_body.quote", quote))
+                quote_kinds.append((_quote_mismatch_kind(quote, doc, inputs),
+                                    len(quote) if isinstance(quote, str) else 0))
         elif quote is not None:
             issues.append(("absent or unknown must not quote", location + ".clinical_body.quote", quote))
         result[ref] = state
     for ref in expected.keys() - seen:
         issues.append(("invalid document coverage", f"document_ref={ref}", "遗漏；须逐份完整覆盖"))
     if issues:
-        raise _BodyViolation(issues)
+        raise _BodyViolation(issues, quote_kinds)
     return result
 
 
@@ -165,21 +299,24 @@ async def extract_course_body_facts(documents: Sequence[CourseBodyDocument], llm
         try:
             response = await llm_client.generate(attempt_prompt, max_completion_tokens=MAX_COMPLETION_TOKENS,
                                                  allow_length_retry=False, **structured_output_kwargs(llm_client))
-        except Exception:
-            return CourseBodyExtraction("data_gap", "semantic_extraction_unresolved", llm_call_count=calls,
+        except Exception as error:
+            return CourseBodyExtraction("technical_error", classify_luxian_0609_llm_call_failure(error), llm_call_count=calls,
                 prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,
                 api_time=api_time or perf_counter() - started)
+        stage = "usage"
         try:
             usage = _usage(response)
             prompt_tokens += usage[0]
             completion_tokens += usage[1]
             total_tokens += usage[2]
             api_time += usage[3]
+            stage = "parse"
             resolved = _parse_states(response, inputs)
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError) as error:
+            _log_parse_rejection(error, response, stage=stage, attempt=attempt + 1)
             if attempt + 1 == PROTOCOL_ATTEMPTS:
-                return CourseBodyExtraction("data_gap", "semantic_extraction_unresolved", llm_call_count=calls,
+                return CourseBodyExtraction("technical_error", "model_invalid_output", llm_call_count=calls,
                     prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,
                     api_time=api_time or perf_counter() - started)
             # 提示放在输入资料之前，资料仍在末尾。

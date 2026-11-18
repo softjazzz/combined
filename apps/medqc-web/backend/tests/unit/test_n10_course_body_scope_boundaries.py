@@ -42,7 +42,7 @@ class InvalidReceiptClient(FrozenCourseBodyClient):
         elif self.mode == "cross_material_span":
             atom["span_id"] = "d2:s1"
         elif self.mode == "bad_quote_coordinate":
-            atom["end"] += 1
+            atom["end"] = len(atom["quote"]) + 1
         elif self.mode == "absent_partial_body":
             atom.update(state="absent", span_id=None, start=0, end=1, quote=None)
         elif self.mode == "unknown_with_quote":
@@ -62,11 +62,11 @@ class InvalidReceiptClient(FrozenCourseBodyClient):
 async def test_invalid_receipt_or_failure_is_unresolved_not_physician_missing(mode):
     client = InvalidReceiptClient({"病情稳定。": ("present", "病情稳定")}, mode=mode)
     result = await extract_course_body_facts((CourseBodyDocument("ref1", "daily_course_record", "病情稳定。"),), client)
-    assert (result.state, result.reason_code) == ("data_gap", "semantic_extraction_unresolved")
+    expected_reason = "execution_program_error" if mode == "client_error" else "model_invalid_output"
+    assert (result.state, result.reason_code) == ("technical_error", expected_reason)
     assert result.states == {}
     # 用户口径（2026-10-11）：协议违规重试 1 次（附违反项）；客户端/传输异常不在此重试。
-    # bad_quote_coordinate 夹具在客户端内抛出异常，等同调用异常，不重试。
-    expected_calls = 1 if mode in {"client_error", "bad_quote_coordinate"} else 2
+    expected_calls = 1 if mode == "client_error" else 2
     assert result.llm_call_count == len(client.calls) == expected_calls
     if expected_calls == 2:
         assert "上一次输出未通过校验" in client.calls[1][0]
@@ -154,7 +154,7 @@ async def test_formal_wrapper_sends_same_redacted_body_and_fails_closed_on_ident
     result = await extract_course_body_facts((CourseBodyDocument("material-ref", "daily_course_record", body),), wrapper)
     assert result.llm_call_count == 1
     if identity_guard:
-        assert (result.state, result.reason_code) == ("data_gap", "semantic_extraction_unresolved")
+        assert (result.state, result.reason_code) == ("technical_error", "privacy_guard_blocked")
         assert client.calls == []
     else:
         assert result.state == "ready" and result.states == {"material-ref": "present"}

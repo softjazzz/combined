@@ -15,6 +15,7 @@ from ..llm_prompt_privacy import luxian_0609_llm_call_failure_reason
 from ..structured_output import structured_output_kwargs
 from ..llm_prompt_privacy import (
     describe_luxian_0609_llm_parse_failure,
+    locate_luxian_0609_redacted_quote,
     redact_luxian_0609_patient_privacy,
 )
 from ..transfusion_order_trigger import _json_response_object, _usage
@@ -185,6 +186,40 @@ class _GroundingIssue:
     uncertainty_quote: str = ""
     # 仅在引文找不到时填写：发送正文（或所属 quote）里最接近的逐字原文片段。
     nearest: str = ""
+    # 模型响应中该文书 assertions 数组的原始下标；诊断按此编号，不按失败项重排。
+    claim_index: int = -1
+
+
+_GROUNDING_FIELD = {
+    "quote not uniquely grounded": "quote",
+    "problem not uniquely grounded": "problem",
+    "uncertainty quote not uniquely grounded": "uncertainty",
+    "uncertainty quote missing marker": "uncertainty_marker",
+    "missing uncertainty quote": "uncertainty_missing",
+    "unproven problem identity": "problem_identity",
+    "duplicate assertion": "duplicate",
+    "missing quote": "quote_missing",
+}
+
+
+def _claim_issue(claim_index: int, *args: Any, **kwargs: Any) -> "_GroundingIssue":
+    return _GroundingIssue(*args, **kwargs, claim_index=claim_index)
+
+
+def _grounding_diagnostic(error: BaseException, limit: int = 12) -> str:
+    """定位失败的安全摘要：字段:命中计数档:文书序号:断言序号，不含引文或病名。
+
+    命中计数沿用定位时已算的 count：quote 为发送正文内次数，problem 为所属引文内次数；
+    uncertainty 只在所属引文中零次时记录。断言序号取模型响应中该文书 assertions 的原始下标，相同即同一条断言。
+    """
+    if not isinstance(error, _GroundingViolation):
+        return "-"
+    parts = []
+    for issue in error.issues[:limit]:
+        bucket = "zero" if issue.count <= 0 else "one" if issue.count == 1 else "multiple"
+        claim = f"a{issue.claim_index}" if issue.claim_index >= 0 else "a-"
+        parts.append(f"{_GROUNDING_FIELD.get(issue.reason, 'other')}:{bucket}:r{issue.row_index}:{claim}")
+    return ",".join(parts) + (f",+{len(error.issues) - limit}" if len(error.issues) > limit else "")
 
 
 class _GroundingViolation(ValueError):
@@ -307,7 +342,7 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
             raise ValueError("invalid coverage")
         assertions = []
         seen_claims: set[tuple[str, ...]] = set()
-        for claim in claims:
+        for claim_index, claim in enumerate(claims):
             if (not isinstance(claim, dict) or set(claim) not in (fields, fields | {"uncertainty_quote"})
                     or any(not isinstance(claim[key], str) for key in fields)):
                 raise ValueError("invalid assertion schema")
@@ -323,59 +358,67 @@ def _parse(response: Mapping[str, Any], originals: Sequence[str],
             # 定位规则不变（逐字、唯一）；失败项继续收集，补核时一次指明全部失败位置。
             try:
                 _unique_position(bodies[row], quote)
-                start = _unique_position(originals[row], quote)
+                # 模型只看到脱敏正文；含本系统占位的引文按共用合同唯一回映到原文区间，
+                # 其余引文仍须在原文逐字唯一。病名坐标在回映后的原文片段内定位。
+                if quote in originals[row]:
+                    start, located = _unique_position(originals[row], quote), quote
+                else:
+                    span = locate_luxian_0609_redacted_quote(quote, originals[row])
+                    if span is None:
+                        raise ValueError("quote not uniquely grounded")
+                    start, located = span[0], originals[row][span[0]:span[1]]
             except ValueError as error:
                 count = _occurrences(bodies[row], quote)
-                issues.append(_GroundingIssue(str(error), row, quote, problem, count,
+                issues.append(_claim_issue(claim_index, str(error), row, quote, problem, count,
                                               nearest="" if count else _nearest_verbatim(bodies[row], quote)))
                 continue
             problem_start = None
             if association == "explicit":
                 try:
-                    problem_start = start + _unique_position(quote, problem)
+                    problem_start = start + _unique_position(located, problem)
                 except ValueError:
-                    problem_start = _anchor_problem_by_uncertainty(quote, problem, claim.get("uncertainty_quote"))
-                    if problem_start is None and _is_self_qualified_repeat(quote, problem):
+                    problem_start = _anchor_problem_by_uncertainty(located, problem, claim.get("uncertainty_quote"))
+                    if problem_start is None and _is_self_qualified_repeat(located, problem):
                         # 病程常把报告结论粘贴后在分析里再复述一遍（C08“…粘液栓可能”两处）。problem 原话
                         # 自带不确定性标记时每处含义相同，下游只按状态/范围判定、不用病名坐标，取首处不改变
                         # 结论；不带标记、靠上下文定性的病名（如“不排除X……明确是否存在X”）仍须唯一定位。
-                        problem_start = quote.index(problem)
+                        problem_start = located.index(problem)
                     if problem_start is None:
-                        count = _occurrences(quote, problem)
-                        issues.append(_GroundingIssue("problem not uniquely grounded", row, quote, problem, count,
+                        count = _occurrences(located, problem)
+                        issues.append(_claim_issue(claim_index, "problem not uniquely grounded", row, quote, problem, count,
                                                       nearest="" if count else _nearest_verbatim(quote, problem)))
                         continue
                     problem_start += start
             elif problem:
-                issues.append(_GroundingIssue("unproven problem identity", row, quote, problem, 0))
+                issues.append(_claim_issue(claim_index, "unproven problem identity", row, quote, problem, 0))
                 continue
             uncertainty = claim.get("uncertainty_quote", "")
             needs_uncertainty = (state in {"unresolved", "undetermined"}
                                  or (state == "explicit" and polarity == "negated"))
             if not isinstance(uncertainty, str) or (needs_uncertainty and not uncertainty.strip()):
-                issues.append(_GroundingIssue("missing uncertainty quote", row, quote, problem, 0))
+                issues.append(_claim_issue(claim_index, "missing uncertainty quote", row, quote, problem, 0))
                 continue
             if uncertainty:
                 # 主控代定口径（2026-10-18，待客户复核）：作为未明确证据只须逐字存在于所属 quote，
                 # 不要求唯一；用作病名定位坐标时由 _anchor_problem_by_uncertainty 另行要求唯一。
                 if _occurrences(quote, uncertainty) == 0:
-                    issues.append(_GroundingIssue("uncertainty quote not uniquely grounded", row, quote, problem,
+                    issues.append(_claim_issue(claim_index, "uncertainty quote not uniquely grounded", row, quote, problem,
                                                   0, uncertainty))
                     continue
                 if not _has_uncertainty_marker(uncertainty):
                     extended = _extend_suffix_marker(quote, uncertainty)
                     if extended is None:
-                        issues.append(_GroundingIssue("uncertainty quote missing marker", row, quote, problem, 1,
+                        issues.append(_claim_issue(claim_index, "uncertainty quote missing marker", row, quote, problem, 1,
                                                       uncertainty))
                         continue
                     uncertainty = extended
             identity = (scope, state, polarity, temporal, association, quote, problem)
             if identity in seen_claims:
-                issues.append(_GroundingIssue("duplicate assertion", row, quote, problem, 2))
+                issues.append(_claim_issue(claim_index, "duplicate assertion", row, quote, problem, 2))
                 continue
             seen_claims.add(identity)
             assertions.append(DiagnosisScopeAssertion(scope, state, polarity, temporal, association,
-                quote, problem, start, start + len(quote), problem_start,
+                quote, problem, start, start + len(located), problem_start,
                 None if problem_start is None else problem_start + len(problem), uncertainty))
         seen_rows.add(row)
         result.append(DiagnosisScopeDocument(row, coverage, tuple(assertions)))
@@ -509,8 +552,8 @@ async def extract_diagnosis_scope(
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
             # 仅记录程序定义的校验类别，不记录引文、问题名称或完整模型输出。
             checks = sorted({issue.reason for issue in error.issues}) if isinstance(error, _GroundingViolation) else []
-            logger.warning("LX0609 diagnosis_scope_invalid attempt=%s checks=%s %s", attempt + 1,
-                           checks, describe_luxian_0609_llm_parse_failure(error, response))
+            logger.warning("LX0609 diagnosis_scope_invalid attempt=%s checks=%s grounding=%s %s", attempt + 1,
+                           checks, _grounding_diagnostic(error), describe_luxian_0609_llm_parse_failure(error, response))
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 return DiagnosisScopeResult("technical_error", (), calls, *totals, reason_code="model_invalid_output")
             attempt_prompt = _retry_prompt(prompt, error, _response_content(response))

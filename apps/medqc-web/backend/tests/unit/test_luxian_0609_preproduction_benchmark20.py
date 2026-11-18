@@ -304,7 +304,7 @@ def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
         assert deterministic_rule_ids == _DETERMINISTIC_RULE_IDS
 
     assert all(
-        row["decision_kind"] == "semantic"
+        row["decision_kind"] == "deterministic"
         for row in rows
         if row["rule_id"] == "LX0609-12-01-02"
     )

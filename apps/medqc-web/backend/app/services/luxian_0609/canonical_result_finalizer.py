@@ -1084,6 +1084,8 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
     )
     if is_discharge_customer_rule(rule_id) and not discharge_status_valid:
+        if normalized_rule_id == "LX0609-08-01-02" and safe_facts is not None:
+            logger.warning("discharge_medication facts rejected category=status_mismatch")
         safe_facts = None
     critical_value_status_valid = (
         is_critical_value_customer_rule(rule_id)
@@ -1350,6 +1352,10 @@ def finalize_luxian_0609_reduced_customer_result(
     customer_evidence = enrich_customer_evidence(
         customer_evidence,
         evidence_materials=evidence_materials,
+        approval_passages=(
+            (raw_customer_display_facts or {}).get("_approval_passages", ())
+            if rule_id == "LX0609-08-02-02" and selected_document_evidence is not None else ()
+        ),
         strict_course_record_time=rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"},
         preferred_source_fields=(
             {"surgery_record": "surgery_name"}

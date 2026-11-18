@@ -44,6 +44,10 @@ _PENDING_DEFINITION_CUSTOMER_MESSAGES: dict[str, tuple[str, str]] = {
         "修正或补充诊断质控暂未启用，未生成合规或问题判定。",
         "待与院方确认诊断变更来源及核查口径后再启用；历史结果保留原结论。",
     ),
+    "difficult_discussion_source_validation_pending": (
+        "独立疑难病例讨论记录尚未通过同步验收，本质控点暂未启用。",
+        "待东华 Caché 疑难病例讨论记录完成同步验收后再启用。",
+    ),
     "event_quality_control_paused_current_release": (
         "本质控点按当前版本安排暂未启用，未生成合规或问题判定。",
         "后续版本启用后可新建任务执行本质控点；历史结果保持原结论。",

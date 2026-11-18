@@ -120,6 +120,7 @@ def _record_state(
     records: Sequence[Mapping[str, Any]],
     order_time: datetime,
     early_out_order: Mapping[str, Any] | None = None,
+    order: Mapping[str, Any] | None = None,
 ) -> tuple[str, datetime | None, tuple[Mapping[str, Any], ...]]:
     """返回单类文书与唯一转科医嘱的关联状态及唯一时间。"""
 
@@ -127,6 +128,8 @@ def _record_state(
         return "missing", None, ()
     candidates = tuple(_candidate_for_order(row, order_time=order_time) for row in records)
     current = tuple(item for item in candidates if item.state == "current")
+    if order is not None and any(_departments_conflict(item.row, order) for item in current):
+        return "multiple", None, tuple(item.row for item in current)
     has_unknown = any(item.state == "time_unknown" for item in candidates)
     # 主控代定口径（2026-10-18，待客户复核），基线072/073：
     # 提前不超过24小时的转出须科室对应且为唯一候选，不能只凭时间接受。
@@ -179,11 +182,24 @@ def _target_department(order: Mapping[str, Any]) -> str:
 
 
 def _departments_correspond(record: Mapping[str, Any], order: Mapping[str, Any]) -> bool:
+    if _departments_conflict(record, order):
+        return False
     target = _target_department(order)
     record_target = re.sub(r"\s+", "", _clean(record.get("transferin_department"))).upper()
     current = _clean(order.get("current_department") or order.get("transferout_department"))
     record_source = _clean(record.get("transferout_department"))
     return bool((target and record_target == target) or (current and record_source == current))
+
+
+def _departments_conflict(record: Mapping[str, Any], order: Mapping[str, Any]) -> bool:
+    """已提供的科室身份必须一致，不能以时间接近或另一端匹配掩盖冲突。"""
+    normalize = lambda value: re.sub(r"\s+", "", _clean(value)).upper()
+    pairs = (
+        (_target_department(order), normalize(record.get("transferin_department"))),
+        (normalize(order.get("current_department") or order.get("transferout_department")),
+         normalize(record.get("transferout_department"))),
+    )
+    return any(left and right and left != right for left, right in pairs)
 
 
 def _departments_compatible(record: Mapping[str, Any], order: Mapping[str, Any]) -> bool:
@@ -448,10 +464,10 @@ def evaluate_transfer_documentation(
         return outcome("data_gap", "authoritative_time_missing")
 
     transfer_in_state, transfer_in_time, selected_in = _record_state(
-        records=transfer_in_rows, order_time=order_time
+        records=transfer_in_rows, order_time=order_time, order=orders[0]
     )
     transfer_out_state, transfer_out_time, selected_out = _record_state(
-        records=transfer_out_rows, order_time=order_time, early_out_order=orders[0]
+        records=transfer_out_rows, order_time=order_time, early_out_order=orders[0], order=orders[0]
     )
     consumed.extend(("transfer_in_record", row) for row in selected_in)
     consumed.extend(("transfer_out_record", row) for row in selected_out)

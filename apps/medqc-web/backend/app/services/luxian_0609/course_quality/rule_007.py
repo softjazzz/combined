@@ -40,6 +40,17 @@ _NON_PERFORMED_ROUND_PREFIXES = ("未进行", "未完成", "取消", "未查房"
 _NON_CURRENT_ROUND_PREFIXES = ("昨日查房", "明日查房")
 
 
+# 与 course_quality_result_mapping 的 recorded_dates 展示上限一致（64）。
+_RECORDED_DATES_DISPLAY_LIMIT = 64
+
+
+def _recorded_dates_fact(ordered_records) -> dict:
+    """记录日期只是展示明细；长期住院超出上限时整列省略，不截取部分日期冒充完整记录。"""
+    if len(ordered_records) > _RECORDED_DATES_DISPLAY_LIMIT:
+        return {}
+    return {"recorded_dates": [item[0].date().isoformat() for item in ordered_records]}
+
+
 def _missing_time_capacity_exceeded(
     *, admission_time: datetime, record_times: list[datetime],
     horizon_time: datetime | None, horizon_date: date | None,
@@ -968,7 +979,7 @@ def rule_007_customer_display_facts(
                 "interval_end_position": len(ordered_records) + 1,
                 "record_count": len(ordered_records),
                 "threshold_hours": 72,
-                "recorded_dates": [item[0].date().isoformat() for item in ordered_records],
+                **_recorded_dates_fact(ordered_records),
             }
         exact_intervals = tuple(
             current[0] - previous[0]
@@ -1027,7 +1038,7 @@ def rule_007_customer_display_facts(
         "overdue_seconds": max(0, interval_seconds - threshold_seconds),
         "interval_hours": round(interval_seconds / 3600, 2),
         "threshold_hours": 72,
-        "recorded_dates": [item[0].date().isoformat() for item in ordered_records],
+        **_recorded_dates_fact(ordered_records),
     }
     # 文书 ID 仅供 Aggregator 生成不可逆客户证据引用，不进入安全展示事实。
     # 入院/评价终点本身没有文书 ID；边界区间仍保留另一端的真实病程定位。

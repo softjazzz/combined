@@ -48,7 +48,14 @@ _PATIENT_INTRO = re.compile(
     rf"(?=(?:\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁|因)|\s*因))"
 )
 _DEMOGRAPHIC_LABEL = (
-    r"(?P<label>(?:(?<=^)|(?<=[\n\r；;。：:]))[ \t]*"
+    # 正文可能嵌在一层或多层 JSON 中；识别转义换行边界，不解码/重写整段医疗文本。
+    r"(?P<label>(?:(?<=^)|(?<=[\n\r；;。：:])|(?<=\\n)|(?<=\\r))[ \t]*"
+    r"(?:(?:[一二三四五六七八九十]+|\d+)[、.．][ \t]*)?)"
+)
+# 各族正文清洗常把换行压成空格（“时间 标题\n张三，男”→“时间 标题 张三，男”）。仅对已知
+# 患者姓名额外接受空白边界；未知姓名仍只按行首/标点边界猜测，避免误删医务人员或病名。
+_KNOWN_DEMOGRAPHIC_LABEL = (
+    r"(?P<label>(?:(?<=^)|(?<=[\n\r；;。：:])|(?<=\\n)|(?<=\\r)|(?<=[ \t　]))[ \t]*"
     r"(?:(?:[一二三四五六七八九十]+|\d+)[、.．][ \t]*)?)"
 )
 _DEMOGRAPHIC_FOLLOW = (
@@ -106,6 +113,25 @@ _EMAIL = re.compile(
 
 _PATIENT_NAME_PLACEHOLDER = "[患者姓名已脱敏]"
 _CONTACT_NAME_PLACEHOLDER = "[联系人姓名已脱敏]"
+# 本模块写入的全部占位；引用核验据此区分“本系统脱敏”与模型自造的方括号文本。
+LUXIAN_0609_REDACTION_PLACEHOLDER = re.compile(
+    r"\[(?:患者姓名|联系人姓名|身份证号|手机号|座机号码|电话号码|地址|出生日期|工作单位|就诊标识|电子邮箱)已脱敏\]"
+)
+
+
+def locate_luxian_0609_redacted_quote(quote: str, original: str) -> tuple[int, int] | None:
+    """把含本系统脱敏占位的引文唯一回映到原文，返回原文区间；不含占位或不唯一时返回 None。
+
+    模型只看到脱敏正文，含占位的逐字引文不可能出现在原文里。占位外的文字必须按原顺序
+    紧邻出现，占位只对应不跨标点/换行、不超过64字的片段，整段在原文中只能匹配一处。
+    调用方仍须另行要求引文逐字出自同一份实际发送正文，不能据此接受改写或他文书借用。
+    """
+    parts = LUXIAN_0609_REDACTION_PLACEHOLDER.split(quote)
+    if len(parts) < 2 or not any(part.strip() for part in parts):
+        return None
+    pattern = re.compile(r"[^\n\r，,。；;]{1,64}?".join(re.escape(part) for part in parts))
+    matches = list(pattern.finditer(original))
+    return matches[0].span() if len(matches) == 1 else None
 
 
 def _replace_labelled(pattern: re.Pattern[str], text: str, placeholder: str) -> str:
@@ -153,7 +179,7 @@ def redact_luxian_0609_patient_privacy(
         # 已知姓名出现在句首/冒号后并紧跟性别、年龄（如“新建S章节:某某，男，79岁”），
         # 同样是患者介绍；姓氏不在常见表时只能靠已知身份识别。
         known_demographic = re.compile(
-            _DEMOGRAPHIC_LABEL + r"(?P<value>" + "|".join(known_names) + r")" + _DEMOGRAPHIC_FOLLOW,
+            _KNOWN_DEMOGRAPHIC_LABEL + r"(?P<value>" + "|".join(known_names) + r")" + _DEMOGRAPHIC_FOLLOW,
             flags=re.MULTILINE,
         )
         name_patterns = (*name_patterns, known_intro, known_demographic)

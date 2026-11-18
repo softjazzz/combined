@@ -22,7 +22,11 @@ def response(content):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model,has_schema", [("qwen3.8-flash", True), ("unknown-model", False)])
-async def test_schema_reaches_real_request_builder_through_privacy_wrapper(monkeypatch, model, has_schema):
+@pytest.mark.parametrize("numbered_passages", [False, True], ids=["legacy", "passages"])
+async def test_schema_reaches_real_request_builder_through_privacy_wrapper(monkeypatch, model, has_schema, numbered_passages):
+    reply = {"schema_version": module.PASSAGE_SCHEMA_VERSION, "items": [
+        {"local_doc_id": "doc_01", "opinion": "approved", "role": "senior", "passage_id": "doc_01:1"},
+    ]} if numbered_passages else PAYLOAD
     client = SichuanQCLLMClient({"api_endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "api_key": "synthetic-only", "provider_code": "alibaba", "model": model,
         "endpoint_settings_snapshot": {"version": 0, "providers": {}}})
@@ -30,10 +34,12 @@ async def test_schema_reaches_real_request_builder_through_privacy_wrapper(monke
 
     async def transport(**kwargs):
         requests.append(kwargs["payload"])
-        return response(json.dumps(PAYLOAD, ensure_ascii=False)), None
+        return response(json.dumps(reply, ensure_ascii=False)), None
 
     monkeypatch.setattr(client, "_perform_observed_attempt", transport)
-    result = await module.extract_discharge_approval(DOCUMENTS, wrap_luxian_0609_llm_client(client))
+    result = await module.extract_discharge_approval(
+        DOCUMENTS, wrap_luxian_0609_llm_client(client), numbered_passages=numbered_passages,
+    )
     assert result.state == "ready" and result.assertions[0].quote == DOCUMENTS[0].text
     assert len(requests) == 1
     assert ("response_format" in requests[0]) is has_schema
@@ -42,9 +48,9 @@ async def test_schema_reaches_real_request_builder_through_privacy_wrapper(monke
         assert contract["type"] == "json_schema" and contract["json_schema"]["strict"] is True
         schema = contract["json_schema"]["schema"]
         jsonschema.Draft202012Validator.check_schema(schema)
-        jsonschema.validate(PAYLOAD, schema)
+        jsonschema.validate(reply, schema)
         with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate({**PAYLOAD, "private_extra": "not allowed"}, schema)
+            jsonschema.validate({**reply, "private_extra": "not allowed"}, schema)
 
 
 class FixedClient:

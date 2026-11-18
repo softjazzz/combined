@@ -9,11 +9,9 @@ from __future__ import annotations
 import json
 
 import pytest
+from test_luxian_0609_discharge_approval_extraction import numbered_reply
 
 from app.services.luxian_0609.decision_reducer import CustomerFinalState
-from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
-    SCHEMA_VERSION,
-)
 from tests.unit.test_luxian_0609_native_extended_document_execution import (
     _canonical_extended_result,
     _evaluate,
@@ -30,10 +28,7 @@ class _Client:
         self.calls.append((prompt, kwargs))
         return {
             "choices": [{
-                "message": {"content": json.dumps({
-                    "schema_version": SCHEMA_VERSION,
-                    "items": self.items,
-                })},
+                "message": {"content": json.dumps(numbered_reply(prompt, self.items))},
                 "finish_reason": "stop",
             }],
             "usage": {
@@ -207,7 +202,8 @@ async def test_unattributed_dated_discharge_plan_in_daily_course_is_not_senior_a
     # 1016 第六轮 C27：住院医师日常病程只写“拟明日出院”，未提及上级医师；
     # 模型称 approved，但写明日期的出院安排只有确认为上级医师所写才视为同意。
     text = "查房后处置：患者术后恢复良好，拟明日出院，今日予以换药。"
-    client = _Client(_item("doc_01", opinion="approved", quote="拟明日出院"))
+    # approved 引文须为整句（2026-11-18 合同变更）；本测验证无上级称谓不得成为上级同意，替身改给整句。
+    client = _Client(_item("doc_01", opinion="approved", quote=text))
     _snapshot, _materials, _result, reduced = await _evaluate_selected(
         ("LX0609-08-02-02",),
         {

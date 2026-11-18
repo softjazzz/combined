@@ -204,7 +204,7 @@ def test_missing_timeliness_document_after_maturity_is_defect(
 
 
 @pytest.mark.unit
-def test_001_empty_template_after_maturity_is_treated_as_missing_admission_record():
+def test_001_empty_template_after_maturity_cannot_prove_missing_admission_record():
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -227,13 +227,9 @@ def test_001_empty_template_after_maturity_is_treated_as_missing_admission_recor
 
     execution, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
-    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    assert reduced[0].reason_code == "required_document_missing"
-    assert dict(execution.customer_display_facts)["LX0609-01-01-01"]["timeliness_state"] == "missing"
-    assert (
-        dict(execution.customer_display_facts)["LX0609-01-01-01"]["document_content_state"]
-        == "blank_or_placeholder"
-    )
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
+    assert execution.customer_display_facts == ()
 
 
 @pytest.mark.unit
@@ -305,8 +301,8 @@ def test_001_short_placeholder_body_is_not_a_substantive_admission_record(
 
     _, reduced = _reduce_typed_basic(session, ("LX0609-01-01-01",))
 
-    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    assert reduced[0].reason_code == "required_document_missing"
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
 
 
 @pytest.mark.unit

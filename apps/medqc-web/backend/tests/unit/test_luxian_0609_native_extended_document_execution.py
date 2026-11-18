@@ -5,6 +5,7 @@ from test_luxian_0609_tc02_performed_event_contract import PerformanceFake
 import json
 
 import pytest
+from test_luxian_0609_discharge_approval_extraction import numbered_reply
 
 from luxian_0609_invasive_procedure_test_client import FrozenInvasiveProcedureClient
 from app.services.luxian_0609.continuity_result_mapping import safe_continuity_customer_display_facts
@@ -40,9 +41,6 @@ from app.services.luxian_0609.evidence_snapshot import (
     Luxian0609EvidenceSnapshot,
     SourceCompleteness,
     SourceObservation,
-)
-from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
-    SCHEMA_VERSION as DISCHARGE_APPROVAL_SCHEMA_VERSION,
 )
 from app.services.luxian_0609.extended_document.diagnosis_change_extraction import (
     SCHEMA_VERSION as DIAGNOSIS_CHANGE_SCHEMA_VERSION,
@@ -369,10 +367,7 @@ class _DischargeApprovalClient:
             raise self.error
         return {
             "choices": [{
-                "message": {"content": json.dumps({
-                    "schema_version": DISCHARGE_APPROVAL_SCHEMA_VERSION,
-                    "items": self.items,
-                })},
+                "message": {"content": json.dumps(numbered_reply(prompt, self.items))},
                 "finish_reason": "stop",
             }],
             "usage": {

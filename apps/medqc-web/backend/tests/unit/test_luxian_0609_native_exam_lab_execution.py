@@ -6211,8 +6211,12 @@ async def test_exam_report_source_failure_blocks_010_report_completeness_check(m
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("error_type", "expected_reason"), (
+    (ConnectionError, "model_transport_error"),
+    (RuntimeError, "execution_program_error"),
+))
 async def test_typed_model_failure_and_invalid_output_are_technical_errors_without_echo(
-    monkeypatch,
+    monkeypatch, error_type, expected_reason,
 ):
     secret = "Bearer_secret_13800138000"
     snapshot, materials = _typed_session(
@@ -6223,7 +6227,7 @@ async def test_typed_model_failure_and_invalid_output_are_technical_errors_witho
             "result": "阳性",
         },),
     )
-    client = _Client([RuntimeError(secret)])
+    client = _Client([error_type(secret)])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
@@ -6239,15 +6243,12 @@ async def test_typed_model_failure_and_invalid_output_are_technical_errors_witho
         "technical_error",
         "technical_error",
     ]
-    assert [item.reason_code for item in result.decisions] == [
-        "model_transport_error",
-        "model_transport_error",
-    ]
+    assert [item.reason_code for item in result.decisions] == [expected_reason, expected_reason]
     invalid = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
         wrapper_rules=[_wrapper("LX0609-06-03-03"), _wrapper("LX0609-06-03-04")],
         evidence_payload=None,
-        llm_client=_Client([f"not-json {secret}"]),
+        llm_client=_Client([f"not-json {secret}"] * 2),
         evidence_snapshot=snapshot,
         evidence_materials=materials,
         decision_rule_ids=("LX0609-06-03-03", "LX0609-06-03-04"),
@@ -6257,7 +6258,9 @@ async def test_typed_model_failure_and_invalid_output_are_technical_errors_witho
         "model_invalid_output",
     ]
     assert result.llm_call_count == 1
+    assert invalid.llm_call_count == 2
     assert secret not in repr(result)
+    assert secret not in repr(invalid)
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,7 @@ import re
 from time import perf_counter
 from typing import Any
 
-from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
+from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure
 from .structured_output import structured_output_kwargs
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .transfusion_order_trigger import _json_response_object, _usage
@@ -216,7 +216,7 @@ async def extract_chemotherapy_administrations(
             **structured_output_kwargs(llm_client),
         )
     except Exception as error:
-        return AdministrationExtraction("technical_error", luxian_0609_llm_call_failure_reason(error),
+        return AdministrationExtraction("technical_error", classify_luxian_0609_llm_call_failure(error),
                                         llm_call_count=1, api_time=perf_counter() - started)
     counters = (0, 0, 0)
     try:

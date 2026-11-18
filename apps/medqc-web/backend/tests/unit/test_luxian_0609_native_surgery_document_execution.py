@@ -756,7 +756,7 @@ async def test_typed_029_unavailable_frontpage_does_not_block_original_event(
 
 
 @pytest.mark.asyncio
-async def test_typed_029_blank_or_placeholder_summary_is_non_compliant_without_llm():
+async def test_typed_029_blank_or_placeholder_summary_is_data_gap_without_llm():
     session = _typed_029_session(
         summary_rows=(
             {
@@ -789,19 +789,9 @@ async def test_typed_029_blank_or_placeholder_summary_is_non_compliant_without_l
         snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
-    assert reduced[0].final_state == "non_compliant"
-    assert result.decisions[0].reason_code == "defect_proven"
-    assert result.customer_display_facts == (
-        (
-            "LX0609-04-01-01",
-            {
-                "failure_kind": "surgery_document_blank",
-                "target_document": "presurg_summary",
-                "surgery_trigger_kind": "performed_surgery",
-                "performed_surgery_confirmed": True,
-            },
-        ),
-    )
+    assert reduced[0].final_state == "data_gap"
+    assert result.decisions[0].reason_code == "required_field_missing"
+    assert result.customer_display_facts == ()
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 

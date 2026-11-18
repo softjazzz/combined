@@ -64,7 +64,7 @@ async def test_frozen_body_facts_keep_original_medical_expectations(rule, body, 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rule", RULES)
-@pytest.mark.parametrize("mode,status,reason", (("unknown", "data_gap", "semantic_extraction_unresolved"), ("absent_unknown", "data_gap", "semantic_extraction_unresolved"), ("present_unknown", "compliant", "requirement_satisfied"), ("present_undated_unknown", "compliant", "requirement_satisfied"), ("invalid_batch", "data_gap", "semantic_extraction_unresolved")))
+@pytest.mark.parametrize("mode,status,reason", (("unknown", "data_gap", "semantic_extraction_unresolved"), ("absent_unknown", "data_gap", "semantic_extraction_unresolved"), ("present_unknown", "compliant", "requirement_satisfied"), ("present_undated_unknown", "compliant", "requirement_satisfied"), ("invalid_batch", "technical_error", "model_invalid_output")))
 async def test_same_window_valid_present_and_unknown_reduction(rule, mode, status, reason):
     first = "病情稳定。" if mode in {"present_unknown", "present_undated_unknown", "invalid_batch"} else "人工冻结空壳候选甲"
     second = "人工冻结待核文字乙"
@@ -74,7 +74,7 @@ async def test_same_window_valid_present_and_unknown_reduction(rule, mode, statu
     final, execution = await _run(rule, rows, client)
     assert (final["status"], final["reason_code"]) == (status, reason)
     assert client.fixture_error is None
-    # 用户口径（2026-10-11）：协议违规批次重试 1 次，仍违规才判资料不足。
+    # 协议违规批次最多修正 1 次，仍违规是技术失败；合法 unknown 仍为资料不足。
     expected_calls = 2 if mode == "invalid_batch" else 1
     assert execution.llm_call_count == len(client.calls) == len(client.payloads) == expected_calls
     if status == "data_gap":

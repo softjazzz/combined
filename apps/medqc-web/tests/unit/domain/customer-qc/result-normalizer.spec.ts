@@ -745,6 +745,35 @@ describe('normalizeCustomerQcResult', () => {
     expect(normalizeCustomerQcResult(unproven).display.summary).toContain('来源完整性未获证明')
   })
 
+  it('已确认的病重超期间隔不伪造全局评价终点', () => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-02-01-04', status: 'non_compliant',
+      customer_display_facts: {
+        failure_kind: 'severity_course_gap_exceeded', severity: 'serious', threshold_days: 2,
+        evaluation_scope: 'confirmed_interval', anchor_date: '2026-06-01',
+        gap_start_date: '2026-06-01', gap_end_date: '2026-06-04', gap_days: 3,
+      },
+    })
+    expect(result.display.summary).toContain('2026-06-01至2026-06-04间隔3个自然日')
+    expect(result.display.detail).toContain('仅核对已确认区间')
+    expect(result.display.detail).not.toContain('undefined')
+    expect(result.display.detail).not.toContain('评价终点为2026-06-04')
+  })
+
+  it.each([
+    { anchor_date: '2026-00-01', gap_start_date: '2026-01-01', gap_end_date: '2026-01-04' },
+    { anchor_date: '2026-01-01', gap_start_date: '2026-02-27', gap_end_date: '2026-02-30' },
+  ])('不将不存在的日期显示为确定超期间隔 %j', (dates) => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-02-01-04', status: 'non_compliant',
+      customer_display_facts: {
+        failure_kind: 'severity_course_gap_exceeded', severity: 'serious', threshold_days: 2,
+        evaluation_scope: 'confirmed_interval', ...dates, gap_days: 3,
+      },
+    })
+    expect(result.display.summary).not.toContain('间隔3个自然日')
+  })
+
   it('为 008/009 展示超期区间或缺失日期，而不透传病程正文', () => {
     const seriousGap = {
       rule_id: 'LX0609-02-01-04',

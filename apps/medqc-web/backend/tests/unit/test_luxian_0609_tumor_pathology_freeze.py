@@ -106,7 +106,7 @@ class _FailingRuleClient:
 
     async def generate(self, prompt: str, **_kwargs: object) -> dict[str, Any]:
         self.prompts.append(prompt)
-        raise RuntimeError("controlled semantic transport failure")
+        raise ConnectionError("controlled semantic transport failure")
 
 
 class _FixedRuleClient:

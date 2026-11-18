@@ -21,6 +21,7 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .decision_model import (
+    ALLOWED_REASON_CODES_BY_FINAL_STATE,
     ApplicabilityState,
     EvidenceState,
     QcDirection,
@@ -361,6 +362,8 @@ def _typed_decision_from_outcome(
         )
     elif outcome.status == "technical_error":
         technical_reason = (
+            outcome.reason_code
+            if outcome.reason_code in ALLOWED_REASON_CODES_BY_FINAL_STATE["technical_error"] else
             "source_query_error"
             if outcome.reason_code
             in {"source_query_error", "malignancy_source_query_error"}
@@ -1898,6 +1901,36 @@ def _is_future_discharge_treatment_clause(clause: str) -> bool:
     return False
 
 
+def _is_future_discharge_follow_up_clause(clause: str) -> bool:
+    """随访须有未来安排，否定和既往事实不能单独证明出院后计划。"""
+    if (_DISCHARGE_PLAN_CONDITIONAL_PATTERN.search(clause)
+            or not _DISCHARGE_PLAN_FUTURE_PATTERN.search(clause)):
+        return False
+    # 转折开始新谓词域；并列的“及/和”继续继承同一否定。
+    scope_boundary = re.compile(r"[，,]|但是|但|然而|不过|而")
+    negative_prefix = re.compile(
+        r"(?:未|没有|暂无|无|不|取消|拒绝)"
+        # 允许专科、疾病、频率等宾语修饰，不逐项枚举；不跨独立动作。
+        r"(?:(?!已|现已|现行|仍|住院|请示|签署).)*$"
+    )
+    negative_suffix = re.compile(r"^\s*(?:计划|安排)?(?:尚未|未|没有|暂无|取消)")
+    history = re.compile(r"既往|此前|曾经|曾|入院后|住院期间|住院中|住院后|本次住院|已完成|已结束")
+    future_scope = re.compile(r"出院后|离院后|后续|下次")
+    for follow_up in _DISCHARGE_PLAN_FOLLOW_UP_PATTERN.finditer(clause):
+        boundaries = tuple(scope_boundary.finditer(clause))
+        start = max((item.end() for item in boundaries if item.end() <= follow_up.start()), default=0)
+        end = min((item.start() for item in boundaries if item.start() >= follow_up.end()), default=len(clause))
+        if (negative_prefix.search(clause[start:follow_up.start()])
+                or negative_suffix.search(clause[follow_up.end():end])):
+            continue
+        prefix = clause[:follow_up.start()]
+        histories = [item.start() for item in history.finditer(prefix)]
+        futures = [item.start() for item in future_scope.finditer(prefix)]
+        if not histories or (futures and futures[-1] > histories[-1]):
+            return True
+    return False
+
+
 def _typed_discharge_plan_outcome(
     material: SourceMaterial,
 ) -> tuple[str, str, Mapping[str, Any]]:
@@ -1917,8 +1950,7 @@ def _typed_discharge_plan_outcome(
     )
     treatment_plan = bool(treatment_plan_clauses)
     follow_up_plan = any(
-        _DISCHARGE_PLAN_FOLLOW_UP_PATTERN.search(item)
-        and not _DISCHARGE_PLAN_CONDITIONAL_PATTERN.search(item)
+        _is_future_discharge_follow_up_clause(item)
         for item in clauses
     )
     compliant = treatment_plan or follow_up_plan

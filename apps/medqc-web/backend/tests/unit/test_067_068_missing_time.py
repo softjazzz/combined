@@ -14,14 +14,15 @@ from app.services.luxian_0609.native_extended_document_execution import (
 from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
 from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
-    SCHEMA_VERSION as DISCHARGE_APPROVAL_SCHEMA_VERSION,
+    PASSAGE_SCHEMA_VERSION as DISCHARGE_APPROVAL_SCHEMA_VERSION,
 )
 
 
 class _ApprovalClient:
     """068 上级同意出院以模型抽取为准（用户口径 2026-10-22）：受控 Fake 逐份判为上级同意。"""
 
-    _QUOTES = ("同意明日出院", "同意今日出院")
+    # approved 引文须为整句（2026-11-18 合同变更）；本组只验证时间/窗口语义，替身改给整句合法回答。
+    _QUOTES = ("上级医师查看患者，同意明日出院。", "上级医师查看患者，同意今日出院。")
 
     def __init__(self):
         self.calls = []
@@ -33,7 +34,8 @@ class _ApprovalClient:
             {
                 "local_doc_id": doc["local_doc_id"],
                 "opinion": "approved",
-                "quote": next(quote for quote in self._QUOTES if quote in doc["text"]),
+                "passage_id": next(part["id"] for part in doc["passages"] if part["text"] in self._QUOTES),
+                "role": "senior",
             }
             for doc in payload
         ]

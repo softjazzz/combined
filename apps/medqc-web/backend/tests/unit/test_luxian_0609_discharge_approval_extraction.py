@@ -8,6 +8,7 @@ import pytest
 
 from app.services.luxian_0609.extended_document.discharge_approval_extraction import (
     MAX_COMPLETION_TOKENS,
+    PASSAGE_SCHEMA_VERSION,
     SCHEMA_VERSION,
     DischargeApprovalInput,
     extract_discharge_approval,
@@ -25,7 +26,8 @@ def _item(
     local_doc_id: str,
     *,
     opinion: str = "approved",
-    quote: str = "予以办理出院",
+    # approved 引文须为整句（2026-11-18 合同变更）：默认合法回答改为 SENIOR_TEXT 整句。
+    quote: str = SENIOR_TEXT,
 ) -> dict[str, object]:
     return {
         "local_doc_id": local_doc_id,
@@ -38,6 +40,20 @@ def _payload(*items: dict[str, object]) -> dict[str, object]:
     return {"schema_version": SCHEMA_VERSION, "items": list(items)}
 
 
+def numbered_reply(prompt, items):
+    """按夹具预定的证据文本选择请求中的段落；从不发模型请求。"""
+    docs, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("[{"):])
+    answers = []
+    for item in items:
+        doc_id, quote = item["local_doc_id"], item["quote"]
+        doc = next((d for d in docs if d["local_doc_id"] == doc_id), {})
+        parts = [p for p in doc.get("passages", ()) if quote and quote in p["text"]]
+        role = "unknown" if not quote else "other" if item["opinion"] == "patient_request" else "senior"
+        answers.append({"local_doc_id": doc_id, "opinion": item["opinion"], "role": role,
+                        "passage_id": parts[0]["id"] if len(parts) == 1 else "invalid" if quote else ""})
+    return {"schema_version": PASSAGE_SCHEMA_VERSION, "items": answers}
+
+
 class Client:
     def __init__(self, payload: object, *, error: Exception | None = None):
         self.payload = payload
@@ -48,6 +64,10 @@ class Client:
         self.calls.append((prompt, kwargs))
         if self.error is not None:
             raise self.error
+        if PASSAGE_SCHEMA_VERSION in prompt and isinstance(self.payload, dict):
+            return {"choices": [{"message": {"content": json.dumps(numbered_reply(prompt, self.payload["items"]))},
+                                 "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 80, "completion_tokens": 20, "total_tokens": 100}}
         content = self.payload if isinstance(self.payload, str) else json.dumps(self.payload)
         return {
             "choices": [{"message": {"content": content}, "finish_reason": "stop"}],
@@ -74,7 +94,7 @@ async def test_extracts_all_documents_once_with_one_bounded_private_call() -> No
         _item("doc_01"),
         _item(
             "doc_02",
-            quote="主任医师查看患者，可安排出院",
+            quote=DAILY_TEXT,  # approved 整句（2026-11-18 合同变更）
         ),
     ))
     result = await extract_discharge_approval(
@@ -174,21 +194,35 @@ async def test_invalid_output_fails_closed(payload: object) -> None:
 
 @pytest.mark.asyncio
 async def test_daily_senior_role_requires_contiguous_role_evidence() -> None:
+    # 角色仍只取引文所在句：上级称谓在另一句时不能借用。
     unknown = await extract_discharge_approval(
-        (DischargeApprovalInput("doc_01", "daily_course_record", DAILY_TEXT),),
-        Client(_payload(_item("doc_01", quote="可安排出院"))),
+        (DischargeApprovalInput("doc_01", "daily_course_record", "今日请示主任医师查看患者。可安排出院。"),),
+        Client(_payload(_item("doc_01", quote="可安排出院。"))),
     )
     valid = await extract_discharge_approval(
         (DischargeApprovalInput("doc_01", "daily_course_record", DAILY_TEXT),),
-        Client(_payload(_item(
-            "doc_01",
-            quote="主任医师查看患者，可安排出院",
-        ))),
+        Client(_payload(_item("doc_01", quote=DAILY_TEXT))),
     )
     assert unknown.state == "ready"
     assert unknown.assertions[0].role == "unknown"
     assert valid.state == "ready"
     assert valid.assertions[0].role == "senior"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote", ["可安排出院", "主任医师查看患者，可安排出院"])
+async def test_contract_change_approved_half_sentence_rejected_whole_sentence_accepted(quote) -> None:
+    # 合同变化（2026-11-18）：原测试接受上述半句作为 approved 证据；现半句拒绝，对应整句接受。
+    half = await extract_discharge_approval(
+        (DischargeApprovalInput("doc_01", "daily_course_record", DAILY_TEXT),),
+        Client(_payload(_item("doc_01", quote=quote))),
+    )
+    whole = await extract_discharge_approval(
+        (DischargeApprovalInput("doc_01", "daily_course_record", DAILY_TEXT),),
+        Client(_payload(_item("doc_01", quote=DAILY_TEXT))),
+    )
+    assert (half.state, half.reason_code) == ("technical_error", "model_invalid_output")
+    assert whole.state == "ready" and whole.assertions[0].quote == DAILY_TEXT
 
 
 @pytest.mark.asyncio

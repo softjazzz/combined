@@ -51,6 +51,8 @@ _RULE_009_EXTERNAL_EVENT_SOURCES = (
     "labtest_item_report",
 )
 _RULE_008_MAX_GAP_DAYS = 2
+# 与 course_quality_result_mapping 的 recorded_dates 展示上限一致（_published_dates 默认64）。
+_RULE_008_RECORDED_DATES_DISPLAY_LIMIT = 64
 _MAX_RULE_009_CONTEXT_CHARS = 32000
 _RULE_009_CHANGE_CATEGORIES = frozenset(
     {"subjective", "objective", "exam_lab", "complication", "special_state"}
@@ -166,7 +168,7 @@ def _severity_active_date_intervals(
             end_time = local_datetime(row.get("planned_end_datetime"))
             if end_time is None or end_time < event_time:
                 return None
-            events.append((end_time, 1, index, "end"))
+            events.append((end_time, 1, index, "own_end"))
     # 不同医嘱行在同一权威时刻解除和重开时，无法证明先后；不能让
     # start/end 类型排序把重开静默丢弃。复用既有时间资料不足合同。
     # 同一 stopped 行自身的开始/结束则有明确生命周期关系，仍可配对。
@@ -180,15 +182,22 @@ def _severity_active_date_intervals(
             return None
 
     active_start: date | None = None
+    active_orders: set[int] = set()
     intervals: list[tuple[date, date | None]] = []
-    for event_time, _kind_order, _index, event_kind in sorted(events):
+    for event_time, _kind_order, index, event_kind in sorted(events):
         event_date = event_time.date()
         if horizon_date is not None and event_date > horizon_date:
             continue
         if event_kind == "start":
             if active_start is None:
                 active_start = event_date
-        elif active_start is not None:
+            active_orders.add(index)
+        elif event_kind == "own_end":
+            active_orders.discard(index)
+        else:
+            # 明确解除等级的独立事件可结束该等级；某一医嘱停止仅结束自身。
+            active_orders.clear()
+        if not active_orders and active_start is not None:
             intervals.append((active_start, event_date))
             active_start = None
     if active_start is not None:
@@ -760,6 +769,12 @@ def _rule_008_009_decision(
                 refs=refs,
                 confidence=None,
             )
+        # 记录日期只是展示明细，判定依据是区间与间隔；长期病重超出展示上限时整列省略，
+        # 不截取部分日期冒充完整记录，也不因展示容量把已裁决结论改成技术失败。
+        recorded_dates_fact = (
+            {"recorded_dates": [item.isoformat() for item in ordered_dates]}
+            if len(ordered_dates) <= _RULE_008_RECORDED_DATES_DISPLAY_LIMIT else {}
+        )
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -780,12 +795,13 @@ def _rule_008_009_decision(
                     "failure_kind": "severity_course_gap_exceeded",
                     "severity": "serious",
                     "anchor_date": anchor_date.isoformat(),
-                    "horizon_date": horizon_date.isoformat() if horizon_date else "",
+                    **({"horizon_date": horizon_date.isoformat()} if horizon_date else
+                       {"evaluation_scope": "confirmed_interval"}),
                     "gap_start_date": exceeded_interval[0].isoformat(),
                     "gap_end_date": exceeded_interval[1].isoformat(),
                     "gap_days": (exceeded_interval[1] - exceeded_interval[0]).days,
                     "threshold_days": _RULE_008_MAX_GAP_DAYS,
-                    "recorded_dates": [item.isoformat() for item in ordered_dates],
+                    **recorded_dates_fact,
                 }
                 if exceeded_interval is not None
                 else {
@@ -794,7 +810,7 @@ def _rule_008_009_decision(
                     "anchor_date": anchor_date.isoformat(),
                     "horizon_date": horizon_date.isoformat() if horizon_date else "",
                     "threshold_days": _RULE_008_MAX_GAP_DAYS,
-                    "recorded_dates": [item.isoformat() for item in ordered_dates],
+                    **recorded_dates_fact,
                     "maximum_gap_days": max(interval_gap_days, default=0),
                 }
             ),

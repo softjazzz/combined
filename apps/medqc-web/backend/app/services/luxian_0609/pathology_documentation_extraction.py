@@ -10,11 +10,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
+from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure
+from .llm_prompt_privacy import locate_luxian_0609_redacted_quote
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .native_preop_content_execution import _usage
 from .structured_output import structured_output_kwargs
@@ -29,6 +31,15 @@ MAX_TOTAL_BODY_CHARS = 40000
 MAX_COMPLETION_TOKENS = 2048
 _STATES = frozenset({"documented", "not_documented", "unknown"})
 _SENTENCE_SPLIT = re.compile(r"[。；;！？!?\n]+")
+logger = logging.getLogger(__name__)
+
+
+class _PathologyViolation(ValueError):
+    """模型输出拒绝的固定子类别；不携带模型输出、引文或文书正文。"""
+
+    def __init__(self, category: str, *, quote_kind: str = "-", quote_chars: int = 0) -> None:
+        super().__init__(category)
+        self.category, self.quote_kind, self.quote_chars = category, quote_kind, quote_chars
 
 
 @dataclass(frozen=True)
@@ -79,11 +90,43 @@ def documentation_scope_issue(
 
 
 def _quote_grounded(quote: str, doc: Mapping[str, Any]) -> bool:
-    """引用逐字来自所指文书；跨句拼接时逐句均须逐字出现在该文书。"""
+    """引用逐字来自所指文书；跨句拼接时逐句均须逐字出现在该文书。
+
+    模型只看到脱敏正文：每句须逐字出现在实际发送正文中；原文侧含本系统脱敏占位的
+    句子按共用合同唯一回映（不跨标点、占位只对应有界片段），其余须逐字出现在原文。
+    """
 
     fragments = [part.strip() for part in _SENTENCE_SPLIT.split(quote) if part.strip()]
     return bool(fragments) and all(
-        fragment in doc["body"] and fragment in doc["original_body"] for fragment in fragments
+        fragment in doc["body"] and (
+            fragment in doc["original_body"]
+            or locate_luxian_0609_redacted_quote(fragment, doc["original_body"]) is not None
+        )
+        for fragment in fragments
+    )
+
+
+def _log_rejection(error: BaseException, response: Any, *, stage: str, sampling: bool) -> None:
+    """只记录固定类别与数值，禁止输出原异常消息、模型输出、引文、标识或正文。"""
+    choices = response.get("choices") if isinstance(response, Mapping) else None
+    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], Mapping) else {}
+    message = choice.get("message") if isinstance(choice, Mapping) else None
+    content = message.get("content") if isinstance(message, Mapping) else None
+    finish = choice.get("finish_reason")
+    safe_finish = finish if type(finish) is str and finish in {"stop", "length", "content_filter", "tool_calls"} else "other"
+    if stage == "usage":
+        category = "usage_invalid"
+    elif isinstance(error, _PathologyViolation):
+        category = error.category
+    elif isinstance(error, json.JSONDecodeError):
+        category = "json_syntax"
+    else:
+        category = "response_shape"
+    logger.warning(
+        "pathology_documentation parse rejected category=%s quote_kind=%s quote_chars=%d stage=%s sampling=%s"
+        " finish=%s content_length=%d",
+        category, getattr(error, "quote_kind", "-"), getattr(error, "quote_chars", 0), stage,
+        "true" if sampling else "false", safe_finish, len(content) if isinstance(content, str) else 0,
     )
 
 
@@ -126,31 +169,36 @@ def _parsed_events(
 ) -> dict[str, tuple[str, str, str]]:
     choice = response["choices"][0]
     if choice.get("finish_reason") not in {None, "stop"}:
-        raise ValueError("incomplete response")
+        raise _PathologyViolation("incomplete_response")
     payload = _json_response_object(choice["message"]["content"])
     if not isinstance(payload, dict) or set(payload) != {"schema_version", "events"} or payload["schema_version"] != SCHEMA_VERSION:
-        raise ValueError("invalid response schema")
+        raise _PathologyViolation("schema")
     items = payload["events"]
     if not isinstance(items, list) or len(items) != len(event_ids):
-        raise ValueError("invalid event coverage")
+        raise _PathologyViolation("event_coverage")
     result: dict[str, tuple[str, str, str]] = {}
     for item in items:
         if not isinstance(item, dict) or set(item) != {"event", "state", "document", "quote"}:
-            raise ValueError("invalid event item")
+            raise _PathologyViolation("event_item")
         event, state, document, quote = item["event"], item["state"], item["document"], item["quote"]
         if not isinstance(event, str) or event not in event_ids or event in result:
-            raise ValueError("invalid event identity")
+            raise _PathologyViolation("event_identity")
         if not isinstance(state, str) or state not in _STATES:
-            raise ValueError("invalid event state")
+            raise _PathologyViolation("event_state")
         if state == "documented":
             if not isinstance(document, str) or document not in documents:
-                raise ValueError("invalid document reference")
+                raise _PathologyViolation("document_reference")
             if not isinstance(quote, str) or not _quote_grounded(quote, documents[document]):
-                raise ValueError("invalid same-document quotation")
+                from .course_body_fact_extraction import _quote_mismatch_kind
+                raise _PathologyViolation(
+                    "same_document_quote",
+                    quote_kind=_quote_mismatch_kind(quote, documents[document], tuple(documents.values())),
+                    quote_chars=len(quote) if isinstance(quote, str) else 0,
+                )
             result[event] = (state, document, quote)
         else:
             if document is not None or quote is not None:
-                raise ValueError("undocumented event must not cite")
+                raise _PathologyViolation("unexpected_quote")
             result[event] = (state, "", "")
     return result
 
@@ -193,12 +241,15 @@ async def extract_pathology_documentation_facts(
         )
     except Exception as error:
         return PathologyDocumentationExtraction(
-            "technical_error", luxian_0609_llm_call_failure_reason(error, "tumor_llm_failure"), llm_call_count=1, api_time=perf_counter() - started,
+            "technical_error", classify_luxian_0609_llm_call_failure(error), llm_call_count=1, api_time=perf_counter() - started,
         )
+    stage = "usage"
     try:
         usage = _usage(response)
+        stage = "parse"
         parsed = _parsed_events(response, event_ids=[event.event_id for event in events], documents=by_alias)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError) as error:
+        _log_rejection(error, response, stage=stage, sampling=sampling)
         return PathologyDocumentationExtraction(
             "technical_error", "tumor_llm_invalid_output", llm_call_count=1,
             prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],

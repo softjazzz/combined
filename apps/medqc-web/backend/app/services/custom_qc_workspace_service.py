@@ -584,6 +584,9 @@ def attach_authorized_evidence_excerpts(
         for evidence in list(item.get("evidence") or []):
             if not isinstance(evidence, dict):
                 continue
+            if re.fullmatch(r"record_content_span_[0-9]{1,5}_[0-9]{1,5}", _safe_text(evidence.get("field_path"))):
+                # 此定位只对原任务冻结的正文版本有效。
+                continue
             source_ref = _safe_text(evidence.get("source_ref"))
             matches = documents_by_ref.get(source_ref) or []
             # 同一 src_ref 对应零份或多份文书时 fail-closed，绝不返回摘录。

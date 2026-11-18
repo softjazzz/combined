@@ -91,7 +91,7 @@ async def test_verified_generic_disposition_survives_action_extraction_failure()
 @pytest.mark.asyncio
 async def test_transport_failure_does_not_claim_patient_material_is_missing():
     outcome = await record.check_disposition_record(
-        documents=documents("建议给予合成治疗。"), llm_client=Client(RuntimeError("模拟网络失败")),
+        documents=documents("建议给予合成治疗。"), llm_client=Client(ConnectionError("模拟网络失败")),
     )
     assert (outcome.status, outcome.reason) == ("technical_error", "model_transport_error")
 

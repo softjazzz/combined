@@ -219,12 +219,14 @@ function extractSeverityCourseGap(
   const gapStartDate = asSafeDate(facts.gap_start_date)
   const gapEndDate = asSafeDate(facts.gap_end_date)
   const gapDays = facts.gap_days
+  const intervalOnly = facts.evaluation_scope === 'confirmed_interval' &&
+    !Object.prototype.hasOwnProperty.call(facts, 'horizon_date')
   if (
     facts.failure_kind !== 'severity_course_gap_exceeded' ||
     facts.severity !== 'serious' ||
     facts.threshold_days !== 2 ||
     !anchorDate ||
-    !horizonDate ||
+    (!horizonDate && !intervalOnly) ||
     !gapStartDate ||
     !gapEndDate ||
     typeof gapDays !== 'number' ||
@@ -232,9 +234,15 @@ function extractSeverityCourseGap(
     gapDays <= 2
   )
     return undefined
+  if (intervalOnly && (
+    ![anchorDate, gapStartDate, gapEndDate].every(value =>
+      Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value) ||
+    anchorDate > gapStartDate ||
+    (Date.parse(gapEndDate) - Date.parse(gapStartDate)) / 86400000 !== gapDays
+  )) return undefined
   return {
     anchorDate,
-    horizonDate,
+    ...(horizonDate ? { horizonDate } : {}),
     gapStartDate,
     gapEndDate,
     gapDays,
@@ -1299,7 +1307,7 @@ function severityCourseGapDescriptor(
   if (!gap) return undefined
   return {
     summary: `病重医嘱起算日为${gap.anchorDate}；${gap.gapStartDate}至${gap.gapEndDate}间隔${gap.gapDays}个自然日，超过每${gap.thresholdDays}个自然日记录一次的要求。`,
-    detail: `该区间内未见可计入本项的日常病程记录或上级医师查房记录。评价终点为${gap.horizonDate}；本项仅按文书权威记录日期计算。`,
+    detail: `该区间内未见可计入本项的日常病程记录或上级医师查房记录。${gap.horizonDate ? `评价终点为${gap.horizonDate}` : '仅核对已确认区间，全局评价终点未确认'}；本项仅按文书权威记录日期计算。`,
     requirement: `下达病重医嘱后，每${gap.thresholdDays}个自然日内应至少有一份日常病程记录或上级医师查房记录。`,
     suggestion: `请补充${gap.gapStartDate}至${gap.gapEndDate}期间反映病情和诊疗情况的日常病程记录或上级医师查房记录。`,
   }

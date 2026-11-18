@@ -678,6 +678,34 @@ def _mature_handoff_outcome(
     return ("not_applicable", "evaluation_window_not_mature", None) if pending else (state, reason, facts)
 
 
+def _is_effective_physician_change_order(row: Mapping[str, Any]) -> bool:
+    if any(marker in _clean(row.get("order_status")) for marker in ("取消", "作废", "撤销", "未执行")):
+        return False
+    # 不将类别字段中的“变更”覆盖正文的拟行/取消语义。
+    text = " ".join(_clean(row.get(field)) for field in ("order_name", "record_content"))
+    if not text.strip():
+        text = _clean(row.get("order_type"))
+    # 按局部情态先后区分否定原因与实际变更；后续否定/计划优先于先前肯定。
+    pending_action = re.compile(r"拟|计划|准备|考虑|建议|待|暂缓|未|不|取消|撤销|作废")
+    # “已”后允许动作修饰；发现/出现等复合词尾字不属于独立现行事实。
+    completed_action = re.compile(r"已经?|(?<![发出体实呈表再显])现(?:行)?\s*$")
+    history = re.compile(r"既往|此前|曾经|曾")
+    current_scope = re.compile(r"本次|此次|今日|目前|现在|现")
+    for clause in re.split(r"[，,。；;\n]", text):
+        for match in _PHYSICIAN_CHANGE_ORDER_PATTERN.finditer(clause):
+            prefix = clause[:match.start()]
+            pending = tuple(pending_action.finditer(prefix))
+            completed = tuple(completed_action.finditer(prefix))
+            if pending and (not completed or pending[-1].start() > completed[-1].start()):
+                continue
+            histories = tuple(history.finditer(prefix))
+            currents = tuple(current_scope.finditer(prefix))
+            if histories and (not currents or currents[-1].start() < histories[-1].start()):
+                continue
+            return True
+    return False
+
+
 def evaluate_physician_handoff(
     *,
     physician_change_rows: Sequence[Mapping[str, Any]],
@@ -699,12 +727,7 @@ def evaluate_physician_handoff(
     explicit_change_orders = tuple(
         row
         for row in nondrug_order_rows
-        if _PHYSICIAN_CHANGE_ORDER_PATTERN.search(
-            " ".join(
-                _clean(row.get(field))
-                for field in ("order_name", "order_type", "record_content")
-            )
-        )
+        if _is_effective_physician_change_order(row)
     )
     change_source_key = "physician_change_event"
     effective_change_rows = physician_change_rows
