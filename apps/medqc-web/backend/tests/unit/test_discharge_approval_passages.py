@@ -66,6 +66,40 @@ async def test_numbered_passage_reaches_authorized_result(sentence, opinion, rol
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("disposition", "opinion", "role", "status"), [
+    ("请示上级医生后办理出院手续。", "approved", "senior", "compliant"),
+    ("待请示上级医生后才能办理出院手续。", "conditional", "unknown", "non_compliant"),
+    ("上级医生明确不同意出院。", "denied", "senior", "non_compliant"),
+    ("", "patient_request", "other", "non_compliant"),
+], ids=["arranged", "awaiting-consultation", "denied", "patient-only"])
+async def test_numbered_extraction_reviews_disposition_after_patient_request(disposition, opinion, role, status):
+    request = "患方拒绝进一步检查并要求出院。"
+    course = {"document_id": "synthetic-course", "source_version_key": "synthetic-course-v1",
+              "record_time": "2026-07-03 08:00:00", "record_content": request + disposition}
+    client = PassageClient([{"local_doc_id": "doc_01", "opinion": opinion, "role": role,
+                             "passage_id": "doc_01:2" if disposition else "doc_01:1"}])
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        (RULE,),
+        {"inpat_registration": ({"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},),
+         "senior_course_record": (course,)},
+        llm_client=client,
+    )
+    prompt, = client.calls
+    instructions = prompt.split("以下是资料", 1)[0]
+    assert "核对同一文书后续段落中的处置" in instructions
+    assert "请示上级医生后办理出院手续" in instructions
+    assert "待请示上级医生后才能办理出院手续" in instructions
+    assert "明确不同意出院用denied" in instructions
+    assert "无医师处置时才用patient_request" in instructions
+    assert reduced[0].final_state.value == status
+    canonical = _canonical_extended_result(rule_id=RULE, snapshot=snapshot, materials=materials,
+                                           result=result, reduced=reduced)
+    evidence, = canonical["customer_evidence"]
+    assert evidence["source_document_id"] == course["source_version_key"]
+    assert evidence["evidence_excerpt"] == (disposition or request)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("fields", "accepted"), [
     ({"opinion": "approved", "role": "senior", "passage_id": "doc_01:1"}, True),
     ({"opinion": "unknown", "role": "unknown", "passage_id": ""}, True),
