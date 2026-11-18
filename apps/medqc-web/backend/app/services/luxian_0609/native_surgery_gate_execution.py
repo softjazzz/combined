@@ -1371,12 +1371,54 @@ def _typed_003_decision(
             positive_document_refs=document_refs,
         )
     if intervals and (not incomplete_performed_row or fallback_resolved):
-        # 一份及时手术记录只能覆盖对应事件，不能代表另一台明确已实施手术。
-        # 沿用麻醉原文的窄实施合同；仅有行数/排班时间不新增手术事实。
-        documented_begins = {_authoritative_surgery_begin_time(row) for row in surgery_rows}
+        # 麻醉原文须通过既有实施协议；同一开始时刻只算一个已确认事件。
+        confirmed_events: dict[datetime, datetime] = {}
         for row in anesthesia_rows:
-            begin, _end, issue = _confirmed_anesthesia_surgery_times(row)
-            if not issue and begin not in documented_begins:
+            begin, end, issue = _confirmed_anesthesia_surgery_times(row)
+            if not issue and begin is not None and end is not None:
+                confirmed_events[begin] = max(end, confirmed_events.get(begin, end))
+        if confirmed_events:
+            record_groups: dict[datetime | None, list[datetime]] = {}
+            begins_by_document: dict[str, datetime] = {}
+            for row in surgery_rows:
+                begin = _authoritative_surgery_begin_time(row)
+                document_id = _clean(row.get("document_id"))
+                if document_id and begin is not None:
+                    previous = begins_by_document.get(document_id)
+                    if previous is not None and previous != begin:
+                        # 同一文书的矛盾时间不能充当两台手术的覆盖证据。
+                        return decision("data_gap", "association_failed")
+                    begins_by_document[document_id] = begin
+                record_time = _authoritative_record_time(authoritative_document_time_value(row))
+                if record_time is not None:
+                    record_groups.setdefault(begin, []).append(record_time)
+            # 相等时间固定到同一事件，重复记录不能占用多个覆盖位置。
+            # 缺开始时间的记录至多证明单台，不能另算一台来填多台覆盖缺口。
+            if len(record_groups) > 1:
+                record_groups.pop(None, None)
+            groups = tuple(record_groups.items())
+            candidates = {
+                event_begin: tuple(
+                    index for index, (record_begin, record_times) in enumerate(groups)
+                    if (record_begin not in confirmed_events or record_begin == event_begin)
+                    # 不等开始时间不直接拒绝；但文书不能在该手术完成前已完成。
+                    and any(record_time >= event_end for record_time in record_times)
+                )
+                for event_begin, event_end in confirmed_events.items()
+            }
+            assigned: dict[int, datetime] = {}
+
+            def assign(event_begin: datetime, seen: set[int]) -> bool:
+                for index in candidates[event_begin]:
+                    if index in seen:
+                        continue
+                    seen.add(index)
+                    if index not in assigned or assign(assigned[index], seen):
+                        assigned[index] = event_begin
+                        return True
+                return False
+
+            if not all(assign(event_begin, set()) for event_begin in confirmed_events):
                 return decision("data_gap", "association_failed")
         (
             interval,
