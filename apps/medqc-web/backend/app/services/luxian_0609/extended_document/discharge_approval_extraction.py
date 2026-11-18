@@ -650,6 +650,10 @@ async def _extract_discharge_approval_once(
             options["response_format"] = _response_format(safe_documents, passages=passages)
         response = await llm_client.generate(
             (_passage_prompt(safe_documents, passages) if passages is not None else _prompt(safe_documents)) + (
+                "\n纠正上一轮出院证据：请重读同一文书，选择明确写有上级医师同意或安排出院的原文段编号。"
+                "查房经过、出院医嘱栏目和出院后指导本身不支持approved。没有可定位的意见时，"
+                "opinion和role均返回unknown，passage_id填空字符串。"
+                if instruction_correction and numbered_passages else
                 "\n纠正上一轮事实抽取：不能将‘出院医嘱’栏目标题或其下的休息、复查等嘱咐"
                 "本身当作上级医师已经批准出院。请重新核对完整文书中的意见主体和明确处置；"
                 "确有批准意见才返回approved，没有提取到意见时按约定返回unknown和空引用。"
@@ -738,6 +742,13 @@ async def _extract_discharge_approval_once(
     )
 
 
+def _approval_passage_lacks_disposition(assertion: DischargeApprovalAssertion) -> bool:
+    return (
+        assertion.opinion == "approved" and assertion.role == "senior"
+        and not _DISCHARGE_DISPOSITION_PATTERN.search(assertion.quote)
+    )
+
+
 async def extract_discharge_approval(
     documents: Sequence[DischargeApprovalInput],
     llm_client: DischargeApprovalLLMClient | None,
@@ -753,6 +764,11 @@ async def extract_discharge_approval(
         and "出院医嘱" in assertion.quote
         and "出院" not in assertion.quote.replace("出院医嘱", "")
     }
+    if numbered_passages:
+        instruction_ids.update(
+            assertion.local_doc_id for assertion in result.assertions
+            if _approval_passage_lacks_disposition(assertion)
+        )
     documents_by_id = {item.local_doc_id: item for item in documents}
     role_ids = {
         assertion.local_doc_id for assertion in result.assertions
@@ -795,10 +811,7 @@ async def extract_discharge_approval(
         )
     if numbered_passages and result.state == "ready":
         for assertion in result.assertions:
-            if (
-                assertion.opinion == "approved" and assertion.role == "senior"
-                and not _DISCHARGE_DISPOSITION_PATTERN.search(assertion.quote)
-            ):
+            if _approval_passage_lacks_disposition(assertion):
                 logger.warning(
                     "LX0609 discharge_approval_rejected reason=approval_passage_lacks_disposition local_doc_id=%s",
                     assertion.local_doc_id,

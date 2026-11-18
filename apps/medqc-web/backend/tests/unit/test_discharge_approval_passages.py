@@ -101,9 +101,9 @@ async def test_numbered_extraction_reviews_disposition_after_patient_request(dis
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("text", "passage_id", "expected_calls"), [
-    ("副主任医师查房：患者病情好转。出院医嘱：定期随访。", "doc_01:1", 1),
+    ("副主任医师查房：患者病情好转。出院医嘱：定期随访。", "doc_01:1", 2),
     ("副主任医师查房：患者病情好转。出院医嘱：定期随访。", "doc_01:2", 2),
-    ("出院医嘱：今日出院后定期随访。", "doc_01:1", 1),
+    ("出院医嘱：今日出院后定期随访。", "doc_01:1", 2),
 ], ids=["round-only", "instructions-after-review", "follow-up-only"])
 async def test_numbered_approval_requires_evidence_of_discharge_disposition(text, passage_id, expected_calls, caplog):
     client = PassageClient([{"local_doc_id": "doc_01", "opinion": "approved",
@@ -120,6 +120,33 @@ async def test_numbered_approval_requires_evidence_of_discharge_disposition(text
     assert result.llm_call_count == len(client.calls) == expected_calls
     assert "approval_passage_lacks_disposition" in caplog.text
     assert text not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rechecked", [
+    {"opinion": "unknown", "role": "unknown", "passage_id": ""},
+    {"opinion": "approved", "role": "senior", "passage_id": "doc_01:2"},
+], ids=["unknown-without-evidence", "reselect-supported-passage"])
+async def test_unsupported_approval_uses_one_existing_recheck(rechecked):
+    class RecheckingClient(PassageClient):
+        async def generate(self, prompt, **options):
+            if self.calls:
+                self.reply = [{"local_doc_id": "doc_01", **rechecked}]
+            return await super().generate(prompt, **options)
+
+    suffix = "上级医师同意今日出院。" if rechecked["passage_id"] else "出院医嘱：定期随访。"
+    documents = (approval.DischargeApprovalInput(
+        "doc_01", "senior_course_record", "主任医师查房：患者病情好转。" + suffix,
+    ),)
+    client = RecheckingClient([{"local_doc_id": "doc_01", "opinion": "approved",
+                                "role": "senior", "passage_id": "doc_01:1"}])
+    result = await approval.extract_discharge_approval(documents, client, numbered_passages=True)
+    assert result.state == "ready"
+    assert result.llm_call_count == len(client.calls) == 2
+    assert "同一文书" in client.calls[1] and "unknown" in client.calls[1]
+    assertion, = result.assertions
+    assert assertion.opinion == rechecked["opinion"]
+    assert assertion.quote == (suffix if rechecked["passage_id"] else "")
 
 
 @pytest.mark.asyncio

@@ -272,7 +272,7 @@ class _SemanticClient:
             payload = json.loads(content)
             payload.update({
                 "medical_analysis": "第一诊断为急性胆囊炎，需结合腹痛的部位、体征和辅助检查核对鉴别诊断是否解释同一临床问题。",
-                "evidence_quote": "消化性溃疡穿孔；急性胰腺炎",
+                "evidence_id": "p01",
             })
             content = json.dumps(payload, ensure_ascii=False)
         return {
@@ -334,20 +334,20 @@ async def test_077_same_document_clinical_background_and_analysis_survive_save_p
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("analysis,quote", [
-    ("", "消化性溃疡穿孔"),
-    ("不相关", "消化性溃疡穿孔"),
-    ("第一诊断所涉及的临床问题与所列鉴别诊断缺少合理解释关系。", "原文没有的引文"),
+@pytest.mark.parametrize("analysis,evidence_id", [
+    ("", "p01"),
+    ("不相关", "p01"),
+    ("第一诊断所涉及的临床问题与所列鉴别诊断缺少合理解释关系。", "p99"),
     ("第一诊断所涉及的临床问题与所列鉴别诊断缺少合理解释关系。", ""),
 ])
-async def test_077_unrelated_without_concrete_grounded_explanation_is_not_a_defect(analysis, quote) -> None:
+async def test_077_unrelated_without_concrete_grounded_explanation_is_not_a_defect(analysis, evidence_id) -> None:
     import json
 
     class Client:
         async def generate(self, prompt, **kwargs):
             return {"content": json.dumps({
                 "relation_state": "unrelated", "rationale_code": "no_related_item",
-                "medical_analysis": analysis, "evidence_quote": quote,
+                "medical_analysis": analysis, "evidence_id": evidence_id,
             }, ensure_ascii=False)}
 
     session = _session("LX0609-01-02-02", _077_rows())
@@ -364,15 +364,15 @@ async def test_077_unrelated_without_concrete_grounded_explanation_is_not_a_defe
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("quote", "expected"), [
-    ("病例特点：右上腹疼痛。\n诊断依据：胆囊影像异常。", "non_compliant"),
-    ("病例特点：右上腹疼痛。 诊断依据：胆囊影像异常。", "non_compliant"),
-    ("病例特点：右上腹疼痛。\t诊断依据：胆囊影像异常。", "non_compliant"),
-    ("病例特点：右上腹疼痛。胆囊影像异常。", "technical_error"),
-    ("病例特点：右上腹疼痛！诊断依据：胆囊影像异常。", "technical_error"),
-    ("急性胆囊炎；慢性胆囊炎 消化性溃疡穿孔；急性胰腺炎", "technical_error"),
+@pytest.mark.parametrize(("evidence_id", "expected"), [
+    ("p01", "non_compliant"),
+    ("p02", "non_compliant"),
+    ("p03", "non_compliant"),
+    ("p02,p03", "technical_error"),
+    (" p02", "technical_error"),
+    ("p99", "technical_error"),
 ])
-async def test_077_quote_whitespace_normalization_matches_the_same_source(quote, expected) -> None:
+async def test_077_selects_one_contiguous_source_passage(evidence_id, expected) -> None:
     import json
 
     class Client:
@@ -380,13 +380,12 @@ async def test_077_quote_whitespace_normalization_matches_the_same_source(quote,
             return {"content": json.dumps({
                 "relation_state": "unrelated", "rationale_code": "no_related_item",
                 "medical_analysis": "第一诊断对应的临床问题与所列鉴别缺少对应依据，所列鉴别均未解释该问题。",
-                # 模型逐字引用两个相邻字段，JSON 中保留换行。
-                "evidence_quote": quote,
+                "evidence_id": evidence_id,
             }, ensure_ascii=False)}
 
     rows = _077_rows()
     rows["first_course_record"][0].update({
-        "case_characteristic": "右上腹疼痛。", "diagnose_based_on": "胆囊影像异常。",
+        "case_characteristic": "患者诉右上腹持续疼痛。", "diagnose_based_on": "入院胆囊影像提示异常。",
     })
     session = _session("LX0609-01-02-02", rows)
     execution = await execute_luxian_0609_native_course_quality_rules(
@@ -411,7 +410,7 @@ async def test_077_rejection_logs_specific_safe_codes_without_patient_content(ca
         async def generate(self, prompt, **kwargs):
             return {"content": json.dumps({
                 "relation_state": "unrelated", "rationale_code": "same_clinical_problem",
-                "medical_analysis": "过短说明", "evidence_quote": "原文中不存在的合成片段",
+                "medical_analysis": "过短说明", "evidence_id": "synthetic-unknown-evidence-id",
             }, ensure_ascii=False)}
 
     session = _session("LX0609-01-02-02", _077_rows())
@@ -427,21 +426,21 @@ async def test_077_rejection_logs_specific_safe_codes_without_patient_content(ca
     assert result["status"] == "technical_error"
     assert "rationale_state_mismatch" in caplog.text
     assert "analysis_too_short" in caplog.text
-    assert "quote_not_in_source" in caplog.text
+    assert "evidence_id_unknown" in caplog.text
     assert "过短说明" not in caplog.text
-    assert "原文中不存在的合成片段" not in caplog.text
+    assert "synthetic-unknown-evidence-id" not in caplog.text
     assert "急性胆囊炎" not in caplog.text
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["medical_analysis", "evidence_quote"])
+@pytest.mark.parametrize("field", ["medical_analysis", "evidence_id"])
 async def test_077_model_objects_are_not_silently_converted_to_valid_strings(field) -> None:
     import json
 
     class Client:
         async def generate(self, prompt, **kwargs):
             payload = {"relation_state": "related", "rationale_code": "same_clinical_problem",
-                       "medical_analysis": "说明", "evidence_quote": ""}
+                       "medical_analysis": "说明", "evidence_id": ""}
             payload[field] = {"text": "模型返回了对象"}
             return {"content": json.dumps(payload, ensure_ascii=False)}
 
@@ -869,7 +868,7 @@ async def test_077_capable_client_uses_non_thinking_strict_json_through_privacy_
     schema = response_format["json_schema"]["schema"]
     assert schema["additionalProperties"] is False
     assert set(schema["required"]) == {
-        "relation_state", "rationale_code", "medical_analysis", "evidence_quote",
+        "relation_state", "rationale_code", "medical_analysis", "evidence_id",
     }
 
 
