@@ -44,6 +44,17 @@ _COMPLETED_SENIOR_APPROVAL_PATTERN = re.compile(
     r"(?:上级医师|主任医师|副主任医师|主任|副主任|主治医师|主治)"
     r".{0,6}(?:同意|批准|准许|准予|许可))"
 )
+# 仅验证合规引用包含出院处置陈述。主体、条件、否定仍由模型结合上下文判断。
+_DISCHARGE_DISPOSITION_PATTERN = re.compile(
+    r"(?:"
+    r"(?:同意|批准|准许|准予|允许|许可)[^。！？；，、\n]{0,12}"
+    r"|(?:安排|办理|予以|予|可)\s*"
+    r"|(?:今日|今天|当日|明日|明天)\s*(?:即|可)?\s*(?:带药\s*)?"
+    r"|(?:换药|拆线|拔管)\s*后\s*"
+    r")出院(?!\s*(?:后|医嘱|用药|带药|指导|注意事项|诊断|随访|复查))"
+)
+
+
 class DischargeApprovalLLMClient(Protocol):
     async def generate(
         self,
@@ -452,6 +463,7 @@ def _passage_prompt(
         "“待请示上级医生后才能办理出院手续”等尚待请示或附有未满足前提的安排，用conditional；"
         "上级医师明确不同意出院用denied。区分患方拒绝检查与医师不同意出院。"
         "若同篇只有患方要求、无医师处置时才用patient_request。"
+        "approved的引用段落本身必须写到同意或安排出院。仅查房经过、病情好转、出院医嘱或出院后指导，均不足以支持approved。"
         "passage_id须从同一local_doc_id的passages[].id原样选取，不抄写原句；无法归属时role为unknown。"
         "仅患者或家属表达意见时role为other。无可定位意见时opinion和role为unknown、passage_id填空字符串。"
         "passage_id字段必填，只有opinion和role均为unknown时可填空字符串。"
@@ -762,24 +774,34 @@ async def extract_discharge_approval(
         )
     }
     pending_ids = instruction_ids | role_ids | condition_ids
-    if not pending_ids:
-        return result
-    # 标题或混合主体不能直接反推“未同意”；其他已核验文书不重复抽取。
-    repaired = await _extract_discharge_approval_once(
-        tuple(item for item in documents if item.local_doc_id in pending_ids),
-        llm_client, instruction_correction=bool(instruction_ids),
-        role_correction=bool(role_ids), condition_correction=bool(condition_ids), numbered_passages=numbered_passages,
-    )
-    repaired_assertions = repaired.assertions
-    by_id = {assertion.local_doc_id: assertion for assertion in repaired_assertions}
-    return replace(
-        repaired,
-        assertions=(tuple(
-            by_id.get(assertion.local_doc_id, assertion) for assertion in result.assertions
-        ) if repaired.state == "ready" else ()),
-        llm_call_count=result.llm_call_count + repaired.llm_call_count,
-        prompt_tokens=result.prompt_tokens + repaired.prompt_tokens,
-        completion_tokens=result.completion_tokens + repaired.completion_tokens,
-        total_tokens=result.total_tokens + repaired.total_tokens,
-        api_time=result.api_time + repaired.api_time,
-    )
+    if pending_ids:
+        # 标题或混合主体不能直接反推“未同意”；其他已核验文书不重复抽取。
+        repaired = await _extract_discharge_approval_once(
+            tuple(item for item in documents if item.local_doc_id in pending_ids),
+            llm_client, instruction_correction=bool(instruction_ids),
+            role_correction=bool(role_ids), condition_correction=bool(condition_ids), numbered_passages=numbered_passages,
+        )
+        by_id = {assertion.local_doc_id: assertion for assertion in repaired.assertions}
+        result = replace(
+            repaired,
+            assertions=(tuple(
+                by_id.get(assertion.local_doc_id, assertion) for assertion in result.assertions
+            ) if repaired.state == "ready" else ()),
+            llm_call_count=result.llm_call_count + repaired.llm_call_count,
+            prompt_tokens=result.prompt_tokens + repaired.prompt_tokens,
+            completion_tokens=result.completion_tokens + repaired.completion_tokens,
+            total_tokens=result.total_tokens + repaired.total_tokens,
+            api_time=result.api_time + repaired.api_time,
+        )
+    if numbered_passages and result.state == "ready":
+        for assertion in result.assertions:
+            if (
+                assertion.opinion == "approved" and assertion.role == "senior"
+                and not _DISCHARGE_DISPOSITION_PATTERN.search(assertion.quote)
+            ):
+                logger.warning(
+                    "LX0609 discharge_approval_rejected reason=approval_passage_lacks_disposition local_doc_id=%s",
+                    assertion.local_doc_id,
+                )
+                return replace(result, state="technical_error", reason_code="model_invalid_output", assertions=())
+    return result

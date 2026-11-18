@@ -100,6 +100,29 @@ async def test_numbered_extraction_reviews_disposition_after_patient_request(dis
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("text", "passage_id", "expected_calls"), [
+    ("副主任医师查房：患者病情好转。出院医嘱：定期随访。", "doc_01:1", 1),
+    ("副主任医师查房：患者病情好转。出院医嘱：定期随访。", "doc_01:2", 2),
+    ("出院医嘱：今日出院后定期随访。", "doc_01:1", 1),
+], ids=["round-only", "instructions-after-review", "follow-up-only"])
+async def test_numbered_approval_requires_evidence_of_discharge_disposition(text, passage_id, expected_calls, caplog):
+    client = PassageClient([{"local_doc_id": "doc_01", "opinion": "approved",
+                             "role": "senior", "passage_id": passage_id}])
+    _, _, result, reduced = await _evaluate_selected(
+        (RULE,),
+        {"inpat_registration": ({"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},),
+         "senior_course_record": ({"document_id": "synthetic-round",
+                                   "record_time": "2026-07-03 09:00:00", "record_content": text},)},
+        llm_client=client,
+    )
+    assert reduced[0].final_state.value == "technical_error"
+    assert reduced[0].reason_code == "model_invalid_output"
+    assert result.llm_call_count == len(client.calls) == expected_calls
+    assert "approval_passage_lacks_disposition" in caplog.text
+    assert text not in caplog.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("fields", "accepted"), [
     ({"opinion": "approved", "role": "senior", "passage_id": "doc_01:1"}, True),
     ({"opinion": "unknown", "role": "unknown", "passage_id": ""}, True),
