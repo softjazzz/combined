@@ -236,7 +236,7 @@ async def test_failed_exam_batch_cannot_be_masked_by_other_batches(monkeypatch):
         async def generate(self, prompt, **kwargs):
             if not self.prompts:
                 self.prompts.append(prompt)
-                raise RuntimeError("合成传输失败")
+                raise ConnectionError("合成传输失败")
             return await super().generate(prompt, **kwargs)
 
     client = _FailedBatchClient()

@@ -341,7 +341,6 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         "LX0609-05-01-02",
         "LX0609-05-01-04",
         "LX0609-05-01-05",
-        "LX0609-05-01-06",
         "LX0609-06-01-01",
         "LX0609-06-01-03",
         "LX0609-06-02-01",
@@ -351,7 +350,6 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         "LX0609-08-01-01",
         "LX0609-08-01-03",
         "LX0609-08-01-05",
-        "LX0609-08-02-02",
         "LX0609-09-01-02",
         "LX0609-09-02-01",
         "LX0609-10-01-01",
@@ -361,9 +359,9 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         "LX0609-12-02-01",
     }
     assert typed_source_rule_ids - typed_contract_rule_ids == typed_source_only_rule_ids
-    # 08-01-02 已升级 v2，当前 57 条规则使用非 v1 决策合同；
+    # 05-01-06、08-02-02 已升级 v2，当前 59 条规则使用非 v1 决策合同；
     # 这里验证合同成熟度及尚待升级的精确成员，不等同于正式可执行规则数量。
-    assert result["metrics"]["rule_decision_count"] == 57
+    assert result["metrics"]["rule_decision_count"] == 59
     assert result["metrics"]["typed_shadow_adapter_count"] == len(
         typed_source_only_rule_ids
     )

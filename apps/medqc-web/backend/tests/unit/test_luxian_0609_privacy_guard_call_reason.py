@@ -180,7 +180,6 @@ _BROAD_HANDLER_EXEMPT = {
     ("consultation_measure_check.py", "check_consultation_measures"): (
         1, "措施核查失败按未核实并回 023，无原因码通道；调用点不在第二阶段处理器内，上抛会变执行器异常"),
     ("exam_finding_relevance.py", "classify_exam_finding_relevance"): (1, "相关性前置提示，失败时不带提示继续主抽取"),
-    ("course_body_fact_extraction.py", "extract_course_body_facts"): (1, "首次调用，失败落 data_gap"),
     ("extended_document/discharge_course_content.py", "call"): (1, "首次调用，失败由调用方收敛为不确定"),
     ("prophylactic_antimicrobial_duration.py", "_infection_evidence"): (1, "首次调用，三元组返回无原因码通道"),
     ("native_exam_lab_execution.py", "execute_luxian_0609_native_exam_lab_rules"): (1, "首次调用，失败落 data_gap"),

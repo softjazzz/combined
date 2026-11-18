@@ -9603,11 +9603,11 @@ def test_planned_only_course_trace_is_recheck_target_and_keeps_structured_execut
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("error", "expected_reason"), [
-    (ValueError("identity context unavailable"), "executor_exception"),
-    (RuntimeError("upstream_http_status=429"), "model_transport_error"),
-    (RuntimeError("upstream_http_status=503"), "model_transport_error"),
-    (RuntimeError("upstream_http_status=401"), "executor_exception"),
-    (RuntimeError("client not configured"), "executor_exception"),
+    (ValueError("identity context unavailable"), "execution_program_error"),
+    (RuntimeError("upstream_http_status=429"), "model_rate_limited"),
+    (RuntimeError("upstream_http_status=503"), "model_upstream_error"),
+    (RuntimeError("upstream_http_status=401"), "model_http_error"),
+    (RuntimeError("client not configured"), "model_configuration_error"),
 ])
 async def test_typed_consultation_call_failure_keeps_valid_technical_decision(error, expected_reason):
     session = _window_session(rows_by_source={

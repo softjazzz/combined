@@ -432,7 +432,7 @@ def test_025_shadow_execution_metadata_does_not_change_formal_025_or_totals(
     snapshot_hash = session.snapshot.snapshot_hash
     _, context = asyncio.run(prepare_luxian_0609_execution(
         rule_set_key=LUXIAN_0609_RULE_SET_KEY,
-        prepared_rules=[{"rule_id": "LX0609-03-02-01"}, {"rule_id": RULE_ID}],
+        prepared_rules=[{"rule_id": "LX0609-10-02-02"}, {"rule_id": RULE_ID}],
         visit_id=COORDINATES[2],
         medical_text="",
         evidence_payload=None,
@@ -440,7 +440,7 @@ def test_025_shadow_execution_metadata_does_not_change_formal_025_or_totals(
         settings=_settings(),
         institute_id=COORDINATES[0],
         patient_id=COORDINATES[1],
-        selected_customer_rule_ids=("LX0609-03-02-01", RULE_ID),
+        selected_customer_rule_ids=("LX0609-10-02-02", RULE_ID),
     ))
     assert context.evidence_snapshot is session.snapshot
     assert session.snapshot.snapshot_hash == snapshot_hash
