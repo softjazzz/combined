@@ -66,20 +66,56 @@ def _log_parse_rejection(error: Exception, response: Any, *, stage: str, attempt
             "invalid document reference": "document_binding",
             "invalid atom": "atom_schema",
         }.get(error.args[0], "response_shape")
+    # 引文失配只记固定类别与字数，供区分改写/拼接/空白/他文书/脱敏回映射，不记引文本身。
+    quote_kinds = getattr(error, "quote_kinds", ())
     logger.warning(
-        "course_body parse rejected category=%s stage=%s attempt=%d finish=%s content_length=%d json_position=%d",
+        "course_body parse rejected category=%s stage=%s attempt=%d finish=%s content_length=%d json_position=%d"
+        " quote_kinds=%s quote_chars=%s",
         category, stage, attempt, safe_finish, len(content) if isinstance(content, str) else 0,
         error.pos if isinstance(error, json.JSONDecodeError) else -1,
+        ",".join(kind for kind, _ in quote_kinds) or "-",
+        ",".join(str(chars) for _, chars in quote_kinds) or "-",
     )
+
+
+_DIAGNOSTIC_SPACE = re.compile(r"\s+")
+_DIAGNOSTIC_PUNCT = re.compile(r"[，,。．.；;：:、！!？?“”\"'‘’（）()【】\[\]《》<>\-—…·/\\]")
+
+
+def _quote_mismatch_kind(quote: Any, doc: Mapping[str, Any], inputs: Sequence[Mapping[str, Any]]) -> str:
+    """仅用于诊断日志的失配分类；不参与通过判定，不放宽任何引用校验。"""
+    if not isinstance(quote, str) or not quote.strip():
+        return "empty"
+    body = doc["body"]
+    if quote in body:
+        return "original_mapping_failed"
+    if any(other is not doc and quote in other["body"] for other in inputs):
+        return "other_document"
+    squash = lambda text: _DIAGNOSTIC_SPACE.sub("", text)
+    unpunct = lambda text: _DIAGNOSTIC_PUNCT.sub("", text)
+    if squash(quote) and squash(quote) in squash(body):
+        return "whitespace_difference"
+    if unpunct(quote) and unpunct(quote) in unpunct(body):
+        return "punctuation_difference"
+    if unpunct(squash(quote)) and unpunct(squash(quote)) in unpunct(squash(body)):
+        return "whitespace_punctuation_difference"
+    if LUXIAN_0609_REDACTION_PLACEHOLDER.search(quote):
+        return "placeholder_not_in_sent_body"
+    pieces = [piece for piece in re.split(r"[，,。；;：:、\s]+", quote) if len(piece) >= 2]
+    if len(pieces) >= 2 and all(piece in body for piece in pieces):
+        return "fragments_spliced"
+    return "not_in_sent_body"
 
 
 class _BodyViolation(ValueError):
     """保留首个失败原因，同时带回同批全部可修正位置。"""
 
-    def __init__(self, issues: Sequence[tuple[str, str, Any]]) -> None:
+    def __init__(self, issues: Sequence[tuple[str, str, Any]],
+                 quote_kinds: Sequence[tuple[str, int]] = ()) -> None:
         # 失败项为空时沿用通用覆盖失败原因，避免构造异常本身出错。
         super().__init__(issues[0][0] if issues else "incomplete coverage")
         self.issues = tuple(issues)
+        self.quote_kinds = tuple(quote_kinds)
 
 
 def _retry_prompt(prompt: str, error: Exception, response: Mapping[str, Any]) -> str:
@@ -150,6 +186,7 @@ def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any
     if not isinstance(items, list):
         raise ValueError("invalid document coverage")
     issues = []
+    quote_kinds: list[tuple[str, int]] = []
     if len(items) != len(expected):
         issues.append(("invalid document coverage", "documents", f"应为{list(expected)}，实际{len(items)}项"))
     result: dict[str, str] = {}
@@ -175,13 +212,15 @@ def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any
             if (not isinstance(quote, str) or not quote.strip()
                     or quote not in doc["body"] or not _quote_grounded_in_original(quote, doc["original_body"])):
                 issues.append(("invalid same-material quotation", location + ".clinical_body.quote", quote))
+                quote_kinds.append((_quote_mismatch_kind(quote, doc, inputs),
+                                    len(quote) if isinstance(quote, str) else 0))
         elif quote is not None:
             issues.append(("absent or unknown must not quote", location + ".clinical_body.quote", quote))
         result[ref] = state
     for ref in expected.keys() - seen:
         issues.append(("invalid document coverage", f"document_ref={ref}", "遗漏；须逐份完整覆盖"))
     if issues:
-        raise _BodyViolation(issues)
+        raise _BodyViolation(issues, quote_kinds)
     return result
 
 

@@ -257,3 +257,31 @@ async def test_placeholder_quote_from_other_material_is_still_rejected():
         CourseBodyDocument("doc-b", "daily_course_record", other),
     ], client)
     assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
+
+
+# ---- 08-02-01：引文失配安全诊断（仅类别与字数，不改变通过判定） ----
+
+_MULTILINE = "今日查房：\n患者咳嗽减轻，  精神可。\n查体：双肺呼吸音清，未闻及啰音。"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote,kind", [
+    ("患者咳嗽减轻，精神可。", "whitespace_difference"),
+    ("患者咳嗽减轻  精神可", "punctuation_difference"),
+    ("今日查房：患者咳嗽减轻，精神可。", "whitespace_difference"),
+    ("患者咳嗽减轻，未闻及啰音", "fragments_spliced"),
+    ("患者咳嗽明显好转。", "not_in_sent_body"),
+    ("今日诉腹痛。", "other_document"),
+])
+async def test_quote_mismatch_is_classified_without_logging_text(caplog, quote, kind):
+    client = _QuoteClient(lambda body, docs: quote if "查房" in body else body)
+    with caplog.at_level("WARNING"):
+        result = await extract_course_body_facts([
+            CourseBodyDocument("doc-a", "daily_course_record", _MULTILINE),
+            CourseBodyDocument("doc-b", "daily_course_record", "今日诉腹痛。"),
+        ], client)
+    assert (result.state, result.reason_code) == ("technical_error", "model_invalid_output")
+    assert f"quote_kinds={kind},{kind}" not in caplog.text  # 每次尝试只记一份失配文书
+    assert f"quote_kinds={kind} quote_chars={len(quote)}" in caplog.text
+    for text in (quote, "咳嗽", "腹痛", "doc-a"):
+        assert text not in caplog.text
