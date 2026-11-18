@@ -9,10 +9,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import logging
+import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure, redact_luxian_0609_patient_privacy
+from .llm_prompt_privacy import (
+    LUXIAN_0609_REDACTION_PLACEHOLDER,
+    classify_luxian_0609_llm_call_failure,
+    redact_luxian_0609_patient_privacy,
+)
 from .native_preop_content_execution import _usage
 from .structured_output import structured_output_kwargs
 from .transfusion_order_trigger import _json_response_object
@@ -117,6 +122,22 @@ class CourseBodyExtraction:
     api_time: float = 0.0
 
 
+def _quote_grounded_in_original(quote: str, original: str) -> bool:
+    """引用须是原文中唯一一段；仅本系统脱敏占位可对应原文中被替换的有界片段。
+
+    模型只看到脱敏正文，含“[患者姓名已脱敏]”的逐字引用不可能出现在原文里。占位外的
+    文字必须按原顺序紧邻出现，占位只对应不跨标点/换行的短片段，整段在原文中唯一。
+    调用方另行要求引用逐字出现在同一份实际发送正文中，不能借用其他材料或改写。
+    """
+    if quote in original:
+        return True
+    parts = LUXIAN_0609_REDACTION_PLACEHOLDER.split(quote)
+    if len(parts) < 2 or not any(part.strip() for part in parts):
+        return False
+    pattern = r"[^\n\r，,。；;]{1,64}?".join(re.escape(part) for part in parts)
+    return len(re.findall(pattern, original)) == 1
+
+
 def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any]]) -> dict[str, str]:
     choice = response["choices"][0]
     if choice.get("finish_reason") != "stop":
@@ -150,9 +171,9 @@ def _parse_states(response: Mapping[str, Any], inputs: Sequence[Mapping[str, Any
         doc = expected[ref]
         state, quote = atom["state"], atom["quote"]
         if state == "present":
-            # 引用须逐字出现在该份材料实际发送正文与原文中。
+            # 引用须逐字出现在该份材料实际发送正文中，并能唯一回到同一份原文。
             if (not isinstance(quote, str) or not quote.strip()
-                    or quote not in doc["body"] or quote not in doc["original_body"]):
+                    or quote not in doc["body"] or not _quote_grounded_in_original(quote, doc["original_body"])):
                 issues.append(("invalid same-material quotation", location + ".clinical_body.quote", quote))
         elif quote is not None:
             issues.append(("absent or unknown must not quote", location + ".clinical_body.quote", quote))

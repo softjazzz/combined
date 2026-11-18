@@ -51,6 +51,8 @@ _RULE_009_EXTERNAL_EVENT_SOURCES = (
     "labtest_item_report",
 )
 _RULE_008_MAX_GAP_DAYS = 2
+# 与 course_quality_result_mapping 的 recorded_dates 展示上限一致（_published_dates 默认64）。
+_RULE_008_RECORDED_DATES_DISPLAY_LIMIT = 64
 _MAX_RULE_009_CONTEXT_CHARS = 32000
 _RULE_009_CHANGE_CATEGORIES = frozenset(
     {"subjective", "objective", "exam_lab", "complication", "special_state"}
@@ -767,6 +769,12 @@ def _rule_008_009_decision(
                 refs=refs,
                 confidence=None,
             )
+        # 记录日期只是展示明细，判定依据是区间与间隔；长期病重超出展示上限时整列省略，
+        # 不截取部分日期冒充完整记录，也不因展示容量把已裁决结论改成技术失败。
+        recorded_dates_fact = (
+            {"recorded_dates": [item.isoformat() for item in ordered_dates]}
+            if len(ordered_dates) <= _RULE_008_RECORDED_DATES_DISPLAY_LIMIT else {}
+        )
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -793,7 +801,7 @@ def _rule_008_009_decision(
                     "gap_end_date": exceeded_interval[1].isoformat(),
                     "gap_days": (exceeded_interval[1] - exceeded_interval[0]).days,
                     "threshold_days": _RULE_008_MAX_GAP_DAYS,
-                    "recorded_dates": [item.isoformat() for item in ordered_dates],
+                    **recorded_dates_fact,
                 }
                 if exceeded_interval is not None
                 else {
@@ -802,7 +810,7 @@ def _rule_008_009_decision(
                     "anchor_date": anchor_date.isoformat(),
                     "horizon_date": horizon_date.isoformat() if horizon_date else "",
                     "threshold_days": _RULE_008_MAX_GAP_DAYS,
-                    "recorded_dates": [item.isoformat() for item in ordered_dates],
+                    **recorded_dates_fact,
                     "maximum_gap_days": max(interval_gap_days, default=0),
                 }
             ),

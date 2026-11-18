@@ -4359,6 +4359,7 @@ async def _execute_extended_document_group(
             selected_discharge_document_refs = tuple(selected_refs)
             # 仅在结构化资料缺失且固定标签无法解析时裁剪出院医嘱。
             # 多份记录不能猜选一份；不覆盖已提供但格式非法的结构化字段。
+            explicit_no_medications = False
             if use_unstructured_extraction:
                 medication_extraction = _with_oral_route_uncertainty_resolved(
                     await extract_discharge_medications(
@@ -4396,6 +4397,8 @@ async def _execute_extended_document_group(
                 if medication_extraction.state in {"ready", "absent"}:
                     medications = list(medication_extraction.medications)
                     medication_error = ""
+                    # absent=原文明确写明无出院带药（如拒绝带药），不同于出院记录对带药只字未提。
+                    explicit_no_medications = medication_extraction.state == "absent" and not medications
                 else:
                     # 定向补核后仍不确定：按资料不足交付（uncertain 不得交付，2026-10-23 C15）。
                     final_state = {
@@ -4420,7 +4423,12 @@ async def _execute_extended_document_group(
                     continue
             if medication_error:
                 final_state, reason_code = "data_gap", medication_error
-            elif not medications and not formal_prescription_medications and not formal_prescription_error:
+            elif not medications and (
+                explicit_no_medications
+                or (not formal_prescription_medications and not formal_prescription_error)
+            ):
+                # 既有口径：原文明确无带药时，正式处方不能把它改写成漏写（062处方一致性用例）；
+                # 只有出院记录未写任何带药、而正式出院处方存在时，才按整组漏写核对（F5）。
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             else:
                 required_groups = _DISCHARGE_MEDICATION_REQUIRED_GROUPS

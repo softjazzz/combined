@@ -52,6 +52,12 @@ _DEMOGRAPHIC_LABEL = (
     r"(?P<label>(?:(?<=^)|(?<=[\n\r；;。：:])|(?<=\\n)|(?<=\\r))[ \t]*"
     r"(?:(?:[一二三四五六七八九十]+|\d+)[、.．][ \t]*)?)"
 )
+# 各族正文清洗常把换行压成空格（“时间 标题\n张三，男”→“时间 标题 张三，男”）。仅对已知
+# 患者姓名额外接受空白边界；未知姓名仍只按行首/标点边界猜测，避免误删医务人员或病名。
+_KNOWN_DEMOGRAPHIC_LABEL = (
+    r"(?P<label>(?:(?<=^)|(?<=[\n\r；;。：:])|(?<=\\n)|(?<=\\r)|(?<=[ \t　]))[ \t]*"
+    r"(?:(?:[一二三四五六七八九十]+|\d+)[、.．][ \t]*)?)"
+)
 _DEMOGRAPHIC_FOLLOW = (
     rf"(?=[ \t]*[，,、][ \t]*(?:{_LABELLED_SEX}|(?:老年|中年|青年|成年|幼年)[男女]性|男|女|\d{{1,3}}[ \t]*岁|年龄))"
 )
@@ -107,6 +113,10 @@ _EMAIL = re.compile(
 
 _PATIENT_NAME_PLACEHOLDER = "[患者姓名已脱敏]"
 _CONTACT_NAME_PLACEHOLDER = "[联系人姓名已脱敏]"
+# 本模块写入的全部占位；引用核验据此区分“本系统脱敏”与模型自造的方括号文本。
+LUXIAN_0609_REDACTION_PLACEHOLDER = re.compile(
+    r"\[(?:患者姓名|联系人姓名|身份证号|手机号|座机号码|电话号码|地址|出生日期|工作单位|就诊标识|电子邮箱)已脱敏\]"
+)
 
 
 def _replace_labelled(pattern: re.Pattern[str], text: str, placeholder: str) -> str:
@@ -154,7 +164,7 @@ def redact_luxian_0609_patient_privacy(
         # 已知姓名出现在句首/冒号后并紧跟性别、年龄（如“新建S章节:某某，男，79岁”），
         # 同样是患者介绍；姓氏不在常见表时只能靠已知身份识别。
         known_demographic = re.compile(
-            _DEMOGRAPHIC_LABEL + r"(?P<value>" + "|".join(known_names) + r")" + _DEMOGRAPHIC_FOLLOW,
+            _KNOWN_DEMOGRAPHIC_LABEL + r"(?P<value>" + "|".join(known_names) + r")" + _DEMOGRAPHIC_FOLLOW,
             flags=re.MULTILINE,
         )
         name_patterns = (*name_patterns, known_intro, known_demographic)

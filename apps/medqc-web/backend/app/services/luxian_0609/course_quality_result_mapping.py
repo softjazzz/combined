@@ -356,9 +356,12 @@ def _safe_008(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             facts["recorded_dates"] = list(records)
         return facts
     maximum = raw.get("maximum_gap_days")
-    if type(maximum) is not int or not 0 <= maximum <= 2 or not isinstance(records, list):
+    # 记录日期为展示明细；长期病重超出展示上限时执行器整列省略，已给出时仍须合法。
+    if type(maximum) is not int or not 0 <= maximum <= 2:
         return None
-    facts.update(maximum_gap_days=maximum, recorded_dates=list(records))
+    facts["maximum_gap_days"] = maximum
+    if isinstance(records, list):
+        facts["recorded_dates"] = list(records)
     return facts
 
 
@@ -542,9 +545,9 @@ def _published_008(raw: dict[str, Any]) -> bool:
         return (_date(raw["gap_start_date"]) and _date(raw["gap_end_date"])
                 and type(raw["gap_days"]) is int and raw["gap_days"] > 2
                 and ("recorded_dates" not in raw or _published_dates(raw["recorded_dates"])))
-    return (set(raw) == base | {"maximum_gap_days", "recorded_dates"}
+    return (set(raw) in (base | {"maximum_gap_days"}, base | {"maximum_gap_days", "recorded_dates"})
             and type(raw["maximum_gap_days"]) is int and 0 <= raw["maximum_gap_days"] <= 2
-            and _published_dates(raw["recorded_dates"]))
+            and ("recorded_dates" not in raw or _published_dates(raw["recorded_dates"])))
 
 
 def _published_009(raw: dict[str, Any]) -> bool:

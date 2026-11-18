@@ -277,6 +277,19 @@ def _reject_062(category: str) -> None:
     logging.getLogger(__name__).warning("discharge_medication facts rejected category=%s", category)
 
 
+def _proven_prescription_omission(raw: Mapping[str, Any]) -> bool:
+    """出院记录0项带药只在正式出院处方已核对且列出漏写药物时成立（2026-11-17 F5）。
+
+    “没有提取到用药”由抽取待定事实承载、“确实无出院用药”为不适用，均不得走此分支。
+    """
+    count = raw.get("prescription_medication_count")
+    names = raw.get("missing_drug_names")
+    missing = raw.get("missing_fields")
+    # 0项带药时不存在可核对的剂量/途径/疗程，缺项只能是药名本身。
+    return (type(count) is int and count > 0 and isinstance(names, list) and bool(names)
+            and missing == ["drug_name"])
+
+
 def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if raw.get("verification_kind") == "discharge_medication_extraction_pending":
         if (set(raw) != {"verification_kind", "extraction_state"}
@@ -310,7 +323,8 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         or raw.get("verification_kind") != "discharge_medication_completeness_check"
     ):
         return _reject_062("field_contract")
-    if type(raw.get("medication_count")) is not int or raw["medication_count"] <= 0:
+    if (type(raw.get("medication_count")) is not int or raw["medication_count"] < 0
+            or (raw["medication_count"] == 0 and not _proven_prescription_omission(raw))):
         return _reject_062("medication_count")
     if raw.get("required_fields") != required:
         return _reject_062("required_fields")
@@ -709,7 +723,8 @@ def validate_published_discharge_facts(
             count = raw.get("prescription_medication_count")
             if (keys not in (legacy_keys, legacy_keys | prescription_keys)
                     or raw.get("verification_kind") != "discharge_medication_completeness_check"
-                    or type(raw.get("medication_count")) is not int or raw["medication_count"] <= 0
+                    or type(raw.get("medication_count")) is not int or raw["medication_count"] < 0
+                    or (raw["medication_count"] == 0 and not _proven_prescription_omission(raw))
                     or raw.get("required_fields") != required or missing is None
                     or any(item not in required for item in missing)
                     or (prescription_keys <= keys and (
