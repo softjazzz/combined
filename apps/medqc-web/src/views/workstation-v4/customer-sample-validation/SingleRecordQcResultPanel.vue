@@ -190,6 +190,11 @@
                 </span>
               </span>
             </span>
+            <span class="result-details-hint" aria-hidden="true">
+              {{ expandedKey === item.key ? '收起详情' : '展开详情' }}
+              <ChevronUp v-if="expandedKey === item.key" :size="16" />
+              <ChevronDown v-else :size="16" />
+            </span>
           </span>
         </button>
 
@@ -493,7 +498,14 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
-import { ArrowRight, ChevronRight, ChevronUp, ClipboardCheck, ListFilter } from 'lucide-vue-next'
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  ClipboardCheck,
+  ListFilter,
+} from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
@@ -1680,12 +1692,6 @@ watch(
   color: inherit;
   font-size: 12px;
   font-weight: 750;
-}
-
-.result-row:not(.is-expanded) .rule-conclusion {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
 }
 
 .result-detail {

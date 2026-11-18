@@ -363,11 +363,10 @@ describe('SingleRecordQcResultPanel', () => {
   it('默认以紧凑摘要展示，客户可明确展开和收起完整详情', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [items[0]!] } })
     const trigger = wrapper.get('[data-testid="single-record-result-toggle"]')
-    const ruleName = wrapper.get('.rule-name')
+    const detailsHint = trigger.get('.result-details-hint')
 
     expect(trigger.attributes('aria-expanded')).toBe('false')
-    expect(trigger.text()).not.toContain('查看详情')
-    expect(trigger.text()).not.toContain('收起详情')
+    expect(detailsHint.text()).toBe('展开详情')
     expect(wrapper.text()).toContain(items[0]!.conclusion)
     expect(wrapper.find('.result-detail').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('完整判定说明')
@@ -375,10 +374,10 @@ describe('SingleRecordQcResultPanel', () => {
     // 侧栏收起时只看摘要；修改建议随详情一起展开，避免多条结果时整栏过长
     expect(wrapper.find('[data-testid="qc-remediation-suggestion"]').exists()).toBe(false)
 
-    await ruleName.trigger('click')
+    await detailsHint.trigger('click')
 
     expect(trigger.attributes('aria-expanded')).toBe('true')
-    expect(trigger.text()).not.toContain('收起详情')
+    expect(detailsHint.text()).toBe('收起详情')
     expect(wrapper.find('.result-detail').exists()).toBe(true)
     expect(wrapper.text()).toContain('完整判定说明')
     expect(wrapper.text()).toContain('关键证据')
@@ -395,10 +394,10 @@ describe('SingleRecordQcResultPanel', () => {
       items[0]!.suggestion!.replace(/\s+/g, ''),
     )
 
-    await ruleName.trigger('click')
+    await detailsHint.trigger('click')
 
     expect(trigger.attributes('aria-expanded')).toBe('false')
-    expect(trigger.text()).not.toContain('查看详情')
+    expect(detailsHint.text()).toBe('展开详情')
     expect(wrapper.find('.result-detail').exists()).toBe(false)
   })
 
@@ -493,7 +492,7 @@ describe('SingleRecordQcResultPanel', () => {
     }
   })
 
-  it('收起时结论只占一行，展开后完整展示，操作栏位于所有详情之后', async () => {
+  it('收起与展开均保留完整结论文案，操作栏位于所有详情之后', async () => {
     const conclusion = '完整说明。'.repeat(50)
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: { items: [{ ...items[0]!, conclusion }] },
