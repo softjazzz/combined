@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import logging
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
@@ -24,6 +25,47 @@ MAX_COMPLETION_TOKENS = 4096
 PROTOCOL_ATTEMPTS = 2
 _ATOM_KEYS = {"state", "quote"}
 _STATES = frozenset({"present", "absent", "unknown"})
+logger = logging.getLogger(__name__)
+
+
+def _log_parse_rejection(error: Exception, response: Any, *, stage: str, attempt: int) -> None:
+    """只记录固定分类和数值；禁止输出 issues、原异常、引文、标识及响应正文。"""
+    choices = response.get("choices") if isinstance(response, Mapping) else None
+    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], Mapping) else {}
+    message = choice.get("message")
+    content = message.get("content") if isinstance(message, Mapping) else None
+    finish = choice.get("finish_reason")
+    safe_finish = finish if type(finish) is str and finish in {"stop", "length", "content_filter", "tool_calls"} else "other"
+    category = "response_shape"
+    if stage == "usage":
+        category = "usage_invalid"
+    elif isinstance(error, json.JSONDecodeError):
+        category = "json_syntax"
+    elif isinstance(error, _BodyViolation):
+        # 多处违规时优先保留关联/引用原因，不把串文书误写成仅漏返。
+        reasons = {item[0] for item in error.issues}
+        category = next((code for reason, code in (
+            ("invalid document reference", "document_binding"),
+            ("invalid same-material quotation", "same_material_quote"),
+            ("absent or unknown must not quote", "unexpected_quote"),
+            ("invalid document coverage", "document_coverage"),
+        ) if reason in reasons), "response_shape")
+    elif type(error) is ValueError and len(error.args) == 1 and type(error.args[0]) is str:
+        category = {
+            "incomplete response": "output_truncated" if safe_finish == "length" else "incomplete_response",
+            "duplicate response key": "duplicate_key",
+            "invalid response text": "response_text",
+            "invalid response schema": "schema",
+            "invalid response document": "document_schema",
+            "invalid document coverage": "document_coverage",
+            "invalid document reference": "document_binding",
+            "invalid atom": "atom_schema",
+        }.get(error.args[0], "response_shape")
+    logger.warning(
+        "course_body parse rejected category=%s stage=%s attempt=%d finish=%s content_length=%d json_position=%d",
+        category, stage, attempt, safe_finish, len(content) if isinstance(content, str) else 0,
+        error.pos if isinstance(error, json.JSONDecodeError) else -1,
+    )
 
 
 class _BodyViolation(ValueError):
@@ -169,15 +211,18 @@ async def extract_course_body_facts(documents: Sequence[CourseBodyDocument], llm
             return CourseBodyExtraction("technical_error", classify_luxian_0609_llm_call_failure(error), llm_call_count=calls,
                 prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,
                 api_time=api_time or perf_counter() - started)
+        stage = "usage"
         try:
             usage = _usage(response)
             prompt_tokens += usage[0]
             completion_tokens += usage[1]
             total_tokens += usage[2]
             api_time += usage[3]
+            stage = "parse"
             resolved = _parse_states(response, inputs)
             break
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError) as error:
+            _log_parse_rejection(error, response, stage=stage, attempt=attempt + 1)
             if attempt + 1 == PROTOCOL_ATTEMPTS:
                 return CourseBodyExtraction("technical_error", "model_invalid_output", llm_call_count=calls,
                     prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens,

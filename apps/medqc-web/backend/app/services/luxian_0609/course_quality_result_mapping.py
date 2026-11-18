@@ -317,13 +317,32 @@ def validate_published_course_007_facts(raw: Any) -> dict[str, Any] | None:
     return dict(raw)
 
 
+def _confirmed_008_interval(raw: Mapping[str, Any]) -> bool:
+    """已证实的闭合超期间隔不依赖全局观察终点；不能据此证明全程合规。"""
+    if (raw.get("evaluation_scope") != "confirmed_interval" or "horizon_date" in raw
+            or raw.get("failure_kind") != "severity_course_gap_exceeded"
+            or not all(_date(raw.get(key)) for key in ("anchor_date", "gap_start_date", "gap_end_date"))
+            or type(raw.get("gap_days")) is not int or raw["gap_days"] <= 2):
+        return False
+    try:
+        anchor, start, end = (datetime.fromisoformat(raw[key]).date()
+                              for key in ("anchor_date", "gap_start_date", "gap_end_date"))
+    except ValueError:
+        return False
+    return anchor <= start and (end - start).days == raw["gap_days"]
+
+
 def _safe_008(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     kind = raw.get("failure_kind")
-    dates = {key: raw.get(key) for key in ("anchor_date", "horizon_date")}
+    interval_only = "evaluation_scope" in raw
+    if interval_only and not _confirmed_008_interval(raw):
+        return None
+    dates = ({"anchor_date": raw["anchor_date"], "evaluation_scope": "confirmed_interval"}
+             if interval_only else {key: raw.get(key) for key in ("anchor_date", "horizon_date")})
     records = raw.get("recorded_dates")
     if (kind not in {"severity_course_gap_exceeded", "severity_course_interval_satisfied"}
             or raw.get("severity") != "serious" or raw.get("threshold_days") != 2
-            or not all(_date(value) for value in dates.values())
+            or (not interval_only and not all(_date(value) for value in dates.values()))
             or (records is not None and (not isinstance(records, list) or len(records) > 64 or not all(_date(value) for value in records)))):
         return None
     facts: dict[str, Any] = {"failure_kind": kind, "severity": "serious", "threshold_days": 2, **dates}
@@ -506,10 +525,15 @@ def _published_009_event(item: Any) -> bool:
 def _published_008(raw: dict[str, Any]) -> bool:
     kind = raw.get("failure_kind")
     base = {"failure_kind", "severity", "threshold_days", "anchor_date", "horizon_date"}
+    interval_only = "evaluation_scope" in raw
+    if interval_only:
+        if not _confirmed_008_interval(raw):
+            return False
+        base = (base - {"horizon_date"}) | {"evaluation_scope"}
     if (type(kind) is not str or kind not in {"severity_course_gap_exceeded", "severity_course_interval_satisfied"}
             or raw.get("severity") != "serious" or type(raw.get("threshold_days")) is not int
             or raw["threshold_days"] != 2 or not _date(raw.get("anchor_date"))
-            or not _date(raw.get("horizon_date"))):
+            or (not interval_only and not _date(raw.get("horizon_date")))):
         return False
     if kind == "severity_course_gap_exceeded":
         gap = {"gap_start_date", "gap_end_date", "gap_days"}
@@ -677,6 +701,8 @@ def validate_published_course_quality_facts(
     validator = validators.get(normalized)
     if validator is None or not validator(raw):
         return False, None
+    if normalized == "LX0609-02-01-04" and "evaluation_scope" in raw and status != "non_compliant":
+        return False, None
     if normalized == "LX0609-12-01-02" and (
         status not in {"compliant", "non_compliant", "data_gap", "not_applicable"}
         or not course_quality_customer_fact_status_is_valid(
@@ -704,6 +730,8 @@ def course_quality_customer_fact_status_is_valid(*, rule_id: str, status: str, r
     """仅检查客户事实与已裁决终态是否自洽，不重新判定业务事实。"""
     if not is_course_quality_customer_rule(rule_id):
         return True
+    if rule_id == "LX0609-02-01-04" and isinstance(raw_facts, Mapping) and "evaluation_scope" in raw_facts:
+        return safe_facts is not None and status == "non_compliant"
     if str(status or "").strip().lower() == "technical_error":
         return rule_id != "LX0609-12-01-02" or safe_facts is None
     if rule_id == "LX0609-02-01-03" and isinstance(raw_facts, Mapping) and raw_facts.get("failure_kind") == "course_interval_source_gap":

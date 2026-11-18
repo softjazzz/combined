@@ -787,7 +787,8 @@ def _rule_008_009_decision(
                     "failure_kind": "severity_course_gap_exceeded",
                     "severity": "serious",
                     "anchor_date": anchor_date.isoformat(),
-                    "horizon_date": horizon_date.isoformat() if horizon_date else "",
+                    **({"horizon_date": horizon_date.isoformat()} if horizon_date else
+                       {"evaluation_scope": "confirmed_interval"}),
                     "gap_start_date": exceeded_interval[0].isoformat(),
                     "gap_end_date": exceeded_interval[1].isoformat(),
                     "gap_days": (exceeded_interval[1] - exceeded_interval[0]).days,

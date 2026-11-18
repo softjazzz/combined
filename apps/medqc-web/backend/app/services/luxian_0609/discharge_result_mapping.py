@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 import math
+import logging
 import re
 from typing import Any
 
@@ -271,11 +272,16 @@ def _safe_061(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _reject_062(category: str) -> None:
+    # 仅由以下固定调用点给出类别；不记录字段值、药品、文书标识或原异常。
+    logging.getLogger(__name__).warning("discharge_medication facts rejected category=%s", category)
+
+
 def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     if raw.get("verification_kind") == "discharge_medication_extraction_pending":
         if (set(raw) != {"verification_kind", "extraction_state"}
                 or raw.get("extraction_state") not in ("unknown", "data_gap", "technical_error")):
-            return None
+            return _reject_062("pending_contract")
         return dict(raw)
     if raw.get("verification_kind") == "discharge_medication_prescription_identity_gap":
         if (
@@ -286,7 +292,7 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             or (raw["gap_reason"] == "identity_missing" and raw["affected_prescription_item_count"] <= 0)
             or (raw["gap_reason"] == "too_many_items" and raw["affected_prescription_item_count"] <= 20)
         ):
-            return None
+            return _reject_062("identity_gap_contract")
         return dict(raw)
     required = ["drug_name", "dose", "route", "duration"]
     if (
@@ -302,14 +308,15 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             | _LEGACY_INTERNAL_KEYS
         )
         or raw.get("verification_kind") != "discharge_medication_completeness_check"
-        or type(raw.get("medication_count")) is not int
-        or raw["medication_count"] <= 0
-        or raw.get("required_fields") != required
     ):
-        return None
+        return _reject_062("field_contract")
+    if type(raw.get("medication_count")) is not int or raw["medication_count"] <= 0:
+        return _reject_062("medication_count")
+    if raw.get("required_fields") != required:
+        return _reject_062("required_fields")
     missing = _safe_text_list(raw.get("missing_fields"), maximum=len(required))
     if missing is None or any(item not in required for item in missing):
-        return None
+        return _reject_062("missing_fields")
     safe = {
         "verification_kind": "discharge_medication_completeness_check",
         "medication_count": raw["medication_count"],
@@ -319,7 +326,7 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     has_prescription_count = "prescription_medication_count" in raw
     has_missing_names = "missing_drug_names" in raw
     if has_prescription_count != has_missing_names:
-        return None
+        return _reject_062("prescription_pair")
     if has_prescription_count:
         count = raw.get("prescription_medication_count")
         names = _safe_text_list(raw.get("missing_drug_names"), maximum=20)
@@ -328,7 +335,7 @@ def _safe_062(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             or len(names) > count or len(names) != len(set(names))
             or (names and "drug_name" not in missing)
         ):
-            return None
+            return _reject_062("prescription_consistency")
         safe["prescription_medication_count"] = count
         safe["missing_drug_names"] = names
     return safe

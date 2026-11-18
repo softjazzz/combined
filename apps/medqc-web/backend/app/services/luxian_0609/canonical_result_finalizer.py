@@ -1084,6 +1084,8 @@ def finalize_luxian_0609_executor_customer_display_facts(
         )
     )
     if is_discharge_customer_rule(rule_id) and not discharge_status_valid:
+        if normalized_rule_id == "LX0609-08-01-02" and safe_facts is not None:
+            logger.warning("discharge_medication facts rejected category=status_mismatch")
         safe_facts = None
     critical_value_status_valid = (
         is_critical_value_customer_rule(rule_id)
