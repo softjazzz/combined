@@ -1,6 +1,7 @@
 """068 只使用合成病程与固定模型返回；贯通冻结取材、证据投影和页面 DTO。"""
 import json
 
+import jsonschema
 import pytest
 
 from app.services.custom_qc_workspace_service import _safe_evidence_rows
@@ -17,17 +18,15 @@ class PassageClient:
     def __init__(self, reply):
         self.reply = reply
         self.calls = []
+        self.schemas = []
 
     def supports_strict_json_schema(self):
         return True
 
     async def generate(self, prompt, **options):
-        import jsonschema
         self.calls.append(prompt)
         payload = {"schema_version": approval.PASSAGE_SCHEMA_VERSION, "items": self.reply}
-        schema = options["response_format"]["json_schema"]["schema"]
-        assert "quote" not in schema["properties"]["items"]["items"]["properties"]
-        jsonschema.validate(payload, schema)
+        self.schemas.append(options["response_format"]["json_schema"]["schema"])
         assert options["allow_length_retry"] is False
         return {"choices": [{"message": {"content": json.dumps(payload)}, "finish_reason": "stop"}],
                 "usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10}}
@@ -49,6 +48,10 @@ async def test_numbered_passage_reaches_authorized_result(sentence, opinion, rol
         (RULE,), {"inpat_registration": ({"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},),
                   "daily_course_record": (row,)}, llm_client=client)
     assert len(client.calls) == 1
+    jsonschema.validate(
+        {"schema_version": approval.PASSAGE_SCHEMA_VERSION, "items": client.reply},
+        client.schemas[0],
+    )
     assert reduced[0].final_state.value == status
     canonical = _canonical_extended_result(rule_id=RULE, snapshot=snapshot, materials=materials,
                                             result=result, reduced=reduced)
@@ -63,14 +66,32 @@ async def test_numbered_passage_reaches_authorized_result(sentence, opinion, rol
 
 
 @pytest.mark.asyncio
-async def test_cross_document_passage_is_rejected_without_retry_or_text_in_logs(caplog):
+@pytest.mark.parametrize(("fields", "accepted"), [
+    ({"opinion": "approved", "role": "senior", "passage_id": "doc_01:1"}, True),
+    ({"opinion": "unknown", "role": "unknown", "passage_id": ""}, True),
+    ({"opinion": "unknown", "role": "unknown", "passage_id": "doc_01:1"}, True),
+    ({"opinion": "approved", "role": "senior", "passage_id": "doc_01:99"}, False),
+    ({"opinion": "approved", "role": "senior", "passage_id": "doc_02:1"}, False),
+    ({"opinion": "approved", "role": "senior", "passage_id": ""}, False),
+    ({"opinion": "unknown", "role": "senior", "passage_id": ""}, False),
+    ({"opinion": "unknown", "role": "unknown"}, False),
+], ids=["own", "unknown-empty", "unknown-with-evidence", "unknown-id", "cross-document",
+        "approved-empty", "attributed-empty", "missing-field"])
+async def test_passage_schema_and_parser_bind_evidence_to_document(fields, accepted, caplog):
     docs = (approval.DischargeApprovalInput("doc_01", "daily_course_record", "姓名：张测试；主任医师同意出院。"),
             approval.DischargeApprovalInput("doc_02", "senior_course_record", "主任医师不同意出院。"))
     client = PassageClient([
-        {"local_doc_id": "doc_01", "opinion": "approved", "role": "senior", "passage_id": "doc_02:1"},
+        {"local_doc_id": "doc_01", **fields},
         {"local_doc_id": "doc_02", "opinion": "unknown", "role": "unknown", "passage_id": ""},
     ])
     result = await approval.extract_discharge_approval(docs, client, numbered_passages=True)
-    assert result.reason_code == "model_invalid_output" and not result.assertions
     assert len(client.calls) == 1 and "张测试" not in client.calls[0]
-    assert "passage_reference_invalid" in caplog.text and "张测试" not in caplog.text
+    payload = {"schema_version": approval.PASSAGE_SCHEMA_VERSION, "items": client.reply}
+    validator = jsonschema.Draft202012Validator(client.schemas[0])
+    assert validator.is_valid(payload) is accepted
+    if accepted:
+        assert result.state == "ready"
+        assert (result.assertions[0].source_span is None) is (fields["passage_id"] == "")
+    else:
+        assert result.reason_code == "model_invalid_output" and not result.assertions
+    assert "张测试" not in caplog.text
