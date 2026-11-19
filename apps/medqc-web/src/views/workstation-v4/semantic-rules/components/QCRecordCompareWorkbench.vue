@@ -1217,24 +1217,17 @@ async function selectDocument(documentKey: string) {
 }
 
 function isAdmissionRecordDocument(document: EditableMedicalRecordDocument) {
-  const typeText = [
-    document.document_type,
-    document.source_table,
-    document.title,
-    resolveDocumentDisplayTitle(document),
-  ]
-    .map((value) =>
-      String(value || '')
-        .trim()
-        .toLowerCase(),
-    )
-    .filter(Boolean)
-    .join(' ')
-  return typeText.includes('admission_record') || typeText.includes('入院记录')
+  return [document.document_type, document.source_table].some((type) =>
+    ['admission_record', '入院记录'].includes(normalizeReference(type)),
+  )
+}
+
+function findAdmissionDocument() {
+  return pdfDocumentDirectory.value.primaryDocuments.find(isAdmissionRecordDocument)
 }
 
 function resolveDefaultDocumentKey() {
-  return documents.value.find(isAdmissionRecordDocument)?.key || documents.value[0]?.key || ''
+  return findAdmissionDocument()?.key || documents.value[0]?.key || ''
 }
 
 function handleDocumentSelect(event: Event) {
@@ -1342,6 +1335,8 @@ async function loadDocuments() {
   documents.value = result.data.documents.filter((document) => document.enabled !== false)
   if (props.lazyResultDocuments) {
     ordersLoadState.value = 'deferred'
+    const admission = findAdmissionDocument()
+    if (admission) await selectDocument(admission.key)
     return
   }
   selectedDocumentKey.value = resolveDefaultDocumentKey()

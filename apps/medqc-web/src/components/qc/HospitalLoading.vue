@@ -6,7 +6,6 @@
       </div>
     </div>
     <p>{{ label }}</p>
-    <div class="hospital-loading__track" aria-hidden="true"></div>
   </div>
 </template>
 
@@ -80,24 +79,6 @@ defineProps<{
   line-height: 20px;
 }
 
-.hospital-loading__track {
-  inline-size: min(124px, 100%);
-  block-size: 3px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--mq-info-bg, #eaf2ff);
-}
-
-.hospital-loading__track::before {
-  display: block;
-  inline-size: 44%;
-  block-size: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #12636c, var(--mq-brand-400, #3b8bff));
-  animation: hospital-loading-sweep 1.55s ease-in-out infinite;
-  content: '';
-}
-
 .hospital-loading.is-compact {
   min-block-size: 0;
   gap: 8px;
@@ -114,20 +95,6 @@ defineProps<{
   inline-size: 118px;
 }
 
-.is-compact .hospital-loading__track {
-  inline-size: min(88px, 100%);
-}
-
-@keyframes hospital-loading-sweep {
-  from {
-    transform: translateX(-105%);
-  }
-
-  to {
-    transform: translateX(230%);
-  }
-}
-
 @keyframes hospital-logo-shine {
   from {
     background-position: 100% 50%;
@@ -142,11 +109,6 @@ defineProps<{
 @media (prefers-reduced-motion: reduce) {
   .hospital-loading__logo::after {
     content: none;
-  }
-
-  .hospital-loading__track::before {
-    transform: translateX(64%);
-    animation: none;
   }
 }
 </style>

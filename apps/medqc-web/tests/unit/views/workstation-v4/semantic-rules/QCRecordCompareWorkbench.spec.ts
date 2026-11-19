@@ -537,8 +537,16 @@ describe('QCRecordCompareWorkbench', () => {
     expect(wrapper.find('mark').exists()).toBe(false)
   })
 
-  it('结果页先读取目录，CT 证据和医嘱各自按需读取', async () => {
+  it('结果页默认打开入院记录，CT 证据和医嘱各自按需读取', async () => {
     const sourceRef = 'src_ct_master'
+    const admission = {
+      key: 'admission_record::admission-id',
+      source_document_id: 'admission-id',
+      document_type: 'admission_record',
+      title: '入院记录',
+      execution_domain: 'admission',
+      content_loaded: false,
+    }
     const report = {
       key: 'exam_item_report::ct-report',
       source_document_id: 'ct-report',
@@ -564,10 +572,19 @@ describe('QCRecordCompareWorkbench', () => {
           title: '其他文书',
           content: '合成病程',
           content_loaded: true,
-        }, report],
+        }, {
+          ...admission,
+          key: 'diagnosis',
+          source_document_id: 'diagnosis',
+          document_type: 'admission_record_diagnosis',
+          title: '入院记录诊断',
+        }, report, admission],
       },
     })
-    getDocumentMock.mockResolvedValue({
+    getDocumentMock.mockResolvedValueOnce({
+      success: true,
+      data: { ...admission, content: '合成入院正文', content_loaded: true },
+    }).mockResolvedValue({
       success: true,
       data: { ...report, content: '合成 CT 报告正文', content_loaded: true },
     })
@@ -592,7 +609,13 @@ describe('QCRecordCompareWorkbench', () => {
       'visit-1',
       expect.objectContaining({ job_id: 'saved-job', view: 'summary', document_scope: 'clinical' }),
     )
-    expect(getDocumentMock).not.toHaveBeenCalled()
+    expect(getDocumentMock).toHaveBeenCalledTimes(1)
+    expect(getDocumentMock).toHaveBeenLastCalledWith(
+      'visit-1',
+      expect.objectContaining({ source_document_id: admission.key, document_type: 'admission_record' }),
+      expect.objectContaining({ job_id: 'saved-job', visit_id: 'visit-1' }),
+    )
+    expect(wrapper.text()).toContain('合成入院正文')
     await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
     await wrapper.get('[data-testid="single-record-evidence"]').trigger('click')
     await flushPromises()
