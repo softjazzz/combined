@@ -291,11 +291,19 @@ watch(
   border-radius: 12px;
   overflow-wrap: anywhere;
 }
-.customer-record-result-drawer :deep(.ant-drawer-close) {
+:global(.customer-record-result-drawer .ant-drawer-title) {
+  min-width: 0;
+}
+
+:global(.customer-record-result-drawer .ant-drawer-close) {
   display: grid;
+  order: 1;
+  flex: 0 0 38px;
+  align-self: flex-start;
   width: 38px;
   height: 38px;
-  margin: 0 12px 0 0;
+  margin: 0;
+  margin-inline-start: 12px;
   place-items: center;
   border: 1px solid rgba(10, 108, 255, 0.18);
   border-radius: 11px;
@@ -305,12 +313,12 @@ watch(
   transition: 180ms ease;
 }
 
-.customer-record-result-drawer :deep(.ant-drawer-close:focus-visible) {
+:global(.customer-record-result-drawer .ant-drawer-close:focus-visible) {
   outline: 3px solid rgba(10, 108, 255, 0.24);
   outline-offset: 2px;
 }
 
-.customer-record-result-drawer :deep(.ant-drawer-close:hover) {
+:global(.customer-record-result-drawer .ant-drawer-close:hover) {
   border-color: rgba(10, 108, 255, 0.38);
   background: #e7f1ff;
   color: #005eb8;

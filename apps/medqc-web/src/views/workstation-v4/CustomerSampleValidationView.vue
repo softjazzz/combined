@@ -1247,16 +1247,11 @@
       @cancel="closeEditableCopyDrawer"
     >
       <div class="editable-copy-drawer">
-        <header v-if="editableCopyReadonly" class="editable-copy-readonly-header">
-          <div class="editable-copy-readonly-title">
-            <FileText :size="18" aria-hidden="true" />
-            <h2>查看病历</h2>
-            <span>只读</span>
-          </div>
-          <MedicalRecordContextBanner
-            :context="editableCopySourceRecord ? resolveRecordResultFocus(editableCopySourceRecord) : null"
-          />
-        </header>
+        <ReadonlyMedicalRecordHeader
+          v-if="editableCopyReadonly"
+          class="editable-copy-readonly-header"
+          :context="editableCopySourceRecord ? resolveRecordResultFocus(editableCopySourceRecord) : null"
+        />
         <header v-else class="editable-copy-hero">
           <div>
             <div v-if="!editableCopyReadonly" class="editable-copy-eyebrow">
@@ -1813,8 +1808,7 @@ import { reactive, watchEffect } from 'vue'
 import { deferredComponent } from './customer-sample-validation/deferredComponent'
 const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
-import MedicalRecordContextBanner from './customer-sample-validation/MedicalRecordContextBanner.vue'
-import { FileText } from 'lucide-vue-next'
+import ReadonlyMedicalRecordHeader from './components/ReadonlyMedicalRecordHeader.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
 
 const {

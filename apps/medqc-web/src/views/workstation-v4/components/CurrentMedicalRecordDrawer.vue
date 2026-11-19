@@ -2,11 +2,14 @@
   <Drawer
     v-if="record"
     open
-    :title="`当前病历文书 · ${record.name} · 住院号 ${record.visitId}`"
+    root-class-name="current-medical-record-drawer"
     width="min(1400px, 100vw)"
     :body-style="{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: '16px 0 0' }"
     @close="emit('close')"
   >
+    <template #title>
+      <ReadonlyMedicalRecordHeader :context="recordContext" />
+    </template>
     <HospitalLoading v-if="loading" label="正在读取病历文书" />
     <Alert v-else-if="loadError" type="error" show-icon :message="loadError" />
     <QCRecordCompareWorkbench
@@ -29,11 +32,12 @@
 
 <script setup lang="ts">
 import { Alert, Drawer } from 'ant-design-vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import { loadCurrentMedicalRecord } from '@/services/current-medical-record'
 import type { EditableMedicalRecordDocument } from '../customer-sample-validation/types'
 import QCRecordCompareWorkbench from '../semantic-rules/components/QCRecordCompareWorkbench.vue'
+import ReadonlyMedicalRecordHeader from './ReadonlyMedicalRecordHeader.vue'
 import type { PatientRecord } from '../types'
 
 const props = defineProps<{ record: PatientRecord | null }>()
@@ -41,6 +45,18 @@ const emit = defineEmits<{ close: [] }>()
 const documents = ref<EditableMedicalRecordDocument[]>([])
 const loading = ref(false)
 const loadError = ref('')
+const recordContext = computed(() => {
+  const record = props.record
+  if (!record) return null
+  return {
+    label: [record.name || '当前病历', record.department, record.visitId].filter(Boolean).join(' · '),
+    patientName: record.name,
+    patientSex: record.sex,
+    patientAge: record.age,
+    admissionTime: record.admissionDate,
+    dischargeTime: record.dischargeDate,
+  }
+})
 
 watch(
   () => props.record,
@@ -65,3 +81,27 @@ watch(
   { immediate: true },
 )
 </script>
+
+<style scoped>
+:global(.current-medical-record-drawer .ant-drawer-content) {
+  background: var(--mq-bg-mesh);
+}
+
+:global(.current-medical-record-drawer .ant-drawer-header) {
+  padding: 16px 20px;
+  border-bottom-color: var(--mq-glass-border);
+  background: var(--mq-glass-bg);
+}
+
+:global(.current-medical-record-drawer .ant-drawer-title) {
+  min-width: 0;
+}
+
+:global(.current-medical-record-drawer .ant-drawer-close) {
+  order: 1;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin: 0;
+  margin-inline-start: 12px;
+}
+</style>

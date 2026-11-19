@@ -1366,6 +1366,12 @@
   overscroll-behavior: contain;
 }
 
+:global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-close) {
+  top: 16px;
+  inset-inline-start: auto;
+  inset-inline-end: 20px;
+}
+
 .customer-sample-page :deep(.editable-copy-workstation-modal .ant-modal-close) {
   top: 16px;
   right: 16px;
@@ -2792,21 +2798,9 @@
 }
 
 
-/* 只读文书与结果页共用病历信息栏，副本编辑页头保持原布局。 */
 .editable-copy-readonly-header {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 16px;
-  min-width: 0;
-  padding: 16px 64px 16px 20px;
+  padding: 16px 20px;
+  padding-inline-end: 64px;
   border-bottom: 1px solid var(--mq-glass-border);
   background: var(--mq-glass-bg);
-}
-.editable-copy-readonly-title { display: flex; flex-shrink: 0; align-items: center; gap: 10px; }
-.editable-copy-readonly-title svg { color: var(--mq-brand-600); }
-.editable-copy-readonly-title h2 { margin: 0; font-size: 17px; font-weight: 700; color: var(--mq-text-primary); }
-.editable-copy-readonly-title > span { color: var(--mq-text-tertiary); font-size: 12px; }
-@media (max-width: 1000px) {
-  .editable-copy-readonly-header { flex-wrap: wrap; gap: 8px 12px; padding: 14px 20px; }
 }
