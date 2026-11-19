@@ -87,21 +87,24 @@ defineProps<{
 }
 
 .hospital-loading__status {
+  max-inline-size: 100%;
   margin: 0;
   color: #165368;
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 700;
-  line-height: 1.5;
-  letter-spacing: 0.08em;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
 }
 
 @supports (background-clip: text) {
   @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
     .hospital-loading__status {
-      background: linear-gradient(105deg, #165368 38%, #147783 50%, #165368 62%) 100% 50% / 240% 100%;
+      background: linear-gradient(105deg, #165368 33%, #00758f 43%, #096ad1 50%, #00758f 57%, #165368 67%)
+        90% 50% / 240% 100% no-repeat;
       background-clip: text;
       color: transparent;
-      animation: hospital-status-shine 2.35s ease-in-out infinite;
+      animation: hospital-status-shine 1.8s ease-in-out infinite;
     }
   }
 }
@@ -123,17 +126,23 @@ defineProps<{
 }
 
 .is-compact .hospital-loading__status {
-  font-size: 16px;
+  font-size: 20px;
 }
 
 @keyframes hospital-status-shine {
   from {
-    background-position: 100% 50%;
+    background-position: 90% 50%;
+    transform: translateY(0);
   }
 
-  84%,
+  36% {
+    transform: translateY(-2px);
+  }
+
+  72%,
   to {
     background-position: 0% 50%;
+    transform: translateY(0);
   }
 }
 
