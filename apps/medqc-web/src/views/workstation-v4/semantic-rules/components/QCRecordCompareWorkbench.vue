@@ -1466,7 +1466,10 @@ onBeforeUnmount(() => {
 }
 .record-content-toolbar strong {
   overflow: hidden;
-  font-size: 14px;
+  color: var(--mq-text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 26px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1539,8 +1542,8 @@ onBeforeUnmount(() => {
   gap: 0;
 }
 .record-content-section {
-  padding: 18px 0 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--mq-border);
   transition:
     background 240ms ease,
     box-shadow 240ms ease;
@@ -1563,18 +1566,31 @@ onBeforeUnmount(() => {
   border-bottom: 0;
 }
 .record-content-section-title {
-  margin: 0 0 9px;
-  color: #0a6cff;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 20px;
+  position: relative;
+  margin: 0 0 6px;
+  padding-inline-start: 10px;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-16);
+  font-weight: 700;
+  line-height: 24px;
+}
+.record-content-section-title::before {
+  position: absolute;
+  inset-block-start: 5px;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  block-size: 14px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.42;
+  content: '';
 }
 .record-content-section-text {
   margin: 0;
   color: #202124;
   font-size: 14px;
-  font-weight: 450;
-  line-height: 2;
+  font-weight: 400;
+  line-height: 1.85;
   white-space: pre-wrap;
   word-break: break-word;
 }

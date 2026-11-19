@@ -494,15 +494,6 @@
   padding: 22px 24px;
   box-shadow: 0 4px 16px rgba(39, 62, 94, 0.06);
 }
-:global(.customer-record-result-drawer .record-content-section-title) {
-  padding-bottom: 8px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid #edf0f4;
-  color: #303640;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
-}
 :global(.customer-record-result-drawer .record-content-time) {
   display: inline-flex;
   gap: 6px;
