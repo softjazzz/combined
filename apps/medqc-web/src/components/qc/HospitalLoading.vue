@@ -1,7 +1,9 @@
 <template>
   <div class="hospital-loading" :class="{ 'is-compact': compact }" role="status">
     <div class="hospital-loading__mark">
-      <img :src="hospitalLogo" alt="泸县人民医院" width="270" height="68" />
+      <div class="hospital-loading__logo">
+        <img :src="hospitalLogo" alt="泸县人民医院" width="270" height="68" />
+      </div>
     </div>
     <p>{{ label }}</p>
     <div class="hospital-loading__track" aria-hidden="true"></div>
@@ -39,11 +41,35 @@ defineProps<{
   box-shadow: 0 4px 16px rgba(20, 69, 96, 0.06);
 }
 
-.hospital-loading__mark img {
-  display: block;
+.hospital-loading__logo {
+  position: relative;
   inline-size: 162px;
   max-inline-size: 100%;
+}
+
+.hospital-loading__logo img {
+  display: block;
+  inline-size: 100%;
   block-size: auto;
+}
+
+@supports (mask-image: none) {
+  .hospital-loading__logo::after {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    mask: url('@/assets/images/lx-logo.png') center / 100% 100% no-repeat;
+    background: linear-gradient(
+      112deg,
+      transparent 40%,
+      rgba(125, 220, 235, 0.45) 47%,
+      rgba(255, 255, 255, 0.9) 50%,
+      rgba(151, 203, 255, 0.52) 53%,
+      transparent 60%
+    ) 100% 50% / 260% 100% no-repeat;
+    animation: hospital-logo-shine 2.35s ease-in-out infinite;
+    content: '';
+  }
 }
 
 .hospital-loading p {
@@ -84,7 +110,7 @@ defineProps<{
   box-shadow: none;
 }
 
-.is-compact .hospital-loading__mark img {
+.is-compact .hospital-loading__logo {
   inline-size: 118px;
 }
 
@@ -102,7 +128,22 @@ defineProps<{
   }
 }
 
+@keyframes hospital-logo-shine {
+  from {
+    background-position: 100% 50%;
+  }
+
+  84%,
+  to {
+    background-position: 0% 50%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .hospital-loading__logo::after {
+    content: none;
+  }
+
   .hospital-loading__track::before {
     transform: translateX(64%);
     animation: none;
