@@ -8,11 +8,7 @@
     @close="emit('close')"
   >
     <template #closeIcon>
-      <span
-        class="customer-record-result-drawer__close-icon"
-        title="关闭病历质控结果"
-        aria-hidden="true"
-      >
+      <span class="record-view-close-icon" title="关闭病历质控结果" aria-hidden="true">
         <X :size="20" :stroke-width="2.35" />
       </span>
     </template>
@@ -88,6 +84,7 @@ import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
+import './record-view-close.css'
 import MedicalRecordContextBanner from './MedicalRecordContextBanner.vue'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import HospitalLoading from '@/components/qc/HospitalLoading.vue'
@@ -296,39 +293,11 @@ watch(
 }
 
 :global(.customer-record-result-drawer .ant-drawer-close) {
-  display: grid;
   order: 1;
   flex: 0 0 38px;
   align-self: flex-start;
-  width: 38px;
-  height: 38px;
   margin: 0;
   margin-inline-start: 12px;
-  place-items: center;
-  border: 1px solid rgba(10, 108, 255, 0.18);
-  border-radius: 11px;
-  background: #f3f8ff;
-  color: #31597f;
-  box-shadow: 0 1px 2px rgba(28, 76, 120, 0.08);
-  transition: 180ms ease;
-}
-
-:global(.customer-record-result-drawer .ant-drawer-close:focus-visible) {
-  outline: 3px solid rgba(10, 108, 255, 0.24);
-  outline-offset: 2px;
-}
-
-:global(.customer-record-result-drawer .ant-drawer-close:hover) {
-  border-color: rgba(10, 108, 255, 0.38);
-  background: #e7f1ff;
-  color: #005eb8;
-  box-shadow: 0 4px 12px rgba(10, 108, 255, 0.14);
-  transform: translateY(-1px);
-}
-
-.customer-record-result-drawer__close-icon {
-  display: grid;
-  place-items: center;
 }
 
 .customer-record-result-title {

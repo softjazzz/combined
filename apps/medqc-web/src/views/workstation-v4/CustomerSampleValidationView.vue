@@ -1246,6 +1246,11 @@
       ]"
       @cancel="closeEditableCopyDrawer"
     >
+      <template v-if="editableCopyReadonly" #closeIcon>
+        <span class="record-view-close-icon" title="关闭病历" aria-hidden="true">
+          <X :size="20" :stroke-width="2.35" />
+        </span>
+      </template>
       <div class="editable-copy-drawer">
         <ReadonlyMedicalRecordHeader
           v-if="editableCopyReadonly"
@@ -1805,11 +1810,13 @@
 
 <script setup lang="ts">
 import { reactive, watchEffect } from 'vue'
+import { X } from 'lucide-vue-next'
 import { deferredComponent } from './customer-sample-validation/deferredComponent'
 const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
 import ReadonlyMedicalRecordHeader from './components/ReadonlyMedicalRecordHeader.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
+import './customer-sample-validation/record-view-close.css'
 
 const {
   initialConfigLoading,
