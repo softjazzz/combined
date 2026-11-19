@@ -70,9 +70,8 @@
       <div
         v-if="filter === 'orders' && ordersLoadState === 'loading'"
         class="readonly-medical-document-state"
-        role="status"
       >
-        正在读取医嘱…
+        <HospitalLoading compact label="正在读取医嘱" />
       </div>
       <div
         v-else-if="filter === 'orders' && ordersLoadState === 'failed'"
@@ -247,6 +246,7 @@ import { computed, ref, watch } from 'vue'
 import type { EditableMedicalRecordDocument } from './types'
 import ReadonlyPdfVersions from './ReadonlyPdfVersions.vue'
 import { groupPdfDocumentVersions } from './pdfDocumentVersions'
+import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import {
   formatMedicalDocumentTime,
   isMedicalOrderDocument,

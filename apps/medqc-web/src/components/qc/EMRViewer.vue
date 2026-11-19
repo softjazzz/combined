@@ -40,7 +40,9 @@
       v-if="loading"
       class="flex h-64 items-center justify-center"
     >
-      <a-spin tip="正在加载文书内容..." />
+      <slot name="loading">
+        <a-spin tip="正在加载文书内容..." />
+      </slot>
     </div>
 
     <div

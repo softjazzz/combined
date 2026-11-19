@@ -140,18 +140,10 @@
         </div>
 
         <div
-          v-if="loading && lazyResultDocuments"
-          class="record-content-empty"
-          role="status"
-        >
-          <strong>正在读取文书目录</strong>
-        </div>
-        <div
-          v-else-if="contentLoading"
+          v-if="loading || contentLoading"
           class="record-content-empty"
         >
-          <strong>正在读取当前文书</strong>
-          <span>文书目录已经就绪，正文正在按需加载。</span>
+          <HospitalLoading :label="loading ? '正在读取文书目录' : '正在读取文书正文'" />
         </div>
         <div
           v-else-if="contentLoadError"
@@ -440,6 +432,7 @@ import ReadonlyMedicalDocumentDirectory from '@/views/workstation-v4/customer-sa
 import ReadonlyFrontpageContent from '@/views/workstation-v4/customer-sample-validation/ReadonlyFrontpageContent.vue'
 import ReadonlyMedicalOrderTable from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalOrderTable.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
+import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import {
   deduplicateMedicalDocumentSections,
   displayMedicalDocumentSectionText,

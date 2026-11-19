@@ -1,0 +1,111 @@
+<template>
+  <div class="hospital-loading" :class="{ 'is-compact': compact }" role="status">
+    <div class="hospital-loading__mark">
+      <img :src="hospitalLogo" alt="泸县人民医院" width="270" height="68" />
+    </div>
+    <p>{{ label }}</p>
+    <div class="hospital-loading__track" aria-hidden="true"></div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import hospitalLogo from '@/assets/images/lx-logo.png'
+
+defineProps<{
+  label: string
+  compact?: boolean
+}>()
+</script>
+
+<style scoped>
+.hospital-loading {
+  display: grid;
+  box-sizing: border-box;
+  min-block-size: 248px;
+  justify-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.hospital-loading__mark {
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  padding: 13px 18px;
+  border: 1px solid var(--mq-info-border, #dce8f5);
+  border-radius: 16px;
+  background: var(--mq-bg-surface, #fff);
+  box-shadow: 0 4px 16px rgba(20, 69, 96, 0.06);
+}
+
+.hospital-loading__mark img {
+  display: block;
+  inline-size: 162px;
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+.hospital-loading p {
+  margin: 0;
+  color: var(--mq-text-secondary, #515154);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.hospital-loading__track {
+  inline-size: min(124px, 100%);
+  block-size: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--mq-info-bg, #eaf2ff);
+}
+
+.hospital-loading__track::before {
+  display: block;
+  inline-size: 44%;
+  block-size: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #12636c, var(--mq-brand-400, #3b8bff));
+  animation: hospital-loading-sweep 1.55s ease-in-out infinite;
+  content: '';
+}
+
+.hospital-loading.is-compact {
+  min-block-size: 0;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.is-compact .hospital-loading__mark {
+  padding: 8px 10px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.is-compact .hospital-loading__mark img {
+  inline-size: 118px;
+}
+
+.is-compact .hospital-loading__track {
+  inline-size: min(88px, 100%);
+}
+
+@keyframes hospital-loading-sweep {
+  from {
+    transform: translateX(-105%);
+  }
+
+  to {
+    transform: translateX(230%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hospital-loading__track::before {
+    transform: translateX(64%);
+    animation: none;
+  }
+}
+</style>

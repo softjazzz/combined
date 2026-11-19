@@ -584,7 +584,9 @@ describe('QCRecordCompareWorkbench', () => {
         }],
       },
     })
+    expect(wrapper.get('.hospital-loading[role="status"]').text()).toBe('正在读取文书目录')
     await flushPromises()
+    expect(wrapper.find('.hospital-loading').exists()).toBe(false)
     expect(getDocumentsMock).toHaveBeenCalledTimes(1)
     expect(getDocumentsMock).toHaveBeenLastCalledWith(
       'visit-1',

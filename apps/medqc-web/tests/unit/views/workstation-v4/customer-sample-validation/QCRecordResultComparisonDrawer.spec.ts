@@ -109,12 +109,6 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped', loadJobMetadata = tr
             () =>
               h('section', [slots.title?.(), slots.default?.()]),
         }),
-        ASpin: defineComponent({
-          setup:
-            (_, { slots }) =>
-            () =>
-              h('div', slots.default?.()),
-        }),
         AResult: defineComponent({
           props: { title: { type: String, default: '' } },
           setup: (props) => () => h('div', { class: 'result-stub' }, props.title),
@@ -354,6 +348,8 @@ describe('QCRecordResultComparisonDrawer', () => {
 
     const wrapper = mountDrawer('grouped')
     await flushPromises()
+    expect(wrapper.get('.hospital-loading [alt="泸县人民医院"]').exists()).toBe(true)
+    expect(wrapper.get('.hospital-loading').text()).toBe('正在读取质控结果')
     await wrapper.setProps({
       focus: {
         visitId: 'V002',
@@ -372,6 +368,7 @@ describe('QCRecordResultComparisonDrawer', () => {
     await flushPromises()
     expect(workbenchProps?.visitId).toBe('V002')
     expect(workbenchProps?.jobId).toBe('job-second')
+    expect(wrapper.find('.hospital-loading').exists()).toBe(false)
 
     first.resolve({ success: true, data: readyResult })
     await flushPromises()

@@ -47,7 +47,8 @@
       </div>
     </template>
 
-    <a-spin :spinning="loading">
+    <HospitalLoading v-if="loading" label="正在读取质控结果" />
+    <template v-else>
       <section
         v-if="latestResult?.result_scope === 'targeted' && !latestResult.execution_status"
         role="status"
@@ -78,7 +79,7 @@
         :title="loadError"
         sub-title="未打开批量结果页，也不会回退到其他病历的结果。"
       />
-    </a-spin>
+    </template>
   </a-drawer>
 </template>
 
@@ -89,6 +90,7 @@ import { computed, ref, watch } from 'vue'
 import { ShieldCheck, X } from 'lucide-vue-next'
 import MedicalRecordContextBanner from './MedicalRecordContextBanner.vue'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
+import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import {
   exportLatestLuxian0609RecordResult,
   getLatestLuxian0609RecordResult,
