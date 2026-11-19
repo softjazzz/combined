@@ -142,20 +142,15 @@
               >
             </span>
             <span
-              v-if="!isCompliantResult(item) || expandedKey === item.key"
+              v-if="(!isCompliantResult(item) || expandedKey === item.key) && !copyMatchHeadline(item)"
               class="result-row-header"
               data-testid="single-record-result-row-header"
             >
               <span
-                v-if="!copyMatchHeadline(item)"
                 class="rule-conclusion"
                 data-testid="single-record-result-conclusion"
                 >{{ resultHeadline(item) }}</span
               >
-              <span v-else class="rule-conclusion-spacer" aria-hidden="true" />
-              <span v-if="!isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
-                shortRuleCode(item.rule_id)
-              }}</span>
             </span>
             <span
               v-if="copyMatchHeadline(item)"
@@ -190,10 +185,15 @@
                 </span>
               </span>
             </span>
-            <span class="result-details-hint" aria-hidden="true">
-              {{ expandedKey === item.key ? '收起详情' : '展开详情' }}
-              <ChevronUp v-if="expandedKey === item.key" :size="16" />
-              <ChevronDown v-else :size="16" />
+            <span class="result-footer">
+              <span v-if="!isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
+                shortRuleCode(item.rule_id)
+              }}</span>
+              <span class="result-details-hint" aria-hidden="true">
+                {{ expandedKey === item.key ? '收起详情' : '展开详情' }}
+                <ChevronUp v-if="expandedKey === item.key" :size="16" />
+                <ChevronDown v-else :size="16" />
+              </span>
             </span>
           </span>
         </button>

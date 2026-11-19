@@ -708,9 +708,7 @@ describe('SingleRecordQcResultPanel', () => {
     )
     const rows = wrapper.findAll('[data-testid="single-record-result-row"]')
     expect(rows).toHaveLength(3)
-    expect(rows[0]!.get('[data-testid="single-record-result-row-header"]').text()).toContain(
-      '01-01-02',
-    )
+    expect(rows[0]!.get('.result-footer .rule-code').text()).toBe('01-01-02')
     expect(rows[0]!.get('.status-cell').text()).toContain('确定问题')
     expect(rows[0]!.get('.status-cell').classes()).toContain('mq-status--danger')
     expect(rows[0]!.get('.rule-code').attributes('title')).toBe('LX0609-01-01-02')
