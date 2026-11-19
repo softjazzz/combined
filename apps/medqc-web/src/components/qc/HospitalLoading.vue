@@ -90,7 +90,7 @@ defineProps<{
   max-inline-size: 100%;
   margin: 0;
   color: #165368;
-  font-size: 24px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
   letter-spacing: 0.04em;
@@ -123,10 +123,6 @@ defineProps<{
 
 .is-compact .hospital-loading__logo {
   inline-size: 118px;
-}
-
-.is-compact .hospital-loading__status {
-  font-size: 20px;
 }
 
 @keyframes hospital-status-shine {
