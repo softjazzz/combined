@@ -3106,6 +3106,7 @@ describe('CustomerSampleValidationView', () => {
       (node) => node.text() === '查看病历',
     )
     expect(reviewAction).toBeTruthy()
+    vi.useFakeTimers()
     await reviewAction!.trigger('click')
     await flushPromises()
     const loading = wrapper.get('.hospital-loading.fills-reading-area')
@@ -3113,7 +3114,11 @@ describe('CustomerSampleValidationView', () => {
     expect(loading.text()).toBe('正在读取病历文书')
     resolveDocuments(documentReply)
     await flushPromises()
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(wrapper.find('.hospital-loading.fills-reading-area').exists()).toBe(true)
+    await vi.advanceTimersByTimeAsync(1)
     expect(wrapper.find('.hospital-loading.fills-reading-area').exists()).toBe(false)
+    vi.useRealTimers()
 
     expect(getEditableMedicalRecordDocuments).toHaveBeenCalledWith('V001', {
       institute_id: 'H1',

@@ -253,6 +253,7 @@ describe('QcRecordResultListView', () => {
       .splice(0)
       .reverse()
       .forEach((wrapper) => wrapper.unmount())
+    vi.useRealTimers()
     document.body.innerHTML = ''
   })
 
@@ -626,8 +627,11 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
     const row = wrapper.get('tr[data-record-key*="V-not-run"]')
     expect(row.find('[data-testid="open-saved-result"]').exists()).toBe(false)
+    vi.useFakeTimers()
     await row.get('.qc-record-result-table__view-button').trigger('click')
     await flushPromises()
+    expect(document.body.querySelector('.hospital-loading.fills-reading-area')).not.toBeNull()
+    await vi.advanceTimersByTimeAsync(2000)
     const reader = wrapper.getComponent(QCRecordCompareWorkbench)
     expect(reader.props()).toMatchObject({
       visitId: 'V-not-run', instituteId: 'H', patientId: 'P',

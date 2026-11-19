@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { UserRole } from '@/types/auth'
 /* eslint-disable vue/one-component-per-file */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import QCRecordResultComparisonDrawer from '@/views/workstation-v4/customer-sample-validation/QCRecordResultComparisonDrawer.vue'
@@ -130,6 +130,8 @@ beforeEach(async () => {
 })
 
 describe('QCRecordResultComparisonDrawer', () => {
+  afterEach(() => vi.useRealTimers())
+
   beforeEach(() => {
     getLatestLuxian0609RecordResult.mockReset()
     getSichuanWorkspaceBatchJob.mockReset()
@@ -341,6 +343,7 @@ describe('QCRecordResultComparisonDrawer', () => {
   })
 
   it('切换病历后忽略上一病历的迟到响应，禁止跨三坐标闪现旧结果', async () => {
+    vi.useFakeTimers()
     const first = deferred<{ success: true; data: typeof readyResult }>()
     const second = deferred<{ success: true; data: typeof readyResult }>()
     getLatestLuxian0609RecordResult
@@ -369,7 +372,11 @@ describe('QCRecordResultComparisonDrawer', () => {
     await flushPromises()
     expect(workbenchProps?.visitId).toBe('V002')
     expect(workbenchProps?.jobId).toBe('job-second')
+    expect(wrapper.find('.hospital-loading').exists()).toBe(true)
+    expect(wrapper.get('.record-compare-workbench-stub').attributes('style')).toContain('display: none')
+    await vi.advanceTimersByTimeAsync(2000)
     expect(wrapper.find('.hospital-loading').exists()).toBe(false)
+    expect(wrapper.get('.record-compare-workbench-stub').attributes('style') || '').not.toContain('display: none')
 
     first.resolve({ success: true, data: readyResult })
     await flushPromises()

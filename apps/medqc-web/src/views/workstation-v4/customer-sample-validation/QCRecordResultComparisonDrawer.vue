@@ -41,10 +41,11 @@
       </div>
     </template>
 
-    <HospitalLoading v-if="loading" label="正在读取质控结果" fill />
-    <template v-else>
+    <HospitalLoading v-if="showLoading" label="正在读取质控结果" fill />
+    <template v-if="!loading">
       <section
         v-if="latestResult?.result_scope === 'targeted' && !latestResult.execution_status"
+        v-show="!showLoading"
         role="status"
         class="customer-record-result-warning"
       >
@@ -52,6 +53,7 @@
       </section>
       <QCRecordCompareWorkbench
         v-if="latestResult && focus.visitId"
+        v-show="!showLoading"
         :visit-id="focus.visitId"
         source-view="saved"
         lazy-result-documents
@@ -69,6 +71,7 @@
       />
       <a-result
         v-else-if="loadError"
+        v-show="!showLoading"
         status="warning"
         :title="loadError"
         sub-title="未打开批量结果页，也不会回退到其他病历的结果。"
@@ -79,6 +82,7 @@
 
 <script setup lang="ts">
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
+import { useMinimumLoading } from '@/composables/useMinimumLoading'
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 import { ShieldCheck } from 'lucide-vue-next'
@@ -126,6 +130,7 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
+const showLoading = useMinimumLoading(() => loading.value, () => props.open)
 const exporting = ref(false)
 const loadError = ref('')
 const latestResult = ref<SingleRecordQcResultPayload | null>(null)

@@ -4,7 +4,7 @@
     open
     root-class-name="current-medical-record-drawer"
     width="min(1400px, 100vw)"
-    :body-style="{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: loading ? 0 : '16px 0 0' }"
+    :body-style="{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: showLoading ? 0 : '16px 0 0' }"
     @close="emit('close')"
   >
     <template #closeIcon>
@@ -13,7 +13,7 @@
     <template #title>
       <ReadonlyMedicalRecordHeader :context="recordContext" />
     </template>
-    <HospitalLoading v-if="loading" label="正在读取病历文书" fill />
+    <HospitalLoading v-if="showLoading" label="正在读取病历文书" fill />
     <Alert v-else-if="loadError" type="error" show-icon :message="loadError" />
     <QCRecordCompareWorkbench
       v-else
@@ -37,6 +37,7 @@
 import { Alert, Drawer } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 import HospitalLoading from '@/components/qc/HospitalLoading.vue'
+import { useMinimumLoading } from '@/composables/useMinimumLoading'
 import { loadCurrentMedicalRecord } from '@/services/current-medical-record'
 import type { EditableMedicalRecordDocument } from '../customer-sample-validation/types'
 import QCRecordCompareWorkbench from '../semantic-rules/components/QCRecordCompareWorkbench.vue'
@@ -48,6 +49,7 @@ const props = defineProps<{ record: PatientRecord | null }>()
 const emit = defineEmits<{ close: [] }>()
 const documents = ref<EditableMedicalRecordDocument[]>([])
 const loading = ref(false)
+const showLoading = useMinimumLoading(() => loading.value, () => Boolean(props.record))
 const loadError = ref('')
 const recordContext = computed(() => {
   const record = props.record

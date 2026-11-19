@@ -1284,7 +1284,7 @@
         </div>
 
         <HospitalLoading
-          v-if="editableCopyReadonly && editableCopyLoading"
+          v-if="showReadonlyRecordLoading"
           label="正在读取病历文书"
           fill
         />
@@ -1817,6 +1817,7 @@ import { deferredComponent } from './customer-sample-validation/deferredComponen
 const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
 import HospitalLoading from '@/components/qc/HospitalLoading.vue'
+import { useMinimumLoading } from '@/composables/useMinimumLoading'
 import RecordViewCloseIcon from './components/RecordViewCloseIcon.vue'
 import ReadonlyMedicalRecordHeader from './components/ReadonlyMedicalRecordHeader.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
@@ -2053,6 +2054,11 @@ const {
   Trash2,
   workflowSteps,
 } = useCustomerSampleValidationController()
+
+const showReadonlyRecordLoading = useMinimumLoading(
+  () => editableCopyLoading.value,
+  () => editableCopyOpen.value && editableCopyReadonly.value,
+)
 
 // 首次打开才挂载；关闭后保留组件，维持原抽屉内的页签和筛选状态。
 const mountedDrawers = reactive({ batch: false, comparison: false, review: false })
