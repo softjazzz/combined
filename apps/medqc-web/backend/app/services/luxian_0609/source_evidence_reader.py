@@ -21,6 +21,7 @@ from app.services.validation_material_source import (
 )
 
 from .surgery_procedure_catalog import catalog_surgery_state
+from .surgery_safecheck_evidence import SAFECHECK_FIELDS
 
 
 _PERFORMED_TIME_TEXT_PATTERN = re.compile(
@@ -863,6 +864,7 @@ _SNAPSHOT_SOURCE_FIELDS.update({
         "document_title",
         *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "document_status",
+        *SAFECHECK_FIELDS,
         "record_content",
     ),
 })
@@ -1729,7 +1731,7 @@ def read_luxian_0609_runtime_source_rows(
     if source_key == "presurg_summary":
         selected.extend(field for field in ("record_content", *AUTHORITATIVE_DOCUMENT_TIME_FIELDS) if field in columns)
     if source_key == "surgery_safecheck_record":
-        selected.extend(field for field in ("record_content",) if field in columns)
+        selected.extend(field for field in ("record_content", *SAFECHECK_FIELDS) if field in columns)
     selected, document_status_column = _with_document_status_projection(
         table=source_key,
         columns=columns,

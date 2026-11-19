@@ -20,7 +20,7 @@ from app.services.luxian_0609.evidence_snapshot import (
     SourceCompleteness,
     SourceObservation,
 )
-from app.services.luxian_0609.source_evidence_reader import SnapshotSourceRows
+from app.services.luxian_0609.source_evidence_reader import SnapshotSourceRows, _SNAPSHOT_SOURCE_FIELDS
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 
@@ -1328,6 +1328,75 @@ def test_native_core_surgery_record_error_blocks_both_formal_record_rules(monkey
     assert [item["status"] for item in result.results] == ["technical_error"] * 2
     assert {item["metadata"]["total_tokens"] for item in result.results} == {0}
     assert "raw_surgery_record_error" not in repr(result)
+
+
+@pytest.mark.parametrize("scenario,status,reason", [
+    ("single", "compliant", "requirement_satisfied"),
+    ("single_time_only", "non_compliant", "defect_proven"),
+    ("single_placeholder", "non_compliant", "defect_proven"),
+    ("single_conflict", "data_gap", "association_failed"),
+    ("both", "compliant", "requirement_satisfied"),
+    ("mixed_time_sources", "compliant", "requirement_satisfied"),
+    ("both_time_only", "data_gap", "required_field_missing"),
+    ("both_placeholders", "data_gap", "required_field_missing"),
+    ("missing", "non_compliant", "required_document_missing"),
+    ("blank_and_missing", "non_compliant", "required_document_missing"),
+    ("conflict", "data_gap", "association_failed"),
+    ("ambiguous", "data_gap", "association_failed"),
+])
+def test_native_032_structured_safecheck_without_body(scenario, status, reason):
+    surgeries = [
+        {"document_id": "op1", "surgery_begin_time": "2026-01-01 08:00:00+08:00", "surgery_process": "第一台手术实质记录"},
+        {"document_id": "op2", "surgery_begin_datetime": "2026-01-01 10:00:00+08:00", "surgery_process": "第二台手术实质记录"},
+    ]
+    checks = [
+        {"document_id": "check1", "surgery_begin_datetime": "2026-01-01 08:00:00",
+         "surgery_method": "正式术式一", "record_content": None},
+        {"document_id": "check2", "surgery_begin_datetime": "2026-01-01 10:00:00",
+         "surgery_method": "正式术式二", "record_content": None},
+    ]
+    if scenario.startswith("single"):
+        surgeries = surgeries[:1]
+        checks = checks[:1]
+        if scenario == "single_conflict":
+            checks[0]["surgery_begin_datetime"] = "2026-01-01 10:00:00"
+    elif scenario in {"missing", "blank_and_missing"}:
+        checks = checks[:1]
+    elif scenario == "conflict":
+        checks[0]["record_content"] = "手术时间：2026-01-01 10:00:00"
+    elif scenario == "ambiguous":
+        checks.append(dict(checks[0], document_id="another-check"))
+    elif scenario == "mixed_time_sources":
+        checks[1] = {"document_id": "check2", "record_content": "手术时间：2026-01-01 10:00:00"}
+    if scenario in {"single_time_only", "both_time_only", "blank_and_missing"}:
+        for row in checks:
+            del row["surgery_method"]
+    if scenario in {"single_placeholder", "both_placeholders"}:
+        for row in checks:
+            row["surgery_method"] = "/"
+    fields = _SNAPSHOT_SOURCE_FIELDS["surgery_safecheck_record"]
+    snapshot, materials = _typed_session(
+        surgery_record_rows=tuple(surgeries),
+        surgery_safecheck_record_rows=tuple({key: value for key, value in row.items() if key in fields} for row in checks),
+    )
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=("LX0609-04-03-01",), decision_rule_ids=("LX0609-04-03-01",),
+        visit_id="safe-visit", institute_id="safe-institute", patient_id="safe-patient",
+        evidence_snapshot=snapshot, evidence_materials=materials, source_schema=None,
+    )
+    assert result.results == ()
+    decision = result.decisions[0]
+    assert decision.evidence_state.value == ("data_gap" if status == "data_gap" else "sufficient")
+    assert decision.qc_direction.value == {
+        "compliant": "satisfied", "non_compliant": "defect", "data_gap": "unknown",
+    }[status]
+    assert decision.reason_code == reason
+    if scenario in {"single", "both"}:
+        assert all(row["record_content"] is None for row in materials.rows("surgery_safecheck_record"))
+    if scenario in {"single_time_only", "single_placeholder"}:
+        assert result.customer_display_facts[0][1]["failure_kind"] == "surgery_document_blank"
+    elif scenario == "blank_and_missing":
+        assert result.customer_display_facts[0][1]["failure_kind"] == "surgery_document_missing"
 
 
 def test_native_032_formal_surgery_record_with_shell_safecheck_is_non_compliant(monkeypatch):

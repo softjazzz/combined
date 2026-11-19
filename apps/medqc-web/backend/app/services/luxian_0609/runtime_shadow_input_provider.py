@@ -18,6 +18,7 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .evidence_snapshot_provider import classify_current_visit_surgery_order_rows
 from .source_manifest import QueryStatus
 from .surgery_procedure_catalog import catalog_surgery_state
+from .surgery_safecheck_evidence import has_qualified_safecheck, safecheck_qualification_material
 from .source_evidence_reader import (
     authoritative_document_time_value,
     SURGERY_TIME_FIELDS,
@@ -159,9 +160,7 @@ def _target_qualification_material_hash(source_key: str, row: Mapping[str, Any])
             "record_time": str(authoritative_document_time_value(row) or "").strip(),
         }
     elif source_key == "surgery_safecheck_record":
-        material = {
-            "record_content": row.get("record_content").strip() if isinstance(row.get("record_content"), str) else "",
-        }
+        material = safecheck_qualification_material(row)
     else:
         return None
     return _digest({"target_source_key": source_key, "qualification_material": material})
@@ -384,7 +383,7 @@ def provide_luxian_0609_runtime_shadow_inputs(
                 and record_time <= earliest_surgery_time
             )
         else:
-            qualified_count = sum(1 for row in target_rows if _substantive_target_body(row.get("record_content")))
+            qualified_count = sum(has_qualified_safecheck(row) for row in target_rows)
         qualifications.append(deterministic_gate.TargetQualification(
             visit_ref=plan.visit_ref, rule_id=rule.rule_id, target_source_key=rule.target_source_key,
             qualification_policy_version=_TARGET_QUALIFICATION_POLICY_VERSION,

@@ -29,6 +29,10 @@ from .surgery_record_coverage import (
     same_day_surgery_coverage_unresolved,
 )
 from .surgery_procedure_catalog import is_non_surgical_procedure_order
+from .surgery_safecheck_evidence import SAFECHECK_BEGIN_FIELDS, has_qualified_safecheck
+
+
+_Minute = tuple[int, int, int, int, int]
 
 
 # 029 已迁入 surgery_document 异步执行器；这里仅保留纯存在性判定。
@@ -218,14 +222,19 @@ def _minute_key(value: object) -> tuple[int, int, int, int, int] | None:
     return (parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute)
 
 
-def _safecheck_surgery_minute(row: Mapping[str, Any]) -> tuple[int, int, int, int, int] | None:
+def _safecheck_surgery_minute(row: Mapping[str, Any]) -> tuple[_Minute | None, bool]:
+    """第二项表示有时间材料，但无法得到唯一有效分钟。"""
+
     content = str(row.get("record_content") or "")
-    if len(_SAFE_CHECK_SURGERY_TIME_LABEL_PATTERN.findall(content)) != 1:
-        return None
+    labels = len(_SAFE_CHECK_SURGERY_TIME_LABEL_PATTERN.findall(content))
     matches = _SAFE_CHECK_SURGERY_TIME_PATTERN.findall(content)
-    if len(matches) != 1:
-        return None
-    return _minute_key(matches[0])
+    if labels > 1 or len(matches) != labels:
+        return None, True
+    raw = [row[field] for field in SAFECHECK_BEGIN_FIELDS if str(row.get(field) or "").strip()]
+    minutes = {_minute_key(value) for value in (*raw, *matches)}
+    if None in minutes or len(minutes) > 1:
+        return None, True
+    return (next(iter(minutes)), False) if minutes else (None, False)
 
 
 def _unique_document_minutes(
@@ -266,9 +275,11 @@ def _surgery_document_minutes(
     material_by_document_id: dict[str, bool] = {}
     for row in rows:
         document_id = str(row.get("document_id") or "").strip()
-        minute = _minute_key(row.get("surgery_begin_time"))
-        if not document_id or minute is None:
+        minutes = {_minute_key(row[field]) for field in SAFECHECK_BEGIN_FIELDS if str(row.get(field) or "").strip()}
+        if not document_id or len(minutes) != 1 or None in minutes:
             return None
+        minute = next(iter(minutes))
+        assert minute is not None
         previous = minute_by_document_id.get(document_id)
         if previous is not None and previous != minute:
             return None
@@ -305,14 +316,19 @@ def _resolve_multi_surgery_safecheck_linkage(
     if surgery_minutes is None:
         return "data_gap", "association_failed"
     surgery_by_minute, confirmed_minutes = surgery_minutes
-    if not surgery_by_minute or (
-        len(surgery_by_minute) == 1 and confirmed_minutes
-    ):
+    if not surgery_by_minute:
+        return None
+    if len(surgery_by_minute) == 1 and confirmed_minutes and len(safecheck_rows) <= 1:
+        if safecheck_rows:
+            minute, invalid = _safecheck_surgery_minute(safecheck_rows[0])
+            if invalid or (minute is not None and minute not in surgery_by_minute):
+                return "data_gap", "association_failed"
+        # 单台单表没有时间字段时保留原资格门槛，不推断额外的时间事实。
         return None
 
     safecheck_by_minute = _unique_document_minutes(
         safecheck_rows,
-        minute_resolver=_safecheck_surgery_minute,
+        minute_resolver=lambda row: _safecheck_surgery_minute(row)[0],
     )
     if safecheck_by_minute is None:
         return "data_gap", "association_failed"
@@ -321,11 +337,11 @@ def _resolve_multi_surgery_safecheck_linkage(
     uncertain_minutes = set(surgery_by_minute).difference(confirmed_minutes)
     if uncertain_minutes.difference(safecheck_by_minute):
         return "data_gap", "association_failed"
-    effective_confirmed_minutes = confirmed_minutes.union(
-        uncertain_minutes.intersection(safecheck_by_minute)
-    )
-    if effective_confirmed_minutes.difference(safecheck_by_minute):
+    if confirmed_minutes.difference(safecheck_by_minute):
         return "non_compliant", "required_document_missing"
+    # 同台时间可以定位空表，但不能代替既有的核查内容证据。
+    if any(not has_qualified_safecheck(row) for row in safecheck_rows):
+        return "data_gap", "required_field_missing"
     return "compliant", "requirement_satisfied"
 
 
