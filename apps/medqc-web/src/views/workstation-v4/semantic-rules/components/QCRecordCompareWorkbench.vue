@@ -13,9 +13,11 @@
         <span>{{
           documentOnly
             ? '选择文书查看完整内容'
-            : sourceView === 'current'
-              ? '当前病历可能已更新，质控结果仍为执行时结果'
-              : '点击质控结果，核对对应文书与证据片段'
+            : lazyResultDocuments
+              ? '按本次质控保存的原文核对'
+              : sourceView === 'current'
+                ? '当前病历可能已更新，质控结果仍为执行时结果'
+                : '点击质控结果，核对对应文书与证据片段'
         }}</span>
       </div>
       <div
@@ -48,8 +50,11 @@
         :selected-key="selectedDocumentKey"
         :loading="loading"
         :error="loadError"
+        :summary-only="lazyResultDocuments"
+        :orders-load-state="ordersLoadState"
         @select="selectDocument"
         @retry="loadDocuments"
+        @load-orders="loadOrders"
       />
 
       <main class="record-content-column">
@@ -135,7 +140,14 @@
         </div>
 
         <div
-          v-if="contentLoading"
+          v-if="loading && lazyResultDocuments"
+          class="record-content-empty"
+          role="status"
+        >
+          <strong>正在读取文书目录</strong>
+        </div>
+        <div
+          v-else-if="contentLoading"
           class="record-content-empty"
         >
           <strong>正在读取当前文书</strong>
@@ -210,6 +222,12 @@
                 @click="emitSelectedIssue"
                 @keydown.enter="emitSelectedIssue"
           >{{ documentTextParts.match }}</mark><span>{{ documentTextParts.after }}</span></pre>
+        </div>
+        <div
+          v-else-if="lazyResultDocuments && !loadError && (documents.length || ordersLoadState)"
+          class="record-content-empty"
+        >
+          <strong>请选择文书查看原文</strong>
         </div>
         <div
           v-else
@@ -458,6 +476,7 @@ const props = withDefaults(
     visitId: string
     documentOnly?: boolean
     sourceView?: 'saved' | 'current'
+    lazyResultDocuments?: boolean
     /** 当前病历完整文书；传入后不再请求历史 Bundle 目录或正文。 */
     providedDocuments?: EditableMedicalRecordDocument[]
     /** 后端解析的本次住院入院时间，仅用于展示。 */
@@ -504,6 +523,9 @@ type LocationState = 'matched' | 'section' | 'document' | 'missing' | 'idle'
 const documents = ref<EditableMedicalRecordDocument[]>([])
 const pdfDocumentDirectory = computed(() => groupPdfDocumentVersions(documents.value))
 const loading = ref(false)
+const ordersLoadState = ref<'deferred' | 'loading' | 'failed'>()
+let orderRequest: Promise<void> | undefined
+let documentSelectionSequence = 0
 const loadError = ref('')
 const contentLoadError = ref('')
 const contentLoadingKey = ref('')
@@ -898,7 +920,7 @@ async function ensureDocumentLoaded(
   if (!summary) return null
   if (props.providedDocuments !== undefined || props.sourceView === 'current') return summary
   if (!renderOverride && isDocumentLoaded(summary)) return summary
-  if (!summary.execution_domain) {
+  if (!summary.execution_domain && !props.lazyResultDocuments) {
     if (selectedDocumentKey.value === documentKey) {
       contentLoadError.value = '当前文书缺少按需读取标识，请刷新页面后重试。'
     }
@@ -921,7 +943,9 @@ async function ensureDocumentLoaded(
           source_document_id: renderOverride.sourceDocumentId,
           ...(renderOverride.sourceRef ? { source_ref: renderOverride.sourceRef } : {}),
         }
-      : summary
+      : props.lazyResultDocuments
+        ? { ...summary, source_document_id: summary.key }
+        : summary
     request = getEditableMedicalRecordDocument(props.visitId, renderSummary, {
       ...(props.jobId ? { job_id: props.jobId } : {}),
       institute_id: String(props.instituteId || '').trim() || undefined,
@@ -1018,6 +1042,7 @@ async function applyLocatedDocument(
 async function tryLocateEvidence(
   evidence: QCRecordCompareEvidence,
   allowMetadataFallback: boolean,
+  sequence = documentSelectionSequence,
 ) {
   const exactMatch = matchDocumentByIdWithOverride(evidence)
   if (exactMatch) {
@@ -1032,7 +1057,7 @@ async function tryLocateEvidence(
           }
         : undefined,
     )
-    if (!exactDocument) return false
+    if (!exactDocument || sequence !== documentSelectionSequence) return false
     const range = findQuoteRange(exactDocument, evidence.quote)
     await applyLocatedDocument(
       exactDocument,
@@ -1056,7 +1081,7 @@ async function tryLocateEvidence(
     if (metadataSummary) {
       selectedDocumentKey.value = metadataSummary.key
       const metadataDocument = await ensureDocumentLoaded(metadataSummary.key)
-      if (!metadataDocument) return false
+      if (!metadataDocument || sequence !== documentSelectionSequence) return false
       await applyLocatedDocument(
         metadataDocument,
         null,
@@ -1069,7 +1094,18 @@ async function tryLocateEvidence(
 }
 
 async function locateEvidence(evidence: QCRecordCompareEvidence) {
-  if (documents.value.length && (await tryLocateEvidence(evidence, true))) return
+  const sequence = ++documentSelectionSequence
+  if (
+    ordersLoadState.value &&
+    [evidence.source_document_type, evidence.source_table].some((type) =>
+      normalizeReference(type).includes('order'),
+    )
+  ) {
+    await loadOrders()
+  }
+  if (sequence !== documentSelectionSequence) return
+  if (documents.value.length && (await tryLocateEvidence(evidence, true, sequence))) return
+  if (sequence !== documentSelectionSequence) return
   locationState.value = 'missing'
   matchedRange.value = null
   matchedSectionKey.value = ''
@@ -1178,6 +1214,7 @@ function setHighlightElement(value: unknown) {
 }
 
 async function selectDocument(documentKey: string) {
+  ++documentSelectionSequence
   selectedDocumentKey.value = documentKey
   contentLoadError.value = ''
   matchedRange.value = null
@@ -1228,11 +1265,42 @@ function resolveStatusTone(status: string) {
   return 'muted'
 }
 
+function loadOrders() {
+  if (!ordersLoadState.value) return
+  if (orderRequest) return orderRequest
+  const generation = loadGeneration
+  const visitId = props.visitId.trim()
+  ordersLoadState.value = 'loading'
+  orderRequest = getEditableMedicalRecordDocuments(visitId, {
+    institute_id: props.instituteId,
+    patient_id: props.patientId,
+    visit_id: visitId,
+    job_id: props.jobId,
+    record_ref: props.recordRef || undefined,
+    view: 'summary',
+    document_scope: 'orders',
+  }).then((result) => {
+    if (generation !== loadGeneration) return
+    if (!result.success || !result.data) {
+      ordersLoadState.value = 'failed'
+      return
+    }
+    documents.value = [...documents.value, ...result.data.documents.filter((document) => document.enabled !== false)]
+    ordersLoadState.value = undefined
+  }).finally(() => {
+    if (generation === loadGeneration) orderRequest = undefined
+  })
+  return orderRequest
+}
+
 async function loadDocuments() {
   const visitId = String(props.visitId || '').trim()
   const jobId = String(props.jobId || '').trim()
   const recordRef = String(props.recordRef || '').trim()
   const generation = ++loadGeneration
+  ++documentSelectionSequence
+  ordersLoadState.value = undefined
+  orderRequest = undefined
   documents.value = []
   selectedDocumentKey.value = ''
   matchedRange.value = null
@@ -1249,7 +1317,7 @@ async function loadDocuments() {
     mobileTab.value = 'record'
     return
   }
-  if (!visitId && !(jobId && recordRef)) {
+  if ((!visitId && !(jobId && recordRef)) || (props.lazyResultDocuments && !jobId)) {
     loadError.value = '当前结果缺少可读取病历的就诊标识'
     return
   }
@@ -1267,7 +1335,10 @@ async function loadDocuments() {
       : {}),
     ...(props.sourceView === 'current'
       ? { view: 'full' as const, source_view: 'current' as const }
-      : { view: 'summary' as const }),
+      : {
+          view: 'summary' as const,
+          ...(props.lazyResultDocuments ? { document_scope: 'clinical' as const } : {}),
+        }),
   })
   if (generation !== loadGeneration) return
   loading.value = false
@@ -1276,6 +1347,10 @@ async function loadDocuments() {
     return
   }
   documents.value = result.data.documents.filter((document) => document.enabled !== false)
+  if (props.lazyResultDocuments) {
+    ordersLoadState.value = 'deferred'
+    return
+  }
   selectedDocumentKey.value = resolveDefaultDocumentKey()
   if (selectedIssue.value) await locateSelectedIssue()
   else if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
@@ -1312,12 +1387,14 @@ watch(
     props.providedDocuments,
     props.documentOnly,
     props.sourceView,
+    props.lazyResultDocuments,
   ],
   () => void loadDocuments(),
   { immediate: true },
 )
 onBeforeUnmount(() => {
   loadGeneration += 1
+  ++documentSelectionSequence
   documentRequests.clear()
   documents.value = []
 })

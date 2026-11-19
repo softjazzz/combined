@@ -537,7 +537,7 @@ describe('QCRecordCompareWorkbench', () => {
     expect(wrapper.find('mark').exists()).toBe(false)
   })
 
-  it('CT 检查主记录的安全引用打开对应报告正文，跳过同号的其他类型文书', async () => {
+  it('结果页先读取目录，CT 证据和医嘱各自按需读取', async () => {
     const sourceRef = 'src_ct_master'
     const report = {
       key: 'exam_item_report::ct-report',
@@ -575,6 +575,7 @@ describe('QCRecordCompareWorkbench', () => {
       props: {
         visitId: 'visit-1', instituteId: 'inst-1', patientId: 'patient-1', jobId: 'saved-job',
         issues: [],
+        lazyResultDocuments: true,
         singleRecordItems: [{
           rule_id: 'LX0609-06-01-02',
           rule_name: 'CT/MRI 检查前病程记录',
@@ -584,16 +585,37 @@ describe('QCRecordCompareWorkbench', () => {
       },
     })
     await flushPromises()
+    expect(getDocumentsMock).toHaveBeenCalledTimes(1)
+    expect(getDocumentsMock).toHaveBeenLastCalledWith(
+      'visit-1',
+      expect.objectContaining({ job_id: 'saved-job', view: 'summary', document_scope: 'clinical' }),
+    )
+    expect(getDocumentMock).not.toHaveBeenCalled()
     await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
     await wrapper.get('[data-testid="single-record-evidence"]').trigger('click')
     await flushPromises()
     expect(getDocumentMock).toHaveBeenLastCalledWith(
       'visit-1',
-      expect.objectContaining({ source_document_id: 'ct-report', source_ref: 'src_ct_report' }),
+      expect.objectContaining({ source_document_id: report.key, source_ref: 'src_ct_report' }),
       expect.objectContaining({ job_id: 'saved-job', visit_id: 'visit-1' }),
     )
     expect(wrapper.text()).toContain('合成 CT 报告正文')
     expect(wrapper.text()).toContain('已定位到文书，未定位到具体片段')
+    getDocumentsMock.mockResolvedValueOnce({
+      success: true,
+      data: { documents: [{
+        key: 'order-key', document_type: 'inpat_drug_order', source_document_id: 'order-id',
+        title: '合成医嘱', has_content: true, content: '',
+      }] },
+    })
+    await wrapper.get('[data-testid="record-document-filter-order"]').trigger('click')
+    await flushPromises()
+    expect(getDocumentsMock).toHaveBeenCalledTimes(2)
+    expect(getDocumentsMock).toHaveBeenLastCalledWith(
+      'visit-1',
+      expect.objectContaining({ job_id: 'saved-job', view: 'summary', document_scope: 'orders' }),
+    )
+    expect(wrapper.text()).toContain('医嘱（1条）')
   })
 
   it('检验申请汇总通过原始文书安全别名加载并定位证据', async () => {

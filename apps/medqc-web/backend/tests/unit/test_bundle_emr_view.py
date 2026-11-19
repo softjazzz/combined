@@ -62,6 +62,10 @@ def test_exam_evidence_routes_to_grouped_report_in_current_and_saved_directories
 
     # 老任务只有当时的成组报告和原始表行，读取时恢复对应关系。
     old_documents = documents()
+    old_documents.append({
+        "doc_type": "inpat_drug_order", "group_key": "orders", "document_id": "order-1",
+        "execution_domain": "course", "content": "合成医嘱正文", "order_item": "合成医嘱项目",
+    })
     for document in old_documents:
         document.pop("exam_evidence_coordinates", None)
     identity = ("org", "patient", "visit")
@@ -72,11 +76,20 @@ def test_exam_evidence_routes_to_grouped_report_in_current_and_saved_directories
     }
     kwargs = dict(record_id="visit", institute_id="org", patient_id="patient", visit_id="visit")
     with material.activate(frozen):
-        assert aliases(emr_render._load_document_summaries_from_bundle(**kwargs)) == expected
+        clinical = emr_render._load_document_summaries_from_bundle(**kwargs, document_scope="clinical")
+        assert aliases(clinical) == expected
+        assert {doc["document_id"] for doc in clinical["documents"]} == {"report-1", "report-2"}
+        orders = emr_render._load_document_summaries_from_bundle(**kwargs, document_scope="orders")
+        assert [doc["document_id"] for doc in orders["documents"]] == ["order-1"]
+        assert orders["documents"][0]["order_item"] == "合成医嘱项目"
+        assert all("content" not in doc for doc in [*orders["documents"], *clinical["documents"]])
         rendered = emr_render._load_document_from_bundle(
             **kwargs, execution_domain="course", doc_type="exam_item_report", doc_id="report-1",
         )
         assert "合成所见二" in rendered["content"]
+        assert emr_render._load_document_from_bundle(
+            **kwargs, execution_domain="course", doc_type="exam_item_report", doc_id="unknown",
+        ) is None
     assert all("source_document_aliases" not in doc for doc in old_documents)
     with material.activate({**frozen, "documents": {"documents": documents()}}):
         public = current_view.load_current_documents(institute_id="org", patient_id="patient", visit_id="visit")

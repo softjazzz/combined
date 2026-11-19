@@ -158,14 +158,25 @@ def _load_document_summaries_from_bundle(
     patient_id: Optional[str],
     visit_id: Optional[str],
     execution_domain: Optional[str] = None,
+    document_scope: Optional[str] = None,
 ) -> Dict[str, Any]:
     frozen = case_material.current()
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
+        payload = frozen["documents"]
+        documents = [
+            dict(document) for document in payload["documents"]
+            if document_scope is None
+            or (document.get("group_key") == "orders") == (document_scope == "orders")
+        ]
+        if document_scope != "orders":
+            restore_frozen_exam_evidence_coordinates(documents, frozen.get("tables") or {})
         return _project_customer_safe_source_refs(summarize_frozen_documents(
-            documents=_frozen_documents_payload(frozen)["documents"], execution_domain=execution_domain,
-            daily_material_status=frozen["documents"].get("daily_material_status"),
-            primary_material_status=frozen["documents"].get("primary_material_status")))
+            documents=documents, execution_domain=execution_domain,
+            daily_material_status=payload.get("daily_material_status"),
+            primary_material_status=payload.get("primary_material_status")))
+    if document_scope is not None:
+        raise HTTPException(409, "historical_material_snapshot_not_retained")
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
     if current is not None:
         return _project_customer_safe_source_refs(summarize_frozen_documents(
@@ -208,11 +219,14 @@ def _load_document_from_bundle(
     frozen = case_material.current()
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
-        documents = _project_customer_safe_source_refs(deepcopy(frozen["documents"]))["documents"]
         if doc_id:
-            documents = [doc for doc in documents if str(doc_id) in {
-                str(doc.get(key) or "") for key in ("id", "doc_id", "document_id", "doc_key")
-            } and (not doc_type or doc.get("doc_type") == doc_type)]
+            matches = [
+                doc for doc in frozen["documents"]["documents"]
+                if (not doc_type or doc.get("doc_type") == doc_type)
+                and doc_id in {str(doc.get(key) or "") for key in ("id", "doc_id", "document_id", "doc_key")}
+            ]
+            return deepcopy(matches[0]) if len(matches) == 1 else None
+        documents = _project_customer_safe_source_refs(deepcopy(frozen["documents"]))["documents"]
         return pick_document(documents=documents, doc_type=doc_type, doc_id=doc_id)
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
     if current is not None:
@@ -279,6 +293,7 @@ async def get_record_documents(
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
     view: str = Query("full", pattern="^(full|summary)$", description="目录视图或完整文书"),
     source_view: str = Query("saved", pattern="^(saved|current)$", description="当前病历或已保存文书"),
+    document_scope: Optional[str] = Query(None, pattern="^(clinical|orders)$", description="历史文书目录中的非医嘱或医嘱"),
     execution_domain: Optional[str] = Query(
         None,
         description="摘要优先加载的文书领域；仅 view=summary 时生效",
@@ -288,6 +303,8 @@ async def get_record_documents(
     own_identity = getattr(request.state, "doctor_case_identity", None)
     if own_identity:
         institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
+    if document_scope is not None and (source_view != "saved" or view != "summary"):
+        raise HTTPException(422, "document_scope_requires_saved_summary")
     if source_view == "current":
         if view != "full":
             raise HTTPException(status_code=422, detail="当前病历查看需使用完整文书视图")
@@ -316,6 +333,8 @@ async def get_record_documents(
     }
     if view == "summary":
         loader_kwargs["execution_domain"] = execution_domain
+        if document_scope is not None:
+            loader_kwargs["document_scope"] = document_scope
     payload = await run_in_threadpool(
         loader,
         **loader_kwargs,
@@ -356,7 +375,7 @@ async def render_document(
             "documents_tree": build_documents_tree([selected] if selected else []),
             "empty_reason": "" if selected else "document_not_found",
         }
-    elif execution_domain:
+    elif execution_domain or (case_material.current() is not None and doc_id):
         selected = await run_in_threadpool(
             _load_document_from_bundle,
             record_id=record_id,
@@ -390,6 +409,8 @@ async def render_document(
     content = str(view_payload.get("content") or "")
     content_type = str(view_payload.get("content_type") or "text")
     metadata = dict(view_payload.get("document_meta") or {})
+    if selected and selected.get("frontpage_display"):
+        metadata["frontpage_display"] = selected["frontpage_display"]
     render_blocks = list(view_payload.get("render_blocks") or [])
     highlight_anchors = list(view_payload.get("highlight_anchors") or [])
     layout_version = str(view_payload.get("layout_version") or "bundle_struct_v1")

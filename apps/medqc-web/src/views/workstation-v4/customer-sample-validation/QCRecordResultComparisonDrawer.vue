@@ -58,7 +58,8 @@
       <QCRecordCompareWorkbench
         v-if="latestResult && focus.visitId"
         :visit-id="focus.visitId"
-        source-view="current"
+        source-view="saved"
+        lazy-result-documents
         :institute-id="focus.instituteId"
         :patient-id="focus.patientId"
         :admission-time="focus.admissionTime"

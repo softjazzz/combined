@@ -526,6 +526,7 @@ function normalizeEditableDocumentRender(
     ),
     source_table: summary.source_table || readStringField(metadata, ['doc_type']),
     document_type: readStringField(metadata, ['doc_type'], summary.document_type),
+    frontpage_display: normalizeFrontpageDisplay(metadata.frontpage_display) || summary.frontpage_display,
     title: readStringField(metadata, ['doc_name'], summary.title),
     record_time: readStringField(metadata, ['record_time'], summary.record_time),
     sections,
@@ -559,6 +560,7 @@ type EditableDocumentRequestParams = {
   record_ref?: string
   view?: 'full' | 'summary'
   source_view?: 'saved' | 'current'
+  document_scope?: 'clinical' | 'orders'
 }
 
 export async function getEditableMedicalRecordDocuments(
@@ -593,7 +595,7 @@ export async function getEditableMedicalRecordDocuments(
 export async function getEditableMedicalRecordDocument(
   visitId: string,
   summary: EditableMedicalRecordDocument,
-  params?: Omit<EditableDocumentRequestParams, 'view' | 'record_ref'>,
+  params?: Omit<EditableDocumentRequestParams, 'view' | 'record_ref' | 'document_scope'>,
 ) {
   try {
     const response = await ApiService.requestRaw<unknown>({
@@ -608,6 +610,16 @@ export async function getEditableMedicalRecordDocument(
         doc_id: summary.source_document_id || summary.key,
       },
     })
+    const envelope = response.data
+    const data = envelope && typeof envelope === 'object' && 'data' in envelope
+      ? envelope.data
+      : envelope
+    if (
+      data && typeof data === 'object' && 'empty_reason' in data &&
+      data.empty_reason === 'document_not_found'
+    ) {
+      return { success: false, message: '未找到目录对应的原文书' }
+    }
     return {
       success: true,
       data: normalizeEditableDocumentRender(response.data, summary),
