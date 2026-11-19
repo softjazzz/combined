@@ -1,5 +1,5 @@
 <template>
-  <div class="hospital-loading" :class="{ 'is-compact': compact }" role="status">
+  <div class="hospital-loading" :class="{ 'is-compact': compact, 'fills-reading-area': fill }" role="status">
     <div class="hospital-loading__mark">
       <div class="hospital-loading__logo">
         <img :src="hospitalLogo" alt="泸县人民医院" width="270" height="68" />
@@ -15,6 +15,7 @@ import hospitalLogo from '@/assets/images/lx-logo.png'
 defineProps<{
   label: string
   compact?: boolean
+  fill?: boolean
 }>()
 </script>
 
@@ -95,6 +96,26 @@ defineProps<{
   line-height: 1.4;
   letter-spacing: 0.04em;
   overflow-wrap: anywhere;
+}
+
+.hospital-loading.fills-reading-area {
+  flex: 1 1 0;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-content: stretch;
+  gap: 0;
+}
+
+.fills-reading-area .hospital-loading__mark {
+  grid-row: 2;
+}
+
+.fills-reading-area .hospital-loading__status {
+  grid-row: 3;
+  align-self: start;
+  margin-block-start: 14px;
 }
 
 @supports (background-clip: text) {

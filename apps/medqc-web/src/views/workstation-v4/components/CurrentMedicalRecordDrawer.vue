@@ -4,7 +4,7 @@
     open
     root-class-name="current-medical-record-drawer"
     width="min(1400px, 100vw)"
-    :body-style="{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: '16px 0 0' }"
+    :body-style="{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: loading ? 0 : '16px 0 0' }"
     @close="emit('close')"
   >
     <template #closeIcon>
@@ -13,7 +13,7 @@
     <template #title>
       <ReadonlyMedicalRecordHeader :context="recordContext" />
     </template>
-    <HospitalLoading v-if="loading" label="正在读取病历文书" />
+    <HospitalLoading v-if="loading" label="正在读取病历文书" fill />
     <Alert v-else-if="loadError" type="error" show-icon :message="loadError" />
     <QCRecordCompareWorkbench
       v-else

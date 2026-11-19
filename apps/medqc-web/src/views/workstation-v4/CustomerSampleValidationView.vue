@@ -1283,7 +1283,12 @@
           </div>
         </div>
 
-        <a-spin :spinning="editableCopyLoading">
+        <HospitalLoading
+          v-if="editableCopyReadonly && editableCopyLoading"
+          label="正在读取病历文书"
+          fill
+        />
+        <a-spin v-else :spinning="editableCopyLoading">
           <div v-if="editableCopyDraft" class="editable-copy-content">
             <section v-if="!editableCopyReadonly" class="editable-copy-section">
               <h3>副本信息</h3>
@@ -1811,6 +1816,7 @@ import { reactive, watchEffect } from 'vue'
 import { deferredComponent } from './customer-sample-validation/deferredComponent'
 const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
+import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import RecordViewCloseIcon from './components/RecordViewCloseIcon.vue'
 import ReadonlyMedicalRecordHeader from './components/ReadonlyMedicalRecordHeader.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'

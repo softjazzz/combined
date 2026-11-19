@@ -139,12 +139,11 @@
           </span>
         </div>
 
-        <div
+        <HospitalLoading
           v-if="loading || contentLoading"
-          class="record-content-empty"
-        >
-          <HospitalLoading :label="loading ? '正在读取文书目录' : '正在读取文书正文'" />
-        </div>
+          :label="loading ? '正在读取文书目录' : '正在读取文书正文'"
+          fill
+        />
         <div
           v-else-if="contentLoadError"
           class="record-content-empty"

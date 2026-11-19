@@ -41,7 +41,7 @@
       </div>
     </template>
 
-    <HospitalLoading v-if="loading" label="正在读取质控结果" />
+    <HospitalLoading v-if="loading" label="正在读取质控结果" fill />
     <template v-else>
       <section
         v-if="latestResult?.result_scope === 'targeted' && !latestResult.execution_status"

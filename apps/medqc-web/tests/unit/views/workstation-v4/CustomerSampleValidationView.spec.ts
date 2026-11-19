@@ -3072,7 +3072,7 @@ describe('CustomerSampleValidationView', () => {
   it('点击查看病历后打开只读文书工作台', async () => {
     const wrapper = await mountView()
     const documentResponse = await getEditableMedicalRecordDocuments()
-    getEditableMedicalRecordDocuments.mockResolvedValue({
+    const documentReply = {
       ...documentResponse,
       data: {
         ...documentResponse.data,
@@ -3095,7 +3095,12 @@ describe('CustomerSampleValidationView', () => {
           admission_time_state: 'exact',
         },
       },
+    }
+    let resolveDocuments!: (reply: typeof documentReply) => void
+    const pendingDocuments = new Promise<typeof documentReply>((resolve) => {
+      resolveDocuments = resolve
     })
+    getEditableMedicalRecordDocuments.mockReturnValueOnce(pendingDocuments)
 
     const reviewAction = [...wrapper.findAll('button'), ...wrapper.findAll('a')].find(
       (node) => node.text() === '查看病历',
@@ -3103,6 +3108,12 @@ describe('CustomerSampleValidationView', () => {
     expect(reviewAction).toBeTruthy()
     await reviewAction!.trigger('click')
     await flushPromises()
+    const loading = wrapper.get('.hospital-loading.fills-reading-area')
+    expect(loading.get('img').attributes('alt')).toBe('泸县人民医院')
+    expect(loading.text()).toBe('正在读取病历文书')
+    resolveDocuments(documentReply)
+    await flushPromises()
+    expect(wrapper.find('.hospital-loading.fills-reading-area').exists()).toBe(false)
 
     expect(getEditableMedicalRecordDocuments).toHaveBeenCalledWith('V001', {
       institute_id: 'H1',
