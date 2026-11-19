@@ -1619,11 +1619,7 @@ watch(
 .copy-match-headline {
   display: grid;
   gap: 8px;
-  margin-top: 9px;
-  padding: 10px 11px;
-  border-left: 3px solid #ef4444;
-  border-radius: 0 9px 9px 0;
-  background: rgba(239, 68, 68, 0.045);
+  margin-top: 8px;
   text-align: left;
 }
 
@@ -1675,17 +1671,6 @@ watch(
   color: rgba(29, 29, 31, 0.65);
   font-size: 11px;
   line-height: 18px;
-}
-
-.copy-match-headline-metrics > span {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.045);
-}
-
-.copy-match-headline-metrics .is-primary {
-  background: rgba(239, 68, 68, 0.09);
-  color: #c62828;
 }
 
 .copy-match-headline-metrics strong {

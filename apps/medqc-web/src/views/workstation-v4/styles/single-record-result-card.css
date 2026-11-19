@@ -146,15 +146,6 @@
   line-height: 18px;
 }
 
-/* 复制类问题的病程配对摘要：浅色状态底，不用彩色左边框 */
-.copy-match-headline {
-  margin-top: 8px;
-  padding: 10px 12px;
-  border-left: 0;
-  border-radius: 12px;
-  background: var(--mq-danger-bg);
-}
-
 .copy-match-headline-documents {
   color: var(--mq-text-secondary);
   font-size: var(--mq-font-13);
@@ -179,12 +170,7 @@
   font-size: var(--mq-font-12);
 }
 
-.copy-match-headline-metrics > span {
-  background: rgba(255, 255, 255, 0.7);
-}
-
 .copy-match-headline-metrics .is-primary {
-  background: rgba(255, 255, 255, 0.7);
   color: var(--mq-danger-text);
 }
 
