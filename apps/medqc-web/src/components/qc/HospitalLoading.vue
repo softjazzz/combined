@@ -5,7 +5,7 @@
         <img :src="hospitalLogo" alt="泸县人民医院" width="270" height="68" />
       </div>
     </div>
-    <p>{{ label }}</p>
+    <p class="hospital-loading__status">{{ label }}</p>
   </div>
 </template>
 
@@ -25,7 +25,7 @@ defineProps<{
   min-block-size: 248px;
   justify-items: center;
   align-content: center;
-  gap: 12px;
+  gap: 10px;
   padding: 24px 16px;
   text-align: center;
 }
@@ -71,12 +71,26 @@ defineProps<{
   }
 }
 
-.hospital-loading p {
+.hospital-loading__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
-  color: var(--mq-text-secondary, #515154);
-  font-size: 13px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--mq-neutral-bg, #edf1f5);
+  color: var(--mq-text-tertiary, #6e6e73);
+  font-size: 12px;
   font-weight: 500;
-  line-height: 20px;
+  line-height: 18px;
+}
+
+.hospital-loading__status::before {
+  flex: 0 0 5px;
+  block-size: 5px;
+  border-radius: 50%;
+  background: #217782;
+  content: '';
 }
 
 .hospital-loading.is-compact {
