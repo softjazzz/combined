@@ -1,5 +1,6 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { loadCurrentMedicalRecord } from '@/services/current-medical-record'
 import { emptyMedicalOrderFilters, matchesMedicalOrderFilters } from './medicalOrderFilters'
 import type {
   EditableMedicalRecordDocument,
@@ -161,12 +162,17 @@ export function useCustomerSampleEditableCopyController(
     editableCopyDraft.value = null
     editableCopyOpen.value = true
     editableCopyLoading.value = true
-    const result = await getEditableMedicalRecordDocuments(record.matched_visit_id || '', {
-      institute_id: record.matched_institute_id,
-      patient_id: record.matched_patient_id,
-      visit_id: record.matched_visit_id,
-      ...(editableCopyReadonly.value ? { source_view: 'current' as const } : {}),
-    })
+    const visitId = record.matched_visit_id || ''
+    const result = await (editableCopyReadonly.value
+      ? loadCurrentMedicalRecord(visitId, {
+          instituteId: record.matched_institute_id,
+          patientId: record.matched_patient_id,
+        })
+      : getEditableMedicalRecordDocuments(visitId, {
+          institute_id: record.matched_institute_id,
+          patient_id: record.matched_patient_id,
+          visit_id: record.matched_visit_id,
+        }))
     editableCopyLoading.value = false
     if (!result.success || !result.data) {
       message.error(result.message || '读取源病历文书失败')

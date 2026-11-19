@@ -3109,6 +3109,7 @@ describe('CustomerSampleValidationView', () => {
       patient_id: 'P001',
       visit_id: 'V001',
       source_view: 'current',
+      view: 'full',
     })
     const modalText = wrapper.find('.a-modal-stub').text()
     expect(modalText).toContain('查看病历')

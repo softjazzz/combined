@@ -60,6 +60,7 @@
         @clear-filters="handleClearFilters"
         @page-change="handlePageChange"
       />
+      <CurrentMedicalRecordDrawer :record="medicalRecordFocus" @close="medicalRecordFocus = null" />
     </template>
     <!-- ====== 详情模式（全屏） ====== -->
     <template v-else-if="viewMode === 'detail'">
@@ -402,6 +403,7 @@ import type { ICDCodeDetail } from './components/ICDDetailPanel.vue'
 import { useWorkstationSession } from './composables/useWorkstationSession'
 import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
+import CurrentMedicalRecordDrawer from './components/CurrentMedicalRecordDrawer.vue'
 import { usePatientRecords } from './composables/usePatientRecords'
 import { useNotifications } from './composables/useNotifications'
 import { useLocalAssistantRegistration } from './composables/useAssistantRegistry'
@@ -459,6 +461,7 @@ const {
 
 const route = useRoute()
 const router = useRouter()
+const medicalRecordFocus = ref<PatientRecord | null>(null)
 
 const {
   allRecords,
@@ -2358,9 +2361,21 @@ async function ensureSettlementLoadedForSelectedRecord() {
   await loadSettlement(record.patientId, record.visitId)
 }
 
+function openCurrentMedicalRecord(record: PatientRecord) {
+  if (![record.instituteId, record.patientId, record.visitId].every((value) => value?.trim())) {
+    message.warning('无法确认当前病历身份，已停止读取病历文书')
+    return
+  }
+  medicalRecordFocus.value = record
+}
+
 function handleRowOpen(recordId: string) {
   const record = findRecordById(listRecords.value, recordId)
   if (!record) return
+  if (!isStageQueueMode.value) {
+    openCurrentMedicalRecord(record)
+    return
+  }
   openRecordForStage({
     stage: currentStageFilter.value,
     record,

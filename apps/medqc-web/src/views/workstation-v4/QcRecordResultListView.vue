@@ -290,26 +290,7 @@
       @open-result="handleOpenAnalysisResult"
     />
 
-    <a-drawer
-      :open="Boolean(medicalRecordFocus)"
-      :title="`当前病历文书 · ${medicalRecordFocus?.name || ''} · 住院号 ${medicalRecordFocus?.visitId || ''}`"
-      width="min(1400px, 100vw)"
-      @close="medicalRecordFocus = null"
-    >
-      <QCRecordCompareWorkbench
-        v-if="medicalRecordFocus"
-        :key="medicalRecordFocus.recordKey"
-        :visit-id="medicalRecordFocus.visitId || medicalRecordFocus.id"
-        :institute-id="medicalRecordFocus.instituteId"
-        :patient-id="medicalRecordFocus.patientId"
-        :admission-time="medicalRecordFocus.admissionDate"
-        :discharge-time="medicalRecordFocus.dischargeDate"
-        document-only
-        source-view="current"
-        :feedback-available="false"
-        :issues="[]"
-      />
-    </a-drawer>
+    <CurrentMedicalRecordDrawer :record="medicalRecordFocus" @close="medicalRecordFocus = null" />
     <QCRecordResultComparisonDrawer
       :open="drawerOpen"
       :focus="selectedFocus"
@@ -321,7 +302,7 @@
 </template>
 
 <script setup lang="ts">
-import { Drawer as ADrawer, Pagination } from 'ant-design-vue'
+import { Pagination } from 'ant-design-vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChevronDown, Download } from 'lucide-vue-next'
@@ -339,7 +320,7 @@ import QcRecordResultTable, {
 } from './components/qc/QcRecordResultTable.vue'
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
-import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
+import CurrentMedicalRecordDrawer from './components/CurrentMedicalRecordDrawer.vue'
 import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'

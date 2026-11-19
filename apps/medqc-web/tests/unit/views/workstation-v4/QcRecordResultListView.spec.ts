@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   downloadBlob: vi.fn(),
   exportFilteredLuxian0609RecordResults: vi.fn(),
   getRaw: vi.fn(),
+  requestRaw: vi.fn(),
 }))
 const routeState = vi.hoisted(() => ({
   path: '/workstation-v4/records/running',
@@ -22,6 +23,7 @@ vi.mock('@/api/clinicalSources', () => ({
 vi.mock('@/services/apiService', () => ({
   ApiService: {
     getRaw: mocks.getRaw,
+    requestRaw: mocks.requestRaw,
   },
 }))
 
@@ -619,6 +621,7 @@ describe('QcRecordResultListView', () => {
   })
 
   it.each(['inpatient', 'discharged'] as const)('%s 未质控病例也能打开当前病历阅读', async (phase) => {
+    mocks.requestRaw.mockResolvedValueOnce({ data: { documents: [] } })
     const wrapper = mountView(phase)
     await flushPromises()
     const row = wrapper.get('tr[data-record-key*="V-not-run"]')
@@ -630,6 +633,14 @@ describe('QcRecordResultListView', () => {
       visitId: 'V-not-run', instituteId: 'H', patientId: 'P',
       sourceView: 'current', documentOnly: true, feedbackAvailable: false,
     })
+    expect(mocks.requestRaw).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'GET',
+      url: '/api/v1/emr/V-not-run/documents',
+      params: {
+        institute_id: 'H', patient_id: 'P', visit_id: 'V-not-run',
+        source_view: 'current', view: 'full',
+      },
+    }))
     expect(reader.props('jobId')).toBeUndefined()
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
     expect(wrapper.text()).not.toContain('这份病历暂无已保存质控结果')
