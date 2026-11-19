@@ -223,22 +223,24 @@ describe('SingleRecordQcResultPanel', () => {
     wrapper.unmount()
   })
 
-  it.each([undefined, null, ''])('缺少规则名称(%s)仍能查看保存结果，不改原始条目', async (name) => {
-    const source = Object.freeze({ ...items[0]!, rule_name: name })
-    const wrapper = mount(SingleRecordQcResultPanel, {
-      props: { items: [source as unknown as SingleRecordQcResultItem] },
-    })
-    expect(wrapper.get('.rule-name').text()).toBe(source.rule_id)
-    const toggle = wrapper.get('[data-testid="single-record-result-toggle"]')
-    expect(toggle.attributes('aria-label')).toContain(source.rule_id)
-    expect(toggle.attributes('aria-label')).not.toContain('undefined')
-    await toggle.trigger('click')
-    expect(wrapper.text()).toContain(source.conclusion)
-    expect(wrapper.text()).toContain(source.rule_id)
-    expect(source.rule_name).toBe(name)
-    expect(source.status).toBe('non_compliant')
-    wrapper.unmount()
-  })
+  it.each([undefined, null, '', 'LX0609-01-01-02', '01-01-02'])(
+    '没有可用的规则名称(%s)时仍能查看保存结果，不显示编号',
+    async (name) => {
+      const source = Object.freeze({ ...items[0]!, rule_name: name })
+      const wrapper = mount(SingleRecordQcResultPanel, {
+        props: { items: [source as unknown as SingleRecordQcResultItem] },
+      })
+      expect(wrapper.get('.rule-name').text()).toBe('未命名质控点')
+      const toggle = wrapper.get('[data-testid="single-record-result-toggle"]')
+      expect(toggle.attributes('aria-label')).toBe('展开未命名质控点详情')
+      await toggle.trigger('click')
+      expect(wrapper.text()).toContain(source.conclusion)
+      expect(wrapper.text()).not.toContain('01-01-02')
+      expect(source.rule_name).toBe(name)
+      expect(source.status).toBe('non_compliant')
+      wrapper.unmount()
+    },
+  )
 
   it('只复制当前一条脱敏质控结果，不导出整份病历的其他规则', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
@@ -289,9 +291,8 @@ describe('SingleRecordQcResultPanel', () => {
       props: { items: [items[0]!], feedbackEnabled: true },
     })
 
-    // 卡片只显示去掉目录前缀的短编号，完整编号保留在悬停提示中
-    expect(wrapper.get('.rule-code').text()).toBe('01-01-02')
-    expect(wrapper.get('.rule-code').attributes('title')).toBe(selectedRuleId)
+    expect(wrapper.text()).not.toContain('01-01-02')
+    expect(wrapper.find('[title="LX0609-01-01-02"]').exists()).toBe(false)
     await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
     await wrapper.get('[data-testid="single-record-feedback-entry-hint"]').trigger('click')
     await wrapper.get('[data-testid="qc-result-feedback-correct"]').trigger('click')
@@ -420,7 +421,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.emitted('submit-feedback')).toBeUndefined()
   })
 
-  it('规则全文收在底部链接中，展示完整规则名、文书和完整编号', async () => {
+  it('规则全文展示完整规则名和文书，不展示质控点编号', async () => {
     const item = {
       ...items[0]!,
       source_document: '主诉能导出第一诊断',
@@ -436,7 +437,7 @@ describe('SingleRecordQcResultPanel', () => {
     const fulltext = wrapper.get('[data-testid="single-record-rule-fulltext"]').text()
     expect(fulltext).toContain(item.rule_name)
     expect(fulltext).toContain('主诉能导出第一诊断')
-    expect(fulltext).toContain('LX0609-01-01-02')
+    expect(fulltext).not.toContain('01-01-02')
   })
 
   it('资料缺口卡片不重复分组、不提供空证据折叠栏，反馈默认收起', async () => {
@@ -508,14 +509,14 @@ describe('SingleRecordQcResultPanel', () => {
     expect(row.lastElementChild?.classList.contains('result-card-actions')).toBe(true)
   })
 
-  it('合规项收起时只显示规则名和编号，不显示结论；展开后再显示结论', async () => {
+  it('合规项收起时显示规则名和状态，展开后再显示结论', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: { items: [historicalCompliantItem] },
     })
     await wrapper.get('[data-testid="single-record-result-tab-compliant"]').trigger('click')
     const row = wrapper.get('[data-testid="single-record-result-row"]')
     expect(row.get('.rule-name').text()).toBe('术前小结')
-    expect(row.get('.rule-code').text()).toBe('04-01-01')
+    expect(row.text()).not.toContain('04-01-01')
     expect(row.get('.status-cell').text()).toBe('合规')
     expect(row.find('[data-testid="single-record-result-conclusion"]').exists()).toBe(false)
     await row.get('[data-testid="single-record-result-toggle"]').trigger('click')
@@ -697,7 +698,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(detail).toContain('判定阈值70%')
   })
 
-  it('按引擎返回顺序展示每条规则的状态、编号、标题和结论', async () => {
+  it('按引擎返回顺序展示每条规则的状态、标题和结论', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items } })
     await wrapper.get('[data-testid="single-record-result-tab-all"]').trigger('click')
 
@@ -708,15 +709,14 @@ describe('SingleRecordQcResultPanel', () => {
     )
     const rows = wrapper.findAll('[data-testid="single-record-result-row"]')
     expect(rows).toHaveLength(3)
-    expect(rows[0]!.get('.result-footer .rule-code').text()).toBe('01-01-02')
+    expect(rows.map((row) => row.get('.rule-name').text())).toEqual(
+      items.map((item) => item.rule_name),
+    )
     expect(rows[0]!.get('.status-cell').text()).toContain('确定问题')
     expect(rows[0]!.get('.status-cell').classes()).toContain('mq-status--danger')
-    expect(rows[0]!.get('.rule-code').attributes('title')).toBe('LX0609-01-01-02')
     expect(rows[0]!.get('[data-testid="single-record-result-conclusion"]').text()).toContain(
       '主诉共14字，未达到不超过20字的要求；诊断指向性未通过。',
     )
-    expect(rows[1]!.get('.rule-code').attributes('title')).toBe('LX0609-04-02-01')
-    expect(rows[2]!.get('.rule-code').attributes('title')).toBe('LX0609-04-02-04')
     expect(wrapper.text()).toContain('全部')
     expect(wrapper.text()).toContain('确定问题')
     expect(wrapper.text()).toContain('待处理')
@@ -797,15 +797,15 @@ describe('SingleRecordQcResultPanel', () => {
     // 证据数量不再挤在收起行中，展开后以证据胶囊列出
     expect(wrapper.text()).not.toContain('处证据')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(1)
-    const ruleCodes = () => wrapper.findAll('.rule-code').map((code) => code.attributes('title'))
-    expect(ruleCodes()).not.toContain('LX0609-01-02-01')
+    const ruleNames = () => wrapper.findAll('.rule-name').map((name) => name.text())
+    expect(ruleNames()).not.toContain('首次病程记录')
 
     await wrapper.get('[data-testid="single-record-report-tab-all"]').trigger('click')
     expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(1)
     expect(wrapper.get('[data-testid="single-record-document-group"]').text()).toContain('会诊记录')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(5)
-    expect(ruleCodes()).toContain('LX0609-01-02-01')
-    expect(ruleCodes()).toContain('LX0609-01-01-01')
+    expect(ruleNames()).toContain('首次病程记录')
+    expect(ruleNames()).toContain('入院记录及时性')
 
     const surgeryGroupToggle = wrapper.findAll(
       '[data-testid="single-record-document-group-toggle"]',
@@ -1066,8 +1066,8 @@ describe('SingleRecordQcResultPanel', () => {
 
     await wrapper.get('[data-testid="single-record-result-tab-pending"]').trigger('click')
     expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(2)
-    const pendingCodes = wrapper.findAll('.rule-code').map((code) => code.attributes('title'))
-    expect(pendingCodes).toEqual(['LX0609-01-01-01', 'LX0609-01-02-01'])
+    const pendingNames = wrapper.findAll('.rule-name').map((name) => name.text())
+    expect(pendingNames).toEqual(['入院记录', '首次病程'])
 
     await wrapper.get('[data-testid="single-record-result-tab-non_compliant"]').trigger('click')
     await wrapper

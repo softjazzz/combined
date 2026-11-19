@@ -131,11 +131,8 @@
                 <span class="visually-hidden">合规</span>
               </span>
               <strong class="rule-name" :title="displayRuleName(item)">{{ displayRuleName(item) }}</strong>
-              <span v-if="isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
-                shortRuleCode(item.rule_id)
-              }}</span>
               <span
-                v-else
+                v-if="!isCompliantResult(item)"
                 class="status-cell status-pill mq-status"
                 :class="[`is-${item.tone}`, statusModifierClass(item)]"
                 >{{ item.status === 'data_gap' ? '资料待核实' : item.displayStatus }}</span
@@ -186,9 +183,6 @@
               </span>
             </span>
             <span class="result-footer">
-              <span v-if="!isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
-                shortRuleCode(item.rule_id)
-              }}</span>
               <span class="result-details-hint" aria-hidden="true">
                 {{ expandedKey === item.key ? '收起详情' : '展开详情' }}
                 <ChevronUp v-if="expandedKey === item.key" :size="16" />
@@ -448,10 +442,6 @@
               <dt>文书</dt>
               <dd>{{ item.source_document }}</dd>
             </template>
-            <dt>编号</dt>
-            <dd class="rule-fulltext-code">
-              {{ item.rule_id }}
-            </dd>
           </dl>
 
           <footer class="result-card-actions">
@@ -526,6 +516,7 @@ import {
   buildSingleRecordQcPresentation,
   buildSingleRecordQcResultItems,
   buildSingleRecordQcStatusTabs,
+  displayQcRuleName,
   recommendationEvidenceForSingleRecord,
   resolveSingleRecordQcResultTab,
   type SingleRecordQcEvidence,
@@ -1083,12 +1074,7 @@ function toggleRuleText(key: string) {
 }
 
 function displayRuleName(item: Pick<SingleRecordQcResultViewItem, 'rule_name' | 'rule_id'>): string {
-  return typeof item.rule_name === 'string' && item.rule_name.trim() ? item.rule_name : item.rule_id
-}
-
-/** 同一页面的规则都属于同一目录，编号去掉目录前缀，完整编号放在 title 中。 */
-function shortRuleCode(ruleId: string): string {
-  return ruleId.replace(/^[A-Z]+\d+-(?=\d)/, '')
+  return displayQcRuleName(item.rule_name, item.rule_id)
 }
 
 function statusModifierClass(item: SingleRecordQcResultViewItem): string {
@@ -1540,15 +1526,6 @@ watch(
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-.rule-code {
-  padding: 1px 0;
-  color: rgba(29, 29, 31, 0.46);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
   white-space: nowrap;
 }
 @media (prefers-reduced-motion: reduce) {

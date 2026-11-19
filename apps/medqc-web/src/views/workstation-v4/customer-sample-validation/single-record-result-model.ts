@@ -141,6 +141,13 @@ export interface SingleRecordQcDataGapDetails {
   availability?: Record<string, string | boolean | null | undefined>
 }
 
+export function displayQcRuleName(ruleName: string, ruleId: string): string {
+  const name = typeof ruleName === 'string' ? ruleName.trim() : ''
+  const id = typeof ruleId === 'string' ? ruleId.trim().toUpperCase() : ''
+  const shortId = id.replace(/^[A-Z]+\d+-(?=\d)/, '')
+  return name && name.toUpperCase() !== id && name !== shortId ? name : '未命名质控点'
+}
+
 /**
  * 单病历最新结果接口的前端固定读模型。
  * 不承载任务树、前端去重或跨病历选择职责。

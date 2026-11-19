@@ -455,8 +455,9 @@ describe('QCRecordCompareWorkbench', () => {
       view: 'summary',
     })
     const resultItems = wrapper.findAll('.record-result-item')
-    expect(resultItems[0]?.text()).toContain('LX0609-01-01-01')
-    expect(resultItems[1]?.text()).toContain('LX0609-01-02-01')
+    expect(resultItems[0]?.text()).toContain('首次病程记录及时性')
+    expect(resultItems[1]?.text()).toContain('首次病程记录完整性')
+    expect(wrapper.find('.record-result-list').text()).not.toContain('LX0609-01-')
     expect(wrapper.find('.record-content-toolbar').text()).toContain('首次病程记录')
     expect(wrapper.find('.record-content-toolbar').text()).toContain('记录时间')
     expect(wrapper.find('.record-content-toolbar').text()).toContain('2026-07-24 11:00:00')

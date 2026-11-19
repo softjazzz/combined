@@ -284,7 +284,6 @@
                     <span class="record-result-status">
                       {{ issue.result_kind_text || issue.status_text }}
                     </span>
-                    <span class="record-result-code">{{ issue.rule_code }}</span>
                   </span>
                   <span
                     class="record-result-toggle"
@@ -296,7 +295,9 @@
                     />
                   </span>
                 </span>
-                <strong :title="issue.rule_name">{{ issue.rule_name }}</strong>
+                <strong :title="displayQcRuleName(issue.rule_name, issue.rule_code)">{{
+                  displayQcRuleName(issue.rule_name, issue.rule_code)
+                }}</strong>
                 <small
                   v-if="resolveIssueSummary(issue)"
                   class="record-result-summary-line"
@@ -437,6 +438,7 @@ import type { EditableMedicalRecordDocument } from '@/views/workstation-v4/custo
 import { groupPdfDocumentVersions } from '@/views/workstation-v4/customer-sample-validation/pdfDocumentVersions'
 import {
   buildSingleRecordQcResultItems,
+  displayQcRuleName,
   recommendationEvidenceForSingleRecord,
   type SingleRecordQcEvidence,
   type SingleRecordQcResultItem,
@@ -1608,12 +1610,6 @@ onBeforeUnmount(() => {
 .record-result-entry.is-success .record-result-status {
   background: rgba(16, 185, 129, 0.1);
   color: #047857;
-}
-.record-result-code {
-  color: #0a6cff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
 }
 .record-result-item strong {
   color: #1d1d1f;

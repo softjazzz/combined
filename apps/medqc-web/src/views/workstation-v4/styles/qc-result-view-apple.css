@@ -62,7 +62,6 @@
   line-height: 22px;
   color: #303640;
 }
-:global(.customer-record-result-drawer .rule-code),
 :global(.customer-record-result-drawer .result-source),
 :global(.customer-record-result-drawer .result-evidence-count) {
   font-size: 12px;
@@ -694,9 +693,6 @@
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 2px 10px rgba(10, 55, 115, 0.06);
-}
-:global(.customer-record-result-drawer .rule-code) {
-  font-family: var(--mq-font-mono);
 }
 :global(.customer-record-result-drawer .ant-btn) {
   border-radius: 999px;

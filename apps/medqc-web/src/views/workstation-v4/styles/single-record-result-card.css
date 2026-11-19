@@ -1,6 +1,6 @@
 /*
  * 单条质控结果卡 v7.1 精简版（SingleRecordQcResultPanel）
- * 收起：完整标题、状态与编号、最多两行结论和展开入口；合规项默认隐藏结论。
+ * 收起：完整标题、状态、最多两行结论和展开入口；合规项默认隐藏结论。
  * 展开：判定说明、逐项判定、关键证据胶囊、整改建议依次排列，反馈与规则全文收在底部胶囊按钮。
  * 本文件在面板内联样式之后加载，覆盖旧版卡片样式；颜色一律取 --mq-* Token。
  */
@@ -124,9 +124,7 @@
 
 .result-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-end;
   margin-top: 6px;
 }
 
@@ -142,7 +140,6 @@
   width: fit-content;
   align-items: center;
   gap: 4px;
-  margin-inline-start: auto;
   padding: 3px 9px;
   border-radius: 999px;
   color: var(--mq-brand-700);
@@ -157,16 +154,6 @@
 .result-trigger:focus-visible .result-details-hint,
 .result-details-hint:hover {
   box-shadow: inset 0 0 0 1px var(--mq-info-border);
-}
-
-.rule-code {
-  flex: none;
-  padding: 0;
-  color: var(--mq-text-tertiary);
-  font-family: var(--mq-font-mono);
-  font-size: var(--mq-font-12);
-  font-weight: 400;
-  line-height: 18px;
 }
 
 .copy-match-headline-documents {
@@ -554,11 +541,6 @@
   font-size: var(--mq-font-13);
   line-height: 20px;
   overflow-wrap: anywhere;
-}
-
-.rule-fulltext .rule-fulltext-code {
-  font-family: var(--mq-font-mono);
-  font-size: var(--mq-font-12);
 }
 
 /* ---------- 底部操作 ---------- */
