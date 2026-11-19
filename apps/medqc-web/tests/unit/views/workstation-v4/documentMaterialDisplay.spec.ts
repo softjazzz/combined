@@ -1,5 +1,52 @@
 import { describe, expect, it } from 'vitest'
-import { resolveDocDisplayTitle, resolveMaterialDisplayNotice, resolveMaterialScopeNotice } from '@/views/workstation-v4/utils/documentDisplay'
+import type { DocItem } from '@/views/workstation-v4/types'
+import {
+  buildFallbackTreeFromDocs,
+  resolveDocDisplayTitle,
+  resolveMaterialDisplayNotice,
+  resolveMaterialScopeNotice,
+} from '@/views/workstation-v4/utils/documentDisplay'
+
+describe('病历池文书目录', () => {
+  function document(id: string, type: string, label: string): DocItem {
+    return { id, type, doc_type: type, label, has_content: true, content: null, length: 0 }
+  }
+
+  it('没有会诊文书时，病程仍位于入院之后、检查和医嘱之前', () => {
+    const tree = buildFallbackTreeFromDocs([
+      document('discharge', 'discharge_record', '出院记录'),
+      document('order', 'medical_order', '医嘱'),
+      document('exam', 'exam_item_report', 'CT检查报告'),
+      document('course', 'daily_course_record', '日常病程记录'),
+      document('admission', 'admission_record', '入院记录'),
+    ])
+
+    expect(tree.map(({ key }) => key)).toEqual([
+      'admission',
+      'course',
+      'exam_lab',
+      'orders',
+      'discharge',
+    ])
+  })
+
+  it('结构化上级查房以文书类型为准，普通查房保留原分组和标题', () => {
+    const upperRound = {
+      ...document('senior', 'senior_course_record', '主治医师查房记录'),
+      doc_key: 'senior_course_record::senior',
+    }
+    const ordinaryRound = document('ordinary', 'daily_course_record', '主治医师查房记录')
+    const [group] = buildFallbackTreeFromDocs([upperRound, ordinaryRound])
+
+    expect(group.subgroups).toMatchObject([
+      {
+        key: 'course.senior',
+        children: [{ title: '上级医师查房记录', doc_key: upperRound.doc_key }],
+      },
+      { key: 'course.ordinary', children: [{ title: '主治医师查房记录' }] },
+    ])
+  })
+})
 
 describe('材料来源提示纯投影', () => {
   it('目录显示已选来源及完整版本，保留旧文书标题', () => {

@@ -1,4 +1,4 @@
-import type { DocItem, MaterialDisplay } from '../types'
+import type { DocItem, DocTreeGroup, DocTreeNode, MaterialDisplay } from '../types'
 import { resolveMedicalDocumentGroup, resolveMedicalDocumentTitle } from './medicalDocumentTaxonomy'
 
 export const DOC_TYPE_LABELS: Record<string, string> = {
@@ -122,11 +122,95 @@ export function resolveMaterialScopeNotice(payload: Record<string, unknown>): st
   return ''
 }
 
+// 与正文页一致，以服务端明确给出的文书类型识别上级查房，保留源标题和文书键。
+function isStructuredSeniorRound(doc: Pick<DocItem, 'doc_type' | 'type'>): boolean {
+  return (doc.doc_type || doc.type) === 'senior_course_record'
+}
+
 export function resolveDocGroupKey(
   doc: Pick<
     DocItem,
     'doc_type' | 'type' | 'source_table' | 'label' | 'document_title' | 'content' | 'group_key'
   >,
 ): string {
+  if (isStructuredSeniorRound(doc)) return 'course.senior'
   return resolveMedicalDocumentGroup(doc).key
+}
+
+function buildTreeNodeFromDoc(doc: DocItem): DocTreeNode {
+  const id = String(doc.document_id || doc.id || doc.doc_id || doc.label || '')
+  const docType = String(doc.doc_type || doc.type || '')
+  const docKey = String(doc.doc_key || `${docType}::${id}`)
+  return {
+    id,
+    doc_key: docKey,
+    doc_type: docType,
+    document_id: String(doc.document_id || doc.id || doc.doc_id || '') || undefined,
+    title: isStructuredSeniorRound(doc)
+      ? DOC_TYPE_LABELS.senior_course_record
+      : resolveDocDisplayTitle(doc),
+    record_time: String(doc.record_time || doc.sort_time || ''),
+    source_table: String(doc.source_table || ''),
+    group_key: String(doc.group_key || ''),
+    has_content: Boolean(doc.has_content),
+    length: Number(doc.length || 0),
+    projection_incomplete: doc.projection_incomplete === true,
+    projection_notice: String(doc.projection_notice || '') || undefined,
+  }
+}
+
+export function buildFallbackTreeFromDocs(docs: DocItem[]): DocTreeGroup[] {
+  const groups: Array<{ key: string; label: string }> = [
+    { key: 'frontpage', label: '病案首页' },
+    { key: 'admission', label: '入院与首次病程' },
+    { key: 'course', label: '日常病程与查房' },
+    { key: 'consultation', label: '会诊与讨论' },
+    { key: 'surgery', label: '手术与麻醉' },
+    { key: 'transfusion', label: '输血相关' },
+    { key: 'exam_lab', label: '检查与检验' },
+    { key: 'orders', label: '医嘱与用药' },
+    { key: 'discharge', label: '出院与死亡' },
+    { key: 'handoff', label: '交接与转科' },
+    { key: 'other', label: '其他文书' },
+  ]
+  const byGroup = new Map<string, DocTreeNode[]>()
+  for (const doc of docs) {
+    const node = buildTreeNodeFromDoc(doc)
+    const groupKey = resolveDocGroupKey(doc)
+    byGroup.set(groupKey, [...(byGroup.get(groupKey) || []), node])
+  }
+  const nestedGroupOrders: Record<string, string[]> = {
+    admission: ['admission.record', 'admission.first'],
+    course: ['course.senior', 'course.ordinary', 'course.other'],
+  }
+  const subgroupLabels: Record<string, string> = {
+    'admission.record': '入院记录',
+    'admission.first': '首次病程记录',
+    'course.senior': '上级医师查房记录',
+    'course.ordinary': '普通查房记录',
+    'course.other': '其他日常病程记录',
+  }
+  return groups
+    .map(({ key, label }) => {
+      const children = byGroup.get(key) || []
+      const subgroups = (nestedGroupOrders[key] || [])
+        .map((subgroupKey) => {
+          const nodes = byGroup.get(subgroupKey) || []
+          return {
+            key: subgroupKey,
+            label: subgroupLabels[subgroupKey],
+            count: nodes.length,
+            children: nodes,
+          }
+        })
+        .filter((subgroup) => subgroup.count > 0)
+      return {
+        key,
+        label,
+        children,
+        count: children.length + subgroups.reduce((sum, subgroup) => sum + subgroup.count, 0),
+        subgroups,
+      }
+    })
+    .filter((group) => group.count > 0)
 }

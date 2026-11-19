@@ -415,9 +415,9 @@ import {
 } from './frontpageAvailability'
 import { normalizeWorklistItem } from './normalize'
 import {
+  buildFallbackTreeFromDocs,
   parseDocSortTime,
   resolveDocDisplayTitle,
-  resolveDocGroupKey,
   resolveMaterialScopeNotice,
 } from './utils/documentDisplay'
 import {
@@ -1596,30 +1596,6 @@ function normalizeDocItem(raw: unknown, index: number): ManagedDocItem {
   }
 }
 
-function buildTreeNodeFromDoc(doc: DocItem): DocTreeNode {
-  const id = String(doc.document_id || doc.id || doc.doc_id || doc.label || '')
-  const docType = String(doc.doc_type || doc.type || '')
-  const docKey = String(doc.doc_key || `${docType}::${id}`)
-  return {
-    id,
-    doc_key: docKey,
-    doc_type: docType,
-    document_id: String(doc.document_id || doc.id || doc.doc_id || '') || undefined,
-    title: resolveDocDisplayTitle(doc),
-    record_time: String(doc.record_time || doc.sort_time || ''),
-    source_table: String(doc.source_table || ''),
-    group_key: String(doc.group_key || ''),
-    has_content: Boolean(doc.has_content),
-    length: Number(doc.length || 0),
-    projection_incomplete: doc.projection_incomplete === true,
-    projection_notice: String(doc.projection_notice || '') || undefined,
-  }
-}
-
-function inferGroupKey(doc: DocItem): string {
-  return resolveDocGroupKey(doc)
-}
-
 function isRoundCourseIdentity(identity: string): boolean {
   return /查房|主任医师|副主任医师|主治医师|上级医师|round|ward[_-]?round|chief[_-]?round|attending[_-]?round/.test(
     identity,
@@ -1628,75 +1604,6 @@ function isRoundCourseIdentity(identity: string): boolean {
 
 function isDailyCourseIdentity(identity: string): boolean {
   return /日常病程|日常病历|daily[_-]?course|daily[_-]?progress|progress[_-]?note/.test(identity)
-}
-
-function buildFallbackTreeFromDocs(docs: DocItem[]): DocTreeGroup[] {
-  const groups: Array<{ key: string; label: string }> = [
-    { key: 'frontpage', label: '病案首页' },
-    { key: 'admission', label: '入院与首次病程' },
-    { key: 'consultation', label: '会诊与讨论' },
-    { key: 'surgery', label: '手术与麻醉' },
-    { key: 'transfusion', label: '输血相关' },
-    { key: 'exam_lab', label: '检查与检验' },
-    { key: 'orders', label: '医嘱与用药' },
-    { key: 'discharge', label: '出院与死亡' },
-    { key: 'handoff', label: '交接与转科' },
-    { key: 'other', label: '其他文书' },
-  ]
-  const byGroup = new Map<string, DocTreeNode[]>()
-  for (const doc of docs) {
-    const node = buildTreeNodeFromDoc(doc)
-    const groupKey = inferGroupKey(doc)
-    byGroup.set(groupKey, [...(byGroup.get(groupKey) || []), node])
-  }
-  const nestedGroupOrders: Record<string, string[]> = {
-    admission: ['admission.record', 'admission.first'],
-    course: ['course.senior', 'course.ordinary', 'course.other'],
-  }
-  const nestedGroupLabels: Record<string, string> = {
-    admission: '入院与首次病程',
-    course: '日常病程与查房',
-    'admission.record': '入院记录',
-    'admission.first': '首次病程记录',
-    'course.senior': '上级医师查房记录',
-    'course.ordinary': '普通查房记录',
-    'course.other': '其他日常病程记录',
-  }
-  const nestedGroups = Object.entries(nestedGroupOrders)
-    .map(([parentKey, subgroupKeys]) => ({
-      parentKey,
-      subgroups: subgroupKeys
-        .map((key) => ({
-          key,
-          label: nestedGroupLabels[key],
-          children: byGroup.get(key) || [],
-        }))
-        .filter((group) => group.children.length > 0),
-    }))
-    .filter((group) => group.subgroups.length > 0)
-  const result: DocTreeGroup[] = groups
-    .map((group) => {
-      const children = byGroup.get(group.key) || []
-      return { key: group.key, label: group.label, count: children.length, children }
-    })
-    .filter((group) => group.children.length > 0)
-  for (const nested of nestedGroups) {
-    const insertBefore = nested.parentKey === 'admission' ? 'consultation' : 'consultation'
-    const index = result.findIndex((group) => group.key === insertBefore)
-    result.splice(index >= 0 ? index : result.length, 0, {
-      key: nested.parentKey,
-      label: nestedGroupLabels[nested.parentKey],
-      count: nested.subgroups.reduce((sum, group) => sum + group.children.length, 0),
-      children: [],
-      subgroups: nested.subgroups.map((group) => ({
-        key: group.key,
-        label: group.label,
-        count: group.children.length,
-        children: group.children,
-      })),
-    })
-  }
-  return result
 }
 
 function shouldSplitCourseGroup(group: DocTreeGroup): boolean {
