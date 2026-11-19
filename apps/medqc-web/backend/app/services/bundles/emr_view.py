@@ -4,7 +4,7 @@ from datetime import datetime
 import re
 from typing import Any
 
-from ..document_assembly.assembler import INDEPENDENT_DOCUMENT_FIELDS
+from ..document_assembly.assembler import INDEPENDENT_DOCUMENT_FIELDS, PERIOPERATIVE_DISPLAY_FIELDS
 
 from .assembly import (
     _build_grouped_exam_reports,
@@ -191,6 +191,29 @@ _FIELD_LABELS: dict[str, str] = {
     "second_assistant": "手术II助",
     "anesthesiologist": "麻醉医师",
     "anesthesia_method": "麻醉方式",
+    "surgery_method": "手术方式",
+    "surgery_nurse": "手术护士",
+    "surgeon_statement": "手术医师陈述",
+    "anesthesiologist_statement": "麻醉医师陈述",
+    "surg_nurse_statement": "手术护士陈述",
+    "planned_surgery": "拟实施手术",
+    "surgery_bodypost": "手术体位",
+    "trachea_intubate_type": "气管插管类型",
+    "anesthesia_bodypost": "麻醉体位",
+    "breath_type": "呼吸类型",
+    "anesthesia_description": "麻醉描述",
+    "anesthesia_complication_sign": "麻醉合并症",
+    "treatment_course": "诊疗经过",
+    "puncture_process": "穿刺过程",
+    "preanes_medication": "麻醉前用药",
+    "asa_level": "ASA分级",
+    "anesthesia_begin_datetime": "麻醉开始时间",
+    "anesthesia_end_datetime": "麻醉结束时间",
+    "leave_operateroom_datetime": "离室时间",
+    "application_id": "申请号",
+    "assessment_datetime": "评估时间",
+    "surgeon_assess_date": "手术医师评估日期",
+    "anesthesiologist_assess_date": "麻醉医师评估日期",
     "preoperative_diagnosis": "术前诊断",
     "intraoperative_diagnosis": "术中诊断",
     "postoperative_diagnosis": "术后诊断",
@@ -330,6 +353,14 @@ def _friendly_field_label(field_name: str) -> str:
     return normalized.replace("_", " ").strip()
 
 
+def _perioperative_display_fields(doc_type: str, document: dict[str, Any]) -> list[dict[str, str]]:
+    return [
+        {"key": field, "label": _friendly_field_label(field), "value": value}
+        for field in PERIOPERATIVE_DISPLAY_FIELDS.get(doc_type, ())
+        if (value := _safe_text(document.get(field)))
+    ]
+
+
 def _build_doc_key(doc_type: str, document_id: str, index: int) -> str:
     suffix = document_id if document_id else str(index)
     return f"{doc_type}::{suffix}"
@@ -407,7 +438,7 @@ def _normalize_source_document(
         "record_time_source": record_time_source,
         "record_time_note": record_time_note,
         "document_status": raw_doc.get("document_status"),
-        "has_content": bool(content),
+        "has_content": bool(content) or bool(_perioperative_display_fields(doc_type, raw_doc)),
         "content": content or None,
         "length": len(content),
         "group_key": group_key,
@@ -902,7 +933,7 @@ def _normalize_source_document_summary(
     sort_time = sort_time or submit_time
     record_time, record_time_source, record_time_note = _record_display_clock(raw_doc, doc_type, sort_time)
     length = max(0, int(raw_doc.get("length") or 0))
-    has_content = raw_doc.get("has_content") is True or length > 0
+    has_content = raw_doc.get("has_content") is True or length > 0 or bool(_perioperative_display_fields(doc_type, raw_doc))
     summary = {
         "id": doc_id or _build_doc_key(doc_type, doc_id, index),
         "doc_id": doc_id or _build_doc_key(doc_type, doc_id, index),
@@ -1290,6 +1321,10 @@ def _extract_kv_fields(document: dict[str, Any]) -> list[dict[str, str]]:
     seen: set[str] = set()
     doc_type = _safe_text(document.get("doc_type"))
     surgery_mode = doc_type in _SURGERY_STRUCT_DOC_TYPES
+    if not _safe_text(document.get("content")):
+        structured_fields = _perioperative_display_fields(doc_type, document)
+        if structured_fields:
+            return structured_fields
 
     for item in source_fields:
         if not isinstance(item, dict):

@@ -769,6 +769,48 @@ def test_build_documents_should_expose_discharge_display_time_when_record_time_m
     assert "源库未返回记录时间" in discharge_doc["record_time_note"]
 
 
+def test_perioperative_structured_fields_render_without_populating_original_body(monkeypatch):
+    rows = {
+        "surgery_safecheck_record": {"surgery_begin_datetime": "2026-01-01 08:00:00", "surgery_method": "合成手术"},
+        "anesthesia_record": {"ASA_level": "II", "anesthesia_method": "全身麻醉"},
+        "surgery_risk_assessment": {"surgeon_assess_date": "2026-01-01", "anesthesiologist_assess_date": "2026-01-01"},
+    }
+    entries = []
+    for kind, fields in rows.items():
+        row = {"document_id": kind, "record_content": None, **fields}
+        assert fields.keys() <= assembly.source_projection_columns(kind, set(row))
+        entries.append(assembly._inventory_entry(table_name=kind, row=row))
+        assert row["record_content"] is None
+    assert assembly._quote_ident("ASA_level") == '"ASA_level"'
+    documents = build_documents_from_domain_bundles({"surgery": {"source_documents": entries}})
+    fields_by_type = {}
+    monkeypatch.setattr(material, "source_binding", lambda _: "synthetic-binding")
+    monkeypatch.setattr(emr_render, "customer_safe_projection_key", lambda: "synthetic-key")
+    frozen = {
+        "identity": ["org", "patient", "visit"], "binding": "synthetic-binding",
+        "tables": {}, "documents": {"documents": documents, "documents_tree": []},
+    }
+    kwargs = dict(record_id="visit", institute_id="org", patient_id="patient", visit_id="visit")
+    with material.activate(frozen):
+        summaries = emr_render._load_document_summaries_from_bundle(**kwargs)["documents"]
+        assert len(summaries) == 3 and all(doc["has_content"] for doc in summaries)
+        assert all("content" not in doc for doc in summaries)
+        for kind in rows:
+            document = emr_render._load_document_from_bundle(**kwargs, execution_domain="surgery", doc_type=kind, doc_id=kind)
+            assert document["content"] is None
+            render = build_render_view(document)
+            assert not render["empty_reason"] and not render["content"]
+            fields_by_type[kind] = {
+                field["key"]: (field["label"], field["value"])
+                for block in render["render_blocks"]
+                for field in block.get("fields", ())
+            }
+    assert fields_by_type["surgery_safecheck_record"]["surgery_method"] == ("手术方式", "合成手术")
+    assert fields_by_type["anesthesia_record"]["ASA_level"] == ("ASA分级", "II")
+    assert fields_by_type["surgery_risk_assessment"]["surgeon_assess_date"] == ("手术医师评估日期", "2026-01-01")
+    assert fields_by_type["surgery_risk_assessment"]["anesthesiologist_assess_date"] == ("麻醉医师评估日期", "2026-01-01")
+
+
 def test_build_documents_should_expose_surgery_form_display_time_when_record_time_missing():
     domain_bundles = {
         "surgery": {

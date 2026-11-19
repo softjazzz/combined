@@ -184,6 +184,25 @@ def extract_document_identity_metadata(
         "participants": participants,
     }
 
+# 按原列搬运围手术文书展示字段，正文为空时依然保留独立字段来源。
+PERIOPERATIVE_DISPLAY_FIELDS: dict[str, tuple[str, ...]] = {
+    "surgery_safecheck_record": (
+        "surgery_begin_datetime", "surgery_begin_time", "surgery_method", "surgeon",
+        "anesthesia_method", "anesthesiologist", "surgery_nurse",
+        "surgeon_statement", "anesthesiologist_statement", "surg_nurse_statement",
+    ),
+    "anesthesia_record": (
+        "planned_surgery", "surgery_name", "surgery_code", "surgery_bodypost", "anesthesia_method",
+        "trachea_intubate_type", "anesthesia_bodypost", "breath_type", "anesthesia_description",
+        "anesthesia_complication_sign", "treatment_course", "puncture_process", "preanes_medication",
+        "ASA_level", "asa_level", "surgery_begin_datetime", "surgery_end_datetime",
+        "anesthesia_begin_datetime", "anesthesia_end_datetime", "leave_operateroom_datetime",
+    ),
+    "surgery_risk_assessment": (
+        "application_id", "assessment_datetime", "surgeon_assess_date", "anesthesiologist_assess_date",
+    ),
+}
+
 # 业务事实独立保留，不用于回填记录、提交、显示时间或实际停止时间。
 INDEPENDENT_DOCUMENT_FIELDS: dict[str, tuple[str, ...]] = {
     **{
@@ -191,14 +210,8 @@ INDEPENDENT_DOCUMENT_FIELDS: dict[str, tuple[str, ...]] = {
         for table in ("inpat_drug_order", "inpat_nondrug_order")
     },
     # 围手术期源事实只作为独立元数据搬运；不拼进正文，不替代记录/提交/显示时间。
-    "anesthesia_record": (
-        "surgery_begin_datetime", "surgery_end_datetime",
-        "anesthesia_begin_datetime", "anesthesia_end_datetime",
-        "leave_operateroom_datetime", "anesthetist_sign", "anesthetist_sign_datetime",
-    ),
-    "surgery_risk_assessment": (
-        "application_id", "assessment_datetime", "surgeon_assess_date", "anesthesiologist_assess_date",
-    ),
+    **PERIOPERATIVE_DISPLAY_FIELDS,
+    "anesthesia_record": (*PERIOPERATIVE_DISPLAY_FIELDS["anesthesia_record"], "anesthetist_sign", "anesthetist_sign_datetime"),
     "surgery_inventory_record": (
         "surgery_date", "surgery_room_enter_time", "surgery_room_leave_time",
     ),
