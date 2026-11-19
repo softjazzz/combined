@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { resolveMedicalDocumentGroup } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
-import { formatDiagnosisSection } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
+import {
+  formatDiagnosisSection,
+  resolvePreliminaryDiagnosisDisplay,
+} from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
 import { resolveMedicalDocumentTimeLabel } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
 import { resolveMedicalDocumentTitle } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
 
@@ -78,6 +81,39 @@ it('诊断类别与其他诊断分行，保留椎体编号及原有归属', () =
   expect(formatDiagnosisSection('现病史', '数值 1.5 其他诊断: 示例')).toBe(
     '数值 1.5 其他诊断: 示例',
   )
+})
+
+it('生成的初步诊断只显示一个标题，保留编号顺序和各条诊断原文', () => {
+  const section = {
+    key: 'admission_record_diagnosis',
+    label: '入院记录诊断',
+    text: '入院记录诊断\n诊断类型: 初步诊断\n其他诊断: 1、合成甲2、2型合成乙3、L3椎体合成丙\n4、合成丁',
+  }
+  expect(resolvePreliminaryDiagnosisDisplay(section)).toEqual({
+    label: '初步诊断',
+    text: '1、合成甲\n2、2型合成乙\n3、L3椎体合成丙\n4、合成丁',
+  })
+  expect(section.text).toContain('其他诊断: 1、合成甲2、2型合成乙')
+  expect(resolvePreliminaryDiagnosisDisplay({
+    ...section,
+    key: 'first_course_record_diagnosis',
+    label: '首次病程诊断',
+    text: '诊断类型: 初步诊断\n第一诊断: 合成甲\n其他诊断: 合成乙；合成丙',
+  })?.text).toBe('合成甲\n合成乙；合成丙')
+})
+
+it('只收起明确为初步诊断的生成标签，保留混合类型和 PDF 原文', () => {
+  const section = {
+    key: 'admission_record_diagnosis',
+    label: '入院记录诊断',
+    text: '诊断类型: 初步诊断；入院诊断\n其他诊断: 合成甲',
+  }
+  expect(resolvePreliminaryDiagnosisDisplay(section)).toBeNull()
+  expect(resolvePreliminaryDiagnosisDisplay({
+    key: 'record_content',
+    label: '初步诊断',
+    text: '1、合成甲\n2、合成乙',
+  })).toBeNull()
 })
 
 describe('medicalDocumentDisplay', () => {

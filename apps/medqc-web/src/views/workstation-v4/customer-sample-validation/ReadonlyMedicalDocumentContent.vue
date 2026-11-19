@@ -112,6 +112,7 @@ import {
   deduplicateMedicalDocumentSections,
   displayMedicalDocumentSectionText,
   formatDiagnosisSection,
+  resolvePreliminaryDiagnosisDisplay,
 } from './medicalDocumentDisplay'
 import { resolveSafeMedicalSectionLabel } from '@/utils/medicalFieldLabels'
 import { buildMedicalReportMetadataRows } from '@/utils/medicalReportDisplay'
@@ -145,15 +146,19 @@ const reportMetadataRows = computed(() =>
 
 const sectionViews = computed<SectionView[]>(() =>
   deduplicateMedicalDocumentSections(props.document.sections || [])
-    .map((section, sourceIndex) => ({
-      key: section.key || `section-${sourceIndex}`,
-      label: resolveSafeMedicalSectionLabel(section.label, '未命名章节'),
-      text: formatDiagnosisSection(section.label, displayMedicalDocumentSectionText(section)),
-      orderIndex: Number.isFinite(section.order_index)
-        ? Number(section.order_index)
-        : Number.MAX_SAFE_INTEGER,
-      sourceIndex,
-    }))
+    .map((section, sourceIndex) => {
+      const text = displayMedicalDocumentSectionText(section)
+      const preliminary = resolvePreliminaryDiagnosisDisplay(section, text)
+      return {
+        key: section.key || `section-${sourceIndex}`,
+        label: resolveSafeMedicalSectionLabel(preliminary?.label || section.label, '未命名章节'),
+        text: preliminary?.text ?? formatDiagnosisSection(section.label, text),
+        orderIndex: Number.isFinite(section.order_index)
+          ? Number(section.order_index)
+          : Number.MAX_SAFE_INTEGER,
+        sourceIndex,
+      }
+    })
     .sort(
       (left, right) => left.orderIndex - right.orderIndex || left.sourceIndex - right.sourceIndex,
     ),

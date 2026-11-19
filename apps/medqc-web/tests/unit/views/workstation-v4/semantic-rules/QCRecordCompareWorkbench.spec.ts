@@ -71,6 +71,48 @@ beforeEach(async () => {
 })
 
 describe('QCRecordCompareWorkbench', () => {
+  it('初步诊断去掉生成标签后仍高亮同一句原文证据', async () => {
+    const key = 'admission_record_diagnosis'
+    const quote = '2、合成诊断乙的原文条目'
+    const text = `入院记录诊断\n诊断类型: 初步诊断\n其他诊断: 1、合成甲${quote}`
+    getDocumentsMock.mockResolvedValue({
+      success: true,
+      data: {
+        documents: [{
+          key: 'synthetic-admission',
+          source_document_id: 'synthetic-admission',
+          document_type: 'admission_record',
+          title: '入院记录',
+          content: text,
+          sections: [{ key, label: '入院记录诊断', text }],
+        }],
+      },
+    })
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'synthetic-diagnosis-visit',
+        issues: [{
+          ...issues[1]!,
+          target_document_type: 'admission_record',
+          evidences: [{
+            key: 'synthetic-diagnosis-evidence',
+            source_document_type: 'admission_record',
+            source_document_id: 'synthetic-admission',
+            section_field_path: key,
+            quote,
+          }],
+        }],
+      },
+    })
+    await flushPromises()
+
+    const section = wrapper.get(`[data-section-key="${key}"]`)
+    expect(section.get('h3').text()).toBe('初步诊断')
+    expect(section.get('p').text()).toBe(`1、合成甲\n${quote}`)
+    expect(section.get('mark').text()).toBe(quote)
+    wrapper.unmount()
+  })
+
   it('PDF正文版本按父文书展开，点击后能读到独立保留的PDF全文', async () => {
     const wrapper = mount(QCRecordCompareWorkbench, {
       props: {

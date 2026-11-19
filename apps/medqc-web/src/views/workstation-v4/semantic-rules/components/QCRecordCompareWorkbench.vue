@@ -189,7 +189,7 @@
               :data-section-key="section.key"
             >
               <h3 class="record-content-section-title">
-                {{ displaySectionLabel(section.label) }}
+                {{ section.displayLabel }}
               </h3>
               <p class="record-content-section-text">
                 <span>{{ section.parts.before }}</span><mark
@@ -437,6 +437,7 @@ import {
   deduplicateMedicalDocumentSections,
   displayMedicalDocumentSectionText,
   formatDiagnosisSection,
+  resolvePreliminaryDiagnosisDisplay,
   formatMedicalDocumentTime,
   isMedicalOrderDocument,
   resolveMedicalDocumentTime,
@@ -644,7 +645,8 @@ const locationMessage = computed(() => {
     const section = selectedDocument.value?.sections?.find(
       (item) => item.key === matchedSectionKey.value,
     )
-    return section?.label ? `已定位到${displaySectionLabel(section.label)}章节` : '已定位到对应章节'
+    const label = section && (resolvePreliminaryDiagnosisDisplay(section)?.label || section.label)
+    return label ? `已定位到${displaySectionLabel(label)}章节` : '已定位到对应章节'
   }
   if (locationState.value === 'document') return '已定位到文书，未定位到具体片段'
   if (locationState.value === 'missing') return '未找到对应文书，请手动核对'
@@ -681,18 +683,32 @@ const documentSectionViews = computed(() => {
       range.end <= sectionStart + text.length
         ? range.start - sectionStart
         : -1
-    const localEnd = localStart >= 0 && range ? range.end - sectionStart : -1
+    const quote = localStart >= 0 && range ? text.slice(localStart, range.end - sectionStart) : ''
+    const preliminary = resolvePreliminaryDiagnosisDisplay(section, text)
+    let displayedText = preliminary?.text ?? formatDiagnosisSection(section.label, text)
+    let quoteStart = -1
+    if (quote) {
+      const uniqueInSource =
+        preliminary && text.indexOf(quote) === localStart && text.lastIndexOf(quote) === localStart
+      quoteStart = uniqueInSource ? displayedText.indexOf(quote) : -1
+      if (quoteStart < 0 || quoteStart !== displayedText.lastIndexOf(quote)) {
+        // 无法在展示文本中唯一复现时，按原定位显示证据，避免高亮另一处相同文字。
+        displayedText = text
+        quoteStart = localStart
+      }
+    }
     return {
       ...section,
+      displayLabel: displaySectionLabel(preliminary?.label || section.label),
       isMatchedSection: matchedSectionKey.value === section.key,
       parts:
-        localStart >= 0 && localEnd > localStart
+        quoteStart >= 0
           ? {
-              before: text.slice(0, localStart),
-              match: text.slice(localStart, localEnd),
-              after: text.slice(localEnd),
+              before: displayedText.slice(0, quoteStart),
+              match: quote,
+              after: displayedText.slice(quoteStart + quote.length),
             }
-          : { before: formatDiagnosisSection(section.label, text), match: '', after: '' },
+          : { before: displayedText, match: '', after: '' },
     }
   })
 })
