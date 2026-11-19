@@ -21,7 +21,7 @@
     </span>
     <span v-if="recordTimes.length" class="customer-record-result-title__context-time">
       <span v-for="time in recordTimes" :key="time.label" class="patient-context-time-entry">
-        <span>{{ time.label }}</span>{{ ' ' }}<strong>{{ time.value }}</strong>
+        <span class="patient-context-time-label">{{ time.label }}</span>{{ ' ' }}<strong>{{ time.value }}</strong>
       </span>
     </span>
     <span
@@ -140,20 +140,23 @@ const recordContextAriaLabel = computed(() =>
   min-width: 0;
   padding-inline-start: 16px;
   border-inline-start: 1px solid var(--mq-border, rgba(0, 0, 0, 0.07));
-  color: var(--mq-text-tertiary, #6e6e73);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 18px;
   overflow-wrap: anywhere;
 }
 .patient-context-time-entry {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
+}
+.patient-context-time-label {
+  color: var(--mq-brand-700, #0a5fd6);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 .patient-context-time-entry strong {
   color: var(--mq-text-secondary, #515154);
-  font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 .customer-record-result-title__qc-time {
