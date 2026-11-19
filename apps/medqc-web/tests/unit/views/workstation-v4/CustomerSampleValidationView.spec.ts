@@ -1049,9 +1049,16 @@ async function mountView() {
 }
 
 async function selectRuleSet(wrapper: ReturnType<typeof mount>, ruleSetKey: string) {
-  const button = wrapper.find(`[data-rule-set-key="${ruleSetKey}"]`)
-  expect(button.exists()).toBe(true)
-  await button.trigger('click')
+  const internalLabels: Record<string, string> = {
+    sc_content_full_v1: 'SC 内涵质控全量 v1',
+    sc_sample_running_v1: 'SC 样本规则模式',
+  }
+  const label = internalLabels[ruleSetKey]
+  const button = label
+    ? wrapper.findAll('.a-dropdown-overlay-stub button').find((item) => item.text() === label)
+    : wrapper.find(`[data-rule-set-key="${ruleSetKey}"]`)
+  expect(button?.exists()).toBe(true)
+  await button!.trigger('click')
   await flushPromises()
 }
 
@@ -2147,24 +2154,31 @@ describe('CustomerSampleValidationView', () => {
 
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
-    expect(wrapper.text()).toContain('Luxian0916 质控点 v1')
-    expect(wrapper.text()).toContain('SC 内涵质控全量 v1')
+    const switcher = wrapper.get('.customer-sample-rule-switcher')
+    expect(switcher.findAll('button').map((item) => item.attributes('data-rule-set-key'))).toEqual([
+      'luxian_0609_qc_v1',
+      'luxian_0916_qc_v1',
+    ])
+    expect(switcher.text()).toContain('泸县0609质控点验证 v1')
+    expect(switcher.text()).toContain('Luxian0916 质控点 v1')
     expect(wrapper.text()).toContain('内置目录')
   })
 
   it('Luxian0916 需主动选择，并且提交时不携带 LX0609 专属范围参数', async () => {
     const wrapper = await mountView()
 
+    expect(wrapper.get('.customer-sample-rule-switcher').findAll('button')).toHaveLength(2)
     const defaultCard = wrapper.find('[data-rule-set-key="luxian_0609_qc_v1"]')
     const luxian0916Card = wrapper.find('[data-rule-set-key="luxian_0916_qc_v1"]')
     expect(defaultCard.classes()).toContain('is-selected')
+    expect(defaultCard.attributes('aria-pressed')).toBe('true')
     expect(luxian0916Card.exists()).toBe(true)
     expect(luxian0916Card.classes()).not.toContain('is-selected')
 
     await luxian0916Card.trigger('click')
     await flushPromises()
     expect(luxian0916Card.classes()).toContain('is-selected')
+    expect(luxian0916Card.attributes('aria-pressed')).toBe('true')
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)

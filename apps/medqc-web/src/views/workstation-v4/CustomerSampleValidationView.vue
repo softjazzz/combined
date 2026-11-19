@@ -110,6 +110,9 @@
                           JSON 原始结果
                         </a-menu-item>
                         <a-menu-divider />
+                        <a-menu-item @click="handleMoreActionKey('mode-sc-full')">
+                          SC 内涵质控全量 v1
+                        </a-menu-item>
                         <a-menu-item @click="handleMoreActionKey('mode-sc')">
                           SC 样本规则模式
                         </a-menu-item>
@@ -168,13 +171,14 @@
                   :class="customerSampleGuideTargetClass('sample-rule')"
                 >
                   <div class="customer-sample-field-label">验证规则集</div>
-                  <div class="customer-sample-rule-switcher">
+                  <div class="customer-sample-rule-switcher" role="group" aria-label="验证规则集">
                     <button
                       v-for="ruleSet in mainRuleSets"
                       :key="ruleSet.rule_set_key"
                       type="button"
                       class="customer-sample-rule-card"
                       :data-rule-set-key="ruleSet.rule_set_key"
+                      :aria-pressed="selectedRuleSet?.rule_set_key === ruleSet.rule_set_key"
                       :class="ruleSetCardClass(ruleSet)"
                       @click="handleRuleSetChange(ruleSet.rule_set_key)"
                     >

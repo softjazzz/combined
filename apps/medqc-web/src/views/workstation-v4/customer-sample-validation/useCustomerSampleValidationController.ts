@@ -490,7 +490,13 @@ export function useCustomerSampleValidationController() {
       : `未选择时默认运行全部 ${luxianDefaultRuleCount.value} 个 0609 质控点；待验收规则须逐条勾选，全选和质控族选择不包含待验收规则。`,
   )
   const mainRuleSets = computed(() =>
-    ruleSets.value.filter((item) => !item.advanced && (item.display_group || 'main') === 'main'),
+    ruleSets.value.filter(
+      (item) =>
+        !item.advanced &&
+        (item.display_group || 'main') === 'main' &&
+        (item.rule_set_key === LUXIAN_0609_RULE_SET_KEY ||
+          item.rule_set_key === LUXIAN_0916_RULE_SET_KEY),
+    ),
   )
   const selectedRuleSetRuleCountText = computed(() => {
     const count = Number(selectedRuleSet.value?.rule_count || 0)
@@ -1824,6 +1830,10 @@ export function useCustomerSampleValidationController() {
     }
     if (key === 'export-luxian-json') {
       await handleExportLuxianReport('json')
+      return
+    }
+    if (key === 'mode-sc-full') {
+      await handleRuleSetChange(FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY)
       return
     }
     if (key === 'mode-sc') {
