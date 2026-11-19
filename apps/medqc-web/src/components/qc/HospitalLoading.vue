@@ -31,6 +31,7 @@ defineProps<{
 }
 
 .hospital-loading__mark {
+  position: relative;
   box-sizing: border-box;
   max-inline-size: 100%;
   padding: 13px 18px;
@@ -52,22 +53,36 @@ defineProps<{
   block-size: auto;
 }
 
-@supports (mask-image: none) {
-  .hospital-loading__logo::after {
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  .hospital-loading__mark::after {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    mask: url('@/assets/images/lx-logo.png') center / 100% 100% no-repeat;
-    background: linear-gradient(
-      112deg,
-      transparent 40%,
-      rgba(125, 220, 235, 0.45) 47%,
-      rgba(255, 255, 255, 0.9) 50%,
-      rgba(151, 203, 255, 0.52) 53%,
-      transparent 60%
-    ) 100% 50% / 260% 100% no-repeat;
-    animation: hospital-logo-shine 2.35s ease-in-out infinite;
+    border-radius: inherit;
+    box-shadow: 0 0 0 1px rgba(36, 154, 230, 0.22), 0 0 20px rgba(24, 156, 225, 0.34);
+    animation: hospital-logo-glow 1.8s ease-in-out infinite;
     content: '';
+  }
+
+  @supports (mask-image: none) {
+    .hospital-loading__logo::after {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      mask: url('@/assets/images/lx-logo.png') center / 100% 100% no-repeat;
+      background: linear-gradient(
+        112deg,
+        transparent 34%,
+        rgba(0, 156, 229, 0.72) 43%,
+        #b4f3ff 48%,
+        #fff 50%,
+        #b4f3ff 52%,
+        rgba(52, 147, 255, 0.76) 57%,
+        transparent 66%
+      ) 96% 50% / 240% 100% no-repeat;
+      animation: hospital-logo-shine 1.8s ease-out infinite;
+      content: '';
+    }
   }
 }
 
@@ -124,18 +139,27 @@ defineProps<{
 
 @keyframes hospital-logo-shine {
   from {
-    background-position: 100% 50%;
+    background-position: 96% 50%;
   }
 
-  84%,
+  72%,
   to {
     background-position: 0% 50%;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .hospital-loading__logo::after {
-    content: none;
+@keyframes hospital-logo-glow {
+  from,
+  to {
+    opacity: 0.7;
+  }
+
+  35% {
+    opacity: 1;
+  }
+
+  78% {
+    opacity: 0.42;
   }
 }
 </style>
