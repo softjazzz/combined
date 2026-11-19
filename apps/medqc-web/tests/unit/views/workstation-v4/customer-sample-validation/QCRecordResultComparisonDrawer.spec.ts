@@ -194,9 +194,10 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(workbenchProps?.lazyResultDocuments).toBe(true)
     expect(workbenchProps?.dischargeTime).toBe('2026-06-26 08:31:00')
     expect(wrapper.get('.customer-record-result-title__context-value').text()).toBe('测试病历')
-    expect(wrapper.get('.customer-record-result-title__context-time').text()).toBe(
-      '住院时间 2026-06-18 07:02:00 → 2026-06-26 08:31:00',
-    )
+    expect(wrapper.findAll('.patient-context-time-entry').map((entry) => entry.text())).toEqual([
+      '入院时间 2026-06-18 07:02:00',
+      '出院时间 2026-06-26 08:31:00',
+    ])
     expect(wrapper.get('.customer-record-result-title__context').attributes('aria-label')).toBe(
       '当前病历：测试病历，入院时间：2026-06-18 07:02:00，出院时间：2026-06-26 08:31:00',
     )

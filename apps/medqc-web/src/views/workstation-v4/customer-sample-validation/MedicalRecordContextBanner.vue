@@ -19,8 +19,10 @@
         </span>
       </span>
     </span>
-    <span v-if="hospitalizationTime" class="customer-record-result-title__context-time">
-      <span>{{ hospitalizationTime.label }}</span>{{ ' ' }}<strong>{{ hospitalizationTime.value }}</strong>
+    <span v-if="recordTimes.length" class="customer-record-result-title__context-time">
+      <span v-for="time in recordTimes" :key="time.label" class="patient-context-time-entry">
+        <span>{{ time.label }}</span>{{ ' ' }}<strong>{{ time.value }}</strong>
+      </span>
     </span>
     <span
       v-if="qcTimeText"
@@ -65,22 +67,17 @@ const contextAvatar = computed(() => {
   return female ? avatarWoman : avatarMan
 })
 const contextParts = computed(() => (props.context?.label || '病历原文与质控结果对照').split(' · '))
-const hospitalizationTime = computed(() => {
-  const admissionTime = props.context?.admissionTime
-  const dischargeTime = props.context?.dischargeTime
-  if (admissionTime && dischargeTime) return { label: '住院时间', value: `${admissionTime} → ${dischargeTime}` }
-  if (admissionTime) return { label: '入院时间', value: admissionTime }
-  if (dischargeTime) return { label: '出院时间', value: dischargeTime }
-  return null
-})
+const recordTimes = computed(() =>
+  [
+    { label: '入院时间', value: props.context?.admissionTime },
+    { label: '出院时间', value: props.context?.dischargeTime },
+  ].filter(({ value }) => Boolean(value)),
+)
 const recordContextAriaLabel = computed(() =>
   [
     `当前病历：${props.context?.label || '病历原文与质控结果对照'}`,
-    props.context?.admissionTime ? `入院时间：${props.context.admissionTime}` : '',
-    props.context?.dischargeTime ? `出院时间：${props.context.dischargeTime}` : '',
-  ]
-    .filter(Boolean)
-    .join('，'),
+    ...recordTimes.value.map(({ label, value }) => `${label}：${value}`),
+  ].join('，'),
 )
 </script>
 
@@ -137,8 +134,9 @@ const recordContextAriaLabel = computed(() =>
   object-fit: cover;
 }
 .customer-record-result-title__context-time {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
   min-width: 0;
   padding-inline-start: 16px;
   border-inline-start: 1px solid var(--mq-border, rgba(0, 0, 0, 0.07));
@@ -147,7 +145,12 @@ const recordContextAriaLabel = computed(() =>
   line-height: 18px;
   overflow-wrap: anywhere;
 }
-.customer-record-result-title__context-time strong {
+.patient-context-time-entry {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.patient-context-time-entry strong {
   color: var(--mq-text-secondary, #515154);
   font-size: 13px;
   font-weight: 600;
