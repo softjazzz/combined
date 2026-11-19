@@ -25,7 +25,7 @@ defineProps<{
   min-block-size: 248px;
   justify-items: center;
   align-content: center;
-  gap: 10px;
+  gap: 14px;
   padding: 24px 16px;
   text-align: center;
 }
@@ -72,25 +72,23 @@ defineProps<{
 }
 
 .hospital-loading__status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   margin: 0;
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--mq-neutral-bg, #edf1f5);
-  color: var(--mq-text-tertiary, #6e6e73);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
+  color: #165368;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
 }
 
-.hospital-loading__status::before {
-  flex: 0 0 5px;
-  block-size: 5px;
-  border-radius: 50%;
-  background: #217782;
-  content: '';
+@supports (background-clip: text) {
+  @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+    .hospital-loading__status {
+      background: linear-gradient(105deg, #165368 38%, #147783 50%, #165368 62%) 100% 50% / 240% 100%;
+      background-clip: text;
+      color: transparent;
+      animation: hospital-status-shine 2.35s ease-in-out infinite;
+    }
+  }
 }
 
 .hospital-loading.is-compact {
@@ -107,6 +105,21 @@ defineProps<{
 
 .is-compact .hospital-loading__logo {
   inline-size: 118px;
+}
+
+.is-compact .hospital-loading__status {
+  font-size: 16px;
+}
+
+@keyframes hospital-status-shine {
+  from {
+    background-position: 100% 50%;
+  }
+
+  84%,
+  to {
+    background-position: 0% 50%;
+  }
 }
 
 @keyframes hospital-logo-shine {
