@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+from collections import Counter
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from functools import lru_cache, wraps
@@ -2096,6 +2097,13 @@ def _build_grouped_exam_reports(
         grouped.setdefault(group_key, (report_id, []))[1].append(row)
 
     master_index = _index_report_masters(master_rows, id_fields=("exam_id", "exam_no"))
+    report_id_counts = Counter(report_id for report_id, _ in grouped.values())
+    master_link_counts = Counter(
+        (field, _normalize_text(row[field]))
+        for row in master_rows
+        for field in ("exam_id", "exam_no")
+        if row.get(field)
+    )
     exam_items_by_exam_id: dict[str, list[dict[str, Any]]] = {}
     exam_items_by_identity: dict[tuple[str, str], dict[str, Any]] = {}
     for exam_item in exam_item_rows:
@@ -2111,12 +2119,22 @@ def _build_grouped_exam_reports(
         rows.sort(key=_report_item_sort_key)
         first = rows[0]
         matched_master: dict[str, Any] = {}
+        master_evidence_ids: set[str] = set()
         for field_name in ("exam_id", "exam_no"):
             value = _normalize_text(first.get(field_name))
             matched = master_index.get((field_name, value)) if value else None
             if matched:
                 consumed_master_indexes.add(matched[0])
                 matched_master = matched[1]
+                if master_link_counts[(field_name, value)] == 1 and all(
+                    _normalize_text(row.get(field_name)) == value for row in rows
+                ):
+                    version_key = _normalize_text(matched_master.get("source_version_key"))
+                    # 原生检查规则的窄投影使用 exam_id，目录还可能读到 document_id。
+                    master_evidence_ids = {version_key} if version_key else {
+                        _normalize_text(matched_master.get(field))
+                        for field in ("document_id", "exam_id")
+                    }
                 break
         matched_exam_id = _first_report_value(
             first,
@@ -2245,14 +2263,26 @@ def _build_grouped_exam_reports(
             "report_time": report_time,
             "record_content": "\n".join([*header_lines, *result_lines]),
         }
-        reports.append(
-            _inventory_entry(
-                table_name="exam_item_report",
-                row=synthetic_row,
-                report_items=report_items,
-                report_metadata=metadata,
-            )
+        report = _inventory_entry(
+            table_name="exam_item_report",
+            row=synthetic_row,
+            report_items=report_items,
+            report_metadata=metadata,
         )
+        if report_id_counts[report_id] == 1:
+            coordinates = {
+                ("exam_item_report", _first_report_value(
+                    row, fields=("source_version_key", "document_id", "exam_id", "id")
+                ))
+                for row in rows
+            }
+            coordinates.update(("exam_master", source_id) for source_id in master_evidence_ids)
+            report["exam_evidence_coordinates"] = [
+                {"source_type": source_type, "source_document_id": source_id}
+                for source_type, source_id in sorted(coordinates)
+                if source_id
+            ]
+        reports.append(report)
     return reports, consumed_master_indexes
 
 
@@ -3033,6 +3063,7 @@ def load_domain_bundle_document_index(
                        'document_type', item -> 'document_type',
                        'source_table', item -> 'source_table',
                        'document_id', item -> 'document_id',
+                       'exam_evidence_coordinates', item -> 'exam_evidence_coordinates',
                        'document_title', item -> 'document_title',
                        'display_time', item -> 'display_time',
                        'record_time', item -> 'record_time',

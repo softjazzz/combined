@@ -537,6 +537,65 @@ describe('QCRecordCompareWorkbench', () => {
     expect(wrapper.find('mark').exists()).toBe(false)
   })
 
+  it('CT 检查主记录的安全引用打开对应报告正文，跳过同号的其他类型文书', async () => {
+    const sourceRef = 'src_ct_master'
+    const report = {
+      key: 'exam_item_report::ct-report',
+      source_document_id: 'ct-report',
+      source_ref: 'src_ct_report',
+      source_table: 'exam_item_report',
+      document_type: 'exam_item_report',
+      title: '胸部 CT 检查报告',
+      execution_domain: 'course',
+      content_loaded: false,
+      source_document_aliases: [
+        { source_document_id: 'ct-report', source_ref: sourceRef, source_document_type: 'exam_master' },
+      ],
+    }
+    getDocumentsMock.mockResolvedValue({
+      success: true,
+      data: {
+        visit_id: 'visit-1',
+        documents: [{
+          key: 'unrelated',
+          source_ref: sourceRef,
+          source_table: 'daily_course_record',
+          document_type: 'daily_course_record',
+          title: '其他文书',
+          content: '合成病程',
+          content_loaded: true,
+        }, report],
+      },
+    })
+    getDocumentMock.mockResolvedValue({
+      success: true,
+      data: { ...report, content: '合成 CT 报告正文', content_loaded: true },
+    })
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-1', instituteId: 'inst-1', patientId: 'patient-1', jobId: 'saved-job',
+        issues: [],
+        singleRecordItems: [{
+          rule_id: 'LX0609-06-01-02',
+          rule_name: 'CT/MRI 检查前病程记录',
+          status: 'non_compliant',
+          evidence: [{ source_ref: sourceRef, source_type: 'exam_master' }],
+        }],
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="single-record-evidence"]').trigger('click')
+    await flushPromises()
+    expect(getDocumentMock).toHaveBeenLastCalledWith(
+      'visit-1',
+      expect.objectContaining({ source_document_id: 'ct-report', source_ref: 'src_ct_report' }),
+      expect.objectContaining({ job_id: 'saved-job', visit_id: 'visit-1' }),
+    )
+    expect(wrapper.text()).toContain('合成 CT 报告正文')
+    expect(wrapper.text()).toContain('已定位到文书，未定位到具体片段')
+  })
+
   it('检验申请汇总通过原始文书安全别名加载并定位证据', async () => {
     getDocumentsMock.mockResolvedValue({
       success: true,

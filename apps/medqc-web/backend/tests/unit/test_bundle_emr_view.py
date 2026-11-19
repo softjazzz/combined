@@ -10,6 +10,81 @@ from app.services.bundles.emr_view import (
 )
 from app.routers.emr_render import _project_customer_safe_source_refs
 from app.services.custom_qc_workspace_service import build_customer_safe_source_ref
+from app.services.bundles import assembly, current_view
+from app.services import case_material_snapshot as material
+from app.routers import emr_render
+from app.services.qc_workspace.canonical_result_store import keyed_ref
+
+
+def test_exam_evidence_routes_to_grouped_report_in_current_and_saved_directories(monkeypatch):
+    key = "synthetic-evidence-key"
+    monkeypatch.setattr(emr_render, "customer_safe_projection_key", lambda: key)
+    tables = {
+        "exam_master": [{"exam_id": "EXAM-1", "document_id": "master-1"}],
+        "exam_item_report": [
+            {"exam_id": "EXAM-1", "exam_no": "report-1", "item_no": "1",
+             "document_id": "detail-1", "exam_name": "胸部CT", "exam_findings": "合成所见"},
+            {"exam_id": "EXAM-1", "exam_no": "report-1", "item_no": "2",
+             "document_id": "detail-2", "exam_name": "胸部CT", "exam_findings": "合成所见二"},
+            {"exam_id": "EXAM-2", "exam_no": "report-2", "item_no": "1",
+             "document_id": "detail-3", "exam_name": "胸部CT", "exam_findings": "另一份报告"},
+        ],
+    }
+    reports, _ = assembly._build_grouped_exam_reports(tables["exam_master"], [], tables["exam_item_report"])
+
+    def documents():
+        return build_documents_from_domain_bundles(
+            {"course": {"source_documents": reports}}, include_exam_evidence_coordinates=True,
+        )
+
+    def aliases(payload):
+        report = next(doc for doc in payload["documents"] if doc["document_id"] == "report-1")
+        assert "exam_evidence_coordinates" not in report
+        return {
+            (alias["source_document_type"], alias["source_ref"], alias["source_document_id"])
+            for alias in report.get("source_document_aliases", [])
+        }
+
+    expected = {
+        (source, keyed_ref("src", source_id, hmac_key=key), "report-1")
+        for source, source_id in (
+            ("exam_master", "master-1"),
+            ("exam_master", "EXAM-1"),
+            ("exam_item_report", "detail-1"),
+            ("exam_item_report", "detail-2"),
+        )
+    }
+    assert aliases(_project_customer_safe_source_refs({"documents": documents()})) == expected
+    assert all(
+        "exam_evidence_coordinates" not in doc
+        for doc in build_documents_from_domain_bundles({"course": {"source_documents": reports}})
+    )
+
+    # 老任务只有当时的成组报告和原始表行，读取时恢复对应关系。
+    old_documents = documents()
+    for document in old_documents:
+        document.pop("exam_evidence_coordinates", None)
+    identity = ("org", "patient", "visit")
+    monkeypatch.setattr(material, "source_binding", lambda _: "synthetic-task-binding")
+    frozen = {
+        "identity": list(identity), "binding": "synthetic-task-binding",
+        "tables": tables, "documents": {"documents": old_documents},
+    }
+    kwargs = dict(record_id="visit", institute_id="org", patient_id="patient", visit_id="visit")
+    with material.activate(frozen):
+        assert aliases(emr_render._load_document_summaries_from_bundle(**kwargs)) == expected
+        rendered = emr_render._load_document_from_bundle(
+            **kwargs, execution_domain="course", doc_type="exam_item_report", doc_id="report-1",
+        )
+        assert "合成所见二" in rendered["content"]
+    assert all("source_document_aliases" not in doc for doc in old_documents)
+    with material.activate({**frozen, "documents": {"documents": documents()}}):
+        public = current_view.load_current_documents(institute_id="org", patient_id="patient", visit_id="visit")
+        assert all("exam_evidence_coordinates" not in doc for doc in public["documents"])
+    old_report = next(doc for doc in old_documents if doc["document_id"] == "report-1")
+    old_report["content"] = "与原始表行不一致的正文"
+    with material.activate(frozen):
+        assert aliases(emr_render._load_document_summaries_from_bundle(**kwargs)) == set()
 
 
 def test_old_course_bundle_without_exam_lab_coverage_requires_refresh():

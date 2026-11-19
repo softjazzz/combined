@@ -16,6 +16,7 @@ from ..services.bundles.emr_view import (
     load_bundle_document_summaries,
     summarize_frozen_documents,
     load_bundle_documents,
+    restore_frozen_exam_evidence_coordinates,
     pick_document,
     build_render_view,
 )
@@ -72,6 +73,16 @@ def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any
         source_document_id = str((document.get("doc_key") if document.get("version_id") else document.get("document_id")) or "").strip()
         if source_document_id:
             document["source_ref"] = source_ref(source_document_id)
+        exam_coordinates = document.pop("exam_evidence_coordinates", None)
+        if source_document_id and exam_coordinates and document.get("doc_type") == "exam_item_report":
+            document["source_document_aliases"] = [
+                {
+                    "source_document_id": source_document_id,
+                    "source_ref": source_ref(coordinate["source_document_id"]),
+                    "source_document_type": coordinate["source_type"],
+                }
+                for coordinate in exam_coordinates
+            ]
         source_document_ids = document.get("source_document_ids")
         if isinstance(source_document_ids, list):
             source_document_type = str(
@@ -97,6 +108,12 @@ def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any
     return payload
 
 
+def _frozen_documents_payload(frozen: dict) -> dict:
+    payload = deepcopy(frozen["documents"])
+    restore_frozen_exam_evidence_coordinates(payload["documents"], frozen.get("tables") or {})
+    return payload
+
+
 def _load_documents_from_bundle(
     *,
     record_id: str,
@@ -107,7 +124,7 @@ def _load_documents_from_bundle(
     frozen = case_material.current()
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
-        return _project_customer_safe_source_refs(deepcopy(frozen["documents"]))
+        return _project_customer_safe_source_refs(_frozen_documents_payload(frozen))
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
     if current is not None:
         return _project_customer_safe_source_refs(current)
@@ -123,6 +140,7 @@ def _load_documents_from_bundle(
             patient_id=normalized_patient_id,
             visit_id=normalized_visit_id,
             bundle_schema="public",
+            include_exam_evidence_coordinates=True,
         )
         return _project_customer_safe_source_refs(payload)
     except Exception as exc:
@@ -145,7 +163,7 @@ def _load_document_summaries_from_bundle(
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
         return _project_customer_safe_source_refs(summarize_frozen_documents(
-            documents=deepcopy(frozen["documents"]["documents"]), execution_domain=execution_domain,
+            documents=_frozen_documents_payload(frozen)["documents"], execution_domain=execution_domain,
             daily_material_status=frozen["documents"].get("daily_material_status"),
             primary_material_status=frozen["documents"].get("primary_material_status")))
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
@@ -234,7 +252,7 @@ def _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id):
     if not all(identity.values()):
         raise HTTPException(422, "clinical_material_identity_unavailable")
     try:
-        return load_current_documents(**identity)
+        return load_current_documents(**identity, include_exam_evidence_coordinates=True)
     except HTTPException:
         raise
     except Exception as exc:
@@ -281,7 +299,9 @@ async def get_record_documents(
         if not all(identity.values()):
             raise HTTPException(status_code=422, detail="缺少完整住院身份，无法读取当前病历")
         try:
-            payload = await run_in_threadpool(load_current_documents, **identity)
+            payload = await run_in_threadpool(
+                load_current_documents, **identity, include_exam_evidence_coordinates=True,
+            )
         except Exception as exc:
             logger.warning("当前文书更新失败: error_type=%s", type(exc).__name__)
             raise HTTPException(status_code=503, detail="文书更新失败，请稍后重试；本次未展示旧文书。") from exc

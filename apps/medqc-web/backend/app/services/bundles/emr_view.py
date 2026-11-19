@@ -7,6 +7,7 @@ from typing import Any
 from ..document_assembly.assembler import INDEPENDENT_DOCUMENT_FIELDS
 
 from .assembly import (
+    _build_grouped_exam_reports,
     assemble_domain_bundle,
     load_domain_bundle,
     load_domain_bundle_document_index,
@@ -364,6 +365,7 @@ def _normalize_source_document(
     raw_doc: dict[str, Any],
     index: int,
     execution_domain: str,
+    include_exam_evidence_coordinates: bool = False,
 ) -> dict[str, Any]:
     doc_type = _safe_text(raw_doc.get("document_type") or raw_doc.get("source_table"))
     doc_id = _safe_text(raw_doc.get("document_id"))
@@ -426,6 +428,8 @@ def _normalize_source_document(
     for key in (*_MATERIAL_DISPLAY_FIELDS, "daily_material", "daily_material_scope", "primary_material", "primary_material_scope"):
         if key in raw_doc:
             normalized[key] = raw_doc[key]
+    if include_exam_evidence_coordinates and raw_doc.get("exam_evidence_coordinates"):
+        normalized["exam_evidence_coordinates"] = raw_doc["exam_evidence_coordinates"]
     if raw_doc.get("chief_physician_sign_datetime") is not None:
         normalized["chief_physician_sign_datetime"] = _safe_text(raw_doc["chief_physician_sign_datetime"])
     for field_name in INDEPENDENT_DOCUMENT_FIELDS.get(doc_type, ()):
@@ -516,6 +520,8 @@ def _collapse_labtest_master_documents(documents: list[dict[str, Any]]) -> list[
 
 def build_documents_from_domain_bundles(
     domain_bundles: dict[str, dict[str, Any]],
+    *,
+    include_exam_evidence_coordinates: bool = False,
 ) -> list[dict[str, Any]]:
     documents: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
@@ -526,7 +532,10 @@ def build_documents_from_domain_bundles(
         for idx, item in enumerate(source_documents):
             if not isinstance(item, dict):
                 continue
-            normalized = _normalize_source_document(raw_doc=item, index=idx, execution_domain=domain)
+            normalized = _normalize_source_document(
+                raw_doc=item, index=idx, execution_domain=domain,
+                include_exam_evidence_coordinates=include_exam_evidence_coordinates,
+            )
             key = _safe_text(normalized.get("doc_key"))
             if key and key in seen_keys:
                 continue
@@ -917,7 +926,7 @@ def _normalize_source_document_summary(
         "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
-    for key in _MATERIAL_DISPLAY_FIELDS:
+    for key in (*_MATERIAL_DISPLAY_FIELDS, "exam_evidence_coordinates"):
         if key in raw_doc:
             summary[key] = raw_doc[key]
     if raw_doc.get("version_id") and raw_doc.get("source_record_identity"):
@@ -975,6 +984,35 @@ def _collapse_summary_only_documents(documents: list[dict[str, Any]]) -> list[di
         "length": sum(int(item.get("length") or 0) for item in applications),
     }
     return [doc for doc in visible if doc.get("doc_type") != "labtest_master"] + [summary]
+
+
+def restore_frozen_exam_evidence_coordinates(
+    documents: list[dict[str, Any]], tables: dict[str, Any],
+) -> None:
+    """只用同份快照的表行补齐旧报告坐标，保留当时保存的正文。"""
+    pending = [
+        doc for doc in documents
+        if doc.get("doc_type") == "exam_item_report" and not doc.get("exam_evidence_coordinates")
+    ]
+    if not pending or not tables.get("exam_item_report"):
+        return
+    rebuilt, _ = _build_grouped_exam_reports(
+        list(tables.get("exam_master") or []),
+        list(tables.get("exam_item") or []),
+        list(tables["exam_item_report"]),
+    )
+    candidates: dict[str, list[dict[str, Any]]] = {}
+    for report in rebuilt:
+        candidates.setdefault(report["document_id"], []).append(report)
+    for doc in pending:
+        matches = candidates.get(doc.get("document_id"), [])
+        if len(matches) != 1:
+            continue
+        report = matches[0]
+        if report.get("exam_evidence_coordinates") and all(
+            doc.get(field) == report.get(field) for field in ("content", "report_items", "report_metadata")
+        ):
+            doc["exam_evidence_coordinates"] = report["exam_evidence_coordinates"]
 
 
 def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_domain: str | None = None, daily_material_status=None, primary_material_status=None) -> dict[str, Any]:
@@ -1089,6 +1127,7 @@ def load_bundle_documents(
     patient_id: str,
     visit_id: str,
     bundle_schema: str = "public",
+    include_exam_evidence_coordinates: bool = False,
 ) -> dict[str, Any]:
     domain_bundles: dict[str, dict[str, Any]] = {}
     domain_hits: dict[str, bool] = {}
@@ -1142,7 +1181,9 @@ def load_bundle_documents(
             domain_bundles["course"] = refreshed_course_bundle
             domain_hits["course_runtime_refresh"] = True
 
-    documents = build_documents_from_domain_bundles(domain_bundles)
+    documents = build_documents_from_domain_bundles(
+        domain_bundles, include_exam_evidence_coordinates=include_exam_evidence_coordinates,
+    )
     if not _documents_include_doc_type(documents, "admission_record_diagnosis"):
         try:
             admission_bundle = assemble_domain_bundle(
@@ -1159,7 +1200,9 @@ def load_bundle_documents(
         ):
             domain_bundles["admission"] = admission_bundle
             domain_hits["admission_runtime_overlay"] = True
-            documents = build_documents_from_domain_bundles(domain_bundles)
+            documents = build_documents_from_domain_bundles(
+                domain_bundles, include_exam_evidence_coordinates=include_exam_evidence_coordinates,
+            )
     if not _documents_include_doc_type(documents, "discharge_record_diagnosis"):
         try:
             terminal_bundle = assemble_domain_bundle(
@@ -1176,7 +1219,9 @@ def load_bundle_documents(
         ):
             domain_bundles["terminal"] = terminal_bundle
             domain_hits["terminal_runtime_overlay"] = True
-            documents = build_documents_from_domain_bundles(domain_bundles)
+            documents = build_documents_from_domain_bundles(
+                domain_bundles, include_exam_evidence_coordinates=include_exam_evidence_coordinates,
+            )
     tree = build_documents_tree(documents)
     return {
         "layout_version": "bundle_struct_v1",

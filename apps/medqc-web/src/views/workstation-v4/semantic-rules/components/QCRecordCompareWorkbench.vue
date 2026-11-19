@@ -823,19 +823,13 @@ function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): Docum
     const sourceTypes = [evidence.source_document_type, evidence.source_table]
       .map(normalizeReference)
       .filter(Boolean)
-    if (sourceTypes.length) {
-      const typedDocuments = referencedDocuments.filter((document) =>
-        [document.document_type, document.source_table]
-          .map(normalizeReference)
-          .some((documentType) => documentType && sourceTypes.includes(documentType)),
-      )
-      if (typedDocuments.length === 1) return { document: typedDocuments[0] }
-      if (typedDocuments.length > 1) return null
-    }
-    // 同一安全引用对应多种投影视图时，不允许仅凭引用顺序猜测文书。
-    if (referencedDocuments.length === 1) return { document: referencedDocuments[0] }
-    if (referencedDocuments.length > 1) return null
-
+    const matchesSource = (...types: (string | undefined)[]) =>
+      types.map(normalizeReference).some((type) => type && sourceTypes.includes(type))
+    const directMatches = sourceTypes.length
+      ? referencedDocuments.filter((document) =>
+          matchesSource(document.document_type, document.source_table),
+        )
+      : referencedDocuments
     const aliasMatches = documents.value.flatMap((document) =>
       (document.source_document_aliases || [])
         .filter((alias) => normalizeReference(alias.source_ref) === sourceRef)
@@ -843,20 +837,33 @@ function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): Docum
     )
     const typedAliasMatches = sourceTypes.length
       ? aliasMatches.filter(({ document, alias }) =>
-          [alias.source_document_type, document.document_type, document.source_table]
-            .map(normalizeReference)
-            .some((documentType) => documentType && sourceTypes.includes(documentType)),
+          alias.source_document_type
+            ? matchesSource(alias.source_document_type)
+            : matchesSource(document.document_type, document.source_table),
         )
       : aliasMatches
+    if (directMatches.length > 1 || typedAliasMatches.length > 1) return null
     if (typedAliasMatches.length === 1) {
       const { document, alias } = typedAliasMatches[0]
+      const rendersListedDocument = alias.source_document_id === document.source_document_id
+      // 直接引用与别名指向不同原文时，保留无法定位状态。
+      if (directMatches[0] && (directMatches[0] !== document || !rendersListedDocument)) {
+        return null
+      }
+      if (rendersListedDocument) return { document }
       return {
         document,
         renderSourceDocumentId: alias.source_document_id,
         renderSourceRef: alias.source_ref,
       }
     }
-    if (typedAliasMatches.length > 1) return null
+    if (directMatches.length === 1) return { document: directMatches[0] }
+    // 已声明检查来源的证据不能命中另一来源恰好同号的文书。
+    if (sourceTypes.some((type) => type === 'exam_master' || type === 'exam_item_report')) {
+      return null
+    }
+    if (referencedDocuments.length === 1) return { document: referencedDocuments[0] }
+    if (referencedDocuments.length > 1) return null
   }
   const sourceId = normalizeReference(evidence.source_document_id)
   if (!sourceId) return null
