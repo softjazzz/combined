@@ -7,6 +7,9 @@
     :body-style="{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: '16px 0 0' }"
     @close="emit('close')"
   >
+    <template #closeIcon>
+      <RecordViewCloseIcon label="关闭病历" />
+    </template>
     <template #title>
       <ReadonlyMedicalRecordHeader :context="recordContext" />
     </template>
@@ -37,6 +40,7 @@ import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import { loadCurrentMedicalRecord } from '@/services/current-medical-record'
 import type { EditableMedicalRecordDocument } from '../customer-sample-validation/types'
 import QCRecordCompareWorkbench from '../semantic-rules/components/QCRecordCompareWorkbench.vue'
+import RecordViewCloseIcon from './RecordViewCloseIcon.vue'
 import ReadonlyMedicalRecordHeader from './ReadonlyMedicalRecordHeader.vue'
 import type { PatientRecord } from '../types'
 
@@ -99,7 +103,7 @@ watch(
 
 :global(.current-medical-record-drawer .ant-drawer-close) {
   order: 1;
-  flex-shrink: 0;
+  flex: 0 0 38px;
   align-self: flex-start;
   margin: 0;
   margin-inline-start: 12px;

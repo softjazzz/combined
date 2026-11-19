@@ -8,9 +8,7 @@
     @close="emit('close')"
   >
     <template #closeIcon>
-      <span class="record-view-close-icon" title="关闭病历质控结果" aria-hidden="true">
-        <X :size="20" :stroke-width="2.35" />
-      </span>
+      <RecordViewCloseIcon label="关闭病历质控结果" />
     </template>
     <template #title>
       <div class="customer-record-result-title">
@@ -83,8 +81,8 @@
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
-import { ShieldCheck, X } from 'lucide-vue-next'
-import './record-view-close.css'
+import { ShieldCheck } from 'lucide-vue-next'
+import RecordViewCloseIcon from '../components/RecordViewCloseIcon.vue'
 import MedicalRecordContextBanner from './MedicalRecordContextBanner.vue'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import HospitalLoading from '@/components/qc/HospitalLoading.vue'

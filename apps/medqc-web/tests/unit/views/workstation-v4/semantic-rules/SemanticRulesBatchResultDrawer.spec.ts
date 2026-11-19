@@ -454,7 +454,7 @@ beforeEach(async () => {
 })
 
 describe('SemanticRulesBatchResultDrawer', () => {
-  it('应提供明确返回样本验证入口并复用关闭逻辑', async () => {
+  it('返回样本验证和右上角关闭按钮复用同一关闭逻辑', async () => {
     const props = buildProps()
     const wrapper = mount(SemanticRulesBatchResultDrawer, {
       props,
@@ -470,6 +470,9 @@ describe('SemanticRulesBatchResultDrawer', () => {
 
     await backButton?.trigger('click')
     expect(props.close).toHaveBeenCalledTimes(1)
+
+    await wrapper.get('button[aria-label="关闭任务结果"]').trigger('click')
+    expect(props.close).toHaveBeenCalledTimes(2)
   })
 
   it('任务未完成或失败时也提供质控诊断包入口', () => {
