@@ -1,7 +1,7 @@
 <template>
   <section
     class="record-compare-shell"
-    :class="{ 'is-document-only': documentOnly }"
+    :class="{ 'is-document-only': documentOnly, 'fills-available-height': fillAvailableHeight }"
     :data-mobile-tab="mobileTab"
   >
     <header
@@ -469,6 +469,7 @@ const props = withDefaults(
   defineProps<{
     visitId: string
     documentOnly?: boolean
+    fillAvailableHeight?: boolean
     sourceView?: 'saved' | 'current'
     lazyResultDocuments?: boolean
     /** 当前病历完整文书；传入后不再请求历史 Bundle 目录或正文。 */
@@ -1996,6 +1997,17 @@ onBeforeUnmount(() => {
 .record-compare-grid {
   gap: 14px;
   padding: 0 16px 16px;
+}
+.record-compare-shell.fills-available-height {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+.fills-available-height .record-compare-grid {
+  height: auto;
+  flex: 1 1 0;
+  grid-template-rows: minmax(0, 1fr);
 }
 .record-document-nav,
 .record-content-column,
