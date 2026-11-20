@@ -2613,14 +2613,15 @@ async def get_latest_workspace_record_result(
 ):
     """返回全院范围内、同一三坐标病历的最新 LX0609 保存结果。"""
 
-    from ..services.saved_result_access import require_saved_result_institute
-    await run_in_threadpool(require_saved_result_institute, _current_user_id(current_user), institute_id)
+    from ..services.saved_result_access import result_view_needs_donghua_proof
+    needs_proof = await run_in_threadpool(result_view_needs_donghua_proof, _current_user_id(current_user), institute_id)
     workspace = _sichuan_workspace_service()
     result = await run_in_threadpool(
         workspace.get_latest_luxian_0609_record_result,
         institute_id=institute_id,
         patient_id=patient_id,
         visit_id=record_id,
+        **({"require_donghua_proof": True} if needs_proof else {}),
     )
     if str(result.get("state") or "") == "not_found":
         raise HTTPException(status_code=404, detail="该病历暂无已保存质控结果或无访问权限")

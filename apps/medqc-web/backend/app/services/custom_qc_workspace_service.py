@@ -3817,6 +3817,7 @@ class CustomQCWorkspaceService:
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
         rule_set_version: str = RULE_SET_VERSION,
         expected_rule_ids: Optional[Sequence[str]] = None,
+        require_donghua_proof: bool = False,
     ) -> Dict[str, Any]:
         """读取一份病历当前规则代次的唯一客户结果。
 
@@ -3977,6 +3978,9 @@ class CustomQCWorkspaceService:
                 prefer_full_scope=True,
             )
             if selection.state != "ready" or not isinstance(selection.job, dict):
+                if require_donghua_proof:
+                    from fastapi import HTTPException
+                    raise HTTPException(403, "缺少可核验的历史结果机构归属")
                 return {
                     "schema_version": "lx0609-single-record-result-v1",
                     "state": selection.state,
@@ -3990,6 +3994,9 @@ class CustomQCWorkspaceService:
                 }
 
             selected_job = selection.job
+            if require_donghua_proof:
+                from .saved_result_access import require_selected_donghua_job
+                require_selected_donghua_job(session, self._batch_job_table, selected_job["id"], tuple(case_ref))
             if not expected_rule_ids and selected_job.get("result_rule_scope"):
                 expected_rule_ids_for_count = [
                     rule_id for rule_id in selected_job["result_rule_scope"]
@@ -5021,6 +5028,7 @@ class CustomQCWorkspaceService:
         expected_rule_ids: Optional[Sequence[str]] = None,
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
         rule_set_version: str = RULE_SET_VERSION,
+        require_donghua_proof: bool = False,
     ) -> Dict[str, Any]:
         """单病历结果接口的唯一服务入口。"""
 
@@ -5031,6 +5039,7 @@ class CustomQCWorkspaceService:
             rule_set_key=rule_set_key,
             rule_set_version=rule_set_version,
             expected_rule_ids=expected_rule_ids,
+            **({"require_donghua_proof": True} if require_donghua_proof else {}),
         )
 
     @staticmethod
