@@ -480,6 +480,14 @@ def safe_basic_timeliness_customer_display_facts(
         value = raw.get(key)
         if isinstance(value, str) and value.strip():
             facts[key] = value.strip()
+    if "observed_time_basis" in raw:
+        if (
+            normalized_rule_id != "LX0609-01-02-01"
+            or raw["observed_time_basis"] != "submit"
+            or _controlled_datetime(facts.get("observed_time")) is None
+        ):
+            return None
+        facts["observed_time_basis"] = "submit"
     elapsed_hours = raw.get("elapsed_hours")
     if isinstance(elapsed_hours, (int, float)) and elapsed_hours >= 0:
         rounded_elapsed = round(float(elapsed_hours), 2)
@@ -669,7 +677,7 @@ def _validate_published_basic_timeliness_facts(
     allowed = required | {
         "anchor_time", "anchor_date", "observed_time", "elapsed_hours",
         "overdue_hours", "remaining_hours", "document_content_state",
-        "time_conflict_seconds",
+        "time_conflict_seconds", "observed_time_basis",
     }
     kind = facts.get("failure_kind")
     state = facts.get("timeliness_state")
@@ -724,6 +732,13 @@ def _validate_published_basic_timeliness_facts(
         or kind != "timeliness_requirement_not_met"
         or state != "missing"
         or facts["document_content_state"] != "blank_or_placeholder"
+    ):
+        return None
+    if "observed_time_basis" in facts and (
+        target_document != "first_course_record"
+        or state not in {"within", "late"}
+        or facts["observed_time_basis"] != "submit"
+        or "observed_time" not in facts
     ):
         return None
     for key in ("anchor_time", "observed_time"):

@@ -894,7 +894,8 @@ def _reduce_with_automatic_scope(session, rows, rule):
     [
         ("record_time", "16:00:00", True, CustomerFinalState.COMPLIANT),
         ("record_datetime", "10:00:00", True, CustomerFinalState.COMPLIANT),
-        ("submit_datetime", "10:00:00", True, CustomerFinalState.DATA_GAP),
+        ("submit_datetime", "10:56:00", True, CustomerFinalState.COMPLIANT),
+        ("submit_datetime", "16:00:01", True, CustomerFinalState.DATA_GAP),
         ("record_time", "16:00:01", True, CustomerFinalState.DATA_GAP),
         ("record_time", "10:00:00", False, CustomerFinalState.DATA_GAP),
         ("record_time", None, True, CustomerFinalState.DATA_GAP),
@@ -907,6 +908,8 @@ def test_002_automatic_scope_binds_recorded_first_course(field, time, has_body, 
         field: f"2026-07-15 {time}" if time else None,
         "record_content": "患者入院后完成病史采集、体格检查和诊疗计划。" if has_body else "",
     }
+    if field == "record_time" and time == "16:00:01":
+        course["submit_datetime"] = "2026-07-15 10:56:00"
     rows = {
         "inpat_registration": [],
         "admission_record": [{"admission_datetime": "2026-07-15 08:00:00"}],
@@ -920,6 +923,17 @@ def test_002_automatic_scope_binds_recorded_first_course(field, time, has_body, 
             execution, session, rule_id=rule, source_key="first_course_record",
             document_id="synthetic-first-course",
         )
+        facts = dict(execution.customer_display_facts)[rule]
+        if field == "submit_datetime":
+            from app.services.luxian_0609.basic_timeliness_customer_projection import (
+                validate_published_first_course_timeliness_facts,
+            )
+
+            assert facts["observed_time_basis"] == "submit"
+            assert facts["elapsed_hours"] == 2.93
+            assert validate_published_first_course_timeliness_facts(facts) == facts
+        else:
+            assert "observed_time_basis" not in facts
 
 
 @pytest.mark.unit
