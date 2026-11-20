@@ -1,12 +1,33 @@
 """一次病历短只读事务；捕获既有投影和读合同，不新增临床判断。"""
 from __future__ import annotations
 
+import builtins
+import logging
 import time
+from traceback import walk_tb
 
-from sqlalchemy import inspect
+from sqlalchemy import exc as sqlalchemy_errors, inspect
 
 from . import case_material_snapshot as material
 from ..database import clinical_connection as clinical
+
+logger = logging.getLogger(__name__)
+
+
+def _log_capture_failure(stage, error):
+    # 只取可信基类名。异常消息、动态异常类名和堆栈源码都可能携带病历或连接参数。
+    error_type = next(
+        cls.__name__ for cls in type(error).__mro__
+        if vars(builtins).get(cls.__name__) is cls or vars(sqlalchemy_errors).get(cls.__name__) is cls
+    )
+    owner, line = "case_material_capture", None
+    for frame, number in walk_tb(error.__traceback__):
+        module = frame.f_globals.get("__name__")
+        if module in {__name__, material.__name__, f"{__package__}.automatic_material_scope"}:
+            owner, line = module.rsplit(".", 1)[-1], number
+            if stage == "source_read" and frame.f_code.co_name in {"validate_read_contract", "validate_table_identity"}:
+                stage = "source_validation"
+    logger.error("material_capture_failed stage=%s type=%s owner=%s line=%s", stage, error_type, owner, line)
 
 
 def capture(*, identity, cancellation_check=None, after_table_read=None):
@@ -170,13 +191,17 @@ def obtain(job_id, identity, *, retry=False, cancellation_check=None):
         return existing
     if retry:
         raise material.MaterialSnapshotError("original_task_material_not_retained")
+    stage = "source_read"
     try:
-        return material.persist(job_id, capture(identity=identity, cancellation_check=cancellation_check))
+        captured = capture(identity=identity, cancellation_check=cancellation_check)
+        stage = "snapshot_persist"
+        return material.persist(job_id, captured)
     except material.MaterialSnapshotError:
         raise
     except Exception as error:
         if type(error).__name__ == "QCJobCancelled":
             raise
+        _log_capture_failure(stage, error)
         raise material.MaterialSnapshotError("material_capture_failed") from None
 
 

@@ -199,6 +199,67 @@ def test_no_original_snapshot_retry_does_not_capture(monkeypatch):
         case_material_capture.obtain("old-task", IDENTITY, retry=True)
 
 
+@pytest.mark.parametrize(("stage", "error_type", "owner"), [
+    ("source_read", "OperationalError", "case_material_capture"),
+    ("source_validation", "KeyError", "automatic_material_scope"),
+    ("snapshot_persist", "PermissionError", "case_material_snapshot"),
+])
+def test_obtain_logs_safe_stage_for_unexpected_failures(monkeypatch, caplog, stage, error_type, owner):
+    from unittest.mock import MagicMock
+    from sqlalchemy.exc import OperationalError
+    from app.services import case_material_capture as capture, clinical_source_contract
+    from app.services.qc_execution_errors import safe_exception_failure
+
+    private = "SYNTHETIC-BODY postgresql://synthetic-user:synthetic-password@db/test"
+    job_id = "SYNTHETIC-JOB"
+    if stage == "source_read":
+        def unavailable(_schema):
+            raise OperationalError(private, IDENTITY, RuntimeError(private))
+
+        monkeypatch.setattr(assembly, "_source_engine", unavailable)
+    elif stage == "source_validation":
+        engine = MagicMock()
+        monkeypatch.setattr(assembly, "_source_engine", lambda _: engine)
+        monkeypatch.setattr(assembly, "_default_source_schema", lambda: "cdm")
+        monkeypatch.setattr(clinical, "configured", lambda: True)
+        # 缺少 dependencies，在真实合同校验函数中触发意外 KeyError。
+        monkeypatch.setattr(clinical_source_contract, "inspect_source", lambda *a, **kw: {
+            "read_only": True, "account_read_only": True, "private": private,
+        })
+    else:
+        def write_failed(*_):
+            raise type("SyntheticPrivateKey", (PermissionError,), {})(private)
+
+        monkeypatch.setattr(capture, "capture", lambda **_: dataset(private))
+        monkeypatch.setattr(material, "_exclusive", write_failed)
+
+    with pytest.raises(material.MaterialSnapshotError) as caught:
+        capture.obtain(job_id, IDENTITY)
+    assert str(caught.value) == "material_capture_failed"
+    assert safe_exception_failure(caught.value)["retryable"] is False
+    assert caught.value.__suppress_context__
+    [record] = [record for record in caplog.records if record.name == capture.__name__]
+    assert record.args[:3] == (stage, error_type, owner)
+    assert isinstance(record.args[3], int) and record.args[3] > 0
+    assert record.exc_info is None and record.stack_info is None
+    assert all(secret not in caplog.text for secret in (private, *IDENTITY, job_id, "SyntheticPrivateKey", "dependencies"))
+
+
+def test_obtain_propagates_known_failure_and_cancellation(monkeypatch, caplog):
+    from app.services import case_material_capture as capture
+    from app.services.qc_cancellation import QCJobCancelled
+
+    for failure in (material.MaterialSnapshotError("material_source_unavailable"), QCJobCancelled()):
+        def fail(**_):
+            raise failure
+
+        monkeypatch.setattr(capture, "capture", fail)
+        with pytest.raises(type(failure)) as caught:
+            capture.obtain("synthetic-task", IDENTITY)
+        assert caught.value is failure
+    assert not [record for record in caplog.records if record.name == capture.__name__]
+
+
 def test_capacity_refused_without_task_reference(monkeypatch):
     monkeypatch.setattr(material, "MAX_BYTES", 20)
     with pytest.raises(material.MaterialSnapshotError, match="capacity"):
