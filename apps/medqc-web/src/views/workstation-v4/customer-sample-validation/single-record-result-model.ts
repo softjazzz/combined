@@ -195,6 +195,9 @@ export interface SingleRecordQcResultPayload {
   reason_code: string
   record_ref: string
   job_id: string
+  result_view?: 'latest' | 'previous_valid'
+  completed_at?: string | null
+  read_only?: boolean
   rule_set_key?: string
   rule_set_version?: string
   items: SingleRecordQcResultItem[]
@@ -210,6 +213,28 @@ export interface SingleRecordQcResultPayload {
   failed_rule_count?: number
   failed_rule_ids?: string[]
 }
+
+export interface PreviousResultRequest {
+  resultView: 'previous_valid'
+  anchorJobId?: string
+}
+
+/** 已核实的本轮零项失败可以作为时间锚点。403 时只能发起独立的授权查询。 */
+export function previousResultRequest(
+  response: { success: boolean; status?: number; data?: SingleRecordQcResultPayload },
+): PreviousResultRequest | undefined {
+  if (!response.success && response.status === 403) return { resultView: 'previous_valid' }
+  const data = response.data
+  if (
+    response.success && data?.state === 'technical_error' &&
+    data.reason_code === 'material_capture_failed' && data.job_id &&
+    data.result_rule_count === 0 && Array.isArray(data.items) && data.items.length === 0
+  ) {
+    return { resultView: 'previous_valid', anchorJobId: data.job_id }
+  }
+}
+
+export const CAPTURE_FAILED_NOTICE = '最近一次病历资料准备失败，未生成质控结果。'
 
 export type SingleRecordQcResultTone = 'danger' | 'warning' | 'success' | 'neutral'
 

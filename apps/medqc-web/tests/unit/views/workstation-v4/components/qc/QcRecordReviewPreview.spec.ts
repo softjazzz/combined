@@ -141,6 +141,19 @@ describe('QcRecordReviewPreview', () => {
     expect(getLatestResult).not.toHaveBeenCalled()
   })
 
+  it('授权的捕获失败从终末预览明确打开上次结果，预览不自行查旧任务', async () => {
+    getLatestResult.mockResolvedValue({ success: true, data: payload({
+      state: 'technical_error', reason_code: 'material_capture_failed', items: [], result_rule_count: 0,
+    }) })
+    const wrapper = mount(QcRecordReviewPreview, { props: { row, carePhase: 'discharged' } })
+    await flushPromises()
+    const action = wrapper.get('[role="alert"] button')
+    expect(action.text()).toBe('查看上一次有效结果')
+    await action.trigger('click')
+    expect(wrapper.emitted('open-full')).toEqual([[row.recordKey, { resultView: 'previous_valid', anchorJobId: 'job-1' }]])
+    expect(getLatestResult).toHaveBeenCalledTimes(1)
+  })
+
   it('显示加载状态并按服务端三坐标读取，默认确定问题，可打开完整结果', async () => {
     const request = deferred()
     getLatestResult.mockReturnValue(request.promise)

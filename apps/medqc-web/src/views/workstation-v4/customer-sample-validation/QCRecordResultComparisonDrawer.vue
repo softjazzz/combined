@@ -21,15 +21,18 @@
             <strong>病历质控结果</strong>
           </span>
         </div>
-        <MedicalRecordContextBanner :context="focus" :qc-time-text="qcTimeText" />
+        <MedicalRecordContextBanner
+          :context="focus"
+          :qc-time-text="qcTimeText || (latestResult && !historyView && focus?.listQcTime) || ''"
+        />
         <div class="customer-record-result-title__actions">
           <QcDiagnosticExport
-            v-if="open && latestResult && focus && !confirmedResultsOnly"
+            v-if="open && latestResult && focus && !confirmedResultsOnly && !historyView"
             :items="latestResult.items"
             :context="debugContext"
           />
           <button
-            v-if="latestResult && !confirmedResultsOnly"
+            v-if="latestResult && !confirmedResultsOnly && !historyView"
             type="button"
             class="customer-record-result-title__export"
             :disabled="exporting"
@@ -43,6 +46,21 @@
 
     <HospitalLoading v-if="showLoading" label="正在读取质控结果" fill />
     <template v-if="!loading">
+      <div
+        v-if="historyView"
+        v-show="!showLoading"
+        class="result-history-nav mq-soft"
+      >
+        <strong>{{ latestResult && historyView.anchorJobId ? '上一次有效质控结果' : '历史质控结果' }}</strong>
+        <span v-if="historyView.anchorJobId">最近一次取材失败</span>
+        <button
+          type="button"
+          class="mq-btn"
+          @click="loadResult()"
+        >
+          返回最近一次
+        </button>
+      </div>
       <section
         v-if="latestResult?.result_scope === 'targeted' && !latestResult.execution_status"
         v-show="!showLoading"
@@ -63,10 +81,10 @@
         :discharge-time="focus.dischargeTime"
         :record-ref="authorizedRecordRef"
         :job-id="latestResult.job_id"
-        :feedback-available="!latestResult.execution_status"
+        :feedback-available="!historyView && !latestResult.execution_status"
         :issues="[]"
         :single-record-items="latestResult.items"
-        :debug-context="debugContext"
+        :debug-context="historyView ? undefined : debugContext"
         :presentation-mode="presentationMode"
       />
       <a-result
@@ -74,8 +92,20 @@
         v-show="!showLoading"
         status="warning"
         :title="loadError"
-        sub-title="未打开批量结果页，也不会回退到其他病历的结果。"
-      />
+      >
+        <template
+          v-if="previousRequest"
+          #extra
+        >
+          <button
+            type="button"
+            class="mq-btn mq-btn--primary"
+            @click="loadResult(previousRequest)"
+          >
+            {{ previousRequest.anchorJobId ? '查看上一次有效结果' : '查找可查看的历史结果' }}
+          </button>
+        </template>
+      </a-result>
     </template>
   </a-drawer>
 </template>
@@ -96,7 +126,13 @@ import {
   getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
-import type { SingleRecordQcResultPayload } from './single-record-result-model'
+import {
+  CAPTURE_FAILED_NOTICE,
+  previousResultRequest,
+  type PreviousResultRequest,
+  type SingleRecordQcResultPayload,
+} from './single-record-result-model'
+import { formatQcCompletedAt } from '../components/qc/latestQcSummaryPresentation'
 import { downloadBlob, normalizeBatchExportBlob } from './batchExport'
 
 export interface QCRecordResultFocus {
@@ -110,6 +146,8 @@ export interface QCRecordResultFocus {
   patientName?: string
   admissionTime?: string
   dischargeTime?: string
+  listQcTime?: string
+  previousResult?: PreviousResultRequest
   label: string
 }
 
@@ -134,6 +172,8 @@ const showLoading = useMinimumLoading(() => loading.value, () => props.open)
 const exporting = ref(false)
 const loadError = ref('')
 const latestResult = ref<SingleRecordQcResultPayload | null>(null)
+const previousRequest = ref<PreviousResultRequest>()
+const historyView = ref<PreviousResultRequest>()
 const authorizedRecordRef = ref('')
 const qcTimeText = ref('')
 let activeRequestSequence = 0
@@ -162,7 +202,7 @@ const debugContext = computed(() => {
 })
 
 async function exportCurrentRecord() {
-  if (confirmedResultsOnly.value) return
+  if (confirmedResultsOnly.value || historyView.value) return
   const focus = props.focus
   if (
     !latestResult.value ||
@@ -194,10 +234,12 @@ async function exportCurrentRecord() {
   }
 }
 
-async function loadLatestResult() {
+async function loadResult(previous?: PreviousResultRequest) {
   const requestSequence = ++activeRequestSequence
   const focus = props.focus
   latestResult.value = null
+  previousRequest.value = undefined
+  historyView.value = previous
   qcTimeText.value = ''
   authorizedRecordRef.value = ''
   loadError.value = ''
@@ -206,22 +248,34 @@ async function loadLatestResult() {
 
   loading.value = true
   try {
-    const result = await getLatestLuxian0609RecordResult({
+    const identity = {
       instituteId: focus.instituteId,
       patientId: focus.patientId,
       visitId: focus.visitId,
-    })
+    }
+    const result = previous
+      ? await getLatestLuxian0609RecordResult(identity, previous)
+      : await getLatestLuxian0609RecordResult(identity)
     if (requestSequence !== activeRequestSequence) return
+    if (!previous) previousRequest.value = previousResultRequest(result)
     if (!result.success || !result.data) {
-      loadError.value = result.message || '这份病历暂无已保存质控结果，请先质控后查看'
+      if (previous && result.status === 404) loadError.value = '暂无可查看的历史质控结果'
+      else if (previous && result.status === 409) loadError.value = '最近一次任务已更新，请返回最近一次重新查看'
+      else loadError.value = result.message || '质控结果读取失败，请稍后重试'
       return
     }
     if (result.data.state === 'technical_error') {
-      loadError.value = '质控结果读取异常，请联系管理员核对结果交付'
+      loadError.value = previousRequest.value?.anchorJobId
+        ? CAPTURE_FAILED_NOTICE : '质控结果读取异常，请联系管理员核对结果交付'
       return
     }
     if (result.data.state !== 'ready') {
-      loadError.value = '这份病历暂无已保存质控结果，请先质控后查看'
+      loadError.value = previous ? '暂无可查看的历史质控结果' : '这份病历暂无已保存质控结果，请先质控后查看'
+      return
+    }
+    if (previous && (result.data.result_view !== 'previous_valid' || result.data.read_only !== true
+        || !result.data.job_id || result.data.job_id === previous.anchorJobId || !result.data.items?.length)) {
+      loadError.value = '历史结果版本无法确认，请返回最近一次重新查看'
       return
     }
     authorizedRecordRef.value = String(result.data.record_ref || '').trim()
@@ -230,6 +284,11 @@ async function loadLatestResult() {
       return
     }
     latestResult.value = result.data
+    if (previous) {
+      const completed = formatQcCompletedAt(result.data.completed_at)
+      qcTimeText.value = completed === '—' ? '历史结果结束时间未返回' : `历史结果结束时间 ${completed}`
+      return
+    }
     // V5列表已展示病例范围内的完成时间，不额外请求任务创建者权限接口。
     if (props.loadJobMetadata) void loadQcTime(result.data.job_id, requestSequence)
   } catch {
@@ -274,14 +333,24 @@ watch(
     props.focus?.visitId,
     props.focus?.recordId,
     props.focus?.recordRef,
+    props.focus?.previousResult,
   ],
-  () => void loadLatestResult(),
+  () => void loadResult(props.focus?.previousResult),
   { immediate: true },
 )
 </script>
 
 <style scoped>
 @import '../styles/qc-result-view-apple.css';
+.result-history-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 16px;
+  padding: 8px 16px;
+}
+.result-history-nav button { margin-inline-start: auto; }
 .customer-record-result-warning {
   margin: 12px 16px;
   padding: 12px 16px;

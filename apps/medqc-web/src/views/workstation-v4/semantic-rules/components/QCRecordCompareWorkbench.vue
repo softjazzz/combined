@@ -960,6 +960,7 @@ async function ensureDocumentLoaded(
         : summary
     request = getEditableMedicalRecordDocument(props.visitId, renderSummary, {
       ...(props.jobId ? { job_id: props.jobId } : {}),
+      ...(props.sourceView === 'saved' && props.jobId && props.recordRef ? { record_ref: props.recordRef } : {}),
       institute_id: String(props.instituteId || '').trim() || undefined,
       patient_id: String(props.patientId || '').trim() || undefined,
       visit_id: String(props.visitId || '').trim(),

@@ -560,7 +560,7 @@ describe('QcRecordResultListView', () => {
       recordId: 'V-shared',
     })
     expect(String((drawer.props('focus') as { label: string }).label)).toContain('患者乙')
-    expect(String((drawer.props('focus') as { label: string }).label)).toContain('2026-08-09 17:02')
+    expect((drawer.props('focus') as { listQcTime: string }).listQcTime).toContain('2026-08-09 17:02')
   })
 
   it('从首页携带三坐标键进入时按住院号服务端检索，并自动打开该病历质控结果', async () => {
@@ -689,9 +689,9 @@ describe('QcRecordResultListView', () => {
       const wrapper = mountView('discharged')
       await flushPromises()
       await wrapper.get('tr[data-record-key*="V-priority"] [data-testid="open-saved-result"]').trigger('click')
-      const focus = wrapper.getComponent(ResultDrawerStub).props('focus') as { label: string }
-      expect(focus.label).toContain('质控结束')
-      expect(focus.label).not.toContain('质控完成')
+      const focus = wrapper.getComponent(ResultDrawerStub).props('focus') as { label: string; listQcTime: string }
+      expect(focus.listQcTime).toContain('质控结束')
+      expect(focus.listQcTime).not.toContain('质控完成')
     },
   )
 

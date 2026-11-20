@@ -92,6 +92,15 @@
       >
         <p>{{ loadError }}</p>
         <button
+          v-if="previousRequest"
+          type="button"
+          class="mq-btn"
+          @click="emit('open-full', row.recordKey, previousRequest)"
+        >
+          {{ previousRequest.anchorJobId ? '查看上一次有效结果' : '查找可查看的历史结果' }}
+        </button>
+        <button
+          v-else
           type="button"
           class="text-button"
           @click="loadResult"
@@ -246,8 +255,11 @@ import { getLatestLuxian0609RecordResult } from '@/services/sichuan-rule-workspa
 import {
   buildSingleRecordQcResultItems,
   buildSingleRecordQcStatusTabs,
+  CAPTURE_FAILED_NOTICE,
+  previousResultRequest,
   resolveSingleRecordQcResultTab,
   type SingleRecordQcResultPayload,
+  type PreviousResultRequest,
   type SingleRecordQcResultItem,
   type SingleRecordQcResultTabKey,
 } from '../../customer-sample-validation/single-record-result-model'
@@ -266,12 +278,13 @@ const props = withDefaults(
     carePhase: 'inpatient',
   },
 )
-const emit = defineEmits<{ 'open-full': [recordKey: string] }>()
+const emit = defineEmits<{ 'open-full': [recordKey: string, previous?: PreviousResultRequest] }>()
 const items = ref<SingleRecordQcResultItem[]>([])
 const loadedResult = ref<SingleRecordQcResultPayload | null>(null)
 const loading = ref(false)
 const ready = ref(false)
 const loadError = ref('')
+const previousRequest = ref<PreviousResultRequest>()
 const activeTab = ref<SingleRecordQcResultTabKey>('all')
 const expandedItems = ref<string[]>([])
 function toggleExplanation(key: string) {
@@ -346,6 +359,7 @@ async function loadResult() {
   ready.value = false
   loading.value = false
   loadError.value = ''
+  previousRequest.value = undefined
   activeTab.value = 'all'
   if (!row || row.resultStatus === 'not-run' || row.resultStatus === 'unknown') return
   if (!row.instituteId || !row.patientId || !row.visitId) {
@@ -360,12 +374,14 @@ async function loadResult() {
       visitId: row.visitId,
     })
     if (sequence !== requestSequence) return
+    previousRequest.value = previousResultRequest(result)
     if (!result.success || !result.data) {
       loadError.value = result.message || '质控结果读取失败，请稍后重试'
       return
     }
     if (result.data.state === 'technical_error') {
-      loadError.value = '质控结果读取异常，请联系管理员核对结果交付'
+      loadError.value = previousRequest.value?.anchorJobId
+        ? CAPTURE_FAILED_NOTICE : '质控结果读取异常，请联系管理员核对结果交付'
       return
     }
     if (result.data.state !== 'ready') return

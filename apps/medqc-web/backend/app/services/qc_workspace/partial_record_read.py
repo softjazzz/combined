@@ -30,6 +30,29 @@ def saved_record_rule_scope(filters: Mapping[str, Any], ref: CaseRef) -> list[st
     return scoped
 
 
+def record_material_capture_failed(items: Any, failures: Any, ref: CaseRef) -> bool:
+    """只认 Worker 保存的该病例取材失败；任务级摘要可能描述同批其他病例。"""
+    if not isinstance(items, list) or not isinstance(failures, list):
+        return False
+    for entry in [*items, *failures]:
+        if not isinstance(entry, Mapping) or not all(
+            isinstance(entry.get(key), str) and entry[key].strip() for key in ref._fields
+        ) or entry.get("record_id", entry["visit_id"]) != entry["visit_id"]:
+            return False
+    if any(CaseRef.from_mapping(item) == ref for item in items):
+        return False
+    matching = [row for row in failures if CaseRef.from_mapping(row) == ref]
+    if len(matching) != 1:
+        return False
+    failure = matching[0]
+    return (
+        failure.get("error_phase") == "material_capture"
+        and failure.get("reason_code", failure.get("error")) == "material_capture_failed"
+        and failure.get("record_key", ref.as_key()) == ref.as_key()
+        and not (failure.get("rule_id") or failure.get("rule_code"))
+    )
+
+
 def read_saved_partial_record(
     *, summary: Mapping[str, Any], items: list[Any], failures: list[Any], ref: CaseRef,
     expected_rules: list[str], projection_key: str,

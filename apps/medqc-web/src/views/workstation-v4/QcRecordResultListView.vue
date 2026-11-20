@@ -315,6 +315,7 @@ import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-w
 import QCRecordResultComparisonDrawer, {
   type QCRecordResultFocus,
 } from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
+import type { PreviousResultRequest } from './customer-sample-validation/single-record-result-model'
 import QcRecordResultTable, {
   type QcRecordCarePhase,
   type QcRecordResultRow,
@@ -685,7 +686,7 @@ function handleOpenMedicalRecord(recordKey: string) {
   medicalRecordFocus.value = record
 }
 
-function handleOpenResult(recordKey: string) {
+function handleOpenResult(recordKey: string, previousResult?: PreviousResultRequest) {
   medicalRecordFocus.value = null
   const record = allRecords.value.find(
     (candidate) => candidate.recordKey === recordKey && hasCompleteRecordIdentity(candidate),
@@ -707,9 +708,6 @@ function handleOpenResult(recordKey: string) {
     record.department || '未分科室',
     `住院号 ${record.visitId}`,
   ]
-  if (row.latestQcTime && row.latestQcTime !== '—') {
-    labelParts.push(`质控结束 ${row.latestQcTime}`)
-  }
   selectedFocus.value = {
     visitId: record.visitId as string,
     instituteId: record.instituteId as string,
@@ -718,6 +716,8 @@ function handleOpenResult(recordKey: string) {
     patientName: record.name,
     patientSex: record.sex,
     patientAge: record.age,
+    listQcTime: row.latestQcTime && row.latestQcTime !== '—' ? `质控结束 ${row.latestQcTime}` : undefined,
+    previousResult,
     label: labelParts.join(' · '),
   }
   drawerOpen.value = true
@@ -739,13 +739,13 @@ function handleOpenAnalysisResult(record: LuxianQcAnalysisRecordItem) {
     `住院号 ${visitId}`,
   ]
   const completedAt = formatQcCompletedAt(record.completed_at)
-  if (completedAt !== '—') labelParts.push(`质控完成 ${completedAt}`)
   selectedFocus.value = {
     visitId,
     instituteId,
     patientId,
     recordId: visitId,
     patientName: String(record.patient_name || '').trim(),
+    listQcTime: completedAt !== '—' ? `质控完成 ${completedAt}` : undefined,
     label: labelParts.join(' · '),
   }
   drawerOpen.value = true

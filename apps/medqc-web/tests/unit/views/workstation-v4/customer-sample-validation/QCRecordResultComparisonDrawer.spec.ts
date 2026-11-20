@@ -111,7 +111,7 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped', loadJobMetadata = tr
         }),
         AResult: defineComponent({
           props: { title: { type: String, default: '' } },
-          setup: (props) => () => h('div', { class: 'result-stub' }, props.title),
+          setup: (props, { slots }) => () => h('div', { class: 'result-stub' }, [props.title, slots.extra?.()]),
         }),
         QCRecordCompareWorkbench: QCRecordCompareWorkbenchStub,
       },
@@ -430,5 +430,48 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(wrapper.text()).toContain('质控结果读取异常')
     expect(wrapper.text()).not.toContain('暂无已保存质控结果')
     expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
+  })
+
+  it('本次捕获失败后显式查看较早一轮，仅按旧任务、原文书引用和旧时间展示', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValueOnce({
+      success: true, data: { state: 'technical_error', reason_code: 'material_capture_failed',
+        job_id: 'failed-latest', result_rule_count: 0, items: [] },
+    }).mockResolvedValueOnce({
+      success: true, data: { ...readyResult, result_view: 'previous_valid', read_only: true,
+        completed_at: '2026-10-01T02:03:00Z' },
+    })
+    const wrapper = mountDrawer('grouped', false)
+    await flushPromises()
+    expect(wrapper.text()).toContain('最近一次病历资料准备失败，未生成质控结果')
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
+    await wrapper.get('.result-stub button').trigger('click')
+    await flushPromises()
+    expect(getLatestLuxian0609RecordResult).toHaveBeenLastCalledWith(
+      { instituteId: 'H1', patientId: 'P001', visitId: 'V001' },
+      { resultView: 'previous_valid', anchorJobId: 'failed-latest' },
+    )
+    expect(wrapper.text()).toContain('上一次有效质控结果')
+    expect(wrapper.text()).toContain('2026-10-01 10:03')
+    expect(workbenchProps).toMatchObject({ sourceView: 'saved', jobId: readyResult.job_id,
+      recordRef: readyResult.record_ref, feedbackAvailable: false, debugContext: undefined })
+    expect(wrapper.find('.customer-record-result-title__export').exists()).toBe(false)
+    expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+  })
+
+  it('最新轮归属不可核验时，仅在点击后独立尝试；未带历史标记的响应不会展示', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValueOnce({ success: false, status: 403, message: '结果归属无法核验' })
+      .mockResolvedValueOnce({ success: true, data: readyResult })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('取材失败')
+    expect(wrapper.get('.result-stub button').text()).toBe('查找可查看的历史结果')
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
+    await wrapper.get('.result-stub button').trigger('click')
+    await flushPromises()
+    expect(getLatestLuxian0609RecordResult).toHaveBeenLastCalledWith(
+      { instituteId: 'H1', patientId: 'P001', visitId: 'V001' }, { resultView: 'previous_valid' },
+    )
+    expect(wrapper.text()).toContain('历史结果版本无法确认')
+    expect(workbenchProps).toBeNull()
   })
 })
