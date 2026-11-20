@@ -872,6 +872,56 @@ def test_001_002_accept_the_localized_customer_record_time_and_document_identity
     )
 
 
+def _reduce_with_automatic_scope(session, rows, rule):
+    from app.services import case_material_snapshot as material
+    from app.services.automatic_material_scope import describe_source
+
+    with material.activate({
+        "automatic_material": {
+            "sources": {
+                source_key: describe_source((), source_rows)
+                for source_key, source_rows in rows.items()
+            },
+            "publication": {"status": "metadata_permission_unconfirmed"},
+        },
+    }):
+        return _reduce_typed_basic(session, (rule,))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("field", "time", "has_body", "expected"),
+    [
+        ("record_time", "16:00:00", True, CustomerFinalState.COMPLIANT),
+        ("record_datetime", "10:00:00", True, CustomerFinalState.COMPLIANT),
+        ("submit_datetime", "10:00:00", True, CustomerFinalState.DATA_GAP),
+        ("record_time", "16:00:01", True, CustomerFinalState.DATA_GAP),
+        ("record_time", "10:00:00", False, CustomerFinalState.DATA_GAP),
+        ("record_time", None, True, CustomerFinalState.DATA_GAP),
+    ],
+)
+def test_002_automatic_scope_binds_recorded_first_course(field, time, has_body, expected):
+    rule = "LX0609-01-02-01"
+    course = {
+        "document_id": "synthetic-first-course",
+        field: f"2026-07-15 {time}" if time else None,
+        "record_content": "患者入院后完成病史采集、体格检查和诊疗计划。" if has_body else "",
+    }
+    rows = {
+        "inpat_registration": [],
+        "admission_record": [{"admission_datetime": "2026-07-15 08:00:00"}],
+        "first_course_record": [course],
+    }
+    session = _typed_basic_session(rows, selected_rule_ids=(rule,))
+    execution, reduced = _reduce_with_automatic_scope(session, rows, rule)
+    assert reduced[0].final_state is expected
+    if expected is CustomerFinalState.COMPLIANT:
+        _assert_selected_document_ref(
+            execution, session, rule_id=rule, source_key="first_course_record",
+            document_id="synthetic-first-course",
+        )
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("registration_time", "completion", "expected", "uses_registration"),
@@ -885,9 +935,6 @@ def test_001_002_accept_the_localized_customer_record_time_and_document_identity
 def test_001_automatic_scope_binds_admission_timeliness_sources(
     registration_time, completion, expected, uses_registration
 ):
-    from app.services import case_material_snapshot as material
-    from app.services.automatic_material_scope import describe_source
-
     rule = "LX0609-01-01-01"
     rows = {
         "inpat_registration": (
@@ -903,16 +950,7 @@ def test_001_automatic_scope_binds_admission_timeliness_sources(
     session = _typed_basic_session(
         rows, selected_rule_ids=(rule,), evaluation_as_of_date="2026-07-17",
     )
-    with material.activate({
-        "automatic_material": {
-            "sources": {
-                source_key: describe_source((), source_rows)
-                for source_key, source_rows in rows.items()
-            },
-            "publication": {"status": "metadata_permission_unconfirmed"},
-        },
-    }):
-        execution, reduced = _reduce_typed_basic(session, (rule,))
+    execution, reduced = _reduce_with_automatic_scope(session, rows, rule)
 
     registration = next(
         item for item in session.snapshot.observations

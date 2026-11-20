@@ -912,22 +912,31 @@ def _typed_basic_decisions(
                             row,
                         )
                     )
-            complete_times = [value for value, *_ in complete_events]
-            deltas = sorted(value - anchor for value in complete_times)
-            if any(timedelta(0) <= delta <= timedelta(hours=8) for delta in deltas):
-                observed, source_document_id, selected_row = min(
-                    (
-                        item
-                        for item in complete_events
-                        if timedelta(0) <= item[0] - anchor <= timedelta(hours=8)
-                    ),
-                    key=lambda item: item[0],
-                )
+            timely_events = [
+                item for item in complete_events
+                if timedelta(0) <= item[0] - anchor <= timedelta(hours=8)
+            ]
+            if timely_events:
+                sources = None
+                if observation_by_source["inpat_registration"].query_state.value == "empty":
+                    # 入院记录提供精确锚点时，只用有正式记录时间的病程证明按时完成。
+                    recorded_events = [
+                        item for item in timely_events
+                        if any(
+                            parse_authoritative_datetime(item[2].get(field)) == item[0]
+                            for field in ("record_time", "record_datetime")
+                        )
+                    ]
+                    if recorded_events:
+                        timely_events = recorded_events
+                        sources = ("admission_record", EVALUATION_HORIZON_SOURCE_KEY, "first_course_record")
+                observed, source_document_id, selected_row = min(timely_events, key=lambda item: item[0])
                 decision = attach_selected_row(
                     conclusive(
                         rule_id,
                         QcDirection.SATISFIED,
                         "requirement_within_threshold",
+                        sources=sources,
                     ),
                     source_key="first_course_record",
                     row=selected_row,
@@ -949,7 +958,7 @@ def _typed_basic_decisions(
                 )
             elif incomplete:
                 decisions.append(gap(rule_id, "required_field_missing"))
-            elif any(delta < timedelta(0) for delta in deltas):
+            elif any(item[0] < anchor for item in complete_events):
                 decisions.append(
                     make(
                         rule_id,
@@ -959,7 +968,7 @@ def _typed_basic_decisions(
                         confidence=None,
                     )
                 )
-            elif deltas:
+            elif complete_events:
                 observed, source_document_id, selected_row = min(
                     complete_events,
                     key=lambda item: item[0],
