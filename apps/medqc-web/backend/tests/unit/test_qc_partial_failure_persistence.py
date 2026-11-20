@@ -1061,13 +1061,20 @@ def test_pool_and_worklist_show_same_partial_round_as_detail_and_export(
         items=items, failed_records=[_rule_failure(_RERUN_RECORD_B, rule) for rule in failed_rules],
     )
     factory = sessionmaker(bind=engine)
-    monkeypatch.setattr(workspace, "CustomQCWorkspaceService", lambda: service)
+    workspace_modes = []
+
+    def read_workspace(*, readonly=False):
+        workspace_modes.append(readonly)
+        return service
+
+    monkeypatch.setattr(workspace, "CustomQCWorkspaceService", read_workspace)
     owner = object.__new__(WorkstationAggregationService)
     owner._session_factory = factory
     identity = tuple(CaseRef.from_mapping(_RERUN_RECORD_B))
     pool = query_service._load_latest_luxian_0609_qc_summaries(
         [_RERUN_RECORD_B], session_factory=factory,
     )[identity]
+    assert workspace_modes == [True]
     worklist = owner._load_luxian_0609_summaries([_RERUN_RECORD_B])[identity]
     detail = service.build_latest_single_record_result_dto(**_RERUN_RECORD_B)
     exported = service.build_luxian_0609_completed_record_result_summaries(

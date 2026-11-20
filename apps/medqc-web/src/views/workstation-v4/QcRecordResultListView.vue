@@ -59,6 +59,7 @@
     <section
       class="review-workbench-metrics mq-card"
       aria-label="质控结果汇总"
+      :aria-busy="qcSummaryState === 'pending'"
     >
       <div
         v-for="metric in metricItems"
@@ -66,7 +67,7 @@
         :class="`review-metric--${metric.key}`"
       >
         <span>{{ metric.key === 'priority' ? '确定问题' : metric.label }}</span>
-        <strong>{{ metric.value }}</strong>
+        <strong>{{ metric.key === 'records' || qcSummaryState === 'ready' ? metric.value : '—' }}</strong>
         <span>{{ metric.key === 'records' || metric.key === 'completed' || metric.key === 'failed' ? '份' : '项' }}</span>
         <MqIconTile
           class="review-metric__icon"
@@ -378,6 +379,7 @@ const {
   loadError,
   loading,
   qcSummary,
+  qcSummaryState,
   refreshData,
   searchText,
   selectHospFilter,
@@ -406,7 +408,7 @@ const METRIC_ICONS: Record<string, { name: MqIconName; tone: MqIconTone }> = {
 }
 
 const metricItems = computed<QcRecordMetricItem[]>(() => [
-  { key: 'records', label: '纳入病历', value: qcSummary.value.totalRecords },
+  { key: 'records', label: '纳入病历', value: qcSummaryState.value === 'ready' ? qcSummary.value.totalRecords : serverTotal.value },
   { key: 'completed', label: '已完成质控', value: qcSummary.value.readyRecords },
   ...(qcSummary.value.partialFailedRecords || qcSummary.value.failedRecords
     ? [{ key: 'failed' as const, label: '未全部完成', value: (qcSummary.value.partialFailedRecords || 0) + (qcSummary.value.failedRecords || 0) }]
@@ -449,7 +451,7 @@ function handleSelectPreview(recordKey: string) {
 }
 
 const emptyMessage = computed(() => {
-  if (loading.value) return '正在加载质控结果…'
+  if (loading.value) return '正在加载病历列表…'
   if (loadError.value) return '加载失败，请重试'
   return '暂无符合当前范围的病历'
 })
@@ -470,7 +472,7 @@ function compareLatestQcTimeDesc(left: QcRecordResultRow, right: QcRecordResultR
 }
 
 function toResultRow(record: PatientRecord): QcRecordResultRow {
-  const result = resolveResultPresentation(record.latestQcSummary)
+  const result = resolveResultPresentation(record.latestQcSummary, qcSummaryState.value)
   return {
     recordKey: record.recordKey as string,
     instituteId: record.instituteId as string,
@@ -699,7 +701,6 @@ function handleOpenResult(recordKey: string) {
     detailNotice.value = '这份病历暂无已保存质控结果'
     return
   }
-
   detailNotice.value = ''
   const labelParts = [
     record.name || '患者信息待核实',

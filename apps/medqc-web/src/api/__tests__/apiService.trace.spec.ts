@@ -122,6 +122,17 @@ describe('apiService trace propagation', () => {
     expect(get).toHaveBeenNthCalledWith(3, '/api/medical-records/workstation', { timeout: 2000, params: {} })
   })
 
+  it.each(['ECONNABORTED', 'ERR_CANCELED'])('后台摘要读取 %s 由页面处理，不弹列表错误', async (code) => {
+    const { responseRejected } = await loadApiServiceWithAxiosMock()
+    const error = {
+      code,
+      config: { method: 'get', url: '/api/medical-records/workstation', params: { qc_summary_mode: 'only' } },
+      message: '合成请求终止',
+    }
+    await expect(responseRejected!(error)).rejects.toBe(error)
+    expect(mockMessageError).not.toHaveBeenCalled()
+  })
+
   it('request interceptor injects X-Trace-ID and X-Request-ID with same value', async () => {
     const { requestFulfilled } = await loadApiServiceWithAxiosMock()
     expect(requestFulfilled).toBeTypeOf('function')

@@ -98,6 +98,26 @@ def test_terminal_list_uses_clinical_identity_and_only_enriches_frontpage_presen
     assert record["doctor"] == "合成医师"
     assert record.get("cdmFrontpageEmpty") is {"no_row": True, "available": False}.get(cdm)
 
+    def load_summaries(refs):
+        assert refs == [IDENTITY]
+        return {tuple(IDENTITY.values()): {"status": "ready", "status_counts": {"non_compliant": 1}}}
+
+    options = {"hospital_status": "discharged", "date_field": "discharge"}
+    deferred = catalog.workstation(
+        **options, qc_summary_mode="deferred",
+        qc_projection_loader=lambda _: pytest.fail("列表不能等待质控摘要"),
+    )
+    assert deferred["records"][0]["recordKey"] == record["recordKey"]
+    assert "qc_summary" not in deferred and "latest_qc_summary" not in deferred["records"][0]
+    inline = catalog.workstation(**options, qc_projection_loader=load_summaries)
+    summary = catalog.workstation(**options, qc_summary_mode="only", qc_projection_loader=load_summaries)
+    assert summary == {
+        "qc_summary": inline["qc_summary"],
+        "records": [
+            {key: inline["records"][0][key] for key in ("recordKey", "latest_qc_summary")}
+        ],
+    }
+
 
 def test_current_documents_open_with_optional_frontpage(cdm):
     app = FastAPI()

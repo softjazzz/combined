@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Callable, Optional
@@ -11,6 +12,7 @@ from typing import Any, Callable, Optional
 from sqlalchemy import DateTime, String, and_, case, cast, exists, func, inspect as sa_inspect, or_, text, tuple_
 from sqlalchemy.orm import Session
 
+from ..case_identity import CaseRef
 from ..clinical_read import clinical_query, clinical_read_schema
 from ...database.connection import engine
 from ...database.repository import get_repository
@@ -530,10 +532,11 @@ def _load_latest_luxian_0609_qc_summaries(
 
     from ...services.custom_qc_workspace_service import CustomQCWorkspaceService
 
-    return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+    return CustomQCWorkspaceService(readonly=True).build_luxian_0609_completed_record_result_summaries(
         record_refs=record_refs,
         session_factory=session_factory,
         include_latest_partial=True,
+        log_read_timing=True,
     )
 
 
@@ -582,6 +585,25 @@ def _build_qc_summary(
         **({"failed_records": failed_records} if failed_records else {}),
         "status_counts": dict(sorted(status_counts.items())),
         "running_state": "unknown",
+    }
+
+
+def _workstation_qc_summary_payload(
+    record_refs: list[dict[str, str]],
+    summaries: dict[tuple[str, str, str], dict[str, Any]],
+    page_identities: Iterable[CaseRef],
+) -> dict[str, Any]:
+    """返回全集统计和当前页三键摘要，不返回病历字段。"""
+    return {
+        "qc_summary": _build_qc_summary(record_refs, summaries),
+        "records": [
+            {
+                "recordKey": identity.as_key(),
+                "latest_qc_summary": summaries.get(identity) or {"status": "not_run"},
+            }
+            for identity in page_identities
+            if all(identity)
+        ],
     }
 
 
@@ -1036,6 +1058,7 @@ def get_workstation_data(
     analytics_result_status: Optional[str] = None,
     analytics_scope: Optional[str] = None,
     case_scope=None,
+    qc_summary_mode: str = "inline",
 ) -> dict[str, Any]:
     from ...database import clinical_connection
     if clinical_connection.configured():
@@ -1043,6 +1066,7 @@ def get_workstation_data(
         return workstation(dept=dept, doctor=doctor, keyword=keyword, start_date=start_date, end_date=end_date,
             date_field=date_field, hospital_status=hospital_status, sync_scope=sync_scope, inpatient_sort=inpatient_sort,
             page=page, page_size=page_size, case_scope=case_scope, qc_projection_loader=qc_projection_loader,
+            qc_summary_mode=qc_summary_mode,
             analytics_job_id=analytics_job_id, analytics_completed_from=analytics_completed_from,
             analytics_completed_to=analytics_completed_to, analytics_rule_id=analytics_rule_id,
             analytics_result_status=analytics_result_status, analytics_scope=analytics_scope)
@@ -1294,8 +1318,16 @@ def get_workstation_data(
                 session_factory=session_factory,
             )
         )
-        latest_qc_summary_map = _normalize_latest_qc_summary_map(summary_loader(full_record_refs))
-        qc_summary = _build_qc_summary(full_record_refs, latest_qc_summary_map)
+        latest_qc_summary_map = (
+            {} if qc_summary_mode == "deferred"
+            else _normalize_latest_qc_summary_map(summary_loader(full_record_refs))
+        )
+        if qc_summary_mode == "only":
+            return _workstation_qc_summary_payload(
+                full_record_refs, latest_qc_summary_map,
+                (CaseRef(*(str(value or "").strip() for value in (r.institute_id, r.patient_id, r.visit_id)))
+                 for r in records),
+            )
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}
         if records and discharge_summary is not None:
@@ -1588,7 +1620,7 @@ def get_workstation_data(
         ]
         items = demo_items + real_items
 
-    return {
+    response = {
         "departments": departments,
         "doctors": doctors,
         "records": items,
@@ -1596,5 +1628,12 @@ def get_workstation_data(
         "page": page,
         "pageSize": page_size,
         "totalPages": (total_count + page_size - 1) // page_size,
-        "qc_summary": qc_summary,
     }
+    if qc_summary_mode == "deferred":
+        response["records"] = [
+            {key: value for key, value in record.items() if key != "latest_qc_summary"}
+            for record in items
+        ]
+    else:
+        response["qc_summary"] = _build_qc_summary(full_record_refs, latest_qc_summary_map)
+    return response

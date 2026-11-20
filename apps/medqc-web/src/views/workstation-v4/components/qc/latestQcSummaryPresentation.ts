@@ -2,7 +2,7 @@
  * 病历最新质控摘要的展示口径（运行/终末病历质控列表与病历池预览共用）。
  * 只把后端 latest_qc_summary 的状态计数翻译为界面文案，不重新判定状态。
  */
-import type { RecordLatestQcSummary } from '../../types'
+import type { QcSummaryLoadState, RecordLatestQcSummary } from '../../types'
 import type { QcRecordResultRow } from './QcRecordResultTable.vue'
 
 export function statusCount(statusCounts: Record<string, number>, status: string): number {
@@ -39,7 +39,12 @@ export function formatQcCompletedAt(value?: string | null): string {
 
 export function resolveResultPresentation(
   summary?: RecordLatestQcSummary,
+  summaryState?: QcSummaryLoadState,
 ): Pick<QcRecordResultRow, 'resultStatus' | 'resultLabel' | 'issueSummary' | 'latestQcTime'> {
+  if (!summary && summaryState) {
+    const label = summaryState === 'pending' ? '质控摘要加载中' : '质控摘要暂不可用'
+    return { resultStatus: 'unknown', resultLabel: label, issueSummary: label, latestQcTime: '—' }
+  }
   if (summary?.status === 'failed' || summary?.executionStatus === 'failed') {
     return {
       resultStatus: 'technical-error', resultLabel: '执行失败',

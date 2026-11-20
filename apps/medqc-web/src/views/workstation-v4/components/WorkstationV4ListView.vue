@@ -327,7 +327,7 @@
                 "
                 :primary-action-loading="batchActionLoading"
                 :show-filter-qc-action="!isStageQueueMode"
-                :filter-qc-count="qcSummary.totalRecords"
+                :filter-qc-count="qcScopeTotal"
                 :filter-qc-loading="batchActionLoading"
                 :row-action-label="stageMeta.singleActionText"
                 :show-primary-action="true"
@@ -367,6 +367,7 @@
               v-if="!isStageQueueMode"
               :row="previewRow"
               :qc-loading="batchActionLoading"
+              :qc-summary-state="qcSummaryState"
               @open-record="emit('open-record', $event)"
               @run-qc="emit('batch-extract', [$event])"
             />
@@ -415,7 +416,7 @@ import RecordPoolPreviewPanel from './workbench/RecordPoolPreviewPanel.vue'
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
 import type { SichuanBatchJob } from '../semantic-rules/types'
 import type { PriorityCard, PriorityGroup } from './workbench/PriorityLane.vue'
-import type { DeptInfo, DoctorInfo, RecordPoolQcSummary } from '../types'
+import type { DeptInfo, DoctorInfo, QcSummaryLoadState } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type {
   InpatientSort,
@@ -473,7 +474,8 @@ const props = defineProps<{
   currentPage: number
   pageSize: number
   displayServerTotal: number
-  qcSummary: RecordPoolQcSummary
+  qcScopeTotal: number
+  qcSummaryState: QcSummaryLoadState
   recordPoolQcTask?: SichuanBatchJob | null
   analyticsDrilldown?: AnalyticsDrilldown | null
   loadError: boolean
@@ -593,11 +595,11 @@ const activeDepartmentTotal = computed(() => {
   const selected = props.departmentSelectOptions.find(
     (department) => department.name === props.activeDept,
   )
-  return selected?.total ?? props.qcSummary.totalRecords
+  return selected?.total ?? props.qcScopeTotal
 })
 
 const totalRows = computed(() =>
-  isFrontpageGenerateStage.value ? props.displayServerTotal : props.qcSummary.totalRecords,
+  isFrontpageGenerateStage.value ? props.displayServerTotal : props.qcScopeTotal,
 )
 
 const pendingGenerateCount = computed(

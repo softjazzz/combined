@@ -61,6 +61,8 @@ export interface RecordLatestQcSummary {
   reasonCode?: string | null
 }
 
+export type QcSummaryLoadState = 'pending' | 'ready' | 'unavailable'
+
 export interface RecordPoolQcSummary {
   totalRecords: number
   readyRecords: number

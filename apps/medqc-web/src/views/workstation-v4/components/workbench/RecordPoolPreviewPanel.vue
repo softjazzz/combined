@@ -94,6 +94,7 @@ import { computed } from 'vue'
 import type { WorkbenchRow } from './BatchTablePanel.vue'
 import { patientAvatarSrc } from '../qc/patient-avatar'
 import { resolveResultPresentation } from '../qc/latestQcSummaryPresentation'
+import type { QcSummaryLoadState } from '../../types'
 import {
   dischargeDateLabel,
   displayHospitalDate,
@@ -104,6 +105,7 @@ import {
 const props = defineProps<{
   row: WorkbenchRow | null
   qcLoading?: boolean
+  qcSummaryState?: QcSummaryLoadState
 }>()
 
 const emit = defineEmits<{
@@ -125,7 +127,7 @@ const hospitalizationTone = computed(() => {
 })
 
 // 质控结果文案与运行/终末病历质控列表共用同一口径
-const qc = computed(() => resolveResultPresentation(props.row?.latestQcSummary))
+const qc = computed(() => resolveResultPresentation(props.row?.latestQcSummary, props.qcSummaryState))
 
 const qcTone = computed(() => {
   switch (qc.value.resultStatus) {

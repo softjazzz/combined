@@ -13,6 +13,11 @@ const settings: ClinicalSourceSettings = {
   version: 1, default_source: 'legacy_pg', legacy_name: '原来源', legacy_enabled: true,
   cdm: { name: '东华CDM', enabled: true, host: 'localhost', port: 62997, database: 'synthetic', username: 'readonly' },
 }
+
+function response(data: unknown) {
+  return { data, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } }
+}
+
 beforeEach(() => {
   vi.resetAllMocks()
   window.history.replaceState({}, '', '/workstation-v5/running-records?source_id=legacy_pg')
@@ -50,5 +55,47 @@ describe('真实面板及病历池单源行为', () => {
     expect(ApiService.getRaw).not.toHaveBeenCalled()
     expect(records.allRecords.value).toEqual([])
     vi.restoreAllMocks()
+  })
+
+  it.each([false, true])('终末列表先显示，摘要独立返回或失败（失败=%s）', async (failed) => {
+    vi.mocked(clinicalSourcesApi.options).mockResolvedValue({
+      default_source: 'independent_cdm', sources: [{ id: 'independent_cdm', name: '东华CDM', enabled: true }],
+    })
+    const recordKey = '["I","P","V"]'
+    const summary = response({
+      qc_summary: { total_records: 2, ready_records: 1, status_counts: { data_gap: 1 } },
+      records: [
+        { recordKey: '["I","other","V"]', latest_qc_summary: { status: 'not_run' } },
+        { recordKey, latest_qc_summary: { status: 'ready', status_counts: { data_gap: 1 } } },
+      ],
+    })
+    let settleSummary: () => void = () => { throw new Error('未发起摘要请求') }
+    vi.mocked(ApiService.getRaw)
+      .mockResolvedValueOnce(response({ records: [{ id: 'V', recordKey, institute_id: 'I', patient_id: 'P', visit_id: 'V' }], total: 2 }))
+      .mockImplementationOnce(() => new Promise((resolve, reject) => {
+        settleSummary = () => failed ? reject(new Error('摘要超时')) : resolve(summary)
+      }))
+    const records = usePatientRecords('discharged')
+    records.dateField.value = 'discharge'
+    records.searchText.value = '合成'
+    await records.fetchData(1, 15)
+    expect(records.loading.value).toBe(false)
+    expect(records.allRecords.value[0].recordKey).toBe(recordKey)
+    expect(records.allRecords.value[0].latestQcSummary).toBeUndefined()
+    const params = { page: 1, page_size: 15, hospital_status: 'discharged', date_field: 'discharge', source_id: 'independent_cdm', keyword: '合成' }
+    expect(ApiService.getRaw).toHaveBeenNthCalledWith(1, '/api/medical-records/workstation', { ...params, qc_summary_mode: 'deferred' })
+    expect(ApiService.getRaw).toHaveBeenNthCalledWith(2, '/api/medical-records/workstation', { ...params, qc_summary_mode: 'only' }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    settleSummary()
+    await flushPromises()
+    expect(records.loadError.value).toBe(false)
+    expect(records.allRecords.value[0].recordKey).toBe(recordKey)
+    if (failed) {
+      expect(records.qcSummaryState.value).toBe('unavailable')
+      expect(records.allRecords.value[0].latestQcSummary).toBeUndefined()
+    } else {
+      expect(records.qcSummaryState.value).toBe('ready')
+      expect(records.qcSummary.value.totalRecords).toBe(2)
+      expect(records.allRecords.value[0].latestQcSummary?.status).toBe('ready')
+    }
   })
 })

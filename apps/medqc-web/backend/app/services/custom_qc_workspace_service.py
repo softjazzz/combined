@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import hashlib
 import json
+import logging
 import re
 import uuid
 
@@ -13,6 +14,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from io import BytesIO, StringIO
 from functools import lru_cache, partial
+from time import monotonic
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 import sqlalchemy as sa
@@ -4183,6 +4185,7 @@ class CustomQCWorkspaceService:
         include_items: bool = False,
         include_rule_set_context: bool = False,
         include_latest_partial: bool = False,
+        log_read_timing: bool = False,
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
         """批量读取病历池可展示的最新 Canonical 结果摘要。
 
@@ -4190,6 +4193,8 @@ class CustomQCWorkspaceService:
         最新失败任务的同轮成功项；仍不读取 legacy Bundle/QCResult，也不跨轮拼接。
         """
 
+        started = monotonic()
+        query_seconds = result_parse_seconds = 0.0
         identities = {
             (
                 _safe_text(ref.get("institute_id")),
@@ -4268,6 +4273,7 @@ class CustomQCWorkspaceService:
             )
             # 新任务的规则集身份保存在 filters_json。病历池只需要选择字段，
             # 只有 filters_json 不完整的旧任务才会通过 CASE 读取 summary_json。
+            query_started = monotonic()
             job_rows = (
                 session.execute(
                     select(*job_columns).where(
@@ -4277,6 +4283,7 @@ class CustomQCWorkspaceService:
                 .mappings()
                 .all()
             )
+            query_seconds += monotonic() - query_started
             # 首页/病历池只需要“选择当前 Canonical 结果”的最小任务字段。
             # 不能为每个候选完整反序列化 items、子任务和运行摘要；真实全院范围
             # 会把同一批任务 JSON 反复解析数十万次，且不会增加任何判定事实。
@@ -4385,6 +4392,7 @@ class CustomQCWorkspaceService:
             if not jobs_by_id:
                 return {identity: {"status": "not_run"} for identity in identities}
 
+            query_started = monotonic()
             envelope_rows = (
                 session.execute(
                     select(self._record_result_envelope_table).where(
@@ -4397,6 +4405,7 @@ class CustomQCWorkspaceService:
                 .mappings()
                 .all()
             )
+            query_seconds += monotonic() - query_started
             envelopes_by_identity: Dict[tuple[str, str, str], Dict[str, list[Dict[str, Any]]]] = {}
             current_envelopes_by_job_visit: Dict[tuple[str, str], list[Dict[str, Any]]] = {}
             for raw_row in envelope_rows:
@@ -4525,6 +4534,7 @@ class CustomQCWorkspaceService:
                         selected_job = ready_selection.job
                         selected_job_id = _safe_text(selected_job.get("id"))
                         if selected_job_id not in saved_partial_rows_by_job:
+                            query_started = monotonic()
                             saved_row = session.execute(select(
                                 self._batch_job_table.c.items_json,
                                 self._batch_job_table.c.summary_json,
@@ -4535,6 +4545,7 @@ class CustomQCWorkspaceService:
                                 self._batch_job_table.c.filters_json
                                 == selected_job.get("saved_filters_json"),
                             ))).mappings().one_or_none()
+                            query_seconds += monotonic() - query_started
                             saved_partial_rows_by_job[selected_job_id] = (
                                 dict(saved_row) if saved_row is not None else None
                             )
@@ -4549,6 +4560,7 @@ class CustomQCWorkspaceService:
                             }
                             continue
                         projection_key = customer_safe_projection_key()
+                        parse_started = monotonic()
                         try:
                             partial = read_saved_partial_record(
                                 summary=_safe_json_loads(saved.get("summary_json"), {}),
@@ -4575,6 +4587,8 @@ class CustomQCWorkspaceService:
                                 ),
                             }
                             continue
+                        finally:
+                            result_parse_seconds += monotonic() - parse_started
                         status_counts: Dict[str, int] = {}
                         for item in partial["items"]:
                             item_status = _safe_text(item.get("status"), "unknown")
@@ -4605,12 +4619,14 @@ class CustomQCWorkspaceService:
                             "reason_code": "canonical_result_envelope_invalid",
                         }
                         continue
+                    parse_started = monotonic()
                     summary = self._summarize_completed_record_result_envelope(
                         envelope_row=selected_envelopes[0],
                         completed_at=ready_selection.job.get("finished_at"),
                         include_items=include_items,
                         rule_set_key=normalized_rule_set_key,
                     )
+                    result_parse_seconds += monotonic() - parse_started
                     if include_rule_set_context and summary.get("status") == "ready":
                         # 供报表绑定已选中的持久结果；不改变候选、选轮或旧调用输出。
                         summary.update({
@@ -4651,6 +4667,14 @@ class CustomQCWorkspaceService:
             return projections
         finally:
             session.close()
+            elapsed = monotonic() - started
+            if log_read_timing and elapsed >= 2:
+                logging.getLogger(__name__).warning(
+                    "workstation_qc_summary_slow query_ms=%d result_parse_ms=%d other_ms=%d total_ms=%d matched=%d",
+                    query_seconds * 1000, result_parse_seconds * 1000,
+                    max(0.0, elapsed - query_seconds - result_parse_seconds) * 1000,
+                    elapsed * 1000, len(identities),
+                )
 
     @staticmethod
     def _summarize_completed_record_result_envelope(

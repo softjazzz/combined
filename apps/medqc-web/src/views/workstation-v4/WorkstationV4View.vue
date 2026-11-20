@@ -33,7 +33,8 @@
         :current-page="currentPage"
         :page-size="pageSize"
         :display-server-total="displayServerTotal"
-        :qc-summary="qcSummary"
+        :qc-scope-total="qcScopeTotal"
+        :qc-summary-state="qcSummaryState"
         :record-pool-qc-task="recordPoolQcTask"
         :analytics-drilldown="analyticsDrilldown"
         :load-error="loadError"
@@ -474,6 +475,7 @@ const {
   loading,
   loadError,
   qcSummary,
+  qcSummaryState,
   activeDept,
   activeDoctor,
   searchText,
@@ -548,6 +550,9 @@ const displayLoading = computed(
 
 const displayServerTotal = computed(() =>
   isAggregatedStageMode.value ? stageServerTotal.value : serverTotal.value,
+)
+const qcScopeTotal = computed(() =>
+  qcSummaryState.value === 'ready' ? qcSummary.value.totalRecords : serverTotal.value,
 )
 
 const displayServerTotalPages = computed(() =>
@@ -2362,7 +2367,7 @@ async function handleBatchExtract(keys: string[]) {
 
 async function handleFilterQc() {
   await runRecordPoolFilterQc({
-    total: qcSummary.value.totalRecords,
+    total: qcScopeTotal.value,
     hospitalStatus: hospFilter.value,
     syncScope: syncScope.value,
     department: activeDept.value,

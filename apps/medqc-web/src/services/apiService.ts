@@ -208,6 +208,9 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config
     const requestUrl: string | undefined = error.config?.url
     const responseStatus: number | undefined = error.response?.status
+    const backgroundQcSummary = requestUrl === '/api/medical-records/workstation'
+      && originalRequest?.params?.qc_summary_mode === 'only'
+    if (backgroundQcSummary && error.code === 'ERR_CANCELED') return Promise.reject(error)
     const traceId = extractTraceIdFromResponse(error.response) || extractTraceIdFromResponse(error)
     attachTraceIdToError(error, traceId)
 
@@ -284,6 +287,8 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // 摘要失败由页面局部展示，保留上面的会话续期处理。
+    if (backgroundQcSummary) return Promise.reject(error)
     // 统一错误处理（兼容后端统一错误结构）
     const data = error.response?.data || {}
     const errorMessage = data.message || data.error || data.detail || error.message || '请求失败'

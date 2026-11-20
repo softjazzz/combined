@@ -103,7 +103,7 @@
         v-else-if="!ready"
         class="preview-state"
       >
-        暂无已保存质控结果，请先运行质控
+        {{ row.resultStatus === 'unknown' ? row.resultLabel : '暂无已保存质控结果，请先运行质控' }}
       </div>
       <template v-else>
         <div class="status-tabs">
@@ -347,7 +347,7 @@ async function loadResult() {
   loading.value = false
   loadError.value = ''
   activeTab.value = 'all'
-  if (!row || row.resultStatus === 'not-run') return
+  if (!row || row.resultStatus === 'not-run' || row.resultStatus === 'unknown') return
   if (!row.instituteId || !row.patientId || !row.visitId) {
     loadError.value = '当前病历身份信息不完整，已停止读取'
     return

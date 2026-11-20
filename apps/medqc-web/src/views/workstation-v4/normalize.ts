@@ -251,7 +251,7 @@ function normalizeStatusCounts(raw: unknown): Record<string, number> {
   )
 }
 
-function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
+export function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
   const source = (raw || {}) as LooseRecord
   const status = pickString(source, ['status'])
   if (status === 'ready' || status === 'failed') {
