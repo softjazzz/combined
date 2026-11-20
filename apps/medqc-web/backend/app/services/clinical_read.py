@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from sqlalchemy import MetaData, Table
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Query, Session, aliased
 
 
@@ -38,6 +39,11 @@ def clinical_table_sql(table_name: str) -> str:
     if not re.fullmatch(r"[a-z][a-z0-9_]*", table_name):
         raise ValueError("invalid_clinical_table_name")
     return f"cdm.{table_name}" if clinical_read_schema() else table_name
+
+
+def optional_frontpage_unavailable(error: BaseException | None) -> bool:
+    """仅首页展示读可隔离缺表与拒读，其他数据库故障继续抛出。"""
+    return isinstance(error, ProgrammingError) and getattr(error.orig, "pgcode", None) in {"42P01", "42501"}
 
 
 def is_synced_clinical_table(table_name: str) -> bool:

@@ -4,9 +4,11 @@ from functools import lru_cache
 from fastapi import HTTPException
 import math
 
-from sqlalchemy import Date, DateTime, MetaData, Table, String, and_, case, cast, func, inspect, literal, or_, select, tuple_, union_all
+from sqlalchemy import Date, DateTime, MetaData, Table, String, and_, case, cast, column, func, inspect, literal, or_, select, table, tuple_, union_all
+from sqlalchemy.exc import ProgrammingError
 
 from ..database import clinical_connection as clinical
+from .clinical_read import optional_frontpage_unavailable
 from .data_pipeline_settings import PipelineError
 from .validation_material_source import EXPLICITLY_INVALID_DOCUMENT_STATUSES, material_document_status_column
 
@@ -181,6 +183,25 @@ def schedule_options(*, scope, institute_id=None):
         raise PipelineError("clinical_source_read_unavailable", 503) from error
 
 
+def _frontpage_refs(connection, refs):
+    """仅附加当前页的首页存在性；None 表示该来源未能核对。"""
+    if not refs:
+        return set()
+    frontpage = table("mr", *(column(key, String) for key in KEYS), schema="cdm")
+    keys = tuple(frontpage.c[key] for key in KEYS)
+    try:
+        with connection.begin_nested():
+            if not inspect(connection).has_table("mr", schema="cdm"):
+                return None
+            return {tuple(str(value) for value in row) for row in connection.execute(
+                select(*keys).where(tuple_(*keys).in_(refs))
+            )}
+    except ProgrammingError as error:
+        if not optional_frontpage_unavailable(error):
+            raise
+        return None
+
+
 def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_date=None,
                 date_field="visit", hospital_status="all", sync_scope="all", inpatient_sort="default",
                 page=1, page_size=50, case_scope=None, qc_projection_loader=None, **analytics):
@@ -195,7 +216,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         raise PipelineError("invalid_clinical_catalog_filter", 422)
     try:
         engine = clinical.get_engine()
-        source = catalog(engine)
+        source = catalog(engine, include_frontpage=False)
         predicates = _predicates(source, dept=dept, doctor=doctor, keyword=keyword,
             start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
             case_scope=case_scope)
@@ -209,6 +230,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
             facets = query.subquery()
             departments = connection.execute(select(facets.c.department, func.count()).group_by(facets.c.department)).all()
             doctors = connection.execute(select(facets.c.doctor, func.count()).group_by(facets.c.doctor)).all()
+            frontpage_refs = _frontpage_refs(connection, [tuple(row[key] for key in KEYS) for row in rows])
         if qc_projection_loader is None:
             from .medical_records.query_service import _load_latest_luxian_0609_qc_summaries
             from ..database.connection import SessionLocal
@@ -220,6 +242,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         for row in rows:
             admission, discharge = _datetime(row["admission"]), _datetime(row["discharge"])
             identity = tuple(str(row[k]) for k in KEYS)
+            frontpage_empty = None if frontpage_refs is None else identity not in frontpage_refs
             records.append({"id": row["visit_id"], "recordKey": CaseRef(*identity).as_key(),
                 "instituteId": row["institute_id"], "patientId": row["patient_id"],
                 "sourceId": "independent_cdm", "name": row["name"] or "未返回", "sex": row["sex"] or "",
@@ -231,9 +254,10 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                 "dischargeDatetime": discharge.isoformat() if isinstance(discharge, datetime) else None,
                 "hospitalizationStatus": "discharged" if discharge else "unknown",
                 "hospitalizationStatusSource": "cdm_observed_discharge" if discharge else "cdm_inpatient_unconfirmed",
-                "materialCompleteness": "首页未观察到" if not row["has_frontpage"] else "发布完整性尚未证明", "updateTime": row["updated"] or "",
+                "materialCompleteness": "首页状态暂不可核对" if frontpage_empty is None else (
+                    "首页未观察到" if frontpage_empty else "发布完整性尚未证明"), "updateTime": row["updated"] or "",
                 "days": max(0, (((discharge.date() if isinstance(discharge, datetime) else discharge) or date.today()) - (admission.date() if isinstance(admission, datetime) else admission)).days) if admission else 0,
-                "status": "not_run", "cdmFrontpageEmpty": not bool(row["has_frontpage"]),
+                "status": "not_run", "cdmFrontpageEmpty": frontpage_empty,
                 "latest_qc_summary": summaries.get(identity)})
         return {"records": records, "total": total, "page": page, "pageSize": page_size,
             "totalPages": max(1, math.ceil(total/page_size)), "source_id": "independent_cdm",

@@ -68,7 +68,7 @@ def resolve_doctor_case_scope(actor_id: str, *, session_factory=None) -> DoctorC
             if clinical_connection.configured():
                 from .clinical_case_catalog import catalog, KEYS
                 from sqlalchemy import select
-                source = catalog(clinical_connection.get_engine())
+                source = catalog(clinical_connection.get_engine(), include_frontpage=False)
                 with clinical_connection.get_engine().connect() as connection:
                     rows = connection.execute(select(*[source.c[k] for k in KEYS]).where(
                         source.c.institute_id == institute, func.trim(source.c.department) == department,

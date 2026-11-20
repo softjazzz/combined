@@ -6,7 +6,10 @@ from copy import deepcopy
 from threading import Lock
 from typing import Any
 
+from sqlalchemy.exc import ProgrammingError
+
 from . import assembly, emr_view
+from ..clinical_read import optional_frontpage_unavailable
 from ..luxian_0609.clinical_material_policy import primary_documents_only
 from .. import case_material_snapshot as case_material
 from .frontpage_view import load_frontpage_document
@@ -38,7 +41,10 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
         # 多取 1 行用于判断是否仍有未展示的医嘱。
         limits[table_name] = max(limits.get(table_name, 0), limit + 1)
     snapshot = assembly._build_material_snapshot(source_schema=source_schema, table_limits=limits, **identity)
-    # 读取失败不能冒充没有文书，更不能回退旧 Bundle。
+    ordinary_cdm = source_schema == "cdm" and assembly.clinical_connection.configured()
+    if ordinary_cdm and optional_frontpage_unavailable(snapshot.errors_by_table.get("mr")):
+        snapshot.errors_by_table.pop("mr")
+    # 正式文书读取失败不能冒充没有文书，也不能回退旧 Bundle。
     if snapshot.errors_by_table:
         raise RuntimeError("current_document_source_read_failed")
     bundles = {
@@ -61,7 +67,14 @@ def _assemble_current_documents(*, institute_id: str, patient_id: str, visit_id:
         documents = [doc for doc in documents if doc.get("doc_type") != "daily_course_record"]
         documents.extend(daily.project_documents(manifest))
     pdf_candidates = material_review_documents(**identity)
-    frontpage = load_frontpage_document(**identity) if not primary_documents_only() and snapshot.rows_by_table.get("mr") else None
+    frontpage = None
+    if not primary_documents_only() and snapshot.rows_by_table.get("mr"):
+        try:
+            frontpage = load_frontpage_document(**identity)
+        except ProgrammingError as error:
+            if not ordinary_cdm or not optional_frontpage_unavailable(error):
+                raise
+            # 结构化首页依赖不可读时，保留当前账号已读到的投影，不回查历史。
     if frontpage is not None:
         # 仅替换当前查看的首页条目；历史 Bundle 和规则输入仍由原有 owner 读取。
         documents = [document for document in documents if document.get("doc_type") != "mr"]
