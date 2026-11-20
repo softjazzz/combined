@@ -873,6 +873,60 @@ def test_001_002_accept_the_localized_customer_record_time_and_document_identity
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("registration_time", "completion", "expected", "uses_registration"),
+    [
+        (None, "2026-07-15 12:03:42", CustomerFinalState.COMPLIANT, False),
+        ("2026-07-15 11:20:00", "2026-07-15 12:03:42", CustomerFinalState.COMPLIANT, True),
+        (None, "2026-07-16 12:03:42", CustomerFinalState.DATA_GAP, True),
+    ],
+    ids=("document_anchor_within_24h", "registration_anchor", "late_at_unknown_coverage"),
+)
+def test_001_automatic_scope_binds_admission_timeliness_sources(
+    registration_time, completion, expected, uses_registration
+):
+    from app.services import case_material_snapshot as material
+    from app.services.automatic_material_scope import describe_source
+
+    rule = "LX0609-01-01-01"
+    rows = {
+        "inpat_registration": (
+            [{"admission_datetime": registration_time}] if registration_time else []
+        ),
+        "admission_record": [{
+            "document_id": "synthetic-admission",
+            "admission_datetime": "2026-07-15 11:23:54",
+            "record_datetime": completion,
+            "chief_complaint": "合成入院材料，因反复头痛入院。",
+        }],
+    }
+    session = _typed_basic_session(
+        rows, selected_rule_ids=(rule,), evaluation_as_of_date="2026-07-17",
+    )
+    with material.activate({
+        "automatic_material": {
+            "sources": {
+                source_key: describe_source((), source_rows)
+                for source_key, source_rows in rows.items()
+            },
+            "publication": {"status": "metadata_permission_unconfirmed"},
+        },
+    }):
+        execution, reduced = _reduce_typed_basic(session, (rule,))
+
+    registration = next(
+        item for item in session.snapshot.observations
+        if item.source_key == "inpat_registration"
+    )
+    assert reduced[0].final_state is expected
+    assert (registration.snapshot_ref.removeprefix("sha256:") in execution.decisions[0].fact_refs) is uses_registration
+    _assert_selected_document_ref(
+        execution, session, rule_id=rule, source_key="admission_record",
+        document_id="synthetic-admission",
+    )
+
+
+@pytest.mark.unit
 def test_001_005_006_do_not_use_admission_record_time_as_its_own_anchor():
     session = _typed_basic_session(
         {

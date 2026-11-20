@@ -664,6 +664,8 @@ def _typed_basic_decisions(
         rule_id: str,
         direction: QcDirection,
         reason_code: str,
+        *,
+        sources: tuple[str, ...] | None = None,
     ) -> RuleDecision:
         return make(
             rule_id,
@@ -671,6 +673,7 @@ def _typed_basic_decisions(
             qc_direction=direction,
             reason_code=reason_code,
             confidence=1.0,
+            sources=sources,
         )
 
     def not_applicable(rule_id: str, reason_code: str) -> RuleDecision:
@@ -1353,12 +1356,21 @@ def _typed_basic_decisions(
                 )
             elif delta_state == "within":
                 observed, source_document_id, selected_row = admission_record_events[0]
+                # 登记零行且锚点精确时，实际采用的是入院记录中的入院时间。
+                # 按时结论已有文书证据，空登记不作为来源完整性的前提。
+                registration = observation_by_source["inpat_registration"]
+                sources = (
+                    tuple(key for key in allowed_sources[rule_id] if key != "inpat_registration")
+                    if anchor is not None and registration.query_state.value == "empty"
+                    else None
+                )
                 decisions.append(
                     attach_selected_row(
                         conclusive(
                             rule_id,
                             QcDirection.SATISFIED,
                             "requirement_within_threshold",
+                            sources=sources,
                         ),
                         source_key="admission_record",
                         row=selected_row,
