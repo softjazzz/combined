@@ -81,7 +81,7 @@ async def get_departments_api(request: Request):
 
 
 @router.get("/workstation")
-async def get_workstation_data_api(
+def get_workstation_data_api(
     request: Request,
     dept: Optional[str] = Query(None, description="科室筛选，不传则返回全部"),
     doctor: Optional[str] = Query(None, description="主管医师筛选，不传则返回全部"),
@@ -121,6 +121,7 @@ async def get_workstation_data_api(
     analytics_scope: Optional[Literal["final"]] = Query(None, description="统计下钻资料范围"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    # CDM 和业务摘要使用同步数据库调用，交由 FastAPI 在线程池执行。
     try:
         return get_workstation_data(
             dept=dept,

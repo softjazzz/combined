@@ -55,12 +55,14 @@ async function loadApiServiceWithAxiosMock() {
     default: axiosMock,
   }))
 
-  await import('@/services/apiService')
+  const { ApiService } = await import('@/services/apiService')
 
   return {
     requestFulfilled,
     responseRejected,
     responseFulfilled,
+    ApiService,
+    get: apiClientMock.get,
   }
 }
 
@@ -106,6 +108,18 @@ describe('apiService trace propagation', () => {
     vi.clearAllMocks()
     vi.resetModules()
     vi.unstubAllEnvs()
+  })
+
+  it('只给病历池列表请求留出更长的等待时间，保留调用者的超时覆盖', async () => {
+    const { ApiService, get } = await loadApiServiceWithAxiosMock()
+    await ApiService.getRaw('/api/medical-records/workstation', { page: 1 })
+    await ApiService.getRaw('/api/v1/notifications')
+    await ApiService.getRaw('/api/medical-records/workstation', {}, { timeout: 2000 })
+    expect(get).toHaveBeenNthCalledWith(1, '/api/medical-records/workstation', {
+      timeout: 30000, params: { page: 1 },
+    })
+    expect(get).toHaveBeenNthCalledWith(2, '/api/v1/notifications', { params: undefined })
+    expect(get).toHaveBeenNthCalledWith(3, '/api/medical-records/workstation', { timeout: 2000, params: {} })
   })
 
   it('request interceptor injects X-Trace-ID and X-Request-ID with same value', async () => {

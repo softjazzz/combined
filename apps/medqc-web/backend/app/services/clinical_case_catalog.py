@@ -1,9 +1,12 @@
 """独立CDM病历目录：临床查询只在源库执行，结果摘要另从业务库装配。"""
+from collections import Counter
 from datetime import date, datetime
 from functools import lru_cache
-from fastapi import HTTPException
+import logging
 import math
+from time import monotonic
 
+from fastapi import HTTPException
 from sqlalchemy import Date, DateTime, MetaData, Table, String, and_, case, cast, column, func, inspect, literal, or_, select, table, tuple_, union_all
 from sqlalchemy.exc import ProgrammingError
 
@@ -12,6 +15,7 @@ from .clinical_read import optional_frontpage_unavailable
 from .data_pipeline_settings import PipelineError
 from .validation_material_source import EXPLICITLY_INVALID_DOCUMENT_STATUSES, material_document_status_column
 
+logger = logging.getLogger(__name__)
 REQUIRED_TABLES = ("mr", "inpat_registration", "admission_record", "discharge_record")
 KEYS = ("institute_id", "patient_id", "visit_id")
 FIELDS = {
@@ -215,6 +219,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
     if hospital_status not in (None, "all", "inpatient", "discharged", "unknown") or date_field not in (None, "visit", "admission", "discharge", "updated"):
         raise PipelineError("invalid_clinical_catalog_filter", 422)
     try:
+        catalog_started = monotonic()
         engine = clinical.get_engine()
         source = catalog(engine, include_frontpage=False)
         predicates = _predicates(source, dept=dept, doctor=doctor, keyword=keyword,
@@ -224,13 +229,17 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
         order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
         with engine.connect() as connection:
-            total = connection.execute(select(func.count()).select_from(query.subquery())).scalar_one()
             rows = connection.execute(query.order_by(order, *[source.c[k] for k in KEYS]).offset((page-1)*page_size).limit(page_size)).mappings().all()
-            all_refs = [dict(row) for row in connection.execute(select(*[source.c[k] for k in KEYS]).where(*predicates)).mappings()]
-            facets = query.subquery()
-            departments = connection.execute(select(facets.c.department, func.count()).group_by(facets.c.department)).all()
-            doctors = connection.execute(select(facets.c.doctor, func.count()).group_by(facets.c.doctor)).all()
+            # 质控摘要本来就需要筛选全集的三键。一次投影同时取分组字段，复用目录聚合。
+            filtered_rows = connection.execute(
+                select(*[source.c[k] for k in KEYS], source.c.department, source.c.doctor).where(*predicates)
+            ).mappings().all()
             frontpage_refs = _frontpage_refs(connection, [tuple(row[key] for key in KEYS) for row in rows])
+        total = len(filtered_rows)
+        all_refs = [{key: row[key] for key in KEYS} for row in filtered_rows]
+        departments = Counter(row["department"] for row in filtered_rows).items()
+        doctors = Counter(row["doctor"] for row in filtered_rows if row["doctor"]).items()
+        summary_started = monotonic()
         if qc_projection_loader is None:
             from .medical_records.query_service import _load_latest_luxian_0609_qc_summaries
             from ..database.connection import SessionLocal
@@ -238,6 +247,13 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         from .medical_records.query_service import _build_qc_summary, _normalize_latest_qc_summary_map
         from .case_identity import CaseRef
         summaries = _normalize_latest_qc_summary_map(qc_projection_loader(all_refs)) if all_refs else {}
+        completed = monotonic()
+        if completed - catalog_started >= 2:
+            logger.warning(
+                "workstation_list_slow cdm_ms=%d qc_summary_ms=%d matched=%d page_size=%d",
+                (summary_started - catalog_started) * 1000, (completed - summary_started) * 1000,
+                total, page_size,
+            )
         records = []
         for row in rows:
             admission, discharge = _datetime(row["admission"]), _datetime(row["discharge"])

@@ -57,6 +57,7 @@ function computeBaseURL(): string {
 
 const API_BASE_URL = computeBaseURL()
 const API_TIMEOUT = 15000 // 15秒超时，避免过长等待
+const WORKSTATION_LIST_TIMEOUT = 30000
 const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
 const API_DEBUG =
   import.meta.env.DEV && String(import.meta.env.VITE_API_DEBUG || '').toLowerCase() === 'true'
@@ -348,7 +349,10 @@ export class ApiService {
     params?: Record<string, unknown>,
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
-    return apiClient.get<T>(url, { ...(config || {}), params })
+    const defaultConfig = url === '/api/medical-records/workstation'
+      ? { timeout: WORKSTATION_LIST_TIMEOUT }
+      : {}
+    return apiClient.get<T>(url, { ...defaultConfig, ...config, params })
   }
 
   static async postRaw<T = unknown>(

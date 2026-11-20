@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
 
 from app.core.security import get_current_user
@@ -74,8 +74,23 @@ def cdm(request, monkeypatch):
 
 def test_terminal_list_uses_clinical_identity_and_only_enriches_frontpage_presence(cdm):
     assert catalog.resolve_identity("SYN-V") == IDENTITY
-    response = catalog.workstation(hospital_status="discharged", qc_projection_loader=lambda _: {})
+    catalog_queries = []
+
+    def track_catalog(_connection, _cursor, statement, *_):
+        if "UNION ALL" in statement:
+            catalog_queries.append(statement)
+
+    engine = clinical.get_engine()
+    event.listen(engine, "before_cursor_execute", track_catalog)
+    try:
+        response = catalog.workstation(hospital_status="discharged", qc_projection_loader=lambda _: {})
+    finally:
+        event.remove(engine, "before_cursor_execute", track_catalog)
     assert response["total"] == 1
+    assert len(catalog_queries) == 2
+    assert response["departments"] == [{"name": "未分科室", "total": 1, "warningCount": 0}]
+    assert response["doctors"] == [{"name": "合成医师", "total": 1}]
+    assert response["qc_summary"]["not_run_records"] == 1
     [record] = response["records"]
     assert (record["instituteId"], record["patientId"], record["id"]) == tuple(IDENTITY.values())
     assert json.loads(record["recordKey"]) == list(IDENTITY.values())
