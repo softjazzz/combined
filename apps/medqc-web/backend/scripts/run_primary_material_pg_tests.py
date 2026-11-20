@@ -27,6 +27,7 @@ def main():
         "test_record_lifecycle_29_usable_and_held_full_business_chain",
         "test_latest_hold_pending_failure_and_restore_keep_frozen_business_copy",
         "test_record_lifecycle_stale_version_and_denial_never_become_empty_success",
+        "test_clinical_surgery_browse_requires_current_publication_evidence",
     ))
     args = parser.parse_args()
     if not 55000 <= args.port <= 55999:

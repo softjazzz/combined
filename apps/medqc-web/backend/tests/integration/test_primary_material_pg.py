@@ -405,3 +405,93 @@ def test_record_lifecycle_stale_version_and_denial_never_become_empty_success(ow
             with pytest.raises(Exception) as error:
                 primary.read_manifest(connection, ("i", "p", "v"))
             assert getattr(error.value, "pgcode", None) == "42501"
+
+
+def test_clinical_surgery_browse_requires_current_publication_evidence(owned, monkeypatch):
+    from hashlib import sha256
+
+    from app.database import clinical_connection
+    from app.services.bundles import clinical_surgery_browse as browse
+    from app.services.primary_material_readonly import KEYS, digest
+
+    admin, reader, _ = owned
+    monkeypatch.setattr(clinical_connection, "get_engine", lambda: reader)
+    identity = ("base-hospital", "synthetic-patient", "SYN-2725811")
+    native = ("clinical-hospital", "clinical-patient", "clinical-visit", "SYN-5608526||1")
+    key_hash = digest(dict(zip(KEYS, native, strict=True)))
+    epoch = "615fd919-565b-4de9-b5ee-868c89232252"
+    body = " " + ("合成手术经过。" * 100)[:492] + "\n"
+    body_hash = sha256(body.encode()).hexdigest()
+    view = "sync_material.clinical_surgery_browse_v1"
+    interface = "clinical.public.surgery_record"
+    base = [{"doc_type": kind, "document_id": native[3], "content": "合成基础文书"}
+            for kind in ("daily_course_record", "presurg_summary", "postsurg_firstcourse_record")]
+
+    def directory(case=identity, documents=base):
+        return browse.supplement_directory({"documents": list(documents)}, case)
+
+    assert directory()["clinical_surgery_status"] == "contract_unavailable"
+    with admin.begin() as writer:
+        writer.exec_driver_sql(
+            f"CREATE TABLE {view} (institute_id text,patient_id text,visit_id text,"
+            "clinical_institute_id text,clinical_patient_id text,clinical_visit_id text,document_id text,"
+            "lifecycle_state text,cache_document_id text,surgery_process_sha256 text,source_epoch uuid,"
+            "source_key_hash text,target_key_hash text,generation bigint,mapping_hash text,activation bigint)"
+        )
+        writer.exec_driver_sql(
+            "INSERT INTO sync_material.clinical_surgery_record_current "
+            "(institute_id,patient_id,visit_id,document_id,surgery_process) VALUES (%s,%s,%s,%s,%s)",
+            (*native, body),
+        )
+        writer.exec_driver_sql(
+            f"INSERT INTO {view} VALUES (%s,%s,%s,%s,%s,%s,%s,'USABLE',NULL,%s,%s,%s,%s,861733,%s,3)",
+            (*identity, *native, body_hash, epoch, key_hash, key_hash, "synthetic-mapping"),
+        )
+        writer.exec_driver_sql(
+            "INSERT INTO sync_delivery.contract VALUES (%s,%s,%s,3) ON CONFLICT (interface_name) "
+            "DO UPDATE SET source_epoch=EXCLUDED.source_epoch,mapping_hash=EXCLUDED.mapping_hash,activation=3",
+            (interface, epoch, "synthetic-mapping"),
+        )
+        writer.exec_driver_sql(
+            "INSERT INTO sync_delivery.receipt VALUES (%s,%s,%s,861733,%s,3,%s)",
+            (interface, key_hash, epoch, "synthetic-mapping", key_hash),
+        )
+    assert directory()["clinical_surgery_status"] == "permission_unavailable"
+    with admin.begin() as writer:
+        writer.exec_driver_sql(f"GRANT SELECT ON {view} TO primary_reader")
+    documents = directory()["documents"]
+    assert documents[:-1] == base
+    summary = documents[-1]
+    assert summary["generation"] == 861733 and summary["length"] == 494
+    assert "content" not in summary
+    selected, status = browse.read_document(identity, native[3], summary["version_id"])
+    assert status == "available" and selected["content"] == body
+    assert selected["version_id"] == summary["version_id"]
+    assert directory(("other-hospital", identity[1], identity[2]))["documents"] == base
+
+    same_id_base = {"doc_type": "surgery_record", "document_id": native[3], "content": "基础正文"}
+    assert len(directory(documents=[same_id_base])["documents"]) == 2
+    with admin.begin() as writer:
+        writer.exec_driver_sql(f"UPDATE {view} SET cache_document_id=%s", (native[3],))
+    assert directory(documents=[same_id_base])["documents"] == [same_id_base]
+
+    for invalid, restore in (
+        (f"UPDATE {view} SET lifecycle_state='HOLD'", f"UPDATE {view} SET lifecycle_state='USABLE'"),
+        ("UPDATE sync_delivery.contract SET activation=4 WHERE interface_name='clinical.public.surgery_record'",
+         "UPDATE sync_delivery.contract SET activation=3 WHERE interface_name='clinical.public.surgery_record'"),
+        (f"UPDATE {view} SET surgery_process_sha256='invalid'",
+         None),
+    ):
+        with admin.begin() as writer:
+            writer.exec_driver_sql(invalid)
+        assert directory()["documents"] == base
+        assert browse.read_document(identity, native[3], summary["version_id"]) == (None, "available")
+        if restore:
+            with admin.begin() as writer:
+                writer.exec_driver_sql(restore)
+
+    with admin.begin() as writer:
+        writer.exec_driver_sql(f"UPDATE {view} SET surgery_process_sha256=%s, generation=861734", (body_hash,))
+        writer.exec_driver_sql("UPDATE sync_delivery.receipt SET generation=861734 WHERE source_key_hash=%s", (key_hash,))
+    assert browse.read_document(identity, native[3], summary["version_id"]) == (None, "available")
+    assert directory()["documents"][-1]["generation"] == 861734

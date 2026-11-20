@@ -927,8 +927,11 @@ async function ensureDocumentLoaded(
 ) {
   const summary = documents.value.find((document) => document.key === documentKey)
   if (!summary) return null
-  if (props.providedDocuments !== undefined || props.sourceView === 'current') return summary
-  if (!renderOverride && isDocumentLoaded(summary)) return summary
+  const currentClinicalSurgery = props.sourceView === 'current' && Boolean(summary.clinical_surgery_version)
+  if (!currentClinicalSurgery) {
+    if (props.providedDocuments !== undefined || props.sourceView === 'current') return summary
+    if (!renderOverride && isDocumentLoaded(summary)) return summary
+  }
   if (!summary.execution_domain && !props.lazyResultDocuments) {
     if (selectedDocumentKey.value === documentKey) {
       contentLoadError.value = '当前文书缺少按需读取标识，请刷新页面后重试。'
@@ -1317,6 +1320,7 @@ async function loadDocuments() {
     documents.value = props.providedDocuments.filter((document) => document.enabled !== false)
     selectedDocumentKey.value = resolveDefaultDocumentKey()
     mobileTab.value = 'record'
+    if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
     return
   }
   if ((!visitId && !(jobId && recordRef)) || (props.lazyResultDocuments && !jobId)) {

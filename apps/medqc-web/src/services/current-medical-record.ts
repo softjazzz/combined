@@ -3,6 +3,7 @@ import { getEditableMedicalRecordDocuments } from './manual-case-sample-service'
 export function loadCurrentMedicalRecord(
   visitId: string,
   identity: { instituteId?: string; patientId?: string },
+  includeClinicalSurgery = false,
 ) {
   const id = visitId.trim()
   return getEditableMedicalRecordDocuments(id, {
@@ -11,5 +12,6 @@ export function loadCurrentMedicalRecord(
     visit_id: id,
     source_view: 'current',
     view: 'full',
+    ...(includeClinicalSurgery ? { include_clinical_surgery: true } : {}),
   })
 }

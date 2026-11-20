@@ -78,7 +78,7 @@ watch(
       return
     }
     loading.value = true
-    const result = await loadCurrentMedicalRecord(record.visitId, record)
+    const result = await loadCurrentMedicalRecord(record.visitId, record, true)
     if (!active) return
     loading.value = false
     if (result.success && result.data) documents.value = result.data.documents

@@ -21,6 +21,7 @@ from ..services.bundles.emr_view import (
     build_render_view,
 )
 from ..services.bundles.current_view import load_current_documents
+from ..services.bundles import clinical_surgery_browse
 from ..services import case_material_snapshot as case_material
 from copy import deepcopy
 from ..services.qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
@@ -294,6 +295,7 @@ async def get_record_documents(
     view: str = Query("full", pattern="^(full|summary)$", description="目录视图或完整文书"),
     source_view: str = Query("saved", pattern="^(saved|current)$", description="当前病历或已保存文书"),
     document_scope: Optional[str] = Query(None, pattern="^(clinical|orders)$", description="历史文书目录中的非医嘱或医嘱"),
+    include_clinical_surgery: bool = False,
     execution_domain: Optional[str] = Query(
         None,
         description="摘要优先加载的文书领域；仅 view=summary 时生效",
@@ -315,10 +317,18 @@ async def get_record_documents(
         }
         if not all(identity.values()):
             raise HTTPException(status_code=422, detail="缺少完整住院身份，无法读取当前病历")
+        if include_clinical_surgery and record_id != identity["visit_id"]:
+            raise HTTPException(422, "病历路径与住院身份不符")
+        if include_clinical_surgery and request.query_params.get("job_id"):
+            raise HTTPException(422, "当前病历目录不可指定历史任务")
         try:
             payload = await run_in_threadpool(
                 load_current_documents, **identity, include_exam_evidence_coordinates=True,
             )
+            if include_clinical_surgery:
+                payload = await run_in_threadpool(
+                    clinical_surgery_browse.supplement_directory, payload, tuple(identity.values()),
+                )
         except Exception as exc:
             logger.warning("当前文书更新失败: error_type=%s", type(exc).__name__)
             raise HTTPException(status_code=503, detail="文书更新失败，请稍后重试；本次未展示旧文书。") from exc
@@ -357,11 +367,37 @@ async def render_document(
     visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
     execution_domain: str = Query("", description="目录返回的文书领域"),
+    source_view: str = "saved",
+    clinical_surgery_version: str | None = Query(None, pattern="^[a-f0-9]{64}$"),
 ):
     """获取文书内容 + 结构化渲染块 + 缺陷标注（BundleOnly）。"""
     own_identity = getattr(request.state, "doctor_case_identity", None)
     if own_identity:
         institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
+    if clinical_surgery_version is not None:
+        identity = tuple(str(value or "").strip() for value in (institute_id, patient_id, visit_id))
+        if (
+            source_view != "current" or case_material.current() is not None
+            or request.query_params.get("job_id") or doc_type != "surgery_record"
+            or not doc_id or not all(identity) or identity[2] != record_id
+        ):
+            raise HTTPException(422, "无法确认当前手术记录的住院身份和版本")
+        selected, status = await run_in_threadpool(
+            clinical_surgery_browse.read_document, identity, doc_id, clinical_surgery_version,
+        )
+        if selected is None:
+            if status not in {"available", "not_applicable"}:
+                raise HTTPException(503, "手术记录暂时无法验证，请刷新病历目录后重试。")
+            raise HTTPException(409, "手术记录版本已变更或不可用，请刷新病历目录。")
+        view = build_render_view(selected)
+        metadata = view.pop("document_meta")
+        return success_response(data={
+            **view, "content": selected["content"],
+            "metadata": {**metadata, "source": "clinical",
+                         "clinical_surgery_version": selected["version_id"],
+                         "generation": selected["generation"]},
+            "defect_annotations": [], "total_annotations": 0,
+        }, message="获取手术记录成功", trace_id=get_trace_id(request))
     current = None
     if case_material.current() is None:
         current = await run_in_threadpool(

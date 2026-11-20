@@ -415,6 +415,7 @@ export type ManualTestRecordSourceMeta = {
 
 export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   key: string
+  clinical_surgery_version?: string
   pdf_review_parent_key?: string
   pdf_review_relation?: 'same_content' | 'version_difference' | 'unmatched'
   pdf_review_notes?: string[]
