@@ -242,3 +242,97 @@ def test_automatic_capture_without_window_keeps_missing_domains(
         ]
         == "receipt_verified"
     )
+
+
+@pytest.mark.parametrize(
+    "mode, error",
+    [
+        ("patient_keys", None),
+        ("visit_keys", None),
+        ("visit_denied", "material_source_contract_incomplete"),
+        ("document_denied", "material_source_contract_incomplete"),
+        ("document_key_missing", "material_identity_or_source_mismatch"),
+    ],
+)
+def test_automatic_capture_patient_information_identity_projection(
+    database, monkeypatch, tmp_path, mode, error
+):
+    from sqlalchemy import event
+
+    from app.database import clinical_connection as clinical
+    from app.services import case_material_capture, clinical_source_contract
+    from app.services.bundles import assembly
+
+    owner, _ = database
+    role = f"patient_projection_{mode}"
+    keys = dict(zip(clinical_source_contract.KEYS, IDENTITY))
+    has_visit = mode in {"visit_keys", "visit_denied"}
+    patient_columns = "institute_id text, patient_id text, patient_name text, update_time timestamp"
+    if has_visit:
+        patient_columns += ", visit_id text"
+    # 姓名和排序时间列真实存在，受限身份只能读授权的键。
+    with owner.begin() as conn:
+        conn.exec_driver_sql(f"CREATE ROLE {role} NOLOGIN")
+        conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA cdm TO {role}")
+        conn.exec_driver_sql(f"GRANT SELECT ON cdm.surgery_record TO {role}")
+        conn.exec_driver_sql(f"CREATE TABLE cdm.patient_information ({patient_columns})")
+        conn.execute(text("""
+            INSERT INTO cdm.patient_information (institute_id, patient_id, patient_name, update_time)
+            VALUES (:institute_id, :patient_id, '合成患者', '2026-11-19 10:00:00'),
+                   ('OTHER-I', :patient_id, '跨机构', '2026-11-19 10:00:00'),
+                   (:institute_id, 'OTHER-P', '跨患者', '2026-11-19 10:00:00')
+        """), keys)
+        if has_visit:
+            conn.execute(text("UPDATE cdm.patient_information SET visit_id='OTHER-V'"))
+            conn.execute(text("""
+                INSERT INTO cdm.patient_information (institute_id, patient_id, visit_id, patient_name)
+                VALUES (:institute_id, :patient_id, :visit_id, '当前就诊')
+            """), keys)
+        granted = "institute_id, patient_id, visit_id" if mode == "visit_keys" else "institute_id, patient_id"
+        conn.exec_driver_sql(f"GRANT SELECT ({granted}) ON cdm.patient_information TO {role}")
+        if mode == "document_denied":
+            conn.exec_driver_sql(f"REVOKE SELECT ON cdm.surgery_record FROM {role}")
+        if mode == "document_key_missing":
+            conn.exec_driver_sql("ALTER TABLE cdm.surgery_record DROP COLUMN visit_id")
+
+    cdm = create_engine(owner.url, connect_args={"options": f"-c role={role}"})
+    monkeypatch.setenv("QC_CASE_MATERIAL_DIR", str(tmp_path / "material"))
+    monkeypatch.setenv("QC_DAILY_MATERIAL_ENABLED", "false")
+    monkeypatch.setenv("QC_PRIMARY_FOUR_MATERIAL_ENABLED", "false")
+    monkeypatch.setattr(clinical, "get_engine", lambda: cdm)
+
+    def reject_source_sql(*_args):
+        pytest.fail("冻结回读不得回查当前 CDM")
+
+    try:
+        with clinical.selected({"id": "independent_cdm", "binding": "synthetic-patient-projection"}):
+            with cdm.connect() as conn:
+                assert conn.execute(text("SELECT current_user")).scalar_one() == role
+                assert not conn.execute(text("""
+                    SELECT has_column_privilege(current_user, 'cdm.patient_information', 'update_time', 'SELECT')
+                """)).scalar_one()
+            if error:
+                with pytest.raises(material.MaterialSnapshotError, match=f"^{error}$"):
+                    case_material_capture.obtain("synthetic-task", IDENTITY)
+                assert material.load("synthetic-task", IDENTITY) is None
+                return
+
+            captured = case_material_capture.obtain("synthetic-task", IDENTITY)
+            frozen = material.load("synthetic-task", IDENTITY)
+            assert frozen["fingerprint"] == captured["fingerprint"]
+            dependency = next(item for item in frozen["read_contract"]["source_report"]["dependencies"]
+                              if item["table"] == "patient_information")
+            identity_row = keys if has_visit else {key: keys[key] for key in ("institute_id", "patient_id")}
+            assert dependency["read_columns"] == sorted(identity_row)
+            assert dependency["status"] == "structure_ready"
+            event.listen(cdm, "before_cursor_execute", reject_source_sql)
+            with material.activate(frozen):
+                assert material.frozen_rows("cdm", "patient_information", IDENTITY, 10) == [
+                    {**identity_row, "__document_type": "patient_information"}
+                ]
+                bundle = assembly._assemble_scene_bundle(scene="final", source_schema="cdm", **keys)
+            assert tuple(bundle[key] for key in keys) == IDENTITY
+            assert bundle["patient_name_masked"] == ""
+            assert "SYNTHETIC-V1" in bundle["medical_text"]
+    finally:
+        cdm.dispose()

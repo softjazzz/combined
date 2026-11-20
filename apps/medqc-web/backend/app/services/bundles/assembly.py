@@ -902,6 +902,7 @@ def _select_records(
     visit_id: str,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
+    from ..clinical_source_contract import material_identity_columns
     projected = primary_material.rows((institute_id, patient_id, visit_id), table, limit=limit)
     if projected is not None:
         return projected
@@ -927,13 +928,16 @@ def _select_records(
     if table == "patient_information" or is_material_copy(patient_id, visit_id):
         case_material.validate_table_identity(table, columns, (institute_id, patient_id, visit_id), ())
 
+    if table == "patient_information" and schema == "cdm" and primary_documents_only():
+        # 质控捕获与预检共用身份键，排序也不能引用展示字段。
+        columns = set(material_identity_columns(table, columns))
+
     selected = sorted(source_projection_columns(table, columns))
     document_status_column = material_document_status_column(source_table=table, source_columns=columns)
     if not selected:
         return []
 
     if table == "patient_information" or {"institute_id", "patient_id", "visit_id"}.issubset(columns):
-        from ..clinical_source_contract import material_identity_columns
         keys = material_identity_columns(table, columns)
         where_sql = " AND ".join(f"{_quote_ident(key)} = :{key}" for key in keys)
         params = {key: value for key, value in zip(("institute_id", "patient_id", "visit_id"),
