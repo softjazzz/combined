@@ -58,7 +58,10 @@ def require_saved_result_institute(actor_id: str, institute_id: str) -> None:
 
 def result_view_needs_donghua_proof(actor_id: str, institute_id: str) -> bool:
     """只有查看结果可以使用已确认的东华单院来源，其他操作沿用各自的权限。"""
-    scope = saved_result_institute_scope(actor_id)
+    return scope_needs_donghua_result_proof(saved_result_institute_scope(actor_id), institute_id)
+
+
+def scope_needs_donghua_result_proof(scope: str | None, institute_id: str) -> bool:
     if scope == "泸县人民医院" and institute_id == "机构号":
         return True
     check_saved_result_institute(scope, institute_id)
@@ -93,7 +96,8 @@ def require_selected_donghua_job(session, jobs, job_id, identity):
     require_donghua_frozen_result(material_job, identity, source["binding"])
 
 
-def require_donghua_frozen_result(job_id: str, identity: tuple, binding: str) -> None:
+def require_donghua_frozen_result(job_id: str, identity: tuple, binding: str) -> dict:
+    """返回已核验的同一份冻结材料，供历史文书直接读取。"""
     from . import case_material_snapshot as material
     from .cdm_publication_evidence import target_hash
 
@@ -116,7 +120,7 @@ def require_donghua_frozen_result(job_id: str, identity: tuple, binding: str) ->
         # 当前投递回执只用于决定谁可查看；历史结果与正文始终取自原任务。
         if (binding == _DONGHUA_BINDING and publication["rows"] == {}
                 and _verify_donghua_delivery_owner(state, identity, digest)):
-            return
+            return state
         raise denied
     if publication.get("status") != "metadata_available":
         raise denied
@@ -139,6 +143,7 @@ def require_donghua_frozen_result(job_id: str, identity: tuple, binding: str) ->
             verified = True
     if not verified:
         raise denied
+    return state
 
 
 def _verify_donghua_delivery_owner(state, identity, digest):

@@ -293,7 +293,9 @@ async def bind_request(request: Request):
         if root_job:
             identity = tuple(request.query_params.get(key) or request.path_params.get(key) or "" for key in ("institute_id", "patient_id", "visit_id"))
             try:
-                frozen = materials.load(root_job, identity)
+                frozen = getattr(request.state, "verified_history_material", None)
+                if frozen is None:
+                    frozen = materials.load(root_job, identity)
                 if frozen is None:
                     raise HTTPException(409, "historical_material_snapshot_not_retained")
                 if request.query_params.get("source_view") == "current":
@@ -304,10 +306,10 @@ async def bind_request(request: Request):
             yield
 
 
-def _require_saved_history_access(session, actor_id: str, identity: tuple[str, str, str], selection: dict) -> None:
-    """所有代际历史读取均核对持久账号；创建者和请求角色不能替代当前授权。"""
+def _saved_history_needs_source_proof(session, actor_id: str, identity: tuple[str, str, str], selection: dict) -> bool:
+    """先核对持久账号；本院质控管理员的占位机构还须核验本任务冻结来源。"""
     from .defect_rectification_service import _person, RectificationError
-    from .saved_result_access import check_saved_result_institute
+    from .saved_result_access import check_saved_result_institute, scope_needs_donghua_result_proof
 
     try:
         person = _person(session, actor_id)
@@ -317,13 +319,15 @@ def _require_saved_history_access(session, actor_id: str, identity: tuple[str, s
         raise HTTPException(503, "账号机构权限来源暂不可用") from None
     roles = person["roles"]
     if roles & {"admin", "sync_admin", "super_admin"}:
-        return
+        return False
     institute_id = person["institute_id"]
     if not isinstance(institute_id, str) or not institute_id.strip() or institute_id != institute_id.strip():
         raise HTTPException(403, "账号缺少可信机构范围")
+    if "qc_manager" in roles and selection["id"] == "independent_cdm":
+        return scope_needs_donghua_result_proof(institute_id, identity[0])
     check_saved_result_institute(institute_id, identity[0])
     if roles & {"qc_manager", "qc_staff"}:
-        return
+        return False
     if "doctor" in roles:
         from ..database.connection import SessionLocal
         from .doctor_case_scope import resolve_doctor_case_scope
@@ -333,7 +337,7 @@ def _require_saved_history_access(session, actor_id: str, identity: tuple[str, s
             scope = resolve_doctor_case_scope(actor_id, session_factory=SessionLocal)
         if scope is not None:
             scope.require_case(*identity)
-            return
+            return False
     raise HTTPException(403, "无权读取该任务病历材料")
 
 
@@ -362,12 +366,22 @@ def source_for_saved_job(request: Request, job_id: str) -> dict:
                 tuple(str(ref.get(k) or "") for k in ("institute_id", "patient_id", "visit_id")) for ref in refs if isinstance(ref, dict)
             }:
                 raise PipelineError("clinical_source_job_case_mismatch", 403)
-            _require_saved_history_access(session, str(actor.get("id") or ""), identity, selection)
+            needs_proof = _saved_history_needs_source_proof(session, str(actor.get("id") or ""), identity, selection)
             from .material_job_lineage import resolve_material_job_id
             try:
                 material_job_id = resolve_material_job_id(row, lookup)
             except ValueError:
                 raise PipelineError("clinical_source_job_lineage_invalid", 409) from None
+        if needs_proof:
+            if request.method != "GET" or request.url.path not in {
+                f"/api/v1/emr/{identity[2]}/documents", f"/api/v1/emr/{identity[2]}/render",
+            }:
+                raise HTTPException(403, "无权读取该任务病历材料")
+            from .saved_result_access import require_donghua_frozen_result
+            with clinical.selected(selection):
+                request.state.verified_history_material = require_donghua_frozen_result(
+                    material_job_id, identity, selection["binding"]
+                )
         request.state.material_root_job_id = material_job_id
         return selection
     except PipelineError:
