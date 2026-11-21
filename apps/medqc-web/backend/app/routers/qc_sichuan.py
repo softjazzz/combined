@@ -2628,7 +2628,9 @@ async def get_latest_workspace_record_result(
     needs_proof = await run_in_threadpool(result_view_needs_donghua_proof, _current_user_id(current_user), institute_id)
     workspace = _sichuan_workspace_service()
     if result_view == "previous_valid":
-        from ..services.custom_qc_workspace_service import PreviousRecordResultAnchorChanged
+        from ..services.custom_qc_workspace_service import (
+            PreviousRecordResultAnchorChanged, PreviousRecordResultConflict,
+        )
         try:
             previous = await run_in_threadpool(
                 workspace.get_previous_valid_luxian_0609_record_result,
@@ -2640,6 +2642,13 @@ async def get_latest_workspace_record_result(
             )
         except PreviousRecordResultAnchorChanged:
             raise HTTPException(status_code=409, detail="最近一次质控任务已更新，请刷新后查看") from None
+        except PreviousRecordResultConflict as error:
+            detail = (
+                "历史质控任务的规则范围存在冲突，无法确认可查看的历史轮次"
+                if str(error) == "record_result_scope_conflict"
+                else "历史质控任务的创建时间和完成时间相同，无法确认可查看的历史轮次"
+            )
+            raise HTTPException(status_code=409, detail=detail) from None
         if str(previous.get("state") or "") != "ready":
             raise HTTPException(status_code=404, detail="暂无可查看的历史质控结果")
         return success_response(

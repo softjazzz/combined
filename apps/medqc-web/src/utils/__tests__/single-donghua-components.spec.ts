@@ -8,7 +8,7 @@ import { usePatientRecords } from '@/views/workstation-v4/composables/usePatient
 import type { ClinicalSourceSettings } from '@/api/clinicalSources'
 
 vi.mock('@/api/clinicalSources', () => ({ clinicalSourcesApi: { configuration: vi.fn(), save: vi.fn(), check: vi.fn(), options: vi.fn() } }))
-vi.mock('@/services/apiService', () => ({ ApiService: { getRaw: vi.fn() } }))
+vi.mock('@/services/apiService', () => ({ ApiService: { getRaw: vi.fn(), postRaw: vi.fn() } }))
 const settings: ClinicalSourceSettings = {
   version: 1, default_source: 'legacy_pg', legacy_name: '原来源', legacy_enabled: true,
   cdm: { name: '东华CDM', enabled: true, host: 'localhost', port: 62997, database: 'synthetic', username: 'readonly' },
@@ -72,6 +72,7 @@ describe('真实面板及病历池单源行为', () => {
     let settleSummary: () => void = () => { throw new Error('未发起摘要请求') }
     vi.mocked(ApiService.getRaw)
       .mockResolvedValueOnce(response({ records: [{ id: 'V', recordKey, institute_id: 'I', patient_id: 'P', visit_id: 'V' }], total: 2 }))
+    vi.mocked(ApiService.postRaw)
       .mockImplementationOnce(() => new Promise((resolve, reject) => {
         settleSummary = () => failed ? reject(new Error('摘要超时')) : resolve(summary)
       }))
@@ -84,7 +85,13 @@ describe('真实面板及病历池单源行为', () => {
     expect(records.allRecords.value[0].latestQcSummary).toBeUndefined()
     const params = { page: 1, page_size: 15, hospital_status: 'discharged', date_field: 'discharge', source_id: 'independent_cdm', keyword: '合成' }
     expect(ApiService.getRaw).toHaveBeenNthCalledWith(1, '/api/medical-records/workstation', { ...params, qc_summary_mode: 'deferred' })
-    expect(ApiService.getRaw).toHaveBeenNthCalledWith(2, '/api/medical-records/workstation', { ...params, qc_summary_mode: 'only' }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(ApiService.postRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation/qc-summary', { record_keys: [recordKey] },
+      expect.objectContaining({
+        params: { hospital_status: 'discharged', date_field: 'discharge', source_id: 'independent_cdm', keyword: '合成' },
+        signal: expect.any(AbortSignal),
+      }),
+    )
     settleSummary()
     await flushPromises()
     expect(records.loadError.value).toBe(false)

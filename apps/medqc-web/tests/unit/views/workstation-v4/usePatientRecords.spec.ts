@@ -3,6 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 
 const mocks = vi.hoisted(() => ({
   getRaw: vi.fn(),
+  postRaw: vi.fn(),
 }))
 
 vi.mock('@/api/clinicalSources', () => ({
@@ -15,12 +16,14 @@ vi.mock('@/api/clinicalSources', () => ({
 vi.mock('@/services/apiService', () => ({
   ApiService: {
     getRaw: mocks.getRaw,
+    postRaw: mocks.postRaw,
   },
 }))
 
 import { usePatientRecords } from '@/views/workstation-v4/composables/usePatientRecords'
 
 function mockWorkstationResponse() {
+  mocks.postRaw.mockResolvedValue({ data: { records: [], qc_summary: { total_records: 1 } } })
   mocks.getRaw.mockResolvedValue({
     data: {
       records: [
@@ -310,7 +313,7 @@ describe('usePatientRecords workstation filters', () => {
         page: 1,
       },
     })
-    mocks.getRaw.mockResolvedValueOnce({
+    mocks.postRaw.mockResolvedValueOnce({
       data: { records: [], qc_summary: { total_records: 1, ready_records: 1 } },
     })
     const records = usePatientRecords('inpatient')
@@ -336,27 +339,34 @@ describe('usePatientRecords workstation filters', () => {
     expect(records.loading.value).toBe(false)
   })
 
-  it('忽略筛选切换后迟到的旧摘要', async () => {
-    const recordKey = '["H","P","V"]'
-    const list = { data: { total: 1, records: [{ id: 'V', recordKey }] } }
-    const summary = (count: number) => ({ data: {
-      qc_summary: { total_records: 1, status_counts: { data_gap: count } },
+  it.each(['筛选', '分页'])('忽略%s切换后迟到的旧摘要', async (change) => {
+    const oldKey = '["H","P","V1"]'
+    const nextKey = '["H","P","V2"]'
+    const nextPage = change === '分页' ? 2 : 1
+    const list = (recordKey: string, id: string, page: number) => ({
+      data: { total: 2, page, records: [{ id, recordKey }] },
+    })
+    const summary = (recordKey: string, count: number) => ({ data: {
+      qc_summary: { total_records: 2, status_counts: { data_gap: count } },
       records: [{ recordKey, latest_qc_summary: { status: 'ready', status_counts: { data_gap: count } } }],
     } })
     let resolveOldSummary: (value: ReturnType<typeof summary>) => void = () => {}
     mocks.getRaw
-      .mockResolvedValueOnce(list)
+      .mockResolvedValueOnce(list(oldKey, 'V1', 1))
+      .mockResolvedValueOnce(list(nextKey, 'V2', nextPage))
+    mocks.postRaw
       .mockImplementationOnce(() => new Promise((resolve) => { resolveOldSummary = resolve }))
-      .mockResolvedValueOnce(list)
-      .mockResolvedValueOnce(summary(1))
+      .mockResolvedValueOnce(summary(nextKey, 1))
     const records = usePatientRecords()
     await records.fetchData()
-    const oldSignal = mocks.getRaw.mock.calls[1][2].signal
-    records.searchText.value = '新条件'
-    await records.fetchData()
+    const oldSignal = mocks.postRaw.mock.calls[0][2].signal
+    if (change === '筛选') records.searchText.value = '新条件'
+    await records.fetchData(nextPage)
     expect(oldSignal.aborted).toBe(true)
-    resolveOldSummary(summary(99))
+    expect(mocks.postRaw.mock.calls[1][1]).toEqual({ record_keys: [nextKey] })
+    resolveOldSummary(summary(oldKey, 99))
     await flushPromises()
+    expect(records.currentPage.value).toBe(nextPage)
     expect(records.qcSummary.value.statusCounts).toEqual({ data_gap: 1 })
     expect(records.allRecords.value[0].latestQcSummary?.statusCounts).toEqual({ data_gap: 1 })
   })

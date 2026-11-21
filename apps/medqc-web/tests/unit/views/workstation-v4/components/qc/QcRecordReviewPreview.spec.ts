@@ -143,7 +143,8 @@ describe('QcRecordReviewPreview', () => {
 
   it('授权的捕获失败从终末预览明确打开上次结果，预览不自行查旧任务', async () => {
     getLatestResult.mockResolvedValue({ success: true, data: payload({
-      state: 'technical_error', reason_code: 'material_capture_failed', items: [], result_rule_count: 0,
+      state: 'technical_error', reason_code: 'material_source_contract_incomplete',
+      failure_stage: 'material_preparation', items: [], result_rule_count: 0,
     }) })
     const wrapper = mount(QcRecordReviewPreview, { props: { row, carePhase: 'discharged' } })
     await flushPromises()

@@ -68,7 +68,7 @@ def scope_needs_donghua_result_proof(scope: str | None, institute_id: str) -> bo
     return False
 
 
-def require_selected_donghua_job(session, jobs, job_id, identity):
+def _saved_job_material_owner(session, jobs, job_id, identity):
     from ..database.clinical_connection import ClinicalSourceConfigurationError
     from .clinical_sources import saved_snapshot
     from .material_job_lineage import resolve_material_job_id
@@ -87,13 +87,41 @@ def require_selected_donghua_job(session, jobs, job_id, identity):
             for ref in filters.get("record_refs", ())
         ):
             raise ValueError
-        source = saved_snapshot(filters)
-        if source["id"] != "independent_cdm":
-            raise ValueError
-        material_job = resolve_material_job_id(row, lookup)
+        return saved_snapshot(filters), resolve_material_job_id(row, lookup)
     except (ValueError, TypeError, KeyError, ClinicalSourceConfigurationError):
         raise HTTPException(403, "缺少可核验的历史结果机构归属") from None
-    require_donghua_frozen_result(material_job, identity, source["binding"])
+
+
+def require_selected_donghua_job(session, jobs, job_id, identity):
+    from ..database import clinical_connection as clinical
+
+    source, material_job = _saved_job_material_owner(session, jobs, job_id, identity)
+    if source["id"] != "independent_cdm":
+        raise HTTPException(403, "缺少可核验的历史结果机构归属")
+    with clinical.selected(source):
+        return require_donghua_frozen_result(material_job, identity, source["binding"])
+
+
+def selected_history_material_is_available(session, jobs, job_id, identity, *, require_donghua_proof):
+    """从原作业谱系读取冻结材料，缺失或不能核验时跳过该轮。"""
+    from ..database import clinical_connection as clinical
+    from . import case_material_snapshot as material
+
+    try:
+        if require_donghua_proof:
+            return bool(require_selected_donghua_job(session, jobs, job_id, identity))
+        source, material_job = _saved_job_material_owner(session, jobs, job_id, identity)
+        with clinical.selected(source):
+            snapshot = material.load(material_job, identity)
+        schema = snapshot.get("schema") if snapshot else None
+        return bool(isinstance(schema, str) and schema
+                    and (source["id"] != "independent_cdm" or schema == "cdm"))
+    except HTTPException as error:
+        if error.status_code not in {403, 503}:
+            raise
+        return False
+    except material.MaterialSnapshotError:
+        return False
 
 
 def require_donghua_frozen_result(job_id: str, identity: tuple, binding: str) -> dict:

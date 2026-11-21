@@ -11,6 +11,7 @@ from sqlalchemy import Date, DateTime, MetaData, Table, String, and_, case, cast
 from sqlalchemy.exc import ProgrammingError
 
 from ..database import clinical_connection as clinical
+from .case_identity import CaseRef
 from .clinical_read import optional_frontpage_unavailable
 from .data_pipeline_settings import PipelineError
 from .validation_material_source import EXPLICITLY_INVALID_DOCUMENT_STATUSES, material_document_status_column
@@ -146,7 +147,6 @@ def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None
 def case_identities(*, scope="all", department=None, doctor=None, keyword=None, start_date=None, end_date=None,
                     date_field="admission", institute_id=None, page=None, page_size=50, count_only=False):
     """任务目录与页面复用同一身份集合；本入口不读取正文或业务结果。"""
-    from .case_identity import CaseRef
     try:
         engine = clinical.get_engine()
         source = catalog(engine, include_frontpage=False)
@@ -209,7 +209,7 @@ def _frontpage_refs(connection, refs):
 def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_date=None,
                 date_field="visit", hospital_status="all", sync_scope="all", inpatient_sort="default",
                 page=1, page_size=50, case_scope=None, qc_projection_loader=None,
-                qc_summary_mode="inline", **analytics):
+                qc_summary_mode="inline", qc_summary_identities: tuple[CaseRef, ...] | None = None, **analytics):
     if any(value for key, value in analytics.items() if key.startswith("analytics_")):
         raise PipelineError("clinical_source_analytics_filter_not_supported", 422)
     if inpatient_sort not in (None, "default", "longest", "recent"):
@@ -226,17 +226,19 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         predicates = _predicates(source, dept=dept, doctor=doctor, keyword=keyword,
             start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
             case_scope=case_scope)
-        query = select(source).where(*predicates)
-        order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
-        order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
-        page_query = query.order_by(order, *[source.c[k] for k in KEYS]).offset((page-1)*page_size).limit(page_size)
         filter_columns = [source.c[key] for key in KEYS]
-        if qc_summary_mode == "only":
-            page_query = page_query.with_only_columns(*filter_columns)
-        else:
+        if qc_summary_mode != "only":
             filter_columns += [source.c.department, source.c.doctor]
         with engine.connect() as connection:
-            rows = connection.execute(page_query).mappings().all()
+            rows = []
+            if qc_summary_identities is None:
+                order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
+                order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
+                page_columns = filter_columns if qc_summary_mode == "only" else [source]
+                page_query = select(*page_columns).where(*predicates).order_by(
+                    order, *[source.c[k] for k in KEYS]
+                ).offset((page-1)*page_size).limit(page_size)
+                rows = connection.execute(page_query).mappings().all()
             # 质控摘要本来就需要筛选全集的三键。一次投影同时取分组字段，复用目录聚合。
             filtered_rows = connection.execute(
                 select(*filter_columns).where(*predicates)
@@ -250,7 +252,6 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
             _build_qc_summary, _load_latest_luxian_0609_qc_summaries,
             _normalize_latest_qc_summary_map, _workstation_qc_summary_payload,
         )
-        from .case_identity import CaseRef
         all_refs, summaries = [], {}
         if qc_summary_mode != "deferred":
             all_refs = [{key: row[key] for key in KEYS} for row in filtered_rows]
@@ -269,6 +270,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         if qc_summary_mode == "only":
             return _workstation_qc_summary_payload(
                 all_refs, summaries, (CaseRef(*(str(row[key]) for key in KEYS)) for row in rows),
+                requested_identities=qc_summary_identities,
             )
         departments = Counter(row["department"] for row in filtered_rows).items()
         doctors = Counter(row["doctor"] for row in filtered_rows if row["doctor"]).items()

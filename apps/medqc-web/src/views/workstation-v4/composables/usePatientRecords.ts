@@ -138,12 +138,17 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
 
   const filteredRecords = computed(() => scopedRecords.value)
 
-  async function loadQcSummary(params: Record<string, string | number>, requestSequence: number) {
+  async function loadQcSummary(
+    params: Record<string, string>,
+    records: PatientRecord[],
+    requestSequence: number,
+  ) {
     const controller = new AbortController()
     summaryRequest = controller
     try {
-      const response = await ApiService.getRaw(
-        WORKSTATION_URL, { ...params, qc_summary_mode: 'only' }, { signal: controller.signal },
+      const recordKeys = records.flatMap((record) => record.recordKey ? [record.recordKey] : [])
+      const response = await ApiService.postRaw(
+        `${WORKSTATION_URL}/qc-summary`, { record_keys: recordKeys }, { params, signal: controller.signal },
       )
       if (requestSequence !== activeRequestSequence) return
       const data = workstationPayload(response.data)
@@ -182,9 +187,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         Number.isFinite(Number(targetPageSize)) && Number(targetPageSize) > 0
           ? Number(targetPageSize)
           : WORKSTATION_PAGE_SIZE
-      const params: Record<string, string | number> = {
-        page,
-        page_size: requestedPageSize,
+      const params: Record<string, string> = {
         source_id: sourceId.value,
         date_field: dateField.value,
       }
@@ -229,7 +232,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         }
       }
 
-      const response = await ApiService.getRaw(WORKSTATION_URL, { ...params, qc_summary_mode: 'deferred' })
+      const response = await ApiService.getRaw(WORKSTATION_URL, {
+        ...params, page, page_size: requestedPageSize, qc_summary_mode: 'deferred',
+      })
       const data = workstationPayload(response.data)
 
       const normalizedRecords = Array.isArray(data.records)
@@ -260,7 +265,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       currentPage.value = Number(data.page ?? data.current_page ?? page) || 1
       pageSize.value = requestedPageSize
       if (total > 0) {
-        void loadQcSummary(params, requestSequence)
+        void loadQcSummary(params, normalizedRecords, requestSequence)
       } else {
         qcSummaryState.value = 'ready'
       }

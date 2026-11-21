@@ -63,29 +63,29 @@ def scene(monkeypatch, tmp_path):
     binding = "cdm-read-v1:" + hashlib.sha256(json.dumps(["test", 5432, "cdm", "reader", "cdm"]).encode()).hexdigest()
     source = {"id": "independent_cdm", "binding": binding, "url": "postgresql://reader@test:5432/cdm"}
     monkeypatch.setattr(case_material_snapshot, "storage_root", lambda: tmp_path)
-    monkeypatch.setattr(clinical_connection, "source_binding", lambda: binding)
 
-    def filters(*refs):
+    def filters(*refs, frozen_source=source):
         return json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09",
-                           "clinical_source": source, "record_refs": list(refs),
+                           "clinical_source": frozen_source, "record_refs": list(refs),
                            "scoped_customer_rule_ids": [RULE]}, ensure_ascii=False)
 
-    def old_job(job_id="job-old", finished="2026-10-02T08:00:00"):
+    def old_job(job_id="job-old", finished="2026-10-02T08:00:00", frozen_source=source):
         # 整批 failed（同批另一病例失败），但本病例有独立保存的结果信封。
         row = {"id": job_id, "created_by": "someone-else", "status": "failed", "job_kind": "leaf",
                "created_at": "2026-10-01T08:00:00", "finished_at": finished,
-               "record_ids_json": json.dumps(["visit-1", "visit-2"]), "filters_json": filters(REF, OTHER_REF)}
+               "record_ids_json": json.dumps(["visit-1", "visit-2"]),
+               "filters_json": filters(REF, OTHER_REF, frozen_source=frozen_source)}
         with Session(engine) as session:
             session.execute(jobs.insert().values(**row))
             # 信封按病例写入：夹具只为本病例写，写入合同按单病例范围校验。
             CanonicalResultStore(envelopes).replace_for_job(
-                session, job_row={**row, "filters_json": filters(REF)},
+                session, job_row={**row, "filters_json": filters(REF, frozen_source=frozen_source)},
                 items=[{**_published_pilot_item_for_read_boundary(RULE), **REF}],
                 now=datetime(2026, 10, 2), projector=lambda raw: envelope_item_from_rule_result(raw, hmac_key="test"),
                 projection_key="test")
             session.commit()
 
-    def capture_failed_job(job_id, finished):
+    def capture_failed_job(job_id, finished, *, has_rule_results=False):
         # 同批另一病例有结果；本病例取材失败、零项。
         row = {"id": job_id, "created_by": "someone-else", "status": "failed", "job_kind": "leaf",
                "created_at": finished, "finished_at": finished,
@@ -93,32 +93,44 @@ def scene(monkeypatch, tmp_path):
                "items_json": json.dumps([{**_published_pilot_item_for_read_boundary(RULE), **OTHER_REF,
                                           "record_id": "visit-2"}], ensure_ascii=False),
                "failed_records_json": json.dumps([_capture_failure(REF)], ensure_ascii=False),
-               "summary_json": json.dumps({"execution_status": "partial_failed", "rule_results": []})}
+               "summary_json": json.dumps({
+                   "material_failure": {"code": "material_capture_failed", "stage": "material_capture"},
+                   "material_failed_record_count": 1,
+                   **({"rule_results": []} if has_rule_results else {}),
+               })}
         with Session(engine) as session:
             session.execute(jobs.insert().values(**row))
             session.commit()
 
-    def prove(job_id):
+    def prove(job_id, snapshot_binding=binding):
         key = target_hash(REF)
         entry = {"status": "receipt_verified", "target_key_hash": key,
                  "receipt": {"source_epoch": EPOCH, "target_key_hash": key},
                  "operation": {"source_epoch": EPOCH, "interface_name": "web.discharge_record"}}
-        case_material_snapshot.persist(job_id, {"protocol": case_material_snapshot.PROTOCOL,
-            "identity": list(IDENTITY), "schema": "cdm", "binding": binding,
-            "automatic_material": {"publication": {"status": "metadata_available",
-                                                   "rows": {"discharge_record": [entry]}}}})
+        with clinical_connection.selected({**source, "binding": snapshot_binding}):
+            case_material_snapshot.persist(job_id, {"protocol": case_material_snapshot.PROTOCOL,
+                "identity": list(IDENTITY), "schema": "cdm", "binding": snapshot_binding,
+                "automatic_material": {"publication": {"status": "metadata_available",
+                                                       "rows": {"discharge_record": [entry]}}}})
+
+    def update_new(**values):
+        with Session(engine) as session:
+            session.execute(jobs.update().where(jobs.c.id == "job-new").values(**values))
+            session.commit()
 
     app = FastAPI()
     app.include_router(qc_sichuan.router)
     app.dependency_overrides[get_current_user] = lambda: {"id": "viewer", "roles": ["qc_manager"]}
     with TestClient(app) as client:
         yield type("Scene", (), dict(client=client, account=account, old_job=staticmethod(old_job),
-                                     capture_failed_job=staticmethod(capture_failed_job), prove=staticmethod(prove)))
+                                     capture_failed_job=staticmethod(capture_failed_job), prove=staticmethod(prove),
+                                     update_new=staticmethod(update_new), service=service, source=source))
     engine.dispose()
 
 
 def test_default_view_reports_verified_capture_failure_then_user_opens_previous_valid(scene):
     scene.old_job()
+    scene.prove("job-old")
     scene.capture_failed_job("job-new", "2026-10-05T08:00:00")
 
     latest = scene.client.get(URL, params=REF)
@@ -194,7 +206,7 @@ def test_source_proof_account_keeps_403_and_only_sees_history_provable_by_its_ow
 def test_capture_failure_with_rule_identity_is_not_reported_as_capture_failure(scene):
     """失败记录带规则身份时是规则级失败，不是“取材阶段零项失败”，沿用既有部分结果合同。"""
     scene.old_job()
-    scene.capture_failed_job("job-new", "2026-10-05T08:00:00")
+    scene.capture_failed_job("job-new", "2026-10-05T08:00:00", has_rule_results=True)
     from sqlalchemy import update
     service = qc_sichuan._sichuan_workspace_service()
     jobs = service._batch_job_table
@@ -208,3 +220,105 @@ def test_capture_failure_with_rule_identity_is_not_reported_as_capture_failure(s
     # 不是已核实的取材失败，不能作为历史视图锚点。
     response = scene.client.get(URL, params={**REF, "result_view": "previous_valid", "anchor_job_id": "job-new"})
     assert response.status_code == 409
+
+
+@pytest.mark.parametrize(("mutations", "expected"), [
+    ({"items_json": "{BROKEN"}, "saved_partial_result_invalid"),
+    ({"items_json": "null"}, "saved_partial_result_invalid"),
+    ({"summary_json": "{BROKEN"}, "saved_partial_result_invalid"),
+    ({"failed_records_json": "null"}, "saved_partial_result_invalid"),
+    ({"failed_records_json": json.dumps([{
+        **_capture_failure(REF), "reason_code": "material_source_contract_incomplete",
+        "material_failure_stage": "projection",
+    }])}, "saved_partial_result_invalid"),
+    ({"failed_records_json": json.dumps([_capture_failure(OTHER_REF)])}, "saved_partial_result_invalid"),
+    ({"failed_records_json": json.dumps([{**_capture_failure(REF), "reason_code": "material_projection_failed"}])},
+     "saved_partial_result_invalid"),
+    *[({"failed_records_json": json.dumps([{**_capture_failure(REF), "reason_code": reason}])}, reason)
+      for reason in ("material_capture_failed", "material_source_contract_incomplete",
+                     "material_source_contract_unavailable", "material_source_unavailable",
+                     "material_publication_identity_conflict")],
+])
+def test_partial_failure_classification_matches_detail_and_batch(scene, mutations, expected):
+    scene.old_job()
+    scene.prove("job-old")
+    scene.capture_failed_job("job-new", "2026-10-05T08:00:00")
+    scene.update_new(**mutations)
+
+    single = scene.client.get(URL, params=REF).json()["data"]
+    bulk = scene.service.build_latest_luxian_0609_record_result_dtos(record_refs=[REF])[IDENTITY]
+    assert single["state"] == bulk["state"] == "technical_error"
+    assert single["reason_code"] == bulk["reason_code"] == expected
+    previous = scene.client.get(URL, params={**REF, "result_view": "previous_valid", "anchor_job_id": "job-new"})
+    if expected == "saved_partial_result_invalid":
+        assert "failure_stage" not in single and "failure_stage" not in bulk
+        assert previous.status_code == 409
+    else:
+        assert single["job_id"] == bulk["job_id"] == "job-new"
+        expected_stage = "material_preparation" if expected == "material_source_contract_incomplete" else "material_capture"
+        assert single["failure_stage"] == bulk["failure_stage"] == expected_stage
+        assert previous.status_code == 200, previous.text
+
+
+def test_history_respects_clinical_source_and_skips_newer_result_without_original(scene):
+    old_source = {**scene.source, "url": "postgresql://reader@older:5432/cdm"}
+    old_source["binding"] = "cdm-read-v1:" + hashlib.sha256(
+        json.dumps(["older", 5432, "cdm", "reader", "cdm"]).encode()
+    ).hexdigest()
+    scene.old_job("job-other-source", "2026-10-04T08:00:00", frozen_source=old_source)
+    scene.prove("job-other-source", snapshot_binding=old_source["binding"])
+    scene.old_job()
+    scene.prove("job-old")
+    scene.old_job("job-without-original", "2026-10-03T08:00:00")
+    scene.capture_failed_job("job-new", "2026-10-05T08:00:00")
+    with clinical_connection.selected(scene.source):
+        previous = scene.service.get_previous_valid_luxian_0609_record_result(
+            institute_id=REF["institute_id"], patient_id=REF["patient_id"], visit_id=REF["visit_id"],
+            anchor_job_id="job-new",
+        )
+    assert previous["job_id"] == "job-old"
+
+
+def test_unanchored_history_does_not_relabel_current_ready_result(scene):
+    scene.old_job()
+    scene.prove("job-old")
+    assert scene.client.get(URL, params=REF).json()["data"]["job_id"] == "job-old"
+    response = scene.client.get(URL, params={**REF, "result_view": "previous_valid"})
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("needs_proof", [True, False])
+def test_history_generation_conflict_requires_authorized_contenders(scene, needs_proof):
+    if needs_proof:
+        scene.account["scope"] = "泸县人民医院"
+    scene.old_job("job-a")
+    scene.old_job("job-b")
+    scene.capture_failed_job("job-new", "2026-10-05T08:00:00")
+    scene.prove("job-a")
+    params = {**REF, "result_view": "previous_valid"}
+    if needs_proof:
+        # 另一轮没有可核验归属，仅一轮可见，不能泄露隐藏冲突。
+        available = scene.client.get(URL, params=params)
+        assert available.status_code == 200, available.text
+        assert available.json()["data"]["job_id"] == "job-a"
+    scene.prove("job-b")
+    conflict = scene.client.get(URL, params=params)
+    assert conflict.status_code == 409, conflict.text
+    assert "完成时间相同" in conflict.text
+    assert all(job_id not in conflict.text for job_id in ("job-a", "job-b", "job-new"))
+
+
+def test_history_generation_tie_ignores_round_with_no_valid_result(scene):
+    scene.old_job("job-a")
+    scene.capture_failed_job("job-empty", "2026-10-02T08:00:00")
+    scene.prove("job-a")
+    # 摘要有冻结快照，仍没有可交付的历史结果。创建时间也设为同一代。
+    jobs = scene.service._batch_job_table
+    with workspace._session() as session:
+        session.execute(jobs.update().where(jobs.c.id == "job-empty").values(created_at="2026-10-01T08:00:00"))
+        session.commit()
+    scene.prove("job-empty")
+    scene.capture_failed_job("job-new", "2026-10-05T08:00:00")
+    response = scene.client.get(URL, params={**REF, "result_view": "previous_valid", "anchor_job_id": "job-new"})
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["job_id"] == "job-a"

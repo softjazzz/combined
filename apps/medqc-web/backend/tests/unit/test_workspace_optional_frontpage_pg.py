@@ -5,7 +5,7 @@ import os
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
@@ -117,6 +117,90 @@ def test_terminal_list_uses_clinical_identity_and_only_enriches_frontpage_presen
             {key: inline["records"][0][key] for key in ("recordKey", "latest_qc_summary")}
         ],
     }
+
+
+@pytest.mark.parametrize("cdm", ["available"], indirect=True)
+def test_workstation_explicit_summary_keeps_visible_case_after_catalog_reorders(cdm, monkeypatch):
+    from app.core import access_control
+    from app.routers import medical_records
+    from app.services import clinical_sources
+    from app.services.doctor_case_scope import DoctorCaseScope
+
+    second = ("SYN-I", "SECOND", "SYN-V")
+    foreign = ("SYN-X", "SYN-P", "SYN-V")
+    first = tuple(IDENTITY.values())
+    keys = [json.dumps(identity, separators=(",", ":")) for identity in (first, second, foreign)]
+    owner = create_engine(os.environ["PR8_DISPOSABLE_PG_URL"])
+    try:
+        with owner.begin() as connection:
+            connection.exec_driver_sql("ALTER TABLE cdm.admission_record ADD COLUMN last_modified_datetime timestamp")
+            for identity in (second, foreign):
+                connection.execute(text("""
+                    INSERT INTO cdm.admission_record
+                    (institute_id, patient_id, visit_id, admission_datetime, attending_physician_sign)
+                    VALUES (:institute, :patient, :visit, '2026-11-10', '合成医师')
+                """), dict(zip(("institute", "patient", "visit"), identity)))
+        monkeypatch.setattr(clinical_sources, "configuration", lambda: clinical_sources.SourceSettings())
+        monkeypatch.setattr(clinical_sources, "snapshot", lambda *_: {"id": "independent_cdm"})
+        monkeypatch.setattr(access_control, "resolve_current_user_from_token",
+                            lambda _: {"id": "synthetic", "roles": ["doctor"]})
+        from app.services import doctor_case_scope
+        from app.services.medical_records import query_service
+
+        scope = DoctorCaseScope("SYN-I", "内科", "合成医师", (first, second))
+        monkeypatch.setattr(doctor_case_scope, "resolve_doctor_case_scope", lambda _: scope)
+
+        def load_summaries(refs, **_kwargs):
+            assert {tuple(ref.values()) for ref in refs} == {first, second}
+            return {
+                first: {"status": "ready", "total_rule_count": 1, "status_counts": {"data_gap": 1}},
+                second: {"status": "ready", "total_rule_count": 2, "status_counts": {"data_gap": 2}},
+                foreign: {"status": "ready", "total_rule_count": 9, "status_counts": {"data_gap": 9}},
+            }
+
+        monkeypatch.setattr(query_service, "_load_latest_luxian_0609_qc_summaries", load_summaries)
+        app = FastAPI(dependencies=[Depends(access_control.enforce_default_auth)])
+        app.include_router(medical_records.router)
+        url = "/api/medical-records/workstation"
+        headers = {"Authorization": "Bearer synthetic"}
+        params = {"source_id": "independent_cdm", "doctor": "合成医师"}
+        with TestClient(app) as client:
+            visible = client.get(url, headers=headers, params={
+                **params, "page_size": 1, "qc_summary_mode": "deferred",
+            })
+            assert visible.status_code == 200
+            assert visible.json()["records"][0]["recordKey"] == keys[0]
+            with owner.begin() as connection:
+                connection.exec_driver_sql("""
+                    UPDATE cdm.admission_record SET last_modified_datetime = '2026-11-21'
+                    WHERE patient_id = 'SECOND'
+                """)
+            repeated_page = client.get(url, headers=headers, params={
+                **params, "page_size": 1, "qc_summary_mode": "only",
+            })
+            assert repeated_page.status_code == 200
+            assert repeated_page.json()["records"][0]["recordKey"] == keys[1]
+            statements = []
+
+            def track_catalog(_connection, _cursor, statement, *_):
+                if "UNION ALL" in statement:
+                    statements.append(statement)
+
+            engine = clinical.get_engine()
+            event.listen(engine, "before_cursor_execute", track_catalog)
+            try:
+                summary = client.post(url + "/qc-summary", headers=headers, params=params,
+                                      json={"record_keys": [keys[0], keys[2]]})
+            finally:
+                event.remove(engine, "before_cursor_execute", track_catalog)
+            assert summary.status_code == 200
+            assert summary.json()["qc_summary"] == repeated_page.json()["qc_summary"]
+            assert summary.json()["qc_summary"]["status_counts"] == {"data_gap": 3}
+            assert [record["recordKey"] for record in summary.json()["records"]] == keys[:1]
+            assert summary.json()["records"][0]["latest_qc_summary"]["status_counts"] == {"data_gap": 1}
+            assert len(statements) == 1 and "ORDER BY" not in statements[0]
+    finally:
+        owner.dispose()
 
 
 def test_current_documents_open_with_optional_frontpage(cdm):

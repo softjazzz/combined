@@ -1658,3 +1658,29 @@ def test_child_leaf_completion_does_not_delete_root_published_canonical(canonica
         ("test-va", 2),
         ("test-vc", 0),
     ]
+
+
+
+@pytest.mark.parametrize(
+    "stage,reason,expected",
+    [
+        ("material_capture", "material_source_unavailable", "material_capture"),
+        ("material_preparation", "material_source_contract_incomplete", "material_preparation"),
+        ("material_preparation", "saved_partial_result_invalid", None),
+    ],
+)
+def test_workstation_projection_retains_only_confirmed_preparation_failure(stage, reason, expected):
+    from app.services.medical_records import query_service
+
+    identity = ("SYN-I", "SYN-P", "SYN-V")
+    raw = {"status": "technical_error", "failure_stage": stage, "reason_code": reason,
+           "completed_at": "2026-11-20T09:00:00Z", "job_id": "synthetic-internal-job"}
+    projection = query_service._normalize_latest_qc_summary_map({identity: raw})[identity]
+    assert projection["status"] == "technical_error"
+    assert projection.get("failure_stage") == expected
+    if expected:
+        assert projection["reason_code"] == reason
+        assert projection["completed_at"] == raw["completed_at"]
+    else:
+        assert projection["reason_code"] == "canonical_envelope_invalid"
+    assert "job_id" not in projection

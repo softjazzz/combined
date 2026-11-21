@@ -592,8 +592,15 @@ def _workstation_qc_summary_payload(
     record_refs: list[dict[str, str]],
     summaries: dict[tuple[str, str, str], dict[str, Any]],
     page_identities: Iterable[CaseRef],
+    *,
+    requested_identities: tuple[CaseRef, ...] | None = None,
 ) -> dict[str, Any]:
-    """返回全集统计和当前页三键摘要，不返回病历字段。"""
+    """返回全集统计，以及筛选范围内的已显示病历摘要。"""
+    if requested_identities is not None:
+        filtered_identities = {
+            CaseRef(ref["institute_id"], ref["patient_id"], ref["visit_id"]) for ref in record_refs
+        }
+        page_identities = (identity for identity in requested_identities if identity in filtered_identities)
     return {
         "qc_summary": _build_qc_summary(record_refs, summaries),
         "records": [
@@ -611,6 +618,11 @@ def _normalize_latest_qc_summary_map(
     value: dict[tuple[str, str, str], dict[str, Any]],
 ) -> dict[tuple[str, str, str], dict[str, Any]]:
     """限制病历池投影为小型、稳定且客户无关的摘要合同。"""
+
+    from ..qc_workspace.partial_record_read import (
+        MATERIAL_PREPARATION_FAILURE_CODES,
+        MATERIAL_PREPARATION_FAILURE_STAGES,
+    )
 
     normalized: dict[tuple[str, str, str], dict[str, Any]] = {}
     reason_aliases = {
@@ -661,13 +673,20 @@ def _normalize_latest_qc_summary_map(
                     "failed_rule_ids": list(raw_summary.get("failed_rule_ids") or []),
                 })
         elif status == "technical_error":
-            normalized[identity] = {
-                "status": "technical_error",
-                "reason_code": reason_aliases.get(
-                    str(raw_summary.get("reason_code") or "").strip(),
-                    "canonical_envelope_invalid",
-                ),
-            }
+            stage = str(raw_summary.get("failure_stage") or "")
+            reason = str(raw_summary.get("reason_code") or "").strip()
+            if stage in MATERIAL_PREPARATION_FAILURE_STAGES and reason in MATERIAL_PREPARATION_FAILURE_CODES:
+                normalized[identity] = {
+                    "status": "technical_error",
+                    "failure_stage": stage,
+                    "reason_code": reason,
+                    "completed_at": raw_summary.get("completed_at") or None,
+                }
+            else:
+                normalized[identity] = {
+                    "status": "technical_error",
+                    "reason_code": reason_aliases.get(reason, "canonical_envelope_invalid"),
+                }
         else:
             normalized[identity] = {"status": "not_run"}
     return normalized
@@ -1059,14 +1078,17 @@ def get_workstation_data(
     analytics_scope: Optional[str] = None,
     case_scope=None,
     qc_summary_mode: str = "inline",
+    qc_summary_identities: tuple[CaseRef, ...] | None = None,
 ) -> dict[str, Any]:
+    if qc_summary_identities is not None and qc_summary_mode != "only":
+        raise ValueError("qc_summary_identities requires qc_summary_mode=only")
     from ...database import clinical_connection
     if clinical_connection.configured():
         from ..clinical_case_catalog import workstation
         return workstation(dept=dept, doctor=doctor, keyword=keyword, start_date=start_date, end_date=end_date,
             date_field=date_field, hospital_status=hospital_status, sync_scope=sync_scope, inpatient_sort=inpatient_sort,
             page=page, page_size=page_size, case_scope=case_scope, qc_projection_loader=qc_projection_loader,
-            qc_summary_mode=qc_summary_mode,
+            qc_summary_mode=qc_summary_mode, qc_summary_identities=qc_summary_identities,
             analytics_job_id=analytics_job_id, analytics_completed_from=analytics_completed_from,
             analytics_completed_to=analytics_completed_to, analytics_rule_id=analytics_rule_id,
             analytics_result_status=analytics_result_status, analytics_scope=analytics_scope)
@@ -1258,38 +1280,39 @@ def get_workstation_data(
             # 不得以当前页可见演示数据混入图表明细。
             visible_demos = []
 
-        total_real_filtered = q.count() + len(indexed_filtered_records)
-        offset = (page - 1) * page_size
-        demo_count = len(visible_demos)
-
-        demo_page: list[dict] = []
-        real_offset = offset
-        real_limit = page_size
-        if demo_count > 0:
-            demo_start = min(offset, demo_count)
-            demo_end = min(offset + page_size, demo_count)
-            if demo_end > demo_start:
-                demo_page = visible_demos[demo_start:demo_end]
-            consumed = len(demo_page)
-            real_limit = max(page_size - consumed, 0)
-            real_offset = max(offset - demo_count, 0)
-
         records = []
-        if real_limit > 0:
-            candidate_limit = real_offset + real_limit
-            frontpage_candidates = (
-                q.order_by(*_workstation_order_by(effective_inpatient_sort, discharge_summary))
-                .limit(candidate_limit)
-                .all()
-            )
-            indexed_candidates = _workstation_sorted_records(
-                indexed_filtered_records,
-                effective_inpatient_sort,
-            )[:candidate_limit]
-            records = _workstation_sorted_records(
-                [*frontpage_candidates, *indexed_candidates],
-                effective_inpatient_sort,
-            )[real_offset : real_offset + real_limit]
+        if qc_summary_identities is None:
+            total_real_filtered = q.count() + len(indexed_filtered_records)
+            offset = (page - 1) * page_size
+            demo_count = len(visible_demos)
+
+            demo_page: list[dict] = []
+            real_offset = offset
+            real_limit = page_size
+            if demo_count > 0:
+                demo_start = min(offset, demo_count)
+                demo_end = min(offset + page_size, demo_count)
+                if demo_end > demo_start:
+                    demo_page = visible_demos[demo_start:demo_end]
+                consumed = len(demo_page)
+                real_limit = max(page_size - consumed, 0)
+                real_offset = max(offset - demo_count, 0)
+
+            if real_limit > 0:
+                candidate_limit = real_offset + real_limit
+                frontpage_candidates = (
+                    q.order_by(*_workstation_order_by(effective_inpatient_sort, discharge_summary))
+                    .limit(candidate_limit)
+                    .all()
+                )
+                indexed_candidates = _workstation_sorted_records(
+                    indexed_filtered_records,
+                    effective_inpatient_sort,
+                )[:candidate_limit]
+                records = _workstation_sorted_records(
+                    [*frontpage_candidates, *indexed_candidates],
+                    effective_inpatient_sort,
+                )[real_offset : real_offset + real_limit]
 
         full_record_refs = [
             {
@@ -1327,6 +1350,7 @@ def get_workstation_data(
                 full_record_refs, latest_qc_summary_map,
                 (CaseRef(*(str(value or "").strip() for value in (r.institute_id, r.patient_id, r.visit_id)))
                  for r in records),
+                requested_identities=qc_summary_identities,
             )
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}

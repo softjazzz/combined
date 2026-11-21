@@ -70,6 +70,7 @@ const DEBUG_SENSITIVE_KEYS = new Set([
   'old_password',
   'access_token',
   'refresh_token',
+  'record_keys',
 ])
 
 function redactDebugSensitiveValues(value: unknown, seen = new WeakSet<object>()): unknown {
@@ -365,7 +366,10 @@ export class ApiService {
     data?: unknown,
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
-    return apiClient.post<T>(url, data, config)
+    const defaultConfig = url === '/api/medical-records/workstation/qc-summary'
+      ? { timeout: WORKSTATION_LIST_TIMEOUT }
+      : {}
+    return apiClient.post<T>(url, data, { ...defaultConfig, ...config })
   }
 
   static async putRaw<T = unknown>(

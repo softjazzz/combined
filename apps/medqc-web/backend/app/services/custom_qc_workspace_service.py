@@ -95,8 +95,8 @@ from .qc_workspace.canonical_result_store import (
 )
 from .qc_workspace.partial_record_delivery import select_complete_record_items
 from .qc_workspace.partial_record_read import (
-    read_saved_partial_record,
-    record_material_capture_failed,
+    MATERIAL_PREPARATION_FAILURE_STAGES,
+    read_saved_partial_record_row,
     saved_record_rule_scope,
 )
 from .qc_workspace.record_repository import RecordRepository, WorkspaceListResult
@@ -2398,7 +2398,11 @@ def _export_customer_safe_html(
 
 
 class PreviousRecordResultAnchorChanged(Exception):
-    """历史视图的锚点不再是该病例最近一次取材失败的轮次。"""
+    """历史视图的锚点不再是该病例最近一次资料准备失败的轮次。"""
+
+
+class PreviousRecordResultConflict(Exception):
+    """当前账号可核验的历史候选无法选出唯一轮次。"""
 
 
 def _record_result_completed_at(job: Mapping[str, Any]) -> Optional[str]:
@@ -4113,35 +4117,22 @@ class CustomQCWorkspaceService:
                 ))).mappings().one_or_none()
                 if saved is None:
                     raise ValueError("saved_partial_task_changed")
-                if record_material_capture_failed(
-                    _safe_json_loads(saved["items_json"], []),
-                    _safe_json_loads(saved["failed_records_json"], []),
-                    case_ref,
-                ):
-                    # 该病例本轮在取材阶段失败且没有任何结果：如实说明，
-                    # 不当作结果损坏，也不在默认视图里换读其他轮次。
-                    return {
-                        "schema_version": "lx0609-single-record-result-v1",
-                        "state": "technical_error",
-                        "reason_code": "material_capture_failed",
-                        "data_origin": "saved_partial_task",
-                        "record_ref": "",
-                        "job_id": _safe_text(selected_job.get("id")),
-                        "completed_at": _record_result_completed_at(selected_job),
-                        "items": [],
-                        "expected_rule_count": len(expected_rule_ids_for_count),
-                        "result_rule_count": 0,
-                        "is_complete": False,
-                    }
                 projection_key = customer_safe_projection_key()
-                partial_details = read_saved_partial_record(
-                    summary=_safe_json_loads(saved["summary_json"], {}),
-                    items=_safe_json_loads(saved["items_json"], []),
-                    failures=_safe_json_loads(saved["failed_records_json"], []),
-                    ref=case_ref, expected_rules=selected_job["result_rule_scope"],
+                partial_details = read_saved_partial_record_row(
+                    saved, ref=case_ref, expected_rules=selected_job["result_rule_scope"],
                     projection_key=projection_key,
                     projector=lambda item: self._envelope_item_from_rule_result(item, hmac_key=projection_key),
                 )
+                if partial_details.get("failure_stage"):
+                    return {
+                        **_record_result_unselected(
+                            "technical_error", partial_details["reason_code"], expected_rule_ids_for_count,
+                        ),
+                        "failure_stage": partial_details["failure_stage"],
+                        "data_origin": "saved_partial_task",
+                        "job_id": _safe_text(selected_job.get("id")),
+                        "completed_at": _record_result_completed_at(selected_job),
+                    }
                 envelope = partial_details
         except ValueError as exc:
             # 已发布合同损坏沿用既有结构化失败，不变成未找到，也不吞其他错误。
@@ -4292,18 +4283,7 @@ class CustomQCWorkspaceService:
         expected_rule_ids: Optional[Sequence[str]] = None,
         require_donghua_proof: bool = False,
     ) -> Dict[str, Any]:
-        """用户显式请求的历史视图：同一病例上一次可查看的有效结果，只读。
-
-        候选与默认视图同源（三坐标、规则版本、冻结范围），每一轮按自身任务的
-        机构归属、结果信封或已保存成功项及冻结材料独立校验；不跨轮拼接、
-        不用当前材料补证。
-
-        - 带 ``anchor_job_id``：锚点必须仍是默认视图选中的轮次，且该病例在
-          该轮取材失败、零项；否则抛 ``PreviousRecordResultAnchorChanged``。
-          只在锚点之前的轮次中查找。
-        - 不带锚点（最近一轮归属无法核验）：在全部轮次中查找当前账号可核验的
-          最近有效结果。无法核验或无结果的轮次直接跳过，不透露其状态。
-        """
+        """查找同一病例原轮次保存的有效结果与可读冻结材料。"""
 
         request = self._luxian_0609_record_result_request(
             institute_id=institute_id,
@@ -4324,46 +4304,70 @@ class CustomQCWorkspaceService:
                 prefer_full_scope=True,
             )
 
+        from .saved_result_access import require_selected_donghua_job, selected_history_material_is_available
+
         session = _session()
         try:
+            identity = tuple(request["case_ref"])
             remaining = self._luxian_0609_record_result_candidates(session, request)
-            if anchor:
-                latest = select(remaining)
-                if latest.state != "ready" or _safe_text((latest.job or {}).get("id")) != anchor:
-                    raise PreviousRecordResultAnchorChanged()
-                latest_result = self._luxian_0609_record_result_for_job(
-                    session, request, latest.job, require_donghua_proof=require_donghua_proof,
-                )
-                if latest_result.get("reason_code") != "material_capture_failed":
-                    raise PreviousRecordResultAnchorChanged()
-                anchor_generation = _generation_key(latest.job)
-                remaining = [
-                    candidate for candidate in remaining
-                    if _safe_text(candidate.get("id")) != anchor
-                    and _generation_key(candidate) < anchor_generation
-                ]
-            from fastapi import HTTPException
+            saved_results: dict[str, dict[str, Any] | None] = {}
+
+            def available_result(candidate: Dict[str, Any]) -> dict[str, Any] | None:
+                job_id = candidate["id"]
+                if job_id not in saved_results:
+                    saved_results[job_id] = None
+                    if selected_history_material_is_available(
+                        session, self._batch_job_table, job_id, identity,
+                        require_donghua_proof=require_donghua_proof,
+                    ):
+                        result = self._luxian_0609_record_result_for_job(session, request, candidate)
+                        if result.get("state") == "ready" and result.get("items") and result.get("record_ref"):
+                            saved_results[job_id] = result
+                        elif not result.get("failure_stage"):
+                            logging.getLogger(__name__).warning(
+                                "LX0609 历史结果跳过不可用轮次 job_id=%s state=%s reason_code=%s",
+                                job_id, result.get("state"), result.get("reason_code"),
+                            )
+                return saved_results[job_id]
+
+            latest = select(remaining)
+
+            if latest.state == "ready" and isinstance(latest.job, dict):
+                latest_job_id = latest.job["id"]
+                if anchor:
+                    if latest_job_id != anchor:
+                        if require_donghua_proof:
+                            require_selected_donghua_job(session, self._batch_job_table, anchor, identity)
+                        raise PreviousRecordResultAnchorChanged()
+                    latest_result = self._luxian_0609_record_result_for_job(
+                        session, request, latest.job, require_donghua_proof=require_donghua_proof,
+                    )
+                    if latest_result.get("failure_stage") not in MATERIAL_PREPARATION_FAILURE_STAGES:
+                        raise PreviousRecordResultAnchorChanged()
+                # 以默认轮次为界，即使无锚点也不把正常的最新结果标成历史。
+                latest_generation = _generation_key(latest.job)
+                remaining = [candidate for candidate in remaining if _generation_key(candidate) < latest_generation]
+            elif anchor:
+                if require_donghua_proof:
+                    # 无法核验的选轮分歧不能向当前账号显示，也不能以猜测的锚点继续。
+                    require_selected_donghua_job(session, self._batch_job_table, anchor, identity)
+                raise PreviousRecordResultAnchorChanged()
+
             while remaining:
                 selection = select(remaining)
+                if selection.state == "technical_error":
+                    # 只有当前账号可核验且实际保存了有效结果的轮次参与历史冲突。
+                    remaining = [candidate for candidate in remaining if available_result(candidate)]
+                    selection = select(remaining)
+                    if selection.state == "technical_error":
+                        raise PreviousRecordResultConflict(selection.reason_code)
                 if selection.state != "ready" or not isinstance(selection.job, dict):
                     break
-                job_id = _safe_text(selection.job.get("id"))
-                remaining = [candidate for candidate in remaining if _safe_text(candidate.get("id")) != job_id]
-                try:
-                    result = self._luxian_0609_record_result_for_job(
-                        session, request, selection.job, require_donghua_proof=require_donghua_proof,
-                    )
-                except HTTPException as exc:
-                    if exc.status_code != 403:
-                        raise
-                    continue  # 当前账号不能核验该轮归属：跳过且不透露状态。
-                if result.get("state") == "ready" and result.get("items") and result.get("record_ref"):
+                job_id = selection.job["id"]
+                remaining = [candidate for candidate in remaining if candidate["id"] != job_id]
+                result = available_result(selection.job)
+                if result is not None:
                     return {**result, "result_view": "previous_valid", "read_only": True}
-                if result.get("reason_code") != "material_capture_failed":
-                    logging.getLogger(__name__).warning(
-                        "LX0609 历史结果跳过不可用轮次 job_id=%s state=%s reason_code=%s",
-                        job_id, result.get("state"), result.get("reason_code"),
-                    )
             return {
                 **_record_result_unselected(
                     "not_found", "previous_record_result_not_found", request["expected_rule_ids_for_count"],
@@ -4761,13 +4765,8 @@ class CustomQCWorkspaceService:
                         projection_key = customer_safe_projection_key()
                         parse_started = monotonic()
                         try:
-                            partial = read_saved_partial_record(
-                                summary=_safe_json_loads(saved.get("summary_json"), {}),
-                                items=_safe_json_loads(saved.get("items_json"), []),
-                                failures=_safe_json_loads(
-                                    saved.get("failed_records_json"), []
-                                ),
-                                ref=CaseRef(*identity),
+                            partial = read_saved_partial_record_row(
+                                saved, ref=CaseRef(*identity),
                                 expected_rules=selected_job["result_rule_scope"],
                                 projection_key=projection_key,
                                 projector=lambda item: self._envelope_item_from_rule_result(
@@ -4788,6 +4787,16 @@ class CustomQCWorkspaceService:
                             continue
                         finally:
                             result_parse_seconds += monotonic() - parse_started
+                        if partial.get("failure_stage"):
+                            projections[identity] = {
+                                "status": "technical_error",
+                                "data_origin": "saved_partial_task",
+                                "job_id": selected_job_id,
+                                "completed_at": _record_result_completed_at(selected_job),
+                                "result_rule_scope": list(selected_job["result_rule_scope"]),
+                                **partial,
+                            }
+                            continue
                         status_counts: Dict[str, int] = {}
                         for item in partial["items"]:
                             item_status = _safe_text(item.get("status"), "unknown")
@@ -5006,6 +5015,10 @@ class CustomQCWorkspaceService:
                     "schema_version": "lx0609-single-record-result-v1",
                     "state": "not_found" if status == "not_run" else "technical_error",
                     "reason_code": _safe_text(projection.get("reason_code")),
+                    **(
+                        {key: projection[key] for key in ("failure_stage", "data_origin", "job_id", "completed_at")}
+                        if projection.get("failure_stage") else {}
+                    ),
                     "record_ref": "",
                     "items": [],
                     "expected_rule_count": len(selected_expected_rule_ids),

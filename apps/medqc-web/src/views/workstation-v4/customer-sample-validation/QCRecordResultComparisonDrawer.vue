@@ -52,7 +52,7 @@
         class="result-history-nav mq-soft"
       >
         <strong>{{ latestResult && historyView.anchorJobId ? '上一次有效质控结果' : '历史质控结果' }}</strong>
-        <span v-if="historyView.anchorJobId">最近一次取材失败</span>
+        <span v-if="historyView.anchorJobId">最近一次资料准备失败</span>
         <button
           type="button"
           class="mq-btn"
@@ -260,7 +260,6 @@ async function loadResult(previous?: PreviousResultRequest) {
     if (!previous) previousRequest.value = previousResultRequest(result)
     if (!result.success || !result.data) {
       if (previous && result.status === 404) loadError.value = '暂无可查看的历史质控结果'
-      else if (previous && result.status === 409) loadError.value = '最近一次任务已更新，请返回最近一次重新查看'
       else loadError.value = result.message || '质控结果读取失败，请稍后重试'
       return
     }

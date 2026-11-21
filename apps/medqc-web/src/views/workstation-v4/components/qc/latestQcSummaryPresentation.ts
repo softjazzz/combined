@@ -2,6 +2,7 @@
  * 病历最新质控摘要的展示口径（运行/终末病历质控列表与病历池预览共用）。
  * 只把后端 latest_qc_summary 的状态计数翻译为界面文案，不重新判定状态。
  */
+import { CAPTURE_FAILED_NOTICE, MATERIAL_PREPARATION_FAILED_LABEL } from '../../customer-sample-validation/single-record-result-model'
 import type { QcSummaryLoadState, RecordLatestQcSummary } from '../../types'
 import type { QcRecordResultRow } from './QcRecordResultTable.vue'
 
@@ -53,6 +54,14 @@ export function resolveResultPresentation(
     }
   }
   if (summary?.status === 'technical_error') {
+    if (summary.failureStage) {
+      return {
+        resultStatus: 'technical-error',
+        resultLabel: MATERIAL_PREPARATION_FAILED_LABEL,
+        issueSummary: CAPTURE_FAILED_NOTICE,
+        latestQcTime: formatQcCompletedAt(summary.completedAt),
+      }
+    }
     return {
       resultStatus: 'technical-error',
       resultLabel: '结果校验异常',

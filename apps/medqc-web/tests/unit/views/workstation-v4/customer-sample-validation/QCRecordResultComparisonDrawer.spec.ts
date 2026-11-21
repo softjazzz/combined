@@ -429,12 +429,14 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(wrapper.find('.record-compare-workbench-stub').exists()).toBe(false)
     expect(wrapper.text()).toContain('质控结果读取异常')
     expect(wrapper.text()).not.toContain('暂无已保存质控结果')
+    expect(wrapper.find('.result-stub button').exists()).toBe(false)
     expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
   })
 
   it('本次捕获失败后显式查看较早一轮，仅按旧任务、原文书引用和旧时间展示', async () => {
     getLatestLuxian0609RecordResult.mockResolvedValueOnce({
-      success: true, data: { state: 'technical_error', reason_code: 'material_capture_failed',
+      success: true, data: { state: 'technical_error', reason_code: 'material_source_unavailable',
+        failure_stage: 'material_capture',
         job_id: 'failed-latest', result_rule_count: 0, items: [] },
     }).mockResolvedValueOnce({
       success: true, data: { ...readyResult, result_view: 'previous_valid', read_only: true,
@@ -456,6 +458,18 @@ describe('QCRecordResultComparisonDrawer', () => {
       recordRef: readyResult.record_ref, feedbackAvailable: false, debugContext: undefined })
     expect(wrapper.find('.customer-record-result-title__export').exists()).toBe(false)
     expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+  })
+
+  it('历史候选冲突时展示服务端的准确原因', async () => {
+    const message = '历史质控任务的创建时间和完成时间相同，无法确认可查看的历史轮次'
+    getLatestLuxian0609RecordResult.mockResolvedValueOnce({ success: false, status: 403, message: '结果归属无法核验' })
+      .mockResolvedValueOnce({ success: false, status: 409, message })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('.result-stub button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(message)
+    expect(workbenchProps).toBeNull()
   })
 
   it('最新轮归属不可核验时，仅在点击后独立尝试；未带历史标记的响应不会展示', async () => {

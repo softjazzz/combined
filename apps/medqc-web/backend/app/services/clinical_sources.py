@@ -274,7 +274,8 @@ def prepare_request(request: Request) -> None:
             suffix = path.split("medical-records/", 1)[1]
             supported = ("workstation", "list", "departments", "stats", "frontpage/", "frontpage-by-mr/",
                          "frontpage-sheet/", "diagnoses/", "surgeries/", "cost/", "record-content/", "documents/")
-            if request.method != "GET" or not suffix.startswith(supported):
+            workstation_summary = path == "/api/medical-records/workstation/qc-summary" and request.method == "POST"
+            if not workstation_summary and (request.method != "GET" or not suffix.startswith(supported)):
                 raise PipelineError("clinical_source_operation_not_supported", 422)
         if request.state.clinical_source["id"] == "independent_cdm" and path.startswith("/api/v1/records"):
             raise PipelineError("clinical_source_legacy_record_api_not_supported", 422)

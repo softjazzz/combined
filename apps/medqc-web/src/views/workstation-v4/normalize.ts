@@ -275,9 +275,13 @@ export function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSumm
     }
   }
   if (status === 'technical_error') {
+    const failureStage = pickString(source, ['failureStage', 'failure_stage'])
     return {
       status: 'technical_error',
       reasonCode: pickString(source, ['reasonCode', 'reason_code']) || null,
+      ...(failureStage === 'material_capture' || failureStage === 'material_preparation'
+        ? { failureStage, completedAt: pickString(source, ['completedAt', 'completed_at']) || null }
+        : {}),
     }
   }
   return { status: 'not_run' }

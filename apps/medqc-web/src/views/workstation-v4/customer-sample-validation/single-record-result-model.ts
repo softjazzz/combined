@@ -1,3 +1,4 @@
+import type { QcMaterialFailureStage } from '../types'
 export type SingleRecordQcStatus =
   | 'non_compliant'
   | 'ai_suggested_non_compliant'
@@ -193,6 +194,7 @@ export interface SingleRecordQcResultPayload {
   schema_version: 'lx0609-single-record-result-v1'
   state: 'ready' | 'not_found' | 'technical_error'
   reason_code: string
+  failure_stage?: QcMaterialFailureStage
   record_ref: string
   job_id: string
   result_view?: 'latest' | 'previous_valid'
@@ -227,14 +229,16 @@ export function previousResultRequest(
   const data = response.data
   if (
     response.success && data?.state === 'technical_error' &&
-    data.reason_code === 'material_capture_failed' && data.job_id &&
+    (data.failure_stage === 'material_capture' || data.failure_stage === 'material_preparation') &&
+    data.job_id &&
     data.result_rule_count === 0 && Array.isArray(data.items) && data.items.length === 0
   ) {
     return { resultView: 'previous_valid', anchorJobId: data.job_id }
   }
 }
 
-export const CAPTURE_FAILED_NOTICE = '最近一次病历资料准备失败，未生成质控结果。'
+export const MATERIAL_PREPARATION_FAILED_LABEL = '病历资料准备失败'
+export const CAPTURE_FAILED_NOTICE = `最近一次${MATERIAL_PREPARATION_FAILED_LABEL}，未生成质控结果。`
 
 export type SingleRecordQcResultTone = 'danger' | 'warning' | 'success' | 'neutral'
 
