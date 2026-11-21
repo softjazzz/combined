@@ -199,22 +199,37 @@ def test_no_original_snapshot_retry_does_not_capture(monkeypatch):
         case_material_capture.obtain("old-task", IDENTITY, retry=True)
 
 
-@pytest.mark.parametrize(("stage", "error_type", "owner"), [
-    ("source_read", "OperationalError", "case_material_capture"),
-    ("source_validation", "KeyError", "automatic_material_scope"),
-    ("snapshot_persist", "PermissionError", "case_material_snapshot"),
+@pytest.mark.parametrize(("stage", "code"), [
+    ("source_read", "source_database_operational_error"),
+    ("source_read", "source_connection_pool_timeout"),
+    ("source_validation", "unknown"),
+    ("source_read", "material_capture_timeout"),
+    ("source_read", "unknown"),
+    ("snapshot_persist", "material_value_type_unsupported"),
+    ("snapshot_persist", "snapshot_io_error"),
 ])
-def test_obtain_logs_safe_stage_for_unexpected_failures(monkeypatch, caplog, stage, error_type, owner):
+def test_obtain_logs_only_stage_and_approved_reason(monkeypatch, caplog, stage, code):
     from unittest.mock import MagicMock
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import OperationalError, TimeoutError
     from app.services import case_material_capture as capture, clinical_source_contract
+    from app.services.material_admission import safe_material_failure
     from app.services.qc_execution_errors import safe_exception_failure
 
     private = "SYNTHETIC-BODY postgresql://synthetic-user:synthetic-password@db/test"
     job_id = "SYNTHETIC-JOB"
+    public_error = "material_capture_failed"
     if stage == "source_read":
+        error = {
+            "source_database_operational_error": OperationalError(private, IDENTITY, RuntimeError(private)),
+            "source_connection_pool_timeout": TimeoutError(private),
+            "material_capture_timeout": material.MaterialSnapshotError(code),
+            "unknown": material.MaterialSnapshotError(private),
+        }[code]
+        if isinstance(error, material.MaterialSnapshotError):
+            public_error = str(error)
+
         def unavailable(_schema):
-            raise OperationalError(private, IDENTITY, RuntimeError(private))
+            raise error
 
         monkeypatch.setattr(assembly, "_source_engine", unavailable)
     elif stage == "source_validation":
@@ -226,6 +241,10 @@ def test_obtain_logs_safe_stage_for_unexpected_failures(monkeypatch, caplog, sta
         monkeypatch.setattr(clinical_source_contract, "inspect_source", lambda *a, **kw: {
             "read_only": True, "account_read_only": True, "private": private,
         })
+    elif code == "material_value_type_unsupported":
+        from datetime import time
+        public_error = code
+        monkeypatch.setattr(capture, "capture", lambda **_: dataset(time(8, 0)))
     else:
         def write_failed(*_):
             raise type("SyntheticPrivateKey", (PermissionError,), {})(private)
@@ -235,12 +254,13 @@ def test_obtain_logs_safe_stage_for_unexpected_failures(monkeypatch, caplog, sta
 
     with pytest.raises(material.MaterialSnapshotError) as caught:
         capture.obtain(job_id, IDENTITY)
-    assert str(caught.value) == "material_capture_failed"
-    assert safe_exception_failure(caught.value)["retryable"] is False
-    assert caught.value.__suppress_context__
+    assert str(caught.value) == public_error
+    assert safe_material_failure(str(caught.value))["code"] == "material_capture_failed"
+    if public_error == "material_capture_failed":
+        assert safe_exception_failure(caught.value)["retryable"] is False
+        assert caught.value.__suppress_context__
     [record] = [record for record in caplog.records if record.name == capture.__name__]
-    assert record.args[:3] == (stage, error_type, owner)
-    assert isinstance(record.args[3], int) and record.args[3] > 0
+    assert record.getMessage() == f"material_capture_failed stage={stage} code={code}"
     assert record.exc_info is None and record.stack_info is None
     assert all(secret not in caplog.text for secret in (private, *IDENTITY, job_id, "SyntheticPrivateKey", "dependencies"))
 
@@ -318,6 +338,125 @@ def test_no_manual_window_still_rejects_unavailable_source(monkeypatch):
     with clinical.selected({"id":"independent_cdm","binding":"source"}):
         with pytest.raises(material.MaterialSnapshotError,match="material_source_unavailable"):
             capture(identity=IDENTITY)
+
+
+@pytest.mark.asyncio
+async def test_two_batches_share_four_cdm_capture_slots(monkeypatch):
+    import asyncio
+    from threading import Event, Lock
+
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.pool import QueuePool
+
+    from app.services import case_material_capture as capture, cdm_publication_evidence, clinical_source_contract
+    from app.services import sample_programmatic_evidence
+    from app.services.bundles import current_view
+    from app.services.luxian_0609 import source_evidence_reader
+    from app.services.sichuan_qc_service import SichuanQCService
+
+    engine = create_engine("sqlite://", poolclass=QueuePool, pool_size=3, max_overflow=2,
+                           pool_timeout=0.1, connect_args={"check_same_thread": False})
+    alias = engine.execution_options()
+    full, release = Event(), Event()
+    counts_lock = Lock()
+    held = peak = 0
+
+    @event.listens_for(engine, "set_connection_execution_options")
+    def sqlite_isolation(_connection, options):
+        if options.get("isolation_level") == "REPEATABLE READ":
+            options["isolation_level"] = "SERIALIZABLE"
+
+    @event.listens_for(engine, "before_cursor_execute", retval=True)
+    def sqlite_transaction_commands(_connection, _cursor, statement, params, _context, _many):
+        if statement in {"SET TRANSACTION READ ONLY", "SET LOCAL statement_timeout=10000"}:
+            return "SELECT 1", ()
+        return statement, params
+
+    def hold_transaction(*args, **kwargs):
+        nonlocal held, peak
+        with counts_lock:
+            held += 1
+            peak = max(held, peak)
+            if held == 4:
+                full.set()
+        try:
+            assert release.wait(5), "synthetic capture release was not signaled"
+            return {"read_only": True, "account_read_only": True, "dependencies": []}
+        finally:
+            with counts_lock:
+                held -= 1
+
+    monkeypatch.setattr(clinical, "get_engine", lambda: alias if clinical.current_selection()["batch"] else engine)
+    monkeypatch.setattr(clinical_source_contract, "inspect_source", hold_transaction)
+    monkeypatch.setattr(assembly, "_select_records", lambda **_: [])
+    monkeypatch.setattr(cdm_publication_evidence, "read_publication", lambda *_: {"rows": {}, "status": "synthetic"})
+    monkeypatch.setattr(sample_programmatic_evidence, "capture_programmatic_sources", lambda *_: {})
+    monkeypatch.setattr(current_view, "_assemble_current_documents", lambda **_: dataset()["documents"])
+    monkeypatch.setattr(SichuanQCService, "_resolve_primary_diagnosis_context", lambda **_: None)
+    for name in (
+        "read_luxian_0609_course_round_timeline", "has_luxian_0609_current_visit_unstable_order",
+        "read_luxian_0609_severity_order_rows", "read_luxian_0609_exam_lab_order_rows",
+        "read_luxian_0609_rescue_order_rows", "read_luxian_0609_discharge_horizon_rows",
+        "read_luxian_0609_snapshot_source_rows", "read_luxian_0609_native_source_rows",
+        "read_luxian_0609_runtime_source_rows",
+    ):
+        monkeypatch.setattr(source_evidence_reader, name, lambda **_: [])
+
+    all_submitted, cancellation_queued = asyncio.Event(), asyncio.Event()
+    submit_capture = clinical.submit_capture
+    submissions = 0
+    queued_cancellation = None
+
+    def track_submission(*args, **kwargs):
+        nonlocal submissions, queued_cancellation
+        result = submit_capture(*args, **kwargs)
+        submissions += 1
+        if submissions == 16:
+            all_submitted.set()
+        elif submissions == 17:
+            queued_cancellation = result
+            cancellation_queued.set()
+        return result
+
+    monkeypatch.setattr(clinical, "submit_capture", track_submission)
+
+    async def batch(index):
+        job = f"synthetic-batch-{index}"
+        identities = [("I", f"P{index}-{n}", f"V{index}-{n}") for n in range(8)]
+        with clinical.selected({"id": "independent_cdm", "binding": "synthetic-cdm", "batch": index}):
+            results = await asyncio.gather(*(capture.obtain_for_batch(job, identity) for identity in identities))
+            assert [value["identity"] for value in results] == [list(identity) for identity in identities]
+            assert all(material.load(job, identity)["fingerprint"] == value["fingerprint"]
+                       for identity, value in zip(identities, results))
+
+    batches = asyncio.gather(batch(0), batch(1))
+    try:
+        try:
+            await asyncio.wait_for(all_submitted.wait(), 3)
+            assert await asyncio.wait_for(asyncio.to_thread(full.wait, 1), 2)
+            cancelled_identity = ("I", "cancelled-patient", "cancelled-visit")
+            with clinical.selected({"id": "independent_cdm", "binding": "synthetic-cdm", "batch": 0}):
+                waiting = asyncio.create_task(capture.obtain_for_batch("synthetic-batch-0", cancelled_identity))
+                try:
+                    await asyncio.wait_for(cancellation_queued.wait(), 1)
+                finally:
+                    waiting.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await waiting
+                assert queued_cancellation is not None and queued_cancellation.cancelled()
+            # 通用工作线程仍能执行模型审计这样的后台操作，浏览也能取得第五条连接。
+            with engine.connect() as online:
+                assert online.exec_driver_sql("SELECT 1").scalar() == 1
+            await asyncio.sleep(0.15)  # 超过合成连接池的 checkout 超时。
+        finally:
+            release.set()
+            await batches
+        assert peak == 4
+        assert engine.pool.checkedout() == 0
+        with clinical.selected({"id": "independent_cdm", "binding": "synthetic-cdm", "batch": 0}):
+            assert material.load("synthetic-batch-0", cancelled_identity) is None
+    finally:
+        engine.dispose()
 
 
 def test_directory_does_not_infer_inpatient_and_keeps_date_precision():

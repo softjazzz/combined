@@ -3592,7 +3592,7 @@ async def run_sichuan_workspace_batch_job(
                                 lambda key, rows: _publish_family(record, key, rows)
                             ) if enable_incremental_results and native_direct_enabled else nullcontext():
                                 from . import case_material_snapshot as materials
-                                from .case_material_capture import obtain
+                                from .case_material_capture import obtain_for_batch
                                 from .validation_material_source import is_material_copy
                                 from .bundles import assembly as material_assembly
                                 from ..database import clinical_connection as material_clinical
@@ -3601,7 +3601,7 @@ async def run_sichuan_workspace_batch_job(
                                 frozen = None
                                 if all(identity) and (is_material_copy(patient_id, visit_id) or material_clinical.configured() or backed_by_pg):
                                     try:
-                                        frozen = await asyncio.to_thread(obtain, material_job_id, identity,
+                                        frozen = await obtain_for_batch(material_job_id, identity,
                                             retry=bool(retry_lineage) or is_failed_rule_retry, cancellation_check=_raise_if_cancelled)
                                     except materials.MaterialSnapshotError as error:
                                         return _material_failed_record(record, identity, str(error))
