@@ -57,6 +57,8 @@ function computeBaseURL(): string {
 
 const API_BASE_URL = computeBaseURL()
 const API_TIMEOUT = 15000 // 15秒超时，避免过长等待
+const WORKSTATION_LIST_PATH = '/api/medical-records/workstation'
+const WORKSTATION_QC_SUMMARY_PATH = '/api/medical-records/workstation/qc-summary'
 const WORKSTATION_LIST_TIMEOUT = 30000
 const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
 const API_DEBUG =
@@ -209,8 +211,9 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config
     const requestUrl: string | undefined = error.config?.url
     const responseStatus: number | undefined = error.response?.status
-    const backgroundQcSummary = requestUrl === '/api/medical-records/workstation'
-      && originalRequest?.params?.qc_summary_mode === 'only'
+    const backgroundQcSummary =
+      (requestUrl === WORKSTATION_QC_SUMMARY_PATH && originalRequest?.method === 'post')
+      || (requestUrl === WORKSTATION_LIST_PATH && originalRequest?.params?.qc_summary_mode === 'only')
     if (backgroundQcSummary && error.code === 'ERR_CANCELED') return Promise.reject(error)
     const traceId = extractTraceIdFromResponse(error.response) || extractTraceIdFromResponse(error)
     attachTraceIdToError(error, traceId)
@@ -355,7 +358,7 @@ export class ApiService {
     params?: Record<string, unknown>,
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
-    const defaultConfig = url === '/api/medical-records/workstation'
+    const defaultConfig = url === WORKSTATION_LIST_PATH
       ? { timeout: WORKSTATION_LIST_TIMEOUT }
       : {}
     return apiClient.get<T>(url, { ...defaultConfig, ...config, params })
@@ -366,7 +369,7 @@ export class ApiService {
     data?: unknown,
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
-    const defaultConfig = url === '/api/medical-records/workstation/qc-summary'
+    const defaultConfig = url === WORKSTATION_QC_SUMMARY_PATH
       ? { timeout: WORKSTATION_LIST_TIMEOUT }
       : {}
     return apiClient.post<T>(url, data, { ...defaultConfig, ...config })

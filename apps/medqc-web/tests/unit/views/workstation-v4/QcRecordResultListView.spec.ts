@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   downloadBlob: vi.fn(),
   exportFilteredLuxian0609RecordResults: vi.fn(),
   getRaw: vi.fn(),
+  postRaw: vi.fn(),
   requestRaw: vi.fn(),
 }))
 const routeState = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ vi.mock('@/api/clinicalSources', () => ({
 vi.mock('@/services/apiService', () => ({
   ApiService: {
     getRaw: mocks.getRaw,
+    postRaw: mocks.postRaw,
     requestRaw: mocks.requestRaw,
   },
 }))
@@ -99,11 +101,19 @@ function mockWorkstationResponse<T extends {
   }
 }>(payload: T) {
   const { qc_summary, records, ...list } = payload.data
-  mocks.getRaw.mockImplementation(async (_url: string, params: { qc_summary_mode?: string }) => ({
-    data: params.qc_summary_mode === 'only'
-      ? { qc_summary, records: records.map((row) => ({ recordKey: row.record_key, latest_qc_summary: row.latest_qc_summary })) }
-      : { ...list, records: records.map(({ latest_qc_summary: _summary, ...row }) => row) },
-  }))
+  mocks.getRaw.mockResolvedValue({
+    data: { ...list, records: records.map(({ latest_qc_summary: _summary, ...row }) => row) },
+  })
+  mocks.postRaw.mockImplementation(async (_url: string, body: { record_keys: string[] }) => {
+    const requested = new Set(body.record_keys)
+    return {
+      data: {
+        qc_summary,
+        records: records.filter((row) => requested.has(row.record_key))
+          .map((row) => ({ recordKey: row.record_key, latest_qc_summary: row.latest_qc_summary })),
+      },
+    }
+  })
 }
 
 function response() {
@@ -302,6 +312,12 @@ describe('QcRecordResultListView', () => {
         date_field: dateField,
         hospital_status: carePhase,
       })
+      expect(mocks.postRaw).toHaveBeenCalledWith(
+        '/api/medical-records/workstation/qc-summary',
+        { record_keys: response().data.records.map((row) => row.record_key) },
+        { params: { source_id: 'independent_cdm', date_field: dateField, hospital_status: carePhase },
+          signal: expect.any(AbortSignal) },
+      )
     },
   )
 
@@ -642,8 +658,7 @@ describe('QcRecordResultListView', () => {
     ['inpatient', false], ['discharged', false], ['discharged', true],
   ] as const)('%s 可打开当前病历（摘要读取中=%s）', async (phase, summaryPending) => {
     if (summaryPending) {
-      mocks.getRaw.mockResolvedValueOnce({ data: { ...response().data, qc_summary: undefined } })
-        .mockImplementationOnce(() => new Promise(() => {}))
+      mocks.postRaw.mockImplementationOnce(() => new Promise(() => {}))
     }
     mocks.requestRaw.mockResolvedValueOnce({ data: { documents: [] } })
     const wrapper = mountView(phase)
@@ -710,16 +725,19 @@ describe('QcRecordResultListView', () => {
         },
       ])
       const requestsBeforeRefresh = mocks.getRaw.mock.calls.length
+      const summariesBeforeRefresh = mocks.postRaw.mock.calls.length
       const previewRefreshKey = wrapper.getComponent(QcRecordReviewPreview).props('refreshKey')
 
       wrapper.getComponent(QcRunSelectedControl).vm.$emit('completed')
       await flushPromises()
       expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh)
+      expect(mocks.postRaw.mock.calls.length).toBe(summariesBeforeRefresh)
 
       wrapper.getComponent(QcRunSelectedControl).vm.$emit('results-updated')
       await flushPromises()
 
-      expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh + 2)
+      expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh + 1)
+      expect(mocks.postRaw.mock.calls.length).toBe(summariesBeforeRefresh + 1)
       expect(wrapper.getComponent(QcRecordReviewPreview).props('refreshKey')).toBeGreaterThan(
         previewRefreshKey,
       )
