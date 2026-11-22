@@ -160,6 +160,8 @@ def test_filtered_run_scores_all_records_and_lists_results(env):
     failing = client.get("/api/v1/frontpage-qc/records", params={"issue": "fail"}).json()["data"]
     assert failing["total"] == 1
     assert failing["items"][0]["patient_name"] == "C02"
+    assert failing["items"][0]["record_key"] == "INST-SYN|C02|C02-V1"
+    assert failing["items"][0]["result"]["record_key"] == "INST-SYN|C02|C02-V1"
     assert failing["items"][0]["result"]["score"] == 96
 
 
@@ -245,6 +247,76 @@ def test_analytics_and_export(env):
     workbook = load_workbook(BytesIO(response.content))
     assert "内科" in workbook["病历结果"]["A1"].value
     assert workbook["病历结果"]["A3"].value in {"C02", "C04"}
+
+
+def test_legacy_colliding_key_does_not_merge_frontpage_cases(tmp_path, monkeypatch):
+    from openpyxl import load_workbook
+
+    a = FrontpageRef("INST-SYN", "P-A", "SEG|V")
+    b = FrontpageRef("INST-SYN", "P-A|SEG", "V")
+    legacy_key = "INST-SYN|P-A|SEG|V"
+    app, engine, store, _ = _build_env(tmp_path, monkeypatch, extra_refs=[a, b])
+    repository = app.dependency_overrides[api.get_record_repository]()
+    for record, department in zip(repository.records[-2:], ("合成甲科", "合成乙科")):
+        record["department"] = department
+    with engine.begin() as conn:
+        conn.execute(sa.text("UPDATE mr SET leaving_hospital_way='' WHERE patient_id IN ('P-A', 'P-A|SEG')"))
+
+    base = "/api/v1/frontpage-qc"
+    with TestClient(app) as client:
+        assert client.post(f"{base}/runs", json={"record_refs": [_ref_payload(a)]}).status_code == 200
+        first = client.get(f"{base}/record", params=_ref_payload(a)).json()["data"]["result"]
+        # 模拟升级前已经落盘的 | 键，保留结果及复核的历史引用。
+        with engine.begin() as conn:
+            conn.execute(store.results.update().where(store.results.c.id == first["id"]).values(record_key=legacy_key))
+            conn.execute(store.findings.update().where(store.findings.c.result_id == first["id"]).values(record_key=legacy_key))
+        finding = next(item for item in first["findings"] if item["rule_id"] == "C-H24")
+        saved_review = client.post(
+            f"{base}/findings/{finding['id']}/review", json={"status": "false_alarm", "note": "仅病例甲"}
+        )
+        assert saved_review.status_code == 200
+
+        detail_b = client.get(f"{base}/record", params=_ref_payload(b)).json()["data"]
+        assert detail_b["result"] is None
+        listing = client.get(f"{base}/records").json()["data"]
+        rows = {item["patient_id"]: item for item in listing["items"]}
+        assert rows[a.patient_id]["record_key"] != rows[b.patient_id]["record_key"]
+        assert rows[a.patient_id]["result"]["record_key"] == legacy_key
+        assert rows[b.patient_id]["result"] is None
+        unchecked = client.get(f"{base}/records", params={"issue": "unchecked", "keyword": b.patient_id}).json()["data"]
+        assert unchecked["total"] == 1
+        failing = client.get(f"{base}/records", params={"issue": "fail", "keyword": b.patient_id}).json()["data"]
+        assert failing["total"] == 0
+        export_b = client.post(f"{base}/records/export", json={"record_refs": [_ref_payload(b)]})
+        assert export_b.status_code == 422
+
+        assert client.post(f"{base}/runs", json={"record_refs": [_ref_payload(b)]}).status_code == 200
+        current_a = client.get(f"{base}/record", params=_ref_payload(a)).json()["data"]["result"]
+        current_b = client.get(f"{base}/record", params=_ref_payload(b)).json()["data"]["result"]
+        assert (current_a["id"], current_a["record_key"]) == (first["id"], legacy_key)
+        assert current_b["record_key"] == rows[b.patient_id]["record_key"]
+        assert "|" not in current_b["record_key"]
+        assert current_b["department"] == "合成乙科"
+        assert all(item["review_status"] == "pending" for item in current_b["findings"])
+
+        export_both = client.post(f"{base}/records/export", json={"record_refs": [_ref_payload(a), _ref_payload(b)]})
+        assert export_both.status_code == 200
+        workbook = load_workbook(BytesIO(export_both.content))
+        assert {(row[0], row[2]) for row in workbook["病历结果"].iter_rows(min_row=3, values_only=True)} == {
+            (a.patient_id, "合成甲科"), (b.patient_id, "合成乙科"),
+        }
+        assert {(row[0], row[13]) for row in workbook["问题明细"].iter_rows(min_row=2, values_only=True) if row[2] == "C-H24"} == {
+            (a.patient_id, "仅病例甲"), (b.patient_id, None),
+        }
+
+        assert client.post(f"{base}/runs", json={"record_refs": [_ref_payload(a), _ref_payload(b)]}).status_code == 200
+        latest_a = client.get(f"{base}/record", params=_ref_payload(a)).json()["data"]["result"]
+        latest_b = client.get(f"{base}/record", params=_ref_payload(b)).json()["data"]["result"]
+        assert latest_a["record_key"] == rows[a.patient_id]["record_key"]
+        assert latest_a["department"] == "合成甲科"
+        assert latest_b["department"] == "合成乙科"
+        assert next(item for item in latest_a["findings"] if item["rule_id"] == "C-H24")["review_note"] == "仅病例甲"
+    engine.dispose()
 
 
 def test_rule_drilldown_lists_and_exports_matching_records(env):

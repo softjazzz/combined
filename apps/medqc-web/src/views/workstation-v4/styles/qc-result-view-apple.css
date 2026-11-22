@@ -3,7 +3,7 @@
 /* 完整结果抽屉的视觉边界，不改变证据内容、定位或状态含义。 */
 :global(.customer-record-result-drawer) {
   font-family: 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
 }
 :global(.customer-record-result-drawer .ant-drawer-header) {
   background: rgba(255, 255, 255, 0.68);
@@ -41,8 +41,8 @@
   font-weight: 400;
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
-  background: #fff;
-  color: #0a6cff;
+  background: var(--mq-bg-surface);
+  color: var(--mq-brand-600);
   box-shadow: 0 1px 3px rgba(30, 50, 80, 0.1);
 }
 :global(.customer-record-result-drawer .result-list) {
@@ -50,7 +50,7 @@
   gap: 12px;
 }
 :global(.customer-record-result-drawer .result-row) {
-  background: #fff;
+  background: var(--mq-bg-surface);
   border: 1px solid rgba(99, 119, 145, 0.13);
   border-radius: 12px;
   box-shadow: 0 3px 12px rgba(39, 62, 94, 0.05);
@@ -76,7 +76,7 @@
   color: #465366;
 }
 :global(.customer-record-result-drawer .result-detail) {
-  background: #fff;
+  background: var(--mq-bg-surface);
   border-top: 1px solid #edf0f4;
 }
 :global(.customer-record-result-drawer .detail-block),
@@ -92,7 +92,7 @@
   line-height: 22px;
 }
 :global(.customer-record-result-drawer button:focus-visible) {
-  outline: 2px solid rgba(10, 108, 255, 0.65);
+  outline: 2px solid color-mix(in srgb, var(--mq-brand-600) 65%, transparent);
   outline-offset: 2px;
 }
 :global(.customer-record-result-drawer .empty-state) {
@@ -123,7 +123,7 @@
   flex-shrink: 0;
 }
 :global(.customer-record-result-drawer .toolbar-summary .result-section-title svg) {
-  color: #0a6cff;
+  color: var(--mq-brand-600);
 }
 :global(.customer-record-result-drawer .result-tab svg) {
   flex-shrink: 0;
@@ -132,7 +132,7 @@
 :global(.customer-record-result-drawer .result-tab b) {
   padding: 0 5px;
   border-radius: 5px;
-  background: rgba(10, 108, 255, 0.07);
+  background: var(--mq-info-bg);
   font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -203,16 +203,16 @@
   line-height: 18px;
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
-  background: #fff;
-  color: #0a6cff;
+  background: var(--mq-bg-surface);
+  color: var(--mq-brand-600);
   box-shadow: 0 1px 4px rgba(33, 53, 81, 0.1);
 }
 :global(.customer-record-result-drawer .result-tab.is-active b) {
-  color: #0a6cff;
-  background: #edf5ff;
+  color: var(--mq-brand-600);
+  background: var(--mq-info-bg);
 }
 :global(.customer-record-result-drawer .result-tab:focus-visible) {
-  outline: 2px solid rgba(10, 108, 255, 0.45);
+  outline: 2px solid color-mix(in srgb, var(--mq-brand-600) 45%, transparent);
   outline-offset: 1px;
 }
 
@@ -299,7 +299,7 @@
   min-height: 44px;
   margin: 0;
   padding: 10px 12px;
-  background: #fff;
+  background: var(--mq-bg-surface);
   border: 0;
   border-bottom: 1px solid #edf0f4;
   border-radius: 0;
@@ -329,7 +329,7 @@
   gap: 3px;
   font-size: 12px;
   font-weight: 400;
-  color: #0a6cff;
+  color: var(--mq-brand-600);
   white-space: nowrap;
 }
 :global(.customer-record-result-drawer .evidence-path) {
@@ -363,10 +363,10 @@
   justify-content: center;
   min-height: 32px;
   padding: 5px 10px;
-  border: 1px solid #cbdcf1;
+  border: 1px solid var(--mq-info-border);
   border-radius: 7px;
-  background: #f0f6ff;
-  color: #0069dc;
+  background: var(--mq-info-bg);
+  color: var(--mq-brand-700);
   font-size: 12px;
   font-weight: 500;
   line-height: 20px;
@@ -375,9 +375,9 @@
 }
 :global(.customer-record-result-drawer .result-card-actions .text-expand-action:hover),
 :global(.customer-record-result-drawer .result-card-actions .result-feedback-action:hover) {
-  background: #e3efff;
-  border-color: #8fb7e8;
-  color: #0a5fd6;
+  background: var(--mq-brand-50);
+  border-color: var(--mq-brand-200);
+  color: var(--mq-brand-700);
 }
 :global(.customer-record-result-drawer .result-card-actions) {
   flex-wrap: wrap;
@@ -397,7 +397,7 @@
   height: 36px;
   border: 1px solid #e0e5ec;
   border-radius: 8px;
-  background: #fff;
+  background: var(--mq-bg-surface);
   font-size: 13px;
 }
 :global(.customer-record-result-drawer .readonly-medical-document-filter) {
@@ -418,8 +418,8 @@
   min-height: 30px;
 }
 :global(.customer-record-result-drawer .readonly-medical-document-filter button.is-active) {
-  background: #fff;
-  color: #0a6cff;
+  background: var(--mq-bg-surface);
+  color: var(--mq-brand-600);
   box-shadow: 0 1px 3px rgba(33, 53, 81, 0.08);
 }
 :global(.customer-record-result-drawer .readonly-medical-document-group-title) {
@@ -449,8 +449,8 @@
   line-height: 21px;
 }
 :global(.customer-record-result-drawer .readonly-medical-document-item.is-active) {
-  background: #e8f1ff;
-  border-color: #d2e3fa;
+  background: var(--mq-brand-50);
+  border-color: var(--mq-info-border);
 }
 :global(.customer-record-result-drawer .readonly-medical-document-meta) {
   font-size: 11px;
@@ -488,7 +488,7 @@
   padding: 20px;
 }
 :global(.customer-record-result-drawer .record-content-sections) {
-  background: #fff;
+  background: var(--mq-bg-surface);
   border: 1px solid #e4e9f0;
   border-radius: 10px;
   padding: 22px 24px;
@@ -548,7 +548,7 @@
   padding: 0 12px;
   border: 1px solid #dce4ee;
   border-radius: 8px;
-  background: #fff;
+  background: var(--mq-bg-surface);
   color: #526174;
   font-size: 13px;
   font-weight: 400;
@@ -590,11 +590,11 @@
   box-shadow: none;
 }
 :global(.customer-record-result-drawer .result-tab b) {
-  background: rgba(118, 128, 160, 0.12);
+  background: var(--mq-bg-muted);
   color: var(--mq-text-tertiary);
 }
 :global(.customer-record-result-drawer .result-tab.is-active) {
-  background: #ffffff !important;
+  background: var(--mq-bg-surface) !important;
   color: var(--mq-text-primary) !important;
   font-weight: 600;
   box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);

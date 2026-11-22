@@ -3,6 +3,7 @@
  * 只把后端 latest_qc_summary 的状态计数翻译为界面文案，不重新判定状态。
  */
 import { CAPTURE_FAILED_NOTICE, MATERIAL_PREPARATION_FAILED_LABEL } from '../../customer-sample-validation/single-record-result-model'
+import { QC_RESULT_STATUS_LABELS } from '../../utils/qcResultStatusLabels'
 import { parseQcTaskTime, shanghaiQcTaskTimeParts } from '../../utils/qcTaskTime'
 import type { QcSummaryLoadState, RecordLatestQcSummary } from '../../types'
 import type { QcRecordResultRow } from './QcRecordResultTable.vue'
@@ -45,7 +46,7 @@ export function resolveResultPresentation(
     }
     return {
       resultStatus: 'technical-error',
-      resultLabel: '结果校验异常',
+      resultLabel: QC_RESULT_STATUS_LABELS.technical_error,
       issueSummary: '请复核结果交付',
       latestQcTime: '—',
     }
@@ -70,18 +71,18 @@ export function resolveResultPresentation(
         '部分执行失败',
         `${summary.totalRuleCount || 0} 项有效结果`,
         `${summary.failedRuleCount || 0} 项失败`,
-        nonCompliant ? `确定问题 ${nonCompliant}` : '',
+        nonCompliant ? `${QC_RESULT_STATUS_LABELS.non_compliant} ${nonCompliant}` : '',
         dataGap ? `待核实 ${dataGap}` : '',
-        uncertain ? `待判断 ${uncertain}` : '',
+        uncertain ? `${QC_RESULT_STATUS_LABELS.uncertain} ${uncertain}` : '',
       ].filter(Boolean).join(' · '),
       latestQcTime: formatQcCompletedAt(summary.completedAt),
     }
   }
   const issueSummary =
     [
-      nonCompliant > 0 ? `确定问题 ${nonCompliant}` : '',
+      nonCompliant > 0 ? `${QC_RESULT_STATUS_LABELS.non_compliant} ${nonCompliant}` : '',
       dataGap > 0 ? `待核实 ${dataGap}` : '',
-      uncertain > 0 ? `待判断 ${uncertain}` : '',
+      uncertain > 0 ? `${QC_RESULT_STATUS_LABELS.uncertain} ${uncertain}` : '',
     ]
       .filter(Boolean)
       .join(' · ') || '未发现确定问题'
@@ -97,7 +98,7 @@ export function resolveResultPresentation(
   if (dataGap > 0) {
     return {
       resultStatus: 'data-gap',
-      resultLabel: '资料待核实',
+      resultLabel: QC_RESULT_STATUS_LABELS.data_gap,
       issueSummary,
       latestQcTime: formatQcCompletedAt(summary.completedAt),
     }
@@ -105,7 +106,7 @@ export function resolveResultPresentation(
   if (uncertain > 0) {
     return {
       resultStatus: 'uncertain',
-      resultLabel: '待判断',
+      resultLabel: QC_RESULT_STATUS_LABELS.uncertain,
       issueSummary,
       latestQcTime: formatQcCompletedAt(summary.completedAt),
     }

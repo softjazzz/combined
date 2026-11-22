@@ -107,6 +107,13 @@
       </div>
     </section>
 
+    <Alert
+      v-if="summaryUnavailable"
+      type="warning"
+      message="质控摘要暂不可用"
+      show-icon
+    />
+
     <FrontpageQcRunBar
       :run="run"
       :error="runError"
@@ -276,7 +283,10 @@
       v-if="activeView === 'records'"
       class="fpqc-split"
     >
-      <div class="mq-card fpqc-list">
+      <div
+        class="mq-card fpqc-list"
+        :aria-busy="listBusy"
+      >
         <header class="fpqc-list__head">
           <h2>病历结果</h2>
           <span>共 {{ total }} 份</span>
@@ -293,25 +303,53 @@
             清空
           </button>
         </header>
-        <FrontpageQcRecordTable
-          :rows="rows"
-          :selected="selectedKeys"
-          :active-key="activeKey"
-          :empty-message="emptyMessage"
-          @select="activeKey = $event"
-          @update:selected="updateSelection"
-        />
+        <Alert
+          v-if="!listBusy && loadError"
+          type="error"
+          message="病历列表加载失败"
+          :description="loadError"
+          show-icon
+        >
+          <template #action>
+            <Button
+              size="small"
+              @click="loadList()"
+            >
+              重试
+            </Button>
+          </template>
+        </Alert>
+        <Spin
+          v-else
+          :spinning="listBusy"
+          tip="正在加载病历列表…"
+        >
+          <FrontpageQcRecordTable
+            v-if="rows.length || listBusy"
+            :rows="rows"
+            :selected="selectedKeys"
+            :active-key="activeKey"
+            empty-message=""
+            @select="activeKey = $event"
+            @update:selected="updateSelection"
+          />
+          <Empty
+            v-else
+            :image="Empty.PRESENTED_IMAGE_SIMPLE"
+            description="当前筛选条件下没有病历"
+          />
+        </Spin>
         <footer
-          v-if="total > pageSize"
+          v-if="total > 0"
           class="fpqc-list__pager"
         >
           <Pagination
             :current="page"
             :page-size="pageSize"
             :total="total"
-            :disabled="loading || scopeChanging"
-            :page-size-options="['15', '30', '50', '100']"
-            :locale="{ items_per_page: '条/页', jump_to: '跳至', page: '页' }"
+            :disabled="listBusy"
+            :page-size-options="WORKSTATION_LIST_PAGE_SIZE_OPTIONS"
+            :locale="WORKSTATION_LIST_PAGINATION_LOCALE"
             show-size-changer
             show-quick-jumper
             size="small"
@@ -403,7 +441,7 @@
 </template>
 
 <script setup lang="ts">
-import { Modal, Pagination } from 'ant-design-vue'
+import { Alert, Button, Empty, Modal, Pagination, Spin } from 'ant-design-vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -426,6 +464,11 @@ import {
 } from '@/services/frontpage-qc-v2-service'
 
 import { downloadBlob } from '../customer-sample-validation/batchExport'
+import {
+  WORKSTATION_LIST_PAGE_SIZE,
+  WORKSTATION_LIST_PAGE_SIZE_OPTIONS,
+  WORKSTATION_LIST_PAGINATION_LOCALE,
+} from '../utils/workstationListPagination'
 import FrontpageQcAnalysisPanel from './FrontpageQcAnalysisPanel.vue'
 import FrontpageQcPreview from './FrontpageQcPreview.vue'
 import FrontpageQcRecordTable from './FrontpageQcRecordTable.vue'
@@ -457,8 +500,9 @@ const scopeChanging = ref(false)
 const rows = ref<FrontpageQcRecordItem[]>([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(15)
+const pageSize = ref(WORKSTATION_LIST_PAGE_SIZE)
 const loading = ref(false)
+const listBusy = computed(() => loading.value || scopeChanging.value)
 const loadError = ref('')
 const notice = ref('')
 const exporting = ref(false)
@@ -469,6 +513,7 @@ const activeKey = ref('')
 const previewRefreshKey = ref(0)
 const analyticsRefreshKey = ref(0)
 const summary = ref<FrontpageQcAnalytics['summary'] | null>(null)
+const summaryUnavailable = ref(false)
 const selectedKeys = ref<string[]>([])
 const selectedRefs = ref<Record<string, FrontpageQcRef>>({})
 const confirmOpen = ref(false)
@@ -494,12 +539,6 @@ const scopeFilters = computed<FrontpageQcScopeFilters>(() => ({
   start_date: applied.start_date,
   end_date: applied.end_date,
 }))
-const emptyMessage = computed(() => {
-  if (loading.value) return '正在加载…'
-  if (loadError.value) return loadError.value
-  return '当前筛选条件下没有病历'
-})
-
 const appliedDateLabel = computed(() =>
   applied.start_date || applied.end_date
     ? `${applied.start_date || '不限'} 至 ${applied.end_date || '不限'}`
@@ -512,7 +551,7 @@ const metrics = computed<
   const data = summary.value
   const records = data?.records ?? 0
   return [
-    { key: 'records', label: '已质控首页', value: String(records), unit: '份', icon: 'stack', tone: 'brand' },
+    { key: 'records', label: '已质控首页', value: data ? String(records) : '—', unit: '份', icon: 'stack', tone: 'brand' },
     { key: 'score', label: '平均分', value: formatScore(data?.avg_score ?? null), unit: '分', icon: 'fp_qc', tone: 'brand' },
     {
       key: 'excellent',
@@ -522,7 +561,7 @@ const metrics = computed<
       icon: 'success',
       tone: 'success',
     },
-    { key: 'issue', label: '有扣分问题', value: String(data?.issue_records ?? 0), unit: '份', icon: 'issue', tone: 'danger' },
+    { key: 'issue', label: '有扣分问题', value: data ? String(data.issue_records) : '—', unit: '份', icon: 'issue', tone: 'danger' },
   ]
 })
 
@@ -559,9 +598,13 @@ async function loadSummary() {
   const seq = ++summarySeq
   try {
     const data = await getFrontpageQcAnalytics(scopeFilters.value)
-    if (seq === summarySeq) summary.value = data.summary
+    if (seq !== summarySeq) return
+    summary.value = data.summary
+    summaryUnavailable.value = false
   } catch {
-    if (seq === summarySeq) summary.value = null
+    if (seq !== summarySeq) return
+    summary.value = null
+    summaryUnavailable.value = true
   }
 }
 

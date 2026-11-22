@@ -68,7 +68,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { UnifiedTaskItem } from '@/views/workstation-v2/types'
+import type { UnifiedTaskItem } from './legacyHomeTypes'
 import UnifiedTaskRow from './UnifiedTaskRow.vue'
 
 const props = defineProps<{

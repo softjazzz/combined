@@ -429,7 +429,7 @@
                     statusLabel(record.status)
                   }}</span>
                 </td>
-                <td>{{ formatQcTime(record.completed_at) }}</td>
+                <td>{{ formatQcCompletedAt(record.completed_at) }}</td>
                 <td>
                   <button
                     type="button"
@@ -474,6 +474,8 @@ import {
   type LuxianQcAnalysisStatus,
   type LuxianQcResultAnalysisPayload,
 } from '@/services/luxian-qc-result-analysis-service'
+import { QC_RESULT_STATUS_LABELS } from '../../utils/qcResultStatusLabels'
+import { formatQcCompletedAt } from './latestQcSummaryPresentation'
 
 const props = defineProps<{ carePhase: LuxianQcAnalysisCarePhase }>()
 const emit = defineEmits<{ (event: 'open-result', record: LuxianQcAnalysisRecordItem): void }>()
@@ -481,9 +483,9 @@ const emit = defineEmits<{ (event: 'open-result', record: LuxianQcAnalysisRecord
 type StatusNavigatorKey = 'all' | LuxianQcAnalysisStatus
 
 const STATUS_META: Array<{ key: LuxianQcAnalysisStatus; label: string }> = [
-  { key: 'non_compliant', label: '确定问题' },
-  { key: 'data_gap', label: '资料待核实' },
-  { key: 'uncertain', label: '待判断' },
+  { key: 'non_compliant', label: QC_RESULT_STATUS_LABELS.non_compliant },
+  { key: 'data_gap', label: QC_RESULT_STATUS_LABELS.data_gap },
+  { key: 'uncertain', label: QC_RESULT_STATUS_LABELS.uncertain },
   { key: 'compliant', label: '合规' },
   { key: 'not_applicable', label: '不适用' },
   { key: 'not_executed', label: '未执行' },
@@ -547,29 +549,6 @@ const topPhysicians = computed(() => (payload.value?.physician_distribution || [
 
 function statusLabel(status: LuxianQcAnalysisStatus): string {
   return STATUS_META.find((item) => item.key === status)?.label || '结果待核实'
-}
-
-const beijingFormatter = new Intl.DateTimeFormat('zh-CN', {
-  timeZone: 'Asia/Shanghai',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-})
-
-function formatQcTime(value: string): string {
-  const normalized = value.replace(' ', 'T')
-  const date = new Date(/(?:Z|[+-]\d{2}:\d{2})$/iu.test(normalized) ? normalized : `${normalized}Z`)
-  if (Number.isNaN(date.getTime())) return '—'
-  const parts = Object.fromEntries(
-    beijingFormatter
-      .formatToParts(date)
-      .filter((item) => item.type !== 'literal')
-      .map((item) => [item.type, item.value]),
-  )
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
 }
 
 async function queryAnalysis(options: { resetRule?: boolean } = {}) {

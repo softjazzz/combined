@@ -71,6 +71,46 @@ def test_credentials_missing_is_fail_closed(profile, monkeypatch):
         sources.snapshot(profile, "independent_cdm")
 
 
+@pytest.mark.parametrize("port,saved_port,digest", [
+    (62996, ":62996", "7e6581d3d48a6652c586de4dd74d2086a4b99b8965eacd2d0f4c08e800660f8b"),
+    (5432, "", "903ff1570f37d62f342b2959ff45de80f30c2bd2e7834293e0b5ed32a248b47e"),
+])
+def test_existing_cdm_binding_and_saved_snapshot_keep_their_bytes(
+    profile, monkeypatch, port, saved_port, digest,
+):
+    profile.cdm.port = port
+    historical = {
+        "id": "independent_cdm",
+        "version": 0,
+        "name": "服务器CDM",
+        "binding": f"cdm-read-v1:{digest}",
+        "url": f"postgresql+psycopg2://reader@127.0.0.1{saved_port}/synthetic_cdm",
+    }
+    filters = json.loads(json.dumps({"clinical_source": historical}))
+    restored = sources.saved_snapshot(filters)
+    assert json.dumps(restored, ensure_ascii=False).encode() == (
+        json.dumps(historical, ensure_ascii=False).encode()
+    )
+
+    configured = {**historical, "url": f"postgresql+psycopg2://reader@127.0.0.1:{port}/synthetic_cdm"}
+    assert sources.snapshot(profile, "independent_cdm") == configured
+    monkeypatch.setenv("CDM_DATABASE_URL", historical["url"] + "?sslmode=require")
+    assert clinical.source_binding() == historical["binding"]
+
+    with clinical.selected(configured):
+        assert sources.job_matches(filters)
+
+
+def test_existing_cdm_url_preserves_non_ascii_binding(monkeypatch):
+    url = "postgresql://reader-%C3%A9@synthetic-host/synthetic_cdm"
+    binding = "cdm-read-v1:9d8464d6fbb7c4ee90c5c2558e9c988f293f66f127ed56084773985a2817b250"
+    monkeypatch.setenv("CDM_DATABASE_URL", url)
+    assert clinical.source_binding() == binding
+
+    historical = {"id": "independent_cdm", "binding": binding, "url": url}
+    assert sources.saved_snapshot({"clinical_source": historical}) == historical
+
+
 def request(path, query="", header=None):
     return Request({"type": "http", "method": "GET", "path": path, "query_string": query.encode(),
         "headers": [(b"x-clinical-source", header.encode())] if header else []})
@@ -134,6 +174,7 @@ def test_task_freezes_original_source_and_old_tasks_stay_legacy(profile):
 def test_snapshot_does_not_accept_mismatched_url_or_password(profile):
     value = sources.snapshot(profile, "independent_cdm")
     for changed in ({**value, "url": value["url"].replace("synthetic_cdm", "other")},
+                    {**value, "url": value["url"].replace("reader@", "reader:synthetic-only@")},
                     {**value, "binding": ""}):
         with pytest.raises(ValueError):
             sources.saved_snapshot({"clinical_source": changed})
@@ -241,7 +282,7 @@ def test_same_key_current_document_requests_do_not_coalesce_across_sources(profi
     entered = Barrier(2)
     def assemble(**identity):
         entered.wait(timeout=5)
-        return {"documents": [clinical.source_binding()]}
+        return {"documents": [{"content": clinical.source_binding()}]}
     monkeypatch.setattr(current_view, "_assemble_current_documents", assemble)
     def load(selection):
         with clinical.selected(selection):
@@ -250,8 +291,8 @@ def test_same_key_current_document_requests_do_not_coalesce_across_sources(profi
     with ThreadPoolExecutor(max_workers=2) as pool:
         old = pool.submit(load, sources.legacy_snapshot())
         new = pool.submit(load, value)
-        assert old.result(timeout=8) == {"documents": [""]}
-        assert new.result(timeout=8) == {"documents": [value["binding"]]}
+        assert old.result(timeout=8) == {"documents": [{"content": ""}]}
+        assert new.result(timeout=8) == {"documents": [{"content": value["binding"]}]}
 
 
 def test_historical_document_source_comes_from_job_not_current_default(settings_store, profile, monkeypatch):

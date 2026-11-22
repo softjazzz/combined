@@ -1,4 +1,6 @@
-Agents 指南（面向后续模型）
+# Agents 指南（历史资料）
+
+> 本文记录早期医保质控项目的共享包和 Supabase 集成方案。现行开发与提交约定见 [仓库 AGENTS](../AGENTS.md) 和 [MedQC AGENTS](../apps/medqc-web/AGENTS.md)，应用启动见 [MedQC 本地启动](../apps/medqc-web/README.md#本地启动)。
 
 目标
 - 快速理解本仓库的单体多项目（Monorepo）结构与运行方式

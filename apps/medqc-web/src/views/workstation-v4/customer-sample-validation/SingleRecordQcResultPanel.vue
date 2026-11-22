@@ -57,7 +57,7 @@
           class="result-system-status"
           data-testid="single-record-system-status"
         >
-          系统状态：{{ presentation.counts.technicalError }} 条结果校验异常，仅在全部规则中展示
+          系统状态：{{ presentation.counts.technicalError }} 条{{ QC_RESULT_STATUS_LABELS.technical_error }}，仅在全部规则中展示
         </p>
       </template>
       <p v-if="confirmedResultsOnly && technicalFailureCount" class="result-system-status" data-testid="single-record-execution-failure">
@@ -135,7 +135,7 @@
                 v-if="!isCompliantResult(item)"
                 class="status-cell status-pill mq-status"
                 :class="[`is-${item.tone}`, statusModifierClass(item)]"
-                >{{ item.status === 'data_gap' ? '资料待核实' : item.displayStatus }}</span
+                >{{ item.displayStatus }}</span
               >
             </span>
             <span
@@ -488,6 +488,7 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
+import { QC_RESULT_STATUS_LABELS } from '../utils/qcResultStatusLabels'
 import {
   ArrowRight,
   ChevronDown,
@@ -519,7 +520,6 @@ import {
   displayQcRuleName,
   recommendationEvidenceForSingleRecord,
   resolveSingleRecordQcResultTab,
-  UNCERTAIN_RESULT_LABEL,
   type SingleRecordQcEvidence,
   type SingleRecordQcResultItem,
   type SingleRecordQcResultReportTab,
@@ -944,11 +944,11 @@ const activeReportTab = ref<SingleRecordQcResultReportTab>('all')
 const reportTabs = computed(() => [
   {
     key: 'non_compliant' as const,
-    label: '确定问题',
+    label: QC_RESULT_STATUS_LABELS.non_compliant,
     count: presentation.value.counts.nonCompliant,
   },
-  { key: 'data_gap' as const, label: '资料待核实', count: presentation.value.counts.dataGap },
-  { key: 'uncertain' as const, label: UNCERTAIN_RESULT_LABEL, count: presentation.value.counts.uncertain },
+  { key: 'data_gap' as const, label: QC_RESULT_STATUS_LABELS.data_gap, count: presentation.value.counts.dataGap },
+  { key: 'uncertain' as const, label: QC_RESULT_STATUS_LABELS.uncertain, count: presentation.value.counts.uncertain },
   { key: 'compliant' as const, label: '合规', count: presentation.value.counts.compliant },
   {
     key: 'not_applicable' as const,

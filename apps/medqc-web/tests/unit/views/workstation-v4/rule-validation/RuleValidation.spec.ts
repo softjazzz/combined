@@ -11,7 +11,7 @@ import type {
 import RuleValidationListView from '@/views/workstation-v4/rule-validation/RuleValidationListView.vue'
 import RuleValidationDetailView from '@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'
 import CaseReviewDrawer from '@/views/workstation-v4/rule-validation/CaseReviewDrawer.vue'
-import { expectedStatuses, statusLabel } from '@/views/workstation-v4/rule-validation/presentation'
+import { expectedStatuses, formatTime, statusLabel } from '@/views/workstation-v4/rule-validation/presentation'
 
 vi.mock('@/services/rule-validation-service', () => ({
   listValidationRules: vi.fn(),
@@ -177,6 +177,11 @@ beforeEach(() => {
 })
 
 describe('规则验收列表', () => {
+  it('旧 UTC 时间和带时区时间跨日后显示同一北京时间', () => {
+    expect(formatTime('2026-11-20 16:30:00')).toBe('11-21 00:30')
+    expect(formatTime('2026-11-21T00:30:00+08:00')).toBe('11-21 00:30')
+  })
+
   it('资料不足选项使用各规则集原生编码，不转换执行结果', () => {
     expect(expectedStatuses('LX0916-001')).toEqual(['compliant', 'non_compliant', 'not_applicable', 'data_quality_gap'])
     expect(expectedStatuses('LX0609-06-01-03')).toEqual(['compliant', 'non_compliant', 'not_applicable', 'data_gap'])

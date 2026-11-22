@@ -655,22 +655,6 @@ const stageStatusText = computed(() => {
   return '待处理'
 })
 
-const stageStatusClass = computed(() => {
-  if (currentStageFilter.value === 'frontpage_generate') {
-    return 'border-sky-200 bg-sky-50 text-sky-700'
-  }
-  if (currentStageFilter.value === 'coding_qc') {
-    return 'border-violet-200 bg-violet-50 text-violet-700'
-  }
-  if (currentStageFilter.value === 'frontpage_qc') {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-  }
-  if (currentStageFilter.value === 'settlement_qc') {
-    return 'border-amber-200 bg-amber-50 text-amber-700'
-  }
-  return 'border-slate-200 bg-slate-50 text-slate-600'
-})
-
 const stageEmptyText = computed(() => {
   if (currentStageFilter.value === 'frontpage_generate') return '当前筛选条件下暂无待生成首页病历'
   if (currentStageFilter.value === 'coding_qc') return '当前筛选条件下暂无待编码质控病历'

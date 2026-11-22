@@ -90,7 +90,7 @@ def test_missing_tables_report_unavailable_instead_of_success(engine):
     with pytest.raises(FrontpageQcStoreUnavailable):
         unmigrated.create_run(created_by="u", refs=[_ref(1)], filters={}, ruleset_version="v")
     with pytest.raises(FrontpageQcStoreUnavailable):
-        unmigrated.latest_by_keys(["x"])
+        unmigrated.latest_by_refs([_ref(1)])
 
 
 def test_run_lifecycle_and_cancel(store):
@@ -142,7 +142,7 @@ def test_query_latest_filters(store):
     assert total == 1
     _, total = store.query_latest(start_date="2026-04-01", end_date="2026-04-30")
     assert total == 1
-    _, total = store.query_latest(record_keys=[_ref(1).as_key()])
+    _, total = store.query_latest(record_refs=[_ref(1)])
     assert total == 1
     failing_id = store.query_latest(issue="fail")[0][0]["id"]
     rule = sorted({f["rule_id"] for f in store.latest_findings([failing_id]) if f["verdict"] == "fail"})[0]
@@ -156,7 +156,7 @@ def test_query_latest_filters(store):
     assert total == 1 and items[0]["record_key"] == _ref(3).as_key()
     _, total = store.query_latest(rule_id="C-H18")
     assert total == 0
-    assert set(store.latest_by_keys([_ref(1).as_key(), _ref(2).as_key(), "x"])) == {_ref(1).as_key(), _ref(2).as_key()}
+    assert set(store.latest_by_refs([_ref(1), _ref(2), _ref(99)])) == {_ref(1), _ref(2)}
 
 
 def test_review_status_must_be_known(store):
@@ -208,7 +208,7 @@ def test_job_completes_and_saves_results(engine, store):
 
     finished = run_frontpage_qc_job(
         run["id"], store=store, cdm_session_factory=factory, cdm_schema=None,
-        record_meta={_ref(1).as_key(): {"department": "外科", "discharge_date": "2026-03-08"}},
+        record_meta={_ref(1): {"department": "外科", "discharge_date": "2026-03-08"}},
     )
 
     assert finished["status"] == "completed"

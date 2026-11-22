@@ -10,7 +10,7 @@
   --mq-brand-400: #3b8bff;
   --mq-brand-600: #0a6cff;
   --mq-brand-700: #0a5fd6;
-  --mq-brand-gradient: linear-gradient(135deg, #3b8bff, #0a6cff);
+  --mq-brand-gradient: linear-gradient(135deg, var(--mq-brand-400), var(--mq-brand-600));
   --mq-brand-hero: linear-gradient(135deg, #3a8dff 0%, #2477ff 50%, #0a5fe0 100%);
   --mq-brand-shadow: 0 8px 20px rgba(10, 100, 230, 0.3);
 
@@ -55,10 +55,10 @@
   --mq-danger-icon: #ff3b30;
   --mq-danger-bg: rgba(255, 59, 48, 0.1);
   --mq-danger-border: rgba(255, 59, 48, 0.22);
-  --mq-info-text: #0a5fd6;
-  --mq-info-icon: #0a6cff;
-  --mq-info-bg: rgba(10, 108, 255, 0.08);
-  --mq-info-border: rgba(10, 108, 255, 0.16);
+  --mq-info-text: var(--mq-brand-700);
+  --mq-info-icon: var(--mq-brand-600);
+  --mq-info-bg: color-mix(in srgb, var(--mq-info-icon) 8%, transparent);
+  --mq-info-border: color-mix(in srgb, var(--mq-info-icon) 16%, transparent);
   --mq-neutral-text: #4a5468;
   --mq-neutral-bg: rgba(118, 128, 160, 0.12);
 

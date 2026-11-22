@@ -157,7 +157,7 @@ import {
   CheckOutlined,
   CloseCircleFilled,
 } from '@ant-design/icons-vue'
-import type { WorkstationHomeTodoItem } from '@/views/workstation-v2/types'
+import type { WorkstationHomeTodoItem } from './legacyHomeTypes'
 
 defineProps<{
   items: WorkstationHomeTodoItem[]

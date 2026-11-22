@@ -158,7 +158,7 @@ import type {
   WorkstationHomeBatchSummary,
   WorkstationHomeDepartmentRiskItem,
   WorkstationHomeWorkflowStatusItem,
-} from '@/views/workstation-v2/types'
+} from './legacyHomeTypes'
 
 const props = defineProps<{
   batchSummaries: WorkstationHomeBatchSummary[]

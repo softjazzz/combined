@@ -878,7 +878,7 @@
 }
 
 .customer-sample-luxian-aggregate-summary .is-review strong {
-  color: #7c3aed;
+  color: var(--mq-info-text);
 }
 
 .customer-sample-luxian-aggregate-summary .is-warning strong {
@@ -995,8 +995,8 @@
 }
 
 .customer-sample-luxian-aggregate-chip.is-review {
-  background: rgba(124, 58, 237, 0.09);
-  color: #6d28d9;
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
 }
 
 .customer-sample-luxian-aggregate-chip.is-warning {

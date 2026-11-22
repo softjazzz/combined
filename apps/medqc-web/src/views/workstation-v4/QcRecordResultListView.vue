@@ -79,6 +79,13 @@
       </div>
     </section>
 
+    <Alert
+      v-if="!loading && !loadError && qcSummaryState === 'unavailable'"
+      type="warning"
+      message="质控摘要暂不可用"
+      show-icon
+    />
+
     <div
       :id="`qc-record-result-task-status-${carePhase}`"
       class="qc-record-result-list-view__task-status review-workbench-task-status"
@@ -93,39 +100,42 @@
           class="qc-record-result-list-view__filters"
           aria-label="病历筛选条件"
         >
-          <div class="qc-record-result-list-view__filter-field" aria-label="病历数据源">
+          <div
+            class="qc-record-result-list-view__filter-field"
+            aria-label="病历数据源"
+          >
             <span class="qc-record-result-list-view__field-label">数据源</span>
             <span>东华CDM</span>
           </div>
-          <label
-            class="qc-record-result-list-view__filter-field qc-record-result-list-view__search-field"
-          >
+          <div class="qc-record-result-list-view__filter-field">
             <span class="qc-record-result-list-view__field-label">关键词</span>
-            <input
-              v-model="searchText"
-              type="search"
+            <Input
+              v-model:value="searchText"
+              class="qc-record-result-list-view__search"
               placeholder="搜索患者、住院号、科室"
               aria-label="关键词筛选"
-              @keydown.enter.prevent="applyFilters"
+              size="large"
+              allow-clear
+              @press-enter="applyFilters"
             >
-          </label>
-          <label class="qc-record-result-list-view__filter-field">
+              <template #prefix>
+                <SearchOutlined aria-hidden="true" />
+              </template>
+            </Input>
+          </div>
+          <div class="qc-record-result-list-view__filter-field">
             <span class="qc-record-result-list-view__field-label">科室</span>
-            <select
-              v-model="activeDept"
+            <Select
+              v-model:value="activeDept"
+              class="qc-record-result-list-view__department"
               aria-label="科室筛选"
+              size="large"
+              show-search
+              :options="departmentOptions"
+              :filter-option="filterDepartmentOption"
               @change="applyFilters"
-            >
-              <option value="全部科室">全部科室</option>
-              <option
-                v-for="department in departmentOptions"
-                :key="department"
-                :value="department"
-              >
-                {{ department }}
-              </option>
-            </select>
-          </label>
+            />
+          </div>
           <div
             class="qc-record-result-list-view__date-field"
             role="group"
@@ -134,31 +144,26 @@
             <span class="qc-record-result-list-view__field-label">{{
               isInpatient ? '入院日期' : '出院日期'
             }}</span>
-            <div class="qc-record-result-list-view__date-inputs">
-              <span class="review-date-label">{{ isInpatient ? '入院' : '出院' }}</span>
-              <input
-                type="date"
-                aria-label="开始日期筛选"
-                :value="startDate"
-                @change="updateStartDate"
-              >
-              <span class="qc-record-result-list-view__date-separator">至</span>
-              <input
-                type="date"
-                aria-label="结束日期筛选"
-                :value="endDate"
-                @change="updateEndDate"
-              >
-            </div>
+            <span class="qc-record-result-list-view__date-label">{{ isInpatient ? '入院' : '出院' }}</span>
+            <RangePicker
+              :value="dateRange || undefined"
+              class="qc-record-result-list-view__date-range"
+              size="large"
+              allow-clear
+              :allow-empty="[true, true]"
+              value-format="YYYY-MM-DD"
+              format="YYYY-MM-DD"
+              :placeholder="['开始日期', '结束日期']"
+              @update:value="updateDateRange"
+            />
           </div>
-          <button
-            class="qc-record-result-list-view__query-button"
-            type="button"
-            :disabled="loading"
+          <Button
+            type="primary"
+            :loading="loading"
             @click="applyFilters"
           >
             查询
-          </button>
+          </Button>
         </div>
         <div class="qc-record-result-list-view__toolbar-actions">
           <div
@@ -223,7 +228,10 @@
       </div>
 
       <div class="review-workbench-split">
-        <div class="review-workbench-list">
+        <div
+          class="review-workbench-list"
+          :aria-busy="loading"
+        >
           <div class="qc-record-result-list-view__list-heading">
             <h2>病历结果</h2>
             <span>共 {{ serverTotal }} 份 · 本页 {{ rows.length }} 份</span>
@@ -232,19 +240,59 @@
               class="qc-record-result-list-view__selected-count"
               role="status"
             >已选 {{ selectedCount }} 份</span>
+            <Button
+              v-if="selectedCount > 0"
+              type="link"
+              size="small"
+              data-testid="qc-result-clear-selection"
+              @click="clearSelection"
+            >
+              清空
+            </Button>
           </div>
-          <QcRecordResultTable
-            :care-phase="carePhase"
-            compact-review
-            :active-record-key="activePreviewKey"
-            :rows="rows"
-            :selected-record-keys="selectedRecordKeys"
-            :empty-message="emptyMessage"
-            @open-result="handleSelectPreview"
-            @open-full="handleOpenResult"
-            @open-record="handleOpenMedicalRecord"
-            @update:selected-record-keys="updateSelectedRecordKeys"
-          />
+          <Alert
+            v-if="loadError"
+            type="error"
+            message="病历列表加载失败"
+            show-icon
+          >
+            <template #action>
+              <Button
+                size="small"
+                data-testid="qc-result-retry-list"
+                @click="refreshData"
+              >
+                重试
+              </Button>
+            </template>
+          </Alert>
+          <Spin
+            v-else
+            :spinning="loading"
+            tip="正在加载病历列表…"
+          >
+            <QcRecordResultTable
+              v-if="rows.length"
+              :care-phase="carePhase"
+              compact-review
+              :active-record-key="activePreviewKey"
+              :rows="rows"
+              :selected-record-keys="selectedRecordKeys"
+              @open-result="handleSelectPreview"
+              @open-full="handleOpenResult"
+              @open-record="handleOpenMedicalRecord"
+              @update:selected-record-keys="updateSelectedRecordKeys"
+            />
+            <div
+              v-else-if="loading"
+              class="qc-record-result-list-view__loading-space"
+            />
+            <Empty
+              v-else
+              :image="Empty.PRESENTED_IMAGE_SIMPLE"
+              description="暂无符合当前范围的病历"
+            />
+          </Spin>
 
           <footer
             v-if="serverTotal > 0"
@@ -256,8 +304,8 @@
               :total="serverTotal"
               :disabled="loading"
               :show-total="(total: number) => `共 ${total} 例`"
-              :page-size-options="['15', '30', '50', '100']"
-              :locale="{ items_per_page: '条/页', jump_to: '跳至', page: '页' }"
+              :page-size-options="WORKSTATION_LIST_PAGE_SIZE_OPTIONS"
+              :locale="WORKSTATION_LIST_PAGINATION_LOCALE"
               show-size-changer
               show-quick-jumper
               show-less-items
@@ -267,7 +315,7 @@
           </footer>
         </div>
         <QcRecordReviewPreview
-            :key="sourceId"
+          :key="sourceId"
           :care-phase="carePhase"
           :row="previewRow"
           :refresh-key="previewRefreshKey"
@@ -285,13 +333,16 @@
     </section>
 
     <QcRecordResultAnalysisPanel
-            :key="sourceId"
       v-else
+      :key="sourceId"
       :care-phase="carePhase"
       @open-result="handleOpenAnalysisResult"
     />
 
-    <CurrentMedicalRecordDrawer :record="medicalRecordFocus" @close="medicalRecordFocus = null" />
+    <CurrentMedicalRecordDrawer
+      :record="medicalRecordFocus"
+      @close="medicalRecordFocus = null"
+    />
     <QCRecordResultComparisonDrawer
       :open="drawerOpen"
       :focus="selectedFocus"
@@ -303,7 +354,8 @@
 </template>
 
 <script setup lang="ts">
-import { Pagination } from 'ant-design-vue'
+import { Alert, Button, Empty, Input, Pagination, RangePicker, Select, Spin } from 'ant-design-vue'
+import { SearchOutlined } from '@ant-design/icons-vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChevronDown, Download } from 'lucide-vue-next'
@@ -328,6 +380,11 @@ import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
 import { downloadBlob } from './customer-sample-validation/batchExport'
+import { buildDepartmentSelectOptions, filterDepartmentOption } from './utils/workstationFilterPresentation'
+import {
+  WORKSTATION_LIST_PAGE_SIZE_OPTIONS,
+  WORKSTATION_LIST_PAGINATION_LOCALE,
+} from './utils/workstationListPagination'
 import {
   formatQcCompletedAt,
   resolveResultPresentation,
@@ -358,8 +415,6 @@ const selectedQcRecordRefs = computed(() =>
     ),
 )
 const activeView = ref<'records' | 'analysis'>('records')
-const startDate = ref('')
-const endDate = ref('')
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
 const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '终末病历质控'))
@@ -388,7 +443,7 @@ const {
 } = usePatientRecords(props.carePhase)
 
 const departmentOptions = computed(() =>
-  departments.value.map((item) => item.name).filter((name) => name && name !== '全部科室'),
+  buildDepartmentSelectOptions(departments.value).map(({ name }) => ({ value: name, label: name })),
 )
 
 type QcRecordMetricKey = 'records' | 'completed' | 'priority' | 'dataGap' | 'failed'
@@ -451,12 +506,6 @@ function handleSelectPreview(recordKey: string) {
   activePreviewKey.value = recordKey
 }
 
-const emptyMessage = computed(() => {
-  if (loading.value) return '正在加载病历列表…'
-  if (loadError.value) return '加载失败，请重试'
-  return '暂无符合当前范围的病历'
-})
-
 function hasCompleteRecordIdentity(record: PatientRecord): boolean {
   return Boolean(record.recordKey && record.instituteId && record.patientId && record.visitId)
 }
@@ -502,7 +551,6 @@ function formatMedicalRecordTimestamp(value?: string | null): string {
 
 function applyFilters() {
   clearSelection()
-  dateRange.value = startDate.value || endDate.value ? [startDate.value, endDate.value] : null
   currentPage.value = 1
   fetchData(1)
 }
@@ -636,13 +684,10 @@ async function exportCurrentFilter() {
   }
 }
 
-function updateStartDate(event: Event) {
-  startDate.value = (event.target as HTMLInputElement).value
-  applyFilters()
-}
-
-function updateEndDate(event: Event) {
-  endDate.value = (event.target as HTMLInputElement).value
+function updateDateRange(value: unknown) {
+  const start = Array.isArray(value) && typeof value[0] === 'string' ? value[0] : ''
+  const end = Array.isArray(value) && typeof value[1] === 'string' ? value[1] : ''
+  dateRange.value = start || end ? [start, end] : null
   applyFilters()
 }
 
@@ -956,39 +1001,6 @@ function closeResultDrawer() {
   gap: 10px;
 }
 
-.qc-record-result-list-view__filters input,
-.qc-record-result-list-view__filters select {
-  height: 34px;
-  border: 1px solid rgba(0, 0, 0, 0.09);
-  border-radius: 8px;
-  background: rgba(245, 245, 247, 0.8);
-  color: rgba(29, 29, 31, 0.78);
-  font: inherit;
-  font-size: 13px;
-}
-
-.qc-record-result-list-view__filters input[type='search'] {
-  min-width: 260px;
-  padding: 0 11px;
-}
-
-.qc-record-result-list-view__filters select {
-  min-width: 190px;
-  padding: 0 10px;
-}
-
-.qc-record-result-list-view__filters input[type='date'] {
-  min-width: 144px;
-  padding: 0 8px;
-}
-
-.qc-record-result-list-view__date-separator {
-  align-self: center;
-  color: rgba(29, 29, 31, 0.45);
-  font-size: 12px;
-}
-
-.qc-record-result-list-view__query-button,
 .qc-record-result-list-view__refresh-button {
   min-height: 38px;
   padding: 0 12px;
@@ -1017,20 +1029,13 @@ function closeResultDrawer() {
   white-space: nowrap;
 }
 
-.qc-record-result-list-view__query-button {
-  border-color: #0a6cff;
-  background: #0a6cff;
-  color: #fff;
-}
-
 .qc-record-result-list-view__refresh-button {
   border-color: #0a6cff;
   background: #0a6cff;
   color: #fff;
 }
 
-.qc-record-result-list-view__refresh-button:hover:not(:disabled),
-.qc-record-result-list-view__query-button:hover:not(:disabled) {
+.qc-record-result-list-view__refresh-button:hover:not(:disabled) {
   background: #0059b3;
 }
 
@@ -1049,7 +1054,6 @@ function closeResultDrawer() {
   padding: 0 20px;
 }
 
-.qc-record-result-list-view__query-button:disabled,
 .qc-record-result-list-view__refresh-button:disabled,
 .qc-record-result-list-view__pagination button:disabled {
   cursor: not-allowed;
@@ -1092,17 +1096,6 @@ function closeResultDrawer() {
     flex-direction: column;
   }
 
-  .qc-record-result-list-view__filters input[type='search'],
-  .qc-record-result-list-view__filters select,
-  .qc-record-result-list-view__filters input[type='date'] {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .qc-record-result-list-view__date-separator {
-    display: none;
-  }
-
   .qc-record-result-list-view__toolbar-actions {
     justify-content: flex-start;
   }
@@ -1132,10 +1125,4 @@ function closeResultDrawer() {
 
 <style scoped>
 @import './styles/running-qc-refined.css';
-
-.qc-record-result-list-view__filter-field,
-.qc-record-result-list-view__date-field,
-.qc-record-result-list-view__date-inputs {
-  display: contents;
-}
 </style>

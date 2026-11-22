@@ -388,6 +388,7 @@ import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { ApiService } from '@/services/apiService'
 import { ANALYTICS_WORKLIST_PATH } from './utils/analyticsDrilldown'
+import { QC_RESULT_STATUS_LABELS } from './utils/qcResultStatusLabels'
 
 type Status =
   | 'non_compliant'
@@ -465,9 +466,9 @@ const activeDepartmentName = computed(
 )
 
 const STATUS_META: Array<{ status: Status; label: string; color: string }> = [
-  { status: 'non_compliant', label: '确定问题', color: '#ef4444' },
-  { status: 'data_gap', label: '资料待核实', color: '#f59e0b' },
-  { status: 'uncertain', label: '待判断', color: '#64748b' },
+  { status: 'non_compliant', label: QC_RESULT_STATUS_LABELS.non_compliant, color: '#ef4444' },
+  { status: 'data_gap', label: QC_RESULT_STATUS_LABELS.data_gap, color: '#f59e0b' },
+  { status: 'uncertain', label: QC_RESULT_STATUS_LABELS.uncertain, color: '#64748b' },
   { status: 'compliant', label: '合规', color: '#10b981' },
   { status: 'not_applicable', label: '不适用', color: '#94a3b8' },
   { status: 'not_executed', label: '未执行', color: '#cbd5e1' },

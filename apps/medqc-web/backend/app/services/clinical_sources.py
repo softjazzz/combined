@@ -2,7 +2,6 @@
 
 from contextlib import contextmanager
 from functools import wraps
-import hashlib
 import json
 import os
 from typing import Literal
@@ -80,8 +79,7 @@ def snapshot(settings: SourceSettings, source_id: str, *, allow_disabled=False) 
         raise PipelineError("clinical_source_credentials_unavailable", 503)
     url = URL.create("postgresql+psycopg2", username=profile.username, host=profile.host, port=profile.port, database=profile.database).render_as_string(hide_password=True)
     clinical._engine(url, passfile)  # 仅静态构造；不checkout连接。
-    identity = [profile.host, profile.port, profile.database, profile.username, "cdm"]
-    binding = "cdm-read-v1:" + hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+    binding = clinical.build_source_binding(profile.host, profile.port, profile.database, profile.username)
     return {"id": source_id, "version": settings.version, "name": profile.name, "binding": binding, "url": url}
 
 
@@ -422,7 +420,7 @@ def saved_snapshot(filters: dict) -> dict:
         raise ValueError("invalid_saved_clinical_source")
     if value["id"] == "independent_cdm":
         parsed = clinical._url(value.get("url", ""))
-        expected = "cdm-read-v1:" + hashlib.sha256(json.dumps([parsed.host, parsed.port or 5432, parsed.database, parsed.username, "cdm"]).encode()).hexdigest()
+        expected = clinical.build_source_binding(parsed.host, parsed.port, parsed.database, parsed.username)
         if parsed.password or value.get("binding") != expected:
             raise ValueError("invalid_saved_clinical_source")
     return dict(value)

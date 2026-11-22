@@ -109,7 +109,7 @@ describe('QcRecordResultAnalysisPanel', () => {
       expect(wrapper.text()).toContain('确定问题')
       expect(wrapper.text()).toContain('资料待核实')
       expect(wrapper.text()).toContain('未执行')
-      expect(wrapper.text()).not.toContain('技术异常')
+      expect(wrapper.text()).not.toContain('结果校验异常')
       expect(wrapper.findAll('.qc-result-analysis__status-button')).toHaveLength(7)
     },
   )
@@ -121,6 +121,7 @@ describe('QcRecordResultAnalysisPanel', () => {
     await wrapper.find('.qc-result-analysis__rule-table tbody tr').trigger('click')
     await flushPromises()
 
+    expect(wrapper.text()).toContain('2026-08-19 16:00')
     expect(mocks.getLuxianQcResultAnalysis).toHaveBeenLastCalledWith(
       expect.objectContaining({ ruleId: 'LX0609-01-01-01' }),
     )

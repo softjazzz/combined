@@ -618,8 +618,8 @@ import { useAuthStore } from '@/stores/auth'
 import type {
   ClinicalQcHomeDepartmentItem,
   ClinicalQcHomePhysicianItem,
-  WorkstationHomePayload,
-} from '@/views/workstation-v2/types'
+  ClinicalQcHomePayload,
+} from './types'
 
 interface KpiCard {
   key: string
@@ -680,7 +680,7 @@ const analysisObject = ref<AnalysisObject>('department')
 const analysisMetric = ref<AnalysisMetric>('total')
 const analysisSort = ref<AnalysisSort>('metric')
 const syncingFromRoute = ref(false)
-const homeData = ref<WorkstationHomePayload | null>(null)
+const homeData = ref<ClinicalQcHomePayload | null>(null)
 
 const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
 const isDemoPresentation = computed(() => authStore.user?.is_demo_account === true && !authStore.userRoles?.includes('sync_admin'))
@@ -978,7 +978,7 @@ async function fetchHome() {
   loading.value = true
   loadError.value = false
   try {
-    const res = await ApiService.get<WorkstationHomePayload>('/api/v1/workstation/qc-home', {
+    const res = await ApiService.get<ClinicalQcHomePayload>('/api/v1/workstation/qc-home', {
       department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
       keyword: keyword.value.trim() || undefined,
       hotspot_limit: 20,

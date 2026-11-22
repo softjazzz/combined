@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { HomeKpis } from '@/views/workstation-v2/types'
+import type { HomeKpis } from './legacyHomeTypes'
 
 const props = defineProps<{
   kpis: HomeKpis

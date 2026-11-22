@@ -6,6 +6,7 @@ import type {
   ValidationRun,
   ValidationStage,
 } from '@/services/rule-validation-service'
+import { parseQcTaskTime, shanghaiQcTaskTimeParts } from '../utils/qcTaskTime'
 
 export type StatusTone = '' | 'info' | 'success' | 'warning' | 'danger'
 export type Labeled = { label: string; tone: StatusTone }
@@ -70,8 +71,8 @@ export function buildLabel(run: Pick<ValidationRun, 'build_kind' | 'execution_ve
 
 export function formatTime(value: string | null | undefined): string {
   if (!value) return '—'
-  const date = new Date(value.endsWith('Z') || /[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`)
-  if (Number.isNaN(date.getTime())) return value
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const date = parseQcTaskTime(value)
+  if (!date) return value
+  const { month, day, hour, minute } = shanghaiQcTaskTimeParts(date)
+  return `${month}-${day} ${hour}:${minute}`
 }

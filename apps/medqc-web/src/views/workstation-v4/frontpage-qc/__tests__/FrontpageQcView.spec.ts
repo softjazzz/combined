@@ -33,7 +33,8 @@ vi.mock('@/services/frontpage-qc-v2-service', async (importOriginal) => {
     reviewFrontpageQcFinding: (...a: unknown[]) => svc.review(...a),
   }
 })
-vi.mock('ant-design-vue', () => ({
+vi.mock('ant-design-vue', async (importOriginal) => ({
+  ...await importOriginal<typeof import('ant-design-vue')>(),
   Modal: {
     name: 'Modal',
     props: ['open'],
@@ -151,6 +152,31 @@ describe('FrontpageQcView', () => {
     expect(wrapper.find('[aria-label="数据范围"]').exists()).toBe(false)
     expect(svc.listRecords).toHaveBeenCalledWith(expect.objectContaining({ data_scope: 'home' }))
     expect(wrapper.findAll('[data-testid="fpqc-record-row"]')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('首页质控只有一页时也能调整每页条数，空结果时隐藏分页', async () => {
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+    const pagination = wrapper.getComponent({ name: 'Pagination' })
+
+    svc.listRecords.mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 30 })
+    pagination.vm.$emit('change', 1, 30)
+    await flushPromises()
+
+    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, page_size: 30 }))
+    expect(wrapper.findComponent({ name: 'Pagination' }).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('首页质控摘要读取失败时保留病历结果，未知计数显示为占位符', async () => {
+    svc.getAnalytics.mockRejectedValueOnce(new Error('合成摘要失败'))
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('质控摘要暂不可用')
+    expect(wrapper.findAll('[data-testid="fpqc-record-row"]')).toHaveLength(2)
+    expect(wrapper.findAll('.fpqc-metrics__value').map((value) => value.text())).toEqual(['—', '—', '—', '—'])
     wrapper.unmount()
   })
 

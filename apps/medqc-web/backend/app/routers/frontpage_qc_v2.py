@@ -13,7 +13,6 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.response import get_trace_id, success_response
-from app.services.case_identity import CaseRef
 from app.services.detached_task_runner import submit_detached_task
 from app.services.frontpage_qc_v2 import RULES, RULESET_VERSION, FrontpageRef, build_frontpage_doc, load_frontpage_raw
 from app.services.frontpage_qc_v2.config import GRADE_EXCELLENT, GRADE_LABELS, GRADE_QUALIFIED, SOURCE_GAP_FIELDS
@@ -151,20 +150,12 @@ def _ok(request: Request, data: Any, message: str = "成功") -> Dict[str, Any]:
     return success_response(data=data, message=message, trace_id=get_trace_id(request))
 
 
-def _record_key(item: Dict[str, Any]) -> str:
-    return FrontpageRef(
-        str(item.get("institute_id") or ""),
-        str(item.get("patient_id") or ""),
-        str(item.get("visit_id") or item.get("record_id") or ""),
-    ).as_key()
-
-
 def _record_public(item: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "institute_id": item.get("institute_id") or "",
         "patient_id": item.get("patient_id") or "",
         "visit_id": item.get("visit_id") or item.get("record_id") or "",
-        "record_key": _record_key(item),
+        "record_key": FrontpageRef.from_record(item).as_key(),
         "patient_name": item.get("patient_name") or "",
         "inpat_no": item.get("inpat_no") or "",
         "mr_no": item.get("mr_no") or "",
@@ -293,15 +284,15 @@ async def create_run(
             raise HTTPException(409, detail={"message": "已有进行中的首页质控任务，请等待完成或取消后再发起", "run": active[0]})
 
         if payload.record_refs:
-            refs = [CaseRef(r.institute_id, r.patient_id, r.visit_id) for r in payload.record_refs]
-            _check_refs(user, refs)
-            records = _check_rows(user, _collect(repository, refs=refs, institute_id=user['_frontpage_institute'] or ""))
-            found = {_record_key(item) for item in records}
+            requested = [FrontpageRef(r.institute_id, r.patient_id, r.visit_id) for r in payload.record_refs]
+            _check_refs(user, requested)
+            records = _check_rows(user, _collect(
+                repository, refs=[ref.as_case_ref() for ref in requested], institute_id=user['_frontpage_institute'] or ""
+            ))
+            found = {FrontpageRef.from_record(item) for item in records}
             # 不在病历池出院范围内的显式病历也照常质控（任务里会如实报告是否有首页）
             records += [
-                {"institute_id": r.institute_id, "patient_id": r.patient_id, "visit_id": r.visit_id}
-                for r in payload.record_refs
-                if FrontpageRef(r.institute_id, r.patient_id, r.visit_id).as_key() not in found
+                ref.as_case_ref().as_dict() for ref in requested if ref not in found
             ]
             filters: Dict[str, Any] = {"mode": "selected", "count": len(payload.record_refs)}
         else:
@@ -328,7 +319,9 @@ async def create_run(
         if len(refs) > MAX_RECORDS_PER_RUN:
             raise HTTPException(422, f"当前条件下有 {len(refs)} 份病历，单次最多 {MAX_RECORDS_PER_RUN} 份，请缩小范围分批执行")
         meta = {
-            _record_key(item): {"department": item.get("department") or "", "discharge_date": item.get("discharge_date") or ""}
+            FrontpageRef.from_record(item): {
+                "department": item.get("department") or "", "discharge_date": item.get("discharge_date") or ""
+            }
             for item in records
         }
         run = store.create_run(created_by=uid, refs=refs, filters=filters, ruleset_version=RULESET_VERSION)
@@ -446,8 +439,8 @@ async def list_records(
         raise HTTPException(422, "按规则筛选时只能查看已质控病历")
     try:
         if grade or issue in RESULT_ISSUE_FILTERS or rule_id:
-            keys = None
-            info: Dict[str, Dict[str, Any]] = {}
+            refs = None
+            info: Dict[FrontpageRef, Dict[str, Any]] = {}
             if keyword:
                 matched = _collect(
                     repository,
@@ -457,8 +450,9 @@ async def list_records(
                     keyword=keyword,
                     institute_id=institute,
                 )
-                info = {_record_key(item): _record_public(item) for item in matched}
-                keys = list(info)
+                _check_rows(_user, matched)
+                info = {FrontpageRef.from_record(item): _record_public(item) for item in matched}
+                refs = list(info)
             results, total = store.query_latest(
                 department=department,
                 start_date=start_date,
@@ -468,19 +462,20 @@ async def list_records(
                 rule_id=rule_id,
                 rule_verdict=rule_verdict,
                 institute_id=institute,
-                record_keys=keys,
+                record_refs=refs,
                 page=page,
                 page_size=page_size,
             )
             _check_rows(_user, results)
-            missing = [r for r in results if r["record_key"] not in info]
+            result_refs = [FrontpageRef.from_record(result) for result in results]
+            missing = [ref.as_case_ref() for ref in result_refs if ref not in info]
             if missing:
-                hydrated = _collect(repository, refs=[CaseRef(r["institute_id"], r["patient_id"], r["visit_id"]) for r in missing])
+                hydrated = _collect(repository, refs=missing)
                 _check_rows(_user, hydrated)
-                info.update({_record_key(item): _record_public(item) for item in hydrated})
+                info.update({FrontpageRef.from_record(item): _record_public(item) for item in hydrated})
             items = [
-                {**(info.get(r["record_key"]) or {k: r[k] for k in ("institute_id", "patient_id", "visit_id", "record_key", "department", "discharge_date")}), "result": r}
-                for r in results
+                {**(info.get(ref) or _record_public(result)), "result": result}
+                for ref, result in zip(result_refs, results)
             ]
         elif issue == "unchecked":
             records = _collect(
@@ -492,8 +487,8 @@ async def list_records(
                 institute_id=institute,
             )
             _check_rows(_user, records)
-            latest = store.latest_by_keys([_record_key(item) for item in records])
-            pending = [item for item in records if _record_key(item) not in latest]
+            latest = store.latest_by_refs(refs_from_records(records))
+            pending = [item for item in records if FrontpageRef.from_record(item) not in latest]
             total = len(pending)
             window = pending[(page - 1) * page_size: page * page_size]
             items = [{**_record_public(item), "result": None} for item in window]
@@ -511,9 +506,12 @@ async def list_records(
                 institute_id=institute or None,
             )
             _check_rows(_user, listing.items)
-            latest = store.latest_by_keys([_record_key(item) for item in listing.items])
+            latest = store.latest_by_refs(refs_from_records(listing.items))
             total = listing.total
-            items = [{**_record_public(item), "result": latest.get(_record_key(item))} for item in listing.items]
+            items = [
+                {**_record_public(item), "result": latest.get(FrontpageRef.from_record(item))}
+                for item in listing.items
+            ]
     except FrontpageQcStoreUnavailable as exc:
         raise _unavailable(exc) from exc
     return _ok(request, {"items": items, "total": total, "page": page, "page_size": page_size})
@@ -543,13 +541,13 @@ async def get_record(
         result = store.latest_detail(ref)
     except FrontpageQcStoreUnavailable as exc:
         raise _unavailable(exc) from exc
-    records = _collect(repository, refs=[CaseRef(*ref.__dict__.values())])
+    records = _collect(repository, refs=[ref.as_case_ref()])
     _check_rows(_user, records)
-    record = _record_public(records[0]) if records else _record_public(ref.__dict__)
+    record = next((item for item in records if FrontpageRef.from_record(item) == ref), ref.as_case_ref().as_dict())
     stale = bool(result) and (
         result["input_fingerprint"] != input_fingerprint(doc) or result["ruleset_version"] != RULESET_VERSION
     )
-    return _ok(request, {"record": record, "result": result, "stale": stale, "frontpage": doc.as_display()})
+    return _ok(request, {"record": _record_public(record), "result": result, "stale": stale, "frontpage": doc.as_display()})
 
 
 class ReviewIn(BaseModel):
@@ -625,11 +623,12 @@ async def export_records(
     _check_rule_id(payload.rule_id)
     try:
         if payload.record_refs:
-            refs = [CaseRef(r.institute_id, r.patient_id, r.visit_id) for r in payload.record_refs]
+            refs = [FrontpageRef(r.institute_id, r.patient_id, r.visit_id) for r in payload.record_refs]
             _check_refs(_user, refs)
-            records = _check_rows(_user, _collect(repository, refs=refs, institute_id=_user['_frontpage_institute'] or ""))
-            keys = [FrontpageRef(r.institute_id, r.patient_id, r.visit_id).as_key() for r in payload.record_refs]
-            summary = f"所选 {len(keys)} 份病历"
+            records = _check_rows(_user, _collect(
+                repository, refs=[ref.as_case_ref() for ref in refs], institute_id=_user['_frontpage_institute'] or ""
+            ))
+            summary = f"所选 {len(refs)} 份病历"
         else:
             records = _collect(
                 repository,
@@ -640,7 +639,7 @@ async def export_records(
                 institute_id=_scope_institute(payload.data_scope, home_institute, _user),
             )
             _check_rows(_user, records)
-            keys = [_record_key(item) for item in records]
+            refs = refs_from_records(records)
             parts = [payload.department or "全部科室"]
             if home_institute and payload.data_scope == "all":
                 parts.append("含测试数据")
@@ -659,7 +658,7 @@ async def export_records(
             issue=payload.issue,
             rule_id=payload.rule_id,
             rule_verdict=payload.rule_verdict,
-            record_keys=keys,
+            record_refs=refs,
             page=1,
             page_size=EXPORT_LIMIT,
         )
@@ -668,8 +667,9 @@ async def export_records(
         raise _unavailable(exc) from exc
     if not results:
         raise HTTPException(422, "当前范围内没有已质控的首页，无法导出")
-    info = {_record_key(item): _record_public(item) for item in records}
-    content = build_export_workbook(filters_summary=summary, results=results, findings=findings, record_info=info)
+    info = {FrontpageRef.from_record(item): _record_public(item) for item in records}
+    info_by_result_id = {result["id"]: info.get(FrontpageRef.from_record(result), {}) for result in results}
+    content = build_export_workbook(filters_summary=summary, results=results, findings=findings, record_info=info_by_result_id)
     filename = f"首页质控结果_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     return Response(
         content=content,

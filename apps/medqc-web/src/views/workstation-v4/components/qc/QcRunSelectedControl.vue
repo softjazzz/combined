@@ -94,6 +94,7 @@ import {
   getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import { useAuthStore } from '@/stores/auth'
+import { buildCaseRecordKey } from '../../utils/caseRecordKey'
 import {
   getBatchJobRetryMessage,
   isBatchJobFinished,
@@ -149,8 +150,8 @@ function normalizeRecordRefs(values: SelectedQcRecordRef[]): SelectedQcRecordRef
     const instituteId = String(value?.institute_id || '').trim()
     const patientId = String(value?.patient_id || '').trim()
     const visitId = String(value?.visit_id || '').trim()
-    if (!instituteId || !patientId || !visitId) continue
-    const key = JSON.stringify([instituteId, patientId, visitId])
+    const key = buildCaseRecordKey(instituteId, patientId, visitId)
+    if (!key) continue
     unique.set(key, {
       institute_id: instituteId,
       patient_id: patientId,

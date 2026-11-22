@@ -70,6 +70,7 @@
                   size="large"
                   allow-clear
                   @update:value="emit('update:searchText', $event)"
+                  @press-enter="emit('page-change', 1)"
                 >
                   <template #prefix>
                     <SearchOutlined class="text-slate-400" />
@@ -282,13 +283,27 @@
           </section>
         </div>
 
-        <div
-          v-if="loadError"
-          class="workstation-empty-state wv4-list__alert"
-          role="alert"
+        <Alert
+          v-if="!displayLoading && loadError"
+          type="error"
+          message="病历列表加载失败"
+          show-icon
         >
-          病历池暂未加载成功，请检查网络后重试。
-        </div>
+          <template #action>
+            <a-button
+              size="small"
+              @click="emit('page-change', currentPage)"
+            >
+              重试
+            </a-button>
+          </template>
+        </Alert>
+        <Alert
+          v-else-if="!isStageQueueMode && !displayLoading && qcSummaryState === 'unavailable'"
+          type="warning"
+          message="质控摘要暂不可用"
+          show-icon
+        />
 
         <div
           v-if="isFrontpageGenerateStage"
@@ -319,6 +334,8 @@
                 :page-size="pageSize"
                 :total="displayServerTotal"
                 :loading="displayLoading"
+                :load-error="loadError"
+                :empty-description="stageEmptyText"
                 :title="isStageQueueMode ? stageMeta.tableTitle || '批量工作台' : '病历池列表'"
                 :primary-action-label="
                   isStageQueueMode
@@ -373,16 +390,6 @@
             />
           </div>
         </div>
-
-        <div
-          v-if="listRecords.length === 0"
-          class="workstation-empty-state wv4-list__empty mq-card"
-        >
-          <InboxOutlined class="workstation-empty-state__icon" />
-          <div class="workstation-empty-state__text">
-            {{ stageEmptyText }}
-          </div>
-        </div>
       </div>
     </div>
     <FrontpageTenderValidationDrawer v-model:open="tenderValidationOpen" />
@@ -391,6 +398,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Alert } from 'ant-design-vue'
 import {
   Building2,
   Stethoscope,
@@ -401,7 +409,6 @@ import {
 import {
   CheckCircleOutlined,
   FileTextOutlined,
-  InboxOutlined,
   SearchOutlined,
   SyncOutlined,
   WarningOutlined,
