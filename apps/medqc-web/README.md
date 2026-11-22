@@ -77,8 +77,8 @@ apps/medqc-web/
 ### 工作台源码入口
 
 - `/workstation-v5` 由 [工作台路由](src/router/index.ts) 挂载。主入口在 `src/views/workstation-v4/`，首页由 [WorkstationV4HomeEntry](src/views/workstation-v4/WorkstationV4HomeEntry.vue) 加载 [QCOverviewView](src/views/workstation/QCOverviewView.vue)，病历池入口为 [WorkstationV4View](src/views/workstation-v4/WorkstationV4View.vue)。
-- `/workstation-v4` 是现行路由的兼容别名。`/workstation-v2`、`/workstation-v3` 和 `/dashboard/medical-records/:id/legacy` 保留旧工作台与病历详情入口。
-- `src/views/workstation-v2/WorkstationV4View.vue` 和 `src/views/workstation-v4/WorkstationV3View.vue` 是历史副本。旧 DRG 文档仍引用 `backend-fastapi/`，现行 FastAPI 入口为 [backend/app/main.py](backend/app/main.py)。
+- `/workstation-v4` 是现行路由的兼容别名；历史 `/workstation-v2`、`/workstation-v3`、`/demo/*`、旧 `/dashboard/*` 及 legacy/simple 病历详情入口均已下线并保留向 `/workstation-v4`（规范化至 `/workstation-v5`）的重定向。
+- 历史废弃目录 `backend-fastapi/` 与旧代工作台页面已清理（完整历史归档见 Git Tag `archive/docs-pre-cleanup-202611`）；现行 FastAPI 入口为 [backend/app/main.py](backend/app/main.py)。
 
 ## 文档导航
 
