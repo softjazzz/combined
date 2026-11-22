@@ -5,7 +5,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python)](https://www.python.org/)
 
-> 基于 AI 的智能医疗质控系统，提供病历质量分析、智能搜索和统计分析功能
+> 基于 AI 的智能医疗质控系统，提供病历质量分析、智能搜索和统计分析功能。
+
+[MedQC 活文档总索引](../../docs/INDEX.md)
 
 ## ✨ 核心特性
 
@@ -78,25 +80,14 @@ apps/medqc-web/
 - `/workstation-v4` 是现行路由的兼容别名。`/workstation-v2`、`/workstation-v3` 和 `/dashboard/medical-records/:id/legacy` 保留旧工作台与病历详情入口。
 - `src/views/workstation-v2/WorkstationV4View.vue` 和 `src/views/workstation-v4/WorkstationV3View.vue` 是历史副本。旧 DRG 文档仍引用 `backend-fastapi/`，现行 FastAPI 入口为 [backend/app/main.py](backend/app/main.py)。
 
-## 📚 文档导航
-
-### 开发与部署入口
+## 文档导航
 
 - [开发端口说明](../../DEVELOPMENT_PORTS.md)
-- [现行 Workstation v7.1 设计规范](docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md)
+- [工作台浅色医疗设计规范](docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md)
 - [Linux 发布与回滚手册](docs/deployment/P2_RELEASE_RUNBOOK.md)
-- [Linux 后端启动脚本](../../scripts/run_backend_prod.sh)
-- [历史 Docker 部署说明](docs/DEPLOYMENT.md)
+- [首页质控 v2 规则目录](docs/frontpage-qc-v2/rule-catalog-review.md)
 
-### 👨‍💻 开发文档
-- [前端集成指南](docs/development/FRONTEND_INTEGRATION_GUIDE.md)
-- [API 接口文档](docs/api/)
-- [架构设计文档](docs/architecture/)
-
-### 👥 用户指南
-- [用户手册](docs/0418/WORKSTATION_V4/USER_MANUAL.md)
-- [认证系统指南](docs/user-guides/AUTH_SYSTEM_GUIDE.md)
-- [医生工作站指南](docs/user-guides/DOCTOR_WORKSTATION_REDESIGN_GUIDE.md)
+本地 FastAPI OpenAPI 页面为 `http://localhost:8001/docs`。
 
 ## 🛠️ 技术栈
 
@@ -162,19 +153,4 @@ apps/medqc-web/
 ## 📞 支持
 
 - 📧 邮箱: support@medqc.com
-- 📖 文档: [项目文档](docs/)
 - 🐛 问题反馈: [GitHub Issues](https://github.com/softjazzz/combined/issues)
-
-## 🎯 路线图
-
-- [ ] 移动端适配
-- [ ] 多语言支持
-- [ ] 高级 AI 分析
-- [ ] 第三方系统集成
-- [ ] 云原生部署
-
----
-
-**最后更新**: 2024-12-25  
-**版本**: 2.0.0  
-**维护者**: MedQC 开发团队

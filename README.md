@@ -1,6 +1,8 @@
 # 医疗质控系统 Monorepo
 
-> 🏥 基于 Vue 3 + TypeScript 的智能医疗质控管理平台
+> 基于 Vue 3、FastAPI 和 PostgreSQL 的医疗质控平台。
+
+[MedQC 活文档总索引](docs/INDEX.md)
 
 [![Node.js](https://img.shields.io/badge/Node.js-18.x+-green.svg)](https://nodejs.org/)
 [![Vue.js](https://img.shields.io/badge/Vue.js-3.x-blue.svg)](https://vuejs.org/)
@@ -147,10 +149,8 @@ pnpm clean            # 清理端口
 
 每个应用都提供了详细的环境变量模板：
 
-- `apps/medqc-web/.env.template` - MedQC 系统配置模板
-- `apps/yibao-web/.env.template` - YiBao 系统配置模板
-
-复制模板文件为 `.env` 并根据实际环境修改配置值。
+- MedQC 后端配置见 [MedQC 本地启动](apps/medqc-web/README.md#本地启动)。前端开发默认使用 Vite 的同源 API 代理。
+- YiBao 环境配置见 [YiBao 应用文档](apps/yibao-web/README.md)。
 
 ## 🧪 测试
 
@@ -188,7 +188,7 @@ pnpm test:all
 ## 📚 文档
 
 - [开发环境配置](DEVELOPMENT_PORTS.md) - 端口分配和环境配置
-- [MedQC 使用指南](apps/medqc-web/docs/LLM质控演示系统使用指南.md) - LLM 质控演示系统详细使用说明
+- [MedQC 应用入口](apps/medqc-web/README.md) - 本地启动与源码入口
 - [YiBao 测试文档](apps/yibao-web/tests/README.md) - 测试架构和执行指南
 
 ## 🛠️ 技术栈
@@ -202,15 +202,15 @@ pnpm test:all
 - **状态管理**: Pinia
 - **路由**: Vue Router 4.x
 - **样式**: Less + CSS Modules
-- **图表**: ECharts (计划集成)
+- **图表**：ECharts
 
 ### 后端技术
 
 - **框架**: FastAPI (Python)
-- **数据库**: PostgreSQL + Supabase
+- **MedQC 数据库**：业务 PostgreSQL，临床材料按部署配置从独立只读 CDM 读取
 - **缓存**: Redis
-- **AI/LLM**: OpenAI GPT / Anthropic Claude
-- **部署**: Docker + Nginx
+- **MedQC 模型服务**：由后端环境配置选择
+- **MedQC 部署**：见[发布与运维](docs/INDEX.md#部署与运维)
 
 ### 开发工具
 
@@ -218,7 +218,7 @@ pnpm test:all
 - **代码质量**: ESLint + Prettier
 - **类型检查**: Vue TSC
 - **测试**: Vitest + Vue Test Utils
-- **CI/CD**: GitHub Actions (待配置)
+- **CI/CD**：GitHub Actions
 
 ## 🔄 开发工作流
 
