@@ -2,7 +2,6 @@
 
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vue.js)](https://vuejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E?logo=supabase)](https://supabase.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python)](https://www.python.org/)
 
@@ -29,99 +28,58 @@
 - **多维度分析**：按时间、科室、医生等多维度分析
 
 ### 🔒 安全管理
-- **用户认证**：基于 Supabase Auth 的安全认证
+- **用户认证**：业务 API 负责用户认证
 - **权限控制**：基于角色的精细化权限管理
 - **数据隔离**：科室级别的数据访问控制
 - **审计日志**：完整的操作审计和追踪
 
-## 🚀 快速开始
+## 本地启动
 
-### 📋 环境要求
+需要 Node.js 18+、pnpm 8+、Python 3.10+ 和开发用 PostgreSQL。后端入口为 `backend/app/main.py`，前端使用 `vite.config.mjs`。初始化开发库可参照 [Alembic 迁移说明](backend/docs/ALEMBIC_MIGRATION.md)。
 
-- **Node.js** >= 18.0.0
-- **Python** >= 3.10
-- **pnpm** >= 8.0.0
-- **Supabase** 账户
+1. 在仓库根目录执行 `pnpm install`。
+2. 从 `apps/medqc-web/backend/.env.example` 复制一份 `.env` 到同目录。设置开发库的 `DATABASE_URL`、与该库一致的 `DB_SCHEMA_MODE`、随机 `JWT_SECRET`，以及 `DATA_SOURCE=pg`。需要独立 CDM 时，按模板配置其只读连接。
+3. 在独立终端启动后端。以下命令从仓库根目录执行。
 
-### 🛠️ 安装部署
+   Linux 或 macOS
 
-#### 1. 克隆项目
-```bash
-git clone <repository-url>
-cd MedQC0817
+   ```bash
+   cd apps/medqc-web/backend
+   python3 -m venv .venv
+   .venv/bin/python -m pip install -r requirements.txt
+   .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+   ```
+
+   Windows PowerShell
+
+   ```powershell
+   Set-Location apps/medqc-web/backend
+   py -3.10 -m venv .venv
+   ./.venv/Scripts/python.exe -m pip install -r requirements.txt
+   ./.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+   ```
+
+4. 在另一个终端从仓库根目录执行 `pnpm --dir apps/medqc-web dev`。前端默认访问 `http://localhost:3000`，代理至 `http://localhost:8001`。
+5. 前端定向测试使用 `pnpm --dir apps/medqc-web test:unit <测试文件>`。后端隔离用例在 `backend` 内执行 `python -B scripts/run_pr8_offline_tests.py <测试文件>`。
+
+## 项目结构
+
+```text
+apps/medqc-web/
+├── src/              # Vue 前端
+├── backend/          # FastAPI、Alembic 和后端测试
+├── tests/            # 前端单元与端到端测试
+└── docs/             # 设计、开发与部署资料
 ```
-
-#### 2. 数据库设置
-```bash
-# 在 Supabase SQL Editor 中按顺序执行
-database/setup/database_init_complete.sql
-database/setup/database_init_part2.sql
-database/setup/database_init_part3.sql
-database/setup/verify_database.sql
-```
-
-#### 3. 环境配置
-```bash
-# 复制环境变量模板
-cp .env.example .env
-
-# 配置 Supabase 连接信息
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-#### 4. 安装依赖
-```bash
-# 前端依赖
-pnpm install
-
-# 后端依赖
-cd production_system
-pip install -r requirements.txt
-```
-
-#### 5. 启动服务
-```bash
-# 启动前端开发服务器
-pnpm dev
-
-# 启动后端服务器
-cd production_system
-python main.py
-```
-
-#### 6. 访问应用
-- **前端**: http://localhost:5173
-- **后端 API**: http://localhost:8001
-- **API 文档**: http://localhost:8001/docs
-
-## 📁 项目结构
-
-```
-MedQC0817/
-├── 📁 database/                    # 数据库相关文件
-│   ├── setup/                      # 初始化脚本
-│   ├── fixes/                      # 修复脚本
-│   └── migrations/                 # 迁移文件
-├── 📁 docs/                        # 项目文档
-│   ├── deployment/                 # 部署文档
-│   ├── development/                # 开发文档
-│   ├── user-guides/                # 用户指南
-│   └── architecture/               # 架构设计
-├── 📁 src/                         # 前端源码
-├── 📁 production_system/           # 后端系统
-├── 📁 tools/                       # 工具脚本
-└── 📁 config/                      # 配置文件
-```
-
-详细结构说明请参考 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
 
 ## 📚 文档导航
 
-### 🚀 快速开始
-- [快速启动指南](docs/deployment/QUICK_START.md)
-- [Supabase 部署指南](docs/deployment/NEW_SUPABASE_DEPLOYMENT_GUIDE.md)
-- [向量搜索设置](docs/deployment/VECTOR_SEARCH_SETUP_GUIDE.md)
+### 开发与部署入口
+
+- [开发端口说明](../../DEVELOPMENT_PORTS.md)
+- [现行 Workstation v7.1 设计规范](docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md)
+- [Linux 后端启动脚本](../../scripts/run_backend_prod.sh)
+- [旧版部署与技术记录](docs/deployment/QUICK_START.md)
 
 ### 👨‍💻 开发文档
 - [前端集成指南](docs/development/FRONTEND_INTEGRATION_GUIDE.md)
@@ -145,9 +103,9 @@ MedQC0817/
 
 ### 后端技术
 - **框架**: FastAPI + Python
-- **数据库**: Supabase (PostgreSQL)
-- **认证**: Supabase Auth
-- **AI 服务**: OpenAI API
+- **数据库**: PostgreSQL
+- **认证**: FastAPI 业务认证
+- **AI 服务**: 由后端环境配置选择
 - **向量搜索**: pgvector
 
 ### 部署运维
@@ -155,32 +113,6 @@ MedQC0817/
 - **CI/CD**: GitHub Actions
 - **监控**: 自定义监控脚本
 - **日志**: 结构化日志记录
-
-## 🔧 开发工具
-
-### 测试工具
-```bash
-# 测试数据库连接
-node tools/testing/test_new_supabase_connection.js
-
-# 测试 API 接口
-python tools/testing/test_api_with_timeout.py
-
-# 运行前端测试
-pnpm test
-
-# 运行后端测试
-cd production_system && python -m pytest
-```
-
-### 部署工具
-```bash
-# 快速启动脚本
-bash tools/deployment/quick_start.sh
-
-# 安全检查
-bash tools/deployment/safety_check.sh
-```
 
 ## 📊 功能模块
 

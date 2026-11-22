@@ -301,6 +301,8 @@ export interface SingleRecordQcResultPresentation {
   sectionsByTab: Record<SingleRecordQcResultReportTab, SingleRecordQcResultDocumentGroup[]>
 }
 
+export const UNCERTAIN_RESULT_LABEL = '待判断'
+
 const STATUS_PRESENTATION: Record<
   string,
   { label: string; tone: SingleRecordQcResultTone; sortOrder: number }
@@ -309,7 +311,7 @@ const STATUS_PRESENTATION: Record<
   ai_suggested_non_compliant: { label: '建议复核', tone: 'warning', sortOrder: 20 },
   technical_error: { label: '技术异常', tone: 'warning', sortOrder: 30 },
   evaluation_unknown: { label: '待确认', tone: 'warning', sortOrder: 40 },
-  uncertain: { label: '待确认', tone: 'warning', sortOrder: 40 },
+  uncertain: { label: UNCERTAIN_RESULT_LABEL, tone: 'warning', sortOrder: 40 },
   data_gap: { label: '数据不足', tone: 'warning', sortOrder: 50 },
   not_executed: { label: '未执行', tone: 'warning', sortOrder: 60 },
   not_applicable: { label: '不适用', tone: 'neutral', sortOrder: 70 },

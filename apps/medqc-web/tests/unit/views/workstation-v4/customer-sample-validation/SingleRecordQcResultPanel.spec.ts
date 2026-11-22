@@ -800,6 +800,9 @@ describe('SingleRecordQcResultPanel', () => {
     const ruleNames = () => wrapper.findAll('.rule-name').map((name) => name.text())
     expect(ruleNames()).not.toContain('首次病程记录')
 
+    await wrapper.get('[data-testid="single-record-report-tab-uncertain"]').trigger('click')
+    expect(wrapper.get('[data-testid="single-record-result-row"] .status-cell').text()).toBe('待判断')
+
     await wrapper.get('[data-testid="single-record-report-tab-all"]').trigger('click')
     expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(1)
     expect(wrapper.get('[data-testid="single-record-document-group"]').text()).toContain('会诊记录')
