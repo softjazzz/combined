@@ -549,6 +549,17 @@ describe('batchJobPresentation', () => {
     expect(model.statusChips).toEqual([])
   })
 
+  it.each([
+    '2026-10-22T16:00:05.123456',
+    '2026-10-22 16:00:05',
+    '2026-10-22T16:00:05Z',
+    '2026-10-23T01:00:05+09:00',
+    '2026-10-22T19:00:05+0300',
+    new Date('2026-10-22T16:00:05Z'),
+  ])('按北京时间保留任务时间的秒级精度：%s', (value) => {
+    expect(formatBatchJobDateTime(value)).toBe('2026/10/23 00:00:05')
+  })
+
   it('集中提供状态和时间格式化合同', () => {
     expect(getBatchJobStatusText('running')).toBe('执行中')
     expect(getBatchJobStatusText(undefined)).toBe('状态待返回')

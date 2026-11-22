@@ -97,7 +97,7 @@
                   </span>
                   <span class="message-center__subject">{{ item.title }}</span>
                   <span class="message-center__excerpt">{{ item.content }}</span>
-                  <time :datetime="item.created_at">{{ messageTime(item.created_at) }}</time>
+                  <time :datetime="item.created_at">{{ messageTime(item.created_at, item.type) }}</time>
                 </span>
               </button>
             </li>
@@ -157,7 +157,7 @@
           </div>
           <h2>{{ selected.title }}</h2>
           <time :datetime="selected.created_at"
-            >接收于 {{ messageTime(selected.created_at) }} · 北京时间</time
+            >接收于 {{ messageTime(selected.created_at, selected.type) }} · 北京时间</time
           >
           <div class="message-center__body-label">消息内容</div>
           <div class="message-center__body">{{ selected.content }}</div>

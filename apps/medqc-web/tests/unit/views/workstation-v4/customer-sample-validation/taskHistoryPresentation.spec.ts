@@ -40,7 +40,7 @@ describe('质控记录列表展示模型', () => {
     expect(cleanTaskTitle('')).toBe('质控任务')
     const row = buildTaskHistoryRow(job())
     expect(row.title).toBe('1023样本验证任务')
-    expect(row.metaText).toBe('08:27 发起 · 18 份病历 · 全量 68 个质控点')
+    expect(row.metaText).toBe('16:27 发起 · 18 份病历 · 全量 68 个质控点')
   })
 
   it('列表不携带结果摘要与计数，完成任务只显示完成时间与用时', () => {
@@ -52,7 +52,7 @@ describe('质控记录列表展示模型', () => {
     )
     expect(row).not.toHaveProperty('counts')
     expect(row).not.toHaveProperty('countTotal')
-    expect(row.detailText).toBe('08:29 完成 · 执行 2 分 5 秒')
+    expect(row.detailText).toBe('16:29 完成 · 执行 2 分 5 秒')
     expect(row.statusLabel).toBe('已完成')
     expect(row.statusTone).toBe('success')
     expect(row.canExport).toBe(true)
@@ -103,7 +103,7 @@ describe('质控记录列表展示模型', () => {
       created_at: '2026-10-23T05:24:24', started_at: '2026-10-23T05:29:28',
       finished_at: '2026-10-23T05:33:09',
     }))
-    expect(row.detailText).toBe('05:33 完成 · 等待 5 分 4 秒 · 执行 3 分 41 秒')
+    expect(row.detailText).toBe('13:33 完成 · 等待 5 分 4 秒 · 执行 3 分 41 秒')
   })
 
   it('执行中显示病历进度', () => {
@@ -119,10 +119,10 @@ describe('质控记录列表展示模型', () => {
   })
 
   it('按发起日期分组为今天、昨天和具体日期', () => {
-    const now = new Date('2026-10-23T12:00:00')
+    const now = new Date('2026-10-22T16:15:00Z')
     const rows = [
-      buildTaskHistoryRow(job({ id: 'a', created_at: '2026-10-23T08:00:00' })),
-      buildTaskHistoryRow(job({ id: 'b', created_at: '2026-10-22T18:00:00' })),
+      buildTaskHistoryRow(job({ id: 'a', created_at: '2026-10-22 16:00:00' })),
+      buildTaskHistoryRow(job({ id: 'b', created_at: '2026-10-22T23:59:00+08:00' })),
       buildTaskHistoryRow(job({ id: 'c', created_at: '2026-10-20T09:00:00' })),
       buildTaskHistoryRow(job({ id: 'd', created_at: '2026-10-20T07:00:00' })),
     ]
@@ -132,6 +132,8 @@ describe('质控记录列表展示模型', () => {
       '昨天 · 10月22日',
       '10月20日',
     ])
+    expect(groups[0].rows[0].timeText).toBe('00:00')
+    expect(groups[1].rows[0].timeText).toBe('23:59')
     expect(groups[2].rows.map((row) => row.id)).toEqual(['c', 'd'])
   })
 })

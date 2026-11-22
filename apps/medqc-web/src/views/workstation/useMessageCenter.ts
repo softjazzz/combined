@@ -5,6 +5,7 @@ import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeNotification } from '@/views/workstation-v4/normalize'
 import type { NotificationVM } from '@/views/workstation-v4/types'
+import { parseQcTaskTime, QC_TASK_TIME_ZONE } from '@/views/workstation-v4/utils/qcTaskTime'
 import { notificationLocation } from './notificationNavigation'
 
 interface MessagePage {
@@ -48,12 +49,12 @@ export function messageActionLabel(item: NotificationVM) {
   }
 }
 
-export function messageTime(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime())
+export function messageTime(value: string, type?: string) {
+  const date = type === 'qc_result_ready' ? parseQcTaskTime(value) : new Date(value)
+  return !date || Number.isNaN(date.getTime())
     ? '时间未知'
     : new Intl.DateTimeFormat('zh-CN', {
-        timeZone: 'Asia/Shanghai',
+        timeZone: QC_TASK_TIME_ZONE,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',

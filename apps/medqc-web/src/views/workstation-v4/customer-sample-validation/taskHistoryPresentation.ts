@@ -5,6 +5,7 @@
  * 不读取、也不展示任何结果计数或结论；结果在“查看结果”抽屉里看。
  */
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
+import { parseQcTaskTime, shanghaiQcTaskTimeParts } from '../utils/qcTaskTime'
 import { buildBatchJobPresentation } from './batchJobPresentation'
 
 export type TaskHistoryTone = 'info' | 'success' | 'warning' | 'danger' | 'neutral'
@@ -30,23 +31,14 @@ export type TaskHistoryRow = {
 
 export type TaskHistoryGroup = { key: string; label: string; rows: TaskHistoryRow[] }
 
-function pad(value: number) {
-  return String(value).padStart(2, '0')
-}
-
-function localDate(value?: string | null): Date | null {
-  const text = String(value || '').trim()
-  if (!text) return null
-  const date = new Date(text)
-  return Number.isNaN(date.getTime()) ? null : date
-}
-
 function dateKeyOf(date: Date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  const { year, month, day } = shanghaiQcTaskTimeParts(date)
+  return `${year}-${month}-${day}`
 }
 
 function clockText(date: Date) {
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const { hour, minute } = shanghaiQcTaskTimeParts(date)
+  return `${hour}:${minute}`
 }
 
 /** 用时：不足 1 分钟按秒，不足 1 小时按“分 秒”，否则按“小时 分”。 */
@@ -86,9 +78,9 @@ export function buildTaskHistoryRow(job: SichuanBatchJob): TaskHistoryRow {
     status === 'failed' &&
     !base.isRunning &&
     (summary.execution_status === 'partial_failed' || job.has_results === true)
-  const created = localDate(job.created_at)
-  const finished = localDate(job.finished_at)
-  const started = localDate(job.started_at) || created
+  const created = parseQcTaskTime(job.created_at)
+  const finished = parseQcTaskTime(job.finished_at)
+  const started = parseQcTaskTime(job.started_at) || created
   const ruleCount = Number(job.customer_rule_count || summary.customer_rule_count || 0)
   const scopeText =
     base.scopeText.startsWith('选定') || ruleCount <= 0
@@ -147,9 +139,7 @@ export function buildTaskHistoryRow(job: SichuanBatchJob): TaskHistoryRow {
 /** 按发起日期分组：今天 / 昨天 / M月D日；无日期的放最后。 */
 export function groupTaskHistoryRows(rows: TaskHistoryRow[], now = new Date()): TaskHistoryGroup[] {
   const today = dateKeyOf(now)
-  const yesterdayDate = new Date(now)
-  yesterdayDate.setDate(now.getDate() - 1)
-  const yesterday = dateKeyOf(yesterdayDate)
+  const yesterday = dateKeyOf(new Date(now.getTime() - 24 * 60 * 60 * 1000))
   const groups: TaskHistoryGroup[] = []
   for (const row of rows) {
     const key = row.dateKey || 'unknown'

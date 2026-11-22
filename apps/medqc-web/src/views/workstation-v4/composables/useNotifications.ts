@@ -3,6 +3,8 @@ import { message } from 'ant-design-vue'
 import { ApiService } from '@/services/apiService'
 import { normalizeNotification, normalizeDoctorInteraction } from '../normalize'
 import { useAuthStore } from '@/stores/auth'
+import { parseQcTaskTime } from '../utils/qcTaskTime'
+import { findRecordById, RECORD_RESELECTION_MESSAGE } from '../workstationNavigationController'
 import type {
   DoctorInteractionTarget,
   NotificationOverviewItem,
@@ -60,7 +62,7 @@ function extractOverviewPayload(payload: unknown): NotificationOverviewResponse 
 
 export function useNotifications(
   allRecords: Ref<PatientRecord[]>,
-  openSessionRecord: (id: string) => void,
+  openRecord: (record: PatientRecord) => void,
   assistPanelVisible: Ref<boolean>,
   assistTab: Ref<string>,
   frontpageTab: Ref<string>,
@@ -332,15 +334,13 @@ export function useNotifications(
       return
     }
 
-    const record = allRecords.value.find(
-      (item) => item.id === targetRecordId || item.visitId === targetRecordId,
-    )
+    const record = findRecordById(allRecords.value, targetRecordId)
     if (!record) {
-      message.warning(`未找到病历：${targetRecordId}`)
+      message.warning(RECORD_RESELECTION_MESSAGE)
       return
     }
 
-    openSessionRecord(record.id)
+    openRecord(record)
     assistPanelVisible.value = true
     assistTab.value = 'form'
     frontpageTab.value = 'fields'
@@ -404,12 +404,12 @@ export function useNotifications(
     await fetchAssistNotificationOverview()
   }
 
-  function formatRelativeTime(iso: string) {
+  function formatRelativeTime(iso?: string | null, type?: string) {
     if (!iso) return ''
-    const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return ''
+    const date = type === 'qc_result_ready' ? parseQcTaskTime(iso) : new Date(iso)
+    if (!date || Number.isNaN(date.getTime())) return ''
     const now = new Date()
-    const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
+    const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
     if (diff < 60) return '刚刚'
     if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
     if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`

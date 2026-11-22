@@ -1690,7 +1690,7 @@
       :review-batch-job-loading="Boolean(reviewBatchJobLoadingId)"
       :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
       :get-batch-job-status-text="getBatchJobStatusText"
-      :format-date-time="formatDateTime"
+      :format-date-time="formatPaddedQcTaskDateTime"
     />
 
     <QCRecordResultComparisonDrawer
@@ -1813,6 +1813,7 @@
 
 <script setup lang="ts">
 import { reactive, watchEffect } from 'vue'
+import { formatPaddedQcTaskDateTime } from './utils/qcTaskTime'
 import { deferredComponent } from './customer-sample-validation/deferredComponent'
 const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'

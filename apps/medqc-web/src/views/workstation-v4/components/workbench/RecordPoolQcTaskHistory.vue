@@ -67,7 +67,7 @@
             <span class="record-pool-task-history__item-meta">
               <span>{{ scopeLabel(job.scope) }}</span>
               <span>{{ recordCount(job) }} 份病历</span>
-              <span>{{ formatDateTime(job.created_at) }}</span>
+              <span>{{ formatPaddedQcTaskDateTime(job.created_at) }}</span>
             </span>
             <span class="record-pool-task-history__item-metrics">
               <span>墙钟耗时 {{ durationLabel(job) }}</span>
@@ -95,7 +95,7 @@
     :export-batch-job-report="exportReport"
     :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
     :get-batch-job-status-text="getBatchJobStatusText"
-    :format-date-time="formatDateTime"
+    :format-date-time="formatPaddedQcTaskDateTime"
   />
 </template>
 
@@ -109,10 +109,10 @@ import {
   getSichuanWorkspaceBatchJobDebugSnapshot,
   listSichuanWorkspaceBatchJobs,
 } from '@/services/sichuan-rule-workspace-service'
+import { formatPaddedQcTaskDateTime } from '../../utils/qcTaskTime'
 import SemanticRulesBatchResultDrawer from '../../semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
 import type { SichuanBatchJob, SichuanBatchJobDebugSnapshot } from '../../semantic-rules/types'
 import {
-  formatDateTime,
   getBatchJobStatusTagClass,
   getBatchJobStatusText,
 } from '../../customer-sample-validation/customerSampleValidationPresentation'

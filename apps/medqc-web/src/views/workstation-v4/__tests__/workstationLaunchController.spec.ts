@@ -32,6 +32,33 @@ function buildParams(action: string) {
 }
 
 describe('workstationLaunchController', () => {
+  it('asks for reselection and does not run a dashboard action for a shared visit', async () => {
+    const params = buildParams('generate_frontpage')
+    params.allRecords = [
+      { ...RECORD, instituteId: 'H-1' },
+      { ...RECORD, instituteId: 'H-2', patientId: 'P-2' },
+    ]
+
+    await handleWorkstationLaunchFlow(params)
+
+    expect(params.openRecord).not.toHaveBeenCalled()
+    expect(params.handleGenerateFrontpage).not.toHaveBeenCalled()
+    expect(params.showWarning).toHaveBeenCalledWith(expect.stringContaining('重新选择'))
+    expect(params.clearLaunchQueryParams).toHaveBeenCalled()
+  })
+
+  it('opens only the exact case requested by a complete dashboard key', async () => {
+    const params = buildParams('open_record')
+    const exact = { ...RECORD, instituteId: 'H-2', patientId: 'P-2' }
+    params.allRecords = [{ ...RECORD, instituteId: 'H-1' }, exact]
+    params.routeQuery.record_id = '["H-2","P-2","C01"]'
+
+    await handleWorkstationLaunchFlow(params)
+
+    expect(params.openRecord).toHaveBeenCalledTimes(1)
+    expect(params.openRecord).toHaveBeenCalledWith(exact)
+  })
+
   it.each([
     ['qc_frontpage', 'frontpage', 'form'],
     ['qc_coding', 'frontpage', 'coding'],
