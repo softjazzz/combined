@@ -2,6 +2,7 @@ import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import { parseQcTaskTime } from '../utils/qcTaskTime'
 import type {
   QCRecordCompareIssue,
   SichuanBatchIssueItem,
@@ -234,20 +235,6 @@ export function useSemanticRulesBatchResultDrawerController(
     const parsed = optionalNumber(value)
     if (parsed === null) return '-'
     return Math.round(parsed).toLocaleString('zh-CN')
-  }
-
-  function parseBackendDateTimeMs(value?: string | Date | null): number {
-    if (!value) return 0
-    if (value instanceof Date) {
-      const timestamp = value.getTime()
-      return Number.isFinite(timestamp) ? timestamp : 0
-    }
-    const text = String(value).trim()
-    if (!text) return 0
-    const normalized = text.includes('T') ? text : text.replace(' ', 'T')
-    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
-    const timestamp = Date.parse(hasTimezone ? normalized : `${normalized}Z`)
-    return Number.isFinite(timestamp) ? timestamp : 0
   }
 
   const liveNow = ref(Date.now())
@@ -1641,7 +1628,7 @@ export function useSemanticRulesBatchResultDrawerController(
 
   const liveStartedAtMs = computed(() => {
     const startValue = props.batchJobDetail?.started_at || streamState.value?.started_at
-    return parseBackendDateTimeMs(startValue)
+    return parseQcTaskTime(startValue)?.getTime() ?? 0
   })
 
   const liveElapsedSeconds = computed(() => {

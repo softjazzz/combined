@@ -7,6 +7,8 @@ import {
   isBatchJobPollingActive,
 } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
+import { formatPaddedQcTaskDateTime } from '../utils/qcTaskTime'
+
 export type BatchJobStatusChip = {
   key: string
   label: string
@@ -365,11 +367,7 @@ export function getBatchJobStatusClass(status?: string | null): string {
 }
 
 export function formatBatchJobDateTime(value?: string | Date | null): string {
-  if (!value) return '未返回时间'
-  const date = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value)
-  const pad = (number: number) => String(number).padStart(2, '0')
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  return value ? formatPaddedQcTaskDateTime(value) : '未返回时间'
 }
 
 export function buildBatchJobPresentation(

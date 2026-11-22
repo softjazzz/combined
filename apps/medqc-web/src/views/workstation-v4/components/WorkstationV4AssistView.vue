@@ -430,7 +430,7 @@
                     <span>·</span>
                     <span>触发 {{ item.occurrence_count }} 次</span>
                     <span>·</span>
-                    <span>{{ formatRelativeTime(item.latest_created_at) }}</span>
+                    <span>{{ formatRelativeTime(item.latest_created_at, item.type) }}</span>
                   </div>
                 </div>
                 <a-tag v-if="item.unread_count > 0" color="blue">
@@ -469,7 +469,7 @@
                     {{ notif.content || '暂无内容' }}
                   </div>
                   <div class="assist-message-inbox__meta">
-                    {{ formatRelativeTime(notif.created_at) }}
+                    {{ formatRelativeTime(notif.created_at, notif.type) }}
                   </div>
                 </div>
                 <a-tag v-if="!notif.is_read" color="blue"> 未读 </a-tag>
@@ -731,7 +731,7 @@ const props = defineProps<{
   overviewLoading: boolean
   filteredNotificationOverviewItems: Array<Record<string, any>>
   filteredAssistNotifications: Array<Record<string, any>>
-  formatRelativeTime: (value?: string | null) => string
+  formatRelativeTime: (value?: string | null, type?: string) => string
   suggestionDrawerVisible: boolean
   suggestions: Array<Record<string, any>>
   suggestionsLoading: boolean

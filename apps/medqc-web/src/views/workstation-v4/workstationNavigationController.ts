@@ -23,16 +23,66 @@ interface CreateDetailNavigationOptions {
   openRecord: (record: PatientRecord) => void
   backToList: () => void
   clearPanels: () => void
+  showWarning?: (message: string) => void
+}
+
+export const RECORD_RESELECTION_MESSAGE = '无法唯一定位病历，请从列表重新选择'
+
+type RecordIdentity = Pick<PatientRecord, 'instituteId' | 'patientId' | 'visitId' | 'recordKey'>
+
+function readCompleteRecordKey(value: string): string[] | undefined {
+  if (!value.trimStart().startsWith('[')) return
+  try {
+    const parts: unknown = JSON.parse(value)
+    if (
+      Array.isArray(parts) &&
+      parts.length === 3 &&
+      parts.every((part): part is string => typeof part === 'string' && Boolean(part.trim()))
+    ) {
+      return parts.map((part) => part.trim())
+    }
+  } catch {
+    return undefined
+  }
+}
+
+export function getCompleteRecordKey(record: RecordIdentity): string | undefined {
+  const coordinates = [record.instituteId, record.patientId, record.visitId].map((part) =>
+    part?.trim(),
+  )
+  if (coordinates.every(Boolean)) return JSON.stringify(coordinates)
+  const keyParts = readCompleteRecordKey(record.recordKey || '')
+  if (keyParts && coordinates.every((part, index) => !part || part === keyParts[index])) {
+    return JSON.stringify(keyParts)
+  }
+}
+
+export function getRecordNavigationKey(record: PatientRecord): string {
+  return getCompleteRecordKey(record) || record.id || record.visitId || ''
 }
 
 export function findRecordById(
   records: PatientRecord[],
   recordId: string,
+  { ignoreCaseForLegacyId = false } = {},
 ): PatientRecord | undefined {
-  return (
-    records.find((item) => item.recordKey === recordId) ||
-    records.find((item) => item.id === recordId)
+  const requested = recordId.trim()
+  if (!requested) return undefined
+
+  const keyParts = readCompleteRecordKey(requested)
+  if (requested.startsWith('[') && !keyParts) return undefined
+  const key = keyParts ? JSON.stringify(keyParts) : undefined
+  const normalizeLegacyId = (value?: string) => {
+    const trimmed = value?.trim()
+    return ignoreCaseForLegacyId ? trimmed?.toLowerCase() : trimmed
+  }
+  const legacyId = normalizeLegacyId(requested)
+  const matches = records.filter((record) =>
+    key
+      ? getCompleteRecordKey(record) === key
+      : normalizeLegacyId(record.id) === legacyId || normalizeLegacyId(record.visitId) === legacyId,
   )
+  return matches.length === 1 ? matches[0] : undefined
 }
 
 export function openRecordForStage(options: OpenRecordForStageOptions) {
@@ -85,32 +135,41 @@ export function openRecordForStage(options: OpenRecordForStageOptions) {
 
 export function createDetailNavigation(options: CreateDetailNavigationOptions): {
   currentRecordIndex: ComputedRef<number>
+  recordCount: ComputedRef<number>
   goToPrevRecord: () => void
   goToNextRecord: () => void
   goBackToList: () => void
 } {
-  const { getSelectedRecord, getFilteredRecords, openRecord, backToList, clearPanels } = options
+  const { getSelectedRecord, getFilteredRecords, openRecord, backToList, clearPanels, showWarning } =
+    options
 
-  const currentRecordIndex = computed(() => {
-    const selectedRecord = getSelectedRecord()
-    if (!selectedRecord) return -1
-    const filteredRecords = getFilteredRecords()
-    const selectedKey = selectedRecord.recordKey || selectedRecord.id
-    return filteredRecords.findIndex((item) => (item.recordKey || item.id) === selectedKey)
+  const navigationRecords = computed(() => {
+    const selected = getSelectedRecord()
+    if (!selected) return []
+    return getFilteredRecords().filter((record) => record.sourceId === selected.sourceId)
   })
 
-  const goToPrevRecord = () => {
-    const idx = currentRecordIndex.value
-    if (idx <= 0) return
-    const filteredRecords = getFilteredRecords()
-    openRecord(filteredRecords[idx - 1])
-  }
+  const currentRecordIndex = computed(() => {
+    const selected = getSelectedRecord()
+    if (!selected) return -1
+    const records = navigationRecords.value
+    const record = findRecordById(records, getRecordNavigationKey(selected))
+    return record ? records.indexOf(record) : -1
+  })
 
-  const goToNextRecord = () => {
-    const filteredRecords = getFilteredRecords()
-    const idx = currentRecordIndex.value
-    if (idx < 0 || idx >= filteredRecords.length - 1) return
-    openRecord(filteredRecords[idx + 1])
+  const recordCount = computed(() =>
+    currentRecordIndex.value < 0 ? 0 : navigationRecords.value.length,
+  )
+
+  const goToOffset = (offset: number) => {
+    const index = currentRecordIndex.value
+    if (index < 0) return
+    const records = navigationRecords.value
+    const next = records[index + offset]
+    if (!next) return
+    const record = findRecordById(records, getRecordNavigationKey(next))
+    if (record) openRecord(record)
+    else showWarning?.(RECORD_RESELECTION_MESSAGE)
   }
 
   const goBackToList = () => {
@@ -118,5 +177,11 @@ export function createDetailNavigation(options: CreateDetailNavigationOptions): 
     clearPanels()
   }
 
-  return { currentRecordIndex, goToPrevRecord, goToNextRecord, goBackToList }
+  return {
+    currentRecordIndex,
+    recordCount,
+    goToPrevRecord: () => goToOffset(-1),
+    goToNextRecord: () => goToOffset(1),
+    goBackToList,
+  }
 }

@@ -72,6 +72,37 @@ def test_overview_matches_full_list_filters_and_paging_without_reading_blobs(ove
         assert [row["id"] for row in second.items] == ["running", "failed"]
 
 
+@pytest.mark.parametrize(("filters", "expected_ids"), [
+    ({"created_start_date": "2026-10-23", "created_end_date": "2026-10-23"}, ["before-end", "at-start"]),
+    ({"created_start_date": "2026-10-23", "created_end_date": "invalid"}, ["at-end", "before-end", "at-start"]),
+    ({"created_start_date": "invalid", "created_end_date": "2026-10-23"}, ["before-end", "at-start", "before-start"]),
+    ({"created_start_date": "0001-01-01", "created_end_date": "9999-12-31"},
+     ["at-end", "before-end", "at-start", "before-start"]),
+])
+def test_task_creation_date_filters_use_beijing_midnight(overview_store, filters, expected_ids):
+    service, _ = overview_store
+    start_utc = datetime(2026, 10, 22, 16)
+    end_utc = datetime(2026, 10, 23, 16)
+    microsecond = timedelta(microseconds=1)
+    timestamps = {
+        "before-start": start_utc - microsecond,
+        "at-start": start_utc,
+        "before-end": end_utc - microsecond,
+        "at-end": end_utc,
+    }
+    with workspace._session() as session:
+        session.execute(service._batch_job_table.insert(), [
+            {"id": job_id, "created_by": "date-filter-user", "created_at": created_at}
+            for job_id, created_at in timestamps.items()
+        ])
+        session.commit()
+
+    for list_jobs in (service.list_batch_jobs, service.list_batch_job_overviews):
+        result = list_jobs(created_by="date-filter-user", **filters)
+        assert result.total == len(expected_ids)
+        assert [row["id"] for row in result.items] == expected_ids
+
+
 def test_overview_projection_drops_all_private_result_fields(overview_store):
     service, _ = overview_store
     job = service.list_batch_job_overviews(created_by="u-1", status="failed").items[0]

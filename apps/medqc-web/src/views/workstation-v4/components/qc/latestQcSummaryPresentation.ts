@@ -3,6 +3,7 @@
  * 只把后端 latest_qc_summary 的状态计数翻译为界面文案，不重新判定状态。
  */
 import { CAPTURE_FAILED_NOTICE, MATERIAL_PREPARATION_FAILED_LABEL } from '../../customer-sample-validation/single-record-result-model'
+import { parseQcTaskTime, shanghaiQcTaskTimeParts } from '../../utils/qcTaskTime'
 import type { QcSummaryLoadState, RecordLatestQcSummary } from '../../types'
 import type { QcRecordResultRow } from './QcRecordResultTable.vue'
 
@@ -11,31 +12,11 @@ export function statusCount(statusCounts: Record<string, number>, status: string
   return Number.isFinite(value) && value > 0 ? value : 0
 }
 
-const beijingQcTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
-  timeZone: 'Asia/Shanghai',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-})
-
 export function formatQcCompletedAt(value?: string | null): string {
-  const text = String(value || '').trim()
-  if (!text) return '—'
-  const normalized = text.replace(' ', 'T')
-  // 工作区任务时间由 datetime.utcnow() 产生，历史值没有时区后缀，但语义为 UTC。
-  const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/iu.test(normalized) ? normalized : `${normalized}Z`
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return '—'
-  const parts = Object.fromEntries(
-    beijingQcTimeFormatter
-      .formatToParts(date)
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
-  )
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
+  const date = parseQcTaskTime(value)
+  if (!date) return '—'
+  const { year, month, day, hour, minute } = shanghaiQcTaskTimeParts(date)
+  return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
 export function resolveResultPresentation(

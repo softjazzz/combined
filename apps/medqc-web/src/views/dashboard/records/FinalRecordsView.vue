@@ -478,7 +478,7 @@
           :scope-options="batchScopeOptions"
           :cancelling-batch-job-id="cancellingBatchJobId"
           :retrying-batch-job-id="retryingBatchJobId"
-          :format-date-time="formatDateTime"
+          :format-date-time="formatQcTaskDateTime"
           @open-batch-launch="openBatchLaunchModal"
           @search-batch-jobs="searchFinalBatchJobs"
           @table-change="handleFinalBatchJobTableChange"
@@ -634,7 +634,7 @@
       :cancel-batch-job-loading="cancellingBatchJobId === batchJobDetail?.id"
       :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
       :get-batch-job-status-text="getBatchJobStatusText"
-      :format-date-time="formatDateTime"
+      :format-date-time="formatQcTaskDateTime"
     />
 
     <!-- 联审详情抽屉 -->
@@ -655,6 +655,7 @@ import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
+import { formatQcTaskDateTime } from '@/views/workstation-v4/utils/qcTaskTime'
 import {
   SearchOutlined,
   ReloadOutlined,
@@ -1261,24 +1262,6 @@ const fetchRecords = async () => {
     recordListError.value = error?.message || '获取终末病历失败'
   } finally {
     loading.value = false
-  }
-}
-
-const formatDateTime = (value?: string | Date | null) => {
-  if (!value) return '-'
-  try {
-    let date: Date
-    if (typeof value === 'string') {
-      const text = value.trim()
-      const normalized = /z$/i.test(text) || /[+-]\d{2}:\d{2}$/.test(text) ? text : `${text}Z`
-      date = new Date(normalized)
-    } else {
-      date = value
-    }
-    if (Number.isNaN(date.getTime())) return String(value)
-    return date.toLocaleString('zh-CN', { hour12: false })
-  } catch {
-    return String(value)
   }
 }
 

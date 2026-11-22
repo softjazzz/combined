@@ -11,11 +11,12 @@ from ..core.execution_timing import project_stage_timing, timed
 from ..core.settings import get_settings
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO, StringIO
 from functools import lru_cache, partial
 from time import monotonic
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
+from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
 from sqlalchemy import (
@@ -1610,6 +1611,21 @@ def _as_date(value: Optional[str]) -> Optional[date]:
         return datetime.strptime(text[:10], "%Y-%m-%d").date()
     except Exception:
         return None
+
+
+_TASK_DATE_TIMEZONE = ZoneInfo("Asia/Shanghai")
+
+
+def _task_date_utc_boundary(day: date, *, next_day: bool = False) -> datetime:
+    if not next_day and day == date.min:
+        return datetime.min
+    # 先换算到 UTC，避免最大日期在北京时间上推进一天时溢出。
+    if next_day and day == date.max:
+        last_local = datetime.combine(day, time.max, _TASK_DATE_TIMEZONE)
+        return last_local.astimezone(timezone.utc).replace(tzinfo=None) + timedelta(microseconds=1)
+    boundary_day = day + timedelta(days=1) if next_day else day
+    local_midnight = datetime.combine(boundary_day, time.min, _TASK_DATE_TIMEZONE)
+    return local_midnight.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _draft_schema() -> Optional[str]:
@@ -3618,10 +3634,11 @@ class CustomQCWorkspaceService:
             )
         start = _as_date(created_start_date)
         end = _as_date(created_end_date)
+        # 筛选日期按北京时间解释，任务时间戳按无时区 UTC 存储。
         if start:
-            clauses.append(func.date(self._batch_job_table.c.created_at) >= start)
+            clauses.append(self._batch_job_table.c.created_at >= _task_date_utc_boundary(start))
         if end:
-            clauses.append(func.date(self._batch_job_table.c.created_at) <= end)
+            clauses.append(self._batch_job_table.c.created_at < _task_date_utc_boundary(end, next_day=True))
         record_id_value = _safe_text(record_id)
         if record_id_value:
             escaped_record_id = (
