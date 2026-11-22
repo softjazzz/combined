@@ -69,6 +69,8 @@ describe('旧 Dashboard 首页路由', () => {
       ).not.toContain('qc_staff')
       await router.push('/workstation-v5')
       expect(router.currentRoute.value.path).toBe('/workstation-v5/feedback')
+      await router.push('/workstation-v5?source=dashboard&record_id=V&action=open_record')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/feedback')
     } finally {
       auth.roles.splice(0, auth.roles.length, 'admin')
     }
@@ -140,6 +142,26 @@ describe('旧 Dashboard 首页路由', () => {
 
     expect(target.path).toBe('/workstation-v5')
     expect(target.query).toEqual({ entry: 'direct' })
+  })
+
+  it('仪表盘旧根链接先进入病历池，消费联动参数后仍在病历池', async () => {
+    const query = {
+      source: 'dashboard',
+      record_id: '["H","P","V"]',
+      action: 'open_record',
+      from_stage: 'frontpage_qc',
+      keep: '1',
+    }
+    await router.push({ path: '/workstation-v5', query, hash: '#chart' })
+    expect(router.currentRoute.value.name).toBe('WorkstationV4Worklist')
+    expect(router.currentRoute.value.query).toEqual(query)
+    expect(router.currentRoute.value.hash).toBe('#chart')
+
+    await router.replace({ path: router.currentRoute.value.path, query: { keep: '1' } })
+    expect(router.currentRoute.value.name).toBe('WorkstationV4Worklist')
+
+    await router.push('/workstation-v5?stage=frontpage_qc')
+    expect(router.currentRoute.value.name).toBe('WorkstationV4Index')
   })
 
   it('旧 V4 链接自动升级到对应的 V5 地址', async () => {

@@ -519,6 +519,7 @@ import {
   displayQcRuleName,
   recommendationEvidenceForSingleRecord,
   resolveSingleRecordQcResultTab,
+  UNCERTAIN_RESULT_LABEL,
   type SingleRecordQcEvidence,
   type SingleRecordQcResultItem,
   type SingleRecordQcResultReportTab,
@@ -947,7 +948,7 @@ const reportTabs = computed(() => [
     count: presentation.value.counts.nonCompliant,
   },
   { key: 'data_gap' as const, label: '资料待核实', count: presentation.value.counts.dataGap },
-  { key: 'uncertain' as const, label: '待判断', count: presentation.value.counts.uncertain },
+  { key: 'uncertain' as const, label: UNCERTAIN_RESULT_LABEL, count: presentation.value.counts.uncertain },
   { key: 'compliant' as const, label: '合规', count: presentation.value.counts.compliant },
   {
     key: 'not_applicable' as const,

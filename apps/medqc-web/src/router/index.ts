@@ -1394,6 +1394,17 @@ router.beforeEach(async (to, from, next) => {
         return
       }
     }
+
+    // 联动参数会在病历打开后清除，先进入稳定的病历池路由。
+    if (
+      to.name === 'WorkstationV4Index' &&
+      to.query.source === 'dashboard' &&
+      typeof to.query.record_id === 'string' && to.query.record_id.trim() &&
+      typeof to.query.action === 'string' && to.query.action.trim()
+    ) {
+      next({ name: 'WorkstationV4Worklist', query: to.query, hash: to.hash, replace: true })
+      return
+    }
   }
 
   // 设置页面标题
