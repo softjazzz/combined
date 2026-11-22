@@ -1,4 +1,0 @@
-
-> medical-qc-system@1.0.0 lint
-> eslint src --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix
-
