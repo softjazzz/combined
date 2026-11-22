@@ -33,6 +33,7 @@ from ..database.models.cdm import (
     MedicalRecordFrontpage,
     PatientInformation,
 )
+from ..core.clinical_defaults import get_clinical_defaults
 from ..core.settings import get_settings
 from .bundles.assembly import (
     refresh_all_bundle_variants_for_rows,
@@ -4198,6 +4199,7 @@ class CustomQCSamplePoolService:
         )
 
         main_diagnosis = _safe_text(basic.get("main_diagnosis"))
+        clinical_defaults = get_clinical_defaults()
         other_diagnoses = [
             _safe_text(item)
             for item in (basic.get("other_diagnoses") or [])
@@ -4249,8 +4251,8 @@ class CustomQCSamplePoolService:
                 {
                     **common,
                     "document_id": f"{visit_id}-MR",
-                    "institute_code": "H51052100267",
-                    "institute_county_desc": "泸县人民医院",
+                    "institute_code": clinical_defaults.hospital_code,
+                    "institute_county_desc": clinical_defaults.hospital_name,
                     "visit_cnt": "1",
                     "id_card_type": "居民身份证",
                     "id_card_no": f"510521{birth_year}0101{sequence[-4:]}",
@@ -5677,7 +5679,7 @@ class CustomQCSamplePoolService:
             }
 
         default_institute_id = str(
-            load_db_config().get("default_institute_id") or "LOCAL-HOSPITAL"
+            load_db_config().get("default_institute_id") or get_clinical_defaults().sync_institute_id
         ).strip()
         lookup = self._lookup_remote_match_candidates(items=items)
 

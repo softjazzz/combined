@@ -7,13 +7,11 @@ from typing import Any, Callable
 from sqlalchemy import MetaData, func, select, text
 from sqlalchemy.orm import Session
 
+from ...core.clinical_defaults import get_clinical_defaults
 from ..clinical_read import clinical_query, clinical_read_table, clinical_table_sql, is_synced_clinical_table
 from ...database.connection import Base, engine
 from ...database.models.cdm import MedicalRecordFrontpage, Diagnosis, MrSurgery, MrCost
 from .errors import MedicalRecordsNotFoundError
-
-
-DEFAULT_HOSPITAL_NAME = "泸县人民医院"
 
 
 def _session_factory() -> Session:
@@ -190,7 +188,7 @@ def get_frontpage_sheet(
         for col in MedicalRecordFrontpage.__table__.columns:
             basic[col.name] = _sheet_basic_value(fp, col.name)
         if not str(basic.get("institute_county_desc") or "").strip():
-            basic["institute_county_desc"] = DEFAULT_HOSPITAL_NAME
+            basic["institute_county_desc"] = get_clinical_defaults().hospital_name
 
         diag_rows = clinical_query(session, Diagnosis).filter_by(
             **identity
