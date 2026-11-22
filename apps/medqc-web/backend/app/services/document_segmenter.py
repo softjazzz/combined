@@ -10,6 +10,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from ..core.clinical_defaults import get_clinical_defaults
+
 logger = logging.getLogger(__name__)
 
 
@@ -90,7 +92,7 @@ TITLE_ONLY_PATTERN = re.compile(
 
 # 跳过的"噪声"行 (页眉页脚)
 NOISE_PATTERN = re.compile(
-    r'^(泸县人民医院|病\s*程\s*记\s*录|手\s*术\s*记\s*录|'
+    r'^(病\s*程\s*记\s*录|手\s*术\s*记\s*录|'
     r'科室：|第\(\d+\)页)'
 )
 
@@ -113,6 +115,11 @@ def split_document(text: str) -> List[DocumentSection]:
     Returns:
         DocumentSection 列表，按出现顺序排列
     """
+    hospital_name = get_clinical_defaults().hospital_name
+
+    def is_noise(line: str) -> bool:
+        return line.startswith(hospital_name) or bool(NOISE_PATTERN.match(line))
+
     lines = text.split('\n')
     sections: List[DocumentSection] = []
 
@@ -131,7 +138,7 @@ def split_document(text: str) -> List[DocumentSection]:
         # 过滤掉纯噪声行
         content_lines = [
             ln for ln in current_lines
-            if ln.strip() and not NOISE_PATTERN.match(ln.strip())
+            if ln.strip() and not is_noise(ln.strip())
         ]
 
         if not content_lines:
@@ -160,7 +167,7 @@ def split_document(text: str) -> List[DocumentSection]:
         line_no = i + 1
 
         # 跳过页眉页脚噪声
-        if NOISE_PATTERN.match(line.strip()):
+        if is_noise(line.strip()):
             current_lines.append(line)
             continue
 

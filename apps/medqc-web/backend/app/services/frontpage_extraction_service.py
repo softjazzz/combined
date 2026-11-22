@@ -20,13 +20,12 @@ from pydantic import ValidationError
 
 from .clinical_read import clinical_table_sql
 from ..schemas.frontpage import FrontPageDraft
+from ..core.clinical_defaults import get_clinical_defaults
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
 from .llm_observability import observe_llm_http_attempt
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_HOSPITAL_NAME = "泸县人民医院"
 
 
 def get_tender_extraction_contract():
@@ -874,7 +873,7 @@ class FrontPageExtractionService:
                     "contact_phone": "",
                     "contact_address": "",
                 },
-                "hospitalization": {"hospital_name": DEFAULT_HOSPITAL_NAME},
+                "hospitalization": {"hospital_name": get_clinical_defaults().hospital_name},
                 "diagnoses": {
                     "ed_diagnosis_texts": [],
                     "discharge_main_diagnosis_text": None,
@@ -1472,6 +1471,7 @@ class FrontPageExtractionService:
         """
         logger.info(f"_prefill_from_cdm: visit_id={visit_id}")
 
+        hospital_name = get_clinical_defaults().hospital_name
         fp_data: Dict[str, Any] = {
             "basic_info": {
                 "patient_name": "", "gender": "0", "gender_text": "",
@@ -1484,7 +1484,7 @@ class FrontPageExtractionService:
                 "work_unit": "", "work_unit_phone": "", "work_unit_zip": "",
                 "contact_name": "", "contact_relation": "", "contact_phone": "", "contact_address": "",
             },
-            "hospitalization": {"hospital_name": DEFAULT_HOSPITAL_NAME},
+            "hospitalization": {"hospital_name": hospital_name},
             "diagnoses": {
                 "ed_diagnosis_texts": [],
                 "discharge_main_diagnosis_text": None,
@@ -1528,7 +1528,7 @@ class FrontPageExtractionService:
                             "admission_dept": reg.get("admission_dept_name") or "",
                             "discharge_dept": reg.get("discharge_dept_name") or "",
                             "payment_method_text": reg.get("insurance_type") or "",
-                            "hospital_name": reg.get("hospital_name") or DEFAULT_HOSPITAL_NAME,
+                            "hospital_name": reg.get("hospital_name") or hospital_name,
                             "organization_code": reg.get("organization_code") or "",
                         })
                         # 计算住院天数
@@ -5140,6 +5140,10 @@ class FrontPageExtractionService:
         raw_frontpage = payload.get("frontpage") or {}
         if not raw_frontpage:
             raise ValueError("示例数据中缺少 frontpage 字段")
+
+        hospital_name = get_clinical_defaults().hospital_name_override
+        if hospital_name:
+            raw_frontpage.setdefault("hospitalization", {})["hospital_name"] = f"{hospital_name}（示例）"
 
         # 兼容 demo JSON 中的 diagnosis_and_procedures 结构
         diag_proc = raw_frontpage.get("diagnosis_and_procedures") or {}

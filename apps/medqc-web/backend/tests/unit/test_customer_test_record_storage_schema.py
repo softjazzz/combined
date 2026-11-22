@@ -62,7 +62,7 @@ class _ReflectedSuccessfully(CustomerTestStorageError):
     """仅在真实创建器通过真实字段校验后终止，不执行任何业务DML。"""
 
 
-def _check_creator_materials(monkeypatch, documents):
+def _check_creator_materials(monkeypatch, documents, *, expected_organization=None):
     from datetime import datetime
     from types import SimpleNamespace
     from app.database.models import cdm
@@ -92,6 +92,9 @@ def _check_creator_materials(monkeypatch, documents):
     def checked(current_session, rows):
         tables = storage.reflect_materials(current_session, rows)
         seen.update(rows)
+        if expected_organization is not None:
+            row = rows["mr"][0]
+            assert (row["institute_county_desc"], row["institute_code"]) == expected_organization
         for row in [
             r
             for name, values in rows.items()
@@ -158,6 +161,16 @@ def test_mixed_submit_only_documents_do_not_invent_record_clock(monkeypatch):
     docs.append(_time_document("admission_record", True))
     with pytest.raises(_ReflectedSuccessfully):
         _check_creator_materials(monkeypatch, docs)
+
+
+def test_customer_test_record_uses_deployment_organization(monkeypatch):
+    monkeypatch.setenv("MEDQC_HOSPITAL_NAME", "新区医院")
+    monkeypatch.setenv("MEDQC_HOSPITAL_CODE", "SITE-B-CODE")
+    with pytest.raises(_ReflectedSuccessfully):
+        _check_creator_materials(
+            monkeypatch, [_time_document("discharge_record")],
+            expected_organization=("新区医院", "SITE-B-CODE"),
+        )
 
 
 @pytest.mark.parametrize("explicit_first", [False, True])
