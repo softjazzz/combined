@@ -242,8 +242,8 @@ pnpm test:all
 
 ## 📞 支持与反馈
 
-- 🐛 **Bug 报告**: 请在 [Issues](../../issues) 中提交
-- 💡 **功能建议**: 欢迎在 [Issues](../../issues) 中讨论
+- 🐛 **Bug 报告**: 请在 [Issues](https://github.com/softjazzz/combined/issues) 中提交
+- 💡 **功能建议**: 欢迎在 [Issues](https://github.com/softjazzz/combined/issues) 中讨论
 - 📧 **技术支持**: 联系开发团队
 
 ---

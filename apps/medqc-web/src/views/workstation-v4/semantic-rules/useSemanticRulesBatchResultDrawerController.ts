@@ -3023,9 +3023,8 @@ export function useSemanticRulesBatchResultDrawerController(
     }
     if (kind === 'status') {
       const map: Record<string, string> = {
-        non_compliant: QC_RESULT_STATUS_LABELS.non_compliant,
+        ...QC_RESULT_STATUS_LABELS,
         ai_suggested_non_compliant: 'AI判断：疑似问题',
-        uncertain: QC_RESULT_STATUS_LABELS.uncertain,
         compliant: '合规',
         ai_suggested_compliant: 'AI判断：未见问题',
         not_applicable: '不适用',

@@ -1,7 +1,14 @@
 import type { DeptInfo } from '../types'
 import type { WorkstationDateField, WorkstationDateRange } from '../composables/usePatientRecords'
 
-const ALL_DEPARTMENTS = '全部科室'
+export const ALL_DEPARTMENTS = '全部科室'
+
+export function normalizeWorkstationDateRange(value: unknown): WorkstationDateRange {
+  if (!Array.isArray(value)) return null
+  const start = typeof value[0] === 'string' ? value[0] : ''
+  const end = typeof value[1] === 'string' ? value[1] : ''
+  return start || end ? [start, end] : null
+}
 
 export function buildDepartmentSelectOptions(departments: DeptInfo[]): DeptInfo[] {
   const seen = new Set<string>()
@@ -81,7 +88,7 @@ export function buildWorkstationFilterSummary(options: {
   }
 
   const dateText = options.dateRange
-    ? `${formatWorkstationDateFieldLabel(options.dateField)} ${options.dateRange[0]} 至 ${options.dateRange[1]}`
+    ? `${formatWorkstationDateFieldLabel(options.dateField)} ${options.dateRange[0] || '不限'} 至 ${options.dateRange[1] || '不限'}`
     : '全部日期'
   return `当前筛选：${options.activeDept} / ${dateText} / ${totalText}`
 }

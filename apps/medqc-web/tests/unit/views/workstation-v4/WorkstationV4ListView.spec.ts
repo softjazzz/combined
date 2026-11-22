@@ -407,6 +407,20 @@ describe('WorkstationV4ListView filters', () => {
     expect(wrapper.find('[data-testid="qc-agent-entry"]').exists()).toBe(false)
   })
 
+  it('保留单边日期并允许清空日期范围', () => {
+    const wrapper = mountListView()
+    const picker = wrapper.getComponent({ name: 'ARangePicker' })
+    picker.vm.$emit('update:value', ['2026-05-25', null])
+    picker.vm.$emit('update:value', [null, '2026-05-27'])
+    picker.vm.$emit('update:value', null)
+
+    expect(wrapper.emitted('update:dateRange')).toEqual([
+      [['2026-05-25', '']],
+      [['', '2026-05-27']],
+      [null],
+    ])
+  })
+
   it('emits selectDept when searchable department select changes', async () => {
     const wrapper = mountListView()
 

@@ -160,6 +160,25 @@ describe('apiService trace propagation', () => {
   })
 
   it.each([
+    { path: 'records', response: { status: 503 }, code: undefined, suppressed: true },
+    { path: 'analytics', response: undefined, code: 'ECONNABORTED', suppressed: true },
+    { path: 'analytics', response: undefined, code: 'ERR_NETWORK', suppressed: true },
+    { path: 'records', response: { status: 403 }, code: undefined, suppressed: false },
+    { path: 'record', response: { status: 503 }, code: undefined, suppressed: false },
+  ])('首页质控 $path 的 $response$code 只交给实际处理错误的入口', async ({
+    path, response, code, suppressed,
+  }) => {
+    const { responseRejected } = await loadApiServiceWithAxiosMock()
+    const error = {
+      code,
+      config: { method: 'get', url: `/api/v1/frontpage-qc/${path}` },
+      response,
+    }
+    await expect(responseRejected!(error)).rejects.toBe(error)
+    expect(mockMessageError).toHaveBeenCalledTimes(suppressed ? 0 : 1)
+  })
+
+  it.each([
     { code: 'ERR_CANCELED', response: undefined },
     { code: 'ECONNABORTED', response: undefined },
     { code: 'ERR_NETWORK', response: undefined },

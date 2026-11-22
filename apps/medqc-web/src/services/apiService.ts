@@ -214,9 +214,12 @@ apiClient.interceptors.response.use(
     const backgroundQcSummary =
       (requestUrl === WORKSTATION_QC_SUMMARY_PATH && originalRequest?.method === 'post')
       || (workstationList && qcSummaryMode === 'only')
-    const deferredWorkstationListFailed =
-      workstationList && originalRequest?.method === 'get' && qcSummaryMode === 'deferred'
-      && (responseStatus === undefined
+    const pageOwnedGet = originalRequest?.method === 'get' && (
+      (workstationList && qcSummaryMode === 'deferred')
+      || requestUrl === '/api/v1/frontpage-qc/records'
+      || requestUrl === '/api/v1/frontpage-qc/analytics'
+    )
+    const pageOwnedRequestFailed = pageOwnedGet && (responseStatus === undefined
         ? error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED'
         : responseStatus >= 500 && responseStatus < 600)
     if (backgroundQcSummary && error.code === 'ERR_CANCELED') return Promise.reject(error)
@@ -297,7 +300,7 @@ apiClient.interceptors.response.use(
     }
 
     // 工作台页内展示摘要、列表服务异常和网络失败，保留会话续期及权限提示。
-    if (backgroundQcSummary || deferredWorkstationListFailed) return Promise.reject(error)
+    if (backgroundQcSummary || pageOwnedRequestFailed) return Promise.reject(error)
     // 统一错误处理（兼容后端统一错误结构）
     const data = error.response?.data || {}
     const errorMessage = data.message || data.error || data.detail || error.message || '请求失败'

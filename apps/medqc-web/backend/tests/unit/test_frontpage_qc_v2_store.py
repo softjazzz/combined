@@ -159,6 +159,43 @@ def test_query_latest_filters(store):
     assert set(store.latest_by_refs([_ref(1), _ref(2), _ref(99)])) == {_ref(1), _ref(2)}
 
 
+def test_query_latest_large_ref_set_keeps_exact_identity_and_global_pagination(engine, store):
+    legacy = FrontpageRef("INST-SYN", "C|01", "V1")
+    collision = FrontpageRef("INST-SYN", "C", "01|V1")
+    selected = (_ref(1), _ref(2), legacy)
+    scores = (20.0, 10.0, 20.0, 1.0)
+    dates = ("2026-04-01", "2026-04-01", "2026-04-02", "2026-04-03")
+    result_ids = [
+        _save(store, run_id=f"synthetic-{index}", outcome=_outcome(ref), discharge_date=day)
+        for index, (ref, day) in enumerate(zip((*selected, collision), dates))
+    ]
+    with engine.begin() as connection:
+        for result_id, score in zip(result_ids, scores):
+            connection.execute(store.results.update().where(store.results.c.id == result_id).values(score=score))
+        connection.execute(store.results.update().where(store.results.c.id == result_ids[2]).values(
+            record_key=legacy.legacy_key()
+        ))
+
+    bindings = []
+
+    @sa.event.listens_for(engine, "before_cursor_execute")
+    def count_bindings(_conn, _cursor, _statement, parameters, _context, _executemany):
+        bindings.append(len(parameters))
+
+    refs = [legacy, *(_ref(n) for n in range(100, 10100)), _ref(1), _ref(2), legacy]
+    first, first_total = store.query_latest(record_refs=refs, page_size=2)
+    second, second_total = store.query_latest(record_refs=refs, page=2, page_size=2)
+
+    assert first_total == second_total == 3
+    assert [row["id"] for row in first] == [result_ids[1], result_ids[2]]
+    assert [row["id"] for row in second] == [result_ids[0]]
+    assert first[1]["record_key"] == legacy.legacy_key()
+    assert max(bindings) <= 10
+    query_count = len(bindings)
+    assert store.query_latest(record_refs=[]) == ([], 0)
+    assert len(bindings) == query_count
+
+
 def test_review_status_must_be_known(store):
     _save(store, run_id="r", outcome=_outcome(_ref(1), sex=""))
     finding = store.latest_detail(_ref(1))["findings"][0]
