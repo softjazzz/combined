@@ -2,7 +2,7 @@
 
 ## 🚀 端口分配规范
 
-为确保开发环境的一致性和避免端口冲突，本项目采用以下端口分配标准：
+MedQC 本地开发使用以下端口。前端通过 Vite 将 API 请求代理到 FastAPI。部署端口以对应发布手册为准。详见[活文档索引](docs/INDEX.md)。
 
 ### 前端服务
 | 服务名称 | 端口 | 用途 | 访问地址 |
@@ -51,12 +51,13 @@ export default defineConfig({
 })
 ```
 
-### 2. FastAPI配置 (后端)
+### 2. FastAPI 配置（后端）
+
+按 [MedQC 本地启动](apps/medqc-web/README.md#本地启动) 配置开发库和 JWT 密钥。Vite 默认代理到 `http://localhost:8001`，可通过 `VITE_BACKEND_TARGET` 指定开发后端。
+
 ```bash
-# MedQC 新版后端（推荐）
 cd apps/medqc-web/backend
-export JWT_SECRET=dev-secret
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 
 # YiBao 后端（保持原端口 8008，如有需要可参见其 README）
 ```
