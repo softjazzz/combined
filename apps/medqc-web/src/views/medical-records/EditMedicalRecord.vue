@@ -474,6 +474,7 @@
 </template>
 
 <script setup lang="ts">
+import { confirmAction } from '@/views/workstation-v4/utils/confirmDialog'
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -751,11 +752,11 @@ const handleSubmit = async () => {
           if (checkResponse.ok) {
             const currentRecord = (await checkResponse.json()) as RecordPayload
             if (currentRecord.updated_at !== originalData.value.updated_at) {
-              const confirmed = window.confirm(
-                '检测到此病历已被其他用户修改。\n\n' +
-                  '继续保存将覆盖其他用户的修改。\n\n' +
-                  '是否继续保存？',
-              )
+              const confirmed = await confirmAction({
+                title: '是否继续保存？',
+                content: '检测到此病历已被其他用户修改。继续保存将覆盖其他用户的修改。',
+                danger: true,
+              })
               if (!confirmed) {
                 submitting.value = false
                 return

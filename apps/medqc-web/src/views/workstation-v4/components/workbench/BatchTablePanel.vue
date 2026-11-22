@@ -530,7 +530,7 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel__header {
-  border-bottom: 1px solid var(--workstation-divider, rgba(226, 232, 240, 0.88));
+  border-bottom: 1px solid var(--mq-border);
 }
 
 .batch-table-panel__toolbar {
@@ -545,25 +545,25 @@ function rowClassName(record: WorkbenchRow): string {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--workstation-text-primary, #1d1d1f);
+  color: var(--mq-text-primary);
 }
 
 .batch-table-panel__summary-pill {
   display: inline-flex;
   align-items: center;
-  border-radius: var(--workstation-radius-pill, 999px);
+  border-radius: var(--mq-radius-tag);
   border: 0;
   background: rgba(248, 250, 252, 0.9);
   padding: 3px 9px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
 }
 
 .batch-table-panel__summary-pill--selected {
-  border-color: var(--workstation-brand-border, rgba(191, 219, 254, 0.96));
-  background: var(--workstation-brand-100, rgba(239, 246, 255, 0.96));
-  color: var(--workstation-brand-600, #0a5fd6);
+  border-color: var(--mq-info-border);
+  background: var(--mq-info-bg);
+  color: var(--mq-brand-700);
 }
 
 .batch-table-panel__action {
@@ -581,20 +581,20 @@ function rowClassName(record: WorkbenchRow): string {
 
 .batch-table-panel__action--primary {
   border: 0 !important;
-  background: var(--workstation-brand-500, #0a6cff) !important;
+  background: var(--mq-brand-600) !important;
   color: #fff !important;
   box-shadow: 0 12px 22px rgba(47, 111, 237, 0.18) !important;
 }
 
 .batch-table-panel__action--primary:hover {
-  background: var(--workstation-brand-600, #0a5fd6) !important;
+  background: var(--mq-brand-700) !important;
   box-shadow: 0 14px 26px rgba(47, 111, 237, 0.22) !important;
 }
 
 .batch-table-panel__action--secondary {
   border-color: transparent !important;
   background: transparent !important;
-  color: var(--workstation-text-secondary, #5b6b84) !important;
+  color: var(--mq-text-secondary) !important;
   box-shadow: none !important;
 }
 
@@ -602,7 +602,7 @@ function rowClassName(record: WorkbenchRow): string {
 .batch-table-panel__detail-button {
   border-color: transparent !important;
   background: rgba(255, 255, 255, 0.72) !important;
-  color: var(--workstation-text-secondary, #5b6b84) !important;
+  color: var(--mq-text-secondary) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
     0 8px 16px rgba(191, 207, 228, 0.12) !important;
@@ -612,7 +612,7 @@ function rowClassName(record: WorkbenchRow): string {
 .batch-table-panel__action--ghost:hover,
 .batch-table-panel__detail-button:hover {
   border-color: transparent !important;
-  color: var(--workstation-brand-600, #0a5fd6) !important;
+  color: var(--mq-brand-700) !important;
 }
 
 .batch-table-panel :deep(.ant-pagination-options) {
@@ -638,7 +638,7 @@ function rowClassName(record: WorkbenchRow): string {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--workstation-text-primary, #1d1d1f);
+  color: var(--mq-text-primary);
 }
 
 .batch-table-panel__patient-cell {
@@ -680,21 +680,21 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel__visit-label {
-  color: var(--workstation-text-muted, #94a3b8);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .batch-table-panel__visit-id {
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
   font-size: 12px;
 }
 
 .batch-table-panel__department,
 .batch-table-panel__risk {
   font-size: 12px;
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -721,7 +721,7 @@ function rowClassName(record: WorkbenchRow): string {
 
 .batch-table-panel__hospitalization-status--inpatient {
   background: rgba(10, 108, 255, 0.1);
-  color: var(--workstation-brand-600, #0a5fd6);
+  color: var(--mq-brand-700);
 }
 
 .batch-table-panel__hospitalization-status--discharged {
@@ -740,7 +740,7 @@ function rowClassName(record: WorkbenchRow): string {
   gap: 3px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
 }
 
 .batch-table-panel__date-line {
@@ -752,19 +752,19 @@ function rowClassName(record: WorkbenchRow): string {
 
 .batch-table-panel__date-label {
   min-width: 24px;
-  color: var(--workstation-text-muted, #94a3b8);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 600;
 }
 
 .batch-table-panel__date-pending {
-  color: var(--workstation-brand-600, #0a5fd6);
+  color: var(--mq-brand-700);
 }
 
 .batch-table-panel__updated-at {
   font-size: 11px;
   font-weight: 600;
-  color: var(--workstation-text-muted, #94a3b8);
+  color: var(--mq-text-tertiary);
 }
 
 .batch-table-panel__tag {
@@ -774,32 +774,32 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel__tag--demo {
-  background: color-mix(in srgb, var(--workstation-state-demo-bg, #eaf5ff) 84%, white);
-  color: var(--workstation-state-demo-text, #0f6cbd);
+  background: color-mix(in srgb, var(--mq-info-bg) 84%, white);
+  color: var(--mq-info-text);
 }
 
 .batch-table-panel__tag--brand {
   background: color-mix(
     in srgb,
-    var(--workstation-brand-050, rgba(234, 242, 255, 0.98)) 88%,
+    var(--mq-brand-tint-6) 88%,
     white
   );
-  color: var(--workstation-brand-600, #0a5fd6);
+  color: var(--mq-brand-700);
 }
 
 .batch-table-panel__tag--review {
-  background: color-mix(in srgb, var(--workstation-state-review-bg, var(--mq-info-bg)) 84%, white);
-  color: var(--workstation-state-review-text, var(--mq-info-text));
+  background: color-mix(in srgb, var(--mq-info-bg) 84%, white);
+  color: var(--mq-info-text);
 }
 
 .batch-table-panel__tag--danger {
-  background: color-mix(in srgb, var(--workstation-state-danger-bg, #fdeded) 84%, white);
-  color: var(--workstation-state-danger-text, #b94a48);
+  background: color-mix(in srgb, var(--mq-danger-bg) 84%, white);
+  color: var(--mq-danger-text);
 }
 
 .batch-table-panel__tag--warning {
-  background: color-mix(in srgb, var(--workstation-state-warning-bg, #fff6e5) 84%, white);
-  color: var(--workstation-state-warning-text, #b85a00);
+  background: color-mix(in srgb, var(--mq-warning-bg) 84%, white);
+  color: var(--mq-warning-text);
 }
 
 .batch-table-panel__tag--success {
@@ -809,7 +809,7 @@ function rowClassName(record: WorkbenchRow): string {
 
 .batch-table-panel__tag--neutral {
   background: rgba(248, 250, 252, 0.86);
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
 }
 
 .batch-table-panel :deep(.ant-table) {
@@ -817,17 +817,17 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel :deep(.ant-table-container) {
-  border-top: 1px solid var(--workstation-divider, rgba(226, 232, 240, 0.88));
+  border-top: 1px solid var(--mq-border);
 }
 
 .batch-table-panel :deep(.ant-table-thead > tr > th) {
-  background: var(--workstation-bg-table-header, rgba(248, 250, 252, 0.92));
-  color: var(--workstation-text-muted, #94a3b8);
+  background: var(--mq-table-header-bg);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--workstation-divider, rgba(226, 232, 240, 0.88));
+  border-bottom: 1px solid var(--mq-border);
 }
 
 .batch-table-panel :deep(.ant-table-tbody > tr > td) {
@@ -838,15 +838,15 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel :deep(.ant-table-tbody > tr:hover > td) {
-  background: var(--workstation-bg-table-row-hover, rgba(248, 250, 252, 0.88));
+  background: var(--mq-table-row-hover-bg);
 }
 
 .batch-table-panel :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: var(--workstation-bg-table-row-selected, rgba(239, 246, 255, 0.92));
+  background: var(--mq-info-bg);
 }
 
 .batch-table-panel :deep(.ant-checkbox-wrapper) {
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
 }
 
 .batch-table-panel :deep(.ant-checkbox-inner) {
@@ -855,8 +855,8 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel :deep(.ant-checkbox-checked .ant-checkbox-inner) {
-  background: var(--workstation-brand-500, #0a6cff);
-  border-color: var(--workstation-brand-500, #0a6cff);
+  background: var(--mq-brand-600);
+  border-color: var(--mq-brand-600);
 }
 
 .batch-table-panel :deep(.ant-empty) {
@@ -864,7 +864,7 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel :deep(.ant-empty-description) {
-  color: var(--workstation-text-muted, #94a3b8);
+  color: var(--mq-text-tertiary);
   font-size: 13px;
 }
 
@@ -877,7 +877,7 @@ function rowClassName(record: WorkbenchRow): string {
 
 .batch-table-panel--record-pool {
   border-radius: 12px;
-  border-color: var(--workstation-divider, #e5eaf1);
+  border-color: var(--mq-border);
   background: #fff;
   box-shadow: none;
 }
@@ -899,7 +899,7 @@ function rowClassName(record: WorkbenchRow): string {
 .batch-table-panel--record-pool .batch-table-panel__clear-selection {
   padding-inline: 2px;
   font-size: 12px;
-  color: var(--workstation-brand-500, #0a6cff);
+  color: var(--mq-brand-600);
 }
 
 .batch-table-panel--record-pool .batch-table-panel__patient-name {
@@ -911,13 +911,13 @@ function rowClassName(record: WorkbenchRow): string {
 .batch-table-panel--record-pool .batch-table-panel__department {
   display: block;
   font-size: 14px;
-  color: var(--workstation-text-primary, #1d1d1f);
+  color: var(--mq-text-primary);
 }
 
 .batch-table-panel--record-pool .batch-table-panel__detail-button {
   height: 30px !important;
   background: transparent !important;
-  color: var(--workstation-brand-500, #0a6cff) !important;
+  color: var(--mq-brand-600) !important;
   box-shadow: none !important;
   font-size: 13px !important;
   font-weight: 500 !important;
@@ -933,7 +933,7 @@ function rowClassName(record: WorkbenchRow): string {
 
 .batch-table-panel--record-pool :deep(.ant-table-thead > tr > th) {
   background: #fafbfd;
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0;
@@ -968,6 +968,6 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel--record-pool :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: var(--workstation-brand-050, #eaf2ff);
+  background: var(--mq-brand-tint-6);
 }
 </style>

@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
 }
 .diagnostic-export__notice {
   margin: 12px 0;
-  color: var(--workstation-text-secondary, #64748b);
+  color: var(--mq-diagnostic-help-text);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -345,7 +345,7 @@ onBeforeUnmount(() => {
   overflow: auto;
   background: #f5f5f7;
   border-radius: 8px;
-  color: var(--workstation-text-primary, #1d1d1f);
+  color: var(--mq-text-primary);
   font-size: 13px;
   line-height: 1.65;
   white-space: pre-wrap;

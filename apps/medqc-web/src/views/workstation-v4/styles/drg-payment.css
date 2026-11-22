@@ -805,18 +805,8 @@
 }
 
 .payment-monitoring-page {
-  --workstation-canvas: var(--mq-bg-subtle);
-  --workstation-surface: var(--mq-glass-bg-strong);
-  --workstation-surface-strong: var(--mq-glass-bg-strong);
-  --workstation-border: var(--mq-border);
-  --workstation-text: var(--mq-text-primary);
-  --workstation-muted: var(--mq-text-secondary);
-  --workstation-subtle: var(--mq-text-tertiary);
-  --workstation-primary: var(--mq-brand-600);
-  --workstation-primary-soft: color-mix(in srgb, var(--mq-brand-600) 10%, transparent);
-
-  background: var(--workstation-canvas);
-  color: var(--workstation-text);
+  background: var(--mq-bg-subtle);
+  color: var(--mq-text-primary);
   font-family: var(--mq-font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -828,8 +818,8 @@
 .detail-panel,
 .advice-panel,
 .kpi-card {
-  border: 1px solid var(--workstation-border);
-  background: var(--workstation-surface);
+  border: 1px solid var(--mq-border);
+  background: var(--mq-glass-bg-strong);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
@@ -870,7 +860,7 @@
 .kpi-content p,
 .advice-footnote,
 .risk-reason small {
-  color: var(--workstation-muted);
+  color: var(--mq-text-secondary);
 }
 
 .payment-title,
@@ -882,7 +872,7 @@
 .kpi-value-row,
 .risk-reason strong,
 .advice-copy strong {
-  color: var(--workstation-text);
+  color: var(--mq-text-primary);
 }
 
 .back-button,
@@ -890,17 +880,17 @@
 .secondary-action,
 .standard-summary-meta span,
 .filter-chip {
-  border-color: var(--workstation-border);
-  background: var(--workstation-surface-strong);
-  color: var(--workstation-muted);
+  border-color: var(--mq-border);
+  background: var(--mq-glass-bg-strong);
+  color: var(--mq-text-secondary);
 }
 
 .back-button:hover,
 .standard-config-button:hover,
 .secondary-action:hover {
   border-color: color-mix(in srgb, var(--mq-brand-600) 22%, transparent);
-  background: var(--workstation-primary-soft);
-  color: var(--workstation-primary);
+  background: var(--mq-brand-tint-10);
+  color: var(--mq-brand-600);
 }
 
 .backend-sync-button,
@@ -910,20 +900,20 @@
 .case-link,
 .link-button,
 .priority-action {
-  color: var(--workstation-primary);
+  color: var(--mq-brand-600);
 }
 
 .backend-sync-button,
 .scope-chip,
 .standard-status {
   border-color: color-mix(in srgb, var(--mq-brand-600) 16%, transparent);
-  background: var(--workstation-primary-soft);
+  background: var(--mq-brand-tint-10);
 }
 
 .export-button,
 .primary-action {
-  border-color: var(--workstation-primary);
-  background: var(--workstation-primary);
+  border-color: var(--mq-brand-600);
+  background: var(--mq-brand-600);
   box-shadow: 0 4px 10px color-mix(in srgb, var(--mq-brand-600) 16%, transparent);
 }
 
@@ -933,12 +923,12 @@
 }
 
 .kpi-card-blue {
-  border-left-color: var(--workstation-primary);
+  border-left-color: var(--mq-brand-600);
 }
 
 .kpi-icon {
-  background: var(--workstation-primary-soft);
-  color: var(--workstation-primary);
+  background: var(--mq-brand-tint-10);
+  color: var(--mq-brand-600);
 }
 
 .risk-head,
@@ -951,7 +941,7 @@
 .risk-head,
 .case-list th {
   background: var(--mq-glass-bg);
-  color: var(--workstation-subtle);
+  color: var(--mq-text-tertiary);
 }
 
 .risk-row:hover,

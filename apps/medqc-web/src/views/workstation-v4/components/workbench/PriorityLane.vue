@@ -191,7 +191,7 @@ function riskBadgeClass(riskType: string) {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--workstation-text-primary, #1d1d1f);
+  color: var(--mq-text-primary);
 }
 
 .priority-lane__segments {
@@ -208,7 +208,7 @@ function riskBadgeClass(riskType: string) {
   gap: 8px;
   min-height: 34px;
   border: 1px solid rgba(226, 232, 240, 0.86);
-  border-radius: var(--workstation-radius-pill, 999px);
+  border-radius: var(--mq-radius-tag);
   padding: 6px 12px;
   background: rgba(255, 255, 255, 0.9);
   text-align: center;
@@ -220,20 +220,20 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__segment--idle {
-  color: var(--workstation-text-secondary, rgb(71 85 105));
+  color: var(--mq-text-secondary);
   background: rgba(255, 255, 255, 0.88);
 }
 
 .priority-lane__segment--idle:hover {
-  background: var(--workstation-bg-surface-strong, rgba(255, 255, 255, 0.92));
-  color: var(--workstation-text-primary, rgb(15 23 42));
-  box-shadow: var(--workstation-shadow-card, 0 10px 24px rgba(148, 163, 184, 0.12));
+  background: var(--mq-workbench-glass-bg-strong);
+  color: var(--mq-text-primary);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 .priority-lane__segment--active {
   border-color: rgba(10, 108, 255, 0.18);
   background: rgba(10, 108, 255, 0.1);
-  color: var(--workstation-primary, #0a6cff);
+  color: var(--mq-brand-600);
   box-shadow: none;
   transform: translateY(-1px);
 }
@@ -243,11 +243,11 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__empty {
-  border-radius: var(--workstation-radius-card, 24px);
-  border: 1px dashed var(--workstation-divider, rgba(226, 232, 240, 0.88));
+  border-radius: var(--mq-workbench-radius-card);
+  border: 1px dashed var(--mq-border);
   background: rgba(248, 251, 255, 0.86);
-  color: var(--workstation-text-secondary, rgb(91 107 132));
-  box-shadow: var(--workstation-shadow-card, 0 16px 30px rgba(148, 163, 184, 0.1));
+  color: var(--mq-text-secondary);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 .priority-lane__card {
@@ -286,7 +286,7 @@ function riskBadgeClass(riskType: string) {
   justify-content: center;
   border-radius: 999px;
   background: #eaf2ff;
-  color: var(--workstation-primary, #0a6cff);
+  color: var(--mq-brand-600);
   font-size: 14px;
 }
 
@@ -294,30 +294,30 @@ function riskBadgeClass(riskType: string) {
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--workstation-text-primary, #1d1d1f);
+  color: var(--mq-text-primary);
 }
 
 .priority-lane__meta {
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
 }
 
 .priority-lane__visit-id,
 .priority-lane__pill,
 .priority-lane__risk {
-  border-radius: var(--workstation-radius-pill, 999px);
+  border-radius: var(--mq-radius-tag);
 }
 
 .priority-lane__visit-id {
   border: 0;
   background: transparent;
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
   box-shadow: none;
 }
 
 .priority-lane__pill--demo,
 .priority-lane__risk--demo {
-  background: color-mix(in srgb, var(--workstation-state-demo-bg, #eaf5ff) 84%, white);
-  color: var(--workstation-state-demo-text, #0f6cbd);
+  background: color-mix(in srgb, var(--mq-info-bg) 84%, white);
+  color: var(--mq-info-text);
   border: 0;
 }
 
@@ -329,31 +329,31 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__risk--warning {
-  background: color-mix(in srgb, var(--workstation-state-warning-bg, #fff6e5) 82%, white);
-  color: var(--workstation-state-warning-text, #b85a00);
+  background: color-mix(in srgb, var(--mq-warning-bg) 82%, white);
+  color: var(--mq-warning-text);
   border-color: transparent;
 }
 
 .priority-lane__risk--danger {
-  background: color-mix(in srgb, var(--workstation-state-danger-bg, #fdeded) 82%, white);
-  color: var(--workstation-state-danger-text, #b94a48);
+  background: color-mix(in srgb, var(--mq-danger-bg) 82%, white);
+  color: var(--mq-danger-text);
   border-color: transparent;
 }
 
 .priority-lane__risk--review {
-  background: color-mix(in srgb, var(--workstation-state-review-bg, var(--mq-info-bg)) 82%, white);
-  color: var(--workstation-state-review-text, var(--mq-info-text));
+  background: color-mix(in srgb, var(--mq-info-bg) 82%, white);
+  color: var(--mq-info-text);
   border-color: transparent;
 }
 
 .priority-lane__risk--default {
-  background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
-  color: var(--workstation-text-secondary, #5b6b84);
+  background: var(--mq-workbench-glass-bg-soft);
+  color: var(--mq-text-secondary);
   border-color: transparent;
 }
 
 .priority-lane__department {
-  color: var(--workstation-text-secondary, #5b6b84);
+  color: var(--mq-text-secondary);
 }
 
 .priority-lane__department-dot {
@@ -402,7 +402,7 @@ function riskBadgeClass(riskType: string) {
 .priority-lane__action--secondary {
   border-color: transparent !important;
   background: transparent !important;
-  color: var(--workstation-text-muted, #94a3b8) !important;
+  color: var(--mq-text-tertiary) !important;
   box-shadow: none !important;
   padding: 0 6px !important;
   height: 34px !important;
@@ -410,7 +410,7 @@ function riskBadgeClass(riskType: string) {
 
 .priority-lane__action--secondary:hover {
   background: transparent !important;
-  color: var(--workstation-brand-600, #0a5fd6) !important;
+  color: var(--mq-brand-700) !important;
 }
 
 .priority-lane__segment-label {

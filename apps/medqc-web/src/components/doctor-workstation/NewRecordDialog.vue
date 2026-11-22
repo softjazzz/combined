@@ -167,14 +167,15 @@
                 >
                   入院日期 <span class="required">*</span>
                 </label>
-                <input
+                <a-date-picker
                   id="admission_date"
-                  v-model="formData.admission_date"
-                  type="date"
+                  :value="formData.admission_date"
+                  @update:value="formData.admission_date = typeof $event === 'string' ? $event : ''"
+                  value-format="YYYY-MM-DD"
                   class="form-input"
-                  :max="today"
-                  required
-                >
+                  :disabled-date="(date) => date.format('YYYY-MM-DD') > today"
+                  aria-required="true"
+                />
               </div>
             </div>
           </div>
@@ -233,6 +234,7 @@
 </template>
 
 <script setup lang="ts">
+import { DatePicker as ADatePicker } from 'ant-design-vue'
 import { ref, computed, onMounted } from 'vue'
 import type { MedicalRecord } from '@/api/medical-records'
 

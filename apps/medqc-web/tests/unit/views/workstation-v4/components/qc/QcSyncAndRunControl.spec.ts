@@ -1,3 +1,4 @@
+import { setDatePickerValue } from '../../../../../utils/setDatePickerValue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -345,10 +346,10 @@ describe('QcSyncAndRunControl', () => {
     await flushPromises()
 
     expect(
-      (wrapper.get('[data-testid="sync-and-qc-start-date"]').element as HTMLInputElement).value,
+      (wrapper.get('[data-testid="sync-and-qc-start-date"] input').element as HTMLInputElement).value,
     ).toBe('2026-08-01')
     expect(
-      (wrapper.get('[data-testid="sync-and-qc-end-date"]').element as HTMLInputElement).value,
+      (wrapper.get('[data-testid="sync-and-qc-end-date"] input').element as HTMLInputElement).value,
     ).toBe('2026-08-18')
     await wrapper.get('[data-testid="sync-and-qc-confirm"]').trigger('click')
     await flushPromises()
@@ -410,14 +411,14 @@ describe('QcSyncAndRunControl', () => {
       await wrapper.get('[data-testid="sync-and-qc-trigger"]').trigger('click')
       await flushPromises()
 
-      const startInput = wrapper.get('[data-testid="sync-and-qc-start-date"]')
-      const endInput = wrapper.get('[data-testid="sync-and-qc-end-date"]')
+      const startInput = wrapper.get('[data-testid="sync-and-qc-start-date"] input')
+      const endInput = wrapper.get('[data-testid="sync-and-qc-end-date"] input')
       expect((startInput.element as HTMLInputElement).value).toBe('2026-08-13')
       expect((endInput.element as HTMLInputElement).value).toBe('2026-08-19')
       expect(wrapper.text()).toContain('默认最近7天（含今日）')
 
-      await startInput.setValue('2026-08-05')
-      await endInput.setValue('2026-08-17')
+      await setDatePickerValue(startInput, '2026-08-05')
+      await setDatePickerValue(endInput, '2026-08-17')
       await wrapper.get('[data-testid="sync-and-qc-confirm"]').trigger('click')
       await flushPromises()
 
@@ -460,8 +461,8 @@ describe('QcSyncAndRunControl', () => {
     })
 
     await wrapper.get('[data-testid="sync-and-qc-trigger"]').trigger('click')
-    await wrapper.get('[data-testid="sync-and-qc-start-date"]').setValue(startDate)
-    await wrapper.get('[data-testid="sync-and-qc-end-date"]').setValue(endDate)
+    await setDatePickerValue(wrapper.get('[data-testid="sync-and-qc-start-date"] input'), startDate)
+    await setDatePickerValue(wrapper.get('[data-testid="sync-and-qc-end-date"] input'), endDate)
     await wrapper.get('[data-testid="sync-and-qc-confirm"]').trigger('click')
     await flushPromises()
 

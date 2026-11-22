@@ -119,12 +119,13 @@
               </label>
               <label class="mq-field">
                 <span class="mq-field__label">评价时间点<span class="mq-field__required">*</span></span>
-                <input
-                  v-model="draft.evaluationDate"
+                <a-date-picker
+                  id="rule-validation-evaluation-date"
+                  :value="draft.evaluationDate"
+                  @update:value="draft.evaluationDate = typeof $event === 'string' ? $event : ''"
                   class="mq-input"
-                  type="date"
-                  aria-label="评价时间点"
-                >
+                  value-format="YYYY-MM-DD"
+                />
               </label>
               <div class="mq-field">
                 <span class="mq-field__label">病历场景</span>
@@ -353,7 +354,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { DatePicker as ADatePicker, message } from 'ant-design-vue'
 import { getValidationRule, saveCaseAnswer } from '@/services/rule-validation-service'
 import type { RuleInfo, ValidationCase } from '@/services/rule-validation-service'
 import { createManualTestMedicalRecord, getEditableMedicalRecordDocuments } from '@/services/manual-case-sample-service'

@@ -334,11 +334,12 @@
             </label>
             <label>
               <span>评价时间点</span>
-              <a-input
-                v-model:value="form.evaluationAsOfDate"
-                type="date"
-                aria-label="评价时间点"
+              <a-date-picker
+                :value="form.evaluationAsOfDate"
+                @update:value="form.evaluationAsOfDate = typeof $event === 'string' ? $event : ''"
+                value-format="YYYY-MM-DD"
                 placeholder="留空取创建当天"
+                class="mq-input"
               />
               <small class="field-hint">未出院病例的时限规则按此日期评价，创建后固定</small>
             </label>
@@ -661,7 +662,7 @@ import MqIcon from '@/components/icons/MqIcon.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { CSSProperties } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { DatePicker as ADatePicker, message } from 'ant-design-vue'
 
 import {
   createManualTestMedicalRecord,

@@ -13,64 +13,14 @@
   background-color: rgba(29, 29, 31, 0.26);
 }
 
-/* 兼容旧组件的变量名，工作台共用语义值来自 --mq-*。 */
-.workstation-shell {
-  --workstation-bg-page: var(--mq-bg-page);
-  --workstation-bg-card: var(--mq-bg-surface);
-  --workstation-bg-surface: rgba(255, 255, 255, 0.82);
-  --workstation-bg-surface-strong: rgba(255, 255, 255, 0.9);
-  --workstation-bg-card-soft: rgba(255, 255, 255, 0.72);
-  --workstation-bg-table-header: rgba(255, 255, 255, 0.92);
-  --workstation-bg-table-row-hover: rgba(0, 0, 0, 0.025);
-  --workstation-bg-table-row-selected: var(--mq-info-bg);
-  --workstation-text-primary: var(--mq-text-primary);
-  --workstation-text-secondary: var(--mq-text-secondary);
-  --workstation-text-muted: var(--mq-text-tertiary);
-  --workstation-border-soft: var(--mq-border);
-  --workstation-border-light: rgba(255, 255, 255, 0.92);
-  --workstation-border-strong: var(--mq-border);
-  --workstation-divider: var(--mq-border);
-  --workstation-brand-500: var(--mq-brand-600);
-  --workstation-brand-600: var(--mq-brand-700);
-  --workstation-brand-050: color-mix(in srgb, var(--mq-brand-600) 6%, transparent);
-  --workstation-brand-100: var(--mq-info-bg);
-  --workstation-brand-border: var(--mq-info-border);
-  --workstation-brand-shadow: var(--mq-info-border);
-  --workstation-state-warning-bg: var(--mq-warning-bg);
-  --workstation-state-warning-text: var(--mq-warning-text);
-  --workstation-state-danger-bg: var(--mq-danger-bg);
-  --workstation-state-danger-text: var(--mq-danger-text);
-  --workstation-state-review-bg: var(--mq-info-bg);
-  --workstation-state-review-text: var(--mq-info-text);
-  --workstation-state-demo-bg: var(--mq-info-bg);
-  --workstation-state-demo-text: var(--mq-info-text);
-  --workstation-radius-panel: 20px;
-  --workstation-radius-card: 16px;
-  --workstation-radius-input: 10px;
-  --workstation-radius-pill: var(--mq-radius-tag);
-  --workstation-shadow-panel: 0 1px 4px rgba(0, 0, 0, 0.045), 0 2px 8px rgba(0, 0, 0, 0.035);
-  --workstation-shadow-card: 0 1px 4px rgba(0, 0, 0, 0.045), 0 2px 8px rgba(0, 0, 0, 0.035);
-  --workstation-shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.1), 0 6px 22px rgba(0, 0, 0, 0.075);
-  --workstation-shadow-input:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 1px rgba(0, 0, 0, 0.035);
-  --workstation-analysis-bg: var(--mq-glass-bg-strong);
-  --workstation-analysis-border: var(--mq-border);
-  --workstation-analysis-shadow: var(--workstation-shadow-panel);
-  --workstation-space-2: var(--mq-space-2);
-  --workstation-space-3: var(--mq-space-3);
-  --workstation-space-4: var(--mq-space-4);
-  --workstation-space-5: var(--mq-space-5);
-  --workstation-space-6: var(--mq-space-6);
-}
-
 .wv4-analysis-overview {
   border-radius: 22px;
-  border: 1px solid var(--workstation-analysis-border);
-  background: var(--workstation-analysis-bg);
+  border: 1px solid var(--mq-border);
+  background: var(--mq-glass-bg-strong);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   padding: 22px;
-  box-shadow: var(--workstation-analysis-shadow);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 .wv4-analysis-overview__header {
@@ -78,7 +28,7 @@
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--workstation-space-4);
+  gap: var(--mq-space-4);
 }
 
 .wv4-analysis-overview__eyebrow {
@@ -87,7 +37,7 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--workstation-text-muted);
+  color: var(--mq-text-tertiary);
 }
 
 .wv4-analysis-overview__title {
@@ -95,20 +45,20 @@
   font-size: 26px;
   line-height: 1.15;
   font-weight: 700;
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
 }
 
 .wv4-analysis-overview__subtitle {
   margin: 8px 0 0;
   max-width: 640px;
   font-size: 13px;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .wv4-analysis-overview__actions {
   display: flex;
   align-items: center;
-  gap: var(--workstation-space-2);
+  gap: var(--mq-space-2);
 }
 
 .wv4-analysis-overview__action {
@@ -138,11 +88,11 @@
 }
 
 .wv4-record-pool-hero {
-  border: 1px solid var(--workstation-analysis-border);
+  border: 1px solid var(--mq-border);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.86);
   padding: 24px;
-  box-shadow: var(--workstation-analysis-shadow);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 .wv4-record-pool-hero .wv4-analysis-overview__header {
@@ -155,14 +105,14 @@
 
 .wv4-record-pool-hero .wv4-analysis-overview__subtitle {
   margin-top: 8px;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .wv4-record-pool-hero .wv4-analysis-overview__controls {
   margin-top: 18px;
   margin-bottom: 0;
   border: 0;
-  border-top: 1px solid var(--workstation-border-light);
+  border-top: 1px solid var(--mq-workbench-glass-border);
   border-radius: 0;
   background: transparent;
   padding: 18px 0 0;
@@ -199,7 +149,7 @@
 }
 
 .wv4-record-pool-hero .workbench-hosp-filter__label {
-  color: var(--workstation-text-muted);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -253,7 +203,7 @@
   margin-top: 12px;
   font-size: 12px;
   line-height: 18px;
-  color: var(--workstation-text-muted);
+  color: var(--mq-text-tertiary);
 }
 
 .wv4-record-pool-filter__notice svg {
@@ -264,7 +214,7 @@
 .wv4-record-pool-hero .wv4-analysis-kpi-card {
   min-height: 106px;
   border-radius: 12px;
-  box-shadow: var(--workstation-shadow-card);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 .wv4-analysis-kpis {
@@ -279,12 +229,12 @@
   gap: 18px;
   min-height: 112px;
   border-radius: 16px;
-  border: 1px solid var(--workstation-border-strong);
+  border: 1px solid var(--mq-border);
   background: rgba(255, 255, 255, 0.86);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   padding: 18px 20px;
-  box-shadow: var(--workstation-shadow-card);
+  box-shadow: var(--mq-workbench-shadow);
   transition:
     border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
     box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
@@ -293,7 +243,7 @@
 
 .wv4-analysis-kpi-card:hover {
   border-color: rgba(0, 0, 0, 0.14);
-  box-shadow: var(--workstation-shadow-card-hover);
+  box-shadow: var(--mq-workbench-shadow-hover);
   transform: translateY(-2px);
 }
 
@@ -307,7 +257,7 @@
   border-radius: 999px;
   font-size: 24px;
   background: var(--mq-info-bg);
-  color: var(--workstation-brand-600);
+  color: var(--mq-brand-700);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
@@ -315,20 +265,20 @@
   margin-bottom: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .wv4-analysis-kpi-card__value {
   font-size: 28px;
   line-height: 1.05;
   font-weight: 700;
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
 }
 
 .wv4-analysis-kpi-card__desc {
   margin-top: 8px;
   font-size: 12px;
-  color: var(--workstation-text-muted);
+  color: var(--mq-text-tertiary);
 }
 
 .wv4-analysis-kpi-card--brand {
@@ -337,7 +287,7 @@
 
 .wv4-analysis-kpi-card--brand .wv4-analysis-kpi-card__icon {
   background: var(--mq-info-bg);
-  color: var(--workstation-brand-600);
+  color: var(--mq-brand-700);
 }
 
 .wv4-analysis-kpi-card--danger {
@@ -370,7 +320,7 @@
 .wv4-filter-actions {
   display: inline-flex;
   align-items: center;
-  gap: var(--workstation-space-2);
+  gap: var(--mq-space-2);
 }
 
 .wv4-filter-actions__button {
@@ -416,13 +366,13 @@
   font-size: 20px;
   line-height: 1.2;
   font-weight: 700;
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
 }
 
 .wv4-record-insight__refresh {
   border: 0;
   background: transparent;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -437,7 +387,7 @@
 .wv4-record-insight__section-title {
   font-size: 13px;
   font-weight: 700;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .wv4-record-insight__rank-list,
@@ -465,14 +415,14 @@
   justify-content: center;
   border-radius: 6px;
   background: #eef4ff;
-  color: var(--workstation-brand-600);
+  color: var(--mq-brand-700);
   font-size: 11px;
   font-weight: 700;
 }
 
 .wv4-record-insight__rank-name {
   overflow: hidden;
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
   font-size: 13px;
   font-weight: 650;
   text-overflow: ellipsis;
@@ -480,7 +430,7 @@
 }
 
 .wv4-record-insight__rank-value {
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
   font-size: 13px;
   font-weight: 700;
   text-align: right;
@@ -504,7 +454,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
-  border-top: 1px solid var(--workstation-divider);
+  border-top: 1px solid var(--mq-border);
   padding-top: 14px;
 }
 
@@ -513,41 +463,41 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 
 .wv4-record-insight__mini-row strong {
-  color: var(--workstation-brand-600);
+  color: var(--mq-brand-700);
   font-weight: 700;
 }
 
 .wv4-record-insight__footer {
   margin-top: auto;
-  color: var(--workstation-text-muted);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
 .wv4-analysis-split {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-  gap: var(--workstation-space-3);
+  gap: var(--mq-space-3);
 }
 
 .wv4-analysis-split__left,
 .wv4-analysis-split__right {
   border-radius: 20px !important;
-  border: 1px solid var(--workstation-border-strong) !important;
+  border: 1px solid var(--mq-border) !important;
   background: rgba(255, 255, 255, 0.86) !important;
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
-  box-shadow: var(--workstation-shadow-card);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 .wv4-analysis-card__title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
 }
 
 .wv4-analysis-tabs :deep(.ant-tabs-nav) {
@@ -561,11 +511,11 @@
 
 .wv4-analysis-list-panel {
   border-radius: 20px;
-  border: 1px solid var(--workstation-border-strong);
+  border: 1px solid var(--mq-border);
   background: rgba(255, 255, 255, 0.86);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
-  box-shadow: var(--workstation-shadow-card);
+  box-shadow: var(--mq-workbench-shadow);
   overflow: hidden;
 }
 
@@ -573,29 +523,29 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--workstation-space-3);
-  padding: var(--workstation-space-4) var(--workstation-space-4) 0;
+  gap: var(--mq-space-3);
+  padding: var(--mq-space-4) var(--mq-space-4) 0;
 }
 
 .wv4-analysis-list-panel__title {
   margin: 0;
   font-size: 17px;
   font-weight: 600;
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
 }
 
 .wv4-analysis-list-panel__subtitle {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .workstation-shell :deep(.ant-card),
 .rules-shell :deep(.ant-card) {
   border-radius: 20px !important;
-  border-color: var(--workstation-border-strong) !important;
+  border-color: var(--mq-border) !important;
   background: rgba(255, 255, 255, 0.86) !important;
-  box-shadow: var(--workstation-shadow-card) !important;
+  box-shadow: var(--mq-workbench-shadow) !important;
 }
 
 .workstation-shell :deep(.ant-drawer-content),
@@ -617,11 +567,11 @@
 
 .workstation-shell :deep(.ant-table-thead > tr > th),
 .rules-shell :deep(.ant-table-thead > tr > th) {
-  background: var(--workstation-bg-table-header) !important;
-  color: var(--workstation-text-muted) !important;
+  background: var(--mq-table-header-bg) !important;
+  color: var(--mq-text-tertiary) !important;
   font-size: 12px !important;
   font-weight: 600 !important;
-  border-bottom: 1px solid var(--workstation-divider) !important;
+  border-bottom: 1px solid var(--mq-border) !important;
 }
 
 .workstation-shell :deep(.ant-table-tbody > tr > td),
@@ -671,11 +621,11 @@
   position: relative;
   overflow: hidden;
   border-radius: 20px;
-  border: 1px solid var(--workstation-border-strong);
+  border: 1px solid var(--mq-border);
   background: rgba(255, 255, 255, 0.86);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
-  box-shadow: var(--workstation-shadow-panel);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 .workstation-panel--filters {
@@ -690,11 +640,11 @@
 .workbench-controls-panel {
   display: grid;
   gap: 12px;
-  border-radius: var(--workstation-radius-panel);
-  border: 1px solid var(--workstation-border-light);
-  background: var(--workstation-bg-surface);
+  border-radius: var(--mq-workbench-radius-panel);
+  border: 1px solid var(--mq-workbench-glass-border);
+  background: var(--mq-workbench-glass-bg);
   padding: 16px;
-  box-shadow: var(--workstation-shadow-panel);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 .workbench-controls-search-row,
@@ -785,7 +735,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
 }
 
 .workbench-dept-select__count {
@@ -794,7 +744,7 @@
   padding: 2px 8px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .wv4-record-pool-select-popup.ant-select-dropdown {
@@ -875,7 +825,7 @@
   flex-shrink: 0;
   align-items: center;
   gap: 8px;
-  border-radius: var(--workstation-radius-pill);
+  border-radius: var(--mq-radius-tag);
   border: 1px solid transparent;
   padding: 6px 14px;
   font-size: 14px;
@@ -888,45 +838,45 @@
   min-width: 18px;
   align-items: center;
   justify-content: center;
-  border-radius: var(--workstation-radius-pill);
+  border-radius: var(--mq-radius-tag);
   padding: 1px 5px;
   font-size: 11px;
   font-weight: 700;
 }
 
 .workbench-dept-chip--active {
-  border-color: var(--workstation-brand-border);
-  background: var(--workstation-brand-100);
-  color: var(--workstation-brand-600);
+  border-color: var(--mq-info-border);
+  background: var(--mq-info-bg);
+  color: var(--mq-brand-700);
 }
 
 .workbench-dept-chip--active .workbench-dept-chip__count {
   background: rgba(10, 108, 255, 0.12);
-  color: var(--workstation-brand-600);
+  color: var(--mq-brand-700);
 }
 
 .workbench-dept-chip--idle {
-  border-color: var(--workstation-border-light);
+  border-color: var(--mq-workbench-glass-border);
   background: rgba(255, 255, 255, 0.82);
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .workbench-dept-chip--idle:hover {
   border-color: rgba(191, 219, 254, 0.95);
   background: rgba(255, 255, 255, 0.96);
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
 }
 
 .workbench-dept-chip--idle .workbench-dept-chip__count {
   background: rgba(241, 245, 249, 0.92);
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .workstation-empty-state {
-  border-radius: var(--workstation-radius-card);
-  border: 1px dashed var(--workstation-divider);
+  border-radius: var(--mq-workbench-radius-card);
+  border: 1px dashed var(--mq-border);
   background: rgba(255, 255, 255, 0.86);
-  box-shadow: var(--workstation-shadow-card);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 .workstation-empty-state__icon {
@@ -934,14 +884,14 @@
 }
 
 .workstation-empty-state__text {
-  color: var(--workstation-text-muted);
+  color: var(--mq-text-tertiary);
 }
 
 .workstation-pagination-shell {
-  border-radius: var(--workstation-radius-card);
-  border: 1px solid var(--workstation-border-light);
+  border-radius: var(--mq-workbench-radius-card);
+  border: 1px solid var(--mq-workbench-glass-border);
   background: rgba(255, 255, 255, 0.86);
-  box-shadow: var(--workstation-shadow-card);
+  box-shadow: var(--mq-workbench-shadow);
 }
 
 @media (max-width: 1279px) {
@@ -964,7 +914,7 @@
 
 @media (max-width: 1023px) {
   .wv4-analysis-overview {
-    padding: var(--workstation-space-4);
+    padding: var(--mq-space-4);
   }
 
   .wv4-analysis-overview__title {
@@ -981,7 +931,7 @@
   }
 
   .wv4-filter-actions {
-    margin-top: var(--workstation-space-2);
+    margin-top: var(--mq-space-2);
   }
 
   .workbench-controls__search-input {
@@ -1035,16 +985,16 @@
 .workstation-shell :deep(.ant-input-search .ant-input),
 .workstation-shell :deep(.ant-select-selector),
 .workstation-shell :deep(.ant-picker) {
-  border-radius: var(--workstation-radius-input) !important;
+  border-radius: var(--mq-workbench-radius-input) !important;
 }
 
 .workstation-shell :deep(.ant-input-affix-wrapper),
 .workstation-shell :deep(.ant-select-selector),
 .workstation-shell :deep(.ant-picker) {
   min-height: 46px !important;
-  border-color: var(--workstation-border-light) !important;
-  background: var(--workstation-bg-surface-strong) !important;
-  box-shadow: var(--workstation-shadow-input);
+  border-color: var(--mq-workbench-glass-border) !important;
+  background: var(--mq-workbench-glass-bg-strong) !important;
+  box-shadow: var(--mq-workbench-control-shadow);
 }
 
 .workstation-shell :deep(.ant-input),
@@ -1061,10 +1011,10 @@
 .workstation-shell :deep(.ant-select-selector:hover),
 .workstation-shell :deep(.ant-picker:hover),
 .workstation-shell :deep(.ant-picker-focused) {
-  border-color: var(--workstation-brand-border) !important;
+  border-color: var(--mq-info-border) !important;
   box-shadow:
     0 0 0 3px var(--mq-info-bg),
-    var(--workstation-shadow-input) !important;
+    var(--mq-workbench-control-shadow) !important;
 }
 
 /* 病历池筛选条统一规格；放在工作台通用控件规则之后，避免 Ant large 尺寸重新覆盖。 */
@@ -1122,7 +1072,7 @@
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__sync-shortcut {
   flex: 0 0 auto;
   border-color: rgba(10, 108, 255, 0.24);
-  color: var(--workstation-primary);
+  color: var(--mq-brand-600);
   padding-inline: 13px;
 }
 
@@ -1144,7 +1094,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .workstation-shell :deep(.ant-pagination .ant-pagination-item),
@@ -1152,7 +1102,7 @@
 .workstation-shell :deep(.ant-pagination .ant-pagination-next),
 .workstation-shell :deep(.ant-pagination .ant-pagination-jump-prev),
 .workstation-shell :deep(.ant-pagination .ant-pagination-jump-next) {
-  border-radius: var(--workstation-radius-pill);
+  border-radius: var(--mq-radius-tag);
   border-color: transparent;
   background: rgba(255, 255, 255, 0.82);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
@@ -1161,23 +1111,23 @@
 .workstation-shell :deep(.ant-pagination .ant-pagination-item a),
 .workstation-shell :deep(.ant-pagination .ant-pagination-prev .ant-pagination-item-link),
 .workstation-shell :deep(.ant-pagination .ant-pagination-next .ant-pagination-item-link) {
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
 }
 
 .workstation-shell :deep(.ant-pagination .ant-pagination-item-active) {
-  border-color: var(--workstation-brand-border);
-  background: var(--workstation-brand-100);
+  border-color: var(--mq-info-border);
+  background: var(--mq-info-bg);
   box-shadow: 0 0 0 3px var(--mq-info-bg);
 }
 
 .workstation-shell :deep(.ant-pagination .ant-pagination-item-active a) {
-  color: var(--workstation-brand-600);
+  color: var(--mq-brand-700);
   font-weight: 700;
 }
 
 .workstation-shell :deep(.ant-pagination .ant-pagination-options-quick-jumper input) {
-  border-radius: var(--workstation-radius-pill);
-  border-color: var(--workstation-border-light);
+  border-radius: var(--mq-radius-tag);
+  border-color: var(--mq-workbench-glass-border);
   background: rgba(255, 255, 255, 0.82);
 }
 
@@ -1249,7 +1199,7 @@
 }
 
 .paste-frontpage-presets {
-  border: 1px solid var(--workstation-border-strong);
+  border: 1px solid var(--mq-border);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.86);
   -webkit-backdrop-filter: blur(18px);
@@ -1266,13 +1216,13 @@
 }
 
 .paste-frontpage-presets__head span {
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
   font-size: 14px;
   font-weight: 600;
 }
 
 .paste-frontpage-presets__head small {
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
   font-size: 12px;
 }
 
@@ -1289,7 +1239,7 @@
   min-height: 112px;
   padding: 12px;
   text-align: left;
-  border: 1px solid var(--workstation-border-strong);
+  border: 1px solid var(--mq-border);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.92);
   cursor: pointer;
@@ -1301,7 +1251,7 @@
 
 .paste-frontpage-preset:hover {
   border-color: rgba(10, 108, 255, 0.22);
-  box-shadow: var(--workstation-shadow-card-hover);
+  box-shadow: var(--mq-workbench-shadow-hover);
   transform: translateY(-1px);
 }
 
@@ -1318,7 +1268,7 @@
 }
 
 .paste-frontpage-preset__title {
-  color: var(--workstation-text-primary);
+  color: var(--mq-text-primary);
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
@@ -1326,7 +1276,7 @@
 
 .paste-frontpage-preset__subtitle {
   flex: 1;
-  color: var(--workstation-text-secondary);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   line-height: 18px;
 }
@@ -1338,13 +1288,13 @@
 }
 
 .paste-frontpage-preset__tags span {
-  color: var(--workstation-brand-600);
+  color: var(--mq-brand-700);
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
   padding: 0 7px;
   border-radius: 999px;
-  background: var(--workstation-brand-050);
+  background: var(--mq-brand-tint-6);
 }
 
 .paste-frontpage-progress {
@@ -1362,16 +1312,8 @@
 
 /* 旧工作区的玻璃层次与控件阴影。 */
 .workstation-shell {
-  --workstation-bg-card: var(--mq-glass-bg-strong);
-  --workstation-bg-surface: rgba(255, 255, 255, 0.76);
-  --workstation-bg-surface-strong: rgba(255, 255, 255, 0.88);
-  --workstation-border-light: rgba(255, 255, 255, 0.86);
-  --workstation-shadow-input:
-    inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 1px 3px rgba(0, 0, 0, 0.035);
-  --workstation-shadow-brand: 0 5px 14px color-mix(in srgb, var(--mq-brand-600) 18%, transparent);
-  --workstation-shadow-brand-hover: 0 6px 18px color-mix(in srgb, var(--mq-brand-600) 22%, transparent);
-  background: var(--workstation-bg-page) !important;
-  color: var(--workstation-text-primary);
+  background: var(--mq-bg-page) !important;
+  color: var(--mq-text-primary);
   font-family:
     'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
     'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;

@@ -1,3 +1,4 @@
+import { setDatePickerValue } from '../../../../../tests/utils/setDatePickerValue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -417,8 +418,8 @@ describe('StaffAnalysisView', () => {
       .get('[data-testid="staff-department-filter"]')
       .setValue(JSON.stringify(['H2', '心内科']))
     await wrapper.get('[data-testid="staff-task-filter"]').setValue('task-1')
-    await wrapper.get('[data-testid="staff-start-date"]').setValue('2026-09-01')
-    await wrapper.get('[data-testid="staff-end-date"]').setValue('2026-09-28')
+    await setDatePickerValue(wrapper.get('[data-testid="staff-start-date"] input'), '2026-09-01')
+    await setDatePickerValue(wrapper.get('[data-testid="staff-end-date"] input'), '2026-09-28')
     await wrapper.get('.primary').trigger('click')
     await settle()
     expect(state.getReport).toHaveBeenLastCalledWith({
@@ -430,16 +431,28 @@ describe('StaffAnalysisView', () => {
       start_date: '2026-09-01',
       end_date: '2026-09-28',
     })
+
+    await wrapper.get('[data-testid="staff-start-date"] .ant-picker-clear').trigger('mouseup')
+    await wrapper.get('[data-testid="staff-end-date"] .ant-picker-clear').trigger('mouseup')
+    await wrapper.get('.primary').trigger('click')
+    await settle()
+    expect(state.getReport).toHaveBeenLastCalledWith({
+      period: 'this_month',
+      scene: 'all',
+      institute_id: 'H2',
+      department: '心内科',
+      task_id: 'task-1',
+    })
   })
 
   it('rejects an unpaired or reversed custom date range before requesting', async () => {
     const wrapper = render()
     await settle()
-    await wrapper.get('[data-testid="staff-start-date"]').setValue('2026-09-28')
+    await setDatePickerValue(wrapper.get('[data-testid="staff-start-date"] input'), '2026-09-28')
     await wrapper.get('.primary').trigger('click')
     expect(wrapper.get('.filter-error').text()).toContain('必须同时填写')
     expect(state.getReport).toHaveBeenCalledTimes(1)
-    await wrapper.get('[data-testid="staff-end-date"]').setValue('2026-09-01')
+    await setDatePickerValue(wrapper.get('[data-testid="staff-end-date"] input'), '2026-09-01')
     await wrapper.get('.primary').trigger('click')
     expect(wrapper.get('.filter-error').text()).toContain('不能晚于')
     expect(state.getReport).toHaveBeenCalledTimes(1)
