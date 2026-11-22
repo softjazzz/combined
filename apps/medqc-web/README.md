@@ -94,7 +94,7 @@ apps/medqc-web/
 - [架构设计文档](docs/architecture/)
 
 ### 👥 用户指南
-- [用户手册](docs/user-guides/USER_MANUAL.md)
+- [用户手册](docs/0418/WORKSTATION_V4/USER_MANUAL.md)
 - [认证系统指南](docs/user-guides/AUTH_SYSTEM_GUIDE.md)
 - [医生工作站指南](docs/user-guides/DOCTOR_WORKSTATION_REDESIGN_GUIDE.md)
 
@@ -163,7 +163,7 @@ apps/medqc-web/
 
 - 📧 邮箱: support@medqc.com
 - 📖 文档: [项目文档](docs/)
-- 🐛 问题反馈: [GitHub Issues](https://github.com/your-repo/issues)
+- 🐛 问题反馈: [GitHub Issues](https://github.com/softjazzz/combined/issues)
 
 ## 🎯 路线图
 

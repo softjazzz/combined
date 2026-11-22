@@ -108,11 +108,15 @@
     </section>
 
     <Alert
-      v-if="summaryUnavailable"
+      v-if="activeView === 'records' && summaryUnavailable"
       type="warning"
       message="质控摘要暂不可用"
       show-icon
-    />
+    >
+      <template #action>
+        <Button size="small" data-testid="fpqc-retry-summary" @click="loadSummary">重试摘要</Button>
+      </template>
+    </Alert>
 
     <FrontpageQcRunBar
       :run="run"
@@ -371,6 +375,7 @@
       :refresh-key="analyticsRefreshKey"
       @drill-rule="drillRule"
       @drill-department="drillDepartment"
+      @summary-loaded="recoverSummaryFromAnalysis"
     />
 
     <!-- 质控当前筛选：页面内弹窗，跟随工作台主题（静态 Modal.confirm 拿不到嵌套主题） -->
@@ -606,6 +611,12 @@ async function loadSummary() {
     summary.value = null
     summaryUnavailable.value = true
   }
+}
+
+function recoverSummaryFromAnalysis(filters: FrontpageQcScopeFilters, next: FrontpageQcAnalytics['summary']) {
+  if (!summaryUnavailable.value || filters !== scopeFilters.value) return
+  summary.value = next
+  summaryUnavailable.value = false
 }
 
 async function loadFilterOptions() {

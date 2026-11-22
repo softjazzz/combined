@@ -504,6 +504,36 @@ describe('QcRecordResultListView', () => {
     expect(clearedParams).not.toHaveProperty('end_date')
   })
 
+  it.each(['inpatient', 'discharged'] as const)('%s 清除关键词并重置筛选时回查第一页', async (phase) => {
+    const wrapper = mountView(phase)
+    await flushPromises()
+    const input = wrapper.get('input[aria-label="关键词筛选"]')
+    await input.setValue('合成关键词')
+    const picker = wrapper.getComponent(RangePicker)
+    picker.vm.$emit('update:value', [null, '2026-08-10'])
+    const department = wrapper.getComponent(Select)
+    department.vm.$emit('update:value', '重症医学科')
+    department.vm.$emit('change', '重症医学科')
+    await flushPromises()
+
+    await wrapper.get('.ant-input-clear-icon').trigger('click')
+    await flushPromises()
+    const [, afterClear] = mocks.getRaw.mock.lastCall!
+    expect(afterClear).not.toHaveProperty('keyword')
+    expect(afterClear).toMatchObject({ page: 1, dept: '重症医学科', end_date: '2026-08-10' })
+
+    await wrapper.get('[data-testid="qc-result-reset-filters"]').trigger('click')
+    await flushPromises()
+    const [, afterReset] = mocks.getRaw.mock.lastCall!
+    expect(afterReset).not.toHaveProperty('dept')
+    expect(afterReset).not.toHaveProperty('end_date')
+    expect(afterReset).toMatchObject({
+      page: 1,
+      hospital_status: phase,
+      date_field: phase === 'inpatient' ? 'admission' : 'discharge',
+    })
+  })
+
   it('按当前服务端筛选导出完整终末病历Excel，不使用当前页行拼接', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()

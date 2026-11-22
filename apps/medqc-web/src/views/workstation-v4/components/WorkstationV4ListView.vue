@@ -97,10 +97,11 @@
                     class="workbench-date-row__range"
                     size="large"
                     allow-clear
+                    :allow-empty="[true, true]"
                     value-format="YYYY-MM-DD"
                     format="YYYY-MM-DD"
                     :placeholder="['开始日期', '结束日期']"
-                    @update:value="emit('update:dateRange', normalizeDateRange($event))"
+                    @update:value="emit('update:dateRange', normalizeWorkstationDateRange($event))"
                   />
                 </div>
 
@@ -433,6 +434,7 @@ import type {
 import {
   filterDepartmentOption,
   formatWorkstationDateFieldLabel,
+  normalizeWorkstationDateRange,
 } from '../utils/workstationFilterPresentation'
 
 interface StageMetaLike {
@@ -515,13 +517,6 @@ const emit = defineEmits<{
 
 function handleBatchPageChange(page: number, pageSize?: number) {
   emit('page-change', page, pageSize)
-}
-
-function normalizeDateRange(value: unknown): WorkstationDateRange {
-  if (!Array.isArray(value) || value.length < 2) return null
-  const start = typeof value[0] === 'string' ? value[0] : ''
-  const end = typeof value[1] === 'string' ? value[1] : ''
-  return start && end ? [start, end] : null
 }
 
 function normalizeDepartmentValue(value: unknown): string {

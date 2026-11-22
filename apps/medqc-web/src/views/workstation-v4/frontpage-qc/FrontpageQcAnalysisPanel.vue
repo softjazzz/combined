@@ -15,6 +15,14 @@
       role="alert"
     >
       {{ error }}
+      <button
+        class="mq-btn"
+        type="button"
+        data-testid="fpqc-retry-analysis"
+        @click="load"
+      >
+        重试分析
+      </button>
     </p>
     <p
       v-else-if="data && !data.summary.records"
@@ -216,6 +224,7 @@ const props = defineProps<{ filters: FrontpageQcScopeFilters; refreshKey: number
 const emit = defineEmits<{
   'drill-rule': [rule: { rule_id: string; rule_name: string; rule_verdict: 'fail' | 'data_gap' }]
   'drill-department': [department: string]
+  'summary-loaded': [filters: FrontpageQcScopeFilters, summary: FrontpageQcAnalytics['summary']]
 }>()
 
 function drillRule(item: FrontpageQcRuleRank, verdict: 'fail' | 'data_gap') {
@@ -235,9 +244,13 @@ async function load() {
   const current = ++seq
   loading.value = true
   error.value = ''
+  const filters = props.filters
   try {
-    const next = await getFrontpageQcAnalytics(props.filters)
-    if (current === seq) data.value = next
+    const next = await getFrontpageQcAnalytics(filters)
+    if (current === seq) {
+      data.value = next
+      emit('summary-loaded', filters, next.summary)
+    }
   } catch (err) {
     if (current === seq) error.value = err instanceof Error ? err.message : '读取首页质控统计失败'
   } finally {

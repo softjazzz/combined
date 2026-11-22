@@ -174,9 +174,36 @@ describe('FrontpageQcView', () => {
     const wrapper = mount(FrontpageQcView)
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text()).toBe('质控摘要暂不可用')
+    expect(wrapper.get('[role="alert"]').text()).toContain('质控摘要暂不可用')
     expect(wrapper.findAll('[data-testid="fpqc-record-row"]')).toHaveLength(2)
     expect(wrapper.findAll('.fpqc-metrics__value').map((value) => value.text())).toEqual(['—', '—', '—', '—'])
+    await wrapper.get('[data-testid="fpqc-retry-summary"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="fpqc-retry-summary"]').exists()).toBe(false)
+    expect(svc.listRecords).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('结果分析读取失败时只显示分析页的提示，重试只刷新分析', async () => {
+    svc.getAnalytics
+      .mockRejectedValueOnce(new Error('合成摘要失败'))
+      .mockRejectedValueOnce(new Error('合成分析失败'))
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="fpqc-view-analysis"]').trigger('click')
+    await flushPromises()
+    const alerts = wrapper.findAll('[role="alert"]')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0].text()).toContain('合成分析失败')
+    expect(wrapper.find('[data-testid="fpqc-retry-summary"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="fpqc-retry-analysis"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="fpqc-retry-analysis"]').exists()).toBe(false)
+    expect(wrapper.findAll('.fpqc-metrics__value').map((value) => value.text())).not.toEqual(['—', '—', '—', '—'])
+    expect(svc.getAnalytics).toHaveBeenCalledTimes(3)
+    expect(svc.listRecords).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 

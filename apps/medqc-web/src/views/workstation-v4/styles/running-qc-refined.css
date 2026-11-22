@@ -1021,7 +1021,7 @@
 
 .qc-record-result-list-view__date-range {
   min-width: 0;
-  width: 270px;
+  width: min(100%, 270px);
 }
 
 .qc-record-result-list-view__loading-space {

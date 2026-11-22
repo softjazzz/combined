@@ -778,7 +778,7 @@
                 </div>
                 <div class="pool-management-meta">
                   <span>{{ pool.total_items || 0 }} 份样本</span>
-                  <span>更新于 {{ formatDateTime(pool.updated_at || pool.created_at) }}</span>
+                  <span>更新于 {{ formatPaddedQcTaskDateTime(pool.updated_at || pool.created_at) }}</span>
                   <span v-if="pool.latest_job_status">
                     最近任务：{{ poolJobStatusLabel(pool.latest_job_status) }}
                   </span>
@@ -1894,7 +1894,6 @@ const {
   fetchBatchJobDebugSnapshot,
   FilePlus2,
   filters,
-  formatDateTime,
   formatEditableCopyDocumentMeta,
   formatEditableCopyOrderGroupMeta,
   getBatchJobStatusTagClass,

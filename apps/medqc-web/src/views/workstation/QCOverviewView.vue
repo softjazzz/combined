@@ -615,6 +615,7 @@ import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { MQ_ICON_TONES, type MqIconName, type MqIconTone } from '@/components/icons/mqIcons'
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
+import { QC_RESULT_STATUS_LABELS } from '../workstation-v4/utils/qcResultStatusLabels'
 import type {
   ClinicalQcHomeDepartmentItem,
   ClinicalQcHomePhysicianItem,
@@ -659,9 +660,9 @@ interface DefectAnalysisItem {
 }
 
 const CONCLUSION_STATUS_META = [
-  { status: 'non_compliant', label: '确定问题', color: '#ef4444' },
-  { status: 'data_gap', label: '资料待核实', color: '#f59e0b' },
-  { status: 'uncertain', label: '待判断', color: '#64748b' },
+  { status: 'non_compliant', label: QC_RESULT_STATUS_LABELS.non_compliant, color: '#ef4444' },
+  { status: 'data_gap', label: QC_RESULT_STATUS_LABELS.data_gap, color: '#f59e0b' },
+  { status: 'uncertain', label: QC_RESULT_STATUS_LABELS.uncertain, color: '#64748b' },
   { status: 'compliant', label: '合规', color: '#10b981' },
   // 与质控分析页保持同一套语义色，避免同一状态在不同首页模块变色。
   { status: 'not_applicable', label: '不适用', color: '#94a3b8' },

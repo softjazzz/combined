@@ -116,6 +116,7 @@
               aria-label="关键词筛选"
               size="large"
               allow-clear
+              @change="handleSearchChange"
               @press-enter="applyFilters"
             >
               <template #prefix>
@@ -163,6 +164,9 @@
             @click="applyFilters"
           >
             查询
+          </Button>
+          <Button :disabled="loading" data-testid="qc-result-reset-filters" @click="resetVisibleFilters">
+            重置
           </Button>
         </div>
         <div class="qc-record-result-list-view__toolbar-actions">
@@ -380,7 +384,12 @@ import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
 import { downloadBlob } from './customer-sample-validation/batchExport'
-import { buildDepartmentSelectOptions, filterDepartmentOption } from './utils/workstationFilterPresentation'
+import {
+  ALL_DEPARTMENTS,
+  buildDepartmentSelectOptions,
+  filterDepartmentOption,
+  normalizeWorkstationDateRange,
+} from './utils/workstationFilterPresentation'
 import {
   WORKSTATION_LIST_PAGE_SIZE_OPTIONS,
   WORKSTATION_LIST_PAGINATION_LOCALE,
@@ -555,6 +564,18 @@ function applyFilters() {
   fetchData(1)
 }
 
+function handleSearchChange(event: Event) {
+  // Ant Design Vue 先更新值，再用点击事件通知清除操作。
+  if (event.type === 'click' && searchText.value === '') applyFilters()
+}
+
+function resetVisibleFilters() {
+  searchText.value = ''
+  activeDept.value = ALL_DEPARTMENTS
+  dateRange.value = null
+  applyFilters()
+}
+
 function updateSelectedRecordKeys(recordKeys: string[]) {
   const nextKeys = [...new Set(recordKeys)]
   const nextRefs = { ...selectedRecordRefs.value }
@@ -685,9 +706,7 @@ async function exportCurrentFilter() {
 }
 
 function updateDateRange(value: unknown) {
-  const start = Array.isArray(value) && typeof value[0] === 'string' ? value[0] : ''
-  const end = Array.isArray(value) && typeof value[1] === 'string' ? value[1] : ''
-  dateRange.value = start || end ? [start, end] : null
+  dateRange.value = normalizeWorkstationDateRange(value)
   applyFilters()
 }
 

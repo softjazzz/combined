@@ -13,6 +13,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
 from .loader import FrontpageRef
@@ -21,6 +22,7 @@ from .model import FrontpageQcOutcome
 RUNS_TABLE = "frontpage_qc_runs"
 RESULTS_TABLE = "frontpage_qc_results"
 FINDINGS_TABLE = "frontpage_qc_findings"
+_RESULT_REF_INLINE_LIMIT = 128
 
 RUN_ACTIVE_STATUSES = ("queued", "running")
 REVIEW_STATUSES = ("pending", "confirmed", "false_alarm")
@@ -174,6 +176,27 @@ class FrontpageQcStore:
                 [ref.as_case_ref() for ref in refs]
             ),
         )
+
+    def _large_result_ref_filter(self, refs: Sequence[FrontpageRef], dialect: str):
+        # 用一个绑定值传入关系，保留数据库统一计数、排序和分页。
+        candidates = [
+            (key, *ref.as_case_ref())
+            for ref in refs
+            for key in dict.fromkeys((ref.legacy_key(), ref.as_key()))
+        ]
+        payload = sa.bindparam(None, _dumps(candidates), type_=sa.Text())
+        if dialect == "postgresql":
+            source = sa.func.jsonb_array_elements(sa.cast(payload, JSONB)).table_valued(
+                sa.column("value", JSONB)
+            )
+            fields = [source.c.value[index].astext for index in range(4)]
+        else:  # SQLite 合成环境。
+            source = sa.func.json_each(payload).table_valued("value")
+            fields = [sa.func.json_extract(source.c.value, f"$[{index}]") for index in range(4)]
+        columns = self.results.c
+        return sa.tuple_(
+            columns.record_key, columns.institute_id, columns.patient_id, columns.visit_id
+        ).in_(sa.select(*fields).select_from(source))
 
     def _run_scope(self):
         return self.runs.c.created_by == self.actor_id if self.institute_id is not None else sa.true()
@@ -554,6 +577,9 @@ class FrontpageQcStore:
         rule_id 用于从结果分析下钻：rule_verdict=fail 取该规则判为问题（含提示）的病历，
         data_gap 取该规则资料不足的病历。
         """
+        refs = tuple(dict.fromkeys(record_refs)) if record_refs is not None else None
+        if refs == ():
+            return [], 0
 
         def op(session):
             t = self.results
@@ -583,8 +609,11 @@ class FrontpageQcStore:
                         sa.and_(f.c.result_id == t.c.id, f.c.rule_id == rule_id, f.c.verdict == rule_verdict)
                     )
                 )
-            if record_refs is not None:
-                conditions.append(self._result_ref_filter(record_refs))
+            if refs is not None:
+                if len(refs) > _RESULT_REF_INLINE_LIMIT:
+                    conditions.append(self._large_result_ref_filter(refs, session.get_bind().dialect.name))
+                else:
+                    conditions.append(self._result_ref_filter(refs))
             where = sa.and_(*conditions)
             total = session.execute(sa.select(sa.func.count()).select_from(t).where(where)).scalar() or 0
             rows = session.execute(
