@@ -614,4 +614,4 @@ onMounted(() => {
 })
 </script>
 
-<style scoped src="../../workstation-v4/styles/outpatient-records.css"></style>
+<style scoped src="../workstation-v4/styles/outpatient-records.css"></style>

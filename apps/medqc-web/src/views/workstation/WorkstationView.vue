@@ -439,7 +439,7 @@ import {
   StructuredDataView,
   DRGGroupingTab,
   CodingOptimizationDrawer,
-} from '../demo/frontpage/components'
+} from '../workstation-v4/frontpage/components'
 
 const router = useRouter()
 
