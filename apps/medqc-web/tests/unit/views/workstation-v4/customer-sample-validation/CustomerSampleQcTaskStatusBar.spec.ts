@@ -133,8 +133,8 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(text).toContain('正在执行质控')
     expect(text).toContain('病历进度：已完成 1 / 2 份')
     expect(text).toContain('结果回写：4 / 98 条')
-    expect(text).toContain('不合规 3')
-    expect(text).toContain('数据不足 1')
+    expect(text).toContain('确定问题 3')
+    expect(text).toContain('资料待核实 1')
 
     await wrapper.get('[data-testid="qc-task-view-result"]').trigger('click')
     await wrapper.get('[data-testid="qc-task-cancel"]').trigger('click')
@@ -195,7 +195,7 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     })
 
     expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-06-01-05')
-    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('数据不足')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('资料待核实')
     expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain(
       '缺少评价截止日期或有效出院时间。',
     )
@@ -227,7 +227,7 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(liveResult).toContain('执行动态')
     expect(liveResult).toContain('正在核对病程质量（4 / 10）')
     expect(liveResult).not.toContain('合规')
-    expect(liveResult).not.toContain('不合规')
+    expect(liveResult).not.toContain('确定问题')
     expect(wrapper.text()).not.toContain('正在准备首份结果')
   })
 
@@ -504,11 +504,11 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     const attention = wrapper.get('[data-testid="qc-task-attention-statuses"]').text()
     const other = wrapper.get('[data-testid="qc-task-other-statuses"]').text()
 
-    expect(attention).toContain('技术异常 2')
-    expect(attention).toContain('不合规 8')
-    expect(attention).toContain('数据不足 13')
-    expect(attention).toContain('资料待核实 6')
-    expect(attention).toContain('AI判断 3')
+    expect(attention).toContain('结果校验异常 2')
+    expect(attention).toContain('确定问题 8')
+    expect(attention).toContain('资料待核实 13')
+    expect(attention).toContain('数据缺口 6')
+    expect(attention).toContain('待判断 3')
     expect(attention).not.toContain('合规 28')
     expect(other).toContain('其他结果')
     expect(other).toContain('合规 28')

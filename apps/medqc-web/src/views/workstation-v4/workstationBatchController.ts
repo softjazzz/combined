@@ -4,6 +4,7 @@ import { createSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspac
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { PatientRecord } from './types'
 import type { SichuanBatchJob } from './semantic-rules/types'
+import { buildCaseRecordKey } from './utils/caseRecordKey'
 import {
   requestFrontpageDraft as requestFrontpageDraftAction,
   persistBatchFrontpageDraft as persistBatchFrontpageDraftAction,
@@ -113,7 +114,8 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
     const instituteId = String(record.instituteId || '').trim()
     const patientId = String(record.patientId || '').trim()
     const visitId = String(record.visitId || '').trim()
-    if (!instituteId || !patientId || !visitId) {
+    const identityKey = buildCaseRecordKey(instituteId, patientId, visitId)
+    if (!identityKey) {
       recordPoolQcError(
         '选中病历缺少完整病例标识，暂不能启动质控。',
         selectedRecordKeys,
@@ -122,7 +124,6 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
       return
     }
 
-    const identityKey = JSON.stringify([instituteId, patientId, visitId])
     const existingOwner = identityOwners.get(identityKey)
     if (existingOwner && existingOwner !== recordKey) {
       recordPoolQcError(

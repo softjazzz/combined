@@ -151,10 +151,6 @@ def _dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
 
 
-def ref_key(ref: FrontpageRef) -> str:
-    return ref.as_key()
-
-
 def _finding_signature(rule_id: str, details: Any) -> str:
     return f"{rule_id}|{_dumps(details)}"
 
@@ -167,6 +163,17 @@ class FrontpageQcStore:
 
     def _result_scope(self):
         return self.results.c.institute_id == self.institute_id if self.institute_id is not None else sa.true()
+
+    def _result_ref_filter(self, refs: Sequence[FrontpageRef]):
+        columns = self.results.c
+        # record_key 用来命中现有索引，只有完整三坐标相符的结果才算同一病例。
+        keys = {key for ref in refs for key in (ref.legacy_key(), ref.as_key())}
+        return sa.and_(
+            columns.record_key.in_(sorted(keys)),
+            sa.tuple_(columns.institute_id, columns.patient_id, columns.visit_id).in_(
+                [ref.as_case_ref() for ref in refs]
+            ),
+        )
 
     def _run_scope(self):
         return self.runs.c.created_by == self.actor_id if self.institute_id is not None else sa.true()
@@ -342,7 +349,7 @@ class FrontpageQcStore:
         discharge_date: str = "",
     ) -> str:
         ref = FrontpageRef(outcome.institute_id, outcome.patient_id, outcome.visit_id)
-        key = ref_key(ref)
+        key = ref.as_key()
         now = _now()
         result_id = str(uuid.uuid4())
 
@@ -351,19 +358,21 @@ class FrontpageQcStore:
             self._check_refs([ref])
             # PG事务级病例锁覆盖“首次还没有latest行”的并发窗口。
             if session.get_bind().dialect.name == 'postgresql':
-                lock = int.from_bytes(hashlib.sha256(key.encode()).digest()[:8], 'big', signed=True)
+                # 历史键和新键的同一病例共用原事务锁。
+                lock = int.from_bytes(hashlib.sha256(ref.legacy_key().encode()).digest()[:8], 'big', signed=True)
                 session.execute(sa.text('SELECT pg_advisory_xact_lock(:key)'), {'key': lock})
             run = session.execute(sa.select(self.runs).where(self.runs.c.id == run_id)).mappings().first()
             if run is None:
                 raise FrontpageQcNotFound('质控任务不存在')
+            scope = (self._result_ref_filter([ref]), self.results.c.is_latest.is_(True), self._result_scope())
             existing = session.execute(sa.select(self.results.c.id, self.runs.c.created_at).join(
                 self.runs, self.runs.c.id == self.results.c.run_id
-            ).where(self.results.c.record_key == key, self.results.c.is_latest.is_(True), self._result_scope())).mappings().first()
+            ).where(*scope)).mappings().first()
             is_latest = existing is None or (_iso(run['created_at']), run_id) >= (_iso(existing['created_at']),
                 session.execute(sa.select(self.results.c.run_id).where(self.results.c.id == existing['id'])).scalar())
             previous_reviews: Dict[str, Dict[str, Any]] = {}
             previous = session.execute(
-                sa.select(self.results.c.id).where(self.results.c.record_key == key, self.results.c.is_latest.is_(True), self._result_scope())
+                sa.select(self.results.c.id).where(*scope)
             ).scalars().all()
             if previous and is_latest:
                 rows = session.execute(
@@ -487,24 +496,28 @@ class FrontpageQcStore:
             "reviewed_at": _iso(data.get("reviewed_at")),
         }
 
-    def latest_by_keys(self, keys: Sequence[str]) -> Dict[str, Dict[str, Any]]:
-        if not keys:
+    def latest_by_refs(self, refs: Sequence[FrontpageRef]) -> Dict[FrontpageRef, Dict[str, Any]]:
+        if not refs:
             return {}
 
         def op(session):
-            rows = session.execute(
-                sa.select(self.results).where(self.results.c.record_key.in_(list(keys)), self.results.c.is_latest.is_(True), self._result_scope())
-            ).mappings().all()
-            return {row["record_key"]: self._public_result(row) for row in rows}
+            found = {}
+            unique_refs = list(dict.fromkeys(refs))
+            for start in range(0, len(unique_refs), 500):
+                rows = session.execute(sa.select(self.results).where(
+                    self._result_ref_filter(unique_refs[start:start + 500]),
+                    self.results.c.is_latest.is_(True),
+                    self._result_scope(),
+                )).mappings().all()
+                found.update({FrontpageRef.from_record(row): self._public_result(row) for row in rows})
+            return found
 
         return self._guard(op)
 
     def latest_detail(self, ref: FrontpageRef) -> Optional[Dict[str, Any]]:
-        key = ref_key(ref)
-
         def op(session):
             row = session.execute(
-                sa.select(self.results).where(self.results.c.record_key == key, self.results.c.is_latest.is_(True), self._result_scope())
+                sa.select(self.results).where(self._result_ref_filter([ref]), self.results.c.is_latest.is_(True), self._result_scope())
             ).mappings().first()
             if row is None:
                 return None
@@ -532,7 +545,7 @@ class FrontpageQcStore:
         rule_id: str = "",
         rule_verdict: str = "fail",
         institute_id: str = "",
-        record_keys: Optional[Sequence[str]] = None,
+        record_refs: Optional[Sequence[FrontpageRef]] = None,
         page: int = 1,
         page_size: int = 50,
     ) -> Tuple[List[Dict[str, Any]], int]:
@@ -570,8 +583,8 @@ class FrontpageQcStore:
                         sa.and_(f.c.result_id == t.c.id, f.c.rule_id == rule_id, f.c.verdict == rule_verdict)
                     )
                 )
-            if record_keys is not None:
-                conditions.append(t.c.record_key.in_(list(record_keys)))
+            if record_refs is not None:
+                conditions.append(self._result_ref_filter(record_refs))
             where = sa.and_(*conditions)
             total = session.execute(sa.select(sa.func.count()).select_from(t).where(where)).scalar() or 0
             rows = session.execute(

@@ -37,7 +37,7 @@
       >
         <div class="flex justify-between text-xs font-bold text-slate-500 mb-3">
           <span>{{ extractionProgress.currentModule ? '正在解析...' : '正在初始化...' }}</span>
-          <span class="font-mono text-[#0a6cff]">{{ extractionProgress.percent }}%</span>
+          <span class="font-mono text-[color:var(--mq-brand-700)]">{{ extractionProgress.percent }}%</span>
         </div>
 
         <!-- 进度轨道 -->
@@ -46,18 +46,18 @@
         >
           <!-- 当前进度 -->
           <div
-            class="absolute left-0 top-0 h-full bg-[#0a6cff] rounded-full transition-all duration-700 ease-out z-0"
+            class="absolute left-0 top-0 h-full bg-[var(--mq-brand-600)] rounded-full transition-all duration-700 ease-out z-0"
             :style="{ width: extractionProgress.percent + '%' }"
           />
           <div class="absolute w-full flex justify-between z-10 -ml-1.5 pr-3">
             <div
-              class="w-3.5 h-3.5 rounded-full border-[2.5px] border-white bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] transition-colors duration-300"
+              class="w-3.5 h-3.5 rounded-full border-[2.5px] border-white bg-[var(--mq-brand-600)] shadow-[0_0_8px_var(--mq-info-border)] transition-colors duration-300"
             />
             <div
               class="w-3.5 h-3.5 rounded-full border-[2.5px] border-white shadow-sm transition-colors duration-500 delay-200"
               :class="
                 extractionProgress.percent >= 40
-                  ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]'
+                  ? 'bg-[var(--mq-brand-600)] shadow-[0_0_8px_var(--mq-info-border)]'
                   : 'bg-slate-200'
               "
             />
@@ -65,7 +65,7 @@
               class="w-3.5 h-3.5 rounded-full border-[2.5px] border-white shadow-sm transition-colors duration-500 delay-200"
               :class="
                 extractionProgress.percent >= 80
-                  ? 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]'
+                  ? 'bg-[var(--mq-brand-600)] shadow-[0_0_8px_var(--mq-info-border)]'
                   : 'bg-slate-200'
               "
             />
@@ -1143,7 +1143,7 @@
           </div>
         </div>
         <div class="bg-slate-50 rounded-lg px-3 py-2 text-center">
-          <div class="text-lg font-bold text-purple-600">
+          <div class="text-lg font-bold text-[color:var(--mq-brand-700)]">
             {{ extractionStats.confidence }}%
           </div>
           <div class="text-xs text-slate-500">

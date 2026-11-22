@@ -1601,11 +1601,6 @@ watch(
   font-weight: 600;
 }
 
-.result-tag--rules {
-  background: #e0e7ff;
-  color: #4338ca;
-}
-
 .result-tag--issues {
   background: #fef2f2;
   color: #dc2626;
@@ -2454,9 +2449,9 @@ watch(
 .result-tag--pass,
 .empty-icon-wrap,
 .summary-card__progress {
-  border-color: rgba(10, 108, 255, 0.16) !important;
-  background: rgba(10, 108, 255, 0.08) !important;
-  color: #0a6cff !important;
+  border-color: var(--mq-info-border) !important;
+  background: var(--mq-info-bg) !important;
+  color: var(--mq-brand-600) !important;
 }
 
 .content-qc-tab__empty {

@@ -1,3 +1,4 @@
+import { QC_RESULT_STATUS_LABELS } from '../utils/qcResultStatusLabels'
 import type {
   SichuanBatchIssueItem,
   SichuanBatchJob,
@@ -70,22 +71,22 @@ const STATUS_META: Array<{
   className: string
   attention: boolean
 }> = [
-  { key: 'technical_error', label: '技术异常', className: 'is-danger', attention: true },
-  { key: 'non_compliant', label: '不合规', className: 'is-danger', attention: true },
+  { key: 'technical_error', label: QC_RESULT_STATUS_LABELS.technical_error, className: 'is-danger', attention: true },
+  { key: 'non_compliant', label: QC_RESULT_STATUS_LABELS.non_compliant, className: 'is-danger', attention: true },
   {
     key: 'ai_suggested_non_compliant',
     label: 'AI建议复核',
     className: 'is-review',
     attention: true,
   },
-  { key: 'data_gap', label: '数据不足', className: 'is-warning', attention: true },
+  { key: 'data_gap', label: QC_RESULT_STATUS_LABELS.data_gap, className: 'is-warning', attention: true },
   {
     key: 'data_quality_gap',
     label: '资料待核实',
     className: 'is-warning',
     attention: true,
   },
-  { key: 'uncertain', label: 'AI判断', className: 'is-review', attention: true },
+  { key: 'uncertain', label: QC_RESULT_STATUS_LABELS.uncertain, className: 'is-review', attention: true },
   { key: 'not_executed', label: '未执行', className: 'is-muted', attention: true },
   {
     key: 'ai_suggested_compliant',
@@ -397,7 +398,7 @@ export function buildBatchJobPresentation(
   const diagnosticRuleFailureCount = numeric(summary.diagnostic_rule_failure_count)
   const statusChips = STATUS_META.map(({ key, label, className }) => ({
     key,
-    label,
+    label: key === 'data_quality_gap' && numeric(statusCounts.data_gap) > 0 ? '数据缺口' : label,
     className,
     value: numeric(statusCounts[key]),
   })).filter((item) => item.value > 0)

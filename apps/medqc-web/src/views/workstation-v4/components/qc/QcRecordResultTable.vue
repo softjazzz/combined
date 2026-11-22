@@ -315,7 +315,7 @@ function togglePageSelection(event: Event) {
   width: 100%;
   min-width: 1120px;
   border-collapse: collapse;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-family:
     'Source Han Sans SC', 'San Francisco', 'SF Pro Text', Inter, 'PingFang SC',
     'Microsoft YaHei UI', sans-serif;
@@ -327,7 +327,7 @@ function togglePageSelection(event: Event) {
   padding: 0 16px;
   border-bottom: 1px solid rgba(226, 232, 240, 0.88);
   background: rgba(248, 250, 252, 0.92);
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -349,7 +349,7 @@ function togglePageSelection(event: Event) {
   width: 15px;
   height: 15px;
   margin: 0;
-  accent-color: #0a6cff;
+  accent-color: var(--mq-brand-600);
   cursor: pointer;
 }
 
@@ -373,11 +373,11 @@ function togglePageSelection(event: Event) {
 .qc-record-result-table__row:hover,
 .qc-record-result-table__row:focus-visible {
   background: rgba(248, 250, 252, 0.88);
-  box-shadow: inset 3px 0 0 #0a6cff;
+  box-shadow: inset 3px 0 0 var(--mq-brand-600);
 }
 
 .qc-record-result-table__row--selected {
-  background: rgba(10, 108, 255, 0.045);
+  background: color-mix(in srgb, var(--mq-brand-600) 4.5%, transparent);
 }
 
 .qc-record-result-table__patient-cell {
@@ -393,11 +393,11 @@ function togglePageSelection(event: Event) {
   height: 24px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: #eaf2ff;
+  background: var(--mq-brand-50);
   object-fit: cover;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.96),
-    0 2px 6px rgba(10, 108, 255, 0.08);
+    0 2px 6px var(--mq-info-bg);
 }
 
 .qc-record-result-table__patient-meta {
@@ -407,7 +407,7 @@ function togglePageSelection(event: Event) {
 }
 
 .qc-record-result-table__patient-name {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -477,7 +477,7 @@ function togglePageSelection(event: Event) {
   padding: 0 11px;
   border: 1px solid rgba(148, 163, 184, 0.32);
   border-radius: 8px;
-  background: #fff;
+  background: var(--mq-bg-surface);
   color: #5b6b84;
   box-shadow: 0 1px 5px rgba(15, 42, 74, 0.05);
   cursor: pointer;
@@ -493,22 +493,22 @@ function togglePageSelection(event: Event) {
 }
 
 .qc-record-result-table__result-button--available {
-  border-color: #0a6cff;
-  background: #0a6cff;
-  color: #fff;
-  box-shadow: 0 3px 9px rgba(10, 108, 255, 0.16);
+  border-color: var(--mq-brand-600);
+  background: var(--mq-brand-600);
+  color: var(--mq-bg-surface);
+  box-shadow: 0 3px 9px var(--mq-info-border);
 }
 
 .qc-record-result-table__result-button:hover {
-  color: #0a6cff;
-  border-color: #0a6cff;
-  box-shadow: 0 4px 11px rgba(10, 108, 255, 0.15);
+  color: var(--mq-brand-600);
+  border-color: var(--mq-brand-600);
+  box-shadow: 0 4px 11px var(--mq-info-border);
   transform: translateY(-1px);
 }
 
 .qc-record-result-table__result-button--available:hover {
-  color: #fff;
-  background: #005bb8;
+  color: var(--mq-bg-surface);
+  background: var(--mq-brand-700);
 }
 
 .qc-record-result-table__empty-row td {
@@ -541,7 +541,7 @@ function togglePageSelection(event: Event) {
 .qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(4),
 .qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(6) {
   min-width: 160px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -576,12 +576,12 @@ function togglePageSelection(event: Event) {
   height: 16px;
   border: 1px solid #bdcbdd;
   border-radius: 4px;
-  background: #fff;
+  background: var(--mq-bg-surface);
   vertical-align: middle;
 }
 .qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:checked {
   appearance: auto;
-  accent-color: #0a6cff;
+  accent-color: var(--mq-brand-600);
 }
 .qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:disabled {
   background: #f1f4f8;
@@ -599,7 +599,7 @@ function togglePageSelection(event: Event) {
 
 .qc-record-result-table--inpatient .qc-record-result-table__visit-id {
   overflow: hidden;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
 }
@@ -615,18 +615,18 @@ function togglePageSelection(event: Event) {
 
 .qc-record-result-table--inpatient .qc-record-result-table__row--selected,
 .qc-record-result-table--inpatient .qc-record-result-table__row--selected:hover {
-  background: #edf4fc;
+  background: var(--mq-info-bg);
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__row:focus-visible {
-  background: #edf4fc;
-  box-shadow: inset 3px 0 0 #0a6cff;
+  background: var(--mq-info-bg);
+  box-shadow: inset 3px 0 0 var(--mq-brand-600);
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button {
   border-color: transparent;
   background: transparent;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   box-shadow: none;
   font-size: 13px;
   font-weight: 500;
@@ -634,19 +634,19 @@ function togglePageSelection(event: Event) {
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button--available {
   background: transparent;
-  color: #0a6cff;
+  color: var(--mq-brand-600);
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button:hover {
-  border-color: rgba(10, 108, 255, 0.14);
-  background: rgba(10, 108, 255, 0.09);
-  color: #0a6cff;
+  border-color: var(--mq-info-border);
+  background: var(--mq-info-bg);
+  color: var(--mq-brand-600);
   transform: none;
 }
 
 .qc-record-result-table--inpatient .qc-record-result-table__result-button:focus-visible,
 .qc-record-result-table--inpatient input:focus-visible {
-  outline: 2px solid #0a6cff;
+  outline: 2px solid var(--mq-brand-600);
   outline-offset: 3px;
 }
 
@@ -703,7 +703,7 @@ function togglePageSelection(event: Event) {
 }
 .qc-record-result-table--compact-review .qc-record-result-table__visit-label,
 .qc-record-result-table--compact-review .qc-record-result-table__visit-id {
-  color: #7a8390;
+  color: var(--mq-text-tertiary);
   font-family: inherit;
   font-size: 12px;
   font-weight: 400;
@@ -718,14 +718,14 @@ function togglePageSelection(event: Event) {
 .qc-record-result-table--compact-review .qc-record-result-table__department {
   display: block;
   overflow: hidden;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__bed-number {
   display: block;
-  color: #7a8390;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__summary {
@@ -747,7 +747,7 @@ function togglePageSelection(event: Event) {
   overflow-wrap: normal;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__summary-item--issue {
-  color: #b74b50;
+  color: var(--mq-danger-text);
 }
 .qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(n) {
   height: 58px;
@@ -770,8 +770,8 @@ function togglePageSelection(event: Event) {
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
-  background: rgba(118, 128, 160, 0.12);
-  color: #1d1d1f;
+  background: var(--mq-bg-muted);
+  color: var(--mq-text-primary);
   font: inherit;
   font-size: 12px;
   font-weight: 500;
@@ -783,21 +783,21 @@ function togglePageSelection(event: Event) {
 }
 .qc-record-result-table__view-button:hover,
 .qc-record-result-table__row--active .qc-record-result-table__view-button {
-  background: rgba(10, 108, 255, 0.12);
-  color: #0a5fd6;
+  background: color-mix(in srgb, var(--mq-brand-600) 12%, transparent);
+  color: var(--mq-brand-700);
 }
 .qc-record-result-table__view-button + .qc-record-result-table__view-button {
   margin-left: 6px;
 }
 .qc-record-result-table__view-button:focus-visible {
-  outline: 2px solid #0a6cff;
+  outline: 2px solid var(--mq-brand-600);
   outline-offset: 2px;
 }
 
 .qc-record-result-table--compact-review .qc-record-result-table__row--active,
 .qc-record-result-table--compact-review .qc-record-result-table__row--active:hover {
-  background: #f2f7fd;
-  box-shadow: inset 3px 0 0 #0a6cff;
+  background: color-mix(in srgb, var(--mq-brand-600) 5%, transparent);
+  box-shadow: inset 3px 0 0 var(--mq-brand-600);
 }
 
 @media (max-width: 768px) {

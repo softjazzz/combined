@@ -1,5 +1,7 @@
 # 🏥 医疗质控系统 (MedQC)
 
+> 历史 README，保留早期演示系统的架构和启动说明。现行应用的环境配置与命令见 [MedQC 本地启动](README.md#本地启动)，生产发布见 [Linux 发布手册](docs/deployment/P2_RELEASE_RUNBOOK.md)。
+
 基于大语言模型的智能医疗质控分析系统，提供专业的病案质量控制和改进建议。
 
 ## ✨ 项目特色

@@ -170,70 +170,8 @@
   padding: 14px 0;
   border-bottom: 1px solid #e8edf3;
 }
-.running-qc-refined .qc-record-result-list-view__filters {
-  display: grid;
-  flex: 1;
-  grid-template-columns: minmax(170px, 1fr) minmax(140px, 180px) 330px auto;
-  gap: 10px;
-  align-items: center;
-}
 .running-qc-refined .qc-record-result-list-view__field-label {
   display: none;
-}
-.running-qc-refined .qc-record-result-list-view__date-field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-}
-.running-qc-refined
-  .qc-record-result-list-view__date-field
-  > .qc-record-result-list-view__field-label {
-  display: none;
-}
-.review-date-label {
-  flex: 0 0 auto;
-  padding: 0 6px;
-  color: #748095;
-  font-size: 12px;
-}
-.running-qc-refined .qc-record-result-list-view__filter-field {
-  display: flex;
-  min-width: 0;
-}
-.running-qc-refined .qc-record-result-list-view__date-inputs {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  height: 36px;
-  border: 1px solid #dce4ee;
-  border-radius: 7px;
-  padding: 0 5px;
-}
-.running-qc-refined .qc-record-result-list-view__filters input,
-.running-qc-refined .qc-record-result-list-view__filters select {
-  width: 100%;
-  min-width: 0;
-  height: 36px;
-  border-color: #dce4ee;
-  border-radius: 7px;
-  background: #fff;
-  color: #45546a;
-  font: inherit;
-  font-size: 13px;
-}
-.running-qc-refined .qc-record-result-list-view__filters input[type='date'] {
-  flex: 1;
-  width: 0;
-  height: 32px;
-  padding: 0 4px;
-  border: 0;
-}
-.running-qc-refined .qc-record-result-list-view__date-separator {
-  display: inline;
-}
-.running-qc-refined .qc-record-result-list-view__filters input::placeholder {
-  color: #8792a2;
 }
 .running-qc-refined .qc-record-result-list-view__toolbar-actions {
   display: flex;
@@ -241,7 +179,6 @@
   gap: 8px;
   align-self: end;
 }
-.running-qc-refined .qc-record-result-list-view__query-button,
 .running-qc-refined .qc-record-result-list-view__export-trigger,
 .running-qc-refined .qc-record-result-list-view__refresh-button {
   min-height: 36px;
@@ -252,10 +189,6 @@
   box-shadow: none;
   font-weight: 400;
 }
-.running-qc-refined .qc-record-result-list-view__query-button {
-  color: #0a6cff;
-}
-.running-qc-refined .qc-record-result-list-view__query-button:hover:not(:disabled),
 .running-qc-refined .qc-record-result-list-view__export-trigger:hover:not(:disabled),
 .running-qc-refined .qc-record-result-list-view__refresh-button:hover:not(:disabled) {
   color: #0a6cff;
@@ -313,9 +246,6 @@
   .running-qc-refined .qc-record-result-list-view__toolbar {
     align-items: end;
   }
-  .running-qc-refined .qc-record-result-list-view__filters {
-    grid-template-columns: minmax(140px, 1fr) 140px 310px auto;
-  }
   .review-workbench-metrics > div {
     padding-inline: 16px;
     gap: 5px;
@@ -369,9 +299,6 @@
     padding: 0;
     border: 0;
   }
-  .running-qc-refined .qc-record-result-list-view__filters {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 /* 运行病历视觉层：保留现有筛选、列表与分析布局。 */
@@ -412,28 +339,16 @@
   border-color: transparent;
   font-weight: 400;
 }
-.running-qc-apple .qc-record-result-list-view__filters :is(input, select),
-.running-qc-apple .qc-record-result-list-view__date-inputs,
 .running-qc-apple .qc-record-result-list-view__toolbar-actions button {
   border-radius: 8px;
   border-color: rgba(0, 0, 0, 0.1);
   font-size: 14px;
 }
-.running-qc-apple .qc-record-result-list-view__filters :is(input, select):focus-visible {
-  outline: 2px solid rgba(10, 108, 255, 0.3);
-  outline-offset: 1px;
-}
-.running-qc-apple .qc-record-result-list-view__query-button,
 .running-qc-apple :deep(.qc-run-selected-control__trigger) {
   background: #0a6cff;
   color: #fff;
   border-radius: 8px;
 }
-.running-qc-apple .qc-record-result-list-view__query-button:hover:not(:disabled) {
-  background: #0069dc;
-  color: #fff;
-}
-.running-qc-apple .review-date-label,
 .running-qc-apple :deep(th),
 .running-qc-apple :deep(td) {
   font-size: 14px;
@@ -517,11 +432,6 @@
 .running-qc-apple .review-workbench-task-status :deep(.record-pool-qc-task-status) {
   border-radius: 12px;
   box-shadow: none;
-}
-@media (max-width: 1100px) {
-  .running-qc-apple .qc-record-result-list-view__filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 /* 结果分析与病历结果采用同一套表面和控件规格。 */
@@ -1083,47 +993,41 @@
   gap: 10px;
 }
 
-.running-qc-apple .qc-record-result-list-view__filters input[type='search'],
-.running-qc-apple .qc-record-result-list-view__filters select,
-.running-qc-apple .qc-record-result-list-view__date-inputs {
-  height: 36px;
-  box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  border-radius: var(--mq-radius-control);
-  background: rgba(255, 255, 255, 0.75);
-  box-shadow: 0 1px 3px rgba(10, 55, 115, 0.06);
-  color: var(--mq-text-primary);
-  font-size: var(--mq-font-13);
+.qc-record-result-list-view__filter-field {
+  max-width: 100%;
 }
 
-.running-qc-apple .qc-record-result-list-view__filters input[type='search'] {
-  width: 300px;
-  padding: 0 14px;
+.qc-record-result-list-view__search {
+  width: min(100%, 280px);
 }
 
-.running-qc-apple .qc-record-result-list-view__filters select {
-  width: 160px;
-  padding: 0 12px;
+.qc-record-result-list-view__department {
+  width: min(100%, 160px);
 }
 
-.running-qc-apple .qc-record-result-list-view__date-inputs {
+.qc-record-result-list-view__date-field {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 8px;
+  gap: var(--mq-space-2);
+  min-width: 0;
+  max-width: 100%;
 }
 
-.running-qc-apple .qc-record-result-list-view__date-inputs input[type='date'] {
-  width: 132px;
-  min-width: 132px;
-  height: 30px;
-  border: 0;
-  background: transparent;
-  color: var(--mq-text-primary);
+.qc-record-result-list-view__date-label {
+  flex: 0 0 auto;
+  color: var(--mq-text-tertiary);
   font-size: var(--mq-font-13);
 }
 
-.running-qc-apple .qc-record-result-list-view__query-button,
+.qc-record-result-list-view__date-range {
+  min-width: 0;
+  width: 270px;
+}
+
+.qc-record-result-list-view__loading-space {
+  min-height: 144px;
+}
+
 .running-qc-apple .qc-record-result-list-view__export-trigger,
 .running-qc-apple .qc-record-result-list-view__refresh-button {
   display: inline-flex;
@@ -1138,19 +1042,6 @@
   color: var(--mq-text-primary);
   font-size: var(--mq-font-13);
   font-weight: 500;
-}
-
-.running-qc-apple .qc-record-result-list-view__query-button {
-  border-color: transparent;
-  background: var(--mq-brand-gradient);
-  box-shadow: var(--mq-brand-shadow);
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.running-qc-apple .qc-record-result-list-view__query-button:hover:not(:disabled) {
-  background: var(--mq-brand-gradient);
-  filter: brightness(1.05);
 }
 
 .running-qc-apple .qc-record-result-list-view__export-options {

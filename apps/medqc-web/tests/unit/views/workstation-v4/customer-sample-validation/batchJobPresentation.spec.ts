@@ -246,10 +246,10 @@ describe('batchJobPresentation', () => {
     expect(model.resultCount).toBe(6)
     expect(model.resultProgressText).toBe('结果回写：6 / 6 条')
     expect(model.statusChips.map((chip) => [chip.key, chip.label, chip.value])).toEqual([
-      ['technical_error', '技术异常', 1],
-      ['non_compliant', '不合规', 1],
-      ['data_gap', '数据不足', 1],
-      ['uncertain', 'AI判断', 1],
+      ['technical_error', '结果校验异常', 1],
+      ['non_compliant', '确定问题', 1],
+      ['data_gap', '资料待核实', 1],
+      ['uncertain', '待判断', 1],
       ['compliant', '合规', 1],
       ['not_applicable', '不适用', 1],
     ])
@@ -383,7 +383,7 @@ describe('batchJobPresentation', () => {
       }),
       expect.objectContaining({
         ruleId: 'LX0609-03-01-01',
-        statusLabel: '不合规',
+        statusLabel: '确定问题',
         text: '后续病程未记录会诊意见及执行情况。',
       }),
     ])
@@ -422,7 +422,7 @@ describe('batchJobPresentation', () => {
     expect(model.liveResultLines).toEqual([
       expect.objectContaining({
         ruleId: 'LX0609-03-01-01',
-        statusLabel: '不合规',
+        statusLabel: '确定问题',
         text: '应保留的较早确定问题。',
       }),
     ])

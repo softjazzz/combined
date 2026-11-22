@@ -5,10 +5,14 @@
 """
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
+
+from ..case_identity import CaseRef
 
 
 @dataclass(frozen=True)
@@ -17,8 +21,27 @@ class FrontpageRef:
     patient_id: str
     visit_id: str
 
-    def as_key(self) -> str:
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> FrontpageRef:
+        return cls(
+            str(record.get("institute_id") or ""),
+            str(record.get("patient_id") or ""),
+            str(record.get("visit_id") or record.get("record_id") or ""),
+        )
+
+    def as_case_ref(self) -> CaseRef:
+        return CaseRef(self.institute_id, self.patient_id, self.visit_id)
+
+    def legacy_key(self) -> str:
         return f"{self.institute_id}|{self.patient_id}|{self.visit_id}"
+
+    def as_key(self) -> str:
+        legacy_key = self.legacy_key()
+        if legacy_key.count("|") == 2:
+            return legacy_key
+        # 旧键至少含两个 |，无 | 的新键不会与任何旧键冲突。
+        digest = hashlib.sha256(self.as_case_ref().as_key().encode("utf-8")).hexdigest()
+        return f"frontpage-ref-v2:{digest}"
 
 
 @dataclass

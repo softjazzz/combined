@@ -1,3 +1,4 @@
+import { EDITABLE_MEDICAL_RECORD_DOCUMENTS_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 import type {
@@ -26,8 +27,6 @@ type ServiceResult<T> = {
   message?: string
   errorType?: 'timeout' | 'network' | 'server' | 'unknown'
 }
-
-const EDITABLE_MEDICAL_RECORD_DOCUMENTS_TIMEOUT_MS = 90000
 
 function toErrorMessage(error: unknown, fallback: string): string {
   return extractApiErrorMessageFromError(error, fallback)

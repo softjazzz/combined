@@ -18,7 +18,7 @@
     <QCRecordCompareWorkbench
       v-else
       :provided-documents="documents"
-      :key="JSON.stringify([record.instituteId, record.patientId, record.visitId])"
+      :key="recordKey"
       :visit-id="record.visitId || ''"
       :institute-id="record.instituteId"
       :patient-id="record.patientId"
@@ -41,6 +41,7 @@ import { useMinimumLoading } from '@/composables/useMinimumLoading'
 import { loadCurrentMedicalRecord } from '@/services/current-medical-record'
 import type { EditableMedicalRecordDocument } from '../customer-sample-validation/types'
 import QCRecordCompareWorkbench from '../semantic-rules/components/QCRecordCompareWorkbench.vue'
+import { buildCaseRecordKey } from '../utils/caseRecordKey'
 import RecordViewCloseIcon from './RecordViewCloseIcon.vue'
 import ReadonlyMedicalRecordHeader from './ReadonlyMedicalRecordHeader.vue'
 import type { PatientRecord } from '../types'
@@ -51,6 +52,10 @@ const documents = ref<EditableMedicalRecordDocument[]>([])
 const loading = ref(false)
 const showLoading = useMinimumLoading(() => loading.value, () => Boolean(props.record))
 const loadError = ref('')
+const recordKey = computed(() => {
+  const record = props.record
+  return buildCaseRecordKey(record?.instituteId, record?.patientId, record?.visitId)
+})
 const recordContext = computed(() => {
   const record = props.record
   if (!record) return null
@@ -73,7 +78,7 @@ watch(
     loadError.value = ''
     loading.value = false
     if (!record) return
-    if (!record.visitId?.trim() || !record.instituteId?.trim() || !record.patientId?.trim()) {
+    if (!record.visitId || !recordKey.value) {
       loadError.value = '无法确认当前病历身份，已停止读取病历文书'
       return
     }

@@ -341,8 +341,8 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__risk--review {
-  background: color-mix(in srgb, var(--workstation-state-review-bg, #f3eeff) 82%, white);
-  color: var(--workstation-state-review-text, #6e56cf);
+  background: color-mix(in srgb, var(--workstation-state-review-bg, var(--mq-info-bg)) 82%, white);
+  color: var(--workstation-state-review-text, var(--mq-info-text));
   border-color: transparent;
 }
 

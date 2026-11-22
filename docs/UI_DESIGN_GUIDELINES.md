@@ -1,4 +1,6 @@
-# UI 设计规范（初稿）
+# UI 设计规范（历史初稿）
+
+> 本文保留早期演示系统的视觉规范。现行 MedQC 工作台遵循 [Workstation v7.1 设计规范](../apps/medqc-web/docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md)，公共样式见 [设计变量](../apps/medqc-web/src/styles/tokens-v2.css) 和 [组件样式](../apps/medqc-web/src/styles/mq-components.css)。
 
 > 目标：为 LLM 质控演示系统建立统一的视觉语言，使界面与医疗 dashboard 风格保持 80% 以上一致性，便于后续开发落地。
 

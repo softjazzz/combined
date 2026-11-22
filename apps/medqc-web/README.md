@@ -72,14 +72,21 @@ apps/medqc-web/
 └── docs/             # 设计、开发与部署资料
 ```
 
+### 工作台源码入口
+
+- `/workstation-v5` 由 [工作台路由](src/router/index.ts) 挂载。主入口在 `src/views/workstation-v4/`，首页由 [WorkstationV4HomeEntry](src/views/workstation-v4/WorkstationV4HomeEntry.vue) 加载 [QCOverviewView](src/views/workstation/QCOverviewView.vue)，病历池入口为 [WorkstationV4View](src/views/workstation-v4/WorkstationV4View.vue)。
+- `/workstation-v4` 是现行路由的兼容别名。`/workstation-v2`、`/workstation-v3` 和 `/dashboard/medical-records/:id/legacy` 保留旧工作台与病历详情入口。
+- `src/views/workstation-v2/WorkstationV4View.vue` 和 `src/views/workstation-v4/WorkstationV3View.vue` 是历史副本。旧 DRG 文档仍引用 `backend-fastapi/`，现行 FastAPI 入口为 [backend/app/main.py](backend/app/main.py)。
+
 ## 📚 文档导航
 
 ### 开发与部署入口
 
 - [开发端口说明](../../DEVELOPMENT_PORTS.md)
 - [现行 Workstation v7.1 设计规范](docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md)
+- [Linux 发布与回滚手册](docs/deployment/P2_RELEASE_RUNBOOK.md)
 - [Linux 后端启动脚本](../../scripts/run_backend_prod.sh)
-- [旧版部署与技术记录](docs/deployment/QUICK_START.md)
+- [历史 Docker 部署说明](docs/DEPLOYMENT.md)
 
 ### 👨‍💻 开发文档
 - [前端集成指南](docs/development/FRONTEND_INTEGRATION_GUIDE.md)
@@ -109,7 +116,7 @@ apps/medqc-web/
 - **向量搜索**: pgvector
 
 ### 部署运维
-- **容器化**: Docker
+- **Linux 服务**: systemd
 - **CI/CD**: GitHub Actions
 - **监控**: 自定义监控脚本
 - **日志**: 结构化日志记录

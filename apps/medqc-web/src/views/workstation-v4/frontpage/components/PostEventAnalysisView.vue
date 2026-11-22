@@ -650,7 +650,7 @@ const improvementTasks = computed(() => {
     return {
       owner: row.name,
       issue: highCost ? '费用偏高' : index % 2 === 0 ? '编码缺口' : 'DRG 低权重占比高',
-      tagColor: highCost ? 'orange' : index % 2 === 0 ? 'blue' : 'purple',
+      tagColor: highCost ? 'orange' : 'blue',
       impact: highCost
         ? `费用指数 ${row.costIndexText}，高于目标线`
         : `病例 ${row.casesText} 例，CMI ${row.avgCmiText}`,
@@ -1810,6 +1810,7 @@ const updateCharts = async () => {
     const labels = ['药品', '耗材', '检查', '治疗']
     const s = stats.value.cost_structure
     const data = [s.drug, s.material, s.exam, s.treatment]
+    const barColor = getComputedStyle(costChart.getDom()).getPropertyValue('--mq-brand-600').trim()
 
     costChart.setOption({
       xAxis: { type: 'value' },
@@ -1818,7 +1819,7 @@ const updateCharts = async () => {
         {
           type: 'bar',
           data: data,
-          itemStyle: { color: '#8b5cf6' },
+          itemStyle: { color: barColor || undefined },
         },
       ],
     })

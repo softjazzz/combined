@@ -232,7 +232,7 @@
 </template>
 
 <script setup lang="ts">
-import type { WorkstationHomeHotspotItem } from '@/views/workstation-v2/types'
+import type { WorkstationHomeHotspotItem } from './legacyHomeTypes'
 
 const columnTemplate = '1fr 0.75fr 0.8fr 0.75fr 1.55fr 0.7fr 0.95fr 0.95fr 0.85fr'
 

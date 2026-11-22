@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import type { ComputedRef } from 'vue'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { PatientRecord } from './types'
+import { buildCaseRecordKey } from './utils/caseRecordKey'
 
 type DetailMainTab = 'records' | 'frontpage' | 'settlement'
 type AssistTab = 'coding' | 'form' | 'cost'
@@ -30,7 +31,7 @@ export const RECORD_RESELECTION_MESSAGE = '无法唯一定位病历，请从列�
 
 type RecordIdentity = Pick<PatientRecord, 'instituteId' | 'patientId' | 'visitId' | 'recordKey'>
 
-function readCompleteRecordKey(value: string): string[] | undefined {
+function readCompleteRecordKey(value: string): [string, string, string] | undefined {
   if (!value.trimStart().startsWith('[')) return
   try {
     const parts: unknown = JSON.parse(value)
@@ -39,7 +40,7 @@ function readCompleteRecordKey(value: string): string[] | undefined {
       parts.length === 3 &&
       parts.every((part): part is string => typeof part === 'string' && Boolean(part.trim()))
     ) {
-      return parts.map((part) => part.trim())
+      return [parts[0].trim(), parts[1].trim(), parts[2].trim()]
     }
   } catch {
     return undefined
@@ -47,13 +48,12 @@ function readCompleteRecordKey(value: string): string[] | undefined {
 }
 
 export function getCompleteRecordKey(record: RecordIdentity): string | undefined {
-  const coordinates = [record.instituteId, record.patientId, record.visitId].map((part) =>
-    part?.trim(),
-  )
-  if (coordinates.every(Boolean)) return JSON.stringify(coordinates)
+  const coordinates = [record.instituteId?.trim(), record.patientId?.trim(), record.visitId?.trim()] as const
+  const key = buildCaseRecordKey(...coordinates)
+  if (key) return key
   const keyParts = readCompleteRecordKey(record.recordKey || '')
   if (keyParts && coordinates.every((part, index) => !part || part === keyParts[index])) {
-    return JSON.stringify(keyParts)
+    return buildCaseRecordKey(...keyParts)
   }
 }
 
@@ -71,7 +71,7 @@ export function findRecordById(
 
   const keyParts = readCompleteRecordKey(requested)
   if (requested.startsWith('[') && !keyParts) return undefined
-  const key = keyParts ? JSON.stringify(keyParts) : undefined
+  const key = keyParts ? buildCaseRecordKey(...keyParts) : undefined
   const normalizeLegacyId = (value?: string) => {
     const trimmed = value?.trim()
     return ignoreCaseForLegacyId ? trimmed?.toLowerCase() : trimmed

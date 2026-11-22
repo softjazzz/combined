@@ -20,7 +20,7 @@ MAX_RECORDS_PER_RUN = 500
 PROGRESS_EVERY = 10
 _FAILED_SAMPLE_LIMIT = 50
 
-RecordMeta = Dict[str, Dict[str, str]]
+RecordMeta = Dict[FrontpageRef, Dict[str, str]]
 
 
 def _now() -> datetime:
@@ -35,7 +35,7 @@ def run_frontpage_qc_job(
     record_meta: Optional[RecordMeta] = None,
     cdm_schema: Any = ...,
 ) -> Dict[str, Any]:
-    """执行一个已创建的任务。record_meta 按 record_key 提供科室、出院日期等展示字段。"""
+    """执行一个已创建的任务。record_meta 按三坐标提供科室、出院日期等展示字段。"""
     run = store.get_run(run_id)
     if run["status"] != "queued":
         return run
@@ -61,7 +61,7 @@ def run_frontpage_qc_job(
                     if raw is None:
                         raise LookupError("未找到病案首页")
                     outcome = evaluate_frontpage(build_frontpage_doc(raw))
-                    info = meta.get(ref.as_key(), {})
+                    info = meta.get(ref, {})
                     store.save_outcome(
                         run_id=run_id,
                         outcome=outcome,
@@ -134,11 +134,7 @@ def refs_from_records(records: List[Dict[str, Any]]) -> List[FrontpageRef]:
     seen = set()
     refs: List[FrontpageRef] = []
     for record in records:
-        ref = FrontpageRef(
-            str(record.get("institute_id") or ""),
-            str(record.get("patient_id") or ""),
-            str(record.get("visit_id") or record.get("record_id") or ""),
-        )
+        ref = FrontpageRef.from_record(record)
         if not all((ref.institute_id, ref.patient_id, ref.visit_id)) or ref in seen:
             continue
         seen.add(ref)
