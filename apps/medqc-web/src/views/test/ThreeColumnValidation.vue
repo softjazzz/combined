@@ -134,10 +134,6 @@
           <ul>
             <li class="icon-list-item">
               <CheckCircleOutlined class="icon-list-item__icon icon-list-item__icon--success" />
-              <span>备份原页面为 <code>MedicalRecordDetail.legacy.vue</code></span>
-            </li>
-            <li class="icon-list-item">
-              <CheckCircleOutlined class="icon-list-item__icon icon-list-item__icon--success" />
               <span>创建三栏布局组件 (<code>LayoutShell</code>, <code>NavTree</code>, <code>Toolbar</code>, <code>ContextAside</code>)</span>
             </li>
             <li class="icon-list-item">
@@ -150,7 +146,7 @@
             </li>
             <li class="icon-list-item">
               <CheckCircleOutlined class="icon-list-item__icon icon-list-item__icon--success" />
-              <span>配置路由支持新旧版本切换</span>
+              <span>历史详情链接跳转到工作台</span>
             </li>
           </ul>
           

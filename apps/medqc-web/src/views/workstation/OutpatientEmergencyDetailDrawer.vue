@@ -363,4 +363,4 @@ const documentPanels = computed(() => [
 ])
 </script>
 
-<style scoped src="../../workstation-v4/styles/outpatient-detail.css"></style>
+<style scoped src="../workstation-v4/styles/outpatient-detail.css"></style>

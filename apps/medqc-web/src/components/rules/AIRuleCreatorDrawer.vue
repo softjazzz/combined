@@ -299,8 +299,8 @@ import {
   BulbOutlined,
   EditOutlined,
 } from '@ant-design/icons-vue'
-import RulePreviewCard from '@/views/demo/components/RulePreviewCard.vue'
-import ExamplesModal from '@/views/demo/components/ExamplesModal.vue'
+import RulePreviewCard from './RulePreviewCard.vue'
+import ExamplesModal from './ExamplesModal.vue'
 
 type GeneratedRule = Record<string, any>
 type RuleParams = {
