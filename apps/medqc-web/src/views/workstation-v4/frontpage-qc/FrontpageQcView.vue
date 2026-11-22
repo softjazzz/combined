@@ -161,17 +161,25 @@
           aria-label="出院日期范围"
         >
           <span>出院</span>
-          <input
-            v-model="draft.start_date"
-            type="date"
-            aria-label="开始日期"
-          >
+          <label class="sr-only" for="fpqc-start-date">开始日期</label>
+          <a-date-picker
+            id="fpqc-start-date"
+            :value="draft.start_date"
+            @update:value="draft.start_date = typeof $event === 'string' ? $event : ''"
+            value-format="YYYY-MM-DD"
+            class="fpqc-toolbar__date-picker"
+            :bordered="false"
+          />
           <span>至</span>
-          <input
-            v-model="draft.end_date"
-            type="date"
-            aria-label="结束日期"
-          >
+          <label class="sr-only" for="fpqc-end-date">结束日期</label>
+          <a-date-picker
+            id="fpqc-end-date"
+            :value="draft.end_date"
+            @update:value="draft.end_date = typeof $event === 'string' ? $event : ''"
+            value-format="YYYY-MM-DD"
+            class="fpqc-toolbar__date-picker"
+            :bordered="false"
+          />
         </div>
         <select
           v-model="draft.grade"
@@ -446,7 +454,7 @@
 </template>
 
 <script setup lang="ts">
-import { Alert, Button, Empty, Modal, Pagination, Spin } from 'ant-design-vue'
+import { Alert, Button, DatePicker as ADatePicker, Empty, Modal, Pagination, Spin } from 'ant-design-vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 

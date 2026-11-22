@@ -292,7 +292,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
+import { openConfirmDialog } from '@/views/workstation-v4/utils/confirmDialog'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import { storeToRefs } from 'pinia'
 import {
@@ -497,7 +498,7 @@ const handleBatchAction = (action: BatchActionPayload['action']) => {
   }
 
   if (action === 'delete') {
-    Modal.confirm({
+    openConfirmDialog({
       title: '确认删除选中的病历？',
       content: '删除后不可恢复，请谨慎操作。',
       okText: '确认删除',

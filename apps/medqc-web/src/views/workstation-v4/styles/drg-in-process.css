@@ -644,18 +644,8 @@
 }
 
 .in-process-page {
-  --workstation-canvas: var(--mq-bg-subtle);
-  --workstation-surface: var(--mq-glass-bg-strong);
-  --workstation-surface-strong: var(--mq-glass-bg-strong);
-  --workstation-border: var(--mq-border);
-  --workstation-text: var(--mq-text-primary);
-  --workstation-muted: var(--mq-text-secondary);
-  --workstation-subtle: var(--mq-text-tertiary);
-  --workstation-primary: var(--mq-brand-600);
-  --workstation-primary-soft: color-mix(in srgb, var(--mq-brand-600) 10%, transparent);
-
-  background: var(--workstation-canvas) !important;
-  color: var(--workstation-text) !important;
+  background: var(--mq-bg-subtle) !important;
+  color: var(--mq-text-primary) !important;
   font-family: var(--mq-font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -664,8 +654,8 @@
 .page-header,
 .panel,
 .kpi-card {
-  border-color: var(--workstation-border);
-  background: var(--workstation-surface);
+  border-color: var(--mq-border);
+  background: var(--mq-glass-bg-strong);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
@@ -701,7 +691,7 @@
 .suggestion-row p,
 .change-main span,
 .change-time {
-  color: var(--workstation-muted);
+  color: var(--mq-text-secondary);
 }
 
 .page-header h2,
@@ -711,36 +701,36 @@
 .priority-main strong,
 .suggestion-row strong,
 .change-main strong {
-  color: var(--workstation-text);
+  color: var(--mq-text-primary);
 }
 
 .back-button,
 .secondary-button,
 .filter-chip,
 .mode-chip {
-  border-color: var(--workstation-border);
-  background: var(--workstation-surface-strong);
-  color: var(--workstation-muted);
+  border-color: var(--mq-border);
+  background: var(--mq-glass-bg-strong);
+  color: var(--mq-text-secondary);
 }
 
 .back-button:hover,
 .secondary-button:hover {
   border-color: color-mix(in srgb, var(--mq-brand-600) 22%, transparent);
-  background: var(--workstation-primary-soft);
-  color: var(--workstation-primary);
+  background: var(--mq-brand-tint-10);
+  color: var(--mq-brand-600);
 }
 
 .threshold-chip,
 .kpi-icon--blue,
 .change-tag--down {
   border-color: color-mix(in srgb, var(--mq-brand-600) 16%, transparent);
-  background: var(--workstation-primary-soft);
-  color: var(--workstation-primary);
+  background: var(--mq-brand-tint-10);
+  color: var(--mq-brand-600);
 }
 
 .primary-button {
-  border-color: var(--workstation-primary);
-  background: var(--workstation-primary);
+  border-color: var(--mq-brand-600);
+  background: var(--mq-brand-600);
   box-shadow: 0 4px 10px color-mix(in srgb, var(--mq-brand-600) 16%, transparent);
 }
 
@@ -750,7 +740,7 @@
 
 .chart-toolbar span::before,
 .suggestion-dot {
-  background: var(--workstation-primary);
+  background: var(--mq-brand-600);
 }
 
 .case-list,
@@ -764,7 +754,7 @@
 
 .case-list th {
   background: var(--mq-glass-bg);
-  color: var(--workstation-subtle);
+  color: var(--mq-text-tertiary);
 }
 
 .case-list tbody tr:hover,
@@ -776,7 +766,7 @@
 .link-button,
 .text-link,
 .priority-action {
-  color: var(--workstation-primary);
+  color: var(--mq-brand-600);
 }
 
 @media (max-width: 1280px) {

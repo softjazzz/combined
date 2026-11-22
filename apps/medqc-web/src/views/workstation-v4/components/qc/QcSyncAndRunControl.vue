@@ -108,27 +108,31 @@
             {{ finalDateRangeHint }}
           </p>
           <div class="qc-sync-and-run-control__date-inputs">
-            <label>
+            <label data-testid="sync-and-qc-start-date">
               <span>开始日期</span>
-              <input
-                v-model="selectedStartDate"
-                type="date"
-                data-testid="sync-and-qc-start-date"
+              <a-date-picker
+                :value="selectedStartDate"
+                @update:value="selectedStartDate = typeof $event === 'string' ? $event : ''"
+                value-format="YYYY-MM-DD"
+                :popup-style="datePickerPopupStyle"
                 @change="onFinalDateRangeChange"
-              >
+                class="qc-sync-and-run-control__date-picker"
+              />
             </label>
             <span
               class="qc-sync-and-run-control__date-separator"
               aria-hidden="true"
             > 至 </span>
-            <label>
+            <label data-testid="sync-and-qc-end-date">
               <span>结束日期</span>
-              <input
-                v-model="selectedEndDate"
-                type="date"
-                data-testid="sync-and-qc-end-date"
+              <a-date-picker
+                :value="selectedEndDate"
+                @update:value="selectedEndDate = typeof $event === 'string' ? $event : ''"
+                value-format="YYYY-MM-DD"
+                :popup-style="datePickerPopupStyle"
                 @change="onFinalDateRangeChange"
-              >
+                class="qc-sync-and-run-control__date-picker"
+              />
             </label>
           </div>
           <p
@@ -263,6 +267,7 @@
 </template>
 
 <script setup lang="ts">
+import { DatePicker as ADatePicker } from 'ant-design-vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { CheckCircle2, RefreshCw, X } from 'lucide-vue-next'
 
@@ -344,6 +349,8 @@ const departmentLoadError = ref('')
 const availableDepartments = ref<string[]>([])
 const selectedDepartments = ref<string[]>(defaultTargetDepartments())
 const selectedStartDate = ref('')
+// 日期面板挂载到 body，层级需高于同步确认遮罩。
+const datePickerPopupStyle = { zIndex: 1201 }
 const selectedEndDate = ref('')
 const finalDateWindowUsesDefault = ref(false)
 const dateRangeError = ref('')
@@ -1423,20 +1430,20 @@ onUnmounted(() => {
   line-height: 18px;
 }
 
-.qc-sync-and-run-control__date-inputs input {
+.qc-sync-and-run-control__date-picker {
   width: 100%;
   min-width: 0;
   min-height: 34px;
   padding: 0 8px;
   border: 1px solid rgb(0 0 0 / 12%);
   border-radius: 7px;
-  color: #1d1d1f;
-  background: #fff;
+  color: var(--mq-text-primary);
+  background: var(--mq-bg-surface);
   font: inherit;
 }
 
-.qc-sync-and-run-control__date-inputs input:focus {
-  border-color: #0a6cff;
+.qc-sync-and-run-control__date-picker:focus-within {
+  border-color: var(--mq-brand-600);
   outline: 2px solid rgb(0 102 204 / 14%);
   outline-offset: 1px;
 }

@@ -102,20 +102,28 @@
             同步成功不代表完整住院期资料已就绪，不联动质控。
           </p>
           <div class="pipeline-fields">
-            <label>开始日期<input
-              v-model="startDate"
-              type="date"
-              :max="catalog?.session.last_complete_date"
-              :disabled="scopeLocked"
-              data-testid="pipeline-start"
-            ></label>
-            <label>结束日期<input
-              v-model="endDate"
-              type="date"
-              :max="catalog?.session.last_complete_date"
-              :disabled="scopeLocked"
-              data-testid="pipeline-end"
-            ></label>
+            <label data-testid="pipeline-start">
+              开始日期
+              <a-date-picker
+                :value="startDate"
+                @update:value="startDate = typeof $event === 'string' ? $event : ''"
+                value-format="YYYY-MM-DD"
+                :disabled-date="isDateAfterLastComplete"
+                :disabled="scopeLocked"
+                class="pipeline-date-picker"
+              />
+            </label>
+            <label data-testid="pipeline-end">
+              结束日期
+              <a-date-picker
+                :value="endDate"
+                @update:value="endDate = typeof $event === 'string' ? $event : ''"
+                value-format="YYYY-MM-DD"
+                :disabled-date="isDateAfterLastComplete"
+                :disabled="scopeLocked"
+                class="pipeline-date-picker"
+              />
+            </label>
             <label>执行方式<select
               v-model="mode"
               :disabled="scopeLocked"
@@ -246,6 +254,8 @@
 </template>
 
 <script setup lang="ts">
+import { DatePicker as ADatePicker } from 'ant-design-vue'
+import type { Dayjs } from 'dayjs'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth'
@@ -283,6 +293,10 @@ const error = ref(''),
   historyError = ref(''),
   saved = ref(false)
 const catalog = ref<IndependentCatalog | null>(null)
+function isDateAfterLastComplete(date: Dayjs) {
+  const lastComplete = catalog.value?.session.last_complete_date
+  return !!lastComplete && date.format('YYYY-MM-DD') > lastComplete
+}
 const detailId = ref<string | null>(null), catalogGeneration = ref(0)
 const jobs = ref<IndependentSyncJob[] | null>(null)
 const startDate = ref(''),
@@ -552,7 +566,10 @@ onUnmounted(() => {
   display: grid;
   gap: 6px;
 }
-.pipeline-fields input,
+.pipeline-date-picker {
+  min-height: 36px;
+  border-radius: 8px;
+}
 .pipeline-fields select {
   padding: 8px;
   border: 1px solid var(--mq-border, #e2e8f0);

@@ -12,12 +12,22 @@
     <form class="manual-filters mq-card mq-card--padded" @submit.prevent="query">
       <label class="mq-field"
         ><span class="mq-field__label">开始日期</span
-        ><input v-model="draft.start_date" class="mq-input" type="date" required
-      /></label>
+        ><a-date-picker
+          :value="draft.start_date"
+          @update:value="draft.start_date = typeof $event === 'string' ? $event : ''"
+          class="mq-input"
+          value-format="YYYY-MM-DD"
+          aria-required="true"
+        /></label>
       <label class="mq-field"
         ><span class="mq-field__label">结束日期</span
-        ><input v-model="draft.end_date" class="mq-input" type="date" required
-      /></label>
+        ><a-date-picker
+          :value="draft.end_date"
+          @update:value="draft.end_date = typeof $event === 'string' ? $event : ''"
+          class="mq-input"
+          value-format="YYYY-MM-DD"
+          aria-required="true"
+        /></label>
       <label class="mq-field"
         ><span class="mq-field__label">机构</span
         ><select v-model="draft.institute_id" class="mq-input" @change="draft.department = ''">
@@ -194,6 +204,7 @@
 </template>
 
 <script setup lang="ts">
+import { DatePicker as ADatePicker } from 'ant-design-vue'
 import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
 import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'

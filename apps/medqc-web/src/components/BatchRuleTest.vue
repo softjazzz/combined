@@ -1999,7 +1999,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
+import { openConfirmDialog } from '@/views/workstation-v4/utils/confirmDialog'
 import {
   ArrowLeftOutlined,
   ThunderboltOutlined,
@@ -2742,7 +2743,7 @@ watch(currentDocumentType, (newType, oldType) => {
 
   // 如果有未保存的修改，弹出确认框
   if (hasUnsavedChanges.value && oldType) {
-    Modal.confirm({
+    openConfirmDialog({
       title: '确认切换病历类型？',
       content: '当前病历文本已修改，切换后将加载新的预置文本，未保存的修改将丢失',
       okText: '确认切换',

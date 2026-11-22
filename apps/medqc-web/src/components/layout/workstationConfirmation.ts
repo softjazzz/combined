@@ -1,6 +1,6 @@
 import { inject, shallowRef, type InjectionKey } from 'vue'
-import { Modal } from 'ant-design-vue'
 import type { VNode } from 'vue'
+import { openConfirmDialog } from '@/views/workstation-v4/utils/confirmDialog'
 
 export interface WorkstationConfirmOptions {
   title: string
@@ -62,5 +62,5 @@ export const WORKSTATION_CONFIRMATION: InjectionKey<WorkstationConfirmation> =
 export function useWorkstationConfirmation() {
   const controller = inject(WORKSTATION_CONFIRMATION, undefined)
   // 旧 Dashboard / demo 入口继续沿用其原有主题；工作台入口由 Layout 提供页面内弹窗。
-  return controller ?? { confirm: (options: WorkstationConfirmOptions) => Modal.confirm(options) }
+  return controller ?? { confirm: (options: WorkstationConfirmOptions) => openConfirmDialog(options) }
 }

@@ -19,7 +19,10 @@ vi.mock('@/services/manual-case-sample-service', () => ({
   createManualTestMedicalRecord: vi.fn(),
   getEditableMedicalRecordDocuments: vi.fn(),
 }))
-vi.mock('ant-design-vue', () => ({ message: { success: vi.fn() } }))
+vi.mock('ant-design-vue', async (importOriginal) => ({
+  ...await importOriginal<typeof import('ant-design-vue')>(),
+  message: { success: vi.fn() },
+}))
 const push = vi.fn()
 const replace = vi.fn(() => Promise.resolve())
 let query: Record<string, string> = {}
@@ -146,7 +149,7 @@ describe('新建测试病例页', () => {
     expect(wrapper.find('[data-testid="copy-banner"]').text()).toContain('【验收测试】抢救记录完整')
     expect((wrapper.find('[aria-label="科室"]').element as HTMLInputElement).value).toBe('急诊内科')
     expect((wrapper.find('[aria-label="入院时间"]').element as HTMLInputElement).value).toBe('2026-07-01T08:00')
-    expect((wrapper.find('[aria-label="评价时间点"]').element as HTMLInputElement).value).toBe('2026-07-05')
+    expect((wrapper.get('#rule-validation-evaluation-date').element as HTMLInputElement).value).toBe('2026-07-05')
     expect(wrapper.findAll('[data-testid="draft-document"]')).toHaveLength(1)
   })
 

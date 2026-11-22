@@ -80,17 +80,25 @@
       </div>
       <div class="field mq-field">
         <label for="sr-from">出院日期起（上海）</label
-        ><input
+        ><a-date-picker
           id="sr-from"
-          v-model="draft.discharged_from"
+          :value="draft.discharged_from"
+          @update:value="draft.discharged_from = typeof $event === 'string' ? $event : ''"
           class="mq-input"
-          type="date"
-          required
+          value-format="YYYY-MM-DD"
+          aria-required="true"
         />
       </div>
       <div class="field mq-field">
         <label for="sr-to">出院日期止（上海）</label
-        ><input id="sr-to" v-model="draft.discharged_to" class="mq-input" type="date" required />
+        ><a-date-picker
+          id="sr-to"
+          :value="draft.discharged_to"
+          @update:value="draft.discharged_to = typeof $event === 'string' ? $event : ''"
+          class="mq-input"
+          value-format="YYYY-MM-DD"
+          aria-required="true"
+        />
       </div>
       <div class="filter-actions">
         <button class="mq-btn mq-btn--primary" type="submit">
@@ -430,6 +438,7 @@
 </template>
 
 <script setup lang="ts">
+import { DatePicker as ADatePicker } from 'ant-design-vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
