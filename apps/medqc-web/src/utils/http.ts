@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import axios from 'axios'
 import { clinicalSourceForRequest } from './clinical-source'
 import { getAccessToken } from '@/utils/auth-token'
@@ -6,7 +7,7 @@ import { attachTraceIdToError, ensureTraceHeaders, extractTraceIdFromResponse } 
 
 export const http = axios.create({
   baseURL: '',
-  timeout: 30000,
+  timeout: STANDARD_REQUEST_TIMEOUT_MS,
 })
 
 http.interceptors.request.use((config) => {

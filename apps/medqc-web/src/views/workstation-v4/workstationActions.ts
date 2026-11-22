@@ -1,3 +1,4 @@
+import { LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import ApiService, { apiClient } from '@/services/apiService'
 
 import type { PatientRecord } from './types'
@@ -6,7 +7,7 @@ export async function requestFrontpageDraft(visitId: string) {
   const { data } = await apiClient.post(
     '/api/v1/frontpage/auto-generate-draft',
     { visit_id: visitId },
-    { timeout: 120000 },
+    { timeout: LONG_REQUEST_TIMEOUT_MS },
   )
   if (data?.success === false) {
     throw new Error(String(data?.error || data?.message || '首页抽取提交失败'))

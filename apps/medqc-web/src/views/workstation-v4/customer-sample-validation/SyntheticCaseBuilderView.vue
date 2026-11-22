@@ -656,6 +656,7 @@
 </template>
 
 <script setup lang="ts">
+import { SAMPLE_RULE_SET_RUN_TIMEOUT_MS } from '@/config/requestTimeouts'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { CSSProperties } from 'vue'
@@ -1447,7 +1448,7 @@ async function handleSave(runAfterSave: boolean) {
             patientId,
             visitId: matchedVisitId,
           }),
-          { timeout: 90000 },
+          { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS },
         )
         if (!runResult.success || !runResult.data) {
           message.warning(runResult.message || '测试病历已保存，但验证任务创建失败')

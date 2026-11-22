@@ -2,6 +2,7 @@
  * 临床质控演示平台 Pinia Store
  * 管理病例、文书、质控结果等状态
  */
+import { LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
@@ -253,7 +254,7 @@ export const useClinicalWorkstationStore = defineStore('clinicalWorkstation', ()
           persist: false,
           prompt_mode: 'plan_a' // 使用精简版提示词
         },
-        { timeout: 120000 }
+        { timeout: LONG_REQUEST_TIMEOUT_MS }
       )
 
       if (response.data && response.data.data) {
@@ -348,7 +349,7 @@ export const useClinicalWorkstationStore = defineStore('clinicalWorkstation', ()
               persist: false,
               prompt_mode: 'plan_a'
             },
-            { timeout: 120000 }
+            { timeout: LONG_REQUEST_TIMEOUT_MS }
           )
 
           if (response.data && response.data.data) {
@@ -489,7 +490,7 @@ export const useClinicalWorkstationStore = defineStore('clinicalWorkstation', ()
             meta: doc.metadata
           }))
         },
-        { timeout: 120000 }
+        { timeout: LONG_REQUEST_TIMEOUT_MS }
       )
 
       if (response.data && response.data.data && response.data.data.frontpage) {

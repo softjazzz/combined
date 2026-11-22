@@ -556,6 +556,7 @@
 </template>
 
 <script setup lang="ts">
+import { LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
@@ -956,7 +957,7 @@ async function loadFullDocumentsForAnalysis(): Promise<DocItem[]> {
           visit_id: visitId,
           view: 'full',
         },
-        timeout: 120000,
+        timeout: LONG_REQUEST_TIMEOUT_MS,
       })
       const payload = response.data?.data || response.data || {}
       const rawDocuments = Array.isArray(payload.documents) ? payload.documents : []
@@ -1056,7 +1057,7 @@ async function runContentQCLegacy(docs: DocItem[]) {
           persist: false,
           prompt_mode: 'plan_a',
         },
-        { timeout: 120000 },
+        { timeout: LONG_REQUEST_TIMEOUT_MS },
       )
 
       const data = extractApiData<any>(resp.data, '文书质控失败')

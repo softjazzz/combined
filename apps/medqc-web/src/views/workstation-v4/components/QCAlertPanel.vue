@@ -190,6 +190,7 @@
 </template>
 
 <script setup lang="ts">
+import { STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { ref, computed, watch, reactive } from 'vue'
 import { message } from 'ant-design-vue'
@@ -528,7 +529,7 @@ const fetchCodingQCFromBackend = async () => {
   try {
     codingQCLoading.value = true
     const resp = await axios.post('/api/v1/qc/coding-qc/check', payload, {
-      timeout: 30000,
+      timeout: STANDARD_REQUEST_TIMEOUT_MS,
     })
     const data = resp.data?.data
     if (!data) return []

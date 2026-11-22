@@ -1048,6 +1048,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { serializeCaseRecordKey } from '@/views/workstation-v4/utils/caseRecordKey'
 import { retryTargetJobId } from '@/utils/batchJobRetryIdentity'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
@@ -1770,7 +1771,7 @@ function normalizeWorkspaceRecordRef(
 }
 
 function workspaceRecordRefKey(recordRef: CustomRuleWorkspaceRecordRef): string {
-  return JSON.stringify([recordRef.institute_id, recordRef.patient_id, recordRef.visit_id])
+  return serializeCaseRecordKey(recordRef.institute_id, recordRef.patient_id, recordRef.visit_id)
 }
 
 function cacheSelectedRecordRef(record: CustomRuleWorkspaceRecord) {

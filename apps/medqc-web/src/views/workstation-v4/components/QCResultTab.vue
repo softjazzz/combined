@@ -222,6 +222,7 @@
 </template>
 
 <script setup lang="ts">
+import { CODING_QC_FALLBACK_TIMEOUT_MS, STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
@@ -660,7 +661,7 @@ async function fetchCodingQCFromBackend() {
     }
   }
 
-  const executeRequest = async (requestPayload: Record<string, any>, timeout = 30000) => {
+  const executeRequest = async (requestPayload: Record<string, any>, timeout: number = STANDARD_REQUEST_TIMEOUT_MS) => {
     const resp = await apiClient.post('/api/v1/qc/coding-qc/check', requestPayload, { timeout })
     const data = resp.data?.data
     if (!data) return { issues: [], persistence: null, degraded: false }
@@ -719,7 +720,7 @@ async function fetchCodingQCFromBackend() {
         .includes('timeout')
     if (maybeTimeout) {
       try {
-        const degradedResult = await executeRequest({ ...payload, skip_llm: true }, 20000)
+        const degradedResult = await executeRequest({ ...payload, skip_llm: true }, CODING_QC_FALLBACK_TIMEOUT_MS)
         message.info('编码质控已降级为规则层执行，结果仍会保存并更新消息')
         return degradedResult
       } catch (retryErr) {
@@ -738,7 +739,7 @@ async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
     visit_id: props.visitId || '',
     frontpage,
   }
-  const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: 30000 })
+  const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: STANDARD_REQUEST_TIMEOUT_MS })
   const data = resp.data?.data
   if (!data) return { issues: [], persistence: null, passed: 0, total: 0 }
 
@@ -774,7 +775,7 @@ async function fetchCostQCFromBackend() {
   let lastError: unknown = null
   for (const url of urls) {
     try {
-      const resp = await apiClient.post(url, undefined, { timeout: 30000 })
+      const resp = await apiClient.post(url, undefined, { timeout: STANDARD_REQUEST_TIMEOUT_MS })
       const data = resp.data
       const issues: QCIssue[] = (data.results || [])
         .filter((item: any) => !item.passed)

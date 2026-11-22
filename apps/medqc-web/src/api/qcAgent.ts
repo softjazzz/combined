@@ -1,3 +1,4 @@
+import { LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { http } from '@/utils/http'
 
 export type QCAgentStatus =
@@ -195,7 +196,7 @@ export interface QCAgentChatResponse {
 export const qcAgentApi = {
   async chat(request: QCAgentChatRequest): Promise<QCAgentChatResponse> {
     const response = await http.post('/api/v1/qc-agent/chat', request, {
-      timeout: 120000,
+      timeout: LONG_REQUEST_TIMEOUT_MS,
     })
     return response.data
   },

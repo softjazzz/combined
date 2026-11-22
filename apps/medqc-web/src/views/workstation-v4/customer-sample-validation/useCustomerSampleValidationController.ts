@@ -1,3 +1,5 @@
+import { SAMPLE_RULE_SET_RUN_TIMEOUT_MS } from '@/config/requestTimeouts'
+import { serializeCaseRecordKey } from '../utils/caseRecordKey'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import { deferredComponent } from './deferredComponent'
@@ -101,7 +103,6 @@ import {
   SC_SAMPLE_RULE_SET_KEY,
   PROGRAMMATIC_RULE_SET_KEY,
   LEGACY_CUSTOMER_RULE_SET_KEY,
-  SAMPLE_RULE_SET_RUN_TIMEOUT_MS,
   RUN_DUPLICATE_GUARD_MS,
   LUXIAN_0609_RULE_FAMILY_DEFINITIONS,
   fallbackRuleSets,
@@ -1223,7 +1224,7 @@ export function useCustomerSampleValidationController() {
   }
 
   function recordRefKey(recordRef: NonNullable<SamplePoolRunPayload['record_refs']>[number]) {
-    return JSON.stringify([recordRef.institute_id, recordRef.patient_id, recordRef.visit_id])
+    return serializeCaseRecordKey(recordRef.institute_id, recordRef.patient_id, recordRef.visit_id)
   }
 
   function sampleItemIdsFromRecord(record: ManualSamplePoolRecord): string[] {

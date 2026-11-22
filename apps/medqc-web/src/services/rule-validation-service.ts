@@ -1,3 +1,4 @@
+import { RUN_CREATE_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ApiService } from './apiService'
 
 /** 规则验收接口（/api/v1/qc/rule-validation）的数据契约，与后端 rule_validation 路由一一对应。 */
@@ -194,7 +195,7 @@ export const removeCaseAnswer = (ruleId: string, itemId: string, revision: numbe
     params: { revision },
   })
 /** 创建运行要走正式任务创建链路（实测约 25 秒），不能用默认 15 秒超时，否则前端报错而后台已建成 */
-export const RUN_CREATE_TIMEOUT_MS = 120000
+export { RUN_CREATE_TIMEOUT_MS }
 export const startValidationRun = (ruleId: string, itemIds?: string[]) =>
   ApiService.post<{ run_id: string; job_id: string }>(
     `${rule(ruleId)}/runs`,
