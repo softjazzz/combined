@@ -215,7 +215,6 @@ async def evaluate_running_final_bundle_input(
 
     bundle_institute_id = str((bundle or {}).get("institute_id") or "").strip()
     bundle_patient_id = str((bundle or {}).get("patient_id") or "").strip()
-    bundle_visit_id = str((bundle or {}).get("visit_id") or document_id or "").strip()
     raw_bundle_source_schema = (bundle or {}).get("source_schema")
     bundle_source_schema = (
         str(raw_bundle_source_schema).strip()
