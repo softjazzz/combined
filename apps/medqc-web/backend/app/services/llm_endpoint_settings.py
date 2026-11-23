@@ -8,6 +8,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from functools import wraps
 import inspect
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -34,6 +35,26 @@ class EndpointSettingsError(ProviderConfigurationError):
         self.status = status
 
 
+def _is_link_local_host(hostname: str) -> bool:
+    try:
+        return ipaddress.ip_address(hostname).is_link_local
+    except ValueError:
+        return False
+
+
+def _endpoint_origin(value: str) -> tuple[str, str, int | None]:
+    parsed = urlsplit(value.strip().rstrip("/"))
+    scheme = (parsed.scheme or "").lower()
+    host = (parsed.hostname or "").lower()
+    port = parsed.port
+    if port is None:
+        if scheme == "http":
+            port = 80
+        elif scheme == "https":
+            port = 443
+    return (scheme, host, port)
+
+
 class EndpointUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     version: int = Field(ge=0)
@@ -52,6 +73,7 @@ class EndpointUpdate(BaseModel):
         try:
             parsed = urlsplit(value)
             valid = (parsed.scheme in {"http", "https"} and parsed.hostname
+                     and not _is_link_local_host(parsed.hostname)
                      and not parsed.username and not parsed.password
                      and not parsed.query and not parsed.fragment and parsed.port != 0
                      and not any(ch.isspace() or ord(ch) < 32 for ch in value))
@@ -198,9 +220,19 @@ def save(provider, proposed, actor, settings):
         else:
             old = current["providers"].get(provider)
             cipher = old["key_ciphertext"] if old else ""
+            dep_endpoint, dep_key = deployment_values(provider, settings)
+            previous_endpoint = old["endpoint"] if old else (dep_endpoint or "")
+            had_previous_key = bool(cipher) if old else bool(dep_key)
+            endpoint_origin_changed = bool(proposed.endpoint) and (
+                not previous_endpoint
+                or _endpoint_origin(previous_endpoint) != _endpoint_origin(proposed.endpoint)
+            )
+            if had_previous_key and not key and not proposed.clear_key and endpoint_origin_changed:
+                # 无论首次编辑还是后续编辑，只要更换端点主机/端口且存在旧密钥，必须显式重新确认密钥或清除密钥。
+                raise EndpointSettingsError("llm_endpoint_key_reconfirmation_required", 422)
             if not old and not key and not proposed.clear_key:
-                # 首次编辑留空，沿用原有效部署密钥；之后留空只保留已保存密钥。
-                key = deployment_values(provider, settings)[1] or ""
+                # 同源首次编辑留空，沿用原有效部署密钥；之后同源留空保留已保存密钥。
+                key = dep_key or ""
             if key:
                 cipher = _cipher(create=True).encrypt(key.encode()).decode()
             if proposed.clear_key:

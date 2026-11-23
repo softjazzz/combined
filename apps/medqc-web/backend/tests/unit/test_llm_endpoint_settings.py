@@ -37,7 +37,7 @@ def test_actual_routes_require_super_admin(setup, role, allowed):
     client, _, user, _ = setup
     user["roles"] = [role]
     assert client.get('/api/v1/llm/endpoints').status_code == (200 if allowed else 403)
-    assert client.put('/api/v1/llm/endpoints/ollama', json=payload()).status_code == (200 if allowed else 403)
+    assert client.put('/api/v1/llm/endpoints/ollama', json=payload(clear_key=True)).status_code == (200 if allowed else 403)
 
 
 def test_deployment_read_does_not_create_storage(setup):
@@ -71,15 +71,15 @@ def test_encrypted_save_keep_clear_restore_and_audit(setup):
 
 def test_conflict_does_not_overwrite_and_disabled_does_not_fallback(setup):
     client, _, _, _ = setup
-    assert client.put('/api/v1/llm/endpoints/ollama', json=payload(enabled=False)).status_code == 200
-    assert client.put('/api/v1/llm/endpoints/ollama', json=payload()).status_code == 409
+    assert client.put('/api/v1/llm/endpoints/ollama', json=payload(enabled=False, clear_key=True)).status_code == 200
+    assert client.put('/api/v1/llm/endpoints/ollama', json=payload(clear_key=True)).status_code == 409
     with pytest.raises(loader.ProviderConfigurationError):
         loader.build_provider_runtime_config('ollama')
     assert 'ollama' not in loader.get_enabled_provider_codes()
     assert store.snapshot()['version'] == 1
 
 
-@pytest.mark.parametrize('endpoint', ['file:///tmp/key', 'http://u:secret@host/v1', 'http://host/v1?token=secret', 'http://host/v1#secret', 'http://host:invalid', 'http://host/\npath'])
+@pytest.mark.parametrize('endpoint', ['file:///tmp/key', 'http://u:secret@host/v1', 'http://host/v1?token=secret', 'http://host/v1#secret', 'http://host:invalid', 'http://host/\npath', 'http://169.254.169.254/latest/meta-data'])
 def test_invalid_endpoint_rejected_without_echo(setup, endpoint):
     client, _, _, _ = setup
     result = client.put('/api/v1/llm/endpoints/ollama', json=payload(endpoint=endpoint, api_key='synthetic-do-not-echo'))
@@ -148,7 +148,7 @@ def test_two_writers_cannot_overwrite_same_version(setup):
     _, cfg, _, _ = setup
     def write(actor):
         try:
-            store.save('ollama', store.EndpointUpdate(**payload()), actor, cfg)
+            store.save('ollama', store.EndpointUpdate(**payload(clear_key=True)), actor, cfg)
             return 200
         except store.EndpointSettingsError as exc:
             return exc.status
@@ -181,8 +181,48 @@ async def test_new_task_service_refresh_does_not_mutate_running_reference(setup,
         qc_sichuan.service = SimpleNamespace(client=SimpleNamespace(**runtime))
     monkeypatch.setattr(qc_sichuan, 'init_qc_service', init)
     assert await qc_sichuan.get_qc_service() is running
-    client.put('/api/v1/llm/endpoints/ollama', json=payload())
+    client.put('/api/v1/llm/endpoints/ollama', json=payload(clear_key=True))
     next_service = await qc_sichuan.get_qc_service()
     assert next_service is not running
     assert next_service.client.api_endpoint == 'http://new.test/v1'
     assert running.client.api_endpoint == 'http://old.test/v1'
+
+
+def test_host_change_requires_key_reconfirmation_on_first_and_second_edit(setup):
+    client, _, _, _ = setup
+    # 首次编辑：从部署端点 old.test 换到 other.test 且留空密钥，必须拒绝继承部署密钥
+    first_bad = client.put(
+        '/api/v1/llm/endpoints/ollama',
+        json=payload(0, endpoint='http://other.test/v1'),
+    )
+    assert first_bad.status_code == 422
+    assert 'llm_endpoint_key_reconfirmation_required' in first_bad.text
+    assert store.snapshot()['version'] == 0
+
+    # 首次同源编辑（仅调整路径）留空密钥允许继续沿用部署密钥
+    first_same_origin = client.put(
+        '/api/v1/llm/endpoints/ollama',
+        json=payload(0, endpoint='http://old.test/v2'),
+    )
+    assert first_same_origin.status_code == 200
+    assert loader.build_provider_runtime_config('ollama')['api_key'] == 'old-test-secret'
+
+    # 二次编辑：从已保存端点 old.test 换到 evil.test 且留空密钥，必须拒绝保留已存密钥
+    second_bad = client.put(
+        '/api/v1/llm/endpoints/ollama',
+        json=payload(1, endpoint='http://evil.test/v1', api_key=''),
+    )
+    assert second_bad.status_code == 422
+    assert 'llm_endpoint_key_reconfirmation_required' in second_bad.text
+    assert store.snapshot()['version'] == 1
+    assert loader.build_provider_runtime_config('ollama')['api_endpoint'] == 'http://old.test/v2'
+
+    # 显式传入新密钥或显式 clear_key=True 允许换地址保存
+    second_with_key = client.put(
+        '/api/v1/llm/endpoints/ollama',
+        json=payload(1, endpoint='http://new-host.test/v1', api_key='new-host-secret'),
+    )
+    assert second_with_key.status_code == 200
+    runtime = loader.build_provider_runtime_config('ollama')
+    assert runtime['api_endpoint'] == 'http://new-host.test/v1'
+    assert runtime['api_key'] == 'new-host-secret'
