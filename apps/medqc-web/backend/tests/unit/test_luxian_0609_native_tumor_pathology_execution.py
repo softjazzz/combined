@@ -2624,8 +2624,9 @@ def test_native_surgery_record_reader_projects_surgery_process(monkeypatch):
 
     assert rows == [{"surgery_process": "safe-internal-material"}]
     assert '"surgery_process"' in str(captured["sql"])
-    assert captured["params"]["limit_rows"] == source_evidence_reader._source_limit(
-        "surgery_record"
+    assert (
+        captured["params"]["limit_rows"]
+        == source_evidence_reader._source_limit("surgery_record") + 1
     )
 
 
