@@ -4468,12 +4468,48 @@ def test_luxian_0609_summary_should_use_canonical_statuses_and_exclude_not_appli
         "not_executed": 0,
         "technical_error": 1,
     }
+    assert summary["confirmed_compliant_count"] == 1
     assert summary["compliant_count"] == 1
     assert summary["not_applicable_count"] == 1
     assert summary["data_gap_count"] == 1
     assert summary["technical_error_count"] == 1
     assert summary["compliance_denominator"] == 2
+    assert summary["compliance_rate_calculable"] is True
+    assert summary["confirmed_compliance_rate"] == 50.0
     assert summary["compliance_rate"] == 50.0
+
+
+def test_luxian_0609_summary_zero_denominator_returns_not_calculable_instead_of_100():
+    summary = summarize_luxian_0609_results(
+        [
+            {"status": "data_gap"},
+            {"status": "technical_error"},
+        ]
+    )
+
+    assert summary["confirmed_compliant_count"] == 0
+    assert summary["ai_suggested_compliant_count"] == 0
+    assert summary["compliant_count"] == 0
+    assert summary["compliance_denominator"] == 0
+    assert summary["compliance_rate_calculable"] is False
+    assert summary["confirmed_compliance_rate"] is None
+    assert summary["compliance_rate"] is None
+
+
+def test_luxian_0609_summary_separates_ai_suggested_compliant_from_confirmed_compliance():
+    summary = summarize_luxian_0609_results(
+        [
+            {"status": "ai_suggested_compliant"},
+        ]
+    )
+
+    assert summary["confirmed_compliant_count"] == 0
+    assert summary["compliant_count"] == 0
+    assert summary["ai_suggested_compliant_count"] == 1
+    assert summary["compliance_denominator"] == 1
+    assert summary["compliance_rate_calculable"] is True
+    assert summary["confirmed_compliance_rate"] == 0.0
+    assert summary["compliance_rate"] == 0.0
 
 
 def test_batch_record_status_counts_should_separate_not_applicable_from_compliant():

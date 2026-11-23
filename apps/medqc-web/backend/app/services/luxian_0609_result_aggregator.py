@@ -212,7 +212,11 @@ def summarize_luxian_0609_results(results: list[dict[str, Any]]) -> dict[str, An
     compliant = int(status_counts.get("compliant") or 0)
     ai_suggested_non_compliant = int(status_counts.get("ai_suggested_non_compliant") or 0)
     ai_suggested_compliant = int(status_counts.get("ai_suggested_compliant") or 0)
-    compliance_rate = round((compliant / compliance_denominator * 100.0), 2) if compliance_denominator else 100.0
+    confirmed_compliance_rate = (
+        round((compliant / compliance_denominator * 100.0), 2)
+        if compliance_denominator
+        else None
+    )
     return {
         "customer_rule_count": total,
         "status_counts": status_counts,
@@ -224,7 +228,11 @@ def summarize_luxian_0609_results(results: list[dict[str, Any]]) -> dict[str, An
         "uncertain_count": int(status_counts.get("uncertain") or 0),
         "not_executed_count": not_executed,
         "technical_error_count": technical_error,
-        "compliant_count": compliant + ai_suggested_compliant,
+        # 确定合规与 AI 建议合规分开计数；零分母时合规率不可计算，返回 None 而非 100.0。
+        "confirmed_compliant_count": compliant,
+        "compliant_count": compliant,
         "compliance_denominator": compliance_denominator,
-        "compliance_rate": compliance_rate,
+        "compliance_rate_calculable": compliance_denominator > 0,
+        "confirmed_compliance_rate": confirmed_compliance_rate,
+        "compliance_rate": confirmed_compliance_rate,
     }
