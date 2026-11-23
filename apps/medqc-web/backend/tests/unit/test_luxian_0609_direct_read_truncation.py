@@ -347,3 +347,78 @@ async def test_running_final_bundle_does_not_substitute_document_id_for_missing_
     assert captured["aggregate_visit_id"] == expected_visit_id
     assert captured["prepare_visit_id"] != "HOSP-1-PAT-1"
     assert result["bundle_metadata"]["visit_id"] == (bundle_visit_id or "")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source_visit_id", "expected_visit_id"),
+    [
+        ("VISIT-TRUSTED-001", "VISIT-TRUSTED-001"),
+        ("  VISIT-TRUSTED-001  ", "VISIT-TRUSTED-001"),
+        ("", ""),
+        ("   ", ""),
+        (None, ""),
+    ],
+)
+async def test_evaluate_rules_orchestrated_uses_consistent_trusted_visit_id_without_document_id_fallback(
+    monkeypatch,
+    source_visit_id: str | None,
+    expected_visit_id: str,
+) -> None:
+    from app.services.luxian_0609.execution import Luxian0609ExecutionContext
+
+    captured: dict[str, object] = {}
+
+    async def _fake_prepare(**kwargs):
+        captured["prepare_visit_id"] = kwargs["visit_id"]
+        captured["prepare_institute_id"] = kwargs["institute_id"]
+        captured["prepare_patient_id"] = kwargs["patient_id"]
+        return [], Luxian0609ExecutionContext(enabled=True)
+
+    def _fake_aggregate(*, orchestrated, visit_id, **_kwargs):
+        captured["aggregate_visit_id"] = visit_id
+        orchestrated["results"] = [
+            {
+                "rule_id": "LX0609-01-01-01",
+                "status": "data_gap",
+                "is_compliant": None,
+                "metadata": {"execution_source": "lx0609_native"},
+            }
+        ]
+        return orchestrated
+
+    async def _fake_evaluate_rules(**_kwargs):
+        return {"results": []}
+
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.prepare_luxian_0609_execution",
+        _fake_prepare,
+    )
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.aggregate_luxian_0609_orchestrated_results",
+        _fake_aggregate,
+    )
+
+    service = SichuanQCService()
+    monkeypatch.setattr(service.rule_orchestrator, "evaluate_rules", _fake_evaluate_rules)
+
+    result = await service._evaluate_rules_orchestrated(
+        document_id="DOC-ONLY-001",
+        content="合成测试病历文本",
+        document_type="病程记录",
+        rules=[{"rule_id": "LX0609-01-01-01", "rule_name": "测试规则"}],
+        use_execution_cache=False,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        source_institute_id="HOSP-1",
+        source_patient_id="PAT-1",
+        source_visit_id=source_visit_id,  # type: ignore[arg-type]
+    )
+
+    assert captured["prepare_institute_id"] == "HOSP-1"
+    assert captured["prepare_patient_id"] == "PAT-1"
+    assert captured["prepare_visit_id"] == expected_visit_id
+    assert captured["aggregate_visit_id"] == expected_visit_id
+    assert captured["prepare_visit_id"] == captured["aggregate_visit_id"]
+    assert captured["prepare_visit_id"] != "DOC-ONLY-001"
+    assert captured["aggregate_visit_id"] != "DOC-ONLY-001"
+    assert result["results"][0]["rule_id"] == "LX0609-01-01-01"

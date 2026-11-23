@@ -1282,10 +1282,11 @@ class SichuanQCService:
             medical_record["evidence_payload"] = dict(evidence_payload)
 
         executable_rules = prepared_rules
+        resolved_visit_id = str(source_visit_id or "").strip()
         executable_rules, luxian_context = await prepare_luxian_0609_execution(
             rule_set_key=normalized_rule_set_key,
             prepared_rules=prepared_rules,
-            visit_id=str(source_visit_id or document_id or ""),
+            visit_id=resolved_visit_id,
             medical_text=content,
             evidence_payload=evidence_payload,
             llm_client=self.adjudicator_client,
@@ -1342,7 +1343,7 @@ class SichuanQCService:
             aggregate_luxian_0609_orchestrated_results(
                 orchestrated=orchestrated,
                 context=luxian_context,
-                visit_id=str(document_id or ""),
+                visit_id=resolved_visit_id,
                 model_name=model_version,
                 evidence_payload=evidence_payload,
             )
