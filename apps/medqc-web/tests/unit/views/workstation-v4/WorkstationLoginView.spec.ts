@@ -120,10 +120,12 @@ function mountView() {
 }
 
 describe('WorkstationLoginView', () => {
-  it('V5登录提供真实注册与登录外结果查询入口', () => {
+  it('V5登录提供真实注册与登录外结果查询入口，且不内置演示管理员快捷登录按钮', () => {
     const wrapper = mountView()
     expect(wrapper.get('a[href="/auth/register"]').text()).toBe('申请账号')
     expect(wrapper.get('a[href="/auth/register?mode=status"]').text()).toBe('查询开通结果')
+    expect(wrapper.find('button[aria-label="演示账号快速登录"]').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('admin888')
     wrapper.unmount()
   })
   beforeEach(() => {

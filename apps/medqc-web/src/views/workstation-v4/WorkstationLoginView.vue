@@ -4,7 +4,6 @@ import '@/styles/source-han-sans-sc.css'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { AuditOutlined, LockOutlined } from '@ant-design/icons-vue'
-import { ArrowRight, LoaderCircle, MonitorPlay } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import WorkstationLoginForm from '@/views/workstation-v4/components/WorkstationLoginForm.vue'
 import type { LoginRequest } from '@/types/auth'
@@ -29,16 +28,6 @@ const loginAccountAliases: Record<string, string> = {
   sync_admin: 'sync_admin@medqc.com',
 }
 
-const demoAccounts = [
-  {
-    label: '功能演示账号',
-    role: 'admin' as const,
-    account: 'admin',
-    password: 'admin888',
-    badge: 'DEMO',
-  },
-]
-
 const navigateAfterLogin = async (target = redirectTarget.value) => {
   try {
     await router.replace(target)
@@ -51,17 +40,10 @@ const navigateAfterLogin = async (target = redirectTarget.value) => {
 const handleLogin = async (loginData: LoginRequest) => {
   try {
     loading.value = true
-    // 演示账号映射到后端真实管理员账号
     const account = loginData.account?.trim() || ''
-    const isDemoLogin = account === 'admin' && loginData.password?.trim() === 'admin888'
     const signInAccount = loginAccountAliases[account] || account
-    const signInPassword = isDemoLogin ? 'admin888' : loginData.password
-    const role = isDemoLogin
-      ? 'admin'
-      : typeof loginData.role === 'string'
-        ? loginData.role
-        : undefined
-    const result = await authStore.signIn(signInAccount, signInPassword, role)
+    const role = typeof loginData.role === 'string' ? loginData.role : undefined
+    const result = await authStore.signIn(signInAccount, loginData.password, role)
 
     if (!result.success) {
       message.error(result.error || '登录失败，请检查账号密码')
@@ -80,15 +62,6 @@ const handleLogin = async (loginData: LoginRequest) => {
 
 const handleForgotPassword = () => {
   router.push('/auth/forgot-password')
-}
-
-const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
-  await handleLogin({
-    account: account.account,
-    password: account.password,
-    role: account.role,
-    remember_me: true,
-  })
 }
 </script>
 
@@ -176,42 +149,6 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
             <div class="mt-4 flex justify-between text-sm">
               <router-link to="/auth/register">申请账号</router-link>
               <router-link to="/auth/register?mode=status">查询开通结果</router-link>
-            </div>
-            <!-- 演示账号：整行即按钮，点一次直接登录 -->
-            <div class="login-demo-list mt-4">
-              <button
-                v-for="account in demoAccounts"
-                :key="account.role"
-                type="button"
-                class="login-demo"
-                :disabled="loading"
-                aria-label="演示账号快速登录"
-                @click="handleDemoLogin(account)"
-              >
-                <span
-                  class="login-demo__icon"
-                  aria-hidden="true"
-                >
-                  <MonitorPlay :size="18" />
-                </span>
-                <span class="login-demo__copy">
-                  <span class="login-demo__title">演示账号快速登录</span>
-                </span>
-                <span
-                  class="login-demo__go"
-                  aria-hidden="true"
-                >
-                  <LoaderCircle
-                    v-if="loading"
-                    :size="16"
-                    class="login-demo__spin"
-                  />
-                  <template v-else>
-                    一键进入
-                    <ArrowRight :size="14" />
-                  </template>
-                </span>
-              </button>
             </div>
 
             <div class="mt-3 flex justify-center text-[13px] text-slate-400">

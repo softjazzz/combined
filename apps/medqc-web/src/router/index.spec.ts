@@ -267,4 +267,32 @@ describe('历史页面下线重定向', () => {
     expect(matched?.components?.default).toBeTypeOf('function')
     expect(matched?.redirect).toBeUndefined()
   })
+
+  it('V5 管理、统计与数据页面均显式声明角色权限，拒绝 doctor 与 qc_staff 直达', async () => {
+    const restrictedPaths = [
+      '/workstation-v5/data',
+      '/workstation-v5/rules',
+      '/workstation-v5/stats',
+      '/workstation-v5/upload',
+      '/workstation-v5/drg/pre',
+      '/workstation-v5/grouper',
+    ]
+    for (const path of restrictedPaths) {
+      const permission = router.resolve(path).meta.permission as string[] | undefined
+      expect(permission).toEqual(expect.arrayContaining(['admin', 'qc_manager', 'sync_admin']))
+      expect(permission).not.toContain('doctor')
+      expect(permission).not.toContain('qc_staff')
+    }
+    auth.roles.splice(0, auth.roles.length, 'doctor')
+    try {
+      await router.push('/workstation-v5/data')
+      expect(router.currentRoute.value.path).not.toBe('/workstation-v5/data')
+      await router.push('/workstation-v5/rules')
+      expect(router.currentRoute.value.path).not.toBe('/workstation-v5/rules')
+      await router.push('/workstation-v5/stats')
+      expect(router.currentRoute.value.path).not.toBe('/workstation-v5/stats')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  }, 15_000)
 })
