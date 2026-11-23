@@ -229,6 +229,14 @@ def test_workstation_page_summaries_keep_visible_three_keys_and_filter_scope(cli
     assert response.json()["qc_summary"]["status_counts"] == {"data_gap": 2}
     assert [record["recordKey"] for record in response.json()["records"]] == [visible]
     assert refs_loaded == [{("H-A", "P-own2", "V-own2")}]
+    refs_loaded.clear()
+    response = client.post(endpoint, headers=headers, json={
+        "record_keys": [visible, '["H-B","P-own","V-own"]'], "include_totals": False,
+    })
+    assert response.status_code == 200
+    assert "qc_summary" not in response.json()
+    assert [record["recordKey"] for record in response.json()["records"]] == [visible]
+    assert refs_loaded == [{("H-A", "P-own2", "V-own2")}]
     assert client.post(endpoint, headers=headers, params={"dept": "外科"}, json={"record_keys": []}).status_code == 403
 
 

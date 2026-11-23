@@ -6,7 +6,7 @@ from typing import Annotated, Any, Dict, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..core.security import get_current_user
@@ -216,6 +216,7 @@ class WorkstationQcSummaryRequest(BaseModel):
     record_keys: list[Annotated[StrictStr, Field(max_length=3 * 6 * _RECORD_COORDINATE_MAX_LENGTH + 10)]] = Field(
         max_length=HEAVY_MAX_PAGE_SIZE,
     )
+    include_totals: StrictBool = True
 
     def identities(self) -> tuple[CaseRef, ...]:
         identities: dict[CaseRef, None] = {}
@@ -244,11 +245,12 @@ def get_workstation_qc_summary_api(
     filters: dict[str, Any] = Depends(_workstation_filters),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """按已显示的病历取行摘要，并按相同筛选取全集统计。"""
+    """按已显示的病历取行摘要，可同时按相同筛选取全集统计。"""
     return _query_workstation(
         request,
         current_user=current_user,
         **filters,
         qc_summary_mode="only",
         qc_summary_identities=body.identities(),
+        qc_summary_include_totals=body.include_totals,
     )

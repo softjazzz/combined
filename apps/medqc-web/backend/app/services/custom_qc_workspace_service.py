@@ -98,6 +98,7 @@ from .qc_workspace.partial_record_delivery import select_complete_record_items
 from .qc_workspace.partial_record_read import (
     MATERIAL_PREPARATION_FAILURE_STAGES,
     read_saved_partial_record_row,
+    SavedPartialRecordBatch,
     saved_record_rule_scope,
 )
 from .qc_workspace.record_repository import RecordRepository, WorkspaceListResult
@@ -4644,7 +4645,8 @@ class CustomQCWorkspaceService:
                     or _rule_set_value(job, "rule_set_version") != normalized_rule_set_version
                 ):
                     continue
-                for visit_id in set(_safe_text(value) for value in job["record_ids"]):
+                job_visit_ids = {_safe_text(value) for value in job["record_ids"]}
+                for visit_id in job_visit_ids:
                     if (
                         visit_id in requested_visit_ids
                         and _safe_text(job.get("status")).lower() == "completed"
@@ -4659,21 +4661,25 @@ class CustomQCWorkspaceService:
                         if (
                             all(exact_ref)
                             and identity in identities
-                            and exact_ref.visit_id in {
-                                _safe_text(value) for value in job["record_ids"]
-                            }
+                            and exact_ref.visit_id in job_visit_ids
                         ):
                             failed_jobs_by_identity.setdefault(identity, []).append(job)
             if not jobs_by_id:
                 return {identity: {"status": "not_run"} for identity in identities}
 
+            envelope_columns = self._record_result_envelope_table.c
+            envelope_selection_columns = (
+                envelope_columns.id, envelope_columns.root_job_id, envelope_columns.institute_id,
+                envelope_columns.patient_id, envelope_columns.visit_id, envelope_columns.rule_set_key,
+                envelope_columns.rule_set_version, envelope_columns.updated_at,
+            )
             query_started = monotonic()
             envelope_rows = (
                 session.execute(
-                    select(self._record_result_envelope_table).where(
+                    select(*envelope_selection_columns).where(
                         and_(
-                            self._record_result_envelope_table.c.root_job_id.in_(list(jobs_by_id)),
-                            self._record_result_envelope_table.c.visit_id.in_(visit_ids),
+                            envelope_columns.root_job_id.in_(list(jobs_by_id)),
+                            envelope_columns.visit_id.in_(visit_ids),
                         )
                     )
                 )
@@ -4710,7 +4716,8 @@ class CustomQCWorkspaceService:
                 ]
 
             projections: Dict[tuple[str, str, str], Dict[str, Any]] = {}
-            saved_partial_rows_by_job: Dict[str, Optional[Dict[str, Any]]] = {}
+            saved_partial_batches: dict[str, SavedPartialRecordBatch | str] = {}
+            selected_canonical = []
             for identity in identities:
                 _, _, visit_id = identity
                 exact_envelopes = envelopes_by_identity.get(identity, {})
@@ -4808,7 +4815,7 @@ class CustomQCWorkspaceService:
                     if ready_selection.job.get("saved_partial_attempt"):
                         selected_job = ready_selection.job
                         selected_job_id = _safe_text(selected_job.get("id"))
-                        if selected_job_id not in saved_partial_rows_by_job:
+                        if selected_job_id not in saved_partial_batches:
                             query_started = monotonic()
                             saved_row = session.execute(select(
                                 self._batch_job_table.c.items_json,
@@ -4821,14 +4828,21 @@ class CustomQCWorkspaceService:
                                 == selected_job.get("saved_filters_json"),
                             ))).mappings().one_or_none()
                             query_seconds += monotonic() - query_started
-                            saved_partial_rows_by_job[selected_job_id] = (
-                                dict(saved_row) if saved_row is not None else None
-                            )
-                        saved = saved_partial_rows_by_job[selected_job_id]
-                        if saved is None:
+                            if saved_row is None:
+                                saved_partial_batches[selected_job_id] = "saved_partial_task_changed"
+                            else:
+                                parse_started = monotonic()
+                                try:
+                                    saved_partial_batches[selected_job_id] = SavedPartialRecordBatch.from_row(saved_row)
+                                except ValueError:
+                                    saved_partial_batches[selected_job_id] = "saved_partial_result_invalid"
+                                finally:
+                                    result_parse_seconds += monotonic() - parse_started
+                        saved = saved_partial_batches[selected_job_id]
+                        if isinstance(saved, str):
                             projections[identity] = {
                                 "status": "technical_error",
-                                "reason_code": "saved_partial_task_changed",
+                                "reason_code": saved,
                                 "result_rule_scope": list(
                                     selected_job["result_rule_scope"]
                                 ),
@@ -4837,8 +4851,8 @@ class CustomQCWorkspaceService:
                         projection_key = customer_safe_projection_key()
                         parse_started = monotonic()
                         try:
-                            partial = read_saved_partial_record_row(
-                                saved, ref=CaseRef(*identity),
+                            partial = saved.read(
+                                ref=CaseRef(*identity),
                                 expected_rules=selected_job["result_rule_scope"],
                                 projection_key=projection_key,
                                 projector=lambda item: self._envelope_item_from_rule_result(
@@ -4893,35 +4907,12 @@ class CustomQCWorkspaceService:
                         continue
                     selected_job_id = _safe_text(ready_selection.job.get("id"))
                     selected_envelopes = exact_envelopes.get(selected_job_id, [])
-                    if len(selected_envelopes) != 1:
-                        projections[identity] = {
-                            "status": "technical_error",
-                            "reason_code": "canonical_result_envelope_invalid",
-                        }
-                        continue
-                    parse_started = monotonic()
-                    summary = self._summarize_completed_record_result_envelope(
-                        envelope_row=selected_envelopes[0],
-                        completed_at=ready_selection.job.get("finished_at"),
-                        include_items=include_items,
-                        rule_set_key=normalized_rule_set_key,
-                    )
-                    result_parse_seconds += monotonic() - parse_started
-                    if include_rule_set_context and summary.get("status") == "ready":
-                        # 供报表绑定已选中的持久结果；不改变候选、选轮或旧调用输出。
-                        summary.update({
-                            "root_job_id": selected_job_id,
-                            "envelope_id": _safe_text(selected_envelopes[0].get("id")),
-                            "rule_set_key": normalized_rule_set_key,
-                            "rule_set_version": _rule_set_value(ready_selection.job, "rule_set_version"),
-                            "result_rule_scope": list(
-                                ready_selection.job.get("result_rule_scope") or []
-                            ),
-                            "result_scope_kind": ready_selection.job.get(
-                                "result_scope_kind", "unknown"
-                            ),
-                        })
-                    projections[identity] = summary
+                    projections[identity] = {
+                        "status": "technical_error",
+                        "reason_code": "canonical_result_envelope_invalid",
+                    }
+                    if len(selected_envelopes) == 1:
+                        selected_canonical.append((identity, ready_selection.job, selected_envelopes[0]))
                     continue
 
                 # 仅以 visit_id 保存的历史根任务不能形成 ready。若该任务已有同
@@ -4944,6 +4935,39 @@ class CustomQCWorkspaceService:
                     }
                 else:
                     projections[identity] = {"status": "not_run"}
+
+            # 选轮只读取元数据，再分批加载实际选中的信封内容。
+            batch_size = 500
+            for offset in range(0, len(selected_canonical), batch_size):
+                selected_batch = selected_canonical[offset:offset + batch_size]
+                query_started = monotonic()
+                rows = session.execute(select(
+                    *envelope_selection_columns, envelope_columns.envelope_json,
+                ).where(envelope_columns.id.in_([row["id"] for _, _, row in selected_batch]))).mappings().all()
+                query_seconds += monotonic() - query_started
+                bodies_by_id = {row["id"]: row for row in rows}
+                for identity, job, selected_row in selected_batch:
+                    body = bodies_by_id.get(selected_row["id"])
+                    if body is None or any(body[key] != value for key, value in selected_row.items()):
+                        continue
+                    parse_started = monotonic()
+                    summary = self._summarize_completed_record_result_envelope(
+                        envelope_row=body,
+                        completed_at=job.get("finished_at"),
+                        include_items=include_items,
+                        rule_set_key=normalized_rule_set_key,
+                    )
+                    result_parse_seconds += monotonic() - parse_started
+                    if include_rule_set_context and summary.get("status") == "ready":
+                        summary.update({
+                            "root_job_id": _safe_text(job.get("id")),
+                            "envelope_id": _safe_text(selected_row.get("id")),
+                            "rule_set_key": normalized_rule_set_key,
+                            "rule_set_version": _rule_set_value(job, "rule_set_version"),
+                            "result_rule_scope": list(job.get("result_rule_scope") or []),
+                            "result_scope_kind": job.get("result_scope_kind", "unknown"),
+                        })
+                    projections[identity] = summary
             return projections
         finally:
             session.close()

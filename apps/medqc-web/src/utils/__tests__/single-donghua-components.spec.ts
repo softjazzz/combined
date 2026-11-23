@@ -57,6 +57,39 @@ describe('真实面板及病历池单源行为', () => {
     vi.restoreAllMocks()
   })
 
+  it('同筛选翻页只读取本页摘要，主动刷新重新统计全集', async () => {
+    vi.mocked(clinicalSourcesApi.options).mockResolvedValue({
+      default_source: 'independent_cdm', sources: [{ id: 'independent_cdm', name: '东华CDM', enabled: true }],
+    })
+    const first = { id: 'V1', recordKey: '["I","P1","V1"]', institute_id: 'I', patient_id: 'P1', visit_id: 'V1' }
+    const second = { id: 'V2', recordKey: '["I","P2","V2"]', institute_id: 'I', patient_id: 'P2', visit_id: 'V2' }
+    const pageTwo = response({ records: [second], total: 80, page: 2 })
+    const totals = { total_records: 80, ready_records: 1, status_counts: { data_gap: 1 } }
+    vi.mocked(ApiService.getRaw)
+      .mockResolvedValueOnce(response({ records: [first], total: 80, page: 1 }))
+      .mockResolvedValue(pageTwo)
+    vi.mocked(ApiService.postRaw)
+      .mockResolvedValueOnce(response({ qc_summary: totals, records: [] }))
+      .mockResolvedValueOnce(response({ records: [{ recordKey: second.recordKey, latest_qc_summary: { status: 'not_run' } }] }))
+      .mockResolvedValueOnce(response({ qc_summary: { ...totals, ready_records: 2 }, records: [] }))
+
+    const records = usePatientRecords('discharged')
+    await records.fetchData()
+    await flushPromises()
+    expect(records.qcSummary.value.readyRecords).toBe(1)
+    records.handlePageChange(2)
+    await flushPromises()
+    expect(ApiService.postRaw).toHaveBeenNthCalledWith(2, '/api/medical-records/workstation/qc-summary',
+      { record_keys: [second.recordKey], include_totals: false }, expect.anything())
+    expect(records.qcSummary.value.readyRecords).toBe(1)
+    expect(records.allRecords.value[0].latestQcSummary?.status).toBe('not_run')
+    records.refreshData()
+    await flushPromises()
+    expect(ApiService.postRaw).toHaveBeenNthCalledWith(3, '/api/medical-records/workstation/qc-summary',
+      { record_keys: [second.recordKey] }, expect.anything())
+    expect(records.qcSummary.value.readyRecords).toBe(2)
+  })
+
   it.each([false, true])('终末列表先显示，摘要独立返回或失败（失败=%s）', async (failed) => {
     vi.mocked(clinicalSourcesApi.options).mockResolvedValue({
       default_source: 'independent_cdm', sources: [{ id: 'independent_cdm', name: '东华CDM', enabled: true }],

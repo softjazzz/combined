@@ -209,7 +209,8 @@ def _frontpage_refs(connection, refs):
 def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_date=None,
                 date_field="visit", hospital_status="all", sync_scope="all", inpatient_sort="default",
                 page=1, page_size=50, case_scope=None, qc_projection_loader=None,
-                qc_summary_mode="inline", qc_summary_identities: tuple[CaseRef, ...] | None = None, **analytics):
+                qc_summary_mode="inline", qc_summary_identities: tuple[CaseRef, ...] | None = None,
+                qc_summary_include_totals: bool = True, **analytics):
     if any(value for key, value in analytics.items() if key.startswith("analytics_")):
         raise PipelineError("clinical_source_analytics_filter_not_supported", 422)
     if inpatient_sort not in (None, "default", "longest", "recent"):
@@ -227,11 +228,14 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
             start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
             case_scope=case_scope)
         filter_columns = [source.c[key] for key in KEYS]
+        page_only = qc_summary_mode == "only" and not qc_summary_include_totals
+        if page_only:
+            predicates.append(tuple_(*filter_columns).in_(qc_summary_identities or ()))
         if qc_summary_mode != "only":
             filter_columns += [source.c.department, source.c.doctor]
         with engine.connect() as connection:
             rows = []
-            if qc_summary_identities is None:
+            if qc_summary_identities is None and not page_only:
                 order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
                 order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
                 page_columns = filter_columns if qc_summary_mode == "only" else [source]
@@ -239,7 +243,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                     order, *[source.c[k] for k in KEYS]
                 ).offset((page-1)*page_size).limit(page_size)
                 rows = connection.execute(page_query).mappings().all()
-            # 质控摘要本来就需要筛选全集的三键。一次投影同时取分组字段，复用目录聚合。
+            # 需要总统计时保留筛选全集的三键。单页摘要仅查询当前授权筛选内的请求三键。
             filtered_rows = connection.execute(
                 select(*filter_columns).where(*predicates)
             ).mappings().all()
@@ -271,6 +275,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
             return _workstation_qc_summary_payload(
                 all_refs, summaries, (CaseRef(*(str(row[key]) for key in KEYS)) for row in rows),
                 requested_identities=qc_summary_identities,
+                include_totals=qc_summary_include_totals,
             )
         departments = Counter(row["department"] for row in filtered_rows).items()
         doctors = Counter(row["doctor"] for row in filtered_rows if row["doctor"]).items()

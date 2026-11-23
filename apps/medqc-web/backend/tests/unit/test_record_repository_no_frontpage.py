@@ -123,6 +123,28 @@ def test_independent_source_catalog_and_collection_do_not_require_mr(independent
         clinical_case_catalog.catalog.cache_clear()
 
 
+def test_independent_workstation_page_only_summary_keeps_exact_scope(independent_source):
+    from app.services import clinical_case_catalog
+
+    sibling = CaseRef("ORG_B", "P2", REF.visit_id)
+    with Session(independent_source.execution_options(schema_translate_map={None: "cdm"})) as session:
+        session.add(InpatRegistration(**sibling.as_dict(), name="其他病历"))
+        session.commit()
+
+    calls = []
+
+    def summaries(refs):
+        calls.append([CaseRef.from_mapping(ref) for ref in refs])
+        return {}
+
+    result = clinical_case_catalog.workstation(
+        keyword="独立来源", qc_projection_loader=summaries, qc_summary_mode="only",
+        qc_summary_identities=(REF, sibling), qc_summary_include_totals=False,
+    )
+    assert calls == [[REF]]
+    assert result == {"records": [{"recordKey": REF.as_key(), "latest_qc_summary": {"status": "not_run"}}]}
+
+
 @pytest.mark.parametrize("filter_value", [{"department": "出院科"}, {"doctor": "原始医生"}])
 def test_independent_filter_uses_same_raw_fields_as_explicit_refs(independent_source, filter_value):
     with Session(independent_source.execution_options(schema_translate_map={None: "cdm"})) as session:

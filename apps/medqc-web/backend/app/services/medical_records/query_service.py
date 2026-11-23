@@ -593,6 +593,7 @@ def _workstation_qc_summary_payload(
     page_identities: Iterable[CaseRef],
     *,
     requested_identities: tuple[CaseRef, ...] | None = None,
+    include_totals: bool = True,
 ) -> dict[str, Any]:
     """返回全集统计，以及筛选范围内的已显示病历摘要。"""
     if requested_identities is not None:
@@ -601,7 +602,7 @@ def _workstation_qc_summary_payload(
         }
         page_identities = (identity for identity in requested_identities if identity in filtered_identities)
     return {
-        "qc_summary": _build_qc_summary(record_refs, summaries),
+        **({"qc_summary": _build_qc_summary(record_refs, summaries)} if include_totals else {}),
         "records": [
             {
                 "recordKey": identity.as_key(),
@@ -611,6 +612,18 @@ def _workstation_qc_summary_payload(
             if all(identity)
         ],
     }
+
+
+def _workstation_qc_summary_refs(
+    record_refs: list[dict[str, str]],
+    requested_identities: tuple[CaseRef, ...] | None,
+    *,
+    include_totals: bool,
+) -> list[dict[str, str]]:
+    if include_totals:
+        return record_refs
+    requested = set(requested_identities or ())
+    return [ref for ref in record_refs if CaseRef.from_mapping(ref) in requested]
 
 
 def _normalize_latest_qc_summary_map(
@@ -1078,6 +1091,7 @@ def get_workstation_data(
     case_scope=None,
     qc_summary_mode: str = "inline",
     qc_summary_identities: tuple[CaseRef, ...] | None = None,
+    qc_summary_include_totals: bool = True,
 ) -> dict[str, Any]:
     if qc_summary_identities is not None and qc_summary_mode != "only":
         raise ValueError("qc_summary_identities requires qc_summary_mode=only")
@@ -1088,6 +1102,7 @@ def get_workstation_data(
             date_field=date_field, hospital_status=hospital_status, sync_scope=sync_scope, inpatient_sort=inpatient_sort,
             page=page, page_size=page_size, case_scope=case_scope, qc_projection_loader=qc_projection_loader,
             qc_summary_mode=qc_summary_mode, qc_summary_identities=qc_summary_identities,
+            qc_summary_include_totals=qc_summary_include_totals,
             analytics_job_id=analytics_job_id, analytics_completed_from=analytics_completed_from,
             analytics_completed_to=analytics_completed_to, analytics_rule_id=analytics_rule_id,
             analytics_result_status=analytics_result_status, analytics_scope=analytics_scope)
@@ -1340,16 +1355,19 @@ def get_workstation_data(
                 session_factory=session_factory,
             )
         )
-        latest_qc_summary_map = (
-            {} if qc_summary_mode == "deferred"
-            else _normalize_latest_qc_summary_map(summary_loader(full_record_refs))
+        summary_refs = _workstation_qc_summary_refs(
+            full_record_refs, qc_summary_identities, include_totals=qc_summary_include_totals,
         )
+        latest_qc_summary_map = {}
+        if qc_summary_mode != "deferred" and summary_refs:
+            latest_qc_summary_map = _normalize_latest_qc_summary_map(summary_loader(summary_refs))
         if qc_summary_mode == "only":
             return _workstation_qc_summary_payload(
-                full_record_refs, latest_qc_summary_map,
+                summary_refs, latest_qc_summary_map,
                 (CaseRef(*(str(value or "").strip() for value in (r.institute_id, r.patient_id, r.visit_id)))
                  for r in records),
                 requested_identities=qc_summary_identities,
+                include_totals=qc_summary_include_totals,
             )
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}
