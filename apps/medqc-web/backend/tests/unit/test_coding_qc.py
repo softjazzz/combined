@@ -348,17 +348,22 @@ class TestCodingQCEngineRunAll:
             '{"issues": "not-a-list"}',
             "[]",
             '[{"issues": []}]',
+            '结果：[{"issues":[]}',
+            '```json\n{"issues": []}',
             '```json\n[{"issues": []}]\n```',
             '分析结果如下：\n[{"issues": []}]\n以上。',
+            '{"issues": []}]',
             '{"issues": [{}]}',
             '{"issues": [{"severity": "high"}]}',
             '{"issues": [{"dimension": "merge"}]}',
             '{"issues": [{"description": "缺少维度"}]}',
+            '{"issues": [{"dimension": "merge", "description": "缺severity"}]}',
+            '{"issues": [{"dimension": "merge", "severity": null, "description": "null severity"}]}',
             '{"issues": [{"dimension": "merge", "severity": "high", "description": "无效严重级别"}]}',
         ],
     )
     async def test_run_all_llm_unparseable_or_empty_marks_parse_failed(self, bad_content):
-        """LLM 输出为空、非顶层对象、顶层数组或 issue 项缺少必填字段时，应标记 parse_failed 且未完成。"""
+        """LLM 输出为空、非顶层对象、顶层/截断数组、未闭合围栏或 issue 缺少必填字段时，应标记 parse_failed 且未完成。"""
         mock_llm = AsyncMock()
         mock_llm.generate.return_value = {
             "choices": [{"message": {"content": bad_content}}]

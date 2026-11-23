@@ -701,8 +701,12 @@ def test_coding_qc_llm_timeout_preserves_existing_d4_defect(monkeypatch):
         "{}",
         '{"issues": [{}]}',
         '[{"issues": []}]',
+        '结果：[{"issues":[]}',
+        '```json\n{"issues": []}',
         '```json\n[{"issues": []}]\n```',
         '{"issues": [{"severity": "high"}]}',
+        '{"issues": [{"dimension": "merge", "description": "缺severity"}]}',
+        '{"issues": [{"dimension": "merge", "severity": null, "description": "null severity"}]}',
     ],
 )
 def test_coding_qc_llm_parse_failure_preserves_existing_d4_defect(monkeypatch, bad_output):

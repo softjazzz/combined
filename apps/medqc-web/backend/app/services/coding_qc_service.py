@@ -469,13 +469,10 @@ def _parse_llm_issues_with_status(raw_output: str) -> Tuple[List[CodingIssue], b
             return [], False
 
         raw_severity = item.get("severity")
-        if raw_severity is None:
-            severity = "info"
-        elif isinstance(raw_severity, str) and raw_severity.strip().lower() in _VALID_LLM_SEVERITIES:
-            severity = raw_severity.strip().lower()
-        else:
-            logger.warning("LLM 输出的 issue 包含无效的 severity 字段: %r", raw_severity)
+        if not isinstance(raw_severity, str) or raw_severity.strip().lower() not in _VALID_LLM_SEVERITIES:
+            logger.warning("LLM 输出的 issue 缺少或包含无效的 severity 字段: %r", raw_severity)
             return [], False
+        severity = raw_severity.strip().lower()
 
         raw_code = item.get("code", "")
         raw_suggestion = item.get("suggestion", "")
@@ -503,7 +500,7 @@ def _parse_llm_issues(raw_output: str) -> List[CodingIssue]:
 
 
 def _parse_json_from_text(text: str) -> Optional[dict]:
-    """从文本中提取顶层 JSON 对象（兼容 markdown 代码块与说明文字包裹，拒绝顶层数组等非对象 JSON）。"""
+    """从文本中提取顶层 JSON 对象（兼容完整 markdown 代码块与说明文字包裹，拒绝顶层/截断数组与未闭合围栏）。"""
     if not isinstance(text, str):
         return None
     stripped = text.strip()
@@ -517,46 +514,46 @@ def _parse_json_from_text(text: str) -> Optional[dict]:
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # 2. 尝试 ```json ... ``` 或 ``` ... ``` 代码块
-    m = re.search(r"```(?:json)?\s*(.*?)\s*```", stripped, re.DOTALL | re.IGNORECASE)
-    if m:
+    # 2. 若包含 markdown 代码围栏，必须存在且仅存在一个完整闭合的围栏块，且内部必须是完整顶层 JSON dict
+    if "```" in stripped:
+        if stripped.count("```") != 2:
+            return None
+        m = re.search(r"```(?:json)?\s*(.*?)\s*```", stripped, re.DOTALL | re.IGNORECASE)
+        if not m:
+            return None
         fenced = m.group(1).strip()
-        if not fenced or fenced.startswith("["):
+        if not fenced:
             return None
         try:
             parsed = json.loads(fenced)
             return parsed if isinstance(parsed, dict) else None
         except (json.JSONDecodeError, TypeError):
-            pass
+            return None
 
-    # 3. 显式拒绝以 '[' 开头的顶层数组文本
-    if stripped.startswith("["):
+    # 3. 无代码围栏时，定位首个 JSON 起始符号；若 '[' 先于 '{'（完整或截断数组），直接拒绝
+    first_obj = stripped.find("{")
+    first_arr = stripped.find("[")
+    if first_obj < 0:
+        return None
+    if first_arr != -1 and first_arr < first_obj:
         return None
 
-    # 4. 兼容前后带说明文字包裹的 JSON 对象，但禁止从包裹的 JSON 数组中提取内嵌对象
+    prefix = stripped[:first_obj]
+    if any(ch in prefix for ch in "}]"):
+        return None
+
     decoder = json.JSONDecoder()
-    brace_start = stripped.find("{")
-    if brace_start < 0:
-        return None
-
-    search_from = 0
-    while True:
-        bracket_start = stripped.find("[", search_from, brace_start)
-        if bracket_start < 0:
-            break
-        try:
-            wrapped, end_idx = decoder.raw_decode(stripped, bracket_start)
-            if isinstance(wrapped, list) and end_idx > brace_start:
-                return None
-        except json.JSONDecodeError:
-            pass
-        search_from = bracket_start + 1
-
     try:
-        parsed, _ = decoder.raw_decode(stripped, brace_start)
-        return parsed if isinstance(parsed, dict) else None
+        parsed, end_idx = decoder.raw_decode(stripped, first_obj)
     except json.JSONDecodeError:
         return None
+    if not isinstance(parsed, dict):
+        return None
+
+    trailing = stripped[end_idx:]
+    if any(ch in trailing for ch in "{}[]"):
+        return None
+    return parsed
 
 
 # ============================================================
