@@ -45,16 +45,28 @@ INVALID_CHOICE_RESPONSES: list[Any] = [
     pytest.param({"choices": [{"message": "raw-string", "finish_reason": "stop"}]}, id="message-string"),
     pytest.param({"choices": [{"message": 123, "finish_reason": "stop"}]}, id="message-int"),
     pytest.param({"choices": [{"message": ["unexpected"], "finish_reason": "stop"}]}, id="message-list"),
+    pytest.param({"choices": [{"message": {}}]}, id="message-empty-dict"),
+    pytest.param({"choices": [{"message": {"content": None}}]}, id="content-none"),
+    pytest.param({"choices": [{"message": {"content": None}, "finish_reason": None}]}, id="content-none-finish-none"),
+    pytest.param({"choices": [{"message": {"content": ""}}]}, id="content-empty-str"),
+    pytest.param({"choices": [{"message": {"content": "   "}}]}, id="content-whitespace-only"),
+    pytest.param({"choices": [{"message": {"content": ["part"]}, "finish_reason": "stop"}]}, id="content-non-string-list"),
+    pytest.param({"choices": [{"message": {"content": 123}, "finish_reason": "stop"}]}, id="content-non-string-int"),
 ]
 
-VALID_MESSAGE_EDGE_CONTENT_RESPONSES: list[Any] = [
-    pytest.param({"choices": [{"message": {"content": None}, "finish_reason": None}]}, id="content-none"),
-    pytest.param({"choices": [{"message": {"content": ["part"]}, "finish_reason": "stop"}]}, id="content-non-string"),
-]
+THINK_ONLY_EMPTY_RESPONSE: dict[str, Any] = {
+    "choices": [{"message": {"content": "<think>only reasoning</think>"}, "finish_reason": "stop"}],
+}
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("raw_response", INVALID_CHOICE_RESPONSES)
+@pytest.mark.parametrize(
+    "raw_response",
+    [
+        *INVALID_CHOICE_RESPONSES,
+        pytest.param(THINK_ONLY_EMPTY_RESPONSE, id="content-empty-after-think-strip"),
+    ],
+)
 async def test_generate_raises_controlled_error_for_empty_or_malformed_choices(
     monkeypatch: pytest.MonkeyPatch,
     raw_response: dict[str, Any],
@@ -84,39 +96,10 @@ async def test_generate_raises_controlled_error_for_empty_or_malformed_choices(
     assert stats["error_calls"] == 1
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("raw_response", VALID_MESSAGE_EDGE_CONTENT_RESPONSES)
-async def test_generate_handles_valid_message_with_none_or_non_string_content(
-    monkeypatch: pytest.MonkeyPatch,
-    raw_response: dict[str, Any],
-) -> None:
-    response_body = {
-        **deepcopy(raw_response),
-        "usage": {"prompt_tokens": 7, "completion_tokens": 0, "total_tokens": 7},
-    }
-
-    async def fake_safe_post_json(**_kwargs: Any) -> dict[str, Any]:
-        return deepcopy(response_body)
-
-    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
-    client = _make_client()
-
-    result = await client.generate("edge content prompt")
-
-    assert client.call_count == 1
-    assert client.success_count == 1
-    assert client.error_count == 0
-    assert result["_usage_breakdown"]["total_tokens"] == 7
-    assert result["_cot_observation"]["cot_mode"] == "disabled"
-    assert result["_cot_observation"]["response_has_think_tags"] is False
-    assert result["_cot_observation"]["response_has_reasoning_content"] is False
-
-
 @pytest.mark.parametrize(
     "raw_response",
     [
         *INVALID_CHOICE_RESPONSES,
-        *VALID_MESSAGE_EDGE_CONTENT_RESPONSES,
         pytest.param(None, id="result-none"),
         pytest.param(["not-a-dict"], id="result-list"),
     ],
@@ -131,10 +114,21 @@ def test_cot_observation_and_strip_think_guard_malformed_choices_directly(
     observed = client._detect_cot_observation(response_copy, payload=payload)
     client._strip_think_content_inplace(response_copy)
 
+    expected = deepcopy(raw_response)
+    if (
+        isinstance(expected, dict)
+        and isinstance(expected.get("choices"), list)
+        and expected["choices"]
+        and isinstance(expected["choices"][0], dict)
+        and isinstance(expected["choices"][0].get("message"), dict)
+        and isinstance(expected["choices"][0]["message"].get("content"), str)
+    ):
+        expected["choices"][0]["message"]["content"] = expected["choices"][0]["message"]["content"].strip()
+
     assert observed["cot_mode"] == "disabled"
     assert observed["response_has_think_tags"] is False
     assert observed["response_has_reasoning_content"] is False
-    assert response_copy == raw_response
+    assert response_copy == expected
 
 
 @pytest.mark.asyncio
@@ -178,6 +172,9 @@ async def test_generate_normal_valid_choices_preserves_cot_detection_and_strips_
         pytest.param({"choices": [None]}, id="retry-first-choice-none"),
         pytest.param({}, id="retry-choices-missing"),
         pytest.param({"choices": [{"message": None}]}, id="retry-message-none"),
+        pytest.param({"choices": [{"message": {}}]}, id="retry-message-empty-dict"),
+        pytest.param({"choices": [{"message": {"content": None}}]}, id="retry-content-none"),
+        pytest.param({"choices": [{"message": {"content": "   "}}]}, id="retry-content-whitespace"),
     ],
 )
 async def test_generate_length_retry_raises_controlled_error_when_retry_choices_invalid(
@@ -283,6 +280,12 @@ async def test_generate_length_retry_recovers_when_first_message_is_none_and_ret
         pytest.param({}, id="e2e-choices-missing"),
         pytest.param({"choices": [None]}, id="e2e-choice-none"),
         pytest.param({"choices": [{"message": None}]}, id="e2e-message-none"),
+        pytest.param({"choices": [{"message": {}}]}, id="e2e-message-empty-dict"),
+        pytest.param({"choices": [{"message": {"content": None}}]}, id="e2e-content-none"),
+        pytest.param({"choices": [{"message": {"content": ""}}]}, id="e2e-content-empty"),
+        pytest.param({"choices": [{"message": {"content": "   "}}]}, id="e2e-content-whitespace"),
+        pytest.param({"choices": [{"message": {"content": ["part"]}}]}, id="e2e-content-non-string"),
+        pytest.param({"choices": [{"message": {"content": "<think>only reasoning</think>"}}]}, id="e2e-content-think-only"),
     ],
 )
 async def test_e2e_client_and_unified_rule_engine_raise_controlled_error_on_empty_choices(
@@ -319,6 +322,12 @@ async def test_e2e_client_and_unified_rule_engine_raise_controlled_error_on_empt
         pytest.param({}, id="stub-choices-missing"),
         pytest.param({"choices": [None]}, id="stub-choice-none"),
         pytest.param({"choices": [{"message": None}]}, id="stub-message-none"),
+        pytest.param({"choices": [{"message": {}}]}, id="stub-message-empty-dict"),
+        pytest.param({"choices": [{"message": {"content": None}}]}, id="stub-content-none"),
+        pytest.param({"choices": [{"message": {"content": ""}}]}, id="stub-content-empty"),
+        pytest.param({"choices": [{"message": {"content": "   "}}]}, id="stub-content-whitespace"),
+        pytest.param({"choices": [{"message": {"content": ["part"]}}]}, id="stub-content-non-string-list"),
+        pytest.param({"choices": [{"message": {"content": 123}}]}, id="stub-content-non-string-int"),
         pytest.param(None, id="stub-response-none"),
     ],
 )

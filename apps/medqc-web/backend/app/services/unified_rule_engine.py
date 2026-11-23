@@ -415,9 +415,8 @@ class UnifiedRuleEngine:
                     message = first_choice.get("message")
                     if isinstance(message, Mapping):
                         content = message.get("content")
-                        if content is None:
-                            return ""
-                        return content if isinstance(content, str) else str(content)
+                        if isinstance(content, str) and bool(content.strip()):
+                            return content
         raise SafeExecutionError("model_invalid_output", retryable=False)
 
     async def evaluate(self, rule: Dict[str, Any], medical_record: Dict[str, Any]) -> Dict[str, Any]:

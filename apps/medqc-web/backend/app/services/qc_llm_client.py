@@ -976,8 +976,12 @@ class SichuanQCLLMClient:
             choices = result.get("choices")
             if isinstance(choices, (list, tuple)) and choices:
                 first = choices[0]
-                if isinstance(first, Mapping) and isinstance(first.get("message"), Mapping):
-                    return
+                if isinstance(first, Mapping):
+                    message = first.get("message")
+                    if isinstance(message, Mapping):
+                        content = message.get("content")
+                        if isinstance(content, str) and bool(content.strip()):
+                            return
         from .qc_execution_errors import SafeExecutionError
         raise SafeExecutionError("model_invalid_output", retryable=False) from None
 
