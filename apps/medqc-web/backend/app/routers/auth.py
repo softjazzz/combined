@@ -111,7 +111,7 @@ async def login(request: Request, login_data: LoginRequest):
     # 旧账号沿用邮箱 subject；无邮箱注册账号使用已有持久 ID 解析链路。
     token_sub = str(user.get("email") or user["id"])
     access_token = create_access_token(
-        data={"sub": token_sub, "uid": user.get("id")},
+        data={"sub": token_sub, "uid": user.get("id"), "type": "access"},
         expires_delta=access_token_expires,
     )
 
@@ -233,12 +233,12 @@ async def refresh_token(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的刷新令牌")
 
         user = resolve_auth_store_user_by_subject(token_subject)
-        if user is None:
+        if user is None or user.get("is_active") is False:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
 
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": token_subject, "uid": user.get("id")},
+            data={"sub": token_subject, "uid": user.get("id"), "type": "access"},
             expires_delta=access_token_expires,
         )
         logger.info("auth.refresh.success subject=%s email=%s", token_subject, user.get("email"))

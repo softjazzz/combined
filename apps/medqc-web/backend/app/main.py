@@ -98,6 +98,13 @@ class UTF8JSONResponse(JSONResponse):
     media_type = "application/json; charset=utf-8"
 
 
+def _is_demo_api_enabled(settings) -> bool:
+    """仅在非生产环境且显式开启 ENABLE_DEMO_API=true 时挂载演示路由。"""
+    if str(getattr(settings, "ENV", "") or "").strip().lower() == "production":
+        return False
+    return os.getenv("ENABLE_DEMO_API", "").strip().lower() in {"1", "true", "yes"}
+
+
 def create_app() -> FastAPI:
     """
     创建并配置 FastAPI 应用实例
@@ -303,8 +310,9 @@ def create_app() -> FastAPI:
     app.include_router(record_reviews_router.router)
     # Department QC Rules (Migration 009)
     app.include_router(department_qc_rules_router.router)
-    # Demo page for LX33 rules (no auth required)
-    app.include_router(demo_router.router)
+    # Demo page for LX33 rules (disabled by default and always off in production)
+    if _is_demo_api_enabled(settings):
+        app.include_router(demo_router.router)
     # Front page auto-generation (demo + future real extraction)
     app.include_router(frontpage_router.router)
     # Front page extraction settings

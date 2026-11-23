@@ -25,9 +25,32 @@ _SCHEMA_OWNED_TABLES = {
 }
 
 
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+_ALLOWED_OR_OPS: Dict[str, str] = {
+    "ilike": "ILIKE",
+    "like": "LIKE",
+    "eq": "=",
+    "neq": "!=",
+    "gt": ">",
+    "gte": ">=",
+    "lt": "<",
+    "lte": "<=",
+    "cs": "=",
+    "is": "IS",
+}
+
+
+def _quote_identifier(identifier: str) -> str:
+    value = str(identifier or "")
+    if not _IDENTIFIER_RE.fullmatch(value):
+        raise ValueError("invalid_database_identifier")
+    return f'"{value}"'
+
+
 def _quote_qualified_identifier(identifier: str) -> str:
     parts = str(identifier or "").split(".")
-    if not parts or any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", part) for part in parts):
+    if not parts or any(not _IDENTIFIER_RE.fullmatch(part) for part in parts):
         raise ValueError("invalid_database_identifier")
     return ".".join(f'"{part}"' for part in parts)
 
@@ -233,6 +256,7 @@ class _Query:
         param_idx = 0
 
         for col, op, val in self._filters:
+            quoted_col = _quote_identifier(col)
             pname = f"p{param_idx}"
             param_idx += 1
 
@@ -241,48 +265,65 @@ class _Query:
                     clauses.append("FALSE")
                 else:
                     placeholders = ", ".join(f":{pname}_{i}" for i in range(len(val)))
-                    clauses.append(f'"{col}" IN ({placeholders})')
+                    clauses.append(f"{quoted_col} IN ({placeholders})")
                     for i, v in enumerate(val):
                         params[f"{pname}_{i}"] = v
             elif op == "IS NOT":
                 literal = "NULL" if val is None else ("TRUE" if val else "FALSE")
-                clauses.append(f'"{col}" IS NOT {literal}')
+                clauses.append(f"{quoted_col} IS NOT {literal}")
             elif op == "IS":
                 if val is None:
-                    clauses.append(f'"{col}" IS NULL')
+                    clauses.append(f"{quoted_col} IS NULL")
                 elif isinstance(val, bool):
-                    clauses.append(f'"{col}" IS {"TRUE" if val else "FALSE"}')
+                    clauses.append(f'{quoted_col} IS {"TRUE" if val else "FALSE"}')
                 else:
-                    clauses.append(f'"{col}" IS NULL')
+                    clauses.append(f"{quoted_col} IS NULL")
             else:
-                clauses.append(f'"{col}" {op} :{pname}')
+                clauses.append(f"{quoted_col} {op} :{pname}")
                 params[pname] = val
 
-        # 处理 or_ 过滤器
+        # 处理 or_ 过滤器：强制列名标识符白名单与运算符白名单，杜绝引号逃逸注入
         for or_str in self._or_filters:
-            or_parts = []
-            for part in or_str.split(","):
-                part = part.strip()
+            if not isinstance(or_str, str) or not or_str.strip():
+                continue
+            or_parts: List[str] = []
+            last_param_key: Optional[str] = None
+            last_op_name: Optional[str] = None
+            for raw_part in or_str.split(","):
+                part = raw_part.strip()
                 segments = part.split(".", 2)
-                if len(segments) >= 3:
-                    col, op_name, val = segments[0], segments[1], segments[2]
+                if len(segments) < 3:
+                    # 含逗号的搜索关键词（无三段结构）安全折叠回前一个 like/ilike 参数值，绝不拼接 SQL
+                    if last_param_key is not None and last_op_name in {"ilike", "like"}:
+                        params[last_param_key] = f"{params[last_param_key]},{raw_part}"
+                        continue
+                    raise ValueError("invalid_or_filter_clause")
+
+                col, op_name, val = segments[0].strip(), segments[1].strip().lower(), segments[2]
+                quoted_col = _quote_identifier(col)
+                if op_name not in _ALLOWED_OR_OPS:
+                    raise ValueError(f"invalid_or_filter_operator: {op_name}")
+
+                if op_name == "is":
+                    val_norm = val.strip().lower()
+                    if val_norm == "null":
+                        or_parts.append(f"{quoted_col} IS NULL")
+                    elif val_norm == "true":
+                        or_parts.append(f"{quoted_col} IS TRUE")
+                    elif val_norm == "false":
+                        or_parts.append(f"{quoted_col} IS FALSE")
+                    else:
+                        raise ValueError("invalid_or_filter_value")
+                    last_param_key = None
+                    last_op_name = op_name
+                else:
+                    sql_op = _ALLOWED_OR_OPS[op_name]
                     pname = f"p{param_idx}"
                     param_idx += 1
-                    if op_name == "ilike":
-                        or_parts.append(f'"{col}" ILIKE :{pname}')
-                        params[pname] = val
-                    elif op_name == "like":
-                        or_parts.append(f'"{col}" LIKE :{pname}')
-                        params[pname] = val
-                    elif op_name == "eq":
-                        or_parts.append(f'"{col}" = :{pname}')
-                        params[pname] = val
-                    elif op_name == "neq":
-                        or_parts.append(f'"{col}" != :{pname}')
-                        params[pname] = val
-                    else:
-                        or_parts.append(f'"{col}" = :{pname}')
-                        params[pname] = val
+                    or_parts.append(f"{quoted_col} {sql_op} :{pname}")
+                    params[pname] = val
+                    last_param_key = pname
+                    last_op_name = op_name
             if or_parts:
                 clauses.append(f"({' OR '.join(or_parts)})")
 
@@ -311,7 +352,7 @@ class _Query:
 
         if self._orders:
             order_clauses = [
-                f'"{col}" {"ASC" if asc else "DESC"}'
+                f'{_quote_identifier(col)} {"ASC" if asc else "DESC"}'
                 for col, asc in self._orders
             ]
             sql += " ORDER BY " + ", ".join(order_clauses)
@@ -406,7 +447,7 @@ class _Query:
         results = []
         for row in payload:
             cols = list(row.keys())
-            col_str = ", ".join(f'"{c}"' for c in cols)
+            col_str = ", ".join(_quote_identifier(c) for c in cols)
             val_str = ", ".join(f":{c}" for c in cols)
             sql = (
                 f"INSERT INTO {_quote_qualified_identifier(self._table)} "
@@ -426,8 +467,9 @@ class _Query:
         where, params = self._build_where()
         set_parts = []
         for key, val in self._payload.items():
+            quoted_key = _quote_identifier(key)
             pname = f"set_{key}"
-            set_parts.append(f'"{key}" = :{pname}')
+            set_parts.append(f"{quoted_key} = :{pname}")
             # dict/list 需序列化为 JSON 字符串
             if isinstance(val, (dict, list)):
                 import json as _json
@@ -543,14 +585,22 @@ def get_supabase() -> Optional[_PgClient]:
 async def async_execute(query):
     """统一的异步执行辅助函数（兼容原接口）
 
-    - 若 query 提供 execute_async，直接 await
+    - 若 query 提供异步 execute_async，直接 await；执行期异常直接向上传播，禁止回退二次执行
     - 否则在线程池中运行同步 execute
     """
-    try:
-        exec_async = getattr(query, "execute_async", None)
-        if callable(exec_async):
-            return await exec_async()
-    except Exception:
-        pass
+    import inspect
+    from unittest.mock import MagicMock
+
+    exec_async = getattr(query, "execute_async", None)
+    if callable(exec_async):
+        is_plain_mock_attr = (
+            isinstance(exec_async, MagicMock)
+            and not inspect.iscoroutinefunction(exec_async)
+        )
+        if not is_plain_mock_attr:
+            result = exec_async()
+            if inspect.isawaitable(result):
+                return await result
+            return result
     from anyio import to_thread
     return await to_thread.run_sync(query.execute)

@@ -23,6 +23,7 @@ _reset_jti_lock = threading.Lock()
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     settings = get_settings()
     to_encode = data.copy()
+    to_encode.setdefault("type", "access")
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
@@ -51,8 +52,13 @@ def _decode_token(token: str, *, expected_type: Optional[str] = None) -> dict:
     except JWTError:
         raise _credentials_exception()
     token_type = payload.get("type")
-    if expected_type is not None and token_type != expected_type:
-        raise _credentials_exception()
+    if expected_type is not None:
+        if expected_type == "access":
+            # 兼容历史未携带 type 的合法 access token，明确拒绝 refresh/password_reset 等非 access 令牌
+            if token_type is not None and token_type != "access":
+                raise _credentials_exception()
+        elif token_type != expected_type:
+            raise _credentials_exception()
     return payload
 
 
@@ -62,6 +68,9 @@ def resolve_user_by_subject(subject: str | None) -> Optional[dict]:
 
 def resolve_current_user_from_token(token: str) -> dict:
     payload = _decode_token(token)
+    token_type = payload.get("type")
+    if token_type is not None and token_type != "access":
+        raise _credentials_exception()
     token_subject: str = payload.get("sub")
     if token_subject is None:
         raise _credentials_exception()
