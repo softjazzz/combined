@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta, timezone
@@ -39,8 +38,8 @@ def _session_factory() -> Session:
 def _workstation_record_key(institute_id: Any, patient_id: Any, visit_id: Any) -> str:
     """工作台内存关联唯一使用的病历三坐标键。"""
 
-    parts = [str(value or "").strip() for value in (institute_id, patient_id, visit_id)]
-    return json.dumps(parts, ensure_ascii=False, separators=(",", ":")) if all(parts) else ""
+    ref = CaseRef(*(str(value or "").strip() for value in (institute_id, patient_id, visit_id)))
+    return ref.as_key() if all(ref) else ""
 
 
 def _workstation_identity_condition():

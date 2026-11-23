@@ -9,7 +9,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from .defect_rectification_service import RectificationError, _person
 
 
-# 现场已核定的东华投递代次。只在本院正式基础 CDM 的入院/出院接口解析机构归属。
+# 泸县人民医院账号查看「机构号」病例时须核验东华单院的归属证据，投递代次与接口由现场核定。
+# 旧快照缺少账本元数据时，仅在已核定的 CDM 绑定上核对现行回执；归属无法核验时拒绝访问。
 _DONGHUA_EPOCH = "7cecd40f-047d-4458-b964-8741d0ea7399"
 _DONGHUA_BINDING = "cdm-read-v1:d6426d946c655b24ec8ad3915e7441e7cb5033dd69c7397a70c7431f5a3dea08"
 _DONGHUA_TABLES = ("admission_record", "discharge_record")

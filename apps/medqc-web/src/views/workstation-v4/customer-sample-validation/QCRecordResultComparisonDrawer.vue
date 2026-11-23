@@ -133,6 +133,7 @@ import {
   type SingleRecordQcResultPayload,
 } from './single-record-result-model'
 import { formatQcCompletedAt } from '../components/qc/latestQcSummaryPresentation'
+import { formatQcTaskDateTime, parseQcTaskTime } from '../utils/qcTaskTime'
 import { downloadBlob, normalizeBatchExportBlob } from './batchExport'
 
 export interface QCRecordResultFocus {
@@ -310,12 +311,10 @@ async function loadQcTime(jobId: string, requestSequence: number) {
     if (job?.status === 'running' || job?.status === 'queued') {
       qcTimeText.value = '质控进行中'
     } else if (job?.finished_at && (job.status === 'completed' || latestResult.value?.execution_status)) {
-      // 任务服务以无时区 UTC 保存时间；已有偏移量的值保持原有时区含义。
-      const rawTime = job.finished_at.trim().replace(' ', 'T')
-      const date = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(rawTime) ? rawTime : `${rawTime}Z`)
-      qcTimeText.value = Number.isNaN(date.getTime())
-        ? '质控完成时间未返回'
-        : `${latestResult.value?.execution_status ? '质控结束时间' : '质控完成时间'}：${date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`
+      const finished = parseQcTaskTime(job.finished_at)
+      qcTimeText.value = finished
+        ? `${latestResult.value?.execution_status ? '质控结束时间' : '质控完成时间'}：${formatQcTaskDateTime(finished)}`
+        : '质控完成时间未返回'
     } else {
       qcTimeText.value = '质控完成时间未返回'
     }

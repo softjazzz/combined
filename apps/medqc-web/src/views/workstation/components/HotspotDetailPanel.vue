@@ -150,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import type { WorkstationHomeHotspotItem } from '@/views/workstation-v2/types'
+import type { WorkstationHomeHotspotItem } from './legacyHomeTypes'
 
 defineProps<{
   item: WorkstationHomeHotspotItem | null

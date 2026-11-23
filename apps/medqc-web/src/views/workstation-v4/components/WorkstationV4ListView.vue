@@ -70,6 +70,7 @@
                   size="large"
                   allow-clear
                   @update:value="emit('update:searchText', $event)"
+                  @press-enter="emit('page-change', 1)"
                 >
                   <template #prefix>
                     <SearchOutlined class="text-slate-400" />
@@ -96,10 +97,11 @@
                     class="workbench-date-row__range"
                     size="large"
                     allow-clear
+                    :allow-empty="[true, true]"
                     value-format="YYYY-MM-DD"
                     format="YYYY-MM-DD"
                     :placeholder="['开始日期', '结束日期']"
-                    @update:value="emit('update:dateRange', normalizeDateRange($event))"
+                    @update:value="emit('update:dateRange', normalizeWorkstationDateRange($event))"
                   />
                 </div>
 
@@ -282,13 +284,27 @@
           </section>
         </div>
 
-        <div
-          v-if="loadError"
-          class="workstation-empty-state wv4-list__alert"
-          role="alert"
+        <Alert
+          v-if="!displayLoading && loadError"
+          type="error"
+          message="病历列表加载失败"
+          show-icon
         >
-          病历池暂未加载成功，请检查网络后重试。
-        </div>
+          <template #action>
+            <a-button
+              size="small"
+              @click="emit('page-change', currentPage)"
+            >
+              重试
+            </a-button>
+          </template>
+        </Alert>
+        <Alert
+          v-else-if="!isStageQueueMode && !displayLoading && qcSummaryState === 'unavailable'"
+          type="warning"
+          message="质控摘要暂不可用"
+          show-icon
+        />
 
         <div
           v-if="isFrontpageGenerateStage"
@@ -319,6 +335,8 @@
                 :page-size="pageSize"
                 :total="displayServerTotal"
                 :loading="displayLoading"
+                :load-error="loadError"
+                :empty-description="stageEmptyText"
                 :title="isStageQueueMode ? stageMeta.tableTitle || '批量工作台' : '病历池列表'"
                 :primary-action-label="
                   isStageQueueMode
@@ -373,16 +391,6 @@
             />
           </div>
         </div>
-
-        <div
-          v-if="listRecords.length === 0"
-          class="workstation-empty-state wv4-list__empty mq-card"
-        >
-          <InboxOutlined class="workstation-empty-state__icon" />
-          <div class="workstation-empty-state__text">
-            {{ stageEmptyText }}
-          </div>
-        </div>
       </div>
     </div>
     <FrontpageTenderValidationDrawer v-model:open="tenderValidationOpen" />
@@ -391,6 +399,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Alert } from 'ant-design-vue'
 import {
   Building2,
   Stethoscope,
@@ -401,7 +410,6 @@ import {
 import {
   CheckCircleOutlined,
   FileTextOutlined,
-  InboxOutlined,
   SearchOutlined,
   SyncOutlined,
   WarningOutlined,
@@ -426,6 +434,7 @@ import type {
 import {
   filterDepartmentOption,
   formatWorkstationDateFieldLabel,
+  normalizeWorkstationDateRange,
 } from '../utils/workstationFilterPresentation'
 
 interface StageMetaLike {
@@ -508,13 +517,6 @@ const emit = defineEmits<{
 
 function handleBatchPageChange(page: number, pageSize?: number) {
   emit('page-change', page, pageSize)
-}
-
-function normalizeDateRange(value: unknown): WorkstationDateRange {
-  if (!Array.isArray(value) || value.length < 2) return null
-  const start = typeof value[0] === 'string' ? value[0] : ''
-  const end = typeof value[1] === 'string' ? value[1] : ''
-  return start && end ? [start, end] : null
 }
 
 function normalizeDepartmentValue(value: unknown): string {

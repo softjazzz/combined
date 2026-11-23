@@ -55,7 +55,7 @@ scrape_configs:
     metrics_path: /api/v1/metrics/prometheus
     static_configs:
       - targets:
-          - medqc-backend.internal:8000
+          - medqc-backend.internal:8001
 ```
 
 Notes:

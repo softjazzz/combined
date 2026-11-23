@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { RangePicker, Select } from 'ant-design-vue'
 import { defineComponent, h } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -334,10 +335,14 @@ describe('QcRecordResultListView', () => {
         .exists(),
     ).toBe(false)
     expect(wrapper.find('.qc-record-result-list-view__selected-count').exists()).toBe(false)
+    const preview = wrapper.getComponent(QcRecordReviewPreview)
+    const initialRow = preview.props('row')
     await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
     expect(wrapper.get('.qc-record-result-list-view__selected-count').text()).toBe('已选 1 份')
-    await wrapper.get('input[aria-label="选择患者甲"]').setValue(false)
+    await wrapper.get('[data-testid="qc-result-clear-selection"]').trigger('click')
     expect(wrapper.find('.qc-record-result-list-view__selected-count').exists()).toBe(false)
+    expect(wrapper.getComponent(QcRunSelectedControl).props('recordRefs')).toEqual([])
+    expect(preview.props('row')).toEqual(initialRow)
 
     const finalView = mountView('discharged')
     await flushPromises()
@@ -371,6 +376,27 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.text()).not.toContain('不得展示')
     expect(wrapper.text()).not.toContain('来源未知')
     expect(wrapper.text()).not.toContain('资料完整')
+  })
+
+  it('区分列表读取失败和后台质控摘要失败，并支持重试列表', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      mocks.getRaw.mockRejectedValueOnce(new Error('合成列表失败'))
+      mocks.postRaw.mockRejectedValueOnce(new Error('合成摘要失败'))
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.get('[role="alert"]').text()).toContain('病历列表加载失败')
+      expect(wrapper.text()).not.toContain('暂无符合当前范围的病历')
+      await wrapper.get('[data-testid="qc-result-retry-list"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('质控摘要暂不可用')
+      expect(wrapper.text()).not.toContain('病历列表加载失败')
+      expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 
   it('预览焦点与多选独立，刷新移除原病历后回到有效首行', async () => {
@@ -438,11 +464,11 @@ describe('QcRecordResultListView', () => {
   it('关键词、科室和日期过滤重置为第一页并只使用服务端请求', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
-    const inputs = wrapper.findAll('input')
-    await inputs[0].setValue('患者甲')
-    await inputs[1].setValue('2026-08-01')
-    await inputs[2].setValue('2026-08-10')
-    await wrapper.find('select[aria-label="科室筛选"]').setValue('重症医学科')
+    await wrapper.get('input[aria-label="关键词筛选"]').setValue('患者甲')
+    wrapper.getComponent(RangePicker).vm.$emit('update:value', ['2026-08-01', '2026-08-10'])
+    const department = wrapper.getComponent(Select)
+    department.vm.$emit('update:value', '重症医学科')
+    department.vm.$emit('change', '重症医学科')
     await flushPromises()
 
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
@@ -459,14 +485,63 @@ describe('QcRecordResultListView', () => {
     })
   })
 
+  it('日期选择允许开放区间，并清除已应用的日期筛选', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const picker = wrapper.getComponent(RangePicker)
+    expect(picker.props('allowEmpty')).toEqual([true, true])
+
+    picker.vm.$emit('update:value', [null, '2026-08-10'])
+    await flushPromises()
+    const [, openRangeParams] = mocks.getRaw.mock.lastCall!
+    expect(openRangeParams).toMatchObject({ date_field: 'admission', end_date: '2026-08-10', page: 1 })
+    expect(openRangeParams).not.toHaveProperty('start_date')
+
+    picker.vm.$emit('update:value', null)
+    await flushPromises()
+    const [, clearedParams] = mocks.getRaw.mock.lastCall!
+    expect(clearedParams).not.toHaveProperty('start_date')
+    expect(clearedParams).not.toHaveProperty('end_date')
+  })
+
+  it.each(['inpatient', 'discharged'] as const)('%s 清除关键词并重置筛选时回查第一页', async (phase) => {
+    const wrapper = mountView(phase)
+    await flushPromises()
+    const input = wrapper.get('input[aria-label="关键词筛选"]')
+    await input.setValue('合成关键词')
+    const picker = wrapper.getComponent(RangePicker)
+    picker.vm.$emit('update:value', [null, '2026-08-10'])
+    const department = wrapper.getComponent(Select)
+    department.vm.$emit('update:value', '重症医学科')
+    department.vm.$emit('change', '重症医学科')
+    await flushPromises()
+
+    await wrapper.get('.ant-input-clear-icon').trigger('click')
+    await flushPromises()
+    const [, afterClear] = mocks.getRaw.mock.lastCall!
+    expect(afterClear).not.toHaveProperty('keyword')
+    expect(afterClear).toMatchObject({ page: 1, dept: '重症医学科', end_date: '2026-08-10' })
+
+    await wrapper.get('[data-testid="qc-result-reset-filters"]').trigger('click')
+    await flushPromises()
+    const [, afterReset] = mocks.getRaw.mock.lastCall!
+    expect(afterReset).not.toHaveProperty('dept')
+    expect(afterReset).not.toHaveProperty('end_date')
+    expect(afterReset).toMatchObject({
+      page: 1,
+      hospital_status: phase,
+      date_field: phase === 'inpatient' ? 'admission' : 'discharge',
+    })
+  })
+
   it('按当前服务端筛选导出完整终末病历Excel，不使用当前页行拼接', async () => {
     const wrapper = mountView('discharged')
     await flushPromises()
-    const inputs = wrapper.findAll('input')
-    await inputs[0].setValue('患者甲')
-    await inputs[1].setValue('2026-08-01')
-    await inputs[2].setValue('2026-08-10')
-    await wrapper.find('select[aria-label="科室筛选"]').setValue('重症医学科')
+    await wrapper.get('input[aria-label="关键词筛选"]').setValue('患者甲')
+    wrapper.getComponent(RangePicker).vm.$emit('update:value', ['2026-08-01', '2026-08-10'])
+    const department = wrapper.getComponent(Select)
+    department.vm.$emit('update:value', '重症医学科')
+    department.vm.$emit('change', '重症医学科')
     await flushPromises()
 
     await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')

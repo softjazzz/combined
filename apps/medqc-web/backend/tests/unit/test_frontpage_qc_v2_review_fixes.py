@@ -170,8 +170,8 @@ def test_scoped_sql_blocks_other_hospital_results_and_review(memory):
     scoped = FrontpageQcStore(factory, institute_id="A", actor_id="A")
     assert (
         len(
-            scoped.latest_by_keys(
-                ["A|same-patient|same-visit", "B|same-patient|same-visit"]
+            scoped.latest_by_refs(
+                [FrontpageRef("A", "same-patient", "same-visit"), FrontpageRef("B", "same-patient", "same-visit")]
             )
         )
         == 1

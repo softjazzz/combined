@@ -359,6 +359,21 @@ describe('病例入口：切换科室与病例', () => {
     expect(api.create).toHaveBeenCalledTimes(2)
   })
 
+  it('仅有列表 ID 的病历不恢复会话，也不能开始会话', async () => {
+    const wrapper = mountAssist()
+    await flushPromises()
+    await setDates(wrapper)
+    await ask(wrapper)
+    expect(wrapper.text()).toContain('回答来自 s1')
+
+    await setRecord(wrapper, { ...RECORD_A, visitId: undefined })
+
+    expect(wrapper.text()).toContain('当前病例缺少机构、患者或住院标识')
+    expect(wrapper.findComponent(BusinessAgentDrawer).exists()).toBe(false)
+    expect(api.restore).not.toHaveBeenCalled()
+    expect(api.create).toHaveBeenCalledTimes(1)
+  })
+
   it('切换病例时停止旧轮次，旧病例迟到的回答不会出现在新病例', async () => {
     let finishLate: (value: BusinessAgentTurn) => void = () => undefined
     api.chat.mockImplementation(

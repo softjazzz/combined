@@ -8,6 +8,7 @@ import type { User } from '@/types/auth'
 import type { WorkspaceScope } from '@/types/custom-rule-workspace'
 import { createSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import { useCustomQcBatchLaunchFilters } from '@/views/rules/composables/useCustomQcBatchLaunchFilters'
+import { formatQcTaskDateTime } from '../../utils/qcTaskTime'
 import { useSichuanBatchJobs } from './useSichuanBatchJobs'
 import type {
   SemanticRuleItem,
@@ -658,24 +659,6 @@ export function useSemanticRulesWorkspace() {
     stopBatchJobPolling()
   }
 
-  function formatDateTime(value?: string | Date | null) {
-    if (!value) return '-'
-    try {
-      let date: Date
-      if (typeof value === 'string') {
-        const text = value.trim()
-        const normalized = /z$/i.test(text) || /[+-]\d{2}:\d{2}$/.test(text) ? text : `${text}Z`
-        date = new Date(normalized)
-      } else {
-        date = value
-      }
-      if (Number.isNaN(date.getTime())) return String(value)
-      return date.toLocaleString('zh-CN', { hour12: false })
-    } catch {
-      return String(value)
-    }
-  }
-
   function openQCEvaluation() {
     showQCEvaluation.value = true
   }
@@ -810,6 +793,6 @@ export function useSemanticRulesWorkspace() {
     executeRetryBatchJob,
     exportBatchJobReport,
     resultDrawerOpen,
-    formatDateTime,
+    formatDateTime: formatQcTaskDateTime,
   }
 }

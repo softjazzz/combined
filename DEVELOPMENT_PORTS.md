@@ -32,7 +32,7 @@
 
 ### 1. Vite配置 (前端)
 ```javascript
-// apps/medqc-web/vite.config.ts
+// apps/medqc-web/vite.config.mjs
 export default defineConfig({
   server: {
     port: 3000,
@@ -69,7 +69,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 lsof -ti:3000
 
 # 检查所有项目相关端口
-lsof -ti:3000,3008,8000,8008,5432,6379
+lsof -ti:3000,3008,8001,8008,5432,6379
 ```
 
 ### 清理占用的端口
@@ -78,15 +78,15 @@ lsof -ti:3000,3008,8000,8008,5432,6379
 kill -9 $(lsof -ti:3000)
 
 # 批量清理项目端口
-kill -9 $(lsof -ti:3000,3008,8000,8008) 2>/dev/null || true
+kill -9 $(lsof -ti:3000,3008,8001,8008) 2>/dev/null || true
 ```
 
 ### 启动服务脚本
 ```bash
 # 根目录添加启动脚本
-npm run dev:medqc    # 启动medqc前后端
-npm run dev:yibao    # 启动yibao前后端
-npm run dev:all      # 启动所有服务
+pnpm dev:medqc       # 启动 MedQC 前端
+pnpm dev:yibao       # 启动 YiBao 前端
+pnpm dev:all         # 启动两个前端
 ```
 
 ## 📝 开发环境检查清单

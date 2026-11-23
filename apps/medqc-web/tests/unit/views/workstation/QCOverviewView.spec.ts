@@ -50,6 +50,7 @@ vi.mock('@/stores/auth', () => ({
 }))
 
 import QCOverviewView from '@/views/workstation/QCOverviewView.vue'
+import type { ClinicalQcHomePayload } from '@/views/workstation/types'
 
 const HomeHeroBarStub = defineComponent({
   name: 'HomeHeroBar',
@@ -59,7 +60,6 @@ const HomeHeroBarStub = defineComponent({
 })
 
 const clinicalQcPayload = {
-  date: '2026-08-08',
   department_options: ['神经外科'],
   scope: {
     hospital_scope: 'all',
@@ -144,7 +144,7 @@ const clinicalQcPayload = {
     trend: null,
     comparison: null,
   },
-}
+} satisfies ClinicalQcHomePayload
 
 async function flushHomeLoad() {
   await Promise.resolve()

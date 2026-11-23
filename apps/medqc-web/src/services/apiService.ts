@@ -2,6 +2,7 @@
 import { clinicalSourceForRequest } from '@/utils/clinical-source'
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
+import { API_REQUEST_TIMEOUT_MS, WORKSTATION_LIST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import {
   clearAuthTokens,
   getAccessToken as readAccessToken,
@@ -56,11 +57,8 @@ function computeBaseURL(): string {
 }
 
 const API_BASE_URL = computeBaseURL()
-const API_TIMEOUT = 15000 // 15秒超时，避免过长等待
 const WORKSTATION_LIST_PATH = '/api/medical-records/workstation'
 const WORKSTATION_QC_SUMMARY_PATH = '/api/medical-records/workstation/qc-summary'
-const WORKSTATION_LIST_TIMEOUT = 30000
-const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
 const API_DEBUG =
   import.meta.env.DEV && String(import.meta.env.VITE_API_DEBUG || '').toLowerCase() === 'true'
 const DEBUG_REDACTED = '[REDACTED]'
@@ -105,7 +103,7 @@ if (API_DEBUG) {
 // 创建axios实例
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: API_TIMEOUT,
+  timeout: API_REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -211,9 +209,19 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config
     const requestUrl: string | undefined = error.config?.url
     const responseStatus: number | undefined = error.response?.status
+    const workstationList = requestUrl === WORKSTATION_LIST_PATH
+    const qcSummaryMode = originalRequest?.params?.qc_summary_mode
     const backgroundQcSummary =
       (requestUrl === WORKSTATION_QC_SUMMARY_PATH && originalRequest?.method === 'post')
-      || (requestUrl === WORKSTATION_LIST_PATH && originalRequest?.params?.qc_summary_mode === 'only')
+      || (workstationList && qcSummaryMode === 'only')
+    const pageOwnedGet = originalRequest?.method === 'get' && (
+      (workstationList && qcSummaryMode === 'deferred')
+      || requestUrl === '/api/v1/frontpage-qc/records'
+      || requestUrl === '/api/v1/frontpage-qc/analytics'
+    )
+    const pageOwnedRequestFailed = pageOwnedGet && (responseStatus === undefined
+        ? error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED'
+        : responseStatus >= 500 && responseStatus < 600)
     if (backgroundQcSummary && error.code === 'ERR_CANCELED') return Promise.reject(error)
     const traceId = extractTraceIdFromResponse(error.response) || extractTraceIdFromResponse(error)
     attachTraceIdToError(error, traceId)
@@ -291,8 +299,8 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // 摘要失败由页面局部展示，保留上面的会话续期处理。
-    if (backgroundQcSummary) return Promise.reject(error)
+    // 工作台页内展示摘要、列表服务异常和网络失败，保留会话续期及权限提示。
+    if (backgroundQcSummary || pageOwnedRequestFailed) return Promise.reject(error)
     // 统一错误处理（兼容后端统一错误结构）
     const data = error.response?.data || {}
     const errorMessage = data.message || data.error || data.detail || error.message || '请求失败'
@@ -359,7 +367,7 @@ export class ApiService {
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
     const defaultConfig = url === WORKSTATION_LIST_PATH
-      ? { timeout: WORKSTATION_LIST_TIMEOUT }
+      ? { timeout: WORKSTATION_LIST_TIMEOUT_MS }
       : {}
     return apiClient.get<T>(url, { ...defaultConfig, ...config, params })
   }
@@ -370,7 +378,7 @@ export class ApiService {
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
     const defaultConfig = url === WORKSTATION_QC_SUMMARY_PATH
-      ? { timeout: WORKSTATION_LIST_TIMEOUT }
+      ? { timeout: WORKSTATION_LIST_TIMEOUT_MS }
       : {}
     return apiClient.post<T>(url, data, { ...defaultConfig, ...config })
   }

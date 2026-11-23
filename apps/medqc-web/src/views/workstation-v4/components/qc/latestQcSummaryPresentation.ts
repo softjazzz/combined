@@ -3,6 +3,8 @@
  * 只把后端 latest_qc_summary 的状态计数翻译为界面文案，不重新判定状态。
  */
 import { CAPTURE_FAILED_NOTICE, MATERIAL_PREPARATION_FAILED_LABEL } from '../../customer-sample-validation/single-record-result-model'
+import { QC_RESULT_STATUS_LABELS } from '../../utils/qcResultStatusLabels'
+import { parseQcTaskTime, shanghaiQcTaskTimeParts } from '../../utils/qcTaskTime'
 import type { QcSummaryLoadState, RecordLatestQcSummary } from '../../types'
 import type { QcRecordResultRow } from './QcRecordResultTable.vue'
 
@@ -11,31 +13,11 @@ export function statusCount(statusCounts: Record<string, number>, status: string
   return Number.isFinite(value) && value > 0 ? value : 0
 }
 
-const beijingQcTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
-  timeZone: 'Asia/Shanghai',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-})
-
 export function formatQcCompletedAt(value?: string | null): string {
-  const text = String(value || '').trim()
-  if (!text) return '—'
-  const normalized = text.replace(' ', 'T')
-  // 工作区任务时间由 datetime.utcnow() 产生，历史值没有时区后缀，但语义为 UTC。
-  const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/iu.test(normalized) ? normalized : `${normalized}Z`
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return '—'
-  const parts = Object.fromEntries(
-    beijingQcTimeFormatter
-      .formatToParts(date)
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
-  )
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
+  const date = parseQcTaskTime(value)
+  if (!date) return '—'
+  const { year, month, day, hour, minute } = shanghaiQcTaskTimeParts(date)
+  return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
 export function resolveResultPresentation(
@@ -64,7 +46,7 @@ export function resolveResultPresentation(
     }
     return {
       resultStatus: 'technical-error',
-      resultLabel: '结果校验异常',
+      resultLabel: QC_RESULT_STATUS_LABELS.technical_error,
       issueSummary: '请复核结果交付',
       latestQcTime: '—',
     }
@@ -89,18 +71,18 @@ export function resolveResultPresentation(
         '部分执行失败',
         `${summary.totalRuleCount || 0} 项有效结果`,
         `${summary.failedRuleCount || 0} 项失败`,
-        nonCompliant ? `确定问题 ${nonCompliant}` : '',
+        nonCompliant ? `${QC_RESULT_STATUS_LABELS.non_compliant} ${nonCompliant}` : '',
         dataGap ? `待核实 ${dataGap}` : '',
-        uncertain ? `待判断 ${uncertain}` : '',
+        uncertain ? `${QC_RESULT_STATUS_LABELS.uncertain} ${uncertain}` : '',
       ].filter(Boolean).join(' · '),
       latestQcTime: formatQcCompletedAt(summary.completedAt),
     }
   }
   const issueSummary =
     [
-      nonCompliant > 0 ? `确定问题 ${nonCompliant}` : '',
+      nonCompliant > 0 ? `${QC_RESULT_STATUS_LABELS.non_compliant} ${nonCompliant}` : '',
       dataGap > 0 ? `待核实 ${dataGap}` : '',
-      uncertain > 0 ? `待判断 ${uncertain}` : '',
+      uncertain > 0 ? `${QC_RESULT_STATUS_LABELS.uncertain} ${uncertain}` : '',
     ]
       .filter(Boolean)
       .join(' · ') || '未发现确定问题'
@@ -116,7 +98,7 @@ export function resolveResultPresentation(
   if (dataGap > 0) {
     return {
       resultStatus: 'data-gap',
-      resultLabel: '资料待核实',
+      resultLabel: QC_RESULT_STATUS_LABELS.data_gap,
       issueSummary,
       latestQcTime: formatQcCompletedAt(summary.completedAt),
     }
@@ -124,7 +106,7 @@ export function resolveResultPresentation(
   if (uncertain > 0) {
     return {
       resultStatus: 'uncertain',
-      resultLabel: '待判断',
+      resultLabel: QC_RESULT_STATUS_LABELS.uncertain,
       issueSummary,
       latestQcTime: formatQcCompletedAt(summary.completedAt),
     }

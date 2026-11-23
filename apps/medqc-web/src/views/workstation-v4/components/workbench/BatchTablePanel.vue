@@ -115,16 +115,23 @@
       class="batch-table-panel__table"
       :columns="columns"
       :data-source="displayRows"
-      :loading="loading"
+      :loading="{ spinning: loading === true, tip: '正在加载病历列表…' }"
+      :aria-busy="loading"
       :row-key="(record: WorkbenchRow) => record.recordKey || record.id"
       :pagination="tablePagination"
       :row-selection="rowSelection"
       :scroll="tableScroll"
-      :locale="tableLocale"
       :custom-row="buildCustomRow"
       :row-class-name="rowClassName"
       @change="handleTableChange"
     >
+      <template #emptyText>
+        <Empty
+          v-if="!loading && !loadError"
+          :image="Empty.PRESENTED_IMAGE_SIMPLE"
+          :description="emptyDescription || '当前筛选条件下暂无候选病历'"
+        />
+      </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'patient'">
           <div class="batch-table-panel__patient-cell">
@@ -249,9 +256,15 @@
 </template>
 
 <script setup lang="ts">
+import { Empty } from 'ant-design-vue'
 import { computed } from 'vue'
 import { Eye, ListChecks } from 'lucide-vue-next'
 import type { RecordLatestQcSummary, RecordSourceState } from '../../types'
+import {
+  WORKSTATION_LIST_PAGE_SIZE,
+  WORKSTATION_LIST_PAGE_SIZE_OPTIONS,
+  WORKSTATION_LIST_PAGINATION_LOCALE,
+} from '../../utils/workstationListPagination'
 import {
   dischargeDateLabel,
   displayHospitalDate,
@@ -299,6 +312,8 @@ const props = defineProps<{
   pageSize?: number
   total?: number
   loading?: boolean
+  loadError?: boolean
+  emptyDescription?: string
   readonly?: boolean
   title?: string
   primaryActionLabel?: string
@@ -373,20 +388,17 @@ const tableScroll = computed(() => ({
 }))
 const displayRows = computed(() => {
   if (showSelection.value) return props.rows
-  const currentPageSize = Number(props.pageSize || 15)
+  const currentPageSize = Number(props.pageSize || WORKSTATION_LIST_PAGE_SIZE)
   if (!Number.isFinite(currentPageSize) || currentPageSize <= 0) return props.rows
   return props.rows.slice(0, currentPageSize)
 })
 
-const tableLocale = {
-  emptyText: '当前筛选条件下暂无候选病历',
-}
-
 const tablePagination = computed(() => {
-  const pageSize = Number(props.pageSize || 15)
+  const pageSize = Number(props.pageSize || WORKSTATION_LIST_PAGE_SIZE)
   const totalFromProps = Number(props.total || 0)
   const totalFromRows = Array.isArray(props.rows) ? props.rows.length : 0
   const total = Math.max(totalFromProps, totalFromRows)
+  if (total === 0) return false
   return {
     current: Number(props.currentPage || 1),
     total,
@@ -394,7 +406,8 @@ const tablePagination = computed(() => {
     size: 'small' as const,
     showQuickJumper: true,
     showSizeChanger: true,
-    pageSizeOptions: ['15', '30', '50', '100'],
+    pageSizeOptions: WORKSTATION_LIST_PAGE_SIZE_OPTIONS,
+    locale: WORKSTATION_LIST_PAGINATION_LOCALE,
     hideOnSinglePage: false,
     showTotal: (value: number) => `共 ${value} 例`,
   }
@@ -402,9 +415,9 @@ const tablePagination = computed(() => {
 
 function handleTableChange(pagination: { current?: number; pageSize?: number }) {
   const nextPage = Number(pagination.current || 1)
-  const nextPageSize = Number(pagination.pageSize || props.pageSize || 15)
+  const nextPageSize = Number(pagination.pageSize || props.pageSize || WORKSTATION_LIST_PAGE_SIZE)
   const currentPage = Number(props.currentPage || 1)
-  const currentPageSize = Number(props.pageSize || 15)
+  const currentPageSize = Number(props.pageSize || WORKSTATION_LIST_PAGE_SIZE)
   if (nextPage === currentPage && nextPageSize === currentPageSize) return
   emit('page-change', nextPage, nextPageSize)
 }
@@ -775,8 +788,8 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel__tag--review {
-  background: color-mix(in srgb, var(--workstation-state-review-bg, #f3eeff) 84%, white);
-  color: var(--workstation-state-review-text, #6e56cf);
+  background: color-mix(in srgb, var(--workstation-state-review-bg, var(--mq-info-bg)) 84%, white);
+  color: var(--workstation-state-review-text, var(--mq-info-text));
 }
 
 .batch-table-panel__tag--danger {

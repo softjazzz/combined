@@ -69,7 +69,7 @@
         <WorkstationV4DetailView
           :selected-record="selectedRecord"
           :current-record-index="currentRecordIndex"
-          :filtered-records-length="filteredRecords.length"
+          :filtered-records-length="recordCount"
           :frontpage-generating="frontpageGenerating"
           :has-draft="!!frontpageDraft"
           :can-generate-frontpage="canGenerateFrontpage"
@@ -372,7 +372,10 @@ import {
 import {
   createDetailNavigation,
   findRecordById,
+  getCompleteRecordKey,
+  getRecordNavigationKey,
   openRecordForStage,
+  RECORD_RESELECTION_MESSAGE,
 } from './workstationNavigationController'
 import {
   resolveStageStatus,
@@ -652,22 +655,6 @@ const stageStatusText = computed(() => {
   return '待处理'
 })
 
-const stageStatusClass = computed(() => {
-  if (currentStageFilter.value === 'frontpage_generate') {
-    return 'border-sky-200 bg-sky-50 text-sky-700'
-  }
-  if (currentStageFilter.value === 'coding_qc') {
-    return 'border-violet-200 bg-violet-50 text-violet-700'
-  }
-  if (currentStageFilter.value === 'frontpage_qc') {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-  }
-  if (currentStageFilter.value === 'settlement_qc') {
-    return 'border-amber-200 bg-amber-50 text-amber-700'
-  }
-  return 'border-slate-200 bg-slate-50 text-slate-600'
-})
-
 const stageEmptyText = computed(() => {
   if (currentStageFilter.value === 'frontpage_generate') return '当前筛选条件下暂无待生成首页病历'
   if (currentStageFilter.value === 'coding_qc') return '当前筛选条件下暂无待编码质控病历'
@@ -820,7 +807,7 @@ const priorityCards = computed<PriorityCard[]>(() => {
     .filter((record) => !pinnedSet.has(record.id))
     .sort((a, b) => priorityScore(b) - priorityScore(a))
   return [...pinnedDemoRecords, ...rankedNormalRecords].map((record) => ({
-    id: record.recordKey || record.id,
+    id: getRecordNavigationKey(record),
     patientName: displayRecordName(record),
     visitId: record.visitId || record.id,
     department: record.department || '未分科室',
@@ -913,7 +900,7 @@ function setSingleBatchRuntimeStatus(
 const workbenchRows = computed<WorkbenchRow[]>(() => {
   if (isAggregatedStageMode.value) {
     return stageWorklistItems.value.map((item) => ({
-      id: item.visitId,
+      id: getCompleteRecordKey(item) || item.visitId,
       patientName: item.patientName,
       patientSex: item.patientSex,
       patientAge: item.patientAge,
@@ -940,8 +927,8 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
   }
 
   return listRecords.value.map((record) => ({
-    id: record.recordKey || record.id,
-    recordKey: record.recordKey,
+    id: getRecordNavigationKey(record),
+    recordKey: getCompleteRecordKey(record),
     patientName: displayRecordName(record),
     patientSex: record.sex,
     patientAge: record.age,
@@ -1088,7 +1075,7 @@ const {
   formatRelativeTime,
 } = useNotifications(
   allRecords,
-  openSessionRecord,
+  openRecord,
   assistPanelVisible,
   assistTab,
   frontpageTab,
@@ -1956,14 +1943,12 @@ const combinedMedicalText = computed(() =>
 )
 
 const selectedRecord = computed(() => {
-  const selectedKey = selectedRecordKey.value || selectedId.value
-  if (!selectedKey) return null
-  return (
-    allRecords.value.find((record) => (record.recordKey || record.id) === selectedKey) ||
-    ((selectedStageRecord.value?.recordKey || selectedStageRecord.value?.id) === selectedKey
-      ? selectedStageRecord.value
-      : null)
-  )
+  const selected = selectedStageRecord.value
+  if (!selected) return null
+  const key = getCompleteRecordKey(selected)
+  if (!key) return selected
+  const candidates = allRecords.value.filter((record) => record.sourceId === selected.sourceId)
+  return findRecordById(candidates, key) || selected
 })
 
 // 选中病例后本页自带带病例上下文的智能助手面板，布局层的全局助手让位。
@@ -2245,14 +2230,20 @@ const icdApplyLabel = computed(() => {
 
 function openRecord(record: PatientRecord) {
   selectedStageRecord.value = record
-  selectedRecordKey.value = record.recordKey || record.id
+  selectedRecordKey.value = getRecordNavigationKey(record)
   openSessionRecord(record.visitId || record.id)
   assistPanelVisible.value = false
   icdDrawerVisible.value = false
 }
 
-function handlePriorityOpen(recordId: string) {
+function findRecordInList(recordId: string) {
   const record = findRecordById(listRecords.value, recordId)
+  if (!record) message.warning(RECORD_RESELECTION_MESSAGE)
+  return record
+}
+
+function handlePriorityOpen(recordId: string) {
+  const record = findRecordInList(recordId)
   if (!record) return
   handleStageRecordAction(record)
 }
@@ -2282,7 +2273,7 @@ function openCurrentMedicalRecord(record: PatientRecord) {
 }
 
 function handleRowOpen(recordId: string) {
-  const record = findRecordById(listRecords.value, recordId)
+  const record = findRecordInList(recordId)
   if (!record) return
   if (!isStageQueueMode.value) {
     openCurrentMedicalRecord(record)
@@ -2309,18 +2300,8 @@ function handleRowOpen(recordId: string) {
 }
 
 function findBatchRecordByKey(recordKey: string): PatientRecord | null {
-  const normalized = String(recordKey || '').trim()
-  if (!normalized) return null
-  return (
-    stageListRecords.value.find(
-      (record) =>
-        String(record.recordKey || record.visitId || record.id || '').trim() === normalized,
-    ) ||
-    allRecords.value.find(
-      (record) => String(record.recordKey || record.id || '').trim() === normalized,
-    ) ||
-    null
-  )
+  const records = isAggregatedStageMode.value ? stageListRecords.value : allRecords.value
+  return findRecordById(records, recordKey) ?? null
 }
 
 async function handleBatchExtract(keys: string[]) {
@@ -2474,10 +2455,10 @@ function goToSichuanRules() {
   router.push('/workstation-v5/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1')
 }
 
-const { currentRecordIndex, goToPrevRecord, goToNextRecord, goBackToList } = createDetailNavigation(
-  {
+const { currentRecordIndex, recordCount, goToPrevRecord, goToNextRecord, goBackToList } =
+  createDetailNavigation({
     getSelectedRecord: () => selectedRecord.value,
-    getFilteredRecords: () => filteredRecords.value,
+    getFilteredRecords: () => listRecords.value,
     openRecord,
     backToList,
     clearPanels: () => {
@@ -2485,8 +2466,8 @@ const { currentRecordIndex, goToPrevRecord, goToNextRecord, goBackToList } = cre
       icdDrawerVisible.value = false
       suggestionDrawerVisible.value = false
     },
-  },
-)
+    showWarning: (content) => message.warning(content),
+  })
 
 function handleLocateFromQC(payload: {
   target: FrontpageFocusTarget

@@ -4,9 +4,9 @@ import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { ApiService } from '@/services/apiService'
 import type { DeptInfo, DoctorInfo, PatientRecord, QcSummaryLoadState, RecordPoolQcSummary } from '../types'
 import { normalizeRecord, normalizeRecordLatestQcSummary, normalizeRecordPoolQcSummary } from '../normalize'
+import { WORKSTATION_LIST_PAGE_SIZE } from '../utils/workstationListPagination'
 
 const WORKSTATION_URL = '/api/medical-records/workstation'
-const WORKSTATION_PAGE_SIZE = 15
 const ALL_DEPARTMENTS = '全部科室'
 const ALL_DOCTORS = '全部主管医师'
 const EMPTY_QC_SUMMARY: RecordPoolQcSummary = {
@@ -102,7 +102,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const departments = ref<DeptInfo[]>([])
   const doctors = ref<DoctorInfo[]>([])
   const currentPage = ref(1)
-  const pageSize = ref(WORKSTATION_PAGE_SIZE)
+  const pageSize = ref(WORKSTATION_LIST_PAGE_SIZE)
   const serverTotal = ref(0)
   const serverTotalPages = ref(1)
   const totalCount = computed(() => serverTotal.value)
@@ -186,7 +186,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       const requestedPageSize =
         Number.isFinite(Number(targetPageSize)) && Number(targetPageSize) > 0
           ? Number(targetPageSize)
-          : WORKSTATION_PAGE_SIZE
+          : WORKSTATION_LIST_PAGE_SIZE
       const params: Record<string, string> = {
         source_id: sourceId.value,
         date_field: dateField.value,

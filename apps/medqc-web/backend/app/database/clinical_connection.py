@@ -114,6 +114,12 @@ def get_engine() -> Engine | None:
     return _engine(value, os.getenv("CDM_PGPASSFILE", "").strip())
 
 
+def build_source_binding(host: str, port: int | None, database: str, username: str) -> str:
+    """生成 cdm-read-v1 摘要，保留历史快照约定的字段顺序与 JSON 序列化。"""
+    identity = [host, port or 5432, database, username, "cdm"]
+    return "cdm-read-v1:" + hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()
+
+
 def source_binding() -> str:
     """仅隔离不同临床源的持久缓存，不包含口令、passfile或患者数据。"""
     source = current_selection()
@@ -129,5 +135,4 @@ def source_binding() -> str:
             raise ClinicalSourceConfigurationError()
         return ""
     url = _url(value)
-    identity = [url.host, url.port or 5432, url.database, url.username, "cdm"]
-    return "cdm-read-v1:" + hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+    return build_source_binding(url.host, url.port, url.database, url.username)

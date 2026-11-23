@@ -2026,9 +2026,9 @@ describe('SemanticRulesBatchResultDrawer', () => {
 
     const summary = wrapper.find('[data-testid="transfusion-documentation-summary"]')
     expect(summary.exists()).toBe(true)
-    expect(summary.text()).toContain('输血前评估：不合规')
-    expect(summary.text()).toContain('输血病程：数据不足')
-    expect(summary.text()).toContain('输血后评价：AI判断')
+    expect(summary.text()).toContain('输血前评估：确定问题')
+    expect(summary.text()).toContain('输血病程：资料待核实')
+    expect(summary.text()).toContain('输血后评价：待判断')
     expect(summary.text()).not.toContain('LX0609-07-02-02')
   })
 

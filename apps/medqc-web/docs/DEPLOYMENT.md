@@ -1,6 +1,6 @@
-﻿# 🚀 部署指南
+# 🚀 部署指南（历史 Docker 方案）
 
-本文档详细介绍了医疗质控系统的部署方法和配置。
+> 本文保留早期 Docker 和手工部署方案。现行 Linux 客户端发布与回滚见 [P2 发布手册](deployment/P2_RELEASE_RUNBOOK.md)，由 [发布脚本](../../../scripts/deploy_medqc_release.sh) 和 [systemd 后端服务](../../../scripts/medqc-backend.service) 管理。本地开发见 [MedQC 本地启动](../README.md#本地启动)。
 
 ## 📋 部署前准备
 
@@ -425,5 +425,5 @@ upstream backend {
 
 ---
 
-如需更多帮助，请查看 [故障排除指南](./TROUBLESHOOTING.md) 或联系技术支持。
+现行部署和回滚操作见 [P2 发布手册](deployment/P2_RELEASE_RUNBOOK.md)。
 

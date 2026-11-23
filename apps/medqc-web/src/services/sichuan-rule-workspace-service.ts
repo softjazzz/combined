@@ -1,3 +1,7 @@
+import {
+  QC_REMEDIATION_DRAFT_TIMEOUT_MS,
+  SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
+} from '@/config/requestTimeouts'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 import type {
@@ -33,10 +37,6 @@ function toErrorJobStatus(error: unknown): string | undefined {
   const value = (error as ErrorResponseLike)?.response?.headers?.['x-batch-job-status']
   return typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : undefined
 }
-
-const WORKSPACE_QUERY_TIMEOUT_MS = 60000
-// 整改草稿要等一次模型生成，单独放宽超时，避免误报为请求失败。
-const WORKSPACE_DRAFT_TIMEOUT_MS = 120000
 
 function toErrorMessage(error: unknown, fallback: string): string {
   return extractApiErrorMessageFromError(error, fallback)
@@ -110,7 +110,7 @@ export async function listSichuanWorkspaceBatchJobs(params: SichuanBatchJobQuery
       method: 'GET',
       url: '/api/v1/qc/sichuan/workspace/batch-jobs',
       params,
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取四川规则批量任务失败',
   )
@@ -121,7 +121,7 @@ export async function getSichuanWorkspaceBatchJob(jobId: string) {
     {
       method: 'GET',
       url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}`,
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取四川规则批量任务详情失败',
   )
@@ -132,7 +132,7 @@ export function getNotificationQcResult(notificationId: string) {
     {
       method: 'GET',
       url: `/api/v1/notifications/${encodeURIComponent(notificationId)}/qc-result`,
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '结果通知已失效或读取失败，请返回消息列表刷新',
   )
@@ -154,7 +154,7 @@ export async function getSichuanWorkspaceBatchJobRecordIdentities(jobId: string)
     {
       method: 'GET',
       url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}/record-identities`,
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取病历标识失败',
   )
@@ -175,7 +175,7 @@ export async function getLatestLuxian0609RecordResult(record: {
         patient_id: record.patientId,
         ...(previous && { result_view: previous.resultView, anchor_job_id: previous.anchorJobId }),
       },
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取该病历最近一次质控结果失败',
   )
@@ -205,7 +205,7 @@ export async function requestLuxian0609RemediationDraft(
         patient_id: record.patientId,
       },
       data: { rule_id: ruleId },
-      timeout: WORKSPACE_DRAFT_TIMEOUT_MS,
+      timeout: QC_REMEDIATION_DRAFT_TIMEOUT_MS,
     },
     '生成整改草稿失败',
   )
@@ -225,7 +225,7 @@ export async function exportLatestLuxian0609RecordResult(record: {
         patient_id: record.patientId,
       },
       responseType: 'blob',
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     })
     return { success: true, data: response.data }
   } catch (error) {
@@ -256,7 +256,7 @@ export async function exportFilteredLuxian0609RecordResults(payload: {
       url: '/api/v1/qc/sichuan/workspace/records/export',
       data: payload,
       responseType: 'blob',
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     })
     return { success: true, data: response.data }
   } catch (error) {
@@ -295,7 +295,7 @@ export async function reviewSichuanWorkspaceBatchJob(jobId: string) {
     {
       method: 'POST',
       url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}/review`,
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '复核泸县0609任务结果失败',
   )
@@ -313,7 +313,7 @@ export async function getSichuanWorkspaceBatchJobDebugSnapshot(
       method: 'GET',
       url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}/debug`,
       params,
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取四川规则批量任务调试快照失败',
   )
@@ -333,7 +333,7 @@ export async function getSichuanWorkspaceBatchJobResultTrace(
       method: 'GET',
       url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}/trace`,
       params,
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取质控诊断追踪失败',
   )
@@ -374,7 +374,7 @@ export async function evaluateSichuanRuleForVisit(payload: {
       method: 'POST',
       url: '/api/v1/qc/sichuan/evaluate-rule-for-visit',
       data: payload,
-      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+      timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '深度复核失败',
   )

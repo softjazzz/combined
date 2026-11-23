@@ -22,7 +22,7 @@ health-qc-monorepo/
 │   ├── medqc-web/                 # 医疗质控系统 (端口: 3000)
 │   │   ├── src/                   # 源代码
 │   │   ├── public/                # 静态资源
-│   │   ├── backend/               # FastAPI 后端 (端口: 8000)
+│   │   ├── backend/               # FastAPI 后端 (端口: 8001)
 │   │   ├── docs/                  # 项目文档
 │   │   └── .env.template          # 环境变量模板
 │   └── yibao-web/                 # 医保质控系统 (端口: 3008)
@@ -43,7 +43,7 @@ health-qc-monorepo/
 
 - Node.js 18.x+
 - pnpm 8.x+
-- Python 3.9+ (后端服务)
+- Python 3.10+（MedQC 后端）
 
 ### 1. 克隆项目
 
@@ -58,26 +58,15 @@ cd health-qc-monorepo
 pnpm install
 ```
 
-### 3. 初始化环境配置
+### 3. 启动 MedQC
+
+按 [MedQC 本地启动说明](apps/medqc-web/README.md#本地启动) 配置开发用 PostgreSQL 并启动 FastAPI（默认端口 8001）。然后在仓库根目录启动前端。
 
 ```bash
-# 使用管理脚本初始化
-./dev-env.sh init
-
-# 或者使用 npm 脚本
-pnpm init
+pnpm --dir apps/medqc-web dev
 ```
 
-### 4. 启动开发服务
-
-```bash
-# 启动所有服务
-pnpm dev:all
-
-# 或分别启动
-pnpm dev:medqc    # 启动 medqc-web (端口 3000)
-pnpm dev:yibao    # 启动 yibao-web (端口 3008)
-```
+前端默认使用 3000 端口，将 API 请求代理到 8001。根目录脚本 `pnpm dev:medqc`、`pnpm dev:yibao` 和 `pnpm dev:all` 启动前端开发服务。
 
 ## 🎯 核心功能
 
@@ -135,7 +124,7 @@ pnpm type-check       # 类型检查
 
 # 测试相关
 pnpm test             # 运行所有测试
-pnpm test:medqc       # 运行 medqc-web 测试
+pnpm --dir apps/medqc-web test:unit  # 运行 MedQC 前端单元测试
 pnpm test:yibao       # 运行 yibao-web 所有测试
 
 # 管理相关
@@ -169,7 +158,7 @@ pnpm clean            # 清理端口
 
 ```bash
 cd apps/medqc-web
-pnpm test          # 单元测试
+pnpm test:unit     # 单元测试
 pnpm test:e2e      # 端到端测试
 ```
 
@@ -253,8 +242,8 @@ pnpm test:all
 
 ## 📞 支持与反馈
 
-- 🐛 **Bug 报告**: 请在 [Issues](../../issues) 中提交
-- 💡 **功能建议**: 欢迎在 [Issues](../../issues) 中讨论
+- 🐛 **Bug 报告**: 请在 [Issues](https://github.com/softjazzz/combined/issues) 中提交
+- 💡 **功能建议**: 欢迎在 [Issues](https://github.com/softjazzz/combined/issues) 中讨论
 - 📧 **技术支持**: 联系开发团队
 
 ---

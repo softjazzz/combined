@@ -778,7 +778,7 @@
                 </div>
                 <div class="pool-management-meta">
                   <span>{{ pool.total_items || 0 }} 份样本</span>
-                  <span>更新于 {{ formatDateTime(pool.updated_at || pool.created_at) }}</span>
+                  <span>更新于 {{ formatPaddedQcTaskDateTime(pool.updated_at || pool.created_at) }}</span>
                   <span v-if="pool.latest_job_status">
                     最近任务：{{ poolJobStatusLabel(pool.latest_job_status) }}
                   </span>
@@ -1690,7 +1690,7 @@
       :review-batch-job-loading="Boolean(reviewBatchJobLoadingId)"
       :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
       :get-batch-job-status-text="getBatchJobStatusText"
-      :format-date-time="formatDateTime"
+      :format-date-time="formatPaddedQcTaskDateTime"
     />
 
     <QCRecordResultComparisonDrawer
@@ -1813,6 +1813,7 @@
 
 <script setup lang="ts">
 import { reactive, watchEffect } from 'vue'
+import { formatPaddedQcTaskDateTime } from './utils/qcTaskTime'
 import { deferredComponent } from './customer-sample-validation/deferredComponent'
 const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
@@ -1893,7 +1894,6 @@ const {
   fetchBatchJobDebugSnapshot,
   FilePlus2,
   filters,
-  formatDateTime,
   formatEditableCopyDocumentMeta,
   formatEditableCopyOrderGroupMeta,
   getBatchJobStatusTagClass,

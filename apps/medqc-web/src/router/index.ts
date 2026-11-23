@@ -546,6 +546,7 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        // 历史详情链接仍需打开经典版，现行业务列表使用工作台入口。
         path: 'medical-records/:id/legacy',
         name: 'MedicalRecordDetailLegacy',
         component: () => import('@/views/medical-records/MedicalRecordDetail.legacy.vue'),
@@ -870,7 +871,7 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
-  // 验收工作站 V2（独立 Layout，与 Dashboard 完全隔离）
+  // 旧验收链接仍可进入 V2，新工作台入口在 /workstation-v5。
   {
     path: '/workstation-v2',
     component: () => import('@/components/layout/WorkstationLayout.vue'),
@@ -944,7 +945,7 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
-  // 工作台 V3 (卡片式布局)
+  // 旧 V3 链接仍使用原卡片工作台。
   {
     path: '/workstation-v3',
     component: () => import('@/components/layout/WorkstationLayout.vue'),
@@ -971,7 +972,7 @@ const routes: RouteRecordRaw[] = [
       title: '工作台登录',
     },
   },
-  // 病案工作台 V5（沿用已验证的工作台组件与内部路由名称）
+  // 现行 V5 使用 workstation-v4 源码目录；V4 URL 保留为兼容别名。
   {
     path: '/workstation-v5',
     alias: ['/workstation-v4'],
@@ -1393,6 +1394,17 @@ router.beforeEach(async (to, from, next) => {
         next('/dashboard')
         return
       }
+    }
+
+    // 联动参数会在病历打开后清除，先进入稳定的病历池路由。
+    if (
+      to.name === 'WorkstationV4Index' &&
+      to.query.source === 'dashboard' &&
+      typeof to.query.record_id === 'string' && to.query.record_id.trim() &&
+      typeof to.query.action === 'string' && to.query.action.trim()
+    ) {
+      next({ name: 'WorkstationV4Worklist', query: to.query, hash: to.hash, replace: true })
+      return
     }
   }
 

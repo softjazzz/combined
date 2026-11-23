@@ -149,7 +149,7 @@ def build_export_workbook(
     for cell in sheet[2]:
         cell.font = Font(bold=True)
     for result in results:
-        info = record_info.get(result["record_key"], {})
+        info = record_info.get(result["id"], {})
         sheet.append(
             [
                 info.get("patient_name", ""),
@@ -173,7 +173,7 @@ def build_export_workbook(
         cell.font = Font(bold=True)
     review_labels = {"pending": "待复核", "confirmed": "已确认", "false_alarm": "误报"}
     for finding in findings:
-        info = record_info.get(finding["record_key"], {})
+        info = record_info.get(finding["result_id"], {})
         detail_sheet.append(
             [
                 info.get("patient_name", ""),

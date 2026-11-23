@@ -4,6 +4,7 @@ import type {
   WorkflowStageKey,
 } from '@/types/workflow'
 import type { PatientRecord } from './types'
+import { findRecordById, RECORD_RESELECTION_MESSAGE } from './workstationNavigationController'
 
 interface HandleWorkstationLaunchParams {
   routeQuery: Record<string, unknown>
@@ -50,29 +51,6 @@ function parseLaunchContext(
 
 function launchKeyOf(ctx: WorkstationLaunchContext): string {
   return [ctx.record_id, ctx.action, ctx.task_id || '', ctx.from_stage || ''].join('|')
-}
-
-function findRecordForLaunch(allRecords: PatientRecord[], recordId: string): PatientRecord | null {
-  const target = recordId.trim().toLowerCase()
-  if (!target) return null
-  const matched = allRecords.find((record: PatientRecord) => {
-    const candidateIds = [
-      String(record.id || '')
-        .trim()
-        .toLowerCase(),
-      String(record.visitId || '')
-        .trim()
-        .toLowerCase(),
-      String((record as any).record_id || '')
-        .trim()
-        .toLowerCase(),
-      String((record as any).task_id || '')
-        .trim()
-        .toLowerCase(),
-    ]
-    return candidateIds.includes(target)
-  })
-  return matched || null
 }
 
 async function executeLaunchAction(
@@ -131,9 +109,11 @@ export async function handleWorkstationLaunchFlow(
   const key = launchKeyOf(ctx)
   if (params.handledLaunchKey === key) return
 
-  const targetRecord = findRecordForLaunch(params.allRecords, ctx.record_id)
+  const targetRecord = findRecordById(params.allRecords, ctx.record_id, {
+    ignoreCaseForLegacyId: true,
+  })
   if (!targetRecord) {
-    params.showWarning('未找到目标病历，已取消自动联动')
+    params.showWarning(RECORD_RESELECTION_MESSAGE)
     params.setHandledLaunchKey(key)
     params.clearLaunchQueryParams()
     return

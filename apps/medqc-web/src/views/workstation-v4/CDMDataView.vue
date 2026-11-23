@@ -366,7 +366,7 @@
                 class="diag-item"
               >
                 <a-tag
-                  color="purple"
+                  color="blue"
                   size="small"
                 >
                   {{ s.surgical_level || '手术' }}

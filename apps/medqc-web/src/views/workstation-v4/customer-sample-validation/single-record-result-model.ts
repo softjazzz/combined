@@ -1,3 +1,4 @@
+import { QC_RESULT_STATUS_LABELS } from '../utils/qcResultStatusLabels'
 import type { QcMaterialFailureStage } from '../types'
 export type SingleRecordQcStatus =
   | 'non_compliant'
@@ -305,12 +306,12 @@ const STATUS_PRESENTATION: Record<
   string,
   { label: string; tone: SingleRecordQcResultTone; sortOrder: number }
 > = {
-  non_compliant: { label: '确定问题', tone: 'danger', sortOrder: 10 },
+  non_compliant: { label: QC_RESULT_STATUS_LABELS.non_compliant, tone: 'danger', sortOrder: 10 },
   ai_suggested_non_compliant: { label: '建议复核', tone: 'warning', sortOrder: 20 },
-  technical_error: { label: '技术异常', tone: 'warning', sortOrder: 30 },
+  technical_error: { label: QC_RESULT_STATUS_LABELS.technical_error, tone: 'warning', sortOrder: 30 },
   evaluation_unknown: { label: '待确认', tone: 'warning', sortOrder: 40 },
-  uncertain: { label: '待确认', tone: 'warning', sortOrder: 40 },
-  data_gap: { label: '数据不足', tone: 'warning', sortOrder: 50 },
+  uncertain: { label: QC_RESULT_STATUS_LABELS.uncertain, tone: 'warning', sortOrder: 40 },
+  data_gap: { label: QC_RESULT_STATUS_LABELS.data_gap, tone: 'warning', sortOrder: 50 },
   not_executed: { label: '未执行', tone: 'warning', sortOrder: 60 },
   not_applicable: { label: '不适用', tone: 'neutral', sortOrder: 70 },
   compliant: { label: '合规', tone: 'success', sortOrder: 80 },

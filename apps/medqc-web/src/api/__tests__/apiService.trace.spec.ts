@@ -135,6 +135,50 @@ describe('apiService trace propagation', () => {
   })
 
   it.each([
+    { mode: 'deferred', responseStatus: 503, suppressed: true },
+    { mode: 'deferred', code: 'ERR_NETWORK', suppressed: true },
+    { mode: 'deferred', code: 'ECONNABORTED', suppressed: true },
+    { mode: 'deferred', responseStatus: 403, suppressed: false },
+    { mode: 'inline', responseStatus: 503, suppressed: false },
+  ])('工作台列表 $mode 的 $responseStatus$code 失败提示符合所属入口', async ({
+    mode, responseStatus, code, suppressed,
+  }) => {
+    const { responseRejected } = await loadApiServiceWithAxiosMock()
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const error = {
+        code,
+        config: { method: 'get', url: '/api/medical-records/workstation', params: { qc_summary_mode: mode } },
+        response: responseStatus ? { status: responseStatus, headers: { 'x-trace-id': 'list-trace' } } : undefined,
+      }
+      await expect(responseRejected!(error)).rejects.toBe(error)
+      expect(mockMessageError).toHaveBeenCalledTimes(suppressed ? 0 : 1)
+      if (responseStatus) expect(error).toHaveProperty('traceId', 'list-trace')
+    } finally {
+      errorLog.mockRestore()
+    }
+  })
+
+  it.each([
+    { path: 'records', response: { status: 503 }, code: undefined, suppressed: true },
+    { path: 'analytics', response: undefined, code: 'ECONNABORTED', suppressed: true },
+    { path: 'analytics', response: undefined, code: 'ERR_NETWORK', suppressed: true },
+    { path: 'records', response: { status: 403 }, code: undefined, suppressed: false },
+    { path: 'record', response: { status: 503 }, code: undefined, suppressed: false },
+  ])('首页质控 $path 的 $response$code 只交给实际处理错误的入口', async ({
+    path, response, code, suppressed,
+  }) => {
+    const { responseRejected } = await loadApiServiceWithAxiosMock()
+    const error = {
+      code,
+      config: { method: 'get', url: `/api/v1/frontpage-qc/${path}` },
+      response,
+    }
+    await expect(responseRejected!(error)).rejects.toBe(error)
+    expect(mockMessageError).toHaveBeenCalledTimes(suppressed ? 0 : 1)
+  })
+
+  it.each([
     { code: 'ERR_CANCELED', response: undefined },
     { code: 'ECONNABORTED', response: undefined },
     { code: 'ERR_NETWORK', response: undefined },

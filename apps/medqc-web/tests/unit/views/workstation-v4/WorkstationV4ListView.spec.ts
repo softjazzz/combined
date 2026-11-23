@@ -193,6 +193,7 @@ function mountListView(overrides: Record<string, unknown> = {}) {
     },
     global: {
       stubs: {
+        AAlert: false,
         PriorityLane: passthroughStub('PriorityLane'),
         BatchTablePanel: BatchTablePanelStub,
         ACard: passthroughStub('ACard'),
@@ -379,10 +380,18 @@ describe('WorkstationV4ListView filters', () => {
     expect(table.props('recordPoolMode')).toBe(false)
   })
 
-  it('renders a customer-facing query failure state', () => {
-    const wrapper = mountListView({ loadError: true })
+  it('列表失败时显示重试，后台摘要失败时保留病历池列表', async () => {
+    const wrapper = mountListView({ loadError: true, qcSummaryState: 'unavailable', currentPage: 2 })
+    const error = wrapper.get('[role="alert"]')
 
-    expect(wrapper.find('[role="alert"]').text()).toContain('病历池暂未加载成功')
+    expect(error.text()).toContain('病历列表加载失败')
+    expect(error.text()).not.toContain('质控摘要暂不可用')
+    await error.get('button').trigger('click')
+    expect(wrapper.emitted('page-change')).toEqual([[2]])
+
+    await wrapper.setProps({ loadError: false })
+    expect(wrapper.get('[role="alert"]').text()).toContain('质控摘要暂不可用')
+    expect(wrapper.findComponent({ name: 'BatchTablePanel' }).exists()).toBe(true)
   })
 
   it('renders filter summary text', () => {
@@ -396,6 +405,20 @@ describe('WorkstationV4ListView filters', () => {
     const wrapper = mountListView()
 
     expect(wrapper.find('[data-testid="qc-agent-entry"]').exists()).toBe(false)
+  })
+
+  it('保留单边日期并允许清空日期范围', () => {
+    const wrapper = mountListView()
+    const picker = wrapper.getComponent({ name: 'ARangePicker' })
+    picker.vm.$emit('update:value', ['2026-05-25', null])
+    picker.vm.$emit('update:value', [null, '2026-05-27'])
+    picker.vm.$emit('update:value', null)
+
+    expect(wrapper.emitted('update:dateRange')).toEqual([
+      [['2026-05-25', '']],
+      [['', '2026-05-27']],
+      [null],
+    ])
   })
 
   it('emits selectDept when searchable department select changes', async () => {

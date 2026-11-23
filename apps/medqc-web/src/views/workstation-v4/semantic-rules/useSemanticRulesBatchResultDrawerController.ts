@@ -2,6 +2,8 @@ import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import { QC_RESULT_STATUS_LABELS } from '../utils/qcResultStatusLabels'
+import { parseQcTaskTime } from '../utils/qcTaskTime'
 import type {
   QCRecordCompareIssue,
   SichuanBatchIssueItem,
@@ -234,20 +236,6 @@ export function useSemanticRulesBatchResultDrawerController(
     const parsed = optionalNumber(value)
     if (parsed === null) return '-'
     return Math.round(parsed).toLocaleString('zh-CN')
-  }
-
-  function parseBackendDateTimeMs(value?: string | Date | null): number {
-    if (!value) return 0
-    if (value instanceof Date) {
-      const timestamp = value.getTime()
-      return Number.isFinite(timestamp) ? timestamp : 0
-    }
-    const text = String(value).trim()
-    if (!text) return 0
-    const normalized = text.includes('T') ? text : text.replace(' ', 'T')
-    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
-    const timestamp = Date.parse(hasTimezone ? normalized : `${normalized}Z`)
-    return Number.isFinite(timestamp) ? timestamp : 0
   }
 
   const liveNow = ref(Date.now())
@@ -1457,25 +1445,25 @@ export function useSemanticRulesBatchResultDrawerController(
     const groups = [
       {
         key: 'non_compliant',
-        title: '优先处理：确定问题',
+        title: `优先处理：${QC_RESULT_STATUS_LABELS.non_compliant}`,
         className: 'issue-review-nav-group--danger',
         items: [] as SichuanBatchIssueItem[],
       },
       {
         key: 'data_gap',
-        title: '需补资料：数据不足',
+        title: QC_RESULT_STATUS_LABELS.data_gap,
         className: 'issue-review-nav-group--warning',
         items: [] as SichuanBatchIssueItem[],
       },
       {
         key: 'uncertain',
-        title: 'AI判断：建议确认',
+        title: QC_RESULT_STATUS_LABELS.uncertain,
         className: 'issue-review-nav-group--review',
         items: [] as SichuanBatchIssueItem[],
       },
       {
         key: 'technical_error',
-        title: '执行异常：技术错误',
+        title: QC_RESULT_STATUS_LABELS.technical_error,
         className: 'issue-review-nav-group--warning',
         items: [] as SichuanBatchIssueItem[],
       },
@@ -1641,7 +1629,7 @@ export function useSemanticRulesBatchResultDrawerController(
 
   const liveStartedAtMs = computed(() => {
     const startValue = props.batchJobDetail?.started_at || streamState.value?.started_at
-    return parseBackendDateTimeMs(startValue)
+    return parseQcTaskTime(startValue)?.getTime() ?? 0
   })
 
   const liveElapsedSeconds = computed(() => {
@@ -2093,15 +2081,15 @@ export function useSemanticRulesBatchResultDrawerController(
     const normalized = String(status || '')
       .trim()
       .toLowerCase()
-    if (normalized === 'non_compliant') return '不合规'
+    if (normalized === 'non_compliant') return QC_RESULT_STATUS_LABELS.non_compliant
     if (normalized === 'ai_suggested_non_compliant') return 'AI判断：疑似问题'
     if (normalized === 'ai_suggested_compliant') return 'AI判断：未见问题'
     if (normalized === 'compliant') return '合规'
     if (normalized === 'not_applicable') return '不适用'
-    if (normalized === 'data_gap') return '数据不足'
-    if (normalized === 'uncertain') return 'AI判断'
+    if (normalized === 'data_gap') return QC_RESULT_STATUS_LABELS.data_gap
+    if (normalized === 'uncertain') return QC_RESULT_STATUS_LABELS.uncertain
     if (normalized === 'not_executed') return '未执行'
-    if (normalized === 'technical_error') return '技术异常'
+    if (normalized === 'technical_error') return QC_RESULT_STATUS_LABELS.technical_error
     return status || 'AI判断'
   }
 
@@ -2295,6 +2283,7 @@ export function useSemanticRulesBatchResultDrawerController(
           ? dataQualityGapRecords
           : 0)
       if (isLuxian0609BatchJob.value) {
+        const { non_compliant, data_gap, uncertain } = QC_RESULT_STATUS_LABELS
         return {
           tone: 'completed',
           title:
@@ -2303,8 +2292,8 @@ export function useSemanticRulesBatchResultDrawerController(
               : '任务已完成，本次未发现泸县0609质控点问题',
           description:
             focusCount > 0
-              ? `请查看下方客户质控点明细：不合规 ${issueRecords} 条，数据不足 ${dataQualityGapRecords} 条，AI判断 ${uncertainRecords} 条。`
-              : '当前所选 LX0609 质控点未返回不合规、数据不足或 AI 判断结果。',
+              ? `请查看下方客户质控点明细：${non_compliant} ${issueRecords} 条，${data_gap} ${dataQualityGapRecords} 条，${uncertain} ${uncertainRecords} 条。`
+              : `当前所选 LX0609 质控点未返回${non_compliant}、${data_gap}或${uncertain}结果。`,
           meta,
           pulse: false,
         }
@@ -2709,7 +2698,8 @@ export function useSemanticRulesBatchResultDrawerController(
     ).length
     if (isLuxian0609BatchJob.value) {
       const modeText = isLuxianScopedRun.value ? '选定质控点验证' : '全量 0609 规则集'
-      return `${scopePrefix}当前展示泸县0609${modeText}结果，共 ${total} 条客户质控点结果，其中不合规 ${nonCompliantCount} 条，数据不足 ${dataQualityGapCount} 条，AI判断 ${uncertainCount} 条，技术异常 ${technicalErrorCount} 条。`
+      const { non_compliant, data_gap, uncertain, technical_error } = QC_RESULT_STATUS_LABELS
+      return `${scopePrefix}当前展示泸县0609${modeText}结果，共 ${total} 条客户质控点结果，其中${non_compliant} ${nonCompliantCount} 条，${data_gap} ${dataQualityGapCount} 条，${uncertain} ${uncertainCount} 条，${technical_error} ${technicalErrorCount} 条。`
     }
     if (isPostprocessedFormalResult.value) {
       return `${scopePrefix}当前为正式质控四层准入结果，共 ${total} 条可查看结果，其中确认缺陷 ${nonCompliantCount} 条，数据缺口 ${dataQualityGapCount} 条，系统驳回 ${rejectedBySystemCount} 条，技术异常 ${technicalErrorCount} 条。原始语义判断不会直接计入确认缺陷。`
@@ -2733,7 +2723,7 @@ export function useSemanticRulesBatchResultDrawerController(
 
   const emptyIssueText = computed(() =>
     confirmedResultsOnly.value ? '当前没有可展示的确定问题' : isLuxian0609BatchJob.value
-      ? '暂无 LX0609 不合规、数据不足或 AI 判断结果'
+      ? `暂无 LX0609 ${QC_RESULT_STATUS_LABELS.non_compliant}、${QC_RESULT_STATUS_LABELS.data_gap}或${QC_RESULT_STATUS_LABELS.uncertain}结果`
       : isPostprocessedFormalResult.value
         ? '暂无确认缺陷、数据缺口或系统驳回项'
         : '暂无问题/AI判断明细',
@@ -3033,9 +3023,8 @@ export function useSemanticRulesBatchResultDrawerController(
     }
     if (kind === 'status') {
       const map: Record<string, string> = {
-        non_compliant: '不合规',
+        ...QC_RESULT_STATUS_LABELS,
         ai_suggested_non_compliant: 'AI判断：疑似问题',
-        uncertain: 'AI判断',
         compliant: '合规',
         ai_suggested_compliant: 'AI判断：未见问题',
         not_applicable: '不适用',
@@ -3050,15 +3039,15 @@ export function useSemanticRulesBatchResultDrawerController(
     const normalized = String(status || '')
       .trim()
       .toLowerCase()
-    if (normalized === 'non_compliant') return '不合规'
+    if (normalized === 'non_compliant') return QC_RESULT_STATUS_LABELS.non_compliant
     if (normalized === 'ai_suggested_non_compliant') return 'AI判断：疑似问题'
-    if (normalized === 'uncertain') return 'AI判断'
+    if (normalized === 'uncertain') return QC_RESULT_STATUS_LABELS.uncertain
     if (normalized === 'ai_suggested_compliant') return 'AI判断：未见问题'
     if (normalized === 'not_applicable') return '不适用'
-    if (normalized === 'data_gap') return '数据不足'
+    if (normalized === 'data_gap') return QC_RESULT_STATUS_LABELS.data_gap
     if (normalized === 'not_executed') return '未执行'
-    if (normalized === 'technical_error' || normalized === 'technical_error_internal')
-      return '技术异常'
+    if (normalized === 'technical_error') return QC_RESULT_STATUS_LABELS.technical_error
+    if (normalized === 'technical_error_internal') return '技术异常'
     if (normalized === 'failed') return '失败'
     return '合规'
   }

@@ -61,7 +61,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { LoadingOutlined } from '@ant-design/icons-vue'
-import type { UnifiedTaskItem } from '@/views/workstation-v2/types'
+import type { UnifiedTaskItem } from './legacyHomeTypes'
 import avatarBoy from '@/assets/avatar-icons/patient-icon-boy.png'
 import avatarElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
 import avatarElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'

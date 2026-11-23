@@ -100,7 +100,7 @@ describe('single-record-result-model canonical 直通展示', () => {
     expect(rendered[1]).toMatchObject({
       status: 'uncertain',
       reason_code: 'customer_explanation_incomplete',
-      displayStatus: '待确认',
+      displayStatus: '待判断',
       tone: 'warning',
     })
     expect(tabs.find((item) => item.key === 'non_compliant')?.count).toBe(1)

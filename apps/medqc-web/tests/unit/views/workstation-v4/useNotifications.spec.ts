@@ -31,6 +31,7 @@ vi.mock('ant-design-vue', () => ({
   },
 }))
 
+import { messageTime } from '@/views/workstation/useMessageCenter'
 import { useNotifications } from '@/views/workstation-v4/composables/useNotifications'
 import { normalizeNotification } from '@/views/workstation-v4/normalize'
 import type { PatientRecord } from '@/views/workstation-v4/types'
@@ -41,6 +42,12 @@ async function flushPromises() {
 }
 
 describe('useNotifications overview acceptance', () => {
+  it('质控结果通知把无时区时间按 UTC 解读，并在北京时间跨日展示', () => {
+    expect(messageTime('2026-10-22 16:00:00', 'qc_result_ready')).toBe('2026/10/23 00:00')
+    expect(messageTime('2026-10-23T01:00:00+09:00', 'qc_result_ready')).toBe('2026/10/23 00:00')
+    expect(messageTime('invalid', 'qc_result_ready')).toBe('时间未知')
+  })
+
   it.each(['account_registration', 'account_registration_result', 'qc_result_ready'])('现代消息%s保持精确目标，不按病历号下钻', async (kind) => {
     const open = vi.fn().mockResolvedValue(undefined)
     const legacyOpen = vi.fn()
@@ -201,6 +208,34 @@ describe('useNotifications overview acceptance', () => {
     expect(mocks.messageError).toHaveBeenCalledWith('消息处理对象未核实，请刷新核对')
   })
 
+  it('rejects an ambiguous legacy notification and opens a complete case key', async () => {
+    const records = ref(
+      ['P-1', 'P-2'].map((patientId) => ({
+        id: patientId,
+        visitId: 'V-100',
+        instituteId: 'H-1',
+        patientId,
+      })) as PatientRecord[],
+    )
+    const open = vi.fn()
+    const assistPanelVisible = ref(false)
+    const notify = useNotifications(records, open, assistPanelVisible, ref('message'), ref('fields'))
+    const notice = { id: 'legacy', is_read: true }
+
+    await notify.handleAssistNotificationClick(
+      normalizeNotification({ ...notice, record_id: 'V-100' }, 0),
+    )
+    expect(open).not.toHaveBeenCalled()
+    expect(assistPanelVisible.value).toBe(false)
+    expect(mocks.messageWarning).toHaveBeenCalledWith(expect.stringContaining('重新选择'))
+
+    await notify.handleAssistNotificationClick(
+      normalizeNotification({ ...notice, record_id: '["H-1","P-2","V-100"]' }, 0),
+    )
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(open).toHaveBeenCalledWith(records.value[1])
+  })
+
   it('falls back to local same-record aggregation and opens linked record', async () => {
     mocks.get
       .mockResolvedValueOnce({
@@ -260,14 +295,14 @@ describe('useNotifications overview acceptance', () => {
         status: 'pending',
       },
     ])
-    const opened: string[] = []
+    const opened: PatientRecord[] = []
     const assistPanelVisible = ref(false)
     const assistTab = ref('overview')
     const frontpageTab = ref('summary')
 
     const notifications = useNotifications(
       records,
-      (id) => opened.push(id),
+      (record) => opened.push(record),
       assistPanelVisible,
       assistTab,
       frontpageTab,
@@ -290,7 +325,7 @@ describe('useNotifications overview acceptance', () => {
     await flushPromises()
 
     expect(mocks.put).toHaveBeenCalledWith('/api/v1/notifications/n1/read')
-    expect(opened).toEqual(['V001'])
+    expect(opened).toEqual([records.value[0]])
     expect(assistPanelVisible.value).toBe(true)
     expect(assistTab.value).toBe('form')
     expect(frontpageTab.value).toBe('fields')

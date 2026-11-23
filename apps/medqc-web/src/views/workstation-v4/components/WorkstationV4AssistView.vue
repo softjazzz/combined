@@ -17,10 +17,11 @@
   >
     <template v-if="chatEnabled" #chat="{ active }">
       <BusinessAgentDrawer
+        v-if="caseRecordKey"
         embedded
         :open="active && accessSettled"
         :user-context="chatContext"
-        :case-key="chatCaseKey"
+        :case-key="caseRecordKey"
         :case-label="chatCaseLabel"
         :panels="['profile']"
         :summary="chatSummary"
@@ -28,6 +29,7 @@
         @open-panel="openProfileFromChat"
         @open-tab="emit('tab-change', $event)"
       />
+      <p v-else>当前病例缺少机构、患者或住院标识，暂不能使用助手。</p>
     </template>
     <template #content>
       <ContentQCTab
@@ -167,16 +169,8 @@
           class="h-full overflow-hidden rounded-[18px] border border-white/85 bg-white/88 shadow-[0_10px_22px_rgba(15,23,42,0.05)]"
         >
           <AsyncAIProfileDashboard
-            v-if="
-              selectedRecord?.instituteId && selectedRecord?.patientId && selectedRecord?.visitId
-            "
-            :scope-key="
-              JSON.stringify([
-                selectedRecord.instituteId,
-                selectedRecord.patientId,
-                selectedRecord.visitId,
-              ])
-            "
+            v-if="caseRecordKey"
+            :scope-key="caseRecordKey"
             :frontpage="frontpageDraft"
             :medical-text="combinedMedicalText"
             style="height: 100%; overflow-y: auto"
@@ -430,7 +424,7 @@
                     <span>·</span>
                     <span>触发 {{ item.occurrence_count }} 次</span>
                     <span>·</span>
-                    <span>{{ formatRelativeTime(item.latest_created_at) }}</span>
+                    <span>{{ formatRelativeTime(item.latest_created_at, item.type) }}</span>
                   </div>
                 </div>
                 <a-tag v-if="item.unread_count > 0" color="blue">
@@ -469,7 +463,7 @@
                     {{ notif.content || '暂无内容' }}
                   </div>
                   <div class="assist-message-inbox__meta">
-                    {{ formatRelativeTime(notif.created_at) }}
+                    {{ formatRelativeTime(notif.created_at, notif.type) }}
                   </div>
                 </div>
                 <a-tag v-if="!notif.is_read" color="blue"> 未读 </a-tag>
@@ -666,6 +660,7 @@ import ContentQCTab from './ContentQCTab.vue'
 import ICDSearchPanel from './ICDSearchPanel.vue'
 import type { ICDCodeDetail } from './ICDDetailPanel.vue'
 import type { DocItem, PatientRecord } from '../types'
+import { buildCaseRecordKey } from '../utils/caseRecordKey'
 
 type AssistTabKey = 'chat' | 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
@@ -731,7 +726,7 @@ const props = defineProps<{
   overviewLoading: boolean
   filteredNotificationOverviewItems: Array<Record<string, any>>
   filteredAssistNotifications: Array<Record<string, any>>
-  formatRelativeTime: (value?: string | null) => string
+  formatRelativeTime: (value?: string | null, type?: string) => string
   suggestionDrawerVisible: boolean
   suggestions: Array<Record<string, any>>
   suggestionsLoading: boolean
@@ -796,7 +791,7 @@ onMounted(() => {
 // 保留管理者身份（科室问数），不再强行按医生模式请求而被拒绝。
 const chatContext = computed<BusinessAgentContext>(() => {
   const record = props.selectedRecord
-  const visitId = record?.visitId || record?.id
+  const visitId = record?.visitId
   const doctor: BusinessAgentContext = {
     view: 'doctor',
     institute_id: record?.instituteId,
@@ -826,14 +821,12 @@ const chatContext = computed<BusinessAgentContext>(() => {
 })
 
 // 病例入口的会话边界：切换病例（含同科室）即停止旧轮次并使用独立会话，旧引用与待确认操作不会带入新病例。
-const chatCaseKey = computed(() => {
+const caseRecordKey = computed(() => {
   const record = props.selectedRecord
-  return record
-    ? JSON.stringify([record.instituteId, record.patientId, record.visitId || record.id])
-    : ''
+  return buildCaseRecordKey(record?.instituteId, record?.patientId, record?.visitId)
 })
 const chatCaseLabel = computed(() => {
-  const visit = props.selectedRecord?.visitId || props.selectedRecord?.id
+  const visit = props.selectedRecord?.visitId
   return visit ? `住院 ${visit}` : ''
 })
 
