@@ -476,7 +476,7 @@ async def prepare_luxian_0609_execution(
         unified_engine_used = True
         expected_native_rule_ids = tuple(
             rule_id
-            for rule_id in selected_customer_rule_ids
+            for rule_id in package_plan.selected_rule_ids
             if rule_id in native_customer_rule_ids
         )
         native_results.extend(
@@ -576,7 +576,7 @@ async def prepare_luxian_0609_execution(
             unified_engine_used = True
             expected_native_rule_ids = tuple(
                 rule_id
-                for rule_id in selected_customer_rule_ids
+                for rule_id in package_plan.selected_rule_ids
                 if rule_id in native_customer_rule_ids
             )
             native_results.extend(
