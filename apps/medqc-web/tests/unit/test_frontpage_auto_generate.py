@@ -15,6 +15,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from app.main import create_app  # noqa: E402
 from app.core.access_control import enforce_default_auth  # noqa: E402
+from app.core.security import get_current_user  # noqa: E402
 from app.routers.frontpage import AutoGenerateFrontPageRequest  # noqa: E402
 
 
@@ -36,6 +37,12 @@ def client(monkeypatch):
     )
     app = create_app()
     app.dependency_overrides[enforce_default_auth] = lambda: None
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "u-admin",
+        "username": "admin",
+        "role": "admin",
+        "institute_id": None,
+    }
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -66,7 +73,13 @@ class _FakeService:
         self.calls.append(("generate_draft_from_visit", visit_id))
         return _FakeDraft(_frontpage_payload("visit"))
 
-    async def _get_medical_text(self, visit_id: str, *, allow_demo_fallback: bool = True):
+    async def _get_medical_text(
+        self,
+        visit_id: str,
+        *,
+        allow_demo_fallback: bool = True,
+        **_kwargs,
+    ):
         self.calls.append(("_get_medical_text", {"visit_id": visit_id, "allow_demo_fallback": allow_demo_fallback}))
         return self.visit_text
 
@@ -146,7 +159,7 @@ def test_auto_generate_visit_id_loads_real_medical_text(client, monkeypatch):
     monkeypatch.setattr("app.routers.frontpage.default_frontpage_service", fake_service)
     monkeypatch.setattr(
         "app.routers.frontpage._resolve_visit_identity",
-        lambda visit_id: {"visit_id": visit_id, "patient_id": "P-002", "institute_id": "H-001"},
+        lambda visit_id, **_kwargs: {"visit_id": visit_id, "patient_id": "P-002", "institute_id": "H-001"},
     )
     monkeypatch.setattr("app.routers.frontpage.save_ai_frontpage_draft", lambda payload: None)
 
@@ -174,7 +187,7 @@ def test_auto_generate_stops_and_never_saves_demo_patient_when_extraction_unavai
     async def _no_refresh():
         real_service._use_llm = False
 
-    async def _real_visit_text(visit_id: str, *, allow_demo_fallback: bool = True):
+    async def _real_visit_text(visit_id: str, *, allow_demo_fallback: bool = True, **_kwargs):
         assert allow_demo_fallback is False
         return "【入院记录】真实患者王五，因咳嗽入院。"
 
