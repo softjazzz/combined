@@ -44,7 +44,7 @@
             <a-button
               type="primary"
               :loading="loading"
-              @click="void fetchAnalytics"
+              @click="fetchAnalytics()"
             >
               查询
             </a-button>
@@ -99,7 +99,7 @@
         </div>
         <a-button
           size="small"
-          @click="void fetchAnalytics"
+          @click="fetchAnalytics()"
         >
           重新加载
         </a-button>
@@ -655,7 +655,10 @@ function drillDown(filters: { department?: string; rule_id?: string; rule_name?:
     },
   })
 }
+let analyticsRequestSeq = 0
+
 async function fetchAnalytics() {
+  const requestSeq = ++analyticsRequestSeq
   loading.value = true
   error.value = ''
   try {
@@ -668,15 +671,19 @@ async function fetchAnalytics() {
         job_id: jobId.value || undefined,
       },
     )
+    if (requestSeq !== analyticsRequestSeq) return
     if (!response.success || !response.data) {
       throw new Error(String(response.error || '统计接口未返回数据'))
     }
     payload.value = response.data
   } catch (caught) {
+    if (requestSeq !== analyticsRequestSeq) return
     payload.value = null
     error.value = caught instanceof Error ? caught.message : '请稍后重试'
   } finally {
-    loading.value = false
+    if (requestSeq === analyticsRequestSeq) {
+      loading.value = false
+    }
   }
 }
 

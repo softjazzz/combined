@@ -400,7 +400,7 @@ export type StructuredQCDisplayStatus =
 
 export interface StructuredQCOverview {
   totalRules: number
-  complianceRate: number
+  complianceRate: number | null
   issueCount: number
   uncertainCount: number
   compliantCount: number

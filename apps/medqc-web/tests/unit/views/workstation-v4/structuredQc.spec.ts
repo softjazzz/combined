@@ -116,4 +116,57 @@ describe('structuredQc mapper', () => {
     expect(filtered).toHaveLength(2)
     expect(filtered.every((item) => item.status !== 'compliant')).toBe(true)
   })
+
+  it('零分母场景保留 complianceRate 为 null，不按旧公式回退为 100 或 0', () => {
+    const allNotApplicableExplicitNull = mapSichuanEvaluationToStructuredQC({
+      evaluation_summary: {
+        total_rules: 2,
+        compliant_rules: 0,
+        not_applicable: 2,
+        compliance_rate: null,
+      },
+      evaluation_results: [
+        { rule_id: 'R1', status: 'not_applicable', findings: '不适用' },
+        { rule_id: 'R2', status: 'not_applicable', findings: '不适用' },
+      ],
+    })
+    expect(allNotApplicableExplicitNull.overview.complianceRate).toBeNull()
+
+    const zeroRulesExplicitNull = mapSichuanEvaluationToStructuredQC({
+      evaluation_summary: {
+        total_rules: 0,
+        compliance_rate: null,
+      },
+      evaluation_results: [],
+    })
+    expect(zeroRulesExplicitNull.overview.complianceRate).toBeNull()
+
+    const allNotApplicableOmitted = mapSichuanEvaluationToStructuredQC({
+      evaluation_summary: {
+        total_rules: 2,
+        compliant_rules: 0,
+        not_applicable: 2,
+      },
+      evaluation_results: [
+        { rule_id: 'R1', status: 'not_applicable', findings: '不适用' },
+        { rule_id: 'R2', status: 'not_applicable', findings: '不适用' },
+      ],
+    })
+    expect(allNotApplicableOmitted.overview.complianceRate).toBeNull()
+
+    const mixedOmitted = mapSichuanEvaluationToStructuredQC({
+      evaluation_summary: {
+        total_rules: 3,
+        compliant_rules: 1,
+        not_applicable: 1,
+        issues_found: 1,
+      },
+      evaluation_results: [
+        { rule_id: 'R1', status: 'compliant', findings: '通过' },
+        { rule_id: 'R2', status: 'non_compliant', findings: '缺陷' },
+        { rule_id: 'R3', status: 'not_applicable', findings: '不适用' },
+      ],
+    })
+    expect(mixedOmitted.overview.complianceRate).toBe(50)
+  })
 })

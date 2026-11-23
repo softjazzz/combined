@@ -597,7 +597,7 @@ interface ContentIssue {
 
 interface ContentSummary {
   totalRules: number
-  complianceRate: number
+  complianceRate: number | null
   issueCount: number
   uncertainCount: number
   compliantCount: number
@@ -703,7 +703,7 @@ const progressPercent = computed(() =>
 
 const complianceClass = computed(() => {
   if (!summary.value) return ''
-  if (summary.value.totalRules <= 0) return 'text-slate-400'
+  if (summary.value.totalRules <= 0 || summary.value.complianceRate === null) return 'text-slate-400'
   const rate = summary.value.complianceRate
   if (rate >= 90) return 'text-blue-600'
   if (rate >= 70) return 'text-amber-500'
@@ -716,6 +716,7 @@ const isNoRulesResult = computed(() => {
 
 const complianceRateText = computed(() => {
   if (!summary.value || summary.value.totalRules <= 0) return '--'
+  if (summary.value.complianceRate === null) return '无适用项'
   return `${summary.value.complianceRate}%`
 })
 
@@ -1126,7 +1127,7 @@ async function runContentQCLegacy(docs: DocItem[]) {
       evaluation_summary: {
         total_rules: uniqueRuleCount,
         compliance_rate:
-          uniqueRuleCount > 0 ? Math.round((compliantCount / uniqueRuleCount) * 10000) / 100 : 100,
+          uniqueRuleCount > 0 ? Math.round((compliantCount / uniqueRuleCount) * 10000) / 100 : null,
         issues_found: allIssues.length,
       },
       evaluation_results: allStructuredIssues.map((item) => ({

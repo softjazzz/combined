@@ -77,7 +77,11 @@ const payload = {
   data_health: { canonical_invalid_or_missing_total: 2 },
 }
 
-const Stub = defineComponent({ setup: () => () => h('div') })
+const Stub = defineComponent({
+  setup(_, { slots, attrs }) {
+    return () => h('button', attrs, slots.default?.())
+  },
+})
 async function flush() {
   await Promise.resolve()
   await nextTick()
@@ -204,5 +208,29 @@ describe('LuxianQcAnalyticsView', () => {
     })
     expect(wrapper.find('[data-testid="analytics-department-chart"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="analytics-physician-chart"]').text()).toContain('张医生')
+  })
+
+  it('点击“查询”和错误态“重新加载”按钮均能触发统计请求', async () => {
+    const wrapper = mountView()
+    await flush()
+    expect(apiGet).toHaveBeenCalledTimes(1)
+
+    const queryButton = wrapper.findAll('button').find((btn) => btn.text().trim() === '查询')
+    expect(queryButton).toBeTruthy()
+    await queryButton!.trigger('click')
+    await flush()
+    expect(apiGet).toHaveBeenCalledTimes(2)
+
+    apiGet.mockRejectedValueOnce(new Error('network_timeout'))
+    await queryButton!.trigger('click')
+    await flush()
+    expect(wrapper.find('[data-testid="analytics-error"]').exists()).toBe(true)
+
+    const reloadButton = wrapper.findAll('button').find((btn) => btn.text().trim() === '重新加载')
+    expect(reloadButton).toBeTruthy()
+    await reloadButton!.trigger('click')
+    await flush()
+    expect(apiGet).toHaveBeenCalledTimes(4)
+    expect(wrapper.find('[data-testid="analytics-error"]').exists()).toBe(false)
   })
 })
