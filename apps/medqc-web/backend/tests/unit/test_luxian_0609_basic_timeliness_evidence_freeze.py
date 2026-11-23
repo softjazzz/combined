@@ -292,12 +292,7 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
     ]
     assert _fact_ref_source_keys(session, execution) == {
         "LX0609-01-01-01": frozenset(
-            {
-            "evaluation_context.horizon",
-            "inpat_registration",
-            "admission_record",
-            "discharge_record",
-            }
+            {"evaluation_context.horizon", "inpat_registration", "admission_record"}
         ),
         "LX0609-01-02-01": frozenset(
             {
@@ -308,24 +303,10 @@ def test_001_002_005_006_multi_document_selection_and_evidence_are_frozen():
             }
         ),
         "LX0609-02-01-01": frozenset(
-            {
-            "evaluation_context.horizon",
-            "inpat_registration",
-            "daily_course_record",
-            "admission_record",
-            "discharge_record",
-            "senior_course_record",
-            }
+            {"evaluation_context.horizon", "inpat_registration", "daily_course_record"}
         ),
         "LX0609-02-01-02": frozenset(
-            {
-            "evaluation_context.horizon",
-            "inpat_registration",
-            "daily_course_record",
-            "admission_record",
-            "discharge_record",
-            "senior_course_record",
-            }
+            {"evaluation_context.horizon", "inpat_registration", "senior_course_record"}
         ),
     }
 
@@ -578,12 +559,7 @@ def test_001_missing_selected_document_id_does_not_borrow_another_document_coord
     assert _coordinates(results[0]) == []
     assert _fact_ref_source_keys(session, execution) == {
         "LX0609-01-01-01": frozenset(
-            {
-            "evaluation_context.horizon",
-            "inpat_registration",
-            "admission_record",
-            "discharge_record",
-            }
+            {"evaluation_context.horizon", "inpat_registration", "admission_record"}
         )
     }
 
@@ -778,12 +754,7 @@ def test_document_refs_require_materials_for_binding():
     ]
     assert _fact_ref_source_keys(session, execution) == {
         "LX0609-01-01-01": frozenset(
-            {
-                "evaluation_context.horizon",
-                "inpat_registration",
-                "admission_record",
-                "discharge_record",
-            }
+            {"evaluation_context.horizon", "inpat_registration", "admission_record"}
         )
     }
     assert [(item.final_state.value, item.reason_code) for item in document_ref_reduced] == [
