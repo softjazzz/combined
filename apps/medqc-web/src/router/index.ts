@@ -5,6 +5,29 @@ import type { RouteRecordRaw } from 'vue-router'
 const WORKSTATION_BASE_PATH = '/workstation-v5'
 const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
 
+function isTruthyFlag(value: unknown): boolean {
+  return String(value ?? '').trim().toLowerCase() === 'true'
+}
+
+/**
+ * 生产构建下默认关闭匿名 ?demo=true 认证旁路及匿名 /dashboard/test/* 测试路由，
+ * 仅当非生产环境或显式开启 VITE_ALLOW_DEMO_MODE=true / VITE_ENABLE_DEMO_MODE=true 时允许。
+ */
+export function isDemoRouteBypassEnabled(
+  env: Record<string, unknown> = import.meta.env as Record<string, unknown>,
+): boolean {
+  const explicitDemo =
+    isTruthyFlag(env.VITE_ALLOW_DEMO_MODE) || isTruthyFlag(env.VITE_ENABLE_DEMO_MODE)
+  if (Boolean(env.PROD)) {
+    return explicitDemo
+  }
+  return true
+}
+
+function isDashboardTestPath(path: string): boolean {
+  return path === '/dashboard/test' || path.startsWith('/dashboard/test/')
+}
+
 // 历史页面统一经 V4 兼容入口，沿用工作台的 URL 规范化和鉴权。
 const retiredPageRedirect = { path: LEGACY_WORKSTATION_BASE_PATH }
 
@@ -370,6 +393,7 @@ const routes: RouteRecordRaw[] = [
           title: 'LLM配置测试',
           icon: 'SettingOutlined',
           hidden: true, // 隐藏在菜单中，只能直接访问
+          permission: ['admin', 'developer'],
         },
       },
       {
@@ -380,6 +404,7 @@ const routes: RouteRecordRaw[] = [
           title: '简化LLM测试',
           icon: 'ExperimentOutlined',
           hidden: true,
+          permission: ['admin', 'developer'],
         },
       },
 
@@ -395,31 +420,56 @@ const routes: RouteRecordRaw[] = [
         path: 'test/modal',
         name: 'ModalTest',
         component: () => import('@/views/test/ModalTest.vue'),
-        meta: { title: 'Modal测试', icon: 'ExperimentOutlined', hidden: true },
+        meta: {
+          title: 'Modal测试',
+          icon: 'ExperimentOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
       {
         path: 'test/batch-processor',
         name: 'BatchProcessorTest',
         component: () => import('@/views/test/BatchProcessorTest.vue'),
-        meta: { title: '批量处理测试', icon: 'ExperimentOutlined', hidden: true },
+        meta: {
+          title: '批量处理测试',
+          icon: 'ExperimentOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
       {
         path: 'test/multi-file-upload',
         name: 'MultiFileUploadTest',
         component: () => import('@/views/test/MultiFileUploadTest.vue'),
-        meta: { title: '多文件上传测试', icon: 'ExperimentOutlined', hidden: true },
+        meta: {
+          title: '多文件上传测试',
+          icon: 'ExperimentOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
       {
         path: 'test/multi-document-merge',
         name: 'MultiDocumentMergeTest',
         component: () => import('@/views/test/MultiDocumentMergeTest.vue'),
-        meta: { title: '多文档合并测试', icon: 'ExperimentOutlined', hidden: true },
+        meta: {
+          title: '多文档合并测试',
+          icon: 'ExperimentOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
       {
         path: 'test/classification-version',
         name: 'ClassificationVersionTest',
         component: () => import('@/views/test/ClassificationVersionTest.vue'),
-        meta: { title: '分类算法版本测试', icon: 'BranchesOutlined', hidden: true },
+        meta: {
+          title: '分类算法版本测试',
+          icon: 'BranchesOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
 
       // 病历管理路由（隐藏入口，保留兼容访问）
@@ -1072,13 +1122,15 @@ router.beforeEach(async (to, from, next) => {
   const authStore = await getAuthStore()
   const isWorkstationRoute = to.path.startsWith(WORKSTATION_BASE_PATH)
   const isWorkstationLogin = to.name === 'WorkstationV4Login'
+  const demoBypassEnabled = isDemoRouteBypassEnabled()
+  const isDashboardTestRoute = to.name !== 'NotFound' && isDashboardTestPath(to.path)
 
   // 检查是否为演示模式（通过URL参数 ?demo=true）
   const isDemoMode = to.query.demo === 'true'
   const allowDemo = to.meta.allowDemo === true
 
-  // 如果是演示模式且路由允许演示访问，跳过认证检查
-  if (isDemoMode && allowDemo) {
+  // 仅在非生产构建或显式开启演示开关时允许 ?demo=true 跳过认证检查
+  if (demoBypassEnabled && isDemoMode && allowDemo) {
     // 设置页面标题
     if (to.meta.title) {
       document.title = `${to.meta.title} - 大模型病案质控系统`
@@ -1103,8 +1155,11 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
+  // 生产构建且未开启演示开关时，关闭匿名 /dashboard/test/* 路由，强制认证并拦截访问
+  const requiresAuth = to.meta.requiresAuth !== false || (isDashboardTestRoute && !demoBypassEnabled)
+
   // 检查是否需要认证
-  if (to.meta.requiresAuth !== false) {
+  if (requiresAuth) {
     // 检查用户是否已登录
     if (!authStore.isAuthenticated) {
       // 尝试从存储中恢复用户状态
@@ -1124,6 +1179,15 @@ router.beforeEach(async (to, from, next) => {
         }
         return
       }
+    }
+
+    if (isDashboardTestRoute && !demoBypassEnabled) {
+      next({
+        name: 'NotFound',
+        params: { pathMatch: to.path.replace(/^\/+/, '').split('/') },
+        replace: true,
+      })
+      return
     }
 
     if (to.path === `${WORKSTATION_BASE_PATH}/worklist` && to.query.assist === 'message' &&

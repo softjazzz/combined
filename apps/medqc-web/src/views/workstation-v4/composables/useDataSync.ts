@@ -1,4 +1,4 @@
-import { computed, reactive } from 'vue'
+import { computed, getCurrentScope, reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
 
 import { useAuthStore } from '@/stores/auth'
@@ -205,10 +205,48 @@ function createInitialState() {
 }
 
 const globalSyncState = reactive(createInitialState())
-let pollingTimer: ReturnType<typeof setInterval> | null = null
+let pollingTimer: ReturnType<typeof setTimeout> | null = null
+let pollingActive = false
+let pollInFlight = false
+let pollGeneration = 0
+let statusRequestSeq = 0
 let departmentsRequest: { controller: AbortController; promise: Promise<void> } | null = null
 let departmentsRequestSequence = 0
-let syncStateGeneration = 0
+let activeGeneration = 0
+let activeAuthStore: ReturnType<typeof useAuthStore> | null = null
+let storageListenerBound = false
+
+function isSessionEnded(): boolean {
+  return activeAuthStore?.isAuthenticated === false
+}
+
+function isAuthFailureError(error: any): boolean {
+  const status = Number(error?.response?.status)
+  return status === 401 || status === 403
+}
+
+function invalidateActiveSessionWork() {
+  ++activeGeneration
+  ++statusRequestSeq
+  cancelDepartmentsRequest()
+  stopPolling()
+}
+
+function handleAuthStorageChange(event: StorageEvent) {
+  if (
+    event.key === null ||
+    ((event.key === 'medqc_access_token' || event.key === 'medqc_authenticated') &&
+      !event.newValue)
+  ) {
+    invalidateActiveSessionWork()
+  }
+}
+
+function ensureStorageListener() {
+  if (storageListenerBound || typeof window === 'undefined') return
+  window.addEventListener('storage', handleAuthStorageChange)
+  storageListenerBound = true
+}
 
 function pushLog(level: SyncRuntimeLogItem['level'], text: string) {
   globalSyncState.currentRunLog.unshift({
@@ -369,19 +407,35 @@ async function loadPgSyncTableGroups() {
   }
 }
 
-async function loadStatusAndStats() {
+async function loadStatusAndStats(
+  expectedGeneration: number = activeGeneration,
+): Promise<boolean> {
+  if (expectedGeneration !== activeGeneration || isSessionEnded()) {
+    return false
+  }
+  const requestSeq = ++statusRequestSeq
   globalSyncState.isLoadingStatus = true
   try {
     const [statusResp, statsResp] = await Promise.all([
       syncApi.getStatus(),
       syncApi.getStatistics(),
     ])
+    if (
+      expectedGeneration !== activeGeneration ||
+      requestSeq !== statusRequestSeq ||
+      isSessionEnded()
+    ) {
+      return false
+    }
     globalSyncState.pgSyncState = statusResp.pg_sync || {}
     globalSyncState.pgStats = statsResp
     globalSyncState.isSyncing = Boolean(globalSyncState.pgSyncState.is_running)
     recomputeOverview()
+    return true
   } finally {
-    globalSyncState.isLoadingStatus = false
+    if (expectedGeneration === activeGeneration && requestSeq === statusRequestSeq) {
+      globalSyncState.isLoadingStatus = false
+    }
   }
 }
 
@@ -451,7 +505,10 @@ function loadDepartments(): Promise<void> {
   return promise
 }
 
-async function loadRunHistory() {
+async function loadRunHistory(expectedGeneration: number = activeGeneration) {
+  if (expectedGeneration !== activeGeneration || isSessionEnded()) {
+    return
+  }
   globalSyncState.runsLoading = true
   try {
     const source =
@@ -467,14 +524,21 @@ async function loadRunHistory() {
       tier,
       limit: 50,
     })
+    if (expectedGeneration !== activeGeneration || isSessionEnded()) {
+      return
+    }
     globalSyncState.runHistory = Array.isArray(resp.items) ? resp.items : []
     globalSyncState.runHistoryTotal = Number(resp.total || 0)
   } catch (error) {
     console.error('加载同步历史失败:', error)
-    globalSyncState.runHistory = []
-    globalSyncState.runHistoryTotal = 0
+    if (expectedGeneration === activeGeneration) {
+      globalSyncState.runHistory = []
+      globalSyncState.runHistoryTotal = 0
+    }
   } finally {
-    globalSyncState.runsLoading = false
+    if (expectedGeneration === activeGeneration) {
+      globalSyncState.runsLoading = false
+    }
   }
 }
 
@@ -518,7 +582,7 @@ async function testActiveConnection() {
 }
 
 async function savePgConnection() {
-  const generation = syncStateGeneration
+  const generation = activeGeneration
   globalSyncState.isSavingPgConnection = true
   try {
     const defaultInstituteId = globalSyncState.pgConnectionForm.default_institute_id.trim()
@@ -536,7 +600,7 @@ async function savePgConnection() {
       remote_password: globalSyncState.pgConnectionForm.remote_password,
     }
     const resp = await syncApi.updatePgConfig(payload)
-    if (generation !== syncStateGeneration) return resp
+    if (generation !== activeGeneration) return resp
     patchPgForms(resp.config)
     cancelDepartmentsRequest()
     void loadDepartments()
@@ -547,7 +611,7 @@ async function savePgConnection() {
     pushLog('error', `保存 PG 连接配置失败：${errMsg}`)
     throw error
   } finally {
-    if (generation === syncStateGeneration) globalSyncState.isSavingPgConnection = false
+    if (generation === activeGeneration) globalSyncState.isSavingPgConnection = false
   }
 }
 
@@ -652,27 +716,96 @@ async function applyTemplate() {
 }
 
 function stopPolling() {
+  pollingActive = false
+  ++pollGeneration
   if (pollingTimer) {
-    clearInterval(pollingTimer)
+    clearTimeout(pollingTimer)
     pollingTimer = null
   }
 }
 
-function startPolling() {
-  stopPolling()
-  pollingTimer = setInterval(async () => {
-    try {
-      await loadStatusAndStats()
-      const stillRunning = Boolean(globalSyncState.pgSyncState.is_running)
-      if (!stillRunning) {
-        stopPolling()
-        await loadRunHistory()
+function scheduleNextPoll(stateGen: number, currentPollGen: number) {
+  if (
+    !pollingActive ||
+    stateGen !== activeGeneration ||
+    currentPollGen !== pollGeneration ||
+    isSessionEnded()
+  ) {
+    stopPolling()
+    return
+  }
+  if (pollingTimer) {
+    clearTimeout(pollingTimer)
+    pollingTimer = null
+  }
+  pollingTimer = setTimeout(() => {
+    pollingTimer = null
+    void runPollTick(stateGen, currentPollGen)
+  }, 2000)
+}
+
+async function runPollTick(stateGen: number, currentPollGen: number) {
+  if (
+    !pollingActive ||
+    stateGen !== activeGeneration ||
+    currentPollGen !== pollGeneration ||
+    isSessionEnded()
+  ) {
+    stopPolling()
+    return
+  }
+  if (pollInFlight) {
+    return
+  }
+  pollInFlight = true
+  try {
+    const applied = await loadStatusAndStats(stateGen)
+    if (
+      !applied ||
+      !pollingActive ||
+      stateGen !== activeGeneration ||
+      currentPollGen !== pollGeneration ||
+      isSessionEnded()
+    ) {
+      return
+    }
+    const stillRunning = Boolean(globalSyncState.pgSyncState.is_running)
+    if (!stillRunning) {
+      stopPolling()
+      await loadRunHistory(stateGen)
+      if (stateGen === activeGeneration && !isSessionEnded()) {
         pushLog('success', '同步任务已结束')
       }
-    } catch (error) {
-      console.error('同步状态轮询失败:', error)
+      return
     }
-  }, 2000)
+    scheduleNextPoll(stateGen, currentPollGen)
+  } catch (error) {
+    console.error('同步状态轮询失败:', error)
+    if (isAuthFailureError(error) || isSessionEnded()) {
+      stopPolling()
+      return
+    }
+    if (
+      pollingActive &&
+      stateGen === activeGeneration &&
+      currentPollGen === pollGeneration
+    ) {
+      scheduleNextPoll(stateGen, currentPollGen)
+    }
+  } finally {
+    pollInFlight = false
+  }
+}
+
+function startPolling(expectedGeneration: number = activeGeneration) {
+  if (expectedGeneration !== activeGeneration || isSessionEnded()) {
+    stopPolling()
+    return
+  }
+  stopPolling()
+  pollingActive = true
+  const currentPollGen = ++pollGeneration
+  scheduleNextPoll(expectedGeneration, currentPollGen)
 }
 
 function resolveTargetDepartments(): string[] | undefined {
@@ -781,6 +914,15 @@ async function runPreflight(source: SyncSource = 'pg') {
 }
 
 async function executeSync(source: SyncSource = 'pg') {
+  const generation = activeGeneration
+  if (isSessionEnded()) {
+    stopPolling()
+    return {
+      success: false,
+      status: 'unauthorized',
+      error: '会话已失效，请重新登录',
+    }
+  }
   const candidateCount = Math.max(
     0,
     Number(globalSyncState.preflightResult?.estimated_impact || 0),
@@ -809,13 +951,17 @@ async function executeSync(source: SyncSource = 'pg') {
     },
   }
   pushLog('info', '同步任务已提交，正在轮询执行进度')
-  startPolling()
+  startPolling(generation)
   try {
     const payload = buildSyncScopePayload(source)
     const result = await syncApi.triggerSync({
       ...payload,
       preflight_fingerprint: globalSyncState.preflightResult?.preflight_fingerprint,
     })
+    if (generation !== activeGeneration || isSessionEnded()) {
+      stopPolling()
+      return result
+    }
     if (result.success || result.status === 'partial') {
       const warnings = Array.isArray(result.warnings) ? result.warnings.filter(Boolean) : []
       if (result.idempotent_reused) {
@@ -826,9 +972,13 @@ async function executeSync(source: SyncSource = 'pg') {
       } else {
         pushLog('info', '同步任务已启动，进入状态轮询')
       }
-      await loadStatusAndStats()
+      const applied = await loadStatusAndStats(generation)
+      if (!applied || generation !== activeGeneration || isSessionEnded()) {
+        stopPolling()
+        return result
+      }
       if (globalSyncState.isSyncing) {
-        startPolling()
+        startPolling(generation)
       } else {
         stopPolling()
       }
@@ -839,7 +989,17 @@ async function executeSync(source: SyncSource = 'pg') {
     }
     return result
   } catch (error: any) {
+    if (generation !== activeGeneration || isSessionEnded()) {
+      stopPolling()
+      throw error
+    }
     const errMsg = error?.response?.data?.detail || error?.message || '未知错误'
+    if (isAuthFailureError(error)) {
+      pushLog('error', `执行同步失败：${errMsg}`)
+      globalSyncState.isSyncing = false
+      stopPolling()
+      throw error
+    }
     const isTimeout =
       error?.code === 'ECONNABORTED' ||
       String(error?.message || '')
@@ -848,10 +1008,17 @@ async function executeSync(source: SyncSource = 'pg') {
     if (isTimeout) {
       pushLog('warn', '同步请求超过前端等待时间，已转入状态轮询。请勿重复点击执行。')
       try {
-        await loadStatusAndStats()
-        startPolling()
+        const applied = await loadStatusAndStats(generation)
+        if (applied && generation === activeGeneration && !isSessionEnded()) {
+          startPolling(generation)
+        } else {
+          stopPolling()
+        }
       } catch (pollError) {
         console.error('同步超时后加载状态失败:', pollError)
+        if (isAuthFailureError(pollError) || generation !== activeGeneration || isSessionEnded()) {
+          stopPolling()
+        }
       }
       return {
         success: true,
@@ -871,6 +1038,7 @@ function clearLogs() {
 }
 
 async function initialize() {
+  const generation = activeGeneration
   globalSyncState.isInitializing = true
   globalSyncState.loadErrors.connection = null
   globalSyncState.loadErrors.policy = null
@@ -891,7 +1059,7 @@ async function initialize() {
             loadPgConfig(),
             loadPgSyncTables(),
             loadPgSyncTableGroups(),
-            loadStatusAndStats(),
+            loadStatusAndStats(generation),
           ]),
       },
       {
@@ -902,11 +1070,14 @@ async function initialize() {
       {
         section: 'history',
         label: '运行历史',
-        run: () => loadRunHistory(),
+        run: () => loadRunHistory(generation),
       },
     ]
 
     const results = await Promise.allSettled(tasks.map((item) => item.run()))
+    if (generation !== activeGeneration || isSessionEnded()) {
+      return
+    }
     let failedCount = 0
 
     results.forEach((result, index) => {
@@ -936,16 +1107,20 @@ async function initialize() {
       pushLog('warn', '控制台已降级加载，可继续使用已就绪功能')
     }
   } catch (error: any) {
+    if (generation !== activeGeneration) return
     const errMsg = toErrorMessage(error)
     message.error(`数据同步配置加载失败：${errMsg}`)
     pushLog('error', `控制台初始化失败：${errMsg}`)
   } finally {
-    globalSyncState.isInitializing = false
+    if (generation === activeGeneration) {
+      globalSyncState.isInitializing = false
+    }
   }
 }
 
 function resetState() {
-  ++syncStateGeneration
+  ++activeGeneration
+  ++statusRequestSeq
   cancelDepartmentsRequest()
   stopPolling()
   Object.assign(globalSyncState, createInitialState())
@@ -966,6 +1141,18 @@ async function refreshRunHistory(filters?: {
 
 export function useDataSync() {
   const authStore = useAuthStore()
+  activeAuthStore = authStore
+  ensureStorageListener()
+  if (getCurrentScope()) {
+    watch(
+      () => authStore.isAuthenticated,
+      (authenticated) => {
+        if (authenticated === false) {
+          invalidateActiveSessionWork()
+        }
+      },
+    )
+  }
   const isAdmin = computed(() => canManageSystemConfig(authStore.userRoles))
   const isReadonly = computed(() => !isAdmin.value)
   const hasPreflightPass = computed(
@@ -991,6 +1178,7 @@ export function useDataSync() {
     savePolicy,
     runPreflight,
     executeSync,
+    stopPolling,
     clearLogs,
     loadMappings,
     loadRunHistory: refreshRunHistory,

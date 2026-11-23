@@ -563,11 +563,21 @@ const {
   initialize,
   loadDepartments,
   resetState,
+  stopPolling,
   testAllConnections,
   runPreflight,
   executeSync,
   savePolicy,
 } = useDataSync()
+
+let disposed = false
+let activeGeneration = 0
+
+function invalidateSyncFlow() {
+  activeGeneration += 1
+  closeExecuteConfirm(false)
+  stopPolling?.()
+}
 
 const isSyncAdvancedUser = computed(() =>
   authStore.userRoles.some((role) => role === 'super_admin' || role === 'sync_admin'),
@@ -960,29 +970,36 @@ const handlePolicyDepartmentChange = (values: string[]) => {
 }
 
 async function ensureSyncInitialized() {
-  if (syncInitialized.value) return
+  if (disposed || syncInitialized.value) return
   if (!showLegacyPipeline.value) return
+  const generation = activeGeneration
   await initialize()
+  if (disposed || generation !== activeGeneration) return
   if (state.isSyncing) currentPageSyncStarted.value = true
   syncInitialized.value = true
 }
 
 async function handleTestAllConnections() {
+  const generation = activeGeneration
   try {
     const result = await testAllConnections()
+    if (disposed || generation !== activeGeneration) return
     if (result.all_connected) {
       message.success('全连接测试通过')
     } else {
       message.warning(`全连接测试完成：${result.connected_count}/${result.total_sources} 可用`)
     }
   } catch {
+    if (disposed || generation !== activeGeneration) return
     message.error('全连接测试失败')
   }
 }
 
 async function handleRunPreflight() {
+  const generation = activeGeneration
   try {
     const result = await runPreflight('pg')
+    if (disposed || generation !== activeGeneration) return
     const estimated = Number(result.estimated_impact || 0)
     const blockers = result.blockers || []
     if (blockers.length > 0) {
@@ -1007,11 +1024,13 @@ async function handleRunPreflight() {
       )
     }
   } catch {
+    if (disposed || generation !== activeGeneration) return
     message.error(isDemoSyncUser.value ? '检查病历范围失败' : '试运行失败')
   }
 }
 
 async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
+  const generation = activeGeneration
   if (autoSavePolicy) {
     const shouldSavePolicy = await new Promise<boolean>((resolve) => {
       workstationConfirmation.confirm({
@@ -1025,15 +1044,17 @@ async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
         onCancel: () => resolve(false),
       })
     })
-    if (!shouldSavePolicy) return
+    if (!shouldSavePolicy || disposed || generation !== activeGeneration) return
 
     await savePolicy()
+    if (disposed || generation !== activeGeneration) return
     message.success('同步策略已保存')
   }
 
   let preflight = state.preflightResult
   if (!preflight || preflight.source !== 'pg' || !hasPreflightPass.value) {
     preflight = await runPreflight('pg')
+    if (disposed || generation !== activeGeneration) return
   }
   if (!preflight.executable) {
     const estimated = Number(preflight.estimated_impact || 0)
@@ -1053,9 +1074,13 @@ async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
   }
 
   const ok = await askExecuteConfirm(Number(preflight?.estimated_impact || 0))
-  if (!ok) return
+  if (!ok || disposed || generation !== activeGeneration) return
 
   const result = await executeSync('pg')
+  if (disposed || generation !== activeGeneration) {
+    stopPolling?.()
+    return
+  }
   currentPageSyncStarted.value = Boolean(result.success || result.status === 'partial')
   if (result.success) {
     if (result.status === 'timeout_polling') {
@@ -1069,17 +1094,21 @@ async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
 }
 
 async function handleSyncWithPolicy() {
+  const generation = activeGeneration
   try {
     await triggerSyncWithConfirm(true)
   } catch {
+    if (disposed || generation !== activeGeneration) return
     message.error('执行同步失败')
   }
 }
 
 async function handleExecuteSync() {
+  const generation = activeGeneration
   try {
     await triggerSyncWithConfirm(false)
   } catch {
+    if (disposed || generation !== activeGeneration) return
     message.error('执行同步失败')
   }
 }
@@ -1106,9 +1135,11 @@ onMounted(async () => {
 })
 
 watch(activeTab, async (tab) => {
-  if (['llmConfig', 'llmObservability', 'accounts', 'qcRuntime', 'dailyQc'].includes(tab)) return
+  if (tab !== 'dataSync') {
+    invalidateSyncFlow()
+    return
+  }
   if (
-    tab === 'dataSync' &&
     canManageLlmConfig.value &&
     (!pipelineConfigReady.value || selectedDataPipeline.value !== 'legacy_pg')
   )
@@ -1117,7 +1148,7 @@ watch(activeTab, async (tab) => {
 })
 
 watch([selectedDataPipeline, pipelineConfigReady], async ([pipeline, ready]) => {
-  closeExecuteConfirm(false)
+  invalidateSyncFlow()
   syncScopeConfirmed.value = false
   if (activeTab.value === 'dataSync' && ready && pipeline === 'legacy_pg')
     await ensureSyncInitialized()
@@ -1130,7 +1161,8 @@ watch(hasPreflightPass, (isReady) => {
 })
 
 onUnmounted(() => {
-  closeExecuteConfirm(false)
+  disposed = true
+  invalidateSyncFlow()
   resetState()
 })
 </script>

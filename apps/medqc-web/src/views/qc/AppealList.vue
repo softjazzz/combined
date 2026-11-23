@@ -143,7 +143,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import dayjs from 'dayjs'
@@ -157,9 +157,15 @@ import {
 } from '@/types/appeal'
 import { getAppeals, withdrawAppeal } from '@/api/appeal'
 import AppealReviewModal from '@/components/qc/AppealReviewModal.vue'
+import { useAuthStore } from '@/stores/auth'
 
-const hasAdminPermission = ref(true)
-const currentUserId = ref('doctor_001') // 模拟当前用户ID
+const APPEAL_REVIEW_ROLES = ['admin', 'qc_manager', 'sync_admin', 'super_admin']
+const authStore = useAuthStore()
+
+const hasAdminPermission = computed(() =>
+  authStore.userRoles.some((role) => APPEAL_REVIEW_ROLES.includes(role)),
+)
+const currentUserId = computed(() => String(authStore.user?.id || '').trim())
 
 const loading = ref(false)
 const appeals = ref<Appeal[]>([])
@@ -239,7 +245,11 @@ const canReview = (item: Appeal) => {
 }
 
 const canWithdraw = (item: Appeal) => {
-  return item.status === AppealStatus.PENDING && item.appellantId === currentUserId.value
+  return (
+    item.status === AppealStatus.PENDING &&
+    Boolean(currentUserId.value) &&
+    item.appellantId === currentUserId.value
+  )
 }
 
 const openReviewModal = (item: Appeal) => {

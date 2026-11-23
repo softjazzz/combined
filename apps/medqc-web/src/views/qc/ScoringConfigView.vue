@@ -215,7 +215,7 @@ import {
   UndoOutlined,
   SaveOutlined,
 } from '@ant-design/icons-vue'
-import { getAccessToken } from '@/utils/auth-token'
+import { apiClient } from '@/services/apiService'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -272,23 +272,31 @@ const deductionTableData = computed(() => [
   { key: 'minor', label: '一般缺陷', color: 'blue', ...formData.deduction_rules.minor },
 ])
 
-// 加载配置
-function getToken() {
-  return getAccessToken()
+// 提取后端真实错误信息
+function resolveApiErrorMessage(error: any, fallback: string): string {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail.trim()
+  const errMsg = error?.response?.data?.error || error?.response?.data?.message
+  if (typeof errMsg === 'string' && errMsg.trim()) return errMsg.trim()
+  if (typeof error?.message === 'string' && error.message.trim()) return error.message.trim()
+  return fallback
 }
 
+// 加载配置
 async function loadConfig() {
   loading.value = true
   try {
-    const resp = await fetch('/api/v1/scoring-config', {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    })
-    const result = await resp.json()
+    const { data: result } = await apiClient.get('/api/v1/scoring-config')
+    if (result?.success === false) {
+      message.error(result?.error || result?.detail || '加载评分配置失败')
+      return
+    }
     if (result?.data) {
       Object.assign(formData, result.data)
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载评分配置失败', e)
+    message.error(resolveApiErrorMessage(e, '加载评分配置失败'))
   } finally {
     loading.value = false
   }
@@ -297,22 +305,14 @@ async function loadConfig() {
 async function saveConfig() {
   saving.value = true
   try {
-    const resp = await fetch('/api/v1/scoring-config', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getToken()}`,
-      },
-      body: JSON.stringify(formData),
-    })
-    const result = await resp.json()
-    if (result?.success !== false) {
-      message.success('评分配置保存成功')
-    } else {
-      message.error(result?.error || '保存失败')
+    const { data: result } = await apiClient.put('/api/v1/scoring-config', formData)
+    if (result?.success === false) {
+      message.error(result?.error || result?.detail || '保存失败')
+      return
     }
-  } catch (e) {
-    message.error('保存失败')
+    message.success('评分配置保存成功')
+  } catch (e: any) {
+    message.error(resolveApiErrorMessage(e, '保存失败'))
   } finally {
     saving.value = false
   }

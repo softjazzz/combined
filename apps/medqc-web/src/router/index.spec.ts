@@ -22,6 +22,15 @@ vi.mock('@/views/workstation/MessageCenter.vue', () => ({ default: { template: '
 vi.mock('@/views/workstation-v4/QcRecordResultListView.vue', () => ({
   default: { template: '<div />' },
 }))
+vi.mock('@/components/layout/MainLayout.vue', () => ({ default: { template: '<router-view />' } }))
+vi.mock('@/views/auth/LoginView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/error/NotFoundView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/drg/CodingAssistant.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/components/BatchRuleTest.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/test/ApiTestView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/test/TestThreeColumn.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/test/ThreeColumnValidation.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/test/LLMConfigTest.vue', () => ({ default: { template: '<div />' } }))
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
@@ -295,4 +304,73 @@ describe('历史页面下线重定向', () => {
       auth.roles.splice(0, auth.roles.length, 'admin')
     }
   }, 15_000)
+})
+
+describe('生产构建关闭匿名 demo 旁路与 /dashboard/test/* 路由', () => {
+  it('PROD 下未开启演示开关时，?demo=true 不能绕过 allowDemo 路由认证', async () => {
+    vi.stubEnv('PROD', true as any)
+    vi.stubEnv('VITE_ALLOW_DEMO_MODE', '')
+    vi.stubEnv('VITE_ENABLE_DEMO_MODE', '')
+    auth.authenticated = false
+    try {
+      await router.push('/dashboard/drg/coding?demo=true')
+      expect(router.currentRoute.value.path).toBe('/auth/login')
+      expect(router.currentRoute.value.query.redirect).toBe('/dashboard/drg/coding?demo=true')
+
+      await router.push('/dashboard/custom-rules/batch-test?demo=true')
+      expect(router.currentRoute.value.path).toBe('/auth/login')
+      expect(router.currentRoute.value.query.redirect).toBe(
+        '/dashboard/custom-rules/batch-test?demo=true',
+      )
+    } finally {
+      auth.authenticated = true
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('PROD 下未开启演示开关时，关闭匿名 /dashboard/test/* 路由（未登录跳登录，已登录落 404）', async () => {
+    vi.stubEnv('PROD', true as any)
+    vi.stubEnv('VITE_ALLOW_DEMO_MODE', '')
+    vi.stubEnv('VITE_ENABLE_DEMO_MODE', '')
+    try {
+      auth.authenticated = false
+      for (const path of [
+        '/dashboard/test/three-column',
+        '/dashboard/test/basic',
+        '/dashboard/test/validation',
+      ]) {
+        await router.push(path)
+        expect(router.currentRoute.value.path).toBe('/auth/login')
+        expect(router.currentRoute.value.query.redirect).toBe(path)
+      }
+
+      auth.authenticated = true
+      auth.roles.splice(0, auth.roles.length, 'admin')
+      await router.push('/dashboard/test/basic')
+      expect(router.currentRoute.value.name).toBe('NotFound')
+
+      await router.push('/dashboard/test/llm-config')
+      expect(router.currentRoute.value.name).toBe('NotFound')
+    } finally {
+      auth.authenticated = true
+      auth.roles.splice(0, auth.roles.length, 'admin')
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('PROD 下显式开启 VITE_ALLOW_DEMO_MODE=true 时仍允许演示路由与测试页访问', async () => {
+    vi.stubEnv('PROD', true as any)
+    vi.stubEnv('VITE_ALLOW_DEMO_MODE', 'true')
+    auth.authenticated = false
+    try {
+      await router.push('/dashboard/drg/coding?demo=true')
+      expect(router.currentRoute.value.path).toBe('/dashboard/drg/coding')
+
+      await router.push('/dashboard/test/basic')
+      expect(router.currentRoute.value.path).toBe('/dashboard/test/basic')
+    } finally {
+      auth.authenticated = true
+      vi.unstubAllEnvs()
+    }
+  })
 })

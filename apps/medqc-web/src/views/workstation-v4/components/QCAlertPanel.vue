@@ -192,7 +192,7 @@
 <script setup lang="ts">
 import { STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
-import { ref, computed, watch, reactive } from 'vue'
+import { ref, computed, watch, reactive, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   BellOutlined,
@@ -244,6 +244,7 @@ const props = defineProps<{
   analyzing?: boolean
   visitId?: string | null
   patientId?: string | null
+  instituteId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -468,8 +469,8 @@ const startDrag = (e: MouseEvent) => {
 }
 
 import { integratedQCEngine } from '@/services/integrated-qc-engine'
-import type { ComprehensiveQCResult, QCRuleResult, DocumentType } from '@/types/enhanced-qc-rule'
-import axios from 'axios'
+import type { QCRuleResult, DocumentType } from '@/types/enhanced-qc-rule'
+import { apiClient } from '@/services/apiService'
 
 const workstationConfirmation = useWorkstationConfirmation()
 
@@ -485,8 +486,10 @@ const fetchCodingQCFromBackend = async () => {
   if (!useVisitIdMode && !fp) return []
 
   let payload: any
+  const instituteId = String(props.instituteId || fp?.institute_id || '').trim()
   if (useVisitIdMode) {
     payload = {
+      ...(instituteId ? { institute_id: instituteId } : {}),
       visit_id: props.visitId,
       patient_id: props.patientId || '',
     }
@@ -516,6 +519,7 @@ const fetchCodingQCFromBackend = async () => {
       })
     }
     payload = {
+      ...(instituteId ? { institute_id: instituteId } : {}),
       frontpage: {
         sex: fp!.sex || fp!.basic_info?.sex || fp!.basic_info?.gender_text || '',
         age: fp!.age || fp!.basic_info?.age || fp!.basic_info?.age_years || '',
@@ -528,7 +532,7 @@ const fetchCodingQCFromBackend = async () => {
 
   try {
     codingQCLoading.value = true
-    const resp = await axios.post('/api/v1/qc/coding-qc/check', payload, {
+    const resp = await apiClient.post('/api/v1/qc/coding-qc/check', payload, {
       timeout: STANDARD_REQUEST_TIMEOUT_MS,
     })
     const data = resp.data?.data
@@ -655,13 +659,20 @@ const generateMockIssues = () => {
   runRealQCEngine()
 }
 
+let autoOpenTimer: ReturnType<typeof setTimeout> | null = null
+
 // 监听 frontpage 变化，自动触发质控
 watch(
   () => props.frontpage,
   (newVal) => {
+    if (autoOpenTimer) {
+      clearTimeout(autoOpenTimer)
+      autoOpenTimer = null
+    }
     if (newVal) {
       generateMockIssues()
-      setTimeout(() => {
+      autoOpenTimer = setTimeout(() => {
+        autoOpenTimer = null
         if (totalIssueCount.value > 0 && !visible.value) {
           visible.value = true
         }
@@ -670,6 +681,13 @@ watch(
   },
   { deep: true },
 )
+
+onUnmounted(() => {
+  if (autoOpenTimer) {
+    clearTimeout(autoOpenTimer)
+    autoOpenTimer = null
+  }
+})
 </script>
 
 <style scoped>

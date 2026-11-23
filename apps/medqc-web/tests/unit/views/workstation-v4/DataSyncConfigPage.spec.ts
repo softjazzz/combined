@@ -3,11 +3,20 @@ import { computed, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataSyncConfigPage from '@/views/workstation-v4/DataSyncConfigPage.vue'
 
-const { mockRunPreflight, mockMessageWarning, mockLoadDepartments, mockInitialize } = vi.hoisted(() => ({
+const {
+  mockRunPreflight,
+  mockMessageWarning,
+  mockLoadDepartments,
+  mockInitialize,
+  mockStopPolling,
+  mockResetState,
+} = vi.hoisted(() => ({
   mockRunPreflight: vi.fn(),
   mockMessageWarning: vi.fn(),
   mockLoadDepartments: vi.fn(),
   mockInitialize: vi.fn(),
+  mockStopPolling: vi.fn(),
+  mockResetState: vi.fn(),
 }))
 
 const mockState = reactive({
@@ -77,7 +86,8 @@ vi.mock('@/views/workstation-v4/composables/useDataSync', () => ({
     hasPreflightPass: computed(() => Boolean(mockState.preflightResult?.executable)),
     initialize: mockInitialize,
     loadDepartments: mockLoadDepartments,
-    resetState: vi.fn(),
+    resetState: mockResetState,
+    stopPolling: mockStopPolling,
     testAllConnections: vi.fn(),
     runPreflight: mockRunPreflight,
     executeSync: vi.fn(),
@@ -214,6 +224,8 @@ describe('DataSyncConfigPage visit progress', () => {
     mockRunPreflight.mockReset()
     mockMessageWarning.mockReset()
     mockLoadDepartments.mockReset()
+    mockStopPolling.mockReset()
+    mockResetState.mockReset()
     mockState.departmentsLoading = false
     mockState.departmentsError = null
     mockUserRoles = ['admin', 'qc_manager']
@@ -257,5 +269,23 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(mockLoadDepartments).not.toHaveBeenCalled()
     expect(mockRunPreflight).not.toHaveBeenCalled()
     wrapper.unmount()
+  })
+
+  it('切离数据同步页签及页面卸载时主动停止轮询并清理状态', async () => {
+    mockUserRoles = ['admin']
+    mockRoute.query = {}
+    const wrapper = mountPage()
+    await flushPromises()
+    mockStopPolling.mockClear()
+    mockResetState.mockClear()
+
+    await wrapper.get('[data-testid="account-management-tab"]').trigger('click')
+    await flushPromises()
+    expect(mockStopPolling).toHaveBeenCalled()
+
+    mockStopPolling.mockClear()
+    wrapper.unmount()
+    expect(mockStopPolling).toHaveBeenCalledTimes(1)
+    expect(mockResetState).toHaveBeenCalledTimes(1)
   })
 })

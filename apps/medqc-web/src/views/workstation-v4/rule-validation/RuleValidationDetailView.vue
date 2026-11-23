@@ -636,7 +636,7 @@
       :reviews="latestRunReviews"
       @close="reviewIndex = -1"
       @navigate="(i) => (reviewIndex = i)"
-      @reviewed="load"
+      @reviewed="() => load()"
     />
     <ApprovalModal
       v-if="detail"
@@ -700,6 +700,10 @@ const approvalOpen = ref(false)
 const conclusionNote = ref('')
 const gapAck = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | undefined
+let disposed = false
+let activeGeneration = 0
+let requestSeq = 0
+let pollInFlight = false
 
 const latestRun = computed<ValidationRun | null>(() => detail.value?.runs[0] ?? null)
 const allRows = computed(() => detail.value?.latest_run_rows ?? [])
@@ -891,23 +895,63 @@ const checks = computed(() => {
   ] as { label: string; note: string; state: 'ok' | 'no' | 'warn' }[]
 })
 
-async function load() {
-  if (!ruleId.value) return
-  loading.value = true
-  const response = await getValidationRule(ruleId.value)
-  loading.value = false
-  if (!response.success) {
-    error.value = response.error || '规则验收详情加载失败'
-    return
+function stopPolling() {
+  if (pollTimer !== undefined) {
+    clearTimeout(pollTimer)
+    pollTimer = undefined
   }
-  error.value = ''
-  detail.value = response.data
-  schedulePoll()
 }
 
-function schedulePoll() {
-  clearTimeout(pollTimer)
-  if (runInProgress.value) pollTimer = setTimeout(() => void load(), POLL_MS)
+function isCurrentContext(generation: number, targetRuleId: string) {
+  return !disposed && generation === activeGeneration && ruleId.value === targetRuleId
+}
+
+async function load(options: { fromPoll?: boolean; expectedGeneration?: number } = {}) {
+  const targetRuleId = ruleId.value
+  if (disposed || !targetRuleId) return
+  const generation = options.expectedGeneration ?? activeGeneration
+  if (generation !== activeGeneration) return
+  if (options.fromPoll && pollInFlight) return
+
+  stopPolling()
+  const seq = ++requestSeq
+  if (options.fromPoll) {
+    pollInFlight = true
+  }
+  loading.value = true
+  try {
+    const response = await getValidationRule(targetRuleId)
+    if (!isCurrentContext(generation, targetRuleId) || seq !== requestSeq) {
+      return
+    }
+    loading.value = false
+    if (!response.success) {
+      error.value = response.error || '规则验收详情加载失败'
+      return
+    }
+    error.value = ''
+    detail.value = response.data
+    schedulePoll(generation, targetRuleId)
+  } finally {
+    if (options.fromPoll) {
+      pollInFlight = false
+    }
+    if (isCurrentContext(generation, targetRuleId) && seq === requestSeq) {
+      loading.value = false
+    }
+  }
+}
+
+function schedulePoll(generation = activeGeneration, targetRuleId = ruleId.value) {
+  stopPolling()
+  if (!isCurrentContext(generation, targetRuleId)) return
+  if (runInProgress.value) {
+    pollTimer = setTimeout(() => {
+      pollTimer = undefined
+      if (!isCurrentContext(generation, targetRuleId) || pollInFlight) return
+      void load({ fromPoll: true, expectedGeneration: generation })
+    }, POLL_MS)
+  }
 }
 
 function openAnswer(item: ValidationCase | null) {
@@ -915,64 +959,99 @@ function openAnswer(item: ValidationCase | null) {
   answerOpen.value = true
 }
 async function onAnswerSaved() {
+  const generation = activeGeneration
+  const targetRuleId = ruleId.value
   answerOpen.value = false
   message.success('预期已保存')
-  await load()
+  if (!isCurrentContext(generation, targetRuleId)) return
+  await load({ expectedGeneration: generation })
 }
 
 async function startRun() {
+  const generation = activeGeneration
+  const targetRuleId = ruleId.value
+  if (disposed || !targetRuleId) return
   starting.value = true
   actionError.value = ''
-  const response = await startValidationRun(ruleId.value)
-  starting.value = false
-  if (!response.success) {
-    // 超时不代表失败：任务可能已在后台建成，刷新后以服务端记录为准，避免重复创建
-    const timedOut = /timeout/i.test(response.error || '')
-    actionError.value = timedOut
-      ? '创建运行超时，可能仍在后台完成；已刷新详情，请勿重复点击运行'
-      : response.error || '运行创建失败'
-    if (timedOut) await load()
-    return
+  try {
+    const response = await startValidationRun(targetRuleId)
+    if (!isCurrentContext(generation, targetRuleId)) return
+    starting.value = false
+    if (!response.success) {
+      // 超时不代表失败：任务可能已在后台建成，刷新后以服务端记录为准，避免重复创建
+      const timedOut = /timeout/i.test(response.error || '')
+      actionError.value = timedOut
+        ? '创建运行超时，可能仍在后台完成；已刷新详情，请勿重复点击运行'
+        : response.error || '运行创建失败'
+      if (timedOut) await load({ expectedGeneration: generation })
+      return
+    }
+    message.success('已创建验收运行')
+    await load({ expectedGeneration: generation })
+  } finally {
+    if (isCurrentContext(generation, targetRuleId)) {
+      starting.value = false
+    }
   }
-  message.success('已创建验收运行')
-  await load()
 }
 
 async function conclude(decision: 'accepted' | 'rejected') {
   if (!latestRun.value) return
+  const generation = activeGeneration
+  const targetRuleId = ruleId.value
   busy.value = true
   actionError.value = ''
-  const response = await concludeRule(ruleId.value, {
-    run_id: latestRun.value.id,
-    decision,
-    note: conclusionNote.value.trim(),
-    gap_ack: gapAck.value.trim(),
-  })
-  busy.value = false
-  if (!response.success) {
-    actionError.value = response.error || '提交验收结论失败'
-    return
+  try {
+    const response = await concludeRule(targetRuleId, {
+      run_id: latestRun.value.id,
+      decision,
+      note: conclusionNote.value.trim(),
+      gap_ack: gapAck.value.trim(),
+    })
+    if (!isCurrentContext(generation, targetRuleId)) return
+    busy.value = false
+    if (!response.success) {
+      actionError.value = response.error || '提交验收结论失败'
+      return
+    }
+    conclusionNote.value = ''
+    gapAck.value = ''
+    message.success(decision === 'accepted' ? '已记录验收通过' : '已记录验收不通过')
+    await load({ expectedGeneration: generation })
+  } finally {
+    if (isCurrentContext(generation, targetRuleId)) {
+      busy.value = false
+    }
   }
-  conclusionNote.value = ''
-  gapAck.value = ''
-  message.success(decision === 'accepted' ? '已记录验收通过' : '已记录验收不通过')
-  await load()
 }
 
 async function onApprovalDone() {
-  await load()
+  const generation = activeGeneration
+  const targetRuleId = ruleId.value
+  if (!isCurrentContext(generation, targetRuleId)) return
+  await load({ expectedGeneration: generation })
 }
 
 watch(
   ruleId,
   () => {
+    activeGeneration += 1
+    requestSeq += 1
+    stopPolling()
     detail.value = null
+    error.value = ''
+    actionError.value = ''
     reviewIndex.value = -1
     void load()
   },
   { immediate: true },
 )
-onBeforeUnmount(() => clearTimeout(pollTimer))
+onBeforeUnmount(() => {
+  disposed = true
+  activeGeneration += 1
+  requestSeq += 1
+  stopPolling()
+})
 </script>
 
 <style scoped src="./styles/rule-validation.css"></style>
