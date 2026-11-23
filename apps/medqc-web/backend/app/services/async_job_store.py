@@ -28,7 +28,35 @@ _ACTIVE_JOB_STATUSES = {
     JOB_STATUS_RETRY_WAITING,
 }
 
+TERMINAL_JOB_STATUSES = frozenset(
+    {
+        JOB_STATUS_SUCCEEDED,
+        JOB_STATUS_FAILED,
+        JOB_STATUS_CANCELLED,
+    }
+)
+
 _ACTIVE_JOB_STATUSES_SQL = "', '".join(sorted(_ACTIVE_JOB_STATUSES))
+_TERMINAL_JOB_STATUSES_SQL = "', '".join(sorted(TERMINAL_JOB_STATUSES))
+
+
+def is_terminal_status(status: Optional[str]) -> bool:
+    return str(status or "").strip() in TERMINAL_JOB_STATUSES
+
+
+def _dialect_name(session: Session) -> str:
+    try:
+        bind = session.get_bind()
+    except Exception:
+        return ""
+    dialect = getattr(bind, "dialect", None)
+    return str(getattr(dialect, "name", "") or "").lower()
+
+
+def _table(session: Session, table_name: str) -> str:
+    if _dialect_name(session) == "sqlite":
+        return table_name
+    return f"qc.{table_name}"
 
 
 def is_available() -> bool:
@@ -93,11 +121,15 @@ def _job_number(job_type: str) -> str:
 
 
 def _ensure_tables(session: Session) -> None:
-    session.execute(text('CREATE SCHEMA IF NOT EXISTS qc'))
+    if _dialect_name(session) != "sqlite":
+        session.execute(text("CREATE SCHEMA IF NOT EXISTS qc"))
+    jobs_table = _table(session, "qc_async_jobs")
+    events_table = _table(session, "qc_async_job_events")
+    dead_letters_table = _table(session, "qc_async_job_dead_letters")
     session.execute(
         text(
-            """
-            CREATE TABLE IF NOT EXISTS qc.qc_async_jobs (
+            f"""
+            CREATE TABLE IF NOT EXISTS {jobs_table} (
                 id VARCHAR(36) PRIMARY KEY,
                 job_number VARCHAR(40) NOT NULL UNIQUE,
                 job_type VARCHAR(50) NOT NULL,
@@ -135,8 +167,8 @@ def _ensure_tables(session: Session) -> None:
     )
     session.execute(
         text(
-            """
-            CREATE TABLE IF NOT EXISTS qc.qc_async_job_events (
+            f"""
+            CREATE TABLE IF NOT EXISTS {events_table} (
                 id VARCHAR(36) PRIMARY KEY,
                 job_id VARCHAR(36) NOT NULL,
                 event_type VARCHAR(30) NOT NULL,
@@ -154,8 +186,8 @@ def _ensure_tables(session: Session) -> None:
     )
     session.execute(
         text(
-            """
-            CREATE TABLE IF NOT EXISTS qc.qc_async_job_dead_letters (
+            f"""
+            CREATE TABLE IF NOT EXISTS {dead_letters_table} (
                 id VARCHAR(36) PRIMARY KEY,
                 job_id VARCHAR(36) NOT NULL UNIQUE,
                 job_type VARCHAR(50) NOT NULL,
@@ -179,12 +211,12 @@ def _ensure_tables(session: Session) -> None:
         )
     )
     index_statements = (
-        'CREATE INDEX IF NOT EXISTS idx_qc_async_jobs_status_priority_created_at ON qc.qc_async_jobs(status, priority, created_at DESC)',
-        'CREATE INDEX IF NOT EXISTS idx_qc_async_jobs_job_type_status_created_at ON qc.qc_async_jobs(job_type, status, created_at DESC)',
-        'CREATE INDEX IF NOT EXISTS idx_qc_async_jobs_business_type_business_id ON qc.qc_async_jobs(business_type, business_id)',
-        'CREATE INDEX IF NOT EXISTS idx_qc_async_jobs_requested_by_status ON qc.qc_async_jobs(requested_by, status)',
-        'CREATE INDEX IF NOT EXISTS idx_qc_async_job_events_job_id_created_at ON qc.qc_async_job_events(job_id, created_at DESC)',
-        'CREATE INDEX IF NOT EXISTS idx_qc_async_job_dead_letters_job_type_created_at ON qc.qc_async_job_dead_letters(job_type, created_at DESC)',
+        f"CREATE INDEX IF NOT EXISTS idx_qc_async_jobs_status_priority_created_at ON {jobs_table}(status, priority, created_at DESC)",
+        f"CREATE INDEX IF NOT EXISTS idx_qc_async_jobs_job_type_status_created_at ON {jobs_table}(job_type, status, created_at DESC)",
+        f"CREATE INDEX IF NOT EXISTS idx_qc_async_jobs_business_type_business_id ON {jobs_table}(business_type, business_id)",
+        f"CREATE INDEX IF NOT EXISTS idx_qc_async_jobs_requested_by_status ON {jobs_table}(requested_by, status)",
+        f"CREATE INDEX IF NOT EXISTS idx_qc_async_job_events_job_id_created_at ON {events_table}(job_id, created_at DESC)",
+        f"CREATE INDEX IF NOT EXISTS idx_qc_async_job_dead_letters_job_type_created_at ON {dead_letters_table}(job_type, created_at DESC)",
     )
     for statement in index_statements:
         session.execute(text(statement))
@@ -203,10 +235,11 @@ def _event(
     details: Optional[dict[str, Any]] = None,
     trace_id: Optional[str] = None,
 ) -> None:
+    events_table = _table(session, "qc_async_job_events")
     session.execute(
         text(
-            """
-            INSERT INTO qc.qc_async_job_events (
+            f"""
+            INSERT INTO {events_table} (
                 id, job_id, event_type, old_status, new_status, operator_id,
                 operator_name, message, details, trace_id, created_at
             )
@@ -254,10 +287,11 @@ def create_job(
     now = _utc_now()
     with Session(engine) as session:
         _ensure_tables(session)
+        jobs_table = _table(session, "qc_async_jobs")
         session.execute(
             text(
-                """
-                INSERT INTO qc.qc_async_jobs (
+                f"""
+                INSERT INTO {jobs_table} (
                     id, job_number, job_type, business_type, business_id, record_id,
                     source_module, priority, status, queue_name, idempotency_key,
                     requested_by, requested_by_name, payload, progress_pct,
@@ -336,17 +370,30 @@ def update_job(
         return
     with Session(engine) as session:
         _ensure_tables(session)
+        jobs_table = _table(session, "qc_async_jobs")
+        dead_letters_table = _table(session, "qc_async_job_dead_letters")
+        for_update_sql = " FOR UPDATE" if _dialect_name(session) == "postgresql" else ""
         current = session.execute(
             text(
-                """
+                f"""
                 SELECT status, payload, result_summary, attempt_count, max_attempts, business_type, business_id, requested_by
-                FROM qc.qc_async_jobs
-                WHERE id = :id
+                FROM {jobs_table}
+                WHERE id = :id{for_update_sql}
                 """
             ),
             {"id": job_id},
         ).mappings().first()
         if current is None:
+            return
+
+        old_status = str(current.get("status") or "").strip()
+        if is_terminal_status(old_status):
+            logger.warning(
+                "[async_job_store] ignored late update for terminal job_id=%s current_status=%s requested_status=%s",
+                job_id,
+                old_status,
+                status,
+            )
             return
 
         merged_payload = _json_loads(current.get("payload"), default={})
@@ -357,7 +404,6 @@ def update_job(
         if result_summary is not None:
             merged_result = result_summary
 
-        old_status = str(current.get("status") or "")
         new_status = status or old_status
         values = {
             "id": job_id,
@@ -375,10 +421,10 @@ def update_job(
             "trace_id": trace_id,
             "updated_at": _utc_now(),
         }
-        session.execute(
+        update_result = session.execute(
             text(
-                """
-                UPDATE qc.qc_async_jobs
+                f"""
+                UPDATE {jobs_table}
                 SET
                     status = COALESCE(:status, status),
                     progress_pct = COALESCE(:progress_pct, progress_pct),
@@ -394,10 +440,19 @@ def update_job(
                     trace_id = COALESCE(:trace_id, trace_id),
                     updated_at = :updated_at
                 WHERE id = :id
+                  AND status NOT IN ('{_TERMINAL_JOB_STATUSES_SQL}')
                 """
             ),
             values,
         )
+        if not update_result.rowcount:
+            session.rollback()
+            logger.warning(
+                "[async_job_store] skipped concurrent update for terminal/missing job_id=%s requested_status=%s",
+                job_id,
+                status,
+            )
+            return
         if event_type:
             _event(
                 session,
@@ -417,8 +472,8 @@ def update_job(
             if attempt_count >= max_attempts:
                 session.execute(
                     text(
-                        """
-                        INSERT INTO qc.qc_async_job_dead_letters (
+                        f"""
+                        INSERT INTO {dead_letters_table} (
                             id, job_id, job_type, business_type, business_id, final_status,
                             attempt_count, error_code, error_message, payload_snapshot,
                             result_snapshot, requested_by, trace_id, moved_to_dead_letter_at, created_at
@@ -427,7 +482,7 @@ def update_job(
                             :id, id, job_type, business_type, business_id, :final_status,
                             attempt_count, error_code, error_message, payload,
                             result_summary, requested_by, trace_id, :moved_to_dead_letter_at, :created_at
-                        FROM qc.qc_async_jobs
+                        FROM {jobs_table}
                         WHERE id = :job_id
                         ON CONFLICT (job_id) DO NOTHING
                         """
@@ -448,12 +503,14 @@ def increment_attempt_count(job_id: str) -> None:
         return
     with Session(engine) as session:
         _ensure_tables(session)
+        jobs_table = _table(session, "qc_async_jobs")
         session.execute(
             text(
-                """
-                UPDATE qc.qc_async_jobs
+                f"""
+                UPDATE {jobs_table}
                 SET attempt_count = attempt_count + 1, updated_at = :updated_at
                 WHERE id = :id
+                  AND status NOT IN ('{_TERMINAL_JOB_STATUSES_SQL}')
                 """
             ),
             {"id": job_id, "updated_at": _utc_now()},
@@ -466,8 +523,9 @@ def get_job(job_id: str) -> Optional[dict[str, Any]]:
         return None
     with Session(engine) as session:
         _ensure_tables(session)
+        jobs_table = _table(session, "qc_async_jobs")
         row = session.execute(
-            text("SELECT * FROM qc.qc_async_jobs WHERE id = :id"),
+            text(f"SELECT * FROM {jobs_table} WHERE id = :id"),
             {"id": job_id},
         ).mappings().first()
     if row is None:
@@ -503,10 +561,11 @@ def list_jobs(
     where_sql = " AND ".join(clauses)
     with Session(engine) as session:
         _ensure_tables(session)
+        jobs_table = _table(session, "qc_async_jobs")
         rows = session.execute(
             text(
                 f"""
-                SELECT * FROM qc.qc_async_jobs
+                SELECT * FROM {jobs_table}
                 WHERE {where_sql}
                 ORDER BY created_at DESC
                 LIMIT :limit OFFSET :offset
@@ -515,7 +574,7 @@ def list_jobs(
             params,
         ).mappings().all()
         total = session.execute(
-            text(f"SELECT COUNT(*) FROM qc.qc_async_jobs WHERE {where_sql}"),
+            text(f"SELECT COUNT(*) FROM {jobs_table} WHERE {where_sql}"),
             {k: v for k, v in params.items() if k not in {"limit", "offset"}},
         ).scalar() or 0
     items = []
@@ -532,7 +591,7 @@ def list_jobs(
 def count_active_jobs(*, job_type: str, requested_by: Optional[str] = None) -> int:
     if engine is None:
         return 0
-    clauses = [f"job_type = :job_type", f"status IN ('{_ACTIVE_JOB_STATUSES_SQL}')"]
+    clauses = ["job_type = :job_type", f"status IN ('{_ACTIVE_JOB_STATUSES_SQL}')"]
     params: dict[str, Any] = {"job_type": job_type}
     if requested_by:
         clauses.append("requested_by = :requested_by")
@@ -540,8 +599,9 @@ def count_active_jobs(*, job_type: str, requested_by: Optional[str] = None) -> i
     where_sql = " AND ".join(clauses)
     with Session(engine) as session:
         _ensure_tables(session)
+        jobs_table = _table(session, "qc_async_jobs")
         total = session.execute(
-            text(f"SELECT COUNT(*) FROM qc.qc_async_jobs WHERE {where_sql}"),
+            text(f"SELECT COUNT(*) FROM {jobs_table} WHERE {where_sql}"),
             params,
         ).scalar() or 0
     return int(total)
@@ -552,10 +612,11 @@ def restore_active_jobs(job_type: str) -> list[dict[str, Any]]:
         return []
     with Session(engine) as session:
         _ensure_tables(session)
+        jobs_table = _table(session, "qc_async_jobs")
         rows = session.execute(
             text(
                 f"""
-                SELECT * FROM qc.qc_async_jobs
+                SELECT * FROM {jobs_table}
                 WHERE job_type = :job_type
                   AND status IN ('{_ACTIVE_JOB_STATUSES_SQL}')
                 ORDER BY created_at ASC
@@ -565,16 +626,19 @@ def restore_active_jobs(job_type: str) -> list[dict[str, Any]]:
         ).mappings().all()
         restored: list[dict[str, Any]] = []
         for row in rows:
-            old_status = str(row.get("status") or "")
-            session.execute(
+            old_status = str(row.get("status") or "").strip()
+            if is_terminal_status(old_status):
+                continue
+            update_result = session.execute(
                 text(
-                    """
-                    UPDATE qc.qc_async_jobs
+                    f"""
+                    UPDATE {jobs_table}
                     SET status = :status,
                         queued_at = :queued_at,
                         updated_at = :updated_at,
                         started_at = CASE WHEN status = :running_status THEN NULL ELSE started_at END
                     WHERE id = :id
+                      AND status NOT IN ('{_TERMINAL_JOB_STATUSES_SQL}')
                     """
                 ),
                 {
@@ -585,6 +649,8 @@ def restore_active_jobs(job_type: str) -> list[dict[str, Any]]:
                     "running_status": JOB_STATUS_RUNNING,
                 },
             )
+            if not update_result.rowcount:
+                continue
             _event(
                 session,
                 job_id=row["id"],
@@ -609,10 +675,13 @@ def delete_jobs_for_testing(job_type: str) -> None:
         return
     with Session(engine) as session:
         _ensure_tables(session)
+        jobs_table = _table(session, "qc_async_jobs")
+        events_table = _table(session, "qc_async_job_events")
+        dead_letters_table = _table(session, "qc_async_job_dead_letters")
         session.execute(
-            text("DELETE FROM qc.qc_async_job_events WHERE job_id IN (SELECT id FROM qc.qc_async_jobs WHERE job_type = :job_type)"),
+            text(f"DELETE FROM {events_table} WHERE job_id IN (SELECT id FROM {jobs_table} WHERE job_type = :job_type)"),
             {"job_type": job_type},
         )
-        session.execute(text("DELETE FROM qc.qc_async_job_dead_letters WHERE job_type = :job_type"), {"job_type": job_type})
-        session.execute(text("DELETE FROM qc.qc_async_jobs WHERE job_type = :job_type"), {"job_type": job_type})
+        session.execute(text(f"DELETE FROM {dead_letters_table} WHERE job_type = :job_type"), {"job_type": job_type})
+        session.execute(text(f"DELETE FROM {jobs_table} WHERE job_type = :job_type"), {"job_type": job_type})
         session.commit()
