@@ -118,8 +118,25 @@ _SEVERITY_ORDER_TERMINAL_MARKERS = (
     "停病危",
     "停病重",
 )
-_EFFECTIVE_SEVERITY_ORDER_STATUSES = frozenset(("新开", "执行中", "停止"))
-_EXCLUDED_SEVERITY_ORDER_STATUSES = frozenset(("取消", "撤销", "作废"))
+_SEVERITY_ORDER_CANCELLED_NAME_MARKERS = ("取消", "撤销", "作废")
+_EFFECTIVE_SEVERITY_ORDER_STATUSES = frozenset(
+    ("新开", "执行中", "执行", "核实", "停止", "已停止")
+)
+_STOPPED_SEVERITY_ORDER_STATUSES = frozenset(("停止", "已停止"))
+_EXCLUDED_SEVERITY_ORDER_STATUSES = frozenset(
+    ("取消", "撤销", "作废", "已取消", "已撤销", "已作废", "未执行")
+)
+_EXCLUDED_SEVERITY_ORDER_STATUS_PARAMS = MappingProxyType(
+    {
+        "cancelled_status": "取消",
+        "revoked_status": "撤销",
+        "voided_status": "作废",
+        "already_cancelled_status": "已取消",
+        "already_revoked_status": "已撤销",
+        "already_voided_status": "已作废",
+        "unexecuted_status": "未执行",
+    }
+)
 _RESCUE_END_TIME_PATTERN = re.compile(
     r"(?:^|[\n\r；;])\s*抢救结束时间\s*[:：]\s*(?P<value>"
     r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
@@ -1222,7 +1239,7 @@ def luxian_0609_native_source_row_limit(source_key: str) -> int:
 def has_luxian_0609_current_visit_unstable_order(
     *, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> bool:
-    """判断本次就诊是否下达过病危或病重医嘱，不返回医嘱原文。"""
+    """判断本次就诊是否下达过有效（含生效后停止）的病危或病重医嘱，不返回医嘱原文。"""
 
     trusted_schema = _case_source_schema(institute_id=institute_id, patient_id=patient_id,
         visit_id=visit_id, source_schema=source_schema)
@@ -1238,29 +1255,89 @@ def has_luxian_0609_current_visit_unstable_order(
     if not required.issubset(columns):
         raise SourceEvidenceUnavailable()
 
-    sql = (
-        f"SELECT 1 FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
+    order_name_col = bundle_assembly._quote_ident("order_name")
+    base_where = (
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        f"AND ({bundle_assembly._quote_ident('order_name')} LIKE :critical_name "
-        f"OR {bundle_assembly._quote_ident('order_name')} LIKE :serious_name) LIMIT 1"
+        f"AND ({order_name_col} LIKE :critical_name "
+        f"OR {order_name_col} LIKE :serious_name) "
+        f"AND {order_name_col} NOT LIKE :cancelled_name "
+        f"AND {order_name_col} NOT LIKE :revoked_name "
+        f"AND {order_name_col} NOT LIKE :voided_name"
+    )
+    base_params = {
+        "institute_id": institute_id,
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+        "critical_name": "%病危%",
+        "serious_name": "%病重%",
+        "cancelled_name": "%取消%",
+        "revoked_name": "%撤销%",
+        "voided_name": "%作废%",
+    }
+    if "order_status" not in columns:
+        sql = (
+            f"SELECT 1 FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
+            f"{base_where} LIMIT 1"
+        )
+        try:
+            with case_material.source_connection(engine) as connection:
+                row = connection.execute(
+                    bundle_assembly.text(sql),
+                    base_params,
+                ).first()
+        except Exception:
+            raise SourceEvidenceQueryError() from None
+        return row is not None
+
+    order_status_col = bundle_assembly._quote_ident("order_status")
+    excluded_placeholders = ", ".join(
+        f":{key}" for key in _EXCLUDED_SEVERITY_ORDER_STATUS_PARAMS
+    )
+    limit_rows = 50
+    sql = (
+        f"SELECT DISTINCT {order_name_col}, {order_status_col} "
+        f"FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
+        f"{base_where} "
+        f"AND ({order_status_col} IS NULL "
+        f"OR TRIM({order_status_col}) NOT IN ({excluded_placeholders})) "
+        f"LIMIT :limit_rows"
     )
     try:
         with case_material.source_connection(engine) as connection:
-            row = connection.execute(
+            raw_rows = connection.execute(
                 bundle_assembly.text(sql),
                 {
-                    "institute_id": institute_id,
-                    "patient_id": patient_id,
-                    "visit_id": visit_id,
-                    "critical_name": "%病危%",
-                    "serious_name": "%病重%",
+                    **base_params,
+                    **_EXCLUDED_SEVERITY_ORDER_STATUS_PARAMS,
+                    "limit_rows": limit_rows + 1,
                 },
-            ).first()
+            ).mappings().all()
     except Exception:
         raise SourceEvidenceQueryError() from None
-    return row is not None
+
+    # 区分"从未生效（取消/撤销/作废/未执行）"与"生效后停止（停止/已停止）"：
+    # 生效后停止说明就诊期间曾达病危/病重，02-01-03 仍不适用；未审计/空状态保守降级为不可证明。
+    has_unresolved = False
+    for row in raw_rows:
+        order_name = str(row.get("order_name") or "")
+        if not ("病危" in order_name or "病重" in order_name):
+            continue
+        if any(marker in order_name for marker in _SEVERITY_ORDER_CANCELLED_NAME_MARKERS):
+            continue
+        order_status = row.get("order_status")
+        normalized_status = (
+            order_status.strip() if isinstance(order_status, str) else ""
+        )
+        if normalized_status in _EFFECTIVE_SEVERITY_ORDER_STATUSES:
+            return True
+        if normalized_status in _EXCLUDED_SEVERITY_ORDER_STATUSES:
+            continue
+        has_unresolved = True
+    if has_unresolved or len(raw_rows) > limit_rows:
+        raise SourceEvidenceUnavailable()
+    return False
 
 
 @case_material.material_query
@@ -1320,16 +1397,23 @@ def read_luxian_0609_severity_order_rows(
         for field in order_columns
     )
     limit_rows = 50
+    order_name_col = bundle_assembly._quote_ident("order_name")
+    order_status_col = bundle_assembly._quote_ident("order_status")
+    excluded_placeholders = ", ".join(
+        f":{key}" for key in _EXCLUDED_SEVERITY_ORDER_STATUS_PARAMS
+    )
     sql = (
         f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        f"AND ({bundle_assembly._quote_ident('order_name')} LIKE :critical_name "
-        f"OR {bundle_assembly._quote_ident('order_name')} LIKE :serious_name) "
-        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :cancelled_name "
-        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :revoked_name "
-        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :voided_name "
+        f"AND ({order_name_col} LIKE :critical_name "
+        f"OR {order_name_col} LIKE :serious_name) "
+        f"AND {order_name_col} NOT LIKE :cancelled_name "
+        f"AND {order_name_col} NOT LIKE :revoked_name "
+        f"AND {order_name_col} NOT LIKE :voided_name "
+        f"AND ({order_status_col} IS NULL "
+        f"OR TRIM({order_status_col}) NOT IN ({excluded_placeholders})) "
         f"ORDER BY {order_sql} LIMIT :limit_rows"
     )
     try:
@@ -1345,6 +1429,7 @@ def read_luxian_0609_severity_order_rows(
                     "cancelled_name": "%取消%",
                     "revoked_name": "%撤销%",
                     "voided_name": "%作废%",
+                    **_EXCLUDED_SEVERITY_ORDER_STATUS_PARAMS,
                     "limit_rows": limit_rows + 1,
                 },
             ).mappings().all()
@@ -1353,7 +1438,7 @@ def read_luxian_0609_severity_order_rows(
     safe_rows = []
     for row in raw_rows:
         order_name = str(row.get("order_name") or "")
-        if "取消" in order_name or "撤销" in order_name or "作废" in order_name:
+        if any(marker in order_name for marker in _SEVERITY_ORDER_CANCELLED_NAME_MARKERS):
             continue
         has_critical = "病危" in order_name
         has_serious = "病重" in order_name
@@ -1362,8 +1447,8 @@ def read_luxian_0609_severity_order_rows(
             if has_critical and not has_serious
             else "serious" if has_serious and not has_critical else "unknown"
         )
-        # 停止状态表示该次医嘱曾有效，结束时间由同一行 planned_end_datetime
-        # 提供。初始取消、撤销、作废行不产生触发；空值及未审计状态则保守
+        # 停止/已停止状态表示该次医嘱曾有效，结束时间由同一行 planned_end_datetime
+        # 提供。初始取消、撤销、作废、未执行行不产生触发；空值及未审计状态则保守
         # 保留为 unresolved，交由 008/009 映射为 data_gap。
         order_status = row.get("order_status")
         normalized_status = (
@@ -1377,7 +1462,7 @@ def read_luxian_0609_severity_order_rows(
             status_state = "unresolved"
         lifecycle_state = (
             "stopped"
-            if normalized_status == "停止"
+            if normalized_status in _STOPPED_SEVERITY_ORDER_STATUSES
             else "active" if status_state == "effective" else ""
         )
         event_kind = (

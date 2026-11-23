@@ -1278,6 +1278,14 @@ class SichuanQCService:
             "content": content,
             "document_type": document_type,
         }
+        if str(source_institute_id or "").strip():
+            medical_record["institute_id"] = str(source_institute_id).strip()
+        if str(source_patient_id or "").strip():
+            medical_record["patient_id"] = str(source_patient_id).strip()
+        if str(source_visit_id or "").strip():
+            medical_record["visit_id"] = str(source_visit_id).strip()
+        if str(source_schema or "").strip():
+            medical_record["source_schema"] = str(source_schema).strip()
         if isinstance(evidence_payload, dict) and evidence_payload:
             medical_record["evidence_payload"] = dict(evidence_payload)
 

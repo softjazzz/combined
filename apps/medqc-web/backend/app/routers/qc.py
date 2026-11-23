@@ -114,6 +114,14 @@ def _build_formal_qc_persistence_result(
         for r in report.results
         if not r.passed
     ]
+    categories = payload.get("categories") or []
+    severities = payload.get("severities") or []
+    evaluated_rule_codes = [
+        str(r.rule_id)
+        for r in (getattr(report, "results", None) or [])
+        if getattr(r, "rule_id", None)
+    ]
+    is_partial_run = bool(categories or severities)
     metadata = {
         "workflow_type": "frontpage",
         "patient_id": patient_id,
@@ -121,8 +129,10 @@ def _build_formal_qc_persistence_result(
         "department": department,
         "data_source": "frontpage_formal_qc",
         "trigger_source": "workstation_v4",
-        "categories": payload.get("categories") or [],
-        "severities": payload.get("severities") or [],
+        "categories": categories,
+        "severities": severities,
+        "evaluated_rule_codes": evaluated_rule_codes,
+        "is_partial_run": is_partial_run,
     }
     return {
         "record_id": f"frontpage::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
@@ -144,7 +154,12 @@ def _build_formal_qc_persistence_result(
     }
 
 
-def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[str, Any]) -> Dict[str, Any]:
+def _build_coding_qc_persistence_result(
+    payload: Dict[str, Any],
+    report: Dict[str, Any],
+    *,
+    llm_executed: Optional[bool] = None,
+) -> Dict[str, Any]:
     patient_id = str(payload.get("patient_id") or "")
     visit_id = str(payload.get("visit_id") or "")
     frontpage = payload.get("frontpage") if isinstance(payload.get("frontpage"), dict) else {}
@@ -162,6 +177,28 @@ def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[st
         if isinstance(item, dict)
     )
     overall_score = max(0.0, 100.0 - min(total_issues, 20) * 5.0)
+    skip_llm = bool(payload.get("skip_llm", False))
+    raw_completed = report.get("llm_review_completed")
+    if raw_completed is not None:
+        llm_review_completed = (not skip_llm) and bool(raw_completed)
+        if llm_executed is not None:
+            llm_review_completed = llm_review_completed and bool(llm_executed)
+    elif llm_executed is not None:
+        llm_review_completed = (not skip_llm) and bool(llm_executed)
+    else:
+        llm_review_completed = False
+
+    raw_status = report.get("llm_review_status")
+    if skip_llm:
+        llm_review_status = "skipped"
+    elif isinstance(raw_status, str) and raw_status.strip():
+        llm_review_status = raw_status.strip()
+        if not llm_review_completed and llm_review_status == "completed":
+            llm_review_status = "unavailable"
+    else:
+        llm_review_status = "completed" if llm_review_completed else "unavailable"
+
+    is_partial_run = skip_llm or not llm_review_completed
     return {
         "record_id": f"coding::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
         "workflow_type": "coding",
@@ -178,6 +215,10 @@ def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[st
             "department": "",
             "data_source": "coding_qc",
             "trigger_source": "workstation_v4",
+            "skip_llm": skip_llm,
+            "llm_review_completed": llm_review_completed,
+            "llm_review_status": llm_review_status,
+            "is_partial_run": is_partial_run,
         },
         "analysis_engine": "coding-qc",
         "analysis_date": datetime.utcnow().isoformat() + "Z",
@@ -933,7 +974,8 @@ async def check_coding_qc(
                     )
                 return success_response(
                     data={"total_issues": 0, "errors": 0, "warnings": 0, "infos": 0,
-                          "rule_issues": [], "llm_issues": [], "overall_assessment": "通过"},
+                          "rule_issues": [], "llm_issues": [], "overall_assessment": "通过",
+                          "llm_review_completed": False, "llm_review_status": "skipped"},
                     message="编码质控完成：该患者无诊断/手术编码数据",
                     trace_id=get_trace_id(request),
                 )
@@ -955,11 +997,14 @@ async def check_coding_qc(
         ):
             if skip_llm:
                 temp_engine = CodingQCEngine(llm_client=None)
-                report = await temp_engine.run_all(frontpage)
+                report = await temp_engine.run_all(frontpage, skip_llm=True)
             else:
                 report = await engine.run_all(frontpage)
         report_dict = report.to_dict()
-        persistence_result = _build_coding_qc_persistence_result(payload, report_dict)
+        persistence_result = _build_coding_qc_persistence_result(
+            payload,
+            report_dict,
+        )
         persistence = await default_qc_persistence_service.persist_analysis(
             persistence_result,
             actor=current_user,

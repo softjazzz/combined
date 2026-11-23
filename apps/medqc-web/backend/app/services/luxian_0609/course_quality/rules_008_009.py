@@ -1146,7 +1146,8 @@ def _rule_009_semantic_context(
                 row.get("planned_start_datetime") or row.get("prescribed_datetime")
             )
             for row in critical_rows
-            if row.get("event_kind") in {None, "start"}
+            if row.get("status_state") in {None, "effective"}
+            and row.get("event_kind") in {None, "start"}
         )
         horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
     except Exception:

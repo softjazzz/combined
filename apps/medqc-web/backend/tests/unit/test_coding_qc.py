@@ -305,3 +305,132 @@ class TestCodingQCEngineRunAll:
         assert "rule_issues" in d
         assert "llm_issues" in d
         assert "overall_assessment" in d
+        assert d["llm_review_completed"] is False
+        assert d["llm_review_status"] == "unavailable"
+
+    @pytest.mark.asyncio
+    async def test_run_all_llm_timeout_marks_semantic_incomplete(self):
+        """LLM 超时时，应显式返回 llm_review_completed=False 且 llm_review_status='timeout'。"""
+        mock_llm = AsyncMock()
+        mock_llm.generate.side_effect = TimeoutError("upstream timeout")
+
+        engine = CodingQCEngine(llm_client=mock_llm)
+        fp = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+        report = await engine.run_all(fp)
+        d = report.to_dict()
+        assert report.llm_review_completed is False
+        assert report.llm_review_status == "timeout"
+        assert d["llm_review_completed"] is False
+        assert d["llm_review_status"] == "timeout"
+        assert d["llm_issues"] == []
+
+    @pytest.mark.asyncio
+    async def test_run_all_llm_error_marks_semantic_incomplete(self):
+        """LLM 抛出一般异常时，应显式返回 llm_review_completed=False 且 llm_review_status='error'。"""
+        mock_llm = AsyncMock()
+        mock_llm.generate.side_effect = RuntimeError("connection reset")
+
+        engine = CodingQCEngine(llm_client=mock_llm)
+        fp = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+        report = await engine.run_all(fp)
+        d = report.to_dict()
+        assert d["llm_review_completed"] is False
+        assert d["llm_review_status"] == "error"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "bad_content",
+        [
+            "",
+            "这不是合法 JSON 输出",
+            "{}",
+            '{"summary": {"total_issues": 0}}',
+            '{"issues": "not-a-list"}',
+            "[]",
+            '[{"issues": []}]',
+            '结果：[{"issues":[]}',
+            '```json\n{"issues": []}',
+            '```json\n[{"issues": []}]\n```',
+            '分析结果如下：\n[{"issues": []}]\n以上。',
+            '{"issues": []}]',
+            '{"issues": [{}]}',
+            '{"issues": [{"severity": "high"}]}',
+            '{"issues": [{"dimension": "merge"}]}',
+            '{"issues": [{"description": "缺少维度"}]}',
+            '{"issues": [{"dimension": "merge", "description": "缺severity"}]}',
+            '{"issues": [{"dimension": "merge", "severity": null, "description": "null severity"}]}',
+            '{"issues": [{"dimension": "merge", "severity": "high", "description": "无效严重级别"}]}',
+        ],
+    )
+    async def test_run_all_llm_unparseable_or_empty_marks_parse_failed(self, bad_content):
+        """LLM 输出为空、非顶层对象、顶层/截断数组、未闭合围栏或 issue 缺少必填字段时，应标记 parse_failed 且未完成。"""
+        mock_llm = AsyncMock()
+        mock_llm.generate.return_value = {
+            "choices": [{"message": {"content": bad_content}}]
+        }
+
+        engine = CodingQCEngine(llm_client=mock_llm)
+        fp = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+        report = await engine.run_all(fp)
+        d = report.to_dict()
+        assert d["llm_review_completed"] is False
+        assert d["llm_review_status"] == "parse_failed"
+        assert d["llm_issues"] == []
+
+    @pytest.mark.asyncio
+    async def test_run_all_llm_valid_issue_payload_marks_completed(self):
+        """LLM 返回包含完整合法 issue 对象的 JSON 时，应标记 completed 且保留解析结果。"""
+        mock_llm = AsyncMock()
+        mock_llm.generate.return_value = {
+            "choices": [{
+                "message": {
+                    "content": (
+                        '{"issues": [{"dimension": "exclusion", "severity": "error", '
+                        '"code": "E10/E11", "description": "1型与2型糖尿病互斥", '
+                        '"suggestion": "核实分型后仅保留其一"}]}'
+                    )
+                }
+            }]
+        }
+
+        engine = CodingQCEngine(llm_client=mock_llm)
+        fp = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+        report = await engine.run_all(fp)
+        d = report.to_dict()
+        assert d["llm_review_completed"] is True
+        assert d["llm_review_status"] == "completed"
+        assert len(d["llm_issues"]) == 1
+        assert d["llm_issues"][0]["dimension"] == "exclusion"
+        assert d["llm_issues"][0]["description"] == "1型与2型糖尿病互斥"
+
+    @pytest.mark.asyncio
+    async def test_run_all_llm_valid_empty_issues_marks_completed(self):
+        """LLM 正常返回 0 问题合法 JSON 时，应标记 completed 且 llm_review_completed=True。"""
+        mock_llm = AsyncMock()
+        mock_llm.generate.return_value = {
+            "choices": [{
+                "message": {
+                    "content": '{"issues": [], "summary": {"total_issues": 0, "overall_assessment": "通过"}}'
+                }
+            }]
+        }
+
+        engine = CodingQCEngine(llm_client=mock_llm)
+        fp = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+        report = await engine.run_all(fp)
+        d = report.to_dict()
+        assert d["llm_review_completed"] is True
+        assert d["llm_review_status"] == "completed"
+        assert d["llm_issues"] == []
+
+    @pytest.mark.asyncio
+    async def test_run_all_skip_llm_marks_skipped(self):
+        """显式 skip_llm=True 时不调用 LLM，并标记 skipped 且未完成。"""
+        mock_llm = AsyncMock()
+        engine = CodingQCEngine(llm_client=mock_llm)
+        fp = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+        report = await engine.run_all(fp, skip_llm=True)
+        d = report.to_dict()
+        mock_llm.generate.assert_not_awaited()
+        assert d["llm_review_completed"] is False
+        assert d["llm_review_status"] == "skipped"

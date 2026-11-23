@@ -247,6 +247,13 @@ class QCService:
             ),
         ]
 
+        evaluated_rule_codes = [
+            str(r.get("rule_code") or r.get("id") or "")
+            for r in normalized_rules
+            if (r.get("rule_code") or r.get("id"))
+        ]
+        is_partial_run = bool(rules_payload or rule_ids)
+
         metadata: Dict[str, Any] = {
             "analysisId": analysis_id,
             "engine": "demo-qc-engine",
@@ -257,6 +264,8 @@ class QCService:
             },
             "documents": documents,
             "rulesApplied": len(normalized_rules),
+            "evaluated_rule_codes": evaluated_rule_codes,
+            "is_partial_run": is_partial_run,
             "scoreBaseline": {
                 "contentStrength": content_strength,
                 "documentBonus": len(documents),
