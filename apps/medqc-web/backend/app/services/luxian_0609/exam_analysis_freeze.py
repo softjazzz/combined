@@ -20,7 +20,9 @@ import json
 import logging
 import os
 from pathlib import Path
+import threading
 from typing import Any, Mapping
+import uuid
 
 from ..llm_experiment import experiment_store_dir
 
@@ -88,9 +90,34 @@ def save_payload(namespace: str, key: str, payload: Mapping[str, Any]) -> None:
         return
     directory.mkdir(parents=True, exist_ok=True)
     artifact = {"schema_version": FREEZE_SCHEMA_VERSION, "key": key, "payload": payload}
-    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(json.dumps(artifact, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
-    os.replace(temporary, path)
+    temporary = path.with_name(
+        f"{path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex[:8]}.tmp"
+    )
+    try:
+        temporary.write_text(
+            json.dumps(artifact, ensure_ascii=False, indent=1) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            # 首次写入者赢：并发竞争中已有同键落盘时不覆盖。
+            return
+        except OSError:
+            if path.is_file():
+                return
+            try:
+                os.replace(temporary, path)
+            except PermissionError:
+                if path.is_file():
+                    return
+                raise
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def load_analysis(key: str) -> tuple[dict[int, tuple[str, ...]], dict[int, tuple[tuple[str, str], ...]]] | None:

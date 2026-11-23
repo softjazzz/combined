@@ -24,7 +24,11 @@ import logging
 import os
 from pathlib import Path
 import re
+import threading
+import time
 from typing import Any, Mapping, Sequence
+import uuid
+import weakref
 
 from ..llm_experiment import experiment_store_dir
 
@@ -80,9 +84,121 @@ def documents_fingerprint(documents: Sequence[Mapping[str, Any]]) -> str:
     return digest.hexdigest()
 
 
-def _freeze_path(*, visit_id: str, store_dir: Path | None) -> Path:
-    safe = _SAFE_NAME.sub("_", str(visit_id)).strip("_") or "unknown"
-    return experiment_store_dir(store_dir or default_store_dir()) / f"{safe}.json"
+class _PathLock:
+    __slots__ = ("_lock", "__weakref__")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def __enter__(self) -> _PathLock:
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self._lock.release()
+
+
+_WRITE_LOCKS_GUARD = threading.Lock()
+_WRITE_LOCKS: weakref.WeakValueDictionary[str, _PathLock] = weakref.WeakValueDictionary()
+
+
+def _path_lock(path: Path) -> _PathLock:
+    key = os.path.normcase(os.path.abspath(str(path)))
+    with _WRITE_LOCKS_GUARD:
+        holder = _WRITE_LOCKS.get(key)
+        if holder is None:
+            holder = _PathLock()
+            _WRITE_LOCKS[key] = holder
+        return holder
+
+
+def _atomic_replace(src: Path, dst: Path) -> None:
+    for attempt in range(5):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if os.name != "nt" or attempt == 4:
+                raise
+            time.sleep(0.01 * (attempt + 1))
+
+
+def _resolve_case_scope(
+    visit_id: str,
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+) -> tuple[str, str] | None:
+    if institute_id is not None or patient_id is not None:
+        inst = "" if institute_id is None else str(institute_id).strip()
+        pat = "" if patient_id is None else str(patient_id).strip()
+        return (inst, pat) if (inst or pat) else None
+    from . import privacy_request_scope
+
+    scope = privacy_request_scope._SCOPE.get()
+    if scope is None or not scope.lease.active or scope.case_coordinates is None:
+        return None
+    inst, pat, scope_visit = scope.case_coordinates
+    if scope_visit != str(visit_id).strip():
+        return None
+    return (inst, pat) if (inst or pat) else None
+
+
+def _case_scope_hash(
+    visit_id: str,
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+) -> str | None:
+    scope = _resolve_case_scope(
+        visit_id, institute_id=institute_id, patient_id=patient_id
+    )
+    if scope is None:
+        return None
+    inst, pat = scope
+    digest = hashlib.sha256()
+    digest.update(b"case\x1e")
+    digest.update(inst.encode("utf-8"))
+    digest.update(b"\x1e")
+    digest.update(pat.encode("utf-8"))
+    digest.update(b"\x1e")
+    digest.update(str(visit_id).encode("utf-8"))
+    return digest.hexdigest()[:16]
+
+
+def _freeze_stem(
+    visit_id: str,
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+) -> str:
+    raw_visit = str(visit_id)
+    safe = _SAFE_NAME.sub("_", raw_visit).strip("_") or "unknown"
+    safe_prefix = "visit" if safe in (".", "..") else safe[:80]
+    scope_hash = _case_scope_hash(
+        visit_id, institute_id=institute_id, patient_id=patient_id
+    )
+    if scope_hash is not None:
+        return f"{safe_prefix}__{scope_hash}"
+    if safe != raw_visit or safe in (".", "..") or len(raw_visit) > 80:
+        visit_hash = hashlib.sha256(
+            b"visit\x1e" + raw_visit.encode("utf-8")
+        ).hexdigest()[:16]
+        return f"{safe_prefix}__{visit_hash}"
+    return safe
+
+
+def _freeze_path(
+    *,
+    visit_id: str,
+    store_dir: Path | None,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+) -> Path:
+    stem = _freeze_stem(
+        visit_id, institute_id=institute_id, patient_id=patient_id
+    )
+    return experiment_store_dir(store_dir or default_store_dir()) / f"{stem}.json"
 
 
 def _coerce_store_dir(store_dir: Path | str | None) -> Path | None:
@@ -96,10 +212,20 @@ def load_opinion_payload(
     visit_id: str,
     documents: Sequence[Mapping[str, Any]],
     store_dir: Path | str | None = None,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
 ) -> FrozenOpinionPayload | None:
     """命中同一病例版本的冻结事实；缺失、指纹不符或内容损坏时返回 None。"""
 
-    path = _freeze_path(visit_id=visit_id, store_dir=_coerce_store_dir(store_dir))
+    scope_hash = _case_scope_hash(
+        visit_id, institute_id=institute_id, patient_id=patient_id
+    )
+    path = _freeze_path(
+        visit_id=visit_id,
+        store_dir=_coerce_store_dir(store_dir),
+        institute_id=institute_id,
+        patient_id=patient_id,
+    )
     if not path.is_file():
         return None
     fingerprint = documents_fingerprint(documents)
@@ -113,6 +239,8 @@ def load_opinion_payload(
     if artifact.get("schema_version") != FREEZE_SCHEMA_VERSION:
         return None
     if artifact.get("visit_id") != visit_id:
+        return None
+    if artifact.get("case_scope_hash") != scope_hash:
         return None
     if artifact.get("fingerprint") != fingerprint:
         return None
@@ -135,6 +263,8 @@ def save_opinion_payload(
     payload: Mapping[str, Any],
     store_dir: Path | str | None = None,
     created_at: str | None = None,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
 ) -> FrozenOpinionPayload:
     """写入冻结事实（原子替换）。已存在旧版本时状态记为 rebuilt。"""
     from ..llm_token_budget import context_budget_failed
@@ -142,46 +272,96 @@ def save_opinion_payload(
         return
 
     directory = _coerce_store_dir(store_dir) or default_store_dir()
-    existing = load_opinion_payload(
-        visit_id=visit_id, documents=documents, store_dir=directory
+    scope_hash = _case_scope_hash(
+        visit_id, institute_id=institute_id, patient_id=patient_id
     )
-    if existing is not None:
-        # 首次写入者赢：同一文书版本的并发执行不得互相覆盖（否则冻结等于没冻结）。
-        return existing
-    path = _freeze_path(visit_id=visit_id, store_dir=directory)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    replaced = path.is_file()
-    fingerprint = documents_fingerprint(documents)
-    stamp = created_at or datetime.now().astimezone().isoformat(timespec="seconds")
-    artifact = {
-        "schema_version": FREEZE_SCHEMA_VERSION,
-        "visit_id": visit_id,
-        "fingerprint": fingerprint,
-        "created_at": stamp,
-        "payload": payload,
-    }
-    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(
-        json.dumps(artifact, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-        newline="\n",
+    path = _freeze_path(
+        visit_id=visit_id,
+        store_dir=directory,
+        institute_id=institute_id,
+        patient_id=patient_id,
     )
-    os.replace(temporary, path)
-    return FrozenOpinionPayload(
-        payload=payload,
-        fingerprint=fingerprint,
-        created_at=stamp,
-        state="rebuilt" if replaced else "created",
-        path=path,
-    )
+    with _path_lock(path):
+        existing = load_opinion_payload(
+            visit_id=visit_id,
+            documents=documents,
+            store_dir=directory,
+            institute_id=institute_id,
+            patient_id=patient_id,
+        )
+        if existing is not None:
+            # 首次写入者赢：同一文书版本的并发执行不得互相覆盖（否则冻结等于没冻结）。
+            return existing
+        path.parent.mkdir(parents=True, exist_ok=True)
+        replaced = path.is_file()
+        fingerprint = documents_fingerprint(documents)
+        stamp = created_at or datetime.now().astimezone().isoformat(timespec="seconds")
+        artifact: dict[str, Any] = {
+            "schema_version": FREEZE_SCHEMA_VERSION,
+            "visit_id": visit_id,
+            "fingerprint": fingerprint,
+            "created_at": stamp,
+            "payload": payload,
+        }
+        if scope_hash is not None:
+            artifact["case_scope_hash"] = scope_hash
+        temporary = path.with_name(
+            f"{path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex[:8]}.tmp"
+        )
+        try:
+            temporary.write_text(
+                json.dumps(artifact, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            if not replaced:
+                try:
+                    os.link(temporary, path)
+                except FileExistsError:
+                    existing = load_opinion_payload(
+                        visit_id=visit_id,
+                        documents=documents,
+                        store_dir=directory,
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                    )
+                    if existing is not None:
+                        return existing
+                    replaced = True
+                    _atomic_replace(temporary, path)
+                except OSError:
+                    _atomic_replace(temporary, path)
+            else:
+                _atomic_replace(temporary, path)
+        finally:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+        return FrozenOpinionPayload(
+            payload=payload,
+            fingerprint=fingerprint,
+            created_at=stamp,
+            state="rebuilt" if replaced else "created",
+            path=path,
+        )
 
 
 def reset_opinion_freeze(
-    *, visit_id: str, store_dir: Path | str | None = None
+    *,
+    visit_id: str,
+    store_dir: Path | str | None = None,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
 ) -> bool:
     """显式清除某病例的冻结事实（下次运行将由模型重新生成）。"""
 
-    path = _freeze_path(visit_id=visit_id, store_dir=_coerce_store_dir(store_dir))
+    path = _freeze_path(
+        visit_id=visit_id,
+        store_dir=_coerce_store_dir(store_dir),
+        institute_id=institute_id,
+        patient_id=patient_id,
+    )
     if not path.is_file():
         return False
     path.unlink()
