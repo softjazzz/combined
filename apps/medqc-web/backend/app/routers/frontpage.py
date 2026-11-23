@@ -9,7 +9,7 @@ import re
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from ..database.models.cdm import MedicalRecordFrontpage
 from ..schemas.frontpage import FrontPageDraft
 from ..services.frontpage_extraction_service import (
     FrontPageExtractionService,
+    FrontPageExtractionUnavailableError,
     default_frontpage_service,
 )
 from ..services.frontpage_report_generation_service import (
@@ -520,6 +521,23 @@ async def auto_generate_frontpage_draft(
                 user_id=user_id,
             )
         raise
+    except FrontPageExtractionUnavailableError as exc:
+        if run_id and visit_id_for_state:
+            default_workflow_queue_state_service.finish_failed(
+                workflow_type="frontpage_generate",
+                visit_id=visit_id_for_state,
+                run_id=run_id,
+                error_message=str(exc),
+                user_id=user_id,
+            )
+        return JSONResponse(
+            status_code=503,
+            content=error_response(
+                error=str(exc),
+                code="FRONTPAGE_EXTRACTION_UNAVAILABLE",
+                trace_id=trace_id,
+            ),
+        )
     except Exception as exc:
         if run_id and visit_id_for_state:
             default_workflow_queue_state_service.finish_failed(

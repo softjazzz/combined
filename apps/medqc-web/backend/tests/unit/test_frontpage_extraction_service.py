@@ -1170,3 +1170,42 @@ def test_normalize_diagnoses_structure_supplements_llm_others_from_parsed_text()
 
     assert "\u51a0\u8109\u652f\u67b6\u690d\u5165\u540e\u72b6\u6001" in others
     assert len(others) == 5
+
+
+@pytest.mark.asyncio
+async def test_formal_extraction_methods_reject_demo_fallback_when_llm_unavailable(monkeypatch):
+    from app.services.frontpage_extraction_service import FrontPageExtractionUnavailableError
+
+    service = FrontPageExtractionService(llm_config={"api_endpoint": "", "api_key": ""})
+
+    async def _no_refresh():
+        service._use_llm = False
+
+    monkeypatch.setattr(service, "_refresh_llm_runtime_from_default", _no_refresh)
+
+    with pytest.raises(FrontPageExtractionUnavailableError):
+        await service.extract_from_text("真实患者王五，因咳嗽入院。")
+
+    with pytest.raises(FrontPageExtractionUnavailableError):
+        await service.generate_draft_from_documents(
+            [{"type": "admission_record", "content": "真实患者王五，入院诊断：肺炎"}]
+        )
+
+    with pytest.raises(FrontPageExtractionUnavailableError):
+        async for _event, _payload in service.extract_from_text_stream("真实患者王五，因咳嗽入院。"):
+            pass
+
+    # LLM 已配置但调用抛错时，generate_draft_from_documents 同样不得静默回退演示患者
+    async def _refresh_enabled():
+        service._use_llm = True
+
+    async def _failing_extract(_text):
+        raise RuntimeError("upstream_llm_down")
+
+    monkeypatch.setattr(service, "_refresh_llm_runtime_from_default", _refresh_enabled)
+    monkeypatch.setattr(service, "_extract_with_llm", _failing_extract)
+
+    with pytest.raises(FrontPageExtractionUnavailableError):
+        await service.generate_draft_from_documents(
+            [{"type": "admission_record", "content": "真实患者王五，入院诊断：肺炎"}]
+        )

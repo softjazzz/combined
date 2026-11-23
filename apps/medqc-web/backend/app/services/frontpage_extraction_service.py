@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, AsyncGenerator, Tuple, Coroutine
+import inspect
 import json
 import re
 import logging
@@ -26,6 +27,10 @@ from ..core.http import safe_post_json
 from .llm_observability import observe_llm_http_attempt
 
 logger = logging.getLogger(__name__)
+
+
+class FrontPageExtractionUnavailableError(RuntimeError):
+    """正式病案首页抽取不可用（缺少有效病历文本、LLM 未配置或调用失败）时抛出，严禁静默回退演示患者数据。"""
 
 
 def get_tender_extraction_contract():
@@ -754,63 +759,88 @@ class FrontPageExtractionService:
 
         self._use_llm = bool(self.llm_client.api_endpoint and self.llm_client.api_key)
 
-    async def generate_draft_from_visit(self, visit_id: str) -> FrontPageDraft:
+    async def generate_draft_from_visit(
+        self, visit_id: str, *, allow_demo_fallback: bool = False
+    ) -> FrontPageDraft:
         """
         根据住院 ID 生成首页草稿
-        
-        - 如果 LLM 已配置，调用 LLM 抽取
-        - 否则回退到 demo 数据
+
+        - 仅在显式允许或 visit_id == 'demo' 时才回退演示数据
+        - 正式病例抽取失败或 LLM 未配置时显式报错，避免用演示患者覆盖真实数据
         """
         await self._refresh_llm_runtime_from_default()
-        # 获取病历文本（当前为 demo，后续接入真实 EMR）
-        medical_text = await self._get_medical_text(visit_id)
-        
-        if self._use_llm and medical_text:
+        effective_allow_demo = allow_demo_fallback or str(visit_id or "").strip().lower() == "demo"
+        get_text_params = inspect.signature(self._get_medical_text).parameters
+        if "allow_demo_fallback" in get_text_params:
+            medical_text = await self._get_medical_text(
+                visit_id, allow_demo_fallback=effective_allow_demo
+            )
+        else:
+            medical_text = await self._get_medical_text(visit_id)
+
+        if self._use_llm and medical_text and medical_text.strip():
             try:
                 return await self._extract_with_llm(medical_text)
             except Exception as e:
-                logger.error(f"LLM 抽取失败，回退到 demo 数据: {e}")
-                return await self._load_demo_frontpage()
-        else:
+                if effective_allow_demo:
+                    logger.error(f"LLM 抽取失败，演示模式回退 demo 数据: {e}")
+                    return await self._load_demo_frontpage()
+                logger.error(f"LLM 抽取失败，拒绝回退演示数据: {e}")
+                raise FrontPageExtractionUnavailableError(f"首页 LLM 抽取失败: {e}") from e
+        if effective_allow_demo:
             return await self._load_demo_frontpage()
+        if not medical_text or not medical_text.strip():
+            raise FrontPageExtractionUnavailableError("未获取到有效病历文本，无法生成首页草稿")
+        raise FrontPageExtractionUnavailableError("首页抽取 LLM 未配置，拒绝回退演示数据")
 
     async def generate_draft_from_documents(
-        self, documents: List[Dict[str, Any]]
+        self, documents: List[Dict[str, Any]], *, allow_demo_fallback: bool = False
     ) -> FrontPageDraft:
-        """根据传入的文书列表生成首页草稿"""
+        """根据传入的文书列表生成首页草稿（默认严禁回退演示患者数据）"""
         await self._refresh_llm_runtime_from_default()
         # 合并文书内容
         medical_text = "\n\n".join(
             f"【{doc.get('type', '未知文书')}】\n{doc.get('content', '')}"
             for doc in documents
+            if str(doc.get("content", "") or "").strip()
         )
-        
-        if self._use_llm and medical_text:
+
+        if not medical_text.strip():
+            if allow_demo_fallback:
+                return await self._load_demo_frontpage()
+            raise FrontPageExtractionUnavailableError("传入文书内容为空，无法生成首页草稿")
+
+        if self._use_llm:
             try:
                 return await self._extract_with_llm(medical_text)
             except Exception as e:
-                logger.error(f"LLM 抽取失败，回退到 demo 数据: {e}")
-                return await self._load_demo_frontpage()
-        else:
+                if allow_demo_fallback:
+                    logger.error(f"LLM 抽取失败，演示模式回退到 demo 数据: {e}")
+                    return await self._load_demo_frontpage()
+                logger.error(f"LLM 抽取失败，拒绝回退到 demo 数据: {e}")
+                raise FrontPageExtractionUnavailableError(f"首页 LLM 抽取失败: {e}") from e
+
+        if allow_demo_fallback:
             return await self._load_demo_frontpage()
+        raise FrontPageExtractionUnavailableError("首页抽取 LLM 未配置，拒绝回退演示数据")
 
     async def extract_from_text(
-        self, medical_text: str, context_strategy: Optional[str] = None
+        self,
+        medical_text: str,
+        context_strategy: Optional[str] = None,
+        *,
+        allow_demo_fallback: bool = False,
     ) -> FrontPageDraft:
         """
-        直接从病历文本提取病案首页信息
-        
-        Args:
-            medical_text: 病历全文
-            
-        Returns:
-            FrontPageDraft: 提取的首页草稿
+        直接从病历文本提取病案首页信息（默认严禁回退演示患者数据）
         """
         await self._refresh_llm_runtime_from_default()
         if not medical_text or not medical_text.strip():
-            logger.warning("传入的病历文本为空，回退到 demo 数据")
-            return await self._load_demo_frontpage()
-        
+            if allow_demo_fallback:
+                logger.warning("传入的病历文本为空，演示模式回退到 demo 数据")
+                return await self._load_demo_frontpage()
+            raise FrontPageExtractionUnavailableError("传入的病历文本为空，无法生成首页草稿")
+
         if self._use_llm:
             try:
                 logger.info(f"开始从文本提取首页信息，文本长度: {len(medical_text)}")
@@ -820,9 +850,11 @@ class FrontPageExtractionService:
             except Exception as e:
                 logger.error(f"LLM 抽取失败: {e}")
                 raise
-        else:
-            logger.warning("LLM 未配置，回退到 demo 数据")
+
+        if allow_demo_fallback:
+            logger.warning("LLM 未配置，演示模式回退到 demo 数据")
             return await self._load_demo_frontpage()
+        raise FrontPageExtractionUnavailableError("首页抽取 LLM 未配置，拒绝回退演示数据")
 
     async def extract_from_text_stream(
         self,
@@ -830,6 +862,8 @@ class FrontPageExtractionService:
         visit_id: str = None,
         force_llm: bool = False,
         context_strategy: Optional[str] = None,
+        *,
+        allow_demo_fallback: bool = False,
     ) -> AsyncGenerator[Tuple[str, Dict[str, Any]], None]:
         """
         逐步抽取首页信息，按模块产出结果（用于前端分批展示）。
@@ -973,9 +1007,11 @@ class FrontPageExtractionService:
                 yield ("done", {"frontpage": fp_data})
                 return
             if not cdm_prefilled:
-                demo = await self._load_demo_frontpage()
-                yield ("done", {"frontpage": demo.model_dump(), "fallback": "empty_text"})
-                return
+                if allow_demo_fallback:
+                    demo = await self._load_demo_frontpage()
+                    yield ("done", {"frontpage": demo.model_dump(), "fallback": "empty_text"})
+                    return
+                raise FrontPageExtractionUnavailableError("未获取到有效病历文本，无法流式生成首页草稿")
             # force_llm=True 但无文本 → 记录日志，继续尝试
             logger.warning("stream: force_llm=True 但 LLM 文本为空，无法调用 LLM")
 
@@ -1005,10 +1041,12 @@ class FrontPageExtractionService:
                     logger.warning("stream: force_llm=True 但 LLM 未配置，仅返回 SQL 数据")
                 yield ("done", {"frontpage": fp_data})
                 return
-            demo = await self._load_demo_frontpage()
-            yield ("update", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
-            yield ("done", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
-            return
+            if allow_demo_fallback:
+                demo = await self._load_demo_frontpage()
+                yield ("update", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
+                yield ("done", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
+                return
+            raise FrontPageExtractionUnavailableError("首页抽取 LLM 未配置，拒绝回退演示数据")
 
         validation_info: Dict[str, Any] = {}
 
