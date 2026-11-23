@@ -41,6 +41,39 @@ def _rule_visit_id(result: dict[str, Any]) -> str:
     return _safe_text(result.get("visit_id") or result.get("record_id") or result.get("visitId"))
 
 
+def _rule_tri_key(
+    result: dict[str, Any],
+    context: dict[str, Any] | None = None,
+) -> tuple[str, str, str]:
+    context = context if isinstance(context, dict) else {}
+    metadata = _metadata(result)
+    bundle_meta = context.get("bundle_metadata") if isinstance(context.get("bundle_metadata"), dict) else {}
+    institute_id = _safe_text(
+        result.get("institute_id")
+        or metadata.get("institute_id")
+        or context.get("institute_id")
+        or bundle_meta.get("institute_id")
+    )
+    patient_id = _safe_text(
+        result.get("patient_id")
+        or metadata.get("patient_id")
+        or context.get("patient_id")
+        or bundle_meta.get("patient_id")
+    )
+    visit_id = _safe_text(
+        _rule_visit_id(result)
+        or metadata.get("visit_id")
+        or context.get("visit_id")
+        or bundle_meta.get("visit_id")
+    )
+    return institute_id, patient_id, visit_id
+
+
+def _is_missing_bundle_table_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(marker in msg for marker in ("no such table", "does not exist", "undefinedtable", "42p01"))
+
+
 def _parse_jsonish(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -216,10 +249,17 @@ def _collect_context_sources(
                 add_count(table, 1)
                 add_text(table, _source_text_from_doc(doc))
 
+    db_truncated = False
     if not any(source_counts.get(table) for table in SOURCE_TABLES):
-        db_context = _load_persisted_bundle_context(_rule_visit_id(result))
+        institute_id, patient_id, visit_id = _rule_tri_key(result, context)
+        db_context = _load_persisted_bundle_context(
+            visit_id,
+            institute_id=institute_id,
+            patient_id=patient_id,
+        )
         if db_context:
             context_keys.append("persisted_bundle")
+            db_truncated = bool(db_context.get("truncated"))
             for table, count in _normalize_source_counts(db_context.get("source_table_counts")).items():
                 add_count(table, count)
             for table, snippets in (db_context.get("source_texts") or {}).items():
@@ -232,46 +272,78 @@ def _collect_context_sources(
         "source_table_counts": source_counts,
         "source_texts": source_texts,
         "context_keys": sorted(set(context_keys)),
+        "truncated": db_truncated,
     }
 
 
-def _load_persisted_bundle_context(visit_id: str) -> dict[str, Any]:
-    if not visit_id:
-        return {}
-    try:
-        from app.database.connection import engine
-    except Exception:
-        return {}
+_SC099_BUNDLE_MAX_ROWS = 10
+
+
+def _load_persisted_bundle_context(
+    visit_id: str,
+    *,
+    institute_id: str = "",
+    patient_id: str = "",
+    max_rows: int = _SC099_BUNDLE_MAX_ROWS,
+) -> dict[str, Any]:
+    """按三坐标读取持久化 bundle；使用 LIMIT N+1 探测截断且不静默吞 DB 异常。"""
+    iid = _safe_text(institute_id)
+    pid = _safe_text(patient_id)
+    vid = _safe_text(visit_id)
+    if not (iid and pid and vid):
+        raise ValueError("SC-099 持久化 bundle 回源缺少完整三坐标 (institute_id, patient_id, visit_id)")
+
+    from app.database.connection import engine
+
     if engine is None:
-        return {}
+        raise RuntimeError("数据库连接未配置，无法读取 SC-099 持久化 bundle")
 
     source_counts: dict[str, int] = {}
     source_texts: dict[str, list[str]] = {table: [] for table in SOURCE_TABLES}
+    limit_cap = max(1, int(max_rows))
+    truncated = False
 
+    is_sqlite = engine.dialect.name == "sqlite"
+    prefix = "" if is_sqlite else "public."
     queries = (
         (
-            "public.final_record_bundle",
-            "SELECT structured_context, medical_text FROM public.final_record_bundle WHERE visit_id = :visit_id LIMIT 1",
+            f"{prefix}final_record_bundle",
+            f"SELECT structured_context, medical_text FROM {prefix}final_record_bundle "
+            "WHERE institute_id = :institute_id AND patient_id = :patient_id AND visit_id = :visit_id "
+            "LIMIT :limit_rows",
         ),
         (
-            "public.course_domain_bundle",
-            "SELECT structured_context FROM public.course_domain_bundle WHERE visit_id = :visit_id LIMIT 1",
+            f"{prefix}course_domain_bundle",
+            f"SELECT structured_context FROM {prefix}course_domain_bundle "
+            "WHERE institute_id = :institute_id AND patient_id = :patient_id AND visit_id = :visit_id "
+            "LIMIT :limit_rows",
         ),
         (
-            "public.surgery_domain_bundle",
-            "SELECT structured_context FROM public.surgery_domain_bundle WHERE visit_id = :visit_id LIMIT 1",
+            f"{prefix}surgery_domain_bundle",
+            f"SELECT structured_context FROM {prefix}surgery_domain_bundle "
+            "WHERE institute_id = :institute_id AND patient_id = :patient_id AND visit_id = :visit_id "
+            "LIMIT :limit_rows",
         ),
     )
 
-    try:
-        with engine.connect() as conn:
-            for _table_name, sql in queries:
-                try:
-                    row = conn.execute(text(sql), {"visit_id": visit_id}).mappings().first()
-                except Exception:
+    params = {
+        "institute_id": iid,
+        "patient_id": pid,
+        "visit_id": vid,
+        "limit_rows": limit_cap + 1,
+    }
+    with engine.connect() as conn:
+        for _table_name, sql in queries:
+            try:
+                rows = list(conn.execute(text(sql), params).mappings().all())
+            except Exception as exc:
+                if _is_missing_bundle_table_error(exc):
                     continue
-                if not row:
-                    continue
+                raise
+            if len(rows) > limit_cap:
+                truncated = True
+                rows = rows[:limit_cap]
+            for row in rows:
                 structured = _parse_jsonish(row.get("structured_context"))
                 for doc in _extract_inventory_docs(structured):
                     table = _source_table_from_doc(doc)
@@ -288,12 +360,11 @@ def _load_persisted_bundle_context(visit_id: str) -> dict[str, Any]:
                     quote = _quote_around(medical_text)
                     if quote:
                         source_texts[SURGERY_TABLE].append(quote)
-    except Exception:
-        return {}
 
     return {
         "source_table_counts": source_counts,
         "source_texts": source_texts,
+        "truncated": truncated,
     }
 
 
@@ -375,6 +446,16 @@ def run_sc099_gate(result: dict[str, Any], context: dict[str, Any] | None = None
             metadata=metadata,
             evidence_quote=support_quote,
             reason=reason,
+        )
+
+    if collected.get("truncated"):
+        base_metadata["source_rows_truncated"] = True
+        return build(
+            applicability=GateApplicability.UNKNOWN,
+            coverage=GateCoverage.INSUFFICIENT,
+            decision=GateDecision.DATA_QUALITY_GAP,
+            reason="SC-099 持久化 bundle 查询发生截断，无法安全断言无病理触发，已降级为资料缺口。",
+            data_gap_reason="sc099_bundle_rows_truncated",
         )
 
     if not surgery_count:

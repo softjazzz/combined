@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import uuid
 from dataclasses import asdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import sqlalchemy as sa
@@ -34,6 +35,37 @@ class FrontpageQcStoreUnavailable(RuntimeError):
 
 class FrontpageQcNotFound(LookupError):
     pass
+
+
+class FrontpageQcRunConflict(RuntimeError):
+    """同一用户并发发起重复的活跃首页质控任务。"""
+
+    def __init__(self, active_run: Dict[str, Any]) -> None:
+        super().__init__("已有进行中的首页质控任务")
+        self.active_run = active_run
+
+
+_LOCAL_LOCKS_GUARD = threading.Lock()
+_LOCAL_LOCKS: Dict[str, threading.Lock] = {}
+
+
+def _get_local_lock(key: str) -> threading.Lock:
+    with _LOCAL_LOCKS_GUARD:
+        lock = _LOCAL_LOCKS.get(key)
+        if lock is None:
+            if len(_LOCAL_LOCKS) > 4096:
+                idle = [k for k, v in _LOCAL_LOCKS.items() if not v.locked()]
+                for k in idle[:2048]:
+                    _LOCAL_LOCKS.pop(k, None)
+            lock = threading.Lock()
+            _LOCAL_LOCKS[key] = lock
+        return lock
+
+
+def _acquire_pg_advisory_xact_lock(session: Any, lock_key: str) -> None:
+    if session.get_bind().dialect.name == "postgresql":
+        lock_id = int.from_bytes(hashlib.sha256(lock_key.encode()).digest()[:8], "big", signed=True)
+        session.execute(sa.text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_id})
 
 
 def build_tables(schema: Optional[str] = None) -> Tuple[sa.Table, sa.Table, sa.Table]:
@@ -264,6 +296,89 @@ class FrontpageQcStore:
 
         return self._guard(op)
 
+    def create_run_if_no_active(
+        self,
+        *,
+        created_by: str,
+        refs: Sequence[FrontpageRef],
+        filters: Dict[str, Any],
+        ruleset_version: str,
+        stalled_after: Optional[timedelta] = None,
+    ) -> Dict[str, Any]:
+        """串行化检查并创建用户活跃任务，防止同用户并发 POST /runs 产生双活跃任务。"""
+        self._check_refs(refs)
+        now = _now()
+        row = {
+            "id": str(uuid.uuid4()),
+            "status": "queued",
+            "ruleset_version": ruleset_version,
+            "filters_json": _dumps(filters),
+            "record_refs_json": _dumps([asdict(ref) for ref in refs]),
+            "total_records": len(refs),
+            "processed_records": 0,
+            "success_count": 0,
+            "failed_count": 0,
+            "issue_records": 0,
+            "data_gap_records": 0,
+            "failed_records_json": None,
+            "error_message": None,
+            "cancel_requested": False,
+            "created_by": created_by,
+            "created_at": now,
+            "started_at": None,
+            "finished_at": None,
+            "updated_at": now,
+        }
+        lock_key = f"frontpage_qc_run:{created_by}"
+
+        def op(session):
+            _acquire_pg_advisory_xact_lock(session, lock_key)
+            active_rows = (
+                session.execute(
+                    sa.select(self.runs)
+                    .where(
+                        self._run_scope(),
+                        self.runs.c.created_by == created_by,
+                        self.runs.c.status.in_(RUN_ACTIVE_STATUSES),
+                    )
+                    .order_by(self.runs.c.created_at.desc())
+                    .limit(5)
+                )
+                .mappings()
+                .all()
+            )
+            still_active: List[Dict[str, Any]] = []
+            for active_row in active_rows:
+                pub = self._public_run(active_row)
+                if stalled_after is not None and pub.get("updated_at"):
+                    updated = datetime.fromisoformat(pub["updated_at"])
+                    if now - updated >= stalled_after:
+                        session.execute(
+                            self.runs.update()
+                            .where(
+                                self.runs.c.id == pub["id"],
+                                self._run_scope(),
+                                self.runs.c.status.in_(RUN_ACTIVE_STATUSES),
+                            )
+                            .values(
+                                status="failed",
+                                error_message="任务中断（服务重启或执行异常），请重新发起",
+                                finished_at=now,
+                                updated_at=now,
+                            )
+                        )
+                        continue
+                still_active.append(pub)
+            if still_active:
+                session.commit()
+                raise FrontpageQcRunConflict(still_active[0])
+            session.execute(self.runs.insert().values(**row))
+            session.commit()
+            return self._public_run(row)
+
+        with _get_local_lock(lock_key):
+            return self._guard(op)
+
     def _public_run(self, row: Any) -> Dict[str, Any]:
         data = dict(row)
         return {
@@ -379,11 +494,8 @@ class FrontpageQcStore:
         def op(session):
             # 沿用上一次结果中相同问题的复核结论，避免重新质控后重复复核
             self._check_refs([ref])
-            # PG事务级病例锁覆盖“首次还没有latest行”的并发窗口。
-            if session.get_bind().dialect.name == 'postgresql':
-                # 历史键和新键的同一病例共用原事务锁。
-                lock = int.from_bytes(hashlib.sha256(ref.legacy_key().encode()).digest()[:8], 'big', signed=True)
-                session.execute(sa.text('SELECT pg_advisory_xact_lock(:key)'), {'key': lock})
+            # PG事务级病例锁覆盖“首次还没有latest行”的并发窗口，并与 review_finding 共用同病例锁。
+            _acquire_pg_advisory_xact_lock(session, ref.legacy_key())
             run = session.execute(sa.select(self.runs).where(self.runs.c.id == run_id)).mappings().first()
             if run is None:
                 raise FrontpageQcNotFound('质控任务不存在')
@@ -472,7 +584,8 @@ class FrontpageQcStore:
             session.commit()
             return result_id
 
-        return self._guard(op)
+        with _get_local_lock(f"case:{ref.legacy_key()}"):
+            return self._guard(op)
 
     def _public_result(self, row: Any) -> Dict[str, Any]:
         data = dict(row)
@@ -598,6 +711,8 @@ class FrontpageQcStore:
                 conditions.append(t.c.data_gap_count > 0)
             elif issue == "hint":
                 conditions.append(t.c.hint_count > 0)
+            elif issue == "required_missing":
+                conditions.append(t.c.required_missing_count > 0)
             elif issue == "clean":
                 conditions.append(sa.and_(t.c.fail_count == 0, t.c.hint_count == 0, t.c.required_missing_count == 0))
             if institute_id:
@@ -644,11 +759,29 @@ class FrontpageQcStore:
             rows = session.execute(
                 sa.select(
                     t.c.id, t.c.record_key, t.c.department, t.c.score, t.c.grade, t.c.fail_count,
-                    t.c.hint_count, t.c.data_gap_count, t.c.rule_verdicts_json,
+                    t.c.hint_count, t.c.required_missing_count, t.c.data_gap_count, t.c.rule_verdicts_json,
                 ).where(sa.and_(*conditions))
             ).mappings().all()
+            result_ids = [row["id"] for row in rows]
+            l06_main_failed_ids: set[str] = set()
+            if result_ids:
+                f = self.findings
+                for start in range(0, len(result_ids), 500):
+                    matched_ids = session.execute(
+                        sa.select(f.c.result_id).where(
+                            f.c.result_id.in_(result_ids[start:start + 500]),
+                            f.c.rule_id == "L-06",
+                            f.c.score_item == "main_diag_code",
+                            f.c.verdict == "fail",
+                        )
+                    ).scalars().all()
+                    l06_main_failed_ids.update(matched_ids)
             return [
-                {**{k: row[k] for k in row.keys() if k != "rule_verdicts_json"}, "rule_verdicts": _loads(row["rule_verdicts_json"], {})}
+                {
+                    **{k: row[k] for k in row.keys() if k != "rule_verdicts_json"},
+                    "rule_verdicts": _loads(row["rule_verdicts_json"], {}),
+                    "l06_main_failed": row["id"] in l06_main_failed_ids,
+                }
                 for row in rows
             ]
 
@@ -676,11 +809,37 @@ class FrontpageQcStore:
         if status not in REVIEW_STATUSES:
             raise ValueError("复核状态只能是 pending / confirmed / false_alarm")
 
+        def locate_case(session):
+            return session.execute(
+                sa.select(
+                    self.findings.c.result_id,
+                    self.results.c.institute_id,
+                    self.results.c.patient_id,
+                    self.results.c.visit_id,
+                )
+                .join(self.results, self.results.c.id == self.findings.c.result_id)
+                .where(self.findings.c.id == finding_id, self._result_scope())
+            ).mappings().first()
+
+        located = self._guard(locate_case)
+        if located is None:
+            raise FrontpageQcNotFound("问题不存在")
+        case_ref = FrontpageRef(located["institute_id"], located["patient_id"], located["visit_id"])
+        legacy_key = case_ref.legacy_key()
+
         def op(session):
-            row = session.execute(sa.select(self.findings).join(self.results, self.results.c.id == self.findings.c.result_id).where(self.findings.c.id == finding_id, self._result_scope())).mappings().first()
+            # 与 save_outcome 复用同一病例级锁，消除并发重跑时复核落到旧结果行导致丢失沿用的竞态
+            _acquire_pg_advisory_xact_lock(session, legacy_key)
+            row = session.execute(
+                sa.select(self.findings)
+                .join(self.results, self.results.c.id == self.findings.c.result_id)
+                .where(self.findings.c.id == finding_id, self._result_scope())
+            ).mappings().first()
             if row is None:
                 raise FrontpageQcNotFound("问题不存在")
-            latest = session.execute(sa.select(self.results.c.is_latest).where(self.results.c.id == row["result_id"])).scalar()
+            latest = session.execute(
+                sa.select(self.results.c.is_latest).where(self.results.c.id == row["result_id"])
+            ).scalar()
             if not latest:
                 raise FrontpageQcNotFound("该问题所在结果已被重新质控替换，请刷新后在最新结果上复核")
             values = {
@@ -691,10 +850,15 @@ class FrontpageQcStore:
             }
             session.execute(self.findings.update().where(self.findings.c.id == finding_id).values(**values))
             session.commit()
-            updated = session.execute(sa.select(self.findings).join(self.results, self.results.c.id == self.findings.c.result_id).where(self.findings.c.id == finding_id, self._result_scope())).mappings().first()
+            updated = session.execute(
+                sa.select(self.findings)
+                .join(self.results, self.results.c.id == self.findings.c.result_id)
+                .where(self.findings.c.id == finding_id, self._result_scope())
+            ).mappings().first()
             return self._public_finding(updated)
 
-        return self._guard(op)
+        with _get_local_lock(f"case:{legacy_key}"):
+            return self._guard(op)
 
 
 def date_text(value: Any) -> str:

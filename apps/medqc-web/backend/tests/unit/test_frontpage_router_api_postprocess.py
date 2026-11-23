@@ -1,6 +1,18 @@
 from __future__ import annotations
 
+from app.core.access_control import enforce_default_auth
+from app.core.security import get_current_user
 from app.routers.frontpage import AutoGenerateFrontPageRequest
+
+
+_FAKE_ADMIN_USER = {
+    "id": "admin-test-1",
+    "username": "admin",
+    "role": "admin",
+    "roles": ["admin"],
+    "institute_id": None,
+    "department": None,
+}
 
 
 class _FakeDraft:
@@ -12,7 +24,11 @@ class _FakeDraft:
 
 
 class _FakeService:
+    def __init__(self):
+        self.received_texts = []
+
     async def extract_from_text(self, medical_text: str):
+        self.received_texts.append(medical_text)
         return _FakeDraft(
             {
                 "basic_info": {},
@@ -34,7 +50,7 @@ class _FakeService:
         )
 
 
-def test_frontpage_auto_generate_draft_fallback_and_suggestions(client, monkeypatch):
+def test_frontpage_auto_generate_draft_fallback_and_suggestions(app, client, monkeypatch):
     fake_service = _FakeService()
     monkeypatch.setattr("app.routers.frontpage.default_frontpage_service", fake_service)
 
@@ -59,9 +75,20 @@ def test_frontpage_auto_generate_draft_fallback_and_suggestions(client, monkeypa
         "手术名称：经皮冠状动脉造影\n"
     )
     payload = AutoGenerateFrontPageRequest(medical_text=medical_text).model_dump()
-    resp = client.post("/api/v1/frontpage/auto-generate-draft", json=payload)
+    # 未认证请求应被拒绝
+    unauth_resp = client.post("/api/v1/frontpage/auto-generate-draft", json=payload)
+    assert unauth_resp.status_code == 401
+
+    app.dependency_overrides[enforce_default_auth] = lambda: dict(_FAKE_ADMIN_USER)
+    app.dependency_overrides[get_current_user] = lambda: dict(_FAKE_ADMIN_USER)
+    try:
+        resp = client.post("/api/v1/frontpage/auto-generate-draft", json=payload)
+    finally:
+        app.dependency_overrides.pop(enforce_default_auth, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
     assert resp.status_code == 200
+    assert fake_service.received_texts and "张三" not in fake_service.received_texts[0]
     body = resp.json()
     assert body.get("success") is True
     diagnoses = body["data"]["frontpage"]["diagnoses"]

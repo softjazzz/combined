@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 
 import asyncio
 import contextlib
+import inspect
 import json
 import logging
 import re
@@ -11,18 +12,22 @@ from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
-from ..services.clinical_read import clinical_query
+from ..services.clinical_read import clinical_query, clinical_table_sql
 from ..core.response import success_response, error_response, get_trace_id
-from ..core.security import get_optional_user
+from ..core.security import get_current_user
 from ..database.connection import engine
 from ..database.models.cdm import MedicalRecordFrontpage
 from ..schemas.frontpage import FrontPageDraft
+from ..services.doctor_case_scope import get_doctor_case_scope
 from ..services.frontpage_extraction_service import (
+    FrontPageCaseIdentityConflictError,
     FrontPageExtractionService,
     FrontPageExtractionUnavailableError,
     default_frontpage_service,
+    redact_frontpage_text_for_llm,
 )
 from ..services.frontpage_report_generation_service import (
     FrontPageReportGenerationService,
@@ -31,12 +36,29 @@ from ..services.frontpage_report_generation_service import (
 )
 from ..services.frontpage_export_service import FrontpageExportService, ExportFormat
 from ..services.llm_observability import llm_observation_context
+from ..services.medical_records.detail_service import (
+    _GLOBAL_INSTITUTE_ROLES,
+    _normalize_user_roles,
+    enforce_institute_access,
+    resolve_non_global_institute_scope,
+)
 from ..services.medical_records.maintenance_service import save_ai_frontpage_draft
 from ..services.frontpage_settings import load_frontpage_settings, resolve_force_llm
 from ..services.workflow_queue_state_service import default_workflow_queue_state_service
 
 router = APIRouter(prefix="/api/v1/frontpage", tags=["frontpage"])
 logger = logging.getLogger(__name__)
+
+_FRONTPAGE_ALLOWED_ROLES = frozenset({
+    "admin",
+    "super_admin",
+    "sync_admin",
+    "qc_manager",
+    "qc_staff",
+    "coder",
+    "reviewer",
+    "doctor",
+})
 
 
 def _current_user_id(current_user: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -46,33 +68,168 @@ def _current_user_id(current_user: Optional[Dict[str, Any]]) -> Optional[str]:
     return str(value) if value else None
 
 
-def _resolve_visit_identity(visit_id: str) -> Dict[str, Optional[str]]:
+def _require_frontpage_role_and_institute_scope(
+    current_user: Optional[Dict[str, Any]],
+    *,
+    requested_institute_id: Optional[str] = None,
+) -> Optional[str]:
+    """校验角色权限并解析持久院区范围。全局角色返回 None，非全局角色缺少院区 fail-closed 403。"""
+    if not isinstance(current_user, dict):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    roles = _normalize_user_roles(current_user)
+    if not (roles & _FRONTPAGE_ALLOWED_ROLES):
+        raise HTTPException(status_code=403, detail="当前角色无权访问病案首页服务")
+
+    if roles & _GLOBAL_INSTITUTE_ROLES:
+        return str(requested_institute_id or "").strip() or None
+
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    if not inst_scope:
+        raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
+    if requested_institute_id and str(requested_institute_id).strip():
+        enforce_institute_access(inst_scope, str(requested_institute_id).strip())
+    return inst_scope
+
+
+def _resolve_visit_identity(
+    visit_id: str,
+    *,
+    patient_id: Optional[str] = None,
+    institute_id: Optional[str] = None,
+) -> Dict[str, Optional[str]]:
     normalized_visit_id = str(visit_id or "").strip()
+    normalized_patient_id = str(patient_id or "").strip() or None
+    normalized_institute_id = str(institute_id or "").strip() or None
     if not normalized_visit_id:
         return {"visit_id": None, "patient_id": None, "institute_id": None}
 
     with Session(engine) as session:
-        record = (
-            clinical_query(session, MedicalRecordFrontpage)
-            .filter_by(visit_id=normalized_visit_id)
-            .first()
+        q = clinical_query(session, MedicalRecordFrontpage).filter(
+            MedicalRecordFrontpage.visit_id == normalized_visit_id
         )
-        if not record:
-            return {"visit_id": normalized_visit_id, "patient_id": None, "institute_id": None}
+        if normalized_patient_id:
+            q = q.filter(MedicalRecordFrontpage.patient_id == normalized_patient_id)
+        if normalized_institute_id:
+            q = q.filter(MedicalRecordFrontpage.institute_id == normalized_institute_id)
+        records = q.limit(2).all()
+        if len(records) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail="同一 visit_id 存在多院区或多患者重号，请显式提供 institute_id 和 patient_id",
+            )
+        if len(records) == 1:
+            record = records[0]
+            return {
+                "visit_id": normalized_visit_id,
+                "patient_id": record.patient_id,
+                "institute_id": record.institute_id,
+            }
+
+        # 回退检查 inpat_registration（尚未生成正式 mr 行的在院/待抽取病例）
+        clauses = ["visit_id = :vid"]
+        params: Dict[str, Any] = {"vid": normalized_visit_id}
+        if normalized_patient_id:
+            clauses.append("patient_id = :pid")
+            params["pid"] = normalized_patient_id
+        if normalized_institute_id:
+            clauses.append("institute_id = :iid")
+            params["iid"] = normalized_institute_id
+        try:
+            rows = (
+                session.execute(
+                    sql_text(
+                        f"SELECT DISTINCT institute_id, patient_id, visit_id "
+                        f"FROM {clinical_table_sql('inpat_registration')} "
+                        f"WHERE {' AND '.join(clauses)} LIMIT 2"
+                    ),
+                    params,
+                )
+                .mappings()
+                .all()
+            )
+            if len(rows) > 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail="同一 visit_id 存在多院区或多患者重号，请显式提供 institute_id 和 patient_id",
+                )
+            if len(rows) == 1:
+                row = rows[0]
+                return {
+                    "visit_id": normalized_visit_id,
+                    "patient_id": str(row.get("patient_id") or "").strip() or normalized_patient_id,
+                    "institute_id": str(row.get("institute_id") or "").strip() or normalized_institute_id,
+                }
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
         return {
             "visit_id": normalized_visit_id,
-            "patient_id": record.patient_id,
-            "institute_id": record.institute_id,
+            "patient_id": normalized_patient_id,
+            "institute_id": normalized_institute_id,
         }
+
+
+def _resolve_and_authorize_visit_identity(
+    request: Request,
+    current_user: Optional[Dict[str, Any]],
+    *,
+    visit_id: Optional[str],
+    patient_id: Optional[str] = None,
+    institute_id: Optional[str] = None,
+    require_found_when_scoped: bool = False,
+) -> Dict[str, Optional[str]]:
+    """校验角色/院区/医生范围并解析三坐标，发现跨院或重号立即 fail-closed。"""
+    effective_scope_inst = _require_frontpage_role_and_institute_scope(
+        current_user, requested_institute_id=institute_id
+    )
+    vid = str(visit_id or "").strip()
+    pid = str(patient_id or "").strip() or None
+    iid = str(institute_id or "").strip() or effective_scope_inst
+    if not vid:
+        return {"visit_id": None, "patient_id": pid, "institute_id": iid}
+
+    # 先按未收窄条件检测跨院访问（非全局角色不得探测他院病历）
+    resolved = _resolve_visit_identity(
+        vid,
+        patient_id=pid,
+        institute_id=iid,
+    )
+    roles = _normalize_user_roles(current_user)
+    is_global = bool(roles & _GLOBAL_INSTITUTE_ROLES)
+    if not is_global:
+        if resolved.get("institute_id"):
+            enforce_institute_access(effective_scope_inst, resolved.get("institute_id"))
+        elif require_found_when_scoped:
+            raise HTTPException(status_code=403, detail="未找到当前机构范围内的目标病历")
+
+    doctor_scope = get_doctor_case_scope(request)
+    if doctor_scope is not None:
+        if not (resolved.get("institute_id") and resolved.get("patient_id") and resolved.get("visit_id")):
+            raise HTTPException(status_code=403, detail="医生账号必须提供可验证的完整病例三坐标")
+        doctor_scope.require_case(
+            resolved["institute_id"],
+            resolved["patient_id"],
+            resolved["visit_id"],
+        )
+    return resolved
 
 
 def _observation_record_identity(
     visit_id: str,
+    *,
+    patient_id: Optional[str] = None,
+    institute_id: Optional[str] = None,
 ) -> Optional[tuple[str, str, str]]:
     if not str(visit_id or "").strip():
         return None
+    if institute_id and patient_id:
+        return (str(institute_id).strip(), str(patient_id).strip(), str(visit_id).strip())
     try:
-        identity = _resolve_visit_identity(visit_id)
+        identity = _resolve_visit_identity(
+            visit_id, patient_id=patient_id, institute_id=institute_id
+        )
     except Exception as error:
         logger.warning(
             "frontpage_observation_identity_unavailable error_type=%s",
@@ -197,6 +354,12 @@ class AutoGenerateFrontPageRequest(BaseModel):
     visit_id: Optional[str] = Field(
         default=None, description="住院就诊 ID（后续用于从 EMR 获取全病历）"
     )
+    patient_id: Optional[str] = Field(
+        default=None, description="患者 ID（三坐标隔离）"
+    )
+    institute_id: Optional[str] = Field(
+        default=None, description="机构 ID（三坐标隔离）"
+    )
     documents: Optional[List[FrontPageDocument]] = Field(
         default=None, description="可选：直接传入文书列表，用于调试"
     )
@@ -238,6 +401,7 @@ class GenerateFrontPageReportRequest(BaseModel):
 
     visit_id: Optional[str] = Field(default=None, description="住院就诊 ID")
     patient_id: Optional[str] = Field(default=None, description="患者 ID，用于结算清单 SQL 补充")
+    institute_id: Optional[str] = Field(default=None, description="机构 ID（三坐标隔离）")
     documents: Optional[List[FrontPageDocument]] = Field(default=None, description="直接传入文书列表")
     medical_text: Optional[str] = Field(default=None, description="直接传入整份病历文本")
     scene: str = Field(default="combined", description="生成场景")
@@ -253,6 +417,7 @@ class FrontPageDemoPreviewRequest(BaseModel):
 
     visit_id: str = Field(..., description="住院就诊 ID")
     patient_id: Optional[str] = Field(default=None, description="患者 ID，用于定位本机病历")
+    institute_id: Optional[str] = Field(default=None, description="机构 ID（三坐标隔离）")
 
     def ensure_valid(self) -> None:
         if not str(self.visit_id or "").strip():
@@ -264,7 +429,7 @@ async def preview_frontpage_demo_visit(
     request: Request,
     payload: FrontPageDemoPreviewRequest,
     service: FrontPageReportGenerationService = Depends(get_frontpage_report_service),
-    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """只读返回预置示例的脱敏病历摘要，不写入业务库。"""
     trace_id = get_trace_id(request)
@@ -278,16 +443,33 @@ async def preview_frontpage_demo_visit(
             )["error"],
         )
 
+    identity = _resolve_and_authorize_visit_identity(
+        request,
+        current_user,
+        visit_id=payload.visit_id,
+        patient_id=payload.patient_id,
+        institute_id=payload.institute_id,
+        require_found_when_scoped=True,
+    )
+
     try:
-        result = await service.build_demo_visit_preview(
-            visit_id=payload.visit_id,
-            patient_id=payload.patient_id,
-        )
+        preview_params = inspect.signature(service.build_demo_visit_preview).parameters
+        preview_kwargs: Dict[str, Any] = {
+            "visit_id": identity["visit_id"] or payload.visit_id,
+            "patient_id": identity.get("patient_id") or payload.patient_id,
+        }
+        if "institute_id" in preview_params:
+            preview_kwargs["institute_id"] = identity.get("institute_id")
+        result = await service.build_demo_visit_preview(**preview_kwargs)
         return success_response(
             data=result,
             message="获取预置病历脱敏预览成功",
             trace_id=trace_id,
         )
+    except HTTPException:
+        raise
+    except FrontPageCaseIdentityConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except FrontPageReportInputError as exc:
         raise HTTPException(
             status_code=400,
@@ -312,7 +494,7 @@ async def generate_frontpage_report_draft(
     request: Request,
     payload: GenerateFrontPageReportRequest,
     service: FrontPageReportGenerationService = Depends(get_frontpage_report_service),
-    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """生成病案首页草稿、医保结算清单草稿和字段覆盖报告。"""
     trace_id = get_trace_id(request)
@@ -326,29 +508,62 @@ async def generate_frontpage_report_draft(
             )["error"],
         )
 
+    identity = _resolve_and_authorize_visit_identity(
+        request,
+        current_user,
+        visit_id=payload.visit_id,
+        patient_id=payload.patient_id,
+        institute_id=payload.institute_id,
+        require_found_when_scoped=bool(payload.visit_id and not payload.medical_text and not payload.documents),
+    )
+    safe_medical_text = (
+        redact_frontpage_text_for_llm(payload.medical_text)
+        if payload.medical_text is not None
+        else None
+    )
+    safe_documents = (
+        [
+            {
+                **doc.model_dump(),
+                "content": redact_frontpage_text_for_llm(doc.content),
+            }
+            for doc in payload.documents
+        ]
+        if payload.documents
+        else None
+    )
+
     try:
         with llm_observation_context(
             business_scene="frontpage_report_generation",
             root_job_id=trace_id,
-            record_identity=_observation_record_identity(payload.visit_id or ""),
+            record_identity=_observation_record_identity(
+                identity.get("visit_id") or "",
+                patient_id=identity.get("patient_id"),
+                institute_id=identity.get("institute_id"),
+            ),
             executor_key="frontpage_report_generation",
         ):
-            result = await service.generate(
-                scene=payload.report_scene or payload.scene,
-                medical_text=payload.medical_text,
-                documents=(
-                    [doc.model_dump() for doc in payload.documents]
-                    if payload.documents
-                    else None
-                ),
-                visit_id=payload.visit_id,
-                patient_id=payload.patient_id,
-            )
+            gen_params = inspect.signature(service.generate).parameters
+            gen_kwargs: Dict[str, Any] = {
+                "scene": payload.report_scene or payload.scene,
+                "medical_text": safe_medical_text,
+                "documents": safe_documents,
+                "visit_id": identity.get("visit_id") or payload.visit_id,
+                "patient_id": identity.get("patient_id") or payload.patient_id,
+            }
+            if "institute_id" in gen_params:
+                gen_kwargs["institute_id"] = identity.get("institute_id")
+            result = await service.generate(**gen_kwargs)
         return success_response(
             data=result,
             message="生成病案首页和医保结算清单草稿成功",
             trace_id=trace_id,
         )
+    except HTTPException:
+        raise
+    except FrontPageCaseIdentityConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except FrontPageReportInputError as exc:
         raise HTTPException(
             status_code=400,
@@ -373,7 +588,7 @@ async def auto_generate_frontpage_draft(
     request: Request,
     payload: AutoGenerateFrontPageRequest,
     service: FrontPageExtractionService = Depends(get_frontpage_service),
-    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     自动生成病案首页草稿（不含正式写入）。
@@ -396,6 +611,15 @@ async def auto_generate_frontpage_draft(
             )["error"],
         )
 
+    identity = _resolve_and_authorize_visit_identity(
+        request,
+        current_user,
+        visit_id=visit_id_for_state or None,
+        patient_id=payload.patient_id,
+        institute_id=payload.institute_id,
+        require_found_when_scoped=bool(visit_id_for_state),
+    )
+
     try:
         if visit_id_for_state:
             run_id = default_workflow_queue_state_service.start_run(
@@ -405,14 +629,18 @@ async def auto_generate_frontpage_draft(
             )
 
         observation_root_job_id = run_id or trace_id
-        observation_record_identity = _observation_record_identity(visit_id_for_state)
+        observation_record_identity = _observation_record_identity(
+            visit_id_for_state,
+            patient_id=identity.get("patient_id"),
+            institute_id=identity.get("institute_id"),
+        )
 
         source_medical_text: Optional[str] = None
         source_type = "medical_text" if payload.medical_text else "documents" if payload.documents else "visit_id"
 
         if payload.medical_text:
-            # 直接从传入的病历文本提取
-            source_medical_text = payload.medical_text
+            # 直接从传入的病历文本提取（发往模型前脱敏）
+            source_medical_text = redact_frontpage_text_for_llm(payload.medical_text)
             with llm_observation_context(
                 business_scene="frontpage_extraction",
                 root_job_id=observation_root_job_id,
@@ -423,10 +651,17 @@ async def auto_generate_frontpage_draft(
                     source_medical_text
                 )
         elif payload.documents:
-            source_medical_text = "\n\n".join(
-                f"【{doc.type or '未知文书'}】\n{doc.content or ''}"
+            redacted_docs = [
+                {
+                    **doc.model_dump(),
+                    "content": redact_frontpage_text_for_llm(doc.content),
+                }
                 for doc in payload.documents
-                if str(doc.content or "").strip()
+            ]
+            source_medical_text = "\n\n".join(
+                f"【{doc.get('type') or '未知文书'}】\n{doc.get('content') or ''}"
+                for doc in redacted_docs
+                if str(doc.get("content") or "").strip()
             )
             with llm_observation_context(
                 business_scene="frontpage_extraction",
@@ -435,15 +670,21 @@ async def auto_generate_frontpage_draft(
                 executor_key="frontpage_extraction",
             ):
                 draft = await service.generate_draft_from_documents(
-                    [doc.model_dump() for doc in payload.documents]
+                    redacted_docs
                 )
         else:
+            get_text_params = inspect.signature(service._get_medical_text).parameters
+            get_text_kwargs: Dict[str, Any] = {"allow_demo_fallback": False}
+            if "patient_id" in get_text_params and identity.get("patient_id"):
+                get_text_kwargs["patient_id"] = identity.get("patient_id")
+            if "institute_id" in get_text_params and identity.get("institute_id"):
+                get_text_kwargs["institute_id"] = identity.get("institute_id")
             visit_medical_text = await service._get_medical_text(
                 visit_id_for_state,
-                allow_demo_fallback=False,
+                **get_text_kwargs,
             )
             if visit_medical_text and visit_medical_text.strip():
-                source_medical_text = visit_medical_text
+                source_medical_text = redact_frontpage_text_for_llm(visit_medical_text)
                 with llm_observation_context(
                     business_scene="frontpage_extraction",
                     root_job_id=observation_root_job_id,
@@ -477,7 +718,6 @@ async def auto_generate_frontpage_draft(
             frontpage = _postprocess_frontpage_diagnoses(frontpage, source_medical_text)
 
         if visit_id_for_state:
-            identity = _resolve_visit_identity(visit_id_for_state)
             patient_id = str(identity.get("patient_id") or "").strip()
             if not patient_id:
                 raise RuntimeError(f"未找到 visit_id={visit_id_for_state} 对应的 patient_id，无法保存首页草稿")
@@ -521,6 +761,16 @@ async def auto_generate_frontpage_draft(
                 user_id=user_id,
             )
         raise
+    except FrontPageCaseIdentityConflictError as exc:
+        if run_id and visit_id_for_state:
+            default_workflow_queue_state_service.finish_failed(
+                workflow_type="frontpage_generate",
+                visit_id=visit_id_for_state,
+                run_id=run_id,
+                error_message=str(exc),
+                user_id=user_id,
+            )
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except FrontPageExtractionUnavailableError as exc:
         if run_id and visit_id_for_state:
             default_workflow_queue_state_service.finish_failed(
@@ -560,6 +810,7 @@ async def auto_generate_frontpage_draft_stream(
     request: Request,
     payload: AutoGenerateFrontPageRequest,
     service: FrontPageExtractionService = Depends(get_frontpage_service),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     自动生成病案首页草稿（流式分批返回）
@@ -579,10 +830,20 @@ async def auto_generate_frontpage_draft_stream(
             )["error"],
         )
 
+    identity = _resolve_and_authorize_visit_identity(
+        request,
+        current_user,
+        visit_id=payload.visit_id,
+        patient_id=payload.patient_id,
+        institute_id=payload.institute_id,
+        require_found_when_scoped=bool(payload.visit_id),
+    )
+
     async def event_generator():
-        print(f"\n[DEBUG] SSE 接口收到请求: visit_id={payload.visit_id}, medical_text_len={len(payload.medical_text or '')}, force_llm={payload.force_llm}")
-        medical_text = payload.medical_text or ""
-        visit_id = payload.visit_id or ""
+        medical_text = redact_frontpage_text_for_llm(payload.medical_text or "")
+        visit_id = identity.get("visit_id") or payload.visit_id or ""
+        patient_id = identity.get("patient_id")
+        institute_id = identity.get("institute_id")
         settings, _ = load_frontpage_settings()
         force_llm = resolve_force_llm(payload.force_llm, settings)
         stream_progress_enabled = settings.stream_progress_enabled
@@ -595,13 +856,18 @@ async def auto_generate_frontpage_draft_stream(
                 settings.llm_backfill_enabled,
             )
 
-        # 如果没有直接传入文本且有 visit_id，走三层架构（visit_id 透传给 stream 方法）
+        # 如果没有直接传入文本且有 visit_id，走三层架构（三坐标透传给 stream 方法）
         # 三层架构会内部处理：SQL 直读 → 码表映射 → LLM 补缺
         if not medical_text and visit_id:
-            print(f"[DEBUG] 三层架构模式: visit_id={visit_id}，SQL 直读 + LLM 补缺, force_llm={force_llm}")
-            # 同时获取 LLM 需要的文本作为 fallback
-            medical_text = await service._get_llm_context_text(visit_id)
-            print(f"[DEBUG] 获取到 LLM 上下文文本长度: {len(medical_text)}")
+            ctx_params = inspect.signature(service._get_llm_context_text).parameters
+            ctx_kwargs: Dict[str, Any] = {}
+            if "patient_id" in ctx_params and patient_id:
+                ctx_kwargs["patient_id"] = patient_id
+            if "institute_id" in ctx_params and institute_id:
+                ctx_kwargs["institute_id"] = institute_id
+            medical_text = redact_frontpage_text_for_llm(
+                await service._get_llm_context_text(visit_id, **ctx_kwargs)
+            )
         
         queue: asyncio.Queue = asyncio.Queue()
         producer_task: Optional[asyncio.Task] = None
@@ -610,14 +876,26 @@ async def auto_generate_frontpage_draft_stream(
             with llm_observation_context(
                 business_scene="frontpage_extraction",
                 root_job_id=trace_id,
-                record_identity=_observation_record_identity(visit_id),
+                record_identity=_observation_record_identity(
+                    visit_id,
+                    patient_id=patient_id,
+                    institute_id=institute_id,
+                ),
                 executor_key="frontpage_extraction",
             ):
                 try:
+                    stream_params = inspect.signature(service.extract_from_text_stream).parameters
+                    stream_kwargs: Dict[str, Any] = {
+                        "visit_id": visit_id,
+                        "force_llm": force_llm,
+                    }
+                    if "patient_id" in stream_params and patient_id:
+                        stream_kwargs["patient_id"] = patient_id
+                    if "institute_id" in stream_params and institute_id:
+                        stream_kwargs["institute_id"] = institute_id
                     async for event_name, data in service.extract_from_text_stream(
                         medical_text,
-                        visit_id=visit_id,
-                        force_llm=force_llm,
+                        **stream_kwargs,
                     ):
                         await queue.put((event_name, data))
                 except Exception as exc:
@@ -683,6 +961,8 @@ async def auto_generate_frontpage_draft_stream(
 class ProfileAnalyzeRequest(BaseModel):
     """医疗画像分析请求"""
     visit_id: Optional[str] = None
+    patient_id: Optional[str] = None
+    institute_id: Optional[str] = None
     medical_text: Optional[str] = None
     frontpage_diagnoses: Optional[List[str]] = None
     frontpage_procedures: Optional[List[str]] = None
@@ -692,6 +972,7 @@ class ProfileAnalyzeRequest(BaseModel):
 async def analyze_medical_profile(
     request: Request,
     payload: ProfileAnalyzeRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     F13：疾病诊断和手术操作画像分析
@@ -709,42 +990,77 @@ async def analyze_medical_profile(
     from ..services.diagnosis_surgery_profiling_service import get_profiling_service
     
     trace_id = get_trace_id(request)
+    identity = _resolve_and_authorize_visit_identity(
+        request,
+        current_user,
+        visit_id=payload.visit_id,
+        patient_id=payload.patient_id,
+        institute_id=payload.institute_id,
+        require_found_when_scoped=bool(payload.visit_id and not payload.medical_text),
+    )
     
     try:
         service = get_profiling_service()
         
-        # 获取病历文本
+        # 获取病历文本（三坐标隔离 + 发往 LLM 前隐私脱敏）
         medical_text = payload.medical_text
-        if not medical_text and payload.visit_id:
-            # 从 visit_id 获取病历（复用 frontpage service）
+        if not medical_text and identity.get("visit_id"):
             fp_service = get_frontpage_service()
-            medical_text = await fp_service._get_medical_text(payload.visit_id)
+            get_text_params = inspect.signature(fp_service._get_medical_text).parameters
+            get_text_kwargs: Dict[str, Any] = {}
+            if "allow_demo_fallback" in get_text_params:
+                get_text_kwargs["allow_demo_fallback"] = False
+            if "patient_id" in get_text_params and identity.get("patient_id"):
+                get_text_kwargs["patient_id"] = identity.get("patient_id")
+            if "institute_id" in get_text_params and identity.get("institute_id"):
+                get_text_kwargs["institute_id"] = identity.get("institute_id")
+            medical_text = await fp_service._get_medical_text(
+                identity["visit_id"], **get_text_kwargs
+            )
         
-        if not medical_text:
+        if not medical_text or not str(medical_text).strip():
             return error_response(
                 error="需要提供 medical_text 或有效的 visit_id",
                 code="MISSING_MEDICAL_TEXT",
                 trace_id=trace_id,
             )
+
+        safe_medical_text = redact_frontpage_text_for_llm(medical_text)
         
         # 分析画像
         with llm_observation_context(
             business_scene="diagnosis_surgery_profiling",
             root_job_id=trace_id,
-            record_identity=_observation_record_identity(payload.visit_id or ""),
+            record_identity=_observation_record_identity(
+                identity.get("visit_id") or "",
+                patient_id=identity.get("patient_id"),
+                institute_id=identity.get("institute_id"),
+            ),
             executor_key="diagnosis_surgery_profiling",
         ):
-            profile = await service.analyze_medical_profile(
-                medical_text=medical_text,
-                frontpage_diagnoses=payload.frontpage_diagnoses,
-                frontpage_procedures=payload.frontpage_procedures,
-            )
+            analyze_params = inspect.signature(service.analyze_medical_profile).parameters
+            analyze_kwargs: Dict[str, Any] = {
+                "medical_text": safe_medical_text,
+                "frontpage_diagnoses": payload.frontpage_diagnoses,
+                "frontpage_procedures": payload.frontpage_procedures,
+            }
+            if "institute_id" in analyze_params:
+                analyze_kwargs["institute_id"] = identity.get("institute_id")
+            if "patient_id" in analyze_params:
+                analyze_kwargs["patient_id"] = identity.get("patient_id")
+            if "visit_id" in analyze_params:
+                analyze_kwargs["visit_id"] = identity.get("visit_id")
+            profile = await service.analyze_medical_profile(**analyze_kwargs)
         
         return success_response(
             data=profile.to_dict(),
             message="医疗画像分析完成",
             trace_id=trace_id,
         )
+    except HTTPException:
+        raise
+    except FrontPageCaseIdentityConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         return error_response(
             error=f"医疗画像分析失败: {exc}",

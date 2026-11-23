@@ -24,6 +24,7 @@ from app.services.frontpage_qc_v2.scoring_items import SCORE_ITEMS, SECTION_POIN
 from app.services.frontpage_qc_v2.store import (
     RUN_ACTIVE_STATUSES,
     FrontpageQcNotFound,
+    FrontpageQcRunConflict,
     FrontpageQcStore,
     FrontpageQcStoreUnavailable,
 )
@@ -34,7 +35,7 @@ router = APIRouter(prefix="/api/v1/frontpage-qc", tags=["首页质控V2"])
 ALLOWED_ROLES = frozenset({"admin", "super_admin", "qc_manager", "coder"})
 EXPORT_LIMIT = 5000
 STALLED_AFTER = timedelta(minutes=10)
-RESULT_ISSUE_FILTERS = ("fail", "hint", "data_gap", "clean")
+RESULT_ISSUE_FILTERS = ("fail", "hint", "required_missing", "data_gap", "clean")
 RULE_IDS = frozenset(rule.rule_id for rule in RULES)
 
 
@@ -324,7 +325,18 @@ async def create_run(
             }
             for item in records
         }
-        run = store.create_run(created_by=uid, refs=refs, filters=filters, ruleset_version=RULESET_VERSION)
+        run = store.create_run_if_no_active(
+            created_by=uid,
+            refs=refs,
+            filters=filters,
+            ruleset_version=RULESET_VERSION,
+            stalled_after=STALLED_AFTER,
+        )
+    except FrontpageQcRunConflict as exc:
+        raise HTTPException(
+            409,
+            detail={"message": "已有进行中的首页质控任务，请等待完成或取消后再发起", "run": exc.active_run},
+        ) from exc
     except FrontpageQcStoreUnavailable as exc:
         raise _unavailable(exc) from exc
 
@@ -422,7 +434,7 @@ async def list_records(
     end_date: str = Query("", max_length=10),
     keyword: str = Query("", max_length=100),
     grade: Literal["", "excellent", "qualified", "unqualified"] = Query(""),
-    issue: Literal["", "fail", "hint", "data_gap", "clean", "unchecked"] = Query(""),
+    issue: Literal["", "fail", "hint", "required_missing", "data_gap", "clean", "unchecked"] = Query(""),
     rule_id: str = Query("", max_length=16),
     rule_verdict: Literal["fail", "data_gap"] = Query("fail"),
     data_scope: Literal["home", "all"] = Query("home"),
@@ -606,7 +618,7 @@ class ExportIn(BaseModel):
     end_date: str = Field(default="", max_length=10)
     keyword: str = Field(default="", max_length=100)
     grade: Literal["", "excellent", "qualified", "unqualified"] = ""
-    issue: Literal["", "fail", "hint", "data_gap", "clean"] = ""
+    issue: Literal["", "fail", "hint", "required_missing", "data_gap", "clean"] = ""
     rule_id: str = Field(default="", max_length=16)
     rule_verdict: Literal["fail", "data_gap"] = "fail"
     data_scope: Literal["home", "all"] = "home"

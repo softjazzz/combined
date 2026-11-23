@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import math
 import re
 from datetime import date, datetime
 from typing import Mapping, Optional
@@ -215,21 +216,26 @@ def is_valid_phone(value: object) -> bool:
 
 
 def parse_number(value: object) -> Optional[float]:
+    if isinstance(value, bool):
+        return None
     text = text_of(value).replace(",", "")
     if not text:
         return None
     try:
-        return float(text)
+        num = float(text)
     except ValueError:
         return None
+    return num if math.isfinite(num) else None
 
 
 _DT_FORMATS = (
     "%Y-%m-%d %H:%M:%S.%f",
+    "%Y-%m-%dT%H:%M:%S.%f",
     "%Y-%m-%d %H:%M:%S",
     "%Y-%m-%d %H:%M",
     "%Y-%m-%dT%H:%M:%S",
     "%Y-%m-%dT%H:%M",
+    "%Y/%m/%d %H:%M:%S.%f",
     "%Y/%m/%d %H:%M:%S",
     "%Y/%m/%d %H:%M",
     "%Y-%m-%d",

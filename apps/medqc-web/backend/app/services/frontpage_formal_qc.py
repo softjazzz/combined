@@ -11,6 +11,7 @@
   - logic:    值域/逻辑校验
   - consistency: 跨字段一致性校验
 """
+import math
 import re
 import logging
 from enum import Enum
@@ -85,15 +86,30 @@ def _not_empty(value: Any) -> bool:
     return True
 
 
-def _valid_number(value: Any) -> bool:
-    """检查合法数字。"""
-    if value is None:
-        return False
+def _to_float(value: Any) -> Optional[float]:
+    """安全转为有限浮点数（排除 bool、NaN、inf）。"""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
     try:
-        float(value)
-        return True
+        num = float(value)
     except (ValueError, TypeError):
-        return False
+        return None
+    return num if math.isfinite(num) else None
+
+
+def _to_int_code(value: Any) -> Optional[int]:
+    """将数字或数字字符串安全转为整数编码（如 '1' -> 1, 1 -> 1）。"""
+    num = _to_float(value)
+    if num is None or not num.is_integer():
+        return None
+    return int(num)
+
+
+def _valid_number(value: Any) -> bool:
+    """检查合法有限数字。"""
+    return _to_float(value) is not None
 
 
 def _valid_icd10(code: str) -> bool:
@@ -151,9 +167,11 @@ def _get_surgeries(fp: dict) -> list:
 def _get_sex_code(fp: dict) -> Optional[int]:
     """性别转数字 (1=男, 2=女)。"""
     sex = fp.get("sex")
-    if sex == "男" or sex == 1:
+    if isinstance(sex, str):
+        sex = sex.strip()
+    if sex in ("男", 1, "1"):
         return 1
-    if sex == "女" or sex == 2:
+    if sex in ("女", 2, "2"):
         return 2
     return None
 
@@ -334,10 +352,8 @@ def _build_rules() -> List[QCRule]:
         severity=Severity.ERROR, category=Category.REQUIRED,
         validate=lambda fp: (
             _valid_number(fp.get("newborn_birth_weight"))
-            if (fp.get("age_in_days") is not None
-                and fp.get("age_in_days") is not None
-                and isinstance(fp.get("age_in_days"), (int, float))
-                and fp["age_in_days"] < 29)
+            if (_to_float(fp.get("age_in_days")) is not None
+                and _to_float(fp.get("age_in_days")) < 29)
             else True
         ),
         message=lambda fp: "新生儿(天龄<29天)入院时，出生体重必须填写",
@@ -420,7 +436,7 @@ def _build_rules() -> List[QCRule]:
         description="离院方式应为标准代码 1-5 或 9",
         severity=Severity.ERROR, category=Category.FORMAT,
         validate=lambda fp: (
-            fp.get("discharge_method") in (1, 2, 3, 4, 5, 9)
+            _to_int_code(fp.get("discharge_method")) in (1, 2, 3, 4, 5, 9)
             if _valid_number(fp.get("discharge_method")) else True
         ),
         message=lambda fp: "离院方式代码不正确（应为1-5或9）",
@@ -461,8 +477,8 @@ def _build_rules() -> List[QCRule]:
         description="新生儿出生体重应在 500-6000g 之间",
         severity=Severity.WARNING, category=Category.LOGIC,
         validate=lambda fp: (
-            500 <= fp["newborn_birth_weight"] <= 6000
-            if _valid_number(fp.get("newborn_birth_weight"))
+            500 <= _to_float(fp.get("newborn_birth_weight")) <= 6000
+            if _to_float(fp.get("newborn_birth_weight")) is not None
             else True
         ),
         message=lambda fp: "新生儿出生体重应在500-6000g之间",
@@ -637,7 +653,7 @@ def _build_rules() -> List[QCRule]:
         description="入院途径应为标准代码 1-4",
         severity=Severity.WARNING, category=Category.FORMAT,
         validate=lambda fp: (
-            fp.get("admission_route") in (1, 2, 3, 4)
+            _to_int_code(fp.get("admission_route")) in (1, 2, 3, 4)
             if _valid_number(fp.get("admission_route")) else True
         ),
         message=lambda fp: "入院途径代码不正确（应为1=急诊/2=门诊/3=其他/4=转入）",
@@ -649,7 +665,7 @@ def _build_rules() -> List[QCRule]:
         description="性别应为标准值",
         severity=Severity.ERROR, category=Category.FORMAT,
         validate=lambda fp: (
-            fp.get("sex") in ("男", "女", 1, 2)
+            _get_sex_code(fp) in (1, 2)
             if _not_empty(fp.get("sex")) else True
         ),
         message=lambda fp: '性别应为"男"或"女"',
@@ -692,8 +708,8 @@ def _build_rules() -> List[QCRule]:
         description="新生儿入院体重应在 500-6000g 之间",
         severity=Severity.WARNING, category=Category.LOGIC,
         validate=lambda fp: (
-            500 <= fp["newborn_admission_weight"] <= 6000
-            if _valid_number(fp.get("newborn_admission_weight"))
+            500 <= _to_float(fp.get("newborn_admission_weight")) <= 6000
+            if _to_float(fp.get("newborn_admission_weight")) is not None
             else True
         ),
         message=lambda fp: "新生儿入院体重应在500-6000g之间",
@@ -705,8 +721,8 @@ def _build_rules() -> List[QCRule]:
         description="年龄应在 0-150 岁之间",
         severity=Severity.WARNING, category=Category.LOGIC,
         validate=lambda fp: (
-            0 <= fp["age"] <= 150
-            if _valid_number(fp.get("age")) else True
+            0 <= _to_float(fp.get("age")) <= 150
+            if _to_float(fp.get("age")) is not None else True
         ),
         message=lambda fp: "年龄超出合理范围(0-150岁)",
     ))
@@ -717,8 +733,8 @@ def _build_rules() -> List[QCRule]:
         description="住院天数应在 0-365 天之间",
         severity=Severity.WARNING, category=Category.LOGIC,
         validate=lambda fp: (
-            0 <= fp["los_days"] <= 365
-            if _valid_number(fp.get("los_days")) else True
+            0 <= _to_float(fp.get("los_days")) <= 365
+            if _to_float(fp.get("los_days")) is not None else True
         ),
         message=lambda fp: "住院天数超出合理范围(0-365天)",
     ))
@@ -729,8 +745,8 @@ def _build_rules() -> List[QCRule]:
         description="总费用应 > 0",
         severity=Severity.WARNING, category=Category.LOGIC,
         validate=lambda fp: (
-            fp["total_cost"] > 0
-            if _valid_number(fp.get("total_cost")) else True
+            _to_float(fp.get("total_cost")) > 0
+            if _to_float(fp.get("total_cost")) is not None else True
         ),
         message=lambda fp: "总费用应大于0",
     ))
@@ -848,10 +864,10 @@ def _check_los_days(fp: dict) -> bool:
     """住院天数 = 出院日期 - 入院日期。"""
     adm = _parse_datetime(fp.get("admission_datetime"))
     dis = _parse_datetime(fp.get("discharge_datetime"))
-    los = fp.get("los_days")
-    if adm and dis and _valid_number(los):
+    los = _to_float(fp.get("los_days"))
+    if adm and dis and los is not None:
         expected = (dis.date() - adm.date()).days
-        return abs(int(los) - expected) <= 1  # 允许 1 天误差
+        return abs(los - expected) <= 1  # 允许 1 天误差
     return True
 
 
@@ -902,8 +918,8 @@ def _check_diagnosis_age(fp: dict) -> bool:
     code = (primary.get("diagnosis_code") or "").upper()
     if not code or not code.startswith("P"):
         return True
-    age = fp.get("age")
-    age_days = fp.get("age_in_days")
+    age = _to_float(fp.get("age"))
+    age_days = _to_float(fp.get("age_in_days"))
     if age is not None and age >= 1:
         return False
     if age_days is not None and age_days >= 365:
@@ -973,7 +989,7 @@ def _check_death_discharge(fp: dict) -> bool:
     if not primary:
         return True
     code = (primary.get("diagnosis_code") or "").upper()
-    method = fp.get("discharge_method")
+    method = _to_int_code(fp.get("discharge_method"))
     if not code:
         return True
     is_death = bool(re.match(r'^R99|^I46\.1', code))
@@ -987,8 +1003,8 @@ def _check_other_diagnosis_age(fp: dict) -> bool:
     diags = _get_diagnoses(fp)
     if len(diags) <= 1:
         return True
-    age = fp.get("age")
-    age_days = fp.get("age_in_days")
+    age = _to_float(fp.get("age"))
+    age_days = _to_float(fp.get("age_in_days"))
     for diag in diags[1:]:
         code = (diag.get("diagnosis_code") or "").upper()
         if not code or not code.startswith("P"):
@@ -1002,9 +1018,9 @@ def _check_other_diagnosis_age(fp: dict) -> bool:
 
 def _check_newborn_weight(fp: dict) -> bool:
     """主诊断与新生儿出生体重一致性。"""
-    birth_weight = fp.get("newborn_birth_weight")
+    birth_weight = _to_float(fp.get("newborn_birth_weight"))
     primary = _get_primary_diagnosis(fp)
-    if not birth_weight or not primary:
+    if birth_weight is None or birth_weight <= 0 or not primary:
         return True
     code = (primary.get("diagnosis_code") or "").upper()
     if not code:
@@ -1040,8 +1056,9 @@ def _check_other_surgery_sex(fp: dict) -> bool:
 
 def _check_coma_brain_injury(fp: dict) -> bool:
     """昏迷时间与颅脑损伤一致性。"""
-    coma_hours = fp.get("coma_hours_before", 0) or 0
-    coma_hours += fp.get("coma_hours_after", 0) or 0
+    coma_hours = (_to_float(fp.get("coma_hours_before")) or 0.0) + (
+        _to_float(fp.get("coma_hours_after")) or 0.0
+    )
     if coma_hours > 0:
         codes = [
             (d.get("diagnosis_code") or "").upper()
@@ -1106,13 +1123,18 @@ class FrontpageFormalQC:
             rules_to_run = [r for r in rules_to_run if r.severity in severities]
 
         for rule in rules_to_run:
+            exec_error_msg: Optional[str] = None
             try:
-                passed = rule.validate(frontpage)
+                passed = bool(rule.validate(frontpage))
             except Exception as e:
-                logger.warning(f"规则 {rule.rule_id} 执行异常: {e}")
-                passed = True  # 异常时默认通过（宽容策略）
+                logger.warning("规则 %s 执行异常: %s", rule.rule_id, type(e).__name__)
+                passed = False
+                exec_error_msg = f"规则 {rule.rule_id} 校验执行异常（{type(e).__name__}），未通过校验"
 
-            msg = "" if passed else rule.message(frontpage)
+            if exec_error_msg is not None:
+                msg = exec_error_msg
+            else:
+                msg = "" if passed else rule.message(frontpage)
             results.append(QCResult(
                 rule_id=rule.rule_id,
                 field_name=rule.field_name,

@@ -10,6 +10,7 @@
 - 合理性（~70条）：逻辑一致性校验
 - 逻辑质控（~11条）：复杂跨字段交叉校验
 """
+import math
 import re
 import logging
 from typing import Any, Callable, Dict, List, Optional
@@ -83,21 +84,20 @@ def _ne(value: Any) -> bool:
     return True
 
 def _is_number(value: Any) -> bool:
-    """是否为数字。"""
-    if value is None:
-        return False
-    try:
-        float(str(value))
-        return True
-    except (ValueError, TypeError):
-        return False
+    """是否为有限数字。"""
+    return _to_num(value) is not None
 
 def _to_num(value: Any) -> Optional[float]:
-    """转数字。"""
+    """转有限数字（拒绝 bool / NaN / inf）。"""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
     try:
-        return float(str(value))
+        num = float(str(value).strip())
     except (ValueError, TypeError):
         return None
+    return num if math.isfinite(num) else None
 
 def _parse_dt(s: Any) -> Optional[datetime]:
     """解析日期时间。"""
@@ -164,8 +164,8 @@ def _get_primary_surgery(fp: dict) -> dict:
     return surgs[0] if surgs else {}
 
 def _get_sex(fp: dict) -> str:
-    """性别编码 1=男 2=女。"""
-    s = fp.get("sex") or fp.get("gender") or ""
+    """性别编码 1=男 2=女（兼容 sex/gender/patient_sex）。"""
+    s = fp.get("sex") or fp.get("gender") or fp.get("patient_sex") or ""
     s = str(s).strip()
     if s in ("1", "男"):
         return "1"
@@ -173,17 +173,55 @@ def _get_sex(fp: dict) -> str:
         return "2"
     return s
 
+def _first_ne(fp: dict, *keys: str) -> Any:
+    for key in keys:
+        val = fp.get(key)
+        if _ne(val):
+            return val
+    return None
+
+def _get_id_number(fp: dict) -> Any:
+    return _first_ne(fp, "id_number", "patient_id_card", "id_card_no", "id_card")
+
+def _get_birth_date(fp: dict) -> Any:
+    return _first_ne(fp, "birth_date", "patient_birthday", "birthday")
+
+def _get_age(fp: dict) -> Any:
+    return _first_ne(fp, "age", "age_years", "patient_age", "age_year")
+
+def _get_total_cost(fp: dict) -> Any:
+    val = fp.get("total_cost")
+    if _ne(val):
+        return val
+    return _get_val(fp, "cost_summary", "total_cost")
+
+def _get_hosp_days(fp: dict) -> Any:
+    return _first_ne(fp, "actual_hospital_days", "hospital_duration")
+
+def _get_admission_dept(fp: dict) -> Any:
+    return _first_ne(fp, "admission_dept", "admission_dept_name")
+
+def _get_discharge_dept(fp: dict) -> Any:
+    return _first_ne(fp, "discharge_dept", "discharge_dept_name")
+
+def _get_admission_condition(fp: dict) -> Any:
+    val = fp.get("admission_condition")
+    if _ne(val):
+        return val
+    primary = _get_primary_diag(fp)
+    return _first_ne(primary, "condition", "admission_condition")
+
 def _diag_code(d: dict) -> str:
-    return str(d.get("code") or d.get("icd_code") or "").strip().upper()
+    return str(d.get("code") or d.get("icd_code") or d.get("diagnosis_code") or "").strip().upper()
 
 def _diag_name(d: dict) -> str:
     return str(d.get("name") or d.get("diagnosis_name") or "").strip()
 
 def _surg_code(s: dict) -> str:
-    return str(s.get("code") or s.get("operation_code") or "").strip()
+    return str(s.get("code") or s.get("operation_code") or s.get("surgery_code") or "").strip()
 
 def _surg_name(s: dict) -> str:
-    return str(s.get("name") or s.get("operation_name") or "").strip()
+    return str(s.get("name") or s.get("operation_name") or s.get("surgery_name") or "").strip()
 
 
 # ============================================================
@@ -294,11 +332,11 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("3", "病案号", "病案号必填", "病案号，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("medical_record_no")))
+      lambda fp: _ne(_first_ne(fp, "medical_record_no", "mr_no")))
 
     R("4", "出生日期", "出生日期必填", "出生日期，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("birth_date")))
+      lambda fp: _ne(_get_birth_date(fp)))
 
     R("10", "出院时间", "出院时间必填", "出院时间为必填项",
       Severity.ERROR, Category.REQUIRED, False,
@@ -306,19 +344,19 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("21", "国籍", "国籍必填", "国籍为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("nationality")))
+      lambda fp: _ne(_first_ne(fp, "nationality", "patient_nationality")))
 
     R("29", "证件号码", "证件号码必填", "证件号码不能为空",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("id_number")))
+      lambda fp: _ne(_get_id_number(fp)))
 
     R("31", "证件类别", "证件类别必填", "患者证件类别，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("id_type")))
+      lambda fp: _ne(_first_ne(fp, "id_type", "id_card_type")))
 
     R("35", "总费用", "总费用必填", "总费用，为必填项",
       Severity.ERROR, Category.REQUIRED, True,
-      lambda fp: _ne(fp.get("total_cost")))
+      lambda fp: _ne(_get_total_cost(fp)))
 
     R("39", "离院方式", "离院方式必填", "离院方式编码，不能为空",
       Severity.ERROR, Category.REQUIRED, False,
@@ -326,19 +364,19 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("47", "民族", "民族必填", "民族名称，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("ethnicity")))
+      lambda fp: _ne(_first_ne(fp, "ethnicity", "patient_ethnicity")))
 
     R("51", "年龄", "年龄必填", "年龄为必填项",
       Severity.ERROR, Category.REQUIRED, True,
-      lambda fp: _ne(fp.get("age") or fp.get("age_years")))
+      lambda fp: _ne(_get_age(fp)))
 
     R("54", "入院病情", "入院病情必填", "入院病情编码不能为空",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("admission_condition")))
+      lambda fp: _ne(_get_admission_condition(fp)))
 
     R("56", "入院科别", "入院科室必填", "入院科室名称，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("admission_dept")))
+      lambda fp: _ne(_get_admission_dept(fp)))
 
     R("59", "入院时间", "入院时间必填", "入院时间为必填项",
       Severity.ERROR, Category.REQUIRED, False,
@@ -346,27 +384,27 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("61", "入院途径", "入院途径必填", "入院途径编码，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("admission_way")))
+      lambda fp: _ne(_first_ne(fp, "admission_way", "admission_route")))
 
     R("64", "住院天数", "住院天数必填", "实际住院天数为必填项",
       Severity.ERROR, Category.REQUIRED, True,
-      lambda fp: _ne(fp.get("actual_hospital_days")))
+      lambda fp: _ne(_get_hosp_days(fp)))
 
     R("85", "性别", "性别必填", "性别编码，为必填项",
       Severity.ERROR, Category.REQUIRED, True,
-      lambda fp: _ne(fp.get("sex") or fp.get("gender")))
+      lambda fp: _ne(_get_sex(fp)))
 
     R("86", "姓名", "姓名必填", "病人姓名，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("patient_name")))
+      lambda fp: _ne(_first_ne(fp, "patient_name", "name")))
 
     R("88", "医保支付方式", "医保支付方式必填", "医保支付方式编码，为必填项",
       Severity.ERROR, Category.REQUIRED, True,
-      lambda fp: _ne(fp.get("payment_method")))
+      lambda fp: _ne(_first_ne(fp, "payment_method", "insurance_type", "patient_insurance_type")))
 
     R("95", "职业", "职业必填", "职业名称，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("occupation")))
+      lambda fp: _ne(_first_ne(fp, "occupation", "occupation_category")))
 
     R("97", "治疗类别", "治疗类别必填", "治疗类别，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
@@ -402,11 +440,11 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("14", "联系人电话", "联系人电话必填", "联系人电话，为必填项",
       Severity.WARNING, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("contact_phone")))
+      lambda fp: _ne(_first_ne(fp, "contact_phone", "contact_telephone")))
 
     R("18", "联系人关系", "联系人关系必填", "与联系人关系，为必填项",
       Severity.WARNING, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("contact_relation")))
+      lambda fp: _ne(_first_ne(fp, "contact_relation", "contact_relationship")))
 
     R("40", "联系人姓名", "联系人姓名必填", "联系人姓名，为必填项",
       Severity.WARNING, Category.REQUIRED, False,
@@ -414,22 +452,22 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("72", "现住址", "现住址必填", "现住址，为必填项",
       Severity.WARNING, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("current_address")))
+      lambda fp: _ne(_first_ne(fp, "current_address", "currentaddress")))
 
     # ============ 规范性规则 ============
 
     R("26", "证件号码", "身份证格式", "证件类别为居民身份证，证件号码不符合填写规范",
       Severity.ERROR, Category.FORMAT, False,
-      lambda fp: (fp.get("id_type") not in ("1", "居民身份证") or _valid_id_card(fp.get("id_number") or "")))
+      lambda fp: (_first_ne(fp, "id_type", "id_card_type") not in ("1", "居民身份证") or _valid_id_card(_get_id_number(fp) or "")))
 
     R("48", "年龄", "年龄为数字", "年龄必须是数字",
       Severity.ERROR, Category.FORMAT, True,
-      lambda fp: (not _ne(fp.get("age"))) or _is_number(fp.get("age") or fp.get("age_years")))
+      lambda fp: (not _ne(_get_age(fp))) or _is_number(_get_age(fp)))
 
     R("62", "住院天数", "住院天数正整数", "实际住院天数为大于0的整数",
       Severity.ERROR, Category.FORMAT, True,
-      lambda fp: (not _ne(fp.get("actual_hospital_days"))) or
-                 (_is_number(fp.get("actual_hospital_days")) and _to_num(fp.get("actual_hospital_days")) > 0))
+      lambda fp: (not _ne(_get_hosp_days(fp))) or
+                 (_is_number(_get_hosp_days(fp)) and _to_num(_get_hosp_days(fp)) > 0))
 
     R("84", "性别", "性别值域", "性别编码，不在值域范围内",
       Severity.ERROR, Category.FORMAT, True,
@@ -442,16 +480,16 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("53", "入院病情", "入院病情值域", "入院病情编码不在值域范围内",
       Severity.ERROR, Category.FORMAT, False,
-      lambda fp: (not _ne(fp.get("admission_condition"))) or
-                 str(fp.get("admission_condition")).strip() in ADMISSION_CONDITION_VALUES)
+      lambda fp: (not _ne(_get_admission_condition(fp))) or
+                 str(_get_admission_condition(fp)).strip() in ADMISSION_CONDITION_VALUES)
 
     R("90", "邮编", "邮编格式", "邮政编码须为6位数字",
       Severity.WARNING, Category.FORMAT, False,
-      lambda fp: (not _ne(fp.get("zipcode"))) or bool(re.match(r'^\d{6}$', str(fp.get("zipcode")).strip())))
+      lambda fp: (not _ne(_first_ne(fp, "zipcode", "currentaddress_postcode"))) or bool(re.match(r'^\d{6}$', str(_first_ne(fp, "zipcode", "currentaddress_postcode")).strip())))
 
     R("15", "联系人电话", "电话格式", "联系人电话不符合电话号码填写规范",
       Severity.WARNING, Category.FORMAT, False,
-      lambda fp: (not _ne(fp.get("contact_phone"))) or _valid_phone(fp.get("contact_phone")))
+      lambda fp: (not _ne(_first_ne(fp, "contact_phone", "contact_telephone"))) or _valid_phone(_first_ne(fp, "contact_phone", "contact_telephone")))
 
     R("73", "新生儿出生体重", "新生儿体重为数字", "新生儿出生体重必须是数字",
       Severity.ERROR, Category.FORMAT, True,
@@ -471,8 +509,8 @@ def _build_rules() -> List[SettlementQCRule]:
     # 时间逻辑
     R("7", "出院时间", "出院时间>出生日期", "出院时间必须大于出生日期",
       Severity.ERROR, Category.LOGIC, False,
-      lambda fp: (not (_parse_dt(fp.get("discharge_datetime")) and _parse_dt(fp.get("birth_date"))))
-                 or _parse_dt(fp.get("discharge_datetime")) > _parse_dt(fp.get("birth_date")))
+      lambda fp: (not (_parse_dt(fp.get("discharge_datetime")) and _parse_dt(_get_birth_date(fp))))
+                 or _parse_dt(fp.get("discharge_datetime")) > _parse_dt(_get_birth_date(fp)))
 
     R("8", "出院时间", "出院时间>入院时间", "出院时间必须大于入院时间",
       Severity.ERROR, Category.LOGIC, False,
@@ -486,17 +524,17 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("58", "入院时间", "入院时间≥出生日期", "入院时间必须大于等于出生日期",
       Severity.ERROR, Category.LOGIC, False,
-      lambda fp: (not (_parse_dt(fp.get("admission_datetime")) and _parse_dt(fp.get("birth_date"))))
-                 or _parse_dt(fp.get("admission_datetime")) >= _parse_dt(fp.get("birth_date")))
+      lambda fp: (not (_parse_dt(fp.get("admission_datetime")) and _parse_dt(_get_birth_date(fp))))
+                 or _parse_dt(fp.get("admission_datetime")) >= _parse_dt(_get_birth_date(fp)))
 
     # 年龄逻辑
     R("49", "年龄", "年龄范围", "年龄大于等于0，小于200",
       Severity.ERROR, Category.LOGIC, True,
-      lambda fp: (not _is_number(fp.get("age"))) or (0 <= _to_num(fp.get("age")) < 200))
+      lambda fp: (not _is_number(_get_age(fp))) or (0 <= _to_num(_get_age(fp)) < 200))
 
     R("34", "总费用", "总费用>0", "金额合计费用必须大于0",
       Severity.ERROR, Category.LOGIC, True,
-      lambda fp: (not _ne(fp.get("total_cost"))) or (_is_number(fp.get("total_cost")) and _to_num(fp.get("total_cost")) > 0))
+      lambda fp: (not _ne(_get_total_cost(fp))) or (_is_number(_get_total_cost(fp)) and _to_num(_get_total_cost(fp)) > 0))
 
     # 新生儿体重范围
     R("74", "新生儿出生体重", "体重范围200-9999", "新生儿出生体重（克）范围：200-9999克",
@@ -606,11 +644,11 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("77", "新生儿入院类型", "非新生儿无需填", "非新生儿不需要填写新生儿入院类型",
       Severity.WARNING, Category.LOGIC, False,
-      lambda fp: (not _ne(fp.get("newborn_type"))) or _to_num(fp.get("age") or 999) == 0)
+      lambda fp: (not _ne(_first_ne(fp, "newborn_type", "newborn_admission_type"))) or _to_num(_get_age(fp) if _ne(_get_age(fp)) else 999) == 0)
 
     R("80", "新生儿入院体重", "新生儿入院体重联动", "入院新生儿应填写新生儿入院体重",
       Severity.WARNING, Category.LOGIC, False,
-      lambda fp: (not _ne(fp.get("newborn_type"))) or _ne(fp.get("newborn_admission_weight")))
+      lambda fp: (not _ne(_first_ne(fp, "newborn_type", "newborn_admission_type"))) or _ne(_first_ne(fp, "newborn_admission_weight", "newborn_admitweigth")))
 
     R("118", "诊断代码", "产妇Z37需新生儿体重",
       "产妇诊断含Z37编码时必填新生儿出生体重",
@@ -620,25 +658,25 @@ def _build_rules() -> List[SettlementQCRule]:
     # 住院医疗类型
     R("108", "住院医疗类型", "日间手术须有手术", "住院医疗类型为日间手术应填写手术操作",
       Severity.WARNING, Category.LOGIC, False,
-      lambda fp: (str(fp.get("medical_type")).strip() != "2") or len(_get_surgeries(fp)) > 0)
+      lambda fp: (str(_first_ne(fp, "medical_type", "inpat_type") or "").strip() != "2") or len(_get_surgeries(fp)) > 0)
 
     R("111", "住院医疗类型", "日间手术天数", "住院天数大于2时不应填写日间手术",
       Severity.WARNING, Category.LOGIC, False,
-      lambda fp: (str(fp.get("medical_type")).strip() != "2") or
-                 (not _is_number(fp.get("actual_hospital_days"))) or
-                 _to_num(fp.get("actual_hospital_days")) <= 2)
+      lambda fp: (str(_first_ne(fp, "medical_type", "inpat_type") or "").strip() != "2") or
+                 (not _is_number(_get_hosp_days(fp))) or
+                 _to_num(_get_hosp_days(fp)) <= 2)
 
     # 转院逻辑
     R("89", "转院机构", "转院须填机构", "离院方式为医嘱转院患者，必填拟接收机构名称",
       Severity.WARNING, Category.LOGIC, False,
       lambda fp: (str(fp.get("leaving_hospital_way")).strip() != "2") or
-                 _ne(fp.get("transfer_hospital")))
+                 _ne(_first_ne(fp, "transfer_hospital", "receiving_institution_name")))
 
     # 呼吸机
     R("23", "呼吸机使用时间", "呼吸机需护理级别", "使用了呼吸机的患者需填写对应护理级别天数",
       Severity.WARNING, Category.LOGIC, False,
-      lambda fp: (not _ne(fp.get("ventilation_hours"))) or
-                 _ne(fp.get("special_care_days")) or _ne(fp.get("first_level_care_days")))
+      lambda fp: (not _ne(_first_ne(fp, "ventilation_hours", "ventilator_usetime"))) or
+                 _ne(_first_ne(fp, "special_care_days", "intensive_care_days")) or _ne(_first_ne(fp, "first_level_care_days", "primary_care_days")))
 
     # 输血
     R("130", "输血品种", "输血品种值域", "输血品种不在代码表范围内",
@@ -733,7 +771,7 @@ def _build_rules() -> List[SettlementQCRule]:
     # --- 费用交叉校验 ---
     R("214", "总费用", "总费用必填", "结算总费用为必填项",
       Severity.ERROR, Category.REQUIRED, True,
-      lambda fp: _ne(fp.get("total_cost")))
+      lambda fp: _ne(_get_total_cost(fp)))
 
     R("215", "结算期间", "结算开始日期必填", "结算开始日期为必填项",
       Severity.WARNING, Category.REQUIRED, False,
@@ -751,13 +789,13 @@ def _build_rules() -> List[SettlementQCRule]:
     # --- 转科 / 转院补充 ---
     R("218", "转科科别", "转科须有科别", "有转科记录时，转科科别不能为空",
       Severity.WARNING, Category.LOGIC, False,
-      lambda fp: (fp.get("admission_dept") == fp.get("discharge_dept"))
+      lambda fp: (_get_admission_dept(fp) == _get_discharge_dept(fp))
                  or _ne(fp.get("transfer_dept_name") or fp.get("transfer_dept")))
 
     # --- 出院科别 ---
     R("219", "出院科别", "出院科别必填", "出院科别为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("discharge_dept") or fp.get("discharge_dept_name")))
+      lambda fp: _ne(_get_discharge_dept(fp)))
 
     R("220", "出院时间", "出院时间必填", "出院时间为必填项",
       Severity.ERROR, Category.REQUIRED, False,
@@ -781,12 +819,12 @@ def _build_rules() -> List[SettlementQCRule]:
     # --- 生日 ---
     R("224", "出生日期", "出生日期必填", "出生日期为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("birth_date") or fp.get("patient_birthday")))
+      lambda fp: _ne(_get_birth_date(fp)))
 
     # --- 证件号码 ---
     R("225", "证件号码", "证件号码必填", "患者证件号码为必填项",
       Severity.WARNING, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("id_number") or fp.get("patient_id_card")))
+      lambda fp: _ne(_get_id_number(fp)))
 
     return rules
 
@@ -853,24 +891,32 @@ def _check_icu_in_range(fp: dict, time_field: str) -> bool:
 
 def _check_id_birthday(fp: dict) -> bool:
     """身份证出生日期与填写出生日期一致。"""
-    id_card = str(fp.get("id_number") or "").strip()
-    birth = str(fp.get("birth_date") or "").strip().replace("-", "")
+    id_card = str(_get_id_number(fp) or "").strip()
+    birth = str(_get_birth_date(fp) or "").strip().replace("-", "")
     if len(id_card) == 18 and birth:
+        if not id_card[6:14].isdigit():
+            return False
         return id_card[6:14] == birth[:8]
     if len(id_card) == 15 and birth:
+        if not id_card[6:12].isdigit():
+            return False
         return "19" + id_card[6:12] == birth[:8]
     return True
 
 def _check_id_sex(fp: dict) -> bool:
-    """身份证性别与填写性别一致。"""
-    id_card = str(fp.get("id_number") or "").strip()
+    """身份证性别与填写性别一致（畸形身份证第 17/15 位非数字直接判不通过）。"""
+    id_card = str(_get_id_number(fp) or "").strip()
     sex = _get_sex(fp)
     if not sex or not id_card:
         return True
     if len(id_card) == 18:
+        if not id_card[16].isdigit():
+            return False
         id_sex = "1" if int(id_card[16]) % 2 == 1 else "2"
         return id_sex == sex
     if len(id_card) == 15:
+        if not id_card[14].isdigit():
+            return False
         id_sex = "1" if int(id_card[14]) % 2 == 1 else "2"
         return id_sex == sex
     return True
@@ -900,10 +946,10 @@ def _check_delivery_z37(fp: dict) -> bool:
 
 def _check_newborn_weight_required(fp: dict) -> bool:
     """新生儿28天内需填出生体重。"""
-    age = _to_num(fp.get("age") or fp.get("age_years"))
+    age = _to_num(_get_age(fp))
     day_age = _to_num(fp.get("age_days"))
     if age is not None and age == 0 and day_age is not None and 0 < day_age <= 28:
-        return _ne(fp.get("newborn_birth_weight"))
+        return _ne(_first_ne(fp, "newborn_birth_weight", "newborn_birthweight"))
     return True
 
 def _check_z37_newborn_weight(fp: dict) -> bool:
@@ -913,7 +959,7 @@ def _check_z37_newborn_weight(fp: dict) -> bool:
     has_z37 = any(any(c.startswith(z) for z in z37_codes) for c in codes)
     if not has_z37:
         return True
-    return _ne(fp.get("newborn_birth_weight"))
+    return _ne(_first_ne(fp, "newborn_birth_weight", "newborn_birthweight"))
 
 def _check_perinatal_age(fp: dict) -> bool:
     """P10-P15 编码需年龄<1岁。"""
@@ -922,14 +968,14 @@ def _check_perinatal_age(fp: dict) -> bool:
     if not has_p10_15:
         return True
     admit = _parse_dt(fp.get("admission_datetime"))
-    birth = _parse_dt(fp.get("birth_date"))
+    birth = _parse_dt(_get_birth_date(fp))
     if admit and birth:
         return (admit - birth).days < 365
     return True
 
 def _check_nursing_days_sum(fp: dict) -> bool:
     """各级护理天数之和不超过住院天数。"""
-    hosp_days = _to_num(fp.get("actual_hospital_days") or fp.get("hospital_duration"))
+    hosp_days = _to_num(_get_hosp_days(fp))
     if hosp_days is None or hosp_days <= 0:
         return True
     total = 0
@@ -963,13 +1009,18 @@ class SettlementFormalQCEngine:
         """
         report = SettlementQCReport(total_rules=len(self.rules))
         for rule in self.rules:
+            exec_error_msg: Optional[str] = None
             try:
-                passed = rule.validate(settlement)
+                passed = bool(rule.validate(settlement))
             except Exception as e:
-                logger.warning(f"规则 {rule.rule_id} 执行异常: {e}")
-                passed = True  # 异常时不误报
+                logger.warning("规则 %s 执行异常: %s", rule.rule_id, type(e).__name__)
+                passed = False
+                exec_error_msg = f"规则 {rule.rule_id} 校验执行异常（{type(e).__name__}），未通过校验"
 
-            msg = "" if passed else rule.message(settlement)
+            if exec_error_msg is not None:
+                msg = exec_error_msg
+            else:
+                msg = "" if passed else rule.message(settlement)
             result = SettlementQCResult(
                 rule_id=rule.rule_id,
                 field_name=rule.field_name,
