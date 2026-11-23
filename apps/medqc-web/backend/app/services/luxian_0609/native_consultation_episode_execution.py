@@ -4875,6 +4875,7 @@ def _finish(
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     decision_rule_ids: frozenset[str] = frozenset(),
     fact_refs_by_rule: Mapping[str, Sequence[str]] | None = None,
+    positive_document_refs_by_rule: Mapping[str, Sequence[str]] | None = None,
 ) -> NativeConsultationEpisodeExecutionResult:
     decisions = tuple(
         _decision(
@@ -4883,6 +4884,7 @@ def _finish(
             reason_code=reason_code,
             snapshot=evidence_snapshot,
             fact_refs=(fact_refs_by_rule or {}).get(rule_id, ()),
+            positive_document_refs=(positive_document_refs_by_rule or {}).get(rule_id, ()),
         )
         for rule_id in selected
         if rule_id in decision_rule_ids and evidence_snapshot is not None
@@ -6593,19 +6595,29 @@ async def _execute_disposition_rule(
     evidence_materials, evidence_snapshot, decision_rule_ids,
 ) -> NativeConsultationEpisodeExecutionResult:
     typed = frozenset(decision_rule_ids)
+    from ..automatic_material_scope import source_scope
     from .consultation_disposition_record import DispositionRecordOutcome
 
+    positive_document_refs = ()
     try:
         documents = _documents(_read_rows(
             institute_id=institute_id, patient_id=patient_id, visit_id=visit_id, source_schema=source_schema,
             evidence_materials=evidence_materials, evidence_snapshot=evidence_snapshot))
         outcome = await check_disposition_record(documents=documents, llm_client=llm_client)
+        if (
+            DISPOSITION_RECORD_RULE_ID in typed
+            and outcome.generic_feedback_refs
+            and outcome.generic_feedback_refs != outcome.fact_refs
+        ):
+            scope = source_scope(_SOURCE_KEY)
+            if scope is not None and not scope.get("can_judge_clinical_absence", False):
+                # 笼统回应可独立证明缺陷，但未获覆盖证明的其他文书不能一并计入缺陷。
+                outcome = replace(outcome, fact_refs=outcome.generic_feedback_refs)
         # 计数来自已核验的文书条目；一份文书可能映射到多个材料引用。
         unspecific_document_count = len(outcome.fact_refs)
         if DISPOSITION_RECORD_RULE_ID in typed and outcome.status == "not_applicable" and not outcome.fact_refs:
             # 全部文书已核验为非适用，保留实际文书；零行只保留来源观察。
             if documents:
-                from .consultation_decision_evidence import material_refs_for_internal_refs
                 try:
                     refs = material_refs_for_internal_refs(
                         documents=documents, candidates=(), internal_refs=tuple(item["ref"] for item in documents),
@@ -6618,11 +6630,12 @@ async def _execute_disposition_rule(
                              for item in evidence_snapshot.observations if item.source_key == _SOURCE_KEY) if evidence_snapshot is not None else ()
                 outcome = replace(outcome, fact_refs=refs)
         elif DISPOSITION_RECORD_RULE_ID in typed and outcome.fact_refs:
-            from .consultation_decision_evidence import material_refs_for_internal_refs
-
             try:
                 outcome = replace(outcome, fact_refs=material_refs_for_internal_refs(
                     documents=documents, candidates=(), internal_refs=outcome.fact_refs))
+                positive_document_refs = material_refs_for_internal_refs(
+                    documents=documents, candidates=(), internal_refs=outcome.generic_feedback_refs,
+                )
             except ValueError:
                 outcome = replace(outcome, status="technical_error", reason="snapshot_mismatch", fact_refs=())
     except _SourceGap:
@@ -6634,6 +6647,7 @@ async def _execute_disposition_rule(
         evidence_snapshot=evidence_snapshot,
         decision_rule_ids=frozenset(typed.intersection({DISPOSITION_RECORD_RULE_ID})),
         fact_refs_by_rule={DISPOSITION_RECORD_RULE_ID: outcome.fact_refs},
+        positive_document_refs_by_rule={DISPOSITION_RECORD_RULE_ID: positive_document_refs},
         calls=outcome.llm_call_count, prompt_tokens=outcome.prompt_tokens,
         completion_tokens=outcome.completion_tokens, total_tokens=outcome.total_tokens, api_time=outcome.api_time)
     return NativeConsultationEpisodeExecutionResult(

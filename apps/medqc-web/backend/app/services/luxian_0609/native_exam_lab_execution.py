@@ -2953,7 +2953,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     model_rule_count += 1
                     ct_freeze_key = fact_freeze_key(
                         protocol="ct-order-course-validated-v1", prompt=build_ct_fact_prompt(ct_review),
-                        client=llm_client, materials=ct_review, scope=evidence_snapshot.visit_ref,
+                        client=llm_client, materials=ct_review.freeze_material(), scope=evidence_snapshot.visit_ref,
                     )
                     ct_frozen_payload = load_facts("ct_order_consistency", ct_freeze_key)
                     if ct_frozen_payload is not None:

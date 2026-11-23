@@ -17,11 +17,17 @@ _HEADINGS = (
     "诊疗计划", "治疗计划", "治疗经过", "诊疗经过", "出院情况", "出院医嘱",
     "出院带药", "出院用药", "出院指导", "随访计划", "医师签名", "医师签字",
 )
-_SECTION = re.compile(
-    r"(?:^|[\n\r]|(?<=[。；;]))\s*(?:[一二三四五六七八九十]+[、.．]\s*)?"
-    r"[【\[]?(?P<label>" + "|".join(map(re.escape, _HEADINGS))
-    + r")[】\]]?[ \t]*(?:[:：]|(?=[\r\n]|$))[ \t]*"
-)
+
+
+def _section_pattern(headings: tuple[str, ...]) -> re.Pattern[str]:
+    return re.compile(
+        r"(?:^|[\n\r]|(?<=[。；;]))\s*(?:[一二三四五六七八九十]+[、.．]\s*)?"
+        r"[【\[]?(?P<label>" + "|".join(map(re.escape, headings))
+        + r")[】\]]?[ \t]*(?:[:：]|(?=[\r\n]|$))[ \t]*"
+    )
+
+
+_SECTION = _section_pattern(_HEADINGS)
 _NUMBERED = re.compile(r"(?:^|[\n\r；;]|\s)(?P<number>[1-9]\d{0,2})[、.．)](?!\d)\s*")
 
 
@@ -48,7 +54,9 @@ class _Text(HTMLParser):
             self.parts.append(data)
 
 
-def explicit_sections(value: Any) -> tuple[tuple[str, str], ...]:
+def explicit_sections(
+    value: Any, *, additional_headings: tuple[str, ...] = (),
+) -> tuple[tuple[str, str], ...]:
     if not isinstance(value, str):
         return ()
     text = value
@@ -56,7 +64,8 @@ def explicit_sections(value: Any) -> tuple[tuple[str, str], ...]:
         parser = _Text()
         parser.feed(value)
         text = "".join(parser.parts)
-    matches = list(_SECTION.finditer(text))
+    pattern = _section_pattern(_HEADINGS + additional_headings) if additional_headings else _SECTION
+    matches = list(pattern.finditer(text))
     return tuple(
         (match["label"], text[match.end():matches[i + 1].start() if i + 1 < len(matches) else None].strip())
         for i, match in enumerate(matches)
@@ -101,6 +110,17 @@ def document_diagnoses(
                         "source_field": "record_content", "source_section": label,
                     })
     return tuple(result)
+
+
+def matches_document_diagnoses(
+    source_key: str, document: Mapping[str, Any], rows: Sequence[Mapping[str, Any]],
+) -> bool:
+    """只认可可从同一冻结正文的唯一诊断栏目逐行复算的投影。"""
+    _, labels = DIAGNOSIS_PARENTS[source_key]
+    if not rows or not str(document.get("document_id") or "").strip():
+        return False
+    found = [label for label, _ in explicit_sections(document.get("record_content")) if label in labels]
+    return len(found) == 1 and tuple(rows) == document_diagnoses(source_key, (document,))
 
 
 def homepage_diagnoses(diagnoses: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], ...]:

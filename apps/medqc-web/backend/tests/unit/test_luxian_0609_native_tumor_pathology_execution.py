@@ -11,8 +11,11 @@ from app.services.luxian_0609.pathology_documentation_extraction import (
 
 from chemotherapy_administration_test_support import FrozenChemotherapyAdministrationClient, fact
 
+from app.services.automatic_material_scope import describe_source
+from app.services.case_material_snapshot import activate
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
 from app.services.luxian_0609 import source_evidence_reader
+from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -1062,7 +1065,7 @@ async def test_typed_027_excludes_death_terminal_before_discharge_and_malignancy
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         rows = {
-            "death_record": ({"record_content": "匿名死亡记录"},),
+            "death_record": ({"record_content": "经抢救无效后死亡。"},),
             # 即使存在恶性诊断，也不能把死亡终末病例送入《出院记录》计划核对。
             "diagnosis": ({"diagnosis_code": "C18.9"},),
             "inpat_registration.discharge_horizon": (
@@ -3280,3 +3283,128 @@ async def test_typed_027_follow_up_plan_satisfies_baseline_without_treatment(
     assert facts["plan_items"]["follow_up"] is follow_up
     assert facts["plan_items"]["tumor_treatment"] is False
     assert facts["requirement_met"] is (expected_state == "compliant")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("discharge_order", "death_record_state", "expected_state", "expected_reason"),
+    (
+        ("出院后暂不抗肿瘤治疗，暂无随访计划。", "empty", "non_compliant", "requirement_violated"),
+        ("出院后暂无肿瘤治疗或随访计划。", "empty", "non_compliant", "requirement_violated"),
+        ("出院后暂不化疗。", "empty", "data_gap", "source_readiness_unproven"),
+        ("出院后暂不化疗，定期复查。", "empty", "compliant", "requirement_satisfied"),
+        ("出院后暂无肿瘤治疗或随访计划。下月肿瘤专科门诊随访。", "empty", "compliant", "requirement_satisfied"),
+        (None, "present", "not_applicable", "trigger_absent_complete"),
+        (None, "time_only", "not_applicable", "trigger_absent_complete"),
+        (None, "same_time_with_offset", "not_applicable", "trigger_absent_complete"),
+        (None, "conflicting_times", "data_gap", "authoritative_time_conflict"),
+        (None, "conflicting_fields", "data_gap", "authoritative_time_conflict"),
+        (None, "conflicting_dates", "data_gap", "authoritative_time_conflict"),
+        (None, "horizon_error", "technical_error", "source_query_error"),
+        (None, "horizon_conflict", "data_gap", "authoritative_time_conflict"),
+        (None, "alive_discharge", "data_gap", "association_failed"),
+        (None, "empty", "data_gap", "source_unavailable"),
+        (None, "shell", "data_gap", "source_readiness_unproven"),
+        (None, "truncated", "data_gap", "source_unavailable"),
+        (None, "error", "technical_error", "source_query_error"),
+    ),
+)
+async def test_typed_027_auto_scope_requires_affirmative_source_proof(
+    discharge_order, death_record_state, expected_state, expected_reason,
+):
+    rule_id = "LX0609-08-01-04"
+    horizon_key = "inpat_registration.discharge_horizon"
+    confirmed_death = ({"record_content": "经抢救无效后死亡。"},)
+    rows = {
+        "diagnosis": ({"diagnosis_code": "C18.9"},),
+        "discharge_record": (
+            ({"discharge_condition": "好转出院"},) if death_record_state == "alive_discharge"
+            else ({"record_content": "", "discharge_order": discharge_order},)
+            if discharge_order is not None else ()
+        ),
+        "death_record": {
+            "present": confirmed_death,
+            "time_only": ({"death_datetime": "2026-06-01 12:00:00", "record_content": ""},),
+            "same_time_with_offset": ({
+                "death_datetime": "2026-06-01 12:00:00",
+                "record_content": "死亡时间：2026-06-01 04:00:00Z。",
+            },),
+            "conflicting_times": ({
+                "death_datetime": "2026-06-01 12:00:00",
+                "record_content": "死亡时间：2026-06-01 13:00:00。",
+            },),
+            "conflicting_fields": ({
+                "death_datetime": "2026-06-01 12:00:00",
+                "death_time": "2026-06-01 13:00:00",
+            },),
+            "conflicting_dates": (
+                {"death_datetime": "2026-06-01"},
+                {"death_time": "2026-06-02 12:00:00"},
+            ),
+            "shell": ({"document_title": "死亡记录", "record_content": ""},),
+            "empty": (),
+            "error": (),
+        }.get(death_record_state, confirmed_death),
+        horizon_key: (
+            {"time_conflict": True, "discharge_datetime": None}
+            if death_record_state == "horizon_conflict"
+            else {"discharge_datetime": "2026-06-01 12:00:00"},
+        ),
+    }
+    source_keys = resolve_legacy_executor_material_source_keys(
+        ("tumor_pathology",), selected_rule_ids=(rule_id,),
+    )
+    scopes = {
+        key: describe_source({column for row in rows.get(key, ()) for column in row}, rows.get(key, ()))
+        for key in set(source_keys).union(rows)
+    }
+    if death_record_state in {"shell", "conflicting_dates"}:
+        # 即使读源没有自动覆盖范围，矛盾或空壳仍不足以确认死亡场景。
+        scopes.pop("death_record")
+
+    def reader(*, source_key, **_kwargs):
+        if (source_key, death_record_state) in {
+            ("death_record", "error"), (horizon_key, "horizon_error"),
+        }:
+            raise SourceEvidenceQueryError()
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows.get(source_key, ()),
+            truncated=source_key == "death_record" and death_record_state == "truncated",
+            limit_rows=50,
+            material_scope=scopes.get(source_key),
+        )
+
+    with activate({"automatic_material": {"sources": scopes}}):
+        session = build_luxian_0609_evidence_read_session(
+            selected_rule_ids=(rule_id,),
+            institute_id="safe-institute", patient_id="safe-patient", visit_id="safe-visit",
+            source_schema=None, created_at=CREATED_AT, row_reader=reader,
+            additional_source_keys=source_keys,
+        )
+        result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+            rule_ids=(rule_id,), wrapper_rules=[_wrapper(rule_id)], evidence_payload=None,
+            institute_id="safe-institute", patient_id="safe-patient", visit_id="safe-visit",
+            source_schema=None, llm_client=_Client([]), evidence_snapshot=session.snapshot,
+            evidence_materials=session.materials, decision_rule_ids=(rule_id,),
+        )
+        (decision,) = bind_and_reduce_luxian_0609_rule_decisions(
+            decisions=result.decisions, expected_rule_ids=(rule_id,),
+            snapshot=session.snapshot, evidence_materials=session.materials,
+        )
+
+    assert decision.final_state.value == expected_state
+    assert decision.reason_code == expected_reason
+    assert result.llm_call_count == 0
+    (raw_decision,) = result.decisions
+    if expected_state == "non_compliant":
+        ((ref, _),) = session.materials.document_rows("discharge_record", snapshot=session.snapshot)
+        assert raw_decision.positive_document_refs == (ref,)
+    else:
+        assert not raw_decision.positive_document_refs
+    if expected_state == "not_applicable":
+        ((ref, _),) = session.materials.document_rows("death_record", snapshot=session.snapshot)
+        assert decision.fact_refs == (ref,)
+        assert decision.affirmative_applicability
+    else:
+        assert not decision.affirmative_applicability

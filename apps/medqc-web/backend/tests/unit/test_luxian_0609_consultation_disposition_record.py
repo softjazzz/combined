@@ -79,6 +79,16 @@ class Client:
         return answer
 
 
+@pytest.fixture
+def no_response_freeze(monkeypatch):
+    def wrap(client, *, visit_id):
+        client.commit = lambda: None
+        client.reused_calls = 0
+        return client
+
+    monkeypatch.setattr(episode, "FrozenResponseClient", wrap)
+
+
 @pytest.mark.asyncio
 async def test_verified_generic_disposition_survives_action_extraction_failure():
     docs = documents("建议给予合成治疗。以上已遵嘱执行。")
@@ -525,7 +535,7 @@ async def test_supported_client_uses_existing_output_options_without_extra_calls
 
 @pytest.mark.asyncio
 async def test_new_rule_reads_only_execution_record_and_does_not_read_orders(
-    monkeypatch,
+    monkeypatch, no_response_freeze,
 ):
     requested = []
 
@@ -582,7 +592,7 @@ def test_new_rule_is_registered_as_independent_writing_check():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("tamper_reference", [False, True])
 async def test_new_rule_binds_record_evidence_and_renders_independent_customer_result(
-    monkeypatch, tamper_reference
+    monkeypatch, tamper_reference, no_response_freeze,
 ):
     from app.services.luxian_0609.evidence_snapshot_provider import (
         SnapshotSourceRows,
@@ -683,6 +693,88 @@ async def test_new_rule_binds_record_evidence_and_renders_independent_customer_r
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("feedback", "kind", "action_error", "mixed", "unquoted_feedback", "expected"), [
+    ("以上已遵嘱执行", "generic", False, False, "", ("non_compliant", "requirement_violated")),
+    ("以上已遵嘱执行", "generic", True, False, "", ("data_gap", "source_readiness_unproven")),
+    ("", "missing", False, False, "", ("data_gap", "source_readiness_unproven")),
+    ("以上已遵嘱执行", "generic", False, True, "", ("non_compliant", "requirement_violated")),
+    pytest.param(
+        "以上已遵嘱执行", "generic", False, False, "本科已于今日完成气压治疗。",
+        ("data_gap", "source_readiness_unproven"), id="response-omitted-from-both-stages",
+    ),
+    pytest.param(
+        "以上已遵嘱执行", "generic", True, False, "本科已于今日完成气压治疗。",
+        ("data_gap", "source_readiness_unproven"), id="response-omitted-before-action-error",
+    ),
+])
+async def test_automatic_disposition_requires_independent_grounded_evidence(
+    no_response_freeze, feedback, kind, action_error, mixed, unquoted_feedback, expected,
+):
+    from app.services import automatic_material_scope, case_material_snapshot as material
+    from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
+    from app.services.luxian_0609.evidence_snapshot_provider import (
+        SnapshotSourceRows,
+        build_luxian_0609_evidence_read_session,
+    )
+
+    source_key = "consultation_record"
+    row = {
+        "document_id": "SYNTHETIC-DISPOSITION",
+        "document_title": "会诊执行记录",
+        "record_time": "2026-07-20 15:59:00",
+        "record_content": "会诊建议给予气压治疗。" + unquoted_feedback + feedback,
+    }
+    rows = [row]
+    opinion_answer = opinions("给予气压治疗", feedback)
+    action_answer = response(item("给予气压治疗", feedback, kind))
+    if mixed:
+        rows.append({
+            **row, "document_id": "SYNTHETIC-MISSING", "record_time": "2026-07-20 15:58:00",
+            "record_content": "会诊建议复查合成检查。",
+        })
+        second_opinion = opinions("复查合成检查")
+        second_action = response(examinations=(item("复查合成检查", "", "missing"),))
+        for first, second in ((opinion_answer, second_opinion), (action_answer, second_action)):
+            first_payload = json.loads(first["content"])
+            second_document, = json.loads(second["content"])["documents"]
+            first_payload["documents"].append({**second_document, "ref": "consultation_record-2"})
+            first["content"] = json.dumps(first_payload, ensure_ascii=False)
+    scope = automatic_material_scope.describe_source(row.keys(), rows)
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=(record.RULE_ID,), institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, created_at="2026-07-20T17:00:00+08:00",
+        row_reader=lambda **kwargs: SnapshotSourceRows.create(
+            source_key=kwargs["source_key"], rows=rows, truncated=False, limit_rows=48,
+        ),
+    )
+    with material.activate({"automatic_material": {"sources": {source_key: scope}}}):
+        outcome = await episode.execute_luxian_0609_native_consultation_episode_rules(
+            rule_ids=(record.RULE_ID,), decision_rule_ids=(record.RULE_ID,),
+            institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+            evidence_materials=session.materials, evidence_snapshot=session.snapshot,
+            llm_client=Client(
+                opinion_answer, RuntimeError("合成抽取失败") if action_error else action_answer,
+            ),
+        )
+        reduced, = bind_and_reduce_luxian_0609_rule_decisions(
+            decisions=outcome.decisions, expected_rule_ids=(record.RULE_ID,),
+            snapshot=session.snapshot, evidence_materials=session.materials,
+        )
+    assert (reduced.final_state.value, reduced.reason_code) == expected
+    decision, = outcome.decisions
+    expected_ref, = (
+        ref for ref, material_row in session.materials.document_rows(source_key, snapshot=session.snapshot)
+        if material_row["document_id"] == "SYNTHETIC-DISPOSITION"
+    )
+    assert decision.fact_refs == (expected_ref,)
+    expected_positive = expected[0] == "non_compliant"
+    assert decision.positive_document_refs == ((expected_ref,) if expected_positive else ())
+    if expected_positive:
+        assert dict(outcome.customer_display_facts)[record.RULE_ID]["unspecific_document_count"] == 1
+    assert outcome.llm_call_count == 2
 
 
 @pytest.mark.parametrize("raw", [

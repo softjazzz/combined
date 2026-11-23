@@ -21,7 +21,7 @@ from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from app.core.execution_timing import measure_stage, timing_labels
-from .evaluation_horizon import frozen_window_is_mature
+from .evaluation_horizon import after_frozen_horizon, frozen_window_is_mature
 from .phase_scope import build_luxian_0609_pending_definition_result
 
 from .decision_model import (
@@ -107,7 +107,7 @@ from .extended_document.transfusion_performance_extraction import extract_transf
 from .prophylactic_antimicrobial_duration import is_local_route_drug_order
 from .transfusion_course_presence import classify_transfusion_course_records, select_transfusion_course_candidates
 from .extended_document.physician_handoff import evaluate_physician_handoff
-from .extended_document.rule_076 import death_time_from_body, evaluate_rule_076
+from .extended_document.rule_076 import death_time_from_body, death_times_from_body, evaluate_rule_076
 from .extended_document.shared import _clean, _parse_datetime, _row_time, row_time_upper_bound
 from app.services.document_assembly.signatures import course_physician_signatures
 from .extended_document.discharge_medication_extraction import extract_discharge_medications
@@ -213,6 +213,7 @@ EXTENDED_DOCUMENT_SOURCE_KEYS = (
 
 _DEATH_MARKERS = ("死亡", "病故")
 _ALIVE_DISCHARGE_MARKERS = ("出院", "转院", "医嘱离院", "非医嘱离院")
+_EXPLICIT_ALIVE_DISCHARGE_MARKERS = ("存活", "好转", "治愈", "未愈", "转院", "医嘱离院")
 _DISCHARGE_DIAGNOSIS_TYPES = frozenset(("出院诊断", "死亡诊断"))
 _UNCERTAIN_DIAGNOSIS_MARKERS = ("诊断仍不明确", "诊断不明确")
 _LOCAL_DIAGNOSIS_UNCERTAINTY_MARKERS = ("原因待查", "性质待定")
@@ -245,6 +246,10 @@ _DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
     r"(?<![a-z])(?:po|sc|ih|im|iv|ivgtt)(?![a-z])|"
     r"\d+(?:\.\d+)?\s*(?:mg|μg|ug|ml|g|单位|片|粒|袋|支)(?![a-z]))",
     re.IGNORECASE,
+)
+_EXPLICIT_NO_DISCHARGE_MEDICATION_PATTERN = re.compile(
+    r"(?:出院带药\s*[:：]\s*(?:无|未开|拒绝)|"
+    r"(?:患者)?(?:未开|无|不需(?:要)?|拒绝)(?:出院)?带药)"
 )
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
     "感染专家", "专家会诊", "专家查房", "同意特殊级",
@@ -827,6 +832,7 @@ def _decision(
     exact_document_refs: bool = False,
     criterion_results: Sequence[Any] = (),
     positive_document_refs: Sequence[str] = (),
+    affirmative_applicability: bool = False,
 ) -> RuleDecision:
     if final_state == "technical_error":
         from .decision_model import ALLOWED_REASON_CODES_BY_FINAL_STATE
@@ -883,6 +889,7 @@ def _decision(
             else tuple(dict.fromkeys((*_fact_refs(snapshot, source_keys), *document_refs)))
         ),
         positive_document_refs=tuple(positive_document_refs),
+        affirmative_applicability=affirmative_applicability,
         evaluator_version="extended-document-v2",
         confidence=None,
         criterion_results=tuple(criterion_results),
@@ -950,6 +957,48 @@ def _death_context(
     ) or discharge_rows:
         return "absent", None
     return "unknown", None
+
+
+def _affirmative_death_record_refs(
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    registration_rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[str, ...], bool]:
+    """返回明确死亡证据及日期/时刻是否矛盾。"""
+    from .basic_timeliness_facts import parse_authoritative_date, parse_authoritative_datetime
+
+    try:
+        records = materials.document_rows("death_record", snapshot=snapshot)
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return (), False
+    dates: set[date] = set()
+    times: set[datetime] = set()
+    proof: list[str] = []
+    unparseable = False
+    for ref, row in (*records, *(("", row) for row in registration_rows)):
+        row_times: list[datetime] = []
+        row_dates: list[date] = []
+        for field in ("death_datetime", "death_time"):
+            value = row.get(field)
+            if not _clean(value):
+                continue
+            if (moment := parse_authoritative_datetime(value)) is not None:
+                row_times.append(moment)
+            elif (day := parse_authoritative_date(value)) is not None:
+                row_dates.append(day)
+            else:
+                unparseable = True
+        if ref:
+            row_times.extend(
+                moment for value in death_times_from_body(row)
+                if (moment := parse_authoritative_datetime(value)) is not None
+            )
+        times.update(row_times)
+        dates.update((*row_dates, *(moment.date() for moment in row_times)))
+        if ref and (row_times or row_dates):
+            proof.append(ref)
+    conflict = len(dates) > 1 or len(times) > 1
+    return (() if conflict or unparseable or len(proof) > 128 else tuple(proof)), conflict
 
 
 def _discharge_time(
@@ -1695,6 +1744,14 @@ def _medication_has_oral_form(item: Mapping[str, Any], prescription_names: Seque
     return False
 
 
+def _is_effective_discharge_prescription(row: Mapping[str, Any]) -> bool:
+    return (
+        _clean(row.get("order_type")) == "出院带药"
+        and _clean(row.get("order_status")) in {"新开", "执行", "执行中", "核实", "完成"}
+        and _clean(row.get("is_deleted")).lower() not in {"1", "true"}
+    )
+
+
 def _discharge_oral_prescription_names(materials: Luxian0609EvidenceMaterialStore) -> tuple[str, ...]:
     """只读同次就诊正式出院处方，仅用于确定口服剂型，不补剂量或频次。"""
     try:
@@ -1704,9 +1761,7 @@ def _discharge_oral_prescription_names(materials: Luxian0609EvidenceMaterialStor
         return ()
     eligible = {
         _clean(row.get("prescription_id")) for row in prescriptions
-        if _clean(row.get("prescription_id")) and _clean(row.get("order_type")) == "出院带药"
-        and _clean(row.get("order_status")) in {"新开", "执行", "执行中", "核实", "完成"}
-        and _clean(row.get("is_deleted")).lower() not in {"1", "true"}
+        if _clean(row.get("prescription_id")) and _is_effective_discharge_prescription(row)
     }
     grouped: dict[str, list[Mapping[str, Any]]] = {}
     for item in items:
@@ -1729,10 +1784,7 @@ def _formal_discharge_prescription_medications(
         return (), "source_unavailable", 0
     eligible = {
         _clean(row.get("prescription_id")) for row in prescriptions
-        if _clean(row.get("prescription_id"))
-        and _clean(row.get("order_type")) == "出院带药"
-        and _clean(row.get("order_status")) in {"新开", "执行", "执行中", "核实", "完成"}
-        and _clean(row.get("is_deleted")).lower() not in {"1", "true"}
+        if _clean(row.get("prescription_id")) and _is_effective_discharge_prescription(row)
     }
     if not eligible:
         return (), "", 0
@@ -2753,6 +2805,25 @@ async def _execute_extended_document_group(
         death_rows=death_rows,
         discharge_rows=discharge_rows,
     )
+    ordinary_discharge_rule_ids = {"LX0609-08-01-01", "LX0609-08-02-01", "LX0609-08-02-02"}
+    death_discharge_exclusion_refs = ()
+    conflicting_death_time = False
+    conflicting_discharge_outcome = False
+    conflicting_discharge_condition = False
+    if ordinary_discharge_rule_ids.intersection(selected) and death_state == "present":
+        death_discharge_exclusion_refs, conflicting_death_time = _affirmative_death_record_refs(
+            evidence_snapshot, evidence_materials, registration_rows,
+        )
+        conflicting_discharge_outcome = bool(death_discharge_exclusion_refs) and any(
+            any(marker in _clean(row.get(field)) for marker in _EXPLICIT_ALIVE_DISCHARGE_MARKERS)
+            and not any(marker in _clean(row.get(field)) for marker in _DEATH_MARKERS)
+            for row in registration_rows
+            for field in ("patient_status", "discharge_status", "discharge_type")
+        )
+        conflicting_discharge_condition = bool(death_discharge_exclusion_refs) and any(
+            _clean(row.get("discharge_condition")) in {"治愈", "好转", "未愈", "存活"}
+            for row in discharge_rows
+        )
     if (
         death_state == "unknown"
         and registration_rows
@@ -2899,6 +2970,8 @@ async def _execute_extended_document_group(
         elif antimicrobial_horizon_error or antimicrobial_evaluation_horizon is None:
             return "data_gap", antimicrobial_horizon_error or "authoritative_time_missing", None, tuple(evidence)
         elif pending:
+            if any(after_frozen_horizon(event.time, antimicrobial_evaluation_horizon) for event in events):
+                return "data_gap", "authoritative_time_conflict", None, tuple(evidence)
             return "not_applicable", "evaluation_window_not_mature", None, tuple(evidence)
         else:
             final_state, reason_code = "non_compliant", "required_document_missing"
@@ -3179,6 +3252,11 @@ async def _execute_extended_document_group(
 
         if rule_id in {"LX0609-06-04-01", "LX0609-06-04-02"}:
             outcome = critical_value_outcomes[rule_id]
+            blocked_pending_window = outcome.reason_code == "evaluation_window_not_mature" and bool(lab_master_error)
+            if blocked_pending_window:
+                outcome = replace(
+                    outcome, final_state="data_gap", reason_code=lab_master_error, display_facts=None,
+                )
             if outcome.display_facts is not None:
                 display.append((rule_id, outcome.display_facts))
             document_refs = _critical_value_document_refs(
@@ -3186,18 +3264,28 @@ async def _execute_extended_document_group(
                 materials=evidence_materials,
                 outcome=outcome,
             )
+            horizon_refs = (
+                _fact_refs(evidence_snapshot, ("evaluation_context.horizon",))
+                if outcome.reason_code == "evaluation_window_not_mature"
+                and document_refs
+                and set(document_refs).issubset(evidence_snapshot.document_refs)
+                and len(document_refs) < 128
+                else ()
+            )
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 # 完整资料已读取但确无任何检验明细时，不适用结论仍需一个
                 # snapshot 级负向证据；它不会被投影为客户文书。
                 source_keys=(
-                    ("labtest_item_report",)
+                    ("labtest_master",) if blocked_pending_window
+                    else ("labtest_item_report",)
                     if not document_refs
                     and outcome.final_state == "not_applicable"
                     else ()
                 ),
-                document_refs=document_refs,
+                document_refs=(*document_refs, *horizon_refs),
                 final_state=outcome.final_state, reason_code=outcome.reason_code,
+                affirmative_applicability=bool(horizon_refs),
             ))
             continue
 
@@ -3661,13 +3749,21 @@ async def _execute_extended_document_group(
             has_selected_antimicrobial_evidence = bool(
                 selected_antimicrobial_evidence_rows
             )
+            is_pending_window = (
+                rule_id in {"LX0609-05-01-03", "LX0609-05-01-06"}
+                and final_state == "not_applicable"
+                and reason_code in {"evaluation_window_not_started", "evaluation_window_not_mature"}
+            )
+            horizon_refs = _fact_refs(evidence_snapshot, ("evaluation_context.horizon",))
             uses_horizon = (
-                reason_code == "evaluation_window_not_mature"
+                is_pending_window
+                or reason_code == "evaluation_window_not_mature"
                 or (rule_id in {"LX0609-05-01-02", "LX0609-05-01-05"} and final_state == "non_compliant")
                 or (rule_id == "LX0609-05-01-06" and reason_code == "required_document_missing")
             )
+            affirmative_window = is_pending_window and bool(antimicrobial_document_refs and horizon_refs)
             if uses_horizon:
-                antimicrobial_document_refs = (*antimicrobial_document_refs, *_fact_refs(evidence_snapshot, ("evaluation_context.horizon",)))
+                antimicrobial_document_refs = (*antimicrobial_document_refs, *horizon_refs)
             decisions.append(_decision(
                 rule_id=rule_id,
                 snapshot=evidence_snapshot,
@@ -3682,6 +3778,7 @@ async def _execute_extended_document_group(
                 exact_document_refs=has_selected_antimicrobial_evidence,
                 final_state=final_state,
                 reason_code=reason_code,
+                affirmative_applicability=affirmative_window,
             ))
             continue
 
@@ -3833,6 +3930,8 @@ async def _execute_extended_document_group(
             # 共 92 项。运行病历只看医嘱（模型把不规范的医嘱名称归入目录）；终末质控
             # 以原始医嘱及文书记载核对；不以首页编码触发。
             final_state, reason_code = "", ""
+            invasive_document_refs: tuple[str, ...] = ()
+            affirmative_invasive_window = False
             triggers: tuple[Any, ...] = ()
             order_rows = _invasive_candidate_order_rows(nondrug_order_rows)
             if nondrug_order_error:
@@ -3865,13 +3964,19 @@ async def _execute_extended_document_group(
             if not final_state:
                 # 0910 源库日常病程为空、病程多记于查房记录，操作记录须同时核对
                 # 首次病程、日常病程、查房记录、术后首次病程与手术记录。
+                candidate_records = tuple(
+                    (source, row)
+                    for source, rows in (
+                        ("first_course_record", first_course_rows),
+                        ("daily_course_record", daily_rows),
+                        ("senior_course_record", senior_rows),
+                        ("postsurg_firstcourse_record", postop_first_rows),
+                        ("surgery_record", surgery_record_rows),
+                    )
+                    for row in rows
+                )
                 documentation = await check_invasive_procedure_records(
-                    triggers,
-                    (
-                        *first_course_rows, *daily_rows, *senior_rows,
-                        *postop_first_rows, *surgery_record_rows,
-                    ),
-                    llm_client,
+                    triggers, tuple(row for _source, row in candidate_records), llm_client,
                 )
                 invasive_extractions.append(documentation)
                 states = dict(documentation.states)
@@ -3895,7 +4000,18 @@ async def _execute_extended_document_group(
                 elif missing and (antimicrobial_horizon_error or antimicrobial_evaluation_horizon is None):
                     final_state, reason_code = "data_gap", antimicrobial_horizon_error or "authoritative_time_missing"
                 elif missing and not mature_missing:
-                    final_state, reason_code = "not_applicable", "evaluation_window_not_mature"
+                    if any(state == "uncertain" for state in states.values()):
+                        final_state, reason_code = "data_gap", "semantic_extraction_unresolved"
+                    elif any(
+                        after_frozen_horizon(
+                            datetime.combine(trigger.anchor_date, datetime.min.time()),
+                            antimicrobial_evaluation_horizon,
+                        )
+                        for trigger in triggers
+                    ):
+                        final_state, reason_code = "data_gap", "authoritative_time_conflict"
+                    else:
+                        final_state, reason_code = "not_applicable", "evaluation_window_not_mature"
                 elif missing and not all(evidence_materials.permits_absence(source) for source in (
                     "first_course_record", "daily_course_record", "senior_course_record",
                     "postsurg_firstcourse_record", "surgery_record",
@@ -3918,6 +4034,23 @@ async def _execute_extended_document_group(
                         "procedures": names,
                         "procedure_count": len(names),
                     }))
+                if final_state == "compliant" or reason_code == "evaluation_window_not_mature":
+                    invasive_binding = bind_consumed_continuity_document_rows(
+                        snapshot=evidence_snapshot,
+                        materials=evidence_materials,
+                        consumed_rows=(
+                            *(("inpat_nondrug_order", row) for trigger in triggers for row in trigger.orders),
+                            *(candidate_records[index] for index in documentation.selected_record_indexes),
+                        ),
+                    )
+                    if invasive_binding.binding_failed or not invasive_binding.document_refs:
+                        final_state, reason_code = "technical_error", "snapshot_mismatch"
+                    else:
+                        invasive_document_refs = invasive_binding.document_refs
+                        if reason_code == "evaluation_window_not_mature":
+                            horizon_refs = _fact_refs(evidence_snapshot, ("evaluation_context.horizon",))
+                            affirmative_invasive_window = bool(horizon_refs)
+                            invasive_document_refs += horizon_refs
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=(
@@ -3926,6 +4059,9 @@ async def _execute_extended_document_group(
                     "evaluation_context.horizon",
                 ),
                 final_state=final_state, reason_code=reason_code,
+                document_refs=invasive_document_refs,
+                exact_document_refs=bool(invasive_document_refs),
+                affirmative_applicability=affirmative_invasive_window,
             ))
             continue
 
@@ -4082,6 +4218,10 @@ async def _execute_extended_document_group(
                     reason_code=outcome.reason_code,
                     document_refs=outcome.document_refs,
                     criterion_results=outcome.criterion_results,
+                    exact_document_refs=bool(outcome.document_refs),
+                    positive_document_refs=(
+                        outcome.document_refs if outcome.status == "non_compliant" else ()
+                    ),
                 )
             )
             continue
@@ -4176,6 +4316,34 @@ async def _execute_extended_document_group(
             )
             continue
 
+        if rule_id in ordinary_discharge_rule_ids:
+            outcome_conflict = conflicting_discharge_outcome or conflicting_discharge_condition
+            if outcome_conflict or conflicting_death_time or death_state == "conflict":
+                decisions.append(_decision(
+                    rule_id=rule_id, snapshot=evidence_snapshot,
+                    source_keys=(
+                        "inpat_registration", "death_record",
+                        *(("discharge_record",) if conflicting_discharge_condition else ()),
+                    ),
+                    final_state="data_gap", reason_code=(
+                        "association_failed" if outcome_conflict else "authoritative_time_conflict"
+                    ),
+                ))
+                continue
+            if (
+                death_discharge_exclusion_refs
+                and not (death_error or registration_error or discharge_error)
+                and (source_scope("inpat_registration") or {}).get("status")
+                not in {"table_missing", "columns_missing"}
+            ):
+                decisions.append(_decision(
+                    rule_id=rule_id, snapshot=evidence_snapshot, source_keys=(),
+                    final_state="not_applicable", reason_code="trigger_absent_complete",
+                    document_refs=death_discharge_exclusion_refs, exact_document_refs=True,
+                    affirmative_applicability=True,
+                ))
+                continue
+
         if rule_id == "LX0609-08-01-01":
             discharge_horizon_error = (
                 horizon_error
@@ -4243,8 +4411,18 @@ async def _execute_extended_document_group(
                     )
                 except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
                     discharge_document_refs = ()
+            has_explicit_late_document = (
+                outcome.reason_code == "threshold_exceeded"
+                and outcome.display_facts is not None
+                and any(
+                    _clean(row.get("record_content") or row.get("content"))
+                    and (completion := _parse_datetime(authoritative_document_time_value(row))) is not None
+                    and completion.isoformat(sep=" ") == outcome.display_facts["record_time"]
+                    for row in discharge_rows
+                )
+            )
             if (
-                outcome.final_state == "compliant"
+                (outcome.final_state == "compliant" or has_explicit_late_document)
                 and discharge_document_refs
                 and discharge_time_source in {
                     "evaluation_context.horizon", "discharge_record.discharge_datetime",
@@ -4258,7 +4436,7 @@ async def _execute_extended_document_group(
                     for item in evidence_snapshot.observations
                 )
             ):
-                # 备用登记正常零行时，达标绑定实际锚点和全部出院记录版本。
+                # 备用登记正常零行时，采用实际锚点及已核对的出院记录版本。
                 source_keys = ("discharge_record", "evaluation_context.horizon") if (
                     discharge_time_source == "evaluation_context.horizon"
                 ) else ("discharge_record",)
@@ -4275,6 +4453,7 @@ async def _execute_extended_document_group(
             continue
 
         if rule_id == "LX0609-08-01-02":
+            prescription_source_keys = ("inpat_prescription", "inpat_prescription_item")
             oral_prescription_names = _discharge_oral_prescription_names(evidence_materials)
             (
                 formal_prescription_medications,
@@ -4311,9 +4490,20 @@ async def _execute_extended_document_group(
                 and all(
                     observation.query_state.value in {"unavailable", "empty"}
                     for observation in evidence_snapshot.observations
-                    if observation.source_key in {"inpat_prescription", "inpat_prescription_item"}
+                    if observation.source_key in prescription_source_keys
                 )
             )
+            normal_empty_prescriptions = all(
+                (source_scope(source) or {}).get("status") == "empty_unconfirmed"
+                and any(
+                    observation.source_key == source
+                    and observation.query_state.value == "empty"
+                    and observation.completeness is SourceCompleteness.COMPLETE
+                    for observation in evidence_snapshot.observations
+                )
+                for source in prescription_source_keys
+            )
+            body_only_medication_scope = body_only_medication_scope or normal_empty_prescriptions
             if body_only_medication_scope:
                 # 只核对实际出院文书的带药内容，不把未知处方范围报成“处方0项”。
                 formal_prescription_error = ""
@@ -4380,6 +4570,8 @@ async def _execute_extended_document_group(
             # 仅在结构化资料缺失且固定标签无法解析时裁剪出院医嘱。
             # 多份记录不能猜选一份；不覆盖已提供但格式非法的结构化字段。
             explicit_no_medications = False
+            grounded_no_medications = False
+            positive_body_defect = False
             if use_unstructured_extraction:
                 medication_extraction = _with_oral_route_uncertainty_resolved(
                     await extract_discharge_medications(
@@ -4412,6 +4604,8 @@ async def _execute_extended_document_group(
                             final_state="non_compliant",
                             reason_code="requirement_violated",
                             document_refs=selected_discharge_document_refs,
+                            exact_document_refs=bool(selected_discharge_document_refs),
+                            positive_document_refs=selected_discharge_document_refs,
                         ))
                         continue
                 if medication_extraction.state in {"ready", "absent"}:
@@ -4419,6 +4613,16 @@ async def _execute_extended_document_group(
                     medication_error = ""
                     # absent=原文明确写明无出院带药（如拒绝带药），不同于出院记录对带药只字未提。
                     explicit_no_medications = medication_extraction.state == "absent" and not medications
+                    if explicit_no_medications:
+                        medication_clauses = tuple(
+                            clause.strip()
+                            for clause in re.split(r"[。；;！!\n]", str(discharge_rows[0]["discharge_order"]))
+                            if _DISCHARGE_MEDICATION_SIGNAL_PATTERN.search(clause)
+                        )
+                        grounded_no_medications = bool(medication_clauses) and all(
+                            _EXPLICIT_NO_DISCHARGE_MEDICATION_PATTERN.fullmatch(clause)
+                            for clause in medication_clauses
+                        )
                 else:
                     # 定向补核后仍不确定：按资料不足交付（uncertain 不得交付，2026-10-23 C15）。
                     final_state = {
@@ -4459,6 +4663,11 @@ async def _execute_extended_document_group(
                     for group in required_groups
                     if not any(_clean(item.get(key)) for key in group)
                 })
+                positive_body_defect = any(
+                    _clean(item.get("drug_name"))
+                    and not _discharge_medications_complete((item,))
+                    for item in medications
+                )
                 if not missing_fields and formal_prescription_error:
                     final_state, reason_code = "data_gap", "required_field_missing"
                     display.append((rule_id, {
@@ -4479,6 +4688,7 @@ async def _execute_extended_document_group(
                     missing_drug_names = _unmatched_formal_discharge_medication_names(
                         medications, formal_prescription_medications,
                     )
+                    positive_body_defect = positive_body_defect and not missing_drug_names
                     if missing_drug_names and "drug_name" not in missing_fields:
                         missing_fields.append("drug_name")
                         missing_fields.sort()
@@ -4506,6 +4716,24 @@ async def _execute_extended_document_group(
                             },
                         )
                     )
+            affirmative_no_medications = False
+            if grounded_no_medications and selected_discharge_document_refs:
+                prescription_rows, prescription_read_error = _source_rows(evidence_materials, "inpat_prescription")
+                items, item_read_error = _source_rows(evidence_materials, "inpat_prescription_item")
+                affirmative_no_medications = (
+                    not (prescription_read_error or item_read_error or formal_prescription_error)
+                    and not any(_is_effective_discharge_prescription(row) for row in prescription_rows)
+                    and (bool(prescription_rows) or not items)
+                    and all(
+                        (source_scope(source) or {}).get("status") not in {"table_missing", "columns_missing"}
+                        for source in prescription_source_keys
+                    )
+                )
+            exact_body_evidence = bool(selected_discharge_document_refs) and (
+                affirmative_no_medications
+                or (positive_body_defect and final_state == "non_compliant")
+                or (body_only_medication_scope and final_state == "compliant")
+            )
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -4513,15 +4741,22 @@ async def _execute_extended_document_group(
                     source_keys=(
                         ("discharge_record",)
                         if reason_code == "trigger_absent_complete" or body_only_medication_scope
-                        else ("discharge_record", "inpat_prescription", "inpat_prescription_item")
+                        else ("discharge_record", *prescription_source_keys)
                     ),
                     final_state=final_state,
                     reason_code=reason_code,
                     document_refs=(
                         ()
-                        if reason_code == "trigger_absent_complete"
+                        if reason_code == "trigger_absent_complete" and not affirmative_no_medications
                         else selected_discharge_document_refs
                     ),
+                    exact_document_refs=exact_body_evidence,
+                    positive_document_refs=(
+                        selected_discharge_document_refs
+                        if positive_body_defect and final_state == "non_compliant"
+                        else ()
+                    ),
+                    affirmative_applicability=affirmative_no_medications,
                 )
             )
             continue
@@ -4590,6 +4825,7 @@ async def _execute_extended_document_group(
                     ),
                 }))
             selected_postoperative_rows: list[Mapping[str, Any]] = []
+            affirmative_non_surgical_operation = False
             if (
                 gate_outcome == ("not_applicable", "performed_event_absent")
                 and surgery_applicability.procedure_kind == "non_surgical_operation"
@@ -4599,6 +4835,13 @@ async def _execute_extended_document_group(
                     for row in surgery_record_rows
                     if catalog_surgery_state(row) is False
                 )
+                affirmative_non_surgical_operation = (
+                    bool(selected_postoperative_rows)
+                    and len(selected_postoperative_rows) == len(surgery_record_rows)
+                    and evidence_materials.permits_absence("surgery_record")
+                )
+                if not affirmative_non_surgical_operation:
+                    final_state, reason_code = "data_gap", "source_readiness_unproven"
             if surgery_events:
                 if linkage_error:
                     selected_postoperative_rows.extend(
@@ -4638,6 +4881,9 @@ async def _execute_extended_document_group(
                     exact_document_refs=bool(selected_postoperative_rows),
                     final_state=final_state,
                     reason_code=reason_code,
+                    affirmative_applicability=(
+                        affirmative_non_surgical_operation and bool(postoperative_document_refs)
+                    ),
                 )
             )
             continue
@@ -5174,6 +5420,7 @@ async def _execute_extended_document_group(
             )
             body_states = {}
             body_issue = ""
+            qualified_body_refs: tuple[str, ...] = ()
             if (death_state != "present" and not (death_state == "unknown" and death_error)
                     and not (registration_error or discharge_horizon_error or discharge_error or daily_error or senior_error)
                     and course_discharge_time is not None):
@@ -5199,6 +5446,12 @@ async def _execute_extended_document_group(
                     else:
                         extraction = await extract_course_body_facts(body_documents, llm_client)
                         body_states = {key: extraction.states.get(ref, "unknown") for key, ref in body_refs.items()}
+                        qualified_body_refs = tuple(
+                            body_refs[(source, ordinal)]
+                            for source, ordinal, row in dated_candidates
+                            if body_states[(source, ordinal)] == "present"
+                            and not _clean(row.get("document_id") or row.get("id"))
+                        )[:8]
                     course_body_extractions.append(extraction)
                     body_issue = extraction.reason_code if extraction.state != "ready" else ""
             outcome = evaluate_predischarge_course_presence(
@@ -5243,6 +5496,7 @@ async def _execute_extended_document_group(
                 selected_document_ids=selected_course_document_ids,
             )
             if outcome.final_state == "compliant":
+                selected_document_refs = (*selected_document_refs, *qualified_body_refs)[:8]
                 consumed_source_keys = (
                     "daily_course_record",
                     "senior_course_record",
@@ -5274,8 +5528,7 @@ async def _execute_extended_document_group(
                         selected_document_refs=selected_document_refs,
                         consumed_source_keys=consumed_source_keys,
                     ),
-                    # 无 ID 或重复 ID 时维持空的逐文书坐标。不能回退为整类来源
-                    # observation，否则公共投影会把未参与判定的病程展示为证据。
+                    # 无 ID 时可使用已经核对的原行坐标；重复自然 ID 保持既有保守投影。
                     exact_document_refs=True,
                 )
             )
@@ -5664,6 +5917,40 @@ async def _execute_extended_document_group(
                 display_facts=outcome.display_facts,
                 daily_course_rows=daily_rows,
             )
+            pending_handoff_refs: tuple[str, ...] = ()
+            if outcome.pending_change_rows and outcome.pending_binding_facts:
+                pending_facts = outcome.pending_binding_facts
+                event_facts = pending_facts.get("events")
+                needed_record_count = (
+                    sum(bool(event.get(field)) for event in event_facts for field in ("handoff_time", "handover_time"))
+                    if event_facts is not None
+                    else len(pending_facts.get("handoff_times", ())) + len(pending_facts.get("handover_times", ()))
+                )
+                selections = tuple(
+                    (reference["source_type"], reference["source_document_id"])
+                    for reference in pending_facts.get("source_document_refs", ())
+                )
+                selected_handoff_rows = tuple(
+                    (source, row)
+                    for source, rows in (("handoff_record", handoff_rows), ("handover_record", handover_rows))
+                    for row in rows
+                    if (source, _clean(row.get("document_id") or row.get("id"))) in selections
+                )
+                if (
+                    len(selected_handoff_rows) == len(selections) == needed_record_count
+                    and any(source == "handoff_record" for source, _row in selected_handoff_rows)
+                ):
+                    pending_binding = bind_consumed_continuity_document_rows(
+                        snapshot=evidence_snapshot,
+                        materials=evidence_materials,
+                        consumed_rows=(
+                            *((outcome.change_source_key, row) for row in outcome.pending_change_rows),
+                            *selected_handoff_rows,
+                        ),
+                    )
+                    horizon_refs = _fact_refs(evidence_snapshot, ("evaluation_context.horizon",))
+                    if pending_binding.document_refs and horizon_refs:
+                        pending_handoff_refs = (*pending_binding.document_refs, *horizon_refs)
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -5671,11 +5958,12 @@ async def _execute_extended_document_group(
                     source_keys=(
                         (outcome.change_source_key, "evaluation_context.horizon")
                     ),
-                    document_refs=handoff_binding.document_refs,
+                    document_refs=pending_handoff_refs or handoff_binding.document_refs,
                     # physician_change_event 尚未纳入客户文书投影白名单。保留它的
                     # snapshot 判定锚点，并只让已匹配的交/接班文书进入公共证据；
                     # 兼容字段待后续结构提交统一删除。
-                    exact_document_refs=False,
+                    exact_document_refs=bool(pending_handoff_refs),
+                    affirmative_applicability=bool(pending_handoff_refs),
                     final_state=(
                         "technical_error"
                         if handoff_binding.binding_failed

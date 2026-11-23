@@ -38,6 +38,7 @@ class ReducedRuleDecision:
     confidence: float | None
     criterion_results: tuple[CriterionResult, ...]
     decision_fingerprint: str
+    affirmative_applicability: bool
 
     def __init__(
         self,
@@ -51,6 +52,7 @@ class ReducedRuleDecision:
         confidence: float | None,
         decision_fingerprint: str,
         criterion_results: tuple[CriterionResult, ...] = (),
+        affirmative_applicability: bool = False,
         _attestation: object | None = None,
     ) -> None:
         if _attestation is not _REDUCER_ATTESTATION:
@@ -67,6 +69,7 @@ class ReducedRuleDecision:
             ("confidence", confidence),
             ("criterion_results", criterion_results),
             ("decision_fingerprint", decision_fingerprint),
+            ("affirmative_applicability", affirmative_applicability),
         ):
             object.__setattr__(self, name, value)
 
@@ -83,6 +86,7 @@ class ReducedRuleDecision:
                 item.to_safe_dict() for item in self.criterion_results
             ],
             "decision_fingerprint": self.decision_fingerprint,
+            **({"affirmative_applicability": True} if self.affirmative_applicability else {}),
         }
 
 
@@ -129,5 +133,6 @@ def reduce_luxian_0609_rule_decision(
         confidence=decision.confidence,
         criterion_results=decision.criterion_results,
         decision_fingerprint=decision.fingerprint(),
+        affirmative_applicability=decision.affirmative_applicability,
         _attestation=_REDUCER_ATTESTATION,
     )

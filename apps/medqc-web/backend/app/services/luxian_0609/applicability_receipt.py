@@ -19,6 +19,7 @@ SCHEMA_VERSION = "lx0609-applicability-receipt-v1"
 _HASH = re.compile(r"^[a-f0-9]{64}$")
 _SCOPE_STATUSES = frozenset({"available", "empty", "table_missing", "columns_missing", "empty_unconfirmed", "body_empty", "not_supplied", "unknown"})
 _COVERAGES = frozenset({"complete", "unknown", "partial", "registered_materials", "registered_materials_complete"})
+AFFIRMATIVE_SCOPE_STATES = frozenset({"available", "body_empty"})
 
 
 def consumed_source_keys(*, decision, snapshot, materials=None):
@@ -61,6 +62,25 @@ def guard_not_applicable_sources(decision, *, snapshot, materials, source_keys):
         reason = "source_truncated"
     elif any(item.completeness is not SourceCompleteness.COMPLETE for item in selected):
         reason = "source_readiness_unproven"
+    elif decision.affirmative_applicability:
+        refs = set(decision.fact_refs)
+        has_observed_proof = bool(refs.intersection(snapshot.document_refs)) or any(
+            fact.fact_id in refs
+            and fact.assertion is Assertion.AFFIRMED
+            and fact.trigger_scope is TriggerScope.CURRENT_VISIT
+            and fact.current_visit_relevance is CurrentVisitRelevance.RELEVANT
+            for fact in snapshot.facts
+        )
+        if materials is None or not has_observed_proof or any(
+            item.query_state is not QueryStatus.AVAILABLE
+            or not materials.has_source(item.source_key)
+            or (
+                (scope := materials.scope(item.source_key)) is not None
+                and scope.get("status") not in AFFIRMATIVE_SCOPE_STATES
+            )
+            for item in selected
+        ):
+            reason = "source_readiness_unproven"
     elif materials is not None and any(not materials.permits_absence(key) for key in source_keys):
         reason = "source_readiness_unproven"
     if reason is None:
@@ -69,7 +89,8 @@ def guard_not_applicable_sources(decision, *, snapshot, materials, source_keys):
     return replace(decision, applicability=ApplicabilityState.ERROR if technical else ApplicabilityState.UNKNOWN,
                    evidence_state=EvidenceState.TECHNICAL_ERROR if technical else EvidenceState.DATA_GAP,
                    qc_direction=QcDirection.UNKNOWN, reason_code=reason, criterion_results=(),
-                   positive_document_refs=(), confidence=None, evaluator_version="applicability-source-guard-v1")
+                   positive_document_refs=(), affirmative_applicability=False, confidence=None,
+                   evaluator_version="applicability-source-guard-v1")
 
 
 def _safe_scope(value):
@@ -113,7 +134,8 @@ def build_applicability_receipt(*, decision, snapshot, materials=None):
                                 "assertion": fact.assertion.value, "trigger_scope": fact.trigger_scope.value,
                                 "current_visit_relevance": fact.current_visit_relevance.value,
                                 "event_status": fact.event_status.value}
-                               for fact in snapshot.facts if fact.fact_id in decision.fact_refs]}
+                               for fact in snapshot.facts if fact.fact_id in decision.fact_refs],
+               **({"affirmative_applicability": True} if decision.affirmative_applicability else {})}
     return validate_applicability_receipt(receipt)
 
 
@@ -130,8 +152,11 @@ def validate_applicability_receipt(raw):
     def digest(value):
         require(isinstance(value, str) and _HASH.fullmatch(value) is not None)
 
-    keys(raw, {"schema_version", "rule_id", "status", "reason_code", "snapshot_hash", "decision_fingerprint", "evaluator_version", "fact_refs", "source_checks", "event_basis"}, {"material_fingerprint"})
+    keys(raw, {"schema_version", "rule_id", "status", "reason_code", "snapshot_hash", "decision_fingerprint", "evaluator_version", "fact_refs", "source_checks", "event_basis"}, {"material_fingerprint", "affirmative_applicability"})
     require(raw["schema_version"] == SCHEMA_VERSION and raw["status"] == "not_applicable")
+    affirmative = "affirmative_applicability" in raw
+    if affirmative:
+        require(raw["affirmative_applicability"] is True)
     from .decision_binding import _allowed_source_keys
     from .decision_model import _VERSION_PATTERN, _has_forbidden_version_marker
     require(isinstance(raw["rule_id"], str) and re.fullmatch(r"LX0609-\d{2}-\d{2}-\d{2}", raw["rule_id"]) is not None)
@@ -171,14 +196,18 @@ def validate_applicability_receipt(raw):
         digest(ref.removeprefix("sha256:"))
         require(type(check["depended_on"]) is bool)
         if check["depended_on"]:
-            require(check["query_state"] in {"available", "empty"} and check["completeness"] == "complete")
+            require(check["completeness"] == "complete")
+            require(check["query_state"] == "available" if affirmative else check["query_state"] in {"available", "empty"})
         if "scope" in check:
             scope = check["scope"]
             keys(scope, {"status", "coverage", "can_judge_clinical_absence"})
             require(isinstance(scope["status"], str) and scope["status"] in _SCOPE_STATUSES and isinstance(scope["coverage"], str) and scope["coverage"] in _COVERAGES and type(scope["can_judge_clinical_absence"]) is bool)
             if check["depended_on"]:
-                require(scope["can_judge_clinical_absence"])
+                require(scope["status"] in AFFIRMATIVE_SCOPE_STATES if affirmative else scope["can_judge_clinical_absence"])
     require(any(check["depended_on"] for check in checks))
+    if affirmative:
+        observation_refs = {check["snapshot_ref"].removeprefix("sha256:") for check in checks}
+        require(bool(set(refs).difference(observation_refs)))
     basis = raw["event_basis"]
     require(type(basis) is list and len(basis) <= 128)
     for item in basis:

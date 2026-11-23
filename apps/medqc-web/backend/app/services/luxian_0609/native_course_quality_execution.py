@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .cache_document_source_adapter import explicit_sections, matches_document_diagnoses
 from .decision_model import (
     ApplicabilityState,
     CriterionResult,
@@ -56,6 +57,7 @@ from .course_quality.rules_016_017 import (
     _rule_016_comparison_material_state,
     _rule_016_copy_coverage,
     _rule_016_customer_display_facts,
+    _rule_016_frozen_sections,
     _rule_017_decision,
 )
 from .course_quality.shared import (
@@ -376,6 +378,7 @@ class _CourseSemanticOutcome:
     api_time: float = 0.0
     customer_display_facts: Mapping[str, Any] | None = None
     criterion_results: tuple[CriterionResult, ...] = ()
+    positive_document_refs: tuple[str, ...] = ()
 
 
 def _lx018_pre_model_outcome(
@@ -586,6 +589,7 @@ def _course_semantic_decision(
                 "source_unavailable",
                 "source_truncated",
                 "source_readiness_unproven",
+                "semantic_extraction_unresolved",
             }
             else "required_field_missing"
         )
@@ -596,8 +600,23 @@ def _course_semantic_decision(
             reason_code,
         )
     applicability, evidence_state, qc_direction, reason_code = dimensions
-    positive_refs = ()
+    positive_refs = outcome.positive_document_refs
     from ..automatic_material_scope import source_scope
+    if outcome.rule_id == "LX0609-01-01-02" and outcome.reason_code in {
+        "course_customer_prompt", "semantic_extraction_unresolved",
+    }:
+        parent_ref = _lx018_frozen_diagnosis_parent(snapshot, materials)
+        if parent_ref:
+            # 不消耗空备选源；真实通用诊断存在时仍绑定并保留其来源保护。
+            refs = (parent_ref,) + tuple(
+                item.snapshot_ref.removeprefix("sha256:") for item in observations
+                if item.source_key == "diagnosis" and item.query_state.value != "empty"
+            )
+            if (
+                outcome.status == "non_compliant"
+                and any(item.actual_value == "mismatch" for item in outcome.criterion_results)
+            ):
+                positive_refs = (parent_ref,)
     if (outcome.rule_id == "LX0609-01-01-02" and outcome.status == "non_compliant"
             and source_scope("admission_record") is not None):
         # 主诉长度由现有原文独立证明，不依赖诊断来源是否供给。
@@ -627,6 +646,41 @@ def _course_semantic_decision(
             replace(item, fact_refs=refs) for item in outcome.criterion_results
         ),
     )
+
+
+def _lx018_frozen_diagnosis_parent(
+    snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609EvidenceMaterialStore,
+) -> str:
+    """确认子表诊断、所用主诉均能定位至同一份自动冻结入院记录。"""
+    child_source = "admission_record_diagnosis"
+    if (
+        (materials.scope(child_source) or {}).get("status") not in {"table_missing", "empty_unconfirmed"}
+        or (materials.scope("admission_record") or {}).get("status") != "available"
+        or (materials.scope("diagnosis") or {}).get("status") not in {"available", "empty_unconfirmed"}
+    ):
+        return ""
+    parents = materials.document_rows("admission_record", snapshot=snapshot)
+    if len(parents) != 1:
+        return ""
+    parent_ref, parent = parents[0]
+    child_rows = materials.rows(child_source)
+    if not matches_document_diagnoses(child_source, parent, child_rows):
+        return ""
+    state, diagnosis = _lx018_primary_diagnosis_resolution({child_source: list(child_rows)})
+    if state != "available" or (state, diagnosis) != _lx018_primary_diagnosis_resolution({
+        child_source: list(child_rows), "diagnosis": list(materials.rows("diagnosis")),
+    }):
+        return ""
+    complaint = _lx018_complaint_text({"admission_record": [parent]})
+    structured_complaint = _clean(parent.get("chief_complaint") or parent.get("complaint"))
+    sections = [
+        _clean(value) for label, value in explicit_sections(parent.get("record_content")) if label == "主诉"
+    ]
+    complaint_grounded = bool(complaint) and (
+        complaint == structured_complaint
+        or (len(sections) == 1 and complaint == sections[0].rstrip("。；;").strip())
+    )
+    return parent_ref if complaint_grounded else ""
 
 
 def _admission_material_ready(
@@ -872,7 +926,11 @@ async def execute_luxian_0609_native_course_quality_rules(
             if terminal_outcome is not None:
                 emit_course_semantic(terminal_outcome)
                 return
+            copy_document_refs = ()
             if rule_id == "LX0609-12-01-01":
+                fallback = _rule_016_frozen_sections(evidence_snapshot, evidence_materials)
+                if fallback is not None:
+                    typed_documents, copy_document_refs = fallback
                 comparison_material_state = _rule_016_comparison_material_state(
                     typed_documents
                 )
@@ -916,6 +974,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                                 typed_documents,
                                 copy_coverage=copy_coverage,
                             ),
+                            positive_document_refs=copy_document_refs if exact_copy else (),
                         )
                     )
                     return
@@ -1106,7 +1165,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                         rule_id=rule_id,
                         status=status,
                         reason_code=(
-                            "source_readiness_unproven"
+                            "semantic_extraction_unresolved"
                             if status == "data_gap"
                             else "requirement_violated"
                             if length_result.status is CriterionStatus.FAILED

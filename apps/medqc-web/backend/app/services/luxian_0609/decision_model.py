@@ -289,6 +289,8 @@ class RuleDecision:
     # 由判定 owner 明确声明：这些实际文书单独证明缺陷，不依赖未出现的材料。
     # 空元组沿用旧合同；不能由 Binding 根据文案、reason 或 refs 非空推测。
     positive_document_refs: tuple[str, ...] = ()
+    # 由执行器声明：不适用基于已观察的互斥事实或时间窗，而非未发现事件。
+    affirmative_applicability: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.rule_id, str) or not _RULE_ID_PATTERN.fullmatch(
@@ -322,6 +324,15 @@ class RuleDecision:
                 or not set(self.positive_document_refs).issubset(self.fact_refs)
                 or len(self.positive_document_refs) != len(set(self.positive_document_refs))):
             raise ValueError("invalid positive document proof")
+        if type(self.affirmative_applicability) is not bool or (
+            self.affirmative_applicability
+            and (
+                self.applicability is not ApplicabilityState.NOT_APPLICABLE
+                or self.reason_code not in ALLOWED_REASON_CODES_BY_FINAL_STATE["not_applicable"]
+                or not self.fact_refs
+            )
+        ):
+            raise ValueError("invalid affirmative applicability proof")
         if not isinstance(
             self.evaluator_version, str
         ) or not _VERSION_PATTERN.fullmatch(
@@ -403,6 +414,7 @@ class RuleDecision:
                 item.to_safe_dict() for item in self.criterion_results
             ],
             **({"positive_document_refs": list(self.positive_document_refs)} if self.positive_document_refs else {}),
+            **({"affirmative_applicability": True} if self.affirmative_applicability else {}),
         }
 
     def canonical_json(self) -> str:

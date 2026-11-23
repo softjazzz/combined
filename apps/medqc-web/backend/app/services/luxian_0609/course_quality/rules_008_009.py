@@ -335,6 +335,7 @@ def _rule_008_009_decision(
         refs: set[str],
         confidence: float | None,
         display_facts: Mapping[str, Any] | None = None,
+        affirmative_applicability: bool = False,
     ) -> RuleDecision:
         if display_facts is not None and customer_display_facts is not None:
             customer_display_facts.append((rule_id, display_facts))
@@ -348,6 +349,7 @@ def _rule_008_009_decision(
             fact_refs=tuple(refs),
             evaluator_version=evaluator_version,
             confidence=confidence,
+            affirmative_applicability=affirmative_applicability,
         )
 
     required_sources = (
@@ -529,6 +531,7 @@ def _rule_008_009_decision(
 
     horizon_date: date | None = None
     horizon_time: datetime | None = None
+    horizon_basis = ""
     if horizon_observation.query_state.value == "available":
         try:
             horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
@@ -553,13 +556,8 @@ def _rule_008_009_decision(
         horizon_date = natural_date(horizon_rows[0].get("horizon_date"))
         if rule_id == "LX0609-02-01-05":
             horizon_time = parse_authoritative_datetime(horizon_rows[0].get("horizon_datetime"))
-        if horizon_date is None or horizon_date < anchor_date:
-            if rule_id == "LX0609-02-01-05" and horizon_date is not None:
-                return decision(
-                    applicability=ApplicabilityState.NOT_APPLICABLE,
-                    evidence_state=EvidenceState.SUFFICIENT, qc_direction=QcDirection.UNKNOWN,
-                    reason_code="evaluation_window_not_mature", refs=refs, confidence=1.0,
-                )
+            horizon_basis = horizon_rows[0].get("basis")
+        if horizon_date is None or (rule_id == "LX0609-02-01-04" and horizon_date < anchor_date):
             return decision(
                 applicability=ApplicabilityState.ERROR,
                 evidence_state=EvidenceState.TECHNICAL_ERROR,
@@ -597,8 +595,11 @@ def _rule_008_009_decision(
             confidence=None,
         )
 
+    starts_after_horizon = horizon_date is not None and horizon_date < anchor_date
     critical_intervals = ()
-    if rule_id == "LX0609-02-01-05":
+    if starts_after_horizon:
+        active_intervals = ()
+    elif rule_id == "LX0609-02-01-05":
         critical_intervals = _critical_active_intervals(
             target_rows, horizon_date=horizon_date, horizon_time=horizon_time,
         )
@@ -687,6 +688,9 @@ def _rule_008_009_decision(
                 refs=refs,
                 confidence=None,
             )
+        if starts_after_horizon:
+            # 未来窗口仍校验读取结果；终点前的病程内容不参与裁决。
+            continue
         for row in rows:
             document_ref = course_document_refs.get(id(row))
             parsed_date = natural_date(
@@ -865,10 +869,21 @@ def _rule_008_009_decision(
             },
         )
     if pending_dates.difference(timed_record_dates) or not expected_dates:
+        # 同一日期级在院终点下，24 小时窗口跨过截止日期才到期。
+        # 仍可能存在已到期的变化事件时，继续要求来源覆盖证明。
+        window_proven_open = horizon_date is not None and (
+            not critical_intervals
+            or (
+                horizon_basis == "evaluation_as_of"
+                and horizon_time is None
+                and (horizon_date - anchor_date).days <= _RULE_009_CHANGE_WINDOW.days
+            )
+        )
         return decision(
             applicability=ApplicabilityState.NOT_APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT, qc_direction=QcDirection.UNKNOWN,
             reason_code="evaluation_window_not_mature", refs=refs, confidence=1.0,
+            affirmative_applicability=window_proven_open,
         )
     if horizon_date is None:
         return decision(

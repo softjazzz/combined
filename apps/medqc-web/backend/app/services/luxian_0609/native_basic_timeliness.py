@@ -1233,9 +1233,34 @@ def _typed_basic_decisions(
                     projected["rescue_events"] = rescue_event_facts
                 add_customer_fact(rule_id, projected)
             elif rescue_timeline:
+                from ..automatic_material_scope import source_scope
+
+                order_source = CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY
+                order_issue = source_issue(
+                    (order_source,), allow_unavailable=frozenset({order_source}),
+                )
+                if order_issue is not None:
+                    reason, technical = order_issue
+                    decisions.append(gap(rule_id, reason, technical=technical))
+                    continue
                 _delta, rescue_end, record_time, document_id, selected_row = max(
                     rescue_timeline,
                     key=lambda item: item[0],
+                )
+                order_scope = (
+                    materials.scope(order_source) or source_scope(order_source)
+                )
+                order_observation = observation_by_source[order_source]
+                # 达标文书自行证明时限；只排除正常零行的备选医嘱，保留缺供给与读失败保护。
+                rescue_sources = (
+                    ("rescue_record",)
+                    if order_observation.query_state.value == "empty"
+                    and order_observation.completeness.value == "complete"
+                    and (
+                        order_scope is None
+                        or order_scope["status"] in {"available", "body_empty", "empty_unconfirmed"}
+                    )
+                    else None
                 )
                 decisions.append(
                     attach_selected_rows(
@@ -1243,6 +1268,7 @@ def _typed_basic_decisions(
                             rule_id,
                             QcDirection.SATISFIED,
                             "requirement_within_threshold",
+                            sources=rescue_sources,
                         ),
                         source_key="rescue_record",
                         selected_rows=(

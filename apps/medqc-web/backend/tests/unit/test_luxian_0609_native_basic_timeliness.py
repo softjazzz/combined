@@ -1709,6 +1709,59 @@ def test_complete_empty_and_unavailable_rescue_sources_are_distinct() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("order_status", "read_issue", "expected", "reason"),
+    [
+        ("structure_ready", None, CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
+        ("table_missing", None, CustomerFinalState.DATA_GAP, "source_readiness_unproven"),
+        ("structure_ready", "rescue_error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
+        ("structure_ready", "order_error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
+        ("structure_ready", "order_truncated", CustomerFinalState.DATA_GAP, "source_truncated"),
+    ],
+    ids=("normally_empty_orders", "missing_order_table", "failed_rescue_read", "failed_order_read", "truncated_orders"),
+)
+def test_004_timely_rescue_evidence_under_automatic_scope(order_status, read_issue, expected, reason) -> None:
+    rule = "LX0609-09-01-01"
+    order_source = source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY
+    rows = {
+        "rescue_record": [{
+            "document_id": "synthetic-rescue",
+            "record_time": "2026-07-15 15:00:00",
+            "record_content": "抢救结束时间：2026-07-15 09:00:00",
+        }],
+        order_source: (
+            [{"order_id": "synthetic-order", "status_state": "effective"}]
+            if read_issue in {"order_error", "order_truncated"} else []
+        ),
+    }
+    session = _typed_basic_session(
+        rows, selected_rule_ids=(rule,),
+        failures={
+            "rescue_error": {"rescue_record": SourceEvidenceQueryError()},
+            "order_error": {order_source: SourceEvidenceQueryError()},
+        }.get(read_issue),
+        truncated_sources=frozenset({order_source}) if read_issue == "order_truncated" else frozenset(),
+    )
+
+    execution, reduced = _reduce_with_automatic_scope(
+        session, rows, rule, source_statuses={order_source: order_status},
+    )
+
+    assert reduced[0].final_state is expected
+    assert reduced[0].reason_code == reason
+    if expected is CustomerFinalState.COMPLIANT:
+        assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
+        assert {
+            item.source_key for item in session.snapshot.observations
+            if item.snapshot_ref.removeprefix("sha256:") in reduced[0].fact_refs
+        } == {"rescue_record"}
+        _assert_selected_document_ref(
+            execution, session, rule_id=rule, source_key="rescue_record",
+            document_id="synthetic-rescue",
+        )
+
+
+@pytest.mark.unit
 def test_004_effective_rescue_order_without_record_is_data_gap() -> None:
     session = _typed_basic_session(
         {

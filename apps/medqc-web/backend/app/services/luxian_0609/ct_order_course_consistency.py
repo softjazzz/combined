@@ -13,10 +13,11 @@ import re
 import unicodedata
 from typing import Any, Mapping
 
-from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_material import EvidenceMaterialUnavailable, Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .decision_model import _MAX_FACT_REFS
 from .source_evidence_reader import authoritative_document_time_value
+from .source_manifest import QueryStatus
 from .handbook_exam_lab import (
     HandbookEvaluation,
     HandbookEvent,
@@ -98,6 +99,24 @@ class CtReviewInput:
     horizon: datetime | None = None
     truncated_source_refs: tuple[str, ...] = ()
     missing_content_source_refs: tuple[str, ...] = ()
+    review_observed_events: bool = False
+
+    def freeze_material(self) -> dict[str, Any]:
+        # 已有完整核对的材料键保持 e762a13ce 的结构，新路径单独隔离冻结事实。
+        material = {
+            "events": self.events,
+            "eligible_positions": self.eligible_positions,
+            "clauses": self.clauses,
+            "initial_findings": self.initial_findings,
+            "complete": self.complete,
+            "horizon_basis": self.horizon_basis,
+            "horizon": self.horizon,
+            "truncated_source_refs": self.truncated_source_refs,
+            "missing_content_source_refs": self.missing_content_source_refs,
+        }
+        if self.review_observed_events:
+            material["review_observed_events"] = True
+        return material
 
     @property
     def reference_budget_exceeded(self) -> bool:
@@ -109,7 +128,8 @@ class CtReviewInput:
         # 无已执行事件但病程提到 CT/MRI 时，也须由模型区分本次住院检查与院外/入院前门急诊检查
         # （用户口径 2026-10-12），不能凭检查名称直接报“有记载无医嘱”。已有关联/执行缺口时
         # 结论必为资料缺口，仍在语义调用前停止。
-        return (not self.reference_budget_exceeded and self.complete and bool(self.clauses)
+        return (not self.reference_budget_exceeded and bool(self.clauses)
+                and (self.complete or self.review_observed_events)
                 and (bool(self.eligible_positions)
                      or (all(item.status == "not_applicable" for item in self.initial_findings.values())
                          and any(target_name("exam", clause.text) for clause in self.clauses))))
@@ -161,7 +181,10 @@ def build_ct_review_input(
     }
     if "exam" in ledger.overflow:
         truncated_sources.update(key for key in RULE_SOURCES[REPORT_RULE_ID] if ledger.sources[key].rows)
-    complete = ledger.complete(REPORT_RULE_ID) and not truncated_sources
+    # 报告齐全不能证明医嘱与检查主表的事件全集已读齐。
+    complete = not truncated_sources and all(
+        ledger.sources[key].complete for key in RULE_SOURCES[REPORT_RULE_ID]
+    )
     missing_content_sources: set[str] = set()
     clauses: list[CourseClause] = []
     total_chars = 0
@@ -226,10 +249,42 @@ def build_ct_review_input(
         return tuple(item.snapshot_ref.removeprefix("sha256:")
                      for item in snapshot.observations if item.source_key in keys)
 
+    # 只在物理读取完整、缺的是临床覆盖证明时复核已确认的检查。
+    # 未见病程或已观察条目均一致时，整条规则仍保留资料不足。
+    observations = {item.source_key: item for item in snapshot.observations}
+    report_positions = {position for position in eligible if events[position - 1].formal_report_present}
+    review_observed_events = (
+        not complete and not truncated_sources and not missing_content_sources
+        and bool(report_positions)
+        and all(
+            key in observations
+            and observations[key].query_state in {QueryStatus.AVAILABLE, QueryStatus.EMPTY}
+            and observations[key].completeness is SourceCompleteness.COMPLETE
+            and materials.has_source(key)
+            and (
+                (scope := materials.scope(key)) is None
+                or scope.get("status") in {"available", "body_empty", "empty", "empty_unconfirmed"}
+            )
+            for key in required_sources
+        )
+    )
+    if review_observed_events:
+        try:
+            for key in required_sources:
+                materials.document_rows(key, snapshot=snapshot)
+        except (EvidenceMaterialUnavailable, ValueError):
+            review_observed_events = False
+    if review_observed_events:
+        for position in eligible:
+            if position not in report_positions:
+                event = events[position - 1]
+                findings[position] = HandbookFinding("data_gap", "source_scope_incomplete", event.refs, event.name)
+        eligible = [position for position in eligible if position in report_positions]
     return CtReviewInput(
         events, tuple(eligible), tuple(clauses), findings, complete, horizon_basis, horizon,
         truncated_source_refs=source_refs(truncated_sources),
         missing_content_source_refs=source_refs(missing_content_sources),
+        review_observed_events=review_observed_events,
     )
 
 
