@@ -144,7 +144,10 @@ class QCPersistenceService:
     def _normalize_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
         metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
         issues = [_normalize_issue(item) for item in (result.get("issues") or []) if isinstance(item, dict)]
-        overall_score = result.get("overall_score") or result.get("score") or 0
+        raw_score = result.get("overall_score")
+        if raw_score is None or raw_score == "":
+            raw_score = result.get("score")
+        overall_score = float(raw_score) if raw_score is not None and raw_score != "" else 0.0
         defect_count = result.get("defect_count")
         workflow_type = _safe_text(metadata.get("workflow_type") or result.get("workflow_type") or "general")
         visit_id = _safe_text(metadata.get("visit_id") or result.get("visit_id") or "")
@@ -152,17 +155,19 @@ class QCPersistenceService:
         record_id = _safe_text(result.get("record_id") or result.get("recordId") or "")
         if not record_id:
             record_id = f"{workflow_type}::{visit_id or uuid.uuid4().hex[:8]}"
+        record_meta = metadata.get("record") if isinstance(metadata.get("record"), dict) else {}
+        department = _safe_text(
+            metadata.get("department")
+            or record_meta.get("department")
+            or result.get("department")
+            or ""
+        )
         metadata = {
             **metadata,
             "workflow_type": workflow_type,
             "visit_id": visit_id,
             "patient_id": patient_id,
-            "department": _safe_text(
-                metadata.get("department")
-                or metadata.get("record", {}).get("department") if isinstance(metadata.get("record"), dict) else metadata.get("department")
-                or result.get("department")
-                or ""
-            ),
+            "department": department,
             "data_source": _safe_text(metadata.get("data_source") or result.get("data_source") or "workstation_v4"),
             "trigger_source": _safe_text(metadata.get("trigger_source") or "workstation_v4"),
         }
@@ -173,7 +178,7 @@ class QCPersistenceService:
             "workflow_type": workflow_type,
             "visit_id": visit_id,
             "patient_id": patient_id,
-            "overall_score": float(overall_score or 0),
+            "overall_score": overall_score,
             "grade": _safe_text(result.get("overall_grade") or result.get("grade") or "C"),
             "issues": issues,
             "defect_count": int(defect_count if defect_count is not None else len(issues)),
@@ -255,6 +260,77 @@ class QCPersistenceService:
         })
         session.execute(stmt)
 
+    def _extract_auto_close_scope(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+
+        raw_rule_codes = metadata.get("evaluated_rule_codes")
+        if raw_rule_codes is None:
+            raw_rule_codes = result.get("evaluated_rule_codes")
+        evaluated_rule_codes: Optional[frozenset[str]] = None
+        if isinstance(raw_rule_codes, (list, tuple, set, frozenset)):
+            evaluated_rule_codes = frozenset(
+                text for item in raw_rule_codes if (text := _safe_text(item).strip())
+            )
+
+        def _non_empty_lower_set(*candidates: Any) -> Optional[frozenset[str]]:
+            for candidate in candidates:
+                if isinstance(candidate, (list, tuple, set, frozenset)):
+                    normalized = frozenset(
+                        text.lower() for item in candidate if (text := _safe_text(item).strip())
+                    )
+                    if normalized:
+                        return normalized
+            return None
+
+        evaluated_categories = _non_empty_lower_set(
+            metadata.get("evaluated_categories"),
+            result.get("evaluated_categories"),
+            metadata.get("categories"),
+            result.get("categories"),
+        )
+        evaluated_severities = _non_empty_lower_set(
+            metadata.get("evaluated_severities"),
+            result.get("evaluated_severities"),
+            metadata.get("severities"),
+            result.get("severities"),
+        )
+        is_partial_run = bool(
+            metadata.get("is_partial_run")
+            or result.get("is_partial_run")
+            or metadata.get("skip_llm")
+            or result.get("skip_llm")
+        )
+        return {
+            "evaluated_rule_codes": evaluated_rule_codes,
+            "evaluated_categories": evaluated_categories,
+            "evaluated_severities": evaluated_severities,
+            "is_partial_run": is_partial_run,
+        }
+
+    def _can_auto_close_defect(self, existing: Dict[str, Any], scope: Dict[str, Any]) -> bool:
+        if _safe_text(existing.get("origin")).strip().lower() == "manual":
+            return False
+
+        evaluated_rule_codes: Optional[frozenset[str]] = scope["evaluated_rule_codes"]
+        if evaluated_rule_codes is not None:
+            return _safe_text(existing.get("rule_code")).strip() in evaluated_rule_codes
+
+        evaluated_categories: Optional[frozenset[str]] = scope["evaluated_categories"]
+        evaluated_severities: Optional[frozenset[str]] = scope["evaluated_severities"]
+        if evaluated_categories is not None or evaluated_severities is not None:
+            if evaluated_categories is not None:
+                if _safe_text(existing.get("category")).strip().lower() not in evaluated_categories:
+                    return False
+            if evaluated_severities is not None:
+                if _safe_text(existing.get("severity")).strip().lower() not in evaluated_severities:
+                    return False
+            return True
+
+        if scope["is_partial_run"]:
+            return False
+
+        return True
+
     def _persist_qc_defects(
         self,
         session: Session,
@@ -277,14 +353,24 @@ class QCPersistenceService:
             if str(row.get("status") or "").lower() != "completed"
         }
 
+        deduped_issues: List[Tuple[str, str, Dict[str, Any]]] = []
+        seen_batch_index: Dict[str, int] = {}
+        for issue in issues:
+            defect_id, identity_key = self._defect_identity(record_id, issue)
+            if defect_id in seen_batch_index:
+                deduped_issues[seen_batch_index[defect_id]] = (defect_id, identity_key, issue)
+            else:
+                seen_batch_index[defect_id] = len(deduped_issues)
+                deduped_issues.append((defect_id, identity_key, issue))
+
         created = 0
         updated = 0
         resolved = 0
         touched_ids: set[str] = set()
+        closed_existing_ids: set[str] = set()
         defect_ids: List[str] = []
 
-        for issue in issues:
-            defect_id, identity_key = self._defect_identity(record_id, issue)
+        for defect_id, identity_key, issue in deduped_issues:
             touched_ids.add(defect_id)
             defect_ids.append(defect_id)
             payload = {
@@ -316,6 +402,7 @@ class QCPersistenceService:
                     })
                 )
                 updated += 1
+                existing_by_id[defect_id] = dict(payload)
                 self._insert_defect_history(
                     session,
                     defect_id=defect_id,
@@ -332,19 +419,46 @@ class QCPersistenceService:
                 for key, value in payload.items()
                 if key in table.c
             }).on_conflict_do_nothing(index_elements=["id"])
-            session.execute(stmt)
-            created += 1
-            self._insert_defect_history(
-                session,
-                defect_id=defect_id,
-                action="auto_created",
-                actor_id=actor_id,
-                actor_name=actor_name,
-                details={"identity": identity_key, "status": "pending"},
-            )
+            insert_res = session.execute(stmt)
+            if (insert_res.rowcount or 0) > 0:
+                created += 1
+                existing_by_id[defect_id] = dict(payload)
+                self._insert_defect_history(
+                    session,
+                    defect_id=defect_id,
+                    action="auto_created",
+                    actor_id=actor_id,
+                    actor_name=actor_name,
+                    details={"identity": identity_key, "status": "pending"},
+                )
+            else:
+                update_res = session.execute(
+                    table.update()
+                    .where(table.c.id == defect_id)
+                    .values({
+                        key: _value_for_column(table.c[key], value)
+                        for key, value in payload.items()
+                        if key in table.c and key not in {"id", "created_at"}
+                    })
+                )
+                if (update_res.rowcount or 0) > 0:
+                    updated += 1
+                    existing_by_id[defect_id] = dict(payload)
+                    self._insert_defect_history(
+                        session,
+                        defect_id=defect_id,
+                        action="auto_updated",
+                        actor_id=actor_id,
+                        actor_name=actor_name,
+                        details={"identity": identity_key, "status": "pending"},
+                    )
 
+        auto_close_scope = self._extract_auto_close_scope(result)
         for defect_id in sorted(active_existing_ids - touched_ids):
-            session.execute(
+            existing = existing_by_id.get(defect_id) or {}
+            if not self._can_auto_close_defect(existing, auto_close_scope):
+                continue
+            resolve_res = session.execute(
                 table.update()
                 .where(and_(table.c.id == defect_id, table.c.status != "completed"))
                 .values({
@@ -352,6 +466,9 @@ class QCPersistenceService:
                     "updated_at": _now_utc(),
                 })
             )
+            closed_existing_ids.add(defect_id)
+            if (resolve_res.rowcount or 0) <= 0:
+                continue
             resolved += 1
             self._insert_defect_history(
                 session,
@@ -362,12 +479,13 @@ class QCPersistenceService:
                 details={"status": "completed"},
             )
 
+        remaining_active_ids = (active_existing_ids - closed_existing_ids) | touched_ids
         return {
             "created": created,
             "updated": updated,
             "resolved": resolved,
             "defect_ids": defect_ids,
-            "active_count": len(touched_ids),
+            "active_count": len(remaining_active_ids),
         }
 
     def _workflow_label(self, workflow_type: str) -> str:
@@ -395,12 +513,13 @@ class QCPersistenceService:
         notification_id = _stable_uuid("qc_notification", workflow_type, result.get("visit_id") or record_id, recipient_id)
         existing = session.execute(table.select().where(table.c.id == notification_id).limit(1)).mappings().first()
 
-        has_issues = result["defect_count"] > 0
+        active_count = int(defect_summary.get("active_count") or 0)
+        has_issues = active_count > 0 or result["defect_count"] > 0
         if has_issues:
             title = f"{workflow_label}发现问题"
             content = (
                 f"病历 {result.get('visit_id') or record_id} {workflow_label}完成，"
-                f"当前有 {defect_summary['active_count']} 条待处理问题。"
+                f"当前有 {active_count or result['defect_count']} 条待处理问题。"
             )
             severity = "warning"
             is_read = False

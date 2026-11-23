@@ -114,6 +114,14 @@ def _build_formal_qc_persistence_result(
         for r in report.results
         if not r.passed
     ]
+    categories = payload.get("categories") or []
+    severities = payload.get("severities") or []
+    evaluated_rule_codes = [
+        str(r.rule_id)
+        for r in (getattr(report, "results", None) or [])
+        if getattr(r, "rule_id", None)
+    ]
+    is_partial_run = bool(categories or severities)
     metadata = {
         "workflow_type": "frontpage",
         "patient_id": patient_id,
@@ -121,8 +129,10 @@ def _build_formal_qc_persistence_result(
         "department": department,
         "data_source": "frontpage_formal_qc",
         "trigger_source": "workstation_v4",
-        "categories": payload.get("categories") or [],
-        "severities": payload.get("severities") or [],
+        "categories": categories,
+        "severities": severities,
+        "evaluated_rule_codes": evaluated_rule_codes,
+        "is_partial_run": is_partial_run,
     }
     return {
         "record_id": f"frontpage::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
@@ -144,7 +154,12 @@ def _build_formal_qc_persistence_result(
     }
 
 
-def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[str, Any]) -> Dict[str, Any]:
+def _build_coding_qc_persistence_result(
+    payload: Dict[str, Any],
+    report: Dict[str, Any],
+    *,
+    llm_executed: Optional[bool] = None,
+) -> Dict[str, Any]:
     patient_id = str(payload.get("patient_id") or "")
     visit_id = str(payload.get("visit_id") or "")
     frontpage = payload.get("frontpage") if isinstance(payload.get("frontpage"), dict) else {}
@@ -162,6 +177,9 @@ def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[st
         if isinstance(item, dict)
     )
     overall_score = max(0.0, 100.0 - min(total_issues, 20) * 5.0)
+    skip_llm = bool(payload.get("skip_llm", False))
+    effective_llm_executed = (not skip_llm) if llm_executed is None else bool(llm_executed)
+    is_partial_run = skip_llm or not effective_llm_executed
     return {
         "record_id": f"coding::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
         "workflow_type": "coding",
@@ -178,6 +196,8 @@ def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[st
             "department": "",
             "data_source": "coding_qc",
             "trigger_source": "workstation_v4",
+            "skip_llm": skip_llm,
+            "is_partial_run": is_partial_run,
         },
         "analysis_engine": "coding-qc",
         "analysis_date": datetime.utcnow().isoformat() + "Z",
@@ -959,7 +979,12 @@ async def check_coding_qc(
             else:
                 report = await engine.run_all(frontpage)
         report_dict = report.to_dict()
-        persistence_result = _build_coding_qc_persistence_result(payload, report_dict)
+        llm_executed = (not skip_llm) and (getattr(engine, "llm_client", None) is not None)
+        persistence_result = _build_coding_qc_persistence_result(
+            payload,
+            report_dict,
+            llm_executed=llm_executed,
+        )
         persistence = await default_qc_persistence_service.persist_analysis(
             persistence_result,
             actor=current_user,
