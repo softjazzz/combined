@@ -8,7 +8,10 @@ import errno
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import threading
+import time
 
 import pytest
 
@@ -245,16 +248,8 @@ def test_failed_publish_cleans_up_temporary_files_across_all_freeze_modules(
     def _fail_io(*_args, **_kwargs):
         raise OSError("synthetic disk error")
 
-    real_open = os.open
-
-    def _fail_excl_open(path, flags, mode=0o777, *args, **kwargs):
-        if flags & os.O_EXCL:
-            raise OSError("synthetic disk error")
-        return real_open(path, flags, mode, *args, **kwargs)
-
     monkeypatch.setattr(os, "link", _fail_io)
     monkeypatch.setattr(os, "replace", _fail_io)
-    monkeypatch.setattr(os, "open", _fail_excl_open)
 
     # 1. antimicrobial_freeze 吞掉 OSError 并清理临时文件且不遗留锁文件或半截目标文件
     antimicrobial_freeze.save_payload("order_reason", "k1", {"ok": True})
@@ -567,50 +562,32 @@ def test_fallback_publish_preserves_first_writer_wins_when_hard_links_unavailabl
     both_passed_initial_check = threading.Barrier(2)
     first_published = threading.Event()
     writer_tag = threading.local()
-    real_open = os.open
     real_replace = os.replace
-    excl_open_successes = 0
-    excl_open_conflicts = 0
     replace_calls = 0
     count_lock = threading.Lock()
 
     def _unsupported_link(_src, _dst):
-        # 两个线程均先穿过入口 if path.is_file(): return，再先后进入无硬链接回退路径。
+        # 两个线程均先穿过入口校验，再先后进入无硬链接内核锁回退路径。
         both_passed_initial_check.wait(timeout=5.0)
         if getattr(writer_tag, "name", None) == "second":
             assert first_published.wait(timeout=5.0)
         raise OSError(errno.EPERM, "hard links unsupported")
 
-    def _counting_open(path, flags, mode=0o777, *args, **kwargs):
-        nonlocal excl_open_successes, excl_open_conflicts
-        is_excl = bool(flags & os.O_EXCL)
-        try:
-            fd = real_open(path, flags, mode, *args, **kwargs)
-        except FileExistsError:
-            if is_excl:
-                with count_lock:
-                    excl_open_conflicts += 1
-            raise
-        if is_excl:
-            with count_lock:
-                excl_open_successes += 1
-        return fd
-
     def _counting_replace(src, dst):
         nonlocal replace_calls
         with count_lock:
             replace_calls += 1
-        return real_replace(src, dst)
+        result = real_replace(src, dst)
+        if getattr(writer_tag, "name", None) == "first":
+            first_published.set()
+        return result
 
     monkeypatch.setattr(os, "link", _unsupported_link)
-    monkeypatch.setattr(os, "open", _counting_open)
     monkeypatch.setattr(os, "replace", _counting_replace)
 
     def _run(label: str) -> None:
         writer_tag.name = label
         owner.save_payload(namespace, key, {"writer": label})
-        if label == "first":
-            first_published.set()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [pool.submit(_run, "first"), pool.submit(_run, "second")]
@@ -618,9 +595,7 @@ def test_fallback_publish_preserves_first_writer_wins_when_hard_links_unavailabl
             future.result()
 
     assert owner.load_payload(namespace, key) == {"writer": "first"}
-    assert excl_open_successes == 1
-    assert excl_open_conflicts == 1
-    assert replace_calls == 0
+    assert replace_calls == 1
     assert len(list(store.rglob("*.json"))) == 1
     assert list(store.rglob("*.tmp")) == []
     assert list(store.rglob("*.lock")) == []
@@ -640,38 +615,27 @@ def test_fallback_publish_paused_writer_never_overwrites_completed_writer(
     monkeypatch.setenv(owner._ENV_STORE_DIR, str(store))
     key = owner.freeze_key(f"synthetic-fallback-pause-race-{namespace}")
 
-    writer_a_paused_before_fallback = threading.Event()
+    # 1. Writer A 在 os.link 失败后、获取内核锁前挂起，期间 Writer B 完成发布；
+    #    Writer A 恢复后不得覆盖 Writer B。
+    writer_a_paused_before_lock = threading.Event()
     writer_b_completed = threading.Event()
     writer_tag = threading.local()
-    real_open = os.open
     real_replace = os.replace
-    writer_a_hit_file_exists = False
     replace_calls = 0
 
     def _unsupported_link(_src, _dst):
         if getattr(writer_tag, "name", None) == "A":
-            # 模拟 Writer A 在硬链接失败后、进入排他创建回退前被长时间挂起（例如 >30s）。
-            writer_a_paused_before_fallback.set()
+            writer_a_paused_before_lock.set()
             assert writer_b_completed.wait(timeout=5.0)
         raise OSError(errno.EPERM, "hard links unsupported")
 
-    def _tracking_open(path, flags, mode=0o777, *args, **kwargs):
-        nonlocal writer_a_hit_file_exists
-        try:
-            return real_open(path, flags, mode, *args, **kwargs)
-        except FileExistsError:
-            if getattr(writer_tag, "name", None) == "A" and (flags & os.O_EXCL):
-                writer_a_hit_file_exists = True
-            raise
-
-    def _forbid_replace(src, dst):
+    def _counting_replace(src, dst):
         nonlocal replace_calls
         replace_calls += 1
         return real_replace(src, dst)
 
     monkeypatch.setattr(os, "link", _unsupported_link)
-    monkeypatch.setattr(os, "open", _tracking_open)
-    monkeypatch.setattr(os, "replace", _forbid_replace)
+    monkeypatch.setattr(os, "replace", _counting_replace)
 
     def _run_a() -> None:
         writer_tag.name = "A"
@@ -679,7 +643,7 @@ def test_fallback_publish_paused_writer_never_overwrites_completed_writer(
 
     def _run_b() -> None:
         writer_tag.name = "B"
-        assert writer_a_paused_before_fallback.wait(timeout=5.0)
+        assert writer_a_paused_before_lock.wait(timeout=5.0)
         owner.save_payload(namespace, key, {"writer": "B"})
         writer_b_completed.set()
 
@@ -690,9 +654,203 @@ def test_fallback_publish_paused_writer_never_overwrites_completed_writer(
         future_a.result()
 
     assert owner.load_payload(namespace, key) == {"writer": "B"}
-    assert writer_a_hit_file_exists is True
-    assert replace_calls == 0
+    assert replace_calls == 1
     assert len(list(store.rglob("*.json"))) == 1
+    assert list(store.rglob("*.tmp")) == []
+    assert list(store.rglob("*.lock")) == []
+
+    # 2. 跨进程真实 OS 内核锁持锁挂起：独立子进程持有内核锁并暂停，再原子发布 "subproc-A"；
+    #    父进程在无硬链接回退下必须等待子进程释放内核锁（绝不超时窃锁），并保留 "subproc-A"。
+    subproc_key = owner.freeze_key(f"synthetic-subproc-lock-hold-{namespace}")
+    target = store / namespace / f"{subproc_key}.json"
+    lock_file = target.with_name(f"{target.name}.lock")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subproc_artifact = json.dumps(
+        {
+            "schema_version": owner.FREEZE_SCHEMA_VERSION,
+            "key": subproc_key,
+            "payload": {"writer": "subproc-A"},
+        },
+        ensure_ascii=False,
+        indent=1,
+    ) + "\n"
+    holder_script = (
+        "import os, sys, time\n"
+        "lock_path, target_path, payload = sys.argv[1], sys.argv[2], sys.argv[3]\n"
+        "flags = os.O_CREAT | os.O_RDWR | getattr(os, 'O_BINARY', 0)\n"
+        "fd = os.open(lock_path, flags, 0o600)\n"
+        "if os.name == 'nt':\n"
+        "    import msvcrt\n"
+        "    os.lseek(fd, 0, os.SEEK_SET)\n"
+        "    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)\n"
+        "else:\n"
+        "    import fcntl\n"
+        "    fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "sys.stdout.write('LOCKED\\n')\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(0.25)\n"
+        "tmp_path = target_path + '.subproc.tmp'\n"
+        "with open(tmp_path, 'wb') as f:\n"
+        "    f.write(payload.encode('utf-8'))\n"
+        "os.replace(tmp_path, target_path)\n"
+        "if os.name == 'nt':\n"
+        "    os.lseek(fd, 0, os.SEEK_SET)\n"
+        "    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)\n"
+        "    os.close(fd)\n"
+        "else:\n"
+        "    try:\n"
+        "        os.unlink(lock_path)\n"
+        "    except OSError:\n"
+        "        pass\n"
+        "    fcntl.flock(fd, fcntl.LOCK_UN)\n"
+        "    os.close(fd)\n"
+    )
+    subproc_env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    proc = subprocess.Popen(
+        [sys.executable, "-c", holder_script, str(lock_file), str(target), subproc_artifact],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=subproc_env,
+    )
+    try:
+        assert proc.stdout is not None
+        assert proc.stdout.readline().strip() == "LOCKED"
+        replace_calls_before = replace_calls
+        start = time.monotonic()
+        owner.save_payload(namespace, subproc_key, {"writer": "parent-B"})
+        waited = time.monotonic() - start
+        _, stderr = proc.communicate(timeout=5.0)
+        assert proc.returncode == 0, stderr
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5.0)
+
+    assert waited >= 0.15
+    assert owner.load_payload(namespace, subproc_key) == {"writer": "subproc-A"}
+    assert replace_calls == replace_calls_before
+    assert list(store.rglob("*.tmp")) == []
+    assert list(store.rglob("*.lock")) == []
+
+
+@pytest.mark.parametrize(
+    ("owner", "namespace"),
+    [
+        (exam_analysis_freeze, "analysis"),
+        (antimicrobial_freeze, "order_reason"),
+    ],
+)
+def test_fallback_and_link_recover_interrupted_8byte_corrupt_file_from_subprocess(
+    monkeypatch, tmp_path, owner, namespace
+):
+    store = tmp_path / f"{namespace}-corrupt-recovery"
+    monkeypatch.setenv(owner._ENV_STORE_DIR, str(store))
+    subproc_env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+
+    crash_writer_script = (
+        "import os, sys\n"
+        "target_path, lock_path = sys.argv[1], sys.argv[2]\n"
+        "os.makedirs(os.path.dirname(target_path), exist_ok=True)\n"
+        "flags = os.O_CREAT | os.O_RDWR | getattr(os, 'O_BINARY', 0)\n"
+        "lock_fd = os.open(lock_path, flags, 0o600)\n"
+        "if os.name == 'nt':\n"
+        "    import msvcrt\n"
+        "    os.lseek(lock_fd, 0, os.SEEK_SET)\n"
+        "    msvcrt.locking(lock_fd, msvcrt.LK_NBLCK, 1)\n"
+        "else:\n"
+        "    import fcntl\n"
+        "    fcntl.flock(lock_fd, fcntl.LOCK_EX)\n"
+        "with open(target_path, 'wb') as f:\n"
+        "    f.write(b'{\"schem')\n"
+        "    f.flush()\n"
+        "os._exit(1)\n"
+    )
+
+    # 1. 硬链接不可用回退路径：独立子进程持有内核锁并写入 8 字节截断文件后 os._exit(1) 崩溃；
+    #    OS 立即释放内核锁，后续正常 save 必须恢复并落盘完整有效内容。
+    fallback_key = owner.freeze_key(f"synthetic-8byte-fallback-{namespace}")
+    fallback_target = store / namespace / f"{fallback_key}.json"
+    fallback_lock = fallback_target.with_name(f"{fallback_target.name}.lock")
+    res = subprocess.run(
+        [sys.executable, "-c", crash_writer_script, str(fallback_target), str(fallback_lock)],
+        check=False,
+        env=subproc_env,
+        timeout=10.0,
+    )
+    assert res.returncode == 1
+    assert fallback_target.read_bytes() == b'{"schem'
+    assert owner.load_payload(namespace, fallback_key) is None
+
+    def _unsupported_link(_src, _dst):
+        raise OSError(errno.EPERM, "hard links unsupported")
+
+    monkeypatch.setattr(os, "link", _unsupported_link)
+    owner.save_payload(namespace, fallback_key, {"writer": "recovered-fallback"})
+
+    assert owner.load_payload(namespace, fallback_key) == {"writer": "recovered-fallback"}
+    assert list(store.rglob("*.tmp")) == []
+    assert list(store.rglob("*.lock")) == []
+
+    # 2. 硬链接主路径：若已有 8 字节残损文件，os.link 抛 FileExistsError 后也应通过内核锁原子恢复。
+    monkeypatch.undo()
+    monkeypatch.setenv(owner._ENV_STORE_DIR, str(store))
+    link_key = owner.freeze_key(f"synthetic-8byte-link-{namespace}")
+    link_target = store / namespace / f"{link_key}.json"
+    link_lock = link_target.with_name(f"{link_target.name}.lock")
+    res_link = subprocess.run(
+        [sys.executable, "-c", crash_writer_script, str(link_target), str(link_lock)],
+        check=False,
+        env=subproc_env,
+        timeout=10.0,
+    )
+    assert res_link.returncode == 1
+    assert link_target.read_bytes() == b'{"schem'
+    assert owner.load_payload(namespace, link_key) is None
+
+    owner.save_payload(namespace, link_key, {"writer": "recovered-link"})
+
+    assert owner.load_payload(namespace, link_key) == {"writer": "recovered-link"}
+    assert list(store.rglob("*.tmp")) == []
+    assert list(store.rglob("*.lock")) == []
+
+
+@pytest.mark.parametrize(
+    ("owner", "namespace"),
+    [
+        (exam_analysis_freeze, "analysis"),
+        (antimicrobial_freeze, "order_reason"),
+    ],
+)
+def test_fallback_publish_preserves_valid_old_schema_freeze_file(
+    monkeypatch, tmp_path, owner, namespace
+):
+    store = tmp_path / f"{namespace}-old-schema"
+    monkeypatch.setenv(owner._ENV_STORE_DIR, str(store))
+    key = owner.freeze_key(f"synthetic-old-schema-{namespace}")
+    target = store / namespace / f"{key}.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    legacy_bytes = (
+        json.dumps(
+            {
+                "schema_version": "legacy-schema-v0",
+                "key": key,
+                "payload": {"writer": "legacy-valid"},
+            },
+            ensure_ascii=False,
+            indent=1,
+        )
+        + "\n"
+    ).encode("utf-8")
+    target.write_bytes(legacy_bytes)
+
+    def _unsupported_link(_src, _dst):
+        raise OSError(errno.EPERM, "hard links unsupported")
+
+    monkeypatch.setattr(os, "link", _unsupported_link)
+    owner.save_payload(namespace, key, {"writer": "must-not-overwrite-legacy"})
+
+    assert target.read_bytes() == legacy_bytes
     assert list(store.rglob("*.tmp")) == []
     assert list(store.rglob("*.lock")) == []
 

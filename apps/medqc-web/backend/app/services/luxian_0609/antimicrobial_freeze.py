@@ -14,14 +14,18 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import errno
 import hashlib
 import json
 import logging
 import os
 from pathlib import Path
 import threading
-from typing import Any, Mapping
+import time
+from typing import Any, Iterator, Mapping
 import uuid
+import weakref
 
 from ..llm_experiment import experiment_store_dir
 
@@ -32,32 +36,144 @@ FREEZE_SCHEMA_VERSION = "antimicrobial-fact-freeze-v1"
 _ENV_STORE_DIR = "LUXIAN_0609_ANTIMICROBIAL_FREEZE_DIR"
 
 
-def _publish_once_fallback(path: Path, payload_bytes: bytes) -> None:
-    """硬链接不可用时以内核原子排他创建（O_CREAT | O_EXCL）保障首次写入者赢。"""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+class _PathLock:
+    __slots__ = ("_lock", "__weakref__")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def __enter__(self) -> _PathLock:
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self._lock.release()
+
+
+_WRITE_LOCKS_GUARD = threading.Lock()
+_WRITE_LOCKS: weakref.WeakValueDictionary[str, _PathLock] = weakref.WeakValueDictionary()
+
+
+def _path_lock(path: Path) -> _PathLock:
+    key = os.path.normcase(os.path.abspath(str(path)))
+    with _WRITE_LOCKS_GUARD:
+        holder = _WRITE_LOCKS.get(key)
+        if holder is None:
+            holder = _PathLock()
+            _WRITE_LOCKS[key] = holder
+        return holder
+
+
+def _is_valid_freeze_file(path: Path) -> bool:
+    if not path.is_file():
+        return False
     try:
-        fd = os.open(os.fspath(path), flags, 0o600)
-    except FileExistsError:
-        # 首次写入者赢：已有同键冻结落盘时不覆盖。
-        return
-    completed = False
-    try:
-        view = memoryview(payload_bytes)
-        written = 0
-        while written < len(view):
-            chunk = os.write(fd, view[written:])
-            if chunk <= 0:
-                raise OSError("short write while publishing freeze file")
-            written += chunk
-        os.fsync(fd)
-        completed = True
-    finally:
-        os.close(fd)
-        if not completed:
+        artifact = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(artifact, dict)
+
+
+@contextmanager
+def _kernel_file_lock(lock_path: Path) -> Iterator[None]:
+    """使用 OS 内核文件锁跨进程排他同步，无超时窃锁；进程崩溃由内核立即释放。"""
+    lock_fs = os.fspath(lock_path)
+    open_flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_BINARY", 0)
+    if os.name == "nt":
+        import msvcrt
+
+        fd: int | None = None
+        for attempt in range(50):
             try:
-                path.unlink(missing_ok=True)
+                fd = os.open(lock_fs, open_flags, 0o600)
+                break
+            except PermissionError:
+                if not lock_path.exists() or attempt == 49:
+                    raise
+                time.sleep(0.005)
+        assert fd is not None
+        locked = False
+        try:
+            while True:
+                os.lseek(fd, 0, os.SEEK_SET)
+                try:
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                    locked = True
+                    break
+                except OSError as exc:
+                    if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                        raise
+                    time.sleep(0.01)
+            yield
+        finally:
+            if locked:
+                try:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+            os.close(fd)
+            try:
+                lock_path.unlink(missing_ok=True)
             except OSError:
                 pass
+    else:
+        import fcntl
+
+        while True:
+            fd = os.open(lock_fs, open_flags, 0o600)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                try:
+                    path_stat = os.stat(lock_fs)
+                    fd_stat = os.fstat(fd)
+                except FileNotFoundError:
+                    os.close(fd)
+                    continue
+                if path_stat.st_ino != fd_stat.st_ino or path_stat.st_dev != fd_stat.st_dev:
+                    os.close(fd)
+                    continue
+            except BaseException:
+                os.close(fd)
+                raise
+            break
+        try:
+            yield
+        finally:
+            try:
+                lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            os.close(fd)
+
+
+def _replace_with_retry(temporary: Path, path: Path) -> None:
+    for attempt in range(20):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            if _is_valid_freeze_file(path):
+                return
+            if attempt == 19:
+                raise
+            time.sleep(0.01)
+
+
+def _publish_once_with_kernel_lock(temporary: Path, path: Path) -> None:
+    """无硬链接或目标残损时，以进程内锁 + OS 内核文件锁原子替换发布，首次有效写入者赢。"""
+    lock_path = path.with_name(f"{path.name}.lock")
+    with _path_lock(path):
+        if _is_valid_freeze_file(path):
+            return
+        with _kernel_file_lock(lock_path):
+            if _is_valid_freeze_file(path):
+                return
+            _replace_with_retry(temporary, path)
 
 
 def default_store_dir() -> Path:
@@ -97,7 +213,7 @@ def save_payload(namespace: str, key: str, payload: Mapping[str, Any]) -> None:
         return
     directory = experiment_store_dir(default_store_dir()) / namespace
     path = directory / f"{key}.json"
-    if path.is_file():
+    if _is_valid_freeze_file(path):
         return
     try:
         directory.mkdir(parents=True, exist_ok=True)
@@ -111,10 +227,12 @@ def save_payload(namespace: str, key: str, payload: Mapping[str, Any]) -> None:
             try:
                 os.link(temporary, path)
             except FileExistsError:
-                # 首次写入者赢：并发竞争中已有同键落盘时不覆盖。
-                return
+                if _is_valid_freeze_file(path):
+                    # 首次写入者赢：并发竞争中已有完整同键落盘时不覆盖。
+                    return
+                _publish_once_with_kernel_lock(temporary, path)
             except OSError:
-                _publish_once_fallback(path, payload_bytes)
+                _publish_once_with_kernel_lock(temporary, path)
         finally:
             try:
                 temporary.unlink(missing_ok=True)
