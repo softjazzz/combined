@@ -20,10 +20,8 @@ import logging
 import os
 from pathlib import Path
 import threading
-import time
 from typing import Any, Mapping
 import uuid
-import weakref
 
 from ..llm_experiment import experiment_store_dir
 
@@ -32,84 +30,32 @@ logger = logging.getLogger(__name__)
 # 冻结内容的结构或核验口径变化时提升版本，使旧冻结失效。
 FREEZE_SCHEMA_VERSION = "antimicrobial-fact-freeze-v1"
 _ENV_STORE_DIR = "LUXIAN_0609_ANTIMICROBIAL_FREEZE_DIR"
-_LOCK_STALE_SECONDS = 30.0
-_LOCK_MAX_ATTEMPTS = 200
 
 
-class _PathLock:
-    __slots__ = ("_lock", "__weakref__")
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-
-    def __enter__(self) -> _PathLock:
-        self._lock.acquire()
-        return self
-
-    def __exit__(self, *_exc: object) -> None:
-        self._lock.release()
-
-
-_WRITE_LOCKS_GUARD = threading.Lock()
-_WRITE_LOCKS: weakref.WeakValueDictionary[str, _PathLock] = weakref.WeakValueDictionary()
-
-
-def _path_lock(path: Path) -> _PathLock:
-    key = os.path.normcase(os.path.abspath(str(path)))
-    with _WRITE_LOCKS_GUARD:
-        holder = _WRITE_LOCKS.get(key)
-        if holder is None:
-            holder = _PathLock()
-            _WRITE_LOCKS[key] = holder
-        return holder
-
-
-def _publish_once_fallback(temporary: Path, path: Path) -> None:
-    """硬链接不可用时以进程内锁 + 跨进程排他锁文件保障首次写入者赢。"""
-    lock_path = path.with_name(f"{path.name}.lock")
-    with _path_lock(path):
-        if path.is_file():
-            return
-        acquired = False
-        for attempt in range(_LOCK_MAX_ATTEMPTS):
-            if path.is_file():
-                return
+def _publish_once_fallback(path: Path, payload_bytes: bytes) -> None:
+    """硬链接不可用时以内核原子排他创建（O_CREAT | O_EXCL）保障首次写入者赢。"""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    try:
+        fd = os.open(os.fspath(path), flags, 0o600)
+    except FileExistsError:
+        # 首次写入者赢：已有同键冻结落盘时不覆盖。
+        return
+    completed = False
+    try:
+        view = memoryview(payload_bytes)
+        written = 0
+        while written < len(view):
+            chunk = os.write(fd, view[written:])
+            if chunk <= 0:
+                raise OSError("short write while publishing freeze file")
+            written += chunk
+        os.fsync(fd)
+        completed = True
+    finally:
+        os.close(fd)
+        if not completed:
             try:
-                fd = os.open(
-                    lock_path,
-                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                    0o600,
-                )
-            except FileExistsError:
-                try:
-                    if time.time() - lock_path.stat().st_mtime > _LOCK_STALE_SECONDS:
-                        lock_path.unlink(missing_ok=True)
-                        continue
-                except OSError:
-                    pass
-                if attempt == _LOCK_MAX_ATTEMPTS - 1:
-                    if path.is_file():
-                        return
-                    raise OSError(f"freeze publish lock busy: {lock_path}")
-                time.sleep(0.01)
-            else:
-                os.close(fd)
-                acquired = True
-                break
-        if not acquired:
-            return
-        try:
-            if path.is_file():
-                return
-            try:
-                os.replace(temporary, path)
-            except PermissionError:
-                if path.is_file():
-                    return
-                raise
-        finally:
-            try:
-                lock_path.unlink(missing_ok=True)
+                path.unlink(missing_ok=True)
             except OSError:
                 pass
 
@@ -156,22 +102,19 @@ def save_payload(namespace: str, key: str, payload: Mapping[str, Any]) -> None:
     try:
         directory.mkdir(parents=True, exist_ok=True)
         artifact = {"schema_version": FREEZE_SCHEMA_VERSION, "key": key, "payload": payload}
+        payload_bytes = (json.dumps(artifact, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
         temporary = path.with_name(
             f"{path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex[:8]}.tmp"
         )
         try:
-            temporary.write_text(
-                json.dumps(artifact, ensure_ascii=False, indent=1) + "\n",
-                encoding="utf-8",
-                newline="\n",
-            )
+            temporary.write_bytes(payload_bytes)
             try:
                 os.link(temporary, path)
             except FileExistsError:
                 # 首次写入者赢：并发竞争中已有同键落盘时不覆盖。
                 return
             except OSError:
-                _publish_once_fallback(temporary, path)
+                _publish_once_fallback(path, payload_bytes)
         finally:
             try:
                 temporary.unlink(missing_ok=True)

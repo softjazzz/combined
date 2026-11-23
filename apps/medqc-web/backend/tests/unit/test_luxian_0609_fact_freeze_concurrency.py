@@ -245,19 +245,29 @@ def test_failed_publish_cleans_up_temporary_files_across_all_freeze_modules(
     def _fail_io(*_args, **_kwargs):
         raise OSError("synthetic disk error")
 
+    real_open = os.open
+
+    def _fail_excl_open(path, flags, mode=0o777, *args, **kwargs):
+        if flags & os.O_EXCL:
+            raise OSError("synthetic disk error")
+        return real_open(path, flags, mode, *args, **kwargs)
+
     monkeypatch.setattr(os, "link", _fail_io)
     monkeypatch.setattr(os, "replace", _fail_io)
+    monkeypatch.setattr(os, "open", _fail_excl_open)
 
-    # 1. antimicrobial_freeze 吞掉 OSError 并清理临时文件与锁文件
+    # 1. antimicrobial_freeze 吞掉 OSError 并清理临时文件且不遗留锁文件或半截目标文件
     antimicrobial_freeze.save_payload("order_reason", "k1", {"ok": True})
     assert list((tmp_path / "abx").rglob("*.tmp")) == []
     assert list((tmp_path / "abx").rglob("*.lock")) == []
+    assert list((tmp_path / "abx").rglob("*.json")) == []
 
-    # 2. exam_analysis_freeze 透传 OSError 但不遗留临时文件与锁文件
+    # 2. exam_analysis_freeze 透传 OSError 但不遗留临时文件、锁文件或半截目标文件
     with pytest.raises(OSError, match="synthetic disk error"):
         exam_analysis_freeze.save_payload("analysis", "k2", {"ok": True})
     assert list((tmp_path / "exam").rglob("*.tmp")) == []
     assert list((tmp_path / "exam").rglob("*.lock")) == []
+    assert list((tmp_path / "exam").rglob("*.json")) == []
 
     # 3. consultation_opinion_freeze 透传 OSError 但不遗留临时文件
     with pytest.raises(OSError, match="synthetic disk error"):
@@ -557,9 +567,12 @@ def test_fallback_publish_preserves_first_writer_wins_when_hard_links_unavailabl
     both_passed_initial_check = threading.Barrier(2)
     first_published = threading.Event()
     writer_tag = threading.local()
+    real_open = os.open
     real_replace = os.replace
+    excl_open_successes = 0
+    excl_open_conflicts = 0
     replace_calls = 0
-    replace_lock = threading.Lock()
+    count_lock = threading.Lock()
 
     def _unsupported_link(_src, _dst):
         # 两个线程均先穿过入口 if path.is_file(): return，再先后进入无硬链接回退路径。
@@ -568,21 +581,36 @@ def test_fallback_publish_preserves_first_writer_wins_when_hard_links_unavailabl
             assert first_published.wait(timeout=5.0)
         raise OSError(errno.EPERM, "hard links unsupported")
 
+    def _counting_open(path, flags, mode=0o777, *args, **kwargs):
+        nonlocal excl_open_successes, excl_open_conflicts
+        is_excl = bool(flags & os.O_EXCL)
+        try:
+            fd = real_open(path, flags, mode, *args, **kwargs)
+        except FileExistsError:
+            if is_excl:
+                with count_lock:
+                    excl_open_conflicts += 1
+            raise
+        if is_excl:
+            with count_lock:
+                excl_open_successes += 1
+        return fd
+
     def _counting_replace(src, dst):
         nonlocal replace_calls
-        with replace_lock:
+        with count_lock:
             replace_calls += 1
-        result = real_replace(src, dst)
-        if getattr(writer_tag, "name", None) == "first":
-            first_published.set()
-        return result
+        return real_replace(src, dst)
 
     monkeypatch.setattr(os, "link", _unsupported_link)
+    monkeypatch.setattr(os, "open", _counting_open)
     monkeypatch.setattr(os, "replace", _counting_replace)
 
     def _run(label: str) -> None:
         writer_tag.name = label
         owner.save_payload(namespace, key, {"writer": label})
+        if label == "first":
+            first_published.set()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [pool.submit(_run, "first"), pool.submit(_run, "second")]
@@ -590,7 +618,80 @@ def test_fallback_publish_preserves_first_writer_wins_when_hard_links_unavailabl
             future.result()
 
     assert owner.load_payload(namespace, key) == {"writer": "first"}
-    assert replace_calls == 1
+    assert excl_open_successes == 1
+    assert excl_open_conflicts == 1
+    assert replace_calls == 0
+    assert len(list(store.rglob("*.json"))) == 1
+    assert list(store.rglob("*.tmp")) == []
+    assert list(store.rglob("*.lock")) == []
+
+
+@pytest.mark.parametrize(
+    ("owner", "namespace"),
+    [
+        (exam_analysis_freeze, "analysis"),
+        (antimicrobial_freeze, "order_reason"),
+    ],
+)
+def test_fallback_publish_paused_writer_never_overwrites_completed_writer(
+    monkeypatch, tmp_path, owner, namespace
+):
+    store = tmp_path / f"{namespace}-pause-race"
+    monkeypatch.setenv(owner._ENV_STORE_DIR, str(store))
+    key = owner.freeze_key(f"synthetic-fallback-pause-race-{namespace}")
+
+    writer_a_paused_before_fallback = threading.Event()
+    writer_b_completed = threading.Event()
+    writer_tag = threading.local()
+    real_open = os.open
+    real_replace = os.replace
+    writer_a_hit_file_exists = False
+    replace_calls = 0
+
+    def _unsupported_link(_src, _dst):
+        if getattr(writer_tag, "name", None) == "A":
+            # 模拟 Writer A 在硬链接失败后、进入排他创建回退前被长时间挂起（例如 >30s）。
+            writer_a_paused_before_fallback.set()
+            assert writer_b_completed.wait(timeout=5.0)
+        raise OSError(errno.EPERM, "hard links unsupported")
+
+    def _tracking_open(path, flags, mode=0o777, *args, **kwargs):
+        nonlocal writer_a_hit_file_exists
+        try:
+            return real_open(path, flags, mode, *args, **kwargs)
+        except FileExistsError:
+            if getattr(writer_tag, "name", None) == "A" and (flags & os.O_EXCL):
+                writer_a_hit_file_exists = True
+            raise
+
+    def _forbid_replace(src, dst):
+        nonlocal replace_calls
+        replace_calls += 1
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "link", _unsupported_link)
+    monkeypatch.setattr(os, "open", _tracking_open)
+    monkeypatch.setattr(os, "replace", _forbid_replace)
+
+    def _run_a() -> None:
+        writer_tag.name = "A"
+        owner.save_payload(namespace, key, {"writer": "A"})
+
+    def _run_b() -> None:
+        writer_tag.name = "B"
+        assert writer_a_paused_before_fallback.wait(timeout=5.0)
+        owner.save_payload(namespace, key, {"writer": "B"})
+        writer_b_completed.set()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        future_a = pool.submit(_run_a)
+        future_b = pool.submit(_run_b)
+        future_b.result()
+        future_a.result()
+
+    assert owner.load_payload(namespace, key) == {"writer": "B"}
+    assert writer_a_hit_file_exists is True
+    assert replace_calls == 0
     assert len(list(store.rglob("*.json"))) == 1
     assert list(store.rglob("*.tmp")) == []
     assert list(store.rglob("*.lock")) == []
