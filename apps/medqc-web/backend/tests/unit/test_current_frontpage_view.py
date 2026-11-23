@@ -92,7 +92,10 @@ def test_current_view_adds_homepage_only_to_response(monkeypatch, database):
     snapshot.rows_by_table["mr"] = [{**IDENTITY}]
     monkeypatch.setattr(assembly, "_build_material_snapshot", lambda **kw: snapshot)
     monkeypatch.setattr(assembly, "assemble_domain_bundle", lambda **kw: {})
-    monkeypatch.setattr(emr_view, "build_documents_from_domain_bundles", lambda bundles: [marker])
+    monkeypatch.setattr(
+        emr_view, "build_documents_from_domain_bundles",
+        lambda bundles, *, include_exam_evidence_coordinates=False: [marker],
+    )
     monkeypatch.setattr(emr_view, "_build_domain_projection_summary", lambda bundles: {})
     result = current_view.load_current_documents(**IDENTITY)
     assert marker == saved
