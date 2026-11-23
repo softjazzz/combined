@@ -233,7 +233,7 @@ class ScheduleStore:
                 else "missed"
                 if current - due > timedelta(hours=1)
                 else "skipped_overlap"
-                if previous_job_status not in {None, "completed", "failed", "canceled"}
+                if previous_job_status not in {None, "completed", "failed", "canceled", "missing"}
                 else "submitting"
             )
             if state == "missed":

@@ -12,6 +12,11 @@ from typing import Any
 
 from ..custom_qc_workspace_service import CustomQCWorkspaceService
 from ..llm_config_loader import LLMConfigLoader
+from ..luxian_0609.llm_prompt_privacy import (
+    _protect_clinician_names,
+    redact_luxian_0609_patient_privacy,
+)
+from ..qc_cancellation import QCJobCancelled, cancellation_scope, raise_if_cancelled
 from ..qc_llm_client import SichuanQCLLMClient
 from ..sample_programmatic_evidence import build_programmatic_evidence_payload
 from .bundle_reader import load_luxian_0916_bundle
@@ -81,8 +86,20 @@ async def run_luxian_0916_batch_job(
     workspace: CustomQCWorkspaceService,
     max_record_concurrency: int | None = None,
     semantic_generate: SemanticGenerate | None = None,
+    external_cancellation_check: Callable[[], bool] | None = None,
 ) -> None:
     """执行一个 Luxian0916 批量任务，任何失败只隔离在该任务内。"""
+
+    def _is_cancelled() -> bool:
+        if external_cancellation_check is not None and bool(external_cancellation_check()):
+            return True
+        lightweight_check = getattr(workspace, "is_batch_job_canceled_or_missing", None)
+        if callable(lightweight_check):
+            return bool(lightweight_check(job_id=job_id))
+        latest = workspace.get_batch_job_for_processing(job_id=job_id)
+        if not latest:
+            return True
+        return str(latest.get("status") or "").strip().lower() == "canceled"
 
     job = workspace.get_batch_job_for_processing(job_id=job_id)
     if not job:
@@ -106,287 +123,310 @@ async def run_luxian_0916_batch_job(
         return
 
     try:
-        records = _collect_records(workspace=workspace, job=job, filters=filters)
-        hydrated_records = workspace.hydrate_records_with_medical_text(records)
-        total_records = len(hydrated_records)
-        if total_records == 0:
-            raise ValueError("批量任务未收集到可执行病历，请确认样本病历已同步到当前病历库")
+        with cancellation_scope(_is_cancelled):
+            raise_if_cancelled()
+            records = _collect_records(workspace=workspace, job=job, filters=filters)
+            hydrated_records = workspace.hydrate_records_with_medical_text(records)
+            total_records = len(hydrated_records)
+            if total_records == 0:
+                raise ValueError("批量任务未收集到可执行病历，请确认样本病历已同步到当前病历库")
 
-        concurrency = _resolve_concurrency(
-            requested=max_record_concurrency,
-            filter_value=filters.get("max_parallel_records"),
-            total_records=total_records,
-        )
-        raw_generate = semantic_generate or await _build_semantic_generate(filters)
-        total_tokens = 0
-        total_api_time = 0.0
-        generate_call_count = 0
-        usage_incomplete_count = 0
-        time_incomplete_count = 0
+            concurrency = _resolve_concurrency(
+                requested=max_record_concurrency,
+                filter_value=filters.get("max_parallel_records"),
+                total_records=total_records,
+            )
+            raw_generate = semantic_generate or await _build_semantic_generate(filters)
+            total_tokens = 0
+            total_api_time = 0.0
+            generate_call_count = 0
+            usage_incomplete_count = 0
+            time_incomplete_count = 0
 
-        async def generate(*args: Any, **kwargs: Any) -> dict[str, Any]:
-            nonlocal total_tokens, total_api_time, generate_call_count
-            nonlocal usage_incomplete_count, time_incomplete_count
-            generate_call_count += 1
+            async def generate(*args: Any, **kwargs: Any) -> dict[str, Any]:
+                nonlocal total_tokens, total_api_time, generate_call_count
+                nonlocal usage_incomplete_count, time_incomplete_count
+                raise_if_cancelled()
+                generate_call_count += 1
+                try:
+                    response = await raw_generate(*args, **kwargs)
+                except QCJobCancelled:
+                    raise
+                except BaseException:
+                    usage_incomplete_count += 1
+                    time_incomplete_count += 1
+                    raise
+
+                response_stats = response if isinstance(response, Mapping) else {}
+                sdk_usage = _mapping(response_stats.get("_usage_breakdown"))
+                raw_usage = _mapping(response_stats.get("usage"))
+                tokens = (
+                    sdk_usage["total_tokens"]
+                    if "total_tokens" in sdk_usage
+                    else raw_usage.get("total_tokens")
+                )
+                valid_tokens = (
+                    isinstance(tokens, int)
+                    and not isinstance(tokens, bool)
+                    and tokens >= 0
+                )
+                if valid_tokens:
+                    total_tokens += tokens
+                # SDK 在完全没有上游 usage 时也合成零汇总，不能将其视为真实零成本。
+                raw_tokens = raw_usage.get("total_tokens")
+                synthetic_zero = (
+                    "total_tokens" in sdk_usage
+                    and valid_tokens
+                    and tokens == 0
+                    and not (
+                        isinstance(raw_tokens, int)
+                        and not isinstance(raw_tokens, bool)
+                        and raw_tokens >= 0
+                    )
+                )
+                if not valid_tokens or synthetic_zero:
+                    usage_incomplete_count += 1
+                api_time = response_stats.get("_api_time")
+                try:
+                    valid_time = (
+                        isinstance(api_time, (int, float))
+                        and not isinstance(api_time, bool)
+                        and math.isfinite(api_time)
+                        and api_time >= 0
+                    )
+                except OverflowError:
+                    valid_time = False
+                if valid_time:
+                    total_api_time += api_time
+                else:
+                    time_incomplete_count += 1
+                return response
+
+            workspace.update_batch_job_progress(
+                job_id=job_id,
+                step_key="prepare",
+                rule_index=0,
+                rule_count=len(_RULE_IDS),
+                processed_records=0,
+                total_records=total_records,
+                summary_patch={
+                    "rule_count": len(_RULE_IDS),
+                    "total_records": total_records,
+                    "rule_set_key": LUXIAN_0916_RULE_SET_KEY,
+                    "max_parallel_records": concurrency,
+                },
+                progress_patch={
+                    "max_parallel_records": concurrency,
+                    "active_record_count": 0,
+                    "queued_record_count": total_records,
+                },
+            )
+
+            semaphore = asyncio.Semaphore(concurrency)
+            progress_lock = asyncio.Lock()
+            processed_records = 0
+
+            async def execute_record(record: Mapping[str, Any]) -> _RecordExecution:
+                nonlocal processed_records
+                async with semaphore:
+                    raise_if_cancelled()
+                    outcome = await _execute_record(
+                        record=record,
+                        job=job,
+                        semantic_generate=generate,
+                    )
+                raise_if_cancelled()
+                async with progress_lock:
+                    processed_records += 1
+                    workspace.update_batch_job_progress(
+                        job_id=job_id,
+                        step_key="run",
+                        rule_index=len(_RULE_IDS),
+                        rule_count=len(_RULE_IDS),
+                        processed_records=processed_records,
+                        total_records=total_records,
+                        summary_patch={
+                            "rule_count": len(_RULE_IDS),
+                            "total_records": total_records,
+                            "rule_set_key": LUXIAN_0916_RULE_SET_KEY,
+                        },
+                        progress_patch={
+                            "max_parallel_records": concurrency,
+                            "active_record_count": max(0, min(concurrency, total_records - processed_records)),
+                            "queued_record_count": max(0, total_records - processed_records),
+                        },
+                    )
+                return outcome
+
+            tasks = [
+                asyncio.create_task(execute_record(record))
+                for record in hydrated_records
+            ]
             try:
-                response = await raw_generate(*args, **kwargs)
-            except BaseException:
-                usage_incomplete_count += 1
-                time_incomplete_count += 1
+                outcomes = await asyncio.gather(*tasks)
+            except (QCJobCancelled, asyncio.CancelledError):
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
                 raise
 
-            response_stats = response if isinstance(response, Mapping) else {}
-            sdk_usage = _mapping(response_stats.get("_usage_breakdown"))
-            raw_usage = _mapping(response_stats.get("usage"))
-            tokens = (
-                sdk_usage["total_tokens"]
-                if "total_tokens" in sdk_usage
-                else raw_usage.get("total_tokens")
-            )
-            valid_tokens = (
-                isinstance(tokens, int)
-                and not isinstance(tokens, bool)
-                and tokens >= 0
-            )
-            if valid_tokens:
-                total_tokens += tokens
-            # SDK 在完全没有上游 usage 时也合成零汇总，不能将其视为真实零成本。
-            raw_tokens = raw_usage.get("total_tokens")
-            synthetic_zero = (
-                "total_tokens" in sdk_usage
-                and valid_tokens
-                and tokens == 0
-                and not (
-                    isinstance(raw_tokens, int)
-                    and not isinstance(raw_tokens, bool)
-                    and raw_tokens >= 0
+            raise_if_cancelled()
+            items = [item for outcome in outcomes for item in outcome.items]
+            rule_failures = [
+                failure for outcome in outcomes for failure in outcome.rule_failures
+            ]
+            failed_records = [
+                failure for outcome in outcomes for failure in outcome.failed_records
+            ]
+            all_failures = [*rule_failures, *failed_records]
+            items.sort(key=_item_sort_key)
+            all_failures.sort(key=_failure_sort_key)
+
+            failed_record_identities = {
+                _record_identity_from_item(failure) for failure in all_failures
+            }
+            completed_records = total_records - len(failed_record_identities)
+            record_statuses: dict[tuple[str, str, str], set[str]] = {}
+            for item in items:
+                record_statuses.setdefault(_record_identity_from_item(item), set()).add(
+                    str(item.get("status") or "").strip().lower()
                 )
+            issue_records = sum(
+                1 for statuses in record_statuses.values() if "non_compliant" in statuses
             )
-            if not valid_tokens or synthetic_zero:
-                usage_incomplete_count += 1
-            api_time = response_stats.get("_api_time")
-            try:
-                valid_time = (
-                    isinstance(api_time, (int, float))
-                    and not isinstance(api_time, bool)
-                    and math.isfinite(api_time)
-                    and api_time >= 0
-                )
-            except OverflowError:
-                valid_time = False
-            if valid_time:
-                total_api_time += api_time
-            else:
-                time_incomplete_count += 1
-            return response
-        workspace.update_batch_job_progress(
-            job_id=job_id,
-            step_key="prepare",
-            rule_index=0,
-            rule_count=len(_RULE_IDS),
-            processed_records=0,
-            total_records=total_records,
-            summary_patch={
+            compliant_records = sum(
+                1
+                for identity, statuses in record_statuses.items()
+                if identity not in failed_record_identities
+                and "compliant" in statuses
+                and not statuses.intersection({"non_compliant", "data_quality_gap"})
+            )
+            status_counts = _status_counts(items)
+            semantic_diagnostics = [
+                outcome.semantic_diagnostic
+                for outcome in outcomes
+                if outcome.semantic_diagnostic
+            ]
+            disease_change_stage2_diagnostics = [
+                outcome.disease_change_stage2_diagnostic
+                for outcome in outcomes
+                if outcome.disease_change_stage2_diagnostic
+            ]
+            critical_value_018_stage2_diagnostics = [
+                outcome.critical_value_018_stage2_diagnostic
+                for outcome in outcomes
+                if outcome.critical_value_018_stage2_diagnostic
+            ]
+            semantic_extraction_failures = _semantic_extraction_failures(outcomes)
+            semantic_contract_retries = _semantic_contract_retries(outcomes)
+            summary = {
+                "total_tokens": total_tokens,
+                "total_processing_time": total_api_time,
+                "llm_generate_call_count": generate_call_count,
+                "llm_usage_incomplete_count": usage_incomplete_count,
+                "llm_time_incomplete_count": time_incomplete_count,
+                "llm_usage_complete": usage_incomplete_count == 0,
+                "llm_time_complete": time_incomplete_count == 0,
+                "execution_status": (
+                    "partial_failed"
+                    if all_failures and items
+                    else "failed"
+                    if all_failures
+                    else "completed"
+                ),
+                "rule_set_key": LUXIAN_0916_RULE_SET_KEY,
                 "rule_count": len(_RULE_IDS),
                 "total_records": total_records,
-                "rule_set_key": LUXIAN_0916_RULE_SET_KEY,
                 "max_parallel_records": concurrency,
-            },
-            progress_patch={
-                "max_parallel_records": concurrency,
-                "active_record_count": 0,
-                "queued_record_count": total_records,
-            },
-        )
-
-        semaphore = asyncio.Semaphore(concurrency)
-        progress_lock = asyncio.Lock()
-        processed_records = 0
-
-        async def execute_record(record: Mapping[str, Any]) -> _RecordExecution:
-            nonlocal processed_records
-            async with semaphore:
-                outcome = await _execute_record(
-                    record=record,
-                    job=job,
-                    semantic_generate=generate,
-                )
-            async with progress_lock:
-                processed_records += 1
-                workspace.update_batch_job_progress(
-                    job_id=job_id,
-                    step_key="run",
-                    rule_index=len(_RULE_IDS),
-                    rule_count=len(_RULE_IDS),
-                    processed_records=processed_records,
-                    total_records=total_records,
-                    summary_patch={
-                        "rule_count": len(_RULE_IDS),
-                        "total_records": total_records,
-                        "rule_set_key": LUXIAN_0916_RULE_SET_KEY,
-                    },
-                    progress_patch={
-                        "max_parallel_records": concurrency,
-                        "active_record_count": max(0, min(concurrency, total_records - processed_records)),
-                        "queued_record_count": max(0, total_records - processed_records),
-                    },
-                )
-            return outcome
-
-        outcomes = await asyncio.gather(
-            *(execute_record(record) for record in hydrated_records),
-        )
-        items = [item for outcome in outcomes for item in outcome.items]
-        rule_failures = [
-            failure for outcome in outcomes for failure in outcome.rule_failures
-        ]
-        failed_records = [
-            failure for outcome in outcomes for failure in outcome.failed_records
-        ]
-        all_failures = [*rule_failures, *failed_records]
-        items.sort(key=_item_sort_key)
-        all_failures.sort(key=_failure_sort_key)
-
-        failed_record_identities = {
-            _record_identity_from_item(failure) for failure in all_failures
-        }
-        completed_records = total_records - len(failed_record_identities)
-        issue_records = len(
-            {
-                _record_identity_from_item(item)
-                for item in items
-                if item.get("status") == "non_compliant"
+                "success_count": completed_records,
+                "failed_count": len(failed_record_identities),
+                "failed_record_count": len(failed_record_identities),
+                "completed_rule_count": len(items),
+                "failed_rule_count": len(all_failures),
+                "issue_records": issue_records,
+                "compliant_records": compliant_records,
+                "status_counts": status_counts,
+                "display_status_counts": status_counts,
+                "diagnostic_rule_failure_count": len(rule_failures),
+                "semantic_llm_call_count": sum(
+                    int(item.get("llm_call_count") or 0) for item in semantic_diagnostics
+                ),
+                "semantic_extraction_invalid_count": len(semantic_extraction_failures),
+                "semantic_extraction_failures": semantic_extraction_failures,
+                "semantic_contract_retry_count": len(semantic_contract_retries),
+                "semantic_contract_retries": semantic_contract_retries,
+                "disease_change_stage2_llm_call_count": _diagnostic_total(
+                    disease_change_stage2_diagnostics, "llm_call_count"
+                ),
+                "disease_change_stage2_prompt_tokens": _diagnostic_total(
+                    disease_change_stage2_diagnostics, "prompt_tokens"
+                ),
+                "disease_change_stage2_completion_tokens": _diagnostic_total(
+                    disease_change_stage2_diagnostics, "completion_tokens"
+                ),
+                "disease_change_stage2_total_tokens": _diagnostic_total(
+                    disease_change_stage2_diagnostics, "total_tokens"
+                ),
+                "disease_change_stage2_model_elapsed_ms": _diagnostic_total(
+                    disease_change_stage2_diagnostics, "model_elapsed_ms"
+                ),
+                "disease_change_stage2_failure_count": _diagnostic_total(
+                    disease_change_stage2_diagnostics, "failure_count"
+                ),
+                "disease_change_stage2_usage_incomplete_count": sum(
+                    item.get("usage_incomplete") is True
+                    for item in disease_change_stage2_diagnostics
+                ),
+                "critical_value_018_stage2_llm_call_count": _diagnostic_total(
+                    critical_value_018_stage2_diagnostics, "llm_call_count"
+                ),
+                "critical_value_018_stage2_prompt_tokens": _diagnostic_total(
+                    critical_value_018_stage2_diagnostics, "prompt_tokens"
+                ),
+                "critical_value_018_stage2_completion_tokens": _diagnostic_total(
+                    critical_value_018_stage2_diagnostics, "completion_tokens"
+                ),
+                "critical_value_018_stage2_total_tokens": _diagnostic_total(
+                    critical_value_018_stage2_diagnostics, "total_tokens"
+                ),
+                "critical_value_018_stage2_model_elapsed_ms": _diagnostic_total(
+                    critical_value_018_stage2_diagnostics, "model_elapsed_ms"
+                ),
+                "critical_value_018_stage2_failure_count": _diagnostic_total(
+                    critical_value_018_stage2_diagnostics, "failure_count"
+                ),
+                "critical_value_018_stage2_usage_incomplete_count": sum(
+                    item.get("usage_incomplete") is True
+                    for item in critical_value_018_stage2_diagnostics
+                ),
+                "critical_value_018_stage2_model_parameters": _diagnostic_parameters(
+                    critical_value_018_stage2_diagnostics
+                ),
+                "progress": {
+                    "step_key": "completed",
+                    "processed_records": total_records,
+                    "total_records": total_records,
+                    "max_parallel_records": concurrency,
+                },
             }
-        )
-        compliant_records = len(
-            {
-                _record_identity_from_item(item)
-                for item in items
-                if item.get("status") == "compliant"
-            }
-        )
-        status_counts = _status_counts(items)
-        semantic_diagnostics = [
-            outcome.semantic_diagnostic
-            for outcome in outcomes
-            if outcome.semantic_diagnostic
-        ]
-        disease_change_stage2_diagnostics = [
-            outcome.disease_change_stage2_diagnostic
-            for outcome in outcomes
-            if outcome.disease_change_stage2_diagnostic
-        ]
-        critical_value_018_stage2_diagnostics = [
-            outcome.critical_value_018_stage2_diagnostic
-            for outcome in outcomes
-            if outcome.critical_value_018_stage2_diagnostic
-        ]
-        semantic_extraction_failures = _semantic_extraction_failures(outcomes)
-        semantic_contract_retries = _semantic_contract_retries(outcomes)
-        summary = {
-            "total_tokens": total_tokens,
-            "total_processing_time": total_api_time,
-            "llm_generate_call_count": generate_call_count,
-            "llm_usage_incomplete_count": usage_incomplete_count,
-            "llm_time_incomplete_count": time_incomplete_count,
-            "llm_usage_complete": usage_incomplete_count == 0,
-            "llm_time_complete": time_incomplete_count == 0,
-            "execution_status": (
-                "partial_failed"
-                if all_failures and items
-                else "failed"
-                if all_failures
-                else "completed"
-            ),
-            "rule_set_key": LUXIAN_0916_RULE_SET_KEY,
-            "rule_count": len(_RULE_IDS),
-            "total_records": total_records,
-            "max_parallel_records": concurrency,
-            "success_count": completed_records,
-            "failed_count": len(failed_record_identities),
-            "failed_record_count": len(failed_record_identities),
-            "completed_rule_count": len(items),
-            "failed_rule_count": len(all_failures),
-            "issue_records": issue_records,
-            "compliant_records": compliant_records,
-            "status_counts": status_counts,
-            "display_status_counts": status_counts,
-            "diagnostic_rule_failure_count": len(rule_failures),
-            "semantic_llm_call_count": sum(
-                int(item.get("llm_call_count") or 0) for item in semantic_diagnostics
-            ),
-            "semantic_extraction_invalid_count": len(semantic_extraction_failures),
-            "semantic_extraction_failures": semantic_extraction_failures,
-            "semantic_contract_retry_count": len(semantic_contract_retries),
-            "semantic_contract_retries": semantic_contract_retries,
-            "disease_change_stage2_llm_call_count": _diagnostic_total(
-                disease_change_stage2_diagnostics, "llm_call_count"
-            ),
-            "disease_change_stage2_prompt_tokens": _diagnostic_total(
-                disease_change_stage2_diagnostics, "prompt_tokens"
-            ),
-            "disease_change_stage2_completion_tokens": _diagnostic_total(
-                disease_change_stage2_diagnostics, "completion_tokens"
-            ),
-            "disease_change_stage2_total_tokens": _diagnostic_total(
-                disease_change_stage2_diagnostics, "total_tokens"
-            ),
-            "disease_change_stage2_model_elapsed_ms": _diagnostic_total(
-                disease_change_stage2_diagnostics, "model_elapsed_ms"
-            ),
-            "disease_change_stage2_failure_count": _diagnostic_total(
-                disease_change_stage2_diagnostics, "failure_count"
-            ),
-            "disease_change_stage2_usage_incomplete_count": sum(
-                item.get("usage_incomplete") is True
-                for item in disease_change_stage2_diagnostics
-            ),
-            "critical_value_018_stage2_llm_call_count": _diagnostic_total(
-                critical_value_018_stage2_diagnostics, "llm_call_count"
-            ),
-            "critical_value_018_stage2_prompt_tokens": _diagnostic_total(
-                critical_value_018_stage2_diagnostics, "prompt_tokens"
-            ),
-            "critical_value_018_stage2_completion_tokens": _diagnostic_total(
-                critical_value_018_stage2_diagnostics, "completion_tokens"
-            ),
-            "critical_value_018_stage2_total_tokens": _diagnostic_total(
-                critical_value_018_stage2_diagnostics, "total_tokens"
-            ),
-            "critical_value_018_stage2_model_elapsed_ms": _diagnostic_total(
-                critical_value_018_stage2_diagnostics, "model_elapsed_ms"
-            ),
-            "critical_value_018_stage2_failure_count": _diagnostic_total(
-                critical_value_018_stage2_diagnostics, "failure_count"
-            ),
-            "critical_value_018_stage2_usage_incomplete_count": sum(
-                item.get("usage_incomplete") is True
-                for item in critical_value_018_stage2_diagnostics
-            ),
-            "critical_value_018_stage2_model_parameters": _diagnostic_parameters(
-                critical_value_018_stage2_diagnostics
-            ),
-            "progress": {
-                "step_key": "completed",
-                "processed_records": total_records,
-                "total_records": total_records,
-                "max_parallel_records": concurrency,
-            },
-        }
-        validate_luxian_0916_task_delivery(
-            summary=summary,
-            items=items,
-            failures=all_failures,
-            expected_rule_ids=_RULE_IDS,
-            expected_record_refs=hydrated_records,
-        )
-        workspace.complete_batch_job(
-            job_id=job_id,
-            summary=summary,
-            items=items,
-            failed_records=all_failures,
-            persist_record_envelopes=False,
-        )
+            validate_luxian_0916_task_delivery(
+                summary=summary,
+                items=items,
+                failures=all_failures,
+                expected_rule_ids=_RULE_IDS,
+                expected_record_refs=hydrated_records,
+            )
+            raise_if_cancelled()
+            workspace.complete_batch_job(
+                job_id=job_id,
+                summary=summary,
+                items=items,
+                failed_records=all_failures,
+                persist_record_envelopes=False,
+            )
+    except QCJobCancelled:
+        return
     except Exception as exc:  # noqa: BLE001 - 仅标记当前任务失败
         workspace.fail_batch_job(job_id=job_id, error_message=f"Luxian0916 执行失败: {type(exc).__name__}")
 
@@ -418,6 +458,84 @@ class _RecordExecution:
         self.semantic_contract_retry = dict(semantic_contract_retry or {})
 
 
+_PRIVACY_NAME_FIELDS = ("patient_name", "name")
+_PRIVACY_DIRECT_FIELDS = (
+    ("id_card", "[身份证号已脱敏]"),
+    ("id_card_no", "[身份证号已脱敏]"),
+    ("id_number", "[身份证号已脱敏]"),
+    ("phone", "[电话号码已脱敏]"),
+    ("mobile", "[手机号已脱敏]"),
+    ("contact_phone", "[电话号码已脱敏]"),
+    ("contact_telephone", "[电话号码已脱敏]"),
+    ("telephone", "[电话号码已脱敏]"),
+    ("address", "[地址已脱敏]"),
+    ("home_address", "[地址已脱敏]"),
+    ("present_address", "[地址已脱敏]"),
+)
+
+
+def _collect_privacy_context(
+    record: Mapping[str, Any],
+    bundle: Any,
+) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
+    sources: list[Mapping[str, Any]] = [record]
+    if isinstance(bundle, Mapping):
+        sources.append(bundle)
+        structured = bundle.get("structured_context")
+        if isinstance(structured, Mapping):
+            sources.append(structured)
+            for key in ("patient", "registration", "frontpage", "basic_info"):
+                nested = structured.get(key)
+                if isinstance(nested, Mapping):
+                    sources.append(nested)
+    names: list[str] = []
+    seen_names: set[str] = set()
+    direct_replacements: list[tuple[str, str]] = []
+    seen_direct: set[tuple[str, str]] = set()
+    for source in sources:
+        for field in _PRIVACY_NAME_FIELDS:
+            raw = source.get(field)
+            if isinstance(raw, str):
+                text = raw.strip()
+                if len(text) >= 2 and text not in seen_names:
+                    seen_names.add(text)
+                    names.append(text)
+        for field, placeholder in _PRIVACY_DIRECT_FIELDS:
+            raw = source.get(field)
+            if isinstance(raw, str):
+                text = raw.strip()
+                if len(text) >= 4 and (text, placeholder) not in seen_direct:
+                    seen_direct.add((text, placeholder))
+                    direct_replacements.append((text, placeholder))
+    names.sort(key=len, reverse=True)
+    direct_replacements.sort(key=lambda item: len(item[0]), reverse=True)
+    return tuple(names), tuple(direct_replacements)
+
+
+def _redact_luxian_0916_prompt(
+    prompt: str,
+    *,
+    patient_names: Sequence[str],
+    direct_replacements: Sequence[tuple[str, str]],
+) -> str:
+    redacted = redact_luxian_0609_patient_privacy(
+        prompt,
+        identity_values=patient_names,
+    )
+    if patient_names or direct_replacements:
+        protected, clinicians = _protect_clinician_names(redacted)
+        for name in patient_names:
+            if name in protected:
+                protected = protected.replace(name, "[患者姓名已脱敏]")
+        for literal, placeholder in direct_replacements:
+            if literal in protected:
+                protected = protected.replace(literal, placeholder)
+        for marker, original in clinicians:
+            protected = protected.replace(marker, original)
+        redacted = protected
+    return redacted
+
+
 async def _execute_record(
     *,
     record: Mapping[str, Any],
@@ -426,6 +544,7 @@ async def _execute_record(
 ) -> _RecordExecution:
     identity = _record_identity(record)
     try:
+        raise_if_cancelled()
         bundle = await asyncio.to_thread(
             load_luxian_0916_bundle,
             scene=_resolve_scene(record=record, job=job),
@@ -433,6 +552,27 @@ async def _execute_record(
             patient_id=identity["patient_id"],
             visit_id=identity["visit_id"],
         )
+        raise_if_cancelled()
+        patient_names, direct_replacements = _collect_privacy_context(record, bundle)
+
+        async def guarded_generate(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            raise_if_cancelled()
+            redacted_args = list(args)
+            redacted_kwargs = dict(kwargs)
+            if redacted_args and isinstance(redacted_args[0], str):
+                redacted_args[0] = _redact_luxian_0916_prompt(
+                    redacted_args[0],
+                    patient_names=patient_names,
+                    direct_replacements=direct_replacements,
+                )
+            elif isinstance(redacted_kwargs.get("prompt"), str):
+                redacted_kwargs["prompt"] = _redact_luxian_0916_prompt(
+                    redacted_kwargs["prompt"],
+                    patient_names=patient_names,
+                    direct_replacements=direct_replacements,
+                )
+            return await semantic_generate(*redacted_args, **redacted_kwargs)
+
         evidence_payload = await asyncio.to_thread(
             build_programmatic_evidence_payload,
             bundle=bundle,
@@ -449,12 +589,14 @@ async def _execute_record(
             bundle=bundle,
             evidence_payload=evidence_payload,
         )
+        raise_if_cancelled()
         extracted = await extract_luxian_0916_facts(
             evidence_payload=evidence_payload,
             # 015/016 与 018 已迁入独立族；共享 Prompt 不再重复提取其同名事件事实。
             rule_ids=_SHARED_SEMANTIC_RULE_IDS,
-            generate=semantic_generate,
+            generate=guarded_generate,
         )
+        raise_if_cancelled()
         context = merge_luxian_0916_semantic_facts(
             context=context,
             extracted=extracted,
@@ -468,14 +610,18 @@ async def _execute_record(
             if not isinstance(critical_value_018_stage1_output, Mapping):
                 raise TypeError("Critical value 018 Stage1 output must be a mapping")
             critical_value_018_stage1 = critical_value_018_stage1_output
+            raise_if_cancelled()
             critical_value_018 = await extract_critical_value_018_stage2_facts(
                 evidence_payload=evidence_payload,
                 structured_facts=critical_value_018_stage1,
                 scene=_resolve_scene(record=record, job=job),
-                generate=semantic_generate,
+                generate=guarded_generate,
             )
+            raise_if_cancelled()
             if not isinstance(critical_value_018, Mapping):
                 raise TypeError("Critical value 018 Stage2 output must be a mapping")
+        except QCJobCancelled:
+            raise
         except Exception:  # noqa: BLE001 - 族内异常只能降级 018
             critical_value_018 = _critical_value_018_internal_failure(
                 critical_value_018_stage1,
@@ -487,6 +633,7 @@ async def _execute_record(
         )
         # 015/016 的触发事实由本次住院三坐标的原始结构化行独立读取。
         # 必须在共享模型事实合并后覆盖，防止旧 disease_changes 回流。
+        raise_if_cancelled()
         structured_disease_change = await asyncio.to_thread(
             load_disease_change_015016_facts,
             institute_id=identity["institute_id"],
@@ -494,15 +641,19 @@ async def _execute_record(
             visit_id=identity["visit_id"],
         )
         try:
+            raise_if_cancelled()
             stage2_output = await extract_disease_change_stage2_facts(
                 evidence_payload=evidence_payload,
                 structured_facts=structured_disease_change,
                 scene=_resolve_scene(record=record, job=job),
-                generate=semantic_generate,
+                generate=guarded_generate,
             )
+            raise_if_cancelled()
             if not isinstance(stage2_output, Mapping):
                 raise TypeError("Stage2 output must be a mapping")
             structured_disease_change = dict(stage2_output)
+        except QCJobCancelled:
+            raise
         except Exception:  # noqa: BLE001 - Stage2 异常只能降级 015/016
             structured_disease_change = _stage2_internal_failure(
                 structured_disease_change
@@ -511,6 +662,7 @@ async def _execute_record(
             context=context,
             structured_facts=structured_disease_change,
         )
+        raise_if_cancelled()
         execution = await asyncio.to_thread(execute_luxian_0916, context, _RULE_IDS)
         outcome = _execution_to_record_outcome(
             identity=identity,
@@ -540,6 +692,8 @@ async def _execute_record(
                 diagnostic=_mapping(extracted.get("diagnostic")),
             ),
         )
+    except QCJobCancelled:
+        raise
     except Exception as exc:  # noqa: BLE001 - 单病历必须隔离
         return _RecordExecution(
             failed_records=tuple(

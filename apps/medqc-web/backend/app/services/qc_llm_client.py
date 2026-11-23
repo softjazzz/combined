@@ -36,6 +36,7 @@ from .llm_dispatch.provider_profiles import (
     validate_gateway_profile,
     validate_provider_code,
 )
+from .qc_cancellation import QCJobCancelled, raise_if_cancelled
 from .qc_diagnostics.capture import (
     begin_attempt as begin_diagnostic_attempt,
     finish_attempt as finish_diagnostic_attempt,
@@ -457,6 +458,7 @@ class SichuanQCLLMClient:
             )
         response_format_payload = self._copy_response_format(response_format)
 
+        raise_if_cancelled()
         self._record_stats_delta(calls=1)
         api_start = time.time()
         logical_call_id = str(uuid4())
@@ -505,6 +507,7 @@ class SichuanQCLLMClient:
                     raise
                 # 仅撤下服务端格式约束，原Prompt、证据、输出预算和严格事实解析器不变。
                 # 第二次失败直接退出；每次尝试仍经过最终准入、剩余时间和调用次数检查。
+                raise_if_cancelled()
                 retry_payload = deepcopy(payload)
                 retry_payload.pop('response_format')
                 attempt_no += 1
@@ -540,6 +543,7 @@ class SichuanQCLLMClient:
                     and self._is_thinking_model()
                     and retry_tokens > max_tokens
                 ):
+                    raise_if_cancelled()
                     retry_payload = dict(payload)
                     retry_payload["max_tokens"] = retry_tokens
                     if response_format_payload is not None:
@@ -580,6 +584,8 @@ class SichuanQCLLMClient:
             result["_usage_breakdown"] = usage_breakdown
             result["_cot_observation"] = cot_observation
             return result
+        except QCJobCancelled:
+            raise
         except Exception as error:
             if self.strata_p9b and getattr(error, 'code', None) == 'strata_structured_output_failed':
                 from .strata_protocol import StrataProtocolError
@@ -609,6 +615,7 @@ class SichuanQCLLMClient:
     ) -> tuple[Dict[str, Any], Optional[dict[str, int]]]:
         from .luxian_0609.privacy_request_scope import protect_current_payload
 
+        raise_if_cancelled()
         payload = protect_current_payload(payload)
         if self.provider_code == 'strata' and self.model == 'qwen3.6-35b-a3b':
             from .strata_handoff import configured_root, ensure_counter, _fail
@@ -701,6 +708,7 @@ class SichuanQCLLMClient:
                             if package_key is not None:
                                 protect_current_payload({"package_key": package_key})
                                 prefix_kwargs["package_key"] = package_key
+                    raise_if_cancelled()
                     result = await self._gateway_dispatch_client.complete(
                         provider_code=self.provider_code,
                         profile=self.gateway_profile,
@@ -712,6 +720,7 @@ class SichuanQCLLMClient:
                         **prefix_kwargs,
                     )
                 else:
+                    raise_if_cancelled()
                     result = await safe_post_json(
                         url=f"{self.api_endpoint}/chat/completions",
                         headers=headers,

@@ -291,6 +291,54 @@ def _now_utc() -> datetime:
     return datetime.utcnow()
 
 
+def _now_utc_aware() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+_SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
+_SPREADSHEET_CONTROL_PREFIXES = ("\t", "\r", "\n")
+
+
+def _sanitize_spreadsheet_cell(value: Any) -> Any:
+    """中和 CSV/Excel 公式注入，保持数值和空白原样。"""
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, (list, tuple, dict)):
+        text = json.dumps(value, ensure_ascii=False, default=str)
+    elif isinstance(value, str):
+        text = value
+    else:
+        text = str(value)
+    if not text:
+        return text
+    if (
+        text.startswith(_SPREADSHEET_CONTROL_PREFIXES)
+        or text.lstrip().startswith(_SPREADSHEET_FORMULA_PREFIXES)
+    ):
+        return "'" + text
+    return text
+
+
+def _sanitize_spreadsheet_row(values: Sequence[Any]) -> List[Any]:
+    return [_sanitize_spreadsheet_cell(value) for value in values]
+
+
+def _sanitize_spreadsheet_rows(rows: Sequence[Sequence[Any]]) -> List[List[Any]]:
+    return [_sanitize_spreadsheet_row(row) for row in rows]
+
+
+def _sanitize_spreadsheet_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    sanitized = dict(summary)
+    if "operation_ref" in sanitized:
+        sanitized["operation_ref"] = _sanitize_spreadsheet_cell(sanitized["operation_ref"])
+    status_counts = sanitized.get("status_counts")
+    if isinstance(status_counts, dict):
+        sanitized["status_counts"] = {
+            str(_sanitize_spreadsheet_cell(k)): v for k, v in status_counts.items()
+        }
+    return sanitized
+
+
 def _safe_text(value: Any, default: str = "") -> str:
     if value is None:
         return default
@@ -2376,12 +2424,19 @@ def _customer_export_rows(
 
 def _export_customer_safe_workbook(job: Dict[str, Any], *, hmac_key: str) -> BytesIO:
     items, rows, summary = _customer_export_rows(job, hmac_key=hmac_key)
-    return render_customer_safe_workbook(items=items, rows=rows, summary=summary)
+    return render_customer_safe_workbook(
+        items=items,
+        rows=_sanitize_spreadsheet_rows(rows),
+        summary=_sanitize_spreadsheet_summary(summary),
+    )
 
 
 def _export_customer_safe_csv(job: Dict[str, Any], *, hmac_key: str) -> StringIO:
     _items, rows, summary = _customer_export_rows(job, hmac_key=hmac_key)
-    return render_customer_safe_csv(rows=rows, summary=summary)
+    return render_customer_safe_csv(
+        rows=_sanitize_spreadsheet_rows(rows),
+        summary=_sanitize_spreadsheet_summary(summary),
+    )
 
 
 def _canonical_customer_export_rows(
@@ -5598,7 +5653,7 @@ class CustomQCWorkspaceService:
         if qc_dispatch_mode_from_filters(filters) == "rabbitmq":
             self._qc_dispatch.assert_ready(session)
             self._qc_dispatch.add_dispatch(session, job_id=new_id, mode="rabbitmq", enqueue_leaf=True,
-                                           available_at=now + timedelta(seconds=retry_delay_seconds))
+                                           available_at=_now_utc_aware() + timedelta(seconds=retry_delay_seconds))
             source_dispatch = self._qc_dispatch.get_dispatch(source_id, session=session)
             self._qc_dispatch.link_retry_successor(
                 session, source_job_id=source_id, source_generation=source_dispatch.generation,
@@ -5659,10 +5714,9 @@ class CustomQCWorkspaceService:
                 if dispatch_record is None:
                     raise RuntimeError("MQ任务缺少持久调度身份")
             original_filters_json = row.get("filters_json")
-            if formal_0609 and (
-                current.get("status") not in {"canceled", "completed", "failed"}
-                or (automatic and original_filters_json != expected_attempt_filters_json)
-            ):
+            if current.get("status") not in {"canceled", "completed", "failed"}:
+                return None
+            if formal_0609 and automatic and original_filters_json != expected_attempt_filters_json:
                 return None
             if formal_0609:
                 current["filters"]["scoped_customer_rule_ids"] = frozen_luxian_0609_delivery_scope(current["filters"])
@@ -5758,7 +5812,7 @@ class CustomQCWorkspaceService:
                 ).mappings().all()
                 retryable_children = 0
                 manual_scope_children = 0
-                due_at = now + timedelta(seconds=retry_delay_seconds)
+                due_at = _now_utc_aware() + timedelta(seconds=retry_delay_seconds)
                 for child_row in child_rows:
                     child = _row_to_batch_job(dict(child_row))
                     if child.get("status") == "completed":
@@ -6028,11 +6082,12 @@ class CustomQCWorkspaceService:
                     ) if formal_0609 else and_(
                         self._batch_job_table.c.id == job_id,
                         self._batch_job_table.c.created_by == created_by,
+                        self._batch_job_table.c.status == current.get("status"),
                     )
                 )
                 .values(**reset_values)
             )
-            if formal_0609 and getattr(retry_update, "rowcount", 0) != 1:
+            if getattr(retry_update, "rowcount", 0) != 1:
                 session.rollback()
                 return None
             if (
@@ -6043,7 +6098,7 @@ class CustomQCWorkspaceService:
                     session,
                     job_id=job_id,
                     expected_generation=dispatch_record.generation,
-                    available_at=now + timedelta(seconds=retry_delay_seconds),
+                    available_at=_now_utc_aware() + timedelta(seconds=retry_delay_seconds),
                 )
             # 子任务单独重试也会废弃父聚合的旧读取快照；与父刷新争用同一父行。
             if formal_0609 and parent_job_id:
@@ -6108,9 +6163,24 @@ class CustomQCWorkspaceService:
                             session.rollback()
                             return None
                 else:
-                    session.execute(
-                        update(self._batch_job_table).where(child_scope).values(**child_reset)
-                    )
+                    child_rows = session.execute(
+                        select(self._batch_job_table).where(child_scope)
+                    ).mappings().all()
+                    for child_row in child_rows:
+                        if child_row["status"] not in {"canceled", "completed", "failed"}:
+                            session.rollback()
+                            return None
+                        child_update = session.execute(
+                            update(self._batch_job_table)
+                            .where(and_(
+                                self._batch_job_table.c.id == child_row["id"],
+                                self._batch_job_table.c.status == child_row["status"],
+                            ))
+                            .values(**child_reset)
+                        )
+                        if getattr(child_update, "rowcount", 0) != 1:
+                            session.rollback()
+                            return None
             session.commit()
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
             return self.get_batch_job(job_id=job_id, created_by=created_by)
@@ -6161,9 +6231,7 @@ class CustomQCWorkspaceService:
                 ):
                     session.rollback()
                     return False
-            if current.get("status") in {"canceled", "completed", "failed"}:
-                return False
-            if formal_0609 and current.get("status") != "queued":
+            if current.get("status") != "queued":
                 return False
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
@@ -6201,7 +6269,10 @@ class CustomQCWorkspaceService:
                         self._batch_job_table.c.id == job_id,
                         self._batch_job_table.c.status == "queued",
                         self._batch_job_table.c.filters_json == original_filters_json,
-                    ) if formal_0609 else self._batch_job_table.c.id == job_id
+                    ) if formal_0609 else and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.status == "queued",
+                    )
                 )
                 .values(
                     status="running",
@@ -6221,7 +6292,7 @@ class CustomQCWorkspaceService:
                     ),
                 )
             )
-            if formal_0609 and getattr(running_update, "rowcount", 0) != 1:
+            if getattr(running_update, "rowcount", 0) != 1:
                 session.rollback()
                 return False
             if dispatch_record is not None and not self._qc_dispatch.transition_dispatch(
@@ -6916,7 +6987,11 @@ class CustomQCWorkspaceService:
                 hmac_key=customer_safe_projection_key(),
                 canonical_items=self._load_batch_job_export_items(job=job),
             )
-            return render_customer_safe_workbook(items=items, rows=rows, summary=summary)
+            return render_customer_safe_workbook(
+                items=items,
+                rows=_sanitize_spreadsheet_rows(rows),
+                summary=_sanitize_spreadsheet_summary(summary),
+            )
         return self._export_batch_job_workbook_legacy(job=job)
 
     def _export_batch_job_workbook_legacy(self, *, job: Dict[str, Any]) -> BytesIO:
@@ -6971,7 +7046,7 @@ class CustomQCWorkspaceService:
             ("执行规则数", _to_int(summary.get("rule_count"), 1)),
         ]
         for label, value in summary_rows:
-            ws_summary.append([label, value])
+            ws_summary.append(_sanitize_spreadsheet_row([label, value]))
         ws_summary.column_dimensions["A"].width = 24
         ws_summary.column_dimensions["B"].width = 80
 
@@ -6997,7 +7072,7 @@ class CustomQCWorkspaceService:
         for item in issue_items:
             append_complete_workbook_row(
                 ws_items,
-                [
+                _sanitize_spreadsheet_row([
                     item.get("record_id") or "",
                     item.get("patient_name") or "",
                     item.get("department") or "",
@@ -7011,7 +7086,7 @@ class CustomQCWorkspaceService:
                     item.get("evidence") or "",
                     _to_float(item.get("confidence"), 0.0),
                     "是" if item.get("refined") is True else "否",
-                ]
+                ]),
             )
         ws_items.freeze_panes = "A2"
         ws_items.column_dimensions["A"].width = 16
@@ -7051,7 +7126,7 @@ class CustomQCWorkspaceService:
         for item in items:
             append_complete_workbook_row(
                 ws_all,
-                [
+                _sanitize_spreadsheet_row([
                     item.get("record_id") or "",
                     item.get("patient_name") or "",
                     item.get("department") or "",
@@ -7066,7 +7141,7 @@ class CustomQCWorkspaceService:
                     item.get("evidence") or "",
                     _to_float(item.get("confidence"), 0.0),
                     "是" if item.get("refined") is True else "否",
-                ]
+                ]),
             )
         ws_all.freeze_panes = "A2"
 
@@ -7075,12 +7150,12 @@ class CustomQCWorkspaceService:
         ws_failed.append(["病历号", "患者姓名", "科室", "失败原因"])
         for item in failed_records:
             ws_failed.append(
-                [
+                _sanitize_spreadsheet_row([
                     item.get("record_id") or "",
                     item.get("patient_name") or "",
                     item.get("department") or "",
                     item.get("error") or "",
-                ]
+                ])
             )
         ws_failed.freeze_panes = "A2"
         ws_failed.column_dimensions["A"].width = 16
@@ -7110,7 +7185,7 @@ class CustomQCWorkspaceService:
             ("summary(raw)", _safe_json_dumps(summary)),
         ]
         for label, value in tech_rows:
-            ws_tech.append([label, value])
+            ws_tech.append(_sanitize_spreadsheet_row([label, value]))
         ws_tech.column_dimensions["A"].width = 24
         ws_tech.column_dimensions["B"].width = 96
 
@@ -7125,7 +7200,10 @@ class CustomQCWorkspaceService:
                 hmac_key=customer_safe_projection_key(),
                 canonical_items=self._load_batch_job_export_items(job=job),
             )
-            return render_customer_safe_csv(rows=rows, summary=summary)
+            return render_customer_safe_csv(
+                rows=_sanitize_spreadsheet_rows(rows),
+                summary=_sanitize_spreadsheet_summary(summary),
+            )
         return self._export_batch_job_csv_legacy(job=job)
 
     def _export_batch_job_csv_legacy(self, *, job: Dict[str, Any]) -> StringIO:
@@ -7151,25 +7229,25 @@ class CustomQCWorkspaceService:
                 issue_items.append(item or {})
 
         writer.writerow(["管理摘要"])
-        writer.writerow(["任务编号", _safe_text(job.get("id"), "-")])
-        writer.writerow(["任务名称", _safe_text(job.get("rule_name"), "终末病历批量质控任务")])
-        writer.writerow(["规则集", _safe_text(summary.get("rule_set_name") or (job.get("filters") or {}).get("rule_set_name"), "手工选择规则")])
-        writer.writerow(["执行策略", _safe_text(summary.get("quality_profile") or (job.get("filters") or {}).get("quality_profile"), "-")])
-        writer.writerow(["分桶策略", _safe_text(summary.get("bucket_strategy") or (job.get("filters") or {}).get("bucket_strategy"), "-")])
-        writer.writerow(["精审规则数", _to_int(summary.get("refined_rule_count"))])
-        writer.writerow(["适用场景", _map_scene_label(job.get("scene"))])
-        writer.writerow(["覆盖范围", _map_scope_label(job.get("scope"))])
-        writer.writerow(["当前状态", _map_job_status_label(job.get("status"))])
-        writer.writerow(["纳入病历数", _to_int(summary.get("total_records"), _to_int(job.get("total_records")))])
-        writer.writerow(["发现问题病历数", _to_int(summary.get("issue_records"), _to_int(job.get("issue_records")))])
-        writer.writerow(["AI判断病历数", _to_int(summary.get("uncertain_records"))])
-        writer.writerow(["合规病历数", _to_int(summary.get("compliant_records"), _to_int(job.get("compliant_records")))])
-        writer.writerow(["执行规则数", _to_int(summary.get("rule_count"), 1)])
+        writer.writerow(_sanitize_spreadsheet_row(["任务编号", _safe_text(job.get("id"), "-")]))
+        writer.writerow(_sanitize_spreadsheet_row(["任务名称", _safe_text(job.get("rule_name"), "终末病历批量质控任务")]))
+        writer.writerow(_sanitize_spreadsheet_row(["规则集", _safe_text(summary.get("rule_set_name") or (job.get("filters") or {}).get("rule_set_name"), "手工选择规则")]))
+        writer.writerow(_sanitize_spreadsheet_row(["执行策略", _safe_text(summary.get("quality_profile") or (job.get("filters") or {}).get("quality_profile"), "-")]))
+        writer.writerow(_sanitize_spreadsheet_row(["分桶策略", _safe_text(summary.get("bucket_strategy") or (job.get("filters") or {}).get("bucket_strategy"), "-")]))
+        writer.writerow(_sanitize_spreadsheet_row(["精审规则数", _to_int(summary.get("refined_rule_count"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["适用场景", _map_scene_label(job.get("scene"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["覆盖范围", _map_scope_label(job.get("scope"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["当前状态", _map_job_status_label(job.get("status"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["纳入病历数", _to_int(summary.get("total_records"), _to_int(job.get("total_records")))]))
+        writer.writerow(_sanitize_spreadsheet_row(["发现问题病历数", _to_int(summary.get("issue_records"), _to_int(job.get("issue_records")))]))
+        writer.writerow(_sanitize_spreadsheet_row(["AI判断病历数", _to_int(summary.get("uncertain_records"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["合规病历数", _to_int(summary.get("compliant_records"), _to_int(job.get("compliant_records")))]))
+        writer.writerow(_sanitize_spreadsheet_row(["执行规则数", _to_int(summary.get("rule_count"), 1)]))
         writer.writerow([])
         writer.writerow(["问题明细"])
         writer.writerow(["病历号", "患者姓名", "科室", "质控点编码", "质控点名称", "文书域", "规则族", "判定结果", "问题结论", "整改建议", "证据摘要", "置信度", "是否精审"])
         for item in issue_items:
-            writer.writerow([
+            writer.writerow(_sanitize_spreadsheet_row([
                 item.get("record_id") or "",
                 item.get("patient_name") or "",
                 item.get("department") or "",
@@ -7183,17 +7261,17 @@ class CustomQCWorkspaceService:
                 item.get("evidence") or "",
                 _to_float(item.get("confidence"), 0.0),
                 "是" if item.get("refined") is True else "否",
-            ])
+            ]))
         writer.writerow([])
         writer.writerow(["失败明细"])
         writer.writerow(["病历号", "患者姓名", "科室", "失败原因"])
         for item in job.get("failed_records") or []:
-            writer.writerow([
+            writer.writerow(_sanitize_spreadsheet_row([
                 item.get("record_id") or "",
                 item.get("patient_name") or "",
                 item.get("department") or "",
                 item.get("error") or "",
-            ])
+            ]))
         output.seek(0)
         return output
 

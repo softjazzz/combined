@@ -36,6 +36,14 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _normalize_utc(value: datetime | None) -> datetime:
+    if value is None:
+        return _utcnow()
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _as_dispatch(row: Mapping[str, Any]) -> DispatchRecord:
     return DispatchRecord(**{name: row.get(name) for name in DispatchRecord.__dataclass_fields__})
 
@@ -260,7 +268,7 @@ class QCDispatchRepository:
             dispatch = self.get_dispatch(job_id, session=active)
             if dispatch is None or dispatch.mode != "rabbitmq" or dispatch.generation != generation:
                 raise ValueError("dispatch generation is not current")
-            due_at = available_at or _utcnow()
+            due_at = _normalize_utc(available_at)
             existing = self._outbox_for_delivery(
                 active, job_id=job_id, generation=generation, target=target
             )
@@ -357,7 +365,7 @@ class QCDispatchRepository:
             raise ValueError("invalid publication owner")
         if lease_seconds <= 0 or limit <= 0:
             raise ValueError("lease_seconds and limit must be positive")
-        claimed_at = now or _utcnow()
+        claimed_at = _normalize_utc(now)
         lease_until = claimed_at + timedelta(seconds=lease_seconds)
         session = self._session_factory()
         claimed: list[OutboxRecord] = []
@@ -423,7 +431,7 @@ class QCDispatchRepository:
     def mark_confirmed(
         self, message_id: str, publication_token: str, *, now: datetime | None = None
     ) -> bool:
-        changed_at = now or _utcnow()
+        changed_at = _normalize_utc(now)
         session = self._session_factory()
         try:
             result = session.execute(
@@ -488,7 +496,7 @@ class QCDispatchRepository:
     ) -> bool:
         if retry_delay_seconds < 0:
             raise ValueError("retry delay must not be negative")
-        changed_at = now or _utcnow()
+        changed_at = _normalize_utc(now)
         session = self._session_factory()
         try:
             values: dict[str, Any] = {
@@ -688,7 +696,7 @@ class QCDispatchRepository:
         if error_code not in TERMINAL_FAILURE_CODES:
             raise ValueError("unsupported terminal failure code")
         session = self._session_factory()
-        changed_at = now or _utcnow()
+        changed_at = _normalize_utc(now)
         try:
             status = self.get_job_status(job_id, session=session)
             if status not in {"failed", "canceled"}:

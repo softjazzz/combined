@@ -281,12 +281,12 @@ class WorkerRecovery:
                 and successor.mode == "rabbitmq")
 
     async def run(self) -> None:
-        self.recover_startup_queued()
-        self.recover_failed_candidates()
+        await asyncio.to_thread(self.recover_startup_queued)
+        await asyncio.to_thread(self.recover_failed_candidates)
         while True:
             await asyncio.sleep(self._scan_interval_seconds)
-            outcomes = self.recover_stale_once()
-            outcomes.update(self.recover_failed_candidates())
+            outcomes = await asyncio.to_thread(self.recover_stale_once)
+            outcomes.update(await asyncio.to_thread(self.recover_failed_candidates))
             if outcomes:
                 logger.warning("QC Worker 已处理 %d 个租约过期任务", len(outcomes))
 

@@ -74,7 +74,7 @@ from .luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
 from .luxian_0609.shadow_audit_summary import (
     merge_luxian_0609_shadow_summaries,
 )
-from .qc_cancellation import QCJobCancelled, raise_if_cancelled
+from .qc_cancellation import QCJobCancelled, cancellation_scope, raise_if_cancelled
 from .task_execution_contract import TaskExecutionContractError
 from .qc_execution_errors import SafeExecutionError, safe_exception_failure, safe_failure_projection
 from .qc_llm_client_runtime import SichuanQCLLMClient
@@ -2863,6 +2863,8 @@ async def run_sichuan_workspace_batch_job(
                         )
                         record_model_execution_stats = _extract_luxian_model_execution_stats(single_result)
                         _capture_usage_observation(single_result)
+                    except QCJobCancelled:
+                        raise
                     except Exception as bundle_exc:
                         if use_luxian_customer_results:
                             record_usage_observation_complete = False
@@ -2870,6 +2872,8 @@ async def run_sichuan_workspace_batch_job(
                             try:
                                 used_bundle_path = await _evaluate_rule_level_visit_bundle()
                                 bundle_fallback_reason = "scene bundle 评估失败，已回退 rule_for_visit: " + safe_exception_failure(bundle_exc)["reason_code"]
+                            except QCJobCancelled:
+                                raise
                             except Exception:
                                 used_bundle_path = False
                                 bundle_fallback_reason = "bundle 一次性评估失败: " + safe_exception_failure(bundle_exc)["reason_code"]
@@ -3402,6 +3406,7 @@ async def run_sichuan_workspace_batch_job(
                         record_status_items.append(issue_item)
 
                 if should_postprocess_formal_results and record_issue_items:
+                    _raise_if_cancelled()
                     adjudicator_client = getattr(qc_service, "adjudicator_client", None) or getattr(qc_service, "client", None)
                     record_issue_items = await adjudicate_postprocessed_qc_results(
                         record_issue_items,
@@ -3575,7 +3580,7 @@ async def run_sichuan_workspace_batch_job(
                 )
                 if identity_collector is not None else nullcontext()
             )
-            with identity_scope:
+            with cancellation_scope(_is_cancelled), identity_scope:
                 with llm_observation_context(
                     business_scene="luxian_0609_qc",
                     root_job_id=root_job_id,
@@ -3613,6 +3618,8 @@ async def run_sichuan_workspace_batch_job(
                                             inputs = material_assembly._assemble_scene_bundle(scene=scene, source_schema=frozen["schema"],
                                                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
                                             record = {**record, "medical_text": inputs["medical_text"]}
+                                        except QCJobCancelled:
+                                            raise
                                         except Exception as error:
                                             from .material_admission import report_projection_failure
                                             code = report_projection_failure(error, logger)
@@ -3870,6 +3877,7 @@ async def run_sichuan_workspace_batch_job(
 
             async def _evaluate_with_limit(record: Dict[str, Any]) -> Dict[str, Any]:
                 async with semaphore:
+                    _raise_if_cancelled()
                     active_records_state["count"] += 1
                     processed_count = int(completed_records_state["count"])
                     workspace.update_batch_job_progress(
@@ -3891,20 +3899,29 @@ async def run_sichuan_workspace_batch_job(
                             int(active_records_state["count"]) - 1,
                         )
 
-            tasks = [
-                asyncio.create_task(
-                    _evaluate_with_limit(record),
-                    name=f"sichuan-batch-{job_id}-{idx + 1}",
-                )
-                for idx, record in enumerate(hydrated_records)
-            ]
+            with cancellation_scope(_is_cancelled):
+                tasks = [
+                    asyncio.create_task(
+                        _evaluate_with_limit(record),
+                        name=f"sichuan-batch-{job_id}-{idx + 1}",
+                    )
+                    for idx, record in enumerate(hydrated_records)
+                ]
             completed_count = 0
+            pending_tasks = set(tasks)
             try:
-                for future in asyncio.as_completed(tasks):
+                while pending_tasks:
                     _raise_if_cancelled()
-                    record_result = await future
-                    completed_count += 1
-                    _merge_record_result(record_result, completed_count)
+                    done_tasks, pending_tasks = await asyncio.wait(
+                        pending_tasks,
+                        timeout=0.5,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    for done_task in done_tasks:
+                        _raise_if_cancelled()
+                        record_result = done_task.result()
+                        completed_count += 1
+                        _merge_record_result(record_result, completed_count)
             except QCJobCancelled:
                 await _cancel_pending_batch_tasks(tasks)
                 logger.info("四川批量任务 %s 已取消，停止执行", job_id)

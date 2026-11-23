@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import secrets
 import time
 from typing import Any, AsyncIterator, Callable
@@ -104,7 +104,32 @@ class GatewayRuntime:
                                                      "timeout_seconds": remaining})
             return await self._complete_uncached(request, internal_prefix=True)
 
-        return await self.case_cache.run(completion, profile, invoke, deadline=deadline)
+        async def invoke_prime(payload):
+            # 共享 Prime 预算与单个临近超时的请求解耦，防止短超时误触发远端未知隔离。
+            gateway_prime_timeout = float(
+                getattr(self.settings, "cache_prime_timeout_seconds", 60.0)
+            )
+            prime_timeout = max(gateway_prime_timeout, float(completion.timeout_seconds))
+            prime_deadline_at = datetime.now(timezone.utc) + timedelta(
+                seconds=prime_timeout
+            )
+            request = completion.model_copy(
+                update={
+                    "payload": payload,
+                    "case_prefix": None,
+                    "timeout_seconds": prime_timeout,
+                    "deadline_at": prime_deadline_at,
+                }
+            )
+            return await self._complete_uncached(request, internal_prefix=True)
+
+        return await self.case_cache.run(
+            completion,
+            profile,
+            invoke,
+            deadline=deadline,
+            prime_invoke=invoke_prime,
+        )
 
     async def _complete_uncached(self, completion: GatewayCompletionRequest, *, internal_prefix=False) -> dict[str, Any]:
         profile = self.settings.profiles.get(completion.profile)
