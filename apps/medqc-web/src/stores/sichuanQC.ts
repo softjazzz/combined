@@ -1,4 +1,5 @@
-﻿import { defineStore } from 'pinia'
+import { defineStore } from 'pinia'
+import { LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import ApiService from '@/services/apiService'
@@ -173,7 +174,7 @@ export const useSichuanQCStore = defineStore('sichuanQC', () => {
         document_content: documentContent.value,
         document_type: documentType.value,
         persist: false,
-      }, { timeout: 120000 })
+      }, { timeout: LONG_REQUEST_TIMEOUT_MS })
 
       const data = response.data as QCResult | null
       analysisEndTime.value = new Date()

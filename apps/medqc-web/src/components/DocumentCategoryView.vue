@@ -458,6 +458,7 @@
 </template>
 
 <script setup lang="ts">
+import { QC_EVALUATION_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
@@ -985,7 +986,7 @@ const analyzeDocumentQC = async (document: DocumentItem, categoryCode?: string) 
         prompt_mode: 'plan_a',
         persist: false
       }),
-      signal: AbortSignal.timeout(180000) // 3分钟超时
+      signal: AbortSignal.timeout(QC_EVALUATION_TIMEOUT_MS)
     })
 
     message.destroy()

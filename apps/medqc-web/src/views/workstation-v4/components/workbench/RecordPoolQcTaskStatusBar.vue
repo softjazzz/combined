@@ -549,16 +549,16 @@ onBeforeUnmount(() => {
   padding: 16px 20px;
   border: 1px solid rgba(10, 108, 255, 0.13);
   border-radius: 10px;
-  background: #fff;
+  background: var(--mq-bg-surface);
   box-shadow: none;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
 }
 
 .record-pool-qc-status::before {
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: #0a6cff;
+  background: var(--mq-brand-600);
   content: none;
 }
 
@@ -576,7 +576,7 @@ onBeforeUnmount(() => {
   flex: none;
   margin: 0 5px;
   border-radius: 50%;
-  background: #0a6cff;
+  background: var(--mq-brand-600);
   box-shadow: 0 0 0 5px rgba(10, 108, 255, 0.1);
 }
 .record-pool-qc-status__phase {
@@ -596,17 +596,17 @@ onBeforeUnmount(() => {
   background: rgba(10, 108, 255, 0.1);
 }
 .record-pool-qc-status__percent {
-  color: #175d9c;
+  color: color-mix(in srgb, var(--mq-brand-700) 90%, var(--mq-text-primary));
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 
 .record-pool-qc-status--success {
-  border-color: #e3eaf2;
+  border-color: color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
 }
 
 .record-pool-qc-status--success::before {
-  background: #10b981;
+  background: var(--mq-success-icon);
 }
 
 .record-pool-qc-status--danger {
@@ -614,7 +614,7 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status--danger::before {
-  background: #ef4444;
+  background: var(--mq-danger-icon);
 }
 
 .record-pool-qc-status__main {
@@ -635,19 +635,19 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__export {
   min-height: 34px;
   padding: 0 13px;
-  border: 1px solid #dde5ef;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 17%, var(--mq-bg-surface));
   border-radius: 9px;
-  background: #fff;
-  color: #52677f;
+  background: var(--mq-bg-surface);
+  color: var(--mq-neutral-text);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
 }
 .record-pool-qc-status__detail-link:hover,
 .record-pool-qc-status__export:hover:not(:disabled) {
-  border-color: #bbd2ec;
-  background: #f5f8fc;
-  color: #0a6cff;
+  border-color: color-mix(in srgb, var(--mq-brand-600) 27%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
+  color: var(--mq-brand-600);
 }
 
 .record-pool-qc-status__export:disabled {
@@ -664,17 +664,17 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: #0a6cff;
+  color: var(--mq-brand-600);
 }
 
 .record-pool-qc-status--success .record-pool-qc-status__indicator {
   background: transparent;
-  color: #66819e;
+  color: var(--mq-text-tertiary);
 }
 
 .record-pool-qc-status--danger .record-pool-qc-status__indicator {
   background: rgba(239, 68, 68, 0.09);
-  color: #dc2626;
+  color: color-mix(in srgb, var(--mq-danger-text) 90%, var(--mq-text-primary));
 }
 
 .record-pool-qc-status__content {
@@ -695,20 +695,20 @@ onBeforeUnmount(() => {
   height: 4px;
   border-radius: 4px;
   overflow: hidden;
-  background: #edf1f6;
+  background: color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
 }
 .record-pool-qc-status__progress > span {
   display: block;
   height: 100%;
-  background: #0a6cff;
+  background: var(--mq-brand-600);
   border-radius: inherit;
   transition: width 200ms ease;
 }
 .record-pool-qc-status--danger .record-pool-qc-status__progress > span {
-  background: #c45151;
+  background: color-mix(in srgb, var(--mq-danger-icon) 72%, var(--mq-neutral-text));
 }
 .record-pool-qc-status--success .record-pool-qc-status__progress > span {
-  background: #398577;
+  background: color-mix(in srgb, var(--mq-success-icon) 48%, var(--mq-neutral-text));
 }
 
 .record-pool-qc-status__heading,
@@ -729,7 +729,7 @@ onBeforeUnmount(() => {
   padding: 2px 8px;
   border-radius: 999px;
   background: rgba(10, 108, 255, 0.08);
-  color: #0a6cff;
+  color: var(--mq-brand-700);
   font-size: 12px;
   line-height: 18px;
   font-weight: 600;
@@ -737,7 +737,7 @@ onBeforeUnmount(() => {
 
 .record-pool-qc-status__heading em {
   margin-left: auto;
-  color: #253247;
+  color: var(--mq-text-primary);
   font-size: 14px;
   line-height: 20px;
   font-style: normal;
@@ -746,16 +746,16 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status--success .record-pool-qc-status__heading em {
-  color: #047857;
+  color: color-mix(in srgb, var(--mq-success-text) 71%, var(--mq-text-primary));
 }
 
 .record-pool-qc-status--danger .record-pool-qc-status__heading em {
-  color: #b91c1c;
+  color: color-mix(in srgb, var(--mq-danger-text) 80%, var(--mq-text-primary));
 }
 
 .record-pool-qc-status__metrics {
   margin-top: 0;
-  color: #76808c;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   line-height: 20px;
   font-weight: 400;
@@ -765,7 +765,7 @@ onBeforeUnmount(() => {
 }
 .record-pool-qc-status__details {
   font-size: 12px;
-  color: #76808c;
+  color: var(--mq-text-tertiary);
 }
 .record-pool-qc-status__details summary {
   cursor: pointer;
@@ -773,7 +773,7 @@ onBeforeUnmount(() => {
 }
 .record-pool-qc-status__details[open] {
   padding-top: 8px;
-  border-top: 1px solid #edf1f6;
+  border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
 }
 .record-pool-qc-status__details .record-pool-qc-status__stages {
   justify-content: flex-start;
@@ -807,7 +807,7 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__concurrency strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 13px;
   font-weight: 700;
 }
@@ -815,21 +815,21 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__concurrency span.is-active {
   border-color: rgba(10, 108, 255, 0.14);
   background: rgba(10, 108, 255, 0.07);
-  color: #0055aa;
+  color: color-mix(in srgb, var(--mq-brand-700) 90%, var(--mq-text-primary));
 }
 
 .record-pool-qc-status__concurrency span.is-active strong {
-  color: #0a6cff;
+  color: var(--mq-brand-700);
 }
 
 .record-pool-qc-status__concurrency span.is-complete {
   border-color: rgba(16, 185, 129, 0.14);
   background: rgba(16, 185, 129, 0.065);
-  color: #047857;
+  color: color-mix(in srgb, var(--mq-success-text) 71%, var(--mq-text-primary));
 }
 
 .record-pool-qc-status__concurrency span.is-complete strong {
-  color: #047857;
+  color: color-mix(in srgb, var(--mq-success-text) 71%, var(--mq-text-primary));
 }
 
 .record-pool-qc-status__stages {
@@ -864,7 +864,7 @@ onBeforeUnmount(() => {
   margin-top: 0;
   border: 2px solid rgba(29, 29, 31, 0.18);
   border-radius: 999px;
-  background: #fff;
+  background: var(--mq-bg-surface);
 }
 
 .record-pool-qc-status__stage-copy {
@@ -898,8 +898,8 @@ onBeforeUnmount(() => {
   padding: 3px 8px;
   border: 1px solid rgba(10, 108, 255, 0.2);
   border-radius: 999px;
-  background: #fff;
-  color: #0a6cff;
+  background: var(--mq-bg-surface);
+  color: var(--mq-brand-600);
   font-size: 11px;
   line-height: 16px;
   font-weight: 700;
@@ -907,7 +907,7 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__stages li.is-complete {
-  color: #728599;
+  color: var(--mq-text-tertiary);
 }
 
 .record-pool-qc-status__stages li.is-complete .record-pool-qc-status__stage-marker {
@@ -922,23 +922,23 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__stages li.is-active {
   border-color: rgba(10, 108, 255, 0.42);
   background: transparent;
-  color: #0055aa;
+  color: color-mix(in srgb, var(--mq-brand-700) 90%, var(--mq-text-primary));
 }
 
 .record-pool-qc-status__stages li.is-active .record-pool-qc-status__stage-marker {
-  border-color: #0a6cff;
+  border-color: var(--mq-brand-600);
   box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
 }
 
 .record-pool-qc-status__stages li.is-error {
   border-color: rgba(239, 68, 68, 0.28);
   background: transparent;
-  color: #b91c1c;
+  color: color-mix(in srgb, var(--mq-danger-text) 80%, var(--mq-text-primary));
 }
 
 .record-pool-qc-status__stages li.is-error .record-pool-qc-status__stage-marker {
-  border-color: #ef4444;
-  background: #ef4444;
+  border-color: var(--mq-danger-icon);
+  background: var(--mq-danger-icon);
 }
 
 .record-pool-qc-status__stage,
@@ -950,7 +950,7 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__refresh-note {
-  color: #b45309;
+  color: color-mix(in srgb, var(--mq-warning-text) 89%, var(--mq-text-primary));
 }
 
 .record-pool-qc-status__dismiss {
@@ -968,7 +968,7 @@ onBeforeUnmount(() => {
 
 .record-pool-qc-status__dismiss:hover {
   background: rgba(0, 0, 0, 0.05);
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
 }
 
 .record-pool-qc-status__spinner {
@@ -1000,9 +1000,9 @@ onBeforeUnmount(() => {
 .record-pool-qc-status,
 .record-pool-qc-status.is-active {
   padding: 20px 24px;
-  border: 1px solid #e3e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 16px;
-  background: #fafbfe;
+  background: color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface));
   box-shadow: none;
   font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif;
 }
@@ -1024,7 +1024,7 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__heading em {
   font-size: 24px;
   line-height: 30px;
-  color: #0a6cff;
+  color: var(--mq-brand-700);
   letter-spacing: -0.5px;
 }
 .record-pool-qc-status__heading em small {
@@ -1032,55 +1032,55 @@ onBeforeUnmount(() => {
   margin-left: 3px;
 }
 .record-pool-qc-status__heading span {
-  background: #eaf3ff;
-  color: #3474b7;
+  background: var(--mq-brand-50);
+  color: var(--mq-brand-700);
   font-weight: 400;
 }
 .record-pool-qc-status__live-dot {
   width: 7px;
   height: 7px;
   margin: 0 3px;
-  background: #0a6cff;
-  box-shadow: 0 0 0 4px #e5efff;
+  background: var(--mq-brand-600);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mq-brand-600) 11%, var(--mq-bg-surface));
 }
 .record-pool-qc-status__phase {
   margin: 0;
-  color: #6e7684;
+  color: var(--mq-text-tertiary);
   font-size: 13px;
 }
 .record-pool-qc-status.is-active .record-pool-qc-status__progress {
   height: 5px;
   margin: 6px 0;
-  background: #e6ebf3;
+  background: color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 99px;
 }
 .record-pool-qc-status__progress > span {
-  background: #0a6cff;
+  background: var(--mq-brand-600);
 }
 .record-pool-qc-status__metrics {
   gap: 8px 20px;
   font-size: 13px;
-  color: #667085;
+  color: var(--mq-text-tertiary);
 }
 .record-pool-qc-status__record-count {
   font-weight: 500;
-  color: #344054;
+  color: var(--mq-neutral-text);
 }
 .record-pool-qc-status__details {
   margin-top: 8px;
 }
 .record-pool-qc-status__details summary {
   padding: 5px 0;
-  color: #55708f;
+  color: var(--mq-neutral-text);
   font-size: 12px;
 }
 .record-pool-qc-status__details summary:focus-visible {
-  outline: 2px solid #0a6cff;
+  outline: 2px solid var(--mq-brand-600);
   outline-offset: 3px;
   border-radius: 4px;
 }
 .record-pool-qc-status__details[open] {
-  border-top-color: #e5e9f0;
+  border-top-color: color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
 }
 .record-pool-qc-status__stages {
   display: grid;
@@ -1102,15 +1102,15 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 12px;
   line-height: 20px;
-  color: #6e7684;
+  color: var(--mq-text-tertiary);
 }
 .record-pool-qc-status--danger {
-  background: #fffaf7;
-  border-color: #efdfd4;
+  background: color-mix(in srgb, var(--mq-danger-icon) 4%, var(--mq-bg-surface));
+  border-color: color-mix(in srgb, var(--mq-warning-icon) 17%, var(--mq-bg-page));
 }
 .record-pool-qc-status--success {
-  background: #f6fbf8;
-  border-color: #deebe4;
+  background: color-mix(in srgb, var(--mq-success-icon) 4%, var(--mq-bg-surface));
+  border-color: color-mix(in srgb, var(--mq-success-text) 6%, var(--mq-bg-page));
 }
 .record-pool-qc-status__refresh-note {
   line-height: 20px;

@@ -4,6 +4,7 @@
  * 通过后端API访问数据，避免CORS问题
  */
 
+import { API_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import CryptoJS from 'crypto-js'
 import { apiClient } from '@/services/apiService'
 
@@ -167,7 +168,7 @@ class LLMConfigService {
 
       // 添加超时控制
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15秒超时
+      const timeoutId = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS)
 
       const response = await apiClient.get(`${LLM_API_PREFIX}/providers`, {
         signal: controller.signal,

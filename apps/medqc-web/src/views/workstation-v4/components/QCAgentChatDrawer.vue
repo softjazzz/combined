@@ -4,7 +4,7 @@
     width="760"
     placement="right"
     class="qc-agent-drawer"
-    :body-style="{ padding: 0, background: '#f6f9fc' }"
+    :body-style="{ padding: 0, background: 'color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface))' }"
     @close="handleClose"
   >
     <template #title>
@@ -1612,20 +1612,20 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer__heading {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 16px;
   font-weight: 700;
 }
 
 .qc-agent-drawer__subtitle {
   margin-top: 2px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 500;
 }
 
 .qc-agent-drawer__title-icon {
-  color: #0a6cff;
+  color: var(--mq-brand-600);
   font-size: 18px;
 }
 
@@ -1635,16 +1635,16 @@ const AgentResponseCard = defineComponent({
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  background: #f6f9fc;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
 }
 
 .qc-agent-context,
 .qc-agent-shortcuts,
 .qc-agent-commandbar,
 .qc-agent-result-card {
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--mq-bg-surface);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
 }
 
@@ -1657,14 +1657,14 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-context__label {
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 700;
 }
 
 .qc-agent-context__value {
   margin-top: 4px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 13px;
   font-weight: 700;
 }
@@ -1676,20 +1676,20 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-capability {
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--mq-bg-surface);
   padding: 5px 10px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
 }
 
 .qc-agent-capability--active {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #0a6cff;
+  border-color: var(--mq-brand-200);
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
 }
 
 .qc-agent-shortcuts {
@@ -1701,7 +1701,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-shortcut-group__title {
   margin-bottom: 8px;
-  color: #334155;
+  color: var(--mq-neutral-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1713,10 +1713,10 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-shortcuts__button {
-  border-color: #dbeafe;
+  border-color: color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 8px;
-  background: #f8fbff;
-  color: #0a5fd6;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
   font-weight: 700;
 }
 
@@ -1737,21 +1737,21 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-empty-card {
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--mq-bg-surface);
   padding: 14px;
 }
 
 .qc-agent-empty-card__title {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 14px;
   font-weight: 700;
 }
 
 .qc-agent-empty-card__desc {
   margin-top: 6px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -1765,7 +1765,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-empty-card__list li {
-  color: #334155;
+  color: var(--mq-neutral-text);
   font-size: 12px;
 }
 
@@ -1791,15 +1791,15 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-message--user .qc-agent-message__bubble {
-  background: #0a6cff;
-  color: #ffffff;
+  background: var(--mq-brand-600);
+  color: var(--mq-bg-surface);
 }
 
 .qc-agent-message--assistant .qc-agent-message__bubble,
 .qc-agent-message--system .qc-agent-message__bubble {
   width: 100%;
-  background: #ffffff;
-  color: #1d1d1f;
+  background: var(--mq-bg-surface);
+  color: var(--mq-text-primary);
 }
 
 .qc-agent-result-card {
@@ -1832,38 +1832,38 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-status--completed {
-  background: #dcfce7;
-  color: #166534;
+  background: color-mix(in srgb, var(--mq-success-icon) 15%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-success-text) 55%, var(--mq-text-primary));
 }
 
 .qc-agent-status--needs_confirmation,
 .qc-agent-status--needs_clarification {
-  background: #fef3c7;
-  color: #92400e;
+  background: color-mix(in srgb, var(--mq-warning-icon) 14%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
 }
 
 .qc-agent-status--unsupported {
-  background: #fee2e2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--mq-danger-icon) 15%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-danger-text) 66%, var(--mq-text-primary));
 }
 
 .qc-agent-result-type {
-  background: #eff6ff;
-  color: #0a5fd6;
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
 }
 
 .qc-agent-execution-tag--partial {
-  background: #ffedd5;
-  color: #9a3412;
+  background: color-mix(in srgb, var(--mq-warning-icon) 17%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
 }
 
 .qc-agent-execution-tag--complete {
-  background: #e0f2fe;
-  color: #075985;
+  background: color-mix(in srgb, var(--mq-brand-600) 11%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-brand-700) 90%, var(--mq-text-primary));
 }
 
 .qc-agent-result-card__run {
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
 }
@@ -1871,15 +1871,15 @@ const AgentResponseCard = defineComponent({
 .qc-agent-conclusion,
 .qc-agent-state-note {
   margin-top: 12px;
-  border: 1px solid #fed7aa;
+  border: 1px solid color-mix(in srgb, var(--mq-warning-icon) 31%, var(--mq-bg-surface));
   border-radius: 12px;
-  background: #fff7ed;
+  background: var(--mq-warning-bg);
   padding: 10px;
 }
 
 .qc-agent-conclusion__label,
 .qc-agent-state-note strong {
-  color: #9a3412;
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
   font-size: 12px;
   font-weight: 700;
 }
@@ -1888,20 +1888,20 @@ const AgentResponseCard = defineComponent({
 .qc-agent-state-note span {
   display: block;
   margin-top: 4px;
-  color: #431407;
+  color: color-mix(in srgb, var(--mq-warning-text) 25%, var(--mq-text-primary));
   font-size: 13px;
   font-weight: 700;
   line-height: 1.55;
 }
 
 .qc-agent-state-note--danger {
-  border-color: #fecaca;
-  background: #fef2f2;
+  border-color: color-mix(in srgb, var(--mq-danger-icon) 23%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-danger-icon) 7%, var(--mq-bg-surface));
 }
 
 .qc-agent-state-note--danger strong,
 .qc-agent-state-note--danger span {
-  color: #991b1b;
+  color: color-mix(in srgb, var(--mq-danger-text) 66%, var(--mq-text-primary));
 }
 
 .qc-agent-summary-grid,
@@ -1916,14 +1916,14 @@ const AgentResponseCard = defineComponent({
 .qc-agent-field,
 .qc-agent-grouping-card {
   border-radius: 10px;
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface));
   padding: 9px 8px;
 }
 
 .qc-agent-summary-item span,
 .qc-agent-field__label {
   display: block;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 700;
 }
@@ -1932,7 +1932,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-field__value {
   display: block;
   margin-top: 3px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 15px;
   font-weight: 700;
   overflow-wrap: anywhere;
@@ -1955,7 +1955,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-block__title {
   margin-bottom: 8px;
-  color: #334155;
+  color: var(--mq-neutral-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1978,26 +1978,26 @@ const AgentResponseCard = defineComponent({
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #0a6cff;
+  background: var(--mq-brand-600);
 }
 
 .qc-agent-plan__tool {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
 }
 
 .qc-agent-plan__status {
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
 .qc-agent-warnings li {
   border-radius: 10px;
-  background: #fffbeb;
+  background: color-mix(in srgb, var(--mq-warning-icon) 8%, var(--mq-bg-surface));
   padding: 7px 9px;
-  color: #92400e;
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
   font-size: 12px;
 }
 
@@ -2021,9 +2021,9 @@ const AgentResponseCard = defineComponent({
 .qc-agent-skipped-rule,
 .qc-agent-code-card,
 .qc-agent-coding-item {
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 10px;
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface));
   padding: 9px;
 }
 
@@ -2051,7 +2051,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-code-card__meta,
 .qc-agent-code-card__mapping,
 .qc-agent-coding-item__meta {
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -2059,9 +2059,9 @@ const AgentResponseCard = defineComponent({
   margin-top: 8px;
   border: 0;
   border-radius: 8px;
-  background: #0a6cff;
+  background: var(--mq-brand-600);
   padding: 5px 9px;
-  color: #ffffff;
+  color: var(--mq-bg-surface);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2071,7 +2071,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-rule-card__id,
 .qc-agent-skipped-rule__head span,
 .qc-agent-code-card__code {
-  color: #0a5fd6;
+  color: var(--mq-brand-700);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -2082,22 +2082,22 @@ const AgentResponseCard = defineComponent({
 .qc-agent-code-card__head em,
 .qc-agent-coding-item__meta em {
   border-radius: 999px;
-  background: #fef3c7;
+  background: color-mix(in srgb, var(--mq-warning-icon) 14%, var(--mq-bg-surface));
   padding: 2px 7px;
-  color: #b45309;
+  color: color-mix(in srgb, var(--mq-warning-text) 89%, var(--mq-text-primary));
   font-size: 12px;
   font-style: normal;
   font-weight: 700;
 }
 
 .qc-agent-rule-status--passed {
-  background: #dcfce7;
-  color: #166534;
+  background: color-mix(in srgb, var(--mq-success-icon) 15%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-success-text) 55%, var(--mq-text-primary));
 }
 
 .qc-agent-rule-status--failed {
-  background: #fee2e2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--mq-danger-icon) 15%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-danger-text) 66%, var(--mq-text-primary));
 }
 
 .qc-agent-issue__message,
@@ -2106,7 +2106,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-code-card__name,
 .qc-agent-coding-item__head strong {
   margin-top: 6px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 13px;
   font-weight: 700;
 }
@@ -2137,7 +2137,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-skipped-rule__reason strong,
 .qc-agent-code-card__mapping strong {
   margin-right: 4px;
-  color: #334155;
+  color: var(--mq-neutral-text);
 }
 
 .qc-agent-skipped-rule__reason {
@@ -2150,9 +2150,9 @@ const AgentResponseCard = defineComponent({
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  border: 1px solid #dbeafe;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 12px;
-  background: #f8fbff;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
   padding: 12px;
 }
 
@@ -2164,13 +2164,13 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-rule-overview__main span,
 .qc-agent-rule-overview__main small {
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 700;
 }
 
 .qc-agent-rule-overview__main strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 18px;
   font-weight: 700;
 }
@@ -2194,9 +2194,9 @@ const AgentResponseCard = defineComponent({
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--mq-bg-surface);
   padding: 10px;
 }
 
@@ -2207,8 +2207,8 @@ const AgentResponseCard = defineComponent({
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: #eff6ff;
-  color: #0a5fd6;
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -2234,14 +2234,14 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-catalog-rule__id {
-  color: #0a5fd6;
+  color: var(--mq-brand-700);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
 }
 
 .qc-agent-catalog-rule__identity strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 14px;
   font-weight: 850;
   line-height: 1.45;
@@ -2258,22 +2258,22 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-catalog-rule__severity--danger {
-  background: #fee2e2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--mq-danger-icon) 15%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-danger-text) 66%, var(--mq-text-primary));
 }
 
 .qc-agent-catalog-rule__severity--warning {
-  background: #fef3c7;
-  color: #92400e;
+  background: color-mix(in srgb, var(--mq-warning-icon) 14%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
 }
 
 .qc-agent-catalog-rule__severity--info {
-  background: #e0f2fe;
-  color: #075985;
+  background: color-mix(in srgb, var(--mq-brand-600) 11%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-brand-700) 90%, var(--mq-text-primary));
 }
 
 .qc-agent-catalog-rule__description {
-  color: #475569;
+  color: var(--mq-neutral-text);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -2286,11 +2286,11 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-code-card__actions button {
-  border: 1px solid #dbeafe;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--mq-bg-surface);
   padding: 4px 8px;
-  color: #0a6cff;
+  color: var(--mq-brand-600);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2301,7 +2301,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-more-rules summary {
-  color: #0a6cff;
+  color: var(--mq-brand-600);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2313,18 +2313,18 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-skipped-note {
   margin-bottom: 8px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
 .qc-agent-raw {
   margin-top: 12px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   padding-top: 10px;
 }
 
 .qc-agent-raw summary {
-  color: #475569;
+  color: var(--mq-neutral-text);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2334,17 +2334,17 @@ const AgentResponseCard = defineComponent({
   max-height: 220px;
   overflow: auto;
   border-radius: 10px;
-  background: #1d1d1f;
+  background: var(--mq-text-primary);
   padding: 10px;
-  color: #dbeafe;
+  color: color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   font-size: 11px;
 }
 
 .qc-agent-error {
   border-radius: 10px;
-  background: #fee2e2;
+  background: color-mix(in srgb, var(--mq-danger-icon) 15%, var(--mq-bg-surface));
   padding: 8px 10px;
-  color: #991b1b;
+  color: color-mix(in srgb, var(--mq-danger-text) 66%, var(--mq-text-primary));
   font-size: 12px;
 }
 
@@ -2374,18 +2374,18 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-commandbar__button {
   border-radius: 8px;
-  color: #334155;
+  color: var(--mq-neutral-text);
   font-weight: 700;
 }
 
 .qc-agent-drawer__safe {
   display: inline-flex;
   align-items: center;
-  border: 1px solid #bbf7d0;
+  border: 1px solid color-mix(in srgb, var(--mq-success-icon) 33%, var(--mq-bg-surface));
   border-radius: 999px;
-  background: #f0fdf4;
+  background: color-mix(in srgb, var(--mq-success-icon) 4%, var(--mq-bg-surface));
   padding: 3px 8px;
-  color: #15803d;
+  color: color-mix(in srgb, var(--mq-success-text) 83%, var(--mq-text-primary));
   font-size: 12px;
   font-weight: 700;
 }
@@ -2393,7 +2393,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-panel {
   gap: 10px;
   padding: 12px 14px;
-  background: #f5f9fc;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
 }
 
 .qc-agent-context {
@@ -2412,7 +2412,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-context__label {
   flex: 0 0 auto;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -2420,7 +2420,7 @@ const AgentResponseCard = defineComponent({
   min-width: 0;
   margin-top: 0;
   overflow: hidden;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -2450,10 +2450,10 @@ const AgentResponseCard = defineComponent({
   flex: 0 0 28px;
   align-items: center;
   justify-content: center;
-  border: 1px solid #dbeafe;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 50%;
-  background: #eff6ff;
-  color: #0a6cff;
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
   font-size: 11px;
   font-weight: 700;
 }
@@ -2464,10 +2464,10 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-message--user .qc-agent-message__bubble {
   max-width: min(78%, 520px);
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--mq-brand-200);
   border-radius: 18px 18px 4px;
-  background: #eaf2ff;
-  color: #1d1d1f;
+  background: var(--mq-brand-50);
+  color: var(--mq-text-primary);
   font-size: 14px;
   line-height: 1.65;
   box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
@@ -2482,19 +2482,19 @@ const AgentResponseCard = defineComponent({
 .qc-agent-message--system .qc-agent-message__bubble {
   width: auto;
   max-width: min(92%, 650px);
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 18px 18px 18px 4px;
-  background: #ffffff;
-  color: #1d1d1f;
+  background: var(--mq-bg-surface);
+  color: var(--mq-text-primary);
   font-size: 14px;
   line-height: 1.65;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
 .qc-agent-message--system .qc-agent-message__bubble {
-  border-color: #fecaca;
-  background: #fef2f2;
-  color: #991b1b;
+  border-color: color-mix(in srgb, var(--mq-danger-icon) 23%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-danger-icon) 7%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-danger-text) 66%, var(--mq-text-primary));
 }
 
 .qc-agent-message--welcome .qc-agent-message__bubble {
@@ -2502,22 +2502,22 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-welcome__title {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 15px;
   font-weight: 700;
 }
 
 .qc-agent-welcome__desc {
   margin-top: 4px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 13px;
   line-height: 1.6;
 }
 
 .qc-agent-sqlbot {
-  border: 1px solid #dbeafe;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 16px;
-  background: #ffffff;
+  background: var(--mq-bg-surface);
   box-shadow: 0 14px 34px rgba(37, 99, 235, 0.08);
 }
 
@@ -2526,12 +2526,12 @@ const AgentResponseCard = defineComponent({
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   padding: 12px 14px;
 }
 
 .qc-agent-sqlbot__eyebrow {
-  color: #0a6cff;
+  color: var(--mq-brand-600);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -2539,7 +2539,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-sqlbot__title {
   margin-top: 2px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 15px;
   font-weight: 850;
 }
@@ -2552,27 +2552,27 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-sqlbot__status {
-  border: 1px solid #fed7aa;
+  border: 1px solid color-mix(in srgb, var(--mq-warning-icon) 31%, var(--mq-bg-surface));
   border-radius: 999px;
-  background: #fff7ed;
+  background: var(--mq-warning-bg);
   padding: 4px 9px;
-  color: #c2410c;
+  color: color-mix(in srgb, var(--mq-warning-text) 89%, var(--mq-text-primary));
   font-size: 12px;
   font-weight: 700;
 }
 
 .qc-agent-sqlbot__status--enabled {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #15803d;
+  border-color: color-mix(in srgb, var(--mq-success-icon) 33%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-success-icon) 4%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-success-text) 83%, var(--mq-text-primary));
 }
 
 .qc-agent-sqlbot__close {
-  border: 1px solid #dbeafe;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 999px;
-  background: #f8fbff;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
   padding: 4px 10px;
-  color: #0a6cff;
+  color: var(--mq-brand-700);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2585,7 +2585,7 @@ const AgentResponseCard = defineComponent({
   min-height: 420px;
   border: 0;
   border-radius: 0 0 16px 16px;
-  background: #f8fbff;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
 }
 
 .qc-agent-sqlbot__placeholder {
@@ -2595,18 +2595,18 @@ const AgentResponseCard = defineComponent({
   justify-content: center;
   gap: 8px;
   padding: 20px 22px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 13px;
   line-height: 1.6;
 }
 
 .qc-agent-sqlbot__placeholder strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 15px;
 }
 
 .qc-agent-sqlbot__placeholder small {
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -2620,11 +2620,11 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-prompt-chip,
 .qc-agent-next-action {
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--mq-brand-200);
   border-radius: 999px;
-  background: #f8fbff;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
   padding: 6px 10px;
-  color: #0a5fd6;
+  color: var(--mq-brand-700);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -2636,13 +2636,13 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-prompt-chip:hover,
 .qc-agent-next-action:hover {
-  border-color: #0a6cff;
-  background: #eff6ff;
-  color: #1e40af;
+  border-color: var(--mq-brand-600);
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-brand-700) 78%, var(--mq-text-primary));
 }
 
 .qc-agent-next-actions {
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   padding-top: 10px;
 }
 
@@ -2654,7 +2654,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-result-card__header {
   align-items: flex-start;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   padding-bottom: 10px;
 }
 
@@ -2665,7 +2665,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-result-card__eyebrow {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.5;
@@ -2680,9 +2680,9 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-conclusion,
 .qc-agent-state-note {
-  border-color: #fed7aa;
+  border-color: color-mix(in srgb, var(--mq-warning-icon) 31%, var(--mq-bg-surface));
   border-radius: 12px;
-  background: #fff7ed;
+  background: var(--mq-warning-bg);
   padding: 9px 10px;
 }
 
@@ -2697,8 +2697,8 @@ const AgentResponseCard = defineComponent({
 .qc-agent-summary-item,
 .qc-agent-field,
 .qc-agent-grouping-card {
-  border: 1px solid #edf2f7;
-  background: #f8fbff;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
 }
 
 .qc-agent-summary-item strong {
@@ -2715,8 +2715,8 @@ const AgentResponseCard = defineComponent({
 .qc-agent-skipped-rule,
 .qc-agent-code-card,
 .qc-agent-coding-item {
-  border-color: #e2e8f0;
-  background: #ffffff;
+  border-color: color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
+  background: var(--mq-bg-surface);
 }
 
 .qc-agent-issue,
@@ -2775,7 +2775,7 @@ const AgentResponseCard = defineComponent({
   display: grid;
   gap: 12px;
   width: min(100%, 590px);
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
 }
 
 .qc-agent-drawer .qc-agent-result-card__header {
@@ -2783,7 +2783,7 @@ const AgentResponseCard = defineComponent({
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   padding-bottom: 10px;
 }
 
@@ -2794,7 +2794,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer .qc-agent-result-card__eyebrow {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.45;
@@ -2811,11 +2811,11 @@ const AgentResponseCard = defineComponent({
 .qc-agent-drawer .qc-agent-execution-tag {
   display: inline-flex;
   align-items: center;
-  border: 1px solid #dbeafe;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 999px;
-  background: #eff6ff;
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
   padding: 3px 8px;
-  color: #0a6cff;
+  color: var(--mq-brand-700);
   font-size: 11px;
   font-weight: 850;
   line-height: 1.2;
@@ -2823,7 +2823,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-drawer .qc-agent-result-card__run {
   flex: 0 0 auto;
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
   font-weight: 700;
@@ -2838,7 +2838,7 @@ const AgentResponseCard = defineComponent({
   display: grid;
   grid-template-columns: minmax(0, 1fr) 180px;
   gap: 12px;
-  border: 1px solid #dbeafe;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 16px;
   background: linear-gradient(135deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.98));
   padding: 14px;
@@ -2852,9 +2852,9 @@ const AgentResponseCard = defineComponent({
   display: inline-flex;
   width: fit-content;
   border-radius: 999px;
-  background: #dbeafe;
+  background: color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   padding: 3px 8px;
-  color: #0a5fd6;
+  color: var(--mq-brand-700);
   font-size: 11px;
   font-weight: 850;
 }
@@ -2862,7 +2862,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-drawer .qc-agent-icd-overview__query {
   display: block;
   margin-top: 8px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 20px;
   font-weight: 850;
   line-height: 1.25;
@@ -2877,11 +2877,11 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer .qc-agent-icd-overview__meta span {
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--mq-brand-200);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--mq-bg-surface);
   padding: 4px 9px;
-  color: #475569;
+  color: var(--mq-neutral-text);
   font-size: 12px;
   font-weight: 750;
 }
@@ -2891,19 +2891,19 @@ const AgentResponseCard = defineComponent({
   min-width: 0;
   flex-direction: column;
   justify-content: center;
-  border-left: 1px solid #dbeafe;
+  border-left: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   padding-left: 14px;
 }
 
 .qc-agent-drawer .qc-agent-icd-overview__best span {
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 850;
 }
 
 .qc-agent-drawer .qc-agent-icd-overview__best strong {
   margin-top: 4px;
-  color: #0a5fd6;
+  color: var(--mq-brand-700);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 17px;
   font-weight: 700;
@@ -2911,7 +2911,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-drawer .qc-agent-icd-overview__best small {
   margin-top: 3px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 650;
   line-height: 1.45;
@@ -2930,13 +2930,13 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer .qc-agent-block__title {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 14px;
   font-weight: 850;
 }
 
 .qc-agent-drawer .qc-agent-block__hint {
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 650;
   text-align: right;
@@ -2951,9 +2951,9 @@ const AgentResponseCard = defineComponent({
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
   gap: 12px;
-  border: 1px solid #dbe7f3;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 14px;
-  background: #ffffff;
+  background: var(--mq-bg-surface);
   padding: 12px;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
 }
@@ -2965,8 +2965,8 @@ const AgentResponseCard = defineComponent({
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  background: #eff6ff;
-  color: #0a6cff;
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -2992,7 +2992,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer .qc-agent-code-card__code {
-  color: #0a5fd6;
+  color: var(--mq-brand-700);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 17px;
   font-weight: 700;
@@ -3001,9 +3001,9 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-drawer .qc-agent-code-card__head em {
   border-radius: 999px;
-  background: #eef6ff;
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
   padding: 3px 8px;
-  color: #0a6cff;
+  color: var(--mq-brand-700);
   font-size: 11px;
   font-style: normal;
   font-weight: 850;
@@ -3018,23 +3018,23 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer .qc-agent-code-card__confidence--high {
-  background: #dcfce7;
-  color: #047857;
+  background: color-mix(in srgb, var(--mq-success-icon) 15%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-success-text) 71%, var(--mq-text-primary));
 }
 
 .qc-agent-drawer .qc-agent-code-card__confidence--medium {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: color-mix(in srgb, var(--mq-brand-600) 11%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
 }
 
 .qc-agent-drawer .qc-agent-code-card__confidence--low {
-  background: #fef3c7;
-  color: #b45309;
+  background: color-mix(in srgb, var(--mq-warning-icon) 14%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-warning-text) 89%, var(--mq-text-primary));
 }
 
 .qc-agent-drawer .qc-agent-code-card__name {
   margin-top: 7px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 14px;
   font-weight: 700;
   line-height: 1.45;
@@ -3052,18 +3052,18 @@ const AgentResponseCard = defineComponent({
   align-items: center;
   gap: 5px;
   border-radius: 999px;
-  background: #f1f5f9;
+  background: color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
   padding: 4px 8px;
 }
 
 .qc-agent-drawer .qc-agent-meta-pill small {
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 750;
 }
 
 .qc-agent-drawer .qc-agent-meta-pill strong {
-  color: #475569;
+  color: var(--mq-neutral-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -3072,18 +3072,18 @@ const AgentResponseCard = defineComponent({
   display: grid;
   gap: 3px;
   margin-top: 9px;
-  border-left: 2px solid #bfdbfe;
+  border-left: 2px solid var(--mq-brand-200);
   padding-left: 9px;
 }
 
 .qc-agent-drawer .qc-agent-code-card__mapping span {
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 850;
 }
 
 .qc-agent-drawer .qc-agent-code-card__mapping strong {
-  color: #334155;
+  color: var(--mq-neutral-text);
   font-size: 12px;
   font-weight: 750;
   line-height: 1.45;
@@ -3097,30 +3097,30 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer .qc-agent-code-card__actions button {
-  border: 1px solid #dbeafe;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--mq-bg-surface);
   padding: 5px 10px;
-  color: #0a6cff;
+  color: var(--mq-brand-600);
   cursor: pointer;
   font-size: 12px;
   font-weight: 850;
 }
 
 .qc-agent-drawer .qc-agent-code-card__actions button:hover {
-  border-color: #93c5fd;
-  background: #eff6ff;
+  border-color: color-mix(in srgb, var(--mq-brand-600) 46%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
 }
 
 .qc-agent-drawer .qc-agent-more-codes {
-  border: 1px dashed #bfdbfe;
+  border: 1px dashed var(--mq-brand-200);
   border-radius: 14px;
-  background: #f8fbff;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
   padding: 9px;
 }
 
 .qc-agent-drawer .qc-agent-more-codes summary {
-  color: #0a6cff;
+  color: var(--mq-brand-700);
   cursor: pointer;
   font-size: 12px;
   font-weight: 850;
@@ -3136,7 +3136,7 @@ const AgentResponseCard = defineComponent({
   }
 
   .qc-agent-drawer .qc-agent-icd-overview__best {
-    border-top: 1px solid #dbeafe;
+    border-top: 1px solid color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
     border-left: 0;
     padding-top: 10px;
     padding-left: 0;

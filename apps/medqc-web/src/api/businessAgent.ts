@@ -1,3 +1,4 @@
+import { BUSINESS_AGENT_MESSAGE_TIMEOUT_MS, EXTENDED_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { http } from '@/utils/http'
 
 export interface BusinessAgentContext {
@@ -179,7 +180,7 @@ export const businessAgentApi = {
           message,
           reference_id: referenceId,
         },
-        { signal, timeout: 70000 },
+        { signal, timeout: BUSINESS_AGENT_MESSAGE_TIMEOUT_MS },
       )
     ).data
   },
@@ -202,7 +203,7 @@ export const businessAgentApi = {
       await http.post(
         `/api/v1/qc-agent/business/sessions/${sessionId}/actions/${actionId}/confirm`,
         { confirmed: true, confirmation_hash: confirmationHash },
-        { timeout: 60000 },
+        { timeout: EXTENDED_REQUEST_TIMEOUT_MS },
       )
     ).data
   },
@@ -218,7 +219,7 @@ export const businessAgentApi = {
     return (
       await http.get(`/api/v1/qc-agent/business/sessions/${sessionId}/evidence-document`, {
         params: { reference_id: referenceId, evidence_index: evidenceIndex },
-        timeout: 60000,
+        timeout: EXTENDED_REQUEST_TIMEOUT_MS,
       })
     ).data
   },

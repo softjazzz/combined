@@ -11,13 +11,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.engine import URL
 
+from ..core.clinical_defaults import (
+    CDM_PROFILE_NAME, INDEPENDENT_CDM, LEGACY_PG, LEGACY_SOURCE_NAME, get_clinical_defaults,
+)
 from ..database import clinical_connection as clinical
 from .data_pipeline_settings import PipelineError
 from .clinical_source_policy import fixed_cdm
 
 NAMESPACE, KEY = "clinical", "sources_v1"
 TASK_KEY = "clinical_source"
-IDS = {"legacy_pg", "independent_cdm"}
+IDS = {LEGACY_PG, INDEPENDENT_CDM}
+_FIXED_SETTINGS = {"default_source": INDEPENDENT_CDM, "legacy_enabled": False}
 WORKSPACE_METADATA_GET_PATHS = frozenset({
     "/api/v1/qc/sichuan/workspace/rule-sets",
     "/api/v1/qc/sichuan/workspace/batch-jobs",
@@ -28,7 +32,10 @@ WORKSPACE_METADATA_GET_PATHS = frozenset({
 
 class CDMProfile(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    name: str = Field(default="服务器CDM", min_length=1, max_length=100)
+    name: str = Field(
+        default_factory=lambda: get_clinical_defaults().cdm_profile_name,
+        min_length=1, max_length=100, validate_default=True, json_schema_extra={"default": CDM_PROFILE_NAME},
+    )
     enabled: bool = False
     host: str = Field(default="127.0.0.1", min_length=1, max_length=253, pattern=r"^[A-Za-z0-9.:-]+$")
     port: int = Field(default=5432, ge=1, le=65535)
@@ -39,8 +46,11 @@ class CDMProfile(BaseModel):
 class SourceSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     version: int = Field(default=0, ge=0)
-    default_source: Literal["legacy_pg", "independent_cdm"] = "legacy_pg"
-    legacy_name: str = Field(default="原有数据源", min_length=1, max_length=100)
+    default_source: Literal["legacy_pg", "independent_cdm"] = Field(
+        default_factory=lambda: get_clinical_defaults().compat_source, validate_default=True,
+        json_schema_extra={"default": LEGACY_PG},
+    )
+    legacy_name: str = Field(default=LEGACY_SOURCE_NAME, min_length=1, max_length=100)
     legacy_enabled: bool = True
     cdm: CDMProfile = Field(default_factory=CDMProfile)
 
@@ -56,7 +66,7 @@ def load(session) -> tuple[SourceSettings, str | None]:
 
 
 def legacy_snapshot() -> dict:
-    return {"id": "legacy_pg", "version": 0, "name": "原有数据源", "binding": ""}
+    return {"id": LEGACY_PG, "version": 0, "name": LEGACY_SOURCE_NAME, "binding": ""}
 
 
 def snapshot(settings: SourceSettings, source_id: str, *, allow_disabled=False) -> dict:
@@ -86,7 +96,7 @@ def snapshot(settings: SourceSettings, source_id: str, *, allow_disabled=False) 
 def save(session, proposed: SourceSettings, actor: str) -> SourceSettings:
     current, raw = load(session)
     if fixed_cdm():
-        proposed = proposed.model_copy(update={"default_source": "independent_cdm", "legacy_enabled": False})
+        proposed = proposed.model_copy(update=_FIXED_SETTINGS)
     if proposed.version != current.version:
         raise PipelineError("clinical_source_configuration_changed", 409)
     if not fixed_cdm() and not proposed.legacy_enabled and not proposed.cdm.enabled:
@@ -112,12 +122,12 @@ def configuration() -> SourceSettings:
     from ..database.connection import SessionLocal
     if SessionLocal is None:
         if os.getenv("ENV", "development").lower() not in {"prod", "production"}:
-            return SourceSettings(default_source="independent_cdm",legacy_enabled=False) if fixed_cdm() else SourceSettings()
+            return SourceSettings(**_FIXED_SETTINGS) if fixed_cdm() else SourceSettings()
         raise PipelineError("clinical_source_configuration_unavailable")
     try:
         with SessionLocal() as session:
             value = load(session)[0]
-            return value.model_copy(update={"default_source": "independent_cdm", "legacy_enabled": False}) if fixed_cdm() else value
+            return value.model_copy(update=_FIXED_SETTINGS) if fixed_cdm() else value
     except PipelineError:
         raise
     except Exception:
@@ -157,7 +167,7 @@ def _local_material_filters(filters: dict) -> bool:
 
 
 def ordinary_snapshot():
-    return snapshot(configuration(), "independent_cdm")
+    return snapshot(configuration(), INDEPENDENT_CDM)
 
 
 async def prepare_task_material_request(request: Request) -> None:
@@ -262,11 +272,11 @@ def prepare_request(request: Request) -> None:
             settings = configuration()
             # 单源部署不允许旧链接切回原库；兼容模式仅供保留原部署与隔离回归。
             if fixed_cdm():
-                if (header or query) not in (None,"independent_cdm"):
+                if (header or query) not in (None, INDEPENDENT_CDM):
                     raise PipelineError("ordinary_source_fixed_donghua_cdm",409)
-                default = "independent_cdm"
+                default = INDEPENDENT_CDM
             else:
-                default = settings.default_source if path.endswith("/workstation") or request.method == "POST" else "legacy_pg"
+                default = settings.default_source if path.endswith("/workstation") or request.method == "POST" else LEGACY_PG
             request.state.clinical_source = snapshot(settings, header or query or default)
         if request.state.clinical_source["id"] == "independent_cdm" and "medical-records/" in path:
             suffix = path.split("medical-records/", 1)[1]

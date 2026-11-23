@@ -47,7 +47,8 @@ on:
       - 'apps/medqc-web/tests/unit/views/workstation-v4/components/qc/QcRecordReviewPreview.spec.ts'
       - 'apps/medqc-web/src/views/workstation-v4/QcRecordResultListView.vue'
       - 'apps/medqc-web/src/views/workstation/QCOverviewView.vue'
-      - 'apps/medqc-web/src/views/workstation-v2/types.ts'
+      - 'apps/medqc-web/src/router/index.ts'
+      - 'apps/medqc-web/src/router/index.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/latestQcFailureSummary.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/QcRecordResultListView.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/usePatientRecords.spec.ts'
@@ -114,7 +115,8 @@ on:
       - 'apps/medqc-web/tests/unit/views/workstation-v4/components/qc/QcRecordReviewPreview.spec.ts'
       - 'apps/medqc-web/src/views/workstation-v4/QcRecordResultListView.vue'
       - 'apps/medqc-web/src/views/workstation/QCOverviewView.vue'
-      - 'apps/medqc-web/src/views/workstation-v2/types.ts'
+      - 'apps/medqc-web/src/router/index.ts'
+      - 'apps/medqc-web/src/router/index.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/latestQcFailureSummary.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/QcRecordResultListView.spec.ts'
       - 'apps/medqc-web/tests/unit/views/workstation-v4/usePatientRecords.spec.ts'
@@ -166,9 +168,9 @@ jobs:
         # 依赖已安装；测试及其子进程使用独立网络命名空间，不能访问模型或业务库。
         run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" node_modules/vitest/vitest.mjs run tests/unit/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.spec.ts tests/unit/views/workstation-v4/customer-sample-validation/batchJobPresentation.spec.ts tests/unit/views/workstation-v4/semantic-rules/useSichuanBatchJobs.f08.spec.ts tests/unit/views/workstation-v4/latestQcFailureSummary.spec.ts tests/unit/views/workstation-v4/QcRecordResultListView.spec.ts tests/unit/views/workstation-v4/components/qc/QcRecordReviewPreview.spec.ts tests/unit/views/workstation-v4/usePatientRecords.spec.ts tests/unit/views/workstation/QCOverviewView.spec.ts --maxWorkers=1 --minWorkers=1
       - name: Read-only lint of changed frontend scope
-        run: npx eslint src/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.vue src/views/workstation-v4/customer-sample-validation/batchJobPresentation.ts src/views/workstation-v4/semantic-rules/types.ts src/views/workstation-v4/normalize.ts src/views/workstation-v4/types.ts src/views/workstation-v4/components/qc/latestQcSummaryPresentation.ts src/views/workstation-v4/components/qc/QcRecordReviewPreview.vue src/views/workstation-v4/QcRecordResultListView.vue src/views/workstation/QCOverviewView.vue src/views/workstation-v2/types.ts
+        run: npx eslint src/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.vue src/views/workstation-v4/customer-sample-validation/batchJobPresentation.ts src/views/workstation-v4/semantic-rules/types.ts src/views/workstation-v4/normalize.ts src/views/workstation-v4/types.ts src/views/workstation-v4/components/qc/latestQcSummaryPresentation.ts src/views/workstation-v4/components/qc/QcRecordReviewPreview.vue src/views/workstation-v4/QcRecordResultListView.vue src/views/workstation/QCOverviewView.vue
       - name: Frontpage presentation, export races and preserved navigation
-        run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" node_modules/vitest/vitest.mjs run src/views/workstation-v4/frontpage-qc/__tests__ src/components/layout/__tests__/workstationNav.spec.ts --maxWorkers=1 --minWorkers=1
+        run: sudo --preserve-env=NODE_OPTIONS unshare --net -- "$(command -v node)" node_modules/vitest/vitest.mjs run src/views/workstation-v4/frontpage-qc/__tests__ src/components/layout/__tests__/workstationNav.spec.ts src/router/index.spec.ts --maxWorkers=1 --minWorkers=1
       - name: Read-only frontpage lint
         run: node node_modules/eslint/bin/eslint.js src/views/workstation-v4/frontpage-qc src/services/frontpage-qc-v2-service.ts src/components/layout/workstationNav.ts src/components/layout/__tests__/workstationNav.spec.ts --quiet
       - name: Local model settings and navigation compatibility (isolated)

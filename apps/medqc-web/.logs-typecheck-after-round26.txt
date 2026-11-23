@@ -1,5 +1,0 @@
-
-> medical-qc-system@1.0.0 type-check
-> vue-tsc --noEmit
-
-src/components/medical/QCAnalysisPanelComponent.vue(494,7): error TS2353: Object literal may only specify known properties, and 'recordId' does not exist in type 'QCAnalysisResultViewModel | { summary: { total_score: number; grade: string; overall_assessment: string; }; item_scores: { item_name: string; total_score: number; actual_score: number; deduction: number; assessment: string; }[]; issues: { ...; }[]; strengths: string[]; recommendations: string[]; analysis_time: strin...'.

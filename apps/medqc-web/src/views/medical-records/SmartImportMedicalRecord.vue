@@ -646,6 +646,7 @@
 </template>
 
 <script setup lang="ts">
+import { MEDICAL_FILE_PARSE_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ref, reactive, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -1228,7 +1229,7 @@ const parsePDFFile = async (file: File) => {
 
     // 创建AbortController来处理请求取消
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60秒超时
+    const timeoutId = setTimeout(() => controller.abort(), MEDICAL_FILE_PARSE_TIMEOUT_MS)
 
     // 尝试直接调用后端，如果代理有问题的话
     const apiUrl =

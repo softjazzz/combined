@@ -1,10 +1,12 @@
 # 逐记录生命周期只读适配交付
 
-业务基线 `946f9d21f7ff1ce6e92a8b7736344b17e5dd0f3d`；固定同步候选 `7a8c4bb424189a10e97f49e2df7d4b5c1a8abafe`。
+> 当前源码固定的同步候选为 `913421639fe3cfb5459909973503f87e14b4802d`。该候选的源码复核关闭了下文旧候选的两项 P1，业务只读逻辑及合同字段保持一致。功能仍默认关闭，现场批准、发布与联验待完成。复核记录可从归档读取（`git show archive/docs-pre-cleanup-202611:apps/medqc-web/docs/clinical-record-lifecycle-business-20261116/CLOSEOUT-913421639.md`）。
 
-**业务只读适配已实现，但固定同步候选存在两项未闭合 P1。不得启用或认定已完成全部防旧版复活边界。** 本地交付提交通过 `git log -1 --format=%H -- apps/medqc-web/docs/clinical-record-lifecycle-business-20261116/IMPLEMENTATION-AND-REVIEW.md` 定位；未推送、合并或部署。
+以下为早期适配及合成验证记录。业务基线为 `946f9d21f7ff1ce6e92a8b7736344b17e5dd0f3d`，当时的同步候选为 `7a8c4bb424189a10e97f49e2df7d4b5c1a8abafe`。
 
-## 包核验和同步复审
+**早期同步候选存在两项 P1，当时不满足启用条件。** 清理前的本地交付提交通过 `git log -1 --format=%H archive/docs-pre-cleanup-202611 -- apps/medqc-web/docs/clinical-record-lifecycle-business-20261116/IMPLEMENTATION-AND-REVIEW.md` 定位；未推送、合并或部署。
+
+## 旧候选包核验和同步复审
 
 指定 ZIP 为466706字节、165个唯一条目。外部 SHA256 与给定值一致，ZIP CRC通过；`CHECKSUMS.txt` 覆盖164个文件，逐文件重算且集合严格相等，无缺失、重复或越界路径。根 `package-manifest.json` 提交为指定7a8c4bb42；未用参考目录内旧版本代替。实际映射保持36/55/59/49列，共199列；草案开关关闭、policies与生命周期批准为空。
 
@@ -61,7 +63,7 @@ policies[]:
 - 专属PG16.15的3个新增场景通过：29准入＋1HOLD贯通目录/Bundle/规则输入和全文副本；消费已保留的HOLD/PENDING/失败证据并在明确发布新版本后恢复、旧副本不变；RR并发回执更新不混版、新读取显式stale及权限42501。首轮1过2败因新增验收helper使用Bundle默认limit=3；显式改为100后只复跑失败两项，均通过。首轮已过的第三项每类最多1行，复用其证据、不重复执行。两次专属集群均停止。
 - 独立业务Spec轴与Standards轴均未发现新增P1/P2。独立核对基线strict摘要、spec摘要和固定候选关键定义逐字内容、源/运行/JSON指纹；未重复运行上述测试。主协调核对最终源码差异和PG报告，复审后仅补交付文档。
 
-PG验证消费的是合成CDM内已保留的逐记录证据，不验证同步producer在中断或漏返后能否正确保留证据；两项P1反例仍成立。没有以手工构造正确coverage掩盖上游缺陷。旧strict及快照兼容已有本轮定向证据，未重复旧PG矩阵或232项。
+PG验证消费的是合成CDM内已保留的逐记录证据，不验证同步producer在中断或漏返后能否正确保留证据；两项 P1 反例针对早期 7a8 候选。没有以手工构造正确coverage掩盖上游缺陷。旧strict及快照兼容已有本轮定向证据，未重复旧PG矩阵或232项。
 
 外部交接目录保留 `CLOSURE-VALIDATION.md`、`BUSINESS-SPEC-REVIEW.md`、`BUSINESS-STANDARDS-REVIEW.md`、`business-lifecycle-tests.json` 及两次PG的原始结果。未验证真实机构/类型/生命周期语义、现场角色及并发负载、真实发布和页面联验；未调用模型、医学规则或质控。
 
@@ -73,9 +75,9 @@ python -B -m pytest -c pytest.ini --confcutdir=tests/unit -p no:cacheprovider -o
 python -B -m pytest -c pytest.ini --confcutdir=tests/unit -p no:cacheprovider -o "addopts=-q --tb=short --strict-markers" tests/unit/test_primary_material_lifecycle.py
 ```
 
-## 修复后未来限定联验条件（本轮不执行）
+## 现场联验条件
 
-1. 同步方先闭合上述两项P1，提供新固定提交、指纹和直接命中时序的反例修复证据；业务只读闭包须据新候选更新后再复审受影响路径。现7a8候选不作为启用依据。
+1. 联验前核对现场同步版本与固定候选、来源指纹及只读权限。
 2. 院方分别确认P01/P02机构、四类文书类型、同号关联与生命周期语义；is_deleted的0/1、NULL、record_status原值不由业务猜测，不填伪批准。
 3. 同步方提供同事务可核对policy_hash、selection_id、版本、回执、正文及coverage证据；运维批准上述精确只读对象/列。保持`QC_PRIMARY_FOUR_MATERIAL_ENABLED`关闭，另获授权才考虑现场联验。
 4. 执行前逐单元声明EXPECTED_AVAILABLE／EXPECTED_HELD／EXPECTED_NO_SUPPLY、批准依据与适用数量/版本断言。预期HOLD或无供给不要求selected_version非空、不读取未发布正文、不计可用链通过，也不阻断其他可靠材料。全部待核只报告“状态核对完成，无可验收的可用材料”。

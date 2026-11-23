@@ -59,6 +59,11 @@ logs/
 .env.production.local
 
 # Temporary files
+/.tmp/
+.logs-*.txt
+.tmp-*
+apps/medqc-web/.logs-*.txt
+apps/medqc-web/.tmp-*
 tmp/
 temp/
 *.tmp

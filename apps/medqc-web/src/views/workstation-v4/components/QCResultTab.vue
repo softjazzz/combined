@@ -174,10 +174,10 @@
                         </a-menu-item>
                         <a-menu-divider />
                         <a-menu-item key="approve">
-                          <CheckOutlined style="color: #52c41a" /> 审核通过
+                          <CheckOutlined style="color: var(--mq-success-icon)" /> 审核通过
                         </a-menu-item>
                         <a-menu-item key="reject">
-                          <CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑
+                          <CloseCircleOutlined style="color: var(--mq-danger-icon)" /> 审核存疑
                         </a-menu-item>
                       </a-menu>
                     </template>
@@ -197,7 +197,7 @@
       </template>
 
       <div v-else class="qc-empty">
-        <CheckCircleOutlined class="qc-empty__icon" style="color: #52c41a" />
+        <CheckCircleOutlined class="qc-empty__icon" style="color: var(--mq-success-icon)" />
         <div class="qc-empty__title">未发现质控问题</div>
         <a-button type="link" size="small" style="margin-top: 8px" @click="startCurrentTab">
           <ReloadOutlined /> 重新分析
@@ -222,6 +222,7 @@
 </template>
 
 <script setup lang="ts">
+import { CODING_QC_FALLBACK_TIMEOUT_MS, STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
@@ -391,10 +392,10 @@ function getTabCount(tab: string) {
 function severityColor(sev: string) {
   return (
     {
-      error: '#ef4444',
-      warning: '#f59e0b',
-      info: '#2563eb',
-    }[sev] || '#94a3b8'
+      error: 'var(--mq-danger-icon)',
+      warning: 'var(--mq-warning-icon)',
+      info: 'var(--mq-brand-600)',
+    }[sev] || 'var(--mq-text-disabled)'
   )
 }
 
@@ -660,7 +661,7 @@ async function fetchCodingQCFromBackend() {
     }
   }
 
-  const executeRequest = async (requestPayload: Record<string, any>, timeout = 30000) => {
+  const executeRequest = async (requestPayload: Record<string, any>, timeout: number = STANDARD_REQUEST_TIMEOUT_MS) => {
     const resp = await apiClient.post('/api/v1/qc/coding-qc/check', requestPayload, { timeout })
     const data = resp.data?.data
     if (!data) return { issues: [], persistence: null, degraded: false }
@@ -719,7 +720,7 @@ async function fetchCodingQCFromBackend() {
         .includes('timeout')
     if (maybeTimeout) {
       try {
-        const degradedResult = await executeRequest({ ...payload, skip_llm: true }, 20000)
+        const degradedResult = await executeRequest({ ...payload, skip_llm: true }, CODING_QC_FALLBACK_TIMEOUT_MS)
         message.info('编码质控已降级为规则层执行，结果仍会保存并更新消息')
         return degradedResult
       } catch (retryErr) {
@@ -738,7 +739,7 @@ async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
     visit_id: props.visitId || '',
     frontpage,
   }
-  const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: 30000 })
+  const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: STANDARD_REQUEST_TIMEOUT_MS })
   const data = resp.data?.data
   if (!data) return { issues: [], persistence: null, passed: 0, total: 0 }
 
@@ -774,7 +775,7 @@ async function fetchCostQCFromBackend() {
   let lastError: unknown = null
   for (const url of urls) {
     try {
-      const resp = await apiClient.post(url, undefined, { timeout: 30000 })
+      const resp = await apiClient.post(url, undefined, { timeout: STANDARD_REQUEST_TIMEOUT_MS })
       const data = resp.data
       const issues: QCIssue[] = (data.results || [])
         .filter((item: any) => !item.passed)
@@ -1011,7 +1012,7 @@ watch(
   gap: 6px;
   border: 1px solid rgba(203, 213, 225, 0.74);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 247, 252, 0.96));
-  color: #475569;
+  color: var(--mq-neutral-text);
   border-radius: 12px;
   padding: 10px 8px;
   font-size: 12px;
@@ -1024,8 +1025,8 @@ watch(
 }
 
 .qc-result-tab__tab--active {
-  background: linear-gradient(180deg, #ffffff, #edf4ff);
-  color: #1d4ed8;
+  background: linear-gradient(180deg, var(--mq-bg-surface), color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface)));
+  color: var(--mq-brand-700);
   border-color: rgba(147, 197, 253, 0.92);
   box-shadow:
     0 12px 22px rgba(59, 130, 246, 0.12),
@@ -1087,7 +1088,7 @@ watch(
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #2563eb;
+  color: var(--mq-brand-700);
   margin-bottom: 4px;
 }
 
@@ -1095,7 +1096,7 @@ watch(
   font-size: 16px;
   line-height: 1.2;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mq-text-primary);
   margin-bottom: 4px;
   letter-spacing: -0.02em;
 }
@@ -1104,7 +1105,7 @@ watch(
   max-width: 250px;
   font-size: 12px;
   line-height: 1.6;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
 }
 
 .qc-overview__status {
@@ -1125,7 +1126,7 @@ watch(
   display: block;
   font-size: 10px;
   font-weight: 700;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
 }
 
 .qc-overview__status-value {
@@ -1133,7 +1134,7 @@ watch(
   font-size: 15px;
   line-height: 1;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mq-text-primary);
 }
 
 .qc-coding-summary {
@@ -1156,7 +1157,7 @@ watch(
 .qc-coding-summary__item span {
   display: block;
   font-size: 11px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   line-height: 1.2;
 }
 
@@ -1165,7 +1166,7 @@ watch(
   margin-top: 5px;
   font-size: 18px;
   line-height: 1;
-  color: #0f172a;
+  color: var(--mq-text-primary);
 }
 
 .qc-coding-summary__item--semantic {
@@ -1174,7 +1175,7 @@ watch(
 }
 
 .qc-coding-summary__item--semantic strong {
-  color: #2563eb;
+  color: var(--mq-brand-700);
 }
 
 .qc-start {
@@ -1197,8 +1198,8 @@ watch(
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: linear-gradient(180deg, #eef4ff, #dbeafe);
-  border: 1px solid #bfdbfe;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface)), color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface)));
+  border: 1px solid var(--mq-brand-200);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1210,19 +1211,19 @@ watch(
 
 .qc-start__icon {
   font-size: 24px;
-  color: #2563eb;
+  color: var(--mq-brand-700);
 }
 
 .qc-start__title {
   font-size: 15px;
   font-weight: 800;
-  color: #1e293b;
+  color: var(--mq-text-primary);
   margin-bottom: 6px;
 }
 
 .qc-start__desc {
   font-size: 12px;
-  color: #6b7f96;
+  color: var(--mq-text-tertiary);
   max-width: 228px;
   line-height: 1.6;
   margin-bottom: 18px;
@@ -1254,7 +1255,7 @@ watch(
 .qc-group__title {
   font-size: 11px;
   font-weight: 800;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1319,23 +1320,23 @@ watch(
 }
 
 .qc-issue__badge--error {
-  background: #fef2f2;
-  color: #dc2626;
+  background: color-mix(in srgb, var(--mq-danger-icon) 7%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-danger-text) 90%, var(--mq-text-primary));
 }
 
 .qc-issue__badge--warning {
-  background: #fffbeb;
-  color: #d97706;
+  background: color-mix(in srgb, var(--mq-warning-icon) 8%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-warning-text) 89%, var(--mq-text-primary));
 }
 
 .qc-issue__badge--info {
-  background: #eff6ff;
-  color: #2563eb;
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
 }
 
 .qc-issue__desc {
   font-size: 12px;
-  color: #334155;
+  color: var(--mq-neutral-text);
   line-height: 1.66;
   margin: 0;
   cursor: pointer;
@@ -1346,13 +1347,13 @@ watch(
 }
 
 .qc-issue__desc:hover {
-  color: #1d4ed8;
+  color: var(--mq-brand-700);
 }
 
 .qc-issue__ai-suggestion {
   margin: 0 12px 10px 14px;
   background: linear-gradient(180deg, rgba(239, 246, 255, 0.78), rgba(248, 250, 252, 0.94));
-  border-left: 3px solid #3b82f6;
+  border-left: 3px solid var(--mq-brand-400);
   border-radius: 0 10px 10px 0;
   padding: 8px 10px;
 }
@@ -1367,17 +1368,17 @@ watch(
 .qc-issue__ai-label span {
   font-size: 12px;
   font-weight: 700;
-  color: #1e40af;
+  color: color-mix(in srgb, var(--mq-brand-700) 78%, var(--mq-text-primary));
 }
 
 .qc-issue__ai-icon {
   font-size: 12px;
-  color: #2563eb;
+  color: var(--mq-brand-700);
 }
 
 .qc-issue__ai-text {
   font-size: 12px;
-  color: #475569;
+  color: var(--mq-neutral-text);
   line-height: 1.55;
   margin: 0;
   font-weight: 500;
@@ -1407,7 +1408,7 @@ watch(
   border-radius: 999px;
   border: none;
   background: rgba(255, 255, 255, 0.78);
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
@@ -1416,17 +1417,17 @@ watch(
 }
 
 .qc-issue__ghost-btn:hover {
-  color: #1d4ed8;
-  background: #eaf2ff;
+  color: var(--mq-brand-700);
+  background: var(--mq-brand-50);
 }
 
 .qc-issue__ghost-btn--muted {
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
 }
 
 .qc-issue__ghost-btn--muted:hover {
-  color: #64748b;
-  background: #f1f5f9;
+  color: var(--mq-text-tertiary);
+  background: color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
 }
 
 .qc-issue__btn-icon {
@@ -1441,15 +1442,15 @@ watch(
   align-items: center;
   justify-content: center;
   text-align: center;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   border-radius: 14px;
-  background: #f7fbff;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
   border: 1px dashed rgba(147, 197, 253, 0.92);
 }
 
 .qc-empty__icon {
   font-size: 30px;
-  color: #2563eb;
+  color: var(--mq-brand-700);
   margin-bottom: 10px;
 }
 
@@ -1467,7 +1468,7 @@ watch(
   border-top: none;
   background: transparent;
   font-size: 12px;
-  color: #475569;
+  color: var(--mq-neutral-text);
 }
 
 .qc-result-tab__footer-actions {
@@ -1515,7 +1516,7 @@ watch(
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: color-mix(in srgb, var(--mq-neutral-text) 26%, var(--mq-bg-surface));
   border-radius: 999px;
 }
 </style>

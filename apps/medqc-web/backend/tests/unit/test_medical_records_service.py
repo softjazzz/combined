@@ -126,7 +126,9 @@ def test_list_medical_records_delegates_to_repository(monkeypatch):
 
 def test_get_documents_concat_mode_handles_missing_table():
     responses = [
+        FakeRowsResult([{"column_name": "record_content"}]),
         FakeRowsResult([{"record_content": "入院内容"}]),
+        FakeRowsResult([{"column_name": "record_content"}]),
         RuntimeError("missing table"),
     ]
     for _ in range(10):

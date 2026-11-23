@@ -1,3 +1,4 @@
+import { serializeCaseRecordKey } from '../utils/caseRecordKey'
 import { computed, ref, watch, type Ref } from 'vue'
 import {
   businessAgentApi,
@@ -40,14 +41,14 @@ export function useBusinessAgentScope(props: ScopeHost, open: Ref<boolean>) {
   )
   const caseOptions = computed(() =>
     (accessScope.value?.doctor_cases || []).map((record) => ({
-      value: JSON.stringify([record.institute_id, record.patient_id, record.visit_id]),
+      value: serializeCaseRecordKey(record.institute_id, record.patient_id, record.visit_id),
       label: `住院 ${record.visit_id} · 患者 ${record.patient_id} · ${record.institute_id}`,
     })),
   )
   const doctorCase = computed(() =>
     accessScope.value?.doctor_cases?.find(
       (record) =>
-        JSON.stringify([record.institute_id, record.patient_id, record.visit_id]) ===
+        serializeCaseRecordKey(record.institute_id, record.patient_id, record.visit_id) ===
         selectedCase.value,
     ),
   )

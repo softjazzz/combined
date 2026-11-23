@@ -5,6 +5,9 @@ import type { RouteRecordRaw } from 'vue-router'
 const WORKSTATION_BASE_PATH = '/workstation-v5'
 const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
 
+// 历史页面统一经 V4 兼容入口，沿用工作台的 URL 规范化和鉴权。
+const retiredPageRedirect = { path: LEGACY_WORKSTATION_BASE_PATH }
+
 function normalizeWorkstationPath(path: string) {
   if (
     path === LEGACY_WORKSTATION_BASE_PATH ||
@@ -90,32 +93,17 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'records/outpatient-emergency',
         name: 'OutpatientEmergencyRecords',
-        component: () => import('@/views/dashboard/records/OutpatientEmergencyRecordsView.vue'),
-        meta: {
-          title: '门急诊病历',
-          icon: 'MedicineBoxOutlined',
-          permission: ['admin', 'qc_manager'],
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'records/running',
         name: 'RunningRecords',
-        component: () => import('@/views/dashboard/records/RunningRecordsViewNew.vue'),
-        meta: {
-          title: '运行病历',
-          icon: 'PlayCircleOutlined',
-          permission: ['admin', 'qc_manager'],
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'records/final',
         name: 'FinalRecords',
-        component: () => import('@/views/dashboard/records/FinalRecordsView.vue'),
-        meta: {
-          title: '终末病历',
-          icon: 'CheckCircleOutlined',
-          permission: ['admin', 'qc_manager'],
-        },
+        redirect: retiredPageRedirect,
       },
       // 智能质控工作站 V4（主质控工作台）
       {
@@ -159,13 +147,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'frontpage-demo',
         name: 'FrontPageAutoDemo',
-        component: () => import('@/views/demo/FrontPageDemoView.vue'),
-        meta: {
-          title: '首页自动生成样例',
-          icon: 'FileTextOutlined',
-          hidden: true,
-          permission: ['admin', 'qc_manager'],
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'records/test',
@@ -191,21 +173,12 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'tasks/my',
         name: 'MyTasks',
-        component: () => import('@/views/dashboard/tasks/MyTasksView.vue'),
-        meta: {
-          title: '我的任务',
-          icon: 'UserOutlined',
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'tasks/all',
         name: 'AllTasks',
-        component: () => import('@/views/dashboard/tasks/AllTasksView.vue'),
-        meta: {
-          title: '全部任务',
-          icon: 'TeamOutlined',
-          permission: ['admin', 'qc_manager'],
-        },
+        redirect: retiredPageRedirect,
       },
       // 质控流程相关路由
       {
@@ -333,125 +306,61 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'quality-control',
         name: 'QualityControlPointManagement',
-        component: () =>
-          import('@/views/dashboard/quality-control/QualityControlPointManagement.vue'),
-        meta: {
-          title: '非编码质控点管理',
-          icon: 'ControlOutlined',
-          permission: ['admin', 'qc_manager'],
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'quality-control/create',
         name: 'QualityControlPointCreate',
-        component: () => import('@/views/dashboard/quality-control/QualityControlPointCreate.vue'),
-        meta: {
-          title: '新建质控点',
-          hidden: true,
-          permission: ['admin', 'qc_manager'],
-        },
+        redirect: retiredPageRedirect,
       },
 
       // 评分标准配置路由
       {
         path: 'scoring-rules',
         name: 'ScoringRules',
-        component: () => import('@/views/dashboard/scoring/ScoringRulesView.vue'),
-        meta: {
-          title: '评分标准配置',
-          icon: 'StarOutlined',
-          permission: ['admin', 'qc_manager'],
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'staff-ranking',
         name: 'StaffRanking',
-        component: () => import('@/views/dashboard/ranking/StaffRankingView.vue'),
-        meta: {
-          title: '质控员工作量排名',
-          icon: 'TrophyOutlined',
-          permission: ['admin', 'qc_manager'],
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'notifications',
         name: 'Notifications',
-        component: () => import('@/views/dashboard/notifications/NotificationsView.vue'),
-        meta: {
-          title: '通知与整改',
-          icon: 'BellOutlined',
-        },
+        redirect: retiredPageRedirect,
       },
 
       // 数据权限配置路由
       {
         path: 'permissions',
         name: 'Permissions',
-        component: () => import('@/views/dashboard/permissions/PermissionsView.vue'),
-        meta: {
-          title: '数据权限配置',
-          icon: 'SafetyCertificateOutlined',
-          permission: ['admin'],
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'llm-qc-demo',
         name: 'LLMQCDemo',
-        component: () => import('@/views/demo/LLMQCDemo.vue'),
-        meta: {
-          title: 'LLM质控演示',
-          icon: 'ExperimentOutlined',
-          hidden: true,
-          permission: ['admin'],
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'llm-qc-demo-enhanced',
         name: 'LLMQCDemoEnhanced',
-        component: () => import('@/views/demo/LLMQCDemoEnhanced.vue'),
-        meta: {
-          title: 'LLM质控演示增强版',
-          icon: 'ExperimentOutlined',
-          hidden: true,
-          permission: ['admin'],
-          description: '完整的LLM质控演示系统，包含规则应用、通知提醒和申诉功能',
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'llm-qc-demo-new',
         name: 'LLMQCDemoEnhancedNew',
-        component: () => import('@/views/demo/LLMQCDemoEnhancedNew.vue'),
-        meta: {
-          title: 'LLM质控演示新版（测试）',
-          icon: 'ExperimentOutlined',
-          hidden: true,
-          permission: ['admin'],
-          description: '重构后的LLM质控演示系统 - P0测试版',
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'sichuan-qc-demo',
         name: 'SichuanQCDemo',
-        component: () => import('@/views/demo/SichuanQCDemo.vue'),
-        meta: {
-          title: '四川质控引擎演示',
-          icon: 'ThunderboltOutlined',
-          hidden: true,
-          permission: ['admin'],
-          description: '基于阿里云百炼 LLM 的四川质控引擎演示，展示首次病程记录质控分析',
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'test-demo',
         name: 'TestDemo',
-        component: () => import('@/views/demo/TestDemo.vue'),
-        meta: {
-          title: '组件测试',
-          icon: 'BugOutlined',
-          hidden: true,
-          permission: ['admin'],
-          description: '测试演示组件功能',
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'test/llm-config',
@@ -546,15 +455,9 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        // 历史详情链接仍需打开经典版，现行业务列表使用工作台入口。
         path: 'medical-records/:id/legacy',
         name: 'MedicalRecordDetailLegacy',
-        component: () => import('@/views/medical-records/MedicalRecordDetail.legacy.vue'),
-        meta: {
-          title: '病历详情（经典版）',
-          hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor'],
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'test/three-column',
@@ -589,12 +492,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'medical-records/:id/simple',
         name: 'MedicalRecordDetailSimple',
-        component: () => import('@/views/medical-records/MedicalRecordDetailSimple.vue'),
-        meta: {
-          title: '病历详情（简化版）',
-          hidden: true,
-          requiresAuth: false,
-        },
+        redirect: retiredPageRedirect,
       },
       {
         path: 'medical-records/:id/qc-sichuan',
@@ -823,144 +721,10 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
-  // 演示页面路由 (无需登录)
   {
-    path: '/demo/lx33',
-    component: () => import('@/layouts/SimpleLayout.vue'),
-    meta: {
-      requiresAuth: false,
-    },
-    children: [
-      {
-        path: '',
-        name: 'LX33Demo',
-        component: () => import('@/views/demo/LX33DemoView.vue'),
-        meta: {
-          requiresAuth: true,
-          permission: ['admin', 'super_admin', 'sync_admin'],
-          title: '泸县33条质控规则演示',
-        },
-      },
-      {
-        path: 'feedbacks',
-        name: 'LX33Feedbacks',
-        component: () => import('@/views/demo/FeedbacksView.vue'),
-        meta: {
-          requiresAuth: true,
-          permission: ['admin', 'super_admin', 'sync_admin'],
-          title: '反馈记录',
-        },
-      },
-      {
-        path: 'create',
-        name: 'LX33CreateRule',
-        component: () => import('@/views/demo/LX33CreateRuleView.vue'),
-        meta: {
-          requiresAuth: false,
-          title: 'AI智能创建质控规则',
-        },
-      },
-      {
-        path: 'frontpage-demo',
-        name: 'FrontPageDemo',
-        component: () => import('@/views/demo/FrontPageDemoView.vue'),
-        meta: {
-          requiresAuth: false,
-          title: '病案首页自动生成样例',
-        },
-      },
-    ],
-  },
-  // 旧验收链接仍可进入 V2，新工作台入口在 /workstation-v5。
-  {
-    path: '/workstation-v2',
-    component: () => import('@/components/layout/WorkstationLayout.vue'),
-    meta: {
-      requiresAuth: false,
-      title: '病案智能质控工作站',
-    },
-    children: [
-      {
-        path: '',
-        name: 'WorkstationV2',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
-        props: { embedded: true, initialView: 'workbench' },
-        meta: { title: '工作台' },
-      },
-
-      {
-        path: 'icd',
-        name: 'WorkstationV2ICD',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
-        props: { embedded: true, initialView: 'icd-search' },
-        meta: { title: 'ICD 编码查询' },
-      },
-      {
-        path: 'upload',
-        name: 'WorkstationV2Upload',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
-        props: { embedded: true, initialView: 'upload' },
-        meta: { title: '数据上传' },
-      },
-      {
-        path: 'stats',
-        name: 'WorkstationV2Stats',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
-        props: { embedded: true, initialView: 'workbench' },
-        meta: { title: '统计分析' },
-      },
-      {
-        path: 'drg/pre',
-        name: 'WorkstationV2DRGPre',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
-        props: { embedded: true, initialView: 'pre-analysis' },
-        meta: { title: '事前分析' },
-      },
-      {
-        path: 'drg/mid',
-        name: 'WorkstationV2DRGMid',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
-        props: { embedded: true, initialView: 'mid-analysis' },
-        meta: { title: '事中监控' },
-      },
-      {
-        path: 'drg/payment',
-        name: 'WorkstationV2DRGPayment',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
-        props: { embedded: true, initialView: 'payment' },
-        meta: { title: '付费监测' },
-      },
-      {
-        path: 'drg/post',
-        name: 'WorkstationV2DRGPost',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
-        props: { embedded: true, initialView: 'post-analysis' },
-        meta: { title: '事后分析' },
-      },
-      {
-        path: 'data',
-        name: 'WorkstationV2Data',
-        component: () => import('@/views/workstation-v2/CDMDataView.vue'),
-        meta: { title: '数据管理' },
-      },
-    ],
-  },
-  // 旧 V3 链接仍使用原卡片工作台。
-  {
-    path: '/workstation-v3',
-    component: () => import('@/components/layout/WorkstationLayout.vue'),
-    meta: {
-      requiresAuth: false,
-      title: '病案智能提取工作台 V3',
-    },
-    children: [
-      {
-        path: '',
-        name: 'WorkstationV3Index',
-        component: () => import('@/views/workstation-v2/WorkstationV3View.vue'),
-        meta: { title: '工作台 V3', permission: ['admin', 'qc_manager', 'doctor'] },
-      },
-    ],
+    path: '/demo/:legacyPath(.*)*',
+    alias: ['/workstation-v2/:legacyPath(.*)*', '/workstation-v3/:legacyPath(.*)*'],
+    redirect: retiredPageRedirect,
   },
   {
     path: '/workstation-v5/login',
@@ -1003,7 +767,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'records/outpatient-emergency',
         name: 'WorkstationV4OutpatientEmergencyRecords',
-        component: () => import('@/views/dashboard/records/OutpatientEmergencyRecordsView.vue'),
+        component: () => import('@/views/workstation/OutpatientEmergencyRecordsView.vue'),
         meta: { title: '门急诊病历', permission: ['admin', 'qc_manager'] },
       },
       {
@@ -1255,15 +1019,6 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/demo/clinical-workstation',
-    name: 'ClinicalWorkstationDemo',
-    component: () => import('@/views/demo/ClinicalWorkstationDemoView.vue'),
-    meta: {
-      requiresAuth: false,
-      title: '临床工作站样例',
-    },
-  },
-  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/error/NotFoundView.vue'),
@@ -1390,8 +1145,8 @@ router.beforeEach(async (to, from, next) => {
           next('/workstation-v5/feedback')
           return
         }
-        // 没有权限，重定向到仪表板
-        next('/dashboard')
+        // 仪表板会返回工作台首页。已在首页时，使用登录后可访问的个人资料页。
+        next(to.name === 'WorkstationV4Index' ? '/auth/profile' : '/dashboard')
         return
       }
     }

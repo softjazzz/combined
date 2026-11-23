@@ -19,7 +19,7 @@
     "test:yibao": "pnpm --filter ./apps/yibao-web test:all",
     "gen:precise": "pnpm --filter ./apps/yibao-web exec tsc -p scripts/tsconfig.json && node scripts/dist/generate-precise-rule-pack.js",
     "prepare": "husky",
-    "precommit": "corepack pnpm lint-staged --config ./package.json && corepack pnpm --filter ./apps/medqc-web run check:encoding",
+    "precommit": "corepack pnpm lint-staged --config ./package.json && corepack pnpm --filter ./apps/medqc-web run check:encoding && node apps/medqc-web/scripts/check-repo-hygiene.mjs --staged",
     "quality:medqc": "corepack pnpm --filter ./apps/medqc-web run quality:ci"
   },
   "devDependencies": {

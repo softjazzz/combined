@@ -4,10 +4,9 @@
  * 提供病案首页自动生成和画像分析相关接口
  */
 
+import { FRONTPAGE_AUTO_GENERATE_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { apiClient } from '@/services/apiService'
 import { unwrapApiEnvelope } from '@/utils/api-envelope'
-
-const FRONTPAGE_AUTO_GENERATE_TIMEOUT_MS = 180000
 
 export type FrontpageReportScene = 'nhc_frontpage' | 'insurance_settlement' | 'combined'
 

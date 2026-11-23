@@ -1,7 +1,0 @@
-qwen3.5-35b-a3b           OK     15.0s  Great! How can I
-qwen3.5-27b               OK     1.8s  Great! How can I
-qwen3.5-9b                FAIL   1.6s  The model `qwen3.5-9b` does not exist or you do not have access to it.
-qwen3.5-4b                FAIL   2.5s  The model `qwen3.5-4b` does not exist or you do not have access to it.
-qwen3-14b                 OK     2.7s  Hello! How can I
-qwen3-8b                  OK     1.9s  Hello! How can I
-qwen3-4b                  OK     1.7s  Hello! How can I

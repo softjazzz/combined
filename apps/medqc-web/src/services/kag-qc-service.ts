@@ -3,13 +3,14 @@
  * 替换原有的传统质控引擎，全面使用KAG进行质控分析
  */
 
+import { STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { supabase } from '@/lib/backend-store'
 import type { Database } from '@/types/database-schema'
 
 // KAG API配置
 const KAG_API_CONFIG = {
   baseUrl: 'http://localhost:8000', // KAG API Gateway地址
-  timeout: 30000,
+  timeout: STANDARD_REQUEST_TIMEOUT_MS,
   retryAttempts: 3,
 }
 

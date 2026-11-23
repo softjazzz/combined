@@ -8,28 +8,28 @@
 :global(.customer-record-result-drawer .ant-drawer-header) {
   background: rgba(255, 255, 255, 0.68);
   backdrop-filter: blur(24px) saturate(140%);
-  border-bottom: 1px solid #e5eaf0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   padding: 16px 20px;
 }
 :global(.customer-record-result-drawer .ant-drawer-body) {
-  background: linear-gradient(125deg, #e2ebf6, #f5f5f7 55%, #eaf0f7);
+  background: linear-gradient(125deg, color-mix(in srgb, var(--mq-brand-600) 11%, var(--mq-bg-surface)), color-mix(in srgb, var(--mq-neutral-text) 5%, var(--mq-bg-surface)) 55%, color-mix(in srgb, var(--mq-brand-600) 9%, var(--mq-bg-surface)));
 }
 :global(.customer-record-result-drawer .customer-record-result-title__heading strong) {
   font-size: 20px;
   font-weight: 600;
 }
 :global(.customer-record-result-drawer .single-record-result-panel) {
-  background: #f3f6fa;
-  color: #303640;
+  background: color-mix(in srgb, var(--mq-neutral-text) 7%, var(--mq-bg-surface));
+  color: var(--mq-text-primary);
 }
 :global(.customer-record-result-drawer .result-toolbar) {
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid #e5eaf0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   padding: 14px 16px;
 }
 :global(.customer-record-result-drawer .result-tabs) {
-  background: #e8e8ed;
+  background: color-mix(in srgb, var(--mq-neutral-text) 12%, var(--mq-bg-surface));
   padding: 3px;
   border-radius: 8px;
   gap: 3px;
@@ -60,34 +60,34 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 22px;
-  color: #303640;
+  color: var(--mq-text-primary);
 }
 :global(.customer-record-result-drawer .result-source),
 :global(.customer-record-result-drawer .result-evidence-count) {
   font-size: 12px;
   font-weight: 400;
-  color: #7a8390;
+  color: var(--mq-text-tertiary);
 }
 :global(.customer-record-result-drawer .rule-conclusion),
 :global(.customer-record-result-drawer .summary-narrative) {
   font-size: 13px;
   font-weight: 400;
   line-height: 1.75;
-  color: #465366;
+  color: var(--mq-neutral-text);
 }
 :global(.customer-record-result-drawer .result-detail) {
   background: var(--mq-bg-surface);
-  border-top: 1px solid #edf0f4;
+  border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
 }
 :global(.customer-record-result-drawer .detail-block),
 :global(.customer-record-result-drawer .detail-disclosure) {
   border-radius: 8px;
   box-shadow: none;
-  border-color: #edf0f4;
+  border-color: color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
 }
 :global(.customer-record-result-drawer .evidence-link) {
   border-radius: 8px;
-  background: #f5f8fc;
+  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
   font-size: 13px;
   line-height: 22px;
 }
@@ -97,7 +97,7 @@
 }
 :global(.customer-record-result-drawer .empty-state) {
   padding: 32px 20px;
-  color: #727b87;
+  color: var(--mq-text-tertiary);
   font-size: 14px;
 }
 @media (max-width: 900px) {
@@ -119,7 +119,7 @@
   gap: 7px;
 }
 :global(.customer-record-result-drawer .result-section-title svg) {
-  color: #6486ad;
+  color: var(--mq-text-tertiary);
   flex-shrink: 0;
 }
 :global(.customer-record-result-drawer .toolbar-summary .result-section-title svg) {
@@ -138,12 +138,12 @@
   font-variant-numeric: tabular-nums;
 }
 :global(.customer-record-result-drawer .result-document-group-header) {
-  background: #f2f6fc;
-  border-bottom: 1px solid #e7edf5;
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
 }
 :global(.customer-record-result-drawer .evidence-link:hover) {
-  background: #edf4ff;
-  border-color: #b9cde7;
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
+  border-color: color-mix(in srgb, var(--mq-brand-600) 27%, var(--mq-bg-surface));
 }
 
 /* 结果导航：固定网格与克制的选中层次。 */
@@ -159,14 +159,14 @@
 }
 :global(.customer-record-result-drawer .toolbar-summary > span) {
   font-size: 12px;
-  color: #86868b;
+  color: var(--mq-text-tertiary);
 }
 :global(.customer-record-result-drawer .result-tabs) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 5px;
-  background: #edf0f5;
+  background: color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
   border: 1px solid rgba(112, 130, 155, 0.08);
   border-radius: 12px;
 }
@@ -181,7 +181,7 @@
   border: 1px solid transparent !important;
   border-radius: 8px;
   background: transparent;
-  color: #657287;
+  color: var(--mq-text-tertiary);
   box-shadow: none;
   outline: none;
   gap: 6px;
@@ -197,7 +197,7 @@
   min-width: 22px;
   padding: 1px 4px;
   background: rgba(112, 130, 155, 0.08);
-  color: #7b8796;
+  color: var(--mq-text-tertiary);
   border-radius: 5px;
   text-align: center;
   line-height: 18px;
@@ -245,32 +245,32 @@
 }
 :global(.customer-record-result-drawer .result-row-meta) {
   margin-top: 6px;
-  color: #8792a2;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   gap: 8px;
 }
 :global(.customer-record-result-drawer .rule-conclusion) {
   margin-top: 10px;
-  color: #5b6574;
+  color: var(--mq-text-tertiary);
   font-size: 13px;
   line-height: 23px;
 }
 :global(.customer-record-result-drawer .result-document-group-header) {
   padding: 0;
-  background: #f6f8fb;
-  color: #526174;
+  background: color-mix(in srgb, var(--mq-neutral-text) 5%, var(--mq-bg-surface));
+  color: var(--mq-neutral-text);
   font-weight: 500;
 }
 :global(.customer-record-result-drawer .result-card-actions) {
   margin: 0 18px;
   padding: 4px 0 6px;
-  border-top: 1px solid #edf0f4;
+  border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
   gap: 14px;
 }
 :global(.customer-record-result-drawer .result-card-actions button) {
   font-size: 12px;
   font-weight: 400;
-  color: #637c99;
+  color: var(--mq-text-tertiary);
 }
 :global(.customer-record-result-drawer .result-detail) {
   padding: 0 18px;
@@ -285,7 +285,7 @@
 :global(.customer-record-result-drawer .evidence-list) {
   display: grid;
   gap: 0;
-  border: 1px solid #e8edf3;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 12%, var(--mq-bg-surface));
   border-radius: 8px;
   overflow: hidden;
   margin-top: 10px;
@@ -301,7 +301,7 @@
   padding: 10px 12px;
   background: var(--mq-bg-surface);
   border: 0;
-  border-bottom: 1px solid #edf0f4;
+  border-bottom: 1px solid color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
   border-radius: 0;
   box-shadow: none;
   text-align: left;
@@ -318,7 +318,7 @@
 :global(.customer-record-result-drawer .evidence-content strong) {
   font-size: 13px;
   font-weight: 400;
-  color: #465366;
+  color: var(--mq-neutral-text);
   line-height: 21px;
   overflow-wrap: anywhere;
 }
@@ -333,7 +333,7 @@
   white-space: nowrap;
 }
 :global(.customer-record-result-drawer .evidence-path) {
-  color: #8792a2;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   line-height: 18px;
 }
@@ -351,7 +351,7 @@
   font-weight: 500;
 }
 :global(.customer-record-result-drawer .evidence-disclosure > summary small) {
-  color: #8792a2;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 400;
 }
@@ -386,16 +386,16 @@
 
 /* 原文目录：以缩进和选中背景表达层级，去掉装饰树线。 */
 :global(.customer-record-result-drawer .readonly-medical-document-directory) {
-  background: #f5f7fa;
+  background: color-mix(in srgb, var(--mq-neutral-text) 5%, var(--mq-bg-surface));
   padding: 16px;
-  border-color: #e8edf3;
+  border-color: color-mix(in srgb, var(--mq-neutral-text) 12%, var(--mq-bg-surface));
 }
 :global(.customer-record-result-drawer .readonly-medical-document-directory *) {
   font-family: 'Source Han Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif !important;
 }
 :global(.customer-record-result-drawer .readonly-medical-document-search) {
   height: 36px;
-  border: 1px solid #e0e5ec;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 17%, var(--mq-bg-surface));
   border-radius: 8px;
   background: var(--mq-bg-surface);
   font-size: 13px;
@@ -405,14 +405,14 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 3px;
   padding: 3px;
-  background: #e8ecf2;
+  background: color-mix(in srgb, var(--mq-neutral-text) 12%, var(--mq-bg-surface));
   border-radius: 8px;
 }
 :global(.customer-record-result-drawer .readonly-medical-document-filter button) {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #657287;
+  color: var(--mq-text-tertiary);
   font-size: 13px;
   font-weight: 400;
   min-height: 30px;
@@ -426,7 +426,7 @@
   padding: 10px 6px;
   font-size: 13px;
   font-weight: 500;
-  color: #526174;
+  color: var(--mq-neutral-text);
 }
 :global(.customer-record-result-drawer .readonly-medical-document-group-title i),
 :global(.customer-record-result-drawer .readonly-medical-document-item::before),
@@ -454,7 +454,7 @@
 }
 :global(.customer-record-result-drawer .readonly-medical-document-meta) {
   font-size: 11px;
-  color: #8792a2;
+  color: var(--mq-text-tertiary);
 }
 
 /* 玻璃仅用于导航和工具层，原文与判定正文保留实色。 */
@@ -484,12 +484,12 @@
 
 /* 中央原文阅读层：工作区与纸面分离，不覆盖证据高亮。 */
 :global(.customer-record-result-drawer .record-content-scroll) {
-  background: #edf1f6;
+  background: color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
   padding: 20px;
 }
 :global(.customer-record-result-drawer .record-content-sections) {
   background: var(--mq-bg-surface);
-  border: 1px solid #e4e9f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 17%, var(--mq-bg-surface));
   border-radius: 10px;
   padding: 22px 24px;
   box-shadow: 0 4px 16px rgba(39, 62, 94, 0.06);
@@ -497,17 +497,17 @@
 :global(.customer-record-result-drawer .record-content-time) {
   display: inline-flex;
   gap: 6px;
-  color: #8792a2;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 :global(.customer-record-result-drawer .record-content-time b) {
-  color: #657287;
+  color: var(--mq-text-tertiary);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 :global(.customer-record-result-drawer .record-document-select select) {
   min-height: 34px;
-  border: 1px solid #dfe5ed;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 17%, var(--mq-bg-surface));
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.8);
   font-size: 13px;
@@ -546,10 +546,10 @@
   min-height: 34px;
   margin: 0;
   padding: 0 12px;
-  border: 1px solid #dce4ee;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 20%, var(--mq-bg-surface));
   border-radius: 8px;
   background: var(--mq-bg-surface);
-  color: #526174;
+  color: var(--mq-neutral-text);
   font-size: 13px;
   font-weight: 400;
   white-space: nowrap;
@@ -637,7 +637,7 @@
 
 :global(.customer-record-result-drawer .readonly-medical-document-meta) {
   font-size: 12px;
-  color: #8792a2;
+  color: var(--mq-text-tertiary);
 }
 
 /* ===== v7.1 液态玻璃覆盖：结果抽屉外框、工具栏、页签与结果卡统一 Token ===== */

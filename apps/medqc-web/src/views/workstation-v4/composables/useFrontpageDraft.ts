@@ -3,6 +3,7 @@ import { message } from 'ant-design-vue'
 import ApiService, { apiClient } from '@/services/apiService'
 import type { FrontpageFocusTarget, IcdApplyTarget, PatientRecord } from '../types'
 import type { ICDCodeDetail } from '../components/ICDDetailPanel.vue'
+import { serializeCaseRecordKey } from '../utils/caseRecordKey'
 import {
   frontpageApi,
   type FrontpageExtractionSettings,
@@ -376,9 +377,15 @@ export function useFrontpageDraft(
 
   const draftSelectionKey = computed(() => {
     const record = selectedRecord.value
+    const recordKey = serializeCaseRecordKey(
+      record?.instituteId,
+      record?.patientId,
+      record?.visitId || record?.id,
+    )
     return JSON.stringify([
-      selectedId.value, record?.sourceId, record?.instituteId,
-      record?.patientId, record?.visitId || record?.id,
+      selectedId.value,
+      record?.sourceId,
+      recordKey,
     ])
   })
   let draftRequestSequence = 0

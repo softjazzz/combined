@@ -1,16 +1,18 @@
-name: E2E Tests - Frontpage Demo
+name: E2E Tests - MedQC Workstation
 
 on:
   push:
     branches: [main, develop]
     paths:
-      - 'apps/medqc-web/src/views/demo/**'
+      - 'apps/medqc-web/src/router/**'
+      - 'apps/medqc-web/src/views/workstation-v4/**'
       - 'apps/medqc-web/tests/**'
       - 'apps/medqc-web/playwright.config.ts'
   pull_request:
     branches: [main, develop]
     paths:
-      - 'apps/medqc-web/src/views/demo/**'
+      - 'apps/medqc-web/src/router/**'
+      - 'apps/medqc-web/src/views/workstation-v4/**'
       - 'apps/medqc-web/tests/**'
   workflow_dispatch:
 

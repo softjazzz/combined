@@ -864,6 +864,7 @@
 </template>
 
 <script setup lang="ts">
+import { QC_EVALUATION_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ref, reactive, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
@@ -1051,8 +1052,7 @@ const startEvaluation = async () => {
         temperature: advancedSettings.temperature,
         max_tokens: advancedSettings.max_tokens,
       }),
-      // 统一超时到3分钟（180秒）
-      signal: AbortSignal.timeout(180000),
+      signal: AbortSignal.timeout(QC_EVALUATION_TIMEOUT_MS),
     })
 
     if (response.ok) {

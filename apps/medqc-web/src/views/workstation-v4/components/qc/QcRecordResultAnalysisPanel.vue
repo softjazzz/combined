@@ -10,20 +10,22 @@
       >
         <label>
           <span>质控完成日期</span>
-          <input
-            v-model="completedFrom"
-            type="date"
-            aria-label="质控完成开始日期"
-          >
+          <a-date-picker
+            :value="completedFrom"
+            @update:value="completedFrom = typeof $event === 'string' ? $event : ''"
+            value-format="YYYY-MM-DD"
+            class="qc-result-analysis__date-picker"
+          />
         </label>
         <span class="qc-result-analysis__date-separator">至</span>
         <label class="qc-result-analysis__date-end">
           <span class="sr-only">质控完成结束日期</span>
-          <input
-            v-model="completedTo"
-            type="date"
-            aria-label="质控完成结束日期"
-          >
+          <a-date-picker
+            :value="completedTo"
+            @update:value="completedTo = typeof $event === 'string' ? $event : ''"
+            value-format="YYYY-MM-DD"
+            class="qc-result-analysis__date-picker"
+          />
         </label>
         <label>
           <span>科室</span>
@@ -458,6 +460,7 @@
 </template>
 
 <script setup lang="ts">
+import { DatePicker as ADatePicker } from 'ant-design-vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import {
   ChevronDown,
@@ -698,7 +701,7 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 600;
 }
-.qc-result-analysis__filters input,
+.qc-result-analysis__date-picker,
 .qc-result-analysis__filters select {
   width: 132px;
   height: 34px;
@@ -1255,7 +1258,7 @@ onMounted(() => {
   .qc-result-analysis__filters label {
     flex: 1 1 132px;
   }
-  .qc-result-analysis__filters input,
+  .qc-result-analysis__date-picker,
   .qc-result-analysis__filters select {
     width: 100%;
   }

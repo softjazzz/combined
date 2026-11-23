@@ -301,7 +301,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
+import { openConfirmDialog } from '@/views/workstation-v4/utils/confirmDialog'
 import {
   SettingOutlined,
   ImportOutlined,
@@ -501,7 +502,7 @@ const duplicateRule = (rule: RuleWithStats) => {
 }
 
 const deleteRule = (rule: RuleWithStats) => {
-  Modal.confirm({
+  openConfirmDialog({
     title: '确认删除',
     content: `确定要删除规则"${rule.name}"吗？此操作不可撤销。`,
     okText: '确认删除',

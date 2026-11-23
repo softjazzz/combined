@@ -1,3 +1,4 @@
+import { EXTENDED_REQUEST_TIMEOUT_MS, STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ApiService } from '@/services/apiService'
 
 export interface DiagnosticSelection {
@@ -28,7 +29,7 @@ export async function prepareDiagnostic(
     method: 'POST',
     url: `${base}/prepare`,
     data: selection,
-    timeout: 60000,
+    timeout: EXTENDED_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }
@@ -39,7 +40,7 @@ export async function downloadDiagnostic(token: string): Promise<Blob> {
     url: `${base}/${encodeURIComponent(token)}/download`,
     data: { confirmed: true },
     responseType: 'blob',
-    timeout: 60000,
+    timeout: EXTENDED_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }
@@ -67,7 +68,7 @@ export async function startDiagnosticCapture(
     method: 'POST',
     url: `${captureBase}/start`,
     data: selection,
-    timeout: 60000,
+    timeout: EXTENDED_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }
@@ -76,7 +77,7 @@ export async function getDiagnosticCapture(jobId: string): Promise<DiagnosticCap
   const response = await ApiService.requestRaw<DiagnosticCaptureStatus>({
     method: 'GET',
     url: `${captureBase}/${encodeURIComponent(jobId)}`,
-    timeout: 30000,
+    timeout: STANDARD_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }
@@ -87,7 +88,7 @@ export async function downloadDiagnosticCapture(jobId: string): Promise<Blob> {
     url: `${captureBase}/${encodeURIComponent(jobId)}/download`,
     data: { confirmed: true },
     responseType: 'blob',
-    timeout: 60000,
+    timeout: EXTENDED_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }

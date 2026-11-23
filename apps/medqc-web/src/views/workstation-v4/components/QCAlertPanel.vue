@@ -74,8 +74,8 @@
               v-if="getTabCount(tab.key) > 0"
               :count="getTabCount(tab.key)"
               :number-style="{
-                backgroundColor: activeTab === tab.key ? '#fff' : '#ff4d4f',
-                color: activeTab === tab.key ? '#0a6cff' : '#fff',
+                backgroundColor: activeTab === tab.key ? 'var(--mq-bg-surface)' : 'var(--mq-danger-icon)',
+                color: activeTab === tab.key ? 'var(--mq-brand-600)' : 'var(--mq-bg-surface)',
                 fontSize: '10px',
                 minWidth: '16px',
                 height: '16px',
@@ -128,10 +128,10 @@
                         </a-menu-item>
                         <a-menu-divider />
                         <a-menu-item key="approve">
-                          <CheckOutlined style="color: #52c41a" /> 审核通过
+                          <CheckOutlined style="color: var(--mq-success-icon)" /> 审核通过
                         </a-menu-item>
                         <a-menu-item key="reject">
-                          <CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑
+                          <CloseCircleOutlined style="color: var(--mq-danger-icon)" /> 审核存疑
                         </a-menu-item>
                       </a-menu>
                     </template>
@@ -190,6 +190,7 @@
 </template>
 
 <script setup lang="ts">
+import { STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { ref, computed, watch, reactive } from 'vue'
 import { message } from 'ant-design-vue'
@@ -345,10 +346,10 @@ function getCodingIssueGroup(issue: Record<string, any>, source: 'rule' | 'llm')
 // ==================== 辅助方法 ====================
 const severityColor = (sev: string) =>
   ({
-    error: '#ff4d4f',
-    warning: '#faad14',
-    info: '#0a6cff',
-  })[sev] || '#999'
+    error: 'var(--mq-danger-icon)',
+    warning: 'var(--mq-warning-icon)',
+    info: 'var(--mq-brand-600)',
+  })[sev] || 'var(--mq-text-disabled)'
 
 const severityTagColor = (sev: string) =>
   ({
@@ -528,7 +529,7 @@ const fetchCodingQCFromBackend = async () => {
   try {
     codingQCLoading.value = true
     const resp = await axios.post('/api/v1/qc/coding-qc/check', payload, {
-      timeout: 30000,
+      timeout: STANDARD_REQUEST_TIMEOUT_MS,
     })
     const data = resp.data?.data
     if (!data) return []
@@ -688,8 +689,8 @@ watch(
   width: 52px;
   height: 52px;
   border-radius: 18px;
-  background: linear-gradient(135deg, #0ea5e9 0%, #0a6cff 100%);
-  color: #fff;
+  background: linear-gradient(135deg, var(--mq-brand-700) 0%, var(--mq-brand-600) 100%);
+  color: var(--mq-bg-surface);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -720,8 +721,8 @@ watch(
   justify-content: space-between;
   align-items: center;
   padding: 14px 18px;
-  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 72%);
-  color: #1d1d1f;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface)) 0%, color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface)) 72%);
+  color: var(--mq-text-primary);
   cursor: grab;
   user-select: none;
   border-bottom: 1px solid rgba(226, 232, 240, 0.85);
@@ -736,7 +737,7 @@ watch(
 }
 .title-icon {
   font-size: 16px;
-  color: #0284c7;
+  color: var(--mq-brand-700);
 }
 .title-text {
   font-weight: 700;
@@ -750,21 +751,21 @@ watch(
   gap: 2px;
 }
 .action-btn {
-  color: #64748b !important;
+  color: var(--mq-text-tertiary) !important;
 }
 .action-btn:hover {
-  color: #1d1d1f !important;
+  color: var(--mq-text-primary) !important;
   background: rgba(255, 255, 255, 0.8) !important;
 }
 .close-btn:hover {
-  color: #ff4d4f !important;
+  color: var(--mq-danger-icon) !important;
 }
 
 /* patient */
 .patient-bar {
   padding: 12px 18px;
   background: linear-gradient(180deg, rgba(240, 249, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
-  border-bottom: 1px solid #e0f2fe;
+  border-bottom: 1px solid color-mix(in srgb, var(--mq-brand-600) 11%, var(--mq-bg-surface));
 }
 .patient-main {
   display: flex;
@@ -773,27 +774,27 @@ watch(
   font-size: 13px;
 }
 .patient-icon {
-  color: #0284c7;
+  color: var(--mq-brand-700);
   margin-right: 4px;
 }
 .patient-name {
   font-weight: 700;
-  color: #1e293b;
+  color: var(--mq-text-primary);
 }
 .patient-meta {
-  color: #64748b;
+  color: var(--mq-text-tertiary);
 }
 .patient-diagnosis {
   margin-top: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .patient-bar-empty {
   text-align: center;
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
 }
 .empty-hint {
   font-size: 12px;
@@ -804,7 +805,7 @@ watch(
   display: flex;
   gap: 6px;
   padding: 10px 10px 6px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
   background: rgba(255, 255, 255, 0.72);
 }
 .qc-tab {
@@ -815,7 +816,7 @@ watch(
   gap: 4px;
   padding: 9px 0;
   font-size: 13px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: 14px;
@@ -823,14 +824,14 @@ watch(
   position: relative;
 }
 .qc-tab:hover {
-  color: #0369a1;
-  background: #f8fafc;
+  color: var(--mq-brand-700);
+  background: color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface));
 }
 .qc-tab.active {
-  color: #0369a1;
+  color: var(--mq-brand-700);
   font-weight: 600;
-  border-color: #bae6fd;
-  background: #f0f9ff;
+  border-color: color-mix(in srgb, var(--mq-brand-600) 27%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
   box-shadow: 0 8px 18px rgba(125, 211, 252, 0.12);
 }
 .tab-icon {
@@ -856,8 +857,8 @@ watch(
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface));
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 14px;
   margin-bottom: 6px;
 }
@@ -867,7 +868,7 @@ watch(
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #334155;
+  color: var(--mq-neutral-text);
 }
 .group-dot {
   width: 8px;
@@ -877,14 +878,14 @@ watch(
 }
 .issue-item {
   padding: 11px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 16px;
   margin-bottom: 6px;
   transition: all 0.2s;
   background: rgba(255, 255, 255, 0.94);
 }
 .issue-item:hover {
-  border-color: #bae6fd;
+  border-color: color-mix(in srgb, var(--mq-brand-600) 27%, var(--mq-bg-surface));
   box-shadow: 0 12px 22px rgba(148, 163, 184, 0.12);
 }
 .issue-item.dismissed {
@@ -899,17 +900,17 @@ watch(
 }
 .issue-desc {
   font-size: 13px;
-  color: #334155;
+  color: var(--mq-neutral-text);
   line-height: 1.55;
 }
 .issue-suggestion {
   font-size: 12px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   margin-top: 4px;
   padding: 6px 9px;
-  background: #fffbe6;
+  background: color-mix(in srgb, var(--mq-warning-icon) 10%, var(--mq-bg-surface));
   border-radius: 12px;
-  border: 1px solid #fde68a;
+  border: 1px solid color-mix(in srgb, var(--mq-warning-icon) 25%, var(--mq-bg-surface));
 }
 .issue-actions {
   display: flex;
@@ -917,7 +918,7 @@ watch(
   gap: 4px;
 }
 .dismiss-btn {
-  color: #94a3b8 !important;
+  color: var(--mq-text-tertiary) !important;
   font-size: 12px;
 }
 
@@ -928,11 +929,11 @@ watch(
   align-items: center;
   justify-content: center;
   padding: 40px 0;
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
 }
 .no-issues-icon {
   font-size: 36px;
-  color: #22c55e;
+  color: var(--mq-success-icon);
   margin-bottom: 8px;
 }
 
@@ -943,9 +944,9 @@ watch(
   align-items: center;
   padding: 10px 16px;
   background: rgba(248, 250, 252, 0.86);
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   font-size: 12px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
 }
 .footer-detail {
   display: flex;
@@ -961,15 +962,15 @@ watch(
   padding: 0 4px !important;
 }
 .stat-error {
-  color: #ef4444;
+  color: var(--mq-danger-icon);
   font-weight: 600;
 }
 .stat-warning {
-  color: #f59e0b;
+  color: var(--mq-warning-icon);
   font-weight: 600;
 }
 .stat-info {
-  color: #0284c7;
+  color: var(--mq-brand-700);
   font-weight: 600;
 }
 
@@ -992,10 +993,10 @@ watch(
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
+  background: color-mix(in srgb, var(--mq-neutral-text) 21%, var(--mq-bg-surface));
   border-radius: 4px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #bfbfbf;
+  background: color-mix(in srgb, var(--mq-neutral-text) 35%, var(--mq-bg-surface));
 }
 </style>

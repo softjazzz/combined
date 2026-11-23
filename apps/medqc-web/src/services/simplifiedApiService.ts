@@ -1,9 +1,10 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 /**
  * 简化的API服务
  * 只保留认证和工具类API，数据操作直接使用Supabase
  */
 
+import { STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 import type { ApiResponse, LoginRequest, LoginResponse, User } from '@/types'
@@ -17,12 +18,11 @@ import { resolveApiBaseUrl } from '@/utils/api-helpers'
 
 // API基础配置
 const API_BASE_URL = resolveApiBaseUrl()
-const API_TIMEOUT = 30000 // 30秒超时
 
 // 创建axios实例
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: API_TIMEOUT,
+  timeout: STANDARD_REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },
