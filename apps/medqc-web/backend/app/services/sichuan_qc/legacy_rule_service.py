@@ -137,6 +137,10 @@ async def evaluate_legacy_rule_for_visit(
             document_type=rule_input.document_type,
             rules=[rule],
             evidence_source="bundle",
+            source_institute_id=str(institute_id or "").strip(),
+            source_patient_id=str(patient_id or "").strip(),
+            source_visit_id=str(visit_id or "").strip(),
+            source_schema=source_schema,
             cancellation_check=cancellation_check,
         )
         orchestrated_results = list(orchestrated.get("results") or [])

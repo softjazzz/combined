@@ -310,6 +310,22 @@ class QCRuleOrchestrator:
         max_concurrency = max(1, int(llm_concurrency or 1))
         semaphore = asyncio.Semaphore(max_concurrency)
         record_snapshot_hash = build_record_snapshot_hash(medical_record)
+        batch_output_mode_normalized = str(batch_output_mode or "full")
+
+        def _cache_key_for_rule(candidate_rule: dict[str, Any], candidate_meta: RuleExecutionMeta) -> str:
+            return build_execution_cache_key(
+                record_snapshot_hash=record_snapshot_hash,
+                rule_id=str(candidate_rule.get("rule_id") or candidate_rule.get("rule_code") or ""),
+                rule_version=candidate_meta.rule_version,
+                prompt_hash=build_prompt_hash(candidate_rule),
+                model_version=str(model_version or "unknown"),
+                prompt_version=candidate_meta.prompt_version,
+                evidence_source=str(evidence_source or ""),
+                prompt_strategy=prompt_strategy_normalized,
+                quality_profile=quality_profile_normalized,
+                batch_output_mode=batch_output_mode_normalized,
+                bucket_strategy=bucket_strategy_normalized,
+            )
 
         async def run_llm_rule(
             idx: int,
@@ -352,21 +368,6 @@ class QCRuleOrchestrator:
                 program_count += 1
                 program_results[idx] = guarded_result
                 continue
-            cache_key = build_execution_cache_key(
-                record_snapshot_hash=record_snapshot_hash,
-                rule_id=str(rule.get("rule_id") or rule.get("rule_code") or ""),
-                rule_version=meta.rule_version,
-                prompt_hash=build_prompt_hash(rule),
-                model_version=str(model_version or "unknown"),
-            )
-
-            if execution_cache is not None:
-                cached = execution_cache.get(cache_key)
-                if isinstance(cached, dict):
-                    cached_results[idx] = (copy.deepcopy(cached), meta, cache_key)
-                    cache_hit_count += 1
-                    continue
-
             if can_program:
                 program_count += 1
                 program_results[idx] = self._program_executor.evaluate(
@@ -374,24 +375,33 @@ class QCRuleOrchestrator:
                     medical_record=medical_record,
                     meta=meta.to_dict(),
                 )
-            else:
-                is_fallback = executor_type == "program"
-                if is_fallback:
-                    llm_fallback_count += 1
-                    logger.warning(
-                        "规则 %s 标注为 program 但无程序化实现，已回退到 llm",
-                        rule.get("rule_id"),
-                    )
-                llm_count += 1
-                bucket_key = _build_bucket_key(meta, bucket_strategy_normalized)
-                llm_buckets.setdefault(bucket_key, []).append(
-                    {
-                        "idx": idx,
-                        "rule": rule,
-                        "meta": meta,
-                        "is_fallback": is_fallback,
-                    }
+                continue
+
+            cache_key = _cache_key_for_rule(rule, meta)
+            if execution_cache is not None and cache_key:
+                cached = execution_cache.get(cache_key)
+                if isinstance(cached, dict):
+                    cached_results[idx] = (copy.deepcopy(cached), meta, cache_key)
+                    cache_hit_count += 1
+                    continue
+
+            is_fallback = executor_type == "program"
+            if is_fallback:
+                llm_fallback_count += 1
+                logger.warning(
+                    "规则 %s 标注为 program 但无程序化实现，已回退到 llm",
+                    rule.get("rule_id"),
                 )
+            llm_count += 1
+            bucket_key = _build_bucket_key(meta, bucket_strategy_normalized)
+            llm_buckets.setdefault(bucket_key, []).append(
+                {
+                    "idx": idx,
+                    "rule": rule,
+                    "meta": meta,
+                    "is_fallback": is_fallback,
+                }
+            )
 
         async def _run_single_entry(
             entry: dict[str, Any],
@@ -826,13 +836,7 @@ class QCRuleOrchestrator:
                 result, meta, is_fallback = llm_results[idx]
                 executor_type = "llm"
                 llm_fallback = bool(is_fallback)
-                cache_key = build_execution_cache_key(
-                    record_snapshot_hash=record_snapshot_hash,
-                    rule_id=str(rule.get("rule_id") or rule.get("rule_code") or ""),
-                    rule_version=meta.rule_version,
-                    prompt_hash=build_prompt_hash(rule),
-                    model_version=str(model_version or "unknown"),
-                )
+                cache_key = _cache_key_for_rule(rule, meta)
 
             metadata = dict(result.get("metadata") or {})
             metadata.setdefault("executor_type", executor_type)

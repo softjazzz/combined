@@ -340,10 +340,25 @@ async def evaluate_inline_rule_orchestrated(
             logger.warning("custom-qc 内联规则补齐执行元数据失败，回退原始规则", exc_info=True)
 
     started_at = time.perf_counter()
-    medical_record = {
+    medical_record: Dict[str, Any] = {
         "id": str(record.get("record_id") or record.get("visit_id") or record.get("id") or ""),
         "content": str(record.get("medical_text") or ""),
         "document_type": str(inline_rule.get("category") or normalize_document_type(rule.get("document_type"))),
+    }
+    if str(record.get("institute_id") or "").strip():
+        medical_record["institute_id"] = str(record.get("institute_id")).strip()
+    if str(record.get("patient_id") or "").strip():
+        medical_record["patient_id"] = str(record.get("patient_id")).strip()
+    if str(record.get("visit_id") or "").strip():
+        medical_record["visit_id"] = str(record.get("visit_id")).strip()
+    if str(record.get("source_schema") or "").strip():
+        medical_record["source_schema"] = str(record.get("source_schema")).strip()
+    if isinstance(record.get("evidence_payload"), dict) and record.get("evidence_payload"):
+        medical_record["evidence_payload"] = dict(record["evidence_payload"])
+    medical_record["llm_sampling_params"] = {
+        "temperature": getattr(qc_service.client, "temperature", None),
+        "top_p": getattr(qc_service.client, "top_p", None),
+        "max_tokens": getattr(qc_service.client, "max_tokens", None),
     }
 
     async def _llm_evaluate(candidate_rule: Dict[str, Any], candidate_record: Dict[str, Any]) -> Dict[str, Any]:

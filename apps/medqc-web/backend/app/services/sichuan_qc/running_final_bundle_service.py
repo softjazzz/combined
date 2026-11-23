@@ -212,6 +212,16 @@ async def evaluate_running_final_bundle_input(
             trace_sink=execution_trace_sink,
         )
 
+    bundle_institute_id = str((bundle or {}).get("institute_id") or "").strip()
+    bundle_patient_id = str((bundle or {}).get("patient_id") or "").strip()
+    bundle_visit_id = str((bundle or {}).get("visit_id") or document_id or "").strip()
+    raw_bundle_source_schema = (bundle or {}).get("source_schema")
+    bundle_source_schema = (
+        str(raw_bundle_source_schema).strip()
+        if isinstance(raw_bundle_source_schema, str) and raw_bundle_source_schema.strip()
+        else None
+    )
+
     if not execution_rules and luxian_context is not None:
         orchestrated = {
             "results": [],
@@ -244,6 +254,10 @@ async def evaluate_running_final_bundle_input(
             enable_pack_probe=enable_pack_probe,
             force_rule_family_buckets=normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY,
             rule_set_key="" if luxian_context is not None else rule_set_key,
+            source_institute_id=bundle_institute_id,
+            source_patient_id=bundle_patient_id,
+            source_visit_id=bundle_visit_id,
+            source_schema=bundle_source_schema,
             cancellation_check=cancellation_check,
         )
     else:
@@ -325,6 +339,10 @@ async def evaluate_running_final_bundle_input(
                 use_execution_cache=use_execution_cache,
                 enable_pack_probe=enable_pack_probe,
                 force_rule_family_buckets=normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                source_institute_id=str(primary_document.get("institute_id") or bundle_institute_id or "").strip(),
+                source_patient_id=str(primary_document.get("patient_id") or bundle_patient_id or "").strip(),
+                source_visit_id=str(primary_document.get("visit_id") or bundle_visit_id or "").strip(),
+                source_schema=bundle_source_schema,
                 cancellation_check=cancellation_check,
             )
             result_items.extend(list(per_doc_orchestrated.get("results") or []))
