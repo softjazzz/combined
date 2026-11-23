@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import re
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
@@ -144,6 +144,9 @@ class ConsultationRuleFact:
     confidence: str
 
 
+_HOSPITAL_TIMEZONE = timezone(timedelta(hours=8))
+
+
 def _text(value: Any) -> str:
     return str(value or "").strip()
 
@@ -155,12 +158,14 @@ def _datetime(value: str | datetime | None) -> datetime | None:
         candidate = _text(value)
         if not candidate:
             return None
+        if candidate.endswith(("Z", "z")):
+            candidate = f"{candidate[:-1]}+00:00"
         try:
-            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(candidate)
         except ValueError as exc:
             raise FactContractError("invalid record_time") from exc
-    if parsed.tzinfo is not None:
-        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    if parsed.utcoffset() is not None:
+        return parsed.astimezone(_HOSPITAL_TIMEZONE).replace(tzinfo=None)
     return parsed
 
 

@@ -54,14 +54,40 @@ def luxian_0609_privacy_scope(function):
     return guarded
 
 
+_PLAIN_COORDINATE_KEYS = ("institute_id", "patient_id", "visit_id")
+_SOURCE_COORDINATE_KEYS = ("source_institute_id", "source_patient_id", "source_visit_id")
+_INVALID_COORDINATE = object()
+
+
+def _normalize_coordinate(value: Any) -> str | None | object:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return _INVALID_COORDINATE
+    normalized = str(value).strip()
+    return normalized if normalized else None
+
+
 def _case_coordinates(arguments: Mapping[str, Any]) -> tuple[str, str, str] | None:
     bundle = arguments.get("bundle")
     source = bundle if isinstance(bundle, Mapping) else arguments
-    values = tuple(source.get(key) for key in ("institute_id", "patient_id", "visit_id"))
-    if any(isinstance(value, bool) or not isinstance(value, (str, int)) for value in values):
-        return None
-    coordinates = tuple(str(value).strip() for value in values)
-    return coordinates if all(coordinates) else None
+    plain = tuple(_normalize_coordinate(source.get(key)) for key in _PLAIN_COORDINATE_KEYS)
+    prefixed = tuple(_normalize_coordinate(source.get(key)) for key in _SOURCE_COORDINATE_KEYS)
+
+    for plain_value, prefixed_value in zip(plain, prefixed):
+        if plain_value is not None and prefixed_value is not None:
+            if (
+                plain_value is _INVALID_COORDINATE
+                or prefixed_value is _INVALID_COORDINATE
+                or plain_value != prefixed_value
+            ):
+                raise PrivacyIdentityContextError("Patient identity context unavailable")
+
+    if all(isinstance(value, str) for value in plain):
+        return plain  # type: ignore[return-value]
+    if all(isinstance(value, str) for value in prefixed):
+        return prefixed  # type: ignore[return-value]
+    return None
 
 
 def luxian_0609_case_privacy_scope(function):
