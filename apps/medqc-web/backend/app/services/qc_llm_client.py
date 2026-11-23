@@ -567,6 +567,8 @@ class SichuanQCLLMClient:
                     )
                     self._strip_think_content_inplace(result)
 
+            self._raise_for_invalid_choices(result)
+
             usage_breakdown = self._aggregate_attempt_usages(attempt_usages)
             api_time = time.time() - api_start
             self._record_stats_delta(
@@ -967,6 +969,17 @@ class SichuanQCLLMClient:
     def _first_choice_message(cls, result: Any) -> Dict[str, Any]:
         message = cls._first_choice(result).get("message")
         return dict(message) if isinstance(message, Mapping) else {}
+
+    @staticmethod
+    def _raise_for_invalid_choices(result: Any) -> None:
+        if isinstance(result, Mapping):
+            choices = result.get("choices")
+            if isinstance(choices, (list, tuple)) and choices:
+                first = choices[0]
+                if isinstance(first, Mapping) and isinstance(first.get("message"), Mapping):
+                    return
+        from .qc_execution_errors import SafeExecutionError
+        raise SafeExecutionError("model_invalid_output", retryable=False) from None
 
     def _detect_cot_observation(
         self, result: Dict[str, Any], *, payload: Dict[str, Any]

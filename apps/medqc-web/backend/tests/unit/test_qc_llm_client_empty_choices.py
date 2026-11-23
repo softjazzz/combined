@@ -10,7 +10,9 @@ from app.services.llm_observability import (
     LLMObservabilityRecorder,
     NullLLMCallEventStore,
 )
+from app.services.qc_execution_errors import SafeExecutionError
 from app.services.qc_llm_client import SichuanQCLLMClient
+from app.services.unified_rule_engine import UnifiedRuleEngine
 
 
 def _make_client(*, model: str = "qwen3.6-35b-a3b", provider_code: str = "alibaba") -> SichuanQCLLMClient:
@@ -27,7 +29,7 @@ def _make_client(*, model: str = "qwen3.6-35b-a3b", provider_code: str = "alibab
     )
 
 
-MALFORMED_CHOICE_RESPONSES: list[Any] = [
+INVALID_CHOICE_RESPONSES: list[Any] = [
     pytest.param({}, id="missing-choices"),
     pytest.param({"choices": None}, id="choices-none"),
     pytest.param({"choices": []}, id="choices-empty-list"),
@@ -38,18 +40,22 @@ MALFORMED_CHOICE_RESPONSES: list[Any] = [
     pytest.param({"choices": [None]}, id="first-choice-none"),
     pytest.param({"choices": ["not-a-dict"]}, id="first-choice-string"),
     pytest.param({"choices": [123]}, id="first-choice-int"),
+    pytest.param({"choices": [{}]}, id="message-missing"),
     pytest.param({"choices": [{"message": None, "finish_reason": "stop"}]}, id="message-none"),
     pytest.param({"choices": [{"message": "raw-string", "finish_reason": "stop"}]}, id="message-string"),
     pytest.param({"choices": [{"message": 123, "finish_reason": "stop"}]}, id="message-int"),
     pytest.param({"choices": [{"message": ["unexpected"], "finish_reason": "stop"}]}, id="message-list"),
+]
+
+VALID_MESSAGE_EDGE_CONTENT_RESPONSES: list[Any] = [
     pytest.param({"choices": [{"message": {"content": None}, "finish_reason": None}]}, id="content-none"),
     pytest.param({"choices": [{"message": {"content": ["part"]}, "finish_reason": "stop"}]}, id="content-non-string"),
 ]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("raw_response", MALFORMED_CHOICE_RESPONSES)
-async def test_generate_handles_missing_empty_or_malformed_choices_without_crashing(
+@pytest.mark.parametrize("raw_response", INVALID_CHOICE_RESPONSES)
+async def test_generate_raises_controlled_error_for_empty_or_malformed_choices(
     monkeypatch: pytest.MonkeyPatch,
     raw_response: dict[str, Any],
 ) -> None:
@@ -64,23 +70,53 @@ async def test_generate_handles_missing_empty_or_malformed_choices_without_crash
     monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
     client = _make_client()
 
-    result = await client.generate("test prompt")
+    with pytest.raises(SafeExecutionError) as exc_info:
+        await client.generate("test prompt")
+
+    assert exc_info.value.reason_code == "model_invalid_output"
+    assert exc_info.value.retryable is False
+    assert client.call_count == 1
+    assert client.success_count == 0
+    assert client.error_count == 1
+    stats = client.stats()
+    assert stats["total_calls"] == 1
+    assert stats["success_calls"] == 0
+    assert stats["error_calls"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raw_response", VALID_MESSAGE_EDGE_CONTENT_RESPONSES)
+async def test_generate_handles_valid_message_with_none_or_non_string_content(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_response: dict[str, Any],
+) -> None:
+    response_body = {
+        **deepcopy(raw_response),
+        "usage": {"prompt_tokens": 7, "completion_tokens": 0, "total_tokens": 7},
+    }
+
+    async def fake_safe_post_json(**_kwargs: Any) -> dict[str, Any]:
+        return deepcopy(response_body)
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = _make_client()
+
+    result = await client.generate("edge content prompt")
 
     assert client.call_count == 1
     assert client.success_count == 1
     assert client.error_count == 0
-    assert result["_usage_breakdown"]["total_tokens"] == 11
+    assert result["_usage_breakdown"]["total_tokens"] == 7
     assert result["_cot_observation"]["cot_mode"] == "disabled"
     assert result["_cot_observation"]["response_has_think_tags"] is False
     assert result["_cot_observation"]["response_has_reasoning_content"] is False
-    assert "_api_time" in result
-    assert "_first_result_latency" in result
 
 
 @pytest.mark.parametrize(
     "raw_response",
     [
-        *MALFORMED_CHOICE_RESPONSES,
+        *INVALID_CHOICE_RESPONSES,
+        *VALID_MESSAGE_EDGE_CONTENT_RESPONSES,
         pytest.param(None, id="result-none"),
         pytest.param(["not-a-dict"], id="result-list"),
     ],
@@ -129,6 +165,8 @@ async def test_generate_normal_valid_choices_preserves_cot_detection_and_strips_
     assert result["_cot_observation"]["response_has_think_tags"] is True
     assert result["_cot_observation"]["response_has_reasoning_content"] is True
     assert result["_usage_breakdown"]["total_tokens"] == 20
+    assert client.stats()["success_calls"] == 1
+    assert client.stats()["error_calls"] == 0
 
 
 @pytest.mark.asyncio
@@ -142,7 +180,7 @@ async def test_generate_normal_valid_choices_preserves_cot_detection_and_strips_
         pytest.param({"choices": [{"message": None}]}, id="retry-message-none"),
     ],
 )
-async def test_generate_length_retry_handles_empty_or_malformed_choices_on_retry(
+async def test_generate_length_retry_raises_controlled_error_when_retry_choices_invalid(
     monkeypatch: pytest.MonkeyPatch,
     retry_response: dict[str, Any],
 ) -> None:
@@ -176,15 +214,18 @@ async def test_generate_length_retry_handles_empty_or_malformed_choices_on_retry
         ),
     )
 
-    result = await client.generate("length retry prompt")
+    with pytest.raises(SafeExecutionError) as exc_info:
+        await client.generate("length retry prompt")
 
+    assert exc_info.value.reason_code == "model_invalid_output"
+    assert exc_info.value.retryable is False
     assert sent_max_tokens == [16384, 32768]
     assert client.call_count == 1
-    assert client.success_count == 1
-    assert client.error_count == 0
-    assert result["_usage_breakdown"]["total_tokens"] == 210
-    assert result["_cot_observation"]["response_has_think_tags"] is False
-    assert result["_cot_observation"]["response_has_reasoning_content"] is False
+    assert client.success_count == 0
+    assert client.error_count == 1
+    stats = client.stats()
+    assert stats["success_calls"] == 0
+    assert stats["error_calls"] == 1
 
 
 @pytest.mark.asyncio
@@ -229,3 +270,74 @@ async def test_generate_length_retry_recovers_when_first_message_is_none_and_ret
     assert result["choices"][0]["message"]["content"] == '{"status": "ok"}'
     assert result["_usage_breakdown"]["total_tokens"] == 120
     assert result["_cot_observation"]["response_has_think_tags"] is True
+    assert client.stats()["success_calls"] == 1
+    assert client.stats()["error_calls"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "transport_response",
+    [
+        pytest.param({"choices": []}, id="e2e-choices-empty"),
+        pytest.param({"choices": None}, id="e2e-choices-none"),
+        pytest.param({}, id="e2e-choices-missing"),
+        pytest.param({"choices": [None]}, id="e2e-choice-none"),
+        pytest.param({"choices": [{"message": None}]}, id="e2e-message-none"),
+    ],
+)
+async def test_e2e_client_and_unified_rule_engine_raise_controlled_error_on_empty_choices(
+    monkeypatch: pytest.MonkeyPatch,
+    transport_response: dict[str, Any],
+) -> None:
+    async def fake_safe_post_json(**_kwargs: Any) -> dict[str, Any]:
+        return deepcopy(transport_response)
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = _make_client()
+    engine = UnifiedRuleEngine(client.generate)
+
+    rule = {"rule_id": "SC-001", "name": "入院记录完整性", "description": "检查主诉与现病史"}
+    medical_record = {"content": "主诉：发热3天。现病史：患者3天前无明显诱因出现发热。"}
+
+    with pytest.raises(SafeExecutionError) as exc_info:
+        await engine.evaluate(rule, medical_record)
+
+    assert exc_info.value.reason_code == "model_invalid_output"
+    assert exc_info.value.retryable is False
+    stats = client.stats()
+    assert stats["total_calls"] == 1
+    assert stats["success_calls"] == 0
+    assert stats["error_calls"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stub_response",
+    [
+        pytest.param({"choices": []}, id="stub-choices-empty"),
+        pytest.param({"choices": None}, id="stub-choices-none"),
+        pytest.param({}, id="stub-choices-missing"),
+        pytest.param({"choices": [None]}, id="stub-choice-none"),
+        pytest.param({"choices": [{"message": None}]}, id="stub-message-none"),
+        pytest.param(None, id="stub-response-none"),
+    ],
+)
+async def test_unified_rule_engine_custom_stub_raises_controlled_error_on_malformed_choices(
+    stub_response: Any,
+) -> None:
+    async def fake_llm(_prompt: str) -> Any:
+        return deepcopy(stub_response)
+
+    engine = UnifiedRuleEngine(fake_llm)
+    rule = {"rule_id": "SC-001", "name": "入院记录完整性", "description": "检查主诉与现病史"}
+    medical_record = {"content": "主诉：发热3天。现病史：患者3天前无明显诱因出现发热。"}
+
+    with pytest.raises(SafeExecutionError) as single_exc:
+        await engine.evaluate(rule, medical_record)
+    assert single_exc.value.reason_code == "model_invalid_output"
+    assert single_exc.value.retryable is False
+
+    with pytest.raises(SafeExecutionError) as batch_exc:
+        await engine.evaluate_batch_compact([rule], medical_record)
+    assert batch_exc.value.reason_code == "model_invalid_output"
+    assert batch_exc.value.retryable is False
