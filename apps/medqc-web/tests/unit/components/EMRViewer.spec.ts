@@ -429,3 +429,79 @@ it('空目录仍显示来源未批准和待更新提示', async () => {
   wrapper.unmount()
   vi.unstubAllGlobals()
 })
+
+it('病历正文与缺陷提示中的 HTML 载荷按纯文本安全渲染，html 类型正文不直出可执行标签', async () => {
+  const xssBody = '前置<img src=x onerror=alert(1)>主诉：体温<svg onload=alert(2)>后置<script>alert(3)</script>'
+  const start = xssBody.indexOf('体温<svg onload=alert(2)>')
+  const end = start + '体温<svg onload=alert(2)>'.length
+  vi.stubGlobal(
+    'fetch',
+    vi.fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          content: xssBody,
+          content_type: 'text',
+          metadata: {},
+          defect_annotations: [
+            {
+              defect_id: 'D-XSS-1',
+              start_offset: start,
+              end_offset: end,
+              keyword: '体温<svg onload=alert(2)>',
+              description: '缺陷描述<img src=y onerror=alert(4)>',
+              suggestion: '整改建议<img src=z onerror=alert(5)>',
+              severity: 'critical',
+              rule_name: 'R1',
+              category: 'C1',
+            },
+          ],
+          render_blocks: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          content: '<div>正常正文<img src=x onerror=alert(9)><script>window.__xss=1</script></div>',
+          content_type: 'html',
+          metadata: {},
+          defect_annotations: [],
+          render_blocks: [],
+        }),
+      ),
+  )
+
+  const documents = [
+    { id: 'D1', doc_type: 'admission_record', doc_name: '入院记录', doc_key: 'admission_record::D1', has_content: true },
+    { id: 'D2', doc_type: 'discharge_record', doc_name: '出院记录', doc_key: 'discharge_record::D2', has_content: true },
+  ]
+  const wrapper = mount(EMRViewer, {
+    props: {
+      visitId: 'V',
+      patientId: 'P',
+      instituteId: 'I',
+      documentsManaged: true,
+      documents,
+      activeDocKey: documents[0].doc_key,
+    },
+    global: { stubs: { 'a-spin': true, FileTextOutlined: true } },
+  })
+  await flushPromises()
+
+  expect(wrapper.find('img').exists()).toBe(false)
+  expect(wrapper.find('svg').exists()).toBe(false)
+  expect(wrapper.find('script').exists()).toBe(false)
+  expect(wrapper.find('.emr-defect[data-defect-id="D-XSS-1"]').exists()).toBe(true)
+  expect(wrapper.text()).toContain('前置<img src=x onerror=alert(1)>')
+  expect(wrapper.text()).toContain('体温<svg onload=alert(2)>')
+  expect(wrapper.text()).toContain('后置<script>alert(3)</script>')
+  expect(wrapper.text()).toContain('缺陷描述<img src=y onerror=alert(4)>')
+
+  await wrapper.setProps({ activeDocKey: documents[1].doc_key })
+  await flushPromises()
+  expect(wrapper.find('img').exists()).toBe(false)
+  expect(wrapper.find('script').exists()).toBe(false)
+  expect(wrapper.text()).toContain('正常正文')
+  expect(wrapper.text()).not.toContain('window.__xss')
+
+  wrapper.unmount()
+  vi.unstubAllGlobals()
+})

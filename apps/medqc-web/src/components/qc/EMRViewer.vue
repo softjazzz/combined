@@ -154,13 +154,39 @@
           <div
             class="emr-struct__paragraph"
             :data-anchor-text="(block.text || '').slice(0, 80)"
-            v-html="renderParagraphContent(block.text || '')"
-          />
+          >
+            <template
+              v-for="(seg, segIdx) in renderParagraphSegments(block.text || '')"
+              :key="segIdx"
+            >
+              <span
+                v-if="seg.type === 'section_title'"
+                class="emr-section-title"
+              >{{ seg.text }}</span>
+              <span
+                v-else-if="seg.type === 'defect'"
+                :class="`emr-defect emr-defect--${seg.severity}`"
+                :data-defect-id="seg.defectId"
+                :data-severity="seg.severity"
+              >
+                {{ seg.text }}
+                <span class="emr-defect-tip">
+                  <span :class="`emr-defect-tip__header emr-defect-tip__header--${seg.severity}`">{{ seg.severityLabel }}</span>
+                  <span class="emr-defect-tip__body">{{ seg.description }}</span>
+                  <span
+                    v-if="seg.suggestion"
+                    class="emr-defect-tip__suggest"
+                  >💡 {{ seg.suggestion }}</span>
+                </span>
+              </span>
+              <template v-else>{{ seg.text }}</template>
+            </template>
+          </div>
         </template>
       </section>
     </div>
 
-    <template v-else-if="renderedContent">
+    <template v-else-if="renderedSegments.length > 0">
       <div class="emr-content-meta">
         <span v-if="displayDocumentId">文书ID：{{ displayDocumentId }}</span>
         <span v-if="metadata.record_time">{{ displayClockLabel }}：{{ metadata.record_time }}</span>
@@ -178,8 +204,34 @@
         ref="contentRef"
         class="emr-content overflow-auto"
         :style="{ maxHeight: maxHeight + 'px' }"
-        v-html="renderedContent"
-      />
+      >
+        <template
+          v-for="(seg, segIdx) in renderedSegments"
+          :key="segIdx"
+        >
+          <span
+            v-if="seg.type === 'section_title'"
+            class="emr-section-title"
+          >{{ seg.text }}</span>
+          <span
+            v-else-if="seg.type === 'defect'"
+            :class="`emr-defect emr-defect--${seg.severity}`"
+            :data-defect-id="seg.defectId"
+            :data-severity="seg.severity"
+          >
+            {{ seg.text }}
+            <span class="emr-defect-tip">
+              <span :class="`emr-defect-tip__header emr-defect-tip__header--${seg.severity}`">{{ seg.severityLabel }}</span>
+              <span class="emr-defect-tip__body">{{ seg.description }}</span>
+              <span
+                v-if="seg.suggestion"
+                class="emr-defect-tip__suggest"
+              >💡 {{ seg.suggestion }}</span>
+            </span>
+          </span>
+          <template v-else>{{ seg.text }}</template>
+        </template>
+      </div>
     </template>
 
     <div
@@ -381,7 +433,7 @@ function isAbortError(error: unknown) {
 const viewerRef = ref<HTMLElement>()
 const contentRef = ref<HTMLElement>()
 
-const { activeDefectId, highlightDefects, scrollToDefect, onDefectClick, bindClickEvents } =
+const { activeDefectId, buildHighlightedSegments, scrollToDefect, onDefectClick, bindClickEvents } =
   useDefectHighlight()
 
 const effectiveRecordId = computed(() => props.recordId || props.visitId || '')
@@ -395,10 +447,23 @@ const baseQueryString = computed(() => {
   return params.toString()
 })
 
-const renderedContent = computed(() => {
-  if (!rawContent.value) return ''
-  if (contentType.value === 'html') return rawContent.value
-  return highlightDefects(rawContent.value, annotations.value)
+function extractSafePlainTextFromHtml(html: string): string {
+  if (!html) return ''
+  if (typeof DOMParser !== 'undefined') {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    doc.querySelectorAll('script, style, noscript, iframe, object, embed').forEach((el) => el.remove())
+    return (doc.body?.textContent || '').replace(/\r\n/g, '\n')
+  }
+  return html
+    .replace(/<(script|style|noscript|iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<[^>]+>/g, '')
+}
+
+const renderedSegments = computed(() => {
+  if (!rawContent.value) return []
+  const safeText =
+    contentType.value === 'html' ? extractSafePlainTextFromHtml(rawContent.value) : rawContent.value
+  return buildHighlightedSegments(safeText, annotations.value)
 })
 
 const isStructuredLayout = computed(
@@ -926,9 +991,9 @@ function handleAnnotationClick(ann: DefectAnnotation) {
   emit('defect-click', ann.defect_id)
 }
 
-function renderParagraphContent(text: string): string {
+function renderParagraphSegments(text: string) {
   const normalized = String(text || '')
-  if (!normalized) return ''
+  if (!normalized) return []
   const localAnnotations: DefectAnnotation[] = []
   for (const ann of annotations.value) {
     const keyword = String(ann.keyword || '').trim()
@@ -941,7 +1006,7 @@ function renderParagraphContent(text: string): string {
       end_offset: index + keyword.length,
     })
   }
-  return highlightDefects(normalized, localAnnotations)
+  return buildHighlightedSegments(normalized, localAnnotations)
 }
 
 function scrollTo(defectId: string) {

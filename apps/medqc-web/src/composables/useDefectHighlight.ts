@@ -7,7 +7,7 @@
  * - 高亮区域点击→右侧面板联动
  */
 
-import { ref, computed, nextTick } from 'vue'
+import { ref, nextTick } from 'vue'
 
 /** 缺陷标注 */
 export interface DefectAnnotation {
@@ -23,12 +23,113 @@ export interface DefectAnnotation {
     suggestion?: string
 }
 
-/** 严重级别样式映射 */
-const SEVERITY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
-    critical: { bg: '#fef2f2', border: '#ef4444', text: '#dc2626' },
-    error: { bg: '#fff7ed', border: '#f97316', text: '#ea580c' },
-    warning: { bg: '#fefce8', border: '#eab308', text: '#ca8a04' },
-    info: { bg: '#eff6ff', border: '#3b82f6', text: '#2563eb' },
+export type HighlightSeverity = 'critical' | 'error' | 'warning' | 'info'
+
+export type EmrHighlightSegment =
+    | { type: 'text'; text: string }
+    | { type: 'section_title'; text: string }
+    | {
+        type: 'defect'
+        text: string
+        defectId: string
+        severity: HighlightSeverity
+        severityLabel: string
+        description: string
+        suggestion: string
+    }
+
+const SECTION_TITLES = [
+    '主诉', '现病史', '既往史', '个人史', '家族史', '体格检查', '辅助检查',
+    '首次病程', '病情摘要', '诊断', '入院诊断', '出院诊断', '门诊诊断',
+    '门（急）诊诊断', '处理意见', '治疗经过', '过敏史', '婚育史',
+    '手术史', '病史小结', '初步诊断', '修正诊断', '补充诊断'
+]
+
+const SEVERITY_LABEL: Record<HighlightSeverity, string> = {
+    critical: 'AI 严重缺陷',
+    error: 'AI 错误',
+    warning: 'AI 警告',
+    info: 'AI 提示',
+}
+
+function normalizeSeverity(severity: unknown): HighlightSeverity {
+    if (severity === 'critical' || severity === 'error' || severity === 'warning' || severity === 'info') {
+        return severity
+    }
+    return 'info'
+}
+
+function splitPlainTextWithSectionTitles(text: string): EmrHighlightSegment[] {
+    if (!text) return []
+    const titleRegex = new RegExp(`(^|\\n)(${SECTION_TITLES.join('|')})([：:])`, 'g')
+    const segments: EmrHighlightSegment[] = []
+    let lastIndex = 0
+    let match: RegExpExecArray | null
+
+    while ((match = titleRegex.exec(text)) !== null) {
+        const prefix = match[1] || ''
+        const titleWithColon = `${match[2]}${match[3]}`
+        const titleStart = match.index + prefix.length
+
+        if (titleStart > lastIndex) {
+            segments.push({ type: 'text', text: text.slice(lastIndex, titleStart) })
+        }
+        segments.push({ type: 'section_title', text: titleWithColon })
+        lastIndex = titleStart + titleWithColon.length
+    }
+
+    if (lastIndex < text.length) {
+        segments.push({ type: 'text', text: text.slice(lastIndex) })
+    }
+    return segments
+}
+
+/**
+ * 将纯文本与缺陷标注拆分为结构化文本片段，供 Vue 文本插值安全渲染（避免 v-html XSS）
+ */
+export function buildHighlightedSegments(
+    content: string,
+    annotations: DefectAnnotation[] = [],
+): EmrHighlightSegment[] {
+    if (!content) return []
+    if (!annotations?.length) {
+        return splitPlainTextWithSectionTitles(content)
+    }
+
+    const sorted = annotations
+        .map((ann) => ({
+            ann,
+            start: Math.max(0, Math.min(content.length, Math.floor(Number(ann.start_offset)))),
+            end: Math.max(0, Math.min(content.length, Math.floor(Number(ann.end_offset)))),
+        }))
+        .filter((item) => Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start)
+        .sort((a, b) => (a.start !== b.start ? a.start - b.start : b.end - a.end))
+
+    const segments: EmrHighlightSegment[] = []
+    let cursor = 0
+
+    for (const { ann, start, end } of sorted) {
+        if (start < cursor) continue
+        if (start > cursor) {
+            segments.push(...splitPlainTextWithSectionTitles(content.slice(cursor, start)))
+        }
+        const severity = normalizeSeverity(ann.severity)
+        segments.push({
+            type: 'defect',
+            text: content.slice(start, end),
+            defectId: String(ann.defect_id || ''),
+            severity,
+            severityLabel: SEVERITY_LABEL[severity],
+            description: String(ann.description || ''),
+            suggestion: String(ann.suggestion || ''),
+        })
+        cursor = end
+    }
+
+    if (cursor < content.length) {
+        segments.push(...splitPlainTextWithSectionTitles(content.slice(cursor)))
+    }
+    return segments
 }
 
 export function useDefectHighlight() {
@@ -36,71 +137,23 @@ export function useDefectHighlight() {
     const clickCallback = ref<((defectId: string) => void) | null>(null)
 
     /**
-     * 将纯文本内容注入缺陷高亮标记，返回 HTML 字符串
+     * 将纯文本内容注入缺陷高亮标记，返回单次安全转义的 HTML 字符串（兼容旧调用方）
      */
     function highlightDefects(content: string, annotations: DefectAnnotation[]): string {
-        if (!content) return ''
-
-        // ① 段落标题列表（块级显示，不内联）
-        const SECTION_TITLES = [
-            '主诉', '现病史', '既往史', '个人史', '家族史', '体格检查', '辅助检查',
-            '首次病程', '病情摘要', '诊断', '入院诊断', '出院诊断', '门诊诊断',
-            '门（急）诊诊断', '处理意见', '治疗经过', '过敏史', '婚育史',
-            '手术史', '病史小结', '初步诊断', '修正诊断', '补充诊断'
-        ]
-
-        // 段落标题注入（块级 span，顶部有 margin-top）
-        const injectSectionTitles = (text: string): string => {
-            const titleRegex = new RegExp(
-                `(^|\\n)(${SECTION_TITLES.join('|')})[：:]`,
-                'g'
-            )
-            return text.replace(titleRegex, (match, prefix, title) => {
-                const colon = match.endsWith('：') ? '：' : ':'
-                const marginTop = prefix === '' ? '' : ''
-                return `${prefix}<span class="emr-section-title">${title}${colon}</span>`
+        return buildHighlightedSegments(content, annotations)
+            .map((segment) => {
+                if (segment.type === 'text') {
+                    return escapeHtml(segment.text)
+                }
+                if (segment.type === 'section_title') {
+                    return `<span class="emr-section-title">${escapeHtml(segment.text)}</span>`
+                }
+                const tooltipContent = segment.suggestion
+                    ? `<div class="emr-defect-tip__body">${escapeHtml(segment.description)}</div><div class="emr-defect-tip__suggest">💡 ${escapeHtml(segment.suggestion)}</div>`
+                    : `<div class="emr-defect-tip__body">${escapeHtml(segment.description)}</div>`
+                return `<span class="emr-defect emr-defect--${segment.severity}" data-defect-id="${escapeAttr(segment.defectId)}" data-severity="${segment.severity}">${escapeHtml(segment.text)}<span class="emr-defect-tip"><span class="emr-defect-tip__header emr-defect-tip__header--${segment.severity}">${escapeHtml(segment.severityLabel)}</span>${tooltipContent}</span></span>`
             })
-        }
-
-        if (!annotations?.length) {
-            const escaped = escapeHtml(content)
-            return injectSectionTitles(escaped)
-        }
-
-        // ② 缺陷高亮：极浅底色 + 虚线下划线 + hover tooltip 卡片
-        const SEVERITY_LABEL: Record<string, string> = {
-            critical: 'AI 严重缺陷',
-            error: 'AI 错误',
-            warning: 'AI 警告',
-            info: 'AI 提示',
-        }
-
-        const validAnnotations = annotations
-            .filter(a => a.start_offset >= 0 && a.end_offset > a.start_offset)
-            .sort((a, b) => b.start_offset - a.start_offset)
-
-        let result = content
-
-        for (const annotation of validAnnotations) {
-            const { start_offset, end_offset, defect_id, severity, description, suggestion } = annotation
-            const before = result.slice(0, start_offset)
-            const highlighted = result.slice(start_offset, end_offset)
-            const after = result.slice(end_offset)
-            const label = SEVERITY_LABEL[severity] || 'AI 提示'
-
-            const tooltipContent = suggestion
-                ? `<div class="emr-defect-tip__body">${escapeHtml(description)}</div><div class="emr-defect-tip__suggest">💡 ${escapeHtml(suggestion)}</div>`
-                : `<div class="emr-defect-tip__body">${escapeHtml(description)}</div>`
-
-            const defectSpan = `<span class="emr-defect emr-defect--${severity}" data-defect-id="${defect_id}" data-severity="${severity}">${escapeHtml(highlighted)}<span class="emr-defect-tip"><span class="emr-defect-tip__header emr-defect-tip__header--${severity}">${label}</span>${tooltipContent}</span></span>`
-
-            result = before + defectSpan + after
-        }
-
-        // ③ 注入段落标题
-        result = injectSectionTitles(escapeHtml(result).replace(/&amp;lt;/g, '<').replace(/&amp;gt;/g, '>'))
-
-        return result
+            .join('')
     }
 
     /**
@@ -150,6 +203,7 @@ export function useDefectHighlight() {
 
     return {
         activeDefectId,
+        buildHighlightedSegments,
         highlightDefects,
         scrollToDefect,
         onDefectClick,
@@ -171,5 +225,5 @@ function escapeHtml(text: string): string {
 
 function escapeAttr(text: string): string {
     if (!text) return ''
-    return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+    return escapeHtml(text)
 }
