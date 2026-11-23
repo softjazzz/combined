@@ -22,7 +22,11 @@ import logging
 import os
 from pathlib import Path
 import re
+import threading
+import time
 from typing import Any, Mapping
+import uuid
+import weakref
 
 from ..llm_experiment import (
     LLMExperimentConfigurationError, current_llm_experiment_namespace, experiment_store_dir,
@@ -43,9 +47,154 @@ def default_store_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "data" / "luxian_0609_consultation_response_freeze"
 
 
-def _path(visit_id: str) -> Path:
-    safe = _SAFE_NAME.sub("_", str(visit_id)).strip("_") or "unknown"
-    return experiment_store_dir(default_store_dir()) / f"{safe}.json"
+class _PathLock:
+    __slots__ = ("_lock", "__weakref__")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def __enter__(self) -> _PathLock:
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self._lock.release()
+
+
+_WRITE_LOCKS_GUARD = threading.Lock()
+_WRITE_LOCKS: weakref.WeakValueDictionary[str, _PathLock] = weakref.WeakValueDictionary()
+
+
+def _path_lock(path: Path) -> _PathLock:
+    key = os.path.normcase(os.path.abspath(str(path)))
+    with _WRITE_LOCKS_GUARD:
+        holder = _WRITE_LOCKS.get(key)
+        if holder is None:
+            holder = _PathLock()
+            _WRITE_LOCKS[key] = holder
+        return holder
+
+
+def _atomic_replace(src: Path, dst: Path) -> None:
+    for attempt in range(5):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if os.name != "nt" or attempt == 4:
+                raise
+            time.sleep(0.01 * (attempt + 1))
+
+
+def _resolve_case_scope(
+    visit_id: str,
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+) -> tuple[str, str] | None:
+    from . import privacy_request_scope
+    from .llm_prompt_privacy import PrivacyIdentityContextError
+
+    scope = privacy_request_scope._SCOPE.get()
+    if scope is not None and scope.case_coordinates is not None:
+        if not scope.lease.active:
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        scope_inst, scope_pat, scope_visit = scope.case_coordinates
+        if scope_visit != str(visit_id).strip():
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        if institute_id is not None and str(institute_id).strip() != scope_inst:
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        if patient_id is not None and str(patient_id).strip() != scope_pat:
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        return (scope_inst, scope_pat) if (scope_inst or scope_pat) else None
+    if institute_id is not None or patient_id is not None:
+        inst = "" if institute_id is None else str(institute_id).strip()
+        pat = "" if patient_id is None else str(patient_id).strip()
+        return (inst, pat) if (inst or pat) else None
+    return None
+
+
+def _case_scope_hash(
+    visit_id: str,
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+) -> str | None:
+    scope = _resolve_case_scope(
+        visit_id, institute_id=institute_id, patient_id=patient_id
+    )
+    if scope is None:
+        return None
+    inst, pat = scope
+    digest = hashlib.sha256()
+    digest.update(b"case\x1e")
+    digest.update(inst.encode("utf-8"))
+    digest.update(b"\x1e")
+    digest.update(pat.encode("utf-8"))
+    digest.update(b"\x1e")
+    digest.update(str(visit_id).encode("utf-8"))
+    return digest.hexdigest()[:16]
+
+
+def _freeze_stem(
+    visit_id: str,
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+) -> str:
+    raw_visit = str(visit_id)
+    safe = _SAFE_NAME.sub("_", raw_visit).strip("_") or "unknown"
+    safe_prefix = "visit" if safe in (".", "..") else safe[:80]
+    scope_hash = _case_scope_hash(
+        visit_id, institute_id=institute_id, patient_id=patient_id
+    )
+    if scope_hash is not None:
+        return f"{safe_prefix}__{scope_hash}"
+    if safe != raw_visit or safe in (".", "..") or len(raw_visit) > 80:
+        visit_hash = hashlib.sha256(
+            b"visit\x1e" + raw_visit.encode("utf-8")
+        ).hexdigest()[:16]
+        return f"{safe_prefix}__{visit_hash}"
+    return safe
+
+
+def _path(
+    visit_id: str,
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+) -> Path:
+    stem = _freeze_stem(
+        visit_id, institute_id=institute_id, patient_id=patient_id
+    )
+    return experiment_store_dir(default_store_dir()) / f"{stem}.json"
+
+
+def _read_entries(
+    path: Path,
+    *,
+    visit_id: str,
+    case_scope_hash: str | None,
+) -> dict[str, list[Any]]:
+    if not path.is_file():
+        return {}
+    try:
+        artifact = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            isinstance(artifact, dict)
+            and artifact.get("schema_version") == FREEZE_SCHEMA_VERSION
+            and artifact.get("visit_id") == visit_id
+            and artifact.get("case_scope_hash") == case_scope_hash
+            and isinstance(artifact.get("entries"), dict)
+        ):
+            return {
+                str(key): list(value)
+                for key, value in artifact["entries"].items()
+                if isinstance(value, list)
+            }
+    except (OSError, ValueError):
+        logger.warning("consultation_response_freeze_unreadable")
+    return {}
 
 
 def _key(prompt: str, kwargs: Mapping[str, Any]) -> str:
@@ -74,7 +223,14 @@ def _without_usage(response: Any) -> Any:
 class FrozenResponseClient:
     """包装模型客户端；其余属性（结构化输出能力等）透传给原客户端。"""
 
-    def __init__(self, inner: Any, *, visit_id: str) -> None:
+    def __init__(
+        self,
+        inner: Any,
+        *,
+        visit_id: str,
+        institute_id: str | None = None,
+        patient_id: str | None = None,
+    ) -> None:
         self._inner = inner
         self._visit_id = visit_id
         self._stored: dict[str, list[Any]] = {}
@@ -85,18 +241,19 @@ class FrozenResponseClient:
         from ..llm_task_roles import current_task_role_partition
 
         self._task_role_partition = current_task_role_partition()
-        self._store_path = _path(visit_id)
-        path = self._store_path
-        if path.is_file():
-            try:
-                artifact = json.loads(path.read_text(encoding="utf-8"))
-                if (isinstance(artifact, dict) and artifact.get("schema_version") == FREEZE_SCHEMA_VERSION
-                        and artifact.get("visit_id") == visit_id and isinstance(artifact.get("entries"), dict)):
-                    self._stored = {
-                        str(key): list(value) for key, value in artifact["entries"].items() if isinstance(value, list)
-                    }
-            except (OSError, ValueError):
-                logger.warning("consultation_response_freeze_unreadable")
+        self._explicit_institute_id = institute_id
+        self._explicit_patient_id = patient_id
+        self._case_scope_hash = _case_scope_hash(
+            visit_id, institute_id=institute_id, patient_id=patient_id
+        )
+        self._store_path = _path(
+            visit_id, institute_id=institute_id, patient_id=patient_id
+        )
+        self._stored = _read_entries(
+            self._store_path,
+            visit_id=visit_id,
+            case_scope_hash=self._case_scope_hash,
+        )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
@@ -116,6 +273,15 @@ class FrozenResponseClient:
 
         if current_task_role_partition() != self._task_role_partition:
             raise LLMExperimentConfigurationError("frozen response client task roles changed")
+        current_scope_hash = _case_scope_hash(
+            self._visit_id,
+            institute_id=self._explicit_institute_id,
+            patient_id=self._explicit_patient_id,
+        )
+        if current_scope_hash != self._case_scope_hash:
+            from .llm_prompt_privacy import PrivacyIdentityContextError
+
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
 
     async def generate(self, prompt: str, **kwargs: Any) -> Any:
         return await self._generate_with(self._inner, prompt, **kwargs)
@@ -143,23 +309,50 @@ class FrozenResponseClient:
 
     def commit(self) -> None:
         """整次运行可交付时落盘：已有提示词的记录不覆盖（首次写入者赢），只补入新提示词。"""
+        self._require_same_experiment()
         from ..llm_token_budget import context_budget_failed
         if context_budget_failed():
             return
-        self._require_same_experiment()
-        new_keys = [key for key in self._recorded if key not in self._stored]
-        if not new_keys:
+        if not any(key not in self._stored for key in self._recorded):
             return
         path = self._store_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        artifact = {
-            "schema_version": FREEZE_SCHEMA_VERSION,
-            "visit_id": self._visit_id,
-            "entries": {**self._stored, **{key: self._recorded[key] for key in new_keys}},
-        }
-        temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-        temporary.write_text(json.dumps(artifact, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
-        os.replace(temporary, path)
+        with _path_lock(path):
+            disk_entries = _read_entries(
+                path,
+                visit_id=self._visit_id,
+                case_scope_hash=self._case_scope_hash,
+            )
+            merged_base = {**self._stored, **disk_entries}
+            new_keys = [key for key in self._recorded if key not in merged_base]
+            if not new_keys:
+                return
+            entries = {
+                **merged_base,
+                **{key: self._recorded[key] for key in new_keys},
+            }
+            artifact: dict[str, Any] = {
+                "schema_version": FREEZE_SCHEMA_VERSION,
+                "visit_id": self._visit_id,
+                "entries": entries,
+            }
+            if self._case_scope_hash is not None:
+                artifact["case_scope_hash"] = self._case_scope_hash
+            temporary = path.with_name(
+                f"{path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex[:8]}.tmp"
+            )
+            try:
+                temporary.write_text(
+                    json.dumps(artifact, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                    newline="\n",
+                )
+                _atomic_replace(temporary, path)
+            finally:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
 
 class _RoleResponseClient:

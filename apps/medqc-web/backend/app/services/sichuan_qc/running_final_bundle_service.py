@@ -171,6 +171,7 @@ async def evaluate_running_final_bundle_input(
 
     luxian_context = None
     execution_rules = selected_rules
+    bundle_visit_id = str((bundle or {}).get("visit_id") or "").strip()
     if (
         normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY
         and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
@@ -191,7 +192,7 @@ async def evaluate_running_final_bundle_input(
         execution_rules, luxian_context = await host_module.prepare_luxian_0609_execution(
             rule_set_key=normalized_rule_set_key,
             prepared_rules=selected_rules,
-            visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
+            visit_id=bundle_visit_id,
             medical_text=content,
             evidence_payload=evidence_payload,
             llm_client=host.adjudicator_client,
@@ -395,7 +396,7 @@ async def evaluate_running_final_bundle_input(
         host_module.aggregate_luxian_0609_orchestrated_results(
             orchestrated=orchestrated,
             context=luxian_context,
-            visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
+            visit_id=bundle_visit_id,
             model_name=model_version,
             evidence_payload=evidence_payload,
             execution_rule_count=len(selected_customer_rule_ids or selected_rules),

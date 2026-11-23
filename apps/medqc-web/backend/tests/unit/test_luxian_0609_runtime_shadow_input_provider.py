@@ -602,7 +602,7 @@ def test_runtime_reader_selects_and_stably_orders_typed_mr_surgery_before_limit(
         "institute_id": "i",
         "patient_id": "p",
         "visit_id": VISIT,
-        "limit_rows": source_evidence_reader._source_limit("mr_surgery"),
+        "limit_rows": source_evidence_reader._source_limit("mr_surgery") + 1,
     }
 
 

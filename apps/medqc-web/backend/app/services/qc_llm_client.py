@@ -517,7 +517,7 @@ class SichuanQCLLMClient:
             cot_observation = self._detect_cot_observation(result, payload=payload)
             self._strip_think_content_inplace(result)
 
-            finish_reason = result.get("choices", [{}])[0].get("finish_reason", "")
+            finish_reason = self._first_choice(result).get("finish_reason") or ""
             if finish_reason == "length":
                 logger.warning(
                     "LLM output hit max_tokens cap: model=%s max_tokens=%s prompt_len=%s",
@@ -566,6 +566,8 @@ class SichuanQCLLMClient:
                         result, payload=retry_payload
                     )
                     self._strip_think_content_inplace(result)
+
+            self._raise_for_invalid_choices(result)
 
             usage_breakdown = self._aggregate_attempt_usages(attempt_usages)
             api_time = time.time() - api_start
@@ -953,10 +955,40 @@ class SichuanQCLLMClient:
             "total_tokens": total_tokens,
         }
 
+    @staticmethod
+    def _first_choice(result: Any) -> Mapping[str, Any]:
+        if not isinstance(result, Mapping):
+            return {}
+        choices = result.get("choices")
+        if not isinstance(choices, (list, tuple)) or not choices:
+            return {}
+        first = choices[0]
+        return first if isinstance(first, Mapping) else {}
+
+    @classmethod
+    def _first_choice_message(cls, result: Any) -> Dict[str, Any]:
+        message = cls._first_choice(result).get("message")
+        return dict(message) if isinstance(message, Mapping) else {}
+
+    @staticmethod
+    def _raise_for_invalid_choices(result: Any) -> None:
+        if isinstance(result, Mapping):
+            choices = result.get("choices")
+            if isinstance(choices, (list, tuple)) and choices:
+                first = choices[0]
+                if isinstance(first, Mapping):
+                    message = first.get("message")
+                    if isinstance(message, Mapping):
+                        content = message.get("content")
+                        if isinstance(content, str) and bool(content.strip()):
+                            return
+        from .qc_execution_errors import SafeExecutionError
+        raise SafeExecutionError("model_invalid_output", retryable=False) from None
+
     def _detect_cot_observation(
         self, result: Dict[str, Any], *, payload: Dict[str, Any]
     ) -> Dict[str, Any]:
-        message = dict(result.get("choices", [{}])[0].get("message") or {})
+        message = self._first_choice_message(result)
         content = str(message.get("content") or "")
         reasoning_content = message.get("reasoning_content")
         has_think_tags = bool(
@@ -1029,15 +1061,19 @@ class SichuanQCLLMClient:
         return re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE).strip()
 
     def _strip_think_content_inplace(self, result: Dict[str, Any]) -> None:
-        try:
-            message = result.get("choices", [{}])[0].get("message", {})
-            content = message.get("content", "")
-            cleaned = self._strip_think_tags(content)
-            if cleaned != content:
-                message["content"] = cleaned
-                result["choices"][0]["message"] = message
-        except Exception:
+        first_choice = self._first_choice(result)
+        if not isinstance(first_choice, dict):
             return
+        message = first_choice.get("message")
+        if not isinstance(message, dict):
+            return
+        content = message.get("content")
+        if not isinstance(content, str) or not content:
+            return
+        cleaned = self._strip_think_tags(content)
+        if cleaned != content:
+            message["content"] = cleaned
+            first_choice["message"] = message
 
     def stats(self) -> Dict[str, Any]:
         return {

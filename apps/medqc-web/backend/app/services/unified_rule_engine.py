@@ -4,9 +4,11 @@ import json
 import re
 import logging
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from .qc_execution_errors import SafeExecutionError
 from .effect_priority_qc import (
     BATCH_OUTPUT_MODE_MINIMAL,
     evidence_limits_for_family,
@@ -403,6 +405,20 @@ class UnifiedRuleEngine:
         "generic": 0,
     }
 
+    @staticmethod
+    def _extract_llm_output(llm_result: Any) -> str:
+        if isinstance(llm_result, Mapping):
+            choices = llm_result.get("choices")
+            if isinstance(choices, (list, tuple)) and choices:
+                first_choice = choices[0]
+                if isinstance(first_choice, Mapping):
+                    message = first_choice.get("message")
+                    if isinstance(message, Mapping):
+                        content = message.get("content")
+                        if isinstance(content, str) and bool(content.strip()):
+                            return content
+        raise SafeExecutionError("model_invalid_output", retryable=False)
+
     async def evaluate(self, rule: Dict[str, Any], medical_record: Dict[str, Any]) -> Dict[str, Any]:
         applicability = self._app_checker.check(rule, medical_record)
         rule_id = rule.get("rule_id")
@@ -443,11 +459,7 @@ class UnifiedRuleEngine:
             evidence_payload=medical_record.get("evidence_payload"),
         )
         llm_result = await self._llm_generate(prompt)
-        raw_output = (
-            llm_result.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-        )
+        raw_output = self._extract_llm_output(llm_result)
         usage = llm_result.get("usage", {})
         usage_breakdown = dict(llm_result.get("_usage_breakdown") or {})
         api_time = llm_result.get("_api_time", 0.0)
@@ -634,11 +646,7 @@ class UnifiedRuleEngine:
             batch_output_mode=batch_output_mode_normalized,
         )
         llm_result = await self._llm_generate(prompt)
-        raw_output = (
-            llm_result.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-        )
+        raw_output = self._extract_llm_output(llm_result)
         usage = llm_result.get("usage", {})
         usage_breakdown = dict(llm_result.get("_usage_breakdown") or {})
         tokens_used = int(usage_breakdown.get("total_tokens") or usage.get("total_tokens", 0) or 0)

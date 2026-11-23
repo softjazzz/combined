@@ -1845,6 +1845,7 @@ def read_luxian_0609_runtime_source_rows(
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
         f"{document_filter}{order_sql} LIMIT :limit_rows"
     )
+    limit = _source_limit(source_key)
     with case_material.source_connection(engine) as connection:
         rows = connection.execute(
             bundle_assembly.text(sql),
@@ -1853,9 +1854,11 @@ def read_luxian_0609_runtime_source_rows(
                 "patient_id": patient_id,
                 "visit_id": visit_id,
                 **document_params,
-                "limit_rows": _source_limit(source_key),
+                "limit_rows": limit + 1,
             },
         ).mappings().all()
+    if len(rows) > limit:
+        raise SourceEvidenceTruncated()
     return [dict(row) for row in rows]
 
 
@@ -1927,6 +1930,7 @@ def read_luxian_0609_native_source_rows(
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
         f"{document_filter}{order_sql} LIMIT :limit_rows"
     )
+    limit = _source_limit(source_key)
     with case_material.source_connection(engine) as connection:
         rows = connection.execute(
             bundle_assembly.text(sql),
@@ -1935,9 +1939,11 @@ def read_luxian_0609_native_source_rows(
                 "patient_id": patient_id,
                 "visit_id": visit_id,
                 **document_params,
-                "limit_rows": _source_limit(source_key),
+                "limit_rows": limit + 1,
             },
         ).mappings().all()
+    if len(rows) > limit:
+        raise SourceEvidenceTruncated()
     return [dict(row) for row in rows]
 
 
