@@ -292,4 +292,4 @@ def test_late_only_analysis_is_data_gap_when_course_times_incomplete():
     assert complete.status == "non_compliant"
     incomplete = native._single_text_fact_outcome(
         rule_id=fact.rule_id, fact=fact, projection=replace(projection, course_time_incomplete=True))
-    assert (incomplete.status, incomplete.reason_code) == ("data_gap", "course_projection_incomplete")
+    assert (incomplete.status, incomplete.reason_code) == ("data_gap", "document_completion_time_missing")

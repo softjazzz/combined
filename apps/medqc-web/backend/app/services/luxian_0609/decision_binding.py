@@ -320,7 +320,13 @@ def bind_and_reduce_luxian_0609_rule_decisions(
                 decision, snapshot=snapshot, materials=evidence_materials,
                 source_keys=consumed_keys,
             )
-            bound = guard_decision(bound, consumed_keys or allowed_keys)
+            bound = guard_decision(
+                bound,
+                consumed_keys or allowed_keys,
+                consumed_observations=tuple(
+                    item for item in snapshot.observations if item.source_key in consumed_keys
+                ),
+            )
         try:
             reduced.append(reduce_luxian_0609_rule_decision(bound))
         except (TypeError, ValueError):

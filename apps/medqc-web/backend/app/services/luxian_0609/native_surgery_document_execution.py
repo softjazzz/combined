@@ -51,7 +51,7 @@ from .surgery_event_association import (
     summary_planned_surgery_time_from_row,
 )
 from .surgery_applicability import resolve_surgery_applicability
-from .surgery_procedure_catalog import normalize_surgery_level
+from .surgery_procedure_catalog import catalog_surgery_state, normalize_surgery_level
 from .source_registry import (
     resolve_luxian_0609_controlled_fact_source_keys,
     resolve_luxian_0609_decision_support_source_keys,
@@ -202,6 +202,7 @@ class _SurgeryDocumentOutcome:
     executor_type: str
     customer_display_facts: Mapping[str, Any] | None = None
     fact_refs: tuple[str, ...] = ()
+    exact_fact_refs: bool = False
 
 
 def _typed_binding_source_keys(rule_id: str) -> frozenset[str]:
@@ -2223,6 +2224,8 @@ def _typed_precise_terminal_refs(
 ) -> tuple[str, ...]:
     """按规则已使用的触发和目标资料选择证据，绝不由下游补全来源。"""
 
+    if outcome.exact_fact_refs:
+        return outcome.fact_refs
     rule_id = outcome.rule_id
     if rule_id == "LX0609-04-01-01":
         facts = outcome.customer_display_facts or {}
@@ -2333,21 +2336,16 @@ _SURGICAL_SCOPE_PATTERN = re.compile(r"腹腔镜|胸腔镜|关节镜|宫腔镜|�
 
 
 def _only_endoscopic_procedures(materials: Luxian0609EvidenceMaterialStore) -> bool:
-    names: list[str] = []
-    for source_key in ("surgery_record",):
-        try:
-            rows = materials.rows(source_key)
-        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, KeyError, ValueError):
-            return False
-        names.extend(
-            _clean(row.get("surgery_name") or row.get("operation_name") or row.get("procedure_name"))
-            for row in rows
-        )
-    return bool(names) and all(
-        name
+    try:
+        rows = materials.rows("surgery_record")
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated, KeyError, ValueError):
+        return False
+    return bool(rows) and all(
+        (name := _clean(row.get("surgery_name") or row.get("operation_name") or row.get("procedure_name")))
         and _ENDOSCOPIC_PROCEDURE_PATTERN.search(name)
         and not _SURGICAL_SCOPE_PATTERN.search(name)
-        for name in names
+        and catalog_surgery_state(row) is not True
+        for row in rows
     )
 
 
@@ -2384,17 +2382,6 @@ async def _typed_029_outcome(
 ) -> tuple[_SurgeryDocumentOutcome, int, int, int, int, float]:
     """029：确认手术事件覆盖后，核对每台手术的术前小结存在性。"""
 
-    if _only_endoscopic_procedures(materials):
-        return (
-            _SurgeryDocumentOutcome(
-                "LX0609-04-01-01", "not_applicable", "endoscopic_procedure_exception", "program"
-            ),
-            0, 0, 0, 0, 0.0,
-        )
-
-    # 029 是纯存在性规则：已证明仅一台手术时，只看术前小结正文是否为
-    # 非空、非占位值。多台手术缺少稳定关联时不得让任一小结覆盖全部事件。
-    # 模型、标题、时间和长度均不得参与正文存在性判定。
     order_state, order_refs = _typed_029_order_trigger(
         snapshot=snapshot,
         materials=materials,
@@ -2403,6 +2390,47 @@ async def _typed_029_outcome(
         snapshot=snapshot,
         materials=materials,
     )
+    if _only_endoscopic_procedures(materials) and (
+        endoscopic_refs := _typed_document_refs(
+            materials=materials, snapshot=snapshot, source_key="surgery_record"
+        )
+    ):
+        # 纯内镜例外仍依赖整体覆盖：眼前的记录不能排除另一台正式手术或额外医嘱。
+        # 同批记录派生的聚合事实只说明存在实施时间，不证明另一台手术。
+        independent_surgery_refs = tuple(
+            fact.fact_id
+            for fact in snapshot.facts
+            if fact.fact_id in performed_applicability.evidence_refs
+            and (fact.source_document_id or fact.extractor_version != "snapshot-provider-surgery-record-v1")
+        )
+        order_source_refs = tuple(
+            item.snapshot_ref.removeprefix("sha256:")
+            for item in snapshot.observations
+            if item.source_key == "inpat_nondrug_order"
+        )
+        if order_state == "technical_error":
+            status, reason = "technical_error", "source_query_error"
+        elif (
+            order_state == "not_applicable"
+            and not independent_surgery_refs
+            and materials.permits_absence("surgery_record")
+            and materials.permits_absence("inpat_nondrug_order")
+        ):
+            status, reason = "not_applicable", "endoscopic_procedure_exception"
+        else:
+            status, reason = "data_gap", "source_readiness_unproven"
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-04-01-01", status, reason, "program",
+                fact_refs=(*endoscopic_refs, *independent_surgery_refs, *order_source_refs, *order_refs),
+                exact_fact_refs=True,
+            ),
+            0, 0, 0, 0, 0.0,
+        )
+
+    # 029 是纯存在性规则：已证明仅一台手术时，只看术前小结正文是否为
+    # 非空、非占位值。多台手术缺少稳定关联时不得让任一小结覆盖全部事件。
+    # 模型、标题、时间和长度均不得参与正文存在性判定。
     performed_triggered = performed_applicability.state == "applicable"
     if order_state != "applicable" and not performed_triggered:
         if (

@@ -636,16 +636,16 @@ def _typed_basic_decisions(
     admission_record_times = tuple(event[0] for event in admission_record_events)
     def admission_anchor(
         rule_id: str,
-    ) -> tuple[datetime | None, date | None, RuleDecision | None]:
+    ) -> tuple[datetime | None, date | None, str, RuleDecision | None]:
         if admission_issue is not None:
             reason, technical = admission_issue
-            return None, None, gap(rule_id, reason, technical=technical)
+            return None, None, "", gap(rule_id, reason, technical=technical)
         if registration_issue is not None:
             reason, technical = registration_issue
-            return None, None, gap(rule_id, reason, technical=technical)
+            return None, None, "", gap(rule_id, reason, technical=technical)
         if discharge_issue is not None:
             reason, technical = discharge_issue
-            return None, None, gap(rule_id, reason, technical=technical)
+            return None, None, "", gap(rule_id, reason, technical=technical)
         anchor_fact = extract_admission_anchor(
             registration_rows=registration_rows,
             admission_rows=admission_rows,
@@ -653,12 +653,29 @@ def _typed_basic_decisions(
             allow_date_fallback=rule_id in _ADMISSION_ANCHOR_RULE_IDS,
         )
         if anchor_fact.state is AdmissionAnchorState.CONFLICT:
-            return None, None, conflict(rule_id)
-        if anchor_fact.state is AdmissionAnchorState.EXACT:
-            return anchor_fact.anchor_time, None, None
-        if anchor_fact.state is AdmissionAnchorState.DATE_ONLY:
-            return None, anchor_fact.anchor_date, None
-        return None, None, gap(rule_id, "authoritative_time_missing")
+            return None, None, "", conflict(rule_id)
+        if anchor_fact.state in {AdmissionAnchorState.EXACT, AdmissionAnchorState.DATE_ONLY}:
+            return anchor_fact.anchor_time, anchor_fact.anchor_date, anchor_fact.source_key, None
+        return None, None, "", gap(rule_id, "authoritative_time_missing")
+
+    def timely_sources(
+        rule_id: str, anchor_source: str, document_source: str,
+    ) -> tuple[str, ...] | None:
+        from ..automatic_material_scope import source_scope
+
+        used = tuple(dict.fromkeys((anchor_source, document_source, EVALUATION_HORIZON_SOURCE_KEY)))
+        for source_key in allowed_sources[rule_id]:
+            if source_key in used:
+                continue
+            observation = observation_by_source[source_key]
+            scope = source_scope(source_key)
+            if (
+                observation.query_state.value not in {"available", "empty"}
+                or observation.completeness.value == "truncated"
+                or (scope is not None and scope["status"] in {"table_missing", "columns_missing"})
+            ):
+                return None  # 读取异常沿用原来源校验，正常零行可以排除。
+        return used
 
     def conclusive(
         rule_id: str,
@@ -847,7 +864,7 @@ def _typed_basic_decisions(
             decisions.append(gap(rule_id, horizon_filter_issue))
             continue
         if rule_id == "LX0609-01-02-01":
-            anchor, _anchor_date, anchor_gap = admission_anchor(rule_id)
+            anchor, _anchor_date, _anchor_source, anchor_gap = admission_anchor(rule_id)
             if anchor_gap is not None or anchor is None:
                 decisions.append(
                     anchor_gap or gap(rule_id, "authoritative_time_missing")
@@ -1216,9 +1233,34 @@ def _typed_basic_decisions(
                     projected["rescue_events"] = rescue_event_facts
                 add_customer_fact(rule_id, projected)
             elif rescue_timeline:
+                from ..automatic_material_scope import source_scope
+
+                order_source = CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY
+                order_issue = source_issue(
+                    (order_source,), allow_unavailable=frozenset({order_source}),
+                )
+                if order_issue is not None:
+                    reason, technical = order_issue
+                    decisions.append(gap(rule_id, reason, technical=technical))
+                    continue
                 _delta, rescue_end, record_time, document_id, selected_row = max(
                     rescue_timeline,
                     key=lambda item: item[0],
+                )
+                order_scope = (
+                    materials.scope(order_source) or source_scope(order_source)
+                )
+                order_observation = observation_by_source[order_source]
+                # 达标文书自行证明时限；只排除正常零行的备选医嘱，保留缺供给与读失败保护。
+                rescue_sources = (
+                    ("rescue_record",)
+                    if order_observation.query_state.value == "empty"
+                    and order_observation.completeness.value == "complete"
+                    and (
+                        order_scope is None
+                        or order_scope["status"] in {"available", "body_empty", "empty_unconfirmed"}
+                    )
+                    else None
                 )
                 decisions.append(
                     attach_selected_rows(
@@ -1226,6 +1268,7 @@ def _typed_basic_decisions(
                             rule_id,
                             QcDirection.SATISFIED,
                             "requirement_within_threshold",
+                            sources=rescue_sources,
                         ),
                         source_key="rescue_record",
                         selected_rows=(
@@ -1258,7 +1301,7 @@ def _typed_basic_decisions(
                 decisions.append(gap(rule_id, reason, technical=technical))
                 continue
             if not substantive_admission_rows:
-                anchor, _anchor_date, anchor_gap = admission_anchor(rule_id)
+                anchor, _anchor_date, _anchor_source, anchor_gap = admission_anchor(rule_id)
                 if anchor_gap is not None:
                     decisions.append(anchor_gap)
                     continue
@@ -1305,7 +1348,7 @@ def _typed_basic_decisions(
             if not admission_record_times:
                 decisions.append(gap(rule_id, "authoritative_time_missing"))
                 continue
-            anchor, anchor_date, anchor_gap = admission_anchor(rule_id)
+            anchor, anchor_date, anchor_source, anchor_gap = admission_anchor(rule_id)
             if anchor_gap is not None or (
                 anchor is None and anchor_date is None
             ):
@@ -1367,21 +1410,13 @@ def _typed_basic_decisions(
                 )
             elif delta_state == "within":
                 observed, source_document_id, selected_row = admission_record_events[0]
-                # 登记零行且锚点精确时，实际采用的是入院记录中的入院时间。
-                # 按时结论已有文书证据，空登记不作为来源完整性的前提。
-                registration = observation_by_source["inpat_registration"]
-                sources = (
-                    tuple(key for key in allowed_sources[rule_id] if key != "inpat_registration")
-                    if anchor is not None and registration.query_state.value == "empty"
-                    else None
-                )
                 decisions.append(
                     attach_selected_row(
                         conclusive(
                             rule_id,
                             QcDirection.SATISFIED,
                             "requirement_within_threshold",
-                            sources=sources,
+                            sources=timely_sources(rule_id, anchor_source, "admission_record"),
                         ),
                         source_key="admission_record",
                         row=selected_row,
@@ -1432,7 +1467,7 @@ def _typed_basic_decisions(
                 )
             continue
 
-        anchor, anchor_date, anchor_gap = admission_anchor(rule_id)
+        anchor, anchor_date, anchor_source, anchor_gap = admission_anchor(rule_id)
         if anchor_gap is not None or (
             anchor is None and anchor_date is None
         ):
@@ -1533,6 +1568,7 @@ def _typed_basic_decisions(
                         rule_id,
                         QcDirection.SATISFIED,
                         "requirement_within_threshold",
+                        sources=timely_sources(rule_id, anchor_source, selected_source_key),
                     ),
                     source_key=selected_source_key,
                     row=selected_row,

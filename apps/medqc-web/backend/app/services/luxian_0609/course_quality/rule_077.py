@@ -7,6 +7,7 @@ import logging
 import re
 from typing import Any, Mapping, Protocol
 
+from ..cache_document_source_adapter import matches_document_diagnoses
 from ..decision_model import (
     ApplicabilityState,
     CriterionResult,
@@ -46,6 +47,7 @@ _DELIVERABLE_DATA_GAP_REASONS = frozenset(
         "source_unavailable",
         "source_truncated",
         "source_readiness_unproven",
+        "semantic_extraction_unresolved",
         "required_field_missing",
         "linkage_unresolved",
     }
@@ -583,6 +585,17 @@ async def evaluate_rule_077(
                 criterion=criterion,
             )
         )
+    child_source = "first_course_record_diagnosis"
+    if (
+        (materials.scope(child_source) or {}).get("status") in {"table_missing", "empty_unconfirmed"}
+        and (materials.scope("first_course_record") or {}).get("status") == "available"
+        and len(first_course_pairs) == 1
+        and matches_document_diagnoses(
+            child_source, first_course_pairs[0][1], tuple(row for _, row in first_course_diagnosis_pairs),
+        )
+    ):
+        # 第一诊断、鉴别诊断均能由同一冻结正文重现，物理子表并未参与证明。
+        refs = (differential_ref,)
     if llm_client is None:
         criterion = _criterion(
             status=CriterionStatus.UNKNOWN,
@@ -735,7 +748,7 @@ async def evaluate_rule_077(
         reason_code = {
             "related": "requirement_satisfied",
             "unrelated": "requirement_violated",
-            "unknown": "source_readiness_unproven",
+            "unknown": "semantic_extraction_unresolved",
         }[state]
         criterion = _criterion(
             status={

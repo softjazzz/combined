@@ -20,6 +20,8 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .applicability_receipt import AFFIRMATIVE_SCOPE_STATES
+from .basic_timeliness_facts import parse_authoritative_date, parse_authoritative_datetime
 from .decision_model import (
     ALLOWED_REASON_CODES_BY_FINAL_STATE,
     ApplicabilityState,
@@ -51,6 +53,7 @@ from .pathology_report_completeness import (
     evaluate_pathology_report_completeness,
 )
 from .evaluation_horizon import read_frozen_evaluation_horizon, after_frozen_horizon
+from .extended_document.rule_076 import death_time_from_body
 
 
 
@@ -225,6 +228,19 @@ _DISCHARGE_PLAN_PENDING_TREATMENT_PATTERN = re.compile(
     r"|(?:必要时|酌情|视情况|视病情).{0,8}"
     r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤)"
 )
+_DISCHARGE_PLAN_EXPLICITLY_MISSING_PATTERN = re.compile(
+    r"(?:出院医嘱[:：]\s*)?(?:出院|离院)后(?:暂无|暂不|无|未(?:安排|制定|记录))"
+    r"(?:后续)?(?:抗肿瘤治疗|肿瘤治疗)(?:计划|安排)?"
+    r"(?:[及和或与、]|[，,]\s*(?:也)?(?:暂无|无|未(?:安排|制定|记录)))"
+    r"(?:肿瘤)?随访(?:计划|安排)?"
+)
+_DEATH_RECORD_AFFIRMATIVE_PATTERN = re.compile(
+    r"(?:^|[。；;，,\n])\s*(?:患者(?:已|确认)?死亡|经抢救无效(?:后|[，,])?死亡|(?:宣告|宣布)死亡)"
+    r"(?=$|[。；;，,\n])"
+)
+_DISCHARGE_ALIVE_CONDITION_PATTERN = re.compile(
+    r"(?:(?:存活|好转|治愈|未愈)(?:出院)?|转院|(?:非)?医嘱离院)[。.]?"
+)
 
 _MALIGNANT_FACT_TYPES = frozenset(
     {
@@ -295,6 +311,7 @@ class _TumorRuleOutcome:
     executor_type: str
     fact_refs: tuple[str, ...] = ()
     positive_document_refs: tuple[str, ...] = ()
+    affirmative_applicability: bool = False
 
 
 def _typed_decision_from_outcome(
@@ -357,7 +374,10 @@ def _typed_decision_from_outcome(
             if outcome.reason_code in {"pathology_report_outside_evaluation_window", "pathology_report_horizon_date_boundary"}
             else "source_readiness_unproven"
             if outcome.reason_code == "pathology_recording_deadline_unconfirmed"
-            else outcome.reason_code if outcome.reason_code in {"authoritative_time_missing", "authoritative_time_conflict", "candidate_scope_incomplete"}
+            else outcome.reason_code if outcome.reason_code in {
+                "authoritative_time_missing", "authoritative_time_conflict", "candidate_scope_incomplete",
+                "association_failed", "source_truncated", "source_readiness_unproven",
+            }
             else "source_unavailable" if source_gap else "required_field_missing",
         )
     elif outcome.status == "technical_error":
@@ -394,6 +414,7 @@ def _typed_decision_from_outcome(
         reason_code=reason_code,
         fact_refs=refs,
         positive_document_refs=outcome.positive_document_refs,
+        affirmative_applicability=outcome.affirmative_applicability,
         evaluator_version=_TYPED_EVALUATOR_VERSION,
         confidence=None,
     )
@@ -691,6 +712,30 @@ def _discharge_stage(
         horizon_rows=horizon.rows,
         discharge_record_state=discharge_record.state,
     )
+
+
+def _confirmed_death_rows(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[Mapping[str, Any], ...], bool]:
+    confirmed: list[Mapping[str, Any]] = []
+    dates: set[date] = set()
+    moments: set[datetime] = set()
+    for row in rows:
+        values = (row.get("death_datetime"), row.get("death_time"))
+        row_dates = {day for value in values if (day := parse_authoritative_date(value)) is not None}
+        row_moments = {
+            moment for value in values if (moment := parse_authoritative_datetime(value)) is not None
+        }
+        body_moment = parse_authoritative_datetime(death_time_from_body(row))
+        if body_moment is not None:
+            row_moments.add(body_moment)
+        moments.update(row_moments)
+        dates.update(row_dates)
+        dates.update(moment.date() for moment in row_moments)
+        body = str(row.get("record_content") or "")
+        if row_dates or row_moments or _DEATH_RECORD_AFFIRMATIVE_PATTERN.search(body):
+            confirmed.append(row)
+    return tuple(confirmed), len(dates) > 1 or len(moments) > 1
 
 
 def _has_complete_pathology_result(material: SourceMaterial) -> bool:
@@ -1933,14 +1978,19 @@ def _is_future_discharge_follow_up_clause(clause: str) -> bool:
 
 def _typed_discharge_plan_outcome(
     material: SourceMaterial,
-) -> tuple[str, str, Mapping[str, Any]]:
-    clauses = tuple(
-        normalized_clause
-        for row in material.rows
-        for clause in _CLINICAL_CLAUSE_SEPARATOR.split(_row_text(row))
-        if (normalized_clause := _clean(clause))
+) -> tuple[str, str, Mapping[str, Any], tuple[Mapping[str, Any], ...]]:
+    clauses: list[str] = []
+    explicit_missing_rows: list[Mapping[str, Any]] = []
+    for row in material.rows:
+        for clause in _CLINICAL_CLAUSE_SEPARATOR.split(_row_text(row)):
+            item = _clean(clause)
+            if _DISCHARGE_PLAN_EXPLICITLY_MISSING_PATTERN.fullmatch(item):
+                explicit_missing_rows.append(row)
+            elif item:
+                clauses.append(item)
+    future_plan = bool(explicit_missing_rows) or any(
+        _DISCHARGE_PLAN_FUTURE_PATTERN.search(item) for item in clauses
     )
-    future_plan = any(_DISCHARGE_PLAN_FUTURE_PATTERN.search(item) for item in clauses)
     treatment_plan_clauses = tuple(
         item
         for item in clauses
@@ -1969,6 +2019,7 @@ def _typed_discharge_plan_outcome(
             },
             "requirement_met": compliant,
         },
+        () if compliant else tuple(explicit_missing_rows),
     )
 
 
@@ -2111,6 +2162,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         display_facts: Mapping[str, Any] | None = None,
         fact_refs: Sequence[str] = (),
         positive_document_refs: Sequence[str] = (),
+        affirmative_applicability: bool = False,
     ) -> None:
         if status == "technical_error":
             # 诊断日志：只记规则、原因码、是否类型化与出错代码行，不含病历或模型内容。
@@ -2125,6 +2177,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             executor_type=executor_type,
             fact_refs=tuple(dict.fromkeys(fact_refs)),
             positive_document_refs=tuple(dict.fromkeys(positive_document_refs)),
+            affirmative_applicability=affirmative_applicability,
         )
         if rule_id in typed_requested:
             assert evidence_snapshot is not None
@@ -2400,7 +2453,9 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 # 死亡记录是互斥终末场景，必须在出院阶段和肿瘤适用性判断前排除；
                 # 不能因缺少出院记录或出院诊断把死亡病例交付为资料不足。
                 death_record = source_for_rule("death_record")
-                if death_record.state == "error":
+                discharge_horizon = source_for_rule("inpat_registration.discharge_horizon")
+                discharge_record = source_for_rule("discharge_record")
+                if any(material.state == "error" for material in (death_record, discharge_horizon, discharge_record)):
                     emit_outcome(
                         rule_id,
                         "technical_error",
@@ -2417,28 +2472,36 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     )
                     continue
                 if death_record.rows:
+                    confirmed_death_rows, death_time_conflict = _confirmed_death_rows(death_record.rows)
+                    confirmed_death_refs = typed_document_refs(
+                        ("death_record", confirmed_death_rows)
+                    )
+                    if death_time_conflict or any(row.get("time_conflict") is True for row in discharge_horizon.rows):
+                        gap_reason = "authoritative_time_conflict"
+                    elif "truncated" in {discharge_horizon.state, discharge_record.state}:
+                        gap_reason = "source_truncated"
+                    elif not confirmed_death_refs:
+                        gap_reason = "source_readiness_unproven"
+                    elif any(
+                        _DISCHARGE_ALIVE_CONDITION_PATTERN.fullmatch(_clean(row.get("discharge_condition")))
+                        for row in discharge_record.rows
+                    ):
+                        gap_reason = "association_failed"
+                    else:
+                        gap_reason = None
+                    if gap_reason is not None:
+                        emit_outcome(rule_id, "data_gap", gap_reason, executor_type="program")
+                        continue
                     emit_outcome(
                         rule_id,
                         "not_applicable",
                         "trigger_absent_complete",
                         executor_type="program",
-                        fact_refs=typed_document_refs(
-                            ("death_record", death_record.rows)
-                        ),
+                        fact_refs=confirmed_death_refs,
+                        affirmative_applicability=True,
                     )
                     continue
-                stage = _discharge_stage(
-                    source_for_rule("inpat_registration.discharge_horizon"),
-                    source_for_rule("discharge_record"),
-                )
-                if stage == "technical_error":
-                    emit_outcome(
-                        rule_id,
-                        "technical_error",
-                        "source_query_error",
-                        executor_type="program",
-                    )
-                    continue
+                stage = _discharge_stage(discharge_horizon, discharge_record)
                 if stage == "inpatient":
                     emit_outcome(
                         rule_id,
@@ -2770,21 +2833,22 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             )
             continue
         if rule_id == "LX0609-08-01-04" and typed_rule:
-            status, reason_code, display_facts = _typed_discharge_plan_outcome(
-                materials["discharge_record"]
+            discharge = materials["discharge_record"]
+            status, reason_code, display_facts, explicit_missing_rows = _typed_discharge_plan_outcome(
+                discharge
             )
+            assert evidence_materials is not None
+            scope = evidence_materials.scope("discharge_record")
             emit_outcome(
                 rule_id,
                 status,
                 reason_code,
                 executor_type="program",
                 display_facts=display_facts,
-                fact_refs=(
-                    typed_document_refs(
-                        ("discharge_record", materials["discharge_record"].rows)
-                    )
-                    if typed_rule
-                    else ()
+                fact_refs=typed_document_refs(("discharge_record", discharge.rows)),
+                positive_document_refs=(
+                    typed_document_refs(("discharge_record", explicit_missing_rows))
+                    if scope is None or scope.get("status") in AFFIRMATIVE_SCOPE_STATES else ()
                 ),
             )
             continue

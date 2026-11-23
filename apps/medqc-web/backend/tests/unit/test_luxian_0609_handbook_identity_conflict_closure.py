@@ -89,7 +89,7 @@ async def test_frozen_iml01_conflicts_keep_event_refs_and_stop_semantic_call(cas
     assert event.refs and len(event.rows) == len(event.reports) == 1
     assert not event.association_resolved
     for decision in result.decisions:
-        assert decision.reason_code == ("required_field_missing" if decision.rule_id == CT_COURSE else "association_failed")
+        assert decision.reason_code == "association_failed"
         assert set(event.refs) <= set(decision.fact_refs)
         item = published[decision.rule_id]
         assert item["status"] == "data_gap"

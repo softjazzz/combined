@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from .llm_prompt_privacy import luxian_0609_llm_call_failure_reason
+from ..automatic_material_scope import source_scope
 from ..llm_token_budget import budget_guarded_executor
 
 from dataclasses import dataclass
@@ -25,7 +26,7 @@ from .evidence_material import (
     EvidenceMaterialUnavailable,
     Luxian0609EvidenceMaterialStore,
 )
-from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .evidence_snapshot_provider import KNOWN_NON_SURGERY_ORDER_TYPES, classify_current_visit_surgery_order_rows
 from .surgery_procedure_catalog import is_non_surgical_procedure_order
 from .native_execution import build_luxian_0609_native_result
@@ -1042,6 +1043,7 @@ def _typed_003_decision(
         selected_document_refs: tuple[str, ...] = (),
         positive_document_refs: tuple[str, ...] = (),
         exact_document_refs: bool = False,
+        source_refs: tuple[str, ...] = refs,
     ) -> RuleDecision:
         if display_facts is not None and customer_display_facts is not None:
             customer_display_facts.append(("LX0609-04-02-01", display_facts))
@@ -1080,7 +1082,7 @@ def _typed_003_decision(
             qc_direction=qc_direction,
             reason_code=reason_code,
             # 独立阳性及已证时间冲突只绑定实际文书；缺失型结论仍保留来源覆盖引用。
-            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *(() if positive_document_refs or exact_document_refs else refs)))),
+            fact_refs=tuple(dict.fromkeys((*selected_document_refs, *(() if positive_document_refs or exact_document_refs else source_refs)))),
             positive_document_refs=positive_document_refs,
             evaluator_version=_TYPED_003_EVALUATOR_VERSION,
             confidence=None,
@@ -1439,11 +1441,28 @@ def _typed_003_decision(
         }
         if source_document_id:
             display_facts["source_document_id"] = source_document_id
+        # 达标仍需覆盖已知台次。有读取异常时沿用全部来源校验，只排除正常读完的空备选来源。
+        optional_observations = tuple(observations[key] for key in support_rows)
+        confirmed_source_refs = refs
+        if document_refs and all(
+            item.query_state.value in {"available", "empty"}
+            and item.completeness is SourceCompleteness.COMPLETE
+            and (source_scope(item.source_key) or {}).get("status") not in {"table_missing", "columns_missing"}
+            for item in optional_observations
+        ):
+            empty_refs = {
+                item.snapshot_ref.removeprefix("sha256:")
+                for item in optional_observations
+                if item.query_state.value == "empty"
+                and (source_scope(item.source_key) or {}).get("status") == "empty_unconfirmed"
+            }
+            confirmed_source_refs = tuple(ref for ref in refs if ref not in empty_refs)
         return decision(
             "compliant",
             "requirement_within_threshold",
             display_facts,
             document_refs,
+            source_refs=confirmed_source_refs,
         )
     # 只报告本次实际未能完成核对的字段，不把所有可能原因混成一句话。
     reason = "authoritative_time_missing"

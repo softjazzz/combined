@@ -5,6 +5,7 @@ from test_luxian_0609_tc02_performed_event_contract import PerformanceFake
 import json
 
 import pytest
+from app.services.automatic_material_scope import source_scope as automatic_source_scope
 from test_luxian_0609_discharge_approval_extraction import numbered_reply
 
 from luxian_0609_invasive_procedure_test_client import FrozenInvasiveProcedureClient
@@ -145,12 +146,16 @@ def _session(
             else SourceCompleteness.COMPLETE
         )
         if not is_unavailable:
+            material_scope = automatic_source_scope(source_key)
             sources[source_key] = SnapshotSourceRows(
                 source_key=source_key,
                 rows=rows,
                 truncated=False,
                 limit_rows=50,
+                material_scope=material_scope,
             )
+        else:
+            material_scope = None
         observations.append(
             SourceObservation.create(
                 source_key=source_key,
@@ -164,6 +169,7 @@ def _session(
                     query_state=query_state,
                     completeness=completeness,
                     document_refs=document_refs,
+                    material_scope=material_scope,
                 ),
                 reason_code=source_reason_codes.get(source_key, ""),
             )
@@ -682,6 +688,7 @@ def test_067_binds_the_frozen_discharge_horizon() -> None:
     assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-08-02-01",))) == {
         "evaluation_context.horizon",
         "inpat_registration",
+        "death_record",
     }
 
 
@@ -1603,6 +1610,42 @@ async def test_061_fails_closed_when_registration_discharge_times_conflict() -> 
             "2026-07-01 12:00:00",
             "2026-07-02 12:00:00",
         ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("registration_status, document_present, expected", [
+    ("structure_ready", True, "compliant"),
+    ("table_missing", True, "data_gap"),
+    ("structure_ready", False, "data_gap"),
+])
+async def test_061_timely_record_with_empty_automatic_registration(registration_status, document_present, expected):
+    from app.services import case_material_snapshot as automatic_material
+    from app.services.automatic_material_scope import describe_source
+
+    rows = ({
+        "document_id": "TIMELY-DISCHARGE",
+        "discharge_date": "2026-07-03",
+        "discharge_time": "2026-07-03 08:00:00",
+        "record_time": "2026-07-03 12:00:00",
+    },) if document_present else ()
+    sources = {
+        "inpat_registration": describe_source((), (), status=registration_status),
+        "discharge_record": describe_source((), rows),
+    }
+    with automatic_material.activate({"automatic_material": {"protocol": "cdm-auto-v1", "sources": sources}}):
+        result, reduced = await _evaluate("LX0609-08-01-01", {
+            "discharge_record": rows,
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-07-03",
+                "horizon_datetime": "2026-07-03 08:00:00",
+                "basis": "discharge_date",
+            },),
+        })
+    assert reduced.final_state.value == expected
+    if expected == "compliant":
+        assert reduced.reason_code == "requirement_within_threshold"
+        assert result.llm_call_count == 0
+        assert set(build_material_document_refs("discharge_record", rows)) <= set(result.decisions[0].fact_refs)
 
 
 @pytest.mark.asyncio
@@ -9351,7 +9394,9 @@ async def test_067_window_course_without_id_never_borrows_old_course_id() -> Non
     )
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert result.decisions[0].fact_refs
-    assert set(result.decisions[0].fact_refs).isdisjoint(snapshot.document_refs)
+    assert result.decisions[0].fact_refs == tuple(
+        reference for reference, _row in materials.document_rows("senior_course_record", snapshot=snapshot)
+    )
     assert "customer_evidence" not in canonical
 
 
@@ -9362,6 +9407,451 @@ _075_ORDER = {
     "order_type": "治疗",
     "prescribed_datetime": "2026-06-01 08:00:00",
 }
+
+
+@pytest.fixture(autouse=True)
+def disable_extended_model_caches(monkeypatch):
+    from app.services.luxian_0609 import validated_fact_freeze
+    from app.services.luxian_0609.extended_document import (
+        antimicrobial_effect_extraction,
+        antimicrobial_order_reason,
+    )
+
+    for module in (validated_fact_freeze, antimicrobial_effect_extraction, antimicrobial_order_reason):
+        monkeypatch.setattr(module, "load_payload", lambda *_args: None)
+        monkeypatch.setattr(module, "save_payload", lambda *_args: None)
+
+
+@pytest.fixture
+def audit_extended_automatic():
+    from app.services import case_material_snapshot
+    from app.services.automatic_material_scope import describe_source
+
+    def activate(rows, empty_sources=(), statuses=None, complete_sources=()):
+        statuses = statuses or {}
+        sources = {
+            key: describe_source((), rows.get(key, ()), status=statuses.get(key, "structure_ready"))
+            for key in set(rows).union(empty_sources, statuses)
+        }
+        for key in complete_sources:
+            sources[key].update(coverage="complete", can_judge_clinical_absence=True)
+        return case_material_snapshot.activate({
+            "automatic_material": {"protocol": "cdm-auto-v1", "sources": sources},
+        })
+
+    return activate
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("complete", [True, False])
+async def test_audit_extended_discharge_medication_positive_record(audit_extended_automatic, complete):
+    instruction = "药品名称：合成药甲；用药剂量：一片"
+    if complete:
+        instruction += "；给药途径：口服；用药时间：三天"
+    rows = {
+        "discharge_record": ({"document_id": "DISCHARGE-AUDIT-062", "discharge_order": instruction},),
+    }
+    with audit_extended_automatic(rows, ("inpat_prescription", "inpat_prescription_item")):
+        execution, reduced = await _evaluate("LX0609-08-01-02", rows)
+
+    assert reduced.final_state.value == ("compliant" if complete else "non_compliant")
+    refs = build_material_document_refs("discharge_record", rows["discharge_record"])
+    assert set(execution.decisions[0].fact_refs) == set(refs)
+    assert execution.decisions[0].positive_document_refs == (() if complete else refs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_death_time", [True, False])
+async def test_audit_extended_death_record_field_check(audit_extended_automatic, with_death_time):
+    row = {"document_id": "DEATH-AUDIT-076", "record_content": "患者经抢救无效死亡。"}
+    if with_death_time:
+        row["death_datetime"] = "2026-06-01 10:00:00"
+    rows = {"death_record": (row,)}
+    with audit_extended_automatic(rows, ("inpat_registration", "discharge_record")):
+        execution, reduced = await _evaluate("LX0609-04-02-08", rows)
+
+    assert reduced.final_state.value == ("compliant" if with_death_time else "non_compliant")
+    refs = build_material_document_refs("death_record", rows["death_record"])
+    assert execution.decisions[0].fact_refs == refs
+    assert execution.decisions[0].positive_document_refs == (() if with_death_time else refs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("include_earlier", [False, True])
+async def test_audit_extended_late_expert_document_does_not_prove_first_approval(
+    audit_extended_automatic, include_earlier,
+):
+    rows = {
+        "inpat_drug_order": ({
+            "order_id": "AUDIT-LATE-ORDER",
+            "generic_name": "美罗培南",
+            "planned_start_datetime": "2026-06-01 10:00:00",
+        },),
+        "consultation_record": ({
+            "document_id": "AUDIT-LATE-APPROVAL",
+            "record_time": "2026-06-02 11:00:00",
+            "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+        },),
+    }
+    late_document = rows["consultation_record"][0]
+    if include_earlier:
+        rows["consultation_record"] += ({
+            "document_id": "AUDIT-EARLIER-APPROVAL",
+            "record_time": "2026-06-01 09:00:00",
+            "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+        },)
+    with audit_extended_automatic(rows, ("daily_course_record", "senior_course_record")):
+        execution, reduced = await _evaluate("LX0609-05-01-06", rows)
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    refs = build_material_document_refs("consultation_record", (late_document,))
+    assert execution.decisions[0].positive_document_refs == ()
+    assert set(execution.decisions[0].fact_refs) == set(
+        refs + build_material_document_refs("inpat_drug_order", rows["inpat_drug_order"])
+    )
+
+
+@pytest.mark.asyncio
+async def test_audit_extended_invasive_binds_only_matched_record_and_order(audit_extended_automatic):
+    selected = {
+        "document_id": "INVASIVE-AUDIT-MATCH",
+        "record_time": "2026-06-01 15:00:00",
+        "record_content": "今日胃镜下行胃窦息肉圈套切除，创面钛夹夹闭。",
+    }
+    rows = {
+        "inpat_nondrug_order": (_075_ORDER, {"order_name": "出院", "order_type": "其他"}),
+        "senior_course_record": (selected, {
+            "document_id": "INVASIVE-AUDIT-OTHER",
+            "record_time": "2026-06-01 16:00:00",
+            "record_content": "患者休息后症状好转。",
+        }),
+    }
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"},
+        records={"内镜下胃息肉切除术": ("documented", "胃镜下行胃窦息肉圈套切除")},
+    )
+    with audit_extended_automatic(rows, (
+        "first_course_record", "daily_course_record", "postsurg_firstcourse_record", "surgery_record",
+    )):
+        execution, reduced = await _evaluate("LX0609-10-03-01", rows, llm_client=client)
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert set(execution.decisions[0].fact_refs) == set(
+        build_material_document_refs("inpat_nondrug_order", (_075_ORDER,))
+        + build_material_document_refs("senior_course_record", (selected,))
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ("LX0609-08-01-01", "LX0609-08-02-01", "LX0609-08-02-02"))
+@pytest.mark.parametrize(("death_state", "expected"), [
+    ("proven", "not_applicable"),
+    ("blank", "data_gap"),
+    ("conflict", "data_gap"),
+    ("unreadable", "data_gap"),
+    ("multiple_dates", "data_gap"),
+    ("registration_date_conflict", "data_gap"),
+    ("body_time_conflict", "data_gap"),
+    ("discharge_condition_conflict", "data_gap"),
+])
+async def test_audit_extended_death_excludes_discharge_rules(audit_extended_automatic, rule_id, death_state, expected):
+    death_row = {"document_id": "DISCHARGE-RULE-DEATH-AUDIT"}
+    if death_state == "multiple_dates":
+        death_row["death_datetime"] = "2026-06-01"
+    elif death_state != "blank":
+        death_row["death_datetime"] = "2026-06-01 10:00:00"
+    rows = {"death_record": (death_row,)}
+    if death_state == "conflict":
+        rows["inpat_registration"] = ({"discharge_status": "好转"},)
+    elif death_state == "multiple_dates":
+        rows["death_record"] += ({"document_id": "OTHER-DEATH", "death_datetime": "2026-06-02"},)
+    elif death_state == "registration_date_conflict":
+        rows["inpat_registration"] = ({"death_datetime": "2026-06-02"},)
+    elif death_state == "body_time_conflict":
+        death_row["record_content"] = "死亡时间：2026-06-01 11:00:00。"
+    elif death_state == "discharge_condition_conflict":
+        rows["discharge_record"] = ({"document_id": "LIVE-DISCHARGE", "discharge_condition": "好转"},)
+    unavailable_sources = {"inpat_registration"} if death_state == "unreadable" else frozenset()
+    with audit_extended_automatic(rows, ("inpat_registration", "discharge_record", "daily_course_record")):
+        execution, reduced = await _evaluate(rule_id, rows, unavailable_sources=unavailable_sources)
+
+    assert reduced.final_state.value == expected
+    assert execution.decisions[0].affirmative_applicability is (death_state == "proven")
+    if death_state == "proven":
+        assert execution.decisions[0].fact_refs == build_material_document_refs("death_record", (death_row,))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("rule_id", "anchor", "expected_reason"),
+    [
+        ("LX0609-05-01-03", "2026-06-01 12:00:00", "evaluation_window_not_started"),
+        ("LX0609-05-01-03", "2026-06-03 22:00:00", "evaluation_window_not_mature"),
+        ("LX0609-05-01-06", "2026-06-01 12:00:00", "evaluation_window_not_mature"),
+    ],
+)
+async def test_audit_extended_antimicrobial_trigger_and_frozen_window(
+    audit_extended_automatic, rule_id, anchor, expected_reason,
+):
+    rows = {
+        "inpat_drug_order": ({
+            "order_id": "ANTIMICROBIAL-AUDIT",
+            "generic_name": "美罗培南",
+            "planned_start_datetime": "2026-06-01 10:00:00",
+        },),
+        "evaluation_context.horizon": ({
+            "horizon_date": anchor[:10], "horizon_datetime": anchor, "basis": "evaluation_as_of",
+        },),
+    }
+    with audit_extended_automatic(rows, ("daily_course_record", "senior_course_record", "consultation_record")):
+        snapshot, _, execution, reduced = await _evaluate_selected((rule_id,), rows)
+
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == expected_reason
+    assert reduced[0].affirmative_applicability
+    horizon_ref = next(
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in snapshot.observations if item.source_key == "evaluation_context.horizon"
+    )
+    assert set(execution.decisions[0].fact_refs) == set(
+        (horizon_ref,) + build_material_document_refs("inpat_drug_order", rows["inpat_drug_order"])
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("scope_complete", "additional_operation", "expect_exclusion"), [
+    (True, "", True),
+    (False, "", False),
+    (True, "unknown", False),
+    (True, "surgery", False),
+])
+async def test_audit_extended_explicit_nondrug_procedure_excludes_postoperative_note(
+    audit_extended_automatic, scope_complete, additional_operation, expect_exclusion,
+):
+    rows = {"surgery_record": ({
+        "document_id": "POSTOP-OPERATION-AUDIT",
+        "surgery_code": "34.0401",
+        "surgery_name": "胸腔闭式引流术",
+        "surgery_begin_time": "2026-07-01 08:00:00",
+    },)}
+    if additional_operation == "unknown":
+        rows["surgery_record"] += ({"document_id": "UNKNOWN-OPERATION", "surgery_name": "待辨别操作"},)
+    elif additional_operation == "surgery":
+        rows["surgery_record"] += ({
+            "document_id": "CONFIRMED-SURGERY",
+            "surgery_code": "01.2400X013",
+            "surgery_name": "硬脑膜外血肿清除术",
+            "surgery_end_time": "2026-07-01 10:00:00+08",
+        },)
+    with audit_extended_automatic(
+        rows, ("postsurg_firstcourse_record",),
+        complete_sources=("surgery_record",) if scope_complete else (),
+    ):
+        execution, reduced = await _evaluate("LX0609-04-05-03", rows)
+    assert (reduced.final_state is CustomerFinalState.NOT_APPLICABLE) is expect_exclusion
+    assert reduced.affirmative_applicability is expect_exclusion
+    if expect_exclusion:
+        assert reduced.reason_code == "performed_event_absent"
+        assert execution.decisions[0].fact_refs == build_material_document_refs("surgery_record", rows["surgery_record"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("instruction", "prescription_state", "explicit"), [
+    ("出院带药：无。", "empty", True),
+    ("出院后休息，定期复诊。", "empty", False),
+    ("必要时服药。", "empty", False),
+    ("出院带药：无。", "present", False),
+    ("出院带药：无。", "header_only", False),
+    ("出院带药：无。", "unreadable", False),
+    ("出院带药：无。", "table_missing", False),
+])
+async def test_audit_extended_discharge_medication_explicit_none(
+    audit_extended_automatic, instruction, prescription_state, explicit,
+):
+    from app.services.luxian_0609.extended_document.discharge_medication_extraction import SCHEMA_VERSION
+
+    class Client:
+        async def generate(self, prompt, **kwargs):
+            return {
+                "choices": [{"message": {"content": json.dumps({
+                    "schema_version": SCHEMA_VERSION,
+                    "state": "no_medications",
+                    "items": [],
+                })}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+
+    rows = {"discharge_record": ({"document_id": "NO-MEDICATION-AUDIT", "discharge_order": instruction},)}
+    if prescription_state in {"present", "header_only"}:
+        rows["inpat_prescription"] = ({
+            "prescription_id": "AUDIT-RX", "order_type": "出院带药", "order_status": "执行",
+        },)
+    if prescription_state == "present":
+        rows["inpat_prescription_item"] = ({"prescription_id": "AUDIT-RX", "generic_name": "合成药甲"},)
+    statuses = {"inpat_prescription": "table_missing"} if prescription_state == "table_missing" else {}
+    unavailable_sources = {"inpat_prescription_item"} if prescription_state == "unreadable" else frozenset()
+    with audit_extended_automatic(rows, ("inpat_prescription", "inpat_prescription_item"), statuses):
+        execution, reduced = await _evaluate(
+            "LX0609-08-01-02", rows, llm_client=Client(), unavailable_sources=unavailable_sources,
+        )
+
+    assert reduced.final_state.value == ("not_applicable" if explicit else "data_gap")
+    assert execution.decisions[0].affirmative_applicability is explicit
+    if explicit:
+        assert execution.decisions[0].fact_refs == build_material_document_refs("discharge_record", rows["discharge_record"])
+
+
+@pytest.mark.asyncio
+async def test_audit_extended_invasive_order_with_pending_documentation_window(audit_extended_automatic):
+    rows = {
+        "inpat_nondrug_order": (_075_ORDER,),
+        "evaluation_context.horizon": ({
+            "horizon_date": "2026-06-02",
+            "horizon_datetime": "2026-06-02 12:00:00",
+            "basis": "evaluation_as_of",
+        },),
+    }
+    client = FrozenInvasiveProcedureClient(mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术"})
+    with audit_extended_automatic(rows, (
+        "first_course_record", "daily_course_record", "senior_course_record",
+        "postsurg_firstcourse_record", "surgery_record",
+    )):
+        _, reduced = await _evaluate("LX0609-10-03-01", rows, llm_client=client)
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "evaluation_window_not_mature"
+    assert reduced.affirmative_applicability
+
+
+@pytest.mark.asyncio
+async def test_audit_extended_invasive_mature_uncertainty_survives_other_pending_order(audit_extended_automatic):
+    rows = {
+        "inpat_nondrug_order": (_075_ORDER, {
+            "order_name": "经皮肝穿刺引流术", "order_type": "治疗", "prescribed_datetime": "2026-06-05 08:00:00",
+        }),
+        "daily_course_record": ({
+            "record_time": "2026-06-01 16:00:00", "record_content": "合成病程无法确认是否完成操作。",
+        },),
+        "evaluation_context.horizon": ({
+            "horizon_date": "2026-06-05", "horizon_datetime": "2026-06-05 12:00:00", "basis": "evaluation_as_of",
+        },),
+    }
+    client = FrozenInvasiveProcedureClient(
+        mapping={"经胃镜特殊治疗(息肉肿物切除)": "内镜下胃息肉切除术", "经皮肝穿刺引流术": "经皮肝穿刺引流术"},
+        records={"内镜下胃息肉切除术": "uncertain"},
+    )
+    with audit_extended_automatic(rows, ("first_course_record", "postsurg_firstcourse_record", "surgery_record")):
+        execution, reduced = await _evaluate("LX0609-10-03-01", rows, llm_client=client)
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "semantic_extraction_unresolved"
+    assert not execution.decisions[0].affirmative_applicability
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change_scope", ["authority_only", "authority_unavailable", "earlier_order", "duplicate_order"])
+async def test_audit_extended_handoff_trigger_and_pending_handover(audit_extended_automatic, change_scope):
+    rows = {
+        "physician_change_event": ({
+            "document_id": "PHYSICIAN-CHANGE-AUDIT",
+            "change_datetime": "2026-07-01 08:00:00",
+            "old_physician_name": "张甲",
+            "new_physician_name": "李乙",
+        },),
+        "handoff_record": ({
+            "document_id": "HANDOFF-AUDIT",
+            "shift_time": "2026-07-01 08:00:00",
+            "handoff_doctor": "张甲",
+            "record_time": "2026-07-01 07:50:00",
+        },),
+        "evaluation_context.horizon": ({
+            "horizon_date": "2026-07-01",
+            "horizon_datetime": "2026-07-01 12:00:00",
+            "basis": "evaluation_as_of",
+        },),
+    }
+    if change_scope == "authority_unavailable":
+        del rows["physician_change_event"]
+    if change_scope != "authority_only":
+        rows["inpat_nondrug_order"] = ({
+            "document_id": "CHANGE-ORDER-AUDIT",
+            "order_name": "经治医师变更",
+            "order_time": "2026-06-27 08:00:00" if change_scope == "earlier_order" else "2026-07-01 08:00:00",
+        },)
+    with audit_extended_automatic(rows, ("daily_course_record", "handover_record")):
+        snapshot, _, execution, reduced = await _evaluate_selected(
+            ("LX0609-10-01-01",), rows,
+            unavailable_sources={"physician_change_event"} if change_scope == "authority_unavailable" else frozenset(),
+        )
+    if change_scope in {"authority_unavailable", "earlier_order"}:
+        assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+        assert not reduced[0].affirmative_applicability
+        return
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "evaluation_window_not_mature"
+    assert reduced[0].affirmative_applicability
+    horizon_ref = next(
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in snapshot.observations if item.source_key == "evaluation_context.horizon"
+    )
+    assert set(execution.decisions[0].fact_refs) == set(
+        (horizon_ref,)
+        + build_material_document_refs("physician_change_event", rows["physician_change_event"])
+        + build_material_document_refs("handoff_record", rows["handoff_record"])
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("master_unavailable", [False, True])
+async def test_audit_extended_critical_value_before_deadline(audit_extended_automatic, master_unavailable):
+    rows = {
+        "labtest_item_report": ({
+            "item_name": "血钾", "result_flag": "PH", "report_time": "2026-06-01 14:00:00",
+        },),
+        "evaluation_context.horizon": ({
+            "horizon_date": "2026-06-01", "horizon_datetime": "2026-06-01 19:59:59",
+            "basis": "evaluation_as_of",
+        },),
+    }
+    with audit_extended_automatic(rows, ("labtest_master", "crisis_value_record")):
+        snapshot, _, execution, reduced = await _evaluate_selected(
+            ("LX0609-06-04-01",), rows,
+            unavailable_sources={"labtest_master"} if master_unavailable else frozenset(),
+        )
+    if master_unavailable:
+        assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+        assert reduced[0].reason_code == "source_unavailable"
+        assert not reduced[0].affirmative_applicability
+        return
+    assert reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced[0].reason_code == "evaluation_window_not_mature"
+    assert reduced[0].affirmative_applicability
+    horizon_ref = next(
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in snapshot.observations if item.source_key == "evaluation_context.horizon"
+    )
+    assert set(execution.decisions[0].fact_refs) == set(
+        (horizon_ref,) + build_material_document_refs("labtest_item_report", rows["labtest_item_report"])
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("registration_status", ["structure_ready", "table_missing"])
+async def test_audit_extended_late_discharge_with_empty_registration(audit_extended_automatic, registration_status):
+    rows = {"discharge_record": ({
+        "document_id": "LATE-DISCHARGE-AUDIT",
+        "discharge_datetime": "2026-06-01 10:00:00",
+        "record_time": "2026-06-02 10:01:00",
+        "record_content": "合成出院文书。",
+    },)}
+    with audit_extended_automatic(rows, statuses={"inpat_registration": registration_status}):
+        execution, reduced = await _evaluate("LX0609-08-01-01", rows)
+    if registration_status == "structure_ready":
+        assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+        assert reduced.reason_code == "threshold_exceeded"
+        assert set(build_material_document_refs("discharge_record", rows["discharge_record"])).issubset(
+            execution.decisions[0].fact_refs
+        )
+    else:
+        assert reduced.final_state is CustomerFinalState.DATA_GAP
 
 
 @pytest.mark.asyncio

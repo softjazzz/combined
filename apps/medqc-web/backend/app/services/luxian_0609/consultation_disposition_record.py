@@ -30,6 +30,9 @@ _GENERIC = re.compile(
 _GENERIC_REMAINDER = re.compile(
     r"(?:其余|其他|余下|余)(?:建议|意见|处理|治疗)?(?:均|已|予以|予)?(?:遵嘱|遵照|遵医嘱|遵会诊意见|按会诊意见|按建议)"
 )
+_OPINION_ROLE_LABEL = r"(?:会诊意见|会诊建议|建议)[:：]?"
+_FEEDBACK_ROLE_LABEL = r"(?:我科处理|本科室反馈|申请科室处置)[:：]"
+_ROLE_SENTENCE_BOUNDARY = "。．.！!？?；;"
 
 
 @dataclass(frozen=True)
@@ -42,10 +45,34 @@ class DispositionRecordOutcome:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    generic_feedback_refs: tuple[str, ...] = ()
 
 
 def _normalized(value: str) -> str:
     return re.sub(r"\s+", "", value)
+
+
+def _has_complete_generic_feedback(source: str, role: Mapping[str, Any]) -> bool:
+    """独立证据仅取能用已知角色边界无缺口复原全文的笼统回应。"""
+    opinions, responses = role["opinion_quotes"], role["feedback_quotes"]
+    if len(opinions) != 1 or len(responses) != 1:
+        return False
+    opinion = re.sub(rf"^{_OPINION_ROLE_LABEL}", "", _normalized(opinions[0])).rstrip(_ROLE_SENTENCE_BOUNDARY)
+    response = re.sub(rf"^{_FEEDBACK_ROLE_LABEL}", "", _normalized(responses[0])).strip(_ROLE_SENTENCE_BOUNDARY)
+    if (
+        not opinion
+        or any(char in _ROLE_SENTENCE_BOUNDARY + "，,：:" for char in opinion)
+        or not any(char.isalnum() for char in response)
+        or not _GENERIC.fullmatch(response)
+    ):
+        return False
+    # 意见须为单句；两段之间只允许句读或明确回应栏目，禁止把漏摘的处置夹在中间。
+    boundary = rf"(?:[{_ROLE_SENTENCE_BOUNDARY}]+(?:{_FEEDBACK_ROLE_LABEL})?|{_FEEDBACK_ROLE_LABEL})"
+    return bool(re.fullmatch(
+        rf"(?:请?会诊执行记录[；;])?{_OPINION_ROLE_LABEL}{re.escape(opinion)}"
+        rf"{boundary}{re.escape(response)}[{_ROLE_SENTENCE_BOUNDARY}]*",
+        _normalized(source),
+    ))
 
 
 _MIN_SPLIT_SEGMENT_CHARS = 4
@@ -302,6 +329,19 @@ def parse_facts(
     *, review_issues: list[_ReviewIssue] | None = None,
     rechecked: bool = False,
 ) -> tuple[str, str, tuple[str, ...]]:
+    outcome = _parse_facts(
+        response, documents, roles, review_issues=review_issues, rechecked=rechecked,
+    )
+    return outcome.status, outcome.reason, outcome.fact_refs
+
+
+def _parse_facts(
+    response: Mapping[str, Any],
+    documents: Sequence[Mapping[str, str]],
+    roles: Mapping[str, Mapping[str, Any]],
+    *, review_issues: list[_ReviewIssue] | None = None,
+    rechecked: bool = False,
+) -> DispositionRecordOutcome:
     """身份和覆盖仍整批严格校验；独立文书失败不能覆盖已核验的缺陷。
 
     rechecked=True 表示本次是补核后的输出：词表提示已经交模型复核过，不再据此改判。
@@ -337,16 +377,19 @@ def parse_facts(
             ))
         except (ValueError, TypeError, KeyError, IndexError, AttributeError):
             invalid = True
-    defects = tuple(dict.fromkeys(ref for status, _, refs in outcomes if status == "non_compliant" for ref in refs))
+    defects = tuple(ref for item in outcomes if item.status == "non_compliant" for ref in item.fact_refs)
     if defects:
-        return "non_compliant", "requirement_violated", defects
+        return DispositionRecordOutcome(
+            "non_compliant", "requirement_violated", defects,
+            generic_feedback_refs=tuple(ref for item in outcomes for ref in item.generic_feedback_refs),
+        )
     if invalid:
         raise ValueError("invalid document facts")
     for state, reason in (("data_gap", "semantic_extraction_unresolved"), ("compliant", "requirement_satisfied")):
-        refs = tuple(dict.fromkeys(ref for status, _, refs in outcomes if status == state for ref in refs))
-        if any(status == state for status, _, _ in outcomes):
-            return state, reason, refs
-    return "not_applicable", "trigger_absent_complete", ()
+        matching = [item for item in outcomes if item.status == state]
+        if matching:
+            return DispositionRecordOutcome(state, reason, tuple(ref for item in matching for ref in item.fact_refs))
+    return DispositionRecordOutcome("not_applicable", "trigger_absent_complete")
 
 
 def _parse_document_facts(
@@ -355,7 +398,7 @@ def _parse_document_facts(
     roles: Mapping[str, Mapping[str, Any]],
     *, review_issues: list[_ReviewIssue] | None = None,
     rechecked: bool = False,
-) -> tuple[str, str, tuple[str, ...]]:
+) -> DispositionRecordOutcome:
     payload = _payload(response)
     if (
         not isinstance(payload, dict)
@@ -367,6 +410,7 @@ def _parse_document_facts(
     sources = {d["ref"]: d["text"] for d in _model_documents(documents)}
     seen: set[str] = set()
     defects: list[str] = []
+    generic_feedback_refs: list[str] = []
     applicable: list[str] = []
     unresolved = False
     for document in payload["documents"]:
@@ -480,6 +524,7 @@ def _parse_document_facts(
                 if kind in {"generic", "missing"}:
                     # 模型自己判为未具体处置，原话又确是套话：缺陷，referent 不能借此升级。
                     defects.append(ref)
+                    generic_feedback_refs.append(ref)
                     continue
                 if not rechecked:
                     # 模型判为具体处置时，笼统回应词表只触发一次补核，不推翻模型判定
@@ -503,6 +548,8 @@ def _parse_document_facts(
                 continue
             if kind in {"generic", "missing"}:
                 defects.append(ref)
+            if kind == "generic":
+                generic_feedback_refs.append(ref)
             unresolved |= kind == "unknown"
         if review_issues is not None and set(required_followups) != covered_followups:
             for target in set(required_followups) - covered_followups:
@@ -513,12 +560,18 @@ def _parse_document_facts(
     if seen != set(sources):
         raise _ReviewViolation([_ReviewIssue("incomplete document coverage", "documents.ref", "", "每个输入ref恰好返回一次，补齐遗漏并删除重复或越界ref")])
     if defects:
-        return "non_compliant", "requirement_violated", tuple(dict.fromkeys(defects))
+        return DispositionRecordOutcome(
+            "non_compliant", "requirement_violated", tuple(dict.fromkeys(defects)),
+            generic_feedback_refs=tuple(
+                ref for ref in dict.fromkeys(generic_feedback_refs)
+                if _has_complete_generic_feedback(sources[ref], roles[ref])
+            ),
+        )
     if unresolved:
-        return "data_gap", "semantic_extraction_unresolved", tuple(applicable)
+        return DispositionRecordOutcome("data_gap", "semantic_extraction_unresolved", tuple(applicable))
     if applicable:
-        return "compliant", "requirement_satisfied", tuple(applicable)
-    return "not_applicable", "trigger_absent_complete", ()
+        return DispositionRecordOutcome("compliant", "requirement_satisfied", tuple(applicable))
+    return DispositionRecordOutcome("not_applicable", "trigger_absent_complete")
 
 
 def build_opinion_prompt(documents: Sequence[Mapping[str, str]]) -> str:
@@ -647,7 +700,7 @@ async def check_disposition_record(
     frozen: dict[str, Mapping[str, Any]] = {}
 
     def extraction_failure(calls: int, reason: str) -> DispositionRecordOutcome:
-        # 第一阶段角色和引文已严格核验；纯笼统回应无需再靠动作抽取证明。
+        # 第一阶段引文只保留旧判定路径，缺少逐项动作核验时不能作为独立证据。
         refs = tuple(ref for ref, role in frozen.items()
                      if role["scope"] == "ordinary" and role["suggestion_state"] == "present"
                      and role["feedback_quotes"] and all(
@@ -713,12 +766,15 @@ async def check_disposition_record(
                 stage = "action"
                 continue
             issues: list[_ReviewIssue] = []
-            status, reason, refs = parse_facts(
+            outcome = _parse_facts(
                 response, documents, frozen, review_issues=issues, rechecked=action_retried,
             )
-            if issues and status == "data_gap":
-                raise _ReviewViolation(issues, fallback=(status, reason, refs))
-            return DispositionRecordOutcome(status, reason, refs, calls, *totals, elapsed)
+            if issues and outcome.status == "data_gap":
+                raise _ReviewViolation(issues, fallback=(outcome.status, outcome.reason, outcome.fact_refs))
+            return DispositionRecordOutcome(
+                outcome.status, outcome.reason, outcome.fact_refs, calls, *totals, elapsed,
+                generic_feedback_refs=outcome.generic_feedback_refs,
+            )
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
             logger.warning(
                 "LX0609 会诊处置记录抽取输出无效: stage=%s call=%s document_count=%s %s",

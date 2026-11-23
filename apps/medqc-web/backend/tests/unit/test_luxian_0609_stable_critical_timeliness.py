@@ -18,6 +18,8 @@ from app.services.luxian_0609.source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY as DISCHARGE,
     CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY as SEVERITY,
     CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY as UNSTABLE,
+    EVALUATION_HORIZON_SOURCE_KEY,
+    SourceEvidenceQueryError,
 )
 from test_luxian_0609_death_record_timeliness import saved_roundtrip
 
@@ -130,6 +132,62 @@ async def test_critical_unfinished_current_day_is_not_missing():
     result = await final(CRITICAL, [note("2026-01-01 12:00:00")],
                          [order("2026-01-01 08:00:00")], discharge=None, as_of="2026-01-02")
     assert (result["status"], result["reason_code"]) == ("not_applicable", "evaluation_window_not_mature")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("start", "as_of", "notes", "course_failure", "expected", "reason"),
+    [
+        ("2026-01-03 08:00:00", "2026-01-02", [], None, "not_applicable", "evaluation_window_not_mature"),
+        ("2026-01-02 08:00:00", "2026-01-02", [], None, "not_applicable", "evaluation_window_not_mature"),
+        ("2026-01-01 08:00:00", "2026-01-02", [note("2026-01-01 12:00:00")], None,
+         "not_applicable", "evaluation_window_not_mature"),
+        ("2026-01-01 08:00:00", "2026-01-02", [], None, "data_gap", "source_unavailable"),
+        ("2026-01-01 08:00:00", "2026-01-03",
+         [note("2026-01-01 12:00:00", "C1"), note("2026-01-02 12:00:00", "C2")], None,
+         "data_gap", "source_readiness_unproven"),
+        (None, "2026-01-02", [], None, "data_gap", "source_readiness_unproven"),
+        ("2026-01-02 08:00:00", "2026-01-02", [], SourceEvidenceQueryError,
+         "technical_error", "source_query_error"),
+        ("2026-01-03 08:00:00", "2026-01-02", [], SourceEvidenceQueryError,
+         "technical_error", "source_query_error"),
+    ],
+    ids=(
+        "future_start", "first_day_open", "covered_yesterday", "missing_closed_day",
+        "mature_change_possible", "unconfirmed_absence_of_order", "failed_course_read",
+        "future_start_failed_course_read",
+    ),
+)
+async def test_critical_automatic_scope_keeps_only_proven_unmatured_windows(
+    start, as_of, notes, course_failure, expected, reason,
+):
+    from app.services import case_material_snapshot as material
+    from app.services.automatic_material_scope import describe_source
+    from app.services.luxian_0609.applicability_receipt import build_applicability_receipt
+    from test_luxian_0609_native_course_quality_execution import _run_typed_009, _severity_session
+
+    orders = [order(start)] if start else []
+    source_rows = {SEVERITY: orders, "daily_course_record": notes, "senior_course_record": []}
+    with material.activate({"automatic_material": {"sources": {
+        key: describe_source((), rows) for key, rows in source_rows.items()
+    }}}):
+        session = _severity_session(
+            rows=orders, daily_rows=notes, evaluation_as_of_date=as_of,
+            course_failure=course_failure() if course_failure else None,
+        )
+        execution, reduced = await _run_typed_009(session, None)
+
+    assert execution.llm_call_count == 0
+    assert reduced[0].final_state.value == expected
+    assert reduced[0].reason_code == reason
+    if expected == "not_applicable":
+        receipt = build_applicability_receipt(
+            decision=reduced[0], snapshot=session.snapshot, materials=session.materials,
+        )
+        assert receipt["affirmative_applicability"] is True
+        assert {check["source_key"] for check in receipt["source_checks"] if check["depended_on"]} == (
+            {SEVERITY, EVALUATION_HORIZON_SOURCE_KEY} | ({"daily_course_record"} if notes else set())
+        )
 
 
 @pytest.mark.asyncio

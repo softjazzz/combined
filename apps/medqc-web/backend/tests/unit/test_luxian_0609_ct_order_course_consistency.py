@@ -73,7 +73,7 @@ def test_executed_exam_absent_from_complete_course_scope_is_non_compliant():
 
 def test_absent_exam_with_incomplete_course_scope_stays_data_gap():
     result = evaluate_ct_review(_review(complete=False), _payload("absent", clauses=[]))
-    assert result.status == "data_gap"
+    assert (result.status, result.reason_code) == ("data_gap", "source_readiness_unproven")
 
 
 @pytest.mark.parametrize("horizon,expected", [
@@ -190,11 +190,16 @@ def test_public_contract_rejects_internal_text_forged_status_and_incomplete_scop
     assert validate_ct_display_facts(facts) is None
 
 
-def _session(rows=None, incomplete=()):
+def _session(rows=None, incomplete=(), unproven_coverage=()):
     rows = rows or {}
     observations, refs, materials = [], [], {}
     for source in (ORDER_SOURCE, "exam_master", "exam_item_report", *COURSE_SOURCES):
-        material = SnapshotSourceRows.create(source_key=source, rows=tuple(rows.get(source, ())), truncated=False, limit_rows=1000)
+        source_rows = tuple(rows.get(source, ()))
+        scope = None
+        if source in unproven_coverage:
+            from app.services.automatic_material_scope import describe_source
+            scope = describe_source((), source_rows)
+        material = SnapshotSourceRows.create(source_key=source, rows=source_rows, truncated=False, limit_rows=1000, material_scope=scope)
         if source not in incomplete:
             materials[source] = material
         documents = build_material_document_refs(source, material.rows)
@@ -205,7 +210,7 @@ def _session(rows=None, incomplete=()):
         observations.append(SourceObservation.create(
             source_key=source, query_state=state, completeness=complete,
             record_count=len(material.rows), query_version=version,
-            snapshot_ref=build_material_snapshot_ref(source_key=source, query_version=version, query_state=state, completeness=complete, document_refs=documents),
+            snapshot_ref=build_material_snapshot_ref(source_key=source, query_version=version, query_state=state, completeness=complete, document_refs=documents, material_scope=material.material_scope),
         ))
     snapshot = Luxian0609EvidenceSnapshot.create(
         institute_id="test", patient_id="patient", visit_id="visit",
@@ -225,8 +230,8 @@ def _rows():
     }
 
 
-def _project(rows=None, incomplete=()):
-    snapshot, material = _session(rows, incomplete)
+def _project(rows=None, incomplete=(), unproven_coverage=()):
+    snapshot, material = _session(rows, incomplete, unproven_coverage)
     ledger = build_handbook_ledger(rule_ids=(REPORT_RULE_ID,), snapshot=snapshot, materials=material)
     return build_ct_review_input(ledger=ledger, snapshot=snapshot, materials=material)
 
@@ -236,6 +241,75 @@ def test_formal_report_proves_execution_despite_new_order_status_and_unnamed_mas
     assert review.needs_model
     assert review.events[0].performed
     assert evaluate_ct_review(review, _payload()).status == "compliant"
+
+
+@pytest.mark.parametrize("body, semantic_state, expected", [
+    ("EXAM-001医嘱为左膝CT，实际完成右膝CT。", "contradictory_description", "non_compliant"),
+    ("本次左膝CT已完成，示骨折。", "consistent_description", "data_gap"),
+    ("病情平稳，继续观察。", "absent", "data_gap"),
+])
+def test_complete_reads_with_unproven_coverage_only_review_observed_ct_events(body, semantic_state, expected):
+    rows = _rows()
+    rows["daily_course_record"][0]["record_content"] = body
+    review = _project(rows, unproven_coverage=("daily_course_record",))
+    assert not review.complete
+    assert review.needs_model
+    result = evaluate_ct_review(review, _payload(semantic_state, clauses=[] if semantic_state == "absent" else None))
+    assert result.status == expected
+    assert ct_display_status_matches(expected, result.display_facts)
+    if expected == "non_compliant":
+        assert result.positive_document_refs
+    else:
+        assert result.reason_code == "source_readiness_unproven"
+        assert not result.positive_document_refs
+
+
+def test_partial_coverage_does_not_review_ct_with_a_failed_or_unproven_read():
+    review = _project(_rows(), ("senior_course_record",), unproven_coverage=("daily_course_record",))
+    assert not review.needs_model
+    assert evaluate_ct_review(review).status == "data_gap"
+
+
+def test_partial_ct_review_does_not_bypass_frozen_readback_failure(monkeypatch):
+    original = Luxian0609EvidenceMaterialStore.document_rows
+
+    def read(store, source_key, *, snapshot):
+        if source_key == "senior_course_record":
+            raise ValueError("synthetic frozen material mismatch")
+        return original(store, source_key, snapshot=snapshot)
+
+    monkeypatch.setattr(Luxian0609EvidenceMaterialStore, "document_rows", read)
+    review = _project(_rows(), unproven_coverage=("daily_course_record",))
+    assert not review.needs_model
+    assert evaluate_ct_review(review).status == "data_gap"
+
+
+def test_ct_can_review_confirmed_event_while_another_report_is_missing():
+    rows = _rows()
+    rows[ORDER_SOURCE].append({"order_id": "ORDER-002", "order_name": "胸部CT", "order_status": "新开"})
+    rows["exam_master"].append({
+        "exam_id": "EXAM-002", "order_id": "ORDER-002", "exam_name": "胸部CT",
+        "exam_time": "2026-09-01T10:00:00+08:00",
+    })
+    rows["daily_course_record"][0]["record_content"] = "EXAM-001医嘱为左膝CT，实际完成右膝CT。"
+    review = _project(rows, unproven_coverage=("daily_course_record",))
+    assert review.needs_model and review.eligible_positions == (1,)
+    result = evaluate_ct_review(review, _payload("contradictory_description"))
+    assert result.status == "non_compliant"
+    assert [event["event_status"] for event in result.display_facts["event_results"]] == [
+        "non_compliant", "data_gap", "data_gap",
+    ]
+
+
+@pytest.mark.parametrize("source", [ORDER_SOURCE, "exam_master"])
+def test_ct_cannot_publish_whole_case_compliance_with_unproven_event_coverage(source):
+    rows = _rows()
+    rows["exam_item_report"][0]["exam_name"] = "左膝CT"
+    review = _project(rows, unproven_coverage=(source,))
+    assert review.needs_model
+    assert not review.complete
+    result = evaluate_ct_review(review, _payload())
+    assert (result.status, result.reason_code) == ("data_gap", "source_readiness_unproven")
 
 
 @pytest.mark.parametrize("documents,body", [
@@ -266,7 +340,45 @@ def test_course_scope_above_cumulative_budget_still_closes_without_model():
     review = _project(rows)
     assert not review.complete
     assert not review.needs_model
-    assert evaluate_ct_review(review).status == "data_gap"
+    result = evaluate_ct_review(review)
+    assert (result.status, result.reason_code) == ("data_gap", "source_truncated")
+
+
+def test_blank_course_body_reports_missing_field_without_model():
+    rows = _rows()
+    rows["daily_course_record"][0]["record_content"] = ""
+    review = _project(rows)
+    assert not review.needs_model
+    result = evaluate_ct_review(review)
+    assert (result.status, result.reason_code) == ("data_gap", "required_field_missing")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body, reason", [
+    ("检查" * 20000, "source_truncated"),
+    ("", "required_field_missing"),
+], ids=["truncated", "missing_field"])
+async def test_unrelated_empty_automatic_source_cannot_hide_specific_ct_gap(body, reason):
+    from app.services import case_material_snapshot as automatic_material
+    from app.services.automatic_material_scope import describe_source
+    from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
+
+    snapshot, materials = _session({
+        "daily_course_record": [{"document_id": "D1", "record_content": body}],
+    })
+    sources = {"senior_course_record": describe_source((), ())}
+    with automatic_material.activate({"automatic_material": {"protocol": "cdm-auto-v1", "sources": sources}}):
+        result = await native.execute_luxian_0609_native_exam_lab_rules(
+            rule_ids=(RULE_ID,), wrapper_rules=[{"rule_id": RULE_ID}], evidence_payload=None,
+            llm_client=None, evidence_snapshot=snapshot, evidence_materials=materials,
+            decision_rule_ids=(RULE_ID,),
+        )
+        decision = bind_and_reduce_luxian_0609_rule_decisions(
+            decisions=result.decisions, expected_rule_ids=(RULE_ID,),
+            snapshot=snapshot, evidence_materials=materials,
+        )[0]
+    assert result.llm_call_count == 0
+    assert (decision.final_state.value, decision.reason_code) == ("data_gap", reason)
 
 
 def _unmatched_only(*clause_ids):
@@ -411,7 +523,17 @@ async def test_native_execution_shares_ledger_and_isolates_bad_model_from_report
 
 
 @pytest.mark.asyncio
-async def test_native_success_exposes_new_id_facts_and_controlled_usage():
+async def test_native_success_exposes_new_id_facts_and_controlled_usage(monkeypatch):
+    from app.services.luxian_0609.validated_fact_freeze import _material_value
+
+    def check_existing_freeze_material(**kwargs):
+        assert set(_material_value(kwargs["materials"])) == {
+            "events", "eligible_positions", "clauses", "initial_findings", "complete",
+            "horizon_basis", "horizon", "truncated_source_refs", "missing_content_source_refs",
+        }
+        return None
+
+    monkeypatch.setattr(native, "fact_freeze_key", check_existing_freeze_material)
     snapshot, material = _session(_rows())
     client = _Client()
     result = await native.execute_luxian_0609_native_exam_lab_rules(
@@ -508,14 +630,18 @@ def test_raw_field_locations_survive_whitespace_and_non_bmp_characters():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("state,expected", [("consistent_description", "compliant"), ("contradictory_description", "non_compliant")])
-async def test_ct_order_evidence_survives_finalizer_sqlite_and_customer_projection(state, expected):
+@pytest.mark.parametrize("state,expected,unproven_coverage", [
+    ("consistent_description", "compliant", ()),
+    ("contradictory_description", "non_compliant", ()),
+    ("contradictory_description", "non_compliant", ("daily_course_record",)),
+], ids=["consistent", "conflict", "conflict_with_unproven_coverage"])
+async def test_ct_order_evidence_survives_finalizer_sqlite_and_customer_projection(state, expected, unproven_coverage, monkeypatch):
     from datetime import datetime
     from sqlalchemy import MetaData, create_engine
     from sqlalchemy.orm import Session
     from app.services import custom_qc_workspace_service as workspace
     from app.services.luxian_0609.canonical_result_finalizer import finalize_luxian_0609_reduced_customer_result
-    from app.services.luxian_0609.decision_reducer import reduce_luxian_0609_rule_decision
+    from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
     from app.services.qc_workspace.canonical_result_store import (
         CanonicalResultStore, envelope_item_from_rule_result,
     )
@@ -523,14 +649,20 @@ async def test_ct_order_evidence_survives_finalizer_sqlite_and_customer_projecti
     rows = _rows()
     body = "ORDER-001左膝CT完成。" if expected == "compliant" else "ORDER-001实际为右膝CT，与医嘱左膝不一致。"
     rows["daily_course_record"][0]["record_content"] = body
-    snapshot, material = _session(rows)
+    snapshot, material = _session(rows, unproven_coverage=unproven_coverage)
+    monkeypatch.setattr(native, "load_facts", lambda *_args: None)
+    monkeypatch.setattr(native, "save_facts", lambda *_args: None)
     result = await native.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=(RULE_ID,), decision_rule_ids=(RULE_ID,), wrapper_rules=(), evidence_payload=None,
         llm_client=_Client(_payload(state)), evidence_snapshot=snapshot, evidence_materials=material,
     )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=(RULE_ID,), snapshot=snapshot,
+        evidence_materials=material,
+    )[0]
     facts = dict(result.customer_display_facts)[RULE_ID]
     item = finalize_luxian_0609_reduced_customer_result(
-        decision=reduce_luxian_0609_rule_decision(result.decisions[0]), raw_customer_display_facts=facts,
+        decision=reduced, raw_customer_display_facts=facts,
         evidence_snapshot=snapshot, evidence_materials=material,
     )
     item.update(record_id="visit", visit_id="visit", institute_id="test", patient_id="patient")

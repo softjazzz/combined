@@ -872,14 +872,15 @@ def test_001_002_accept_the_localized_customer_record_time_and_document_identity
     )
 
 
-def _reduce_with_automatic_scope(session, rows, rule):
+def _reduce_with_automatic_scope(session, rows, rule, *, source_statuses=None):
     from app.services import case_material_snapshot as material
     from app.services.automatic_material_scope import describe_source
 
+    source_statuses = source_statuses or {}
     with material.activate({
         "automatic_material": {
             "sources": {
-                source_key: describe_source((), source_rows)
+                source_key: describe_source((), source_rows, source_statuses.get(source_key, "structure_ready"))
                 for source_key, source_rows in rows.items()
             },
             "publication": {"status": "metadata_permission_unconfirmed"},
@@ -960,6 +961,7 @@ def test_001_automatic_scope_binds_admission_timeliness_sources(
             "record_datetime": completion,
             "chief_complaint": "合成入院材料，因反复头痛入院。",
         }],
+        "discharge_record": [],
     }
     session = _typed_basic_session(
         rows, selected_rule_ids=(rule,), evaluation_as_of_date="2026-07-17",
@@ -971,11 +973,122 @@ def test_001_automatic_scope_binds_admission_timeliness_sources(
         if item.source_key == "inpat_registration"
     )
     assert reduced[0].final_state is expected
-    assert (registration.snapshot_ref.removeprefix("sha256:") in execution.decisions[0].fact_refs) is uses_registration
+    refs = execution.decisions[0].fact_refs
+    assert (registration.snapshot_ref.removeprefix("sha256:") in refs) is uses_registration
+    discharge = next(item for item in session.snapshot.observations if item.source_key == "discharge_record")
+    assert (discharge.snapshot_ref.removeprefix("sha256:") in refs) is (expected is CustomerFinalState.DATA_GAP)
     _assert_selected_document_ref(
         execution, session, rule_id=rule, source_key="admission_record",
         document_id="synthetic-admission",
     )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("rule", "anchor_source", "anchor_fields", "course_source", "title"),
+    [
+        (
+            "LX0609-02-01-01", "admission_record", {"admission_datetime": "2026-07-15 08:00:00"},
+            "senior_course_record", "主治医师首次查房记录",
+        ),
+        (
+            "LX0609-02-01-02", "inpat_registration", {"admission_datetime": "2026-07-15 08:00:00"},
+            "daily_course_record", "副主任医师首次查房记录",
+        ),
+        (
+            "LX0609-02-01-02", "discharge_record", {"admission_date": "2026-07-15"},
+            "senior_course_record", "副主任医师首次查房记录",
+        ),
+    ],
+    ids=("48h_admission", "72h_registration", "72h_discharge_date"),
+)
+def test_first_round_automatic_scope_binds_only_selected_evidence(
+    rule, anchor_source, anchor_fields, course_source, title
+):
+    rows = {
+        "inpat_registration": [],
+        "admission_record": [],
+        "discharge_record": [],
+        "daily_course_record": [],
+        "senior_course_record": [],
+    }
+    rows[anchor_source] = [anchor_fields]
+    rows[course_source] = [{
+        "document_id": "synthetic-round",
+        "document_title": title,
+        "record_datetime": "2026-07-16 09:00:00",
+    }]
+    session = _typed_basic_session(rows, selected_rule_ids=(rule,), evaluation_as_of_date="2026-07-17")
+    execution, reduced = _reduce_with_automatic_scope(session, rows, rule)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    refs = execution.decisions[0].fact_refs
+    assert {
+        item.source_key for item in session.snapshot.observations
+        if item.snapshot_ref.removeprefix("sha256:") in refs
+    } == {
+        anchor_source, course_source, source_evidence_reader.EVALUATION_HORIZON_SOURCE_KEY,
+    }
+    _assert_selected_document_ref(
+        execution, session, rule_id=rule, source_key=course_source, document_id="synthetic-round"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("rule", ("LX0609-01-01-01", "LX0609-02-01-01", "LX0609-02-01-02"))
+def test_empty_unconfirmed_timeliness_documents_still_require_coverage(rule):
+    rows = {
+        "inpat_registration": [{"admission_datetime": "2026-07-10 08:00:00"}],
+        "admission_record": [],
+        "discharge_record": [],
+        "daily_course_record": [],
+        "senior_course_record": [],
+    }
+    session = _typed_basic_session(rows, selected_rule_ids=(rule,), evaluation_as_of_date="2026-07-17")
+    execution, reduced = _reduce_with_automatic_scope(session, rows, rule)
+
+    assert execution.decisions[0].reason_code == "required_document_missing"
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "source_readiness_unproven"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("rule", "failed_source", "scope_status", "read_error"),
+    [
+        ("LX0609-01-01-01", "inpat_registration", "table_missing", SourceEvidenceUnavailable),
+        ("LX0609-02-01-02", "daily_course_record", "columns_missing", None),
+        ("LX0609-02-01-02", "daily_course_record", "empty_unconfirmed", SourceEvidenceQueryError),
+    ],
+    ids=("registration_table_missing", "course_columns_missing", "course_query_error"),
+)
+def test_timely_document_keeps_checks_for_failed_source_reads(rule, failed_source, scope_status, read_error):
+    rows = {
+        "inpat_registration": [],
+        "admission_record": [{
+            "document_id": "synthetic-admission",
+            "admission_datetime": "2026-07-15 08:00:00",
+            "record_datetime": "2026-07-15 09:00:00",
+            "chief_complaint": "合成主诉",
+        }],
+        "discharge_record": [{"document_id": "synthetic-discharge", "admission_date": "2026-07-15"}],
+        "daily_course_record": [],
+        "senior_course_record": [{
+            "document_id": "synthetic-round",
+            "document_title": "副主任医师首次查房记录",
+            "record_datetime": "2026-07-16 09:00:00",
+        }],
+    }
+    session = _typed_basic_session(
+        rows, selected_rule_ids=(rule,), failures={failed_source: read_error()} if read_error else None,
+    )
+    execution, reduced = _reduce_with_automatic_scope(
+        session, rows, rule, source_statuses={failed_source: scope_status},
+    )
+
+    assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "source_readiness_unproven"
 
 
 @pytest.mark.unit
@@ -1593,6 +1706,59 @@ def test_complete_empty_and_unavailable_rescue_sources_are_distinct() -> None:
     assert complete_reduced[0].reason_code == "trigger_absent_complete"
     assert unavailable_reduced[0].final_state is CustomerFinalState.DATA_GAP
     assert unavailable_reduced[0].reason_code == "source_unavailable"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("order_status", "read_issue", "expected", "reason"),
+    [
+        ("structure_ready", None, CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
+        ("table_missing", None, CustomerFinalState.DATA_GAP, "source_readiness_unproven"),
+        ("structure_ready", "rescue_error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
+        ("structure_ready", "order_error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
+        ("structure_ready", "order_truncated", CustomerFinalState.DATA_GAP, "source_truncated"),
+    ],
+    ids=("normally_empty_orders", "missing_order_table", "failed_rescue_read", "failed_order_read", "truncated_orders"),
+)
+def test_004_timely_rescue_evidence_under_automatic_scope(order_status, read_issue, expected, reason) -> None:
+    rule = "LX0609-09-01-01"
+    order_source = source_evidence_reader.CURRENT_VISIT_RESCUE_ORDER_SOURCE_KEY
+    rows = {
+        "rescue_record": [{
+            "document_id": "synthetic-rescue",
+            "record_time": "2026-07-15 15:00:00",
+            "record_content": "抢救结束时间：2026-07-15 09:00:00",
+        }],
+        order_source: (
+            [{"order_id": "synthetic-order", "status_state": "effective"}]
+            if read_issue in {"order_error", "order_truncated"} else []
+        ),
+    }
+    session = _typed_basic_session(
+        rows, selected_rule_ids=(rule,),
+        failures={
+            "rescue_error": {"rescue_record": SourceEvidenceQueryError()},
+            "order_error": {order_source: SourceEvidenceQueryError()},
+        }.get(read_issue),
+        truncated_sources=frozenset({order_source}) if read_issue == "order_truncated" else frozenset(),
+    )
+
+    execution, reduced = _reduce_with_automatic_scope(
+        session, rows, rule, source_statuses={order_source: order_status},
+    )
+
+    assert reduced[0].final_state is expected
+    assert reduced[0].reason_code == reason
+    if expected is CustomerFinalState.COMPLIANT:
+        assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
+        assert {
+            item.source_key for item in session.snapshot.observations
+            if item.snapshot_ref.removeprefix("sha256:") in reduced[0].fact_refs
+        } == {"rescue_record"}
+        _assert_selected_document_ref(
+            execution, session, rule_id=rule, source_key="rescue_record",
+            document_id="synthetic-rescue",
+        )
 
 
 @pytest.mark.unit

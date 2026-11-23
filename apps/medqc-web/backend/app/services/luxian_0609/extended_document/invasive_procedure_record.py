@@ -108,6 +108,7 @@ class ProcedureTrigger:
     procedure: InvasiveProcedure
     anchor_date: date | None
     ordered_as: tuple[str, ...] = ()
+    orders: tuple[Mapping[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,7 @@ class OrderMappingResult(LlmStepResult):
 class RecordDocumentationResult(LlmStepResult):
     # trigger_key（目录编码@操作日） -> documented / not_documented / uncertain
     states: tuple[tuple[str, str], ...] = ()
+    selected_record_indexes: tuple[int, ...] = ()
 
 
 def trigger_key(trigger: ProcedureTrigger) -> str:
@@ -221,7 +223,7 @@ def order_triggers(
         if procedure is None:
             continue
         anchor = _first_time(row, _ORDER_TIME_FIELDS)
-        triggers.append(ProcedureTrigger(procedure, anchor.date() if anchor else None, (name,)))
+        triggers.append(ProcedureTrigger(procedure, anchor.date() if anchor else None, (name,), (row,)))
     return tuple(triggers)
 
 
@@ -239,6 +241,7 @@ def merge_triggers(triggers: Sequence[ProcedureTrigger]) -> tuple[ProcedureTrigg
             trigger.procedure,
             trigger.anchor_date,
             tuple(dict.fromkeys((*current.ordered_as, *trigger.ordered_as))),
+            (*current.orders, *trigger.orders),
         )
     return tuple(sorted(merged.values(), key=lambda item: (
         item.procedure.code, item.anchor_date is None, item.anchor_date or date.min,
@@ -376,15 +379,15 @@ async def map_orders_to_invasive_catalog(
 def window_records(
     triggers: Sequence[ProcedureTrigger],
     record_rows: Sequence[Mapping[str, Any]],
-) -> tuple[tuple[datetime, str, str], ...]:
-    """返回落在任一操作日起 3 天窗口内的记录（时间, 正文, 原文书身份），按时间排序。
+) -> tuple[tuple[datetime, str, str, int], ...]:
+    """返回落在操作窗口内的时间、正文、原文书身份和原行下标，按时间排序。
 
     同一份原文书（编号、时间、正文均相同）在多个来源出现时只保留一条，
     不能因来源重复被当成两份记录。没有文书编号时以时间和正文作为身份。
     """
 
-    selected: dict[tuple[str, datetime, str], tuple[datetime, str, str]] = {}
-    for row in record_rows:
+    selected: dict[tuple[str, datetime, str], tuple[datetime, str, str, int]] = {}
+    for index, row in enumerate(record_rows):
         recorded = _record_time(row)
         text = _record_text(row)
         if recorded is None or not text:
@@ -396,7 +399,7 @@ def window_records(
         ):
             doc_id = str(row.get("document_id") or "").strip()
             identity = f"doc:{doc_id}" if doc_id else f"text:{recorded.isoformat()}|{text}"
-            selected.setdefault((identity, recorded, text), (recorded, text, identity))
+            selected.setdefault((identity, recorded, text), (recorded, text, identity, index))
     return tuple(sorted(selected.values(), key=lambda item: (item[0], item[2])))
 
 
@@ -489,10 +492,10 @@ def _record_text(row: Mapping[str, Any]) -> str:
 
 
 def _record_prompt(
-    triggers: Sequence[ProcedureTrigger], records: Sequence[tuple[datetime, str, str]],
+    triggers: Sequence[ProcedureTrigger], records: Sequence[tuple[datetime, str, str, int]],
 ) -> tuple[str, tuple[str, ...]]:
     texts = tuple(
-        redact_luxian_0609_patient_privacy(text) for _time, text, _identity in records
+        redact_luxian_0609_patient_privacy(text) for _time, text, _identity, _index in records
     )
     payload = {
         "procedures": [
@@ -506,7 +509,7 @@ def _record_prompt(
         ],
         "records": [
             {"id": f"R{index:02d}", "time": recorded.strftime("%Y-%m-%d %H:%M"), "text": text}
-            for index, ((recorded, _raw, _identity), text) in enumerate(zip(records, texts), start=1)
+            for index, ((recorded, _raw, _identity, _source_index), text) in enumerate(zip(records, texts), start=1)
         ],
     }
     prompt = (
@@ -530,9 +533,9 @@ def _record_prompt(
 def _parse_records(
     response: Mapping[str, Any],
     triggers: Sequence[ProcedureTrigger],
-    records: Sequence[tuple[datetime, str, str]],
+    records: Sequence[tuple[datetime, str, str, int]],
     texts: Sequence[str],
-) -> tuple[tuple[str, str], ...]:
+) -> tuple[tuple[tuple[str, str], ...], tuple[int, ...]]:
     payload = _json_response_object(_response_content(response))
     if (
         not isinstance(payload, dict)
@@ -544,7 +547,7 @@ def _parse_records(
     procedures = {f"P{index:02d}": trigger for index, trigger in enumerate(triggers, start=1)}
     record_ids = {f"R{index:02d}": index - 1 for index in range(1, len(records) + 1)}
     seen: set[str] = set()
-    states: list[tuple[str, str]] = []
+    states: list[tuple[str, str, str | None, bool, int | None]] = []
     for item in payload["items"]:
         if not isinstance(item, dict) or set(item) != {"id", "state", "record", "quote"}:
             raise ValueError("invalid record item")
@@ -617,25 +620,33 @@ def _parse_records(
         dated = state == "documented" and _quote_states_date(
             _quote_context(texts[record_ids[item["record"]]], item["quote"]), trigger.anchor_date
         )
-        states.append((procedure_id, state, identity, dated))
+        source_index = records[record_ids[item["record"]]][3] if state == "documented" else None
+        states.append((procedure_id, state, identity, dated, source_index))
     if seen != set(procedures):
         raise ValueError("incomplete procedure coverage")
     # 同一份原文书被用来证明同一目录项的多次操作时，只有每次引用的摘录都写明
     # 各自操作日期（文书确实逐次记录）才成立，否则无法确定它属于哪一次。
     cited: dict[tuple[str, str], list[bool]] = {}
-    for procedure_id, state, identity, dated in states:
-        if state == "documented":
+    for procedure_id, state, identity, dated, _source_index in states:
+        if state == "documented" and identity is not None:
             cited.setdefault((procedures[procedure_id].procedure.code, identity), []).append(dated)
 
     def resolved(procedure_id: str, state: str, identity: str | None) -> str:
-        if state != "documented":
+        if state != "documented" or identity is None:
             return state
         flags = cited[(procedures[procedure_id].procedure.code, identity)]
         return "documented" if len(flags) == 1 or all(flags) else "uncertain"
 
-    return tuple(
-        (trigger_key(procedures[procedure_id]), resolved(procedure_id, state, identity))
-        for procedure_id, state, identity, _dated in states
+    resolved_states = tuple(
+        (trigger_key(procedures[procedure_id]), resolved(procedure_id, state, identity), source_index)
+        for procedure_id, state, identity, _dated, source_index in states
+    )
+    return (
+        tuple((key, state) for key, state, _source_index in resolved_states),
+        tuple(dict.fromkeys(
+            source_index for _key, state, source_index in resolved_states
+            if state == "documented" and source_index is not None
+        )),
     )
 
 
@@ -670,10 +681,12 @@ async def check_invasive_procedure_records(
         return RecordDocumentationResult("technical_error", response["_context_failure"], int(response["_request_started"]), api_time=elapsed)
     usage = _usage_tuple(response, elapsed)
     try:
-        states = _parse_records(response, triggers, records, texts)
+        states, selected_record_indexes = _parse_records(response, triggers, records, texts)
     except (ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
         _log_parse_rejection("record_documentation", error)
         return RecordDocumentationResult("technical_error", "model_invalid_output", 1, *usage)
     if candidate_issue and any(state != "documented" for _, state in states):
         return RecordDocumentationResult("unresolved", candidate_issue, 1, *usage)
-    return RecordDocumentationResult("ready", "", 1, *usage, states=states)
+    return RecordDocumentationResult(
+        "ready", "", 1, *usage, states=states, selected_record_indexes=selected_record_indexes,
+    )

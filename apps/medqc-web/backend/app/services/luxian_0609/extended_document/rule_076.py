@@ -70,18 +70,23 @@ def _parse_time(value: Any) -> datetime | None:
         return None
 
 
-def death_time_from_body(row: Mapping[str, Any]) -> datetime | None:
+def death_times_from_body(row: Mapping[str, Any]) -> tuple[datetime, ...]:
     """死亡记录正文中明确记载的死亡日期和时刻。"""
 
     body = _clean(row.get("record_content") or row.get("content"))
+    results: list[datetime] = []
     for pattern in _LABELED_TIME_PATTERNS:
         for match in pattern.finditer(body):
             tail = match.groupdict().get("tail") or ""
             if _NON_DEATH_EVENT_PATTERN.search(tail):
                 continue
             if parsed := _parse_time(match.group("value")):
-                return parsed
-    return None
+                results.append(parsed)
+    return tuple(results)
+
+
+def death_time_from_body(row: Mapping[str, Any]) -> datetime | None:
+    return next(iter(death_times_from_body(row)), None)
 
 
 def _death_time(row: Mapping[str, Any]) -> datetime | None:

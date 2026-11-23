@@ -9,7 +9,7 @@ from math import ceil
 from typing import Any, Mapping, Sequence
 
 from .shared import _clean, _parse_datetime, _row_time
-from ..evaluation_horizon import frozen_window_is_mature
+from ..evaluation_horizon import after_frozen_horizon, frozen_window_is_mature
 from app.services.document_assembly.signatures import course_physician_signatures
 
 
@@ -28,6 +28,8 @@ class PhysicianHandoffOutcome:
     reason_code: str
     change_source_key: str
     display_facts: Mapping[str, Any] | None = None
+    pending_change_rows: tuple[Mapping[str, Any], ...] = ()
+    pending_binding_facts: Mapping[str, Any] | None = None
 
 
 def _document_refs(
@@ -652,7 +654,7 @@ def _mature_handoff_outcome(
         "handover_time": next(iter(facts.get("handover_times") or ()), None),
     },)
     events = [dict(item) for item in events]
-    pending = missing_horizon = confirmed = False
+    pending = missing_horizon = conflicting_horizon = confirmed = False
     for item in events:
         change = _parse_datetime(item.get("change_time"))
         handoff = _parse_datetime(item.get("handoff_time"))
@@ -665,6 +667,8 @@ def _mature_handoff_outcome(
                 missing_horizon = True
                 if item.get("outcome") == "handover_missing":
                     item["outcome"] = "handover_window_unresolved"
+            elif after_frozen_horizon(change, horizon):
+                conflicting_horizon = True
             elif frozen_window_is_mature(horizon, change + timedelta(hours=24)):
                 confirmed = True
             else:
@@ -673,9 +677,11 @@ def _mature_handoff_outcome(
                     item["outcome"] = "handover_window_not_mature"
     if confirmed:
         return state, reason, {**facts, "events": events} if "events" in facts else facts
+    if conflicting_horizon:
+        return "data_gap", "authoritative_time_conflict", None
     if missing_horizon:
         return "data_gap", horizon_error or "authoritative_time_missing", None
-    return ("not_applicable", "evaluation_window_not_mature", None) if pending else (state, reason, facts)
+    return ("not_applicable", "evaluation_window_not_mature", facts) if pending else (state, reason, facts)
 
 
 def _is_effective_physician_change_order(row: Mapping[str, Any]) -> bool:
@@ -704,6 +710,15 @@ def _is_effective_physician_change_order(row: Mapping[str, Any]) -> bool:
                 continue
             return True
     return False
+
+
+def _physician_change_time(row: Mapping[str, Any]) -> datetime | None:
+    return _parse_datetime(
+        row.get("change_datetime")
+        or row.get("handoff_datetime")
+        or row.get("prescribed_datetime")
+        or row.get("order_time")
+    )
 
 
 def evaluate_physician_handoff(
@@ -777,15 +792,7 @@ def evaluate_physician_handoff(
     change_times = tuple(
         parsed
         for row in effective_change_rows
-        if (
-            parsed := _parse_datetime(
-                row.get("change_datetime")
-                or row.get("handoff_datetime")
-                or row.get("prescribed_datetime")
-                or row.get("order_time")
-            )
-        )
-        is not None
+        if (parsed := _physician_change_time(row)) is not None
     )
     handoff_times = tuple(
         parsed
@@ -811,10 +818,7 @@ def evaluate_physician_handoff(
             # 否则沿用下方整体资料不足（不把未决事件写成缺失、超时或已完成）。
             timed_rows = tuple(
                 row for row in effective_change_rows
-                if _parse_datetime(
-                    row.get("change_datetime") or row.get("handoff_datetime")
-                    or row.get("prescribed_datetime") or row.get("order_time")
-                ) is not None
+                if _physician_change_time(row) is not None
             )
             def related_records(rows, record_fields, change_fields):
                 # 仅隔离班次时间和人员均可证明不属于可靠事件的文书。
@@ -889,47 +893,42 @@ def evaluate_physician_handoff(
                 "source_document_refs": all_document_refs,
             },
         )
+    def window_outcome(
+        final_state: str, reason_code: str, facts: Mapping[str, Any] | None,
+    ) -> PhysicianHandoffOutcome:
+        final_state, reason_code, facts = _mature_handoff_outcome(
+            final_state, reason_code, facts, evaluation_horizon_datetime, evaluation_horizon_error,
+        )
+        if reason_code == "evaluation_window_not_mature":
+            if change_source_key != "physician_change_event" and physician_change_error:
+                return PhysicianHandoffOutcome("data_gap", physician_change_error, change_source_key)
+            if change_source_key == "physician_change_event" and any(
+                _physician_change_time(row) not in change_times for row in explicit_change_orders
+            ):
+                # 不同时间或没有时间的明确医嘱可能是另一变更，无法证明整例均未到期。
+                return PhysicianHandoffOutcome("data_gap", "association_failed", change_source_key)
+            # 只有权威事件可独立证明适用窗口；备选医嘱及签名链保留原有覆盖要求。
+            verified_rows = tuple(effective_change_rows) if change_source_key == "physician_change_event" else ()
+            return PhysicianHandoffOutcome(
+                final_state, reason_code, change_source_key,
+                pending_change_rows=verified_rows, pending_binding_facts=facts,
+            )
+        return PhysicianHandoffOutcome(final_state, reason_code, change_source_key, facts)
+
     if change_source_key == "inpat_nondrug_order":
-        final_state, reason_code, display_facts = _evaluate_explicit_order_events(
+        return window_outcome(*_evaluate_explicit_order_events(
             change_times=change_times,
             handoff_rows=handoff_rows,
             handover_rows=handover_rows,
-        )
-        final_state, reason_code, display_facts = _mature_handoff_outcome(
-            final_state, reason_code, display_facts, evaluation_horizon_datetime, evaluation_horizon_error,
-        )
-        return PhysicianHandoffOutcome(
-            final_state,
-            reason_code,
-            change_source_key,
-            display_facts,
-        )
+        ))
     if change_source_key == "daily_course_record":
-        final_state, reason_code, display_facts = _evaluate_derived_change_events(
+        return window_outcome(*_evaluate_derived_change_events(
             change_rows=effective_change_rows,
             handoff_rows=handoff_rows,
             handover_rows=handover_rows,
-        )
-        final_state, reason_code, display_facts = _mature_handoff_outcome(
-            final_state, reason_code, display_facts, evaluation_horizon_datetime, evaluation_horizon_error,
-        )
-        return PhysicianHandoffOutcome(
-            final_state,
-            reason_code,
-            change_source_key,
-            display_facts,
-        )
-    final_state, reason_code, display_facts = _evaluate_structured_change_events(
+        ))
+    return window_outcome(*_evaluate_structured_change_events(
         change_rows=effective_change_rows,
         handoff_rows=handoff_rows,
         handover_rows=handover_rows,
-    )
-    final_state, reason_code, display_facts = _mature_handoff_outcome(
-        final_state, reason_code, display_facts, evaluation_horizon_datetime, evaluation_horizon_error,
-    )
-    return PhysicianHandoffOutcome(
-        final_state,
-        reason_code,
-        change_source_key,
-        display_facts,
-    )
+    ))

@@ -10,6 +10,7 @@ import heapq
 import re
 from typing import Any, Mapping, Protocol
 
+from ..cache_document_source_adapter import explicit_sections
 from ..decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -73,6 +74,22 @@ _COPY_TEMPLATE_SHELL_PHRASES = (
     "观察病情",
 )
 _RULE_016_EXACT_MATCH = 1.0
+_RULE_016_ADMISSION_HEADINGS = (
+    "个人史", "婚姻史", "婚育史", "婚姻及生育史", "月经史", "生育史", "月经生育史", "家族史",
+)
+# 未识别的独立短行后若还有正文，可能是下一栏标题，不能当作当前栏原文。
+_RULE_016_UNRESOLVED_HEADING = re.compile(
+    r"(?:^|[\r\n]|(?<=[。；;]))[ \t]*(?:[一二三四五六七八九十]+[、.．][ \t]*)?"
+    r"[【\[]?[\u4e00-\u9fff]{2,10}[】\]]?[ \t]*[:：]"
+    r"|(?:^|[\r\n])[ \t]*(?:[一二三四五六七八九十]+[、.．][ \t]*)?"
+    r"(?:[【\[][\u4e00-\u9fff]{2,16}[】\]]|[\u4e00-\u9fff]{0,12}"
+    r"(?:情况|记录|资料|信息|栏目|摘要|概述|说明|计划|意见|内容|备注|事项|检查|报告|史))"
+    r"[ \t]*(?=[\r\n]|$)"
+    r"|(?:^|[\r\n])[ \t]*[\u4e00-\u9fff]{2,12}[ \t]*(?=[\r\n]+[ \t]*\S)"
+)
+_RULE_016_SECTION_PLACEHOLDER = re.compile(
+    r"(?:请填写|待填写|未填写|待补充|请输入)(?:现病史|病例特点)?"
+)
 
 
 def _first_course_body_text(row: Mapping[str, Any]) -> str:
@@ -173,8 +190,51 @@ def _normalized_for_exact_section_comparison(content: str) -> str:
     return re.sub(r"[；;。]", "", value)
 
 
+def _rule_016_frozen_sections(
+    snapshot: Luxian0609EvidenceSnapshot, materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[dict[str, Any], tuple[str, ...]] | None:
+    """只为自动冻结材料补读明确的整段栏目，结构化值始终优先。"""
+    documents: dict[str, Any] = {}
+    refs: list[str] = []
+    used_body_section = False
+    for source_key, field, label, substantive_body in (
+        ("admission_record", "history_of_present_illness", "现病史", _admission_body_text),
+        ("first_course_record", "case_characteristic", "病例特点", _first_course_body_text),
+    ):
+        scope_status = (materials.scope(source_key) or {}).get("status")
+        if scope_status not in {"available", "body_empty"}:
+            return None
+        pairs = materials.document_rows(source_key, snapshot=snapshot)
+        if len(pairs) != 1:
+            return None
+        ref, row = pairs[0]
+        if not _clean(row.get("document_id")):
+            return None
+        value = _clean(row.get(field))
+        if not value:
+            additional_headings = _RULE_016_ADMISSION_HEADINGS if source_key == "admission_record" else ()
+            sections = [
+                text for heading, text in explicit_sections(
+                    row.get("record_content"), additional_headings=additional_headings,
+                ) if heading == label
+            ]
+            if scope_status != "available" or len(sections) != 1:
+                return None
+            value = sections[0]
+            if (
+                not substantive_body({field: value})
+                or _RULE_016_UNRESOLVED_HEADING.search(value)
+                or _RULE_016_SECTION_PLACEHOLDER.fullmatch(re.sub(r"[\W_]+", "", value))
+            ):
+                return None
+            used_body_section = True
+        refs.append(ref)
+        documents[source_key] = [{**row, field: value}]
+    return (documents, tuple(refs)) if used_body_section else None
+
+
 def _rule_016_copy_coverage(documents: Mapping[str, Any]) -> float | None:
-    """只比较结构化现病史与病例特点；1.0仅表示规范化后完全相同。"""
+    """只比较已定位的现病史与病例特点；1.0仅表示规范化后完全相同。"""
 
     admission_texts = tuple(
         _clean(row.get("history_of_present_illness"))
