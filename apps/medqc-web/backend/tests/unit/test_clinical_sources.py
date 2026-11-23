@@ -241,7 +241,7 @@ def test_same_key_current_document_requests_do_not_coalesce_across_sources(profi
     entered = Barrier(2)
     def assemble(**identity):
         entered.wait(timeout=5)
-        return {"documents": [clinical.source_binding()]}
+        return {"documents": [{"content": clinical.source_binding()}]}
     monkeypatch.setattr(current_view, "_assemble_current_documents", assemble)
     def load(selection):
         with clinical.selected(selection):
@@ -250,8 +250,8 @@ def test_same_key_current_document_requests_do_not_coalesce_across_sources(profi
     with ThreadPoolExecutor(max_workers=2) as pool:
         old = pool.submit(load, sources.legacy_snapshot())
         new = pool.submit(load, value)
-        assert old.result(timeout=8) == {"documents": [""]}
-        assert new.result(timeout=8) == {"documents": [value["binding"]]}
+        assert old.result(timeout=8) == {"documents": [{"content": ""}]}
+        assert new.result(timeout=8) == {"documents": [{"content": value["binding"]}]}
 
 
 def test_historical_document_source_comes_from_job_not_current_default(settings_store, profile, monkeypatch):

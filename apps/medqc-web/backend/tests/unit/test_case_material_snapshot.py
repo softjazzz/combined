@@ -559,7 +559,11 @@ def test_catalog_no_registration_keeps_unknown_and_date_only(monkeypatch):
             for name in ("mr","admission_record","discharge_record"):
                 connection.execute(text(f"CREATE TABLE cdm.{name}(institute_id TEXT,patient_id TEXT,visit_id TEXT,admission_datetime TEXT,admission_date TEXT,discharge_date TEXT)"))
             connection.execute(text("INSERT INTO cdm.admission_record VALUES('I','P1','V1','2026-11-01 08:00:00',NULL,NULL)"))
-            connection.execute(text("INSERT INTO cdm.discharge_record VALUES('I','P2','V2',NULL,'2026-11-01','2026-11-03')"))
+            # 无住院登记时，日期级入院记录仍可作为住院身份锚点。
+            connection.execute(text("INSERT INTO cdm.admission_record VALUES('I','P2','V2',NULL,'2026-11-01',NULL)"))
+            connection.execute(text("INSERT INTO cdm.discharge_record VALUES('I','P2','V2',NULL,NULL,'2026-11-03')"))
+            # 单独一份出院记录不能建立普通病历的住院身份。
+            connection.execute(text("INSERT INTO cdm.discharge_record VALUES('I','P3','V3',NULL,'2026-11-01','2026-11-03')"))
         monkeypatch.setattr(clinical,"get_engine",lambda:engine)
         unknown = catalog.workstation(hospital_status="unknown",qc_projection_loader=lambda _: {})
         assert unknown["total"] == 1 and unknown["records"][0]["hospitalizationStatus"] == "unknown"
@@ -567,6 +571,8 @@ def test_catalog_no_registration_keeps_unknown_and_date_only(monkeypatch):
         discharged = catalog.workstation(hospital_status="discharged",qc_projection_loader=lambda _: {})
         assert discharged["total"] == 1
         row = discharged["records"][0]
+        assert (row["instituteId"], row["patientId"], row["id"]) == ("I", "P2", "V2")
+        assert tuple(catalog.case_identities(scope="final")) == (("I", "P2", "V2"),)
         assert row["admissionDate"] == "2026-11-01" and row["admissionPrecision"] == "date"
         assert row["dischargeDate"] == "2026-11-03" and row["dischargeDatetime"] is None
     finally:

@@ -352,7 +352,7 @@ describe('QCRecordResultComparisonDrawer', () => {
 
     const wrapper = mountDrawer('grouped')
     await flushPromises()
-    expect(wrapper.get('.hospital-loading [alt="泸县人民医院"]').exists()).toBe(true)
+    expect(wrapper.find('.hospital-loading [alt="泸县人民医院"]').exists()).toBe(true)
     expect(wrapper.get('.hospital-loading').text()).toBe('正在读取质控结果')
     await wrapper.setProps({
       focus: {
