@@ -42,38 +42,17 @@ _COMMON_SURNAME = (
 )
 # 仅识别人口学标签及明确性别值；不把“性别相关”等医疗叙述当身份依据。
 _LABELLED_SEX = r"性别[ \t]*[:：]?[ \t]*[男女](?=[\s，,、；;。\"}]|$)"
-# 带明确性别/年龄锚点的患者介绍视为高置信姓名并参与全文替换。
+# 仅带明确性别/年龄锚点的患者介绍才视为高置信姓名并参与全文替换；
+# 无性别/年龄锚点且仅跟“因”的句式（如“患者高热，因...”与“患者孙小红，因...”）在脱敏阶段不盲猜，
+# 交由发送前护栏在缺少已知中文姓名上下文时 fail-closed 拦截。
 _PATIENT_INTRO = re.compile(
     rf"(?P<label>(?:患者|病人|患儿)\s*)"
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
     rf"(?=\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁))"
 )
-# “因”锚点介绍（含可选逗号，如“患者孙小红，因发热入院”“患者孙小红因发热入院”）
-# 经常见临床/时间词过滤后视为可信患者姓名，原地脱敏并参与同篇后续出现替换。
-_PATIENT_CAUSE_INTRO = re.compile(
-    rf"(?P<label>(?:患者|病人|患儿)\s*)"
-    rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
-    r"(?=(?:\s*[，,、]\s*因|\s*因))"
-)
-_CAUSE_INTRO_NON_NAME_PREFIXES = (
-    "于昨日", "于今日", "于夜间", "于上午", "于下午", "于院外", "于家中", "于外院", "于入院",
-    "从高处", "经治疗", "经检查", "经外院", "经产", "经期", "查体", "查血", "查尿",
-    "左肺", "左侧", "左胸", "左腹", "双肺", "双侧", "双下肢", "全身", "全腹", "空腹",
-    "平素", "平时", "平卧", "平稳", "平车", "常年", "长期", "常规", "周身",
-    "连日", "连续", "时有", "时感", "明显", "明确", "危重", "危急", "严重",
-    "强直", "强迫", "劳累", "劳力", "步态", "步行", "焦虑", "焦躁", "解黑",
-    "解稀", "解血", "解水", "高危", "高龄", "高度", "高热", "高温", "高烧",
-    "黄疸", "黄染", "冷汗", "白带", "白内障", "白细胞", "包块", "房颤", "房扑",
-    "房早", "房室", "窦性", "窦缓", "窦速", "干咳", "干呕", "干燥", "红肿",
-    "红斑", "红细胞", "皮疹", "皮肤", "皮下", "皮损", "水肿", "水疱", "水样",
-    "支气管", "关节", "宫缩", "宫颈", "宫腔", "宫口", "宫内", "宫外",
-    "阴道", "阴性", "阴囊", "阴茎", "羊水", "怀孕", "仰卧", "苍白", "沙哑",
-    "麻醉", "麻木", "麻疹", "糜烂", "满腹", "谷丙", "谷草", "终末", "车祸",
-    "家属", "张口", "曾于", "曾经", "曾行", "曾有", "曾患", "曾住",
-)
-_CAUSE_INTRO_CLINICAL_SUFFIXES = frozenset(
-    "热痛咳呕吐泻喘闷晕肿疹斑痰血尿便压糖脂炎癌瘤病症颤烂醉折毒竭乱"
-    "肺肾肝胃肠脑胸腹腰背颈眼耳鼻咽喉肢膝肩臂腿肤膜腔管节块液汗温龄院"
+_KNOWN_CJK_NAME = re.compile(r"[\u4e00-\u9fff·]{2,12}")
+_AMBIGUOUS_PATIENT_CAUSE_INTRO = re.compile(
+    rf"(?:患者|病人|患儿)\s*{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}}(?=(?:\s*[，,、]\s*因|\s*因))"
 )
 _DEMOGRAPHIC_LABEL = (
     # 正文可能嵌在一层或多层 JSON 中；识别转义换行边界，不解码/重写整段医疗文本。
@@ -169,27 +148,6 @@ def _replace_labelled(pattern: re.Pattern[str], text: str, placeholder: str) -> 
     )
 
 
-def _is_plausible_unverified_cause_name(value: str) -> bool:
-    cleaned = value.strip()
-    if len(cleaned) < 2:
-        return False
-    if any(cleaned.startswith(prefix) for prefix in _CAUSE_INTRO_NON_NAME_PREFIXES):
-        return False
-    if cleaned[-1] in _CAUSE_INTRO_CLINICAL_SUFFIXES:
-        return False
-    return True
-
-
-def _replace_unverified_cause_intro(text: str, placeholder: str) -> str:
-    def _replace(match: re.Match[str]) -> str:
-        value = match.group("value")
-        if not _is_plausible_unverified_cause_name(value):
-            return match.group(0)
-        return f"{match.group('label')}{placeholder}"
-
-    return _PATIENT_CAUSE_INTRO.sub(_replace, text)
-
-
 def _protect_clinician_names(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
     protected: list[tuple[str, str]] = []
 
@@ -217,7 +175,7 @@ def redact_luxian_0609_patient_privacy(
     # 已知身份只补充明确患者介绍的识别，不靠扩充姓氏表猜测，也不盲删数字/无标签身份。
     known_names = [
         re.escape(value) for value in _freeze_identity_values(identity_values if identity_values is not None else ())
-        if re.fullmatch(r"[\u4e00-\u9fff·]{2,12}", value)
+        if _KNOWN_CJK_NAME.fullmatch(value)
     ]
     name_patterns = (_PATIENT_NAME_LABEL, _PATIENT_INTRO, _DEMOGRAPHIC_NAME)
     if known_names:
@@ -233,16 +191,11 @@ def redact_luxian_0609_patient_privacy(
         )
         name_patterns = (*name_patterns, known_intro, known_demographic)
     protected_prompt, protected_clinicians = _protect_clinician_names(prompt)
-    inferred_cause_names = {
-        match.group("value").strip()
-        for match in _PATIENT_CAUSE_INTRO.finditer(protected_prompt)
-        if _is_plausible_unverified_cause_name(match.group("value"))
-    }
     patient_names = {
         match.group("value").strip()
         for pattern in name_patterns
         for match in pattern.finditer(protected_prompt)
-    } | inferred_cause_names
+    }
     contact_names = {
         match.group("value").strip()
         for match in _CONTACT_NAME.finditer(protected_prompt)
@@ -266,10 +219,6 @@ def redact_luxian_0609_patient_privacy(
     if known_names:
         redacted = _replace_labelled(known_intro, redacted, _PATIENT_NAME_PLACEHOLDER)
         redacted = _replace_labelled(known_demographic, redacted, _PATIENT_NAME_PLACEHOLDER)
-    redacted = _replace_unverified_cause_intro(
-        redacted,
-        _PATIENT_NAME_PLACEHOLDER,
-    )
     redacted = _replace_labelled(
         _CONTACT_NAME,
         redacted,
@@ -350,19 +299,47 @@ def _contains_identity(text: str, identity: str) -> bool:
     return identity in text
 
 
+def _has_known_cjk_patient_name(identities: Iterable[str]) -> bool:
+    return any(_KNOWN_CJK_NAME.fullmatch(value) for value in identities)
+
+
+def _contains_ambiguous_patient_cause_intro(text: str) -> bool:
+    protected_text, _ = _protect_clinician_names(text)
+    return _AMBIGUOUS_PATIENT_CAUSE_INTRO.search(protected_text) is not None
+
+
 def _check_identity_residue(
-    value: Any, identities: tuple[str, ...], depth: int = 0
+    value: Any,
+    identities: tuple[str, ...],
+    depth: int = 0,
+    *,
+    reject_ambiguous_cause_intro: bool = False,
 ) -> None:
     if depth > _MAX_REQUEST_DEPTH:
         raise PrivacyIdentityContextError("Model request cannot be checked safely")
     if isinstance(value, Mapping):
         for key, item in value.items():
-            _check_identity_residue(key, identities, depth + 1)
-            _check_identity_residue(item, identities, depth + 1)
+            _check_identity_residue(
+                key,
+                identities,
+                depth + 1,
+                reject_ambiguous_cause_intro=reject_ambiguous_cause_intro,
+            )
+            _check_identity_residue(
+                item,
+                identities,
+                depth + 1,
+                reject_ambiguous_cause_intro=reject_ambiguous_cause_intro,
+            )
         return
     if isinstance(value, (tuple, list)):
         for item in value:
-            _check_identity_residue(item, identities, depth + 1)
+            _check_identity_residue(
+                item,
+                identities,
+                depth + 1,
+                reject_ambiguous_cause_intro=reject_ambiguous_cause_intro,
+            )
         return
     if value is None:
         return
@@ -381,12 +358,20 @@ def _check_identity_residue(
             lambda m: chr(0x10000 + ((ord(m[1]) - 0xD800) << 10) + ord(m[2]) - 0xDC00),
             decoded,
         )
+        candidate_texts = (current, decoded, _decode_json_simple_escapes(decoded))
         if any(
             _contains_identity(text, identity)
             for identity in identities
-            for text in (current, decoded, _decode_json_simple_escapes(decoded))
+            for text in candidate_texts
         ):
             raise PatientPrivacyViolation("Patient identity remains in model request")
+        if reject_ambiguous_cause_intro and any(
+            _contains_ambiguous_patient_cause_intro(text)
+            for text in candidate_texts
+        ):
+            raise PrivacyIdentityContextError(
+                "Ambiguous patient introduction without known patient name"
+            )
         try:
             parsed = json.loads(current)
         except (ValueError, TypeError):
@@ -400,7 +385,12 @@ def _check_identity_residue(
             current = parsed
             continue
         if isinstance(parsed, (dict, list)):
-            _check_identity_residue(parsed, identities, depth + 1)
+            _check_identity_residue(
+                parsed,
+                identities,
+                depth + 1,
+                reject_ambiguous_cause_intro=reject_ambiguous_cause_intro,
+            )
         return
     raise PrivacyIdentityContextError(
         "Model request encoding exceeds privacy check limit"
@@ -412,8 +402,13 @@ def assert_no_known_identity(request: object, identity_values: Iterable[str]) ->
     identities = _freeze_identity_values(identity_values)
     if not identities:
         return
+    reject_ambiguous = not _has_known_cjk_patient_name(identities)
     try:
-        _check_identity_residue(request, identities)
+        _check_identity_residue(
+            request,
+            identities,
+            reject_ambiguous_cause_intro=reject_ambiguous,
+        )
     except (PatientPrivacyViolation, PrivacyIdentityContextError):
         raise
     except Exception:
@@ -505,6 +500,30 @@ def _schema_privacy_projection(schema: object, depth: int = 0) -> object:
     return projected
 
 
+def _project_model_request_for_privacy(request: object) -> object:
+    projected = request
+    if isinstance(request, Mapping):
+        projected = dict(request)
+        for key in _MODEL_NUMERIC_PARAMETERS:
+            if type(projected.get(key)) in (int, float):
+                projected[key] = None
+        response_format = request.get("response_format")
+        if (
+            isinstance(response_format, Mapping)
+            and response_format.get("type") == "json_schema"
+        ):
+            envelope = response_format.get("json_schema")
+            if isinstance(envelope, Mapping) and "schema" in envelope:
+                projected["response_format"] = {
+                    **response_format,
+                    "json_schema": {
+                        **envelope,
+                        "schema": _schema_privacy_projection(envelope["schema"]),
+                    },
+                }
+    return projected
+
+
 def assert_no_known_identity_in_model_request(
     request: object, identity_values: Iterable[str]
 ) -> None:
@@ -513,26 +532,7 @@ def assert_no_known_identity_in_model_request(
     if not identities:
         return
     try:
-        projected = request
-        if isinstance(request, Mapping):
-            projected = dict(request)
-            for key in _MODEL_NUMERIC_PARAMETERS:
-                if type(projected.get(key)) in (int, float):
-                    projected[key] = None
-            response_format = request.get("response_format")
-            if (
-                isinstance(response_format, Mapping)
-                and response_format.get("type") == "json_schema"
-            ):
-                envelope = response_format.get("json_schema")
-                if isinstance(envelope, Mapping) and "schema" in envelope:
-                    projected["response_format"] = {
-                        **response_format,
-                        "json_schema": {
-                            **envelope,
-                            "schema": _schema_privacy_projection(envelope["schema"]),
-                        },
-                    }
+        projected = _project_model_request_for_privacy(request)
         assert_no_known_identity(projected, identities)
     except (PatientPrivacyViolation, PrivacyIdentityContextError):
         raise
@@ -669,6 +669,17 @@ class _Luxian0609PrivacyRedactingLLMClient:
             redacted = redact_luxian_0609_patient_privacy(prompt, identity_values=identities)
             assert_no_known_identity(redacted, identities)
             assert_no_known_identity_in_model_request(kwargs, identities)
+            if not identities:
+                _check_identity_residue(
+                    redacted,
+                    (),
+                    reject_ambiguous_cause_intro=True,
+                )
+                _check_identity_residue(
+                    _project_model_request_for_privacy(kwargs),
+                    (),
+                    reject_ambiguous_cause_intro=True,
+                )
         except (PatientPrivacyViolation, PrivacyIdentityContextError) as error:
             _log_privacy_guard_block(error)
             raise
