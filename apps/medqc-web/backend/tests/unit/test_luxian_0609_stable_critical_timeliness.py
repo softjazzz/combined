@@ -256,3 +256,109 @@ async def test_critical_closed_intervals_and_restart_exclude_stable_days():
                           order("2026-01-05 08:00:00", "2026-01-05 20:00:00")])
     assert result["status"] == "compliant"
     assert result["customer_display_facts"]["required_dates"] == ["2026-01-01", "2026-01-02", "2026-01-05"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("order_rows", "expected_003", "expected_005"),
+    [
+        (
+            [{"order_name": "病危", "order_status": "取消",
+              "prescribed_datetime": "2026-01-01 09:00:00"}],
+            ("non_compliant", "threshold_exceeded"),
+            ("not_applicable", "trigger_absent_complete"),
+        ),
+        (
+            [{"order_name": "病重", "order_status": "未执行",
+              "prescribed_datetime": "2026-01-01 09:00:00"}],
+            ("non_compliant", "threshold_exceeded"),
+            ("not_applicable", "trigger_absent_complete"),
+        ),
+        (
+            [{"order_name": "病危", "order_status": "停止",
+              "prescribed_datetime": "2026-01-01 08:00:00",
+              "planned_start_datetime": "2026-01-01 09:00:00",
+              "planned_end_datetime": "2026-01-02 10:00:00"}],
+            ("not_applicable", "eligibility_not_met"),
+            ("non_compliant", "requirement_violated"),
+        ),
+        (
+            [{"order_name": "病危", "order_status": "待确认",
+              "prescribed_datetime": "2026-01-01 09:00:00"}],
+            ("data_gap", "applicability_source_gap"),
+            ("data_gap", "source_unavailable"),
+        ),
+    ],
+    ids=("cancelled_void", "unexecuted_void", "stopped_after_effective", "unresolved_status"),
+)
+async def test_real_sql_severity_gate_distinguishes_void_stopped_and_unresolved(
+    monkeypatch, order_rows, expected_003, expected_005
+):
+    from app.services.luxian_0609 import source_evidence_reader as reader
+    from test_luxian_0609_source_evidence_reader import _sqlite_nondrug_order_engine
+
+    _sqlite_nondrug_order_engine(order_rows, monkeypatch)
+    static_rows = {
+        "inpat_registration": [{"admission_datetime": "2026-01-01 08:00:00"}],
+        DISCHARGE: [{"discharge_datetime": "2026-01-07 08:00:00"}],
+        "daily_course_record": [],
+        "senior_course_record": [],
+        "exam_item_report": [],
+        "labtest_master": [],
+        "labtest_item_report": [],
+    }
+
+    def row_reader(**kwargs):
+        source = kwargs["source_key"]
+        if source in (UNSTABLE, SEVERITY):
+            return reader.read_luxian_0609_snapshot_source_rows(**kwargs)
+        return SnapshotSourceRows.create(
+            source_key=source, rows=static_rows.get(source, ()), truncated=False, limit_rows=50
+        )
+
+    rules = (STABLE, "LX0609-02-01-04", CRITICAL)
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=rules, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, created_at="2026-01-07T10:00:00+08:00",
+        evaluation_as_of_date="2026-01-07", row_reader=row_reader,
+    )
+    execution = await execute_luxian_0609_native_course_quality_rules(
+        rule_ids=rules, decision_rule_ids=rules,
+        wrapper_rules=[{"rule_id": rule} for rule in rules],
+        evidence_payload=None, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=None,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions, expected_rule_ids=rules,
+        snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    by_rule = {
+        item.rule_id: (item.final_state.value, item.reason_code)
+        for item in reduced
+    }
+    assert by_rule[STABLE] == expected_003
+    assert by_rule[CRITICAL] == expected_005
+
+
+@pytest.mark.asyncio
+async def test_critical_excluded_order_with_missing_time_does_not_degrade_semantic_context():
+    excluded_without_time = {
+        "severity": "critical",
+        "event_kind": "start",
+        "status_state": "excluded",
+        "lifecycle_state": "",
+        "prescribed_datetime": None,
+        "planned_start_datetime": None,
+        "planned_end_datetime": None,
+        "row_ref": "excluded-critical-no-time",
+    }
+    result = await final(
+        CRITICAL,
+        [note("2026-01-01 12:00:00", "C1"), note("2026-01-02 12:00:00", "C2")],
+        [order("2026-01-01 09:00:00", "2026-01-02 10:00:00"), excluded_without_time],
+    )
+    assert (result["status"], result["reason_code"]) == (
+        "compliant",
+        "requirement_satisfied",
+    )

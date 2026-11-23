@@ -805,3 +805,231 @@ def test_discharge_signature_and_json_are_in_both_whitelists_but_not_time_fallba
     assert fields <= set(source_evidence_reader._NATIVE_SOURCE_FIELDS["discharge_record"])
     assert fields <= set(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS["discharge_record"])
     assert not fields.intersection(source_evidence_reader.AUTHORITATIVE_DOCUMENT_TIME_FIELDS)
+
+
+def _sqlite_nondrug_order_engine(rows: list[dict], monkeypatch):
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE inpat_nondrug_order (
+                    institute_id TEXT,
+                    patient_id TEXT,
+                    visit_id TEXT,
+                    order_id TEXT,
+                    order_name TEXT,
+                    order_status TEXT,
+                    prescribed_datetime TEXT,
+                    planned_start_datetime TEXT,
+                    planned_end_datetime TEXT
+                )
+                """
+            )
+        )
+        for index, row in enumerate(rows):
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO inpat_nondrug_order (
+                        institute_id, patient_id, visit_id, order_id, order_name,
+                        order_status, prescribed_datetime, planned_start_datetime,
+                        planned_end_datetime
+                    ) VALUES (
+                        :institute_id, :patient_id, :visit_id, :order_id, :order_name,
+                        :order_status, :prescribed_datetime, :planned_start_datetime,
+                        :planned_end_datetime
+                    )
+                    """
+                ),
+                {
+                    "institute_id": row.get("institute_id", "I"),
+                    "patient_id": row.get("patient_id", "P"),
+                    "visit_id": row.get("visit_id", "V"),
+                    "order_id": row.get("order_id", f"O-{index}"),
+                    "order_name": row.get("order_name"),
+                    "order_status": row.get("order_status"),
+                    "prescribed_datetime": row.get("prescribed_datetime"),
+                    "planned_start_datetime": row.get("planned_start_datetime"),
+                    "planned_end_datetime": row.get("planned_end_datetime"),
+                },
+            )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "_source_engine", lambda _schema: engine
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "main"
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_qualified_table",
+        lambda _schema, table: f'"{table}"',
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "order_id",
+            "order_name",
+            "order_status",
+            "prescribed_datetime",
+            "planned_start_datetime",
+            "planned_end_datetime",
+        ],
+    )
+    return engine
+
+
+@pytest.mark.parametrize(
+    ("order_name", "order_status"),
+    [
+        ("病危", "取消"),
+        ("病重", "撤销"),
+        ("病危通知", "作废"),
+        ("病重", "已取消"),
+        ("病危", "已撤销"),
+        ("病重通知", "已作废"),
+        ("病危", "未执行"),
+        ("病重", " 取消 "),
+        ("取消病危", "执行中"),
+        ("撤销病重", "新开"),
+        ("作废病危", "停止"),
+    ],
+)
+def test_unstable_order_ignores_void_and_never_effective_orders(
+    monkeypatch, order_name: str, order_status: str
+) -> None:
+    _sqlite_nondrug_order_engine(
+        [{"order_name": order_name, "order_status": order_status}], monkeypatch
+    )
+
+    present = source_evidence_reader.has_luxian_0609_current_visit_unstable_order(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None
+    )
+
+    assert present is False
+
+
+@pytest.mark.parametrize(
+    "order_status",
+    ["新开", "执行中", "执行", "核实", "停止", "已停止", " 停止 "],
+)
+def test_unstable_order_detects_effective_and_stopped_after_effective_orders(
+    monkeypatch, order_status: str
+) -> None:
+    _sqlite_nondrug_order_engine(
+        [
+            {"order_name": "病重", "order_status": "取消"},
+            {"order_name": "病危", "order_status": order_status},
+        ],
+        monkeypatch,
+    )
+
+    present = source_evidence_reader.has_luxian_0609_current_visit_unstable_order(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None
+    )
+
+    assert present is True
+
+
+@pytest.mark.parametrize("order_status", [None, "", "   ", "待确认"])
+def test_unstable_order_raises_unavailable_when_only_unresolved_status_exists(
+    monkeypatch, order_status
+) -> None:
+    _sqlite_nondrug_order_engine(
+        [{"order_name": "病危", "order_status": order_status}], monkeypatch
+    )
+
+    with pytest.raises(source_evidence_reader.SourceEvidenceUnavailable):
+        source_evidence_reader.has_luxian_0609_current_visit_unstable_order(
+            institute_id="I", patient_id="P", visit_id="V", source_schema=None
+        )
+
+
+def test_unstable_order_returns_true_when_effective_order_coexists_with_unresolved(
+    monkeypatch,
+) -> None:
+    _sqlite_nondrug_order_engine(
+        [
+            {"order_name": "病重", "order_status": None},
+            {"order_name": "病危", "order_status": "停止"},
+        ],
+        monkeypatch,
+    )
+
+    assert (
+        source_evidence_reader.has_luxian_0609_current_visit_unstable_order(
+            institute_id="I", patient_id="P", visit_id="V", source_schema=None
+        )
+        is True
+    )
+
+
+def test_unstable_order_without_status_column_still_filters_cancelled_names(
+    monkeypatch,
+) -> None:
+    _sqlite_nondrug_order_engine(
+        [{"order_name": "取消病危", "order_status": "取消"}], monkeypatch
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _table: ["institute_id", "patient_id", "visit_id", "order_name"],
+    )
+
+    assert (
+        source_evidence_reader.has_luxian_0609_current_visit_unstable_order(
+            institute_id="I", patient_id="P", visit_id="V", source_schema=None
+        )
+        is False
+    )
+
+
+def test_severity_order_reader_filters_excluded_statuses_before_limit_and_keeps_null_unresolved(
+    monkeypatch,
+) -> None:
+    """大量取消/作废/未执行病危行不得占满 LIMIT 50 截断有效行，同时 NULL 状态仍保留为 unresolved。"""
+
+    rows = [
+        {
+            "order_id": f"CANCEL-{index:03d}",
+            "order_name": "病危",
+            "order_status": ("取消", "已取消", "未执行")[index % 3],
+            "prescribed_datetime": f"2026-01-01 08:{index % 60:02d}:00",
+        }
+        for index in range(55)
+    ] + [
+        {
+            "order_id": "STOPPED-CRITICAL",
+            "order_name": "病危",
+            "order_status": "已停止",
+            "prescribed_datetime": "2026-01-02 08:00:00",
+            "planned_start_datetime": "2026-01-02 08:00:00",
+            "planned_end_datetime": "2026-01-03 08:00:00",
+        },
+        {
+            "order_id": "NULL-SERIOUS",
+            "order_name": "病重",
+            "order_status": None,
+            "prescribed_datetime": "2026-01-02 09:00:00",
+        },
+    ]
+    _sqlite_nondrug_order_engine(rows, monkeypatch)
+
+    result = source_evidence_reader.read_luxian_0609_severity_order_rows(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None
+    )
+
+    assert result.truncated is False
+    assert [
+        (row["severity"], row["status_state"], row["lifecycle_state"])
+        for row in result.rows
+    ] == [
+        ("critical", "effective", "stopped"),
+        ("serious", "unresolved", ""),
+    ]
