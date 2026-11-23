@@ -8,8 +8,12 @@ from typing import Any, Dict, Optional
 from fastapi import HTTPException, status
 from sqlalchemy import text
 
+from app.core.roles import effective_roles
 from app.database.connection import SessionLocal
 from app.services.qc_agent.tools import assert_no_sensitive_output
+
+
+_ADMIN_ROLES = frozenset({"admin", "super_admin", "sync_admin"})
 
 
 def _now() -> datetime:
@@ -36,26 +40,69 @@ def _loads(value: Any) -> Dict[str, Any]:
 def _user_id(user: Dict[str, Any] | None) -> str:
     if not isinstance(user, dict):
         return ""
-    return str(user.get("id") or user.get("user_id") or user.get("email") or "")
+    return str(user.get("id") or user.get("user_id") or user.get("email") or "").strip()
+
+
+def _is_admin_user(user: Dict[str, Any] | None) -> bool:
+    if not isinstance(user, dict):
+        return False
+    roles = set(effective_roles(user.get("roles")))
+    single_role = str(user.get("role") or "").strip()
+    if single_role:
+        roles.update(effective_roles([single_role]))
+    return bool(roles & _ADMIN_ROLES)
+
+
+def _assert_session_owner(row_user_id: Any, current_user: Dict[str, Any] | None) -> None:
+    """强制校验会话归属：非本人且非管理员一律拒绝 403。"""
+    if _is_admin_user(current_user):
+        return
+    uid = _user_id(current_user)
+    owner = str(row_user_id or "").strip()
+    if not uid or not owner or owner != uid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权访问或修改其他用户的 qc_agent 会话",
+        )
+
+
+def _is_sqlite(session: Any) -> bool:
+    try:
+        bind = session.get_bind()
+        return getattr(getattr(bind, "dialect", None), "name", "") == "sqlite"
+    except Exception:
+        return False
+
+
+def _tbl(session: Any, name: str) -> str:
+    return name if _is_sqlite(session) else f"qc.{name}"
 
 
 class QCAgentSessionStore:
     """qc_agent 最小会话与 trace 持久化。"""
 
-    def __init__(self) -> None:
-        if SessionLocal is None:
+    def __init__(self, session_factory: Any = None) -> None:
+        self._session_factory = session_factory or SessionLocal
+        if self._session_factory is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="数据库未配置，无法使用 qc_agent 会话存储",
             )
 
     def _ensure_tables(self, session: Any) -> None:
-        session.execute(text("CREATE SCHEMA IF NOT EXISTS qc"))
+        sqlite_mode = _is_sqlite(session)
+        pk_col = "INTEGER PRIMARY KEY AUTOINCREMENT" if sqlite_mode else "BIGSERIAL PRIMARY KEY"
+        if not sqlite_mode:
+            session.execute(text("CREATE SCHEMA IF NOT EXISTS qc"))
+        t_sessions = _tbl(session, "qc_agent_sessions")
+        t_messages = _tbl(session, "qc_agent_messages")
+        t_runs = _tbl(session, "qc_agent_runs")
+        t_confirmations = _tbl(session, "qc_agent_confirmations")
         session.execute(
             text(
-                """
-                CREATE TABLE IF NOT EXISTS qc.qc_agent_sessions (
-                    id BIGSERIAL PRIMARY KEY,
+                f"""
+                CREATE TABLE IF NOT EXISTS {t_sessions} (
+                    id {pk_col},
                     session_id VARCHAR(64) UNIQUE NOT NULL,
                     user_id VARCHAR(128) NOT NULL DEFAULT '',
                     title VARCHAR(255) NOT NULL DEFAULT '',
@@ -71,9 +118,9 @@ class QCAgentSessionStore:
         )
         session.execute(
             text(
-                """
-                CREATE TABLE IF NOT EXISTS qc.qc_agent_messages (
-                    id BIGSERIAL PRIMARY KEY,
+                f"""
+                CREATE TABLE IF NOT EXISTS {t_messages} (
+                    id {pk_col},
                     session_id VARCHAR(64) NOT NULL,
                     run_id VARCHAR(64) NOT NULL DEFAULT '',
                     role VARCHAR(32) NOT NULL,
@@ -87,14 +134,14 @@ class QCAgentSessionStore:
         )
         session.execute(
             text(
-                """
-                CREATE TABLE IF NOT EXISTS qc.qc_agent_runs (
+                f"""
+                CREATE TABLE IF NOT EXISTS {t_runs} (
                     run_id VARCHAR(64) PRIMARY KEY,
                     session_id VARCHAR(64) NOT NULL,
                     user_id VARCHAR(128) NOT NULL DEFAULT '',
-                    parsed_intent TEXT NOT NULL DEFAULT '{}',
+                    parsed_intent TEXT NOT NULL DEFAULT '{{}}',
                     plan TEXT NOT NULL DEFAULT '[]',
-                    result_summary TEXT NOT NULL DEFAULT '{}',
+                    result_summary TEXT NOT NULL DEFAULT '{{}}',
                     warnings TEXT NOT NULL DEFAULT '[]',
                     error_summary TEXT NOT NULL DEFAULT '',
                     created_at TIMESTAMP NOT NULL
@@ -104,19 +151,39 @@ class QCAgentSessionStore:
         )
         session.execute(
             text(
-                """
-                CREATE TABLE IF NOT EXISTS qc.qc_agent_confirmations (
-                    id BIGSERIAL PRIMARY KEY,
+                f"""
+                CREATE TABLE IF NOT EXISTS {t_confirmations} (
+                    id {pk_col},
                     session_id VARCHAR(64) NOT NULL,
                     run_id VARCHAR(64) NOT NULL,
                     confirmation_type VARCHAR(64) NOT NULL,
-                    payload TEXT NOT NULL DEFAULT '{}',
+                    payload TEXT NOT NULL DEFAULT '{{}}',
                     expires_at TIMESTAMP NOT NULL,
                     resolved_at TIMESTAMP NULL
                 )
                 """
             )
         )
+
+    def assert_session_access(
+        self,
+        session_id: str,
+        *,
+        current_user: Dict[str, Any] | None,
+    ) -> None:
+        """若 session_id 已存在，强制校验其归属权（本人或管理员）。"""
+        sid = str(session_id or "").strip()
+        if not sid:
+            return
+        with self._session_factory() as session:
+            self._ensure_tables(session)
+            t_sessions = _tbl(session, "qc_agent_sessions")
+            row = session.execute(
+                text(f"SELECT user_id FROM {t_sessions} WHERE session_id = :session_id LIMIT 1"),
+                {"session_id": sid},
+            ).mappings().first()
+            if row is not None:
+                _assert_session_owner(row.get("user_id"), current_user)
 
     def create_session(
         self,
@@ -129,53 +196,84 @@ class QCAgentSessionStore:
         sid = session_id or str(uuid.uuid4())
         context = user_context or {}
         now = _now()
-        with SessionLocal() as session:
+        with self._session_factory() as session:
             self._ensure_tables(session)
-            session.execute(
-                text(
-                    """
-                    INSERT INTO qc.qc_agent_sessions (
-                        session_id, user_id, title, status, current_visit_id,
-                        current_patient_id, last_run_id, created_at, updated_at
-                    )
-                    VALUES (
-                        :session_id, :user_id, :title, 'active', :visit_id,
-                        :patient_id, '', :created_at, :updated_at
-                    )
-                    ON CONFLICT (session_id) DO UPDATE SET
-                        title = COALESCE(NULLIF(:title, ''), qc.qc_agent_sessions.title),
-                        current_visit_id = COALESCE(NULLIF(:visit_id, ''), qc.qc_agent_sessions.current_visit_id),
-                        current_patient_id = COALESCE(NULLIF(:patient_id, ''), qc.qc_agent_sessions.current_patient_id),
-                        updated_at = :updated_at
-                    """
-                ),
-                {
-                    "session_id": sid,
-                    "user_id": _user_id(current_user),
-                    "title": title or "",
-                    "visit_id": str(context.get("visit_id") or ""),
-                    "patient_id": str(context.get("patient_id") or ""),
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            )
+            t_sessions = _tbl(session, "qc_agent_sessions")
+            existing = session.execute(
+                text(f"SELECT user_id FROM {t_sessions} WHERE session_id = :session_id LIMIT 1"),
+                {"session_id": sid},
+            ).mappings().first()
+            if existing is not None:
+                _assert_session_owner(existing.get("user_id"), current_user)
+                session.execute(
+                    text(
+                        f"""
+                        UPDATE {t_sessions}
+                        SET title = COALESCE(NULLIF(:title, ''), title),
+                            current_visit_id = COALESCE(NULLIF(:visit_id, ''), current_visit_id),
+                            current_patient_id = COALESCE(NULLIF(:patient_id, ''), current_patient_id),
+                            updated_at = :updated_at
+                        WHERE session_id = :session_id
+                        """
+                    ),
+                    {
+                        "session_id": sid,
+                        "title": title or "",
+                        "visit_id": str(context.get("visit_id") or ""),
+                        "patient_id": str(context.get("patient_id") or ""),
+                        "updated_at": now,
+                    },
+                )
+            else:
+                session.execute(
+                    text(
+                        f"""
+                        INSERT INTO {t_sessions} (
+                            session_id, user_id, title, status, current_visit_id,
+                            current_patient_id, last_run_id, created_at, updated_at
+                        )
+                        VALUES (
+                            :session_id, :user_id, :title, 'active', :visit_id,
+                            :patient_id, '', :created_at, :updated_at
+                        )
+                        """
+                    ),
+                    {
+                        "session_id": sid,
+                        "user_id": _user_id(current_user),
+                        "title": title or "",
+                        "visit_id": str(context.get("visit_id") or ""),
+                        "patient_id": str(context.get("patient_id") or ""),
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                )
             session.commit()
-        return self.get_session(sid)
+        return self.get_session(sid, current_user=current_user)
 
-    def get_session(self, session_id: str) -> Dict[str, Any]:
-        with SessionLocal() as session:
+    def get_session(
+        self,
+        session_id: str,
+        *,
+        current_user: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        with self._session_factory() as session:
             self._ensure_tables(session)
+            t_sessions = _tbl(session, "qc_agent_sessions")
+            t_messages = _tbl(session, "qc_agent_messages")
+            t_confirmations = _tbl(session, "qc_agent_confirmations")
             row = session.execute(
-                text("SELECT * FROM qc.qc_agent_sessions WHERE session_id = :session_id LIMIT 1"),
+                text(f"SELECT * FROM {t_sessions} WHERE session_id = :session_id LIMIT 1"),
                 {"session_id": session_id},
             ).mappings().first()
             if row is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="qc_agent 会话不存在")
+            _assert_session_owner(row.get("user_id"), current_user)
             messages = session.execute(
                 text(
-                    """
+                    f"""
                     SELECT role, message, response_status, result_type, run_id, created_at
-                    FROM qc.qc_agent_messages
+                    FROM {t_messages}
                     WHERE session_id = :session_id
                     ORDER BY id DESC
                     LIMIT 30
@@ -185,9 +283,9 @@ class QCAgentSessionStore:
             ).mappings().all()
             pending = session.execute(
                 text(
-                    """
+                    f"""
                     SELECT confirmation_type, payload, run_id, expires_at
-                    FROM qc.qc_agent_confirmations
+                    FROM {t_confirmations}
                     WHERE session_id = :session_id
                       AND resolved_at IS NULL
                       AND expires_at > :now
@@ -216,6 +314,44 @@ class QCAgentSessionStore:
             ),
         }
 
+    def delete_session(
+        self,
+        session_id: str,
+        *,
+        current_user: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        with self._session_factory() as session:
+            self._ensure_tables(session)
+            t_sessions = _tbl(session, "qc_agent_sessions")
+            t_messages = _tbl(session, "qc_agent_messages")
+            t_runs = _tbl(session, "qc_agent_runs")
+            t_confirmations = _tbl(session, "qc_agent_confirmations")
+            row = session.execute(
+                text(f"SELECT session_id, user_id FROM {t_sessions} WHERE session_id = :session_id LIMIT 1"),
+                {"session_id": session_id},
+            ).mappings().first()
+            if row is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="qc_agent 会话不存在")
+            _assert_session_owner(row.get("user_id"), current_user)
+            session.execute(
+                text(f"DELETE FROM {t_confirmations} WHERE session_id = :session_id"),
+                {"session_id": session_id},
+            )
+            session.execute(
+                text(f"DELETE FROM {t_messages} WHERE session_id = :session_id"),
+                {"session_id": session_id},
+            )
+            session.execute(
+                text(f"DELETE FROM {t_runs} WHERE session_id = :session_id"),
+                {"session_id": session_id},
+            )
+            session.execute(
+                text(f"DELETE FROM {t_sessions} WHERE session_id = :session_id"),
+                {"session_id": session_id},
+            )
+            session.commit()
+        return {"session_id": session_id, "deleted": True}
+
     def record_chat(
         self,
         *,
@@ -236,41 +372,66 @@ class QCAgentSessionStore:
         warnings = list(getattr(response, "warnings", []) or [])
         now = _now()
         context = user_context or {}
-        with SessionLocal() as session:
+        with self._session_factory() as session:
             self._ensure_tables(session)
+            t_sessions = _tbl(session, "qc_agent_sessions")
+            t_messages = _tbl(session, "qc_agent_messages")
+            t_runs = _tbl(session, "qc_agent_runs")
+            t_confirmations = _tbl(session, "qc_agent_confirmations")
+            existing = session.execute(
+                text(f"SELECT user_id FROM {t_sessions} WHERE session_id = :session_id LIMIT 1"),
+                {"session_id": sid},
+            ).mappings().first()
+            if existing is not None:
+                _assert_session_owner(existing.get("user_id"), current_user)
+                session.execute(
+                    text(
+                        f"""
+                        UPDATE {t_sessions}
+                        SET current_visit_id = COALESCE(NULLIF(:visit_id, ''), current_visit_id),
+                            current_patient_id = COALESCE(NULLIF(:patient_id, ''), current_patient_id),
+                            last_run_id = :run_id,
+                            updated_at = :updated_at
+                        WHERE session_id = :session_id
+                        """
+                    ),
+                    {
+                        "session_id": sid,
+                        "visit_id": str(context.get("visit_id") or ""),
+                        "patient_id": str(context.get("patient_id") or ""),
+                        "run_id": run_id,
+                        "updated_at": now,
+                    },
+                )
+            else:
+                session.execute(
+                    text(
+                        f"""
+                        INSERT INTO {t_sessions} (
+                            session_id, user_id, title, status, current_visit_id,
+                            current_patient_id, last_run_id, created_at, updated_at
+                        )
+                        VALUES (
+                            :session_id, :user_id, :title, 'active', :visit_id,
+                            :patient_id, :run_id, :created_at, :updated_at
+                        )
+                        """
+                    ),
+                    {
+                        "session_id": sid,
+                        "user_id": _user_id(current_user),
+                        "title": request_message[:80],
+                        "visit_id": str(context.get("visit_id") or ""),
+                        "patient_id": str(context.get("patient_id") or ""),
+                        "run_id": run_id,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                )
             session.execute(
                 text(
-                    """
-                    INSERT INTO qc.qc_agent_sessions (
-                        session_id, user_id, title, status, current_visit_id,
-                        current_patient_id, last_run_id, created_at, updated_at
-                    )
-                    VALUES (
-                        :session_id, :user_id, :title, 'active', :visit_id,
-                        :patient_id, :run_id, :created_at, :updated_at
-                    )
-                    ON CONFLICT (session_id) DO UPDATE SET
-                        current_visit_id = COALESCE(NULLIF(:visit_id, ''), qc.qc_agent_sessions.current_visit_id),
-                        current_patient_id = COALESCE(NULLIF(:patient_id, ''), qc.qc_agent_sessions.current_patient_id),
-                        last_run_id = :run_id,
-                        updated_at = :updated_at
-                    """
-                ),
-                {
-                    "session_id": sid,
-                    "user_id": _user_id(current_user),
-                    "title": request_message[:80],
-                    "visit_id": str(context.get("visit_id") or ""),
-                    "patient_id": str(context.get("patient_id") or ""),
-                    "run_id": run_id,
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            )
-            session.execute(
-                text(
-                    """
-                    INSERT INTO qc.qc_agent_messages (
+                    f"""
+                    INSERT INTO {t_messages} (
                         session_id, run_id, role, message, response_status, result_type, created_at
                     )
                     VALUES (:session_id, :run_id, 'user', :message, '', '', :created_at)
@@ -280,8 +441,8 @@ class QCAgentSessionStore:
             )
             session.execute(
                 text(
-                    """
-                    INSERT INTO qc.qc_agent_messages (
+                    f"""
+                    INSERT INTO {t_messages} (
                         session_id, run_id, role, message, response_status, result_type, created_at
                     )
                     VALUES (:session_id, :run_id, 'assistant', :message, :status, :result_type, :created_at)
@@ -300,8 +461,8 @@ class QCAgentSessionStore:
             plan_payload = [item.model_dump() if hasattr(item, "model_dump") else item for item in plan]
             session.execute(
                 text(
-                    """
-                    INSERT INTO qc.qc_agent_runs (
+                    f"""
+                    INSERT INTO {t_runs} (
                         run_id, session_id, user_id, parsed_intent, plan,
                         result_summary, warnings, error_summary, created_at
                     )
@@ -327,8 +488,8 @@ class QCAgentSessionStore:
             if getattr(response, "status", "") == "needs_confirmation":
                 session.execute(
                     text(
-                        """
-                        INSERT INTO qc.qc_agent_confirmations (
+                        f"""
+                        INSERT INTO {t_confirmations} (
                             session_id, run_id, confirmation_type, payload, expires_at, resolved_at
                         )
                         VALUES (:session_id, :run_id, :confirmation_type, :payload, :expires_at, NULL)
@@ -344,13 +505,27 @@ class QCAgentSessionStore:
                 )
             session.commit()
 
-    def resolve_pending_confirmation(self, *, session_id: str) -> None:
-        with SessionLocal() as session:
+    def resolve_pending_confirmation(
+        self,
+        *,
+        session_id: str,
+        current_user: Dict[str, Any] | None = None,
+    ) -> None:
+        with self._session_factory() as session:
             self._ensure_tables(session)
+            t_sessions = _tbl(session, "qc_agent_sessions")
+            t_confirmations = _tbl(session, "qc_agent_confirmations")
+            if current_user is not None:
+                row = session.execute(
+                    text(f"SELECT user_id FROM {t_sessions} WHERE session_id = :session_id LIMIT 1"),
+                    {"session_id": session_id},
+                ).mappings().first()
+                if row is not None:
+                    _assert_session_owner(row.get("user_id"), current_user)
             session.execute(
                 text(
-                    """
-                    UPDATE qc.qc_agent_confirmations
+                    f"""
+                    UPDATE {t_confirmations}
                     SET resolved_at = :resolved_at
                     WHERE session_id = :session_id
                       AND resolved_at IS NULL

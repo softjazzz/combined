@@ -20,7 +20,7 @@ def _stub_preproduction_auth(monkeypatch):
     monkeypatch.setattr(
         luxian_0609_preproduction,
         "resolve_current_user_from_token",
-        lambda _token: {"id": "api-test-user"},
+        lambda _token: {"id": "api-test-user", "roles": ["admin"]},
     )
 
 
@@ -183,7 +183,7 @@ def test_preproduction_api_enabled_passes_exact_safe_contract_once(monkeypatch) 
     def resolve_user(token):
         captured["auth_db"] += 1
         assert token == "safe-test-token"
-        return {"id": "authenticated-user"}
+        return {"id": "authenticated-user", "roles": ["admin"]}
 
     def load_bundle(**kwargs):
         captured["loader"] += 1
@@ -718,7 +718,7 @@ def test_main_app_defers_auth_until_preproduction_flag_is_enabled(monkeypatch) -
         nonlocal auth_calls
         auth_calls += 1
         assert token == "safe-main-token"
-        return {"id": "authenticated-user"}
+        return {"id": "authenticated-user", "roles": ["admin"]}
 
     monkeypatch.setattr(access_control, "resolve_current_user_from_token", resolve_user)
     monkeypatch.setattr(

@@ -4,8 +4,9 @@ import re
 import uuid
 from typing import Any, Dict, List
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
+from app.core.roles import effective_roles
 from app.services.qc_agent.intent_router import (
     merge_llm_intent,
     normalize_intent_message,
@@ -16,7 +17,17 @@ from app.services.qc_agent.tool_registry import AgentToolRegistry
 from app.services.qc_agent.tools import assert_no_sensitive_output
 
 
-_ALLOWED_USER_CONTEXT_KEYS = {"dept", "department", "name", "patient_name", "visit_id", "patient_id", "mr_no"}
+_ALLOWED_USER_CONTEXT_KEYS = {
+    "dept",
+    "department",
+    "name",
+    "patient_name",
+    "visit_id",
+    "patient_id",
+    "mr_no",
+    "institute_id",
+}
+_GLOBAL_SCOPE_ROLES = frozenset({"admin", "super_admin", "sync_admin"})
 
 _DOCUMENT_PATTERNS = [
     (("入院记录", "再次入院记录", "多次入院记录"), "admission", None),
@@ -409,12 +420,156 @@ def _execute_tool(
     return public_data
 
 
+def _resolve_chat_institute_scope(current_user: Dict[str, Any] | None) -> tuple[bool, str | None]:
+    """解析对话请求者的院区作用域。
+
+    返回 `(is_scoped, allowed_institute_id)`：
+    - `current_user is None` 或全局角色（admin/super_admin/sync_admin）返回 `(False, None)`；
+    - 非全局角色优先从持久 `SysUser` 读取院区与角色，否则回退 `current_user['institute_id']`。
+    """
+    if not isinstance(current_user, dict):
+        return False, None
+
+    actor_id = _text(current_user.get("id") or current_user.get("user_id"))
+    if actor_id:
+        try:
+            from app.database.connection import SessionLocal
+            from app.services.defect_rectification_service import _person
+
+            if SessionLocal is not None:
+                with SessionLocal() as session:
+                    actor = _person(session, actor_id)
+                if actor["roles"] & _GLOBAL_SCOPE_ROLES:
+                    return False, None
+                return True, _text(actor.get("institute_id")) or None
+        except Exception:
+            pass
+
+    roles = set(effective_roles(current_user.get("roles")))
+    single_role = _text(current_user.get("role"))
+    if single_role:
+        roles.update(effective_roles([single_role]))
+    if roles & _GLOBAL_SCOPE_ROLES:
+        return False, None
+    return True, _text(current_user.get("institute_id")) or None
+
+
+def _lookup_visit_institutes(visit_ids: List[str]) -> Dict[str, set[str]]:
+    """从本地 CDM 索引表查询 visit_id 对应的院区集合（用于非全局角色的院区隔离校验）。"""
+    normalized_ids = [vid for vid in dict.fromkeys(_text(v) for v in visit_ids) if vid]
+    if not normalized_ids:
+        return {}
+    mapping: Dict[str, set[str]] = {}
+    try:
+        from app.database.connection import SessionLocal
+        from app.database.models.cdm import InpatRegistration, MedicalRecordFrontpage
+
+        if SessionLocal is None:
+            return {}
+        with SessionLocal() as session:
+            for model in (MedicalRecordFrontpage, InpatRegistration):
+                try:
+                    rows = (
+                        session.query(model.visit_id, model.institute_id)
+                        .filter(model.visit_id.in_(normalized_ids))
+                        .all()
+                    )
+                    for vid, inst in rows:
+                        vid_s = _text(vid)
+                        inst_s = _text(inst)
+                        if vid_s and inst_s:
+                            mapping.setdefault(vid_s, set()).add(inst_s)
+                except Exception:
+                    continue
+    except Exception:
+        return {}
+    return mapping
+
+
+def _require_scoped_institute(
+    is_scoped: bool,
+    allowed_institute: str | None,
+    request: QCAgentChatRequest,
+) -> None:
+    if not is_scoped:
+        return
+    if not allowed_institute:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="当前账号缺少可信院区归属，无法查询或质控病历",
+        )
+    for container in (request.user_context, request.confirm_selection):
+        if isinstance(container, dict):
+            req_inst = _text(container.get("institute_id"))
+            if req_inst and req_inst != allowed_institute:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="无权查询或质控其他院区病历",
+                )
+
+
+def _filter_candidates_by_institute(
+    candidates: List[Dict[str, Any]],
+    *,
+    is_scoped: bool,
+    allowed_institute: str | None,
+) -> List[Dict[str, Any]]:
+    if not is_scoped:
+        return candidates
+    if not allowed_institute:
+        return []
+    db_map = _lookup_visit_institutes([_text(c.get("visit_id")) for c in candidates])
+    filtered: List[Dict[str, Any]] = []
+    for cand in candidates:
+        cand_inst = _text(cand.get("institute_id"))
+        if cand_inst:
+            if cand_inst == allowed_institute:
+                filtered.append(cand)
+            continue
+        vid = _text(cand.get("visit_id"))
+        known_insts = db_map.get(vid, set())
+        if allowed_institute in known_insts:
+            filtered.append(cand)
+    return filtered
+
+
+def _enforce_visit_institute_access(
+    visit_id: str,
+    *,
+    is_scoped: bool,
+    allowed_institute: str | None,
+    confirmed_institute: str = "",
+) -> None:
+    if not is_scoped:
+        return
+    if not allowed_institute:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="当前账号缺少可信院区归属，无法访问病历",
+        )
+    if confirmed_institute:
+        if confirmed_institute != allowed_institute:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权访问其他院区病历",
+            )
+        return
+    db_map = _lookup_visit_institutes([visit_id])
+    known_insts = db_map.get(_text(visit_id), set())
+    if allowed_institute not in known_insts:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权访问其他院区或未确认院区归属的病历",
+        )
+
+
 def _record_ref_from_confirmation(confirm_selection: Dict[str, Any] | None) -> Dict[str, str]:
     if not isinstance(confirm_selection, dict):
         return {}
     return {
         "visit_id": _text(confirm_selection.get("visit_id")),
         "patient_id": _text(confirm_selection.get("patient_id")),
+        "institute_id": _text(confirm_selection.get("institute_id")),
     }
 
 
@@ -422,6 +577,9 @@ def _search_candidates(
     registry: AgentToolRegistry,
     intent: Dict[str, Any],
     plan: List[Dict[str, Any]],
+    *,
+    is_scoped: bool = False,
+    allowed_institute: str | None = None,
 ) -> List[Dict[str, Any]]:
     keyword = intent.get("mr_no") or intent.get("patient_name") or intent.get("patient_id") or ""
     arguments = {
@@ -436,7 +594,12 @@ def _search_candidates(
         "page_size": 20,
     }
     public_data = _execute_tool(registry, "search_records", arguments, plan)
-    return list(public_data.get("records") or [])
+    records = list(public_data.get("records") or [])
+    return _filter_candidates_by_institute(
+        records,
+        is_scoped=is_scoped,
+        allowed_institute=allowed_institute,
+    )
 
 
 def _resolve_single_record_for_coding(
@@ -447,13 +610,27 @@ def _resolve_single_record_for_coding(
     intent: Dict[str, Any],
     plan: List[Dict[str, Any]],
     warnings: List[str],
+    is_scoped: bool = False,
+    allowed_institute: str | None = None,
 ) -> tuple[str, str, QCAgentChatResponse | None]:
+    _require_scoped_institute(is_scoped, allowed_institute, request)
     confirmed_ref = _record_ref_from_confirmation(request.confirm_selection)
     visit_id = confirmed_ref.get("visit_id") or intent.get("visit_id")
     patient_id = confirmed_ref.get("patient_id") or intent.get("patient_id")
     if visit_id:
+        _enforce_visit_institute_access(
+            _text(visit_id),
+            is_scoped=is_scoped,
+            allowed_institute=allowed_institute,
+        )
         return _text(visit_id), _text(patient_id), None
-    candidates = _search_candidates(registry, intent, plan)
+    candidates = _search_candidates(
+        registry,
+        intent,
+        plan,
+        is_scoped=is_scoped,
+        allowed_institute=allowed_institute,
+    )
     if not candidates:
         return "", "", QCAgentChatResponse(
             status="needs_clarification",
@@ -485,6 +662,8 @@ def _run_coding_or_grouping_intent(
     intent: Dict[str, Any],
     plan: List[Dict[str, Any]],
     warnings: List[str],
+    is_scoped: bool = False,
+    allowed_institute: str | None = None,
 ) -> QCAgentChatResponse | None:
     capability = _text(intent.get("capability"))
     if capability == "search_icd_codes":
@@ -524,6 +703,8 @@ def _run_coding_or_grouping_intent(
             intent=intent,
             plan=plan,
             warnings=warnings,
+            is_scoped=is_scoped,
+            allowed_institute=allowed_institute,
         )
         if response is not None:
             assert_no_sensitive_output(response.model_dump())
@@ -616,9 +797,15 @@ def _run_coding_or_grouping_intent(
     return None
 
 
-def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAgentChatResponse:
+def run_intent(
+    request: QCAgentChatRequest,
+    registry: AgentToolRegistry,
+    *,
+    current_user: Dict[str, Any] | None = None,
+) -> QCAgentChatResponse:
     run_id = str(uuid.uuid4())
     plan: List[Dict[str, Any]] = []
+    is_scoped, allowed_institute = _resolve_chat_institute_scope(current_user)
     intent, warnings = parse_intent(request)
     if intent.get("intent_router") == "llm_unavailable":
         response = QCAgentChatResponse(
@@ -690,6 +877,8 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
         intent=intent,
         plan=plan,
         warnings=warnings,
+        is_scoped=is_scoped,
+        allowed_institute=allowed_institute,
     )
     if capability_response is not None:
         return capability_response
@@ -719,12 +908,20 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
         assert_no_sensitive_output(response.model_dump())
         return response
 
+    _require_scoped_institute(is_scoped, allowed_institute, request)
     confirmed_ref = _record_ref_from_confirmation(request.confirm_selection)
     visit_id = confirmed_ref.get("visit_id") or intent.get("visit_id")
     patient_id = confirmed_ref.get("patient_id") or intent.get("patient_id")
     candidates: List[Dict[str, Any]] = []
+    matched_candidate_institute = ""
     if not visit_id:
-        candidates = _search_candidates(registry, intent, plan)
+        candidates = _search_candidates(
+            registry,
+            intent,
+            plan,
+            is_scoped=is_scoped,
+            allowed_institute=allowed_institute,
+        )
         if not candidates:
             response = QCAgentChatResponse(
                 status="needs_clarification",
@@ -757,6 +954,13 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
             return response
         visit_id = candidates[0].get("visit_id", "")
         patient_id = patient_id or candidates[0].get("patient_id", "")
+        matched_candidate_institute = _text(candidates[0].get("institute_id"))
+    _enforce_visit_institute_access(
+        _text(visit_id),
+        is_scoped=is_scoped,
+        allowed_institute=allowed_institute,
+        confirmed_institute=matched_candidate_institute,
+    )
 
     context_args = {
         "visit_id": visit_id,

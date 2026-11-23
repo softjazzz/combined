@@ -14,9 +14,61 @@ from app.core.http import (
 )
 from app.core.settings import get_settings
 from app.services.llm_observability import observe_llm_sync_http_attempt
+from app.services.luxian_0609.llm_prompt_privacy import redact_luxian_0609_patient_privacy
 
 
 logger = logging.getLogger(__name__)
+
+_PATIENT_NAME_IN_QUERY_PATTERNS = (
+    re.compile(r"(?:患者|病人|患儿)\s*([\u4e00-\u9fa5]{2,4})"),
+    re.compile(r"(?:^|[，,。；;\s])[\u4e00-\u9fa5]{2,12}科\s*([\u4e00-\u9fa5]{2,4})的"),
+    re.compile(r"(?:^|[，,。；;\s])([\u4e00-\u9fa5]{2,4})的(?:查房|病程|出院|会诊|入院)"),
+)
+_BLOCKED_NAME_TOKENS = frozenset({"查房", "病程", "出院", "会诊", "质控", "记录", "首页", "完整", "时效", "一致", "入院"})
+
+
+def redact_intent_input_for_llm(
+    message: str,
+    context: Dict[str, Any] | None = None,
+) -> Tuple[str, Dict[str, Any]]:
+    """对发往 LLM 的用户消息与上下文做隐私脱敏，防止 PHI（姓名/证件/电话/住址/病案号等）外泄。"""
+    ctx = context if isinstance(context, dict) else {}
+    normalized = normalize_intent_message(message)
+
+    identities: list[str] = []
+    for key in ("patient_name", "name", "patient_id", "mr_no"):
+        val = str(ctx.get(key) or "").strip()
+        if val:
+            identities.append(val)
+    for pattern in _PATIENT_NAME_IN_QUERY_PATTERNS:
+        for match in pattern.finditer(normalized):
+            candidate = str(match.group(1) or "").strip()
+            if candidate and candidate not in _BLOCKED_NAME_TOKENS:
+                identities.append(candidate)
+
+    redacted_message = redact_luxian_0609_patient_privacy(
+        normalized,
+        identity_values=identities,
+    )
+    # 兜底替换上下文与问句中已识别的姓名/病历标识，确保不残留明文
+    for ident in sorted(set(identities), key=len, reverse=True):
+        if ident and ident in redacted_message:
+            placeholder = "[就诊标识已脱敏]" if ident.isascii() else "[患者姓名已脱敏]"
+            redacted_message = redacted_message.replace(ident, placeholder)
+
+    # 发往 LLM 的上下文仅保留非 PHI 路由提示（如科室）
+    safe_context: Dict[str, Any] = {}
+    dept = str(ctx.get("department") or ctx.get("dept") or "").strip()
+    if dept:
+        safe_context["department"] = redact_luxian_0609_patient_privacy(
+            dept,
+            identity_values=identities,
+        )
+    if ctx.get("visit_id") not in (None, ""):
+        safe_context["has_visit_id"] = True
+    if ctx.get("patient_id") not in (None, ""):
+        safe_context["has_patient_id"] = True
+    return redacted_message, safe_context
 
 _LAST_HEALTH: Dict[str, Any] = {
     "last_check_status": "unknown",
@@ -309,11 +361,7 @@ def _build_system_prompt() -> str:
 
 
 def _build_user_prompt(message: str, context: Dict[str, Any]) -> str:
-    safe_context = {
-        key: context.get(key)
-        for key in ("visit_id", "patient_id", "mr_no", "patient_name", "department")
-        if context.get(key) not in (None, "")
-    }
+    redacted_message, safe_context = redact_intent_input_for_llm(message, context)
     schema = {
         "task_type": "qc|coding|grouping|unsupported",
         "capability": "list_qc_rules|run_document_qc|search_icd_codes|suggest_record_icd_codes|predict_dip_group|predict_drg_group|unsupported",
@@ -354,7 +402,7 @@ def _build_user_prompt(message: str, context: Dict[str, Any]) -> str:
     ]
     return json.dumps(
         {
-            "message": normalize_intent_message(message),
+            "message": redacted_message,
             "safe_context": safe_context,
             "output_schema": schema,
             "examples": examples,

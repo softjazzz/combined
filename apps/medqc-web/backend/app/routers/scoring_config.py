@@ -5,6 +5,7 @@
 每条记录为一个 config_key（如 'grade_thresholds'）及其 JSON config_value。
 """
 
+import copy
 import json
 import logging
 import uuid
@@ -14,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
-from ..core.security import get_current_user
+from ..core.security import get_current_user, require_roles
 
 router = APIRouter(prefix="/api/v1/scoring-config", tags=["evaluator-config"])
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ async def _load_config(sb) -> dict:
     resp = await async_execute(sb.table('scoring_config').select('*'))
     rows = list(getattr(resp, 'data', None) or [])
     if not rows:
-        return dict(_DEFAULT_CONFIG)
+        return copy.deepcopy(_DEFAULT_CONFIG)
 
     config = {}
     for row in rows:
@@ -61,7 +62,7 @@ async def _load_config(sb) -> dict:
     # 补全不存在于 PG 的默认键
     for k, v in _DEFAULT_CONFIG.items():
         if k not in config:
-            config[k] = v
+            config[k] = copy.deepcopy(v)
     return config
 
 
@@ -94,9 +95,33 @@ async def _save_config_key(sb, key: str, value, user_id: str = "system"):
     )
 
 
+def _load_grade_thresholds_sync() -> dict:
+    """同步优先读取数据库持久化的 grade_thresholds，不可用时回退默认阈值。"""
+    thresholds = copy.deepcopy(_DEFAULT_CONFIG["grade_thresholds"])
+    sb = get_supabase()
+    if sb is None:
+        return thresholds
+    try:
+        resp = sb.table('scoring_config').select('*').eq('config_key', 'grade_thresholds').execute()
+        rows = list(getattr(resp, 'data', None) or [])
+        if not rows:
+            return thresholds
+        raw = rows[0].get('config_value', '{}')
+        parsed = json.loads(raw) if isinstance(raw, str) else raw
+        if isinstance(parsed, dict):
+            for grade, cfg in parsed.items():
+                if grade in thresholds and isinstance(cfg, dict):
+                    thresholds[grade].update(cfg)
+                elif isinstance(cfg, dict):
+                    thresholds[grade] = dict(cfg)
+    except Exception as e:
+        logger.warning(f"读取数据库评分阈值失败，回退默认配置: {e}")
+    return thresholds
+
+
 def get_grade(score: int) -> str:
-    """根据默认阈值计算等级（同步辅助函数，供其他模块调用）。"""
-    thresholds = _DEFAULT_CONFIG["grade_thresholds"]
+    """根据数据库持久化评分阈值计算等级（同步辅助函数，供其他模块调用）。"""
+    thresholds = _load_grade_thresholds_sync()
     if score >= thresholds["甲"]["min_score"]:
         return "甲"
     elif score >= thresholds["乙"]["min_score"]:
@@ -120,7 +145,10 @@ async def get_scoring_config(request: Request, current_user: dict = Depends(get_
 
 
 @router.put("")
-async def update_scoring_config(request: Request, current_user: dict = Depends(get_current_user)):
+async def update_scoring_config(
+    request: Request,
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
     """更新评分阈值配置"""
     sb = _ensure_db()
     body = await request.json()

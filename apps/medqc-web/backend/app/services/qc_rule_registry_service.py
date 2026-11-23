@@ -14,8 +14,8 @@ from .sc_rule_launch_tier import load_sc_intrinsic_launch_tier_map, resolve_sc_i
 
 logger = logging.getLogger(__name__)
 
-_PUBLISH_ACTIONS = {"publish", "published", "promote", "stable", "activate"}
-_INACTIVE_ACTIONS = {"rollback", "unpublish", "deprecate", "archive", "disable"}
+_PUBLISH_ACTIONS = {"publish", "published", "promote", "stable", "activate", "rollback"}
+_INACTIVE_ACTIONS = {"unpublish", "deprecate", "archive", "disable"}
 _PREFERRED_STATUSES = {"published", "stable"}
 
 _DEFAULT_RULE_VERSION = "2026.04.p0"

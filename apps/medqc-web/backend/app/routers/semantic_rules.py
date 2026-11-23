@@ -1,8 +1,9 @@
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from inspect import isawaitable
 from ..core.supabase_client import get_supabase
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
+from ..core.security import get_current_user, require_roles
 from datetime import datetime
 
 router = APIRouter(prefix="/api/v1/semantic-rules", tags=["semantic-rules"])
@@ -62,6 +63,7 @@ async def get_all(
     page_size: int = Query(default=50, ge=1, le=200),
     sort_by: str = Query(default="updated_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    current_user: dict = Depends(get_current_user),
 ):
     """返回语义规则定义（含筛选/排序/分页）。
     - 数据源：Supabase `qc_rules`（若不可用则返回空数组）。
@@ -253,7 +255,7 @@ async def get_all(
 
 
 @router.get("/stats")
-async def stats(request: Request):
+async def stats(request: Request, current_user: dict = Depends(get_current_user)):
     try:
         return success_response(
             data={
@@ -274,7 +276,7 @@ async def stats(request: Request):
 
 
 @router.get("/validate-llm")
-async def validate_llm(request: Request):
+async def validate_llm(request: Request, current_user: dict = Depends(get_current_user)):
     """检测 LLM 连接状态。
     - 若 Supabase 中存在激活的 provider 或 model，则认为具备真实配置，显示为非 Mock。
     - 若查询失败或没有配置，则返回 Mock 模式。
@@ -311,8 +313,30 @@ async def validate_llm(request: Request):
     )
 
 
+@router.get("/export")
+async def export_rules(request: Request, current_user: dict = Depends(get_current_user)):
+    sb = get_supabase()
+    if sb is None:
+        # 与列表接口保持一致，返回空
+        return success_response(
+            data={"rules": [], "count": 0},
+            trace_id=get_trace_id(request)
+        )
+    try:
+        resp = await _exec_query(sb.table("qc_rules").select("*").limit(2000))
+        records = resp.data or []
+        rules = [_normalize_from_db(r) for r in records]
+        return success_response(
+            data={"rules": rules, "count": len(rules)},
+            message="导出成功",
+            trace_id=get_trace_id(request)
+        )
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"导出规则失败: {e}")
+
+
 @router.get("/{rule_id}")
-async def get_rule(request: Request, rule_id: str):
+async def get_rule(request: Request, rule_id: str, current_user: dict = Depends(get_current_user)):
     for r in _rules:
         if r["rule_id"] == rule_id:
             return success_response(data={"rule": r}, trace_id=get_trace_id(request))
@@ -320,7 +344,12 @@ async def get_rule(request: Request, rule_id: str):
 
 
 @router.post("/{rule_id}/execute")
-async def execute(request: Request, rule_id: str, payload: Dict[str, Any]):
+async def execute(
+    request: Request,
+    rule_id: str,
+    payload: Dict[str, Any],
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
     content = (payload.get("input_data") or {}).get("content", "")
     compliant = len(content) > 0
     return success_response(
@@ -342,7 +371,11 @@ async def execute(request: Request, rule_id: str, payload: Dict[str, Any]):
 
 
 @router.post("/batch-execute")
-async def batch_execute(request: Request, payload: Dict[str, Any]):
+async def batch_execute(
+    request: Request,
+    payload: Dict[str, Any],
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
     rule_ids: List[str] = payload.get("rule_ids", [])
     input_data = payload.get("input_data", {})
     results = []
@@ -365,7 +398,11 @@ async def batch_execute(request: Request, payload: Dict[str, Any]):
 
 
 @router.post("/custom")
-async def custom(request: Request, payload: Dict[str, Any]):
+async def custom(
+    request: Request,
+    payload: Dict[str, Any],
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
     rid = f"SR-{len(_rules)+1:03d}"
     rule = {"rule_id": rid, **payload}
     _rules.append(rule)
@@ -398,7 +435,11 @@ def _normalize_from_db(r: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.post("")
-async def create_rule(request: Request, payload: Dict[str, Any]):
+async def create_rule(
+    request: Request,
+    payload: Dict[str, Any],
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
@@ -417,7 +458,12 @@ async def create_rule(request: Request, payload: Dict[str, Any]):
 
 
 @router.put("/{rule_id}")
-async def update_rule(request: Request, rule_id: str, payload: Dict[str, Any]):
+async def update_rule(
+    request: Request,
+    rule_id: str,
+    payload: Dict[str, Any],
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
@@ -460,7 +506,11 @@ async def update_rule(request: Request, rule_id: str, payload: Dict[str, Any]):
 
 
 @router.delete("/{rule_id}")
-async def delete_rule(request: Request, rule_id: str):
+async def delete_rule(
+    request: Request,
+    rule_id: str,
+    current_user: dict = Depends(require_roles("admin")),
+):
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
@@ -484,7 +534,11 @@ async def delete_rule(request: Request, rule_id: str):
 
 
 @router.post("/import")
-async def import_rules(request: Request, body: Dict[str, Any]):
+async def import_rules(
+    request: Request,
+    body: Dict[str, Any],
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
@@ -691,28 +745,6 @@ async def import_rules(request: Request, body: Dict[str, Any]):
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"导入规则失败: {e}")
 
 
-@router.get("/export")
-async def export_rules(request: Request):
-    sb = get_supabase()
-    if sb is None:
-        # 与列表接口保持一致，返回空
-        return success_response(
-            data={"rules": [], "count": 0},
-            trace_id=get_trace_id(request)
-        )
-    try:
-        resp = sb.table("qc_rules").select("*").limit(2000).execute()
-        records = resp.data or []
-        rules = [_normalize_from_db(r) for r in records]
-        return success_response(
-            data={"rules": rules, "count": len(rules)},
-            message="导出成功",
-            trace_id=get_trace_id(request)
-        )
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"导出规则失败: {e}")
-
-
 # ------------------------- Utilities: 文书类型细粒度映射/推断 -------------------------
 
 _RULE_DOCUMENT_MAPPING: dict[str, list[str]] = {
@@ -893,7 +925,11 @@ def _infer_docs_from_rule_name(rule_name: str) -> list[str]:
 
 
 @router.post("/ops/normalize-docs")
-async def normalize_documents(request: Request, dry_run: bool = Query(default=True)):
+async def normalize_documents(
+    request: Request,
+    dry_run: bool = Query(default=True),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
     """将规则的文书类型从粗粒度(inpatient/outpatient/emergency)批量归一为细粒度中文。
     - 优先保留已存在的细粒度中文 `check_logic.applicable_documents`
     - 否则：按 `rule_code` 精确映射；若无，基于名称关键词推断

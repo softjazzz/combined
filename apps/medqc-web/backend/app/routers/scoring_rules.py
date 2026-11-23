@@ -14,13 +14,14 @@ import logging
 import uuid
 from datetime import datetime
 from typing import Optional, List
+from urllib.parse import quote
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
-from ..core.security import get_current_user
+from ..core.security import get_current_user, require_roles
 
 router = APIRouter(prefix="/api/v1/scoring-rules", tags=["scoring-rules"])
 logger = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ async def list_scoring_rules(
 @router.post("")
 async def create_scoring_rule(
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
 ):
     """创建评分规则"""
     sb = _ensure_db()
@@ -126,7 +127,7 @@ async def create_scoring_rule(
 async def update_scoring_rule(
     request: Request,
     rule_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
 ):
     """更新评分规则"""
     sb = _ensure_db()
@@ -154,7 +155,7 @@ async def update_scoring_rule(
 async def delete_scoring_rule(
     request: Request,
     rule_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin")),
 ):
     """删除评分规则"""
     sb = _ensure_db()
@@ -177,7 +178,7 @@ async def delete_scoring_rule(
 async def toggle_scoring_rule(
     request: Request,
     rule_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
 ):
     """启用/禁用评分规则"""
     sb = _ensure_db()
@@ -263,11 +264,18 @@ async def export_scoring_rules(
         wb.save(buffer)
         buffer.seek(0)
 
-        filename = f"评分标准_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        date_tag = datetime.now().strftime('%Y%m%d')
+        ascii_filename = f"scoring_rules_{date_tag}.xlsx"
+        utf8_filename = quote(f"评分标准_{date_tag}.xlsx", safe="")
         return StreamingResponse(
             buffer,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{utf8_filename}"
+                )
+            },
         )
     except ImportError:
         raise HTTPException(status_code=500, detail="需要安装 openpyxl: pip install openpyxl")
@@ -282,7 +290,7 @@ async def export_scoring_rules(
 async def import_scoring_rules(
     request: Request,
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
 ):
     """从 Excel 导入评分规则"""
     sb = _ensure_db()
