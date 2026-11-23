@@ -2,7 +2,7 @@
 
 **业务代码适配及合成材料链验证完成，独立复审无未闭合P1/P2。真实现场联验未执行，生产未部署，功能默认关闭。**
 
-业务起点 `7ba8a94a9029a784aa6ec629219b4fbccc21cb63`。本地交付提交为包含本说明的提交，使用 `git log -1 --format=%H -- apps/medqc-web/docs/clinical-primary-four-business-20261116/IMPLEMENTATION.md` 精确定位；外部交接单记录提交号，避免文档自引用改变commit。
+业务起点 `7ba8a94a9029a784aa6ec629219b4fbccc21cb63`。原始交付记录见归档（`git show archive/docs-pre-cleanup-202611:apps/medqc-web/docs/clinical-primary-four-business-20261116/IMPLEMENTATION.md`）。
 
 同步固定依据：`cb437e611e802c5117f212c1e9743d2748ec4127`，`clinical-primary-four-v1`，`clinical-primary-real-fields-v2`。复用 `3123e046865c28155c227a3d05d54599e2286859` 的既有证据，已核对相关运行源与三个JSON字节相同；没有重跑同步侧232项或真实65+44行材料。
 
@@ -80,6 +80,6 @@ node node_modules/vitest/vitest.mjs run tests/unit/views/workstation-v4/document
 
 独立复审核对固定ZIP/指纹、权限闭包、各reader接缝、时间/正文隔离、历史/PDF与UI透传。发现并关闭2项P2：Cache可靠时间过度屏蔽；新联验工具默认3行造成版本比较误报。未确认遗留P1/P2。完整只读复审记录在外部交接目录`review-primary-four-business.md`。
 
-责任方待办：院方确认两例机构/类型/生命周期；同步方完成真实发布与policy/selection证据、确认时间合同；运维确认最小只读权限和受保护政策来源；业务方在另获授权后按 `ONSITE-TRIAL-NOT-EXECUTED.md` 运行一次两例材料链并核对页面同版本。真实clinical仍HELD就停在准备态，不以此扩大到全院历史供给审计。
+责任方待办：院方确认两例机构/类型/生命周期；同步方完成真实发布与policy/selection证据、确认时间合同；运维确认最小只读权限和受保护政策来源；业务方在另获授权后按归档中的原始联验操作单运行一次两例材料链（`git show archive/docs-pre-cleanup-202611:apps/medqc-web/docs/clinical-primary-four-business-20261116/ONSITE-TRIAL-NOT-EXECUTED.md`）并核对页面同版本。真实clinical仍HELD就停在准备态，不以此扩大到全院历史供给审计。
 
 本轮不推送、不合并、不部署、不改配置、不重启现有服务；没有现场连接、模型/规则/QC执行、真实材料重放或历史数据改写。未建新的业务任务，旧冻结和历史结果保持原状。

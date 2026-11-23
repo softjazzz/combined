@@ -87,7 +87,8 @@
 
 <script setup lang="ts">
 import { h } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
+import { openConfirmDialog } from '@/views/workstation-v4/utils/confirmDialog'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import { useQCDemoStore } from '@/stores/qcDemo'
 import {
@@ -172,7 +173,7 @@ const handleConfig = () => {
 }
 
 const handleClear = () => {
-  Modal.confirm({
+  openConfirmDialog({
     title: '确认清除所有状态？',
     content: '此操作将清除所有演示数据和进度，无法恢复',
     okText: '确认清除',

@@ -556,6 +556,7 @@
 </template>
 
 <script setup lang="ts">
+import { LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
@@ -956,7 +957,7 @@ async function loadFullDocumentsForAnalysis(): Promise<DocItem[]> {
           visit_id: visitId,
           view: 'full',
         },
-        timeout: 120000,
+        timeout: LONG_REQUEST_TIMEOUT_MS,
       })
       const payload = response.data?.data || response.data || {}
       const rawDocuments = Array.isArray(payload.documents) ? payload.documents : []
@@ -1056,7 +1057,7 @@ async function runContentQCLegacy(docs: DocItem[]) {
           persist: false,
           prompt_mode: 'plan_a',
         },
-        { timeout: 120000 },
+        { timeout: LONG_REQUEST_TIMEOUT_MS },
       )
 
       const data = extractApiData<any>(resp.data, '文书质控失败')
@@ -1362,7 +1363,7 @@ watch(
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #2563eb;
+  color: var(--mq-brand-700);
 }
 
 .content-qc-tab__header-desc {
@@ -1370,7 +1371,7 @@ watch(
   max-width: 280px;
   font-size: 12px;
   line-height: 1.6;
-  color: #6b7f96;
+  color: var(--mq-text-tertiary);
 }
 
 .content-qc-tab__header-action {
@@ -1394,14 +1395,14 @@ watch(
 }
 
 .header-icon {
-  color: #2563eb;
+  color: var(--mq-brand-700);
   font-size: 15px;
 }
 
 .header-title {
   font-size: 15px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mq-text-primary);
 }
 
 /* ========== 进度时间线 ========== */
@@ -1429,7 +1430,7 @@ watch(
   width: 38px;
   height: 38px;
   border-radius: 11px;
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  background: linear-gradient(135deg, var(--mq-brand-400), var(--mq-brand-700));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1439,12 +1440,12 @@ watch(
 .progress-title {
   font-size: 14px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mq-text-primary);
 }
 
 .progress-sub {
   font-size: 11px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   margin-top: 2px;
 }
 
@@ -1456,14 +1457,14 @@ watch(
 .progress-bar-bg {
   height: 6px;
   border-radius: 999px;
-  background: #e2e8f0;
+  background: color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #0ea5e9, #2563eb);
+  background: linear-gradient(90deg, var(--mq-brand-400), var(--mq-brand-700));
   transition: width 0.5s ease;
 }
 
@@ -1485,10 +1486,10 @@ watch(
 }
 
 .timeline-done {
-  background: linear-gradient(180deg, #eff6ff, #f8fbff);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface)), color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface)));
 }
 .timeline-active {
-  background: linear-gradient(180deg, #eff6ff, #f8fbff);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface)), color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface)));
   animation: pulse-bg 2s infinite;
 }
 .timeline-pending {
@@ -1498,10 +1499,10 @@ watch(
 @keyframes pulse-bg {
   0%,
   100% {
-    background: #eff6ff;
+    background: color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface));
   }
   50% {
-    background: #dbeafe;
+    background: color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
   }
 }
 
@@ -1517,20 +1518,20 @@ watch(
 }
 
 .timeline-dot--done {
-  background: #2563eb;
+  background: var(--mq-brand-600);
 }
 .timeline-dot--active {
-  background: #3b82f6;
+  background: var(--mq-brand-400);
 }
 .timeline-dot--pending {
-  background: #e2e8f0;
+  background: color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
 }
 
 .dot-ping {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #fff;
+  background: var(--mq-bg-surface);
   animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
@@ -1538,7 +1539,7 @@ watch(
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #94a3b8;
+  background: var(--mq-text-disabled);
 }
 
 @keyframes ping {
@@ -1566,24 +1567,24 @@ watch(
 }
 
 .timeline-label--done {
-  color: #2563eb;
+  color: var(--mq-brand-700);
 }
 .timeline-label--active {
-  color: #2563eb;
+  color: var(--mq-brand-700);
 }
 .timeline-label--pending {
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
 }
 
 .timeline-time {
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
 .timeline-active-hint {
   font-size: 10px;
-  color: #3b82f6;
+  color: var(--mq-brand-400);
   font-weight: 600;
 }
 
@@ -1602,13 +1603,13 @@ watch(
 }
 
 .result-tag--issues {
-  background: #fef2f2;
-  color: #dc2626;
+  background: color-mix(in srgb, var(--mq-danger-icon) 7%, var(--mq-bg-surface));
+  color: color-mix(in srgb, var(--mq-danger-text) 90%, var(--mq-text-primary));
 }
 
 .result-tag--pass {
-  background: #dbeafe;
-  color: #2563eb;
+  background: color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
 }
 
 .timeline-issues {
@@ -1626,7 +1627,7 @@ watch(
 
 .issue-text {
   font-size: 11px;
-  color: #475569;
+  color: var(--mq-neutral-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1634,7 +1635,7 @@ watch(
 
 .timeline-issue-more {
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
   padding-left: 4px;
 }
 
@@ -1660,8 +1661,8 @@ watch(
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: linear-gradient(180deg, #eef4ff, #dbeafe);
-  border: 1px solid #bfdbfe;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface)), color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface)));
+  border: 1px solid var(--mq-brand-200);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1673,17 +1674,17 @@ watch(
 
 .empty-icon {
   font-size: 24px;
-  color: #2563eb;
+  color: var(--mq-brand-700);
 }
 .empty-title {
   font-size: 15px;
   font-weight: 800;
-  color: #1e293b;
+  color: var(--mq-text-primary);
   margin-bottom: 6px;
 }
 .empty-desc {
   font-size: 12px;
-  color: #6b7f96;
+  color: var(--mq-text-tertiary);
   line-height: 1.6;
   margin-bottom: 18px;
   max-width: 228px;
@@ -1711,8 +1712,8 @@ watch(
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   padding: 12px;
-  background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 30%), #fff;
-  border: 1px solid #e2e8f0;
+  background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 30%), var(--mq-bg-surface);
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 16px;
   margin-bottom: 12px;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
@@ -1734,22 +1735,22 @@ watch(
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #2563eb;
+  color: var(--mq-brand-700);
   margin-bottom: 4px;
 }
 
 .summary-card__title {
   font-size: 15px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mq-text-primary);
 }
 
 .summary-card__progress {
   min-width: 64px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: linear-gradient(180deg, #eff6ff, #dbeafe);
-  color: #2563eb;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mq-brand-600) 6%, var(--mq-bg-surface)), color-mix(in srgb, var(--mq-brand-600) 14%, var(--mq-bg-surface)));
+  color: var(--mq-brand-700);
   text-align: center;
   font-size: 18px;
   line-height: 1;
@@ -1762,7 +1763,7 @@ watch(
   padding: 8px 10px;
   border: 1px solid rgba(245, 158, 11, 0.35);
   background: rgba(255, 247, 237, 0.92);
-  color: #9a3412;
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1776,32 +1777,32 @@ watch(
 
 .summary-row--action {
   border-radius: 10px;
-  background: #fffbeb;
+  background: color-mix(in srgb, var(--mq-warning-icon) 8%, var(--mq-bg-surface));
 }
 
 .summary-link {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #b45309;
+  color: color-mix(in srgb, var(--mq-warning-text) 89%, var(--mq-text-primary));
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
 
 .summary-link:hover {
-  color: #92400e;
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
 }
 
 .summary-label {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
   font-weight: 600;
 }
 .summary-value {
   font-size: 13px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mq-text-primary);
 }
 
 .result-toolbar {
@@ -1822,13 +1823,13 @@ watch(
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
 }
 
 .group-panel {
   flex-shrink: 0;
   margin-bottom: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 14px;
   padding: 10px;
   background: rgba(255, 255, 255, 0.9);
@@ -1837,7 +1838,7 @@ watch(
 .group-panel-title {
   font-size: 12px;
   font-weight: 700;
-  color: #334155;
+  color: var(--mq-neutral-text);
   margin-bottom: 8px;
 }
 
@@ -1848,9 +1849,9 @@ watch(
 }
 
 .group-chip {
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 10px;
-  background: #fff;
+  background: var(--mq-bg-surface);
   padding: 8px 10px;
   text-align: left;
   cursor: pointer;
@@ -1860,11 +1861,11 @@ watch(
 }
 
 .group-chip:hover {
-  border-color: #93c5fd;
+  border-color: color-mix(in srgb, var(--mq-brand-600) 46%, var(--mq-bg-surface));
 }
 
 .group-chip--active {
-  border-color: #60a5fa;
+  border-color: color-mix(in srgb, var(--mq-brand-400) 82%, var(--mq-bg-surface));
   box-shadow: 0 0 0 2px rgba(191, 219, 254, 0.5);
 }
 
@@ -1872,14 +1873,14 @@ watch(
   display: block;
   font-size: 12px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--mq-text-primary);
 }
 
 .group-chip__meta {
   display: block;
   margin-top: 2px;
   font-size: 11px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
 }
 
 .filter-panel {
@@ -1911,7 +1912,7 @@ watch(
 
 .issue-card {
   border-radius: 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 251, 255, 0.98));
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
   padding: 10px 10px 8px;
@@ -1939,7 +1940,7 @@ watch(
 .issue-card__code {
   font-size: 12px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mq-text-primary);
   font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
 }
 
@@ -1947,14 +1948,14 @@ watch(
   margin-top: 6px;
   font-size: 13px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mq-text-primary);
   line-height: 1.45;
 }
 
 .issue-card__findings {
   margin-top: 6px;
   font-size: 12px;
-  color: #0f172a;
+  color: var(--mq-text-primary);
   line-height: 1.55;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -1965,7 +1966,7 @@ watch(
 .issue-card__suggestion {
   margin-top: 6px;
   font-size: 12px;
-  color: #1d4ed8;
+  color: var(--mq-brand-700);
   line-height: 1.55;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1981,8 +1982,8 @@ watch(
   margin-top: 8px;
   padding: 8px;
   border-radius: 12px;
-  border: 1px solid #fde68a;
-  background: #fffbeb;
+  border: 1px solid color-mix(in srgb, var(--mq-warning-icon) 25%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-warning-icon) 8%, var(--mq-bg-surface));
 }
 
 .subitem-anchor-head,
@@ -1997,7 +1998,7 @@ watch(
   margin-bottom: 6px;
   font-size: 11px;
   font-weight: 800;
-  color: #92400e;
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
 }
 
 .subitem-anchor {
@@ -2012,14 +2013,14 @@ watch(
 }
 
 .subitem-anchor--detail {
-  background: #fff;
+  background: var(--mq-bg-surface);
 }
 
 .subitem-anchor__name {
   min-width: 0;
   font-size: 12px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mq-text-primary);
 }
 
 .subitem-anchor__tag {
@@ -2033,13 +2034,13 @@ watch(
   margin-top: 6px;
   font-size: 12px;
   line-height: 1.55;
-  color: #475569;
+  color: var(--mq-neutral-text);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .subitem-anchor__reason {
-  color: #92400e;
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
 }
 
 .issue-card__subitem-anchors .subitem-anchor__evidence {
@@ -2062,7 +2063,7 @@ watch(
 .issue-card__chip {
   margin: 0;
   font-size: 11px;
-  color: #475569;
+  color: var(--mq-neutral-text);
   border-color: rgba(203, 213, 225, 0.85);
   background: rgba(248, 250, 252, 0.92);
 }
@@ -2078,7 +2079,7 @@ watch(
   background: rgba(239, 246, 255, 0.55);
   font-size: 11px;
   line-height: 1.5;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
 }
 
 .issue-card__actions {
@@ -2094,13 +2095,13 @@ watch(
   flex-direction: column;
   gap: 2px;
   font-size: 11px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
   line-height: 1.5;
 }
 
 .advanced-cell--detail {
   font-size: 12px;
-  color: #475569;
+  color: var(--mq-neutral-text);
 }
 
 .detail-pagination {
@@ -2117,45 +2118,45 @@ watch(
 }
 
 .issue-detail-item {
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 10px;
   padding: 8px 10px;
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface));
 }
 
 .issue-detail-label {
   display: block;
   font-size: 11px;
-  color: #64748b;
+  color: var(--mq-text-tertiary);
 }
 
 .issue-detail-value {
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: #0f172a;
+  color: var(--mq-text-primary);
   font-weight: 700;
 }
 
 .issue-detail-block {
   margin-top: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 10px;
   padding: 10px;
-  background: #fff;
+  background: var(--mq-bg-surface);
 }
 
 .issue-detail-block__title {
   font-size: 12px;
   font-weight: 700;
-  color: #334155;
+  color: var(--mq-neutral-text);
   margin-bottom: 6px;
 }
 
 .issue-detail-block__content {
   font-size: 12px;
   line-height: 1.6;
-  color: #0f172a;
+  color: var(--mq-text-primary);
   white-space: pre-wrap;
 }
 
@@ -2169,8 +2170,8 @@ watch(
 .subitem-anchor-modal__hint {
   padding: 9px 10px;
   border-radius: 12px;
-  background: #f8fafc;
-  color: #475569;
+  background: color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface));
+  color: var(--mq-neutral-text);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -2185,7 +2186,7 @@ watch(
   gap: 8px;
   padding: 8px 10px;
   background: rgba(255, 255, 255, 0.82);
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 12px;
   margin-bottom: 8px;
 }
@@ -2199,16 +2200,16 @@ watch(
 .group-title {
   font-size: 12px;
   font-weight: 700;
-  color: #334155;
+  color: var(--mq-neutral-text);
 }
 .group-count {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--mq-text-tertiary);
 }
 
 .issue-item {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--mq-bg-surface);
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
   border-radius: 14px;
   padding: 12px;
   margin-bottom: 8px;
@@ -2234,18 +2235,18 @@ watch(
 .issue-rule {
   font-size: 12px;
   font-weight: 700;
-  color: #475569;
+  color: var(--mq-neutral-text);
 }
 .issue-desc {
   font-size: 13px;
-  color: #0f172a;
+  color: var(--mq-text-primary);
   line-height: 1.6;
 }
 .issue-suggestion {
   margin-top: 6px;
   background: linear-gradient(180deg, rgba(255, 247, 237, 0.9), rgba(255, 251, 235, 0.9));
-  border-left: 3px solid #f59e0b;
-  color: #9a3412;
+  border-left: 3px solid var(--mq-warning-icon);
+  color: color-mix(in srgb, var(--mq-warning-text) 70%, var(--mq-text-primary));
   font-size: 12px;
   padding: 6px 8px;
   border-radius: 0 8px 8px 0;
@@ -2267,13 +2268,13 @@ watch(
 
 .empty-result-icon {
   font-size: 30px;
-  color: #2563eb;
+  color: var(--mq-brand-700);
   margin-bottom: 10px;
 }
 .empty-result-text {
   font-size: 13px;
   font-weight: 700;
-  color: #334155;
+  color: var(--mq-neutral-text);
 }
 
 .content-qc-tab__footer {
@@ -2285,7 +2286,7 @@ watch(
   border-top: none;
   background: transparent;
   font-size: 12px;
-  color: #475569;
+  color: var(--mq-neutral-text);
 }
 
 @media (max-width: 520px) {
@@ -2337,13 +2338,13 @@ watch(
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: color-mix(in srgb, var(--mq-neutral-text) 26%, var(--mq-bg-surface));
   border-radius: 999px;
 }
 
 /* Apple workstation visual convergence */
 .content-qc-tab {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-family:
     'San Francisco', 'SF Pro Text', 'Source Han Sans SC', 'SF Pro Display', Inter, 'PingFang SC',
     'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
@@ -2399,7 +2400,7 @@ watch(
 .summary-value,
 .empty-icon,
 .empty-result-icon {
-  color: #0a6cff !important;
+  color: var(--mq-brand-700) !important;
 }
 
 .header-title,
@@ -2408,7 +2409,7 @@ watch(
 .empty-title,
 .issue-desc,
 .empty-result-text {
-  color: #1d1d1f !important;
+  color: var(--mq-text-primary) !important;
   font-weight: 600 !important;
 }
 
@@ -2425,7 +2426,7 @@ watch(
 .progress-bar-fill,
 .timeline-dot--done,
 .timeline-dot--active {
-  background: #0a6cff !important;
+  background: var(--mq-brand-600) !important;
 }
 
 .progress-avatar {

@@ -16,7 +16,7 @@
 
 当前源码迁移依赖为`20261102_000062 → 20261105_000063 → 20261106_000064`：063为Bundle刷新存储，064为每日计划与触发账本，计划默认关闭。现场真实Alembic版本与结构仍未知，必须逐版本确认；不得沿用下方历史062“无需迁移”口径。仅在另获批准的维护窗口使用现有`db-admin.py`备份并执行必要迁移，不自动迁移、不stamp、不downgrade、不重新导入1026。代码回退前先确认旧版能读取升级后结构，保留新增表和数据。
 
-本轮仅准备预检，未制包、安装依赖、操作服务或访问数据库/模型。候选来源、定向检查及现场未验收项见`docs/plans/2026-11-07-closeout-linux-preflight.md`；下方历史操作示例不能直接用于当前版本。
+本轮仅准备预检，未制包、安装依赖、操作服务或访问数据库/模型。候选来源、定向检查及现场未验收项见归档（`git show archive/docs-pre-cleanup-202611:apps/medqc-web/docs/plans/2026-11-07-closeout-linux-preflight.md`）；下方历史操作示例不能直接用于当前版本。
 
 ```text
 python -B apps/medqc-web/scripts/linux_app_upgrade/make_package.py --source <已验收完整tar.gz> --source-sha256 <发行方64位SHA256> --application-commit <该包40位应用Commit> --output <全新目录>

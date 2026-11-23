@@ -1,3 +1,4 @@
+import { FRONTPAGE_STREAM_HEADER_TIMEOUT_MS } from '@/config/requestTimeouts'
 import type { Ref } from 'vue'
 import { ref } from 'vue'
 import { message, notification } from 'ant-design-vue'
@@ -355,7 +356,6 @@ export function useMedicalTextExtraction(options: {
       // All requests go through Vite proxy (relative path) to avoid CORS issues.
       const streamUrls = ['/api/v1/frontpage/auto-generate-draft-stream']
 
-      const streamHeaderTimeoutMs = 30000
       let response: Response | null = null
       let lastStreamFetchError: any = null
 
@@ -365,13 +365,13 @@ export function useMedicalTextExtraction(options: {
         sseLog(requestId, 'streamFetch:start', {
           attempt: i + 1,
           url: streamUrl,
-          timeout_ms: streamHeaderTimeoutMs,
+          timeout_ms: FRONTPAGE_STREAM_HEADER_TIMEOUT_MS,
         })
 
         const controller = new AbortController()
         const timeoutId = window.setTimeout(
           () => controller.abort('stream_header_timeout'),
-          streamHeaderTimeoutMs,
+          FRONTPAGE_STREAM_HEADER_TIMEOUT_MS,
         )
         const waitingTimer = window.setInterval(() => {
           sseLog(requestId, 'streamFetch:waiting_headers', {

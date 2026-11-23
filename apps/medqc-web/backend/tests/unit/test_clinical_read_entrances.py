@@ -76,6 +76,22 @@ def test_frontpage_sheet_reads_same_clinical_owner(database, service):
     assert result["basic"]["discharge_dept_name"] == "cdm科"
 
 
+@pytest.mark.parametrize(("hospital_name", "expected"), [(None, "泸县人民医院"), ("新区医院", "新区医院")])
+def test_frontpage_export_uses_hospital_default_for_missing_name_only(database, monkeypatch, hospital_name, expected):
+    monkeypatch.delenv("MEDQC_HOSPITAL_NAME", raising=False)
+    if hospital_name is not None:
+        monkeypatch.setenv("MEDQC_HOSPITAL_NAME", hospital_name)
+
+    def export():
+        return export_service.get_frontpage_sheet("P1", "V1", session_factory=lambda: Session(database))
+
+    assert export()["basic"]["institute_county_desc"] == expected
+    table = MedicalRecordFrontpage.__table__.to_metadata(MetaData(), schema="cdm")
+    with database.begin() as connection:
+        connection.execute(table.update().values(institute_county_desc="原始登记机构"))
+    assert export()["basic"]["institute_county_desc"] == "原始登记机构"
+
+
 def test_table_inspection_uses_cdm_only_for_synced_clinical_tables(database):
     metadata = MetaData()
     MedicalRecordFrontpage.__table__.to_metadata(metadata)

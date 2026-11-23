@@ -2,8 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { WORKSTATION_NAV, filterVisibleNav } from '@/components/layout/workstationNav'
 
 vi.unmock('vue-router')
-const auth = vi.hoisted(() => ({ roles: ['admin'] }))
+const auth = vi.hoisted(() => ({ authenticated: true, roles: ['admin'] }))
 vi.mock('@/components/layout/WorkstationLayout.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/auth/ProfileView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/workstation-v4/WorkstationLoginView.vue', () => ({
+  default: { template: '<div />' },
+}))
 vi.mock('@/views/workstation/HomeRectificationTodos.vue', () => ({
   default: { template: '<div />' },
 }))
@@ -21,7 +25,7 @@ vi.mock('@/views/workstation-v4/QcRecordResultListView.vue', () => ({
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
-    isAuthenticated: true,
+    isAuthenticated: auth.authenticated,
     userRoles: auth.roles,
     initialize: vi.fn(),
   }),
@@ -152,7 +156,7 @@ describe('旧 Dashboard 首页路由', () => {
       from_stage: 'frontpage_qc',
       keep: '1',
     }
-    await router.push({ path: '/workstation-v5', query, hash: '#chart' })
+    await router.push({ path: '/dashboard', query, hash: '#chart' })
     expect(router.currentRoute.value.name).toBe('WorkstationV4Worklist')
     expect(router.currentRoute.value.query).toEqual(query)
     expect(router.currentRoute.value.hash).toBe('#chart')
@@ -171,7 +175,6 @@ describe('旧 Dashboard 首页路由', () => {
   }, 15_000)
 })
 
-
 describe('反馈与整改入口保护', () => {
   it('旧整改URL复用正式页面，不再进入旧接口页面', async () => {
     const legacy = router.resolve('/dashboard/qc/rectifications').matched.at(-1)!
@@ -182,9 +185,86 @@ describe('反馈与整改入口保护', () => {
     expect(legacy.components!.default).toBe(modern.components!.default)
     expect(legacy.meta.permission).toContain('doctor')
   })
-  it.each(['/demo/lx33', '/demo/lx33/feedbacks'])('%s 必须登录管理员', path => {
-    const meta = router.resolve(path).meta
-    expect(meta.requiresAuth).toBe(true)
-    expect(meta.permission).toEqual(['admin', 'super_admin', 'sync_admin'])
+})
+
+describe('历史页面下线重定向', () => {
+  it.each([
+    '/workstation-v2',
+    '/workstation-v2/icd',
+    '/workstation-v2/drg/pre',
+    '/workstation-v2/old/nested',
+    '/workstation-v3',
+    '/demo',
+    '/demo/lx33',
+    '/demo/lx33/feedbacks',
+    '/demo/lx33/create',
+    '/demo/lx33/frontpage-demo',
+    '/demo/clinical-workstation',
+    '/demo/frontpage',
+    '/dashboard/records/outpatient-emergency',
+    '/dashboard/records/running',
+    '/dashboard/records/final',
+    '/dashboard/tasks/my',
+    '/dashboard/tasks/all',
+    '/dashboard/quality-control',
+    '/dashboard/quality-control/create',
+    '/dashboard/scoring-rules',
+    '/dashboard/staff-ranking',
+    '/dashboard/notifications',
+    '/dashboard/permissions',
+    '/dashboard/frontpage-demo',
+    '/dashboard/llm-qc-demo',
+    '/dashboard/llm-qc-demo-enhanced',
+    '/dashboard/llm-qc-demo-new',
+    '/dashboard/sichuan-qc-demo',
+    '/dashboard/test-demo',
+    '/dashboard/medical-records/R-1/legacy',
+    '/dashboard/medical-records/R-1/simple',
+  ])('%s 经 V4 入口进入现行工作台并保留参数', async (path) => {
+    const matched = router.resolve(path).matched.at(-1)
+    expect(matched?.redirect).toEqual({ path: '/workstation-v4' })
+    expect(matched?.components).toBeFalsy()
+
+    await router.push({ path, query: { keep: ['1', '2'] }, hash: '#recent' })
+    expect(router.currentRoute.value.fullPath).toBe('/workstation-v5?keep=1&keep=2#recent')
+    expect(router.currentRoute.value.params).toEqual({})
+  })
+
+  it('未登录时由工作台守卫处理旧演示链接', async () => {
+    auth.authenticated = false
+    try {
+      await router.push('/demo/lx33/create?demo=true#rule')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/login')
+      expect(router.currentRoute.value.query.redirect).toBe('/workstation-v5?demo=true#rule')
+    } finally {
+      auth.authenticated = true
+    }
+  })
+
+  it('无工作台首页权限的账号进入个人资料，避免在旧首页间循环', async () => {
+    auth.roles.splice(0, auth.roles.length, 'coder')
+    try {
+      await router.push('/demo/lx33/feedbacks')
+      expect(router.currentRoute.value.path).toBe('/auth/profile')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  })
+
+  it.each([
+    ['/workstation-v4', 'WorkstationV4Index'],
+    ['/workstation-v4/records/outpatient-emergency', 'WorkstationV4OutpatientEmergencyRecords'],
+    ['/workstation-v4/records/running', 'WorkstationV4RunningRecords'],
+    ['/workstation-v4/rules/custom-workspace', 'WorkstationV4CustomRuleWorkspace'],
+    ['/workstation-v4/grouper', 'WorkstationV4Grouper'],
+    ['/dashboard/medical-records/R-1', 'MedicalRecordDetail'],
+    ['/dashboard/rules', 'Rules'],
+    ['/dashboard/drg/coding', 'CodingAssistant'],
+  ])('%s 保留现行页面 %s', (path, name) => {
+    const matched = router.resolve(path).matched.at(-1)
+
+    expect(matched?.name).toBe(name)
+    expect(matched?.components?.default).toBeTypeOf('function')
+    expect(matched?.redirect).toBeUndefined()
   })
 })

@@ -29,6 +29,7 @@ from ..database.connection import DB_SCHEMA_MODE, engine
 from .visit_index_service import ingest_sync_rows
 from .sync_policy import load_sync_policy
 from .config_registry import get_config, set_config
+from ..core.clinical_defaults import UNCONFIGURED_INSTITUTE_ID, get_clinical_defaults
 from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
 from .case_scope_service import ACTIVE_ADMISSION_LOOKBACK_DAYS
 from .homology_sync import HOMOLOGY_TABLE_KEYS, resolve_homology_source
@@ -626,8 +627,6 @@ _DEFAULT_CONFIG = {
     "remote_username": "postgres",
     "remote_password_ref": "env:REMOTE_DB_PASSWORD",
     "remote_schema": "public",
-    # 单院源库通常没有机构号列；该固定值只在源数据缺失时补入。
-    "default_institute_id": "LOCAL-HOSPITAL",
     "sync_mode": "table",  # table | procedure
 }
 
@@ -1207,8 +1206,8 @@ def load_db_config() -> Dict:
         cfg["remote_password_ref"] = "env:REMOTE_DB_PASSWORD"
     cfg["remote_schema"] = str(cfg.get("remote_schema") or "public")
     cfg["default_institute_id"] = (
-        str(cfg.get("default_institute_id") or "LOCAL-HOSPITAL").strip()
-        or "LOCAL-HOSPITAL"
+        str(cfg.get("default_institute_id") or "").strip()
+        or get_clinical_defaults().sync_institute_id
     )
     cfg["sync_mode"] = str(cfg.get("sync_mode") or "table").lower()
 
@@ -1239,7 +1238,7 @@ def save_db_config(config: Dict, runtime_password: Optional[str] = None) -> Dict
     if not to_save.get("remote_schema"):
         to_save["remote_schema"] = "public"
     if not str(to_save.get("default_institute_id") or "").strip():
-        to_save["default_institute_id"] = "LOCAL-HOSPITAL"
+        to_save["default_institute_id"] = get_clinical_defaults().sync_institute_id
     if str(to_save.get("sync_mode") or "").lower() not in {"table", "procedure"}:
         to_save["sync_mode"] = "table"
     if not set_config(
@@ -3344,9 +3343,7 @@ def _scope_mode_for_scene(scene: str) -> str:
 
 def _uses_unconfigured_institute(case_ref: Any) -> bool:
     """识别历史自动补入的占位机构号；该值不能作为生产三坐标。"""
-    return str(getattr(case_ref, "institute_id", "") or "").strip().upper() == (
-        "LOCAL-HOSPITAL"
-    )
+    return str(getattr(case_ref, "institute_id", "") or "").strip().upper() == UNCONFIGURED_INSTITUTE_ID
 
 
 def _current_hospital_date() -> date:

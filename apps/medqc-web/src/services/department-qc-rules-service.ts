@@ -1,9 +1,10 @@
-﻿/**
+/**
  * 科室级质控规则 API 服务
  * 
  * 提供科室规则的 CRUD 操作、发布、变更历史查询等功能
  */
 
+import { API_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import axios, { AxiosInstance } from 'axios'
 import { message } from 'ant-design-vue'
 import { getAccessToken } from '@/utils/auth-token'
@@ -153,7 +154,7 @@ export class DepartmentQCRulesService {
 
     this.apiClient = axios.create({
       baseURL,
-      timeout: 15000,
+      timeout: API_REQUEST_TIMEOUT_MS,
       headers: {
         'Content-Type': 'application/json',
       },

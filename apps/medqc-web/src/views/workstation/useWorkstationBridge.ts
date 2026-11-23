@@ -1,12 +1,12 @@
 /**
  * useWorkstationBridge.ts
- * 桥接 composable：将工作站的 MedicalRecord 格式转换为 frontpage-demo 的 DemoCaseLike 格式
+ * 桥接 composable：将工作站的 MedicalRecord 格式转换为病案首页组件使用的 DemoCaseLike 格式
  * 这样可以复用 useMedicalTextExtraction 和 useDRGGrouping composables
  */
 import { ref, computed, watch, type Ref } from 'vue'
 import type { MedicalRecord } from './mockData'
-import { useMedicalTextExtraction, type DemoCaseLike } from '../demo/frontpage/composables/useMedicalTextExtraction'
-import { useDRGGrouping } from '../demo/frontpage/composables/useDRGGrouping'
+import { useMedicalTextExtraction, type DemoCaseLike } from '../workstation-v4/frontpage/composables/useMedicalTextExtraction'
+import { useDRGGrouping } from '../workstation-v4/frontpage/composables/useDRGGrouping'
 
 export function useWorkstationBridge(selectedRecord: Ref<MedicalRecord | null>) {
     // ===== 核心状态：DemoCaseLike ref =====

@@ -1,3 +1,4 @@
+import { SAMPLE_RULE_SET_RUN_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { loadCurrentMedicalRecord } from '@/services/current-medical-record'
@@ -15,7 +16,6 @@ import {
   runManualSamplePool,
 } from '@/services/manual-case-sample-service'
 import {
-  SAMPLE_RULE_SET_RUN_TIMEOUT_MS,
   type EditableCopyDocumentFilter,
   type EditableCopyDocumentGroup,
   type EditableCopyDraft,

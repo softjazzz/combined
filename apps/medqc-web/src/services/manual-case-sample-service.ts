@@ -1,3 +1,4 @@
+import { serializeCaseRecordKey } from '@/views/workstation-v4/utils/caseRecordKey'
 import { EDITABLE_MEDICAL_RECORD_DOCUMENTS_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
@@ -884,7 +885,7 @@ export async function runManualSamplePool(
     throw new Error('record_refs 必须包含完整的机构、患者和就诊三坐标')
   }
   const recordRefKeys = recordRefs.map((item) =>
-    JSON.stringify([item.institute_id, item.patient_id, item.visit_id]),
+    serializeCaseRecordKey(item.institute_id, item.patient_id, item.visit_id),
   )
   if (new Set(recordRefKeys).size !== recordRefKeys.length) {
     throw new Error('record_refs 存在重复三坐标')

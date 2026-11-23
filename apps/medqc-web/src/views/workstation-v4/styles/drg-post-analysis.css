@@ -537,18 +537,8 @@
 }
 
 .post-event-analysis-page {
-  --workstation-canvas: var(--mq-bg-subtle);
-  --workstation-surface: var(--mq-glass-bg-strong);
-  --workstation-surface-strong: var(--mq-glass-bg-strong);
-  --workstation-border: var(--mq-border);
-  --workstation-text: var(--mq-text-primary);
-  --workstation-muted: var(--mq-text-secondary);
-  --workstation-subtle: var(--mq-text-tertiary);
-  --workstation-primary: var(--mq-brand-600);
-  --workstation-primary-soft: color-mix(in srgb, var(--mq-brand-600) 10%, transparent);
-
-  background: var(--workstation-canvas);
-  color: var(--workstation-text);
+  background: var(--mq-bg-subtle);
+  color: var(--mq-text-primary);
   font-family: var(--mq-font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -559,8 +549,8 @@
 .analysis-panel,
 .dataset-upload-compact,
 .kpi-card {
-  border-color: var(--workstation-border);
-  background: var(--workstation-surface);
+  border-color: var(--mq-border);
+  background: var(--mq-glass-bg-strong);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
@@ -597,7 +587,7 @@
 .rank-row,
 .task-row,
 .drg-legend-row {
-  color: var(--workstation-text);
+  color: var(--mq-text-primary);
 }
 
 .analysis-title-block p,
@@ -608,28 +598,28 @@
 .rank-head,
 .task-head,
 .drg-legend-head {
-  color: var(--workstation-muted);
+  color: var(--mq-text-secondary);
 }
 
 .back-icon-button,
 .metric-tabs,
 .insight-row {
-  border-color: var(--workstation-border);
-  background: var(--workstation-surface-strong);
-  color: var(--workstation-muted);
+  border-color: var(--mq-border);
+  background: var(--mq-glass-bg-strong);
+  color: var(--mq-text-secondary);
 }
 
 .back-icon-button:hover {
   border-color: color-mix(in srgb, var(--mq-brand-600) 22%, transparent);
-  background: var(--workstation-primary-soft);
-  color: var(--workstation-primary);
+  background: var(--mq-brand-tint-10);
+  color: var(--mq-brand-600);
 }
 
 .tone-blue .kpi-icon,
 .tone-blue.insight-row .insight-icon,
 .metric-tabs button.active {
-  color: var(--workstation-primary);
-  background: var(--workstation-primary-soft);
+  color: var(--mq-brand-600);
+  background: var(--mq-brand-tint-10);
 }
 
 .metric-tabs button.active {
@@ -639,13 +629,13 @@
 .rank-name i {
   background: linear-gradient(
     90deg,
-    var(--workstation-primary),
+    var(--mq-brand-600),
     color-mix(in srgb, var(--mq-brand-600) 28%, transparent)
   );
 }
 
 .dot-blue {
-  background: var(--workstation-primary);
+  background: var(--mq-brand-600);
 }
 
 .rank-table,

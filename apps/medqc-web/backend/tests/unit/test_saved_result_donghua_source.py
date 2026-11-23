@@ -126,7 +126,7 @@ def test_old_snapshot_checks_only_receipt_and_contract_in_disposable_pg(monkeypa
     identity = ("机构号", "合成患者", "旧任务")
     ref = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
     digest = target_hash(ref)
-    binding = access._DONGHUA_BINDING
+    binding = "cdm-read-v1:d6426d946c655b24ec8ad3915e7441e7cb5033dd69c7397a70c7431f5a3dea08"
     state = {"schema": "cdm", "binding": binding, "identity": list(identity),
              "automatic_material": {"publication": {"status": "metadata_permission_unconfirmed", "rows": {}}},
              "tables": {"admission_record": [ref]}}
@@ -143,7 +143,7 @@ def test_old_snapshot_checks_only_receipt_and_contract_in_disposable_pg(monkeypa
         c.exec_driver_sql("CREATE TABLE sync_delivery.contract(interface_name text, source_epoch uuid, activation int, mapping_hash text)")
         c.exec_driver_sql("CREATE TABLE sync_delivery.receipt(interface_name text, source_epoch uuid, activation int, mapping_hash text, generation bigint, target_key_hash text)")
         c.execute(sa.text("INSERT INTO sync_delivery.contract VALUES ('web.admission_record',:epoch,1,'mapping')"),
-                  {"epoch": access._DONGHUA_EPOCH})
+                  {"epoch": "7cecd40f-047d-4458-b964-8741d0ea7399"})
     try:
         rejected()
         with engine.begin() as c:

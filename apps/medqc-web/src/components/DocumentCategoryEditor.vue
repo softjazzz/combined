@@ -346,7 +346,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
+import { openConfirmDialog } from '@/views/workstation-v4/utils/confirmDialog'
 import { documentQCService } from '@/services/document-qc-service'
 import type { DocumentUpdateRequest } from '@/services/document-qc-service'
 import type { DocumentApiResponse, DocumentCategoryItem, DocumentItem, DocumentQCResult } from '@/types/document-category'
@@ -593,7 +594,7 @@ const resetDocument = (document: DocumentItem) => {
 }
 
 const deleteDocument = async (document: DocumentItem) => {
-  Modal.confirm({
+  openConfirmDialog({
     title: '确认删除',
     content: `确定要删除文档"${document.title}"吗？此操作不可恢复。`,
     okText: '确定',

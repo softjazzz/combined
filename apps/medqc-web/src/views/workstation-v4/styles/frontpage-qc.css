@@ -125,7 +125,7 @@ select.fpqc-toolbar__control {
   color: var(--mq-text-tertiary);
 }
 
-.fpqc-toolbar__dates input {
+.fpqc-toolbar__date-picker {
   width: 124px;
   height: 30px;
   border: 0;

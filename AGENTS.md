@@ -20,6 +20,18 @@
 - 新增或重构前端页面时，优先复用现有 `workstation-v4` CSS token、布局容器和组件风格，不另起一套视觉语言。
 - 不为纯展示效果修改后端接口契约；如必须改接口，先明确兼容字段和回退策略。
 
+## 唯一权威模块对照表
+
+| 事项 | 唯一权威入口 | 禁止行为 |
+| --- | --- | --- |
+| 设计规范与色值 Token | `apps/medqc-web/docs/0418/UI/WorkstationV4-医疗浅色-DESIGN.md` 和 `--mq-*` CSS 变量 | 在 `workstation-v4/` 及新建页面中硬编码 `#rgb`、`#rrggbb` 等色值，或使用旧 `--workstation-*` 变量 |
+| 病例三键生成与解析 | `apps/medqc-web/src/views/workstation-v4/utils/caseRecordKey.ts` | 手写 `JSON.stringify([institute, patient, visit])` 拼接病例三键 |
+| 质控任务时间格式化 | `apps/medqc-web/src/views/workstation-v4/utils/qcTaskTime.ts` | 新建 `formatDateTime` 或 `formatTime` 处理任务时间 |
+| 质控结果状态文案 | `apps/medqc-web/src/views/workstation-v4/utils/qcResultStatusLabels.ts` | 维护第二套质控结果状态中文映射 |
+| 请求超时与工作台分页 | `apps/medqc-web/src/config/requestTimeouts.ts` 和 `apps/medqc-web/src/views/workstation-v4/utils/workstationListPagination.ts` | 在调用处写死超时毫秒数或分页魔数 |
+| 后端临床来源绑定 | `apps/medqc-web/backend/app/database/clinical_connection.py::build_source_binding` | 在调用方自行拼装临床来源绑定 |
+| 临时脚本与过程报告 | 本地未跟踪目录 `.tmp/`。历史文档已固化在 Git tag `archive/docs-pre-cleanup-202611` | 提交到仓库根目录、`apps/medqc-web/` 或 `apps/medqc-web/backend/` 根部 |
+
 ## Prohibited Actions
 - Do not commit generated build output (`dist/`, coverage artifacts, temp logs).
 - Do not disable CI gates in workflow files to force green.

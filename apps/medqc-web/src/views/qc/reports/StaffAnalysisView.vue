@@ -133,22 +133,22 @@
               </option>
             </select>
           </label>
-          <label class="filter-field mq-field">
+          <label class="filter-field mq-field" data-testid="staff-start-date">
             <span class="mq-field__label">开始日期</span>
-            <input
-              v-model="draft.start_date"
+            <a-date-picker
+              :value="draft.start_date"
+              @update:value="draft.start_date = typeof $event === 'string' ? $event : ''"
               class="mq-input"
-              type="date"
-              data-testid="staff-start-date"
+              value-format="YYYY-MM-DD"
             />
           </label>
-          <label class="filter-field mq-field">
+          <label class="filter-field mq-field" data-testid="staff-end-date">
             <span class="mq-field__label">结束日期</span>
-            <input
-              v-model="draft.end_date"
+            <a-date-picker
+              :value="draft.end_date"
+              @update:value="draft.end_date = typeof $event === 'string' ? $event : ''"
               class="mq-input"
-              type="date"
-              data-testid="staff-end-date"
+              value-format="YYYY-MM-DD"
             />
           </label>
           <div class="filter-actions">
@@ -444,6 +444,7 @@
 </template>
 
 <script setup lang="ts">
+import { DatePicker as ADatePicker } from 'ant-design-vue'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MqIcon from '@/components/icons/MqIcon.vue'

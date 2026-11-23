@@ -271,7 +271,7 @@ Interpretation rules:
 - `apps/medqc-web/reports/perf/<run-id>/capacity-final-summary.json`
 - `apps/medqc-web/reports/perf/<run-id>/capacity-final-report.md`
 - Step reports under `apps/medqc-web/reports/perf/<run-id>/steps/`
-- Reference template: `docs/deployment/perf-baseline-template.md`
+- Historical reference template: `git show archive/docs-pre-cleanup-202611:apps/medqc-web/docs/deployment/perf-baseline-template.md`
 
 ## Local Preflight (Before Manual Release)
 ```bash
@@ -290,7 +290,7 @@ Outputs:
 - `release-gate-artifacts/preflight/preflight-report.md`
 
 If preflight frontend gates fail, see:
-- `docs/deployment/P2_FRONTEND_GATE_BLOCKERS.md`
+- Historical frontend gate blockers: `git show archive/docs-pre-cleanup-202611:apps/medqc-web/docs/deployment/P2_FRONTEND_GATE_BLOCKERS.md`
 
 ## Architecture Governance (P2-ARCH-03)
 - ADR: `docs/architecture/ADR-2026-03-26-modular-boundaries.md`

@@ -14,7 +14,6 @@ export const FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = 'sc_content_full_v1'
 export const SC_SAMPLE_RULE_SET_KEY = 'sc_sample_running_v1'
 export const PROGRAMMATIC_RULE_SET_KEY = 'sample_programmatic_gate_v1'
 export const LEGACY_CUSTOMER_RULE_SET_KEY = 'customer_luxian_full_v1'
-export const SAMPLE_RULE_SET_RUN_TIMEOUT_MS = 90000
 export const RUN_DUPLICATE_GUARD_MS = 120000
 export const CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY = 'medqc_customer_sample_validation_guide_seen_v1'
 export type LuxianRuleOption = {

@@ -1,3 +1,4 @@
+import { setDatePickerValue } from '../../../utils/setDatePickerValue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -83,8 +84,8 @@ async function readyToSubmit(wrapper: ReturnType<typeof mountPanel>) {
   await flushPromises()
   await button(wrapper, '检查服务').trigger('click')
   await flushPromises()
-  await wrapper.get('[data-testid="pipeline-start"]').setValue('2020-10-26')
-  await wrapper.get('[data-testid="pipeline-end"]').setValue('2020-10-28')
+  await setDatePickerValue(wrapper.get('[data-testid="pipeline-start"] input'), '2020-10-26')
+  await setDatePickerValue(wrapper.get('[data-testid="pipeline-end"] input'), '2020-10-28')
   await wrapper.get('select[multiple]').setValue(['web.mr'])
   await wrapper.get('.pipeline-confirm input').setValue(true)
   await flushPromises()
@@ -176,7 +177,7 @@ describe('独立同步控制面板', () => {
     await button(wrapper, '提交预检任务').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('提交未确认')
-    expect(wrapper.get('[data-testid="pipeline-start"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="pipeline-start"] input').attributes('disabled')).toBeDefined()
     await button(wrapper, '使用原操作标识重试').trigger('click')
     await flushPromises()
     expect(api.submit.mock.calls[0]?.[0]).toEqual(api.submit.mock.calls[1]?.[0])
@@ -238,7 +239,7 @@ describe('独立同步控制面板', () => {
     const wrapper = mountPanel()
     await readyToSubmit(wrapper)
     expect(wrapper.text()).toContain('单次最多 3 天')
-    await wrapper.get('[data-testid="pipeline-end"]').setValue('2020-10-29')
+    await setDatePickerValue(wrapper.get('[data-testid="pipeline-end"] input'), '2020-10-29')
     await wrapper.get('.pipeline-confirm input').setValue(true)
     expect(button(wrapper, '提交预检任务').attributes('disabled')).toBeDefined()
     api.check.mockResolvedValue({ profile: 'accepted_manual', interfaces: ['web.mr'], session: { ...capabilities, permissions: ['read'] } })

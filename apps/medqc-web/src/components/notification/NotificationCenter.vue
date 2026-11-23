@@ -249,7 +249,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
+import { openConfirmDialog } from '@/views/workstation-v4/utils/confirmDialog'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import {
   BellOutlined,
@@ -402,7 +403,7 @@ const markAsProcessed = async (messageId: string) => {
 }
 
 const deleteMessage = async (messageId: string) => {
-  Modal.confirm({
+  openConfirmDialog({
     title: '确认删除',
     content: '确定要删除这条消息吗？',
     onOk: async () => {
@@ -461,7 +462,7 @@ const executeAction = async (action: MessageAction, notification: QCNotification
         break
 
       case 'confirm':
-        Modal.confirm({
+        openConfirmDialog({
           title: '确认操作',
           content: action.config.confirm_message || '确定要执行此操作吗？',
           onOk: () => {

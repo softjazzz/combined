@@ -1,3 +1,4 @@
+import { RUNTIME_BUILD_QUERY_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { apiClient } from '@/services/apiService'
 
 export interface FrontendBuildIdentity {
@@ -66,7 +67,7 @@ export async function fetchRuntimeBuild(): Promise<RuntimeBuildResult> {
     const response = await apiClient.get<unknown>('/api/v1/runtime-build', {
       params: { _t: Date.now() },
       headers: { 'Cache-Control': 'no-cache, no-store' },
-      timeout: 10000,
+      timeout: RUNTIME_BUILD_QUERY_TIMEOUT_MS,
       // 轮询中的旧后端 404 由状态按钮解释，不弹出全局 HTTP 错误提示。
       validateStatus: () => true,
     })

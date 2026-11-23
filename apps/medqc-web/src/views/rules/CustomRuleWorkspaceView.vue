@@ -1048,6 +1048,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { serializeCaseRecordKey } from '@/views/workstation-v4/utils/caseRecordKey'
 import { retryTargetJobId } from '@/utils/batchJobRetryIdentity'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
@@ -1770,7 +1771,7 @@ function normalizeWorkspaceRecordRef(
 }
 
 function workspaceRecordRefKey(recordRef: CustomRuleWorkspaceRecordRef): string {
-  return JSON.stringify([recordRef.institute_id, recordRef.patient_id, recordRef.visit_id])
+  return serializeCaseRecordKey(recordRef.institute_id, recordRef.patient_id, recordRef.visit_id)
 }
 
 function cacheSelectedRecordRef(record: CustomRuleWorkspaceRecord) {
@@ -2291,9 +2292,6 @@ onBeforeUnmount(() => {
 </script>
 <style scoped>
 .custom-rule-workspace {
-  --workstation-font:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
   --panel-bg: rgba(255, 255, 255, 0.86);
   --panel-border: rgba(0, 0, 0, 0.08);
   --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 30px rgba(0, 0, 0, 0.06);
@@ -2307,7 +2305,7 @@ onBeforeUnmount(() => {
   --surface-muted: rgba(0, 0, 0, 0.03);
   min-height: 100%;
   padding: 14px;
-  font-family: var(--workstation-font);
+  font-family: var(--mq-font-family);
   color: var(--ink-main);
   background: #f5f5f7;
 }
@@ -2960,7 +2958,7 @@ onBeforeUnmount(() => {
 
 :deep(.ant-btn) {
   border-radius: 8px;
-  font-family: var(--workstation-font);
+  font-family: var(--mq-font-family);
   font-weight: 600;
   transition:
     transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
@@ -2993,7 +2991,7 @@ onBeforeUnmount(() => {
 :deep(.ant-radio-button-wrapper) {
   border-color: var(--panel-border);
   color: var(--ink-muted);
-  font-family: var(--workstation-font);
+  font-family: var(--mq-font-family);
 }
 
 :deep(.ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled)) {
@@ -3013,7 +3011,7 @@ onBeforeUnmount(() => {
 :deep(.ant-select-selector) {
   border-radius: 8px !important;
   border-color: var(--panel-border) !important;
-  font-family: var(--workstation-font);
+  font-family: var(--mq-font-family);
 }
 
 :deep(.ant-input:hover),
@@ -3034,7 +3032,7 @@ onBeforeUnmount(() => {
 :deep(.ant-tag) {
   border: 0;
   border-radius: 999px;
-  font-family: var(--workstation-font);
+  font-family: var(--mq-font-family);
   font-size: 11px;
   font-weight: 600;
 }
@@ -3044,7 +3042,7 @@ onBeforeUnmount(() => {
 :deep(.ant-pagination),
 :deep(.ant-form),
 :deep(.ant-alert) {
-  font-family: var(--workstation-font);
+  font-family: var(--mq-font-family);
 }
 
 @media (max-width: 1440px) {
@@ -3095,7 +3093,6 @@ onBeforeUnmount(() => {
 
 /* ===== v7.1 液态玻璃覆盖：本页变量改指 --mq-* Token，面板统一玻璃卡 ===== */
 .custom-rule-workspace {
-  --workstation-font: var(--mq-font-family);
   --panel-bg: var(--mq-glass-bg);
   --panel-border: var(--mq-glass-border);
   --panel-shadow: var(--mq-glass-shadow);

@@ -4,11 +4,13 @@ on:
   pull_request:
     branches: [main, develop]
     paths:
+      - '*'
       - 'apps/medqc-web/**'
       - '.github/workflows/quality-gates-medqc.yml'
   push:
     branches: [main, develop]
     paths:
+      - '*'
       - 'apps/medqc-web/**'
       - '.github/workflows/quality-gates-medqc.yml'
   workflow_dispatch:
@@ -23,11 +25,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Repository hygiene check
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        working-directory: .
+        env:
+          DIFF_BASE: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+        run: node apps/medqc-web/scripts/check-repo-hygiene.mjs --diff-base "$DIFF_BASE"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2

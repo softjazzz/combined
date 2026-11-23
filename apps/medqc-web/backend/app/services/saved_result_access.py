@@ -6,13 +6,10 @@ from fastapi import HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from ..core.clinical_defaults import get_clinical_defaults
 from .defect_rectification_service import RectificationError, _person
 
 
-# 泸县人民医院账号查看「机构号」病例时须核验东华单院的归属证据，投递代次与接口由现场核定。
-# 旧快照缺少账本元数据时，仅在已核定的 CDM 绑定上核对现行回执；归属无法核验时拒绝访问。
-_DONGHUA_EPOCH = "7cecd40f-047d-4458-b964-8741d0ea7399"
-_DONGHUA_BINDING = "cdm-read-v1:d6426d946c655b24ec8ad3915e7441e7cb5033dd69c7397a70c7431f5a3dea08"
 _DONGHUA_TABLES = ("admission_record", "discharge_record")
 _COORDINATES = ("institute_id", "patient_id", "visit_id")
 
@@ -63,7 +60,9 @@ def result_view_needs_donghua_proof(actor_id: str, institute_id: str) -> bool:
 
 
 def scope_needs_donghua_result_proof(scope: str | None, institute_id: str) -> bool:
-    if scope == "泸县人民医院" and institute_id == "机构号":
+    defaults = get_clinical_defaults()
+    if (scope != institute_id and scope == defaults.hospital_name
+            and institute_id == defaults.saved_result_case_institute):
         return True
     check_saved_result_institute(scope, institute_id)
     return False
@@ -131,12 +130,17 @@ def require_donghua_frozen_result(job_id: str, identity: tuple, binding: str) ->
     from .cdm_publication_evidence import target_hash
 
     denied = HTTPException(403, "缺少可核验的历史结果机构归属")
+    defaults = get_clinical_defaults()
+    epoch = defaults.saved_result_epoch
+    if (not epoch or not identity or identity[0] != defaults.saved_result_case_institute
+            or (defaults.saved_result_binding_override and binding != defaults.saved_result_binding_override)):
+        raise denied
     try:
         state = material.load(job_id, identity)
     except material.MaterialSnapshotError:
         raise denied from None
     if (not state or state.get("schema") != "cdm" or state.get("binding") != binding
-            or state.get("identity") != list(identity) or identity[0] != "机构号"):
+            or state.get("identity") != list(identity)):
         raise denied
     automatic = state.get("automatic_material")
     publication = automatic.get("publication") if isinstance(automatic, dict) else None
@@ -147,8 +151,8 @@ def require_donghua_frozen_result(job_id: str, identity: tuple, binding: str) ->
                                      "metadata_contract_unconfirmed"}:
         # 旧快照可能没有操作账本的列权限。仅对专属院区已绑定的基础表核对归属，
         # 当前投递回执只用于决定谁可查看；历史结果与正文始终取自原任务。
-        if (binding == _DONGHUA_BINDING and publication["rows"] == {}
-                and _verify_donghua_delivery_owner(state, identity, digest)):
+        if (binding and binding == defaults.saved_result_receipt_binding and publication["rows"] == {}
+                and _verify_donghua_delivery_owner(state, identity, digest, binding=binding, epoch=epoch)):
             return state
         raise denied
     if publication.get("status") != "metadata_available":
@@ -166,7 +170,7 @@ def require_donghua_frozen_result(job_id: str, identity: tuple, binding: str) ->
             receipt, operation = entry.get("receipt") or {}, entry.get("operation") or {}
             if (not isinstance(receipt, dict) or not isinstance(operation, dict)
                     or entry.get("target_key_hash") != digest or receipt.get("target_key_hash") != digest
-                    or receipt.get("source_epoch") != _DONGHUA_EPOCH or operation.get("source_epoch") != _DONGHUA_EPOCH
+                    or receipt.get("source_epoch") != epoch or operation.get("source_epoch") != epoch
                     or operation.get("interface_name") != "web." + table):
                 raise denied
             verified = True
@@ -175,7 +179,7 @@ def require_donghua_frozen_result(job_id: str, identity: tuple, binding: str) ->
     return state
 
 
-def _verify_donghua_delivery_owner(state, identity, digest):
+def _verify_donghua_delivery_owner(state, identity, digest, *, binding: str, epoch: str):
     from ..database import clinical_connection as clinical
 
     tables = state.get("tables")
@@ -191,7 +195,7 @@ def _verify_donghua_delivery_owner(state, identity, digest):
             return False
         if rows:
             interfaces.add("web." + table)
-    if not interfaces or clinical.source_binding() != _DONGHUA_BINDING:
+    if not interfaces or clinical.source_binding() != binding:
         return False
     try:
         engine = clinical.get_engine()
@@ -216,7 +220,7 @@ def _verify_donghua_delivery_owner(state, identity, digest):
     seen = set()
     for record in records:
         interface = record["interface_name"]
-        if (interface in seen or str(record["source_epoch"]) != _DONGHUA_EPOCH
+        if (interface in seen or str(record["source_epoch"]) != epoch
                 or record["matches_contract"] is not True or not record["generation"] or record["generation"] < 1):
             return False
         seen.add(interface)

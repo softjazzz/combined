@@ -3,6 +3,7 @@
  * 定义所有 LLM 客户端的通用接口和行为
  */
 
+import { EXTENDED_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import type {
   LLMConfig,
   CallOptions,
@@ -94,7 +95,7 @@ export abstract class BaseLLMClient {
     options?: { timeout?: number }
   ): Promise<Response> {
     const controller = new AbortController()
-    const timeout = options?.timeout || this.config.timeout || 60000
+    const timeout = options?.timeout || this.config.timeout || EXTENDED_REQUEST_TIMEOUT_MS
 
     const timeoutId = setTimeout(() => controller.abort(), timeout)
 

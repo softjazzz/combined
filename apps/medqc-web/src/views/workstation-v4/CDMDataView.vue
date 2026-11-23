@@ -482,6 +482,7 @@
 </template>
 
 <script setup lang="ts">
+import { serializeCaseRecordKey } from './utils/caseRecordKey'
 import { ref, computed, onMounted } from 'vue'
 import { clinicalSourcesApi } from '@/api/clinicalSources'
 import { getAccessToken } from '@/utils/auth-token'
@@ -526,7 +527,7 @@ const detailError = ref('')
 let detailSequence = 0
 let loadSequence = 0
 function patientKey(pt: Record<string, unknown>) {
-  return JSON.stringify([pt.institute_id, pt.patient_id, pt.visit_id])
+  return serializeCaseRecordKey(pt.institute_id, pt.patient_id, pt.visit_id)
 }
 async function readJson(url: string) {
   const resp = await fetch(url, { headers: getAuthHeaders({

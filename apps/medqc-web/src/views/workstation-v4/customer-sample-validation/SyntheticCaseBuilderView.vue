@@ -334,11 +334,12 @@
             </label>
             <label>
               <span>评价时间点</span>
-              <a-input
-                v-model:value="form.evaluationAsOfDate"
-                type="date"
-                aria-label="评价时间点"
+              <a-date-picker
+                :value="form.evaluationAsOfDate"
+                @update:value="form.evaluationAsOfDate = typeof $event === 'string' ? $event : ''"
+                value-format="YYYY-MM-DD"
                 placeholder="留空取创建当天"
+                class="mq-input"
               />
               <small class="field-hint">未出院病例的时限规则按此日期评价，创建后固定</small>
             </label>
@@ -656,11 +657,12 @@
 </template>
 
 <script setup lang="ts">
+import { SAMPLE_RULE_SET_RUN_TIMEOUT_MS } from '@/config/requestTimeouts'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { CSSProperties } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { DatePicker as ADatePicker, message } from 'ant-design-vue'
 
 import {
   createManualTestMedicalRecord,
@@ -1447,7 +1449,7 @@ async function handleSave(runAfterSave: boolean) {
             patientId,
             visitId: matchedVisitId,
           }),
-          { timeout: 90000 },
+          { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS },
         )
         if (!runResult.success || !runResult.data) {
           message.warning(runResult.message || '测试病历已保存，但验证任务创建失败')
