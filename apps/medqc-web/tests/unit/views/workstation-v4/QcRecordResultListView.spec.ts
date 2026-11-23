@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   downloadBlob: vi.fn(),
   exportFilteredLuxian0609RecordResults: vi.fn(),
   getRaw: vi.fn(),
+  postRaw: vi.fn(),
+  requestRaw: vi.fn(),
 }))
 const routeState = vi.hoisted(() => ({
   path: '/workstation-v4/records/running',
@@ -22,6 +24,8 @@ vi.mock('@/api/clinicalSources', () => ({
 vi.mock('@/services/apiService', () => ({
   ApiService: {
     getRaw: mocks.getRaw,
+    postRaw: mocks.postRaw,
+    requestRaw: mocks.requestRaw,
   },
 }))
 
@@ -89,6 +93,28 @@ const ResultAnalysisStub = defineComponent({
 })
 
 const mountedWrappers: Array<{ unmount: () => void }> = []
+
+function mockWorkstationResponse<T extends {
+  data: {
+    records: ReadonlyArray<{ record_key: string; latest_qc_summary?: object }>
+    qc_summary: object
+  }
+}>(payload: T) {
+  const { qc_summary, records, ...list } = payload.data
+  mocks.getRaw.mockResolvedValue({
+    data: { ...list, records: records.map(({ latest_qc_summary: _summary, ...row }) => row) },
+  })
+  mocks.postRaw.mockImplementation(async (_url: string, body: { record_keys: string[] }) => {
+    const requested = new Set(body.record_keys)
+    return {
+      data: {
+        qc_summary,
+        records: records.filter((row) => requested.has(row.record_key))
+          .map((row) => ({ recordKey: row.record_key, latest_qc_summary: row.latest_qc_summary })),
+      },
+    }
+  })
+}
 
 function response() {
   return {
@@ -209,7 +235,7 @@ describe('QcRecordResultListView', () => {
     window.sessionStorage.clear()
     routeState.path = '/workstation-v4/records/running'
     routeState.query = {}
-    mocks.getRaw.mockResolvedValue(response())
+    mockWorkstationResponse(response())
     mocks.exportFilteredLuxian0609RecordResults.mockResolvedValue({
       success: true,
       data: new Blob(['xlsx']),
@@ -227,7 +253,7 @@ describe('QcRecordResultListView', () => {
     Object.assign(payload.data, { qc_summary: {
       total_records: 6, ready_records: 3, failed_records: 1,
     } })
-    mocks.getRaw.mockResolvedValue(payload)
+    mockWorkstationResponse(payload)
     const wrapper = mountView('inpatient')
     await flushPromises()
     expect(wrapper.text()).toContain('执行失败')
@@ -251,6 +277,7 @@ describe('QcRecordResultListView', () => {
       .splice(0)
       .reverse()
       .forEach((wrapper) => wrapper.unmount())
+    vi.useRealTimers()
     document.body.innerHTML = ''
   })
 
@@ -278,12 +305,19 @@ describe('QcRecordResultListView', () => {
         '仅展示当前范围内病历的最新质控结果，不混入其他业务流程。',
       )
       expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+        qc_summary_mode: 'deferred',
         page: 1,
         page_size: 15,
         source_id: 'independent_cdm',
-      date_field: dateField,
+        date_field: dateField,
         hospital_status: carePhase,
       })
+      expect(mocks.postRaw).toHaveBeenCalledWith(
+        '/api/medical-records/workstation/qc-summary',
+        { record_keys: response().data.records.map((row) => row.record_key) },
+        { params: { source_id: 'independent_cdm', date_field: dateField, hospital_status: carePhase },
+          signal: expect.any(AbortSignal) },
+      )
     },
   )
 
@@ -354,7 +388,7 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
     const payload = response()
     payload.data.records = payload.data.records.filter((record) => record.visit_id === 'V-data-gap')
-    mocks.getRaw.mockResolvedValue(payload)
+    mockWorkstationResponse(payload)
     await wrapper.get('.qc-record-result-list-view__refresh-button').trigger('click')
     await flushPromises()
     expect(preview.props('row')!.visitId).toBe('V-data-gap')
@@ -387,7 +421,7 @@ describe('QcRecordResultListView', () => {
     const payload = response()
     payload.data.records[0]!.latest_qc_summary!.completed_at = '2026-08-17T08:49:00'
     payload.data.records[1]!.latest_qc_summary!.completed_at = '2026-08-17T16:49:00+08:00'
-    mocks.getRaw.mockResolvedValue(payload)
+    mockWorkstationResponse(payload)
 
     const wrapper = mountView('inpatient')
     await flushPromises()
@@ -411,7 +445,8 @@ describe('QcRecordResultListView', () => {
     await wrapper.find('select[aria-label="科室筛选"]').setValue('重症医学科')
     await flushPromises()
 
-    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -485,7 +520,7 @@ describe('QcRecordResultListView', () => {
   })
 
   it('相同 visitId 的两份病历按 recordKey 定位，并向抽屉传入所选行的完整三坐标', async () => {
-    mocks.getRaw.mockResolvedValue({
+    mockWorkstationResponse({
       data: {
         ...response().data,
         records: [
@@ -541,7 +576,7 @@ describe('QcRecordResultListView', () => {
       recordId: 'V-shared',
     })
     expect(String((drawer.props('focus') as { label: string }).label)).toContain('患者乙')
-    expect(String((drawer.props('focus') as { label: string }).label)).toContain('2026-08-09 17:02')
+    expect((drawer.props('focus') as { listQcTime: string }).listQcTime).toContain('2026-08-09 17:02')
   })
 
   it('从首页携带三坐标键进入时按住院号服务端检索，并自动打开该病历质控结果', async () => {
@@ -554,6 +589,7 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -618,18 +654,40 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
   })
 
-  it.each(['inpatient', 'discharged'] as const)('%s 未质控病例也能打开当前病历阅读', async (phase) => {
+  it.each([
+    ['inpatient', false], ['discharged', false], ['discharged', true],
+  ] as const)('%s 可打开当前病历（摘要读取中=%s）', async (phase, summaryPending) => {
+    if (summaryPending) {
+      mocks.postRaw.mockImplementationOnce(() => new Promise(() => {}))
+    }
+    mocks.requestRaw.mockResolvedValueOnce({ data: { documents: [] } })
     const wrapper = mountView(phase)
     await flushPromises()
     const row = wrapper.get('tr[data-record-key*="V-not-run"]')
-    expect(row.find('[data-testid="open-saved-result"]').exists()).toBe(false)
+    expect(row.find('[data-testid="open-saved-result"]').exists()).toBe(summaryPending)
+    if (summaryPending) {
+      expect(row.text()).toContain('质控摘要加载中')
+      expect(wrapper.findAll('.review-workbench-metrics strong').map((item) => item.text()))
+        .toEqual(['6', '—', '—', '—'])
+    }
+    vi.useFakeTimers()
     await row.get('.qc-record-result-table__view-button').trigger('click')
     await flushPromises()
+    expect(document.body.querySelector('.hospital-loading.fills-reading-area')).not.toBeNull()
+    await vi.advanceTimersByTimeAsync(2000)
     const reader = wrapper.getComponent(QCRecordCompareWorkbench)
     expect(reader.props()).toMatchObject({
       visitId: 'V-not-run', instituteId: 'H', patientId: 'P',
       sourceView: 'current', documentOnly: true, feedbackAvailable: false,
     })
+    expect(mocks.requestRaw).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'GET',
+      url: '/api/v1/emr/V-not-run/documents',
+      params: {
+        institute_id: 'H', patient_id: 'P', visit_id: 'V-not-run',
+        source_view: 'current', view: 'full', include_clinical_surgery: true,
+      },
+    }))
     expect(reader.props('jobId')).toBeUndefined()
     expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
     expect(wrapper.text()).not.toContain('这份病历暂无已保存质控结果')
@@ -642,13 +700,13 @@ describe('QcRecordResultListView', () => {
         status: executionStatus === 'failed' ? 'failed' : 'ready',
         execution_status: executionStatus, failed_rule_count: 2,
       })
-      mocks.getRaw.mockResolvedValue(data)
+      mockWorkstationResponse(data)
       const wrapper = mountView('discharged')
       await flushPromises()
       await wrapper.get('tr[data-record-key*="V-priority"] [data-testid="open-saved-result"]').trigger('click')
-      const focus = wrapper.getComponent(ResultDrawerStub).props('focus') as { label: string }
-      expect(focus.label).toContain('质控结束')
-      expect(focus.label).not.toContain('质控完成')
+      const focus = wrapper.getComponent(ResultDrawerStub).props('focus') as { label: string; listQcTime: string }
+      expect(focus.listQcTime).toContain('质控结束')
+      expect(focus.listQcTime).not.toContain('质控完成')
     },
   )
 
@@ -667,16 +725,19 @@ describe('QcRecordResultListView', () => {
         },
       ])
       const requestsBeforeRefresh = mocks.getRaw.mock.calls.length
+      const summariesBeforeRefresh = mocks.postRaw.mock.calls.length
       const previewRefreshKey = wrapper.getComponent(QcRecordReviewPreview).props('refreshKey')
 
       wrapper.getComponent(QcRunSelectedControl).vm.$emit('completed')
       await flushPromises()
       expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh)
+      expect(mocks.postRaw.mock.calls.length).toBe(summariesBeforeRefresh)
 
       wrapper.getComponent(QcRunSelectedControl).vm.$emit('results-updated')
       await flushPromises()
 
       expect(mocks.getRaw.mock.calls.length).toBe(requestsBeforeRefresh + 1)
+      expect(mocks.postRaw.mock.calls.length).toBe(summariesBeforeRefresh + 1)
       expect(wrapper.getComponent(QcRecordReviewPreview).props('refreshKey')).toBeGreaterThan(
         previewRefreshKey,
       )

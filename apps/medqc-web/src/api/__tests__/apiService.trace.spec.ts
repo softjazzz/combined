@@ -55,12 +55,15 @@ async function loadApiServiceWithAxiosMock() {
     default: axiosMock,
   }))
 
-  await import('@/services/apiService')
+  const { ApiService } = await import('@/services/apiService')
 
   return {
     requestFulfilled,
     responseRejected,
     responseFulfilled,
+    ApiService,
+    get: apiClientMock.get,
+    post: apiClientMock.post,
   }
 }
 
@@ -106,6 +109,77 @@ describe('apiService trace propagation', () => {
     vi.clearAllMocks()
     vi.resetModules()
     vi.unstubAllEnvs()
+  })
+
+  it('只给病历池列表请求留出更长的等待时间，保留调用者的超时覆盖', async () => {
+    const { ApiService, get } = await loadApiServiceWithAxiosMock()
+    await ApiService.getRaw('/api/medical-records/workstation', { page: 1 })
+    await ApiService.getRaw('/api/v1/notifications')
+    await ApiService.getRaw('/api/medical-records/workstation', {}, { timeout: 2000 })
+    expect(get).toHaveBeenNthCalledWith(1, '/api/medical-records/workstation', {
+      timeout: 30000, params: { page: 1 },
+    })
+    expect(get).toHaveBeenNthCalledWith(2, '/api/v1/notifications', { params: undefined })
+    expect(get).toHaveBeenNthCalledWith(3, '/api/medical-records/workstation', { timeout: 2000, params: {} })
+  })
+
+  it.each(['ECONNABORTED', 'ERR_CANCELED'])('后台摘要读取 %s 由页面处理，不弹列表错误', async (code) => {
+    const { responseRejected } = await loadApiServiceWithAxiosMock()
+    const error = {
+      code,
+      config: { method: 'get', url: '/api/medical-records/workstation', params: { qc_summary_mode: 'only' } },
+      message: '合成请求终止',
+    }
+    await expect(responseRejected!(error)).rejects.toBe(error)
+    expect(mockMessageError).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { code: 'ERR_CANCELED', response: undefined },
+    { code: 'ECONNABORTED', response: undefined },
+    { code: 'ERR_NETWORK', response: undefined },
+    { code: undefined, response: { status: 503, headers: { 'x-trace-id': 'summary-trace' } } },
+  ])('新 POST 后台摘要失败由页面处理，保留错误原值 $code', async ({ code, response }) => {
+    const { responseRejected } = await loadApiServiceWithAxiosMock()
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const error = {
+        code,
+        response,
+        config: { method: 'post', url: '/api/medical-records/workstation/qc-summary' },
+        message: '合成后台摘要异常',
+      }
+      await expect(responseRejected!(error)).rejects.toBe(error)
+      expect(mockMessageError).not.toHaveBeenCalled()
+      if (code === 'ERR_CANCELED') expect(errorLog).not.toHaveBeenCalled()
+      if (response) expect(error).toHaveProperty('traceId', 'summary-trace')
+    } finally {
+      errorLog.mockRestore()
+    }
+  })
+
+  it('后台摘要 POST 使用 30 秒超时并在调试日志中隐去三键', async () => {
+    vi.stubEnv('VITE_API_DEBUG', 'true')
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const { ApiService, post, requestFulfilled } = await loadApiServiceWithAxiosMock()
+      const url = '/api/medical-records/workstation/qc-summary'
+      const recordKey = '["SYNTHETIC-INSTITUTE","SYNTHETIC-PATIENT","SYNTHETIC-VISIT"]'
+      const body = { record_keys: [recordKey] }
+      await ApiService.postRaw(url, body)
+      await ApiService.postRaw(url, body, { timeout: 2000 })
+      await ApiService.postRaw('/api/v1/notifications', {})
+      expect(post).toHaveBeenNthCalledWith(1, url, body, { timeout: 30000 })
+      expect(post).toHaveBeenNthCalledWith(2, url, body, { timeout: 2000 })
+      expect(post).toHaveBeenNthCalledWith(3, '/api/v1/notifications', {}, {})
+      requestFulfilled!({ method: 'post', url, headers: {}, data: body })
+      const output = JSON.stringify(log.mock.calls)
+      expect(output).toContain('[REDACTED]')
+      expect(output).not.toMatch(/SYNTHETIC-(INSTITUTE|PATIENT|VISIT)/)
+      expect(body.record_keys).toEqual([recordKey])
+    } finally {
+      log.mockRestore()
+    }
   })
 
   it('request interceptor injects X-Trace-ID and X-Request-ID with same value', async () => {

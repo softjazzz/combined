@@ -184,7 +184,7 @@ function readDocumentSections(source: Record<string, unknown>) {
 
 function normalizeEditableDocumentsResponse(
   value: unknown,
-  options: { includeSummaries?: boolean } = {},
+  options: { includeSummaries?: boolean; includeClinicalSurgery?: boolean } = {},
 ): EditableMedicalRecordDocumentsResult {
   const payload =
     value && typeof value === 'object' && 'data' in value
@@ -231,6 +231,7 @@ function normalizeEditableDocumentsResponse(
         ['document_type', 'doc_type', 'type', 'source_table', 'table_name'],
         title,
       )
+      const clinicalSurgeryVersion = row.clinical_surgery_version
       const rawRecordTime = readStringField(row, [
         'record_time',
         'record_datetime',
@@ -311,6 +312,11 @@ function normalizeEditableDocumentsResponse(
           `${documentType}-${index + 1}`,
         ),
         source_document_id: readStringField(row, ['document_id', 'doc_id', 'id']),
+        ...(options.includeClinicalSurgery && documentType === 'surgery_record' &&
+        row.source_namespace === 'clinical' && typeof clinicalSurgeryVersion === 'string' &&
+        /^[a-f0-9]{64}$/.test(clinicalSurgeryVersion)
+          ? { clinical_surgery_version: clinicalSurgeryVersion }
+          : {}),
         source_ref: readStringField(row, ['source_ref']),
         source_document_aliases: sourceDocumentAliases,
         source_table: readStringField(row, ['source_table', 'table_name', 'doc_type']),
@@ -399,7 +405,7 @@ function normalizeEditableDocumentsResponse(
         Boolean(item) &&
         item.enabled !== false &&
         (Boolean(item.content.trim()) ||
-          (options.includeSummaries === true && item.has_content === true)),
+          ((options.includeSummaries === true || item.clinical_surgery_version) && item.has_content === true)),
     )
   return {
     current_record:
@@ -515,7 +521,9 @@ function normalizeEditableDocumentRender(
     .filter((block) => readStringField(block, ['block_type']) === 'order_table')
     .flatMap((block) => (Array.isArray(block.rows) ? block.rows : []))
     .find((row): row is Record<string, unknown> => Boolean(row && typeof row === 'object'))
-  const content = readStringField(candidate, ['content'])
+  const content = summary.clinical_surgery_version && typeof candidate.content === 'string'
+    ? candidate.content
+    : readStringField(candidate, ['content'])
   return {
     ...summary,
     key: readStringField(metadata, ['doc_key'], summary.key),
@@ -526,6 +534,7 @@ function normalizeEditableDocumentRender(
     ),
     source_table: summary.source_table || readStringField(metadata, ['doc_type']),
     document_type: readStringField(metadata, ['doc_type'], summary.document_type),
+    frontpage_display: normalizeFrontpageDisplay(metadata.frontpage_display) || summary.frontpage_display,
     title: readStringField(metadata, ['doc_name'], summary.title),
     record_time: readStringField(metadata, ['record_time'], summary.record_time),
     sections,
@@ -559,6 +568,8 @@ type EditableDocumentRequestParams = {
   record_ref?: string
   view?: 'full' | 'summary'
   source_view?: 'saved' | 'current'
+  document_scope?: 'clinical' | 'orders'
+  include_clinical_surgery?: boolean
 }
 
 export async function getEditableMedicalRecordDocuments(
@@ -579,6 +590,7 @@ export async function getEditableMedicalRecordDocuments(
       success: true,
       data: normalizeEditableDocumentsResponse(response.data, {
         includeSummaries: params?.view === 'summary',
+        includeClinicalSurgery: params?.source_view === 'current' && params.include_clinical_surgery,
       }),
     } satisfies ServiceResult<EditableMedicalRecordDocumentsResult>
   } catch (error) {
@@ -593,7 +605,7 @@ export async function getEditableMedicalRecordDocuments(
 export async function getEditableMedicalRecordDocument(
   visitId: string,
   summary: EditableMedicalRecordDocument,
-  params?: Omit<EditableDocumentRequestParams, 'view' | 'record_ref'>,
+  params?: Omit<EditableDocumentRequestParams, 'view' | 'document_scope'>,
 ) {
   try {
     const response = await ApiService.requestRaw<unknown>({
@@ -606,8 +618,32 @@ export async function getEditableMedicalRecordDocument(
         execution_domain: summary.execution_domain,
         doc_type: summary.document_type,
         doc_id: summary.source_document_id || summary.key,
+        ...(summary.clinical_surgery_version ? {
+          source_view: 'current',
+          clinical_surgery_version: summary.clinical_surgery_version,
+        } : {}),
       },
     })
+    const envelope = response.data
+    const data = envelope && typeof envelope === 'object' && 'data' in envelope
+      ? envelope.data
+      : envelope
+    if (summary.clinical_surgery_version) {
+      const rendered = data && typeof data === 'object' ? data as Record<string, unknown> : {}
+      const metadata = rendered.metadata
+      if (!metadata || typeof metadata !== 'object' ||
+        !('clinical_surgery_version' in metadata) ||
+        metadata.clinical_surgery_version !== summary.clinical_surgery_version ||
+        typeof rendered.content !== 'string' || !rendered.content.trim()) {
+        return { success: false, message: '手术记录版本已变更或不可用，请刷新病历目录。' }
+      }
+    }
+    if (
+      data && typeof data === 'object' && 'empty_reason' in data &&
+      data.empty_reason === 'document_not_found'
+    ) {
+      return { success: false, message: '未找到目录对应的原文书' }
+    }
     return {
       success: true,
       data: normalizeEditableDocumentRender(response.data, summary),

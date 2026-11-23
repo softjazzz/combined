@@ -63,7 +63,7 @@ function deferred() {
 
 describe('QcRecordReviewPreview', () => {
   it.each(['failed', 'partial_failed'] as const)(
-    '读取成功但执行 %s 时保留有效项并展示真实失败范围', async (executionStatus) => {
+    '读取成功但执行 %s 时保留有效项并隐藏失败横幅', async (executionStatus) => {
       const data = payload({
         execution_status: executionStatus, failed_rule_count: 2,
         failed_rule_ids: ['LX0609-07-03-01', 'LX0609-03-01-04'], is_complete: false,
@@ -73,14 +73,10 @@ describe('QcRecordReviewPreview', () => {
       getLatestResult.mockResolvedValue({ success: true, data })
       const wrapper = mount(QcRecordReviewPreview, { props: { row } })
       await flushPromises()
-      const notice = wrapper.get('[role="alert"]')
-      expect(notice.text()).toContain(`已保留 ${data.result_rule_count} 项有效结果`)
-      expect(notice.text()).toContain('2 项执行失败')
-      expect(notice.text()).toContain('LX0609-07-03-01')
-      expect(notice.text()).toContain('LX0609-03-01-04')
+      expect(wrapper.text()).not.toContain('本次质控未全部完成')
       expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(data.items.length)
       expect(wrapper.find('.full-result-button').exists()).toBe(true)
-      if (executionStatus === 'failed') expect(wrapper.text()).not.toContain('该状态暂无质控项')
+      if (executionStatus === 'failed') expect(wrapper.text()).toContain('该状态暂无质控项')
       else expect(wrapper.text()).toContain('后端已保存的结论')
       // 刷新为正常成功轮后不残留旧失败提示。
       getLatestResult.mockResolvedValue({ success: true, data: payload() })
@@ -143,6 +139,20 @@ describe('QcRecordReviewPreview', () => {
     expect(wrapper.text()).toContain('暂无已保存质控结果')
     expect(wrapper.text()).toContain('入院时间—最近质控—')
     expect(getLatestResult).not.toHaveBeenCalled()
+  })
+
+  it('授权的捕获失败从终末预览明确打开上次结果，预览不自行查旧任务', async () => {
+    getLatestResult.mockResolvedValue({ success: true, data: payload({
+      state: 'technical_error', reason_code: 'material_source_contract_incomplete',
+      failure_stage: 'material_preparation', items: [], result_rule_count: 0,
+    }) })
+    const wrapper = mount(QcRecordReviewPreview, { props: { row, carePhase: 'discharged' } })
+    await flushPromises()
+    const action = wrapper.get('[role="alert"] button')
+    expect(action.text()).toBe('查看上一次有效结果')
+    await action.trigger('click')
+    expect(wrapper.emitted('open-full')).toEqual([[row.recordKey, { resultView: 'previous_valid', anchorJobId: 'job-1' }]])
+    expect(getLatestResult).toHaveBeenCalledTimes(1)
   })
 
   it('显示加载状态并按服务端三坐标读取，默认确定问题，可打开完整结果', async () => {

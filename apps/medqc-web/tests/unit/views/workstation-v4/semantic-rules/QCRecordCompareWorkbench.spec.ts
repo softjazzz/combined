@@ -71,6 +71,48 @@ beforeEach(async () => {
 })
 
 describe('QCRecordCompareWorkbench', () => {
+  it('初步诊断去掉生成标签后仍高亮同一句原文证据', async () => {
+    const key = 'admission_record_diagnosis'
+    const quote = '2、合成诊断乙的原文条目'
+    const text = `入院记录诊断\n诊断类型: 初步诊断\n其他诊断: 1、合成甲${quote}`
+    getDocumentsMock.mockResolvedValue({
+      success: true,
+      data: {
+        documents: [{
+          key: 'synthetic-admission',
+          source_document_id: 'synthetic-admission',
+          document_type: 'admission_record',
+          title: '入院记录',
+          content: text,
+          sections: [{ key, label: '入院记录诊断', text }],
+        }],
+      },
+    })
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'synthetic-diagnosis-visit',
+        issues: [{
+          ...issues[1]!,
+          target_document_type: 'admission_record',
+          evidences: [{
+            key: 'synthetic-diagnosis-evidence',
+            source_document_type: 'admission_record',
+            source_document_id: 'synthetic-admission',
+            section_field_path: key,
+            quote,
+          }],
+        }],
+      },
+    })
+    await flushPromises()
+
+    const section = wrapper.get(`[data-section-key="${key}"]`)
+    expect(section.get('h3').text()).toBe('初步诊断')
+    expect(section.get('p').text()).toBe(`1、合成甲\n${quote}`)
+    expect(section.get('mark').text()).toBe(quote)
+    wrapper.unmount()
+  })
+
   it('PDF正文版本按父文书展开，点击后能读到独立保留的PDF全文', async () => {
     const wrapper = mount(QCRecordCompareWorkbench, {
       props: {
@@ -455,8 +497,9 @@ describe('QCRecordCompareWorkbench', () => {
       view: 'summary',
     })
     const resultItems = wrapper.findAll('.record-result-item')
-    expect(resultItems[0]?.text()).toContain('LX0609-01-01-01')
-    expect(resultItems[1]?.text()).toContain('LX0609-01-02-01')
+    expect(resultItems[0]?.text()).toContain('首次病程记录及时性')
+    expect(resultItems[1]?.text()).toContain('首次病程记录完整性')
+    expect(wrapper.find('.record-result-list').text()).not.toContain('LX0609-01-')
     expect(wrapper.find('.record-content-toolbar').text()).toContain('首次病程记录')
     expect(wrapper.find('.record-content-toolbar').text()).toContain('记录时间')
     expect(wrapper.find('.record-content-toolbar').text()).toContain('2026-07-24 11:00:00')
@@ -534,6 +577,112 @@ describe('QCRecordCompareWorkbench', () => {
     ).toBe('right-key')
     expect(wrapper.text()).toContain('已定位到文书，未定位到具体片段')
     expect(wrapper.find('mark').exists()).toBe(false)
+  })
+
+  it('结果页默认打开入院记录，CT 证据和医嘱各自按需读取', async () => {
+    const sourceRef = 'src_ct_master'
+    const admission = {
+      key: 'admission_record::admission-id',
+      source_document_id: 'admission-id',
+      document_type: 'admission_record',
+      title: '入院记录',
+      execution_domain: 'admission',
+      content_loaded: false,
+    }
+    const report = {
+      key: 'exam_item_report::ct-report',
+      source_document_id: 'ct-report',
+      source_ref: 'src_ct_report',
+      source_table: 'exam_item_report',
+      document_type: 'exam_item_report',
+      title: '胸部 CT 检查报告',
+      execution_domain: 'course',
+      content_loaded: false,
+      source_document_aliases: [
+        { source_document_id: 'ct-report', source_ref: sourceRef, source_document_type: 'exam_master' },
+      ],
+    }
+    getDocumentsMock.mockResolvedValue({
+      success: true,
+      data: {
+        visit_id: 'visit-1',
+        documents: [{
+          key: 'unrelated',
+          source_ref: sourceRef,
+          source_table: 'daily_course_record',
+          document_type: 'daily_course_record',
+          title: '其他文书',
+          content: '合成病程',
+          content_loaded: true,
+        }, {
+          ...admission,
+          key: 'diagnosis',
+          source_document_id: 'diagnosis',
+          document_type: 'admission_record_diagnosis',
+          title: '入院记录诊断',
+        }, report, admission],
+      },
+    })
+    getDocumentMock.mockResolvedValueOnce({
+      success: true,
+      data: { ...admission, content: '合成入院正文', content_loaded: true },
+    }).mockResolvedValue({
+      success: true,
+      data: { ...report, content: '合成 CT 报告正文', content_loaded: true },
+    })
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-1', instituteId: 'inst-1', patientId: 'patient-1', jobId: 'saved-job',
+        issues: [],
+        lazyResultDocuments: true,
+        singleRecordItems: [{
+          rule_id: 'LX0609-06-01-02',
+          rule_name: 'CT/MRI 检查前病程记录',
+          status: 'non_compliant',
+          evidence: [{ source_ref: sourceRef, source_type: 'exam_master' }],
+        }],
+      },
+    })
+    expect(wrapper.get('.hospital-loading[role="status"]').text()).toBe('正在读取文书目录')
+    await flushPromises()
+    expect(wrapper.find('.hospital-loading').exists()).toBe(false)
+    expect(getDocumentsMock).toHaveBeenCalledTimes(1)
+    expect(getDocumentsMock).toHaveBeenLastCalledWith(
+      'visit-1',
+      expect.objectContaining({ job_id: 'saved-job', view: 'summary', document_scope: 'clinical' }),
+    )
+    expect(getDocumentMock).toHaveBeenCalledTimes(1)
+    expect(getDocumentMock).toHaveBeenLastCalledWith(
+      'visit-1',
+      expect.objectContaining({ source_document_id: admission.key, document_type: 'admission_record' }),
+      expect.objectContaining({ job_id: 'saved-job', visit_id: 'visit-1' }),
+    )
+    expect(wrapper.text()).toContain('合成入院正文')
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="single-record-evidence"]').trigger('click')
+    await flushPromises()
+    expect(getDocumentMock).toHaveBeenLastCalledWith(
+      'visit-1',
+      expect.objectContaining({ source_document_id: report.key, source_ref: 'src_ct_report' }),
+      expect.objectContaining({ job_id: 'saved-job', visit_id: 'visit-1' }),
+    )
+    expect(wrapper.text()).toContain('合成 CT 报告正文')
+    expect(wrapper.text()).toContain('已定位到文书，未定位到具体片段')
+    getDocumentsMock.mockResolvedValueOnce({
+      success: true,
+      data: { documents: [{
+        key: 'order-key', document_type: 'inpat_drug_order', source_document_id: 'order-id',
+        title: '合成医嘱', has_content: true, content: '',
+      }] },
+    })
+    await wrapper.get('[data-testid="record-document-filter-order"]').trigger('click')
+    await flushPromises()
+    expect(getDocumentsMock).toHaveBeenCalledTimes(2)
+    expect(getDocumentsMock).toHaveBeenLastCalledWith(
+      'visit-1',
+      expect.objectContaining({ job_id: 'saved-job', view: 'summary', document_scope: 'orders' }),
+    )
+    expect(wrapper.text()).toContain('医嘱（1条）')
   })
 
   it('检验申请汇总通过原始文书安全别名加载并定位证据', async () => {

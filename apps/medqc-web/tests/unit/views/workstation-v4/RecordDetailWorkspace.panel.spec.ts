@@ -46,6 +46,15 @@ describe('病历详情的助手入口', () => {
       'visit-id': 'V', 'patient-id': 'P', 'institute-id': 'H',
     })
   })
+
+  it('查看病历的目录加载阶段显示医院标识，并在响应后切换到文书查看器', async () => {
+    const wrapper = mountWorkspace({ id: 'V', instituteId: 'H', patientId: 'P', visitId: 'V' })
+    await wrapper.setProps({ documentsLoading: true })
+    expect(wrapper.get('hospital-loading-stub').attributes('label')).toBe('正在读取病历文书目录')
+    await wrapper.setProps({ documentsLoading: false })
+    expect(wrapper.find('hospital-loading-stub').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="original-emr"]').exists()).toBe(true)
+  })
 })
 
 

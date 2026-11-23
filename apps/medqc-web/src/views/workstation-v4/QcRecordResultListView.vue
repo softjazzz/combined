@@ -59,6 +59,7 @@
     <section
       class="review-workbench-metrics mq-card"
       aria-label="质控结果汇总"
+      :aria-busy="qcSummaryState === 'pending'"
     >
       <div
         v-for="metric in metricItems"
@@ -66,7 +67,7 @@
         :class="`review-metric--${metric.key}`"
       >
         <span>{{ metric.key === 'priority' ? '确定问题' : metric.label }}</span>
-        <strong>{{ metric.value }}</strong>
+        <strong>{{ metric.key === 'records' || qcSummaryState === 'ready' ? metric.value : '—' }}</strong>
         <span>{{ metric.key === 'records' || metric.key === 'completed' || metric.key === 'failed' ? '份' : '项' }}</span>
         <MqIconTile
           class="review-metric__icon"
@@ -290,26 +291,7 @@
       @open-result="handleOpenAnalysisResult"
     />
 
-    <a-drawer
-      :open="Boolean(medicalRecordFocus)"
-      :title="`当前病历文书 · ${medicalRecordFocus?.name || ''} · 住院号 ${medicalRecordFocus?.visitId || ''}`"
-      width="min(1400px, 100vw)"
-      @close="medicalRecordFocus = null"
-    >
-      <QCRecordCompareWorkbench
-        v-if="medicalRecordFocus"
-        :key="medicalRecordFocus.recordKey"
-        :visit-id="medicalRecordFocus.visitId || medicalRecordFocus.id"
-        :institute-id="medicalRecordFocus.instituteId"
-        :patient-id="medicalRecordFocus.patientId"
-        :admission-time="medicalRecordFocus.admissionDate"
-        :discharge-time="medicalRecordFocus.dischargeDate"
-        document-only
-        source-view="current"
-        :feedback-available="false"
-        :issues="[]"
-      />
-    </a-drawer>
+    <CurrentMedicalRecordDrawer :record="medicalRecordFocus" @close="medicalRecordFocus = null" />
     <QCRecordResultComparisonDrawer
       :open="drawerOpen"
       :focus="selectedFocus"
@@ -321,7 +303,7 @@
 </template>
 
 <script setup lang="ts">
-import { Drawer as ADrawer, Pagination } from 'ant-design-vue'
+import { Pagination } from 'ant-design-vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChevronDown, Download } from 'lucide-vue-next'
@@ -333,13 +315,14 @@ import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-w
 import QCRecordResultComparisonDrawer, {
   type QCRecordResultFocus,
 } from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
+import type { PreviousResultRequest } from './customer-sample-validation/single-record-result-model'
 import QcRecordResultTable, {
   type QcRecordCarePhase,
   type QcRecordResultRow,
 } from './components/qc/QcRecordResultTable.vue'
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
-import QCRecordCompareWorkbench from './semantic-rules/components/QCRecordCompareWorkbench.vue'
+import CurrentMedicalRecordDrawer from './components/CurrentMedicalRecordDrawer.vue'
 import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
@@ -397,6 +380,7 @@ const {
   loadError,
   loading,
   qcSummary,
+  qcSummaryState,
   refreshData,
   searchText,
   selectHospFilter,
@@ -425,7 +409,7 @@ const METRIC_ICONS: Record<string, { name: MqIconName; tone: MqIconTone }> = {
 }
 
 const metricItems = computed<QcRecordMetricItem[]>(() => [
-  { key: 'records', label: '纳入病历', value: qcSummary.value.totalRecords },
+  { key: 'records', label: '纳入病历', value: qcSummaryState.value === 'ready' ? qcSummary.value.totalRecords : serverTotal.value },
   { key: 'completed', label: '已完成质控', value: qcSummary.value.readyRecords },
   ...(qcSummary.value.partialFailedRecords || qcSummary.value.failedRecords
     ? [{ key: 'failed' as const, label: '未全部完成', value: (qcSummary.value.partialFailedRecords || 0) + (qcSummary.value.failedRecords || 0) }]
@@ -468,7 +452,7 @@ function handleSelectPreview(recordKey: string) {
 }
 
 const emptyMessage = computed(() => {
-  if (loading.value) return '正在加载质控结果…'
+  if (loading.value) return '正在加载病历列表…'
   if (loadError.value) return '加载失败，请重试'
   return '暂无符合当前范围的病历'
 })
@@ -489,7 +473,7 @@ function compareLatestQcTimeDesc(left: QcRecordResultRow, right: QcRecordResultR
 }
 
 function toResultRow(record: PatientRecord): QcRecordResultRow {
-  const result = resolveResultPresentation(record.latestQcSummary)
+  const result = resolveResultPresentation(record.latestQcSummary, qcSummaryState.value)
   return {
     recordKey: record.recordKey as string,
     instituteId: record.instituteId as string,
@@ -702,7 +686,7 @@ function handleOpenMedicalRecord(recordKey: string) {
   medicalRecordFocus.value = record
 }
 
-function handleOpenResult(recordKey: string) {
+function handleOpenResult(recordKey: string, previousResult?: PreviousResultRequest) {
   medicalRecordFocus.value = null
   const record = allRecords.value.find(
     (candidate) => candidate.recordKey === recordKey && hasCompleteRecordIdentity(candidate),
@@ -718,16 +702,12 @@ function handleOpenResult(recordKey: string) {
     detailNotice.value = '这份病历暂无已保存质控结果'
     return
   }
-
   detailNotice.value = ''
   const labelParts = [
     record.name || '患者信息待核实',
     record.department || '未分科室',
     `住院号 ${record.visitId}`,
   ]
-  if (row.latestQcTime && row.latestQcTime !== '—') {
-    labelParts.push(`质控结束 ${row.latestQcTime}`)
-  }
   selectedFocus.value = {
     visitId: record.visitId as string,
     instituteId: record.instituteId as string,
@@ -736,6 +716,8 @@ function handleOpenResult(recordKey: string) {
     patientName: record.name,
     patientSex: record.sex,
     patientAge: record.age,
+    listQcTime: row.latestQcTime && row.latestQcTime !== '—' ? `质控结束 ${row.latestQcTime}` : undefined,
+    previousResult,
     label: labelParts.join(' · '),
   }
   drawerOpen.value = true
@@ -757,13 +739,13 @@ function handleOpenAnalysisResult(record: LuxianQcAnalysisRecordItem) {
     `住院号 ${visitId}`,
   ]
   const completedAt = formatQcCompletedAt(record.completed_at)
-  if (completedAt !== '—') labelParts.push(`质控完成 ${completedAt}`)
   selectedFocus.value = {
     visitId,
     instituteId,
     patientId,
     recordId: visitId,
     patientName: String(record.patient_name || '').trim(),
+    listQcTime: completedAt !== '—' ? `质控完成 ${completedAt}` : undefined,
     label: labelParts.join(' · '),
   }
   drawerOpen.value = true

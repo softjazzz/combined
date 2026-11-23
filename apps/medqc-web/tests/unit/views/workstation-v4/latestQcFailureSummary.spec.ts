@@ -26,6 +26,30 @@ describe('病历池失败语义传到最终展示', () => {
     expect(shown.resultStatus).not.toBe('completed')
   })
 
+  it.each(['material_capture', 'material_preparation'])('以 %s 识别本轮资料准备失败', (stage) => {
+    const record = normalizeRecord({ latest_qc_summary: {
+      status: 'technical_error',
+      failure_stage: stage,
+      reason_code: 'material_source_contract_incomplete',
+      completed_at: '2026-10-28T00:00:00Z',
+    } })
+    expect(record.latestQcSummary?.failureStage).toBe(stage)
+    expect(resolveResultPresentation(record.latestQcSummary)).toMatchObject({
+      resultStatus: 'technical-error', resultLabel: '病历资料准备失败',
+      issueSummary: '最近一次病历资料准备失败，未生成质控结果。',
+      latestQcTime: '2026-10-28 08:00',
+    })
+  })
+
+  it('没有资料准备失败标记时仍提示结果校验异常', () => {
+    const record = normalizeRecord({ latest_qc_summary: {
+      status: 'technical_error', reason_code: 'saved_partial_result_invalid',
+    } })
+    expect(resolveResultPresentation(record.latestQcSummary)).toMatchObject({
+      resultLabel: '结果校验异常', issueSummary: '请复核结果交付',
+    })
+  })
+
   it('汇总保留部分失败和全部失败的独立计数', () => {
     const counts = normalizeRecordPoolQcSummary({
       total_records: 3, ready_records: 1, partial_failed_records: 1, failed_records: 1,

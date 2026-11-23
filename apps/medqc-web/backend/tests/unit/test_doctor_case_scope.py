@@ -172,12 +172,79 @@ def test_direct_urls_and_legacy_paths_cannot_bypass_scope(client, path):
     assert "P-colleague" not in response.text
 
 
-def test_workstation_http_enforces_own_scope_and_filter_tampering(client):
+def test_workstation_http_enforces_own_scope_and_filter_tampering(client, monkeypatch):
+    calls = []
+
+    def load_summaries(refs, **_kwargs):
+        calls.append({tuple(ref.values()) for ref in refs})
+        return {("H-A", "P-own", "V-own"): {"status": "ready", "status_counts": {"data_gap": 1}}}
+
+    monkeypatch.setattr(query_service, "_load_latest_luxian_0609_qc_summaries", load_summaries)
     headers = {"Authorization": "Bearer doctor-a"}
-    data = client.get("/api/medical-records/workstation?page_size=1", headers=headers).json()
+    url = "/api/medical-records/workstation?page_size=1"
+    data = client.get(url, headers=headers).json()
     assert data["total"] == 2 and len(data["records"]) == 1
-    for query in ("dept=外科", "doctor=合成乙"):
-        assert client.get("/api/medical-records/workstation?" + query, headers=headers).status_code == 403
+    deferred = client.get(url + "&qc_summary_mode=deferred", headers=headers).json()
+    assert deferred["records"][0]["recordKey"] == data["records"][0]["recordKey"]
+    assert "qc_summary" not in deferred and "latest_qc_summary" not in deferred["records"][0]
+    assert len(calls) == 1
+    summary = client.get(url + "&qc_summary_mode=only", headers=headers).json()
+    assert summary == {
+        "qc_summary": data["qc_summary"],
+        "records": [
+            {key: data["records"][0][key] for key in ("recordKey", "latest_qc_summary")}
+        ],
+    }
+    assert calls == [{("H-A", "P-own", "V-own"), ("H-A", "P-own2", "V-own2")}] * 2
+    for mode in ("inline", "deferred", "only"):
+        for query in ("dept=外科", "doctor=合成乙"):
+            assert client.get(url + f"&qc_summary_mode={mode}&" + query, headers=headers).status_code == 403
+
+
+def test_workstation_page_summaries_keep_visible_three_keys_and_filter_scope(client, monkeypatch):
+    refs_loaded = []
+
+    def load_summaries(refs, **_kwargs):
+        refs_loaded.append({tuple(ref.values()) for ref in refs})
+        return {
+            ("H-A", "P-own", "V-own"): {"status": "ready", "total_rule_count": 1, "status_counts": {"data_gap": 1}},
+            ("H-A", "P-own2", "V-own2"): {"status": "ready", "total_rule_count": 2, "status_counts": {"data_gap": 2}},
+            ("H-B", "P-own", "V-own"): {"status": "ready", "total_rule_count": 9, "status_counts": {"data_gap": 9}},
+        }
+
+    monkeypatch.setattr(query_service, "_load_latest_luxian_0609_qc_summaries", load_summaries)
+    headers = {"Authorization": "Bearer doctor-a"}
+    url = "/api/medical-records/workstation"
+    visible = client.get(url, headers=headers, params={
+        "page_size": 1, "qc_summary_mode": "deferred", "keyword": "P-own",
+    }).json()["records"][0]["recordKey"]
+    assert json.loads(visible) == ["H-A", "P-own2", "V-own2"]
+
+    endpoint = url + "/qc-summary"
+    response = client.post(endpoint, headers=headers, params={"keyword": "P-own2"}, json={
+        "record_keys": [visible, '["H-A","P-own","V-own"]', '["H-B","P-own","V-own"]', visible],
+    })
+    assert response.status_code == 200
+    assert response.json()["qc_summary"]["total_records"] == 1
+    assert response.json()["qc_summary"]["status_counts"] == {"data_gap": 2}
+    assert [record["recordKey"] for record in response.json()["records"]] == [visible]
+    assert refs_loaded == [{("H-A", "P-own2", "V-own2")}]
+    assert client.post(endpoint, headers=headers, params={"dept": "外科"}, json={"record_keys": []}).status_code == 403
+
+
+@pytest.mark.parametrize("body", [
+    {}, {"record_keys": "V-own"}, {"record_keys": ["V-own"]},
+    {"record_keys": ['["H-A","P-own"]']}, {"record_keys": ['["H-A","","V-own"]']},
+    {"record_keys": ['["H-A",7,"V-own"]']}, {"record_keys": [7]},
+    {"record_keys": ['["H-A","P-own","V-own"]'] * 201},
+    {"record_keys": [], "extra": True},
+])
+def test_workstation_page_summary_rejects_malformed_three_key_requests(client, body):
+    response = client.post(
+        "/api/medical-records/workstation/qc-summary", json=body,
+        headers={"Authorization": "Bearer doctor-a"},
+    )
+    assert response.status_code == 422
 
 
 def test_emr_explicit_identity_permits_own_shared_visit_but_rejects_foreign_identity(client, monkeypatch):

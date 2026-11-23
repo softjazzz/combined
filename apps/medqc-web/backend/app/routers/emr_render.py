@@ -16,10 +16,12 @@ from ..services.bundles.emr_view import (
     load_bundle_document_summaries,
     summarize_frozen_documents,
     load_bundle_documents,
+    restore_frozen_exam_evidence_coordinates,
     pick_document,
     build_render_view,
 )
 from ..services.bundles.current_view import load_current_documents
+from ..services.bundles import clinical_surgery_browse
 from ..services import case_material_snapshot as case_material
 from copy import deepcopy
 from ..services.qc_workspace.canonical_result_store import customer_safe_projection_key, keyed_ref
@@ -72,6 +74,16 @@ def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any
         source_document_id = str((document.get("doc_key") if document.get("version_id") else document.get("document_id")) or "").strip()
         if source_document_id:
             document["source_ref"] = source_ref(source_document_id)
+        exam_coordinates = document.pop("exam_evidence_coordinates", None)
+        if source_document_id and exam_coordinates and document.get("doc_type") == "exam_item_report":
+            document["source_document_aliases"] = [
+                {
+                    "source_document_id": source_document_id,
+                    "source_ref": source_ref(coordinate["source_document_id"]),
+                    "source_document_type": coordinate["source_type"],
+                }
+                for coordinate in exam_coordinates
+            ]
         source_document_ids = document.get("source_document_ids")
         if isinstance(source_document_ids, list):
             source_document_type = str(
@@ -97,6 +109,12 @@ def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any
     return payload
 
 
+def _frozen_documents_payload(frozen: dict) -> dict:
+    payload = deepcopy(frozen["documents"])
+    restore_frozen_exam_evidence_coordinates(payload["documents"], frozen.get("tables") or {})
+    return payload
+
+
 def _load_documents_from_bundle(
     *,
     record_id: str,
@@ -107,7 +125,7 @@ def _load_documents_from_bundle(
     frozen = case_material.current()
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
-        return _project_customer_safe_source_refs(deepcopy(frozen["documents"]))
+        return _project_customer_safe_source_refs(_frozen_documents_payload(frozen))
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
     if current is not None:
         return _project_customer_safe_source_refs(current)
@@ -123,6 +141,7 @@ def _load_documents_from_bundle(
             patient_id=normalized_patient_id,
             visit_id=normalized_visit_id,
             bundle_schema="public",
+            include_exam_evidence_coordinates=True,
         )
         return _project_customer_safe_source_refs(payload)
     except Exception as exc:
@@ -140,14 +159,25 @@ def _load_document_summaries_from_bundle(
     patient_id: Optional[str],
     visit_id: Optional[str],
     execution_domain: Optional[str] = None,
+    document_scope: Optional[str] = None,
 ) -> Dict[str, Any]:
     frozen = case_material.current()
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
+        payload = frozen["documents"]
+        documents = [
+            dict(document) for document in payload["documents"]
+            if document_scope is None
+            or (document.get("group_key") == "orders") == (document_scope == "orders")
+        ]
+        if document_scope != "orders":
+            restore_frozen_exam_evidence_coordinates(documents, frozen.get("tables") or {})
         return _project_customer_safe_source_refs(summarize_frozen_documents(
-            documents=deepcopy(frozen["documents"]["documents"]), execution_domain=execution_domain,
-            daily_material_status=frozen["documents"].get("daily_material_status"),
-            primary_material_status=frozen["documents"].get("primary_material_status")))
+            documents=documents, execution_domain=execution_domain,
+            daily_material_status=payload.get("daily_material_status"),
+            primary_material_status=payload.get("primary_material_status")))
+    if document_scope is not None:
+        raise HTTPException(409, "historical_material_snapshot_not_retained")
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
     if current is not None:
         return _project_customer_safe_source_refs(summarize_frozen_documents(
@@ -190,11 +220,14 @@ def _load_document_from_bundle(
     frozen = case_material.current()
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
-        documents = _project_customer_safe_source_refs(deepcopy(frozen["documents"]))["documents"]
         if doc_id:
-            documents = [doc for doc in documents if str(doc_id) in {
-                str(doc.get(key) or "") for key in ("id", "doc_id", "document_id", "doc_key")
-            } and (not doc_type or doc.get("doc_type") == doc_type)]
+            matches = [
+                doc for doc in frozen["documents"]["documents"]
+                if (not doc_type or doc.get("doc_type") == doc_type)
+                and doc_id in {str(doc.get(key) or "") for key in ("id", "doc_id", "document_id", "doc_key")}
+            ]
+            return deepcopy(matches[0]) if len(matches) == 1 else None
+        documents = _project_customer_safe_source_refs(deepcopy(frozen["documents"]))["documents"]
         return pick_document(documents=documents, doc_type=doc_type, doc_id=doc_id)
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
     if current is not None:
@@ -234,7 +267,7 @@ def _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id):
     if not all(identity.values()):
         raise HTTPException(422, "clinical_material_identity_unavailable")
     try:
-        return load_current_documents(**identity)
+        return load_current_documents(**identity, include_exam_evidence_coordinates=True)
     except HTTPException:
         raise
     except Exception as exc:
@@ -261,6 +294,8 @@ async def get_record_documents(
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
     view: str = Query("full", pattern="^(full|summary)$", description="目录视图或完整文书"),
     source_view: str = Query("saved", pattern="^(saved|current)$", description="当前病历或已保存文书"),
+    document_scope: Optional[str] = Query(None, pattern="^(clinical|orders)$", description="历史文书目录中的非医嘱或医嘱"),
+    include_clinical_surgery: bool = False,
     execution_domain: Optional[str] = Query(
         None,
         description="摘要优先加载的文书领域；仅 view=summary 时生效",
@@ -270,6 +305,8 @@ async def get_record_documents(
     own_identity = getattr(request.state, "doctor_case_identity", None)
     if own_identity:
         institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
+    if document_scope is not None and (source_view != "saved" or view != "summary"):
+        raise HTTPException(422, "document_scope_requires_saved_summary")
     if source_view == "current":
         if view != "full":
             raise HTTPException(status_code=422, detail="当前病历查看需使用完整文书视图")
@@ -280,8 +317,18 @@ async def get_record_documents(
         }
         if not all(identity.values()):
             raise HTTPException(status_code=422, detail="缺少完整住院身份，无法读取当前病历")
+        if include_clinical_surgery and record_id != identity["visit_id"]:
+            raise HTTPException(422, "病历路径与住院身份不符")
+        if include_clinical_surgery and request.query_params.get("job_id"):
+            raise HTTPException(422, "当前病历目录不可指定历史任务")
         try:
-            payload = await run_in_threadpool(load_current_documents, **identity)
+            payload = await run_in_threadpool(
+                load_current_documents, **identity, include_exam_evidence_coordinates=True,
+            )
+            if include_clinical_surgery:
+                payload = await run_in_threadpool(
+                    clinical_surgery_browse.supplement_directory, payload, tuple(identity.values()),
+                )
         except Exception as exc:
             logger.warning("当前文书更新失败: error_type=%s", type(exc).__name__)
             raise HTTPException(status_code=503, detail="文书更新失败，请稍后重试；本次未展示旧文书。") from exc
@@ -296,6 +343,8 @@ async def get_record_documents(
     }
     if view == "summary":
         loader_kwargs["execution_domain"] = execution_domain
+        if document_scope is not None:
+            loader_kwargs["document_scope"] = document_scope
     payload = await run_in_threadpool(
         loader,
         **loader_kwargs,
@@ -318,11 +367,37 @@ async def render_document(
     visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
     execution_domain: str = Query("", description="目录返回的文书领域"),
+    source_view: str = "saved",
+    clinical_surgery_version: str | None = Query(None, pattern="^[a-f0-9]{64}$"),
 ):
     """获取文书内容 + 结构化渲染块 + 缺陷标注（BundleOnly）。"""
     own_identity = getattr(request.state, "doctor_case_identity", None)
     if own_identity:
         institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
+    if clinical_surgery_version is not None:
+        identity = tuple(str(value or "").strip() for value in (institute_id, patient_id, visit_id))
+        if (
+            source_view != "current" or case_material.current() is not None
+            or request.query_params.get("job_id") or doc_type != "surgery_record"
+            or not doc_id or not all(identity) or identity[2] != record_id
+        ):
+            raise HTTPException(422, "无法确认当前手术记录的住院身份和版本")
+        selected, status = await run_in_threadpool(
+            clinical_surgery_browse.read_document, identity, doc_id, clinical_surgery_version,
+        )
+        if selected is None:
+            if status not in {"available", "not_applicable"}:
+                raise HTTPException(503, "手术记录暂时无法验证，请刷新病历目录后重试。")
+            raise HTTPException(409, "手术记录版本已变更或不可用，请刷新病历目录。")
+        view = build_render_view(selected)
+        metadata = view.pop("document_meta")
+        return success_response(data={
+            **view, "content": selected["content"],
+            "metadata": {**metadata, "source": "clinical",
+                         "clinical_surgery_version": selected["version_id"],
+                         "generation": selected["generation"]},
+            "defect_annotations": [], "total_annotations": 0,
+        }, message="获取手术记录成功", trace_id=get_trace_id(request))
     current = None
     if case_material.current() is None:
         current = await run_in_threadpool(
@@ -336,7 +411,7 @@ async def render_document(
             "documents_tree": build_documents_tree([selected] if selected else []),
             "empty_reason": "" if selected else "document_not_found",
         }
-    elif execution_domain:
+    elif execution_domain or (case_material.current() is not None and doc_id):
         selected = await run_in_threadpool(
             _load_document_from_bundle,
             record_id=record_id,
@@ -370,6 +445,8 @@ async def render_document(
     content = str(view_payload.get("content") or "")
     content_type = str(view_payload.get("content_type") or "text")
     metadata = dict(view_payload.get("document_meta") or {})
+    if selected and selected.get("frontpage_display"):
+        metadata["frontpage_display"] = selected["frontpage_display"]
     render_blocks = list(view_payload.get("render_blocks") or [])
     highlight_anchors = list(view_payload.get("highlight_anchors") or [])
     layout_version = str(view_payload.get("layout_version") or "bundle_struct_v1")

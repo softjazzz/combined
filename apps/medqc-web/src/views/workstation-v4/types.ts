@@ -49,6 +49,8 @@ export interface RecordSourceState {
   reasonCode: string | null
 }
 
+export type QcMaterialFailureStage = 'material_capture' | 'material_preparation'
+
 export interface RecordLatestQcSummary {
   status: 'ready' | 'not_run' | 'technical_error' | 'failed'
   executionStatus?: 'partial_failed' | 'failed'
@@ -58,8 +60,11 @@ export interface RecordLatestQcSummary {
   completedAt?: string | null
   totalRuleCount?: number
   statusCounts?: Record<string, number>
+  failureStage?: QcMaterialFailureStage
   reasonCode?: string | null
 }
+
+export type QcSummaryLoadState = 'pending' | 'ready' | 'unavailable'
 
 export interface RecordPoolQcSummary {
   totalRecords: number

@@ -110,6 +110,9 @@
                           JSON 原始结果
                         </a-menu-item>
                         <a-menu-divider />
+                        <a-menu-item @click="handleMoreActionKey('mode-sc-full')">
+                          SC 内涵质控全量 v1
+                        </a-menu-item>
                         <a-menu-item @click="handleMoreActionKey('mode-sc')">
                           SC 样本规则模式
                         </a-menu-item>
@@ -168,13 +171,14 @@
                   :class="customerSampleGuideTargetClass('sample-rule')"
                 >
                   <div class="customer-sample-field-label">验证规则集</div>
-                  <div class="customer-sample-rule-switcher">
+                  <div class="customer-sample-rule-switcher" role="group" aria-label="验证规则集">
                     <button
                       v-for="ruleSet in mainRuleSets"
                       :key="ruleSet.rule_set_key"
                       type="button"
                       class="customer-sample-rule-card"
                       :data-rule-set-key="ruleSet.rule_set_key"
+                      :aria-pressed="selectedRuleSet?.rule_set_key === ruleSet.rule_set_key"
                       :class="ruleSetCardClass(ruleSet)"
                       @click="handleRuleSetChange(ruleSet.rule_set_key)"
                     >
@@ -1242,17 +1246,15 @@
       ]"
       @cancel="closeEditableCopyDrawer"
     >
+      <template v-if="editableCopyReadonly" #closeIcon>
+        <RecordViewCloseIcon label="关闭病历" />
+      </template>
       <div class="editable-copy-drawer">
-        <header v-if="editableCopyReadonly" class="editable-copy-readonly-header">
-          <div class="editable-copy-readonly-title">
-            <FileText :size="18" aria-hidden="true" />
-            <h2>查看病历</h2>
-            <span>只读</span>
-          </div>
-          <MedicalRecordContextBanner
-            :context="editableCopySourceRecord ? resolveRecordResultFocus(editableCopySourceRecord) : null"
-          />
-        </header>
+        <ReadonlyMedicalRecordHeader
+          v-if="editableCopyReadonly"
+          class="editable-copy-readonly-header"
+          :context="editableCopySourceRecord ? resolveRecordResultFocus(editableCopySourceRecord) : null"
+        />
         <header v-else class="editable-copy-hero">
           <div>
             <div v-if="!editableCopyReadonly" class="editable-copy-eyebrow">
@@ -1281,7 +1283,12 @@
           </div>
         </div>
 
-        <a-spin :spinning="editableCopyLoading">
+        <HospitalLoading
+          v-if="showReadonlyRecordLoading"
+          label="正在读取病历文书"
+          fill
+        />
+        <a-spin v-else :spinning="editableCopyLoading">
           <div v-if="editableCopyDraft" class="editable-copy-content">
             <section v-if="!editableCopyReadonly" class="editable-copy-section">
               <h3>副本信息</h3>
@@ -1809,8 +1816,10 @@ import { reactive, watchEffect } from 'vue'
 import { deferredComponent } from './customer-sample-validation/deferredComponent'
 const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
-import MedicalRecordContextBanner from './customer-sample-validation/MedicalRecordContextBanner.vue'
-import { FileText } from 'lucide-vue-next'
+import HospitalLoading from '@/components/qc/HospitalLoading.vue'
+import { useMinimumLoading } from '@/composables/useMinimumLoading'
+import RecordViewCloseIcon from './components/RecordViewCloseIcon.vue'
+import ReadonlyMedicalRecordHeader from './components/ReadonlyMedicalRecordHeader.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
 
 const {
@@ -2045,6 +2054,11 @@ const {
   Trash2,
   workflowSteps,
 } = useCustomerSampleValidationController()
+
+const showReadonlyRecordLoading = useMinimumLoading(
+  () => editableCopyLoading.value,
+  () => editableCopyOpen.value && editableCopyReadonly.value,
+)
 
 // 首次打开才挂载；关闭后保留组件，维持原抽屉内的页签和筛选状态。
 const mountedDrawers = reactive({ batch: false, comparison: false, review: false })

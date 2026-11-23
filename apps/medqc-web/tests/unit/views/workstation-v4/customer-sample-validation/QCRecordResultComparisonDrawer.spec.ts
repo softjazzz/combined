@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { UserRole } from '@/types/auth'
 /* eslint-disable vue/one-component-per-file */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import QCRecordResultComparisonDrawer from '@/views/workstation-v4/customer-sample-validation/QCRecordResultComparisonDrawer.vue'
@@ -38,6 +38,7 @@ const QCRecordCompareWorkbenchStub = defineComponent({
   props: {
     visitId: { type: String, default: '' },
     sourceView: { type: String, default: 'saved' },
+    lazyResultDocuments: { type: Boolean, default: false },
     admissionTime: { type: String, default: '' },
     dischargeTime: { type: String, default: '' },
     jobId: { type: String, default: '' },
@@ -108,15 +109,9 @@ function mountDrawer(presentationMode?: 'flat' | 'grouped', loadJobMetadata = tr
             () =>
               h('section', [slots.title?.(), slots.default?.()]),
         }),
-        ASpin: defineComponent({
-          setup:
-            (_, { slots }) =>
-            () =>
-              h('div', slots.default?.()),
-        }),
         AResult: defineComponent({
           props: { title: { type: String, default: '' } },
-          setup: (props) => () => h('div', { class: 'result-stub' }, props.title),
+          setup: (props, { slots }) => () => h('div', { class: 'result-stub' }, [props.title, slots.extra?.()]),
         }),
         QCRecordCompareWorkbench: QCRecordCompareWorkbenchStub,
       },
@@ -135,6 +130,8 @@ beforeEach(async () => {
 })
 
 describe('QCRecordResultComparisonDrawer', () => {
+  afterEach(() => vi.useRealTimers())
+
   beforeEach(() => {
     getLatestLuxian0609RecordResult.mockReset()
     getSichuanWorkspaceBatchJob.mockReset()
@@ -147,7 +144,7 @@ describe('QCRecordResultComparisonDrawer', () => {
     workbenchProps = null
   })
 
-  it.each(['sync_admin', UserRole.ADMIN] as const)('部分失败时保留已完成结果和失败提示（%s）', async (role) => {
+  it.each(['sync_admin', UserRole.ADMIN] as const)('部分失败时保留已完成结果并隐藏失败横幅（%s）', async (role) => {
     vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
       success: true, data: { id: 'test-viewer', roles: [role], is_demo_account: true },
     })
@@ -171,9 +168,7 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(workbenchProps?.jobId).toBe('latest-partial-full')
     expect(workbenchProps?.singleRecordItems).toEqual(partial.items)
     expect(workbenchProps?.feedbackAvailable).toBe(false)
-    expect(wrapper.get('[data-testid="record-result-partial-failure"]').text()).toContain('已保留 75 项有效结果')
-    expect(wrapper.text()).toContain('1 项执行失败')
-    expect(wrapper.text()).toContain('LX0609-01-02-02')
+    expect(wrapper.text()).not.toContain('本次质控未全部完成')
     expect(wrapper.text()).not.toContain('自动重试')
     expect(wrapper.get('.customer-record-result-title__qc-time').text()).toContain('质控结束时间：')
   })
@@ -197,12 +192,14 @@ describe('QCRecordResultComparisonDrawer', () => {
 
     expect(wrapper.get('.customer-record-result-title__context-label').text()).toBe('当前病历')
     expect(workbenchProps?.admissionTime).toBe('2026-06-18 07:02:00')
-    expect(workbenchProps?.sourceView).toBe('current')
+    expect(workbenchProps?.sourceView).toBe('saved')
+    expect(workbenchProps?.lazyResultDocuments).toBe(true)
     expect(workbenchProps?.dischargeTime).toBe('2026-06-26 08:31:00')
     expect(wrapper.get('.customer-record-result-title__context-value').text()).toBe('测试病历')
-    expect(wrapper.get('.customer-record-result-title__context-time').text()).toBe(
-      '住院时间 2026-06-18 07:02:00 → 2026-06-26 08:31:00',
-    )
+    expect(wrapper.findAll('.patient-context-time-entry').map((entry) => entry.text())).toEqual([
+      '入院时间 2026-06-18 07:02:00',
+      '出院时间 2026-06-26 08:31:00',
+    ])
     expect(wrapper.get('.customer-record-result-title__context').attributes('aria-label')).toBe(
       '当前病历：测试病历，入院时间：2026-06-18 07:02:00，出院时间：2026-06-26 08:31:00',
     )
@@ -346,6 +343,7 @@ describe('QCRecordResultComparisonDrawer', () => {
   })
 
   it('切换病历后忽略上一病历的迟到响应，禁止跨三坐标闪现旧结果', async () => {
+    vi.useFakeTimers()
     const first = deferred<{ success: true; data: typeof readyResult }>()
     const second = deferred<{ success: true; data: typeof readyResult }>()
     getLatestLuxian0609RecordResult
@@ -354,6 +352,8 @@ describe('QCRecordResultComparisonDrawer', () => {
 
     const wrapper = mountDrawer('grouped')
     await flushPromises()
+    expect(wrapper.find('.hospital-loading [alt="泸县人民医院"]').exists()).toBe(true)
+    expect(wrapper.get('.hospital-loading').text()).toBe('正在读取质控结果')
     await wrapper.setProps({
       focus: {
         visitId: 'V002',
@@ -372,6 +372,11 @@ describe('QCRecordResultComparisonDrawer', () => {
     await flushPromises()
     expect(workbenchProps?.visitId).toBe('V002')
     expect(workbenchProps?.jobId).toBe('job-second')
+    expect(wrapper.find('.hospital-loading').exists()).toBe(true)
+    expect(wrapper.get('.record-compare-workbench-stub').attributes('style')).toContain('display: none')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(wrapper.find('.hospital-loading').exists()).toBe(false)
+    expect(wrapper.get('.record-compare-workbench-stub').attributes('style') || '').not.toContain('display: none')
 
     first.resolve({ success: true, data: readyResult })
     await flushPromises()
@@ -424,6 +429,63 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(wrapper.find('.record-compare-workbench-stub').exists()).toBe(false)
     expect(wrapper.text()).toContain('质控结果读取异常')
     expect(wrapper.text()).not.toContain('暂无已保存质控结果')
+    expect(wrapper.find('.result-stub button').exists()).toBe(false)
     expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
+  })
+
+  it('本次捕获失败后显式查看较早一轮，仅按旧任务、原文书引用和旧时间展示', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValueOnce({
+      success: true, data: { state: 'technical_error', reason_code: 'material_source_unavailable',
+        failure_stage: 'material_capture',
+        job_id: 'failed-latest', result_rule_count: 0, items: [] },
+    }).mockResolvedValueOnce({
+      success: true, data: { ...readyResult, result_view: 'previous_valid', read_only: true,
+        completed_at: '2026-10-01T02:03:00Z' },
+    })
+    const wrapper = mountDrawer('grouped', false)
+    await flushPromises()
+    expect(wrapper.text()).toContain('最近一次病历资料准备失败，未生成质控结果')
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
+    await wrapper.get('.result-stub button').trigger('click')
+    await flushPromises()
+    expect(getLatestLuxian0609RecordResult).toHaveBeenLastCalledWith(
+      { instituteId: 'H1', patientId: 'P001', visitId: 'V001' },
+      { resultView: 'previous_valid', anchorJobId: 'failed-latest' },
+    )
+    expect(wrapper.text()).toContain('上一次有效质控结果')
+    expect(wrapper.text()).toContain('2026-10-01 10:03')
+    expect(workbenchProps).toMatchObject({ sourceView: 'saved', jobId: readyResult.job_id,
+      recordRef: readyResult.record_ref, feedbackAvailable: false, debugContext: undefined })
+    expect(wrapper.find('.customer-record-result-title__export').exists()).toBe(false)
+    expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+  })
+
+  it('历史候选冲突时展示服务端的准确原因', async () => {
+    const message = '历史质控任务的创建时间和完成时间相同，无法确认可查看的历史轮次'
+    getLatestLuxian0609RecordResult.mockResolvedValueOnce({ success: false, status: 403, message: '结果归属无法核验' })
+      .mockResolvedValueOnce({ success: false, status: 409, message })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.get('.result-stub button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(message)
+    expect(workbenchProps).toBeNull()
+  })
+
+  it('最新轮归属不可核验时，仅在点击后独立尝试；未带历史标记的响应不会展示', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValueOnce({ success: false, status: 403, message: '结果归属无法核验' })
+      .mockResolvedValueOnce({ success: true, data: readyResult })
+    const wrapper = mountDrawer()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('取材失败')
+    expect(wrapper.get('.result-stub button').text()).toBe('查找可查看的历史结果')
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
+    await wrapper.get('.result-stub button').trigger('click')
+    await flushPromises()
+    expect(getLatestLuxian0609RecordResult).toHaveBeenLastCalledWith(
+      { instituteId: 'H1', patientId: 'P001', visitId: 'V001' }, { resultView: 'previous_valid' },
+    )
+    expect(wrapper.text()).toContain('历史结果版本无法确认')
+    expect(workbenchProps).toBeNull()
   })
 })

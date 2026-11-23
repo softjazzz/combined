@@ -1,6 +1,6 @@
 /*
  * 单条质控结果卡 v7.1 精简版（SingleRecordQcResultPanel）
- * 收起：短标题 + 状态胶囊 / 一行结论 + 编号；合规项只占一行。
+ * 收起：完整标题、状态、最多两行结论和展开入口；合规项默认隐藏结论。
  * 展开：判定说明、逐项判定、关键证据胶囊、整改建议依次排列，反馈与规则全文收在底部胶囊按钮。
  * 本文件在面板内联样式之后加载，覆盖旧版卡片样式；颜色一律取 --mq-* Token。
  */
@@ -49,7 +49,7 @@
   font-size: var(--mq-font-12);
 }
 
-/* ---------- 收起态：两行摘要 ---------- */
+/* ---------- 结果摘要与展开入口 ---------- */
 .result-trigger,
 .result-row:not(.is-expanded) .result-trigger {
   padding: 10px 14px;
@@ -76,6 +76,21 @@
   flex: none;
 }
 
+.result-row.is-danger .result-title-row {
+  position: relative;
+}
+
+.result-row.is-danger .result-title-row::before {
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-start: -8px;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--mq-danger-icon);
+  content: '';
+}
+
 .compliant-dot {
   position: relative;
   flex: none;
@@ -86,16 +101,13 @@
 }
 
 .result-row-header {
-  display: flex;
-  min-height: 20px;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  display: block;
+  margin-top: 8px;
 }
 
-.rule-conclusion {
-  flex: 1;
-  min-width: 0;
+.result-row-header .rule-conclusion {
+  display: block;
+  margin: 0;
   color: var(--mq-text-secondary);
   font-size: var(--mq-font-13);
   font-weight: 400;
@@ -104,33 +116,44 @@
 }
 
 .result-row:not(.is-expanded) .rule-conclusion {
-  display: block;
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.rule-conclusion-spacer {
-  flex: 1;
+.result-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
 }
 
-.rule-code {
-  flex: none;
-  padding: 0;
-  color: var(--mq-text-tertiary);
-  font-family: var(--mq-font-mono);
+.result-row-header ~ .result-footer,
+.copy-match-headline ~ .result-footer {
+  margin-top: 9px;
+  padding-top: 7px;
+  border-top: 1px solid var(--mq-border);
+}
+
+.result-details-hint {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--mq-brand-700);
+  background: var(--mq-info-bg);
   font-size: var(--mq-font-12);
-  font-weight: 400;
+  font-weight: 600;
   line-height: 18px;
+  cursor: pointer;
+  user-select: none;
 }
 
-/* 复制类问题的病程配对摘要：浅色状态底，不用彩色左边框 */
-.copy-match-headline {
-  margin-top: 8px;
-  padding: 10px 12px;
-  border-left: 0;
-  border-radius: 12px;
-  background: var(--mq-danger-bg);
+.result-trigger:focus-visible .result-details-hint,
+.result-details-hint:hover {
+  box-shadow: inset 0 0 0 1px var(--mq-info-border);
 }
 
 .copy-match-headline-documents {
@@ -157,12 +180,7 @@
   font-size: var(--mq-font-12);
 }
 
-.copy-match-headline-metrics > span {
-  background: rgba(255, 255, 255, 0.7);
-}
-
 .copy-match-headline-metrics .is-primary {
-  background: rgba(255, 255, 255, 0.7);
   color: var(--mq-danger-text);
 }
 
@@ -177,13 +195,19 @@
   margin-left: 14px;
 }
 
-.result-row.is-expanded > .result-detail,
-.result-row.is-expanded > .result-suggestion-disclosure,
 .result-row.is-expanded > .result-feedback-panel,
 .result-row.is-expanded > .rule-fulltext,
 .result-row.is-expanded > .result-event-overview,
 .result-row.is-expanded > :deep(.consultation-summary) {
   margin-bottom: 12px;
+}
+
+.result-row.is-expanded > .result-detail {
+  margin-bottom: 8px;
+}
+
+.result-row.is-expanded > .result-suggestion-disclosure {
+  margin-bottom: 6px;
 }
 
 .result-detail {
@@ -427,7 +451,7 @@
 
 .result-suggestion-disclosure > summary {
   display: flex;
-  min-height: 40px;
+  min-height: 36px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -519,18 +543,13 @@
   overflow-wrap: anywhere;
 }
 
-.rule-fulltext .rule-fulltext-code {
-  font-family: var(--mq-font-mono);
-  font-size: var(--mq-font-12);
-}
-
 /* ---------- 底部操作 ---------- */
 .result-card-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0 14px;
-  padding: 0 0 12px;
+  padding: 0 0 6px;
   border-top: 0;
 }
 
@@ -554,6 +573,7 @@
 }
 
 .result-action-link {
+  min-height: 32px;
   border: 1px solid transparent;
   background: transparent;
 }

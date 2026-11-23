@@ -130,32 +130,24 @@
               <span v-if="isCompliantResult(item)" class="status-cell compliant-dot">
                 <span class="visually-hidden">合规</span>
               </span>
-              <strong class="rule-name" :title="displayRuleName(item)">{{ shortRuleTitle(item) }}</strong>
-              <span v-if="isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
-                shortRuleCode(item.rule_id)
-              }}</span>
+              <strong class="rule-name" :title="displayRuleName(item)">{{ displayRuleName(item) }}</strong>
               <span
-                v-else
+                v-if="!isCompliantResult(item)"
                 class="status-cell status-pill mq-status"
                 :class="[`is-${item.tone}`, statusModifierClass(item)]"
                 >{{ item.status === 'data_gap' ? '资料待核实' : item.displayStatus }}</span
               >
             </span>
             <span
-              v-if="!isCompliantResult(item) || expandedKey === item.key"
+              v-if="(!isCompliantResult(item) || expandedKey === item.key) && !copyMatchHeadline(item)"
               class="result-row-header"
               data-testid="single-record-result-row-header"
             >
               <span
-                v-if="!copyMatchHeadline(item)"
                 class="rule-conclusion"
                 data-testid="single-record-result-conclusion"
                 >{{ resultHeadline(item) }}</span
               >
-              <span v-else class="rule-conclusion-spacer" aria-hidden="true" />
-              <span v-if="!isCompliantResult(item)" class="rule-code" :title="item.rule_id">{{
-                shortRuleCode(item.rule_id)
-              }}</span>
             </span>
             <span
               v-if="copyMatchHeadline(item)"
@@ -188,6 +180,13 @@
                 <span v-if="copyMatchHeadline(item)?.additionalCount">
                   另有 <strong>{{ copyMatchHeadline(item)?.additionalCount }}</strong> 组
                 </span>
+              </span>
+            </span>
+            <span class="result-footer">
+              <span class="result-details-hint" aria-hidden="true">
+                {{ expandedKey === item.key ? '收起详情' : '展开详情' }}
+                <ChevronUp v-if="expandedKey === item.key" :size="16" />
+                <ChevronDown v-else :size="16" />
               </span>
             </span>
           </span>
@@ -443,10 +442,6 @@
               <dt>文书</dt>
               <dd>{{ item.source_document }}</dd>
             </template>
-            <dt>编号</dt>
-            <dd class="rule-fulltext-code">
-              {{ item.rule_id }}
-            </dd>
           </dl>
 
           <footer class="result-card-actions">
@@ -493,7 +488,14 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
-import { ArrowRight, ChevronRight, ChevronUp, ClipboardCheck, ListFilter } from 'lucide-vue-next'
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  ClipboardCheck,
+  ListFilter,
+} from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
@@ -514,6 +516,7 @@ import {
   buildSingleRecordQcPresentation,
   buildSingleRecordQcResultItems,
   buildSingleRecordQcStatusTabs,
+  displayQcRuleName,
   recommendationEvidenceForSingleRecord,
   resolveSingleRecordQcResultTab,
   type SingleRecordQcEvidence,
@@ -1071,41 +1074,7 @@ function toggleRuleText(key: string) {
 }
 
 function displayRuleName(item: Pick<SingleRecordQcResultViewItem, 'rule_name' | 'rule_id'>): string {
-  return typeof item.rule_name === 'string' && item.rule_name.trim() ? item.rule_name : item.rule_id
-}
-
-function splitRuleTitle(title: string): { head: string; tail: string } | null {
-  const index = title.search(/[：:]/)
-  if (index <= 0) return null
-  const head = title.slice(0, index).trim()
-  const tail = title.slice(index + 1).trim()
-  return head && tail ? { head, tail } : null
-}
-
-// 规则名多为「文书：具体要求」，同一文书下有多条规则；冒号前只在不重复时才能区分规则。
-const ruleTitleHeadCounts = computed(() => {
-  const counts = new Map<string, number>()
-  viewItems.value.forEach((item) => {
-    const head = splitRuleTitle(displayRuleName(item))?.head
-    if (head) counts.set(head, (counts.get(head) || 0) + 1)
-  })
-  return counts
-})
-
-/**
- * 卡片短标题：冒号前在本病历结果中唯一时取冒号前，否则取冒号后（分组标题已给出文书名）。
- * 完整规则名放在 title 与「规则全文」中，不修改原始规则名称。
- */
-function shortRuleTitle(item: SingleRecordQcResultViewItem): string {
-  const name = displayRuleName(item)
-  const parts = splitRuleTitle(name)
-  if (!parts) return name
-  return (ruleTitleHeadCounts.value.get(parts.head) || 0) > 1 ? parts.tail : parts.head
-}
-
-/** 同一页面的规则都属于同一目录，编号去掉目录前缀，完整编号放在 title 中。 */
-function shortRuleCode(ruleId: string): string {
-  return ruleId.replace(/^[A-Z]+\d+-(?=\d)/, '')
+  return displayQcRuleName(item.rule_name, item.rule_id)
 }
 
 function statusModifierClass(item: SingleRecordQcResultViewItem): string {
@@ -1559,15 +1528,6 @@ watch(
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-.rule-code {
-  padding: 1px 0;
-  color: rgba(29, 29, 31, 0.46);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  white-space: nowrap;
-}
 @media (prefers-reduced-motion: reduce) {
   .result-row,
   .result-row::before {
@@ -1636,11 +1596,7 @@ watch(
 .copy-match-headline {
   display: grid;
   gap: 8px;
-  margin-top: 9px;
-  padding: 10px 11px;
-  border-left: 3px solid #ef4444;
-  border-radius: 0 9px 9px 0;
-  background: rgba(239, 68, 68, 0.045);
+  margin-top: 8px;
   text-align: left;
 }
 
@@ -1694,32 +1650,10 @@ watch(
   line-height: 18px;
 }
 
-.copy-match-headline-metrics > span {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.045);
-}
-
-.copy-match-headline-metrics .is-primary {
-  background: rgba(239, 68, 68, 0.09);
-  color: #c62828;
-}
-
 .copy-match-headline-metrics strong {
   color: inherit;
   font-size: 12px;
   font-weight: 750;
-}
-
-.result-row:not(.is-expanded) .rule-name,
-.result-row:not(.is-expanded) .rule-conclusion {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-}
-
-.result-row:not(.is-expanded) .rule-name {
-  -webkit-line-clamp: 2;
 }
 
 .result-detail {

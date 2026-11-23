@@ -664,6 +664,8 @@ def _typed_basic_decisions(
         rule_id: str,
         direction: QcDirection,
         reason_code: str,
+        *,
+        sources: tuple[str, ...] | None = None,
     ) -> RuleDecision:
         return make(
             rule_id,
@@ -671,6 +673,7 @@ def _typed_basic_decisions(
             qc_direction=direction,
             reason_code=reason_code,
             confidence=1.0,
+            sources=sources,
         )
 
     def not_applicable(rule_id: str, reason_code: str) -> RuleDecision:
@@ -784,6 +787,12 @@ def _typed_basic_decisions(
             return ""
         return value.isoformat(sep=" ") if precise else value.strftime("%Y-%m-%d %H:%M:%S")
 
+    def first_course_time_basis(row: Mapping[str, Any]) -> str | None:
+        # 仅在已选定有效文书时间后调用。正式记录时间缺失时，读取器使用提交时间。
+        if any(parse_authoritative_datetime(row.get(key)) is not None for key in ("record_time", "record_datetime")):
+            return None
+        return "submit"
+
     def timeliness_fact(
         *,
         rule_id: str,
@@ -794,6 +803,7 @@ def _typed_basic_decisions(
         anchor: datetime | None,
         anchor_date: date | None = None,
         observed: datetime | None = None,
+        observed_time_basis: str | None = None,
         source_document_id: str | None = None,
         failure_kind: str = "timeliness_requirement_not_met",
     ) -> dict[str, Any]:
@@ -810,6 +820,8 @@ def _typed_basic_decisions(
             facts["anchor_date"] = anchor_date.isoformat()
         if observed is not None:
             facts["observed_time"] = format_time(observed, precise=rule_id == "LX0609-09-01-01")
+            if observed_time_basis is not None:
+                facts["observed_time_basis"] = observed_time_basis
         if anchor is not None and observed is not None:
             elapsed_hours = (observed - anchor).total_seconds() / 3600
             facts["elapsed_hours"] = round(elapsed_hours, 2)
@@ -909,22 +921,22 @@ def _typed_basic_decisions(
                             row,
                         )
                     )
-            complete_times = [value for value, *_ in complete_events]
-            deltas = sorted(value - anchor for value in complete_times)
-            if any(timedelta(0) <= delta <= timedelta(hours=8) for delta in deltas):
-                observed, source_document_id, selected_row = min(
-                    (
-                        item
-                        for item in complete_events
-                        if timedelta(0) <= item[0] - anchor <= timedelta(hours=8)
-                    ),
-                    key=lambda item: item[0],
-                )
+            timely_events = [
+                item for item in complete_events
+                if timedelta(0) <= item[0] - anchor <= timedelta(hours=8)
+            ]
+            if timely_events:
+                sources = None
+                if observation_by_source["inpat_registration"].query_state.value == "empty":
+                    # 入院记录提供精确锚点，首次病程证明按时完成，空登记不参与结论。
+                    sources = ("admission_record", EVALUATION_HORIZON_SOURCE_KEY, "first_course_record")
+                observed, source_document_id, selected_row = min(timely_events, key=lambda item: item[0])
                 decision = attach_selected_row(
                     conclusive(
                         rule_id,
                         QcDirection.SATISFIED,
                         "requirement_within_threshold",
+                        sources=sources,
                     ),
                     source_key="first_course_record",
                     row=selected_row,
@@ -940,13 +952,14 @@ def _typed_basic_decisions(
                         threshold_hours=8,
                         anchor=anchor,
                         observed=observed,
+                        observed_time_basis=first_course_time_basis(selected_row),
                         source_document_id=source_document_id,
                         failure_kind="timeliness_requirement_satisfied",
                     ),
                 )
             elif incomplete:
                 decisions.append(gap(rule_id, "required_field_missing"))
-            elif any(delta < timedelta(0) for delta in deltas):
+            elif any(item[0] < anchor for item in complete_events):
                 decisions.append(
                     make(
                         rule_id,
@@ -956,7 +969,7 @@ def _typed_basic_decisions(
                         confidence=None,
                     )
                 )
-            elif deltas:
+            elif complete_events:
                 observed, source_document_id, selected_row = min(
                     complete_events,
                     key=lambda item: item[0],
@@ -977,6 +990,7 @@ def _typed_basic_decisions(
                         threshold_hours=8,
                         anchor=anchor,
                         observed=observed,
+                        observed_time_basis=first_course_time_basis(selected_row),
                         source_document_id=source_document_id,
                     ),
                 )
@@ -1353,12 +1367,21 @@ def _typed_basic_decisions(
                 )
             elif delta_state == "within":
                 observed, source_document_id, selected_row = admission_record_events[0]
+                # 登记零行且锚点精确时，实际采用的是入院记录中的入院时间。
+                # 按时结论已有文书证据，空登记不作为来源完整性的前提。
+                registration = observation_by_source["inpat_registration"]
+                sources = (
+                    tuple(key for key in allowed_sources[rule_id] if key != "inpat_registration")
+                    if anchor is not None and registration.query_state.value == "empty"
+                    else None
+                )
                 decisions.append(
                     attach_selected_row(
                         conclusive(
                             rule_id,
                             QcDirection.SATISFIED,
                             "requirement_within_threshold",
+                            sources=sources,
                         ),
                         source_key="admission_record",
                         row=selected_row,

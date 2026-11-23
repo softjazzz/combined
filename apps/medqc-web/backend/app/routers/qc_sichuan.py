@@ -2607,20 +2607,61 @@ async def get_latest_workspace_record_result(
     record_id: str,
     institute_id: str = Query(..., min_length=1, description="机构标识"),
     patient_id: str = Query(..., min_length=1, description="患者标识"),
+    result_view: str = Query("latest", max_length=32, description="latest 或用户显式请求的 previous_valid"),
+    anchor_job_id: Optional[str] = Query(None, min_length=1, max_length=128, description="已查看的最近一次取材失败任务"),
     current_user: Dict[str, Any] = Depends(
         require_roles("admin", "qc_manager", "sync_admin", "super_admin")
     ),
 ):
-    """返回全院范围内、同一三坐标病历的最新 LX0609 保存结果。"""
+    """返回全院范围内、同一三坐标病历的最新 LX0609 保存结果。
 
-    from ..services.saved_result_access import require_saved_result_institute
-    await run_in_threadpool(require_saved_result_institute, _current_user_id(current_user), institute_id)
+    ``result_view=previous_valid`` 只在用户点击后读取上一次可查看的有效结果：
+    每一轮按自身归属与冻结材料核验，返回只读结果及原轮 job_id、record_ref、完成时间。
+    """
+
+    from ..services.saved_result_access import result_view_needs_donghua_proof
+    # 直接调用路由函数时未经 FastAPI 解析，默认值仍是 Query 对象：按默认视图处理。
+    result_view = result_view if isinstance(result_view, str) else "latest"
+    anchor_job_id = anchor_job_id if isinstance(anchor_job_id, str) else None
+    if result_view not in {"latest", "previous_valid"} or (anchor_job_id and result_view != "previous_valid"):
+        raise HTTPException(status_code=422, detail="结果视图参数无效")
+    needs_proof = await run_in_threadpool(result_view_needs_donghua_proof, _current_user_id(current_user), institute_id)
     workspace = _sichuan_workspace_service()
+    if result_view == "previous_valid":
+        from ..services.custom_qc_workspace_service import (
+            PreviousRecordResultAnchorChanged, PreviousRecordResultConflict,
+        )
+        try:
+            previous = await run_in_threadpool(
+                workspace.get_previous_valid_luxian_0609_record_result,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=record_id,
+                anchor_job_id=anchor_job_id or "",
+                **({"require_donghua_proof": True} if needs_proof else {}),
+            )
+        except PreviousRecordResultAnchorChanged:
+            raise HTTPException(status_code=409, detail="最近一次质控任务已更新，请刷新后查看") from None
+        except PreviousRecordResultConflict as error:
+            detail = (
+                "历史质控任务的规则范围存在冲突，无法确认可查看的历史轮次"
+                if str(error) == "record_result_scope_conflict"
+                else "历史质控任务的创建时间和完成时间相同，无法确认可查看的历史轮次"
+            )
+            raise HTTPException(status_code=409, detail=detail) from None
+        if str(previous.get("state") or "") != "ready":
+            raise HTTPException(status_code=404, detail="暂无可查看的历史质控结果")
+        return success_response(
+            data=previous,
+            message="获取单病历历史质控结果成功",
+            trace_id=get_trace_id(request),
+        )
     result = await run_in_threadpool(
         workspace.get_latest_luxian_0609_record_result,
         institute_id=institute_id,
         patient_id=patient_id,
         visit_id=record_id,
+        **({"require_donghua_proof": True} if needs_proof else {}),
     )
     if str(result.get("state") or "") == "not_found":
         raise HTTPException(status_code=404, detail="该病历暂无已保存质控结果或无访问权限")

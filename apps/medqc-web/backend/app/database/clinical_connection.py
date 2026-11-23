@@ -1,18 +1,35 @@
 """显式启用的独立CDM只读连接；不改变业务engine或SessionLocal。"""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 import hashlib
 import json
 import os
 from pathlib import Path
+from threading import Lock
+from weakref import WeakKeyDictionary
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.pool import Pool
 
 _selection: ContextVar[dict | None] = ContextVar("clinical_source_selection", default=None)
+_capture_executors: WeakKeyDictionary[Pool, ThreadPoolExecutor] = WeakKeyDictionary()
+_capture_executors_lock = Lock()
+
+
+def submit_capture(engine: Engine, operation, *args, **kwargs):
+    """同一只读 CDM 池最多四路捕获，排队不占用通用工作线程。"""
+    pool = engine.pool
+    with _capture_executors_lock:
+        executor = _capture_executors.get(pool)
+        if executor is None:
+            executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="medqc-cdm-capture")
+            _capture_executors[pool] = executor
+    return executor.submit(copy_context().run, operation, *args, **kwargs)
 
 
 def current_selection() -> dict | None:

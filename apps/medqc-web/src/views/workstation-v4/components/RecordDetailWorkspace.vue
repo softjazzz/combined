@@ -37,8 +37,12 @@
         }}
       </div>
 
+      <HospitalLoading
+        v-if="selectedRecord && documentsLoading && !documents?.length"
+        label="正在读取病历文书目录"
+      />
       <ReadonlyMedicalOrderTable
-        v-if="activeOrderDocument"
+        v-else-if="activeOrderDocument"
         :documents="orderDocuments"
         :selected-key="activeDocType"
         @select="emit('select-document', $event)"
@@ -59,13 +63,14 @@
         @loaded="emit('emr-loaded', $event)"
         @error="emit('emr-error')"
         @defect-click="emit('emr-defect-click', $event)"
-      />
+      >
+        <template #loading>
+          <HospitalLoading label="正在读取文书正文" />
+        </template>
+      </AsyncEMRViewer>
 
       <template v-else>
-        <div v-if="concatLoading" class="flex flex-col items-center py-20">
-          <a-spin size="large" />
-          <div class="text-sm text-slate-400 mt-4">加载病历文书中...</div>
-        </div>
+        <HospitalLoading v-if="concatLoading" label="正在读取病历文书" />
 
         <div
           v-else-if="concatText"
@@ -156,6 +161,7 @@ import type { PatientRecord } from '../types'
 import type { EditableMedicalRecordDocument } from '../customer-sample-validation/types'
 import { isMedicalOrderDocument } from '../customer-sample-validation/medicalDocumentDisplay'
 import ReadonlyMedicalOrderTable from '../customer-sample-validation/ReadonlyMedicalOrderTable.vue'
+import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 
 interface ConcatSection {
   title: string

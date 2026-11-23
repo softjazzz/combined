@@ -18,9 +18,10 @@ describe('MedicalRecordContextBanner', () => {
       '呼吸科',
       'SAMPLE-11',
     ])
-    expect(wrapper.get('.customer-record-result-title__context-time').text()).toBe(
-      '住院时间 2026-06-01 10:00:00 → 2026-06-10 12:00:00',
-    )
+    expect(wrapper.findAll('.patient-context-time-entry').map((entry) => entry.text())).toEqual([
+      '入院时间 2026-06-01 10:00:00',
+      '出院时间 2026-06-10 12:00:00',
+    ])
     expect(wrapper.get('img').attributes('src')).toContain('patient-icon-elder-woman')
     expect(wrapper.find('.customer-record-result-title__qc-time').exists()).toBe(false)
     wrapper.unmount()

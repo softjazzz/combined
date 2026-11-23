@@ -1061,13 +1061,20 @@ def test_pool_and_worklist_show_same_partial_round_as_detail_and_export(
         items=items, failed_records=[_rule_failure(_RERUN_RECORD_B, rule) for rule in failed_rules],
     )
     factory = sessionmaker(bind=engine)
-    monkeypatch.setattr(workspace, "CustomQCWorkspaceService", lambda: service)
+    workspace_modes = []
+
+    def read_workspace(*, readonly=False):
+        workspace_modes.append(readonly)
+        return service
+
+    monkeypatch.setattr(workspace, "CustomQCWorkspaceService", read_workspace)
     owner = object.__new__(WorkstationAggregationService)
     owner._session_factory = factory
     identity = tuple(CaseRef.from_mapping(_RERUN_RECORD_B))
     pool = query_service._load_latest_luxian_0609_qc_summaries(
         [_RERUN_RECORD_B], session_factory=factory,
     )[identity]
+    assert workspace_modes == [True]
     worklist = owner._load_luxian_0609_summaries([_RERUN_RECORD_B])[identity]
     detail = service.build_latest_single_record_result_dto(**_RERUN_RECORD_B)
     exported = service.build_luxian_0609_completed_record_result_summaries(
@@ -1651,3 +1658,29 @@ def test_child_leaf_completion_does_not_delete_root_published_canonical(canonica
         ("test-va", 2),
         ("test-vc", 0),
     ]
+
+
+
+@pytest.mark.parametrize(
+    "stage,reason,expected",
+    [
+        ("material_capture", "material_source_unavailable", "material_capture"),
+        ("material_preparation", "material_source_contract_incomplete", "material_preparation"),
+        ("material_preparation", "saved_partial_result_invalid", None),
+    ],
+)
+def test_workstation_projection_retains_only_confirmed_preparation_failure(stage, reason, expected):
+    from app.services.medical_records import query_service
+
+    identity = ("SYN-I", "SYN-P", "SYN-V")
+    raw = {"status": "technical_error", "failure_stage": stage, "reason_code": reason,
+           "completed_at": "2026-11-20T09:00:00Z", "job_id": "synthetic-internal-job"}
+    projection = query_service._normalize_latest_qc_summary_map({identity: raw})[identity]
+    assert projection["status"] == "technical_error"
+    assert projection.get("failure_stage") == expected
+    if expected:
+        assert projection["reason_code"] == reason
+        assert projection["completed_at"] == raw["completed_at"]
+    else:
+        assert projection["reason_code"] == "canonical_envelope_invalid"
+    assert "job_id" not in projection

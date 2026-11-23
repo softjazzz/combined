@@ -3,6 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 
 const mocks = vi.hoisted(() => ({
   getRaw: vi.fn(),
+  postRaw: vi.fn(),
 }))
 
 vi.mock('@/api/clinicalSources', () => ({
@@ -15,12 +16,14 @@ vi.mock('@/api/clinicalSources', () => ({
 vi.mock('@/services/apiService', () => ({
   ApiService: {
     getRaw: mocks.getRaw,
+    postRaw: mocks.postRaw,
   },
 }))
 
 import { usePatientRecords } from '@/views/workstation-v4/composables/usePatientRecords'
 
 function mockWorkstationResponse() {
+  mocks.postRaw.mockResolvedValue({ data: { records: [], qc_summary: { total_records: 1 } } })
   mocks.getRaw.mockResolvedValue({
     data: {
       records: [
@@ -67,6 +70,7 @@ describe('usePatientRecords workstation filters', () => {
 
     expect(records.activeDept.value).toBe('ICU')
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -88,6 +92,7 @@ describe('usePatientRecords workstation filters', () => {
     await records.fetchData(2, 10)
 
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 2,
       page_size: 10,
       source_id: 'independent_cdm',
@@ -105,7 +110,8 @@ describe('usePatientRecords workstation filters', () => {
     const runningRecords = usePatientRecords('inpatient')
     await runningRecords.fetchData()
 
-    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -116,7 +122,8 @@ describe('usePatientRecords workstation filters', () => {
     const finalRecords = usePatientRecords('discharged')
     await finalRecords.fetchData()
 
-    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -134,6 +141,7 @@ describe('usePatientRecords workstation filters', () => {
 
     expect(records.currentPage.value).toBe(1)
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -149,6 +157,7 @@ describe('usePatientRecords workstation filters', () => {
     await records.fetchData()
 
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -167,6 +176,7 @@ describe('usePatientRecords workstation filters', () => {
 
     expect(records.currentPage.value).toBe(1)
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -225,6 +235,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(records.currentPage.value).toBe(1)
     expect(records.activeDoctor.value).toBe('全部主管医师')
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -243,6 +254,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(records.currentPage.value).toBe(1)
     expect(records.activeDoctor.value).toBe('陈医师')
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      qc_summary_mode: 'deferred',
       page: 1,
       page_size: 15,
       source_id: 'independent_cdm',
@@ -299,8 +311,10 @@ describe('usePatientRecords workstation filters', () => {
         ],
         total: 1,
         page: 1,
-        qc_summary: { total_records: 1, ready_records: 1 },
       },
+    })
+    mocks.postRaw.mockResolvedValueOnce({
+      data: { records: [], qc_summary: { total_records: 1, ready_records: 1 } },
     })
     const records = usePatientRecords('inpatient')
     records.searchText.value = '旧条件'
@@ -324,6 +338,38 @@ describe('usePatientRecords workstation filters', () => {
     expect(records.qcSummary.value).toMatchObject({ totalRecords: 1, readyRecords: 1 })
     expect(records.loading.value).toBe(false)
   })
+
+  it.each(['筛选', '分页'])('忽略%s切换后迟到的旧摘要', async (change) => {
+    const oldKey = '["H","P","V1"]'
+    const nextKey = '["H","P","V2"]'
+    const nextPage = change === '分页' ? 2 : 1
+    const list = (recordKey: string, id: string, page: number) => ({
+      data: { total: 2, page, records: [{ id, recordKey }] },
+    })
+    const summary = (recordKey: string, count: number) => ({ data: {
+      qc_summary: { total_records: 2, status_counts: { data_gap: count } },
+      records: [{ recordKey, latest_qc_summary: { status: 'ready', status_counts: { data_gap: count } } }],
+    } })
+    let resolveOldSummary: (value: ReturnType<typeof summary>) => void = () => {}
+    mocks.getRaw
+      .mockResolvedValueOnce(list(oldKey, 'V1', 1))
+      .mockResolvedValueOnce(list(nextKey, 'V2', nextPage))
+    mocks.postRaw
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOldSummary = resolve }))
+      .mockResolvedValueOnce(summary(nextKey, 1))
+    const records = usePatientRecords()
+    await records.fetchData()
+    const oldSignal = mocks.postRaw.mock.calls[0][2].signal
+    if (change === '筛选') records.searchText.value = '新条件'
+    await records.fetchData(nextPage)
+    expect(oldSignal.aborted).toBe(true)
+    expect(mocks.postRaw.mock.calls[1][1]).toEqual({ record_keys: [nextKey] })
+    resolveOldSummary(summary(oldKey, 99))
+    await flushPromises()
+    expect(records.currentPage.value).toBe(nextPage)
+    expect(records.qcSummary.value.statusCounts).toEqual({ data_gap: 1 })
+    expect(records.allRecords.value[0].latestQcSummary?.statusCounts).toEqual({ data_gap: 1 })
+  })
 })
 
 
@@ -336,7 +382,9 @@ describe('独立CDM状态筛选', () => {
     expect(records.hospOptions.value.map((option) => option.value)).toContain('unknown')
     records.selectHospFilter('unknown')
     await flushPromises()
-    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', expect.objectContaining({ source_id: 'independent_cdm', hospital_status: 'unknown' }))
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', expect.objectContaining({
+      source_id: 'independent_cdm', hospital_status: 'unknown', qc_summary_mode: 'deferred',
+    }))
     expect(() => records.selectSource('legacy_pg')).toThrow('普通病历固定读取东华CDM')
     expect(records.sourceId.value).toBe('independent_cdm')
     expect(records.hospOptions.value.map((option) => option.value)).toContain('unknown')

@@ -57,6 +57,9 @@ function computeBaseURL(): string {
 
 const API_BASE_URL = computeBaseURL()
 const API_TIMEOUT = 15000 // 15秒超时，避免过长等待
+const WORKSTATION_LIST_PATH = '/api/medical-records/workstation'
+const WORKSTATION_QC_SUMMARY_PATH = '/api/medical-records/workstation/qc-summary'
+const WORKSTATION_LIST_TIMEOUT = 30000
 const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
 const API_DEBUG =
   import.meta.env.DEV && String(import.meta.env.VITE_API_DEBUG || '').toLowerCase() === 'true'
@@ -69,6 +72,7 @@ const DEBUG_SENSITIVE_KEYS = new Set([
   'old_password',
   'access_token',
   'refresh_token',
+  'record_keys',
 ])
 
 function redactDebugSensitiveValues(value: unknown, seen = new WeakSet<object>()): unknown {
@@ -207,6 +211,10 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config
     const requestUrl: string | undefined = error.config?.url
     const responseStatus: number | undefined = error.response?.status
+    const backgroundQcSummary =
+      (requestUrl === WORKSTATION_QC_SUMMARY_PATH && originalRequest?.method === 'post')
+      || (requestUrl === WORKSTATION_LIST_PATH && originalRequest?.params?.qc_summary_mode === 'only')
+    if (backgroundQcSummary && error.code === 'ERR_CANCELED') return Promise.reject(error)
     const traceId = extractTraceIdFromResponse(error.response) || extractTraceIdFromResponse(error)
     attachTraceIdToError(error, traceId)
 
@@ -283,6 +291,8 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // 摘要失败由页面局部展示，保留上面的会话续期处理。
+    if (backgroundQcSummary) return Promise.reject(error)
     // 统一错误处理（兼容后端统一错误结构）
     const data = error.response?.data || {}
     const errorMessage = data.message || data.error || data.detail || error.message || '请求失败'
@@ -348,7 +358,10 @@ export class ApiService {
     params?: Record<string, unknown>,
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
-    return apiClient.get<T>(url, { ...(config || {}), params })
+    const defaultConfig = url === WORKSTATION_LIST_PATH
+      ? { timeout: WORKSTATION_LIST_TIMEOUT }
+      : {}
+    return apiClient.get<T>(url, { ...defaultConfig, ...config, params })
   }
 
   static async postRaw<T = unknown>(
@@ -356,7 +369,10 @@ export class ApiService {
     data?: unknown,
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
-    return apiClient.post<T>(url, data, config)
+    const defaultConfig = url === WORKSTATION_QC_SUMMARY_PATH
+      ? { timeout: WORKSTATION_LIST_TIMEOUT }
+      : {}
+    return apiClient.post<T>(url, data, { ...defaultConfig, ...config })
   }
 
   static async putRaw<T = unknown>(

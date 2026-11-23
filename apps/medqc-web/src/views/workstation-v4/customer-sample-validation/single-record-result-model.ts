@@ -1,3 +1,4 @@
+import type { QcMaterialFailureStage } from '../types'
 export type SingleRecordQcStatus =
   | 'non_compliant'
   | 'ai_suggested_non_compliant'
@@ -141,6 +142,13 @@ export interface SingleRecordQcDataGapDetails {
   availability?: Record<string, string | boolean | null | undefined>
 }
 
+export function displayQcRuleName(ruleName: string, ruleId: string): string {
+  const name = typeof ruleName === 'string' ? ruleName.trim() : ''
+  const id = typeof ruleId === 'string' ? ruleId.trim().toUpperCase() : ''
+  const shortId = id.replace(/^[A-Z]+\d+-(?=\d)/, '')
+  return name && name.toUpperCase() !== id && name !== shortId ? name : '未命名质控点'
+}
+
 /**
  * 单病历最新结果接口的前端固定读模型。
  * 不承载任务树、前端去重或跨病历选择职责。
@@ -186,8 +194,12 @@ export interface SingleRecordQcResultPayload {
   schema_version: 'lx0609-single-record-result-v1'
   state: 'ready' | 'not_found' | 'technical_error'
   reason_code: string
+  failure_stage?: QcMaterialFailureStage
   record_ref: string
   job_id: string
+  result_view?: 'latest' | 'previous_valid'
+  completed_at?: string | null
+  read_only?: boolean
   rule_set_key?: string
   rule_set_version?: string
   items: SingleRecordQcResultItem[]
@@ -203,6 +215,30 @@ export interface SingleRecordQcResultPayload {
   failed_rule_count?: number
   failed_rule_ids?: string[]
 }
+
+export interface PreviousResultRequest {
+  resultView: 'previous_valid'
+  anchorJobId?: string
+}
+
+/** 已核实的本轮零项失败可以作为时间锚点。403 时只能发起独立的授权查询。 */
+export function previousResultRequest(
+  response: { success: boolean; status?: number; data?: SingleRecordQcResultPayload },
+): PreviousResultRequest | undefined {
+  if (!response.success && response.status === 403) return { resultView: 'previous_valid' }
+  const data = response.data
+  if (
+    response.success && data?.state === 'technical_error' &&
+    (data.failure_stage === 'material_capture' || data.failure_stage === 'material_preparation') &&
+    data.job_id &&
+    data.result_rule_count === 0 && Array.isArray(data.items) && data.items.length === 0
+  ) {
+    return { resultView: 'previous_valid', anchorJobId: data.job_id }
+  }
+}
+
+export const MATERIAL_PREPARATION_FAILED_LABEL = '病历资料准备失败'
+export const CAPTURE_FAILED_NOTICE = `最近一次${MATERIAL_PREPARATION_FAILED_LABEL}，未生成质控结果。`
 
 export type SingleRecordQcResultTone = 'danger' | 'warning' | 'success' | 'neutral'
 

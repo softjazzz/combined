@@ -76,6 +76,22 @@ describe('TimelinessResultBlock', () => {
     expect(wrapper.get('.timeliness-metric.is-overdue').text()).toContain('440.6 小时')
   })
 
+  it('首次病程使用提交时间判定时显示实际时间来源', () => {
+    const item = buildItem('compliant', {
+      source_label: '首次病程记录',
+      anchor_time: '2026-07-15 08:00:00',
+      observed_time: '2026-07-15 10:56:00',
+      observed_time_basis: 'submit',
+      threshold_hours: 8,
+      elapsed_hours: 2.93,
+    })
+    const wrapper = mount(TimelinessResultBlock, { props: { item, variant: 'compliant' } })
+
+    const timeline = wrapper.get('[data-testid="timeliness-timeline"]').text()
+    expect(timeline).toContain('首次病程提交时间2026-07-15 10:56:00')
+    expect(timeline).not.toContain('首次病程记录时间')
+  })
+
   it('只有时间轴事实时不生成空指标带', () => {
     const item = buildItem('data_gap', {
       anchor_time: '2026-06-20 17:19:08',

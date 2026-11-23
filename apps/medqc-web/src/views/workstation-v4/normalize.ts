@@ -251,7 +251,7 @@ function normalizeStatusCounts(raw: unknown): Record<string, number> {
   )
 }
 
-function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
+export function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
   const source = (raw || {}) as LooseRecord
   const status = pickString(source, ['status'])
   if (status === 'ready' || status === 'failed') {
@@ -275,9 +275,13 @@ function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
     }
   }
   if (status === 'technical_error') {
+    const failureStage = pickString(source, ['failureStage', 'failure_stage'])
     return {
       status: 'technical_error',
       reasonCode: pickString(source, ['reasonCode', 'reason_code']) || null,
+      ...(failureStage === 'material_capture' || failureStage === 'material_preparation'
+        ? { failureStage, completedAt: pickString(source, ['completedAt', 'completed_at']) || null }
+        : {}),
     }
   }
   return { status: 'not_run' }

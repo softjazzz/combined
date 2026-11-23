@@ -1049,9 +1049,16 @@ async function mountView() {
 }
 
 async function selectRuleSet(wrapper: ReturnType<typeof mount>, ruleSetKey: string) {
-  const button = wrapper.find(`[data-rule-set-key="${ruleSetKey}"]`)
-  expect(button.exists()).toBe(true)
-  await button.trigger('click')
+  const internalLabels: Record<string, string> = {
+    sc_content_full_v1: 'SC 内涵质控全量 v1',
+    sc_sample_running_v1: 'SC 样本规则模式',
+  }
+  const label = internalLabels[ruleSetKey]
+  const button = label
+    ? wrapper.findAll('.a-dropdown-overlay-stub button').find((item) => item.text() === label)
+    : wrapper.find(`[data-rule-set-key="${ruleSetKey}"]`)
+  expect(button?.exists()).toBe(true)
+  await button!.trigger('click')
   await flushPromises()
 }
 
@@ -2147,24 +2154,31 @@ describe('CustomerSampleValidationView', () => {
 
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
-    expect(wrapper.text()).toContain('Luxian0916 质控点 v1')
-    expect(wrapper.text()).toContain('SC 内涵质控全量 v1')
+    const switcher = wrapper.get('.customer-sample-rule-switcher')
+    expect(switcher.findAll('button').map((item) => item.attributes('data-rule-set-key'))).toEqual([
+      'luxian_0609_qc_v1',
+      'luxian_0916_qc_v1',
+    ])
+    expect(switcher.text()).toContain('泸县0609质控点验证 v1')
+    expect(switcher.text()).toContain('Luxian0916 质控点 v1')
     expect(wrapper.text()).toContain('内置目录')
   })
 
   it('Luxian0916 需主动选择，并且提交时不携带 LX0609 专属范围参数', async () => {
     const wrapper = await mountView()
 
+    expect(wrapper.get('.customer-sample-rule-switcher').findAll('button')).toHaveLength(2)
     const defaultCard = wrapper.find('[data-rule-set-key="luxian_0609_qc_v1"]')
     const luxian0916Card = wrapper.find('[data-rule-set-key="luxian_0916_qc_v1"]')
     expect(defaultCard.classes()).toContain('is-selected')
+    expect(defaultCard.attributes('aria-pressed')).toBe('true')
     expect(luxian0916Card.exists()).toBe(true)
     expect(luxian0916Card.classes()).not.toContain('is-selected')
 
     await luxian0916Card.trigger('click')
     await flushPromises()
     expect(luxian0916Card.classes()).toContain('is-selected')
+    expect(luxian0916Card.attributes('aria-pressed')).toBe('true')
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
@@ -3058,7 +3072,7 @@ describe('CustomerSampleValidationView', () => {
   it('点击查看病历后打开只读文书工作台', async () => {
     const wrapper = await mountView()
     const documentResponse = await getEditableMedicalRecordDocuments()
-    getEditableMedicalRecordDocuments.mockResolvedValue({
+    const documentReply = {
       ...documentResponse,
       data: {
         ...documentResponse.data,
@@ -3081,20 +3095,37 @@ describe('CustomerSampleValidationView', () => {
           admission_time_state: 'exact',
         },
       },
+    }
+    let resolveDocuments!: (reply: typeof documentReply) => void
+    const pendingDocuments = new Promise<typeof documentReply>((resolve) => {
+      resolveDocuments = resolve
     })
+    getEditableMedicalRecordDocuments.mockReturnValueOnce(pendingDocuments)
 
     const reviewAction = [...wrapper.findAll('button'), ...wrapper.findAll('a')].find(
       (node) => node.text() === '查看病历',
     )
     expect(reviewAction).toBeTruthy()
+    vi.useFakeTimers()
     await reviewAction!.trigger('click')
     await flushPromises()
+    const loading = wrapper.get('.hospital-loading.fills-reading-area')
+    expect(loading.get('img').attributes('alt')).toBe('泸县人民医院')
+    expect(loading.text()).toBe('正在读取病历文书')
+    resolveDocuments(documentReply)
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(wrapper.find('.hospital-loading.fills-reading-area').exists()).toBe(true)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(wrapper.find('.hospital-loading.fills-reading-area').exists()).toBe(false)
+    vi.useRealTimers()
 
     expect(getEditableMedicalRecordDocuments).toHaveBeenCalledWith('V001', {
       institute_id: 'H1',
       patient_id: 'P001',
       visit_id: 'V001',
       source_view: 'current',
+      view: 'full',
     })
     const modalText = wrapper.find('.a-modal-stub').text()
     expect(modalText).toContain('查看病历')
@@ -3142,7 +3173,8 @@ describe('CustomerSampleValidationView', () => {
     expect(banner.text()).toContain('张三')
     expect(banner.text()).toContain('普外科')
     expect(banner.text()).toContain('2248248')
-    expect(banner.text()).toContain('住院时间 2026-06-18 07:02:00 → 2026-06-26 08:31:00')
+    expect(banner.text()).toContain('入院时间 2026-06-18 07:02:00')
+    expect(banner.text()).toContain('出院时间 2026-06-26 08:31:00')
     expect(wrapper.find('.editable-copy-source-card').exists()).toBe(false)
     const resultAction = wrapper.findAll('.customer-sample-secondary-link').find((node) => node.text() === '查看结果')
     await resultAction!.trigger('click')

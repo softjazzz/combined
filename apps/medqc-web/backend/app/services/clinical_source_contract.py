@@ -40,14 +40,16 @@ def material_identity_columns(name, columns):
     return KEYS
 
 
-def read_columns(name, columns):
+def read_columns(name, columns, *, primary_documents_only=False):
     """复用正式投影和ORM映射；返回实际会引用的列，不扩大到所有别名。"""
     available = set(columns)
+    if primary_documents_only and name == "patient_information":
+        required = set(material_identity_columns(name, available))
+        return required, required & available
     from .bundles import assembly
     from .sample_programmatic_evidence import _SOURCE_TABLES
     from .luxian_0609 import source_evidence_reader as reader
     from ..database.models import cdm
-    available = set(columns)
     full_rows = set(_SOURCE_TABLES) | {"mr", "diagnosis", "mr_surgery", "mr_cost"}
     orm = {"mr": cdm.MedicalRecordFrontpage, "diagnosis": cdm.Diagnosis,
            "mr_surgery": cdm.MrSurgery, "mr_cost": cdm.MrCost,
@@ -117,7 +119,9 @@ def inspect_source(connection, *, check_rows=True, primary_documents_only=False)
         if metadata is None:
             item.update(status="table_missing", missing_columns=[])
         else:
-            required, selected = read_columns(name, metadata["columns"])
+            required, selected = read_columns(
+                name, metadata["columns"], primary_documents_only=primary_documents_only,
+            )
             missing = sorted(required - set(metadata["columns"]))
             denied = []
             if not metadata["readable"]:

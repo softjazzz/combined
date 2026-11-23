@@ -1,19 +1,59 @@
 """一次病历短只读事务；捕获既有投影和读合同，不新增临床判断。"""
 from __future__ import annotations
 
+import asyncio
+from contextlib import contextmanager
+import logging
+from threading import Event
 import time
+from traceback import walk_tb
 
-from sqlalchemy import inspect
+from sqlalchemy import exc as sqlalchemy_errors, inspect
 
 from . import case_material_snapshot as material
 from ..database import clinical_connection as clinical
 
+logger = logging.getLogger(__name__)
 
-def capture(*, identity, cancellation_check=None, after_table_read=None):
-    from .bundles import assembly, current_view, emr_view
-    from .luxian_0609 import source_evidence_reader as reader
-    from .luxian_0609.clinical_material_policy import CLINICAL_MATERIAL_POLICY_VERSION, clinical_source_keys
-    from .sample_programmatic_evidence import capture_programmatic_sources, _SOURCE_TABLES
+_CAPTURE_LOG_CODES = frozenset({
+    "material_capture_timeout",
+    "material_table_capacity_exceeded",
+    "programmatic_material_capacity_exceeded",
+    "material_value_type_unsupported",
+    "material_snapshot_capacity_exceeded",
+    "material_symlink_forbidden",
+    "material_schema_mismatch",
+    "primary_material_independent_cdm_required",
+    "daily_material_independent_cdm_required",
+})
+
+
+def _log_capture_failure(stage, error):
+    code = "unknown"
+    if isinstance(error, material.MaterialSnapshotError):
+        from .material_admission import MESSAGES
+        raw_code = str(error)
+        if raw_code in MESSAGES or raw_code == "material_capture_cancelled":
+            return  # 已有独立的对外原因码，或走既有取消语义。
+        if raw_code in _CAPTURE_LOG_CODES:
+            code = raw_code
+    elif isinstance(error, sqlalchemy_errors.TimeoutError):
+        code = "source_connection_pool_timeout"
+    elif isinstance(error, sqlalchemy_errors.OperationalError):
+        code = "source_database_operational_error"
+    elif stage == "snapshot_persist" and isinstance(error, OSError):
+        code = "snapshot_io_error"
+    if stage == "source_read":
+        for frame, _ in walk_tb(error.__traceback__):
+            if (frame.f_globals.get("__name__") in {material.__name__, f"{__package__}.automatic_material_scope"}
+                    and frame.f_code.co_name in {"validate_read_contract", "validate_table_identity"}):
+                stage = "source_validation"
+                break
+    logger.error("material_capture_failed stage=%s code=%s", stage, code)
+
+
+def _capture_source(identity):
+    from .bundles import assembly
     from .validation_material_source import material_source_schema, is_material_copy
 
     pdf_copy = is_material_copy(identity[1], identity[2])
@@ -23,6 +63,27 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
     engine = assembly.engine if pdf_copy else assembly._source_engine(schema)
     if engine is None:
         raise material.MaterialSnapshotError("material_source_unavailable")
+    return engine, schema, pdf_copy
+
+
+def capture(*, identity, cancellation_check=None, after_table_read=None):
+    source = _capture_source(identity)
+    engine, schema, pdf_copy = source
+    if not pdf_copy and schema == "cdm" and clinical.configured():
+        return clinical.submit_capture(
+            engine, _capture_transaction, source, identity, cancellation_check, after_table_read,
+        ).result()
+    return _capture_transaction(source, identity, cancellation_check, after_table_read)
+
+
+def _capture_transaction(source, identity, cancellation_check, after_table_read=None):
+    from .bundles import assembly, current_view, emr_view
+    from .luxian_0609 import source_evidence_reader as reader
+    from .luxian_0609.clinical_material_policy import CLINICAL_MATERIAL_POLICY_VERSION, clinical_source_keys
+    from .sample_programmatic_evidence import capture_programmatic_sources, _SOURCE_TABLES
+
+    engine, schema, pdf_copy = source
+    coordinates = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
     state = {"protocol": material.PROTOCOL, "identity": list(identity), "binding": material.source_binding(identity),
              "schema": schema, "columns": {}, "tables": {}, "queries": {},
              "clinical_material_policy": CLINICAL_MATERIAL_POLICY_VERSION}
@@ -38,7 +99,10 @@ def capture(*, identity, cancellation_check=None, after_table_read=None):
         if time.monotonic() - started > 60:
             raise material.MaterialSnapshotError("material_capture_timeout")
 
-    with engine.connect().execution_options(isolation_level="REPEATABLE READ") as connection:
+    if not pdf_copy and schema == "cdm" and clinical.configured():
+        check()  # 等待取材席位不消耗事务预算，进入事务前核对任务取消状态。
+    with engine.connect() as connection:
+        connection = connection.execution_options(isolation_level="REPEATABLE READ")
         with connection.begin():
             connection.exec_driver_sql("SET TRANSACTION READ ONLY")
             connection.exec_driver_sql("SET LOCAL statement_timeout=10000")
@@ -170,13 +234,50 @@ def obtain(job_id, identity, *, retry=False, cancellation_check=None):
         return existing
     if retry:
         raise material.MaterialSnapshotError("original_task_material_not_retained")
+    with _capture_failure("source_read"):
+        captured = capture(identity=identity, cancellation_check=cancellation_check)
+    with _capture_failure("snapshot_persist"):
+        return material.persist(job_id, captured)
+
+
+async def obtain_for_batch(job_id, identity, *, retry=False, cancellation_check=None):
+    """批任务异步等待 CDM 池的取材席位，快照落盘和后续执行均在席位之外。"""
+    from .validation_material_source import is_material_copy
+
+    if retry or is_material_copy(identity[1], identity[2]) or not clinical.configured():
+        return await asyncio.to_thread(obtain, job_id, identity, retry=retry, cancellation_check=cancellation_check)
+    existing = await asyncio.to_thread(material.load, job_id, identity)
+    if existing is not None:
+        return existing
+    cancelled = Event()
+
+    def check_cancelled():
+        return cancelled.is_set() or bool(cancellation_check and cancellation_check())
+
+    with _capture_failure("source_read"):
+        source = await asyncio.to_thread(_capture_source, identity)
+        queued = clinical.submit_capture(source[0], _capture_transaction, source, identity, check_cancelled)
+        try:
+            captured = await asyncio.wrap_future(queued)
+        except asyncio.CancelledError:
+            cancelled.set()
+            queued.cancel()
+            raise
+    with _capture_failure("snapshot_persist"):
+        return await asyncio.to_thread(material.persist, job_id, captured)
+
+
+@contextmanager
+def _capture_failure(stage):
     try:
-        return material.persist(job_id, capture(identity=identity, cancellation_check=cancellation_check))
-    except material.MaterialSnapshotError:
+        yield
+    except material.MaterialSnapshotError as error:
+        _log_capture_failure(stage, error)
         raise
     except Exception as error:
         if type(error).__name__ == "QCJobCancelled":
             raise
+        _log_capture_failure(stage, error)
         raise material.MaterialSnapshotError("material_capture_failed") from None
 
 

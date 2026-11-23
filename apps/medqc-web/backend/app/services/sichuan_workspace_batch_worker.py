@@ -3531,7 +3531,7 @@ async def run_sichuan_workspace_batch_job(
         material_failures: list[dict[str, Any]] = []
         material_executed_rules: set[str] = set()
 
-        def _material_failed_record(record, identity, code):
+        def _material_failed_record(record, identity, code, *, stage):
             from .material_admission import safe_material_failure
             failure = safe_material_failure(code)
             return {"record_id": identity[2], "visit_id": identity[2],
@@ -3540,6 +3540,7 @@ async def run_sichuan_workspace_batch_job(
                     "material_failure_record": {"institute_id": identity[0], "patient_id": identity[1],
                         "visit_id": identity[2], "record_id": identity[2],
                         "record_key": CaseRef(*identity).as_key(), "error_phase": "material_capture",
+                        "material_failure_stage": stage,
                         **safe_failure_projection({"reason_code": failure["code"]}),
                         "error": failure["code"]}}
 
@@ -3592,7 +3593,7 @@ async def run_sichuan_workspace_batch_job(
                                 lambda key, rows: _publish_family(record, key, rows)
                             ) if enable_incremental_results and native_direct_enabled else nullcontext():
                                 from . import case_material_snapshot as materials
-                                from .case_material_capture import obtain
+                                from .case_material_capture import obtain_for_batch
                                 from .validation_material_source import is_material_copy
                                 from .bundles import assembly as material_assembly
                                 from ..database import clinical_connection as material_clinical
@@ -3601,10 +3602,10 @@ async def run_sichuan_workspace_batch_job(
                                 frozen = None
                                 if all(identity) and (is_material_copy(patient_id, visit_id) or material_clinical.configured() or backed_by_pg):
                                     try:
-                                        frozen = await asyncio.to_thread(obtain, material_job_id, identity,
+                                        frozen = await obtain_for_batch(material_job_id, identity,
                                             retry=bool(retry_lineage) or is_failed_rule_retry, cancellation_check=_raise_if_cancelled)
                                     except materials.MaterialSnapshotError as error:
-                                        return _material_failed_record(record, identity, str(error))
+                                        return _material_failed_record(record, identity, str(error), stage="capture")
                                 with materials.activate(frozen):
                                     if frozen is not None:
                                         scene = "final" if str(record.get("scope") or filters.get("query_scope") or current.get("scope")) == "final" else "running"
@@ -3615,7 +3616,7 @@ async def run_sichuan_workspace_batch_job(
                                         except Exception as error:
                                             from .material_admission import report_projection_failure
                                             code = report_projection_failure(error, logger)
-                                            return _material_failed_record(record, identity, code)
+                                            return _material_failed_record(record, identity, code, stage="projection")
                                     result = await _evaluate_single_record_impl(record)
                                     if frozen is not None:
                                         result["case_material_fingerprint"] = frozen["fingerprint"]

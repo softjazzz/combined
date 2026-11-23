@@ -27,7 +27,7 @@
       </button>
     </div>
     <div
-      v-else-if="!documents.length"
+      v-else-if="!documents.length && !ordersLoadState"
       class="readonly-medical-document-state"
     >
       当前未返回可查看的病历原文
@@ -38,7 +38,7 @@
         type="search"
         class="readonly-medical-document-search"
         data-testid="record-document-search"
-        placeholder="搜索标题、正文或医嘱"
+        :placeholder="summaryOnly ? '搜索文书标题或已加载医嘱' : '搜索标题、正文或医嘱'"
       >
       <div class="readonly-medical-document-filter">
         <button
@@ -61,14 +61,27 @@
           type="button"
           data-testid="record-document-filter-order"
           :class="{ 'is-active': filter === 'orders' }"
-          @click="filter = 'orders'"
+          @click="selectOrdersFilter"
         >
           医嘱
         </button>
       </div>
 
       <div
-        v-if="filteredDocuments.length"
+        v-if="filter === 'orders' && ordersLoadState === 'loading'"
+        class="readonly-medical-document-state"
+      >
+        <HospitalLoading compact label="正在读取医嘱" />
+      </div>
+      <div
+        v-else-if="filter === 'orders' && ordersLoadState === 'failed'"
+        class="readonly-medical-document-state is-error"
+      >
+        <span>医嘱读取失败</span>
+        <button type="button" @click="emit('load-orders')">重新读取</button>
+      </div>
+      <div
+        v-else-if="filteredDocuments.length"
         class="readonly-medical-document-groups record-document-groups is-tree editable-copy-document-directory-list"
       >
         <section
@@ -233,6 +246,7 @@ import { computed, ref, watch } from 'vue'
 import type { EditableMedicalRecordDocument } from './types'
 import ReadonlyPdfVersions from './ReadonlyPdfVersions.vue'
 import { groupPdfDocumentVersions } from './pdfDocumentVersions'
+import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import {
   formatMedicalDocumentTime,
   isMedicalOrderDocument,
@@ -248,6 +262,8 @@ const props = withDefaults(
     selectedKey?: string
     loading?: boolean
     error?: string
+    summaryOnly?: boolean
+    ordersLoadState?: 'deferred' | 'loading' | 'failed'
   }>(),
   {
     selectedKey: '',
@@ -259,6 +275,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (event: 'select', key: string): void
   (event: 'retry'): void
+  (event: 'load-orders'): void
 }>()
 
 type DocumentFilter = 'all' | 'content' | 'orders'
@@ -266,6 +283,18 @@ type DocumentFilter = 'all' | 'content' | 'orders'
 const query = ref('')
 const filter = ref<DocumentFilter>('all')
 const expandedGroupKeys = ref(new Set<string>())
+
+function selectOrdersFilter() {
+  filter.value = 'orders'
+  if (props.ordersLoadState === 'deferred' || props.ordersLoadState === 'failed') {
+    expandedGroupKeys.value = new Set(['orders'])
+    emit('load-orders')
+  }
+}
+
+watch(() => props.loading, (loading) => {
+  if (loading && props.summaryOnly) filter.value = 'all'
+})
 
 type DirectoryGroup = {
   key: string
@@ -285,6 +314,7 @@ function matchesQuery(document: EditableMedicalRecordDocument, keyword: string):
     resolveMedicalDocumentTitle(document),
     document.title,
     document.document_type,
+    document.order_item,
     document.content,
     ...(document.sections || []).flatMap((section) => [section.label, section.text]),
   ]

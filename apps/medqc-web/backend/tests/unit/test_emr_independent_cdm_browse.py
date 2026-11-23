@@ -23,7 +23,7 @@ def browse(monkeypatch):
     monkeypatch.setattr(clinical_connection, "configured", lambda: True)
     monkeypatch.setattr(router.case_material, "current", lambda: None)
 
-    def current(**identity):
+    def current(*, include_exam_evidence_coordinates=False, **identity):
         assert identity == IDENTITY
         calls.append(identity)
         return dict(documents=[deepcopy(DOCUMENT)], documents_tree=[], empty_reason="")
@@ -114,3 +114,43 @@ def test_legacy_material_route_unchanged(browse, monkeypatch):
     assert response.status_code == 200
     assert response.json()["data"]["documents"] == []
     assert not calls
+
+
+def test_open_current_clinical_surgery_requires_directory_version(browse, monkeypatch):
+    client, _ = browse
+    from app.database import clinical_connection
+    from app.services.bundles import clinical_surgery_browse
+
+    body = " " + ("合成手术经过。" * 100)[:492] + "\n"
+    row = dict(document_id="SYN-5608526||1", document_title="合成手术记录",
+               record_time=None, submit_time=None, surgery_process=body, cache_document_id=None,
+               source_epoch="synthetic", source_key_hash="synthetic-key", target_key_hash="synthetic-key",
+               generation=861733, mapping_hash="synthetic-mapping", activation=3,
+               surgery_process_sha256="synthetic-body-hash")
+    monkeypatch.setattr(clinical_connection, "source_binding", lambda: "synthetic-cdm")
+
+    def read(identity, document_id=None):
+        assert identity == tuple(IDENTITY.values())
+        return ([row] if not document_id or document_id == row["document_id"] else []), "available"
+
+    monkeypatch.setattr(clinical_surgery_browse, "_read", read)
+    directory = client.get("/api/v1/emr/V-SYN/documents", params={
+        **IDENTITY, "source_view": "current", "include_clinical_surgery": True,
+    })
+    assert directory.status_code == 200
+    base, summary = directory.json()["data"]["documents"]
+    assert base["content"] == DOCUMENT["content"]
+    assert "content" not in summary and summary["length"] == 494
+    params = {**IDENTITY, "source_view": "current", "doc_type": "surgery_record",
+              "doc_id": summary["document_id"], "clinical_surgery_version": summary["version_id"]}
+    response = client.get("/api/v1/emr/V-SYN/render", params=params)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["content"] == body and data["metadata"]["generation"] == 861733
+    assert data["metadata"]["clinical_surgery_version"] == summary["version_id"]
+    row["generation"] = 861734
+    stale = client.get("/api/v1/emr/V-SYN/render", params=params)
+    assert stale.status_code == 409 and "请刷新病历目录" in stale.text
+    assert body not in stale.text
+    wrong_visit = client.get("/api/v1/emr/wrong/render", params=params)
+    assert wrong_visit.status_code == 422

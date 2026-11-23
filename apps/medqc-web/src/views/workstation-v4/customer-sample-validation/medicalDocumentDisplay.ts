@@ -96,6 +96,43 @@ export function formatDiagnosisSection(label: string, text: string): string {
     .trim()
 }
 
+/** 将系统装配的初步诊断恢复为单一标题，保留诊断正文和原有顺序。 */
+export function resolvePreliminaryDiagnosisDisplay(
+  section: EditableMedicalRecordSection,
+  text = displayMedicalDocumentSectionText(section),
+): { label: string; text: string } | null {
+  if (
+    section.key !== 'admission_record_diagnosis' &&
+    section.key !== 'first_course_record_diagnosis'
+  ) {
+    return null
+  }
+
+  const [type, ...lines] = formatDiagnosisSection(section.label, text).split('\n')
+  if (type !== '诊断类型：初步诊断') return null
+
+  const body = lines
+    .map((line) => line.replace(/^(第一诊断|主要诊断|主诊断|其他诊断)：/u, '').trim())
+    .filter(Boolean)
+    .join('\n')
+
+  // 仅补齐从 1 开始的连续顿号编号换行，避开 L3、等诊断自身的编号。
+  const markers = [...body.matchAll(/(?<![a-z0-9])([1-9]\d*)、/giu)]
+  const hasContinuousList =
+    markers.length > 1 &&
+    markers[0].index === 0 &&
+    markers.every((marker, index) => Number(marker[1]) === index + 1)
+
+  return {
+    label: '初步诊断',
+    text: hasContinuousList
+      ? markers
+          .map((marker, index) => body.slice(marker.index, markers[index + 1]?.index).trim())
+          .join('\n')
+      : body,
+  }
+}
+
 /**
  * 源系统可能同时返回结构化章节和“正文”投影；正文相同则属于同一份文书内容。
  * 这里只做展示层去重，不改变文书正文、字段或质控输入。

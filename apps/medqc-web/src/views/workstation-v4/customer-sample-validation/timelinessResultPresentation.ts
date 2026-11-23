@@ -53,6 +53,13 @@ function timelinessLabel(
   sourceLabel: string,
 ): string {
   if (key === 'anchor_time' && item.rule_id === 'LX0609-01-02-01') return '入院时间'
+  if (
+    key === 'observed_time' &&
+    item.rule_id === 'LX0609-01-02-01' &&
+    item.customer_display_facts?.observed_time_basis === 'submit'
+  ) {
+    return '首次病程提交时间'
+  }
   if (key === 'observed_time' && sourceLabel) return `${sourceLabel}时间`
   return TIMELINESS_FACT_LABELS[key]
 }

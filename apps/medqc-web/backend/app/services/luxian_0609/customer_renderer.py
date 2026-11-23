@@ -2274,9 +2274,10 @@ def customer_finding_from_controlled_facts(
             document_label, relation_label, anchor_label = basic_timeliness_labels[
                 rule_id
             ]
+            observed_label = "提交时间" if facts.get("observed_time_basis") == "submit" else "记录时间"
             return (
                 f"{document_label}于{relation_label} {elapsed_hours:g} 小时完成"
-                f"（{anchor_label} {anchor_time}；记录时间 {observed_time}），"
+                f"（{anchor_label} {anchor_time}；{observed_label} {observed_time}），"
                 f"超过 {threshold_hours} 小时要求 {overdue_hours:g} 小时。"
             )
 

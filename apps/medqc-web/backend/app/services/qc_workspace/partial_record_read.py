@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import json
 from typing import Any
 
 from ..case_identity import CaseRef
@@ -10,6 +11,28 @@ from ..luxian_0609.phase_scope import frozen_luxian_0609_delivery_scope
 from .canonical_result_store import (
     canonical_envelope_items_are_consistent, keyed_ref, validated_customer_explanation,
 )
+
+
+# Worker 也曾以 material_capture 保存装配失败，装配专属码不属于取材失败。
+MATERIAL_PREPARATION_FAILURE_CODES = frozenset({
+    "material_capture_failed",
+    "material_source_contract_incomplete",
+    "material_source_contract_unavailable",
+    "material_source_unavailable",
+    "original_task_material_not_retained",
+    "material_retry_lineage_invalid",
+    "material_integrity_failed",
+    "material_reference_corrupt",
+    "material_object_unavailable",
+    "material_identity_or_source_mismatch",
+    "material_publication_identity_conflict",
+    "material_publication_version_conflict",
+    "cdm_publication_window_unconfirmed",
+})
+MATERIAL_PREPARATION_FAILURE_STAGES = frozenset({"material_capture", "material_preparation"})
+_LEGACY_PREPARATION_CODES = frozenset({
+    "material_source_contract_incomplete", "material_identity_or_source_mismatch",
+})
 
 
 def saved_record_rule_scope(filters: Mapping[str, Any], ref: CaseRef) -> list[str]:
@@ -28,6 +51,62 @@ def saved_record_rule_scope(filters: Mapping[str, Any], ref: CaseRef) -> list[st
     if not scoped or not set(scoped) <= set(scope):
         raise ValueError("saved_record_scope_invalid")
     return scoped
+
+
+def _record_material_preparation_failure(
+    items: list[Any], failures: list[Any], ref: CaseRef,
+) -> dict[str, str]:
+    """只认 Worker 保存的同病例、无规则身份且零项的资料准备失败。"""
+    for entry in [*items, *failures]:
+        if not isinstance(entry, Mapping) or not all(
+            isinstance(entry.get(key), str) and entry[key] and entry[key] == entry[key].strip()
+            for key in ref._fields
+        ) or entry.get("record_id", entry["visit_id"]) != entry["visit_id"]:
+            return {}
+    if any(CaseRef.from_mapping(item) == ref for item in items):
+        return {}
+    matching = [row for row in failures if CaseRef.from_mapping(row) == ref]
+    if len(matching) != 1:
+        return {}
+    failure = matching[0]
+    reason = failure.get("reason_code", failure.get("error"))
+    stage = failure.get("material_failure_stage")
+    if (
+        failure.get("error_phase") != "material_capture"
+        or not isinstance(reason, str) or reason not in MATERIAL_PREPARATION_FAILURE_CODES
+        or stage not in (None, "capture")
+        or failure.get("record_key", ref.as_key()) != ref.as_key()
+        or failure.get("rule_id") or failure.get("rule_code")
+    ):
+        return {}
+    # 旧任务没有子阶段，部分原因也可能在装配阶段产生。
+    failure_stage = (
+        "material_preparation" if stage is None and reason in _LEGACY_PREPARATION_CODES
+        else "material_capture"
+    )
+    return {"reason_code": reason, "failure_stage": failure_stage}
+
+
+def read_saved_partial_record_row(
+    row: Mapping[str, Any], *, ref: CaseRef, expected_rules: list[str],
+    projection_key: str, projector: Callable[[dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    """单例详情和批量摘要共用持久失败任务的读取边界。"""
+    try:
+        summary = json.loads(row["summary_json"])
+        items = json.loads(row["items_json"])
+        failures = json.loads(row["failed_records_json"])
+    except (TypeError, ValueError):
+        raise ValueError("saved_partial_result_invalid") from None
+    if not (isinstance(summary, dict) and isinstance(items, list) and isinstance(failures, list)):
+        raise ValueError("saved_partial_result_invalid")
+    preparation_failure = _record_material_preparation_failure(items, failures, ref)
+    if preparation_failure:
+        return {**preparation_failure, "items": []}
+    return read_saved_partial_record(
+        summary=summary, items=items, failures=failures, ref=ref, expected_rules=expected_rules,
+        projection_key=projection_key, projector=projector,
+    )
 
 
 def read_saved_partial_record(

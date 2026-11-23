@@ -1,10 +1,11 @@
 import { clinicalSourcesApi, type ClinicalSourceId, type ClinicalSourceOption } from '@/api/clinicalSources'
 import { setPageClinicalSource } from '@/utils/clinical-source'
-import { computed, ref } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { ApiService } from '@/services/apiService'
-import type { DeptInfo, DoctorInfo, PatientRecord, RecordPoolQcSummary } from '../types'
-import { normalizeRecord, normalizeRecordPoolQcSummary } from '../normalize'
+import type { DeptInfo, DoctorInfo, PatientRecord, QcSummaryLoadState, RecordPoolQcSummary } from '../types'
+import { normalizeRecord, normalizeRecordLatestQcSummary, normalizeRecordPoolQcSummary } from '../normalize'
 
+const WORKSTATION_URL = '/api/medical-records/workstation'
 const WORKSTATION_PAGE_SIZE = 15
 const ALL_DEPARTMENTS = '全部科室'
 const ALL_DOCTORS = '全部主管医师'
@@ -66,6 +67,12 @@ function normalizeDoctor(raw: unknown): DoctorInfo {
   }
 }
 
+function workstationPayload(raw: unknown): Record<string, unknown> {
+  const payload = raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw
+  if (!payload || typeof payload !== 'object') throw new Error('工作台响应格式无效')
+  return payload as Record<string, unknown>
+}
+
 /**
  * 病历池的住院状态必须由调用方显式固定到服务端查询。
  * 默认值保留既有全量病历池的行为，运行/终末质控页不会在当前页做本地过滤。
@@ -102,6 +109,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const loading = ref(false)
   const loadError = ref(false)
   const qcSummary = ref<RecordPoolQcSummary>({ ...EMPTY_QC_SUMMARY })
+  const qcSummaryState = ref<QcSummaryLoadState>('pending')
 
   const activeDept = ref(initialDepartment || ALL_DEPARTMENTS)
   const activeDoctor = ref(initialDoctor || ALL_DOCTORS)
@@ -112,6 +120,11 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const syncScope = ref<RecordPoolSyncScope>('all')
   const inpatientSort = ref<InpatientSort>('default')
   let activeRequestSequence = 0
+  let summaryRequest: AbortController | undefined
+  if (getCurrentScope()) onScopeDispose(() => {
+    ++activeRequestSequence
+    summaryRequest?.abort()
+  })
 
   const hospOptions = computed<Array<{ value: HospitalStatusScope; label: string }>>(() => [
     { value: 'all', label: '全部病历' },
@@ -125,10 +138,47 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
 
   const filteredRecords = computed(() => scopedRecords.value)
 
+  async function loadQcSummary(
+    params: Record<string, string>,
+    records: PatientRecord[],
+    requestSequence: number,
+  ) {
+    const controller = new AbortController()
+    summaryRequest = controller
+    try {
+      const recordKeys = records.flatMap((record) => record.recordKey ? [record.recordKey] : [])
+      const response = await ApiService.postRaw(
+        `${WORKSTATION_URL}/qc-summary`, { record_keys: recordKeys }, { params, signal: controller.signal },
+      )
+      if (requestSequence !== activeRequestSequence) return
+      const data = workstationPayload(response.data)
+      if (!data.qc_summary || !Array.isArray(data.records)) throw new Error('质控摘要响应格式无效')
+      const summaries = new Map<string, ReturnType<typeof normalizeRecordLatestQcSummary>>()
+      for (const record of data.records) {
+        if (record && typeof record.recordKey === 'string' && record.latest_qc_summary) {
+          summaries.set(record.recordKey, normalizeRecordLatestQcSummary(record.latest_qc_summary))
+        }
+      }
+      allRecords.value = allRecords.value.map((record) => ({
+        ...record,
+        latestQcSummary: record.recordKey ? summaries.get(record.recordKey) : undefined,
+      }))
+      qcSummary.value = normalizeRecordPoolQcSummary(data.qc_summary)
+      qcSummaryState.value = 'ready'
+    } catch {
+      if (requestSequence === activeRequestSequence) qcSummaryState.value = 'unavailable'
+    } finally {
+      if (summaryRequest === controller) summaryRequest = undefined
+    }
+  }
+
   async function fetchData(page = 1, targetPageSize = pageSize.value) {
     const requestSequence = ++activeRequestSequence
+    summaryRequest?.abort()
     loading.value = true
     loadError.value = false
+    qcSummary.value = { ...EMPTY_QC_SUMMARY }
+    qcSummaryState.value = 'pending'
     try {
       await initializeSource()
       if (requestSequence !== activeRequestSequence) return
@@ -137,9 +187,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         Number.isFinite(Number(targetPageSize)) && Number(targetPageSize) > 0
           ? Number(targetPageSize)
           : WORKSTATION_PAGE_SIZE
-      const params: Record<string, string | number> = {
-        page,
-        page_size: requestedPageSize,
+      const params: Record<string, string> = {
         source_id: sourceId.value,
         date_field: dateField.value,
       }
@@ -184,13 +232,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         }
       }
 
-      const response = await ApiService.getRaw('/api/medical-records/workstation', params)
-      const raw = response.data as Record<string, unknown>
-      const data = (
-        raw && typeof raw === 'object' && 'data' in raw
-          ? (raw.data as Record<string, unknown>)
-          : raw
-      ) as Record<string, unknown>
+      const response = await ApiService.getRaw(WORKSTATION_URL, {
+        ...params, page, page_size: requestedPageSize, qc_summary_mode: 'deferred',
+      })
+      const data = workstationPayload(response.data)
 
       const normalizedRecords = Array.isArray(data.records)
         ? data.records.map((record: unknown) => normalizeRecord(record))
@@ -198,7 +243,11 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       // 过期请求不得覆盖较新的筛选、分页或住院状态响应。
       if (requestSequence !== activeRequestSequence) return
 
-      allRecords.value = normalizedRecords.map((record) => ({ ...record, sourceId: sourceId.value || undefined }))
+      allRecords.value = normalizedRecords.map((record) => ({
+        ...record,
+        sourceId: sourceId.value || undefined,
+        latestQcSummary: undefined,
+      }))
       departments.value =
         Array.isArray(data.departments) && data.departments.length > 0
           ? data.departments.map((dept: unknown) => normalizeDepartment(dept))
@@ -215,14 +264,18 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       serverTotalPages.value = Math.max(1, totalPagesComputed || 1)
       currentPage.value = Number(data.page ?? data.current_page ?? page) || 1
       pageSize.value = requestedPageSize
-      qcSummary.value = normalizeRecordPoolQcSummary(data.qc_summary)
+      if (total > 0) {
+        void loadQcSummary(params, normalizedRecords, requestSequence)
+      } else {
+        qcSummaryState.value = 'ready'
+      }
     } catch (error) {
       if (requestSequence !== activeRequestSequence) return
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
       loadError.value = true
       allRecords.value = []
       serverTotal.value = 0
-      qcSummary.value = { ...EMPTY_QC_SUMMARY }
+      qcSummaryState.value = 'unavailable'
     } finally {
       if (requestSequence === activeRequestSequence) {
         loading.value = false
@@ -317,6 +370,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     loading,
     loadError,
     qcSummary,
+    qcSummaryState,
     activeDept,
     activeDoctor,
     searchText,

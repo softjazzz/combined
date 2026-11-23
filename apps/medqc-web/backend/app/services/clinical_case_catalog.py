@@ -1,15 +1,22 @@
 """独立CDM病历目录：临床查询只在源库执行，结果摘要另从业务库装配。"""
+from collections import Counter
 from datetime import date, datetime
 from functools import lru_cache
-from fastapi import HTTPException
+import logging
 import math
+from time import monotonic
 
-from sqlalchemy import Date, DateTime, MetaData, Table, String, and_, case, cast, func, inspect, literal, or_, select, tuple_, union_all
+from fastapi import HTTPException
+from sqlalchemy import Date, DateTime, MetaData, Table, String, and_, case, cast, column, func, inspect, literal, or_, select, table, tuple_, union_all
+from sqlalchemy.exc import ProgrammingError
 
 from ..database import clinical_connection as clinical
+from .case_identity import CaseRef
+from .clinical_read import optional_frontpage_unavailable
 from .data_pipeline_settings import PipelineError
 from .validation_material_source import EXPLICITLY_INVALID_DOCUMENT_STATUSES, material_document_status_column
 
+logger = logging.getLogger(__name__)
 REQUIRED_TABLES = ("mr", "inpat_registration", "admission_record", "discharge_record")
 KEYS = ("institute_id", "patient_id", "visit_id")
 FIELDS = {
@@ -140,7 +147,6 @@ def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None
 def case_identities(*, scope="all", department=None, doctor=None, keyword=None, start_date=None, end_date=None,
                     date_field="admission", institute_id=None, page=None, page_size=50, count_only=False):
     """任务目录与页面复用同一身份集合；本入口不读取正文或业务结果。"""
-    from .case_identity import CaseRef
     try:
         engine = clinical.get_engine()
         source = catalog(engine, include_frontpage=False)
@@ -181,9 +187,29 @@ def schedule_options(*, scope, institute_id=None):
         raise PipelineError("clinical_source_read_unavailable", 503) from error
 
 
+def _frontpage_refs(connection, refs):
+    """仅附加当前页的首页存在性；None 表示该来源未能核对。"""
+    if not refs:
+        return set()
+    frontpage = table("mr", *(column(key, String) for key in KEYS), schema="cdm")
+    keys = tuple(frontpage.c[key] for key in KEYS)
+    try:
+        with connection.begin_nested():
+            if not inspect(connection).has_table("mr", schema="cdm"):
+                return None
+            return {tuple(str(value) for value in row) for row in connection.execute(
+                select(*keys).where(tuple_(*keys).in_(refs))
+            )}
+    except ProgrammingError as error:
+        if not optional_frontpage_unavailable(error):
+            raise
+        return None
+
+
 def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_date=None,
                 date_field="visit", hospital_status="all", sync_scope="all", inpatient_sort="default",
-                page=1, page_size=50, case_scope=None, qc_projection_loader=None, **analytics):
+                page=1, page_size=50, case_scope=None, qc_projection_loader=None,
+                qc_summary_mode="inline", qc_summary_identities: tuple[CaseRef, ...] | None = None, **analytics):
     if any(value for key, value in analytics.items() if key.startswith("analytics_")):
         raise PipelineError("clinical_source_analytics_filter_not_supported", 422)
     if inpatient_sort not in (None, "default", "longest", "recent"):
@@ -194,32 +220,65 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
     if hospital_status not in (None, "all", "inpatient", "discharged", "unknown") or date_field not in (None, "visit", "admission", "discharge", "updated"):
         raise PipelineError("invalid_clinical_catalog_filter", 422)
     try:
+        catalog_started = monotonic()
         engine = clinical.get_engine()
-        source = catalog(engine)
+        source = catalog(engine, include_frontpage=False)
         predicates = _predicates(source, dept=dept, doctor=doctor, keyword=keyword,
             start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
             case_scope=case_scope)
-        query = select(source).where(*predicates)
-        order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
-        order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
+        filter_columns = [source.c[key] for key in KEYS]
+        if qc_summary_mode != "only":
+            filter_columns += [source.c.department, source.c.doctor]
         with engine.connect() as connection:
-            total = connection.execute(select(func.count()).select_from(query.subquery())).scalar_one()
-            rows = connection.execute(query.order_by(order, *[source.c[k] for k in KEYS]).offset((page-1)*page_size).limit(page_size)).mappings().all()
-            all_refs = [dict(row) for row in connection.execute(select(*[source.c[k] for k in KEYS]).where(*predicates)).mappings()]
-            facets = query.subquery()
-            departments = connection.execute(select(facets.c.department, func.count()).group_by(facets.c.department)).all()
-            doctors = connection.execute(select(facets.c.doctor, func.count()).group_by(facets.c.doctor)).all()
-        if qc_projection_loader is None:
-            from .medical_records.query_service import _load_latest_luxian_0609_qc_summaries
-            from ..database.connection import SessionLocal
-            qc_projection_loader = lambda refs: _load_latest_luxian_0609_qc_summaries(refs, session_factory=SessionLocal)
-        from .medical_records.query_service import _build_qc_summary, _normalize_latest_qc_summary_map
-        from .case_identity import CaseRef
-        summaries = _normalize_latest_qc_summary_map(qc_projection_loader(all_refs)) if all_refs else {}
+            rows = []
+            if qc_summary_identities is None:
+                order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
+                order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
+                page_columns = filter_columns if qc_summary_mode == "only" else [source]
+                page_query = select(*page_columns).where(*predicates).order_by(
+                    order, *[source.c[k] for k in KEYS]
+                ).offset((page-1)*page_size).limit(page_size)
+                rows = connection.execute(page_query).mappings().all()
+            # 质控摘要本来就需要筛选全集的三键。一次投影同时取分组字段，复用目录聚合。
+            filtered_rows = connection.execute(
+                select(*filter_columns).where(*predicates)
+            ).mappings().all()
+            frontpage_refs = None if qc_summary_mode == "only" else _frontpage_refs(
+                connection, [tuple(row[key] for key in KEYS) for row in rows]
+            )
+        total = len(filtered_rows)
+        summary_started = monotonic()
+        from .medical_records.query_service import (
+            _build_qc_summary, _load_latest_luxian_0609_qc_summaries,
+            _normalize_latest_qc_summary_map, _workstation_qc_summary_payload,
+        )
+        all_refs, summaries = [], {}
+        if qc_summary_mode != "deferred":
+            all_refs = [{key: row[key] for key in KEYS} for row in filtered_rows]
+            if qc_projection_loader is None:
+                from ..database.connection import SessionLocal
+                qc_projection_loader = lambda refs: _load_latest_luxian_0609_qc_summaries(refs, session_factory=SessionLocal)
+            if all_refs:
+                summaries = _normalize_latest_qc_summary_map(qc_projection_loader(all_refs))
+        completed = monotonic()
+        if completed - catalog_started >= 2:
+            logger.warning(
+                "workstation_list_slow cdm_ms=%d qc_summary_ms=%d matched=%d page_size=%d",
+                (summary_started - catalog_started) * 1000, (completed - summary_started) * 1000,
+                total, page_size,
+            )
+        if qc_summary_mode == "only":
+            return _workstation_qc_summary_payload(
+                all_refs, summaries, (CaseRef(*(str(row[key]) for key in KEYS)) for row in rows),
+                requested_identities=qc_summary_identities,
+            )
+        departments = Counter(row["department"] for row in filtered_rows).items()
+        doctors = Counter(row["doctor"] for row in filtered_rows if row["doctor"]).items()
         records = []
         for row in rows:
             admission, discharge = _datetime(row["admission"]), _datetime(row["discharge"])
             identity = tuple(str(row[k]) for k in KEYS)
+            frontpage_empty = None if frontpage_refs is None else identity not in frontpage_refs
             records.append({"id": row["visit_id"], "recordKey": CaseRef(*identity).as_key(),
                 "instituteId": row["institute_id"], "patientId": row["patient_id"],
                 "sourceId": "independent_cdm", "name": row["name"] or "未返回", "sex": row["sex"] or "",
@@ -231,15 +290,19 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                 "dischargeDatetime": discharge.isoformat() if isinstance(discharge, datetime) else None,
                 "hospitalizationStatus": "discharged" if discharge else "unknown",
                 "hospitalizationStatusSource": "cdm_observed_discharge" if discharge else "cdm_inpatient_unconfirmed",
-                "materialCompleteness": "首页未观察到" if not row["has_frontpage"] else "发布完整性尚未证明", "updateTime": row["updated"] or "",
+                "materialCompleteness": "首页状态暂不可核对" if frontpage_empty is None else (
+                    "首页未观察到" if frontpage_empty else "发布完整性尚未证明"), "updateTime": row["updated"] or "",
                 "days": max(0, (((discharge.date() if isinstance(discharge, datetime) else discharge) or date.today()) - (admission.date() if isinstance(admission, datetime) else admission)).days) if admission else 0,
-                "status": "not_run", "cdmFrontpageEmpty": not bool(row["has_frontpage"]),
-                "latest_qc_summary": summaries.get(identity)})
-        return {"records": records, "total": total, "page": page, "pageSize": page_size,
+                "status": "not_run", "cdmFrontpageEmpty": frontpage_empty})
+            if qc_summary_mode == "inline":
+                records[-1]["latest_qc_summary"] = summaries.get(identity)
+        response = {"records": records, "total": total, "page": page, "pageSize": page_size,
             "totalPages": max(1, math.ceil(total/page_size)), "source_id": "independent_cdm",
             "departments": [{"name": name or "未分科室", "total": count, "warningCount": 0} for name, count in departments],
-            "doctors": [{"name": name, "total": count} for name, count in doctors if name],
-            "qc_summary": _build_qc_summary(all_refs, summaries)}
+            "doctors": [{"name": name, "total": count} for name, count in doctors if name]}
+        if qc_summary_mode == "inline":
+            response["qc_summary"] = _build_qc_summary(all_refs, summaries)
+        return response
     except (PipelineError, HTTPException):
         raise
     except Exception as error:

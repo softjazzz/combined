@@ -1,0 +1,40 @@
+.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-close,
+:is(.customer-record-result-drawer, .current-medical-record-drawer) .ant-drawer-close,
+.record-view-close-button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  box-sizing: border-box;
+  appearance: none;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(10, 108, 255, 0.18);
+  border-radius: 11px;
+  background: #f3f8ff;
+  color: #31597f;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(28, 76, 120, 0.08);
+  transition: 180ms ease;
+}
+
+.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-close:focus-visible,
+:is(.customer-record-result-drawer, .current-medical-record-drawer) .ant-drawer-close:focus-visible,
+.record-view-close-button:focus-visible {
+  outline: 3px solid rgba(10, 108, 255, 0.24);
+  outline-offset: 2px;
+}
+
+.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-close:hover,
+:is(.customer-record-result-drawer, .current-medical-record-drawer) .ant-drawer-close:hover,
+.record-view-close-button:hover {
+  border-color: rgba(10, 108, 255, 0.38);
+  background: #e7f1ff;
+  color: #005eb8;
+  box-shadow: 0 4px 12px rgba(10, 108, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.record-view-close-icon {
+  display: grid;
+  place-items: center;
+}

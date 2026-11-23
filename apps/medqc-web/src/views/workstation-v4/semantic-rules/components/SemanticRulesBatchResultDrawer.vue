@@ -69,8 +69,15 @@
             <MqIcon name="download" :size="16" />
             导出质控报告
           </a-button>
-          <a-button type="text" @click="close"> 关闭 </a-button>
         </div>
+        <button
+          type="button"
+          class="record-view-close-button drawer-close-button"
+          aria-label="关闭任务结果"
+          @click="close"
+        >
+          <RecordViewCloseIcon label="关闭任务结果" />
+        </button>
       </div>
 
       <div class="drawer-body">
@@ -2008,6 +2015,7 @@
 import BatchTaskFailureSummary from './BatchTaskFailureSummary.vue'
 import { ref } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import RecordViewCloseIcon from '../../components/RecordViewCloseIcon.vue'
 import BatchRecordReviewPanel from '@/views/workstation-v4/semantic-rules/components/BatchRecordReviewPanel.vue'
 import TopIssueRulesCard from '@/views/workstation-v4/semantic-rules/components/TopIssueRulesCard.vue'
 import QcRemediationSuggestion from '@/views/workstation-v4/components/qc/QcRemediationSuggestion.vue'

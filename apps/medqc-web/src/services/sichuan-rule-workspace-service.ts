@@ -8,7 +8,7 @@ import type {
   SichuanBatchJobQuery,
   Luxian0609ReviewReport,
 } from '@/views/workstation-v4/semantic-rules/types'
-import type { SingleRecordQcResultPayload } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
+import type { PreviousResultRequest, SingleRecordQcResultPayload } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
 
 type ServiceResult<T> = {
   success: boolean
@@ -165,7 +165,7 @@ export async function getLatestLuxian0609RecordResult(record: {
   instituteId: string
   patientId: string
   visitId: string
-}) {
+}, previous?: PreviousResultRequest) {
   return requestEnvelope<SingleRecordQcResultPayload>(
     {
       method: 'GET',
@@ -173,6 +173,7 @@ export async function getLatestLuxian0609RecordResult(record: {
       params: {
         institute_id: record.instituteId,
         patient_id: record.patientId,
+        ...(previous && { result_view: previous.resultView, anchor_job_id: previous.anchorJobId }),
       },
       timeout: WORKSPACE_QUERY_TIMEOUT_MS,
     },

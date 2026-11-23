@@ -68,7 +68,7 @@ def resolve_doctor_case_scope(actor_id: str, *, session_factory=None) -> DoctorC
             if clinical_connection.configured():
                 from .clinical_case_catalog import catalog, KEYS
                 from sqlalchemy import select
-                source = catalog(clinical_connection.get_engine())
+                source = catalog(clinical_connection.get_engine(), include_frontpage=False)
                 with clinical_connection.get_engine().connect() as connection:
                     rows = connection.execute(select(*[source.c[k] for k in KEYS]).where(
                         source.c.institute_id == institute, func.trim(source.c.department) == department,
@@ -146,7 +146,9 @@ async def enforce_doctor_case_access(request: Request, user: dict[str, Any]) -> 
     if scope is None:
         return
     query_paths = {"/api/medical-records/workstation", "/api/medical-records/list", "/api/medical-records/stats", "/api/medical-records/departments"}
-    if path in query_paths and request.method == "GET":
+    if (path in query_paths and request.method == "GET") or (
+        path == "/api/medical-records/workstation/qc-summary" and request.method == "POST"
+    ):
         scope.require_filters(request.query_params.get("dept"), request.query_params.get("doctor"))
         return
     if path in {"/api/v1/workstation/qc-home", "/api/v1/records", "/api/v1/records/final"} and request.method == "GET":

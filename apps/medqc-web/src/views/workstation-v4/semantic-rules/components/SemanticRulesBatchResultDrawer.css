@@ -3564,12 +3564,21 @@
 
 /* ---------- 页头：眉标 + 32px 标题，右侧胶囊按钮 ---------- */
 .drawer-shell .result-review-header {
+  --drawer-header-inline-padding: 32px;
+  position: relative;
   min-height: 0;
-  padding: 20px 32px 18px;
+  padding: 20px var(--drawer-header-inline-padding) 18px;
+  padding-inline-end: calc(var(--drawer-header-inline-padding) + 50px);
   border-bottom: 0.5px solid var(--mq-border);
   background: var(--mq-glass-bg-strong);
   -webkit-backdrop-filter: var(--mq-glass-blur);
   backdrop-filter: var(--mq-glass-blur);
+}
+
+.drawer-close-button {
+  position: absolute;
+  inset-block-start: 16px;
+  inset-inline-end: var(--drawer-header-inline-padding);
 }
 
 .drawer-shell .drawer-title-group {
@@ -4152,7 +4161,10 @@
 }
 
 @media (max-width: 1180px) {
-  .drawer-shell .result-review-header,
+  .drawer-shell .result-review-header {
+    --drawer-header-inline-padding: var(--mq-space-5);
+  }
+
   .drawer-shell .drawer-body {
     padding-right: var(--mq-space-5);
     padding-left: var(--mq-space-5);
@@ -4160,6 +4172,13 @@
 
   .drawer-shell .drawer-title {
     font-size: var(--mq-font-28);
+  }
+}
+
+@media (max-width: 767px) {
+  .drawer-shell .drawer-title-group {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
   }
 }
 

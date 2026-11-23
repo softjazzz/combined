@@ -1,7 +1,7 @@
 <template>
   <section
     class="record-compare-shell"
-    :class="{ 'is-document-only': documentOnly }"
+    :class="{ 'is-document-only': documentOnly, 'fills-available-height': fillAvailableHeight }"
     :data-mobile-tab="mobileTab"
   >
     <header
@@ -13,9 +13,11 @@
         <span>{{
           documentOnly
             ? '选择文书查看完整内容'
-            : sourceView === 'current'
-              ? '当前病历可能已更新，质控结果仍为执行时结果'
-              : '点击质控结果，核对对应文书与证据片段'
+            : lazyResultDocuments
+              ? '按本次质控保存的原文核对'
+              : sourceView === 'current'
+                ? '当前病历可能已更新，质控结果仍为执行时结果'
+                : '点击质控结果，核对对应文书与证据片段'
         }}</span>
       </div>
       <div
@@ -48,8 +50,11 @@
         :selected-key="selectedDocumentKey"
         :loading="loading"
         :error="loadError"
+        :summary-only="lazyResultDocuments"
+        :orders-load-state="ordersLoadState"
         @select="selectDocument"
         @retry="loadDocuments"
+        @load-orders="loadOrders"
       />
 
       <main class="record-content-column">
@@ -134,13 +139,11 @@
           </span>
         </div>
 
-        <div
-          v-if="contentLoading"
-          class="record-content-empty"
-        >
-          <strong>正在读取当前文书</strong>
-          <span>文书目录已经就绪，正文正在按需加载。</span>
-        </div>
+        <HospitalLoading
+          v-if="loading || contentLoading"
+          :label="loading ? '正在读取文书目录' : '正在读取文书正文'"
+          fill
+        />
         <div
           v-else-if="contentLoadError"
           class="record-content-empty"
@@ -185,7 +188,7 @@
               :data-section-key="section.key"
             >
               <h3 class="record-content-section-title">
-                {{ displaySectionLabel(section.label) }}
+                {{ section.displayLabel }}
               </h3>
               <p class="record-content-section-text">
                 <span>{{ section.parts.before }}</span><mark
@@ -210,6 +213,12 @@
                 @click="emitSelectedIssue"
                 @keydown.enter="emitSelectedIssue"
           >{{ documentTextParts.match }}</mark><span>{{ documentTextParts.after }}</span></pre>
+        </div>
+        <div
+          v-else-if="lazyResultDocuments && !loadError && (documents.length || ordersLoadState)"
+          class="record-content-empty"
+        >
+          <strong>请选择文书查看原文</strong>
         </div>
         <div
           v-else
@@ -284,7 +293,6 @@
                     <span class="record-result-status">
                       {{ issue.result_kind_text || issue.status_text }}
                     </span>
-                    <span class="record-result-code">{{ issue.rule_code }}</span>
                   </span>
                   <span
                     class="record-result-toggle"
@@ -296,7 +304,9 @@
                     />
                   </span>
                 </span>
-                <strong :title="issue.rule_name">{{ issue.rule_name }}</strong>
+                <strong :title="displayQcRuleName(issue.rule_name, issue.rule_code)">{{
+                  displayQcRuleName(issue.rule_name, issue.rule_code)
+                }}</strong>
                 <small
                   v-if="resolveIssueSummary(issue)"
                   class="record-result-summary-line"
@@ -421,10 +431,12 @@ import ReadonlyMedicalDocumentDirectory from '@/views/workstation-v4/customer-sa
 import ReadonlyFrontpageContent from '@/views/workstation-v4/customer-sample-validation/ReadonlyFrontpageContent.vue'
 import ReadonlyMedicalOrderTable from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalOrderTable.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
+import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import {
   deduplicateMedicalDocumentSections,
   displayMedicalDocumentSectionText,
   formatDiagnosisSection,
+  resolvePreliminaryDiagnosisDisplay,
   formatMedicalDocumentTime,
   isMedicalOrderDocument,
   resolveMedicalDocumentTime,
@@ -437,6 +449,7 @@ import type { EditableMedicalRecordDocument } from '@/views/workstation-v4/custo
 import { groupPdfDocumentVersions } from '@/views/workstation-v4/customer-sample-validation/pdfDocumentVersions'
 import {
   buildSingleRecordQcResultItems,
+  displayQcRuleName,
   recommendationEvidenceForSingleRecord,
   type SingleRecordQcEvidence,
   type SingleRecordQcResultItem,
@@ -455,7 +468,9 @@ const props = withDefaults(
   defineProps<{
     visitId: string
     documentOnly?: boolean
+    fillAvailableHeight?: boolean
     sourceView?: 'saved' | 'current'
+    lazyResultDocuments?: boolean
     /** 当前病历完整文书；传入后不再请求历史 Bundle 目录或正文。 */
     providedDocuments?: EditableMedicalRecordDocument[]
     /** 后端解析的本次住院入院时间，仅用于展示。 */
@@ -502,6 +517,9 @@ type LocationState = 'matched' | 'section' | 'document' | 'missing' | 'idle'
 const documents = ref<EditableMedicalRecordDocument[]>([])
 const pdfDocumentDirectory = computed(() => groupPdfDocumentVersions(documents.value))
 const loading = ref(false)
+const ordersLoadState = ref<'deferred' | 'loading' | 'failed'>()
+let orderRequest: Promise<void> | undefined
+let documentSelectionSequence = 0
 const loadError = ref('')
 const contentLoadError = ref('')
 const contentLoadingKey = ref('')
@@ -627,7 +645,8 @@ const locationMessage = computed(() => {
     const section = selectedDocument.value?.sections?.find(
       (item) => item.key === matchedSectionKey.value,
     )
-    return section?.label ? `已定位到${displaySectionLabel(section.label)}章节` : '已定位到对应章节'
+    const label = section && (resolvePreliminaryDiagnosisDisplay(section)?.label || section.label)
+    return label ? `已定位到${displaySectionLabel(label)}章节` : '已定位到对应章节'
   }
   if (locationState.value === 'document') return '已定位到文书，未定位到具体片段'
   if (locationState.value === 'missing') return '未找到对应文书，请手动核对'
@@ -664,18 +683,32 @@ const documentSectionViews = computed(() => {
       range.end <= sectionStart + text.length
         ? range.start - sectionStart
         : -1
-    const localEnd = localStart >= 0 && range ? range.end - sectionStart : -1
+    const quote = localStart >= 0 && range ? text.slice(localStart, range.end - sectionStart) : ''
+    const preliminary = resolvePreliminaryDiagnosisDisplay(section, text)
+    let displayedText = preliminary?.text ?? formatDiagnosisSection(section.label, text)
+    let quoteStart = -1
+    if (quote) {
+      const uniqueInSource =
+        preliminary && text.indexOf(quote) === localStart && text.lastIndexOf(quote) === localStart
+      quoteStart = uniqueInSource ? displayedText.indexOf(quote) : -1
+      if (quoteStart < 0 || quoteStart !== displayedText.lastIndexOf(quote)) {
+        // 无法在展示文本中唯一复现时，按原定位显示证据，避免高亮另一处相同文字。
+        displayedText = text
+        quoteStart = localStart
+      }
+    }
     return {
       ...section,
+      displayLabel: displaySectionLabel(preliminary?.label || section.label),
       isMatchedSection: matchedSectionKey.value === section.key,
       parts:
-        localStart >= 0 && localEnd > localStart
+        quoteStart >= 0
           ? {
-              before: text.slice(0, localStart),
-              match: text.slice(localStart, localEnd),
-              after: text.slice(localEnd),
+              before: displayedText.slice(0, quoteStart),
+              match: quote,
+              after: displayedText.slice(quoteStart + quote.length),
             }
-          : { before: formatDiagnosisSection(section.label, text), match: '', after: '' },
+          : { before: displayedText, match: '', after: '' },
     }
   })
 })
@@ -821,19 +854,13 @@ function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): Docum
     const sourceTypes = [evidence.source_document_type, evidence.source_table]
       .map(normalizeReference)
       .filter(Boolean)
-    if (sourceTypes.length) {
-      const typedDocuments = referencedDocuments.filter((document) =>
-        [document.document_type, document.source_table]
-          .map(normalizeReference)
-          .some((documentType) => documentType && sourceTypes.includes(documentType)),
-      )
-      if (typedDocuments.length === 1) return { document: typedDocuments[0] }
-      if (typedDocuments.length > 1) return null
-    }
-    // 同一安全引用对应多种投影视图时，不允许仅凭引用顺序猜测文书。
-    if (referencedDocuments.length === 1) return { document: referencedDocuments[0] }
-    if (referencedDocuments.length > 1) return null
-
+    const matchesSource = (...types: (string | undefined)[]) =>
+      types.map(normalizeReference).some((type) => type && sourceTypes.includes(type))
+    const directMatches = sourceTypes.length
+      ? referencedDocuments.filter((document) =>
+          matchesSource(document.document_type, document.source_table),
+        )
+      : referencedDocuments
     const aliasMatches = documents.value.flatMap((document) =>
       (document.source_document_aliases || [])
         .filter((alias) => normalizeReference(alias.source_ref) === sourceRef)
@@ -841,20 +868,33 @@ function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): Docum
     )
     const typedAliasMatches = sourceTypes.length
       ? aliasMatches.filter(({ document, alias }) =>
-          [alias.source_document_type, document.document_type, document.source_table]
-            .map(normalizeReference)
-            .some((documentType) => documentType && sourceTypes.includes(documentType)),
+          alias.source_document_type
+            ? matchesSource(alias.source_document_type)
+            : matchesSource(document.document_type, document.source_table),
         )
       : aliasMatches
+    if (directMatches.length > 1 || typedAliasMatches.length > 1) return null
     if (typedAliasMatches.length === 1) {
       const { document, alias } = typedAliasMatches[0]
+      const rendersListedDocument = alias.source_document_id === document.source_document_id
+      // 直接引用与别名指向不同原文时，保留无法定位状态。
+      if (directMatches[0] && (directMatches[0] !== document || !rendersListedDocument)) {
+        return null
+      }
+      if (rendersListedDocument) return { document }
       return {
         document,
         renderSourceDocumentId: alias.source_document_id,
         renderSourceRef: alias.source_ref,
       }
     }
-    if (typedAliasMatches.length > 1) return null
+    if (directMatches.length === 1) return { document: directMatches[0] }
+    // 已声明检查来源的证据不能命中另一来源恰好同号的文书。
+    if (sourceTypes.some((type) => type === 'exam_master' || type === 'exam_item_report')) {
+      return null
+    }
+    if (referencedDocuments.length === 1) return { document: referencedDocuments[0] }
+    if (referencedDocuments.length > 1) return null
   }
   const sourceId = normalizeReference(evidence.source_document_id)
   if (!sourceId) return null
@@ -887,9 +927,12 @@ async function ensureDocumentLoaded(
 ) {
   const summary = documents.value.find((document) => document.key === documentKey)
   if (!summary) return null
-  if (props.providedDocuments !== undefined || props.sourceView === 'current') return summary
-  if (!renderOverride && isDocumentLoaded(summary)) return summary
-  if (!summary.execution_domain) {
+  const currentClinicalSurgery = props.sourceView === 'current' && Boolean(summary.clinical_surgery_version)
+  if (!currentClinicalSurgery) {
+    if (props.providedDocuments !== undefined || props.sourceView === 'current') return summary
+    if (!renderOverride && isDocumentLoaded(summary)) return summary
+  }
+  if (!summary.execution_domain && !props.lazyResultDocuments) {
     if (selectedDocumentKey.value === documentKey) {
       contentLoadError.value = '当前文书缺少按需读取标识，请刷新页面后重试。'
     }
@@ -912,9 +955,12 @@ async function ensureDocumentLoaded(
           source_document_id: renderOverride.sourceDocumentId,
           ...(renderOverride.sourceRef ? { source_ref: renderOverride.sourceRef } : {}),
         }
-      : summary
+      : props.lazyResultDocuments
+        ? { ...summary, source_document_id: summary.key }
+        : summary
     request = getEditableMedicalRecordDocument(props.visitId, renderSummary, {
       ...(props.jobId ? { job_id: props.jobId } : {}),
+      ...(props.sourceView === 'saved' && props.jobId && props.recordRef ? { record_ref: props.recordRef } : {}),
       institute_id: String(props.instituteId || '').trim() || undefined,
       patient_id: String(props.patientId || '').trim() || undefined,
       visit_id: String(props.visitId || '').trim(),
@@ -1009,6 +1055,7 @@ async function applyLocatedDocument(
 async function tryLocateEvidence(
   evidence: QCRecordCompareEvidence,
   allowMetadataFallback: boolean,
+  sequence = documentSelectionSequence,
 ) {
   const exactMatch = matchDocumentByIdWithOverride(evidence)
   if (exactMatch) {
@@ -1023,7 +1070,7 @@ async function tryLocateEvidence(
           }
         : undefined,
     )
-    if (!exactDocument) return false
+    if (!exactDocument || sequence !== documentSelectionSequence) return false
     const range = findQuoteRange(exactDocument, evidence.quote)
     await applyLocatedDocument(
       exactDocument,
@@ -1047,7 +1094,7 @@ async function tryLocateEvidence(
     if (metadataSummary) {
       selectedDocumentKey.value = metadataSummary.key
       const metadataDocument = await ensureDocumentLoaded(metadataSummary.key)
-      if (!metadataDocument) return false
+      if (!metadataDocument || sequence !== documentSelectionSequence) return false
       await applyLocatedDocument(
         metadataDocument,
         null,
@@ -1060,7 +1107,18 @@ async function tryLocateEvidence(
 }
 
 async function locateEvidence(evidence: QCRecordCompareEvidence) {
-  if (documents.value.length && (await tryLocateEvidence(evidence, true))) return
+  const sequence = ++documentSelectionSequence
+  if (
+    ordersLoadState.value &&
+    [evidence.source_document_type, evidence.source_table].some((type) =>
+      normalizeReference(type).includes('order'),
+    )
+  ) {
+    await loadOrders()
+  }
+  if (sequence !== documentSelectionSequence) return
+  if (documents.value.length && (await tryLocateEvidence(evidence, true, sequence))) return
+  if (sequence !== documentSelectionSequence) return
   locationState.value = 'missing'
   matchedRange.value = null
   matchedSectionKey.value = ''
@@ -1169,6 +1227,7 @@ function setHighlightElement(value: unknown) {
 }
 
 async function selectDocument(documentKey: string) {
+  ++documentSelectionSequence
   selectedDocumentKey.value = documentKey
   contentLoadError.value = ''
   matchedRange.value = null
@@ -1178,24 +1237,17 @@ async function selectDocument(documentKey: string) {
 }
 
 function isAdmissionRecordDocument(document: EditableMedicalRecordDocument) {
-  const typeText = [
-    document.document_type,
-    document.source_table,
-    document.title,
-    resolveDocumentDisplayTitle(document),
-  ]
-    .map((value) =>
-      String(value || '')
-        .trim()
-        .toLowerCase(),
-    )
-    .filter(Boolean)
-    .join(' ')
-  return typeText.includes('admission_record') || typeText.includes('入院记录')
+  return [document.document_type, document.source_table].some((type) =>
+    ['admission_record', '入院记录'].includes(normalizeReference(type)),
+  )
+}
+
+function findAdmissionDocument() {
+  return pdfDocumentDirectory.value.primaryDocuments.find(isAdmissionRecordDocument)
 }
 
 function resolveDefaultDocumentKey() {
-  return documents.value.find(isAdmissionRecordDocument)?.key || documents.value[0]?.key || ''
+  return findAdmissionDocument()?.key || documents.value[0]?.key || ''
 }
 
 function handleDocumentSelect(event: Event) {
@@ -1219,11 +1271,42 @@ function resolveStatusTone(status: string) {
   return 'muted'
 }
 
+function loadOrders() {
+  if (!ordersLoadState.value) return
+  if (orderRequest) return orderRequest
+  const generation = loadGeneration
+  const visitId = props.visitId.trim()
+  ordersLoadState.value = 'loading'
+  orderRequest = getEditableMedicalRecordDocuments(visitId, {
+    institute_id: props.instituteId,
+    patient_id: props.patientId,
+    visit_id: visitId,
+    job_id: props.jobId,
+    record_ref: props.recordRef || undefined,
+    view: 'summary',
+    document_scope: 'orders',
+  }).then((result) => {
+    if (generation !== loadGeneration) return
+    if (!result.success || !result.data) {
+      ordersLoadState.value = 'failed'
+      return
+    }
+    documents.value = [...documents.value, ...result.data.documents.filter((document) => document.enabled !== false)]
+    ordersLoadState.value = undefined
+  }).finally(() => {
+    if (generation === loadGeneration) orderRequest = undefined
+  })
+  return orderRequest
+}
+
 async function loadDocuments() {
   const visitId = String(props.visitId || '').trim()
   const jobId = String(props.jobId || '').trim()
   const recordRef = String(props.recordRef || '').trim()
   const generation = ++loadGeneration
+  ++documentSelectionSequence
+  ordersLoadState.value = undefined
+  orderRequest = undefined
   documents.value = []
   selectedDocumentKey.value = ''
   matchedRange.value = null
@@ -1238,9 +1321,10 @@ async function loadDocuments() {
     documents.value = props.providedDocuments.filter((document) => document.enabled !== false)
     selectedDocumentKey.value = resolveDefaultDocumentKey()
     mobileTab.value = 'record'
+    if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
     return
   }
-  if (!visitId && !(jobId && recordRef)) {
+  if ((!visitId && !(jobId && recordRef)) || (props.lazyResultDocuments && !jobId)) {
     loadError.value = '当前结果缺少可读取病历的就诊标识'
     return
   }
@@ -1258,7 +1342,10 @@ async function loadDocuments() {
       : {}),
     ...(props.sourceView === 'current'
       ? { view: 'full' as const, source_view: 'current' as const }
-      : { view: 'summary' as const }),
+      : {
+          view: 'summary' as const,
+          ...(props.lazyResultDocuments ? { document_scope: 'clinical' as const } : {}),
+        }),
   })
   if (generation !== loadGeneration) return
   loading.value = false
@@ -1267,6 +1354,12 @@ async function loadDocuments() {
     return
   }
   documents.value = result.data.documents.filter((document) => document.enabled !== false)
+  if (props.lazyResultDocuments) {
+    ordersLoadState.value = 'deferred'
+    const admission = findAdmissionDocument()
+    if (admission) await selectDocument(admission.key)
+    return
+  }
   selectedDocumentKey.value = resolveDefaultDocumentKey()
   if (selectedIssue.value) await locateSelectedIssue()
   else if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
@@ -1303,12 +1396,14 @@ watch(
     props.providedDocuments,
     props.documentOnly,
     props.sourceView,
+    props.lazyResultDocuments,
   ],
   () => void loadDocuments(),
   { immediate: true },
 )
 onBeforeUnmount(() => {
   loadGeneration += 1
+  ++documentSelectionSequence
   documentRequests.clear()
   documents.value = []
 })
@@ -1392,7 +1487,10 @@ onBeforeUnmount(() => {
 }
 .record-content-toolbar strong {
   overflow: hidden;
-  font-size: 14px;
+  color: var(--mq-text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 26px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1465,8 +1563,8 @@ onBeforeUnmount(() => {
   gap: 0;
 }
 .record-content-section {
-  padding: 18px 0 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--mq-border);
   transition:
     background 240ms ease,
     box-shadow 240ms ease;
@@ -1489,18 +1587,31 @@ onBeforeUnmount(() => {
   border-bottom: 0;
 }
 .record-content-section-title {
-  margin: 0 0 9px;
-  color: #0a6cff;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 20px;
+  position: relative;
+  margin: 0 0 6px;
+  padding-inline-start: 10px;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-16);
+  font-weight: 700;
+  line-height: 24px;
+}
+.record-content-section-title::before {
+  position: absolute;
+  inset-block-start: 5px;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  block-size: 14px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.42;
+  content: '';
 }
 .record-content-section-text {
   margin: 0;
   color: #202124;
   font-size: 14px;
-  font-weight: 450;
-  line-height: 2;
+  font-weight: 400;
+  line-height: 1.85;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1608,12 +1719,6 @@ onBeforeUnmount(() => {
 .record-result-entry.is-success .record-result-status {
   background: rgba(16, 185, 129, 0.1);
   color: #047857;
-}
-.record-result-code {
-  color: #0a6cff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
 }
 .record-result-item strong {
   color: #1d1d1f;
@@ -1896,6 +2001,17 @@ onBeforeUnmount(() => {
 .record-compare-grid {
   gap: 14px;
   padding: 0 16px 16px;
+}
+.record-compare-shell.fills-available-height {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+.fills-available-height .record-compare-grid {
+  height: auto;
+  flex: 1 1 0;
+  grid-template-rows: minmax(0, 1fr);
 }
 .record-document-nav,
 .record-content-column,
