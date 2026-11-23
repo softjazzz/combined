@@ -121,7 +121,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const inpatientSort = ref<InpatientSort>('default')
   let activeRequestSequence = 0
   let summaryRequest: AbortController | undefined
-  let loadedTotals: { scope: string; total: number } | undefined
+  const loadedTotals = ref<{ scope: string; total: number }>()
+  const qcTotalsReady = computed(() => loadedTotals.value !== undefined)
   if (getCurrentScope()) onScopeDispose(() => {
     ++activeRequestSequence
     summaryRequest?.abort()
@@ -147,10 +148,14 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     scope: string,
     total: number,
   ) {
+    const recordKeys = records.flatMap((record) => record.recordKey ? [record.recordKey] : [])
+    if (!includeTotals && recordKeys.length === 0) {
+      qcSummaryState.value = 'ready'
+      return
+    }
     const controller = new AbortController()
     summaryRequest = controller
     try {
-      const recordKeys = records.flatMap((record) => record.recordKey ? [record.recordKey] : [])
       const body = includeTotals ? { record_keys: recordKeys } : { record_keys: recordKeys, include_totals: false }
       const response = await ApiService.postRaw(
         `${WORKSTATION_URL}/qc-summary`, body, { params, signal: controller.signal },
@@ -170,7 +175,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       }))
       if (includeTotals) {
         qcSummary.value = normalizeRecordPoolQcSummary(data.qc_summary)
-        loadedTotals = { scope, total }
+        loadedTotals.value = { scope, total }
       }
       qcSummaryState.value = 'ready'
     } catch {
@@ -186,7 +191,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     loading.value = true
     loadError.value = false
     if (!isPagination) {
-      loadedTotals = undefined
+      loadedTotals.value = undefined
       qcSummary.value = { ...EMPTY_QC_SUMMARY }
     }
     qcSummaryState.value = 'pending'
@@ -271,9 +276,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       const total = Number(data.total ?? data.total_count ?? 0)
       const totalPagesComputed = requestedPageSize > 0 ? Math.ceil(total / requestedPageSize) : 1
       const scope = JSON.stringify(params)
-      const reuseTotals = isPagination && loadedTotals?.scope === scope && loadedTotals.total === total
+      const reuseTotals = isPagination && loadedTotals.value?.scope === scope && loadedTotals.value.total === total
       if (!reuseTotals) {
-        loadedTotals = undefined
+        loadedTotals.value = undefined
         qcSummary.value = { ...EMPTY_QC_SUMMARY }
       }
 
@@ -284,6 +289,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       if (total > 0) {
         void loadQcSummary(params, normalizedRecords, requestSequence, !reuseTotals, scope, total)
       } else {
+        loadedTotals.value = { scope, total }
         qcSummaryState.value = 'ready'
       }
     } catch (error) {
@@ -292,7 +298,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       loadError.value = true
       allRecords.value = []
       serverTotal.value = 0
-      loadedTotals = undefined
+      loadedTotals.value = undefined
       qcSummary.value = { ...EMPTY_QC_SUMMARY }
       qcSummaryState.value = 'unavailable'
     } finally {
@@ -390,6 +396,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     loadError,
     qcSummary,
     qcSummaryState,
+    qcTotalsReady,
     activeDept,
     activeDoctor,
     searchText,

@@ -90,6 +90,42 @@ describe('真实面板及病历池单源行为', () => {
     expect(records.qcSummary.value.readyRecords).toBe(2)
   })
 
+  it('已有总计在翻页等待和失败时可用，越界空页不请求行摘要', async () => {
+    vi.mocked(clinicalSourcesApi.options).mockResolvedValue({
+      default_source: 'independent_cdm', sources: [{ id: 'independent_cdm', name: '东华CDM', enabled: true }],
+    })
+    const record = { id: 'V', recordKey: '["I","P","V"]', institute_id: 'I', patient_id: 'P', visit_id: 'V' }
+    vi.mocked(ApiService.getRaw)
+      .mockResolvedValueOnce(response({ records: [record], total: 80, page: 1 }))
+      .mockResolvedValueOnce(response({ records: [record], total: 80, page: 2 }))
+      .mockResolvedValueOnce(response({ records: [], total: 80, page: 3 }))
+    let rejectRows: (error: Error) => void = () => { throw new Error('未发起行摘要请求') }
+    vi.mocked(ApiService.postRaw)
+      .mockResolvedValueOnce(response({ qc_summary: { total_records: 80, ready_records: 9 }, records: [] }))
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectRows = reject }))
+
+    const records = usePatientRecords('discharged')
+    await records.fetchData()
+    await flushPromises()
+    records.handlePageChange(2)
+    await flushPromises()
+    expect(records.qcSummaryState.value).toBe('pending')
+    expect(records.qcTotalsReady.value).toBe(true)
+    expect(records.qcSummary.value.readyRecords).toBe(9)
+    rejectRows(new Error('本页摘要超时'))
+    await flushPromises()
+    expect(records.qcSummaryState.value).toBe('unavailable')
+    expect(records.qcTotalsReady.value).toBe(true)
+    expect(records.qcSummary.value.readyRecords).toBe(9)
+
+    records.handlePageChange(3)
+    await flushPromises()
+    expect(records.allRecords.value).toEqual([])
+    expect(records.qcSummaryState.value).toBe('ready')
+    expect(records.qcTotalsReady.value).toBe(true)
+    expect(ApiService.postRaw).toHaveBeenCalledTimes(2)
+  })
+
   it.each([false, true])('终末列表先显示，摘要独立返回或失败（失败=%s）', async (failed) => {
     vi.mocked(clinicalSourcesApi.options).mockResolvedValue({
       default_source: 'independent_cdm', sources: [{ id: 'independent_cdm', name: '东华CDM', enabled: true }],

@@ -145,6 +145,22 @@ def test_independent_workstation_page_only_summary_keeps_exact_scope(independent
     assert result == {"records": [{"recordKey": REF.as_key(), "latest_qc_summary": {"status": "not_run"}}]}
 
 
+def test_independent_workstation_empty_page_only_skips_catalog_but_checks_filters(monkeypatch):
+    from fastapi import HTTPException
+    from app.services import clinical_case_catalog
+    from app.services.doctor_case_scope import DoctorCaseScope
+
+    monkeypatch.setattr(clinical_connection, "get_engine", lambda: pytest.fail("空页无需读取CDM目录"))
+    options = {
+        "case_scope": DoctorCaseScope(REF.institute_id, "内科", "合成医生", (REF,)),
+        "qc_summary_mode": "only", "qc_summary_identities": (), "qc_summary_include_totals": False,
+    }
+    assert clinical_case_catalog.workstation(dept="内科", **options) == {"records": []}
+    with pytest.raises(HTTPException) as forbidden:
+        clinical_case_catalog.workstation(dept="其他科室", **options)
+    assert forbidden.value.status_code == 403
+
+
 @pytest.mark.parametrize("filter_value", [{"department": "出院科"}, {"doctor": "原始医生"}])
 def test_independent_filter_uses_same_raw_fields_as_explicit_refs(independent_source, filter_value):
     with Session(independent_source.execution_options(schema_translate_map={None: "cdm"})) as session:

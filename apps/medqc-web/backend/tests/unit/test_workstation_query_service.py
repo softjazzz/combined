@@ -22,6 +22,15 @@ import app.services.medical_records.query_service as query_service_module
 from app.services.medical_records.query_service import get_workstation_data
 
 
+@pytest.mark.parametrize("mode,identities", [("inline", None), ("deferred", None), ("only", None)])
+def test_workstation_rejects_page_only_summary_without_explicit_identities(mode, identities):
+    with pytest.raises(ValueError, match="qc_summary_include_totals"):
+        get_workstation_data(
+            qc_summary_mode=mode, qc_summary_identities=identities, qc_summary_include_totals=False,
+            session_factory=lambda: pytest.fail("无效摘要请求不得读库"),
+        )
+
+
 class DummyWorkflowQueueStateService:
     def get_state_map(self, **_kwargs):
         return {}

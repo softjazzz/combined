@@ -479,6 +479,7 @@ const {
   loadError,
   qcSummary,
   qcSummaryState,
+  qcTotalsReady,
   activeDept,
   activeDoctor,
   searchText,
@@ -555,7 +556,7 @@ const displayServerTotal = computed(() =>
   isAggregatedStageMode.value ? stageServerTotal.value : serverTotal.value,
 )
 const qcScopeTotal = computed(() =>
-  qcSummaryState.value === 'ready' ? qcSummary.value.totalRecords : serverTotal.value,
+  qcTotalsReady.value ? qcSummary.value.totalRecords : serverTotal.value,
 )
 
 const displayServerTotalPages = computed(() =>

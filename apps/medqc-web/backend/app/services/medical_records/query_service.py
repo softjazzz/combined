@@ -1093,6 +1093,8 @@ def get_workstation_data(
     qc_summary_identities: tuple[CaseRef, ...] | None = None,
     qc_summary_include_totals: bool = True,
 ) -> dict[str, Any]:
+    if not qc_summary_include_totals and (qc_summary_mode != "only" or qc_summary_identities is None):
+        raise ValueError("qc_summary_include_totals=False requires qc_summary_mode=only and explicit identities")
     if qc_summary_identities is not None and qc_summary_mode != "only":
         raise ValueError("qc_summary_identities requires qc_summary_mode=only")
     from ...database import clinical_connection

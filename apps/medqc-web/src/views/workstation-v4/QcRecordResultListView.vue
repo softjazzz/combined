@@ -59,7 +59,7 @@
     <section
       class="review-workbench-metrics mq-card"
       aria-label="质控结果汇总"
-      :aria-busy="qcSummaryState === 'pending'"
+      :aria-busy="!qcTotalsReady && qcSummaryState === 'pending'"
     >
       <div
         v-for="metric in metricItems"
@@ -67,7 +67,7 @@
         :class="`review-metric--${metric.key}`"
       >
         <span>{{ metric.key === 'priority' ? '确定问题' : metric.label }}</span>
-        <strong>{{ metric.key === 'records' || qcSummaryState === 'ready' ? metric.value : '—' }}</strong>
+        <strong>{{ metric.key === 'records' || qcTotalsReady ? metric.value : '—' }}</strong>
         <span>{{ metric.key === 'records' || metric.key === 'completed' || metric.key === 'failed' ? '份' : '项' }}</span>
         <MqIconTile
           class="review-metric__icon"
@@ -82,7 +82,7 @@
     <Alert
       v-if="!loading && !loadError && qcSummaryState === 'unavailable'"
       type="warning"
-      message="质控摘要暂不可用"
+      :message="qcTotalsReady ? '本页质控摘要暂不可用' : '质控摘要暂不可用'"
       show-icon
     />
 
@@ -448,6 +448,7 @@ const {
   loading,
   qcSummary,
   qcSummaryState,
+  qcTotalsReady,
   refreshData,
   searchText,
   selectHospFilter,
@@ -476,7 +477,7 @@ const METRIC_ICONS: Record<string, { name: MqIconName; tone: MqIconTone }> = {
 }
 
 const metricItems = computed<QcRecordMetricItem[]>(() => [
-  { key: 'records', label: '纳入病历', value: qcSummaryState.value === 'ready' ? qcSummary.value.totalRecords : serverTotal.value },
+  { key: 'records', label: '纳入病历', value: qcTotalsReady.value ? qcSummary.value.totalRecords : serverTotal.value },
   { key: 'completed', label: '已完成质控', value: qcSummary.value.readyRecords },
   ...(qcSummary.value.partialFailedRecords || qcSummary.value.failedRecords
     ? [{ key: 'failed' as const, label: '未全部完成', value: (qcSummary.value.partialFailedRecords || 0) + (qcSummary.value.failedRecords || 0) }]

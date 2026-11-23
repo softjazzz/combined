@@ -220,6 +220,11 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         raise PipelineError("clinical_source_live_status_not_supported", 422)
     if hospital_status not in (None, "all", "inpatient", "discharged", "unknown") or date_field not in (None, "visit", "admission", "discharge", "updated"):
         raise PipelineError("invalid_clinical_catalog_filter", 422)
+    page_only = qc_summary_mode == "only" and not qc_summary_include_totals
+    if page_only and qc_summary_identities == ():
+        if case_scope is not None:
+            case_scope.require_filters(dept, doctor)
+        return {"records": []}
     try:
         catalog_started = monotonic()
         engine = clinical.get_engine()
@@ -228,7 +233,6 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
             start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
             case_scope=case_scope)
         filter_columns = [source.c[key] for key in KEYS]
-        page_only = qc_summary_mode == "only" and not qc_summary_include_totals
         if page_only:
             predicates.append(tuple_(*filter_columns).in_(qc_summary_identities or ()))
         if qc_summary_mode != "only":
