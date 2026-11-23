@@ -11,7 +11,10 @@ from functools import wraps
 from copy import deepcopy
 from datetime import datetime, timezone
 from functools import lru_cache
+import hashlib
 import json
+import os
+import threading
 from typing import Any, Callable, Iterable
 from uuid import uuid4
 
@@ -36,29 +39,32 @@ def expected_statuses(rule: dict) -> tuple[str, ...]:
 
 
 _decision_session = ContextVar("rule_validation_decision_session", default=None)
+_RULE_LOCKS_GUARD = threading.Lock()
+_RULE_LOCKS: dict[str, threading.RLock] = {}
+
+
+def _get_rule_lock(rule_id: str) -> threading.RLock:
+    key = str(rule_id or "")
+    with _RULE_LOCKS_GUARD:
+        lock = _RULE_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _RULE_LOCKS[key] = lock
+        return lock
 
 
 def _serialize_decision(method):
-    """同一运行的复核、结论、批准串行写入；跨进程由数据库锁保证。"""
+    """同一规则的运行创建、复核、结论、批准在互斥锁与数据库锁内串行写入，消除 TOCTOU 竞态。"""
     @wraps(method)
     def wrapped(self, target, *args, **kwargs):
-        run_id = target["id"] if isinstance(target, dict) else None
-        if run_id is None:
-            runs = self.list_runs(target)
-            run_id = runs[0]["id"] if runs else None
-        with self.sessions() as session:
-            if session.get_bind().dialect.name == "sqlite":
-                session.execute(sa.text("BEGIN IMMEDIATE"))
-            if run_id:
-                session.execute(select(self.runs.c.id).where(
-                    self.runs.c.id == run_id).with_for_update()).first()
-            token = _decision_session.set(session)
-            try:
-                value = method(self, target, *args, **kwargs)
-                session.commit()
-                return value
-            finally:
-                _decision_session.reset(token)
+        if isinstance(target, dict):
+            rule_id = target["rule_id"]
+            run_id = target.get("id")
+        else:
+            rule_id = str(target)
+            run_id = None
+        with self._locked_rule_transaction(rule_id, run_id=run_id):
+            return method(self, target, *args, **kwargs)
     return wrapped
 
 
@@ -208,13 +214,66 @@ def compare_cases(rule_id: str, cases: list[dict], job: dict | None,
 
 class RuleValidationService:
     def __init__(self, *, item_table=None, runs_table=None, events_table=None, session_factory=None,
-                 catalog: Callable[[], dict[str, dict]] = rule_catalog, env: str | None = None):
+                 catalog: Callable[[], dict[str, dict]] = rule_catalog, env: str | None = None,
+                 enforce_actor_separation: bool | None = None):
         self.items = item_table if item_table is not None else pools._sample_pool_items_table()
         self.runs = runs_table if runs_table is not None else _tables()[0]
         self.events = events_table if events_table is not None else _tables()[1]
         self.sessions = session_factory or pools._session
         self.catalog = catalog
         self.env = env
+        self.enforce_actor_separation = enforce_actor_separation
+
+    @contextmanager
+    def _read_connection(self):
+        active = _decision_session.get()
+        if active is not None:
+            yield active
+        else:
+            with self.sessions() as session:
+                yield session
+
+    @contextmanager
+    def _locked_rule_transaction(self, rule_id: str, *, run_id: str | None = None):
+        """按 rule_id 加进程内互斥锁 + 数据库事务锁，串行化运行创建、复核、结论与批准。"""
+        with _get_rule_lock(rule_id):
+            with self.sessions() as session:
+                bind = session.get_bind()
+                dialect_name = str(getattr(getattr(bind, "dialect", None), "name", ""))
+                if dialect_name == "sqlite":
+                    session.execute(sa.text("BEGIN IMMEDIATE"))
+                elif dialect_name == "postgresql":
+                    digest = hashlib.sha256(f"rule_validation:{rule_id}".encode("utf-8")).digest()
+                    key1 = int.from_bytes(digest[:4], "big", signed=True)
+                    key2 = int.from_bytes(digest[4:8], "big", signed=True)
+                    session.execute(
+                        sa.text("SELECT pg_advisory_xact_lock(:key1, :key2)"),
+                        {"key1": key1, "key2": key2},
+                    )
+                if run_id:
+                    session.execute(
+                        select(self.runs.c.id).where(self.runs.c.id == run_id).with_for_update()
+                    ).first()
+                token = _decision_session.set(session)
+                try:
+                    yield session
+                    session.commit()
+                except BaseException:
+                    session.rollback()
+                    raise
+                finally:
+                    _decision_session.reset(token)
+
+    def _should_enforce_actor_separation(self, run: dict | None = None) -> bool:
+        if self.enforce_actor_separation is not None:
+            return bool(self.enforce_actor_separation)
+        env_flag = str(os.getenv("RULE_VALIDATION_ENFORCE_SOD") or "").strip().lower()
+        if env_flag in {"1", "true", "yes", "on"}:
+            return True
+        if env_flag in {"0", "false", "no", "off"}:
+            return False
+        # 非开发环境正式构建的验收与上线批准必须满足职责分离，兼容现有开发态与本地构建单测。
+        return (not self._is_development_env()) and build_kind((run or {}).get("execution_version")) == "release"
 
     # ---- 规则与病例 ----
 
@@ -250,14 +309,14 @@ class RuleValidationService:
 
     def list_cases(self, rule_id: str) -> list[dict]:
         self._rule(rule_id)
-        with self.sessions() as session:
+        with self._read_connection() as session:
             views = [self._case_view(r, rule_id) for r in self._customer_items(session)]
         return sorted((v for v in views if v), key=lambda v: v["item_id"])
 
     def list_candidate_cases(self, rule_id: str) -> list[dict]:
         """可关联到本规则的测试病例（尚未为本规则标注预期）。"""
         self._rule(rule_id)
-        with self.sessions() as session:
+        with self._read_connection() as session:
             rows = self._customer_items(session)
         result = []
         for row in rows:
@@ -325,23 +384,27 @@ class RuleValidationService:
     # ---- 运行 ----
 
     def begin_run(self, rule_id: str, item_ids: Iterable[str] | None, user: str) -> dict:
-        cases = self.list_cases(rule_id)
-        if item_ids is not None:
-            wanted = list(dict.fromkeys(item_ids))
-            by_id = {c["item_id"]: c for c in cases}
-            if any(i not in by_id for i in wanted):
-                raise ValueError("所选病例未关联本规则或不存在")
-            cases = [by_id[i] for i in wanted]
-        if not cases:
-            raise ValueError("请先为本规则关联测试病例并标注预期")
-        if len(cases) > MAX_CASES_PER_RUN:
-            raise ValueError(f"单次运行最多 {MAX_CASES_PER_RUN} 个病例")
-        if any(not all(c["record_ref"].values()) for c in cases):
-            raise ValueError("存在住院标识不完整的测试病例")
-        scope = self._release_scope_plan(rule_id)
-        if len({c["item_id"] for c in cases + scope["regression_cases"]}) > MAX_CASES_PER_RUN:
-            raise ValueError(f"本规则病例与同族回归病例合计超过 {MAX_CASES_PER_RUN} 个，请分批验收")
-        with self.sessions() as session:
+        actor = str(user or "").strip()
+        if not actor:
+            raise ValueError("缺少运行触发人标识")
+        self._rule(rule_id)
+        with self._locked_rule_transaction(rule_id) as session:
+            cases = self.list_cases(rule_id)
+            if item_ids is not None:
+                wanted = list(dict.fromkeys(item_ids))
+                by_id = {c["item_id"]: c for c in cases}
+                if any(i not in by_id for i in wanted):
+                    raise ValueError("所选病例未关联本规则或不存在")
+                cases = [by_id[i] for i in wanted]
+            if not cases:
+                raise ValueError("请先为本规则关联测试病例并标注预期")
+            if len(cases) > MAX_CASES_PER_RUN:
+                raise ValueError(f"单次运行最多 {MAX_CASES_PER_RUN} 个病例")
+            if any(not all(c["record_ref"].values()) for c in cases):
+                raise ValueError("存在住院标识不完整的测试病例")
+            scope = self._release_scope_plan(rule_id)
+            if len({c["item_id"] for c in cases + scope["regression_cases"]}) > MAX_CASES_PER_RUN:
+                raise ValueError(f"本规则病例与同族回归病例合计超过 {MAX_CASES_PER_RUN} 个，请分批验收")
             creating = session.execute(select(self.runs.c.id).where(
                 self.runs.c.rule_id == rule_id, self.runs.c.state == "creating")).first()
             if creating:
@@ -349,10 +412,9 @@ class RuleValidationService:
             snapshot = {"cases": cases, **scope}
             run = {"id": str(uuid4()), "rule_id": rule_id, "cases_json": json.dumps(snapshot, ensure_ascii=False),
                    "job_id": None, "state": "creating", "execution_version_json": None,
-                   "created_by": user, "created_at": _now()}
+                   "created_by": actor, "created_at": _now()}
             session.execute(self.runs.insert().values(**run))
-            session.commit()
-        return self.get_run(run["id"])
+            return _run_view(run)
 
     def _release_scope_plan(self, rule_id: str) -> dict:
         """共享抽取批次规则按“上线后范围”运行：本规则 + 同执行器已上线规则，并带上它们的保护集。"""
@@ -413,14 +475,14 @@ class RuleValidationService:
             raise RuleValidationConflict("运行已经绑定，不能更换任务")
 
     def get_run(self, run_id: str) -> dict:
-        with self.sessions() as session:
+        with self._read_connection() as session:
             row = session.execute(select(self.runs).where(self.runs.c.id == run_id)).mappings().first()
         if not row:
             raise LookupError("运行不存在")
         return _run_view(dict(row))
 
     def list_runs(self, rule_id: str) -> list[dict]:
-        with self.sessions() as session:
+        with self._read_connection() as session:
             rows = session.execute(select(self.runs).where(self.runs.c.rule_id == rule_id)
                                    .order_by(self.runs.c.created_at.desc())).mappings().all()
         return [_run_view(dict(r)) for r in rows]
@@ -444,13 +506,16 @@ class RuleValidationService:
         return _event_view(record)
 
     def list_events(self, rule_id: str) -> list[dict]:
-        with self._event_connection() as session:
+        with self._read_connection() as session:
             rows = session.execute(select(self.events).where(self.events.c.rule_id == rule_id)
                                    .order_by(self.events.c.created_at.asc())).mappings().all()
         return [_event_view(dict(r)) for r in rows]
 
     @_serialize_decision
     def review_case(self, run: dict, rows: list[dict], item_id: str, *, decision: str, note: str, user: str) -> dict:
+        actor = str(user or "").strip()
+        if not actor:
+            raise ValueError("缺少复核人标识")
         if decision not in {"confirmed", "problem"} or not note.strip():
             raise ValueError("请选择复核结论并填写核对意见")
         # 逐例核对针对本规则病例；同族由保存基线比较，不能用本规则复核覆盖差异。
@@ -462,34 +527,62 @@ class RuleValidationService:
         if decision == "confirmed" and row["comparison"] != "same":
             raise ValueError("状态与预期不一致，不能确认通过；请记录问题")
         return self._append(rule_id=run["rule_id"], run_id=run["id"], item_id=item_id, kind="case_review",
-                            decision=decision, note=note.strip(), actor=user,
+                            decision=decision, note=note.strip(), actor=actor,
                             # 事件只记比较结论，不复制结果证据。
                             payload_json=json.dumps({"comparison": {k: v for k, v in row.items() if k != "result"}},
                                                     ensure_ascii=False))
 
     @_serialize_decision
     def conclude(self, run: dict, rows: list[dict], *, decision: str, note: str, gap_ack: str, user: str) -> dict:
+        actor = str(user or "").strip()
+        if not actor:
+            raise ValueError("缺少验收结论提交人标识")
         if decision not in {"accepted", "rejected"} or not note.strip():
             raise ValueError("请选择验收结论并填写意见")
+        # 在互斥锁内重新校验 run 是否仍为该规则最新一次运行，消除 begin_run 与 conclude 之间的 TOCTOU 竞态。
+        latest_runs = self.list_runs(run["rule_id"])
+        if not latest_runs or latest_runs[0]["id"] != run["id"]:
+            raise RuleValidationConflict("只能对最新一次运行下结论")
+        persisted_run = latest_runs[0]
         summary = self.summarize(run["rule_id"], run=run, rows=rows)
+        sod_enforced = self._should_enforce_actor_separation(run)
+        initiator = str(persisted_run.get("created_by") or run.get("created_by") or "").strip()
+        case_editors = {
+            str(case.get("labeled_by") or "").strip()
+            for case in (persisted_run.get("cases") or run.get("cases") or [])
+            if str(case.get("labeled_by") or "").strip()
+        }
         if decision == "accepted":
             blockers = summary["acceptance_blockers"]
             if blockers:
                 raise ValueError("不能验收通过：" + "；".join(blockers))
             if (summary["coverage"]["gaps"] or summary["regression_gaps"]) and not gap_ack.strip():
                 raise ValueError("存在覆盖缺口或同族保护集缺口，请逐项说明可接受的原因")
+            if sod_enforced:
+                if initiator and actor == initiator:
+                    raise ValueError("验收结论提交人不能与运行触发人相同")
+                if actor in case_editors:
+                    raise ValueError("验收结论提交人不能与规则预期编辑者相同")
         return self._append(rule_id=run["rule_id"], run_id=run["id"], kind="conclusion", decision=decision,
-                            note=note.strip(), actor=user, payload_json=json.dumps(
+                            note=note.strip(), actor=actor, payload_json=json.dumps(
                                 {"gap_ack": gap_ack.strip(), "coverage": summary["coverage"],
                                  "regression_gaps": summary["regression_gaps"],
                                  "regression_rows": [
                                      {k: r.get(k) for k in ("rule_id", "item_id", "case_title", "expected_status",
                                                             "actual_status", "comparison", "regression_comparison")}
                                      for r in rows if r.get("role") == "regression"],
-                                 "build_kind": build_kind(run.get("execution_version"))}, ensure_ascii=False))
+                                 "build_kind": build_kind(run.get("execution_version")),
+                                 "actor_boundary": {
+                                     "sod_enforced": sod_enforced,
+                                     "distinct_from_initiator": bool(initiator and actor != initiator),
+                                     "distinct_from_editors": actor not in case_editors,
+                                 }}, ensure_ascii=False))
 
     @_serialize_decision
     def approve(self, rule_id: str, *, decision: str, note: str, user: str) -> dict:
+        actor = str(user or "").strip()
+        if not actor:
+            raise ValueError("缺少批准人标识")
         if decision not in {"approved", "rejected"} or not note.strip():
             raise ValueError("请选择批准结论并填写意见")
         rule = self._rule(rule_id)
@@ -515,11 +608,16 @@ class RuleValidationService:
             kind = build_kind(run.get("execution_version"))
             if kind != "release" and not self._is_development_env():
                 raise ValueError("客户环境只能依据正式构建的验收运行批准；本地进程版本请在固定发布构建上重跑")
-            sheet = self._release_sheet(rule, run, events, conclusion, approver=user, note=note.strip(), kind=kind)
+            if self._should_enforce_actor_separation(run):
+                conclusion_actor = str(conclusion.get("actor") or "").strip()
+                initiator = str(run.get("created_by") or "").strip()
+                if actor == conclusion_actor or (initiator and actor == initiator):
+                    raise ValueError("上线批准人不能与验收结论提交人或运行触发人相同")
+            sheet = self._release_sheet(rule, run, events, conclusion, approver=actor, note=note.strip(), kind=kind)
             return self._append(rule_id=rule_id, run_id=run["id"], kind="approval", decision="approved",
-                                note=note.strip(), actor=user, payload_json=json.dumps(sheet, ensure_ascii=False))
+                                note=note.strip(), actor=actor, payload_json=json.dumps(sheet, ensure_ascii=False))
         return self._append(rule_id=rule_id, run_id=conclusion["run_id"] if conclusion else None, kind="approval",
-                            decision="rejected", note=note.strip(), actor=user)
+                            decision="rejected", note=note.strip(), actor=actor)
 
     def _is_development_env(self) -> bool:
         env = self.env
@@ -629,8 +727,12 @@ REAL_SOURCE_COPY_TYPE = "customer_source_editable_copy"
 
 
 def _source_kind(raw: dict) -> str:
-    """只有从真实病历复制的测试病例算真实副本；测试病例之间的复制、模板/手工构建都是合成病例。"""
+    """只有服务端确认的真实病历副本才算真实副本；未验证或测试病例间复制、模板/手工构建均为合成病例。"""
+    if raw.get("source_kind") == "synthetic":
+        return "synthetic"
     source = raw.get("source_record") or {}
+    if source.get("source_kind") == "synthetic" or source.get("server_verified") is False:
+        return "synthetic"
     return "real_copy" if source.get("type") in {
         REAL_SOURCE_COPY_TYPE, "authorized_pdf_material_copy",
     } else "synthetic"

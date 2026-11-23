@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional
 import hashlib
 import logging
 import os
+import threading
 
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 _USER_LLM_CONFIGS_TABLE_UNAVAILABLE = False
 QC_USE_SELECTED_MODEL_KEY = "qc_use_selected_model"
+_CLIENT_RELOAD_LOCK = threading.RLock()
 
 
 def _deployed_provider_codes() -> tuple[str, ...]:
@@ -536,45 +538,73 @@ class LLMConfigLoader:
                     # 先构造并校验双方，避免切换失败留下半更新的在用客户端。
                     candidate = SichuanQCLLMClient(config)
                     adjudicator = SichuanQCLLMClient(build_adjudicator_runtime_config(config))
-                    service.client = candidate
-                    if hasattr(service, "adjudicator_client"):
-                        service.adjudicator_client = adjudicator
+                    with _CLIENT_RELOAD_LOCK:
+                        service.client = candidate
+                        if hasattr(service, "adjudicator_client"):
+                            service.adjudicator_client = adjudicator
                     return True
-                client = service.client
-                client.api_endpoint = config.get("api_endpoint")
-                client.api_key = config.get("api_key")
-                client.model = config.get("model") or client.model
-                client.timeout_seconds = int(config.get("timeout_seconds") or client.timeout_seconds)
-                client.allow_mock_when_unconfigured = bool(
-                    config.get("allow_mock_when_unconfigured", client.allow_mock_when_unconfigured)
-                )
-                client.config_source = str(config.get("source") or "unknown")
-                if hasattr(client, "provider_code"):
-                    client.provider_code = str(config.get("provider_code") or "").strip().lower()
-                if hasattr(client, "dispatch_mode"):
-                    client.dispatch_mode = str(config.get("dispatch_mode") or "direct")
-                if hasattr(client, "gateway_profile"):
-                    client.gateway_profile = config.get("gateway_profile")
 
+                client = service.client
                 custom_params = config.get("custom_parameters", {}) or {}
                 execution_concurrency = concurrency_from_custom_parameters(custom_params)
-                client.max_parallel_records = execution_concurrency.max_parallel_records
-                client.family_max_concurrency = execution_concurrency.family_max_concurrency
-                client.http_max_concurrency = execution_concurrency.http_max_concurrency
+
+                # 先计算并校验全部目标字段，再在互斥锁内原子替换，异常时整体回滚，消除无锁半更新竞态。
+                updates: Dict[str, Any] = {
+                    "api_endpoint": config.get("api_endpoint"),
+                    "api_key": config.get("api_key"),
+                    "model": config.get("model") or getattr(client, "model", None),
+                    "timeout_seconds": int(config.get("timeout_seconds") or getattr(client, "timeout_seconds", 120)),
+                    "allow_mock_when_unconfigured": bool(
+                        config.get(
+                            "allow_mock_when_unconfigured",
+                            getattr(client, "allow_mock_when_unconfigured", False),
+                        )
+                    ),
+                    "config_source": str(config.get("source") or "unknown"),
+                    "max_parallel_records": execution_concurrency.max_parallel_records,
+                    "family_max_concurrency": execution_concurrency.family_max_concurrency,
+                    "http_max_concurrency": execution_concurrency.http_max_concurrency,
+                }
+                if hasattr(client, "provider_code"):
+                    updates["provider_code"] = str(config.get("provider_code") or "").strip().lower()
+                if hasattr(client, "dispatch_mode"):
+                    updates["dispatch_mode"] = str(config.get("dispatch_mode") or "direct")
+                if hasattr(client, "gateway_profile"):
+                    updates["gateway_profile"] = config.get("gateway_profile")
                 if hasattr(client, "temperature"):
-                    client.temperature = float(custom_params.get("temperature", 0.2))
+                    updates["temperature"] = float(custom_params.get("temperature", 0.2))
                 if hasattr(client, "top_p"):
-                    client.top_p = float(custom_params.get("top_p", 0.9))
+                    updates["top_p"] = float(custom_params.get("top_p", 0.9))
                 if hasattr(client, "max_tokens"):
-                    client.max_tokens = int(custom_params.get("max_tokens", 16384))
+                    updates["max_tokens"] = int(custom_params.get("max_tokens", 16384))
                 if hasattr(client, "enable_thinking"):
-                    client.enable_thinking = bool(custom_params.get("enable_thinking", False))
+                    updates["enable_thinking"] = bool(custom_params.get("enable_thinking", False))
                 if hasattr(client, "thinking_budget"):
-                    client.thinking_budget = custom_params.get("thinking_budget")
+                    updates["thinking_budget"] = custom_params.get("thinking_budget")
                 if hasattr(client, "reasoning_effort"):
-                    client.reasoning_effort = str(custom_params.get("reasoning_effort") or "").strip().lower()
-                if hasattr(client, "refresh_dispatch_identity"):
-                    client.refresh_dispatch_identity()
+                    updates["reasoning_effort"] = str(custom_params.get("reasoning_effort") or "").strip().lower()
+
+                with _CLIENT_RELOAD_LOCK:
+                    sentinel = object()
+                    previous = {attr: getattr(client, attr, sentinel) for attr in updates}
+                    try:
+                        for attr, value in updates.items():
+                            setattr(client, attr, value)
+                        if hasattr(client, "refresh_dispatch_identity"):
+                            client.refresh_dispatch_identity()
+                    except Exception:
+                        for attr, old_value in previous.items():
+                            if old_value is sentinel:
+                                try:
+                                    delattr(client, attr)
+                                except Exception:
+                                    pass
+                            else:
+                                try:
+                                    setattr(client, attr, old_value)
+                                except Exception:
+                                    pass
+                        raise
 
                 logger.info(
                     "✅ 成功为服务重新加载配置: provider=%s model=%s source=%s",

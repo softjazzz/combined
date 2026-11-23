@@ -19,6 +19,30 @@ from ..discharge_time import select_discharge_time
 from ..clinical_scene_admission import resolve_scene
 from ..validation_material_source import is_explicitly_invalid_document_status
 
+CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
+CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
+
+
+def _should_exclude_customer_test(
+    *,
+    institute_id: Optional[str] = None,
+    include_test_records: bool = False,
+    record_refs: Optional[Sequence[CaseRefInput]] = None,
+    record_ids: Optional[Sequence[str]] = None,
+) -> bool:
+    """默认生产查询排除 CUSTOMER_TEST，除非显式指定机构、测试模式或显式测试样本坐标。"""
+    if include_test_records:
+        return False
+    if _safe_text(institute_id) == CUSTOMER_TEST_INSTITUTE_ID:
+        return False
+    if record_refs:
+        normalized = normalize_case_refs(record_refs)
+        if any(ref.institute_id == CUSTOMER_TEST_INSTITUTE_ID for ref in normalized):
+            return False
+    if record_ids and any(_safe_text(rid).startswith(CUSTOMER_TEST_VISIT_PREFIX) for rid in record_ids):
+        return False
+    return True
+
 
 def _capture_private_orm_identities(collector: Callable[[str, Any], None] | None, source_key: str, rows: Sequence[Any]) -> None:
     """可选0609回调只消费本次已加载ORM，不新增查询或返回字段。"""
@@ -157,9 +181,10 @@ class RecordRepository:
     """工作区病历池的唯一只读查询与正文水合实现。"""
 
     def __init__(self, *, session_factory: Callable[[], Session], _material_schema: str | None = None,
-                 frontpage_display: bool = False) -> None:
+                 frontpage_display: bool = False, include_test_records: bool = False) -> None:
         self._session_factory = session_factory
         self._frontpage_display = frontpage_display
+        self._include_test_records = bool(include_test_records)
         if _material_schema:
             from ..validation_material_source import MATERIAL_SCHEMA
             if not MATERIAL_SCHEMA.fullmatch(_material_schema):
@@ -186,15 +211,24 @@ class RecordRepository:
     def _raw_case_refs(
         self, session: Session, *, record_ids: Optional[Sequence[str]] = None,
         institute_id: Optional[str] = None, sync_scope: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> List[CaseRef]:
         """只从原始住院登记/入院文书发现身份，旧 visit 入口必须唯一。"""
+        effective_include_test = bool(include_test_records or self._include_test_records)
+        exclude_customer_test = _should_exclude_customer_test(
+            institute_id=institute_id,
+            include_test_records=effective_include_test,
+            record_ids=record_ids,
+        )
         refs: set[CaseRef] = set()
         for model in (InpatRegistration, AdmissionRecord):
             query = session.query(model.institute_id, model.patient_id, model.visit_id)
             if record_ids:
                 query = query.filter(model.visit_id.in_(record_ids))
             if institute_id:
-                query = query.filter(model.institute_id == institute_id)
+                query = query.filter(model.institute_id == _safe_text(institute_id))
+            elif exclude_customer_test:
+                query = query.filter(model.institute_id != CUSTOMER_TEST_INSTITUTE_ID)
             if _safe_text(sync_scope).lower() == "today_inpatient":
                 query = query.filter(exists().where(and_(
                     HospitalizationStatusProjection.institute_id == model.institute_id,
@@ -420,6 +454,7 @@ class RecordRepository:
         record_refs: Optional[Sequence[CaseRefInput]] = None,
         sync_scope: Optional[str] = None,
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ):
         scope_value = _normalize_scope(scope)
         date_field_value = _normalize_date_field(date_field)
@@ -488,9 +523,17 @@ class RecordRepository:
             MedicalRecordFrontpage.visit_id.is_not(None),
             MedicalRecordFrontpage.visit_id != "",
         )
-        # 可选：只取指定机构的病历（如首页质控默认只看本院、排除测试数据）；不传时行为不变
+        # 默认生产病历池排除 CUSTOMER_TEST；仅显式指定机构、测试模式或显式测试样本坐标时包含
+        effective_include_test = bool(include_test_records or self._include_test_records)
         if _safe_text(institute_id):
             query = query.filter(MedicalRecordFrontpage.institute_id == _safe_text(institute_id))
+        elif _should_exclude_customer_test(
+            institute_id=institute_id,
+            include_test_records=effective_include_test,
+            record_refs=record_refs,
+            record_ids=record_ids,
+        ):
+            query = query.filter(MedicalRecordFrontpage.institute_id != CUSTOMER_TEST_INSTITUTE_ID)
 
         if scope_value == "final":
             query = query.filter(discharge_dt_expr.is_not(None))
@@ -647,6 +690,7 @@ class RecordRepository:
         page: int,
         page_size: int,
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> WorkspaceListResult:
         session = self._open_session()
         try:
@@ -660,6 +704,7 @@ class RecordRepository:
                 end_date=end_date,
                 keyword=keyword,
                 institute_id=institute_id,
+                include_test_records=include_test_records,
             )
             total = int(query.count())
             rows = (
@@ -682,6 +727,7 @@ class RecordRepository:
         scope: str,
         department: Optional[str],
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> Dict[str, Any]:
         session = self._open_session()
         try:
@@ -699,6 +745,7 @@ class RecordRepository:
                 end_date=None,
                 keyword=None,
                 institute_id=institute_id,
+                include_test_records=include_test_records,
             )
             dept_query = base_query.with_entities(dept_expr.label("department")).filter(
                 dept_expr.is_not(None), dept_expr != ""
@@ -755,30 +802,40 @@ class RecordRepository:
         page: int,
         page_size: int,
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> WorkspaceListResult:
+        effective_include_test = bool(include_test_records or self._include_test_records)
         if self._frontpage_display:
             return self._list_frontpage_records(scope=scope, department=department, doctor=doctor,
                 date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
-                page=page, page_size=page_size, institute_id=institute_id)
+                page=page, page_size=page_size, institute_id=institute_id,
+                include_test_records=effective_include_test)
         records = self.collect_records(
             scope=scope, department=department, doctor=doctor, date_field=date_field,
             start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id,
-            _metadata_only=True,
+            include_test_records=effective_include_test, _metadata_only=True,
         )
         offset = max(page - 1, 0) * page_size
         selected = records[offset:offset + page_size]
         items = self.collect_records(scope=scope, department=department, doctor=doctor, date_field=date_field,
             start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id,
+            include_test_records=effective_include_test,
             record_refs=[CaseRef.from_mapping(item) for item in selected]) if selected else []
         return WorkspaceListResult(items=items, total=len(records), page=page, page_size=page_size)
 
     def get_record_filters(
         self, *, scope: str, department: Optional[str], institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> Dict[str, Any]:
+        effective_include_test = bool(include_test_records or self._include_test_records)
         if self._frontpage_display:
-            return self._get_frontpage_record_filters(scope=scope, department=department, institute_id=institute_id)
+            return self._get_frontpage_record_filters(
+                scope=scope, department=department, institute_id=institute_id,
+                include_test_records=effective_include_test,
+            )
         records = self.collect_records(scope=scope, department=None, doctor=None,
-            date_field="admission", start_date=None, end_date=None, keyword=None, institute_id=institute_id, _metadata_only=True)
+            date_field="admission", start_date=None, end_date=None, keyword=None, institute_id=institute_id,
+            include_test_records=effective_include_test, _metadata_only=True)
         def bounds(field: str) -> Dict[str, str]:
             values = [item[field] for item in records if item.get(field)]
             return {"min": min(values) if values else "", "max": max(values) if values else ""}
@@ -805,7 +862,9 @@ class RecordRepository:
         _metadata_only: bool = False,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> List[Dict[str, Any]]:
+        effective_include_test = bool(include_test_records or self._include_test_records)
         from ..validation_material_source import is_material_copy, material_source_schema
         if not self._material_schema and record_refs:
             refs = normalize_case_refs(record_refs)
@@ -819,11 +878,13 @@ class RecordRepository:
                 collected = []
                 for schema, group in groups.items():
                     repository = RecordRepository(session_factory=self._session_factory, _material_schema=schema,
-                                                  frontpage_display=self._frontpage_display)
+                                                  frontpage_display=self._frontpage_display,
+                                                  include_test_records=effective_include_test)
                     collected.extend(repository.collect_records(scope=scope, department=department, doctor=doctor,
                         date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
                         record_refs=group, sync_scope=sync_scope, _private_identity_collector=_private_identity_collector,
-                        institute_id=institute_id, _metadata_only=_metadata_only))
+                        institute_id=institute_id, include_test_records=effective_include_test,
+                        _metadata_only=_metadata_only))
                 return collected
         if record_ids and any(str(value).startswith("pdfv_") for value in record_ids):
             raise ValueError("material_copy_requires_complete_case_refs")
@@ -833,7 +894,7 @@ class RecordRepository:
                 rows = self._build_records_query(session, scope=scope, department=department, doctor=doctor,
                     date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
                     record_ids=record_ids, record_refs=record_refs, sync_scope=sync_scope,
-                    institute_id=institute_id).all()
+                    institute_id=institute_id, include_test_records=effective_include_test).all()
                 return [self._serialize_record_row(row) for row in rows]
             finally:
                 session.close()
@@ -846,11 +907,24 @@ class RecordRepository:
         session = self._open_session()
         try:
             refs = list(normalize_case_refs(record_refs)) if record_refs else self._raw_case_refs(
-                session, record_ids=record_ids, institute_id=institute_id, sync_scope=sync_scope)
+                session, record_ids=record_ids, institute_id=institute_id, sync_scope=sync_scope,
+                include_test_records=effective_include_test)
             if institute_id:
                 refs = [ref for ref in refs if ref.institute_id == _safe_text(institute_id)]
+            elif _should_exclude_customer_test(
+                institute_id=institute_id,
+                include_test_records=effective_include_test,
+                record_refs=record_refs,
+                record_ids=record_ids,
+            ):
+                refs = [ref for ref in refs if ref.institute_id != CUSTOMER_TEST_INSTITUTE_ID]
             if record_refs and _safe_text(sync_scope).lower() == "today_inpatient":
-                verified = set(self._raw_case_refs(session, institute_id=institute_id, sync_scope=sync_scope))
+                verified = set(self._raw_case_refs(
+                    session, institute_id=institute_id, sync_scope=sync_scope,
+                    include_test_records=effective_include_test or any(
+                        ref.institute_id == CUSTOMER_TEST_INSTITUTE_ID for ref in refs
+                    ),
+                ))
                 refs = [ref for ref in refs if ref in verified]
             records = []
             for offset in range(0, len(refs), 128):
@@ -877,37 +951,60 @@ class RecordRepository:
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
+        institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> int:
         return len(self.collect_records(
             scope=scope, department=department, doctor=doctor, date_field=date_field,
             start_date=start_date, end_date=end_date, keyword=keyword,
-            record_ids=record_ids, record_refs=record_refs, _metadata_only=True,
+            record_ids=record_ids, record_refs=record_refs, institute_id=institute_id,
+            include_test_records=include_test_records, _metadata_only=True,
         ))
 
     def hydrate_records_with_medical_text(
         self,
         records: Sequence[Dict[str, Any]],
+        *,
+        include_test_records: bool = False,
     ) -> List[Dict[str, Any]]:
+        effective_include_test = bool(include_test_records or self._include_test_records)
         filters = dict(scope="all", department=None, doctor=None, date_field="admission",
-                       start_date=None, end_date=None, keyword=None)
+                       start_date=None, end_date=None, keyword=None,
+                       include_test_records=effective_include_test)
         full_refs = [CaseRef.from_mapping(item) for item in records if all(CaseRef.from_mapping(item))]
         sources = self.collect_records(**filters, record_refs=full_refs) if full_refs else []
-        source_by_ref = {CaseRef.from_mapping(item): item for item in sources}
+        source_by_ref: Dict[CaseRef, Dict[str, Any]] = {
+            CaseRef.from_mapping(item): item for item in sources
+        }
         legacy_groups: Dict[str, set[str]] = {}
         for item in records:
             ref = CaseRef.from_mapping(item)
             if ref.visit_id and not all(ref):
                 legacy_groups.setdefault(ref.institute_id, set()).add(ref.visit_id)
-        legacy_sources = {}
+        legacy_sources_by_ref: Dict[CaseRef, Dict[str, Any]] = {}
         for institute, visit_ids in legacy_groups.items():
             for item in self.collect_records(**filters, record_ids=sorted(visit_ids), institute_id=institute or None):
-                legacy_sources[(institute, item["visit_id"])] = item
+                candidate_ref = CaseRef.from_mapping(item)
+                if all(candidate_ref):
+                    legacy_sources_by_ref[candidate_ref] = item
         hydrated: List[Dict[str, Any]] = []
         for item in records:
             ref = CaseRef.from_mapping(item)
             if not ref.visit_id:
                 continue
-            source = source_by_ref.get(ref) if all(ref) else legacy_sources.get((ref.institute_id, ref.visit_id))
+            if all(ref):
+                source = source_by_ref.get(ref)
+            else:
+                matches = [
+                    candidate
+                    for candidate_ref, candidate in legacy_sources_by_ref.items()
+                    if candidate_ref.visit_id == ref.visit_id
+                    and (not ref.institute_id or candidate_ref.institute_id == ref.institute_id)
+                    and (not ref.patient_id or candidate_ref.patient_id == ref.patient_id)
+                ]
+                if len(matches) > 1:
+                    raise ValueError("clinical_case_identity_ambiguous_or_missing")
+                source = matches[0] if len(matches) == 1 else None
             if source is not None and any(given and given != actual for given, actual in zip(ref, CaseRef.from_mapping(source))):
                 raise ValueError("clinical_case_identity_ambiguous_or_missing")
             hydrated_item = dict(item)

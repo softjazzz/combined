@@ -19,6 +19,7 @@ import psycopg2.extras
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy import MetaData, Table, and_, delete, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -67,6 +68,44 @@ CUSTOMER_TEST_POOL_ID = "customer-created-test-records-v1"
 CUSTOMER_TEST_POOL_NAME = "客户自建测试病历"
 CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
 CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
+VERIFIED_REAL_SOURCE_COPY_TYPE = "customer_source_editable_copy"
+AUTHORIZED_PDF_MATERIAL_COPY_TYPE = "authorized_pdf_material_copy"
+SYNTHETIC_DERIVED_COPY_TYPE = "synthetic_derived_copy"
+_REAL_SOURCE_CLAIM_TYPES = frozenset({
+    VERIFIED_REAL_SOURCE_COPY_TYPE,
+    AUTHORIZED_PDF_MATERIAL_COPY_TYPE,
+})
+_ID_CARD_NO_REGEX = re.compile(
+    r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)"
+)
+_MOBILE_PHONE_REGEX = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
+
+
+def _desensitize_derived_copy_text(
+    text: str,
+    *,
+    replacements: Sequence[tuple[str, str]],
+) -> str:
+    """对派生测试副本中的直接患者身份文本与常见证件/手机号强制脱敏。"""
+    result = _safe_text(text)
+    if not result:
+        return result
+    ordered = sorted(
+        [(raw, masked) for raw, masked in replacements if raw],
+        key=lambda pair: len(pair[0]),
+        reverse=True,
+    )
+    for raw_value, masked_value in ordered:
+        result = result.replace(raw_value, masked_value)
+    result = _ID_CARD_NO_REGEX.sub("[脱敏身份证]", result)
+    result = _MOBILE_PHONE_REGEX.sub("[脱敏电话]", result)
+    return result
+
+
+def _dialect_upsert(session: Session, table: Table):
+    bind = session.get_bind()
+    dialect_name = str(getattr(getattr(bind, "dialect", None), "name", ""))
+    return sqlite_insert(table) if dialect_name == "sqlite" else pg_insert(table)
 
 
 def _reject_customer_test_pool_source_write(pool_id: str) -> None:
@@ -4069,7 +4108,7 @@ class CustomQCSamplePoolService:
         insert_columns = sorted({key for row in cleaned_rows for key in row.keys()})
         normalized_rows = [{column: row.get(column) for column in insert_columns} for row in cleaned_rows]
         pk_columns = [column.name for column in table.primary_key.columns]
-        statement = pg_insert(table).values(normalized_rows)
+        statement = _dialect_upsert(session, table).values(normalized_rows)
         update_columns = [column for column in insert_columns if column not in pk_columns]
         if pk_columns and update_columns:
             statement = statement.on_conflict_do_update(
@@ -4080,6 +4119,54 @@ class CustomQCSamplePoolService:
             statement = statement.on_conflict_do_nothing(index_elements=pk_columns)
         session.execute(statement)
         return len(normalized_rows)
+
+    def _verify_real_source_sample(
+        self,
+        session: Session,
+        source_meta: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """服务端校验派生副本声明的真实源样本是否真实存在且非 CUSTOMER_TEST 测试病历。"""
+        source_pool_id = _safe_text(source_meta.get("source_pool_id"))
+        if source_pool_id == CUSTOMER_TEST_POOL_ID:
+            return None
+        source_item_ids = list(
+            dict.fromkeys(
+                _safe_text(item_id)
+                for item_id in (source_meta.get("source_item_ids") or [])
+                if _safe_text(item_id)
+            )
+        )
+        source_visit_id = _safe_text(
+            source_meta.get("source_visit_id") or source_meta.get("source_record_id")
+        )
+        if not source_item_ids and not source_visit_id:
+            return None
+
+        clauses = [
+            self._item_table.c.pool_id != CUSTOMER_TEST_POOL_ID,
+            self._item_table.c.match_status == "matched",
+            self._item_table.c.matched_institute_id.is_not(None),
+            self._item_table.c.matched_institute_id != "",
+            self._item_table.c.matched_institute_id != CUSTOMER_TEST_INSTITUTE_ID,
+            self._item_table.c.matched_patient_id.is_not(None),
+            self._item_table.c.matched_patient_id != "",
+            self._item_table.c.matched_visit_id.is_not(None),
+            self._item_table.c.matched_visit_id != "",
+        ]
+        if source_pool_id:
+            clauses.append(self._item_table.c.pool_id == source_pool_id)
+        if source_item_ids:
+            clauses.append(self._item_table.c.id.in_(source_item_ids))
+            if source_visit_id:
+                clauses.append(self._item_table.c.matched_visit_id == source_visit_id)
+            rows = session.execute(select(self._item_table).where(and_(*clauses))).mappings().all()
+            if len(rows) != len(source_item_ids):
+                return None
+            return dict(rows[0])
+
+        clauses.append(self._item_table.c.matched_visit_id == source_visit_id)
+        row = session.execute(select(self._item_table).where(and_(*clauses)).limit(1)).mappings().first()
+        return dict(row) if row else None
 
     @staticmethod
     def _test_record_common_identity(
@@ -4163,7 +4250,17 @@ class CustomQCSamplePoolService:
             raise ValueError("至少需要填写一份病历文书")
 
         now_value = _now_utc()
-        patient_name = _safe_text(basic.get("patient_name"), "测试患者")
+        source_meta = payload.get("source") if isinstance(payload.get("source"), dict) else {}
+        is_derived_copy = bool(source_meta)
+
+        raw_patient_name = _safe_text(basic.get("patient_name"))
+        raw_source_patient_name = _safe_text(source_meta.get("source_patient_name"))
+        raw_mr_no = _safe_text(basic.get("mr_no"))
+        raw_source_mr_no = _safe_text(source_meta.get("source_mr_no"))
+        raw_id_card_no = _safe_text(basic.get("id_card_no"))
+        raw_contact_number = _safe_text(basic.get("contact_number") or basic.get("phone"))
+        raw_address = _safe_text(basic.get("address") or basic.get("currentaddress"))
+
         sex = _safe_text(basic.get("sex"), "男")
         try:
             age = int(basic.get("age") or 45)
@@ -4181,12 +4278,38 @@ class CustomQCSamplePoolService:
         )
         if evaluation_as_of_date < admission_time.date():
             raise ValueError("评价时间点不能早于入院日期")
-        case_title =_safe_text(payload.get("case_title"), f"{patient_name}测试病历")
         sequence = now_value.strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:6].upper()
         visit_id = f"{CUSTOMER_TEST_VISIT_PREFIX}{sequence}"
         patient_id = f"CUSTOMER_PATIENT_{sequence}"
-        mr_no = _safe_text(basic.get("mr_no")) or visit_id
         birth_year = max(admission_time.year - age, 1900)
+
+        pii_replacements: List[tuple[str, str]] = []
+        if is_derived_copy:
+            # 派生测试副本强制脱敏所有直接患者身份字段（姓名、住院号、身份证、电话、住址）
+            patient_name = f"脱敏患者_{sequence[-4:]}"
+            mr_no = visit_id
+            id_card_no = "******************"
+            contact_number = "***********"
+            address = "[脱敏住址]"
+            pii_replacements = [
+                (raw_patient_name, patient_name),
+                (raw_source_patient_name, patient_name),
+                (raw_mr_no, mr_no),
+                (raw_source_mr_no, mr_no),
+                (raw_id_card_no, "[脱敏身份证]"),
+                (raw_contact_number, "[脱敏电话]"),
+                (raw_address, "[脱敏住址]"),
+            ]
+            raw_case_title = _safe_text(payload.get("case_title"), f"{patient_name}测试病历")
+            case_title = _desensitize_derived_copy_text(raw_case_title, replacements=pii_replacements)
+        else:
+            patient_name = raw_patient_name or "测试患者"
+            mr_no = raw_mr_no or visit_id
+            id_card_no = f"510521{birth_year}0101{sequence[-4:]}"
+            contact_number = raw_contact_number or "13900000000"
+            address = raw_address or "四川省泸州市泸县客户测试地址"
+            case_title = _safe_text(payload.get("case_title"), f"{patient_name}测试病历")
+
         common = self._test_record_common_identity(
             visit_id=visit_id,
             patient_id=patient_id,
@@ -4222,15 +4345,15 @@ class CustomQCSamplePoolService:
                     "sex": sex,
                     "birthday": date(birth_year, 1, 1),
                     "id_card_type": "居民身份证",
-                    "id_card_no": f"510521{birth_year}0101{sequence[-4:]}",
+                    "id_card_no": id_card_no,
                     "ethnicity": "汉族",
                     "nationality": "中国",
                     "marital_status": "已婚",
-                    "contact_number": _safe_text(basic.get("contact_number"), "13900000000"),
-                    "currentaddress": _safe_text(basic.get("address"), "四川省泸州市泸县客户测试地址"),
+                    "contact_number": contact_number,
+                    "currentaddress": address,
                     "contact_name": f"{patient_name}家属",
                     "contact_relationship": "家属",
-                    "contact_telephone": _safe_text(basic.get("contact_number"), "13900000000"),
+                    "contact_telephone": contact_number,
                     "record_content": base_record_content,
                     "update_time": now_value,
                 }
@@ -4255,16 +4378,16 @@ class CustomQCSamplePoolService:
                     "institute_county_desc": clinical_defaults.hospital_name,
                     "visit_cnt": "1",
                     "id_card_type": "居民身份证",
-                    "id_card_no": f"510521{birth_year}0101{sequence[-4:]}",
+                    "id_card_no": id_card_no,
                     "birthday": date(birth_year, 1, 1),
                     "nationality": "中国",
                     "ethnicity": "汉族",
                     "marital_status": "已婚",
-                    "currentaddress": _safe_text(basic.get("address"), "四川省泸州市泸县客户测试地址"),
-                    "contact_number": _safe_text(basic.get("contact_number"), "13900000000"),
+                    "currentaddress": address,
+                    "contact_number": contact_number,
                     "contact_name": f"{patient_name}家属",
                     "contact_relationship": "家属",
-                    "contact_telephone": _safe_text(basic.get("contact_number"), "13900000000"),
+                    "contact_telephone": contact_number,
                     "admission_route": "急诊",
                     "admission_datetime": admission_time,
                     "admission_condition": "一般",
@@ -4308,6 +4431,9 @@ class CustomQCSamplePoolService:
             submit_time = self._parse_test_record_datetime(document.get("submit_time")) or record_time or admission_time
             title = _safe_text(document.get("title"), "病历文书")
             content = _safe_text(document.get("content"))
+            if is_derived_copy:
+                title = _desensitize_derived_copy_text(title, replacements=pii_replacements)
+                content = _desensitize_derived_copy_text(content, replacements=pii_replacements)
             row = {
                 **common,
                 **self._test_record_table_specific_ids(
@@ -4334,6 +4460,27 @@ class CustomQCSamplePoolService:
         inserted_summary: Dict[str, int] = {}
         session = _session()
         try:
+            verified_source: Optional[Dict[str, Any]] = None
+            if is_derived_copy:
+                verified_source = self._verify_real_source_sample(session, source_meta)
+                if verified_source is not None:
+                    extra_replacements = [
+                        (_safe_text(verified_source.get("patient_name")), patient_name),
+                        (_safe_text(verified_source.get("mr_no")), mr_no),
+                    ]
+                    if any(raw for raw, _masked in extra_replacements):
+                        case_title = _desensitize_derived_copy_text(case_title, replacements=extra_replacements)
+                        for table_rows in rows_by_table.values():
+                            for table_row in table_rows:
+                                if isinstance(table_row.get("record_content"), str):
+                                    table_row["record_content"] = _desensitize_derived_copy_text(
+                                        table_row["record_content"], replacements=extra_replacements
+                                    )
+                                if isinstance(table_row.get("document_title"), str):
+                                    table_row["document_title"] = _desensitize_derived_copy_text(
+                                        table_row["document_title"], replacements=extra_replacements
+                                    )
+
             reflected = reflect_materials(session, rows_by_table)
             existing_pool = session.execute(
                 select(self._pool_table.c.id).where(self._pool_table.c.id == CUSTOMER_TEST_POOL_ID)
@@ -4379,10 +4526,10 @@ class CustomQCSamplePoolService:
                 for item in (payload.get("golden_answers") or [])
                 if isinstance(item, dict) and _safe_text(item.get("qc_point_id"))
             ]
-            source_meta = payload.get("source") if isinstance(payload.get("source"), dict) else {}
-            item_payload = {
+            item_payload: Dict[str, Any] = {
                 "builder_version": "v1",
                 "source": "customer_synthetic_case_builder",
+                "source_kind": "synthetic",
                 "template_key": _safe_text(payload.get("template_key")),
                 "case_title": case_title,
                 "visit_id": visit_id,
@@ -4394,21 +4541,54 @@ class CustomQCSamplePoolService:
                 "golden_answers": golden_answers,
                 "evaluation_as_of_date": evaluation_as_of_date.isoformat(),
             }
-            if source_meta:
+            if is_derived_copy:
+                requested_type = _safe_text(source_meta.get("type"))
+                server_verified = (
+                    verified_source is not None
+                    and (not requested_type or requested_type in _REAL_SOURCE_CLAIM_TYPES)
+                )
+                if server_verified:
+                    verified_pool_id = _safe_text((verified_source or {}).get("pool_id"))
+                    resolved_type = (
+                        AUTHORIZED_PDF_MATERIAL_COPY_TYPE
+                        if requested_type == AUTHORIZED_PDF_MATERIAL_COPY_TYPE and verified_pool_id.startswith("pdfset-")
+                        else VERIFIED_REAL_SOURCE_COPY_TYPE
+                    )
+                    resolved_source_kind = "real_copy"
+                else:
+                    # 禁止客户端伪造 customer_source_editable_copy / authorized_pdf_material_copy
+                    resolved_type = (
+                        SYNTHETIC_DERIVED_COPY_TYPE
+                        if not requested_type or requested_type in _REAL_SOURCE_CLAIM_TYPES
+                        else requested_type
+                    )
+                    resolved_source_kind = "synthetic"
                 item_payload["builder_version"] = "v2-derived"
+                item_payload["source_kind"] = resolved_source_kind
+                item_payload["desensitized"] = True
                 item_payload["source_record"] = {
-                    "type": _safe_text(source_meta.get("type"), "customer_source_editable_copy"),
-                    "source_pool_id": _safe_text(source_meta.get("source_pool_id")),
+                    "type": resolved_type,
+                    "source_kind": resolved_source_kind,
+                    "server_verified": server_verified,
+                    "source_pool_id": (
+                        _safe_text((verified_source or {}).get("pool_id"))
+                        if server_verified
+                        else _safe_text(source_meta.get("source_pool_id"))
+                    ),
                     "source_pool_name": _safe_text(source_meta.get("source_pool_name")),
                     "source_record_id": _safe_text(source_meta.get("source_record_id")),
                     "source_item_ids": [
-                        _safe_text(item_id)
-                        for item_id in (source_meta.get("source_item_ids") or [])
-                        if _safe_text(item_id)
+                        _safe_text(src_id)
+                        for src_id in (source_meta.get("source_item_ids") or [])
+                        if _safe_text(src_id)
                     ],
-                    "source_visit_id": _safe_text(source_meta.get("source_visit_id")),
-                    "source_mr_no": _safe_text(source_meta.get("source_mr_no")),
-                    "source_patient_name": _safe_text(source_meta.get("source_patient_name")),
+                    "source_visit_id": (
+                        _safe_text((verified_source or {}).get("matched_visit_id"))
+                        if server_verified
+                        else _safe_text(source_meta.get("source_visit_id"))
+                    ),
+                    "source_mr_no": "[已脱敏]" if raw_source_mr_no else "",
+                    "source_patient_name": "[已脱敏]" if raw_source_patient_name else "",
                     "source_department": _safe_text(source_meta.get("source_department")),
                     "created_from": _safe_text(source_meta.get("created_from"), "customer_sample_validation"),
                 }
@@ -4421,6 +4601,19 @@ class CustomQCSamplePoolService:
                 payload.get("manual_issue_text"),
                 f"客户自建测试病历：{case_title}；共 {len(enabled_documents)} 份文书，可用于验证质控规则。",
             )
+            if is_derived_copy:
+                manual_issue_text = _desensitize_derived_copy_text(
+                    manual_issue_text,
+                    replacements=pii_replacements
+                    + (
+                        [
+                            (_safe_text(verified_source.get("patient_name")), patient_name),
+                            (_safe_text(verified_source.get("mr_no")), mr_no),
+                        ]
+                        if verified_source is not None
+                        else []
+                    ),
+                )
             item_values = {
                 "id": item_id,
                 "pool_id": CUSTOMER_TEST_POOL_ID,
@@ -4451,7 +4644,7 @@ class CustomQCSamplePoolService:
                 "created_at": now_value,
                 "updated_at": now_value,
             }
-            statement = pg_insert(self._item_table).values(item_values)
+            statement = _dialect_upsert(session, self._item_table).values(item_values)
             update_columns = [key for key in item_values if key != "id"]
             statement = statement.on_conflict_do_update(
                 index_elements=["id"],
