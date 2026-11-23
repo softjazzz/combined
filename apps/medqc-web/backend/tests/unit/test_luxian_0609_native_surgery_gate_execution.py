@@ -2960,6 +2960,38 @@ def test_003_missing_record_requires_complete_sources_and_confirmed_original_tim
     assert decision.positive_document_refs == ()
 
 
+@pytest.mark.parametrize("mode, state", [
+    ("available", "compliant"),
+    ("error", "technical_error"),
+    ("truncated", "data_gap"),
+])
+def test_003_timely_record_with_empty_automatic_support(mode, state):
+    from app.services import case_material_snapshot as automatic_material
+    from app.services.automatic_material_scope import describe_source
+
+    session = _typed_003_session(
+        surgery_document_id="TIMELY",
+        surgery_time="2026-01-01 08:00:00+08:00",
+        record_time="2026-01-01 12:00:00+08:00",
+        source_mode=mode,
+        evaluation_as_of_date="2026-01-03",
+    )
+    sources = {key: describe_source((), ()) for key in (
+        "anesthesia_record", "surgery_application", "inpat_nondrug_order",
+    )}
+    sources["surgery_record"] = describe_source((), ({"document_id": "TIMELY"},))
+    with automatic_material.activate({"automatic_material": {"protocol": "cdm-auto-v1", "sources": sources}}):
+        decision = surgery._typed_003_decision(snapshot=session.snapshot, materials=session.materials)
+        reduced = bind_and_reduce_luxian_0609_rule_decisions(
+            decisions=(decision,), expected_rule_ids=(decision.rule_id,),
+            snapshot=session.snapshot, evidence_materials=session.materials,
+        )[0]
+    assert reduced.final_state.value == state
+    if state == "compliant":
+        assert reduced.reason_code == "requirement_within_threshold"
+        assert set(decision.fact_refs) & set(session.snapshot.document_refs)
+
+
 @pytest.mark.parametrize("mode", ["empty_unconfirmed", "not_captured"])
 def test_003_mature_missing_record_keeps_automatic_coverage_guard(mode):
     from app.services import case_material_snapshot as automatic_material

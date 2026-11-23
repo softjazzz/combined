@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from ..automatic_material_scope import source_scope
 from ..llm_token_budget import budget_guarded_executor
 
 import asyncio
@@ -40,7 +41,7 @@ from .evidence_material import (
     EvidenceMaterialUnavailable,
     Luxian0609EvidenceMaterialStore,
 )
-from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .extended_document.diagnosis_scope_extraction import extract_diagnosis_scope
 from .extended_document.discharge_diagnosis_equivalence import (
     extract_discharge_diagnosis_equivalence,
@@ -4242,6 +4243,25 @@ async def _execute_extended_document_group(
                     )
                 except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
                     discharge_document_refs = ()
+            if (
+                outcome.final_state == "compliant"
+                and discharge_document_refs
+                and discharge_time_source in {
+                    "evaluation_context.horizon", "discharge_record.discharge_datetime",
+                    "discharge_record.discharge_time",
+                }
+                and (source_scope("inpat_registration") or {}).get("status") == "empty_unconfirmed"
+                and any(
+                    item.source_key == "inpat_registration"
+                    and item.query_state.value == "empty"
+                    and item.completeness is SourceCompleteness.COMPLETE
+                    for item in evidence_snapshot.observations
+                )
+            ):
+                # 备用登记正常零行时，达标绑定实际锚点和全部出院记录版本。
+                source_keys = ("discharge_record", "evaluation_context.horizon") if (
+                    discharge_time_source == "evaluation_context.horizon"
+                ) else ("discharge_record",)
             decisions.append(
                 _decision(
                     rule_id=rule_id,

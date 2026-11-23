@@ -14,7 +14,7 @@ import unicodedata
 from typing import Any, Mapping
 
 from .evidence_material import Luxian0609EvidenceMaterialStore
-from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .decision_model import _MAX_FACT_REFS
 from .source_evidence_reader import authoritative_document_time_value
 from .handbook_exam_lab import (
@@ -22,6 +22,7 @@ from .handbook_exam_lab import (
     HandbookEvent,
     HandbookFinding,
     HandbookLedger,
+    RULE_SOURCES,
     _read_source,
     _COURSE_FIELDS,
     clean,
@@ -58,6 +59,15 @@ _ISSUE_STATES = {
     "semantic_fact_unknown": "data_gap",
     "no_performed_event": "not_applicable",
 }
+_GAP_REASONS = {
+    "association_unresolved": "association_failed",
+    "execution_unconfirmed": "linkage_unresolved",
+    "executed_order_without_course": "authoritative_time_missing",
+    "course_without_order": "association_failed",
+    "course_content_unavailable": "required_field_missing",
+    "semantic_fact_unknown": "semantic_extraction_unresolved",
+    "source_scope_incomplete": "source_readiness_unproven",
+}
 
 
 @dataclass(frozen=True, repr=False)
@@ -86,6 +96,8 @@ class CtReviewInput:
     complete: bool
     horizon_basis: str = ""
     horizon: datetime | None = None
+    truncated_source_refs: tuple[str, ...] = ()
+    missing_content_source_refs: tuple[str, ...] = ()
 
     @property
     def reference_budget_exceeded(self) -> bool:
@@ -142,7 +154,15 @@ def build_ct_review_input(
     horizon_basis: str = "", horizon: datetime | None = None,
 ) -> CtReviewInput:
     """未裁剪的病程范围独立于旧010/011的时间窗口。"""
-    complete = ledger.complete(REPORT_RULE_ID)
+    required_sources = {*RULE_SOURCES[REPORT_RULE_ID], *COURSE_SOURCES}
+    truncated_sources = {
+        item.source_key for item in snapshot.observations
+        if item.source_key in required_sources and item.completeness is SourceCompleteness.TRUNCATED
+    }
+    if "exam" in ledger.overflow:
+        truncated_sources.update(key for key in RULE_SOURCES[REPORT_RULE_ID] if ledger.sources[key].rows)
+    complete = ledger.complete(REPORT_RULE_ID) and not truncated_sources
+    missing_content_sources: set[str] = set()
     clauses: list[CourseClause] = []
     total_chars = 0
     document_position = 0
@@ -161,6 +181,7 @@ def build_ct_review_input(
                     seen_bodies.add(normalized)
             if not fields:
                 complete = False
+                missing_content_sources.add(source)
             for field, body in fields:
                 for match in _SPLIT.finditer(body):
                     text = match.group().strip()
@@ -170,6 +191,7 @@ def build_ct_review_input(
                     if (len(clauses) >= MAX_CLAUSES or total_chars > MAX_CONTEXT_CHARS
                             or len(text) > MAX_CLAUSE_CHARS):
                         complete = False
+                        truncated_sources.add(source)
                         continue
                     start = match.start() + len(match.group()) - len(match.group().lstrip())
                     clauses.append(CourseClause(
@@ -200,7 +222,15 @@ def build_ct_review_input(
                     horizon_basis=horizon_basis, horizon=horizon,
                 )
                 findings[position] = HandbookFinding(_ISSUE_STATES[issue], issue, finding.refs, finding.name)
-    return CtReviewInput(events, tuple(eligible), tuple(clauses), findings, complete, horizon_basis, horizon)
+    def source_refs(keys: set[str]) -> tuple[str, ...]:
+        return tuple(item.snapshot_ref.removeprefix("sha256:")
+                     for item in snapshot.observations if item.source_key in keys)
+
+    return CtReviewInput(
+        events, tuple(eligible), tuple(clauses), findings, complete, horizon_basis, horizon,
+        truncated_source_refs=source_refs(truncated_sources),
+        missing_content_source_refs=source_refs(missing_content_sources),
+    )
 
 
 def _event_orders(event: HandbookEvent) -> tuple[Mapping[str, Any], ...]:
@@ -611,17 +641,37 @@ def evaluate_ct_review(review: CtReviewInput, payload: Mapping[str, Any] | None 
         extras.append(HandbookFinding("data_gap", "source_scope_incomplete"))
     all_findings = tuple(findings[key] for key in sorted(findings)) + tuple(extras)
     status = _aggregate_status(all_findings, review.complete)
-    reason = {"compliant": "requirement_satisfied", "non_compliant": "requirement_violated", "data_gap": "required_field_missing", "not_applicable": (
-        "evaluation_window_not_mature" if any(item.issue == "course_not_yet_due" for item in all_findings)
-        else "performed_event_absent"
-    )}[status]
+    gap_source_refs: tuple[str, ...] = ()
+    if status == "data_gap":
+        if review.truncated_source_refs:
+            reason = "source_truncated"
+            gap_source_refs = review.truncated_source_refs
+        elif review.missing_content_source_refs:
+            reason = "required_field_missing"
+            gap_source_refs = review.missing_content_source_refs
+        elif not review.complete:
+            reason = "source_readiness_unproven"
+        else:
+            first_gap = next(item for item in all_findings if item.status == "data_gap")
+            reason = _GAP_REASONS[first_gap.issue]
+    else:
+        reason = {
+            "compliant": "requirement_satisfied",
+            "non_compliant": "requirement_violated",
+            "not_applicable": (
+                "evaluation_window_not_mature"
+                if any(item.issue == "course_not_yet_due" for item in all_findings)
+                else "performed_event_absent"
+            ),
+        }[status]
     display = {
         "verification_kind": "ct_order_course_review", "subject": "ct_mri",
         "requirement": "order_course_consistency", "review_scope_complete": review.complete,
         "event_count": len(review.events),
         "event_results": [{"event_position": index, "event_status": item.status, "issue_kind": item.issue} for index, item in enumerate(all_findings, 1)],
     }
-    refs = tuple(dict.fromkeys(ref for item in all_findings for ref in item.refs))
+    # 已确认的读取缺口仍绑定实际来源，避免无事件时回退到规则的所有备选来源。
+    refs = tuple(dict.fromkeys(ref for item in all_findings for ref in item.refs)) or gap_source_refs
     if len(refs) > _MAX_FACT_REFS:
         raise CtEvidenceBudgetExceeded("CT output exceeds RuleDecision reference budget")
     # RuleDecision 的权威引用顺序为字典序，公开位置必须与其一致。

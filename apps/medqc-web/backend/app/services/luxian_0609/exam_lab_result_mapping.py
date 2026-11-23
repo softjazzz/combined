@@ -743,6 +743,8 @@ def build_exam_lab_rule_decision(
             "course_record_time_unproven": "document_completion_time_missing",
         }
         preserved_gap_reasons = {
+            "source_readiness_unproven",
+            "source_truncated",
             "semantic_extraction_unresolved",
             "target_report_missing",
             "authoritative_time_missing",
@@ -753,6 +755,7 @@ def build_exam_lab_rule_decision(
             # 010 已明确要求以业务键唯一关联医嘱、检查和报告。关联不唯一时
             # 必须将真实原因原样交付，不能压缩成笼统字段缺失。
             "association_failed",
+            "linkage_unresolved",
             "document_completion_time_missing",
         }
         dimensions = (

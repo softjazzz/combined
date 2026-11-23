@@ -619,6 +619,8 @@ def _typed_trigger_state(
         return "present", loaded
     if row_trigger:
         return "present", loaded
+    if any(source.state == "truncated" for source in required_sources):
+        return "truncated", loaded
     if source_gap:
         return "unavailable", loaded
     # 否定事实只有在本次规则所需来源均完整时才可证明“不适用”。来源缺失、
@@ -1439,6 +1441,14 @@ def _uncited_verbatim_in_window_ref(
     return None
 
 
+def _incomplete_course_reason(rule_id: str, projection: ExamLabTextProjection) -> str:
+    if rule_id != "LX0609-06-01-05" or projection.course_projection_truncated:
+        return "course_projection_incomplete"
+    if projection.course_time_incomplete:
+        return "document_completion_time_missing"
+    return "source_readiness_unproven"
+
+
 def _post_report_response_outcome(
     *,
     rule_id: str,
@@ -1477,7 +1487,7 @@ def _post_report_response_outcome(
         # 与“未见分析”同口径：病程时间不完整时，可能有未进入窗口的病程在 24 小时内，
         # 只见超时分析也不能认定超时（C02）。
         return _ExamLabOutcome(
-            rule_id, "data_gap", "course_projection_incomplete", refs
+            rule_id, "data_gap", _incomplete_course_reason(rule_id, projection), refs
         )
     if any(item.kind in {"conflict", "unreconciled"} for item in responses):
         # 记录时间早于报告、提交时间不早于报告：时间无法对账。逐字确认正文含结果的是
@@ -1640,7 +1650,7 @@ def _single_text_fact_outcome(
             return _ExamLabOutcome(
                 rule_id,
                 "data_gap",
-                "course_projection_incomplete",
+                _incomplete_course_reason(rule_id, projection),
                 refs,
             )
         if rule_id == "LX0609-06-01-02":
@@ -1667,6 +1677,14 @@ def _single_text_fact_outcome(
             refs,
         )
     if fact.semantic_state != "present":
+        if rule_id == "LX0609-06-01-05" and (
+            projection.course_projection_truncated
+            or not projection.course_scope_complete
+            or projection.course_time_incomplete
+        ):
+            return _ExamLabOutcome(
+                rule_id, "data_gap", _incomplete_course_reason(rule_id, projection), refs
+            )
         return _ExamLabOutcome(
             rule_id,
             _contract_allowed_status(
@@ -1686,7 +1704,8 @@ def _single_text_fact_outcome(
         projection.course_times.get(doc_ref) for doc_ref in fact.course_doc_refs
     )
     if not course_times or any(item is None for item in course_times):
-        return _ExamLabOutcome(rule_id, "data_gap", "course_record_time_missing", refs)
+        reason = "document_completion_time_missing" if rule_id == "LX0609-06-01-05" else "course_record_time_missing"
+        return _ExamLabOutcome(rule_id, "data_gap", reason, refs)
     if rule_id != "LX0609-06-01-02" and has_time_sources(projection):
         return _post_report_response_outcome(
             rule_id=rule_id,
@@ -1720,7 +1739,7 @@ def _single_text_fact_outcome(
         return _ExamLabOutcome(rule_id, "compliant", "exam_lab_text_fact", refs)
     if (projection.course_projection_truncated or not projection.course_scope_complete):
         return _ExamLabOutcome(
-            rule_id, "data_gap", "course_projection_incomplete", refs
+            rule_id, "data_gap", _incomplete_course_reason(rule_id, projection), refs
         )
     if any(interval > timedelta(hours=24) for interval in post_event_intervals):
         return _ExamLabOutcome(rule_id, "non_compliant", "exam_lab_text_fact", refs)
@@ -2805,6 +2824,13 @@ async def execute_luxian_0609_native_exam_lab_rules(
     # 仅在当前一次 Evidence Session 已读取的行内查找显式 document_id；不回读 DB。
     display_rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]] = {}
 
+    def observation_refs(sources: set[str]) -> tuple[str, ...]:
+        assert evidence_snapshot is not None
+        return tuple(
+            item.snapshot_ref.removeprefix("sha256:")
+            for item in evidence_snapshot.observations if item.source_key in sources
+        )
+
     def emit_typed(
         rule_id: str,
         status: str,
@@ -2815,6 +2841,11 @@ async def execute_luxian_0609_native_exam_lab_rules(
         positive_document_refs: tuple[str, ...] = (),
     ) -> None:
         assert evidence_snapshot is not None
+        if rule_id == "LX0609-06-01-05" and reason_code == "course_projection_incomplete" and not fact_refs:
+            fact_refs = observation_refs({
+                key for key in (*_EXAM_SOURCE_KEYS, _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS)
+                if display_rows_by_source.get(key)
+            })
         if status == "technical_error":
             # 诊断日志：只记规则、原因码与出错代码行，不含病历或模型内容。
             logger.warning(
@@ -2958,7 +2989,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
             if rule_id not in typed_requested or rule_id in typed_processed:
                 continue
             fact_kind = "exam" if rule_id in _EXECUTABLE_EXAM_RULE_IDS else "culture"
-            typed_state, _ = _typed_trigger_state(
+            typed_state, trigger_sources = _typed_trigger_state(
                 fact_kind=fact_kind,
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
@@ -2967,7 +2998,12 @@ async def execute_luxian_0609_native_exam_lab_rules(
             if typed_state == "error":
                 emit_typed(rule_id, "technical_error", "source_query_error")
                 typed_processed.add(rule_id)
-            elif typed_state == "unavailable":
+            elif typed_state == "truncated" and rule_id == "LX0609-06-01-05":
+                emit_typed(rule_id, "data_gap", "source_truncated", observation_refs({
+                    key for key, source in trigger_sources.items() if source.state == "truncated"
+                }))
+                typed_processed.add(rule_id)
+            elif typed_state in {"unavailable", "truncated"}:
                 emit_typed(rule_id, "data_gap", f"{fact_kind}_source_unavailable")
                 typed_processed.add(rule_id)
             elif typed_state == "absent":
@@ -3020,6 +3056,11 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 required = tuple(key for key in required if key != "exam_master")
             if any(loaded_sources[key].state == "error" for key in required):
                 emit_typed(rule_id, "technical_error", "source_query_error")
+                typed_processed.add(rule_id)
+            elif rule_id == "LX0609-06-01-05" and (
+                truncated_keys := {key for key in required if loaded_sources[key].state == "truncated"}
+            ):
+                emit_typed(rule_id, "data_gap", "source_truncated", observation_refs(truncated_keys))
                 typed_processed.add(rule_id)
             elif any(
                 loaded_sources[key].state in {"unavailable", "truncated", "missing"}

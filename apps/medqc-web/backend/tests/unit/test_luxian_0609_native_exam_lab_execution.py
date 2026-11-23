@@ -111,6 +111,7 @@ def _typed_session(
     evaluation_horizon_rows: tuple[dict, ...] = (),
     admission_rows: tuple[dict, ...] = (),
     source_states: dict[str, str] | None = None,
+    source_scopes: dict[str, dict] | None = None,
 ):
     source_states = dict(source_states or {})
     original_registered = source_registry.is_registered_luxian_0609_source_key
@@ -174,6 +175,7 @@ def _typed_session(
                 rows=tuple(dict(row) for row in rows),
                 truncated=state == "truncated",
                 limit_rows=50,
+                material_scope=(source_scopes or {}).get(source_key),
             )
             refs = build_material_document_refs(source_key, material.rows)
             query_state = QueryStatus.AVAILABLE if rows else QueryStatus.EMPTY
@@ -191,6 +193,7 @@ def _typed_session(
             query_state=query_state,
             completeness=completeness,
             document_refs=refs,
+            material_scope=(source_scopes or {}).get(source_key),
         )
         observations.append(
             SourceObservation.create(
@@ -3227,6 +3230,74 @@ async def test_complete_empty_course_only_uses_one_model_call_for_imaging_state(
     assert facts["LX0609-06-01-05"]["requirement"] == "positive_result_analysis_within_24h"
     assert facts["LX0609-06-03-03"]["subject"] == "culture_susceptibility"
     assert facts["LX0609-06-03-04"]["requirement"] == "positive_result_analysis_within_24h"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case, expected_reason", [
+    ("coverage_unknown", "source_readiness_unproven"),
+    ("semantic_unknown_with_incomplete_coverage", "source_readiness_unproven"),
+    ("time_missing", "document_completion_time_missing"),
+    ("read_truncated", "source_truncated"),
+    ("report_truncated", "source_truncated"),
+    ("projection_truncated", "source_truncated"),
+])
+async def test_012_distinguishes_coverage_missing_time_and_truncated_read(monkeypatch, case, expected_reason):
+    from contextlib import nullcontext
+    from app.services import case_material_snapshot as automatic_material
+    from app.services.automatic_material_scope import describe_source
+
+    rule_id = "LX0609-06-01-05"
+    course_rows = () if case == "projection_truncated" else ({
+        "document_id": "COURSE",
+        "record_time": None if case == "time_missing" else "2026-04-26 13:00:00",
+        "record_content": "胸部CT报告提示右肺占位。",
+    },)
+    course_scope = describe_source(("record_content",), course_rows)
+    coverage_unknown = case in {"coverage_unknown", "semantic_unknown_with_incomplete_coverage"}
+    truncated = case in {"read_truncated", "report_truncated", "projection_truncated"}
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({
+            "document_id": "CT-REPORT",
+            "exam_name": "胸部CT",
+            "report_time": "2026-04-26 12:00:00",
+            "exam_conclusion": "positive: lesion" * 50000 if case == "projection_truncated" else "阳性：右肺占位。",
+        },),
+        course_rows=course_rows,
+        evaluation_horizon_rows=({
+            "horizon_date": "2026-04-28",
+            "horizon_datetime": "2026-04-28 12:00:00",
+        },),
+        source_states={
+            "read_truncated": {"daily_course_record": "truncated"},
+            "report_truncated": {"exam_master": "truncated"},
+        }.get(case, {}),
+        source_scopes={"daily_course_record": course_scope} if coverage_unknown else {},
+    )
+    scoped_sources = {"senior_course_record": describe_source((), ())}
+    if coverage_unknown:
+        scoped_sources["daily_course_record"] = course_scope
+    scope = automatic_material.activate({"automatic_material": {
+        "protocol": "cdm-auto-v1",
+        "sources": scoped_sources,
+    }}) if coverage_unknown or truncated else nullcontext()
+    client = _Client([] if truncated else [
+        _fact_response((rule_id,), semantic_state=(
+            "unknown" if case == "semantic_unknown_with_incomplete_coverage" else "absent"
+        ), positive_state="positive"),
+    ])
+    with scope:
+        result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+            rule_ids=(rule_id,), wrapper_rules=[_wrapper(rule_id)], evidence_payload=None,
+            llm_client=client, evidence_snapshot=snapshot, evidence_materials=materials,
+            decision_rule_ids=(rule_id,),
+        )
+        reduced = bind_and_reduce_luxian_0609_rule_decisions(
+            decisions=result.decisions, expected_rule_ids=(rule_id,),
+            snapshot=snapshot, evidence_materials=materials,
+        )[0]
+    assert reduced.final_state.value == "data_gap"
+    assert reduced.reason_code == expected_reason
 
 
 @pytest.mark.asyncio

@@ -1606,6 +1606,42 @@ async def test_061_fails_closed_when_registration_discharge_times_conflict() -> 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("registration_status, document_present, expected", [
+    ("structure_ready", True, "compliant"),
+    ("table_missing", True, "data_gap"),
+    ("structure_ready", False, "data_gap"),
+])
+async def test_061_timely_record_with_empty_automatic_registration(registration_status, document_present, expected):
+    from app.services import case_material_snapshot as automatic_material
+    from app.services.automatic_material_scope import describe_source
+
+    rows = ({
+        "document_id": "TIMELY-DISCHARGE",
+        "discharge_date": "2026-07-03",
+        "discharge_time": "2026-07-03 08:00:00",
+        "record_time": "2026-07-03 12:00:00",
+    },) if document_present else ()
+    sources = {
+        "inpat_registration": describe_source((), (), status=registration_status),
+        "discharge_record": describe_source((), rows),
+    }
+    with automatic_material.activate({"automatic_material": {"protocol": "cdm-auto-v1", "sources": sources}}):
+        result, reduced = await _evaluate("LX0609-08-01-01", {
+            "discharge_record": rows,
+            "evaluation_context.horizon": ({
+                "horizon_date": "2026-07-03",
+                "horizon_datetime": "2026-07-03 08:00:00",
+                "basis": "discharge_date",
+            },),
+        })
+    assert reduced.final_state.value == expected
+    if expected == "compliant":
+        assert reduced.reason_code == "requirement_within_threshold"
+        assert result.llm_call_count == 0
+        assert set(build_material_document_refs("discharge_record", rows)) <= set(result.decisions[0].fact_refs)
+
+
+@pytest.mark.asyncio
 async def test_discharge_family_uses_frozen_bundle_horizon() -> None:
     """061/067/068 必须共用 Bundle 已冻结的权威出院终点。"""
 

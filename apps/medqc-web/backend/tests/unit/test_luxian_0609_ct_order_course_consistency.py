@@ -73,7 +73,7 @@ def test_executed_exam_absent_from_complete_course_scope_is_non_compliant():
 
 def test_absent_exam_with_incomplete_course_scope_stays_data_gap():
     result = evaluate_ct_review(_review(complete=False), _payload("absent", clauses=[]))
-    assert result.status == "data_gap"
+    assert (result.status, result.reason_code) == ("data_gap", "source_readiness_unproven")
 
 
 @pytest.mark.parametrize("horizon,expected", [
@@ -266,7 +266,45 @@ def test_course_scope_above_cumulative_budget_still_closes_without_model():
     review = _project(rows)
     assert not review.complete
     assert not review.needs_model
-    assert evaluate_ct_review(review).status == "data_gap"
+    result = evaluate_ct_review(review)
+    assert (result.status, result.reason_code) == ("data_gap", "source_truncated")
+
+
+def test_blank_course_body_reports_missing_field_without_model():
+    rows = _rows()
+    rows["daily_course_record"][0]["record_content"] = ""
+    review = _project(rows)
+    assert not review.needs_model
+    result = evaluate_ct_review(review)
+    assert (result.status, result.reason_code) == ("data_gap", "required_field_missing")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body, reason", [
+    ("检查" * 20000, "source_truncated"),
+    ("", "required_field_missing"),
+], ids=["truncated", "missing_field"])
+async def test_unrelated_empty_automatic_source_cannot_hide_specific_ct_gap(body, reason):
+    from app.services import case_material_snapshot as automatic_material
+    from app.services.automatic_material_scope import describe_source
+    from app.services.luxian_0609.decision_binding import bind_and_reduce_luxian_0609_rule_decisions
+
+    snapshot, materials = _session({
+        "daily_course_record": [{"document_id": "D1", "record_content": body}],
+    })
+    sources = {"senior_course_record": describe_source((), ())}
+    with automatic_material.activate({"automatic_material": {"protocol": "cdm-auto-v1", "sources": sources}}):
+        result = await native.execute_luxian_0609_native_exam_lab_rules(
+            rule_ids=(RULE_ID,), wrapper_rules=[{"rule_id": RULE_ID}], evidence_payload=None,
+            llm_client=None, evidence_snapshot=snapshot, evidence_materials=materials,
+            decision_rule_ids=(RULE_ID,),
+        )
+        decision = bind_and_reduce_luxian_0609_rule_decisions(
+            decisions=result.decisions, expected_rule_ids=(RULE_ID,),
+            snapshot=snapshot, evidence_materials=materials,
+        )[0]
+    assert result.llm_call_count == 0
+    assert (decision.final_state.value, decision.reason_code) == ("data_gap", reason)
 
 
 def _unmatched_only(*clause_ids):
