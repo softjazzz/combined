@@ -92,19 +92,26 @@ def _resolve_case_scope(
     institute_id: str | None = None,
     patient_id: str | None = None,
 ) -> tuple[str, str] | None:
+    from . import privacy_request_scope
+    from .llm_prompt_privacy import PrivacyIdentityContextError
+
+    scope = privacy_request_scope._SCOPE.get()
+    if scope is not None and scope.case_coordinates is not None:
+        if not scope.lease.active:
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        scope_inst, scope_pat, scope_visit = scope.case_coordinates
+        if scope_visit != str(visit_id).strip():
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        if institute_id is not None and str(institute_id).strip() != scope_inst:
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        if patient_id is not None and str(patient_id).strip() != scope_pat:
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        return (scope_inst, scope_pat) if (scope_inst or scope_pat) else None
     if institute_id is not None or patient_id is not None:
         inst = "" if institute_id is None else str(institute_id).strip()
         pat = "" if patient_id is None else str(patient_id).strip()
         return (inst, pat) if (inst or pat) else None
-    from . import privacy_request_scope
-
-    scope = privacy_request_scope._SCOPE.get()
-    if scope is None or not scope.lease.active or scope.case_coordinates is None:
-        return None
-    inst, pat, scope_visit = scope.case_coordinates
-    if scope_visit != str(visit_id).strip():
-        return None
-    return (inst, pat) if (inst or pat) else None
+    return None
 
 
 def _case_scope_hash(
@@ -234,6 +241,8 @@ class FrozenResponseClient:
         from ..llm_task_roles import current_task_role_partition
 
         self._task_role_partition = current_task_role_partition()
+        self._explicit_institute_id = institute_id
+        self._explicit_patient_id = patient_id
         self._case_scope_hash = _case_scope_hash(
             visit_id, institute_id=institute_id, patient_id=patient_id
         )
@@ -264,6 +273,15 @@ class FrozenResponseClient:
 
         if current_task_role_partition() != self._task_role_partition:
             raise LLMExperimentConfigurationError("frozen response client task roles changed")
+        current_scope_hash = _case_scope_hash(
+            self._visit_id,
+            institute_id=self._explicit_institute_id,
+            patient_id=self._explicit_patient_id,
+        )
+        if current_scope_hash != self._case_scope_hash:
+            from .llm_prompt_privacy import PrivacyIdentityContextError
+
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
 
     async def generate(self, prompt: str, **kwargs: Any) -> Any:
         return await self._generate_with(self._inner, prompt, **kwargs)
@@ -291,10 +309,10 @@ class FrozenResponseClient:
 
     def commit(self) -> None:
         """整次运行可交付时落盘：已有提示词的记录不覆盖（首次写入者赢），只补入新提示词。"""
+        self._require_same_experiment()
         from ..llm_token_budget import context_budget_failed
         if context_budget_failed():
             return
-        self._require_same_experiment()
         if not any(key not in self._stored for key in self._recorded):
             return
         path = self._store_path

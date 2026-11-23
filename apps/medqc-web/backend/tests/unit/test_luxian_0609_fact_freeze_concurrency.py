@@ -18,6 +18,7 @@ from app.services.luxian_0609 import (
     consultation_response_freeze,
     exam_analysis_freeze,
 )
+from app.services.luxian_0609.llm_prompt_privacy import PrivacyIdentityContextError
 from app.services.luxian_0609.privacy_request_scope import (
     luxian_0609_case_identity_scope,
 )
@@ -247,14 +248,16 @@ def test_failed_publish_cleans_up_temporary_files_across_all_freeze_modules(
     monkeypatch.setattr(os, "link", _fail_io)
     monkeypatch.setattr(os, "replace", _fail_io)
 
-    # 1. antimicrobial_freeze 吞掉 OSError 并清理临时文件
+    # 1. antimicrobial_freeze 吞掉 OSError 并清理临时文件与锁文件
     antimicrobial_freeze.save_payload("order_reason", "k1", {"ok": True})
     assert list((tmp_path / "abx").rglob("*.tmp")) == []
+    assert list((tmp_path / "abx").rglob("*.lock")) == []
 
-    # 2. exam_analysis_freeze 透传 OSError 但不遗留临时文件
+    # 2. exam_analysis_freeze 透传 OSError 但不遗留临时文件与锁文件
     with pytest.raises(OSError, match="synthetic disk error"):
         exam_analysis_freeze.save_payload("analysis", "k2", {"ok": True})
     assert list((tmp_path / "exam").rglob("*.tmp")) == []
+    assert list((tmp_path / "exam").rglob("*.lock")) == []
 
     # 3. consultation_opinion_freeze 透传 OSError 但不遗留临时文件
     with pytest.raises(OSError, match="synthetic disk error"):
@@ -535,3 +538,231 @@ async def test_consultation_freeze_prevents_visit_id_sanitization_collisions(
         got = await verifier.generate("prompt")
         assert got["choices"][0]["message"]["content"] == f"resp-{visit_id}"
         assert verifier.reused_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("owner", "namespace"),
+    [
+        (exam_analysis_freeze, "analysis"),
+        (antimicrobial_freeze, "order_reason"),
+    ],
+)
+def test_fallback_publish_preserves_first_writer_wins_when_hard_links_unavailable(
+    monkeypatch, tmp_path, owner, namespace
+):
+    store = tmp_path / namespace
+    monkeypatch.setenv(owner._ENV_STORE_DIR, str(store))
+    key = owner.freeze_key(f"synthetic-fallback-first-writer-{namespace}")
+
+    both_passed_initial_check = threading.Barrier(2)
+    first_published = threading.Event()
+    writer_tag = threading.local()
+    real_replace = os.replace
+    replace_calls = 0
+    replace_lock = threading.Lock()
+
+    def _unsupported_link(_src, _dst):
+        # 两个线程均先穿过入口 if path.is_file(): return，再先后进入无硬链接回退路径。
+        both_passed_initial_check.wait(timeout=5.0)
+        if getattr(writer_tag, "name", None) == "second":
+            assert first_published.wait(timeout=5.0)
+        raise OSError(errno.EPERM, "hard links unsupported")
+
+    def _counting_replace(src, dst):
+        nonlocal replace_calls
+        with replace_lock:
+            replace_calls += 1
+        result = real_replace(src, dst)
+        if getattr(writer_tag, "name", None) == "first":
+            first_published.set()
+        return result
+
+    monkeypatch.setattr(os, "link", _unsupported_link)
+    monkeypatch.setattr(os, "replace", _counting_replace)
+
+    def _run(label: str) -> None:
+        writer_tag.name = label
+        owner.save_payload(namespace, key, {"writer": label})
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(_run, "first"), pool.submit(_run, "second")]
+        for future in futures:
+            future.result()
+
+    assert owner.load_payload(namespace, key) == {"writer": "first"}
+    assert replace_calls == 1
+    assert len(list(store.rglob("*.json"))) == 1
+    assert list(store.rglob("*.tmp")) == []
+    assert list(store.rglob("*.lock")) == []
+
+
+def test_consultation_opinion_freeze_rejects_active_scope_conflicts_and_preserves_legacy(
+    tmp_path,
+):
+    store = tmp_path / "opinions-scope-conflict"
+    legacy = consultation_opinion_freeze.save_opinion_payload(
+        visit_id="V1",
+        documents=_OPINION_DOCS,
+        payload=_opinion_payload("legacy-unscoped"),
+        store_dir=store,
+    )
+    assert legacy.path == store / "V1.json"
+    legacy_bytes = legacy.path.read_bytes()
+
+    # 在 V2 活跃作用域内请求 V1：读写/重置均必须 fail-closed 拒绝，不得回退到旧 V1.json。
+    with luxian_0609_case_identity_scope(
+        case_coordinates=("HOSP_A", "P2", "V2"),
+        identity_provider=lambda: ("合成乙",),
+    ):
+        with pytest.raises(PrivacyIdentityContextError):
+            consultation_opinion_freeze.load_opinion_payload(
+                visit_id="V1", documents=_OPINION_DOCS, store_dir=store
+            )
+        with pytest.raises(PrivacyIdentityContextError):
+            consultation_opinion_freeze.save_opinion_payload(
+                visit_id="V1",
+                documents=_OPINION_DOCS,
+                payload=_opinion_payload("must-not-write"),
+                store_dir=store,
+            )
+        with pytest.raises(PrivacyIdentityContextError):
+            consultation_opinion_freeze.reset_opinion_freeze(
+                visit_id="V1", store_dir=store
+            )
+    assert legacy.path.read_bytes() == legacy_bytes
+
+    # 在 V1 合法活跃作用域内：旧无归属 V1.json 不得被盲目复用，scoped 读写独立落盘且保留旧文件。
+    with luxian_0609_case_identity_scope(
+        case_coordinates=("HOSP_A", "P1", "V1"),
+        identity_provider=lambda: ("合成甲",),
+    ):
+        assert (
+            consultation_opinion_freeze.load_opinion_payload(
+                visit_id="V1", documents=_OPINION_DOCS, store_dir=store
+            )
+            is None
+        )
+        scoped = consultation_opinion_freeze.save_opinion_payload(
+            visit_id="V1",
+            documents=_OPINION_DOCS,
+            payload=_opinion_payload("scoped-v1"),
+            store_dir=store,
+        )
+        assert scoped.path != legacy.path
+        reused = consultation_opinion_freeze.load_opinion_payload(
+            visit_id="V1", documents=_OPINION_DOCS, store_dir=store
+        )
+        assert reused is not None
+        assert reused.payload["episodes"][0]["marker"] == "scoped-v1"
+
+        # 与当前活跃作用域一致的显式坐标允许命中；冲突的显式院区或患者号必须拒绝。
+        explicit_ok = consultation_opinion_freeze.load_opinion_payload(
+            visit_id="V1",
+            institute_id="HOSP_A",
+            patient_id="P1",
+            documents=_OPINION_DOCS,
+            store_dir=store,
+        )
+        assert explicit_ok is not None and explicit_ok.path == scoped.path
+
+        with pytest.raises(PrivacyIdentityContextError):
+            consultation_opinion_freeze.load_opinion_payload(
+                visit_id="V1",
+                institute_id="HOSP_B",
+                patient_id="P1",
+                documents=_OPINION_DOCS,
+                store_dir=store,
+            )
+        with pytest.raises(PrivacyIdentityContextError):
+            consultation_opinion_freeze.save_opinion_payload(
+                visit_id="V1",
+                institute_id="HOSP_A",
+                patient_id="P_OTHER",
+                documents=_OPINION_DOCS,
+                payload=_opinion_payload("conflict-pat"),
+                store_dir=store,
+            )
+
+    assert legacy.path.read_bytes() == legacy_bytes
+
+
+@pytest.mark.asyncio
+async def test_consultation_response_freeze_rejects_active_scope_conflicts_and_preserves_legacy(
+    monkeypatch, tmp_path
+):
+    store = tmp_path / "responses-scope-conflict"
+    monkeypatch.setenv(consultation_response_freeze._ENV_STORE_DIR, str(store))
+
+    # 先在无作用域旧模式下落盘 legacy V1.json
+    legacy_client = consultation_response_freeze.FrozenResponseClient(
+        _FixedResponseLLM({"p": "legacy-answer"}), visit_id="V1"
+    )
+    await legacy_client.generate("p")
+    legacy_client.commit()
+    legacy_path = store / "V1.json"
+    assert legacy_path.is_file()
+    legacy_bytes = legacy_path.read_bytes()
+
+    # 预先在无作用域下构造的 V1 客户端，也绝不能在冲突作用域中读/写
+    unscoped_retained = consultation_response_freeze.FrozenResponseClient(
+        _FixedResponseLLM({"p2": "new-unscoped"}), visit_id="V1"
+    )
+    await unscoped_retained.generate("p2")
+
+    # 在 V2 活跃作用域内请求 V1：构造/调用/提交全部拒绝，不读取也不改动 V1.json
+    with luxian_0609_case_identity_scope(
+        case_coordinates=("HOSP_A", "P2", "V2"),
+        identity_provider=lambda: ("合成乙",),
+    ):
+        with pytest.raises(PrivacyIdentityContextError):
+            consultation_response_freeze.FrozenResponseClient(
+                _FixedResponseLLM({"p": "must-not-run"}), visit_id="V1"
+            )
+        with pytest.raises(PrivacyIdentityContextError):
+            await unscoped_retained.generate("p")
+        with pytest.raises(PrivacyIdentityContextError):
+            unscoped_retained.commit()
+    assert legacy_path.read_bytes() == legacy_bytes
+
+    # 在 V1 合法活跃作用域内：不误用旧无归属 V1.json，scoped 读写独立落盘并保留旧文件
+    with luxian_0609_case_identity_scope(
+        case_coordinates=("HOSP_A", "P1", "V1"),
+        identity_provider=lambda: ("合成甲",),
+    ):
+        scoped_llm = _FixedResponseLLM({"p": "scoped-v1-answer"})
+        scoped_client = consultation_response_freeze.FrozenResponseClient(
+            scoped_llm, visit_id="V1"
+        )
+        got = await scoped_client.generate("p")
+        assert got["choices"][0]["message"]["content"] == "scoped-v1-answer"
+        assert scoped_client.reused_calls == 0
+        scoped_client.commit()
+        assert scoped_client._store_path != legacy_path
+
+        # 再次在同作用域内读取可正常复用
+        reuse_llm = _FixedResponseLLM({})
+        reused = consultation_response_freeze.FrozenResponseClient(
+            reuse_llm, visit_id="V1", institute_id="HOSP_A", patient_id="P1"
+        )
+        got_reused = await reused.generate("p")
+        assert got_reused["choices"][0]["message"]["content"] == "scoped-v1-answer"
+        assert reused.reused_calls == 1
+        assert reuse_llm.calls == []
+
+        # 显式院区/患者号与当前活跃作用域冲突时必须拒绝
+        with pytest.raises(PrivacyIdentityContextError):
+            consultation_response_freeze.FrozenResponseClient(
+                _FixedResponseLLM({"p": "bad"}),
+                visit_id="V1",
+                institute_id="HOSP_B",
+                patient_id="P1",
+            )
+        with pytest.raises(PrivacyIdentityContextError):
+            consultation_response_freeze.FrozenResponseClient(
+                _FixedResponseLLM({"p": "bad"}),
+                visit_id="V1",
+                institute_id="HOSP_A",
+                patient_id="P_OTHER",
+            )
+
+    assert legacy_path.read_bytes() == legacy_bytes

@@ -21,8 +21,10 @@ import logging
 import os
 from pathlib import Path
 import threading
+import time
 from typing import Any, Mapping
 import uuid
+import weakref
 
 from ..llm_experiment import experiment_store_dir
 
@@ -32,6 +34,86 @@ logger = logging.getLogger(__name__)
 # main 三个命名空间的 key，使可能含旧错误事实的主冻结自然失效；旧文件保留、不删除。
 FREEZE_SCHEMA_VERSION = "exam-finding-analysis-freeze-v2"
 _ENV_STORE_DIR = "LUXIAN_0609_EXAM_ANALYSIS_FREEZE_DIR"
+_LOCK_STALE_SECONDS = 30.0
+_LOCK_MAX_ATTEMPTS = 200
+
+
+class _PathLock:
+    __slots__ = ("_lock", "__weakref__")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def __enter__(self) -> _PathLock:
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self._lock.release()
+
+
+_WRITE_LOCKS_GUARD = threading.Lock()
+_WRITE_LOCKS: weakref.WeakValueDictionary[str, _PathLock] = weakref.WeakValueDictionary()
+
+
+def _path_lock(path: Path) -> _PathLock:
+    key = os.path.normcase(os.path.abspath(str(path)))
+    with _WRITE_LOCKS_GUARD:
+        holder = _WRITE_LOCKS.get(key)
+        if holder is None:
+            holder = _PathLock()
+            _WRITE_LOCKS[key] = holder
+        return holder
+
+
+def _publish_once_fallback(temporary: Path, path: Path) -> None:
+    """硬链接不可用时以进程内锁 + 跨进程排他锁文件保障首次写入者赢。"""
+    lock_path = path.with_name(f"{path.name}.lock")
+    with _path_lock(path):
+        if path.is_file():
+            return
+        acquired = False
+        for attempt in range(_LOCK_MAX_ATTEMPTS):
+            if path.is_file():
+                return
+            try:
+                fd = os.open(
+                    lock_path,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o600,
+                )
+            except FileExistsError:
+                try:
+                    if time.time() - lock_path.stat().st_mtime > _LOCK_STALE_SECONDS:
+                        lock_path.unlink(missing_ok=True)
+                        continue
+                except OSError:
+                    pass
+                if attempt == _LOCK_MAX_ATTEMPTS - 1:
+                    if path.is_file():
+                        return
+                    raise OSError(f"freeze publish lock busy: {lock_path}")
+                time.sleep(0.01)
+            else:
+                os.close(fd)
+                acquired = True
+                break
+        if not acquired:
+            return
+        try:
+            if path.is_file():
+                return
+            try:
+                os.replace(temporary, path)
+            except PermissionError:
+                if path.is_file():
+                    return
+                raise
+        finally:
+            try:
+                lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def default_store_dir() -> Path:
@@ -105,14 +187,7 @@ def save_payload(namespace: str, key: str, payload: Mapping[str, Any]) -> None:
             # 首次写入者赢：并发竞争中已有同键落盘时不覆盖。
             return
         except OSError:
-            if path.is_file():
-                return
-            try:
-                os.replace(temporary, path)
-            except PermissionError:
-                if path.is_file():
-                    return
-                raise
+            _publish_once_fallback(temporary, path)
     finally:
         try:
             temporary.unlink(missing_ok=True)

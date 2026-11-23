@@ -129,19 +129,26 @@ def _resolve_case_scope(
     institute_id: str | None = None,
     patient_id: str | None = None,
 ) -> tuple[str, str] | None:
+    from . import privacy_request_scope
+    from .llm_prompt_privacy import PrivacyIdentityContextError
+
+    scope = privacy_request_scope._SCOPE.get()
+    if scope is not None and scope.case_coordinates is not None:
+        if not scope.lease.active:
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        scope_inst, scope_pat, scope_visit = scope.case_coordinates
+        if scope_visit != str(visit_id).strip():
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        if institute_id is not None and str(institute_id).strip() != scope_inst:
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        if patient_id is not None and str(patient_id).strip() != scope_pat:
+            raise PrivacyIdentityContextError("Patient identity context unavailable")
+        return (scope_inst, scope_pat) if (scope_inst or scope_pat) else None
     if institute_id is not None or patient_id is not None:
         inst = "" if institute_id is None else str(institute_id).strip()
         pat = "" if patient_id is None else str(patient_id).strip()
         return (inst, pat) if (inst or pat) else None
-    from . import privacy_request_scope
-
-    scope = privacy_request_scope._SCOPE.get()
-    if scope is None or not scope.lease.active or scope.case_coordinates is None:
-        return None
-    inst, pat, scope_visit = scope.case_coordinates
-    if scope_visit != str(visit_id).strip():
-        return None
-    return (inst, pat) if (inst or pat) else None
+    return None
 
 
 def _case_scope_hash(
@@ -267,14 +274,14 @@ def save_opinion_payload(
     patient_id: str | None = None,
 ) -> FrozenOpinionPayload:
     """写入冻结事实（原子替换）。已存在旧版本时状态记为 rebuilt。"""
+    scope_hash = _case_scope_hash(
+        visit_id, institute_id=institute_id, patient_id=patient_id
+    )
     from ..llm_token_budget import context_budget_failed
     if context_budget_failed():
         return
 
     directory = _coerce_store_dir(store_dir) or default_store_dir()
-    scope_hash = _case_scope_hash(
-        visit_id, institute_id=institute_id, patient_id=patient_id
-    )
     path = _freeze_path(
         visit_id=visit_id,
         store_dir=directory,
