@@ -347,10 +347,18 @@ class TestCodingQCEngineRunAll:
             '{"summary": {"total_issues": 0}}',
             '{"issues": "not-a-list"}',
             "[]",
+            '[{"issues": []}]',
+            '```json\n[{"issues": []}]\n```',
+            '分析结果如下：\n[{"issues": []}]\n以上。',
+            '{"issues": [{}]}',
+            '{"issues": [{"severity": "high"}]}',
+            '{"issues": [{"dimension": "merge"}]}',
+            '{"issues": [{"description": "缺少维度"}]}',
+            '{"issues": [{"dimension": "merge", "severity": "high", "description": "无效严重级别"}]}',
         ],
     )
     async def test_run_all_llm_unparseable_or_empty_marks_parse_failed(self, bad_content):
-        """LLM 输出为空、非 JSON 或缺少有效 issues 列表时，应标记 parse_failed 且未完成。"""
+        """LLM 输出为空、非顶层对象、顶层数组或 issue 项缺少必填字段时，应标记 parse_failed 且未完成。"""
         mock_llm = AsyncMock()
         mock_llm.generate.return_value = {
             "choices": [{"message": {"content": bad_content}}]
@@ -363,6 +371,32 @@ class TestCodingQCEngineRunAll:
         assert d["llm_review_completed"] is False
         assert d["llm_review_status"] == "parse_failed"
         assert d["llm_issues"] == []
+
+    @pytest.mark.asyncio
+    async def test_run_all_llm_valid_issue_payload_marks_completed(self):
+        """LLM 返回包含完整合法 issue 对象的 JSON 时，应标记 completed 且保留解析结果。"""
+        mock_llm = AsyncMock()
+        mock_llm.generate.return_value = {
+            "choices": [{
+                "message": {
+                    "content": (
+                        '{"issues": [{"dimension": "exclusion", "severity": "error", '
+                        '"code": "E10/E11", "description": "1型与2型糖尿病互斥", '
+                        '"suggestion": "核实分型后仅保留其一"}]}'
+                    )
+                }
+            }]
+        }
+
+        engine = CodingQCEngine(llm_client=mock_llm)
+        fp = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+        report = await engine.run_all(fp)
+        d = report.to_dict()
+        assert d["llm_review_completed"] is True
+        assert d["llm_review_status"] == "completed"
+        assert len(d["llm_issues"]) == 1
+        assert d["llm_issues"][0]["dimension"] == "exclusion"
+        assert d["llm_issues"][0]["description"] == "1型与2型糖尿病互斥"
 
     @pytest.mark.asyncio
     async def test_run_all_llm_valid_empty_issues_marks_completed(self):

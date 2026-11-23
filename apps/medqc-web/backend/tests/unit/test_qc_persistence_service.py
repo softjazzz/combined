@@ -693,9 +693,20 @@ def test_coding_qc_llm_timeout_preserves_existing_d4_defect(monkeypatch):
         assert row["status"] == "pending"
 
 
-@pytest.mark.parametrize("bad_output", ["not valid json garbage", "", "{}"])
+@pytest.mark.parametrize(
+    "bad_output",
+    [
+        "not valid json garbage",
+        "",
+        "{}",
+        '{"issues": [{}]}',
+        '[{"issues": []}]',
+        '```json\n[{"issues": []}]\n```',
+        '{"issues": [{"severity": "high"}]}',
+    ],
+)
 def test_coding_qc_llm_parse_failure_preserves_existing_d4_defect(monkeypatch, bad_output):
-    """Regression: unparseable/empty LLM output must NOT auto-close active D4 defect."""
+    """Regression: unparseable/empty/malformed-schema LLM output must NOT auto-close active D4 defect."""
     env = _build_sqlite_persistence_env(monkeypatch, shared_pool=True)
     actor = {"id": "u1", "username": "coder"}
     payload = _seed_coding_d4_defect(env, visit_id="V_CODE_PARSE_FAIL", actor=actor)
@@ -723,6 +734,44 @@ def test_coding_qc_llm_parse_failure_preserves_existing_d4_defect(monkeypatch, b
             .where(env.qc_defects.c.rule_code == "D4_EXCLUSION_01")
         ).mappings().one()
         assert row["status"] == "pending"
+
+
+def test_coding_qc_llm_valid_issue_payload_marks_completed_and_not_partial(monkeypatch):
+    """Valid semantic JSON with a well-formed issue marks completed and is_partial_run=False."""
+    env = _build_sqlite_persistence_env(monkeypatch, shared_pool=True)
+    actor = {"id": "u1", "username": "coder"}
+    payload = _seed_coding_d4_defect(env, visit_id="V_CODE_VALID_ISSUE", actor=actor)
+
+    stub_llm = AsyncMock()
+    stub_llm.generate.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": (
+                        '{"issues": [{"dimension": "merge", "severity": "warning", '
+                        '"code": "K35/K65", "description": "阑尾炎与腹膜炎应使用合并编码", '
+                        '"suggestion": "改用 K35.2"}]}'
+                    )
+                }
+            }
+        ]
+    }
+    engine = CodingQCEngine(llm_client=stub_llm)
+    frontpage = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+    report_dict = asyncio.run(engine.run_all(frontpage)).to_dict()
+
+    assert report_dict["llm_review_completed"] is True
+    assert report_dict["llm_review_status"] == "completed"
+    assert len(report_dict["llm_issues"]) == 1
+
+    pers_input = _build_coding_qc_persistence_result(payload, report_dict)
+    assert pers_input["metadata"]["is_partial_run"] is False
+    assert pers_input["metadata"]["llm_review_completed"] is True
+    assert pers_input["metadata"]["llm_review_status"] == "completed"
+
+    summary = asyncio.run(env.service.persist_analysis(pers_input, actor=actor))
+    assert summary["defects_created"] == 1
+    assert summary["defects_resolved"] == 1
 
 
 def test_coding_qc_llm_valid_empty_issues_auto_closes_fixed_d4_defect(monkeypatch):

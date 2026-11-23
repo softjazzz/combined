@@ -438,6 +438,9 @@ def _is_timeout_exception(exc: BaseException) -> bool:
     return "timeout" in type(exc).__name__.lower()
 
 
+_VALID_LLM_SEVERITIES = frozenset({"error", "warning", "info"})
+
+
 def _parse_llm_issues_with_status(raw_output: str) -> Tuple[List[CodingIssue], bool]:
     """从 LLM 原始输出中解析质控问题，返回 (issues, parsed_ok)。"""
     parsed = _parse_json_from_text(raw_output)
@@ -455,12 +458,39 @@ def _parse_llm_issues_with_status(raw_output: str) -> Tuple[List[CodingIssue], b
         if not isinstance(item, dict):
             logger.warning("LLM 输出的 issues 列表包含非对象项")
             return [], False
+
+        dimension = item.get("dimension")
+        description = item.get("description")
+        if not isinstance(dimension, str) or not dimension.strip():
+            logger.warning("LLM 输出的 issue 缺少有效的 dimension 字段")
+            return [], False
+        if not isinstance(description, str) or not description.strip():
+            logger.warning("LLM 输出的 issue 缺少有效的 description 字段")
+            return [], False
+
+        raw_severity = item.get("severity")
+        if raw_severity is None:
+            severity = "info"
+        elif isinstance(raw_severity, str) and raw_severity.strip().lower() in _VALID_LLM_SEVERITIES:
+            severity = raw_severity.strip().lower()
+        else:
+            logger.warning("LLM 输出的 issue 包含无效的 severity 字段: %r", raw_severity)
+            return [], False
+
+        raw_code = item.get("code", "")
+        raw_suggestion = item.get("suggestion", "")
+        if (raw_code is not None and not isinstance(raw_code, str)) or (
+            raw_suggestion is not None and not isinstance(raw_suggestion, str)
+        ):
+            logger.warning("LLM 输出的 issue 包含非字符串的 code/suggestion 字段")
+            return [], False
+
         issues.append(CodingIssue(
-            dimension=item.get("dimension", "unknown"),
-            severity=item.get("severity", "info"),
-            code=item.get("code", ""),
-            description=item.get("description", ""),
-            suggestion=item.get("suggestion", ""),
+            dimension=dimension.strip(),
+            severity=severity,
+            code=(raw_code or "").strip(),
+            description=description.strip(),
+            suggestion=(raw_suggestion or "").strip(),
             source="llm",
         ))
     return issues, True
@@ -473,43 +503,60 @@ def _parse_llm_issues(raw_output: str) -> List[CodingIssue]:
 
 
 def _parse_json_from_text(text: str) -> Optional[dict]:
-    """从文本中提取 JSON（兼容 markdown 代码块包裹）。"""
-    if not isinstance(text, str) or not text.strip():
+    """从文本中提取顶层 JSON 对象（兼容 markdown 代码块与说明文字包裹，拒绝顶层数组等非对象 JSON）。"""
+    if not isinstance(text, str):
         return None
+    stripped = text.strip()
+    if not stripped:
+        return None
+
+    # 1. 整体为合法 JSON 时，严格要求顶层为 dict；数组/标量直接返回 None，禁止落入内嵌对象抽取
     try:
-        parsed = json.loads(text)
-        if isinstance(parsed, dict):
-            return parsed
+        parsed = json.loads(stripped)
+        return parsed if isinstance(parsed, dict) else None
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # 尝试 ```json ... ```
-    m = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
+    # 2. 尝试 ```json ... ``` 或 ``` ... ``` 代码块
+    m = re.search(r"```(?:json)?\s*(.*?)\s*```", stripped, re.DOTALL | re.IGNORECASE)
     if m:
+        fenced = m.group(1).strip()
+        if not fenced or fenced.startswith("["):
+            return None
         try:
-            parsed = json.loads(m.group(1))
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
+            parsed = json.loads(fenced)
+            return parsed if isinstance(parsed, dict) else None
+        except (json.JSONDecodeError, TypeError):
             pass
 
-    # 尝试提取第一个完整 JSON 对象
-    brace_start = text.find("{")
-    if brace_start >= 0:
-        depth = 0
-        for i in range(brace_start, len(text)):
-            if text[i] == "{":
-                depth += 1
-            elif text[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    try:
-                        parsed = json.loads(text[brace_start:i + 1])
-                        if isinstance(parsed, dict):
-                            return parsed
-                    except json.JSONDecodeError:
-                        break
-    return None
+    # 3. 显式拒绝以 '[' 开头的顶层数组文本
+    if stripped.startswith("["):
+        return None
+
+    # 4. 兼容前后带说明文字包裹的 JSON 对象，但禁止从包裹的 JSON 数组中提取内嵌对象
+    decoder = json.JSONDecoder()
+    brace_start = stripped.find("{")
+    if brace_start < 0:
+        return None
+
+    search_from = 0
+    while True:
+        bracket_start = stripped.find("[", search_from, brace_start)
+        if bracket_start < 0:
+            break
+        try:
+            wrapped, end_idx = decoder.raw_decode(stripped, bracket_start)
+            if isinstance(wrapped, list) and end_idx > brace_start:
+                return None
+        except json.JSONDecodeError:
+            pass
+        search_from = bracket_start + 1
+
+    try:
+        parsed, _ = decoder.raw_decode(stripped, brace_start)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        return None
 
 
 # ============================================================
