@@ -42,10 +42,17 @@ _COMMON_SURNAME = (
 )
 # 仅识别人口学标签及明确性别值；不把“性别相关”等医疗叙述当身份依据。
 _LABELLED_SEX = r"性别[ \t]*[:：]?[ \t]*[男女](?=[\s，,、；;。\"}]|$)"
+# 仅带明确性别/年龄锚点的患者介绍才视为高置信姓名并参与全文替换；
+# 无性别/年龄锚点且仅跟“因”的句式（如“患者高热，因...”与“患者孙小红，因...”）在脱敏阶段不盲猜，
+# 交由发送前护栏在缺少已知中文姓名上下文时 fail-closed 拦截。
 _PATIENT_INTRO = re.compile(
     rf"(?P<label>(?:患者|病人|患儿)\s*)"
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
-    rf"(?=(?:\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁|因)|\s*因))"
+    rf"(?=\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁))"
+)
+_KNOWN_CJK_NAME = re.compile(r"[\u4e00-\u9fff·]{2,12}")
+_AMBIGUOUS_PATIENT_CAUSE_INTRO = re.compile(
+    rf"(?:患者|病人|患儿)\s*{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}}(?=(?:\s*[，,、]\s*因|\s*因))"
 )
 _DEMOGRAPHIC_LABEL = (
     # 正文可能嵌在一层或多层 JSON 中；识别转义换行边界，不解码/重写整段医疗文本。
@@ -168,7 +175,7 @@ def redact_luxian_0609_patient_privacy(
     # 已知身份只补充明确患者介绍的识别，不靠扩充姓氏表猜测，也不盲删数字/无标签身份。
     known_names = [
         re.escape(value) for value in _freeze_identity_values(identity_values if identity_values is not None else ())
-        if re.fullmatch(r"[\u4e00-\u9fff·]{2,12}", value)
+        if _KNOWN_CJK_NAME.fullmatch(value)
     ]
     name_patterns = (_PATIENT_NAME_LABEL, _PATIENT_INTRO, _DEMOGRAPHIC_NAME)
     if known_names:
@@ -292,19 +299,47 @@ def _contains_identity(text: str, identity: str) -> bool:
     return identity in text
 
 
+def _has_known_cjk_patient_name(identities: Iterable[str]) -> bool:
+    return any(_KNOWN_CJK_NAME.fullmatch(value) for value in identities)
+
+
+def _contains_ambiguous_patient_cause_intro(text: str) -> bool:
+    protected_text, _ = _protect_clinician_names(text)
+    return _AMBIGUOUS_PATIENT_CAUSE_INTRO.search(protected_text) is not None
+
+
 def _check_identity_residue(
-    value: Any, identities: tuple[str, ...], depth: int = 0
+    value: Any,
+    identities: tuple[str, ...],
+    depth: int = 0,
+    *,
+    reject_ambiguous_cause_intro: bool = False,
 ) -> None:
     if depth > _MAX_REQUEST_DEPTH:
         raise PrivacyIdentityContextError("Model request cannot be checked safely")
     if isinstance(value, Mapping):
         for key, item in value.items():
-            _check_identity_residue(key, identities, depth + 1)
-            _check_identity_residue(item, identities, depth + 1)
+            _check_identity_residue(
+                key,
+                identities,
+                depth + 1,
+                reject_ambiguous_cause_intro=reject_ambiguous_cause_intro,
+            )
+            _check_identity_residue(
+                item,
+                identities,
+                depth + 1,
+                reject_ambiguous_cause_intro=reject_ambiguous_cause_intro,
+            )
         return
     if isinstance(value, (tuple, list)):
         for item in value:
-            _check_identity_residue(item, identities, depth + 1)
+            _check_identity_residue(
+                item,
+                identities,
+                depth + 1,
+                reject_ambiguous_cause_intro=reject_ambiguous_cause_intro,
+            )
         return
     if value is None:
         return
@@ -323,12 +358,20 @@ def _check_identity_residue(
             lambda m: chr(0x10000 + ((ord(m[1]) - 0xD800) << 10) + ord(m[2]) - 0xDC00),
             decoded,
         )
+        candidate_texts = (current, decoded, _decode_json_simple_escapes(decoded))
         if any(
             _contains_identity(text, identity)
             for identity in identities
-            for text in (current, decoded, _decode_json_simple_escapes(decoded))
+            for text in candidate_texts
         ):
             raise PatientPrivacyViolation("Patient identity remains in model request")
+        if reject_ambiguous_cause_intro and any(
+            _contains_ambiguous_patient_cause_intro(text)
+            for text in candidate_texts
+        ):
+            raise PrivacyIdentityContextError(
+                "Ambiguous patient introduction without known patient name"
+            )
         try:
             parsed = json.loads(current)
         except (ValueError, TypeError):
@@ -342,7 +385,12 @@ def _check_identity_residue(
             current = parsed
             continue
         if isinstance(parsed, (dict, list)):
-            _check_identity_residue(parsed, identities, depth + 1)
+            _check_identity_residue(
+                parsed,
+                identities,
+                depth + 1,
+                reject_ambiguous_cause_intro=reject_ambiguous_cause_intro,
+            )
         return
     raise PrivacyIdentityContextError(
         "Model request encoding exceeds privacy check limit"
@@ -354,8 +402,13 @@ def assert_no_known_identity(request: object, identity_values: Iterable[str]) ->
     identities = _freeze_identity_values(identity_values)
     if not identities:
         return
+    reject_ambiguous = not _has_known_cjk_patient_name(identities)
     try:
-        _check_identity_residue(request, identities)
+        _check_identity_residue(
+            request,
+            identities,
+            reject_ambiguous_cause_intro=reject_ambiguous,
+        )
     except (PatientPrivacyViolation, PrivacyIdentityContextError):
         raise
     except Exception:
@@ -447,6 +500,30 @@ def _schema_privacy_projection(schema: object, depth: int = 0) -> object:
     return projected
 
 
+def _project_model_request_for_privacy(request: object) -> object:
+    projected = request
+    if isinstance(request, Mapping):
+        projected = dict(request)
+        for key in _MODEL_NUMERIC_PARAMETERS:
+            if type(projected.get(key)) in (int, float):
+                projected[key] = None
+        response_format = request.get("response_format")
+        if (
+            isinstance(response_format, Mapping)
+            and response_format.get("type") == "json_schema"
+        ):
+            envelope = response_format.get("json_schema")
+            if isinstance(envelope, Mapping) and "schema" in envelope:
+                projected["response_format"] = {
+                    **response_format,
+                    "json_schema": {
+                        **envelope,
+                        "schema": _schema_privacy_projection(envelope["schema"]),
+                    },
+                }
+    return projected
+
+
 def assert_no_known_identity_in_model_request(
     request: object, identity_values: Iterable[str]
 ) -> None:
@@ -455,26 +532,7 @@ def assert_no_known_identity_in_model_request(
     if not identities:
         return
     try:
-        projected = request
-        if isinstance(request, Mapping):
-            projected = dict(request)
-            for key in _MODEL_NUMERIC_PARAMETERS:
-                if type(projected.get(key)) in (int, float):
-                    projected[key] = None
-            response_format = request.get("response_format")
-            if (
-                isinstance(response_format, Mapping)
-                and response_format.get("type") == "json_schema"
-            ):
-                envelope = response_format.get("json_schema")
-                if isinstance(envelope, Mapping) and "schema" in envelope:
-                    projected["response_format"] = {
-                        **response_format,
-                        "json_schema": {
-                            **envelope,
-                            "schema": _schema_privacy_projection(envelope["schema"]),
-                        },
-                    }
+        projected = _project_model_request_for_privacy(request)
         assert_no_known_identity(projected, identities)
     except (PatientPrivacyViolation, PrivacyIdentityContextError):
         raise
@@ -611,6 +669,17 @@ class _Luxian0609PrivacyRedactingLLMClient:
             redacted = redact_luxian_0609_patient_privacy(prompt, identity_values=identities)
             assert_no_known_identity(redacted, identities)
             assert_no_known_identity_in_model_request(kwargs, identities)
+            if not identities:
+                _check_identity_residue(
+                    redacted,
+                    (),
+                    reject_ambiguous_cause_intro=True,
+                )
+                _check_identity_residue(
+                    _project_model_request_for_privacy(kwargs),
+                    (),
+                    reject_ambiguous_cause_intro=True,
+                )
         except (PatientPrivacyViolation, PrivacyIdentityContextError) as error:
             _log_privacy_guard_block(error)
             raise

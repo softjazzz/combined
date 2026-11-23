@@ -1883,6 +1883,7 @@ def _normalize_snapshot_source_row(
             for field in ("test_id", "test_no", "report_id")
             if str(normalized.get(field) or "").strip()
         ),
+        "",
     )
     if fallback_id:
         normalized["document_id"] = fallback_id

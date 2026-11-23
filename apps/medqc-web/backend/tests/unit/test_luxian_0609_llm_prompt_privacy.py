@@ -53,7 +53,7 @@ def test_redaction_removes_patient_identifiers_and_preserves_clinician_names():
 李四主治医师查房记录；主治医师姓名：李四；会诊医师 姓名：钱七；王五主任医师建议继续治疗。
 """
 
-    redacted = redact_luxian_0609_patient_privacy(prompt)
+    redacted = redact_luxian_0609_patient_privacy(prompt, identity_values=("孙小红",))
 
     for private_value in (
         "张三",
@@ -250,3 +250,145 @@ def test_shared_client_temperature_override_is_validated_and_optional():
 
     parameter = inspect.signature(SichuanQCLLMClient.generate).parameters["temperature"]
     assert parameter.default is None
+
+
+@pytest.mark.parametrize(
+    "clinical_text",
+    [
+        "患者高位截瘫，因发热入院。既往高位截瘫。",
+        "患者左耳失聪，因头晕入院。既往左耳失聪。",
+        "患者高热，因症状加重就诊。查体仍高热。",
+        "患者今日高热，复测仍高热。",
+        "患者高热因症状加重就诊。查体仍高热。",
+        "患者黄疸，因皮肤巩膜黄染入院。复查黄疸消退。",
+        "患者冷汗，因胸闷就诊。",
+        "患者周身乏力，因纳差入院。",
+        "患者高血压，因头晕就诊。复测血压仍高。",
+        "患者于昨日因高热入院。查体仍高热。",
+        "患者平素体健，因咳嗽入院。平素无药物过敏史。",
+    ],
+)
+def test_clinical_terms_after_patient_word_before_cause_are_not_masked(clinical_text):
+    assert redact_luxian_0609_patient_privacy(clinical_text) == clinical_text
+
+
+@pytest.mark.asyncio
+async def test_known_patient_name_in_same_cause_sentence_still_redacted_while_preserving_clinical_terms():
+    delegate = _CaptureClient()
+    client = wrap_luxian_0609_llm_client(delegate, identity_values=("高强",))
+    prompt = "患者高强，因高热加重就诊。查体仍高热，高强诉畏寒。"
+    await client.generate(prompt)
+    assert len(delegate.prompts) == 1
+    sent = delegate.prompts[0]
+    assert "高强" not in sent
+    assert sent == "患者[患者姓名已脱敏]，因高热加重就诊。查体仍高热，[患者姓名已脱敏]诉畏寒。"
+    assert redact_luxian_0609_patient_privacy(sent, identity_values=("高强",)) == sent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("identity_values", "prompt", "expected", "absent_tokens", "present_tokens"),
+    [
+        (
+            ("李明", "PAT-001"),
+            "患者李明，因高热加重就诊。既往高位截瘫，患者高位截瘫，因发热入院。患者左耳失聪，因头晕入院。查体仍高热，李明诉畏寒。",
+            "患者[患者姓名已脱敏]，因高热加重就诊。既往高位截瘫，患者高位截瘫，因发热入院。患者左耳失聪，因头晕入院。查体仍高热，[患者姓名已脱敏]诉畏寒。",
+            ("李明",),
+            ("高位截瘫", "左耳失聪", "高热", "畏寒"),
+        ),
+        (
+            ("孙小红", "PAT-001"),
+            "患者孙小红，因发热入院。孙小红诉畏寒。",
+            "患者[患者姓名已脱敏]，因发热入院。[患者姓名已脱敏]诉畏寒。",
+            ("孙小红",),
+            ("发热", "畏寒"),
+        ),
+        (
+            ("孙小红", "PAT-001"),
+            "患者孙小红，因发热入院。记录医师：周丙丁。",
+            "患者[患者姓名已脱敏]，因发热入院。记录医师：周丙丁。",
+            ("孙小红",),
+            ("记录医师：周丙丁", "发热"),
+        ),
+        (
+            ("PAT-001",),
+            "患者今日高热，复测仍高热。",
+            "患者今日高热，复测仍高热。",
+            (),
+            ("高热",),
+        ),
+    ],
+)
+async def test_wrapper_with_known_name_or_unambiguous_text_redacts_cleanly_and_preserves_clinical_terms(
+    identity_values,
+    prompt,
+    expected,
+    absent_tokens,
+    present_tokens,
+):
+    delegate = _CaptureClient()
+    client = wrap_luxian_0609_llm_client(delegate, identity_values=identity_values)
+    await client.generate(prompt)
+    assert len(delegate.prompts) == 1
+    sent = delegate.prompts[0]
+    assert sent == expected
+    for token in absent_tokens:
+        assert token not in sent
+    for token in present_tokens:
+        assert sent.count(token) == prompt.count(token)
+    assert redact_luxian_0609_patient_privacy(sent, identity_values=identity_values) == sent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "identity_values",
+    [
+        ("PAT-001",),
+        (),
+    ],
+)
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "患者孙小红，因发热入院。孙小红诉畏寒。",
+        "患者孙小红因发热入院。",
+        "患者于小红，因发热入院。于小红诉畏寒。",
+        "患者高位截瘫，因发热入院。既往高位截瘫。",
+        "患者左耳失聪，因头晕入院。既往左耳失聪。",
+    ],
+)
+async def test_wrapper_without_known_cjk_name_fails_closed_on_ambiguous_cause_intro(
+    identity_values,
+    prompt,
+):
+    from app.services.luxian_0609.llm_prompt_privacy import (
+        PrivacyIdentityContextError,
+        is_luxian_0609_privacy_block,
+    )
+
+    delegate = _CaptureClient()
+    client = wrap_luxian_0609_llm_client(delegate, identity_values=identity_values)
+    with pytest.raises(PrivacyIdentityContextError) as exc_info:
+        await client.generate(prompt)
+    assert is_luxian_0609_privacy_block(exc_info.value) is True
+    assert delegate.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_id_only_gate_rejects_json_encoded_ambiguous_cause_intro_and_provider_without_name():
+    import json
+
+    from app.services.luxian_0609.llm_prompt_privacy import (
+        PrivacyIdentityContextError,
+        assert_no_known_identity,
+    )
+
+    encoded = json.dumps({"body": "患者孙小红，因发热入院。"}, ensure_ascii=True)
+    with pytest.raises(PrivacyIdentityContextError):
+        assert_no_known_identity(encoded, ("PAT-001",))
+
+    delegate = _CaptureClient()
+    client = wrap_luxian_0609_llm_client(delegate, identity_provider=lambda: ("PAT-001",))
+    with pytest.raises(PrivacyIdentityContextError):
+        await client.generate("患者孙小红，因发热入院。孙小红诉畏寒。")
+    assert delegate.prompts == []

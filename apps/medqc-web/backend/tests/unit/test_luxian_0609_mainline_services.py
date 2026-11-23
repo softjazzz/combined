@@ -2122,6 +2122,93 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure_mode", ["snapshot_build_failed", "snapshot_unavailable", "infrastructure_failed"])
+@pytest.mark.parametrize("selection_kind", ["none", "generator", "list"])
+async def test_unified_engine_failure_branches_support_none_and_single_use_generator_selection(
+    monkeypatch,
+    failure_mode: str,
+    selection_kind: str,
+) -> None:
+    selected = ("LX0609-01-01-01", "LX0609-01-02-01")
+    batches = (
+        (("basic_timeliness", selected), ("basic_timeliness", selected))
+        if failure_mode == "infrastructure_failed"
+        else (("basic_timeliness", selected),)
+    )
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=selected,
+        native_async_rule_ids=(),
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=batches,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    if failure_mode == "infrastructure_failed":
+        monkeypatch.setattr(
+            luxian_execution,
+            "build_luxian_0609_evidence_read_session",
+            lambda **_kwargs: _safe_evidence_session(),
+        )
+    elif failure_mode == "snapshot_build_failed":
+        monkeypatch.setattr(
+            luxian_execution,
+            "build_luxian_0609_evidence_read_session",
+            lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("private failure")),
+        )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                rule_id,
+                name=rule_id,
+                mapped_rule_ids=[f"RAW-{rule_id}"],
+                trigger_condition="test",
+            )
+            for rule_id in selected
+        ],
+    )
+    selection_arg = (
+        None
+        if selection_kind == "none"
+        else ((rule_id for rule_id in selected) if selection_kind == "generator" else list(selected))
+    )
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="" if failure_mode == "snapshot_unavailable" else "private-visit",
+        medical_text="",
+        evidence_payload={"programmatic_timeline": {}},
+        llm_client=object(),
+        settings=_all_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        source_schema="cdm",
+        selected_customer_rule_ids=selection_arg,
+    )
+
+    expected_reason = {
+        "snapshot_build_failed": "evidence_snapshot_build_failed",
+        "snapshot_unavailable": "unified_engine_snapshot_unavailable",
+        "infrastructure_failed": "unified_engine_infrastructure_failed",
+    }[failure_mode]
+    assert executable == []
+    assert context.unified_engine_used is True
+    assert [item["rule_id"] for item in context.native_results] == list(selected)
+    assert all(item["status"] == "technical_error" for item in context.native_results)
+    assert all(
+        item["metadata"]["reason_code"] == expected_reason
+        for item in context.native_results
+    )
+
+
+@pytest.mark.asyncio
 async def test_public_entry_rejects_restored_029_compatibility_before_legacy_lookup(monkeypatch):
     _use_synthetic_legacy_bundle_material(monkeypatch)
     selected = list(published_rule_ids(1, 49))
@@ -4381,12 +4468,48 @@ def test_luxian_0609_summary_should_use_canonical_statuses_and_exclude_not_appli
         "not_executed": 0,
         "technical_error": 1,
     }
+    assert summary["confirmed_compliant_count"] == 1
     assert summary["compliant_count"] == 1
     assert summary["not_applicable_count"] == 1
     assert summary["data_gap_count"] == 1
     assert summary["technical_error_count"] == 1
     assert summary["compliance_denominator"] == 2
+    assert summary["compliance_rate_calculable"] is True
+    assert summary["confirmed_compliance_rate"] == 50.0
     assert summary["compliance_rate"] == 50.0
+
+
+def test_luxian_0609_summary_zero_denominator_returns_not_calculable_instead_of_100():
+    summary = summarize_luxian_0609_results(
+        [
+            {"status": "data_gap"},
+            {"status": "technical_error"},
+        ]
+    )
+
+    assert summary["confirmed_compliant_count"] == 0
+    assert summary["ai_suggested_compliant_count"] == 0
+    assert summary["compliant_count"] == 0
+    assert summary["compliance_denominator"] == 0
+    assert summary["compliance_rate_calculable"] is False
+    assert summary["confirmed_compliance_rate"] is None
+    assert summary["compliance_rate"] is None
+
+
+def test_luxian_0609_summary_separates_ai_suggested_compliant_from_confirmed_compliance():
+    summary = summarize_luxian_0609_results(
+        [
+            {"status": "ai_suggested_compliant"},
+        ]
+    )
+
+    assert summary["confirmed_compliant_count"] == 0
+    assert summary["compliant_count"] == 0
+    assert summary["ai_suggested_compliant_count"] == 1
+    assert summary["compliance_denominator"] == 1
+    assert summary["compliance_rate_calculable"] is True
+    assert summary["confirmed_compliance_rate"] == 0.0
+    assert summary["compliance_rate"] == 0.0
 
 
 def test_batch_record_status_counts_should_separate_not_applicable_from_compliant():
