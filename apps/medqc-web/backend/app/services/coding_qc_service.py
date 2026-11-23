@@ -6,10 +6,11 @@ D3（合并）+ D4（互斥）+ D5（主诊断）+ D6（一致性）：LLM 语�
 
 基于 30 个用例 × 9 个 Qwen 模型评测结论设计。
 """
+import asyncio
 import re
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,8 @@ class CodingQCReport:
     llm_issues: List[CodingIssue] = field(default_factory=list)
     llm_raw_output: str = ""
     overall_assessment: str = "通过"  # 通过 / 需修改 / 严重问题
+    llm_review_completed: bool = False
+    llm_review_status: str = "skipped"  # completed / skipped / unavailable / timeout / error / parse_failed
 
     def to_dict(self) -> dict:
         return {
@@ -58,6 +61,8 @@ class CodingQCReport:
             "rule_issues": [i.to_dict() for i in self.rule_issues],
             "llm_issues": [i.to_dict() for i in self.llm_issues],
             "overall_assessment": self.overall_assessment,
+            "llm_review_completed": self.llm_review_completed,
+            "llm_review_status": self.llm_review_status,
         }
 
 
@@ -426,15 +431,30 @@ def _build_llm_user_prompt(frontpage: dict) -> str:
     return "\n".join(lines)
 
 
-def _parse_llm_issues(raw_output: str) -> List[CodingIssue]:
-    """从 LLM 原始输出中解析质控问题。"""
-    parsed = _parse_json_from_text(raw_output)
-    if not parsed:
-        logger.warning("无法解析 LLM 输出为 JSON")
-        return []
+def _is_timeout_exception(exc: BaseException) -> bool:
+    """判断异常是否属于超时类型（兼容标准库与 httpx 等第三方异常）。"""
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
+        return True
+    return "timeout" in type(exc).__name__.lower()
 
-    issues = []
-    for item in parsed.get("issues", []):
+
+def _parse_llm_issues_with_status(raw_output: str) -> Tuple[List[CodingIssue], bool]:
+    """从 LLM 原始输出中解析质控问题，返回 (issues, parsed_ok)。"""
+    parsed = _parse_json_from_text(raw_output)
+    if not isinstance(parsed, dict):
+        logger.warning("无法解析 LLM 输出为有效 JSON 对象")
+        return [], False
+
+    raw_issues = parsed.get("issues")
+    if not isinstance(raw_issues, list):
+        logger.warning("LLM 输出缺少有效的 issues 列表字段")
+        return [], False
+
+    issues: List[CodingIssue] = []
+    for item in raw_issues:
+        if not isinstance(item, dict):
+            logger.warning("LLM 输出的 issues 列表包含非对象项")
+            return [], False
         issues.append(CodingIssue(
             dimension=item.get("dimension", "unknown"),
             severity=item.get("severity", "info"),
@@ -443,13 +463,23 @@ def _parse_llm_issues(raw_output: str) -> List[CodingIssue]:
             suggestion=item.get("suggestion", ""),
             source="llm",
         ))
+    return issues, True
+
+
+def _parse_llm_issues(raw_output: str) -> List[CodingIssue]:
+    """从 LLM 原始输出中解析质控问题。"""
+    issues, _ = _parse_llm_issues_with_status(raw_output)
     return issues
 
 
 def _parse_json_from_text(text: str) -> Optional[dict]:
     """从文本中提取 JSON（兼容 markdown 代码块包裹）。"""
+    if not isinstance(text, str) or not text.strip():
+        return None
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
     except (json.JSONDecodeError, TypeError):
         pass
 
@@ -457,7 +487,9 @@ def _parse_json_from_text(text: str) -> Optional[dict]:
     m = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
     if m:
         try:
-            return json.loads(m.group(1))
+            parsed = json.loads(m.group(1))
+            if isinstance(parsed, dict):
+                return parsed
         except json.JSONDecodeError:
             pass
 
@@ -472,7 +504,9 @@ def _parse_json_from_text(text: str) -> Optional[dict]:
                 depth -= 1
                 if depth == 0:
                     try:
-                        return json.loads(text[brace_start:i + 1])
+                        parsed = json.loads(text[brace_start:i + 1])
+                        if isinstance(parsed, dict):
+                            return parsed
                     except json.JSONDecodeError:
                         break
     return None
@@ -685,6 +719,50 @@ class CodingQCEngine:
 
         return issues
 
+    async def _run_semantic_check(self, frontpage: dict) -> Tuple[List[CodingIssue], str, bool, str]:
+        """
+        D3-D6：LLM 语义审查（返回明确完成状态）。
+
+        Returns:
+            (issues: List[CodingIssue], raw_output: str, llm_review_completed: bool, llm_review_status: str)
+        """
+        if not self.llm_client:
+            logger.info("LLM 客户端未配置，跳过语义审查")
+            return [], "", False, "unavailable"
+
+        # 检查是否有足够的编码数据值得做语义审查
+        diagnoses = frontpage.get("diagnoses") or []
+        if not diagnoses:
+            return [], "", False, "skipped"
+
+        user_prompt = _build_llm_user_prompt(frontpage)
+        full_prompt = f"{CODING_QC_SYSTEM_PROMPT}\n\n{user_prompt}"
+
+        try:
+            result = await self.llm_client.generate(full_prompt)
+            if not isinstance(result, dict):
+                logger.warning("LLM 语义审查返回非字典结果: %s", type(result).__name__)
+                return [], str(result or ""), False, "parse_failed"
+            choices = result.get("choices")
+            first_choice = (
+                choices[0]
+                if isinstance(choices, list) and choices and isinstance(choices[0], dict)
+                else {}
+            )
+            message = first_choice.get("message") if isinstance(first_choice.get("message"), dict) else {}
+            content = message.get("content", "")
+            if not isinstance(content, str):
+                content = "" if content is None else str(content)
+            issues, parsed_ok = _parse_llm_issues_with_status(content)
+            if not parsed_ok:
+                logger.warning("LLM 语义审查输出解析失败，标记语义审查未完成")
+                return [], content, False, "parse_failed"
+            return issues, content, True, "completed"
+        except Exception as e:
+            status = "timeout" if _is_timeout_exception(e) else "error"
+            logger.error(f"LLM 语义审查失败({status}): {e}")
+            return [], f"LLM 调用失败: {e}", False, status
+
     async def check_semantic(self, frontpage: dict) -> tuple:
         """
         D3-D6：LLM 语义审查。
@@ -692,33 +770,16 @@ class CodingQCEngine:
         Returns:
             (issues: List[CodingIssue], raw_output: str)
         """
-        if not self.llm_client:
-            logger.info("LLM 客户端未配置，跳过语义审查")
-            return [], ""
+        issues, raw_output, _, _ = await self._run_semantic_check(frontpage)
+        return issues, raw_output
 
-        # 检查是否有足够的编码数据值得做语义审查
-        diagnoses = frontpage.get("diagnoses") or []
-        if not diagnoses:
-            return [], ""
-
-        user_prompt = _build_llm_user_prompt(frontpage)
-        full_prompt = f"{CODING_QC_SYSTEM_PROMPT}\n\n{user_prompt}"
-
-        try:
-            result = await self.llm_client.generate(full_prompt)
-            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-            issues = _parse_llm_issues(content)
-            return issues, content
-        except Exception as e:
-            logger.error(f"LLM 语义审查失败: {e}")
-            return [], f"LLM 调用失败: {e}"
-
-    async def run_all(self, frontpage: dict) -> CodingQCReport:
+    async def run_all(self, frontpage: dict, *, skip_llm: bool = False) -> CodingQCReport:
         """
         执行全量编码质控（规则层 + LLM 层）。
 
         Args:
             frontpage: 病案首页数据字典
+            skip_llm: 是否显式跳过 LLM 语义审查
 
         Returns:
             CodingQCReport
@@ -732,9 +793,17 @@ class CodingQCEngine:
         report.rule_issues = format_issues + existence_issues + bidding_issues
 
         # --- LLM 层 ---
-        llm_issues, raw_output = await self.check_semantic(frontpage)
-        report.llm_issues = llm_issues
-        report.llm_raw_output = raw_output
+        if skip_llm:
+            report.llm_issues = []
+            report.llm_raw_output = ""
+            report.llm_review_completed = False
+            report.llm_review_status = "skipped"
+        else:
+            llm_issues, raw_output, llm_completed, llm_status = await self._run_semantic_check(frontpage)
+            report.llm_issues = llm_issues
+            report.llm_raw_output = raw_output
+            report.llm_review_completed = llm_completed
+            report.llm_review_status = llm_status
 
         # --- 汇总 ---
         all_issues = report.rule_issues + report.llm_issues

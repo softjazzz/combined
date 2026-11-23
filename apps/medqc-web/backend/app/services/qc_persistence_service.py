@@ -294,11 +294,15 @@ class QCPersistenceService:
             metadata.get("severities"),
             result.get("severities"),
         )
+        llm_review_completed = metadata.get("llm_review_completed")
+        if llm_review_completed is None:
+            llm_review_completed = result.get("llm_review_completed")
         is_partial_run = bool(
             metadata.get("is_partial_run")
             or result.get("is_partial_run")
             or metadata.get("skip_llm")
             or result.get("skip_llm")
+            or (llm_review_completed is False)
         )
         return {
             "evaluated_rule_codes": evaluated_rule_codes,

@@ -6,24 +6,36 @@ import asyncio
 from types import SimpleNamespace
 from typing import Any, Dict
 
+from unittest.mock import AsyncMock
+
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, MetaData, String, Table, Text, create_engine
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 import app.services.qc_persistence_service as qps
 from app.routers.qc import (
     _build_coding_qc_persistence_result,
     _build_formal_qc_persistence_result,
 )
+from app.services.coding_qc_service import CodingQCEngine
 from app.services.frontpage_formal_qc import Category as FQCategory, FrontpageFormalQC
 from app.services.qc_service import QCService
 
 
-def _build_sqlite_persistence_env(monkeypatch: pytest.MonkeyPatch, *, include_origin: bool = False):
+def _build_sqlite_persistence_env(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    include_origin: bool = False,
+    shared_pool: bool = False,
+):
     """Create an isolated in-memory SQLite schema and wire QCPersistenceService to it."""
-    eng = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    engine_kwargs: Dict[str, Any] = {"connect_args": {"check_same_thread": False}}
+    if shared_pool:
+        engine_kwargs["poolclass"] = StaticPool
+    eng = create_engine("sqlite:///:memory:", **engine_kwargs)
     meta = MetaData()
 
     qc_results = Table(
@@ -619,3 +631,166 @@ def test_caller_metadata_propagation_for_formal_qc_and_qc_service():
     full_eval = asyncio.run(qc_service.evaluate({"record_id": "REC_EVAL_FULL"}))
     assert full_eval["metadata"]["is_partial_run"] is False
     assert isinstance(full_eval["metadata"]["evaluated_rule_codes"], list)
+
+
+def _seed_coding_d4_defect(env, *, visit_id: str, actor: Dict[str, Any]):
+    """Seed an active D4 (exclusion) semantic defect via a completed full coding QC run."""
+    payload = {"patient_id": "P_D4", "visit_id": visit_id, "skip_llm": False}
+    initial_report = {
+        "total_issues": 1,
+        "rule_issues": [],
+        "llm_issues": [
+            {
+                "dimension": "exclusion",
+                "severity": "error",
+                "code": "E10/E11",
+                "rule_id": "D4_EXCLUSION_01",
+                "rule_name": "1型与2型糖尿病编码互斥",
+                "description": "E10 与 E11 互斥，不应同时编码",
+                "suggestion": "请核实糖尿病分型并删除互斥编码",
+            }
+        ],
+        "llm_review_completed": True,
+        "llm_review_status": "completed",
+    }
+    res_seed = _build_coding_qc_persistence_result(payload, initial_report)
+    assert res_seed["metadata"]["is_partial_run"] is False
+    assert res_seed["metadata"]["llm_review_completed"] is True
+    assert res_seed["metadata"]["llm_review_status"] == "completed"
+    seed_summary = asyncio.run(env.service.persist_analysis(res_seed, actor=actor))
+    assert seed_summary["defects_created"] == 1
+    return payload
+
+
+def test_coding_qc_llm_timeout_preserves_existing_d4_defect(monkeypatch):
+    """Regression: stub LLM raising TimeoutError must NOT auto-close active D4 defect."""
+    env = _build_sqlite_persistence_env(monkeypatch, shared_pool=True)
+    actor = {"id": "u1", "username": "coder"}
+    payload = _seed_coding_d4_defect(env, visit_id="V_CODE_TIMEOUT", actor=actor)
+
+    stub_llm = AsyncMock()
+    stub_llm.generate.side_effect = TimeoutError("LLM semantic review timed out")
+    engine = CodingQCEngine(llm_client=stub_llm)
+    frontpage = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+    report_dict = asyncio.run(engine.run_all(frontpage)).to_dict()
+
+    assert report_dict["llm_review_completed"] is False
+    assert report_dict["llm_review_status"] == "timeout"
+
+    pers_input = _build_coding_qc_persistence_result(payload, report_dict)
+    assert pers_input["metadata"]["is_partial_run"] is True
+    assert pers_input["metadata"]["llm_review_completed"] is False
+    assert pers_input["metadata"]["llm_review_status"] == "timeout"
+
+    summary = asyncio.run(env.service.persist_analysis(pers_input, actor=actor))
+    assert summary["defects_resolved"] == 0
+
+    with env.session_factory() as s:
+        row = s.execute(
+            sa.select(env.qc_defects.c.rule_code, env.qc_defects.c.status)
+            .where(env.qc_defects.c.rule_code == "D4_EXCLUSION_01")
+        ).mappings().one()
+        assert row["status"] == "pending"
+
+
+@pytest.mark.parametrize("bad_output", ["not valid json garbage", "", "{}"])
+def test_coding_qc_llm_parse_failure_preserves_existing_d4_defect(monkeypatch, bad_output):
+    """Regression: unparseable/empty LLM output must NOT auto-close active D4 defect."""
+    env = _build_sqlite_persistence_env(monkeypatch, shared_pool=True)
+    actor = {"id": "u1", "username": "coder"}
+    payload = _seed_coding_d4_defect(env, visit_id="V_CODE_PARSE_FAIL", actor=actor)
+
+    stub_llm = AsyncMock()
+    stub_llm.generate.return_value = {"choices": [{"message": {"content": bad_output}}]}
+    engine = CodingQCEngine(llm_client=stub_llm)
+    frontpage = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+    report_dict = asyncio.run(engine.run_all(frontpage)).to_dict()
+
+    assert report_dict["llm_review_completed"] is False
+    assert report_dict["llm_review_status"] == "parse_failed"
+
+    pers_input = _build_coding_qc_persistence_result(payload, report_dict)
+    assert pers_input["metadata"]["is_partial_run"] is True
+    assert pers_input["metadata"]["llm_review_completed"] is False
+    assert pers_input["metadata"]["llm_review_status"] == "parse_failed"
+
+    summary = asyncio.run(env.service.persist_analysis(pers_input, actor=actor))
+    assert summary["defects_resolved"] == 0
+
+    with env.session_factory() as s:
+        row = s.execute(
+            sa.select(env.qc_defects.c.rule_code, env.qc_defects.c.status)
+            .where(env.qc_defects.c.rule_code == "D4_EXCLUSION_01")
+        ).mappings().one()
+        assert row["status"] == "pending"
+
+
+def test_coding_qc_llm_valid_empty_issues_auto_closes_fixed_d4_defect(monkeypatch):
+    """Valid empty-issues semantic JSON marks review completed and auto-closes fixed D4 defect."""
+    env = _build_sqlite_persistence_env(monkeypatch, shared_pool=True)
+    actor = {"id": "u1", "username": "coder"}
+    payload = _seed_coding_d4_defect(env, visit_id="V_CODE_FIXED", actor=actor)
+
+    stub_llm = AsyncMock()
+    stub_llm.generate.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": '{"issues": [], "summary": {"total_issues": 0, "overall_assessment": "通过"}}'
+                }
+            }
+        ]
+    }
+    engine = CodingQCEngine(llm_client=stub_llm)
+    frontpage = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+    report_dict = asyncio.run(engine.run_all(frontpage)).to_dict()
+
+    assert report_dict["llm_review_completed"] is True
+    assert report_dict["llm_review_status"] == "completed"
+
+    pers_input = _build_coding_qc_persistence_result(payload, report_dict)
+    assert pers_input["metadata"]["is_partial_run"] is False
+    assert pers_input["metadata"]["llm_review_completed"] is True
+    assert pers_input["metadata"]["llm_review_status"] == "completed"
+
+    summary = asyncio.run(env.service.persist_analysis(pers_input, actor=actor))
+    assert summary["defects_resolved"] == 1
+
+    with env.session_factory() as s:
+        row = s.execute(
+            sa.select(env.qc_defects.c.rule_code, env.qc_defects.c.status)
+            .where(env.qc_defects.c.rule_code == "D4_EXCLUSION_01")
+        ).mappings().one()
+        assert row["status"] == "completed"
+
+
+def test_coding_qc_skip_llm_engine_run_preserves_existing_d4_defect(monkeypatch):
+    """skip_llm=True through CodingQCEngine.run_all produces skipped status and preserves D4 defect."""
+    env = _build_sqlite_persistence_env(monkeypatch, shared_pool=True)
+    actor = {"id": "u1", "username": "coder"}
+    _seed_coding_d4_defect(env, visit_id="V_CODE_SKIP", actor=actor)
+
+    stub_llm = AsyncMock()
+    engine = CodingQCEngine(llm_client=stub_llm)
+    frontpage = {"diagnoses": [{"code": "I21.001", "name": "急性心梗"}]}
+    report_dict = asyncio.run(engine.run_all(frontpage, skip_llm=True)).to_dict()
+
+    assert report_dict["llm_review_completed"] is False
+    assert report_dict["llm_review_status"] == "skipped"
+    stub_llm.generate.assert_not_awaited()
+
+    skip_payload = {"patient_id": "P_D4", "visit_id": "V_CODE_SKIP", "skip_llm": True}
+    pers_input = _build_coding_qc_persistence_result(skip_payload, report_dict)
+    assert pers_input["metadata"]["is_partial_run"] is True
+    assert pers_input["metadata"]["llm_review_completed"] is False
+    assert pers_input["metadata"]["llm_review_status"] == "skipped"
+
+    summary = asyncio.run(env.service.persist_analysis(pers_input, actor=actor))
+    assert summary["defects_resolved"] == 0
+
+    with env.session_factory() as s:
+        row = s.execute(
+            sa.select(env.qc_defects.c.rule_code, env.qc_defects.c.status)
+            .where(env.qc_defects.c.rule_code == "D4_EXCLUSION_01")
+        ).mappings().one()
+        assert row["status"] == "pending"
