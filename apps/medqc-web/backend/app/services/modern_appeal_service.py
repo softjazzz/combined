@@ -28,7 +28,8 @@ SOURCE_FIELDS = (
     "rule_set_version",
 )
 OPEN = ("pending", "reviewing")
-STATES = (*OPEN, "approved", "rejected", "withdrawn")
+STALE_CLOSE_ACTIONS = {"supersede", "close_stale"}
+STATES = (*OPEN, "approved", "rejected", "withdrawn", "superseded")
 REVIEWERS = {"admin", "qc_manager"}
 
 
@@ -249,11 +250,40 @@ class ModernAppealService:
             ).all()
             return {**_view(row), "events": [_view(event) for event in events]}
 
+    def _is_source_stale(self, session, data):
+        try:
+            source = self.source(session, data)
+        except RectificationError as exc:
+            if exc.status == 409:
+                return True
+            raise
+        return any(source.get(key) != data[key] for key in SOURCE_FIELDS)
+
+    def close_stale(
+        self,
+        actor_id,
+        appeal_id,
+        *,
+        expected_status="pending",
+        comment="质控已重跑至新轮次，终结原失效轮次未决申诉",
+        action="close_stale",
+    ):
+        if action not in STALE_CLOSE_ACTIONS:
+            raise RectificationError("申诉终结操作无效")
+        return self.transition(
+            actor_id,
+            appeal_id,
+            expected_status=expected_status,
+            action=action,
+            comment=comment,
+        )
+
     def transition(self, actor_id, appeal_id, *, expected_status, action, comment):
         if expected_status not in OPEN or action not in {
             "approve",
             "reject",
             "withdraw",
+            *STALE_CLOSE_ACTIONS,
         }:
             raise RectificationError("申诉操作无效")
         if not isinstance(comment, str) or not 10 <= len(comment.strip()) <= 2000:
@@ -274,6 +304,15 @@ class ModernAppealService:
                 if "doctor" not in actor["roles"] or row.appellant_id != actor_id:
                     raise RectificationError("仅申诉医生本人可以撤回", 403)
                 status = "withdrawn"
+            elif action in STALE_CLOSE_ACTIONS:
+                if not _reviewer(actor) or row.appellant_id == actor_id:
+                    raise RectificationError("仅独立质控审核人员可以终结失效申诉", 403)
+                data = {key: getattr(row, key) for key in SOURCE_FIELDS}
+                if not self._is_source_stale(session, data):
+                    raise RectificationError(
+                        "该申诉仍属于当前最新质控轮次，请按正常流程审核", 409
+                    )
+                status = "superseded"
             else:
                 if not _reviewer(actor) or row.appellant_id == actor_id:
                     raise RectificationError("仅独立质控审核人员可以审核", 403)

@@ -23,6 +23,7 @@ from .qc_result_ready_notification import SOURCE as RESULT_SOURCE, ready_predica
 SOURCE = "v5_doctor_feedback"
 QC_SOURCE = "v5_qc_feedback"
 REGISTRATION_SOURCE = "v5_account_registration"
+GLOBAL_ADMIN_ROLES = {"admin", "super_admin"}
 
 
 def _publish_qc_notification(
@@ -36,21 +37,39 @@ def _publish_qc_notification(
     rows = (
         session.execute(
             select(SysUser).where(
-                SysUser.is_active.is_(True), SysUser.institute_id == source.institute_id
+                SysUser.is_active.is_(True),
+                or_(
+                    SysUser.institute_id == source.institute_id,
+                    and_(
+                        SysUser.institute_id.is_(None),
+                        or_(
+                            SysUser.role.in_(tuple(GLOBAL_ADMIN_ROLES)),
+                            SysUser.roles_json.is_not(None),
+                        ),
+                    ),
+                ),
             ),
             execution_options=user_owner_options(session),
         )
         .scalars()
         .all()
     )
-    eligible = [
-        row
-        for row in rows
-        if row.id != actor_id
-        and _effective_persistent_roles(row.role, row.roles_json)
-        & ({"admin", "qc_manager"} if appeal else MANAGERS)
-    ]
-    # 优先原派发人；不能处理申诉或已停用时转同机构主管，避免丢给无权审核者。
+    same_inst_roles = (
+        {"admin", "super_admin", "qc_manager"}
+        if appeal
+        else (MANAGERS | GLOBAL_ADMIN_ROLES)
+    )
+    eligible = []
+    for row in rows:
+        if row.id == actor_id:
+            continue
+        roles = _effective_persistent_roles(row.role, row.roles_json)
+        if row.institute_id == source.institute_id:
+            if roles & same_inst_roles:
+                eligible.append(row)
+        elif row.institute_id is None and (roles & GLOBAL_ADMIN_ROLES):
+            eligible.append(row)
+    # 优先原派发人（含无机构全局 admin）；不能处理申诉或已停用时先转同机构主管，再兜底全局 admin。
     creator_id = getattr(source, "creator_id", None)
     if appeal:
         from .modern_appeal_service import SOURCE_FIELDS
@@ -64,11 +83,20 @@ def _publish_qc_notification(
             .limit(1)
         )
     preferred = [row for row in eligible if row.id == creator_id]
-    recipients = preferred or [
+    same_institute_managers = [
         row
         for row in eligible
-        if _effective_persistent_roles(row.role, row.roles_json) & {"admin", "qc_manager"}
+        if row.institute_id == source.institute_id
+        and _effective_persistent_roles(row.role, row.roles_json)
+        & {"admin", "super_admin", "qc_manager"}
     ]
+    global_admins = [
+        row
+        for row in eligible
+        if row.institute_id is None
+        and _effective_persistent_roles(row.role, row.roles_json) & GLOBAL_ADMIN_ROLES
+    ]
+    recipients = preferred or same_institute_managers or global_admins
     if not recipients:
         raise RectificationError(
             "没有可接收反馈的同机构质控账号，请联系管理员配置", 409
@@ -126,7 +154,12 @@ def publish_doctor_notification(
             comment=comment,
         )
     labels = (
-        {"approve": "申诉审核通过", "reject": "申诉已驳回"}
+        {
+            "approve": "申诉审核通过",
+            "reject": "申诉已驳回",
+            "supersede": "原轮次申诉已因新轮质控终结",
+            "close_stale": "原轮次申诉已因新轮质控终结",
+        }
         if appeal
         else {
             "assign": "新的整改任务",
@@ -192,12 +225,22 @@ class DoctorNotificationService:
         )
         modern = False
         qc_feedback = False
-        if actor["roles"] & MANAGERS and actor["institute_id"]:
+        is_global_admin = (
+            bool(actor["roles"] & GLOBAL_ADMIN_ROLES) and not actor["institute_id"]
+        )
+        if (
+            actor["roles"] & (MANAGERS | GLOBAL_ADMIN_ROLES) and actor["institute_id"]
+        ) or is_global_admin:
             identity = ("institute_id", "patient_id", "visit_id")
+            task_institute_cond = (
+                (Task.institute_id.is_not(None), func.trim(Task.institute_id) != "")
+                if is_global_admin
+                else (Task.institute_id == actor["institute_id"],)
+            )
             task = exists(
                 select(Task.id).where(
                     Task.id == Notification.related_id,
-                    Task.institute_id == actor["institute_id"],
+                    *task_institute_cond,
                     Task.assignee_id != actor["id"],
                     Task.scene.in_(("running", "final")),
                     Task.target_kind.in_(("canonical_defect", "task_manual_defect")),
@@ -220,11 +263,19 @@ class DoctorNotificationService:
                 )
             )
             appeal = False
-            if actor["roles"] & {"admin", "qc_manager"}:
+            if actor["roles"] & {"admin", "super_admin", "qc_manager"}:
+                appeal_institute_cond = (
+                    (
+                        Appeal.institute_id.is_not(None),
+                        func.trim(Appeal.institute_id) != "",
+                    )
+                    if is_global_admin
+                    else (Appeal.institute_id == actor["institute_id"],)
+                )
                 appeal = exists(
                     select(Appeal.id).where(
                         Appeal.id == Notification.related_id,
-                        Appeal.institute_id == actor["institute_id"],
+                        *appeal_institute_cond,
                         Appeal.appellant_id != actor["id"],
                         Appeal.scene.in_(("running", "final")),
                         Appeal.target_kind.in_(
@@ -249,10 +300,18 @@ class DoctorNotificationService:
                         ),
                     )
                 )
+            notif_institute_cond = (
+                (
+                    Notification.institute_id.is_not(None),
+                    func.trim(Notification.institute_id) != "",
+                )
+                if is_global_admin
+                else (Notification.institute_id == actor["institute_id"],)
+            )
             qc_feedback = and_(
                 Notification.source_key == QC_SOURCE,
                 Notification.identity_version == 1,
-                Notification.institute_id == actor["institute_id"],
+                *notif_institute_cond,
                 or_(
                     and_(Notification.related_type == "rectification", task),
                     and_(Notification.related_type == "modern_appeal", appeal),

@@ -149,13 +149,21 @@ class DefectRectificationService:
         self.document_loader = document_loader
         self.notification_writer = notification_writer
 
-    def _snapshot(self, row):
+    def _snapshot_identity(self, identity):
         from .rectification_document_snapshot import capture_documents
 
+        try:
+            return capture_documents(identity, loader=self.document_loader)
+        except RectificationError:
+            raise
+        except ValueError as exc:
+            raise RectificationError(str(exc), 422) from exc
+
+    def _snapshot(self, row):
         identity = {
             key: getattr(row, key) for key in ("institute_id", "patient_id", "visit_id")
         }
-        return capture_documents(identity, loader=self.document_loader)
+        return self._snapshot_identity(identity)
 
     def candidates(self, actor_id, **query):
         from .feedback_result_source import candidates
@@ -272,6 +280,36 @@ class DefectRectificationService:
     def transition(
         self, actor_id, task_id, *, version, action, comment, urge_event_id=None
     ):
+        if action != "withdraw_urge" and urge_event_id is not None:
+            raise RectificationError("仅撤回催办允许指定催办事件")
+        snapshot = None
+        if action == "submit":
+            # 先在无行锁只读会话完成权限与状态预检，再于锁外拉取 CDM 文书，避免持 FOR UPDATE 锁等待外部读 IO。
+            with self.sessions() as read_session:
+                pre_actor = self.person(read_session, actor_id)
+                pre_row = read_session.get(Task, task_id)
+                if pre_row is None:
+                    raise RectificationError("整改记录不存在", 404)
+                _scope(
+                    pre_actor,
+                    pre_row.institute_id,
+                    pre_row.department,
+                    assignee_id=pre_row.assignee_id,
+                )
+                if pre_row.version != version:
+                    raise RectificationError("整改已被更新，请刷新", 409)
+                if (
+                    pre_actor["id"] != pre_row.assignee_id
+                    or "doctor" not in pre_actor["roles"]
+                ):
+                    raise RectificationError("仅受领医生可提交", 403)
+                if pre_row.status not in {"pending", "rejected"}:
+                    raise RectificationError("当前状态不能提交", 409)
+                identity = {
+                    key: getattr(pre_row, key)
+                    for key in ("institute_id", "patient_id", "visit_id")
+                }
+            snapshot = self._snapshot_identity(identity)
         with self.sessions() as session, session.begin():
             actor = self.person(session, actor_id)
             row = session.execute(
@@ -284,8 +322,6 @@ class DefectRectificationService:
                 raise RectificationError("整改已被更新，请刷新", 409)
             old = row.status
             manager = _manager(actor)
-            if action != "withdraw_urge" and urge_event_id is not None:
-                raise RectificationError("仅撤回催办允许指定催办事件")
             if action == "submit":
                 if actor["id"] != row.assignee_id or "doctor" not in actor["roles"]:
                     raise RectificationError("仅受领医生可提交", 403)
@@ -326,7 +362,6 @@ class DefectRectificationService:
                 recipient = row.assignee_id
             else:
                 raise RectificationError("不支持的整改操作")
-            snapshot = self._snapshot(row) if action == "submit" else None
             changed = session.execute(
                 update(Task)
                 .where(Task.id == row.id, Task.version == version)
@@ -371,11 +406,16 @@ class DefectRectificationService:
                 key: getattr(row, key)
                 for key in ("institute_id", "patient_id", "visit_id")
             }
-            return compare_documents(
-                row.dispatch_document_snapshot,
-                event.submission_document_snapshot,
-                identity,
-            )
+            try:
+                return compare_documents(
+                    row.dispatch_document_snapshot,
+                    event.submission_document_snapshot,
+                    identity,
+                )
+            except RectificationError:
+                raise
+            except ValueError as exc:
+                raise RectificationError(str(exc), 422) from exc
 
     def list(self, actor_id, *, state=None, page=1, page_size=20, source=None):
         with self.sessions() as session:

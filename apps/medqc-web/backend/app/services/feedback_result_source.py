@@ -24,6 +24,26 @@ class _BorrowedReadSession:
         pass
 
 
+def verify_historical_envelope(session, identity, root_job_id, envelope_id):
+    """校验历史保存结果 envelope 存在且归属三坐标与 root_job_id，不要求其仍为最新轮次。"""
+    from .custom_qc_workspace_service import _record_result_envelopes_table
+
+    mapping = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
+    envelopes = _record_result_envelopes_table()
+    locked = session.execute(
+        select(envelopes.c.id)
+        .where(
+            envelopes.c.id == envelope_id,
+            envelopes.c.root_job_id == root_job_id,
+            *(getattr(envelopes.c, key) == value for key, value in mapping.items()),
+        )
+        .with_for_update(read=True)
+    ).scalar_one_or_none()
+    if locked is None:
+        raise RectificationError("原保存结果对象不存在或归属不一致", 409)
+    return locked
+
+
 def current_result(session, identity, expected_job_id, expected_envelope_id=None):
     from .case_identity import CaseRef
     from .custom_qc_workspace_service import (

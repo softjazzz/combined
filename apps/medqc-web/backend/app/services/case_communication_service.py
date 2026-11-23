@@ -132,6 +132,17 @@ def event_view(event, notice, *, withdrawn=False):
     }
 
 
+def _verify_envelope(session, data):
+    from .feedback_result_source import verify_historical_envelope
+
+    return verify_historical_envelope(
+        session,
+        tuple(data[key] for key in IDENTITY_FIELDS),
+        data["root_job_id"],
+        data["envelope_id"],
+    )
+
+
 class CaseCommunicationService:
     def __init__(
         self,
@@ -140,6 +151,7 @@ class CaseCommunicationService:
         department=None,
         person=None,
         notification_writer=None,
+        envelope_verifier=None,
     ):
         self.sessions = sessions or SessionLocal
         self.source = source or _source
@@ -148,6 +160,12 @@ class CaseCommunicationService:
         self.notification_writer = (
             notification_writer or publish_case_communication_notification
         )
+        if envelope_verifier is not None:
+            self.envelope_verifier = envelope_verifier
+        elif source is None:
+            self.envelope_verifier = _verify_envelope
+        else:
+            self.envelope_verifier = None
 
     def _rows(self, session, *conditions, page=None, page_size=20):
         from .doctor_notification_service import Notification
@@ -244,21 +262,18 @@ class CaseCommunicationService:
                 previous = self._existing(session, actor_id, data)
                 if previous:
                     return previous
-                source = self.source(session, data)
-                _valid_source(source)
-                if any(source[key] != data[key] for key in SOURCE_FIELDS):
-                    raise RectificationError("病历沟通冻结来源已变化", 409)
-                department = self.department(
-                    session, tuple(data[key] for key in IDENTITY_FIELDS)
-                )
-                recipient = self.person(session, data["recipient_id"])
-                if (
-                    "doctor" not in recipient["roles"]
-                    or recipient["institute_id"] != source["institute_id"]
-                    or recipient["department"] != department
-                ):
-                    raise RectificationError("受领人须为同院本科室有效医生", 403)
                 if data["action"] == "withdraw":
+                    _valid_source(data)
+                    department = self.department(
+                        session, tuple(data[key] for key in IDENTITY_FIELDS)
+                    )
+                    recipient = self.person(session, data["recipient_id"])
+                    if (
+                        "doctor" not in recipient["roles"]
+                        or recipient["institute_id"] != data["institute_id"]
+                        or recipient["department"] != department
+                    ):
+                        raise RectificationError("受领人须为同院本科室有效医生", 403)
                     original = session.scalar(
                         select(Event)
                         .where(Event.id == data["related_event_id"])
@@ -270,18 +285,36 @@ class CaseCommunicationService:
                         or original.recipient_id != recipient["id"]
                         or original.department != department
                         or any(
-                            getattr(original, key) != source[key]
+                            getattr(original, key) != data[key]
                             for key in SOURCE_FIELDS
                         )
                     ):
                         raise RectificationError(
                             "原催办与当前病历、收件人或冻结轮次不一致", 409
                         )
+                    if self.envelope_verifier is not None:
+                        self.envelope_verifier(session, data)
                     if session.scalar(
                         select(Event.id).where(Event.related_event_id == original.id)
                     ):
                         raise RectificationError("该催办已撤回", 409)
                     self._rows(session, Event.id == original.id)
+                    source = {key: getattr(original, key) for key in SOURCE_FIELDS}
+                else:
+                    source = self.source(session, data)
+                    _valid_source(source)
+                    if any(source[key] != data[key] for key in SOURCE_FIELDS):
+                        raise RectificationError("病历沟通冻结来源已变化", 409)
+                    department = self.department(
+                        session, tuple(data[key] for key in IDENTITY_FIELDS)
+                    )
+                    recipient = self.person(session, data["recipient_id"])
+                    if (
+                        "doctor" not in recipient["roles"]
+                        or recipient["institute_id"] != source["institute_id"]
+                        or recipient["department"] != department
+                    ):
+                        raise RectificationError("受领人须为同院本科室有效医生", 403)
                 event = Event(
                     id=str(uuid4()),
                     **source,

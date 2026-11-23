@@ -73,16 +73,19 @@ def _authorized(actor, institute_id):
         raise RectificationError("无权访问该机构病历审核", 403)
 
 
-def _case_rows(session, identity):
+def _case_rows(session, identity, *, scene=None):
+    conditions = [
+        *(
+            getattr(QCRecordReview, key) == value
+            for key, value in zip(SOURCE_FIELDS[:3], identity)
+        ),
+        QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+    ]
+    if scene is not None:
+        conditions.append(QCRecordReview.scene == scene)
     return session.scalars(
         select(QCRecordReview)
-        .where(
-            *(
-                getattr(QCRecordReview, key) == value
-                for key, value in zip(SOURCE_FIELDS[:3], identity)
-            ),
-            QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
-        )
+        .where(*conditions)
         .order_by(QCRecordReview.created_at.desc(), QCRecordReview.id.desc())
     ).all()
 
@@ -344,9 +347,16 @@ class RecordReviewWorkflowService:
         with self.sessions() as session:
             actor = self.person(session, actor_id)
             _, department = self._resolve(session, actor, source)
-            rows = _case_rows(session, tuple(source[key] for key in SOURCE_FIELDS[:3]))
+            rows = _case_rows(
+                session,
+                tuple(source[key] for key in SOURCE_FIELDS[:3]),
+                scene=source["scene"],
+            )
             state, stage, row = _derive_state(
-                rows, source["root_job_id"], source["envelope_id"]
+                rows,
+                source["root_job_id"],
+                source["envelope_id"],
+                scene=source["scene"],
             )
             return {
                 **source,
@@ -366,7 +376,11 @@ class RecordReviewWorkflowService:
                 raise RectificationError("审核历史不存在", 404)
             _authorized(actor, row.institute_id)
             view = _row_view(row)
-            rows = _case_rows(session, (row.institute_id, row.patient_id, row.visit_id))
+            rows = _case_rows(
+                session,
+                (row.institute_id, row.patient_id, row.visit_id),
+                scene=row.scene,
+            )
             return {
                 **{key: view[key] for key in SOURCE_FIELDS},
                 "case_department": view["case_department"],
@@ -413,20 +427,23 @@ class RecordReviewWorkflowService:
                         raise RectificationError("请求ID已用于其他审核内容", 409)
                     return view | {"idempotent": True}
                 identity = tuple(source[key] for key in SOURCE_FIELDS[:3])
-                # 锁串行化同病例跨结果的阶段推导，唯一约束兜底同结果竞争。
+                # 锁串行化同病例同场景跨结果的阶段推导，唯一约束兜底同结果竞争。
                 if session.get_bind().dialect.name == "postgresql":
                     session.execute(
                         text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
                         {
                             "key": "record_review|"
-                            + "|".join((*identity, source["rule_set_key"]))
+                            + "|".join(
+                                (*identity, source["rule_set_key"], source["scene"])
+                            )
                         },
                     )
                 current, department = self._resolve(session, actor, source)
                 state, stage, row = _derive_state(
-                    _case_rows(session, identity),
+                    _case_rows(session, identity, scene=source["scene"]),
                     source["root_job_id"],
                     source["envelope_id"],
+                    scene=source["scene"],
                 )
                 if row is not None or state != expected_state:
                     raise RectificationError("审核状态已变化，请刷新核对", 409)
@@ -508,7 +525,7 @@ class RecordReviewWorkflowService:
                 )
                 for row in rows:
                     grouped.setdefault(
-                        (row.institute_id, row.patient_id, row.visit_id), []
+                        (row.institute_id, row.patient_id, row.visit_id, row.scene), []
                     ).append(row)
             items = []
             for source in sources:
@@ -518,9 +535,15 @@ class RecordReviewWorkflowService:
                 _authorized(actor, source["institute_id"])
                 if scene and source["scene"] != scene:
                     continue
-                rows = grouped.get(tuple(source[key] for key in SOURCE_FIELDS[:3]), [])
+                rows = grouped.get(
+                    (*tuple(source[key] for key in SOURCE_FIELDS[:3]), source["scene"]),
+                    [],
+                )
                 current_state, stage, row = _derive_state(
-                    rows, source["root_job_id"], source["envelope_id"]
+                    rows,
+                    source["root_job_id"],
+                    source["envelope_id"],
+                    scene=source["scene"],
                 )
                 items.append(
                     {

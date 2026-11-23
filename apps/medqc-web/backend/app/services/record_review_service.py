@@ -43,33 +43,56 @@ def _chunks(values: Iterable[Any]) -> Iterable[list[Any]]:
         yield items[start : start + _IN_CHUNK]
 
 
-def _stage_from_decisions(decisions: list[Any], job_id: str, envelope_id: str) -> str:
-    """decisions 须已按 created_at、id 倒序；只看其他结果对象上的最近一次决定。"""
+def _stage_from_decisions(
+    decisions: list[Any],
+    job_id: str,
+    envelope_id: str,
+    *,
+    scene: str | None = None,
+) -> str:
+    """decisions 须已按 created_at、id 倒序；只看同场景其他结果对象上的最近一次决定。"""
+    target_scene = _review_scene(scene) if scene is not None else None
     for row in decisions:
         if row.job_id == job_id and row.envelope_id == envelope_id:
             continue
+        if target_scene is not None:
+            row_scene = _review_scene(getattr(row, "scene", None))
+            if row_scene != target_scene:
+                continue
         return "recheck" if row.decision == "doubtful" else "initial"
     return "initial"
 
 
 def _derive_state(
-    decisions: list[Any], job_id: str, envelope_id: str
+    decisions: list[Any],
+    job_id: str,
+    envelope_id: str,
+    *,
+    scene: str | None = None,
 ) -> tuple[str, str, Any | None]:
     """单病例与批量共用的唯一状态推导：返回 (state, stage, 当前决定行或 None)。
 
     decisions 须为同三坐标 + rule_set_key 的全部决定，按 created_at、id 倒序。
+    传入 scene 时按运行/终末场景严格隔离阶段推导，避免在院 doubtful 串入出院终末首次审核。
     """
+    target_scene = _review_scene(scene) if scene is not None else None
     current = next(
         (
             row
             for row in decisions
-            if row.job_id == job_id and row.envelope_id == envelope_id
+            if row.job_id == job_id
+            and row.envelope_id == envelope_id
+            and (
+                target_scene is None
+                or getattr(row, "scene", None) is None
+                or _review_scene(getattr(row, "scene", None)) == target_scene
+            )
         ),
         None,
     )
     if current is not None:
         return current.decision, current.stage, current
-    stage = _stage_from_decisions(decisions, job_id, envelope_id)
+    stage = _stage_from_decisions(decisions, job_id, envelope_id, scene=target_scene)
     return ("pending_recheck" if stage == "recheck" else "pending_review"), stage, None
 
 
@@ -145,9 +168,9 @@ def _normalize_identity(
 
 def _batch_anchors(
     results: Iterable[Any],
-) -> dict[tuple[str, str, str], tuple[str, str]]:
+) -> dict[tuple[str, str, str], tuple[str, str, str | None]]:
     """批量锚点校验：锚点不完整或规则集非 LX0609 的病例直接跳过。"""
-    anchors: dict[tuple[str, str, str], tuple[str, str]] = {}
+    anchors: dict[tuple[str, str, str], tuple[str, str, str | None]] = {}
     for item in results:
         if (
             not isinstance(item, dict)
@@ -161,15 +184,16 @@ def _batch_anchors(
         envelope_id = str(item.get("envelope_id") or "").strip()
         if identity is None or not job_id or not envelope_id:
             continue
-        anchors[identity] = (job_id, envelope_id)
+        scene = _review_scene(item.get("scene"))
+        anchors[identity] = (job_id, envelope_id, scene)
     return anchors
 
 
 def _batch_case_decisions(
     session: Any,
-    anchors: dict[tuple[str, str, str], tuple[str, str]],
+    anchors: dict[tuple[str, str, str], tuple[Any, ...]],
 ) -> dict[tuple[str, str, str], list[Any]]:
-    """列表挂载与导出共用的唯一批量决定查询：按 visit_id 分块，倒序。"""
+    """列表挂载与导出共用的唯一批量决定查询：按三坐标分块，倒序。"""
     decisions_by_case: dict[tuple[str, str, str], list[Any]] = {}
     for chunk in _chunks(sorted(anchors)):
         for row in session.execute(
@@ -178,6 +202,7 @@ def _batch_case_decisions(
                 QCRecordReview.institute_id,
                 QCRecordReview.patient_id,
                 QCRecordReview.visit_id,
+                QCRecordReview.scene,
                 QCRecordReview.job_id,
                 QCRecordReview.envelope_id,
                 QCRecordReview.stage,
@@ -210,8 +235,8 @@ def _batch_case_decisions(
 def batch_review_states(results: Iterable[Any]) -> dict[tuple[str, str, str], str]:
     """批量推导病例审核状态，供运行/终末列表挂载 review_state。
 
-    入参每项含三坐标、job_id、envelope_id、rule_set_key；锚点不完整或规则集非 LX0609 的
-    病例不出现在返回值中（调用方显示为未知）。决定按 visit_id 分块一次性读取，
+    入参每项含三坐标、job_id、envelope_id、rule_set_key（可选 scene）；锚点不完整或规则集非 LX0609 的
+    病例不出现在返回值中（调用方显示为未知）。决定按三坐标分块一次性读取，
     状态推导与单病例共用 _derive_state。数据库故障抛 RecordReviewUnavailable。
     """
     anchors = _batch_anchors(results)
@@ -225,9 +250,12 @@ def batch_review_states(results: Iterable[Any]) -> dict[tuple[str, str, str], st
         raise RecordReviewUnavailable("审核数据暂不可用") from exc
     return {
         identity: _derive_state(
-            decisions_by_case.get(identity, []), job_id, envelope_id
+            decisions_by_case.get(identity, []),
+            job_id,
+            envelope_id,
+            scene=scene,
         )[0]
-        for identity, (job_id, envelope_id) in anchors.items()
+        for identity, (job_id, envelope_id, scene) in anchors.items()
     }
 
 
@@ -252,9 +280,12 @@ def batch_current_reviews(
             decisions_by_case = _batch_case_decisions(session, anchors)
             derived = {
                 identity: _derive_state(
-                    decisions_by_case.get(identity, []), job_id, envelope_id
+                    decisions_by_case.get(identity, []),
+                    job_id,
+                    envelope_id,
+                    scene=scene,
                 )
-                for identity, (job_id, envelope_id) in anchors.items()
+                for identity, (job_id, envelope_id, scene) in anchors.items()
             }
             reviewer_ids = {
                 str(current.reviewer_id)
