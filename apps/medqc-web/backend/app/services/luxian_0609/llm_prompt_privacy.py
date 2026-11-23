@@ -42,10 +42,35 @@ _COMMON_SURNAME = (
 )
 # 仅识别人口学标签及明确性别值；不把“性别相关”等医疗叙述当身份依据。
 _LABELLED_SEX = r"性别[ \t]*[:：]?[ \t]*[男女](?=[\s，,、；;。\"}]|$)"
+# 仅带明确性别/年龄锚点的患者介绍才视为高置信姓名并参与全文替换；
+# 逗号后跟“因”（如“患者高热，因症状加重就诊”）常为临床叙述，未知姓名不盲猜。
 _PATIENT_INTRO = re.compile(
     rf"(?P<label>(?:患者|病人|患儿)\s*)"
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
-    rf"(?=(?:\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁|因)|\s*因))"
+    rf"(?=\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁))"
+)
+# 无逗号紧邻“因”的旧句式（如“患者孙小红因发热入院”）仍做原地兜底脱敏，
+# 但须排除常见临床/时间词，且不加入全文替换集合，避免误伤后文医学事实。
+_PATIENT_CAUSE_INTRO = re.compile(
+    rf"(?P<label>(?:患者|病人|患儿)\s*)"
+    rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
+    r"(?=因)"
+)
+_CAUSE_INTRO_NON_NAME_PREFIXES = (
+    "于", "从", "经", "查", "后", "左", "双", "单", "全", "空",
+    "平素", "平时", "平卧", "平稳", "常年", "长期", "常规", "周身",
+    "连日", "连续", "时有", "时感", "明显", "明确", "危重", "危急",
+    "强直", "强迫", "劳累", "劳力", "步态", "焦虑", "焦躁", "解黑",
+    "解稀", "解血", "解水", "高危", "高龄", "高度", "高热", "高温",
+    "黄疸", "黄染", "冷汗", "白带", "白内障", "包块", "房颤", "房扑",
+    "房早", "窦性", "窦缓", "窦速", "干咳", "干呕", "干燥", "红肿",
+    "红斑", "皮疹", "皮肤", "皮下", "水肿", "水疱", "支气管", "关节",
+    "宫缩", "宫颈", "宫腔", "宫口", "阴道", "阴性", "阴囊", "阴茎",
+    "麻醉", "麻木", "麻疹", "糜烂", "满腹", "谷丙", "谷草", "终末",
+)
+_CAUSE_INTRO_CLINICAL_SUFFIXES = frozenset(
+    "热痛咳呕吐泻喘闷晕肿疹斑痰血尿便压糖脂炎癌瘤病症颤烂醉折毒竭乱"
+    "肺肾肝胃肠脑胸腹腰背颈眼耳鼻咽喉肢膝肩臂腿肤膜腔管节块液汗温龄院"
 )
 _DEMOGRAPHIC_LABEL = (
     # 正文可能嵌在一层或多层 JSON 中；识别转义换行边界，不解码/重写整段医疗文本。
@@ -141,6 +166,27 @@ def _replace_labelled(pattern: re.Pattern[str], text: str, placeholder: str) -> 
     )
 
 
+def _is_plausible_unverified_cause_name(value: str) -> bool:
+    cleaned = value.strip()
+    if len(cleaned) < 2:
+        return False
+    if any(cleaned.startswith(prefix) for prefix in _CAUSE_INTRO_NON_NAME_PREFIXES):
+        return False
+    if cleaned[-1] in _CAUSE_INTRO_CLINICAL_SUFFIXES:
+        return False
+    return True
+
+
+def _replace_unverified_cause_intro(text: str, placeholder: str) -> str:
+    def _replace(match: re.Match[str]) -> str:
+        value = match.group("value")
+        if not _is_plausible_unverified_cause_name(value):
+            return match.group(0)
+        return f"{match.group('label')}{placeholder}"
+
+    return _PATIENT_CAUSE_INTRO.sub(_replace, text)
+
+
 def _protect_clinician_names(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
     protected: list[tuple[str, str]] = []
 
@@ -212,6 +258,10 @@ def redact_luxian_0609_patient_privacy(
     if known_names:
         redacted = _replace_labelled(known_intro, redacted, _PATIENT_NAME_PLACEHOLDER)
         redacted = _replace_labelled(known_demographic, redacted, _PATIENT_NAME_PLACEHOLDER)
+    redacted = _replace_unverified_cause_intro(
+        redacted,
+        _PATIENT_NAME_PLACEHOLDER,
+    )
     redacted = _replace_labelled(
         _CONTACT_NAME,
         redacted,

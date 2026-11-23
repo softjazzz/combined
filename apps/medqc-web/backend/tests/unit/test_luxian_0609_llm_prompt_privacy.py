@@ -250,3 +250,38 @@ def test_shared_client_temperature_override_is_validated_and_optional():
 
     parameter = inspect.signature(SichuanQCLLMClient.generate).parameters["temperature"]
     assert parameter.default is None
+
+
+@pytest.mark.parametrize(
+    "clinical_text",
+    [
+        "患者高热，因症状加重就诊。查体仍高热。",
+        "患者今日高热，复测仍高热。",
+        "患者高热因症状加重就诊。查体仍高热。",
+        "患者黄疸，因皮肤巩膜黄染入院。复查黄疸消退。",
+        "患者于昨日因高热入院。查体仍高热。",
+        "患者平素体健，因咳嗽入院。平素无药物过敏史。",
+    ],
+)
+def test_clinical_terms_after_patient_word_before_cause_are_not_masked(clinical_text):
+    assert redact_luxian_0609_patient_privacy(clinical_text) == clinical_text
+
+
+@pytest.mark.asyncio
+async def test_known_patient_name_in_same_cause_sentence_still_redacted_while_preserving_clinical_terms():
+    delegate = _CaptureClient()
+    client = wrap_luxian_0609_llm_client(delegate, identity_values=("高强",))
+    prompt = "患者高强，因高热加重就诊。查体仍高热，高强诉畏寒。"
+    await client.generate(prompt)
+    assert len(delegate.prompts) == 1
+    sent = delegate.prompts[0]
+    assert "高强" not in sent
+    assert sent == "患者[患者姓名已脱敏]，因高热加重就诊。查体仍高热，[患者姓名已脱敏]诉畏寒。"
+    assert redact_luxian_0609_patient_privacy(sent, identity_values=("高强",)) == sent
+
+
+def test_unverified_cause_intro_does_not_globally_replace_subsequent_text():
+    text = "患者孙小红因高热入院。查体仍高热。"
+    redacted = redact_luxian_0609_patient_privacy(text)
+    assert redacted == "患者[患者姓名已脱敏]因高热入院。查体仍高热。"
+    assert redact_luxian_0609_patient_privacy(redacted) == redacted
