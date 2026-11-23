@@ -259,6 +259,9 @@ def test_shared_client_temperature_override_is_validated_and_optional():
         "患者今日高热，复测仍高热。",
         "患者高热因症状加重就诊。查体仍高热。",
         "患者黄疸，因皮肤巩膜黄染入院。复查黄疸消退。",
+        "患者冷汗，因胸闷就诊。",
+        "患者周身乏力，因纳差入院。",
+        "患者高血压，因头晕就诊。复测血压仍高。",
         "患者于昨日因高热入院。查体仍高热。",
         "患者平素体健，因咳嗽入院。平素无药物过敏史。",
     ],
@@ -280,8 +283,62 @@ async def test_known_patient_name_in_same_cause_sentence_still_redacted_while_pr
     assert redact_luxian_0609_patient_privacy(sent, identity_values=("高强",)) == sent
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("prompt", "expected", "absent_tokens", "present_tokens"),
+    [
+        (
+            "患者孙小红，因发热入院。",
+            "患者[患者姓名已脱敏]，因发热入院。",
+            ("孙小红",),
+            ("发热",),
+        ),
+        (
+            "患者孙小红因发热入院。",
+            "患者[患者姓名已脱敏]因发热入院。",
+            ("孙小红",),
+            ("发热",),
+        ),
+        (
+            "患者高热，因症状加重就诊。查体仍高热。",
+            "患者高热，因症状加重就诊。查体仍高热。",
+            (),
+            ("高热",),
+        ),
+        (
+            "患者高强，因高热加重就诊。查体仍高热。",
+            "患者[患者姓名已脱敏]，因高热加重就诊。查体仍高热。",
+            ("高强",),
+            ("高热",),
+        ),
+    ],
+)
+async def test_wrapper_with_id_only_identity_redacts_comma_cause_names_and_preserves_clinical_terms(
+    prompt,
+    expected,
+    absent_tokens,
+    present_tokens,
+):
+    delegate = _CaptureClient()
+    client = wrap_luxian_0609_llm_client(delegate, identity_values=("PAT-001",))
+    await client.generate(prompt)
+    assert len(delegate.prompts) == 1
+    sent = delegate.prompts[0]
+    assert sent == expected
+    for token in absent_tokens:
+        assert token not in sent
+    for token in present_tokens:
+        assert sent.count(token) == prompt.count(token)
+    assert redact_luxian_0609_patient_privacy(sent, identity_values=("PAT-001",)) == sent
+
+
 def test_unverified_cause_intro_does_not_globally_replace_subsequent_text():
     text = "患者孙小红因高热入院。查体仍高热。"
     redacted = redact_luxian_0609_patient_privacy(text)
     assert redacted == "患者[患者姓名已脱敏]因高热入院。查体仍高热。"
     assert redact_luxian_0609_patient_privacy(redacted) == redacted
+
+    comma_text = "患者孙小红，因高热入院。查体仍高热，提及孙小红处不盲替。"
+    comma_redacted = redact_luxian_0609_patient_privacy(comma_text)
+    assert comma_redacted == "患者[患者姓名已脱敏]，因高热入院。查体仍高热，提及孙小红处不盲替。"
+    assert redact_luxian_0609_patient_privacy(comma_redacted) == comma_redacted
