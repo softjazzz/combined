@@ -294,10 +294,28 @@ async def test_known_patient_name_in_same_cause_sentence_still_redacted_while_pr
             ("发热",),
         ),
         (
+            "患者孙小红，因发热入院。孙小红诉畏寒。",
+            "患者[患者姓名已脱敏]，因发热入院。[患者姓名已脱敏]诉畏寒。",
+            ("孙小红",),
+            ("发热", "畏寒"),
+        ),
+        (
             "患者孙小红因发热入院。",
             "患者[患者姓名已脱敏]因发热入院。",
             ("孙小红",),
             ("发热",),
+        ),
+        (
+            "患者于小红，因发热入院。于小红诉畏寒。",
+            "患者[患者姓名已脱敏]，因发热入院。[患者姓名已脱敏]诉畏寒。",
+            ("于小红",),
+            ("发热", "畏寒"),
+        ),
+        (
+            "患者于昨日因高热入院。查体仍高热。",
+            "患者于昨日因高热入院。查体仍高热。",
+            (),
+            ("于昨日", "高热"),
         ),
         (
             "患者高热，因症状加重就诊。查体仍高热。",
@@ -306,10 +324,16 @@ async def test_known_patient_name_in_same_cause_sentence_still_redacted_while_pr
             ("高热",),
         ),
         (
-            "患者高强，因高热加重就诊。查体仍高热。",
-            "患者[患者姓名已脱敏]，因高热加重就诊。查体仍高热。",
+            "患者高强，因高热加重就诊。查体仍高热。高强诉畏寒。",
+            "患者[患者姓名已脱敏]，因高热加重就诊。查体仍高热。[患者姓名已脱敏]诉畏寒。",
             ("高强",),
-            ("高热",),
+            ("高热", "畏寒"),
+        ),
+        (
+            "患者孙小红，因发热入院。记录医师：孙小红。",
+            "患者[患者姓名已脱敏]，因发热入院。记录医师：孙小红。",
+            (),
+            ("记录医师：孙小红", "发热"),
         ),
     ],
 )
@@ -332,13 +356,21 @@ async def test_wrapper_with_id_only_identity_redacts_comma_cause_names_and_prese
     assert redact_luxian_0609_patient_privacy(sent, identity_values=("PAT-001",)) == sent
 
 
-def test_unverified_cause_intro_does_not_globally_replace_subsequent_text():
-    text = "患者孙小红因高热入院。查体仍高热。"
-    redacted = redact_luxian_0609_patient_privacy(text)
-    assert redacted == "患者[患者姓名已脱敏]因高热入院。查体仍高热。"
-    assert redact_luxian_0609_patient_privacy(redacted) == redacted
-
-    comma_text = "患者孙小红，因高热入院。查体仍高热，提及孙小红处不盲替。"
-    comma_redacted = redact_luxian_0609_patient_privacy(comma_text)
-    assert comma_redacted == "患者[患者姓名已脱敏]，因高热入院。查体仍高热，提及孙小红处不盲替。"
-    assert redact_luxian_0609_patient_privacy(comma_redacted) == comma_redacted
+def test_plausible_cause_intro_redacts_subsequent_mentions_without_masking_clinical_terms():
+    for text, expected in (
+        (
+            "患者孙小红，因发热入院。孙小红诉畏寒。",
+            "患者[患者姓名已脱敏]，因发热入院。[患者姓名已脱敏]诉畏寒。",
+        ),
+        (
+            "患者于小红，因发热入院。于小红诉畏寒。",
+            "患者[患者姓名已脱敏]，因发热入院。[患者姓名已脱敏]诉畏寒。",
+        ),
+        (
+            "患者孙小红因高热入院。查体仍高热，孙小红诉乏力。",
+            "患者[患者姓名已脱敏]因高热入院。查体仍高热，[患者姓名已脱敏]诉乏力。",
+        ),
+    ):
+        redacted = redact_luxian_0609_patient_privacy(text)
+        assert redacted == expected
+        assert redact_luxian_0609_patient_privacy(redacted) == redacted

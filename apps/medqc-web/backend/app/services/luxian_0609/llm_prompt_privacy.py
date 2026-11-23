@@ -42,22 +42,23 @@ _COMMON_SURNAME = (
 )
 # 仅识别人口学标签及明确性别值；不把“性别相关”等医疗叙述当身份依据。
 _LABELLED_SEX = r"性别[ \t]*[:：]?[ \t]*[男女](?=[\s，,、；;。\"}]|$)"
-# 仅带明确性别/年龄锚点的患者介绍才视为高置信姓名并参与全文替换；
-# 仅以“因”为锚点（含“患者某某，因...”与“患者某某因...”）只做原地兜底脱敏，不参与全文替换。
+# 带明确性别/年龄锚点的患者介绍视为高置信姓名并参与全文替换。
 _PATIENT_INTRO = re.compile(
     rf"(?P<label>(?:患者|病人|患儿)\s*)"
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
     rf"(?=\s*[，,、]\s*(?:{_LABELLED_SEX}|男|女|年龄|\d{{1,3}}\s*岁))"
 )
-# “因”锚点兜底（含可选逗号，如“患者孙小红，因发热入院”“患者孙小红因发热入院”）
-# 只做原地脱敏，不加入全文替换集合，并排除常见临床/时间词，避免误伤医学事实。
+# “因”锚点介绍（含可选逗号，如“患者孙小红，因发热入院”“患者孙小红因发热入院”）
+# 经常见临床/时间词过滤后视为可信患者姓名，原地脱敏并参与同篇后续出现替换。
 _PATIENT_CAUSE_INTRO = re.compile(
     rf"(?P<label>(?:患者|病人|患儿)\s*)"
     rf"(?P<value>{_COMMON_SURNAME}[\u4e00-\u9fff·]{{1,3}})"
     r"(?=(?:\s*[，,、]\s*因|\s*因))"
 )
 _CAUSE_INTRO_NON_NAME_PREFIXES = (
-    "于", "从", "经", "查", "后", "左", "双", "单", "全", "空",
+    "于昨日", "于今日", "于夜间", "于上午", "于下午", "于院外", "于家中", "于外院", "于入院",
+    "从高处", "经治疗", "经检查", "经外院", "经产", "经期", "查体", "查血", "查尿",
+    "左肺", "左侧", "左胸", "左腹", "双肺", "双侧", "双下肢", "全身", "全腹", "空腹",
     "平素", "平时", "平卧", "平稳", "平车", "常年", "长期", "常规", "周身",
     "连日", "连续", "时有", "时感", "明显", "明确", "危重", "危急", "严重",
     "强直", "强迫", "劳累", "劳力", "步态", "步行", "焦虑", "焦躁", "解黑",
@@ -232,11 +233,16 @@ def redact_luxian_0609_patient_privacy(
         )
         name_patterns = (*name_patterns, known_intro, known_demographic)
     protected_prompt, protected_clinicians = _protect_clinician_names(prompt)
+    inferred_cause_names = {
+        match.group("value").strip()
+        for match in _PATIENT_CAUSE_INTRO.finditer(protected_prompt)
+        if _is_plausible_unverified_cause_name(match.group("value"))
+    }
     patient_names = {
         match.group("value").strip()
         for pattern in name_patterns
         for match in pattern.finditer(protected_prompt)
-    }
+    } | inferred_cause_names
     contact_names = {
         match.group("value").strip()
         for match in _CONTACT_NAME.finditer(protected_prompt)
