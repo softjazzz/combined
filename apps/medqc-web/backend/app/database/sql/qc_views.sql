@@ -31,6 +31,7 @@ SELECT
     COUNT(*) AS count,
     0.0 AS avg_resolution_time_seconds
 FROM qc_appeals
+WHERE qc_result_id IS NOT NULL AND record_id IS NOT NULL
 GROUP BY status, appeal_type, priority;
 
 

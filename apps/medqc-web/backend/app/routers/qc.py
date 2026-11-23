@@ -3,11 +3,13 @@ import uuid
 import json
 import re
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterable, Set
+from contextlib import nullcontext
 
 from fastapi import APIRouter, HTTPException, status, Query, Request, Depends
+from sqlalchemy import inspect as sa_inspect, text
 
-from ..services.clinical_read import clinical_query
+from ..services.clinical_read import clinical_query, clinical_table_sql
 from ..schemas.qc import QCResult, QCRule
 from ..services.qc_service import QCService
 from ..core.supabase_client import get_supabase, async_execute
@@ -20,6 +22,20 @@ from ..core.permissions import (
     ResourceType,
     PermissionAction,
     UserRole,
+)
+from ..database import connection as db_connection
+from ..services.defect_rectification_service import _effective_persistent_roles
+from ..services.user_scope_owner import (
+    UserOwnerUnavailable,
+    configured_search_path,
+    resolve_user_owner_schema,
+)
+from ..services.luxian_0609.llm_prompt_privacy import (
+    redact_luxian_0609_patient_privacy,
+)
+from ..services.luxian_0609.privacy_request_scope import (
+    _case_scope,
+    bind_luxian_0609_identity_provider,
 )
 from ..services.qc_persistence_service import default_qc_persistence_service
 from ..services.workflow_queue_state_service import default_workflow_queue_state_service
@@ -35,11 +51,263 @@ service = QCService()
 import logging as _logging
 logger = _logging.getLogger(__name__)
 
+_GLOBAL_ROLES = frozenset({"admin", "sync_admin", "super_admin"})
+_QC_STAFF_ROLES = _GLOBAL_ROLES | frozenset({"qc_manager", "qc_staff"})
+_QC_CODING_ROLES = _QC_STAFF_ROLES | frozenset({"coder"})
+
+_DIRECT_IDENTITY_KEYS = frozenset(
+    {
+        "name",
+        "patient_name",
+        "patientName",
+        "id_card",
+        "id_card_no",
+        "identity_card",
+        "identity_card_no",
+        "phone",
+        "mobile",
+        "telephone",
+        "contact_number",
+        "contact_name",
+        "contact_telephone",
+        "contact_address",
+        "address",
+        "home_address",
+        "currentaddress",
+        "nativeplace",
+        "work_unit",
+        "mr_no",
+        "inpat_no",
+        "insurance_no",
+        "_privacy_identities",
+    }
+)
+_LLM_TEXT_KEYS = (
+    "clinical_summary",
+    "discharge_summary",
+    "record_content",
+    "chief_complaint",
+    "history_present_illness",
+    "summary",
+    "content",
+)
+
+
 def _current_user_id(current_user: Optional[Dict[str, Any]]) -> Optional[str]:
     if not current_user:
         return None
     value = current_user.get("id") or current_user.get("user_id")
     return str(value) if value else None
+
+
+def _table_columns(session, table_name: str) -> Set[str]:
+    bind = session.get_bind()
+    inspector = sa_inspect(bind)
+    if bind.dialect.name != "postgresql":
+        if not inspector.has_table(table_name):
+            return set()
+        return {col["name"] for col in inspector.get_columns(table_name)}
+    schemas = list(dict.fromkeys([*configured_search_path(), "qc", "public", "sys", "cdm"]))
+    for schema in schemas:
+        if inspector.has_table(table_name, schema=schema):
+            return {col["name"] for col in inspector.get_columns(table_name, schema=schema)}
+    if inspector.has_table(table_name):
+        return {col["name"] for col in inspector.get_columns(table_name)}
+    return set()
+
+
+def _resolve_qc_actor(
+    current_user: Dict[str, Any],
+    *,
+    allowed_roles: Iterable[str],
+    denied_detail: str = "权限不足",
+) -> Dict[str, Any]:
+    actor_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if not actor_id:
+        raise HTTPException(status_code=403, detail="缺少可信账号身份")
+
+    session_factory = db_connection.SessionLocal
+    if session_factory is None:
+        raise HTTPException(status_code=503, detail="账号机构权限来源暂不可用")
+
+    try:
+        with session_factory() as session:
+            owner_schema = resolve_user_owner_schema(session)
+            inspector = sa_inspect(session.connection())
+            if not inspector.has_table("sys_users", schema=owner_schema):
+                raise HTTPException(status_code=503, detail="账号持久表不可用")
+            user_cols = {
+                col["name"]
+                for col in inspector.get_columns("sys_users", schema=owner_schema)
+            }
+            has_institute = "institute_id" in user_cols
+            table_ref = f'"{owner_schema}"."sys_users"' if owner_schema else '"sys_users"'
+            select_cols = (
+                "id, display_name, role, roles_json, is_active, department"
+                + (", institute_id" if has_institute else "")
+            )
+            row = (
+                session.execute(
+                    text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
+                    {"uid": actor_id},
+                )
+                .mappings()
+                .one_or_none()
+            )
+    except HTTPException:
+        raise
+    except UserOwnerUnavailable:
+        raise HTTPException(status_code=503, detail="账号机构权限来源暂不可用") from None
+    except Exception:
+        logger.error("qc_actor_lookup_failed", exc_info=True)
+        raise HTTPException(status_code=503, detail="账号机构权限来源暂不可用") from None
+
+    if row is None or not bool(row.get("is_active")):
+        raise HTTPException(status_code=403, detail="账号不可用")
+
+    roles = _effective_persistent_roles(row.get("role"), row.get("roles_json"))
+    if not roles:
+        raise HTTPException(status_code=403, detail="账号缺少可信持久角色")
+
+    if not (roles & set(allowed_roles)):
+        raise HTTPException(status_code=403, detail=denied_detail)
+
+    is_global = bool(roles & _GLOBAL_ROLES)
+    institute_id = row.get("institute_id") if has_institute else None
+    if not is_global:
+        if not isinstance(institute_id, str) or not institute_id.strip() or institute_id != institute_id.strip():
+            raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
+    else:
+        institute_id = None
+
+    return {
+        "id": str(row["id"]),
+        "name": str(row.get("display_name") or current_user.get("display_name") or ""),
+        "roles": roles,
+        "is_global": is_global,
+        "institute_id": institute_id,
+    }
+
+
+def _check_requested_institute(
+    actor: Dict[str, Any],
+    requested_institute: Optional[str],
+    *,
+    denied_detail: str = "无权访问或操作其他机构数据",
+) -> Optional[str]:
+    req = str(requested_institute or "").strip() or None
+    if actor["is_global"]:
+        return req
+    if req is not None and req != actor["institute_id"]:
+        raise HTTPException(status_code=403, detail=denied_detail)
+    return actor["institute_id"]
+
+
+def _qc_results_has_institute_column() -> bool:
+    session_factory = db_connection.SessionLocal
+    if session_factory is None:
+        return False
+    try:
+        with session_factory() as session:
+            return "institute_id" in _table_columns(session, "qc_results")
+    except Exception:
+        return False
+
+
+def _collect_identity_values_from_mapping(
+    source: Any,
+    extra_values: Iterable[str] = (),
+) -> tuple[str, ...]:
+    values: Set[str] = set()
+    for val in extra_values:
+        if isinstance(val, str) and val.strip():
+            values.add(val.strip())
+
+    def _walk(obj: Any, depth: int = 0) -> None:
+        if depth > 4 or not isinstance(obj, dict):
+            return
+        for key, val in obj.items():
+            if key == "_privacy_identities" and isinstance(val, (list, tuple, set)):
+                for item in val:
+                    if isinstance(item, str) and item.strip():
+                        values.add(item.strip())
+            elif key in _DIRECT_IDENTITY_KEYS and isinstance(val, (str, int)) and not isinstance(val, bool):
+                text_val = str(val).strip()
+                if text_val and "*" not in text_val and "＊" not in text_val:
+                    values.add(text_val)
+            elif key in {"basic_info", "basic", "patient", "patient_info", "hospitalization", "record"} and isinstance(val, dict):
+                _walk(val, depth + 1)
+
+    _walk(source)
+    return tuple(sorted(values, key=len, reverse=True))
+
+
+def _redact_text_for_llm(text_value: str, identity_values: tuple[str, ...]) -> str:
+    redacted = redact_luxian_0609_patient_privacy(text_value, identity_values=identity_values)
+    for ident in identity_values:
+        if ident and not ident.isascii() and len(ident) >= 2 and ident in redacted:
+            redacted = redacted.replace(ident, "[患者姓名已脱敏]")
+    return redacted
+
+
+def _redact_frontpage_for_llm(
+    frontpage: Dict[str, Any],
+    identity_values: tuple[str, ...],
+) -> Dict[str, Any]:
+    """发往外部 LLM 前对病案首页临床文本脱敏，并剥离显式患者身份字段。"""
+    sanitized: Dict[str, Any] = {}
+    for key, val in frontpage.items():
+        if key in _DIRECT_IDENTITY_KEYS:
+            continue
+        if key in _LLM_TEXT_KEYS and isinstance(val, str):
+            sanitized[key] = _redact_text_for_llm(val, identity_values)
+        elif key in {"diagnoses", "surgeries"} and isinstance(val, list):
+            clean_items = []
+            for item in val:
+                if isinstance(item, dict):
+                    copied = dict(item)
+                    for text_key in ("name", "diagnosis_name", "operation_name", "description"):
+                        if isinstance(copied.get(text_key), str):
+                            copied[text_key] = _redact_text_for_llm(copied[text_key], identity_values)
+                    clean_items.append(copied)
+                else:
+                    clean_items.append(item)
+            sanitized[key] = clean_items
+        else:
+            sanitized[key] = val
+    return sanitized
+
+
+def _redact_analyze_payload_for_llm(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """对 /analyze 入口的临床正文与文书内容执行发前脱敏。"""
+    identities = _collect_identity_values_from_mapping(payload)
+    sanitized = dict(payload)
+    if isinstance(sanitized.get("content"), str):
+        sanitized["content"] = _redact_text_for_llm(sanitized["content"], identities)
+    if isinstance(sanitized.get("record"), dict):
+        rec_copy = dict(sanitized["record"])
+        if isinstance(rec_copy.get("content"), str):
+            rec_copy["content"] = _redact_text_for_llm(rec_copy["content"], identities)
+        if isinstance(rec_copy.get("documents"), list):
+            rec_copy["documents"] = _redact_documents_list(rec_copy["documents"], identities)
+        sanitized["record"] = rec_copy
+    if isinstance(sanitized.get("documents"), list):
+        sanitized["documents"] = _redact_documents_list(sanitized["documents"], identities)
+    return sanitized
+
+
+def _redact_documents_list(documents: List[Any], identities: tuple[str, ...]) -> List[Any]:
+    out: List[Any] = []
+    for doc in documents:
+        if isinstance(doc, dict):
+            doc_copy = dict(doc)
+            for field in ("content", "text", "record_content", "summary"):
+                if isinstance(doc_copy.get(field), str):
+                    doc_copy[field] = _redact_text_for_llm(doc_copy[field], identities)
+            out.append(doc_copy)
+        else:
+            out.append(doc)
+    return out
 
 
 def _extract_frontpage_value(frontpage: Dict[str, Any], *paths: tuple[str, ...] | str) -> str:
@@ -348,6 +616,16 @@ async def analyze_batch(
     current_user: dict = Depends(get_current_user)
 ):
     """批量分析病案记录"""
+    actor = _resolve_qc_actor(
+        current_user,
+        allowed_roles=_QC_STAFF_ROLES,
+        denied_detail="无权执行批量质控分析",
+    )
+    batch_institute = _check_requested_institute(
+        actor,
+        payload.get("institute_id"),
+        denied_detail="无权对其他机构病历执行批量质控分析",
+    )
     started = []
     records_payload: List[Dict[str, Any]] = payload.get("records", [])
     if records_payload:
@@ -355,15 +633,37 @@ async def analyze_batch(
             rid = entry.get("record_id") or entry.get("id")
             if not rid:
                 continue
-            entry_payload = dict(entry)
+            entry_inst = _check_requested_institute(
+                actor,
+                entry.get("institute_id") or batch_institute,
+                denied_detail="无权对其他机构病历执行批量质控分析",
+            )
+            entry_payload = _redact_analyze_payload_for_llm(dict(entry))
             entry_payload["record_id"] = rid
+            if entry_inst:
+                entry_payload["institute_id"] = entry_inst
             res = await service.evaluate(entry_payload)
+            if isinstance(res, dict) and entry_inst:
+                res = dict(res)
+                res["institute_id"] = entry_inst
+                meta = dict(res.get("metadata") or {}) if isinstance(res.get("metadata"), dict) else {}
+                meta.setdefault("institute_id", entry_inst)
+                res["metadata"] = meta
             persistence = await _save_qc_result(rid, res, actor=current_user)
             started.append({"record_id": rid, "status": "completed", "analysis_id": persistence.get("qc_result_id") or res.get("id"), "persistence": persistence})
     else:
         record_ids: List[str] = payload.get("record_ids", [])
         for rid in record_ids:
-            res = await service.evaluate({"record_id": rid})
+            eval_payload: Dict[str, Any] = {"record_id": rid}
+            if batch_institute:
+                eval_payload["institute_id"] = batch_institute
+            res = await service.evaluate(eval_payload)
+            if isinstance(res, dict) and batch_institute:
+                res = dict(res)
+                res["institute_id"] = batch_institute
+                meta = dict(res.get("metadata") or {}) if isinstance(res.get("metadata"), dict) else {}
+                meta.setdefault("institute_id", batch_institute)
+                res["metadata"] = meta
             persistence = await _save_qc_result(rid, res, actor=current_user)
             started.append({"record_id": rid, "status": "completed", "analysis_id": persistence.get("qc_result_id") or res.get("id"), "persistence": persistence})
 
@@ -386,9 +686,29 @@ async def analyze_record(
     current_user: dict = Depends(get_current_user)
 ):
     """分析单个病案记录"""
-    request_payload = dict(payload or {})
+    actor = _resolve_qc_actor(
+        current_user,
+        allowed_roles=_QC_STAFF_ROLES,
+        denied_detail="无权执行病历质控分析",
+    )
+    raw_payload = dict(payload or {})
+    rec_obj = raw_payload.get("record") if isinstance(raw_payload.get("record"), dict) else {}
+    effective_institute = _check_requested_institute(
+        actor,
+        raw_payload.get("institute_id") or rec_obj.get("institute_id"),
+        denied_detail="无权对其他机构病历执行质控分析",
+    )
+    request_payload = _redact_analyze_payload_for_llm(raw_payload)
     request_payload["record_id"] = record_id
+    if effective_institute:
+        request_payload["institute_id"] = effective_institute
     result = await service.evaluate(request_payload)
+    if isinstance(result, dict) and effective_institute:
+        result = dict(result)
+        result["institute_id"] = effective_institute
+        meta = dict(result.get("metadata") or {}) if isinstance(result.get("metadata"), dict) else {}
+        meta.setdefault("institute_id", effective_institute)
+        result["metadata"] = meta
     persistence = await _save_qc_result(record_id, result, actor=current_user)
     analysis_id = persistence.get("qc_result_id") or result.get("id") or f"analysis-{uuid.uuid4().hex[:8]}"
 
@@ -407,15 +727,25 @@ async def analyze_record(
 @router.get("/result/{record_id}", response_model=QCResult)
 @require_permission(ResourceType.QC_RESULTS, PermissionAction.READ)
 async def get_result(record_id: str, current_user: dict = Depends(get_current_user)):
-    """获取质控结果，从 PG qc_results 表读取"""
+    """获取质控结果，从 PG qc_results 表读取（强制角色与持久院区过滤）"""
+    actor = _resolve_qc_actor(
+        current_user,
+        allowed_roles=_QC_STAFF_ROLES,
+        denied_detail="无权读取质控结果",
+    )
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
     try:
-        resp = await async_execute(
-            sb.table('qc_results').select('*').eq('record_id', record_id).order('created_at', desc=True).limit(1)
-        )
+        query = sb.table('qc_results').select('*').eq('record_id', record_id)
+        if not actor["is_global"]:
+            if not _qc_results_has_institute_column():
+                raise HTTPException(status_code=403, detail="质控结果表缺少机构隔离字段")
+            query = query.eq('institute_id', actor["institute_id"])
+        resp = await async_execute(query.order('created_at', desc=True).limit(1))
         data = list(getattr(resp, 'data', None) or [])
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询质控结果失败: {str(e)}")
     if not data:
@@ -423,7 +753,12 @@ async def get_result(record_id: str, current_user: dict = Depends(get_current_us
             status_code=StatusCode.NOT_FOUND,
             detail="质控结果不存在"
         )
-    return _row_to_qc_result(data[0])
+    row = data[0]
+    if not actor["is_global"]:
+        row_inst = str(row.get("institute_id") or "").strip()
+        if row_inst != actor["institute_id"]:
+            raise HTTPException(status_code=403, detail="无权读取其他机构质控结果")
+    return _row_to_qc_result(row)
 
 
 @router.get("/progress/{analysis_id}")
@@ -457,7 +792,7 @@ async def list_rules(
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
     current_user: dict = Depends(get_current_user)
 ):
-    """获取质控规则列表（仅从 PG 加载，不再回退 JSON）。"""
+    """获取质控规则列表（仅从 PG 加载，禁止原始 .or_() 拼接注入）。"""
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
@@ -465,34 +800,60 @@ async def list_rules(
     try:
         launch_tier_map = load_sc_intrinsic_launch_tier_map()
         query = sb.table('qc_rules').select('*', count='exact')
-        if keyword:
-            if hasattr(query, 'or_'):
-                query = query.or_(f"name.ilike.%{keyword}%,description.ilike.%{keyword}%,rule_code.ilike.%{keyword}%")
         if category:
             query = query.eq('category', category)
-        if document_category:
-            if hasattr(query, 'or_'):
-                query = query.or_(
-                    f"applicable_documents.cs.{{{document_category}}},"
-                    f"applicable_documents.is.null,"
-                    f"applicable_documents.eq.{{}},"
-                    f"primary_document_category.eq.{document_category},"
-                    f"document_categories.cs.{{{document_category}}}"
-                )
         if rule_type:
             query = query.eq('rule_type', rule_type)
         if severity:
             query = query.eq('severity', severity)
         if is_active is not None:
             query = query.eq('is_active', is_active)
-        offset = (page - 1) * limit
-        if hasattr(query, 'range'):
-            query = query.range(offset, offset + limit - 1)
         if hasattr(query, 'order'):
             query = query.order('primary_document_category').order('name')
 
+        use_memory_filter = bool(keyword or document_category)
+        if not use_memory_filter:
+            offset = (page - 1) * limit
+            if hasattr(query, 'range'):
+                query = query.range(offset, offset + limit - 1)
+
         resp = await async_execute(query)
         data = list(getattr(resp, 'data', None) or [])
+
+        if keyword:
+            kw = keyword.lower()
+            data = [
+                item for item in data
+                if kw in str(item.get("name") or "").lower()
+                or kw in str(item.get("description") or "").lower()
+                or kw in str(item.get("rule_code") or "").lower()
+            ]
+        if document_category:
+            def _matches_doc_cat(item: Dict[str, Any]) -> bool:
+                if str(item.get("primary_document_category") or "") == document_category:
+                    return True
+                for field in ("applicable_documents", "document_categories"):
+                    raw_val = item.get(field)
+                    if raw_val is None or raw_val == [] or raw_val == "{}" or raw_val == "[]":
+                        if field == "applicable_documents":
+                            return True
+                    parsed = _parse_json_field(raw_val)
+                    if isinstance(parsed, list):
+                        if not parsed and field == "applicable_documents":
+                            return True
+                        if document_category in [str(x) for x in parsed]:
+                            return True
+                    elif isinstance(raw_val, str) and document_category in raw_val:
+                        return True
+                return False
+
+            data = [item for item in data if _matches_doc_cat(item)]
+
+        total = len(data) if use_memory_filter else getattr(resp, 'count', None)
+        if use_memory_filter:
+            offset = (page - 1) * limit
+            data = data[offset : offset + limit]
+
         tier_label_map = {
             "A": "默认启用",
             "B": "灰度",
@@ -507,7 +868,6 @@ async def list_rules(
             normalized['launch_tier'] = tier
             normalized['launch_tier_label'] = tier_label_map.get(tier, '未分层')
             enriched_data.append(normalized)
-        total = getattr(resp, 'count', None)
         if total is None:
             total = len(enriched_data)
 
@@ -654,16 +1014,32 @@ async def delete_rule(request: Request, rule_id: str, current_user: dict = Depen
 
 
 @router.get("/history")
-async def get_history(request: Request):
-    """获取质控历史，从 PG qc_results 表读取"""
+@require_permission(ResourceType.QC_RESULTS, PermissionAction.READ)
+async def get_history(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """获取质控历史，从 PG qc_results 表读取（强制角色与持久院区过滤）"""
+    actor = _resolve_qc_actor(
+        current_user,
+        allowed_roles=_QC_STAFF_ROLES,
+        denied_detail="无权查看质控历史",
+    )
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
     try:
+        query = sb.table('qc_results').select('*')
+        if not actor["is_global"]:
+            if not _qc_results_has_institute_column():
+                raise HTTPException(status_code=403, detail="质控结果表缺少机构隔离字段")
+            query = query.eq('institute_id', actor["institute_id"])
         resp = await async_execute(
-            sb.table('qc_results').select('*').order('created_at', desc=True).limit(100)
+            query.order('created_at', desc=True).limit(100)
         )
         items = list(getattr(resp, 'data', None) or [])
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询历史失败: {str(e)}")
     return success_response(
@@ -714,7 +1090,24 @@ async def validate_frontpage_formal(
         "severities": ["error"]                // 可选，按严重度过滤
     }
     """
+    actor = _resolve_qc_actor(
+        current_user,
+        allowed_roles=_QC_CODING_ROLES,
+        denied_detail="无权执行病案首页形式质控",
+    )
     frontpage = payload.get("frontpage") or payload
+    requested_institute = (
+        payload.get("institute_id")
+        or (frontpage.get("institute_id") if isinstance(frontpage, dict) else None)
+        or _extract_frontpage_value(frontpage, ("basic_info", "institute_id"), ("hospitalization", "institute_id"))
+        if isinstance(frontpage, dict)
+        else payload.get("institute_id")
+    )
+    effective_institute = _check_requested_institute(
+        actor,
+        requested_institute,
+        denied_detail="无权对其他机构病历执行形式质控",
+    )
     categories = None
     severities = None
     user_id = _current_user_id(current_user)
@@ -742,6 +1135,9 @@ async def validate_frontpage_formal(
 
         report = _formal_qc_engine.validate(frontpage, categories=categories, severities=severities)
         persistence_result = _build_formal_qc_persistence_result(frontpage, report, payload)
+        if effective_institute:
+            persistence_result["institute_id"] = effective_institute
+            persistence_result.setdefault("metadata", {})["institute_id"] = effective_institute
         persistence = await default_qc_persistence_service.persist_analysis(
             persistence_result,
             actor=current_user,
@@ -941,12 +1337,27 @@ async def check_coding_qc(
 
     POST body 支持两种模式：
     1. visit_id 模式（推荐）：直接从 PG 数据库读取诊断/手术数据
-       {"visit_id": "xxx", "patient_id": "xxx"}
+       {"institute_id": "xxx", "visit_id": "xxx", "patient_id": "xxx"}
     2. frontpage 模式（兼容旧版）：前端手动传入首页数据
        {"frontpage": { ... 首页数据字典 ... }}
     """
+    actor = _resolve_qc_actor(
+        current_user,
+        allowed_roles=_QC_CODING_ROLES,
+        denied_detail="无权执行编码质控",
+    )
     visit_id = payload.get("visit_id")
     patient_id = payload.get("patient_id")
+    raw_frontpage = payload.get("frontpage") if isinstance(payload.get("frontpage"), dict) else None
+    requested_institute = (
+        payload.get("institute_id")
+        or (raw_frontpage.get("institute_id") if raw_frontpage else None)
+    )
+    effective_institute = _check_requested_institute(
+        actor,
+        requested_institute,
+        denied_detail="无权对其他机构病历执行编码质控",
+    )
     skip_llm = payload.get("skip_llm", False)
     user_id = _current_user_id(current_user)
     run_id: Optional[str] = None
@@ -962,8 +1373,12 @@ async def check_coding_qc(
 
     try:
         if visit_id:
-            # === 从 PG 直接读取诊断和手术数据 ===
-            frontpage = _load_frontpage_from_pg(patient_id, visit_id)
+            # === 从 PG 直接读取诊断和手术数据（DB 异常直接上抛 HTTP 503，绝不误判通过） ===
+            frontpage = _load_frontpage_from_pg(
+                patient_id,
+                visit_id,
+                institute_id=effective_institute,
+            )
             if not frontpage:
                 if run_id and visit_id_for_state:
                     default_workflow_queue_state_service.finish_success(
@@ -985,13 +1400,22 @@ async def check_coding_qc(
 
         engine = _get_coding_qc_engine()
 
+        resolved_inst = str(effective_institute or payload.get("institute_id") or "").strip()
+        resolved_pid = str(patient_id or "").strip()
+        resolved_vid = str(visit_id or "").strip()
+        coords = (
+            (resolved_inst, resolved_pid, resolved_vid)
+            if (resolved_inst and resolved_pid and resolved_vid)
+            else None
+        )
+
         with llm_observation_context(
             business_scene="coding_qc",
             root_job_id=run_id or get_trace_id(request),
             record_identity=(
-                str(payload.get("institute_id") or ""),
-                str(patient_id or ""),
-                str(visit_id or ""),
+                resolved_inst,
+                resolved_pid,
+                resolved_vid,
             ),
             executor_key="coding_qc_engine",
         ):
@@ -999,12 +1423,26 @@ async def check_coding_qc(
                 temp_engine = CodingQCEngine(llm_client=None)
                 report = await temp_engine.run_all(frontpage, skip_llm=True)
             else:
-                report = await engine.run_all(frontpage)
+                known_identities = _collect_identity_values_from_mapping(
+                    frontpage,
+                    extra_values=(resolved_pid, resolved_vid),
+                )
+                sanitized_frontpage = _redact_frontpage_for_llm(frontpage, known_identities)
+                guard_identities = known_identities or ("__coding_qc_privacy_guard__",)
+                with _case_scope(coords):
+                    bind_luxian_0609_identity_provider(
+                        lambda: guard_identities,
+                        case_coordinates=coords,
+                    )
+                    report = await engine.run_all(sanitized_frontpage)
         report_dict = report.to_dict()
         persistence_result = _build_coding_qc_persistence_result(
             payload,
             report_dict,
         )
+        if effective_institute:
+            persistence_result["institute_id"] = effective_institute
+            persistence_result.setdefault("metadata", {})["institute_id"] = effective_institute
         persistence = await default_qc_persistence_service.persist_analysis(
             persistence_result,
             actor=current_user,
@@ -1038,39 +1476,65 @@ async def check_coding_qc(
         raise
 
 
-def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optional[Dict[str, Any]]:
-    """从 PG 数据库直接读取诊断和手术编码数据，组装为质控引擎所需的 frontpage 格式。"""
-    from sqlalchemy import text
+def _load_frontpage_from_pg(
+    patient_id: Optional[str],
+    visit_id: str,
+    institute_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """从 PG 数据库直接读取诊断和手术编码数据，按三坐标隔离且 DB 异常上抛 503。"""
     from sqlalchemy.orm import Session
     from ..database.connection import engine as db_engine
     from ..database.models.cdm import (
         MedicalRecordFrontpage, Diagnosis, MrCost, MrSurgery
     )
 
+    if db_engine is None:
+        raise HTTPException(status_code=503, detail="编码质控临床数据源暂不可用")
+
+    norm_institute = str(institute_id or "").strip() or None
+    norm_patient = str(patient_id or "").strip() or None
+
     try:
         with Session(db_engine) as session:
-            # 查询首页基本信息
+            # 查询首页基本信息（强制三坐标唯一性，拒绝跨院/跨患者混读）
             fp_query = clinical_query(session, MedicalRecordFrontpage).filter_by(visit_id=visit_id)
-            if patient_id:
-                fp_query = fp_query.filter_by(patient_id=patient_id)
-            fp = fp_query.first()
+            if norm_institute:
+                fp_query = fp_query.filter_by(institute_id=norm_institute)
+            if norm_patient:
+                fp_query = fp_query.filter_by(patient_id=norm_patient)
+            fp_rows = fp_query.limit(2).all()
+            if len(fp_rows) > 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail="存在多条同就诊号病历，请提供完整的 institute_id 与 patient_id 三坐标",
+                )
+            fp = fp_rows[0] if fp_rows else None
+
+            resolved_institute = norm_institute or (str(fp.institute_id).strip() if fp and fp.institute_id else None)
+            resolved_patient = norm_patient or (str(fp.patient_id).strip() if fp and fp.patient_id else None)
 
             # 查询诊断列表
             diag_query = clinical_query(session, Diagnosis).filter_by(visit_id=visit_id)
-            if patient_id:
-                diag_query = diag_query.filter_by(patient_id=patient_id)
+            if resolved_institute:
+                diag_query = diag_query.filter_by(institute_id=resolved_institute)
+            if resolved_patient:
+                diag_query = diag_query.filter_by(patient_id=resolved_patient)
             diag_rows = diag_query.all()
 
             if not diag_rows:
+                mr_diag_table = clinical_table_sql("mr_diagnosis")
                 mr_diag_sql = (
-                    "SELECT * FROM mr_diagnosis "
+                    f"SELECT * FROM {mr_diag_table} "
                     "WHERE visit_id = :visit_id "
                     "AND COALESCE(is_deleted, '0') <> '1' "
                 )
                 mr_diag_params: Dict[str, Any] = {"visit_id": visit_id}
-                if patient_id:
+                if resolved_institute:
+                    mr_diag_sql += "AND institute_id = :institute_id "
+                    mr_diag_params["institute_id"] = resolved_institute
+                if resolved_patient:
                     mr_diag_sql += "AND patient_id = :patient_id "
-                    mr_diag_params["patient_id"] = patient_id
+                    mr_diag_params["patient_id"] = resolved_patient
                 mr_diag_sql += "ORDER BY diagnosis_id"
                 diag_rows = [
                     dict(row)
@@ -1079,14 +1543,40 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
 
             # 查询手术列表
             surg_query = clinical_query(session, MrSurgery).filter_by(visit_id=visit_id)
-            if patient_id:
-                surg_query = surg_query.filter_by(patient_id=patient_id)
+            if resolved_institute:
+                surg_query = surg_query.filter_by(institute_id=resolved_institute)
+            if resolved_patient:
+                surg_query = surg_query.filter_by(patient_id=resolved_patient)
             surg_rows = surg_query.all()
+
+            # 无首页行且未指定三坐标时，检测诊断/手术是否跨院或跨患者
+            if not resolved_institute or not resolved_patient:
+                def _coord_of(r: Any) -> tuple[str, str]:
+                    if isinstance(r, dict):
+                        return (str(r.get("institute_id") or "").strip(), str(r.get("patient_id") or "").strip())
+                    return (str(getattr(r, "institute_id", "") or "").strip(), str(getattr(r, "patient_id", "") or "").strip())
+
+                coord_pairs = {
+                    _coord_of(r)
+                    for r in [*diag_rows, *surg_rows]
+                    if any(_coord_of(r))
+                }
+                if len(coord_pairs) > 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="存在多条同就诊号编码记录，请提供完整的 institute_id 与 patient_id 三坐标",
+                    )
+                if len(coord_pairs) == 1:
+                    only_inst, only_pid = next(iter(coord_pairs))
+                    resolved_institute = resolved_institute or (only_inst or None)
+                    resolved_patient = resolved_patient or (only_pid or None)
 
             # 查询费用信息，供病理诊断费一致性规则使用
             cost_query = clinical_query(session, MrCost).filter_by(visit_id=visit_id)
-            if patient_id:
-                cost_query = cost_query.filter_by(patient_id=patient_id)
+            if resolved_institute:
+                cost_query = cost_query.filter_by(institute_id=resolved_institute)
+            if resolved_patient:
+                cost_query = cost_query.filter_by(patient_id=resolved_patient)
             cost = cost_query.first()
 
             if not fp and not diag_rows and not surg_rows:
@@ -1186,8 +1676,8 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
 
             # 组装手术（主手术排第一）
             def _is_main_surgery_flag(v: Any) -> bool:
-                text = str(v or "").strip().lower()
-                return text in {"1", "是", "y", "yes", "true", "t", "main", "主"}
+                text_val = str(v or "").strip().lower()
+                return text_val in {"1", "是", "y", "yes", "true", "t", "main", "主"}
 
             surgeries = []
             main_surgeries = [s for s in surg_rows if _is_main_surgery_flag(s.main_surgery_sign)]
@@ -1211,6 +1701,11 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
                 "clinical_summary": "",
             }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.warning(f"从 PG 读取编码质控数据失败: {e}")
-        return None
+        logger.error("从 PG 读取编码质控数据失败: %s", type(e).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="编码质控临床数据源暂不可用",
+        ) from None
