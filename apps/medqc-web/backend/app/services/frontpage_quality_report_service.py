@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import csv
+import inspect
 import io
 import logging
 from collections import defaultdict
@@ -17,6 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable, Iterable, Mapping
+
+from sqlalchemy import func, select, tuple_
 
 from .report_institute_scope import authorized_report_institute
 
@@ -39,6 +42,7 @@ UNASSIGNED_DOCTOR = "未登记主治医师"
 MAX_REPORT_CASES = 5000
 TOP_LIMIT = 20
 MAX_PAGE_SIZE = 100
+_IN_CHUNK_SIZE = 500
 
 
 class FrontpageQualityReportInvalid(ValueError):
@@ -77,14 +81,248 @@ def _default_scope_loader(
     )
 
 
+def _chunked(
+    values: Iterable[Any], size: int | None = None
+) -> Iterable[list[Any]]:
+    chunk_size = _IN_CHUNK_SIZE if size is None else size
+    items = list(values)
+    for start in range(0, len(items), chunk_size):
+        yield items[start : start + chunk_size]
+
+
+def _normalize_sql_bound(column: Any, value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if getattr(getattr(column, "type", None), "timezone", False):
+        return (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
+    return (
+        value.astimezone(timezone.utc).replace(tzinfo=None)
+        if value.tzinfo is not None
+        else value
+    )
+
+
+def _load_pushed_down_latest_results(
+    svc: Any,
+    source_keys: tuple[str, ...],
+    *,
+    institute_id: str | None = None,
+    analyzed_from: datetime | None = None,
+    analyzed_to: datetime | None = None,
+    identities: Iterable[tuple[str, str, str]] | None = None,
+) -> list[dict]:
+    from .modern_case_qc_result_service import (
+        BATCH_CHUNK,
+        ModernCaseQCResultError,
+        SourceUnavailable,
+        _OWNER_KEYS,
+        _projection,
+        _serialize_row,
+    )
+    from .qc_report_identity import VerifiedQCIdentity
+
+    keys = tuple(sorted({str(key) for key in source_keys}))
+    for key in keys:
+        VerifiedQCIdentity("_", "_", "_", key)
+    normalized_identities: list[tuple[str, str, str]] | None = None
+    if identities is not None:
+        normalized_identities = sorted(
+            {
+                (str(item[0]).strip(), str(item[1]).strip(), str(item[2]).strip())
+                for item in identities
+                if len(item) == 3 and all(str(part or "").strip() for part in item)
+            }
+        )
+        if not normalized_identities:
+            return []
+    session_factory = getattr(svc, "_session_factory", None)
+    if session_factory is None:
+        raise SourceUnavailable("modern case QC source is unavailable")
+    try:
+        session = session_factory()
+    except Exception:
+        raise SourceUnavailable("modern case QC source is unavailable") from None
+    try:
+        tables = svc._require_modern_tables()
+        results = tables["qc_results"]
+        owner_columns = [results.c[name] for name in _OWNER_KEYS]
+        lower_bound = _normalize_sql_bound(results.c.analysis_date, analyzed_from)
+        upper_bound = _normalize_sql_bound(results.c.analysis_date, analyzed_to)
+
+        def _query_chunk(
+            identity_chunk: list[tuple[str, str, str]] | None,
+        ) -> list[Mapping[str, Any]]:
+            inner_predicates = [
+                results.c.identity_version == 1,
+                results.c.source_key.in_(keys),
+            ]
+            if institute_id is not None:
+                inner_predicates.append(results.c.institute_id == institute_id)
+            if identity_chunk is not None:
+                inner_predicates.append(
+                    tuple_(
+                        results.c.institute_id,
+                        results.c.patient_id,
+                        results.c.visit_id,
+                    ).in_(identity_chunk)
+                )
+            ranked = (
+                select(
+                    *owner_columns,
+                    *_projection(results),
+                    func.row_number()
+                    .over(
+                        partition_by=owner_columns,
+                        order_by=svc._latest_first(results),
+                    )
+                    .label("latest_rank"),
+                )
+                .where(*inner_predicates)
+                .subquery()
+            )
+            effective_time = func.coalesce(
+                ranked.c.analysis_date, ranked.c.created_at
+            )
+            outer_predicates = [ranked.c.latest_rank == 1]
+            if lower_bound is not None or upper_bound is not None:
+                outer_predicates.append(effective_time.is_not(None))
+            if lower_bound is not None:
+                outer_predicates.append(effective_time >= lower_bound)
+            if upper_bound is not None:
+                outer_predicates.append(effective_time <= upper_bound)
+            return (
+                session.execute(select(ranked).where(*outer_predicates))
+                .mappings()
+                .all()
+            )
+
+        rows: list[Mapping[str, Any]] = []
+        if normalized_identities is None:
+            rows = _query_chunk(None)
+        else:
+            for chunk in _chunked(normalized_identities, _IN_CHUNK_SIZE):
+                rows.extend(_query_chunk(chunk))
+
+        latest: list[dict[str, Any]] = []
+        distinct_cases: set[tuple[str, str, str]] = set()
+        for row in rows:
+            data = dict(row)
+            data.pop("latest_rank", None)
+            owner = {name: data.pop(name) for name in _OWNER_KEYS}
+            distinct_cases.add(
+                (
+                    _text(owner.get("institute_id")),
+                    _text(owner.get("patient_id")),
+                    _text(owner.get("visit_id")),
+                )
+            )
+            latest.append({**owner, "result": _serialize_row(data), "defects": []})
+
+        if not latest or len(distinct_cases) > MAX_REPORT_CASES:
+            return latest
+
+        by_result = {str(item["result"]["id"]): item for item in latest}
+        defects = tables["qc_defects"]
+        result_ids = sorted(by_result)
+        for chunk in _chunked(result_ids, BATCH_CHUNK):
+            for row in (
+                session.execute(
+                    select(
+                        defects.c.result_id.label("owner_result_id"),
+                        *(
+                            defects.c[name].label(f"owner_{name}")
+                            for name in _OWNER_KEYS
+                        ),
+                        *_projection(defects),
+                    )
+                    .where(
+                        defects.c.identity_version == 1,
+                        defects.c.result_id.in_(chunk),
+                    )
+                    .order_by(defects.c.result_id, defects.c.id)
+                )
+                .mappings()
+                .all()
+            ):
+                data = dict(row)
+                owner = by_result.get(str(data.pop("owner_result_id")))
+                defect_owner = {
+                    name: data.pop(f"owner_{name}") for name in _OWNER_KEYS
+                }
+                if owner is not None and all(
+                    defect_owner[name] == owner[name] for name in _OWNER_KEYS
+                ):
+                    owner["defects"].append(_serialize_row(data))
+        return latest
+    except ModernCaseQCResultError:
+        raise
+    except Exception:
+        raise SourceUnavailable("modern case QC source is unavailable") from None
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
+
+
 def _default_latest_loader(
-    source_keys: tuple[str, ...], *, institute_id: str | None = None
+    source_keys: tuple[str, ...],
+    *,
+    institute_id: str | None = None,
+    analyzed_from: datetime | None = None,
+    analyzed_to: datetime | None = None,
+    identities: Iterable[tuple[str, str, str]] | None = None,
 ) -> list[dict]:
     from .modern_case_qc_result_service import default_modern_case_qc_result_service
 
-    return default_modern_case_qc_result_service.list_latest_results(
-        source_keys, institute_id=institute_id
+    svc = default_modern_case_qc_result_service
+    if hasattr(svc, "_require_modern_tables") and hasattr(svc, "_session_factory"):
+        return _load_pushed_down_latest_results(
+            svc,
+            source_keys,
+            institute_id=institute_id,
+            analyzed_from=analyzed_from,
+            analyzed_to=analyzed_to,
+            identities=identities,
+        )
+    return svc.list_latest_results(source_keys, institute_id=institute_id)
+
+
+def _call_latest_loader(
+    latest_loader: Callable[..., list[dict]],
+    source_keys: tuple[str, ...],
+    *,
+    institute_id: str | None,
+    analyzed_from: datetime | None,
+    analyzed_to: datetime | None,
+    identities: set[tuple[str, str, str]] | None,
+) -> list[dict]:
+    candidates: dict[str, Any] = {}
+    if institute_id is not None:
+        candidates["institute_id"] = institute_id
+    if analyzed_from is not None:
+        candidates["analyzed_from"] = analyzed_from
+    if analyzed_to is not None:
+        candidates["analyzed_to"] = analyzed_to
+    if identities is not None:
+        candidates["identities"] = identities
+    if not candidates:
+        return latest_loader(source_keys)
+    try:
+        params = inspect.signature(latest_loader).parameters
+    except (TypeError, ValueError):
+        return latest_loader(source_keys, **candidates)
+    accepts_var_kw = any(
+        param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values()
     )
+    if accepts_var_kw:
+        return latest_loader(source_keys, **candidates)
+    accepted = {key: value for key, value in candidates.items() if key in params}
+    return latest_loader(source_keys, **accepted)
 
 
 # ---------------------------------------------------------------------------
@@ -159,8 +397,48 @@ def build_report_context(
         raise FrontpageQualityReportInvalid("analyzed_from 不能晚于 analyzed_to")
     institute = authorized_report_institute(actor_id)
     institute_filter = {"institute_id": institute} if institute is not None else {}
+    pool_by_identity: dict[tuple[str, str, str], Mapping[str, Any]] | None = None
+    allowed_identities: set[tuple[str, str, str]] | None = None
+    if department or doctor:
+        try:
+            pool = scope_loader(
+                department=department, doctor=doctor, **institute_filter
+            )
+        except Exception as exc:  # noqa: BLE001 - 范围读取失败整体 503
+            logger.warning("病案首页报表范围读取失败 error_type=%s", type(exc).__name__)
+            raise FrontpageQualityReportUnavailable("病历范围暂不可用") from exc
+        pool_by_identity = {}
+        for record in pool:
+            key = (
+                _text(record.get("institute_id")),
+                _text(record.get("patient_id")),
+                _text(record.get("visit_id")),
+            )
+            if all(key) and (institute is None or key[0] == institute):
+                pool_by_identity.setdefault(key, record)
+        allowed_identities = set(pool_by_identity)
+        if not allowed_identities:
+            return ReportContext(
+                scope={
+                    "department": department,
+                    "doctor": doctor,
+                    "analyzed_from": analyzed_from.isoformat()
+                    if analyzed_from
+                    else None,
+                    "analyzed_to": analyzed_to.isoformat() if analyzed_to else None,
+                    "sources": list(SOURCES),
+                },
+                rows=[],
+            )
     try:
-        latest = latest_loader(SOURCES, **institute_filter)
+        latest = _call_latest_loader(
+            latest_loader,
+            SOURCES,
+            institute_id=institute,
+            analyzed_from=window_from,
+            analyzed_to=window_to,
+            identities=allowed_identities,
+        )
     except SchemaUnavailable as exc:
         raise FrontpageQualityReportSchemaUnavailable(
             "首页质控现代数据源未部署"
@@ -183,6 +461,7 @@ def build_report_context(
             source not in SOURCES
             or not all(identity)
             or (institute is not None and identity[0] != institute)
+            or (allowed_identities is not None and identity not in allowed_identities)
         ):
             continue
         result = item.get("result") if isinstance(item.get("result"), Mapping) else {}
@@ -205,22 +484,23 @@ def build_report_context(
     if not by_identity:
         rows: list[CaseRow] = []
     else:
-        try:
-            pool = scope_loader(
-                department=department, doctor=doctor, **institute_filter
-            )
-        except Exception as exc:  # noqa: BLE001 - 范围读取失败整体 503
-            logger.warning("病案首页报表范围读取失败 error_type=%s", type(exc).__name__)
-            raise FrontpageQualityReportUnavailable("病历范围暂不可用") from exc
-        pool_by_identity: dict[tuple[str, str, str], Mapping[str, Any]] = {}
-        for record in pool:
-            key = (
-                _text(record.get("institute_id")),
-                _text(record.get("patient_id")),
-                _text(record.get("visit_id")),
-            )
-            if all(key):
-                pool_by_identity.setdefault(key, record)
+        if pool_by_identity is None:
+            try:
+                pool = scope_loader(
+                    department=department, doctor=doctor, **institute_filter
+                )
+            except Exception as exc:  # noqa: BLE001 - 范围读取失败整体 503
+                logger.warning("病案首页报表范围读取失败 error_type=%s", type(exc).__name__)
+                raise FrontpageQualityReportUnavailable("病历范围暂不可用") from exc
+            pool_by_identity = {}
+            for record in pool:
+                key = (
+                    _text(record.get("institute_id")),
+                    _text(record.get("patient_id")),
+                    _text(record.get("visit_id")),
+                )
+                if all(key):
+                    pool_by_identity.setdefault(key, record)
         rows = []
         for identity in sorted(by_identity):
             record = pool_by_identity.get(identity)

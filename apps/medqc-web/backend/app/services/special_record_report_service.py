@@ -5,6 +5,9 @@ import io
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 
+from sqlalchemy import select
+
+from ..database import clinical_connection
 from ..database.connection import SessionLocal
 from . import record_quality_report_service as base
 from . import special_record_report_source_service as source
@@ -13,7 +16,92 @@ HOSPITAL_TZ = timezone(timedelta(hours=8))
 MAX_CASES = 5000
 
 
+def _to_datetime(value):
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    if isinstance(value, str) and value.strip():
+        text = value.strip()
+        if len(text) == 10:
+            parsed = date.fromisoformat(text)
+            return datetime(parsed.year, parsed.month, parsed.day)
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    return None
+
+
+def _load_independent_cohort(*, discharged_from, discharged_to, department, institute_id):
+    from . import clinical_case_catalog as catalog_service
+
+    clinical_engine = clinical_connection.get_engine()
+    if clinical_engine is None:
+        raise RuntimeError("独立临床库只读连接不可用")
+    catalog = catalog_service.catalog(clinical_engine, include_frontpage=False)
+    is_sqlite = clinical_engine.dialect.name == "sqlite"
+    predicates = catalog_service._predicates(
+        catalog,
+        dept=department,
+        hospital_status="discharged",
+        start_date=None if is_sqlite else discharged_from,
+        end_date=None if is_sqlite else discharged_to,
+        date_field="discharge",
+        institute_id=institute_id,
+    )
+    stmt = (
+        select(
+            catalog.c.institute_id,
+            catalog.c.patient_id,
+            catalog.c.visit_id,
+            catalog.c.name,
+            catalog.c.department,
+            catalog.c.admission,
+            catalog.c.discharge,
+        )
+        .where(*predicates)
+        .order_by(catalog.c.institute_id, catalog.c.patient_id, catalog.c.visit_id)
+    )
+    if not is_sqlite:
+        stmt = stmt.limit(MAX_CASES + 1)
+    with clinical_engine.connect() as connection:
+        raw_rows = connection.execute(stmt).mappings().all()
+    rows = []
+    for row in raw_rows:
+        discharge_dt = _to_datetime(catalog_service._datetime(row["discharge"]))
+        if not isinstance(discharge_dt, datetime):
+            continue
+        discharge_day = (
+            discharge_dt.astimezone(HOSPITAL_TZ)
+            if discharge_dt.tzinfo
+            else discharge_dt
+        ).date()
+        if not discharged_from <= discharge_day <= discharged_to:
+            continue
+        admission_dt = _to_datetime(catalog_service._datetime(row["admission"]))
+        rows.append(
+            {
+                "institute_id": str(row["institute_id"] or "").strip(),
+                "patient_id": str(row["patient_id"] or "").strip(),
+                "visit_id": str(row["visit_id"] or "").strip(),
+                "patient_name": str(row["name"] or "").strip(),
+                "department": str(row["department"] or "").strip() or None,
+                "hospitalization_status": "discharged",
+                "admission_time": admission_dt,
+                "discharge_time": discharge_dt,
+            }
+        )
+        if len(rows) > MAX_CASES:
+            raise source.SpecialReportInvalid("出院队列超过5000例，请缩小范围")
+    return rows
+
+
 def load_cohort(*, discharged_from, discharged_to, department, institute_id):
+    if clinical_connection.configured():
+        return _load_independent_cohort(
+            discharged_from=discharged_from,
+            discharged_to=discharged_to,
+            department=department,
+            institute_id=institute_id,
+        )
     from .case_scope_service import CaseScopeService
 
     rows = []
@@ -138,8 +226,11 @@ class SpecialRecordReportService:
             cohort[identity] = row
         if len(cohort) > MAX_CASES:
             raise source.SpecialReportInvalid("出院队列超过5000例，请缩小范围")
-        with self.sessions() as session:
-            sources = source.load_sources(session, cohort)
+        if clinical_connection.configured():
+            sources = source.load_sources(None, cohort)
+        else:
+            with self.sessions() as session:
+                sources = source.load_sources(session, cohort)
         raw_results = (
             self.results_loader(
                 [dict(zip(source.COORDINATES, identity)) for identity in cohort]

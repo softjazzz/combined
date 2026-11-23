@@ -144,6 +144,7 @@ class CoreSystemReportService:
             raise RuntimeError("结果来源回执无效")
         versions = {}
         cases = []
+        has_time_window = bool(start or end)
         for identity, record in identities.items():
             result = raw.get(identity)
             row = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
@@ -159,14 +160,22 @@ class CoreSystemReportService:
                 points=[],
                 coverage="unavailable",
             )
+            completed = (
+                _parse_completed_at(result.get("completed_at"))
+                if isinstance(result, dict)
+                else None
+            )
+            if has_time_window and (
+                completed is None
+                or (start and completed < start)
+                or (end and completed > end)
+            ):
+                continue
             if not isinstance(result, dict) or result.get("status") != "ready":
                 cases.append(row)
                 continue
-            completed = _parse_completed_at(result.get("completed_at"))
             if completed is None or not isinstance(result.get("items"), list):
                 cases.append(row)
-                continue
-            if (start and completed < start) or (end and completed > end):
                 continue
             for key in (
                 "root_job_id",

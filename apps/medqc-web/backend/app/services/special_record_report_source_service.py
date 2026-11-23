@@ -7,7 +7,9 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import MetaData, Table, inspect, select, text, tuple_
 from sqlalchemy.exc import IntegrityError
 
+from ..database import clinical_connection
 from ..database.connection import SessionLocal
+from .clinical_read import clinical_read_schema
 from .defect_rectification_service import RectificationError, _person
 
 COORDINATES = ("institute_id", "patient_id", "visit_id")
@@ -106,10 +108,30 @@ def authorize(session, actor_id, institute_id):
     return institute_id
 
 
+def _sync_config_registry_table(session) -> str:
+    """按 single/split schema 模式解析配置注册表名，移除硬编码 qc.sync_config_registry。"""
+    from ..database import connection as db_connection
+
+    if (
+        str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+    ):
+        return "qc.sync_config_registry"
+    conn = session.connection()
+    if conn is not None and conn.dialect.name == "sqlite":
+        inspector = inspect(conn)
+        if not inspector.has_table("sync_config_registry") and inspector.has_table(
+            "sync_config_registry", schema="qc"
+        ):
+            return "qc.sync_config_registry"
+    return "sync_config_registry"
+
+
 def config_in_session(session, institute_id):
+    registry_table = _sync_config_registry_table(session)
     row = session.execute(
         text(
-            "SELECT payload_json FROM qc.sync_config_registry "
+            f"SELECT payload_json FROM {registry_table} "
             "WHERE namespace=:ns AND config_key=:key"
         ),
         {"ns": "special_record_report", "key": institute_id},
@@ -143,13 +165,14 @@ def write_config(actor_id, institute_id, *, version_seq, config, session_factory
     try:
         with (session_factory or SessionLocal)() as session, session.begin():
             institute_id = authorize(session, actor_id, institute_id)
+            registry_table = _sync_config_registry_table(session)
             params = {"ns": "special_record_report", "key": institute_id}
             lock = (
                 " FOR UPDATE" if session.get_bind().dialect.name == "postgresql" else ""
             )
             row = session.execute(
                 text(
-                    "SELECT payload_json FROM qc.sync_config_registry "
+                    f"SELECT payload_json FROM {registry_table} "
                     "WHERE namespace=:ns AND config_key=:key" + lock
                 ),
                 params,
@@ -174,7 +197,7 @@ def write_config(actor_id, institute_id, *, version_seq, config, session_factory
                 params["previous"] = row[0]
                 changed = session.execute(
                     text(
-                        "UPDATE qc.sync_config_registry SET payload_json=:payload, "
+                        f"UPDATE {registry_table} SET payload_json=:payload, "
                         "updated_by=:actor, updated_at=CURRENT_TIMESTAMP "
                         "WHERE namespace=:ns AND config_key=:key AND payload_json=:previous"
                     ),
@@ -185,7 +208,7 @@ def write_config(actor_id, institute_id, *, version_seq, config, session_factory
             else:
                 session.execute(
                     text(
-                        "INSERT INTO qc.sync_config_registry "
+                        f"INSERT INTO {registry_table} "
                         "(namespace,config_key,payload_json,updated_by,source,change_reason,updated_at) "
                         "VALUES (:ns,:key,:payload,:actor,'special_report','院方显式代码配置',CURRENT_TIMESTAMP)"
                     ),
@@ -196,27 +219,26 @@ def write_config(actor_id, institute_id, *, version_seq, config, session_factory
         raise SpecialReportConflict("类型配置并发冲突") from exc
 
 
-def load_sources(session, identities):
-    """只反射白名单字段；缺表/列保留未知，数据库读取异常向上抛出。"""
-    inspector = inspect(session.get_bind())
+def _load_sources_from_bind(executor, bind, identities, *, schema):
+    inspector = inspect(bind)
     result = {identity: {name: None for name in SOURCES} for identity in identities}
+    ordered = sorted(identities)
     for name, allowed in SOURCES.items():
-        if not inspector.has_table(name):
+        if not inspector.has_table(name, schema=schema):
             continue
-        columns = {column["name"] for column in inspector.get_columns(name)}
+        columns = {column["name"] for column in inspector.get_columns(name, schema=schema)}
         if not set(COORDINATES).issubset(columns):
             continue
         selected = [field for field in allowed if field in columns]
         if not selected:
             continue
-        table = Table(name, MetaData(), autoload_with=session.get_bind())
+        table = Table(name, MetaData(), schema=schema, autoload_with=bind)
         for identity in identities:
             result[identity][name] = []
-        ordered = sorted(identities)
         total = 0
         for start in range(0, len(ordered), 500):
             rows = (
-                session.execute(
+                executor.execute(
                     select(*(table.c[field] for field in (*COORDINATES, *selected)))
                     .where(
                         tuple_(*(table.c[field] for field in COORDINATES)).in_(
@@ -235,6 +257,24 @@ def load_sources(session, identities):
                 identity = tuple(str(row[field]).strip() for field in COORDINATES)
                 result[identity][name].append(dict(row))
     return result
+
+
+def load_sources(session, identities):
+    """只反射白名单字段；按临床只读路由区分 single/split/独立CDM；缺表/列保留未知。"""
+    if not identities:
+        return {}
+    if clinical_connection.configured():
+        clinical_engine = clinical_connection.get_engine()
+        if clinical_engine is None:
+            raise RuntimeError("独立临床库只读连接不可用")
+        with clinical_engine.connect() as connection:
+            return _load_sources_from_bind(
+                connection, connection, identities, schema="cdm"
+            )
+    conn = session.connection()
+    return _load_sources_from_bind(
+        session, conn, identities, schema=clinical_read_schema()
+    )
 
 
 def time_value(value):

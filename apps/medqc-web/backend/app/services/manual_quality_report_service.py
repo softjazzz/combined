@@ -29,6 +29,8 @@ from .qc_workspace.canonical_result_store import (
 from .user_scope_owner import user_owner_options
 
 MAX_ROWS = 10000
+_IN_CHUNK_SIZE = 500
+_ENVELOPE_CHUNK_SIZE = 200
 REVIEW = ("pending", "approved", "rejected", "unknown")
 RECTIFICATION = (
     "pending",
@@ -46,6 +48,27 @@ def _json(value):
         return json.loads(value)
     except (TypeError, ValueError):
         return None
+
+
+def _chunked(values, size=None):
+    chunk_size = _IN_CHUNK_SIZE if size is None else size
+    items = list(values)
+    for start in range(0, len(items), chunk_size):
+        yield items[start : start + chunk_size]
+
+
+def _is_valid_envelope_payload(raw_json, result_count):
+    if type(result_count) is not int:
+        return False
+    payload = _json(raw_json)
+    return (
+        isinstance(payload, dict)
+        and payload.get("schema_version") == RECORD_RESULT_ENVELOPE_SCHEMA
+        and payload.get("delivery_mode") == CANONICAL_RESULT_DELIVERY_MODE
+        and isinstance(payload.get("items"), list)
+        and bool(payload["items"])
+        and len(payload["items"]) == result_count
+    )
 
 
 def _source(defect, histories, records, runs, jobs, envelopes):
@@ -110,18 +133,19 @@ def _source(defect, histories, records, runs, jobs, envelopes):
     if len(matches) != 1:
         return task, department, None
     envelope = matches[0]
-    payload = _json(envelope["envelope_json"])
+    payload_valid = (
+        bool(envelope["payload_valid"])
+        if "payload_valid" in envelope
+        else _is_valid_envelope_payload(
+            envelope.get("envelope_json"), envelope.get("result_count")
+        )
+    )
     if (
         not _text(envelope["id"], maximum=36)
         or envelope["record_id"] != identity[2]
         or envelope["created_by"] != defect.manual_created_by
-        or not isinstance(payload, dict)
-        or payload.get("schema_version") != RECORD_RESULT_ENVELOPE_SCHEMA
-        or payload.get("delivery_mode") != CANONICAL_RESULT_DELIVERY_MODE
-        or not isinstance(payload.get("items"), list)
-        or not payload["items"]
         or type(envelope["result_count"]) is not int
-        or len(payload["items"]) != envelope["result_count"]
+        or not payload_valid
     ):
         return task, department, None
     return (
@@ -160,8 +184,6 @@ class ManualQualityReportService:
             or not 1 <= page_size <= 100
         ):
             raise RectificationError("分页参数无效")
-        if department and not institute_id:
-            raise RectificationError("科室筛选须同时指定机构")
         as_of = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         window = RankingWindow(
             period="custom",
@@ -182,6 +204,8 @@ class ManualQualityReportService:
                 ):
                     raise RectificationError("无权读取该机构报表", 403)
                 institute_id = actor["institute_id"]
+            if department and not institute_id:
+                raise RectificationError("科室筛选须同时指定机构")
             self_only = "admin" not in roles and "qc_manager" not in roles
             if self_only and creator_id and creator_id != actor_id:
                 raise RectificationError("仅可读取本人录入的人工缺陷", 403)
@@ -360,88 +384,137 @@ class ManualQualityReportService:
                 "people": {},
                 "tasks": {},
             }
-        for row in session.scalars(
-            select(QCDefectHistory).where(
-                QCDefectHistory.defect_id.in_(ids),
-                QCDefectHistory.action == "manual_create",
-            )
-        ):
-            histories[row.defect_id].append(row)
+        for chunk in _chunked(ids):
+            for row in session.scalars(
+                select(QCDefectHistory).where(
+                    QCDefectHistory.defect_id.in_(chunk),
+                    QCDefectHistory.action == "manual_create",
+                )
+            ):
+                histories[row.defect_id].append(row)
         details = [
             _history_details(row) or {}
             for values in histories.values()
             for row in values
         ]
-        task_ids = [
-            value["task_id"]
-            for value in details
-            if isinstance(value.get("task_id"), str)
-        ]
-        record_ids = [
-            value["task_record_id"]
-            for value in details
-            if isinstance(value.get("task_record_id"), str)
-        ]
-        job_ids = [
-            value["job_id"] for value in details if isinstance(value.get("job_id"), str)
-        ]
-        run_refs = [
-            (value["task_id"], value["run_number"])
-            for value in details
-            if isinstance(value.get("task_id"), str)
-            and type(value.get("run_number")) is int
-        ]
-        records = {
-            row["id"]: row
+        task_ids = sorted(
+            {
+                value["task_id"]
+                for value in details
+                if isinstance(value.get("task_id"), str)
+            }
+        )
+        record_ids = sorted(
+            {
+                value["task_record_id"]
+                for value in details
+                if isinstance(value.get("task_record_id"), str)
+            }
+        )
+        job_ids = sorted(
+            {
+                value["job_id"]
+                for value in details
+                if isinstance(value.get("job_id"), str)
+            }
+        )
+        run_refs = sorted(
+            {
+                (value["task_id"], value["run_number"])
+                for value in details
+                if isinstance(value.get("task_id"), str)
+                and type(value.get("run_number")) is int
+            }
+        )
+        records = {}
+        for chunk in _chunked(record_ids):
             for row in session.execute(
-                select(QCTaskRecord.__table__).where(QCTaskRecord.id.in_(record_ids))
-            ).mappings()
-        }
-        runs = {
-            (row["task_id"], row["run_number"]): row
+                select(
+                    QCTaskRecord.id,
+                    QCTaskRecord.task_id,
+                    QCTaskRecord.record_id,
+                    QCTaskRecord.institute_id,
+                    QCTaskRecord.patient_id,
+                    QCTaskRecord.visit_id,
+                    QCTaskRecord.department,
+                ).where(QCTaskRecord.id.in_(chunk))
+            ).mappings():
+                records[row["id"]] = dict(row)
+        runs = {}
+        for chunk in _chunked(run_refs, _ENVELOPE_CHUNK_SIZE):
             for row in session.execute(
-                select(QCTaskQCRun.__table__).where(
-                    tuple_(QCTaskQCRun.task_id, QCTaskQCRun.run_number).in_(run_refs)
+                select(
+                    QCTaskQCRun.task_id,
+                    QCTaskQCRun.run_number,
+                    QCTaskQCRun.job_id,
+                    QCTaskQCRun.run_scope,
+                    QCTaskQCRun.triggered_by,
+                ).where(
+                    tuple_(QCTaskQCRun.task_id, QCTaskQCRun.run_number).in_(chunk)
                 )
-            ).mappings()
-        }
+            ).mappings():
+                runs[(row["task_id"], row["run_number"])] = dict(row)
         job_table, envelope_table = self.tables or (
             _batch_jobs_table(readonly=True),
             _record_result_envelopes_table(),
         )
-        jobs = {
-            row["id"]: row
+        jobs = {}
+        for chunk in _chunked(job_ids):
             for row in session.execute(
-                select(job_table).where(job_table.c.id.in_(job_ids))
-            ).mappings()
-        }
+                select(
+                    job_table.c.id,
+                    job_table.c.created_by,
+                    job_table.c.filters_json,
+                ).where(job_table.c.id.in_(chunk))
+            ).mappings():
+                jobs[row["id"]] = dict(row)
         envelopes = defaultdict(list)
-        case_refs = {
-            (
-                value.get("job_id"),
-                defect.institute_id,
-                defect.patient_id,
-                defect.visit_id,
+        case_refs = sorted(
+            {
+                (
+                    value.get("job_id"),
+                    defect.institute_id,
+                    defect.patient_id,
+                    defect.visit_id,
+                )
+                for defect in defects
+                for history in histories.get(defect.id, [])
+                for value in [_history_details(history) or {}]
+                if isinstance(value.get("job_id"), str)
+            }
+        )
+        for chunk in _chunked(case_refs, _ENVELOPE_CHUNK_SIZE):
+            stream = (
+                session.execute(
+                    select(
+                        envelope_table.c.id,
+                        envelope_table.c.root_job_id,
+                        envelope_table.c.institute_id,
+                        envelope_table.c.patient_id,
+                        envelope_table.c.visit_id,
+                        envelope_table.c.rule_set_key,
+                        envelope_table.c.rule_set_version,
+                        envelope_table.c.record_id,
+                        envelope_table.c.created_by,
+                        envelope_table.c.result_count,
+                        envelope_table.c.envelope_json,
+                    )
+                    .where(
+                        tuple_(
+                            envelope_table.c.root_job_id,
+                            envelope_table.c.institute_id,
+                            envelope_table.c.patient_id,
+                            envelope_table.c.visit_id,
+                        ).in_(chunk)
+                    )
+                    .execution_options(yield_per=_ENVELOPE_CHUNK_SIZE)
+                )
+                .mappings()
             )
-            for defect in defects
-            for history in histories.get(defect.id, [])
-            for value in [_history_details(history) or {}]
-            if isinstance(value.get("job_id"), str)
-        }
-        for row in session.execute(
-            select(envelope_table).where(
-                tuple_(
-                    envelope_table.c.root_job_id,
-                    envelope_table.c.institute_id,
-                    envelope_table.c.patient_id,
-                    envelope_table.c.visit_id,
-                ).in_(case_refs)
-            )
-        ).mappings():
-            envelopes[
-                tuple(
-                    row[key]
-                    for key in (
+            for row in stream:
+                key = tuple(
+                    row[field]
+                    for field in (
                         "root_job_id",
                         "institute_id",
                         "patient_id",
@@ -450,28 +523,41 @@ class ManualQualityReportService:
                         "rule_set_version",
                     )
                 )
-            ].append(row)
+                # 逐行流式校验并释放原始 envelope_json，避免在内存滞留上万份大 JSON。
+                envelopes[key].append(
+                    {
+                        "id": row["id"],
+                        "record_id": row["record_id"],
+                        "created_by": row["created_by"],
+                        "result_count": row["result_count"],
+                        "payload_valid": _is_valid_envelope_payload(
+                            row["envelope_json"], row["result_count"]
+                        ),
+                    }
+                )
         rectifications = defaultdict(list)
-        for row in session.scalars(
-            select(DefectRectification).where(
-                DefectRectification.target_kind == "task_manual_defect",
-                DefectRectification.target_id.in_(ids),
-            )
-        ):
-            rectifications[row.target_id].append(row)
-        people = {
-            row.id: row.display_name
+        for chunk in _chunked(ids):
             for row in session.scalars(
-                select(SysUser).where(
-                    SysUser.id.in_([row.manual_created_by for row in defects])
-                ),
+                select(DefectRectification).where(
+                    DefectRectification.target_kind == "task_manual_defect",
+                    DefectRectification.target_id.in_(chunk),
+                )
+            ):
+                rectifications[row.target_id].append(row)
+        creator_ids = sorted(
+            {row.manual_created_by for row in defects if row.manual_created_by}
+        )
+        people = {}
+        for chunk in _chunked(creator_ids):
+            for row in session.scalars(
+                select(SysUser).where(SysUser.id.in_(chunk)),
                 execution_options=user_owner_options(session),
-            )
-        }
-        tasks = {
-            row.id: row.task_name
-            for row in session.scalars(select(QCTask).where(QCTask.id.in_(task_ids)))
-        }
+            ):
+                people[row.id] = row.display_name
+        tasks = {}
+        for chunk in _chunked(task_ids):
+            for row in session.scalars(select(QCTask).where(QCTask.id.in_(chunk))):
+                tasks[row.id] = row.task_name
         return {
             "histories": histories,
             "records": records,
