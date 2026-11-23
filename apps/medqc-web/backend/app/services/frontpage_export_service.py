@@ -17,6 +17,8 @@ import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from ..core.export_safety import sanitize_spreadsheet_cell
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,8 +68,8 @@ def _get_surgeries(data: dict) -> list:
 
 def _set_cell(ws, row: int, col: int, value: Any,
               font=None, alignment=None, border=None, fill=None):
-    """设置单元格值和样式。"""
-    cell = ws.cell(row=row, column=col, value=value)
+    """设置单元格值和样式（自动执行公式注入安全转义）。"""
+    cell = ws.cell(row=row, column=col, value=sanitize_spreadsheet_cell(value))
     if font:
         cell.font = font
     if alignment:

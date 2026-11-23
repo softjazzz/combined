@@ -20,7 +20,11 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
+from app.database import connection as db_connection
+from app.database.models.v36_reports import SysUser
 from app.routers import reports as reports_module
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
 
 @pytest.fixture(autouse=True)
@@ -31,12 +35,80 @@ def _bypass_default_auth_guard(client, monkeypatch, tmp_path):
     async def _default_current_user():
         return {"id": "reports-owner", "roles": ["qc_manager"]}
 
+    db_file = tmp_path / f"reports_api_{uuid4().hex[:8]}.sqlite"
+    engine = create_engine(
+        f"sqlite:///{db_file.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+    SysUser.__table__.create(bind=engine, checkfirst=True)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS medical_records (
+                    id VARCHAR(64) PRIMARY KEY,
+                    institute_id VARCHAR(128)
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO medical_records (id, institute_id) VALUES ('record-1', 'HOSP-A'), ('record-2', 'HOSP-A')"
+            )
+        )
+    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    now = datetime.utcnow()
+    with session_factory() as session:
+        session.add_all(
+            [
+                SysUser(
+                    id="reports-owner",
+                    username="reports_owner",
+                    display_name="Reports Owner",
+                    role="qc_manager",
+                    roles_json=json.dumps(["qc_manager"]),
+                    institute_id="HOSP-A",
+                    is_active=True,
+                    created_at=now,
+                    updated_at=now,
+                ),
+                SysUser(
+                    id="another-user",
+                    username="another_user",
+                    display_name="Another User",
+                    role="doctor",
+                    roles_json=json.dumps(["doctor"]),
+                    institute_id="HOSP-A",
+                    is_active=True,
+                    created_at=now,
+                    updated_at=now,
+                ),
+                SysUser(
+                    id="admin-user",
+                    username="admin_user",
+                    display_name="Admin User",
+                    role="admin",
+                    roles_json=json.dumps(["admin"]),
+                    institute_id=None,
+                    is_active=True,
+                    created_at=now,
+                    updated_at=now,
+                ),
+            ]
+        )
+        session.commit()
+
     client.app.dependency_overrides[enforce_default_auth] = _noop_auth_gate
     client.app.dependency_overrides[get_current_user] = _default_current_user
     monkeypatch.setattr(reports_module, "_QC_EXPORT_DIR", tmp_path)
+    monkeypatch.setattr(reports_module, "_QC_SUMMARY_CACHE", None)
+    monkeypatch.setattr(reports_module, "_QC_SUMMARY_CACHE_TS", 0.0)
+    monkeypatch.setattr(db_connection, "SessionLocal", session_factory)
     yield
     client.app.dependency_overrides.pop(enforce_default_auth, None)
     client.app.dependency_overrides.pop(get_current_user, None)
+    engine.dispose()
 
 
 @pytest.mark.unit
@@ -73,19 +145,15 @@ class TestReportsAPI:
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
             with patch("app.routers.reports.async_execute") as mock_execute:
                 mock_execute.side_effect = [mock_view_response, mock_rules_response, mock_defects_response]
-                with patch("app.routers.reports.SichuanQCService") as mock_service:
-                    mock_service.return_value.stats.return_value = {
-                        "success_rate": 0.85,
-                        "avg_api_time": 1.2,
-                    }
 
-                    response = client.get("/api/v1/reports/qc/summary")
+                response = client.get("/api/v1/reports/qc/summary")
 
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert data["success"] is True
-                    assert "kpis" in data["data"]
-                    assert "generated_at" in data["data"]
+                assert response.status_code == 200
+                data = response.json()
+                assert data["success"] is True
+                assert "kpis" in data["data"]
+                assert data["data"]["kpis"]["pass_rate"] == 70.0
+                assert "generated_at" in data["data"]
 
     @pytest.mark.asyncio
     async def test_qc_summary_kpis_structure(self, client):
@@ -96,29 +164,23 @@ class TestReportsAPI:
 
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
             with patch("app.routers.reports.async_execute", return_value=mock_response):
-                with patch("app.routers.reports.SichuanQCService") as mock_service:
-                    mock_service.return_value.stats.return_value = {
-                        "success_rate": 0.0,
-                        "avg_api_time": 0.0,
-                    }
+                response = client.get("/api/v1/reports/qc/summary")
 
-                    response = client.get("/api/v1/reports/qc/summary")
+                assert response.status_code == 200
+                data = response.json()
+                kpis = data["data"]["kpis"]
 
-                    assert response.status_code == 200
-                    data = response.json()
-                    kpis = data["data"]["kpis"]
-
-                    # 验证 KPI 字段
-                    assert "total_records" in kpis
-                    assert "active_rules" in kpis
-                    assert "qc_executions" in kpis
-                    assert "pass_rate" in kpis
-                    assert "avg_api_time" in kpis
-                    assert "avg_qc_score" in kpis
-                    assert "passed" in kpis
-                    assert "warning" in kpis
-                    assert "failed" in kpis
-                    assert "pending" in kpis
+                # 验证 KPI 字段
+                assert "total_records" in kpis
+                assert "active_rules" in kpis
+                assert "qc_executions" in kpis
+                assert "pass_rate" in kpis
+                assert "avg_api_time" in kpis
+                assert "avg_qc_score" in kpis
+                assert "passed" in kpis
+                assert "warning" in kpis
+                assert "failed" in kpis
+                assert "pending" in kpis
 
     @pytest.mark.asyncio
     async def test_qc_summary_cache_mechanism(self, client):
@@ -129,22 +191,16 @@ class TestReportsAPI:
 
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
             with patch("app.routers.reports.async_execute", return_value=mock_response):
-                with patch("app.routers.reports.SichuanQCService") as mock_service:
-                    mock_service.return_value.stats.return_value = {
-                        "success_rate": 0.0,
-                        "avg_api_time": 0.0,
-                    }
+                # 第一次请求
+                response1 = client.get("/api/v1/reports/qc/summary")
+                assert response1.status_code == 200
 
-                    # 第一次请求
-                    response1 = client.get("/api/v1/reports/qc/summary")
-                    assert response1.status_code == 200
+                # 第二次请求（应该使用缓存）
+                response2 = client.get("/api/v1/reports/qc/summary")
+                assert response2.status_code == 200
 
-                    # 第二次请求（应该使用缓存）
-                    response2 = client.get("/api/v1/reports/qc/summary")
-                    assert response2.status_code == 200
-
-                    # 验证数据一致
-                    assert response1.json()["data"]["kpis"] == response2.json()["data"]["kpis"]
+                # 验证数据一致
+                assert response1.json()["data"]["kpis"] == response2.json()["data"]["kpis"]
 
     @pytest.mark.asyncio
     async def test_qc_summary_uses_shared_scan_limit(self, client):
@@ -193,13 +249,7 @@ class TestReportsAPI:
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
             with patch("app.routers.reports.async_execute") as mock_execute:
                 mock_execute.side_effect = [mock_view_response, mock_rules_response]
-                with patch("app.routers.reports.SichuanQCService") as mock_service:
-                    mock_service.return_value.stats.return_value = {
-                        "success_rate": 0.0,
-                        "avg_api_time": 0.0,
-                    }
-
-                    response = client.get("/api/v1/reports/qc/summary")
+                response = client.get("/api/v1/reports/qc/summary")
 
         assert response.status_code == 200
         assert mock_supabase.table_calls == ["qc_statistics_view", "qc_rules", "qc_defects"]
@@ -608,17 +658,11 @@ class TestReportsAPI:
 
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
             with patch("app.routers.reports.async_execute", return_value=mock_response):
-                with patch("app.routers.reports.SichuanQCService") as mock_service:
-                    mock_service.return_value.stats.return_value = {
-                        "success_rate": 0.0,
-                        "avg_api_time": 0.0,
-                    }
+                response = client.get("/api/v1/reports/qc/summary")
 
-                    response = client.get("/api/v1/reports/qc/summary")
-
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert "trace_id" in data
+                assert response.status_code == 200
+                data = response.json()
+                assert "trace_id" in data
 
     @pytest.mark.asyncio
     async def test_qc_summary_includes_top_categories(self, client):
@@ -646,9 +690,9 @@ class TestReportsAPI:
         mock_rules_response.data = [{"id": "rule-1"}]
         mock_defects_response = MagicMock()
         mock_defects_response.data = [
-            {"category": "病程记录"},
-            {"category": "病程记录"},
-            {"category": "病案首页"},
+            {"category": "病程记录", "record_id": "record-1"},
+            {"category": "病程记录", "record_id": "record-1"},
+            {"category": "病案首页", "record_id": "record-1"},
         ]
 
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
@@ -658,13 +702,7 @@ class TestReportsAPI:
                     mock_rules_response,
                     mock_defects_response,
                 ]
-                with patch("app.routers.reports.SichuanQCService") as mock_service:
-                    mock_service.return_value.stats.return_value = {
-                        "success_rate": 0.85,
-                        "avg_api_time": 1.2,
-                    }
-
-                    response = client.get("/api/v1/reports/qc/summary")
+                response = client.get("/api/v1/reports/qc/summary")
 
         assert response.status_code == 200
         data = response.json()["data"]
