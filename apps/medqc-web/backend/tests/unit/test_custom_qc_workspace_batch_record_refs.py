@@ -5,9 +5,39 @@ from typing import Any
 import pytest
 from fastapi import BackgroundTasks, HTTPException
 from pydantic import ValidationError
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
 
+from app.database import connection as db_connection
+from app.database.models.v36_reports import SysUser
 from app.routers import custom_qc
+
+
+@pytest.fixture(autouse=True)
+def _persistent_admin_actor(monkeypatch):
+    engine = create_engine(
+        "sqlite://",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+    SysUser.__table__.create(engine)
+    sessions = sessionmaker(bind=engine)
+    with sessions.begin() as session:
+        session.add(
+            SysUser(
+                id="qc-user",
+                username="qc-user",
+                display_name="管理员",
+                role="admin",
+                institute_id="HOSP-A",
+                is_active=True,
+            )
+        )
+    monkeypatch.setattr(db_connection, "SessionLocal", sessions)
+    yield
+    engine.dispose()
 
 
 RECORD_REFS = [

@@ -9,8 +9,11 @@ import pytest
 import sqlalchemy as sa
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
 
+from app.database import connection as db_connection
+from app.database.models.v36_reports import SysUser
 from app.routers import custom_qc, qc_sichuan
 from app.services import custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
@@ -18,7 +21,11 @@ from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 
 @pytest.fixture
 def storage(monkeypatch):
-    engine = sa.create_engine("sqlite://")
+    engine = sa.create_engine(
+        "sqlite://",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
     monkeypatch.setattr(workspace_module, "engine", engine)
     monkeypatch.setattr(workspace_module, "_draft_schema", lambda: None)
     monkeypatch.setattr(workspace_module, "_sync_batch_job_parent_columns", lambda **_: None)
@@ -26,16 +33,34 @@ def storage(monkeypatch):
     metadata = sa.MetaData()
     table = service._batch_job_table.to_metadata(metadata, schema=None)
     metadata.create_all(engine)
+    SysUser.__table__.create(engine, checkfirst=True)
     service._batch_job_table = table
-    monkeypatch.setattr(workspace_module, "_session", sessionmaker(bind=engine))
+    sessions = sessionmaker(bind=engine)
+    monkeypatch.setattr(workspace_module, "_session", sessions)
+    monkeypatch.setattr(db_connection, "SessionLocal", sessions)
     monkeypatch.setattr(custom_qc, "get_workspace_service", lambda: service)
+    with sessions.begin() as session:
+        session.add(
+            SysUser(
+                id="tester",
+                username="tester",
+                display_name="管理员",
+                role="admin",
+                institute_id="H1",
+                is_active=True,
+            )
+        )
     with engine.begin() as connection:
         connection.execute(table.insert().values(
             id="owner-job", draft_id="sichuan-rule-library", created_by="tester",
             status="canceled", rule_code="LX0609", rule_name="入口归属", scope="final",
             total_records=1, created_at=datetime(2026, 9, 24),
             updated_at=datetime(2026, 9, 24),
-            filters_json=json.dumps({"rule_set_key": "luxian_0609_qc_v1", "rule_ids": ["LX0609-01-01-01"]}),
+            filters_json=json.dumps({
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_ids": ["LX0609-01-01-01"],
+                "record_refs": [{"institute_id": "H1", "patient_id": "P1", "visit_id": "V1"}],
+            }),
         ))
     yield service, engine, table
     engine.dispose()

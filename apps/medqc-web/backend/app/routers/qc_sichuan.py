@@ -3,6 +3,7 @@ from app.services.material_admission import safe_material_failure
 from typing import List, Dict, Any, Literal, Optional, Sequence
 
 import asyncio
+import copy
 import uuid
 import json
 import hashlib
@@ -14,7 +15,7 @@ from pydantic import BaseModel, ValidationError
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
 from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from ..services.luxian_0609.phase_scope import get_luxian_0609_acceptance_only_rule_ids
 from ..services.sample_validation_rule_sets import get_luxian_0609_customer_delivery_rule_ids
@@ -1145,6 +1146,166 @@ def _can_export_record_results(current_user: Optional[Dict[str, Any]]) -> bool:
     )
 
 
+_QC_SICHUAN_ADMIN_ROLES = frozenset({"admin", "super_admin", "sync_admin"})
+_QC_SICHUAN_OPERATOR_ROLES = frozenset({"admin", "qc_manager", "sync_admin", "super_admin"})
+
+
+def _request_scoped_qc_service(
+    qc_service: Any,
+    *,
+    current_user: Optional[Dict[str, Any]],
+    model: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+) -> Any:
+    """返回请求级隔离的质控服务浅拷贝，严禁原地修改全局共享 client 参数。"""
+    normalized_model = str(model).strip() if isinstance(model, str) and model.strip() else None
+    has_override = bool(
+        normalized_model is not None or temperature is not None or max_tokens is not None
+    )
+    if not has_override:
+        return qc_service
+    if not _extract_user_roles(current_user).intersection(_QC_SICHUAN_ADMIN_ROLES):
+        raise HTTPException(status_code=403, detail="仅管理员允许覆写模型配置")
+    scoped_service = copy.copy(qc_service)
+    client = getattr(qc_service, "client", None)
+    if client is not None:
+        scoped_client = copy.copy(client)
+        if normalized_model is not None:
+            scoped_client.model = normalized_model
+        if temperature is not None:
+            scoped_client.temperature = temperature
+        if max_tokens is not None:
+            scoped_client.max_tokens = max_tokens
+        scoped_service.client = scoped_client
+    rule_engine = getattr(qc_service, "rule_engine", None)
+    if rule_engine is not None and hasattr(scoped_service, "_generate_with_current_client"):
+        scoped_rule_engine = copy.copy(rule_engine)
+        if hasattr(scoped_rule_engine, "_llm_generate"):
+            scoped_rule_engine._llm_generate = scoped_service._generate_with_current_client
+        scoped_service.rule_engine = scoped_rule_engine
+    return scoped_service
+
+
+def _extract_bundle_institute_id(bundle_input: Any) -> Optional[str]:
+    if not isinstance(bundle_input, dict):
+        return None
+    for candidate in (
+        bundle_input.get("institute_id"),
+        (bundle_input.get("case") or {}).get("institute_id") if isinstance(bundle_input.get("case"), dict) else None,
+        (bundle_input.get("identity") or {}).get("institute_id") if isinstance(bundle_input.get("identity"), dict) else None,
+        (bundle_input.get("record") or {}).get("institute_id") if isinstance(bundle_input.get("record"), dict) else None,
+    ):
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate
+    return None
+
+
+def _job_belongs_to_institute_scope(job: Dict[str, Any], institute_scope: Optional[str]) -> bool:
+    """校验批量任务所含病历全部属于指定机构范围；非全局账号缺少可验证机构归属时 fail-closed。"""
+    if institute_scope is None:
+        return True
+    if not isinstance(job, dict):
+        return False
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    record_refs = filters.get("record_refs")
+    items = job.get("items")
+    checked = False
+    if isinstance(record_refs, list) and record_refs:
+        for ref in record_refs:
+            if not isinstance(ref, dict):
+                return False
+            ref_inst = ref.get("institute_id")
+            if not isinstance(ref_inst, str) or not ref_inst.strip() or ref_inst != institute_scope:
+                return False
+        checked = True
+    if isinstance(items, list) and items:
+        for item in items:
+            if not isinstance(item, dict):
+                return False
+            item_inst = item.get("institute_id")
+            if item_inst is not None:
+                if not isinstance(item_inst, str) or not item_inst.strip() or item_inst != institute_scope:
+                    return False
+                checked = True
+            elif not checked:
+                return False
+    if checked:
+        return True
+    filter_inst = filters.get("institute_id")
+    if isinstance(filter_inst, str) and filter_inst.strip() and filter_inst == institute_scope:
+        if int(job.get("total_records") or 0) == 0:
+            return True
+    return False
+
+
+def _parse_history_date_bound(value: str, *, field_name: str) -> tuple[bool, date | datetime]:
+    text = str(value or "").strip()
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        try:
+            return True, date.fromisoformat(text)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"{field_name} 日期格式无效") from exc
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{field_name} 时间格式无效") from exc
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return False, parsed
+
+
+def _parse_history_timestamp(value: Any) -> Optional[tuple[date, datetime]]:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        try:
+            parsed_date = date.fromisoformat(text)
+            return parsed_date, datetime(parsed_date.year, parsed_date.month, parsed_date.day)
+        except ValueError:
+            return None
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    local_date = parsed.date()
+    utc_naive = parsed.astimezone(timezone.utc).replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+    return local_date, utc_naive
+
+
+def _history_created_at_in_range(
+    created_at: Any,
+    start_bound: Optional[tuple[bool, date | datetime]],
+    end_bound: Optional[tuple[bool, date | datetime]],
+) -> bool:
+    if start_bound is None and end_bound is None:
+        return True
+    parsed = _parse_history_timestamp(created_at)
+    if parsed is None:
+        return False
+    created_date, created_dt_utc = parsed
+    if start_bound is not None:
+        is_date_only, bound_val = start_bound
+        if is_date_only:
+            if created_date < bound_val:
+                return False
+        elif created_dt_utc < bound_val:
+            return False
+    if end_bound is not None:
+        is_date_only, bound_val = end_bound
+        if is_date_only:
+            if created_date > bound_val:
+                return False
+        elif created_dt_utc > bound_val:
+            return False
+    return True
+
+
 
 
 def _trace_pick(item: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
@@ -1328,7 +1489,8 @@ def _build_result_trace_snapshot(job: Dict[str, Any], item: Dict[str, Any]) -> D
 async def evaluate_fast(
     request: Request,
     req: SichuanEvaluateRequest,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     """
     快速质控模式：一次 API 调用评估所有规则
@@ -1344,12 +1506,14 @@ async def evaluate_fast(
     - plan_c: 方案C - 平衡版（提取【检查要点】+【判定逻辑】）
     """
     try:
-        # Allow runtime override of model
-        if req.model:
-            qc_service.client.model = req.model
+        scoped_qc_service = _request_scoped_qc_service(
+            qc_service,
+            current_user=current_user,
+            model=req.model,
+        )
 
         # 调用快速质控方法（传递 prompt_mode）
-        result = await qc_service.evaluate_document_fast(
+        result = await scoped_qc_service.evaluate_document_fast(
             document_id=req.document_id,
             content=req.document_content,
             document_type=req.document_type or "病程记录",
@@ -1358,6 +1522,8 @@ async def evaluate_fast(
         )
 
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"快速质控评估失败: {e}")
 
@@ -1366,14 +1532,19 @@ async def evaluate_fast(
 async def evaluate(
     request: Request,
     req: SichuanEvaluateRequest,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
-        # Allow runtime override of model (for A/B testing different LLMs)
-        if req.model:
-            qc_service.client.model = req.model
-        _enforce_sc_source_guard(
+        scoped_qc_service = _request_scoped_qc_service(
             qc_service,
+            current_user=current_user,
+            model=req.model,
+            temperature=req.temperature,
+            max_tokens=req.max_tokens,
+        )
+        _enforce_sc_source_guard(
+            scoped_qc_service,
             context="evaluate",
             rule_ids=req.rule_ids,
             block_batch=False,
@@ -1381,7 +1552,7 @@ async def evaluate(
         # running/final bundle 直入旧规则链入口（不依赖独立 runtime）
         if isinstance(req.bundle_input, dict) and req.bundle_input:
             bundle_result = await evaluate_running_final_bundle(
-                qc_service=qc_service,
+                qc_service=scoped_qc_service,
                 bundle_input=req.bundle_input,
                 rule_ids=req.rule_ids,
             )
@@ -1437,7 +1608,7 @@ async def evaluate(
                     print(f"Warning: Failed to fetch grouped rules: {e}")
                     rules_by_document_type = None
             
-            md = await qc_service.evaluate_multi_document(
+            md = await scoped_qc_service.evaluate_multi_document(
                 document_id=req.document_id,
                 document_content=req.document_content,
                 document_types=req.document_types,
@@ -1480,12 +1651,7 @@ async def evaluate(
             return response
         else:
             # ── P1 收口：单文书主路径统一走 orchestrator（保持响应壳兼容） ──
-            if req.temperature is not None:
-                qc_service.client.temperature = req.temperature
-            if req.max_tokens is not None:
-                qc_service.client.max_tokens = req.max_tokens
-
-            result = await qc_service.evaluate_document(
+            result = await scoped_qc_service.evaluate_document(
                 document_id=req.document_id,
                 content=req.document_content,
                 document_type=req.document_type or "病程记录",
@@ -1507,7 +1673,7 @@ async def evaluate(
                     "compliance_rate": round(compliance_rate, 2),
                     "overall_grade": _grade_from_rate(compliance_rate),
                     "critical_violations": summary.get("issues_found", 0),
-                    "model": summary.get("model", qc_service.client.model),
+                    "model": summary.get("model", scoped_qc_service.client.model),
                     "executor_breakdown": summary.get("executor_breakdown") or {},
                     "cache_breakdown": summary.get("cache_breakdown") or {},
                     "pack_metrics": summary.get("pack_metrics") or {},
@@ -1531,8 +1697,7 @@ async def evaluate(
                 "cache_breakdown": result.get("cache_breakdown") or {},
                 "pack_metrics": result.get("pack_metrics") or {},
                 "llm_info": {
-                    "model": qc_service.client.model,
-                    "api_endpoint": qc_service.client.api_endpoint,
+                    "model": scoped_qc_service.client.model,
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "status": "success",
@@ -1551,19 +1716,44 @@ async def evaluate(
 async def evaluate_bundle(
     request: Request,
     req: SichuanBundleEvaluateRequest,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "sync_admin", "super_admin")
+    ),
+    qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
-        if req.model:
-            qc_service.client.model = req.model
-        _enforce_sc_source_guard(
+        from ..services.saved_result_access import (
+            check_saved_result_institute,
+            saved_result_institute_scope,
+        )
+
+        institute_scope = await run_in_threadpool(
+            saved_result_institute_scope, _current_user_id(current_user)
+        )
+        bundle_institute = _extract_bundle_institute_id(req.bundle_input)
+        if req.institute_id is not None and str(req.institute_id).strip():
+            check_saved_result_institute(institute_scope, req.institute_id)
+        if bundle_institute is not None:
+            check_saved_result_institute(institute_scope, bundle_institute)
+        if institute_scope is not None and not (
+            (isinstance(req.institute_id, str) and req.institute_id.strip())
+            or bundle_institute is not None
+        ):
+            raise HTTPException(status_code=403, detail="缺少可信病历机构范围")
+
+        scoped_qc_service = _request_scoped_qc_service(
             qc_service,
+            current_user=current_user,
+            model=req.model,
+        )
+        _enforce_sc_source_guard(
+            scoped_qc_service,
             context="evaluate_bundle",
             rule_ids=req.rule_ids,
             block_batch=False,
         )
         result = await evaluate_running_final_bundle(
-            qc_service=qc_service,
+            qc_service=scoped_qc_service,
             scene=req.scene,
             institute_id=req.institute_id,
             patient_id=req.patient_id,
@@ -1591,18 +1781,33 @@ async def evaluate_bundle(
 async def evaluate_rule_for_visit(
     request: Request,
     req: SichuanRuleVisitEvaluateRequest,
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "sync_admin", "super_admin")
+    ),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
-        if req.model:
-            qc_service.client.model = req.model
-        _enforce_sc_source_guard(
+        from ..services.saved_result_access import (
+            check_saved_result_institute,
+            saved_result_institute_scope,
+        )
+
+        institute_scope = await run_in_threadpool(
+            saved_result_institute_scope, _current_user_id(current_user)
+        )
+        check_saved_result_institute(institute_scope, req.institute_id)
+        scoped_qc_service = _request_scoped_qc_service(
             qc_service,
+            current_user=current_user,
+            model=req.model,
+        )
+        _enforce_sc_source_guard(
+            scoped_qc_service,
             context="evaluate_rule_for_visit",
             rule_ids=[req.rule_id],
             block_batch=False,
         )
-        result = await qc_service.evaluate_rule_for_visit(
+        result = await scoped_qc_service.evaluate_rule_for_visit(
             rule_id=req.rule_id,
             institute_id=req.institute_id,
             patient_id=req.patient_id,
@@ -1860,6 +2065,14 @@ def _resolve_shared_sample_pool_latest_job(
 ) -> Optional[Dict[str, Any]]:
     if not _extract_user_roles(current_user).intersection(_SHARED_SAMPLE_JOB_READ_ROLES):
         return None
+    from ..services.saved_result_access import saved_result_institute_scope
+
+    try:
+        institute_scope = saved_result_institute_scope(_current_user_id(current_user))
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return None
+        raise
     resolved = _shared_sample_pool_service().resolve_unique_pool_id_for_latest_job(
         job_id=job_id
     )
@@ -1874,6 +2087,8 @@ def _resolve_shared_sample_pool_latest_job(
         return None
     source = str(filters.get("source") or "").strip().lower()
     if source not in _SHARED_SAMPLE_JOB_SOURCES:
+        return None
+    if not _job_belongs_to_institute_scope(job, institute_scope):
         return None
     return job
 
@@ -1967,6 +2182,9 @@ async def create_workspace_batch_job(
     request: Request,
     payload: SichuanWorkspaceBatchJobCreateRequest,
     current_user: Dict[str, Any] = Depends(require_product_activation),
+    _role_guard: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "sync_admin", "super_admin")
+    ),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     return await admit_workspace_batch_job(request, payload, current_user, qc_service)
@@ -1974,6 +2192,15 @@ async def create_workspace_batch_job(
 
 async def admit_workspace_batch_job(request, payload, current_user, qc_service, *, scheduled_origin=None):
     """手动与定时共用接纳owner；定时来源不是HTTP输入字段。"""
+    institute_scope: Optional[str] = None
+    if scheduled_origin is None:
+        if not _extract_user_roles(current_user).intersection(_QC_SICHUAN_OPERATOR_ROLES):
+            raise HTTPException(status_code=403, detail="当前账号无权创建四川规则批量任务")
+        from ..services.saved_result_access import saved_result_institute_scope
+
+        institute_scope = await run_in_threadpool(
+            saved_result_institute_scope, _current_user_id(current_user)
+        )
     requested_rule_set = get_sichuan_rule_set(payload.rule_set_key)
     if payload.diagnostic_capture:
         if not set(current_user.get("roles", [])).intersection({"admin", "super_admin"}):
@@ -2117,6 +2344,11 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if payload.record_refs and len(requested_record_refs) != len(payload.record_refs):
         raise HTTPException(status_code=422, detail="record_refs 不可重复")
+    if scheduled_origin is None and requested_record_refs:
+        from ..services.saved_result_access import check_saved_result_institute
+
+        for case_ref in requested_record_refs:
+            check_saved_result_institute(institute_scope, case_ref.institute_id)
     collect_kwargs: Dict[str, Any] = dict(
         scope=normalized_scope,
         department=payload.department,
@@ -2132,6 +2364,8 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
         collect_kwargs["sync_scope"] = payload.sync_scope
     if scheduled_origin is not None:
         collect_kwargs["institute_id"] = scheduled_origin["institute_id"]
+    elif institute_scope is not None:
+        collect_kwargs["institute_id"] = institute_scope
     admission_reader = getattr(workspace, "collect_records_for_admission", None)
     if is_direct_native_selection and callable(admission_reader):
         records, scene_rejections = admission_reader(**collect_kwargs)
@@ -2155,6 +2389,11 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
         effective_record_refs = case_refs_from_records(records)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="病历缺少完整三坐标，无法创建质控任务") from exc
+    if scheduled_origin is None:
+        from ..services.saved_result_access import check_saved_result_institute
+
+        for case_ref in effective_record_refs:
+            check_saved_result_institute(institute_scope, case_ref.institute_id)
     if requested_record_refs and set(effective_record_refs) != set(requested_record_refs):
         raise HTTPException(status_code=422, detail="所选病历与服务端匹配结果不一致，请刷新后重试")
     if payload.record_ids and not requested_record_refs:
@@ -2942,13 +3181,22 @@ async def export_filtered_workspace_record_results(
             raise HTTPException(status_code=422, detail="所选病历范围已变化，请重新勾选后导出")
         export_filters = {**filters, "export_mode": "selected"}
     else:
-        record_count = workspace.count_records(**filters)
-        if record_count > 1000:
+        query_filters = {
+            **filters,
+            **({"institute_id": institute_scope} if institute_scope is not None else {}),
+        }
+        try:
+            record_count = workspace.count_records(**query_filters)
+        except TypeError:
+            records = workspace.collect_records(**query_filters)
+            record_count = len(records)
+        else:
+            if record_count > 1000:
+                raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
+            records = workspace.collect_records(**query_filters)
+        if record_count > 1000 or len(records) > 1000:
             raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
-        records = workspace.collect_records(**filters)
-        if len(records) > 1000:
-            raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
-        export_filters = filters
+        export_filters = query_filters
 
     identities: set[tuple[str, str, str]] = set()
     canonical_record_refs: List[Dict[str, str]] = []
@@ -3132,6 +3380,14 @@ async def retry_workspace_batch_job(
             await run_in_threadpool(require_retry_record_institutes, _current_user_id(current_user),
                                     existing["filters"].get("record_refs"))
             runtime_snapshot = capture_luxian_0609_task_runtime(await get_qc_service())
+        else:
+            from ..services.saved_result_access import saved_result_institute_scope
+
+            institute_scope = await run_in_threadpool(
+                saved_result_institute_scope, _current_user_id(current_user)
+            )
+            if not _job_belongs_to_institute_scope(existing, institute_scope):
+                raise HTTPException(status_code=403, detail="无权重试其他机构批量任务")
         job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user),
                                         task_runtime_snapshot=runtime_snapshot)
     except QCDispatchSchemaUnavailable as exc:
@@ -3234,10 +3490,17 @@ async def export_workspace_batch_job(
 ):
     if not _can_export_record_results(current_user):
         raise HTTPException(status_code=403, detail="当前账号无权导出质控结果")
+    from ..services.saved_result_access import saved_result_institute_scope
+
+    institute_scope = await run_in_threadpool(
+        saved_result_institute_scope, _current_user_id(current_user)
+    )
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权导出其他机构批量质控结果")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     normalized_format = str(format or "").lower()
     if normalized_format == "html":
@@ -3343,6 +3606,16 @@ async def get_qc_history(
 ):
     """获取质控结果历史列表"""
     try:
+        start_bound = (
+            _parse_history_date_bound(start_date, field_name="start_date")
+            if start_date
+            else None
+        )
+        end_bound = (
+            _parse_history_date_bound(end_date, field_name="end_date")
+            if end_date
+            else None
+        )
         base_dir = _saved_qc_results_directory()
         if not base_dir.exists():
             return success_response(
@@ -3387,9 +3660,7 @@ async def get_qc_history(
                     continue
 
                 created_at = data.get("created_at") or data.get("saved_at")
-                if start_date and created_at < start_date:
-                    continue
-                if end_date and created_at > end_date:
+                if not _history_created_at_in_range(created_at, start_bound, end_bound):
                     continue
 
                 # 优先从 evaluation_summary 获取合规率和问题数量，否则从 stats 获取
@@ -3444,6 +3715,8 @@ async def get_qc_history(
             message="获取质控历史成功",
             trace_id=get_trace_id(request),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取质控历史失败: {e}")
 
@@ -3514,7 +3787,8 @@ async def get_qc_result_detail(
 @router.get("/stats")
 async def stats(
     request: Request,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    current_user: Dict[str, Any] = Depends(require_roles("admin", "super_admin", "sync_admin")),
+    qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
         st = qc_service.stats()
@@ -3531,15 +3805,8 @@ async def stats(
                 "total_api_time": st.get("total_api_time", 0.0),
                 "total_tokens": st.get("total_tokens", 0),
             },
-            "optimization_achievements": {
-                "token_savings_rate": 0.80,
-                "estimated_original_tokens": st.get("total_tokens", 0) * 5,
-                "actual_tokens_saved": st.get("total_tokens", 0) * 4,
-                "total_cost_savings": st.get("total_tokens", 0) * 4 / 1000 * 0.002,
-            },
             "real_time_status": {
                 "service_health": "healthy",
-                "api_endpoint": str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None,
                 "model": s.LLM_MODEL,
                 "last_updated": datetime.now(timezone.utc).isoformat(),
             },
@@ -3547,6 +3814,8 @@ async def stats(
             "status": "success",
         }
         return response
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取四川省质控统计失败: {e}")
 

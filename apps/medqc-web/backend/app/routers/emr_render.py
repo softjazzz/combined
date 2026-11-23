@@ -9,7 +9,11 @@ from starlette.concurrency import run_in_threadpool
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
-from ..core.security import require_roles
+from ..core.security import get_current_user, require_roles
+from ..services.medical_records.detail_service import (
+    enforce_institute_access,
+    resolve_non_global_institute_scope,
+)
 from ..services.bundles.emr_view import (
     build_documents_tree,
     load_bundle_document,
@@ -300,11 +304,18 @@ async def get_record_documents(
         None,
         description="摘要优先加载的文书领域；仅 view=summary 时生效",
     ),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """获取病历文书列表（BundleOnly）。"""
     own_identity = getattr(request.state, "doctor_case_identity", None)
     if own_identity:
         institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
+    else:
+        inst_scope = await run_in_threadpool(resolve_non_global_institute_scope, current_user)
+        if inst_scope is not None:
+            if institute_id is not None and str(institute_id).strip():
+                enforce_institute_access(inst_scope, institute_id)
+            institute_id = inst_scope
     if document_scope is not None and (source_view != "saved" or view != "summary"):
         raise HTTPException(422, "document_scope_requires_saved_summary")
     if source_view == "current":
@@ -369,11 +380,19 @@ async def render_document(
     execution_domain: str = Query("", description="目录返回的文书领域"),
     source_view: str = "saved",
     clinical_surgery_version: str | None = Query(None, pattern="^[a-f0-9]{64}$"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """获取文书内容 + 结构化渲染块 + 缺陷标注（BundleOnly）。"""
     own_identity = getattr(request.state, "doctor_case_identity", None)
+    inst_scope: Optional[str] = None
     if own_identity:
         institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
+    else:
+        inst_scope = await run_in_threadpool(resolve_non_global_institute_scope, current_user)
+        if inst_scope is not None:
+            if institute_id is not None and str(institute_id).strip():
+                enforce_institute_access(inst_scope, institute_id)
+            institute_id = inst_scope
     if clinical_surgery_version is not None:
         identity = tuple(str(value or "").strip() for value in (institute_id, patient_id, visit_id))
         if (
@@ -452,7 +471,10 @@ async def render_document(
     layout_version = str(view_payload.get("layout_version") or "bundle_struct_v1")
     empty_reason = str(view_payload.get("empty_reason") or documents_payload.get("empty_reason") or "")
 
-    annotations, annotation_status = await _load_defect_annotations(record_id, content)
+    if inst_scope is not None and not selected:
+        annotations, annotation_status = [], "no_result"
+    else:
+        annotations, annotation_status = await _load_defect_annotations(record_id, content)
 
     return success_response(
         data={

@@ -11,6 +11,10 @@ from ..services.clinical_read import clinical_query, clinical_read_model
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.security import get_current_user
 from ..services.doctor_case_scope import get_doctor_case_scope
+from ..services.medical_records.detail_service import (
+    enforce_institute_access,
+    resolve_non_global_institute_scope,
+)
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
@@ -728,6 +732,7 @@ async def get_medical_records(
                                           qc_status=_normalize_final_status(status), page=page, page_size=page_size)
         return paginated_response(items=items, total=total, page=page, page_size=page_size,
                                   message="获取本人病历成功", trace_id=get_trace_id(request))
+    inst_scope = resolve_non_global_institute_scope(current_user)
     supabase = get_supabase()
     settings = get_settings()
     try:
@@ -739,6 +744,8 @@ async def get_medical_records(
                 '*'
             ).order('created_at', {'ascending': False}).execute()  # type: ignore[attr-defined]
             records = list(response.data or [])
+            if inst_scope is not None:
+                records = [r for r in records if str(r.get("institute_id") or "") == inst_scope]
 
             # 优化：一次性查询所有文档，避免 N+1 查询问题
             if records:
@@ -780,6 +787,8 @@ async def get_medical_records(
         else:
             # Fallback to in-memory records when Supabase is not configured
             records = list(medical_records_db.values())
+            if inst_scope is not None:
+                records = [r for r in records if str(r.get("institute_id") or "") == inst_scope]
             # 按创建时间倒序排列（最新的在前面）
             records.sort(key=lambda x: x.get('created_at', ''), reverse=True)
 
@@ -857,6 +866,7 @@ async def get_outpatient_emergency_records(
       total, page, page_size
     }
     """
+    inst_scope = resolve_non_global_institute_scope(current_user)
     supabase = get_supabase()
     settings = get_settings()
     rows: List[Dict[str, Any]] = []
@@ -873,6 +883,9 @@ async def get_outpatient_emergency_records(
                 rows = list(medical_records_db.values())
         else:
             rows = list(medical_records_db.values())
+
+        if inst_scope is not None:
+            rows = [r for r in rows if str(r.get("institute_id") or "") == inst_scope]
 
         normalized = [_normalize_outpatient_item(r) for r in rows]
         normalized = [r for r in normalized if r.get("visit_type") in {"outpatient", "emergency"}]
@@ -932,6 +945,7 @@ async def get_final_records(
     qc_status: Optional[str] = Query(None, alias="status", description="状态 passed|failed|pending"),
     start_date: Optional[str] = Query(None, description="出院日期开始 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="出院日期结束 YYYY-MM-DD"),
+    institute_id: Optional[str] = Query(None, description="机构标识"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=200, description="每页数量"),
     current_user: dict = Depends(get_current_user),
@@ -960,9 +974,16 @@ async def get_final_records(
         return paginated_response(items=items, total=total, page=page, page_size=page_size,
                                   message="获取本人终末病历成功", trace_id=get_trace_id(request))
 
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    if inst_scope is not None and institute_id:
+        enforce_institute_access(inst_scope, institute_id)
+    effective_institute = inst_scope or (str(institute_id).strip() if institute_id else None)
+
     if SessionLocal is None:
         # 数据库不可用时降级为内存数据（仅用于保证接口可用性）
         rows = [row for row in medical_records_db.values() if str(row.get("discharge_date") or "").strip()]
+        if effective_institute:
+            rows = [row for row in rows if str(row.get("institute_id") or "") == effective_institute]
         if keyword:
             kw = keyword.strip().lower()
             rows = [
@@ -1030,6 +1051,18 @@ async def get_final_records(
             admission_source.update_time,
         )
         try:
+            # 仅对跨院/跨患者不重号的 visit_id 关联旧版单键 qc_results / qc_defects，防止裸 visit_id 跨院混读。
+            unique_visit_subquery = (
+                session.query(frontpage_source.visit_id.label("visit_id"))
+                .group_by(frontpage_source.visit_id)
+                .having(
+                    and_(
+                        func.count(func.distinct(frontpage_source.institute_id)) == 1,
+                        func.count(func.distinct(frontpage_source.patient_id)) == 1,
+                    )
+                )
+                .subquery()
+            )
             latest_qc_time_subquery = (
                 session.query(
                     QCResultBiz.record_id.label("record_id"),
@@ -1050,12 +1083,20 @@ async def get_final_records(
                         QCResultBiz.created_at == latest_qc_time_subquery.c.latest_created_at,
                     ),
                 )
+                .join(
+                    unique_visit_subquery,
+                    QCResultBiz.record_id == unique_visit_subquery.c.visit_id,
+                )
                 .subquery()
             )
             defect_count_subquery = (
                 session.query(
                     QCDefect.record_id.label("record_id"),
                     func.count(QCDefect.id).label("defect_count"),
+                )
+                .join(
+                    unique_visit_subquery,
+                    QCDefect.record_id == unique_visit_subquery.c.visit_id,
                 )
                 .group_by(QCDefect.record_id)
                 .subquery()
@@ -1097,6 +1138,8 @@ async def get_final_records(
                 .filter(discharge_dt_expr.is_not(None))
             )
 
+            if effective_institute:
+                query = query.filter(frontpage_source.institute_id == effective_institute)
             if keyword:
                 kw = f"%{keyword.strip()}%"
                 query = query.filter(
@@ -1161,6 +1204,9 @@ async def get_final_records(
                         "id": str(row.visit_id or ""),
                         "task_id": "",
                         "record_id": str(row.visit_id or ""),
+                        "institute_id": str(row.institute_id or ""),
+                        "patient_id": str(row.patient_id or ""),
+                        "visit_id": str(row.visit_id or ""),
                         "visit_type": str(row.visit_type or ""),
                         "patient_name": str(row.name or ""),
                         "department": str(
@@ -1209,6 +1255,8 @@ async def get_final_records(
                 )
                 .filter(discharge_dt_expr.is_not(None))
             )
+            if effective_institute:
+                query = query.filter(frontpage_source.institute_id == effective_institute)
             if keyword:
                 kw = f"%{keyword.strip()}%"
                 query = query.filter(
@@ -1245,6 +1293,9 @@ async def get_final_records(
                         "id": str(row.visit_id or ""),
                         "task_id": "",
                         "record_id": str(row.visit_id or ""),
+                        "institute_id": str(row.institute_id or ""),
+                        "patient_id": str(row.patient_id or ""),
+                        "visit_id": str(row.visit_id or ""),
                         "visit_type": str(row.visit_type or ""),
                         "patient_name": str(row.name or ""),
                         "department": str(row.discharge_dept_name or row.admission_dept_name or ""),
@@ -1495,9 +1546,11 @@ async def get_record_qc_detail(
 @router.get("/{record_id}", response_model=MedicalRecordResponse)
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_medical_record(record_id: str, current_user: dict = Depends(get_current_user)):
+    inst_scope = resolve_non_global_institute_scope(current_user)
     record = medical_records_db.get(record_id)
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="医疗记录不存在")
+    enforce_institute_access(inst_scope, record.get("institute_id"))
     return MedicalRecordResponse(**record)
 
 
@@ -1515,6 +1568,7 @@ async def create_medical_record(
     file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
 ):
+    inst_scope = resolve_non_global_institute_scope(current_user)
     if file is not None:
         upload_bytes = await file.read()
         _validate_record_upload(file, upload_bytes)
@@ -1534,6 +1588,7 @@ async def create_medical_record(
         "updated_at": datetime.utcnow().isoformat() + "Z",
         "created_by": current_user["id"],
         "file_url": file_url,
+        **({"institute_id": inst_scope} if inst_scope is not None else {}),
     }
     medical_records_db[record_id] = new_record
     return MedicalRecordResponse(**new_record)
@@ -1554,9 +1609,11 @@ async def update_medical_record(
     file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
 ):
+    inst_scope = resolve_non_global_institute_scope(current_user)
     record = medical_records_db.get(record_id)
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="医疗记录不存在")
+    enforce_institute_access(inst_scope, record.get("institute_id"))
 
     if patient_name is not None:
         record["patient_name"] = patient_name
@@ -1589,11 +1646,14 @@ async def delete_medical_record(
     current_user: dict = Depends(get_current_user)
 ):
     """删除病案记录"""
-    if record_id not in medical_records_db:
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    record = medical_records_db.get(record_id)
+    if record is None:
         raise HTTPException(
             status_code=StatusCode.NOT_FOUND,
             detail="医疗记录不存在"
         )
+    enforce_institute_access(inst_scope, record.get("institute_id"))
     del medical_records_db[record_id]
     return success_response(
         data={"record_id": record_id},
@@ -1603,12 +1663,19 @@ async def delete_medical_record(
 
 
 @router.delete("/batch")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.DELETE)
 async def batch_delete_records(
     request: Request,
     record_ids: List[str],
     current_user: dict = Depends(get_current_user)
 ):
     """批量删除病案记录"""
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    if inst_scope is not None:
+        for rid in record_ids:
+            rec = medical_records_db.get(rid)
+            if rec is not None:
+                enforce_institute_access(inst_scope, rec.get("institute_id"))
     deleted = 0
     for rid in record_ids:
         if rid in medical_records_db:
@@ -1622,12 +1689,19 @@ async def batch_delete_records(
 
 
 @router.post("/export")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.EXPORT)
 async def export_records(
     request: Request,
     record_ids: List[str],
     current_user: dict = Depends(get_current_user)
 ):
     """导出病案记录"""
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    if inst_scope is not None:
+        for rid in record_ids:
+            rec = medical_records_db.get(rid)
+            if rec is not None:
+                enforce_institute_access(inst_scope, rec.get("institute_id"))
     export_id = f"export-{uuid.uuid4().hex[:8]}"
     download_url = f"/downloads/{export_id}.xlsx"
     return success_response(
@@ -1638,12 +1712,16 @@ async def export_records(
 
 
 @router.get("/statistics")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_medical_records_statistics(
     request: Request,
     current_user: dict = Depends(get_current_user)
 ):
     """获取病案统计信息"""
+    inst_scope = resolve_non_global_institute_scope(current_user)
     records = list(medical_records_db.values())
+    if inst_scope is not None:
+        records = [r for r in records if str(r.get("institute_id") or "") == inst_scope]
     total_records = len(records)
     pending_records = len([r for r in records if r.get("status") == "pending"])
     completed_records = len([r for r in records if r.get("status") == "completed"])
@@ -1696,10 +1774,13 @@ async def upload_record_file(
 
 
 @router.post("/{record_id}/duplicate", response_model=MedicalRecordResponse)
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.CREATE)
 async def duplicate_record(record_id: str, current_user: dict = Depends(get_current_user)):
+    inst_scope = resolve_non_global_institute_scope(current_user)
     original = medical_records_db.get(record_id)
     if not original:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="医疗记录不存在")
+    enforce_institute_access(inst_scope, original.get("institute_id"))
     new_id = f"record-{uuid.uuid4().hex[:8]}"
     new_record = {**original}
     new_record.update({

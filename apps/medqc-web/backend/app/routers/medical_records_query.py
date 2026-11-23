@@ -12,6 +12,11 @@ from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..core.security import get_current_user
 from ..services.case_identity import CaseRef
 from ..services.doctor_case_scope import get_doctor_case_scope
+from ..services.medical_records.detail_service import (
+    InstituteCaseScope,
+    list_departments_for_institute,
+    resolve_non_global_institute_scope,
+)
 from ..services.medical_records.query_service import (
     get_departments,
     get_stats,
@@ -24,6 +29,16 @@ from ..services.medical_records.hospitalization_status_service import (
 from .medical_records_common import raise_medical_records_http_error
 
 router = APIRouter(tags=["病案数据-查询"])
+
+
+def _effective_case_scope(request: Request, current_user: Optional[Dict[str, Any]]):
+    doctor_scope = get_doctor_case_scope(request)
+    if doctor_scope is not None:
+        return doctor_scope
+    institute_scope = resolve_non_global_institute_scope(current_user)
+    if institute_scope is not None:
+        return InstituteCaseScope(institute_scope)
+    return None
 
 
 @router.post("/workstation/hospitalization-status/verify")
@@ -47,6 +62,7 @@ async def list_medical_records_api(
     end_date: Optional[date] = Query(None, description="出院截止日期"),
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(description="每页条数"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     try:
         return list_medical_records(
@@ -56,7 +72,7 @@ async def list_medical_records_api(
             end_date=end_date,
             page=page,
             page_size=page_size,
-            case_scope=get_doctor_case_scope(request),
+            case_scope=_effective_case_scope(request, current_user),
         )
     except Exception as exc:
         raise_medical_records_http_error(exc)
@@ -68,17 +84,32 @@ async def get_stats_api(
     dept: Optional[str] = Query(None, description="科室筛选"),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     try:
-        return get_stats(dept=dept, start_date=start_date, end_date=end_date, case_scope=get_doctor_case_scope(request))
+        return get_stats(
+            dept=dept,
+            start_date=start_date,
+            end_date=end_date,
+            case_scope=_effective_case_scope(request, current_user),
+        )
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
 
 @router.get("/departments")
-async def get_departments_api(request: Request):
+async def get_departments_api(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
     try:
-        return get_departments(case_scope=get_doctor_case_scope(request))
+        doctor_scope = get_doctor_case_scope(request)
+        if doctor_scope is not None:
+            return get_departments(case_scope=doctor_scope)
+        institute_scope = resolve_non_global_institute_scope(current_user)
+        if institute_scope is not None:
+            return list_departments_for_institute(institute_scope)
+        return get_departments(case_scope=None)
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
@@ -138,10 +169,17 @@ def _workstation_filters(
     )
 
 
-def _query_workstation(request: Request, **parameters: Any):
+def _query_workstation(
+    request: Request,
+    current_user: Optional[Dict[str, Any]] = None,
+    **parameters: Any,
+):
     # CDM 和业务摘要使用同步数据库调用，交由 FastAPI 在线程池执行。
     try:
-        return get_workstation_data(case_scope=get_doctor_case_scope(request), **parameters)
+        return get_workstation_data(
+            case_scope=_effective_case_scope(request, current_user),
+            **parameters,
+        )
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
@@ -156,7 +194,12 @@ def get_workstation_data_api(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     return _query_workstation(
-        request, **filters, page=page, page_size=page_size, qc_summary_mode=qc_summary_mode,
+        request,
+        current_user=current_user,
+        **filters,
+        page=page,
+        page_size=page_size,
+        qc_summary_mode=qc_summary_mode,
     )
 
 
@@ -199,5 +242,9 @@ def get_workstation_qc_summary_api(
 ):
     """按已显示的病历取行摘要，并按相同筛选取全集统计。"""
     return _query_workstation(
-        request, **filters, qc_summary_mode="only", qc_summary_identities=body.identities(),
+        request,
+        current_user=current_user,
+        **filters,
+        qc_summary_mode="only",
+        qc_summary_identities=body.identities(),
     )
