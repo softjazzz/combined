@@ -653,3 +653,156 @@ def test_history_summary_is_lightweight_and_keeps_document_identity(monkeypatch)
     assert summary["id"] == "D" and summary["has_content"] is True
     assert result["documents_tree"] == []
     assert not {"content","sections","render_blocks","source_fields"} & set(summary)
+
+
+def test_supplementary_lab_row_without_business_ids_keeps_original_document_id():
+    from app.services.luxian_0609.source_evidence_reader import _normalize_snapshot_source_row
+
+    missing_ids_row = {
+        "document_id": "SYN-V-labtest_item_report-supp-001",
+        "test_id": None,
+        "test_no": "",
+        "report_id": "   ",
+        "item_name": "白细胞计数",
+    }
+    normalized = _normalize_snapshot_source_row("labtest_item_report", missing_ids_row)
+    assert normalized["document_id"] == "SYN-V-labtest_item_report-supp-001"
+
+    with_test_id = {**missing_ids_row, "test_id": "LAB-009"}
+    assert _normalize_snapshot_source_row("labtest_item_report", with_test_id)["document_id"] == "LAB-009"
+
+    ordinary_row = {"document_id": "DOC-REAL-01", "test_id": "LAB-009"}
+    assert _normalize_snapshot_source_row("labtest_item_report", ordinary_row)["document_id"] == "DOC-REAL-01"
+
+
+def test_capture_survives_supplementary_lab_row_missing_business_ids(monkeypatch):
+    from types import SimpleNamespace
+    from sqlalchemy import create_engine, text
+    from app.services import case_material_capture
+    from app.services.bundles import current_view
+    from app.services.luxian_0609 import source_evidence_reader as reader
+    from app.services.sichuan_qc_service import SichuanQCService
+
+    engine = create_engine("sqlite://")
+    try:
+        class SqlitePgCompatConnection:
+            def __init__(self, inner):
+                self._inner = inner
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+            def execution_options(self, **kwargs):
+                return self
+
+            def begin(self):
+                return nullcontext()
+
+            def begin_nested(self):
+                return nullcontext()
+
+            def exec_driver_sql(self, sql):
+                return None
+
+            def execute(self, statement, *args, **kwargs):
+                return self._inner.execute(statement, *args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(self._inner, name)
+
+        with engine.connect() as real_conn:
+            real_conn.execute(text("ATTACH DATABASE ':memory:' AS cdm"))
+            real_conn.execute(
+                text(
+                    "CREATE TABLE cdm.labtest_item_report("
+                    "institute_id TEXT, patient_id TEXT, visit_id TEXT, "
+                    "document_id TEXT, test_id TEXT, test_no TEXT, report_id TEXT, "
+                    "item_name TEXT, result TEXT, record_time TEXT)"
+                )
+            )
+            real_conn.execute(
+                text(
+                    "INSERT INTO cdm.labtest_item_report VALUES("
+                    "'SYNTHETIC-I', 'SYNTHETIC-P', 'SYNTHETIC-V', "
+                    "'SYNTHETIC-V-labtest_item_report-supp-001', NULL, '', NULL, "
+                    "'血红蛋白', '120', '2026-11-01 09:00:00')"
+                )
+            )
+            real_conn.execute(
+                text(
+                    "CREATE TABLE cdm.daily_course_record("
+                    "institute_id TEXT, patient_id TEXT, visit_id TEXT, "
+                    "document_id TEXT, document_title TEXT, record_content TEXT, "
+                    "record_time TEXT)"
+                )
+            )
+            real_conn.execute(
+                text(
+                    "INSERT INTO cdm.daily_course_record VALUES("
+                    "'SYNTHETIC-I', 'SYNTHETIC-P', 'SYNTHETIC-V', "
+                    "'COURSE-001', '日常病程记录', '患者一般情况可。', '2026-11-01 10:00:00')"
+                )
+            )
+            compat_conn = SqlitePgCompatConnection(real_conn)
+            fake_engine = SimpleNamespace(connect=lambda: compat_conn)
+            tables_columns = {
+                "labtest_item_report": [
+                    "institute_id", "patient_id", "visit_id", "document_id",
+                    "test_id", "test_no", "report_id", "item_name", "result", "record_time",
+                ],
+                "daily_course_record": [
+                    "institute_id", "patient_id", "visit_id", "document_id",
+                    "document_title", "record_content", "record_time",
+                ],
+            }
+            monkeypatch.setattr(assembly, "_source_engine", lambda _schema: fake_engine)
+            monkeypatch.setattr(assembly, "_default_source_schema", lambda: "cdm")
+            monkeypatch.setattr(
+                case_material_capture,
+                "inspect",
+                lambda _conn: SimpleNamespace(
+                    has_table=lambda table, schema=None: table in tables_columns,
+                    get_columns=lambda table, schema=None: [
+                        {"name": col} for col in tables_columns[table]
+                    ],
+                ),
+            )
+            monkeypatch.setattr(clinical, "configured", lambda: False)
+            monkeypatch.setattr(
+                current_view,
+                "_assemble_current_documents",
+                lambda **kw: {"documents": [{"id": "COURSE-001"}], "documents_tree": []},
+            )
+            monkeypatch.setattr(SichuanQCService, "_resolve_primary_diagnosis_context", lambda **kw: None)
+
+            captured = case_material_capture.capture(identity=IDENTITY)
+
+        assert len(captured["tables"]["daily_course_record"]) == 1
+        assert captured["tables"]["daily_course_record"][0]["document_id"] == "COURSE-001"
+        assert len(captured["tables"]["labtest_item_report"]) == 1
+
+        frozen = material.persist("supp-lab-missing-id-task", captured)
+        with material.activate(frozen):
+            lab_rows = reader.read_luxian_0609_snapshot_source_rows(
+                source_key="labtest_item_report",
+                institute_id=IDENTITY[0],
+                patient_id=IDENTITY[1],
+                visit_id=IDENTITY[2],
+                source_schema="cdm",
+            )
+            course_rows = reader.read_luxian_0609_snapshot_source_rows(
+                source_key="daily_course_record",
+                institute_id=IDENTITY[0],
+                patient_id=IDENTITY[1],
+                visit_id=IDENTITY[2],
+                source_schema="cdm",
+            )
+        assert len(lab_rows.rows) == 1
+        assert lab_rows.rows[0]["document_id"] == "SYNTHETIC-V-labtest_item_report-supp-001"
+        assert len(course_rows.rows) == 1
+        assert course_rows.rows[0]["document_id"] == "COURSE-001"
+    finally:
+        engine.dispose()
