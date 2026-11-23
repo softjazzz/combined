@@ -210,6 +210,9 @@
           <option value="fail">
             有扣分问题
           </option>
+          <option value="required_missing">
+            有必填缺项
+          </option>
           <option value="hint">
             有提示
           </option>
@@ -489,9 +492,11 @@ import FrontpageQcRunBar from './FrontpageQcRunBar.vue'
 import { formatPercent, formatScore } from './presentation'
 import { useFrontpageQcRun } from './useFrontpageQcRun'
 
+type FrontpageQcViewIssueFilter = FrontpageQcIssueFilter | 'required_missing'
+
 interface FilterState extends Required<FrontpageQcScopeFilters> {
   grade: FrontpageQcGrade | ''
-  issue: FrontpageQcIssueFilter
+  issue: FrontpageQcViewIssueFilter
 }
 
 const emptyFilters = (): FilterState => ({
@@ -585,6 +590,7 @@ async function loadList(targetPage = page.value) {
   try {
     const data = await listFrontpageQcRecords({
       ...applied,
+      issue: applied.issue as FrontpageQcIssueFilter,
       ...ruleQuery(),
       page: targetPage,
       page_size: pageSize.value,

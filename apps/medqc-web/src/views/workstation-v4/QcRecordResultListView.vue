@@ -224,7 +224,7 @@
             class="qc-record-result-list-view__refresh-button"
             type="button"
             :disabled="loading"
-            @click="refreshData"
+            @click="handleRefreshData"
           >
             刷新
           </button>
@@ -264,7 +264,7 @@
               <Button
                 size="small"
                 data-testid="qc-result-retry-list"
-                @click="refreshData"
+                @click="handleRefreshData"
               >
                 重试
               </Button>
@@ -314,7 +314,7 @@
               show-quick-jumper
               show-less-items
               size="small"
-              @change="handlePageChange"
+              @change="onPageChange"
             />
           </footer>
         </div>
@@ -338,7 +338,7 @@
 
     <QcRecordResultAnalysisPanel
       v-else
-      :key="sourceId"
+      :key="`${sourceId}:${analysisRefreshKey}`"
       :care-phase="carePhase"
       @open-result="handleOpenAnalysisResult"
     />
@@ -360,7 +360,7 @@
 <script setup lang="ts">
 import { Alert, Button, Empty, Input, Pagination, RangePicker, Select, Spin } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChevronDown, Download } from 'lucide-vue-next'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
@@ -424,6 +424,9 @@ const selectedQcRecordRefs = computed(() =>
     ),
 )
 const activeView = ref<'records' | 'analysis'>('records')
+const analysisRefreshKey = ref(0)
+const pendingDeepLinkKey = ref('')
+let deepLinkGeneration = 0
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
 const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '终末病历质控'))
@@ -490,10 +493,10 @@ const metricItems = computed<QcRecordMetricItem[]>(() => [
   },
 ])
 
-const rows = computed<QcRecordResultRow[]>(() => {
-  const resultRows = allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow)
-  return resultRows.sort(compareLatestQcTimeDesc)
-})
+// 保持后端分页顺序，避免 deferred 摘要回填后客户端重排造成列表跳动
+const rows = computed<QcRecordResultRow[]>(() =>
+  allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow),
+)
 const selectedCount = computed(() => selectedRecordKeys.value.length)
 const activePreviewKey = ref('')
 const previewRefreshKey = ref(0)
@@ -503,31 +506,60 @@ const previewRow = computed(
 watch(
   rows,
   (next) => {
+    if (pendingDeepLinkKey.value && next.some((row) => row.recordKey === pendingDeepLinkKey.value)) {
+      activePreviewKey.value = pendingDeepLinkKey.value
+      return
+    }
     if (!next.some((row) => row.recordKey === activePreviewKey.value)) {
       activePreviewKey.value = next[0]?.recordKey ?? ''
     }
-    previewRefreshKey.value += 1
   },
   { immediate: true },
 )
 
+// 仅当同一病历在相同非占位状态下发生原地摘要变更时主动刷新预览；
+// recordKey / resultStatus 变更已由 QcRecordReviewPreview 自身监听处理，避免重复拉取。
+watch(
+  () => [
+    previewRow.value?.recordKey ?? '',
+    previewRow.value?.resultStatus ?? '',
+    previewRow.value?.latestQcTime ?? '',
+    previewRow.value?.issueSummary ?? '',
+  ],
+  ([nextKey, nextStatus, nextTime, nextSummary], [prevKey, prevStatus, prevTime, prevSummary]) => {
+    if (!nextKey || nextKey !== prevKey) return
+    if (nextStatus !== prevStatus) return
+    if (nextStatus === 'unknown' || nextStatus === 'not-run') return
+    if (nextTime !== prevTime || nextSummary !== prevSummary) {
+      previewRefreshKey.value += 1
+    }
+  },
+)
+
+function cancelPendingDeepLink() {
+  pendingDeepLinkKey.value = ''
+  deepLinkGeneration += 1
+}
+
+function tryResolvePendingDeepLink() {
+  const targetKey = pendingDeepLinkKey.value
+  if (!targetKey) return
+  if (loading.value || qcSummaryState.value === 'pending') return
+  pendingDeepLinkKey.value = ''
+  if (loadError.value) return
+  if (rows.value.some((row) => row.recordKey === targetKey)) {
+    activePreviewKey.value = targetKey
+  }
+  handleOpenResult(targetKey)
+}
+
 function handleSelectPreview(recordKey: string) {
+  cancelPendingDeepLink()
   activePreviewKey.value = recordKey
 }
 
 function hasCompleteRecordIdentity(record: PatientRecord): boolean {
   return Boolean(record.recordKey && record.instituteId && record.patientId && record.visitId)
-}
-
-function qcTimeSortValue(value?: string): number {
-  const text = String(value || '').trim()
-  if (!text || text === '—') return 0
-  const timestamp = Date.parse(`${text.replace(' ', 'T')}+08:00`)
-  return Number.isFinite(timestamp) ? timestamp : 0
-}
-
-function compareLatestQcTimeDesc(left: QcRecordResultRow, right: QcRecordResultRow): number {
-  return qcTimeSortValue(right.latestQcTime) - qcTimeSortValue(left.latestQcTime)
 }
 
 function toResultRow(record: PatientRecord): QcRecordResultRow {
@@ -559,9 +591,20 @@ function formatMedicalRecordTimestamp(value?: string | null): string {
 }
 
 function applyFilters() {
+  cancelPendingDeepLink()
   clearSelection()
   currentPage.value = 1
   fetchData(1)
+}
+
+function handleRefreshData() {
+  cancelPendingDeepLink()
+  refreshData()
+}
+
+function onPageChange(page: number, nextPageSize?: number) {
+  cancelPendingDeepLink()
+  handlePageChange(page, nextPageSize)
 }
 
 function handleSearchChange(event: Event) {
@@ -608,6 +651,7 @@ function clearSelection() {
 
 function refreshAfterSelectedQc() {
   clearSelection()
+  analysisRefreshKey.value += 1
   refreshData()
 }
 
@@ -713,6 +757,7 @@ function updateDateRange(value: unknown) {
 watch(
   () => props.carePhase,
   (carePhase) => {
+    cancelPendingDeepLink()
     medicalRecordFocus.value = null
     closeResultDrawer()
     clearSelection()
@@ -721,13 +766,29 @@ watch(
   },
 )
 
+watch(
+  () => [loading.value, qcSummaryState.value, loadError.value],
+  () => {
+    tryResolvePendingDeepLink()
+  },
+)
+
+onBeforeUnmount(() => {
+  cancelPendingDeepLink()
+})
+
 onMounted(async () => {
   dateField.value = props.carePhase === 'inpatient' ? 'admission' : 'discharge'
   const requestedRecordKey = routeQueryText('record_key')
   const requestedVisitId = routeQueryText('visit_id')
-  if (requestedRecordKey && requestedVisitId) searchText.value = requestedVisitId
+  if (requestedRecordKey) {
+    pendingDeepLinkKey.value = requestedRecordKey
+    if (requestedVisitId) searchText.value = requestedVisitId
+  }
+  const generation = ++deepLinkGeneration
   await fetchData(1)
-  if (requestedRecordKey) handleOpenResult(requestedRecordKey)
+  if (generation !== deepLinkGeneration || !pendingDeepLinkKey.value) return
+  tryResolvePendingDeepLink()
 })
 
 function routeQueryText(name: string): string {
@@ -738,6 +799,7 @@ function routeQueryText(name: string): string {
 const medicalRecordFocus = ref<PatientRecord | null>(null)
 
 function handleOpenMedicalRecord(recordKey: string) {
+  cancelPendingDeepLink()
   medicalRecordFocus.value = null
   closeResultDrawer()
   const record = allRecords.value.find(
@@ -751,6 +813,9 @@ function handleOpenMedicalRecord(recordKey: string) {
 }
 
 function handleOpenResult(recordKey: string, previousResult?: PreviousResultRequest) {
+  if (pendingDeepLinkKey.value && pendingDeepLinkKey.value !== recordKey) {
+    cancelPendingDeepLink()
+  }
   medicalRecordFocus.value = null
   const record = allRecords.value.find(
     (candidate) => candidate.recordKey === recordKey && hasCompleteRecordIdentity(candidate),

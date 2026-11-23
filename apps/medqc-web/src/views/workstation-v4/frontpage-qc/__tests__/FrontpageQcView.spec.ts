@@ -452,3 +452,64 @@ describe('首页V2导出复审保护', () => {
     expect(downloadBlob).not.toHaveBeenCalled()
   })
 })
+
+describe('P1-G3 required_missing 筛选桶与问题列徽标', () => {
+  it('仅存在必填缺项时展示“必填缺项”徽标且不误判为“无”，仅三项均为0时显示“无”', async () => {
+    const requiredOnly = record('C03', true)
+    requiredOnly.result!.fail_count = 0
+    requiredOnly.result!.hint_count = 0
+    requiredOnly.result!.required_missing_count = 2
+
+    const cleanRecord = record('C04', true)
+    cleanRecord.result!.fail_count = 0
+    cleanRecord.result!.hint_count = 0
+    cleanRecord.result!.required_missing_count = 0
+
+    const customRows = [requiredOnly, cleanRecord]
+    svc.listRecords.mockResolvedValue({ items: customRows, total: 2, page: 1, page_size: 15 })
+    svc.getRecord.mockImplementation(async (ref: { visit_id: string }) =>
+      detailFor(customRows.find((row) => row.visit_id === ref.visit_id)!),
+    )
+
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+
+    const tableRows = wrapper.findAll('[data-testid="fpqc-record-row"]')
+    expect(tableRows).toHaveLength(2)
+
+    const reqCells = tableRows[0].findAll('td')
+    expect(reqCells[6].get('[data-testid="fpqc-issue-required-missing"]').text()).toBe('必填缺项 2')
+    expect(reqCells[6].text()).not.toContain('无')
+
+    const cleanCells = tableRows[1].findAll('td')
+    expect(cleanCells[6].find('[data-testid="fpqc-issue-required-missing"]').exists()).toBe(false)
+    expect(cleanCells[6].text().trim()).toBe('无')
+
+    wrapper.unmount()
+  })
+
+  it('问题筛选下拉提供 required_missing 选项并透传查询与导出参数', async () => {
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+
+    const issueSelect = wrapper.get('[aria-label="问题筛选"]')
+    expect(issueSelect.find('option[value="required_missing"]').exists()).toBe(true)
+
+    await issueSelect.setValue('required_missing')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(svc.listRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ issue: 'required_missing', page: 1 }),
+    )
+    expect(wrapper.get('[data-testid="fpqc-export-filtered"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.get('[data-testid="fpqc-export-filtered"]').trigger('click')
+    await flushPromises()
+    expect(svc.exportRecords).toHaveBeenCalledWith(
+      expect.objectContaining({ issue: 'required_missing' }),
+    )
+
+    wrapper.unmount()
+  })
+})

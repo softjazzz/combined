@@ -197,7 +197,11 @@
           <a-radio-button value="advanced"> 高级视图 </a-radio-button>
         </a-radio-group>
         <div class="result-toolbar-meta">
-          <a-switch v-model:checked="showAllStatuses" size="small" />
+          <a-switch
+            v-model:checked="showAllStatuses"
+            size="small"
+            @change="handleShowAllStatusesChange"
+          />
           <span>{{ showAllStatuses ? '显示全部状态' : '仅显示问题项' }}</span>
         </div>
       </div>
@@ -557,7 +561,7 @@
 
 <script setup lang="ts">
 import { LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SafetyCertificateOutlined,
@@ -566,7 +570,7 @@ import {
   CheckCircleOutlined,
   SearchOutlined,
 } from '@ant-design/icons-vue'
-import axios from 'axios'
+import { apiClient } from '@/services/apiService'
 import { evaluateSichuanBundleQC } from '@/api/qc'
 import { extractApiData } from '@/utils/api-helpers'
 import {
@@ -676,6 +680,7 @@ const sectionTimeline = ref<SectionProgress[]>([])
 const totalSections = ref(0)
 const viewMode = ref<'business' | 'advanced'>('business')
 const showAllStatuses = ref(false)
+const selectedStatusGroup = ref<StructuredQCStatus | null>(null)
 const activeGroupKey = ref('')
 const issueFilter = ref<StructuredQCFilterState>(createDefaultStructuredQCFilter())
 const issueDetailOpen = ref(false)
@@ -684,6 +689,60 @@ const subitemAnchorDetailOpen = ref(false)
 const fullDocumentsVisitKey = ref('')
 const fullDocumentsCache = ref<DocItem[]>([])
 let fullDocumentsRequest: Promise<DocItem[]> | null = null
+let fullDocumentsRequestKey = ''
+let activeRunSeq = 0
+
+const PROBLEM_STATUS_LIST: StructuredQCStatus[] = [
+  'non_compliant',
+  'ai_suggested_non_compliant',
+  'uncertain',
+  'data_gap',
+  'not_executed',
+  'technical_error',
+  'failed',
+  'error',
+]
+
+const STATUS_GROUP_LABEL_MAP: Record<string, StructuredQCStatus> = {
+  不合规: 'non_compliant',
+  'AI判断：疑似问题': 'ai_suggested_non_compliant',
+  AI判断: 'uncertain',
+  待复核: 'uncertain',
+  'AI判断：未见问题': 'ai_suggested_compliant',
+  合规: 'compliant',
+  不适用: 'not_applicable',
+  数据不足: 'data_gap',
+  未执行: 'not_executed',
+  技术异常: 'technical_error',
+  失败: 'failed',
+  错误: 'error',
+}
+
+const VALID_STRUCTURED_STATUSES = new Set<StructuredQCStatus>([
+  'non_compliant',
+  'ai_suggested_non_compliant',
+  'uncertain',
+  'ai_suggested_compliant',
+  'compliant',
+  'not_applicable',
+  'data_gap',
+  'not_executed',
+  'technical_error',
+  'failed',
+  'error',
+])
+
+function buildVisitKey(patientId?: string, instituteId?: string, visitId?: string): string {
+  return `${String(patientId || '').trim()}::${String(instituteId || '').trim()}::${String(visitId || '').trim()}`
+}
+
+function getCurrentVisitKey(): string {
+  return buildVisitKey(props.patientId, props.instituteId, props.visitId)
+}
+
+function isCurrentRun(seq: number, visitKey: string): boolean {
+  return seq === activeRunSeq && getCurrentVisitKey() === visitKey
+}
 
 const detailPagination = ref({
   current: 1,
@@ -805,9 +864,14 @@ const defectLevelOptions = computed(() => {
 })
 
 const filteredIssues = computed(() => {
+  const statusList = selectedStatusGroup.value
+    ? [selectedStatusGroup.value]
+    : showAllStatuses.value
+      ? []
+      : PROBLEM_STATUS_LIST
   const nextFilter: StructuredQCFilterState = {
     ...issueFilter.value,
-    statusList: showAllStatuses.value ? [] : ['non_compliant', 'uncertain'],
+    statusList,
   }
   return filterStructuredQCIssues(effectiveStructuredIssues.value, nextFilter)
 })
@@ -856,9 +920,11 @@ function severityLabel(sev: string) {
 
 function statusTagColor(status: StructuredQCStatus) {
   if (status === 'non_compliant') return 'error'
-  if (status === 'uncertain') return 'warning'
-  if (status === 'not_applicable') return 'default'
-  if (status === 'failed' || status === 'error') return 'error'
+  if (status === 'ai_suggested_non_compliant' || status === 'uncertain') return 'warning'
+  if (status === 'not_applicable' || status === 'data_gap' || status === 'not_executed') {
+    return 'default'
+  }
+  if (status === 'failed' || status === 'error' || status === 'technical_error') return 'error'
   return 'success'
 }
 
@@ -897,27 +963,56 @@ function toContentIssue(item: StructuredQCIssue, fallbackGroup = '整份病历')
 function resetIssueFilter() {
   issueFilter.value = createDefaultStructuredQCFilter()
   showAllStatuses.value = false
+  selectedStatusGroup.value = null
   activeGroupKey.value = ''
+  detailPagination.value.current = 1
+}
+
+function handleShowAllStatusesChange() {
+  if (selectedStatusGroup.value) {
+    selectedStatusGroup.value = null
+    if (activeGroupKey.value.startsWith('status:')) {
+      activeGroupKey.value = ''
+    }
+  }
+  detailPagination.value.current = 1
+}
+
+function resolveStatusGroupCode(group: { key: string; label: string }): StructuredQCStatus | null {
+  const label = String(group.label || '').trim()
+  if (STATUS_GROUP_LABEL_MAP[label]) return STATUS_GROUP_LABEL_MAP[label]
+  if (VALID_STRUCTURED_STATUSES.has(label as StructuredQCStatus)) {
+    return label as StructuredQCStatus
+  }
+  const keySuffix = String(group.key || '')
+    .replace(/^status:/, '')
+    .trim()
+  if (STATUS_GROUP_LABEL_MAP[keySuffix]) return STATUS_GROUP_LABEL_MAP[keySuffix]
+  if (VALID_STRUCTURED_STATUSES.has(keySuffix as StructuredQCStatus)) {
+    return keySuffix as StructuredQCStatus
+  }
+  return null
 }
 
 function applyGroupFilter(group: { key: string; kind: string; label: string }) {
-  activeGroupKey.value = activeGroupKey.value === group.key ? '' : group.key
-  if (!activeGroupKey.value) {
+  const nextActiveKey = activeGroupKey.value === group.key ? '' : group.key
+  if (!nextActiveKey) {
     resetIssueFilter()
     return
   }
+  issueFilter.value = {
+    ...createDefaultStructuredQCFilter(),
+    keyword: issueFilter.value.keyword,
+  }
+  selectedStatusGroup.value = null
+  activeGroupKey.value = nextActiveKey
+  detailPagination.value.current = 1
+
   if (group.kind === 'status') {
-    const map: Record<string, StructuredQCStatus> = {
-      不合规: 'non_compliant',
-      待复核: 'uncertain',
-      合规: 'compliant',
-      不适用: 'not_applicable',
-      失败: 'failed',
-      错误: 'error',
-    }
-    const status = map[group.label]
+    const status = resolveStatusGroupCode(group)
     if (status) {
       showAllStatuses.value = true
+      selectedStatusGroup.value = status
       issueFilter.value.statusList = [status]
     }
     return
@@ -941,20 +1036,26 @@ function openIssueDetail(issue: StructuredQCIssue) {
   issueDetailOpen.value = true
 }
 
-async function loadFullDocumentsForAnalysis(): Promise<DocItem[]> {
-  const patientId = String(props.patientId || '').trim()
-  const visitId = String(props.visitId || '').trim()
-  if (!patientId || !visitId) return []
-  const visitKey = `${patientId}::${String(props.instituteId || '').trim()}::${visitId}`
-  if (fullDocumentsVisitKey.value === visitKey) return fullDocumentsCache.value
-  if (fullDocumentsRequest) return fullDocumentsRequest
+interface ContentQCRunContext {
+  seq: number
+  visitKey: string
+  patientId: string
+  visitId: string
+  instituteId: string
+}
 
-  fullDocumentsRequest = (async () => {
+async function loadFullDocumentsForAnalysis(target: ContentQCRunContext): Promise<DocItem[]> {
+  const { patientId, visitId, instituteId, visitKey } = target
+  if (!patientId || !visitId) return []
+  if (fullDocumentsVisitKey.value === visitKey) return fullDocumentsCache.value
+  if (fullDocumentsRequest && fullDocumentsRequestKey === visitKey) return fullDocumentsRequest
+
+  const request = (async () => {
     try {
-      const response = await axios.get(`/api/v1/emr/${encodeURIComponent(visitId)}/documents`, {
+      const response = await apiClient.get(`/api/v1/emr/${encodeURIComponent(visitId)}/documents`, {
         params: {
           patient_id: patientId,
-          ...(props.instituteId ? { institute_id: props.instituteId } : {}),
+          ...(instituteId ? { institute_id: instituteId } : {}),
           visit_id: visitId,
           view: 'full',
         },
@@ -966,8 +1067,7 @@ async function loadFullDocumentsForAnalysis(): Promise<DocItem[]> {
         (doc: unknown): doc is DocItem =>
           !!doc && typeof doc === 'object' && 'content' in doc && Boolean((doc as DocItem).content),
       )
-      const currentVisitKey = `${String(props.patientId || '').trim()}::${String(props.instituteId || '').trim()}::${String(props.visitId || '').trim()}`
-      if (currentVisitKey !== visitKey) return []
+      if (!isCurrentRun(target.seq, visitKey)) return []
       if (documents.length) {
         fullDocumentsCache.value = documents
         fullDocumentsVisitKey.value = visitKey
@@ -977,10 +1077,15 @@ async function loadFullDocumentsForAnalysis(): Promise<DocItem[]> {
       console.warn('内涵质控按需加载完整文书失败:', error)
       return []
     } finally {
-      fullDocumentsRequest = null
+      if (fullDocumentsRequest === request) {
+        fullDocumentsRequest = null
+        fullDocumentsRequestKey = ''
+      }
     }
   })()
-  return fullDocumentsRequest
+  fullDocumentsRequest = request
+  fullDocumentsRequestKey = visitKey
+  return request
 }
 
 async function copyIssueEvidence(issue: StructuredQCIssue) {
@@ -1008,7 +1113,9 @@ function resolveScene(): 'running' | 'final' {
 
 // ==================== 回退链路：逐文书质控（旧模式） ====================
 
-async function runContentQCLegacy(docs: DocItem[]) {
+async function runContentQCLegacy(docs: DocItem[], runCtx: ContentQCRunContext) {
+  if (!isCurrentRun(runCtx.seq, runCtx.visitKey)) return
+
   totalSections.value = docs.length
   sectionTimeline.value = docs.map((d) => ({
     type: d.type,
@@ -1021,10 +1128,12 @@ async function runContentQCLegacy(docs: DocItem[]) {
   let allIssues: ContentIssue[] = []
   let allStructuredIssues: StructuredQCIssue[] = []
   const allRuleIds = new Set<string>()
+  const evaluableRuleIds = new Set<string>()
   const problemRuleIds = new Set<string>()
   const startTime = Date.now()
 
   for (let i = 0; i < sectionTimeline.value.length; i++) {
+    if (!isCurrentRun(runCtx.seq, runCtx.visitKey)) return
     const sec = sectionTimeline.value[i]
     sec.status = 'active'
 
@@ -1042,24 +1151,27 @@ async function runContentQCLegacy(docs: DocItem[]) {
         '',
       ].join('\n')
 
-      const resp = await axios.post(
+      const resp = await apiClient.post(
         '/api/v1/qc/sichuan/evaluate',
         {
-          document_id: `${props.patientId}-${props.visitId}-${sec.type}`,
+          document_id: `${runCtx.patientId}-${runCtx.visitId}-${sec.type}`,
           document_content: contextPrefix + sec.content,
           document_type: qcDocType,
           patient_info: {
             current_document_type: qcDocType,
             current_table: sec.type,
             available_documents: docs.map((d) => TABLE_TO_DOC_TYPE[d.type] || d.label).join('、'),
-            patient_id: props.patientId || '',
-            visit_id: props.visitId || '',
+            patient_id: runCtx.patientId,
+            visit_id: runCtx.visitId,
+            ...(runCtx.instituteId ? { institute_id: runCtx.instituteId } : {}),
           },
           persist: false,
           prompt_mode: 'plan_a',
         },
         { timeout: LONG_REQUEST_TIMEOUT_MS },
       )
+
+      if (!isCurrentRun(runCtx.seq, runCtx.visitKey)) return
 
       const data = extractApiData<any>(resp.data, '文书质控失败')
       const secDuration = ((Date.now() - secStart) / 1000).toFixed(1)
@@ -1078,6 +1190,9 @@ async function runContentQCLegacy(docs: DocItem[]) {
           const key = item.ruleId || item.ruleCode
           if (key) {
             allRuleIds.add(key)
+            if (item.status !== 'not_applicable') {
+              evaluableRuleIds.add(key)
+            }
             if (isProblemStatus(item.status)) {
               problemRuleIds.add(key)
             }
@@ -1108,6 +1223,7 @@ async function runContentQCLegacy(docs: DocItem[]) {
         completedSections.value.push({ ...sec })
       }
     } catch (err: any) {
+      if (!isCurrentRun(runCtx.seq, runCtx.visitKey)) return
       const secDuration = ((Date.now() - secStart) / 1000).toFixed(1)
       console.error(`质控 ${sec.label} 失败:`, err)
       sec.status = 'done'
@@ -1118,16 +1234,25 @@ async function runContentQCLegacy(docs: DocItem[]) {
     }
   }
 
-  // 3. 汇总（按 rule_id 去重后的唯一规则数）
+  if (!isCurrentRun(runCtx.seq, runCtx.visitKey)) return
+
+  // 3. 汇总（按 rule_id 去重后的唯一规则数；无规则或全部不适用时 compliance_rate 置 null）
   const totalDuration = (Date.now() - startTime) / 1000
   const uniqueRuleCount = allRuleIds.size
-  const compliantCount = uniqueRuleCount - problemRuleIds.size
+  const evaluableRuleCount = evaluableRuleIds.size
+  const notApplicableCount = Math.max(0, uniqueRuleCount - evaluableRuleCount)
+  const compliantCount = Math.max(0, evaluableRuleCount - problemRuleIds.size)
+  const complianceRate =
+    uniqueRuleCount > 0 && evaluableRuleCount > 0
+      ? Math.round((compliantCount / evaluableRuleCount) * 10000) / 100
+      : null
   const legacyStructuredResult = mapSichuanEvaluationToStructuredQC(
     {
       evaluation_summary: {
         total_rules: uniqueRuleCount,
-        compliance_rate:
-          uniqueRuleCount > 0 ? Math.round((compliantCount / uniqueRuleCount) * 10000) / 100 : null,
+        compliant_rules: compliantCount,
+        not_applicable: notApplicableCount,
+        compliance_rate: complianceRate,
         issues_found: allIssues.length,
       },
       evaluation_results: allStructuredIssues.map((item) => ({
@@ -1194,12 +1319,14 @@ async function runContentQCLegacy(docs: DocItem[]) {
 
 // ==================== 主链路：单次 bundle 评估 ====================
 
-async function runContentQCBundle(docs: DocItem[]): Promise<boolean> {
-  if (!props.instituteId || !props.patientId || !props.visitId) {
-    return false
+async function runContentQCBundle(
+  docs: DocItem[],
+  runCtx: ContentQCRunContext,
+): Promise<'completed' | 'stale' | 'fallback'> {
+  if (!runCtx.instituteId || !runCtx.patientId || !runCtx.visitId) {
+    return 'fallback'
   }
 
-  loading.value = true
   analyzed.value = false
   issues.value = []
   summary.value = null
@@ -1223,10 +1350,14 @@ async function runContentQCBundle(docs: DocItem[]): Promise<boolean> {
   try {
     const response = await evaluateSichuanBundleQC({
       scene: resolveScene(),
-      institute_id: props.instituteId,
-      patient_id: props.patientId,
-      visit_id: props.visitId,
+      institute_id: runCtx.instituteId,
+      patient_id: runCtx.patientId,
+      visit_id: runCtx.visitId,
     })
+
+    if (!isCurrentRun(runCtx.seq, runCtx.visitKey)) {
+      return 'stale'
+    }
 
     if (!response.success || !response.data) {
       throw new Error(response.message || 'Bundle 质控失败')
@@ -1260,56 +1391,82 @@ async function runContentQCBundle(docs: DocItem[]): Promise<boolean> {
     } else {
       message.warning(`发现 ${allIssues.length} 个问题（Bundle）`)
     }
-    return true
+    return 'completed'
   } catch (error: any) {
+    if (!isCurrentRun(runCtx.seq, runCtx.visitKey)) {
+      return 'stale'
+    }
     console.error('Bundle 质控失败，准备回退旧链路:', error)
-    loading.value = false
     sectionTimeline.value = []
     totalSections.value = 0
-    return false
+    return 'fallback'
   }
 }
 
 // ==================== 统一入口 ====================
 
 async function runContentQC() {
-  if (!props.patientId) {
+  if (loading.value) return
+  const patientId = String(props.patientId || '').trim()
+  if (!patientId) {
     message.warning('请先选择病历')
     return
   }
 
-  let docs = (props.documents || []).filter((d) => d.has_content && d.content)
-  // summary 目录只包含长度和身份信息；真正逐文书分析前按需读取 full 视图。
-  if (!docs.length || (props.documents || []).some((d) => d.has_content && !d.content)) {
-    docs = await loadFullDocumentsForAnalysis()
-  }
-  if (docs.length === 0) {
-    message.warning('该患者暂无病历文书内容，请先加载文书')
-    return
-  }
-
-  const bundleDone = await runContentQCBundle(docs)
-  if (bundleDone) {
-    return
+  const visitId = String(props.visitId || '').trim()
+  const instituteId = String(props.instituteId || '').trim()
+  const runCtx: ContentQCRunContext = {
+    seq: ++activeRunSeq,
+    visitKey: buildVisitKey(patientId, instituteId, visitId),
+    patientId,
+    visitId,
+    instituteId,
   }
 
-  message.warning('Bundle 评估不可用，已回退逐文书模式')
   loading.value = true
-  analyzed.value = false
-  issues.value = []
-  summary.value = null
-  structuredResult.value = null
-  completedSections.value = []
-  await runContentQCLegacy(docs)
+  try {
+    let docs = (props.documents || []).filter((d) => d.has_content && d.content)
+    // summary 目录只包含长度和身份信息；真正逐文书分析前按需读取 full 视图。
+    if (!docs.length || (props.documents || []).some((d) => d.has_content && !d.content)) {
+      docs = await loadFullDocumentsForAnalysis(runCtx)
+    }
+    if (!isCurrentRun(runCtx.seq, runCtx.visitKey)) return
+
+    if (docs.length === 0) {
+      message.warning('该患者暂无病历文书内容，请先加载文书')
+      return
+    }
+
+    const bundleStatus = await runContentQCBundle(docs, runCtx)
+    if (bundleStatus === 'completed' || bundleStatus === 'stale') {
+      return
+    }
+    if (!isCurrentRun(runCtx.seq, runCtx.visitKey)) return
+
+    message.warning('Bundle 评估不可用，已回退逐文书模式')
+    analyzed.value = false
+    issues.value = []
+    summary.value = null
+    structuredResult.value = null
+    completedSections.value = []
+    await runContentQCLegacy(docs, runCtx)
+  } finally {
+    if (runCtx.seq === activeRunSeq) {
+      loading.value = false
+    }
+  }
 }
 
-// 切换患者时重置
+// 切换患者时重置并作废在途请求
 watch(
   () => [props.patientId, props.visitId, props.instituteId],
   () => {
+    activeRunSeq += 1
+    loading.value = false
     fullDocumentsVisitKey.value = ''
     fullDocumentsCache.value = []
     fullDocumentsRequest = null
+    fullDocumentsRequestKey = ''
     analyzed.value = false
     issues.value = []
     summary.value = null
@@ -1317,11 +1474,17 @@ watch(
     resetIssueFilter()
     issueDetailOpen.value = false
     issueDetailRecord.value = null
+    subitemAnchorDetailOpen.value = false
     completedSections.value = []
     sectionTimeline.value = []
+    totalSections.value = 0
     emit('issues-change', 0)
   },
 )
+
+onBeforeUnmount(() => {
+  activeRunSeq += 1
+})
 </script>
 
 <style scoped>

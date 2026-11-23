@@ -412,7 +412,9 @@ const activeMaterialNotice = computed(() => resolveMaterialDisplayNotice({ ...ac
 const annotations = ref<DefectAnnotation[]>([])
 const documentItems = ref<EmrDocumentSummary[]>([])
 const loadedDocKey = ref('')
-const loadedRecordId = ref('')
+const loadedDocSignature = ref('')
+const loadedRecordContextKey = ref('')
+const loadedDocType = ref('')
 const showAnnotationPanel = ref(false)
 const layoutVersion = ref('')
 const renderBlocks = ref<EmrRenderBlock[]>([])
@@ -438,6 +440,14 @@ const { activeDefectId, buildHighlightedSegments, scrollToDefect, onDefectClick,
 
 const effectiveRecordId = computed(() => props.recordId || props.visitId || '')
 const hasTripletContext = computed(() => !!(props.visitId && props.patientId && props.instituteId))
+const recordContextKey = computed(() =>
+  [
+    String(props.instituteId || '').trim(),
+    String(props.patientId || '').trim(),
+    String(props.visitId || '').trim(),
+    String(props.recordId || '').trim(),
+  ].join('::'),
+)
 
 const baseQueryString = computed(() => {
   const params = new URLSearchParams()
@@ -755,6 +765,17 @@ function docIdentityKey(doc: EmrDocumentSummary): string {
   return String(doc.doc_key || `${doc.doc_type || ''}::${doc.id || ''}`)
 }
 
+function docSnapshotSignature(doc: EmrDocumentSummary): string {
+  return [
+    docIdentityKey(doc),
+    String(doc.id || ''),
+    String(doc.doc_type || ''),
+    String(doc.version_id || ''),
+    String(doc.execution_domain || ''),
+    doc.has_content === undefined ? '' : String(Boolean(doc.has_content)),
+  ].join('|')
+}
+
 function resetViewerState() {
   documentReadError.value = ''
   documentEmptyReason.value = ''
@@ -764,7 +785,9 @@ function resetViewerState() {
   annotations.value = []
   documentItems.value = []
   loadedDocKey.value = ''
-  loadedRecordId.value = ''
+  loadedDocSignature.value = ''
+  loadedRecordContextKey.value = ''
+  loadedDocType.value = ''
   layoutVersion.value = ''
   renderBlocks.value = []
 }
@@ -817,7 +840,9 @@ async function fetchDocuments() {
       return
     }
     loadedDocKey.value = docIdentityKey(target)
-    loadedRecordId.value = effectiveRecordId.value
+    loadedDocSignature.value = docSnapshotSignature(target)
+    loadedRecordContextKey.value = recordContextKey.value
+    loadedDocType.value = String(props.docType || '')
     await loadDocument(target)
     return
   }
@@ -861,7 +886,9 @@ async function fetchDocuments() {
       return
     }
     loadedDocKey.value = docIdentityKey(target)
-    loadedRecordId.value = effectiveRecordId.value
+    loadedDocSignature.value = docSnapshotSignature(target)
+    loadedRecordContextKey.value = recordContextKey.value
+    loadedDocType.value = String(props.docType || '')
     await loadDocument(target)
   } catch (err) {
     if (isAbortError(err)) return
@@ -896,6 +923,9 @@ async function loadDocument(doc?: EmrDocumentSummary) {
   const controller = beginRequest()
   loading.value = true
   loadedDocKey.value = docIdentityKey(doc)
+  loadedDocSignature.value = docSnapshotSignature(doc)
+  loadedRecordContextKey.value = recordContextKey.value
+  loadedDocType.value = String(props.docType || '')
   rawContent.value = ''
   metadata.value = {}
   annotations.value = []
@@ -1033,20 +1063,34 @@ watch(
     props.instituteId,
     props.docType,
     props.documents,
+    Array.isArray(props.documents)
+      ? props.documents.map((doc) => docSnapshotSignature(doc)).join(';;')
+      : '',
     props.documentsManaged,
     props.documentsLoading,
   ],
   () => {
-    // 受控目录后台补齐时 documents 数组会追加项目，但当前文书仍然有效，
-    // 不应因为目录变化再次请求同一份正文；切换病历/文书时 loadedDocKey 会失效。
-    if (
-      props.documentsManaged &&
-      loadedRecordId.value === effectiveRecordId.value &&
-      loadedDocKey.value &&
-      documentItems.value.some((doc) => docIdentityKey(doc) === loadedDocKey.value) &&
-      (!props.activeDocKey || props.activeDocKey === loadedDocKey.value)
-    ) {
-      return
+    // 受控目录后台补齐时 documents 数组会追加项目：必须先校验三键上下文与当前文书快照签名，
+    // 同一病历且当前文书快照未变化时同步目录并跳过重复正文拉取；跨院同号或快照变化则刷新。
+    if (props.documentsManaged) {
+      const incomingDocs = Array.isArray(props.documents) ? props.documents : []
+      const sameRecordContext =
+        Boolean(loadedRecordContextKey.value) &&
+        loadedRecordContextKey.value === recordContextKey.value
+      const matchedCurrentDoc =
+        sameRecordContext && loadedDocKey.value
+          ? incomingDocs.find((doc) => docIdentityKey(doc) === loadedDocKey.value)
+          : undefined
+      const sameDocSnapshot =
+        Boolean(matchedCurrentDoc) &&
+        docSnapshotSignature(matchedCurrentDoc!) === loadedDocSignature.value
+      const activeKeyMatches = !props.activeDocKey || props.activeDocKey === loadedDocKey.value
+      const docTypeUnchanged = loadedDocType.value === String(props.docType || '')
+
+      if (sameRecordContext && sameDocSnapshot && activeKeyMatches && docTypeUnchanged) {
+        documentItems.value = incomingDocs
+        return
+      }
     }
     if (effectiveRecordId.value || hasTripletContext.value) {
       void fetchDocuments()

@@ -84,11 +84,20 @@
                 class="fpqc-table__issue fpqc-table__issue--danger"
               >扣分 {{ row.result.fail_count }}</span>
               <span
+                v-if="row.result.required_missing_count"
+                class="fpqc-table__issue fpqc-table__issue--danger"
+                data-testid="fpqc-issue-required-missing"
+              >必填缺项 {{ row.result.required_missing_count }}</span>
+              <span
                 v-if="row.result.hint_count"
                 class="fpqc-table__issue fpqc-table__issue--warning"
               >提示 {{ row.result.hint_count }}</span>
               <span
-                v-if="!row.result.fail_count && !row.result.hint_count"
+                v-if="
+                  !row.result.fail_count &&
+                    !row.result.hint_count &&
+                    !row.result.required_missing_count
+                "
                 class="fpqc-table__muted"
               >无</span>
             </template>
