@@ -399,8 +399,13 @@ def _workstation_comparable_datetime(value: Any) -> datetime | None:
     return parsed
 
 
-def _workstation_python_sort_key(record) -> tuple[datetime, datetime, str]:
-    discharge = _workstation_comparable_datetime(record.discharge_datetime)
+def _workstation_python_sort_key(
+    record,
+    resolved_discharge: Any = None,
+) -> tuple[datetime, datetime, str]:
+    discharge = _workstation_comparable_datetime(
+        resolved_discharge if resolved_discharge is not None else record.discharge_datetime
+    )
     admission = _workstation_comparable_datetime(record.admission_datetime)
     updated = _workstation_comparable_datetime(record.update_time)
     return (
@@ -827,7 +832,7 @@ def _workstation_discharge_record_columns(session) -> dict[str, dict[str, Any]] 
             columns = {column["name"]: column for column in inspector.get_columns(table_name, schema=schema)}
             result = columns if required_columns.issubset(columns) else None
 
-    if cache_key is not None:
+    if cache_key is not None and result is not None:
         with _DISCHARGE_RECORD_COLUMNS_CACHE_LOCK:
             _DISCHARGE_RECORD_COLUMNS_CACHE[cache_key] = _clone_discharge_record_columns(result)
             _DISCHARGE_RECORD_COLUMNS_CACHE.move_to_end(cache_key)
@@ -1075,8 +1080,8 @@ def _workstation_default_order_by(discharge_summary=None):
         MedicalRecordFrontpage.admission_datetime,
     )
     return (
-        sort_time.desc(),
-        visit_time.desc(),
+        sort_time.desc().nullslast(),
+        visit_time.desc().nullslast(),
         MedicalRecordFrontpage.visit_id.desc(),
     )
 
@@ -1095,7 +1100,12 @@ def _workstation_order_by(inpatient_sort: str, discharge_summary=None):
     return _workstation_default_order_by(discharge_summary)
 
 
-def _workstation_sorted_records(records, inpatient_sort: str):
+def _workstation_sorted_records(
+    records,
+    inpatient_sort: str,
+    *,
+    resolved_discharge_by_record: dict[int, Any] | None = None,
+):
     def admission_datetime(record) -> datetime | None:
         return _workstation_comparable_datetime(record.admission_datetime)
 
@@ -1118,7 +1128,15 @@ def _workstation_sorted_records(records, inpatient_sort: str):
             ),
             reverse=True,
         )
-    return sorted(records, key=_workstation_python_sort_key, reverse=True)
+    discharge_lookup = resolved_discharge_by_record or {}
+    return sorted(
+        records,
+        key=lambda record: _workstation_python_sort_key(
+            record,
+            resolved_discharge=discharge_lookup.get(id(record)),
+        ),
+        reverse=True,
+    )
 
 
 def get_workstation_data(
@@ -1383,11 +1401,28 @@ def get_workstation_data(
                     )
                 else:
                     candidate_limit = real_offset + real_limit
-                    frontpage_candidates = (
-                        q.order_by(*_workstation_order_by(effective_inpatient_sort, discharge_summary))
-                        .limit(candidate_limit)
-                        .all()
-                    )
+                    resolved_discharge_by_record: dict[int, Any] = {}
+                    if discharge_summary is not None:
+                        frontpage_rows = (
+                            q.add_columns(
+                                discharge_summary.c.discharge_time.label("_ws_discharge_time")
+                            )
+                            .order_by(*_workstation_order_by(effective_inpatient_sort, discharge_summary))
+                            .limit(candidate_limit)
+                            .all()
+                        )
+                        frontpage_candidates = []
+                        for row in frontpage_rows:
+                            rec = row[0]
+                            frontpage_candidates.append(rec)
+                            if row[1] is not None:
+                                resolved_discharge_by_record[id(rec)] = row[1]
+                    else:
+                        frontpage_candidates = (
+                            q.order_by(*_workstation_order_by(effective_inpatient_sort, discharge_summary))
+                            .limit(candidate_limit)
+                            .all()
+                        )
                     indexed_candidates = _workstation_sorted_records(
                         indexed_filtered_records,
                         effective_inpatient_sort,
@@ -1395,6 +1430,7 @@ def get_workstation_data(
                     records = _workstation_sorted_records(
                         [*frontpage_candidates, *indexed_candidates],
                         effective_inpatient_sort,
+                        resolved_discharge_by_record=resolved_discharge_by_record,
                     )[real_offset : real_offset + real_limit]
 
         full_record_refs: list[dict[str, str]] = []

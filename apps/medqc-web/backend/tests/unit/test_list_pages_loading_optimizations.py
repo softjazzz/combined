@@ -844,3 +844,322 @@ def test_clinical_case_catalog_deferred_aggregates_facets_in_sql_and_skips_empty
         clinical_case_catalog.catalog.cache_clear()
         engine.dispose()
 
+
+def test_watermark_cache_invalidates_when_earlier_row_updates_below_max_timestamp(monkeypatch):
+    """Codex P1 回归：两份结果中较早一份更新且新时间仍早于较晚一份时，冷热统计必须一致。"""
+    workspace.clear_luxian_0609_summary_caches()
+    clear_luxian_0609_result_analysis_caches()
+    engine, jobs, envelopes, factory = _create_sqlite_workspace_env()
+    svc = object.__new__(workspace.CustomQCWorkspaceService)
+    svc._batch_job_table = jobs
+    svc._record_result_envelope_table = envelopes
+    try:
+        t_early = datetime(2026, 10, 1, 10, 0, 0)
+        t_late = datetime(2026, 10, 1, 12, 0, 0)
+        ref_early = {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1"}
+        ref_late = {"institute_id": "H1", "patient_id": "P2", "visit_id": "V2"}
+        with engine.begin() as conn:
+            _insert_completed_record(
+                conn,
+                jobs=jobs,
+                envelopes=envelopes,
+                job_id="job-early",
+                env_id="env-early",
+                ts=t_early,
+                status="compliant",
+                **ref_early,
+            )
+            _insert_completed_record(
+                conn,
+                jobs=jobs,
+                envelopes=envelopes,
+                job_id="job-late",
+                env_id="env-late",
+                ts=t_late,
+                status="compliant",
+                **ref_late,
+            )
+
+        updated_early_envelope_json = _make_valid_envelope_json(
+            **ref_early,
+            status="non_compliant",
+        )
+
+        monkeypatch.setattr(workspace, "_session", factory)
+        monkeypatch.setattr(workspace, "CustomQCWorkspaceService", lambda *, readonly=False: svc)
+        monkeypatch.setattr(
+            result_analysis_module, "CustomQCWorkspaceService", lambda *, readonly=False: svc
+        )
+
+        scope_records = [
+            {**ref_early, "patient_name": "患者甲", "department": "内科", "attending_physician": "张医生"},
+            {**ref_late, "patient_name": "患者乙", "department": "内科", "attending_physician": "李医生"},
+        ]
+        analysis = Luxian0609ResultAnalysisService(
+            record_scope_loader=lambda **_kw: list(scope_records),
+            rule_name_loader=lambda: {"LX0609-06-01-04": "主诉规范性"},
+        )
+
+        # 预热结果分析与摘要两层水印缓存
+        warm_before = analysis.get_analysis(
+            care_phase="discharged",
+            rule_id="LX0609-06-01-04",
+            result_status="non_compliant",
+        )
+        assert warm_before["record_page"]["total"] == 0
+        summary_before = svc.build_luxian_0609_completed_record_result_summaries(
+            record_refs=[ref_early, ref_late],
+            session_factory=factory,
+        )
+        assert summary_before[("H1", "P1", "V1")]["status_counts"] == {"compliant": 1}
+
+        # 更新较早一份结果为 non_compliant，其 updated_at 变为 10:05（仍早于 12:00，表行数与 MAX(updated_at) 均未变）
+        t_early_updated = datetime(2026, 10, 1, 10, 5, 0)
+        with engine.begin() as conn:
+            conn.execute(
+                envelopes.update()
+                .where(envelopes.c.id == "env-early")
+                .values(
+                    envelope_json=updated_early_envelope_json,
+                    updated_at=t_early_updated,
+                )
+            )
+
+        # 热缓存必须立即感知到较早行版本变化，与清缓存后冷算结果 100% 一致
+        hot_after = analysis.get_analysis(
+            care_phase="discharged",
+            rule_id="LX0609-06-01-04",
+            result_status="non_compliant",
+        )
+        assert hot_after["record_page"]["total"] == 1
+        assert hot_after["record_page"]["items"][0]["visit_id"] == "V1"
+
+        clear_luxian_0609_result_analysis_caches()
+        cold_after = analysis.get_analysis(
+            care_phase="discharged",
+            rule_id="LX0609-06-01-04",
+            result_status="non_compliant",
+        )
+        assert hot_after == cold_after
+
+        summary_hot_after = svc.build_luxian_0609_completed_record_result_summaries(
+            record_refs=[ref_early, ref_late],
+            session_factory=factory,
+        )
+        assert summary_hot_after[("H1", "P1", "V1")]["status_counts"] == {"non_compliant": 1}
+    finally:
+        workspace.clear_luxian_0609_summary_caches()
+        clear_luxian_0609_result_analysis_caches()
+        engine.dispose()
+
+
+def test_single_db_default_sort_matches_between_sql_offset_and_python_merge(monkeypatch):
+    """Codex P2 回归：SQL 直分页路径与合并登记病历的 Python 排序路径必须保持完全一致的默认顺序。"""
+    clear_workstation_discharge_record_columns_cache()
+    engine, factory = _build_workstation_sqlite_env(monkeypatch)
+    try:
+        same_updated = datetime(2026, 5, 10, 8, 0, 0)
+        with Session(engine) as session:
+            # A 入院较晚，但无出院记录；B 入院较早，但出院记录表 discharge_time 更晚
+            session.add_all(
+                [
+                    MedicalRecordFrontpage(
+                        institute_id="H1",
+                        patient_id="PA",
+                        visit_id="VA",
+                        name="患者A",
+                        admission_dept_name="内科",
+                        admission_datetime=datetime(2026, 5, 5, 9, 0, 0),
+                        discharge_datetime=None,
+                        update_time=same_updated,
+                    ),
+                    MedicalRecordFrontpage(
+                        institute_id="H1",
+                        patient_id="PB",
+                        visit_id="VB",
+                        name="患者B",
+                        admission_dept_name="内科",
+                        admission_datetime=datetime(2026, 5, 1, 9, 0, 0),
+                        discharge_datetime=None,
+                        update_time=same_updated,
+                    ),
+                ]
+            )
+            session.execute(
+                text(
+                    """
+                    INSERT INTO discharge_record
+                        (institute_id, patient_id, visit_id, document_id, dept_name, discharge_time, update_time)
+                    VALUES
+                        ('H1', 'PB', 'VB', 'DOC-B', '内科', '2026-05-08 10:00:00', '2026-05-08 10:00:00')
+                    """
+                )
+            )
+            session.commit()
+
+        from app.database import clinical_connection
+
+        monkeypatch.setattr(clinical_connection, "configured", lambda: False)
+        monkeypatch.setattr(
+            query_service_module.default_workflow_queue_state_service,
+            "get_state_map",
+            lambda **_kw: {},
+        )
+        monkeypatch.setattr(
+            query_service_module.default_workflow_queue_state_service,
+            "backfill_frontpage_generate",
+            lambda **_kw: None,
+        )
+
+        settings_loader = lambda: (FrontpageExtractionSettings(), None)
+        # 路径 1：无 indexed_filtered_records -> SQL OFFSET/LIMIT 路径
+        sql_p1 = get_workstation_data(
+            page=1,
+            page_size=1,
+            qc_summary_mode="deferred",
+            session_factory=factory,
+            settings_loader=settings_loader,
+            demo_records_builder=lambda: [],
+            demo_policy=lambda *_a: False,
+        )
+        sql_p2 = get_workstation_data(
+            page=2,
+            page_size=1,
+            qc_summary_mode="deferred",
+            session_factory=factory,
+            settings_loader=settings_loader,
+            demo_records_builder=lambda: [],
+            demo_policy=lambda *_a: False,
+        )
+        sql_order = [sql_p1["records"][0]["id"], sql_p2["records"][0]["id"]]
+        assert sql_order == ["VB", "VA"]
+
+        # 路径 2：插入一条无首页登记病历进入 visit_index -> 触发 Python 合并排序路径
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    """
+                    INSERT INTO visit_index (institute_id, patient_id, visit_id, scene_current, updated_at)
+                    VALUES ('H1', 'PC', 'VC', 'inpatient', '2026-04-01 08:00:00')
+                    """
+                )
+            )
+            session.add(
+                InpatRegistration(
+                    institute_id="H1",
+                    patient_id="PC",
+                    visit_id="VC",
+                    name="患者C",
+                    admission_dept_name="内科",
+                    admission_datetime=datetime(2026, 4, 1, 8, 0, 0),
+                    update_time=datetime(2026, 4, 1, 8, 0, 0),
+                )
+            )
+            session.commit()
+
+        merge_p1 = get_workstation_data(
+            page=1,
+            page_size=1,
+            qc_summary_mode="deferred",
+            session_factory=factory,
+            settings_loader=settings_loader,
+            demo_records_builder=lambda: [],
+            demo_policy=lambda *_a: False,
+        )
+        merge_p2 = get_workstation_data(
+            page=2,
+            page_size=1,
+            qc_summary_mode="deferred",
+            session_factory=factory,
+            settings_loader=settings_loader,
+            demo_records_builder=lambda: [],
+            demo_policy=lambda *_a: False,
+        )
+        merge_p3 = get_workstation_data(
+            page=3,
+            page_size=1,
+            qc_summary_mode="deferred",
+            session_factory=factory,
+            settings_loader=settings_loader,
+            demo_records_builder=lambda: [],
+            demo_policy=lambda *_a: False,
+        )
+        assert [
+            merge_p1["records"][0]["id"],
+            merge_p2["records"][0]["id"],
+            merge_p3["records"][0]["id"],
+        ] == ["VB", "VA", "VC"]
+    finally:
+        clear_workstation_discharge_record_columns_cache()
+        engine.dispose()
+
+
+def test_discharge_record_columns_cache_does_not_negative_cache_missing_columns(monkeypatch):
+    """Codex P2 回归：首次探测缺列不得负缓存 None，恢复完整列后应立即探测成功并缓存。"""
+    clear_workstation_discharge_record_columns_cache()
+    try:
+        monkeypatch.setattr(query_service_module, "clinical_read_schema", lambda: "cdm")
+        required_columns = (
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "document_id",
+            "dept_name",
+            "discharge_time",
+            "update_time",
+        )
+        full_rows = [
+            {
+                "table_schema": "cdm",
+                "column_name": column_name,
+                "data_type": "timestamp without time zone"
+                if column_name == "discharge_time"
+                else "character varying",
+                "udt_name": "timestamp" if column_name == "discharge_time" else "varchar",
+            }
+            for column_name in required_columns
+        ]
+        # 首次模拟缺列（仅返回部分列），第二次恢复全部 7 列
+        responses = [full_rows[:3], full_rows]
+        execute_calls = 0
+
+        class _FakeBind:
+            dialect = SimpleNamespace(name="postgresql")
+
+        bind = _FakeBind()
+
+        class _Result:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def mappings(self):
+                return self
+
+            def all(self):
+                return self._rows
+
+        class _SessionStub:
+            def get_bind(self):
+                return bind
+
+            def execute(self, *_args, **_kwargs):
+                nonlocal execute_calls
+                idx = min(execute_calls, len(responses) - 1)
+                execute_calls += 1
+                return _Result(responses[idx])
+
+        assert query_service_module._workstation_discharge_record_columns(_SessionStub()) is None
+        assert execute_calls == 1
+
+        # 恢复全部 7 列后，下一次调用必须重新探测并成功返回
+        recovered = query_service_module._workstation_discharge_record_columns(_SessionStub())
+        assert recovered is not None
+        assert set(required_columns).issubset(recovered)
+        assert execute_calls == 2
+
+        # 完整列信息命中正缓存，第三次不再重复查库
+        cached = query_service_module._workstation_discharge_record_columns(_SessionStub())
+        assert cached == recovered
+        assert execute_calls == 2
+    finally:
+        clear_workstation_discharge_record_columns_cache()

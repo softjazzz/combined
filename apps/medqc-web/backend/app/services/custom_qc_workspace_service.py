@@ -4552,7 +4552,7 @@ class CustomQCWorkspaceService:
         self,
         session: Session,
     ) -> Optional[tuple[Any, ...]]:
-        """读取质控任务与信封表的轻量水印，零 TOAST 读取且无 TTL 过期窗口。"""
+        """读取质控任务与信封表的每行版本水印，零 TOAST 读取且感知任意历史行更新。"""
         try:
             from ..database import clinical_connection as _clinical_conn
 
@@ -4560,33 +4560,90 @@ class CustomQCWorkspaceService:
             clinical_binding = (
                 None if active_sel is None else str(active_sel.get("binding") or "")
             )
-            job_row = session.execute(
-                select(
-                    sa.func.count().label("cnt"),
-                    sa.func.max(self._batch_job_table.c.updated_at).label("max_updated"),
-                    sa.func.max(self._batch_job_table.c.finished_at).label("max_finished"),
-                    sa.func.max(self._batch_job_table.c.created_at).label("max_created"),
-                    sa.func.sum(
-                        case((self._batch_job_table.c.status == "completed", 1), else_=0)
-                    ).label("completed_cnt"),
-                    sa.func.sum(
-                        case((self._batch_job_table.c.status == "failed", 1), else_=0)
-                    ).label("failed_cnt"),
-                )
-            ).first()
-            env_row = session.execute(
-                select(
-                    sa.func.count().label("cnt"),
-                    sa.func.max(self._record_result_envelope_table.c.updated_at).label("max_updated"),
-                    sa.func.max(self._record_result_envelope_table.c.id).label("max_id"),
-                )
-            ).first()
-            if job_row is None or env_row is None:
+            bind = session.get_bind() if hasattr(session, "get_bind") else None
+            dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+
+            job_col_names = (
+                "id",
+                "status",
+                "updated_at",
+                "finished_at",
+                "created_at",
+                "total_records",
+                "success_count",
+                "failed_count",
+                "issue_records",
+                "compliant_records",
+            )
+            env_col_names = (
+                "id",
+                "root_job_id",
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "rule_set_key",
+                "rule_set_version",
+                "updated_at",
+            )
+            job_cols = [
+                self._batch_job_table.c[name]
+                for name in job_col_names
+                if name in self._batch_job_table.c
+            ]
+            env_cols = [
+                self._record_result_envelope_table.c[name]
+                for name in env_col_names
+                if name in self._record_result_envelope_table.c
+            ]
+            if not job_cols or not env_cols:
                 return None
+
+            if dialect_name == "postgresql":
+                def _pg_row_digest(table: Table, cols: list[Any]) -> Optional[tuple[str, ...]]:
+                    row_sig = sa.func.concat_ws(
+                        "|",
+                        *(sa.func.coalesce(sa.cast(col, sa.String), "") for col in cols),
+                    )
+                    row_hash = sa.func.hashtext(row_sig)
+                    agg = session.execute(
+                        select(
+                            sa.func.count().label("cnt"),
+                            sa.func.coalesce(
+                                sa.func.sum(sa.cast(row_hash, sa.BigInteger)),
+                                0,
+                            ).label("sum_hash"),
+                            sa.func.coalesce(
+                                sa.func.bit_xor(row_hash),
+                                0,
+                            ).label("xor_hash"),
+                        ).select_from(table)
+                    ).first()
+                    if agg is None:
+                        return None
+                    return tuple(str(v) if v is not None else "" for v in agg)
+
+                job_sig = _pg_row_digest(self._batch_job_table, job_cols)
+                env_sig = _pg_row_digest(self._record_result_envelope_table, env_cols)
+                if job_sig is None or env_sig is None:
+                    return None
+                return (clinical_binding, job_sig, env_sig)
+
+            def _python_row_digest(table: Table, cols: list[Any]) -> tuple[str, ...]:
+                rows = session.execute(
+                    select(*cols).order_by(table.c.id.asc())
+                ).all()
+                hasher = hashlib.blake2b(digest_size=16)
+                for row in rows:
+                    hasher.update(
+                        "|".join("" if v is None else str(v) for v in row).encode("utf-8")
+                    )
+                    hasher.update(b"\n")
+                return (str(len(rows)), hasher.hexdigest())
+
             return (
                 clinical_binding,
-                tuple(str(v) if v is not None else "" for v in job_row),
-                tuple(str(v) if v is not None else "" for v in env_row),
+                _python_row_digest(self._batch_job_table, job_cols),
+                _python_row_digest(self._record_result_envelope_table, env_cols),
             )
         except Exception:
             return None
