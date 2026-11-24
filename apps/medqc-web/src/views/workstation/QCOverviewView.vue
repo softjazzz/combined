@@ -269,9 +269,8 @@
                     cy="100"
                     :r="ring.r"
                     fill="none"
-                    :stroke="`url(#${ring.gradient})`"
-                    stroke-opacity="0.14"
-                    stroke-width="20"
+                    stroke="#e2e8f0"
+                    stroke-width="18"
                   />
                   <!-- 零值不画进度弧，避免圆角端点残留成一个点 -->
                   <circle
@@ -281,7 +280,7 @@
                     :r="ring.r"
                     fill="none"
                     :stroke="`url(#${ring.gradient})`"
-                    stroke-width="20"
+                    stroke-width="18"
                     stroke-linecap="round"
                     :stroke-dasharray="ringDash(ring.r, ring.rate)"
                     transform="rotate(-90 100 100)"
@@ -294,7 +293,11 @@
                   :key="ring.key"
                 >
                   <dt :style="{ color: ring.textColor }">
-                    {{ ring.label }}
+                    <i
+                      class="qc-home-rings__dot"
+                      :style="{ background: ring.to }"
+                      aria-hidden="true"
+                    />{{ ring.label }}
                   </dt>
                   <dd>{{ formatRate(ring.rate) }}<small> %</small></dd>
                 </div>
@@ -317,7 +320,7 @@
             <div class="qc-home-metric__head">
               <MqIconTile
                 :name="card.icon"
-                :tone="card.value === 0 ? 'neutral' : card.tone"
+                :tone="card.value === 0 ? 'neutral' : card.key === 'risk' ? 'brand' : card.tone"
                 :size="40"
               />
               <div class="qc-home-metric__titles">
@@ -652,7 +655,7 @@
                 >
                   <MqIconTile
                     name="tech_error"
-                    tone="warning"
+                    tone="neutral"
                     :size="34"
                   />
                   <dt>技术异常</dt>
@@ -663,7 +666,7 @@
                 <div data-testid="health-status-item">
                   <MqIconTile
                     name="success"
-                    tone="success"
+                    tone="brand"
                     :size="34"
                   />
                   <dt>最近成功质控</dt>
@@ -779,11 +782,11 @@ interface DefectAnalysisItem {
 }
 
 const CONCLUSION_STATUS_META = [
-  { status: 'non_compliant', label: QC_RESULT_STATUS_LABELS.non_compliant, color: '#ef4444' },
-  { status: 'data_gap', label: QC_RESULT_STATUS_LABELS.data_gap, color: '#f59e0b' },
+  { status: 'non_compliant', label: QC_RESULT_STATUS_LABELS.non_compliant, color: '#312e81' },
+  { status: 'data_gap', label: QC_RESULT_STATUS_LABELS.data_gap, color: '#0ea5e9' },
   { status: 'uncertain', label: QC_RESULT_STATUS_LABELS.uncertain, color: '#64748b' },
-  { status: 'compliant', label: '合规', color: '#10b981' },
-  // 与质控分析页保持同一套语义色，避免同一状态在不同首页模块变色。
+  { status: 'compliant', label: '合规', color: '#2563eb' },
+  // 首页统一采用临床蓝灰同色系层级，避免红绿橙高饱和撞色。
   { status: 'not_applicable', label: '不适用', color: '#94a3b8' },
   { status: 'not_executed', label: '未执行', color: '#cbd5e1' },
 ] as const
@@ -899,7 +902,7 @@ const kpiCards = computed<KpiCard[]>(() => {
       key: 'risk',
       label: '有确定问题的病历',
       value: Number(kpis?.high_risk_review_total || 0),
-      helper: '含确定问题的病历',
+      helper: '需重点复核与整改',
       icon: 'issue',
       tone: 'danger',
     },
@@ -917,7 +920,7 @@ const kpiCards = computed<KpiCard[]>(() => {
       value: Number(kpis?.qc_completed_total || 0),
       helper: '已生成正式质控结果',
       icon: 'fp_qc',
-      tone: 'success',
+      tone: 'brand',
     },
     {
       key: 'records',
@@ -925,7 +928,7 @@ const kpiCards = computed<KpiCard[]>(() => {
       value: Number(kpis?.records_total || 0),
       helper: '当前筛选范围',
       icon: 'stack',
-      tone: 'brand',
+      tone: 'neutral',
     },
   ]
 })
@@ -977,30 +980,30 @@ const ringDefs = computed(() => [
     label: '问题率',
     r: 84,
     rate: rates.value.issue,
-    gradient: 'qcRingRed',
-    from: '#FF6B61',
-    to: '#FF3B30',
-    textColor: 'var(--qc-danger-text, #c81e32)',
+    gradient: 'qcRingIndigo',
+    from: '#4f46e5',
+    to: '#312e81',
+    textColor: 'var(--qc-danger-text, #312e81)',
   },
   {
     key: 'completion',
     label: '完成率',
     r: 60,
     rate: rates.value.completion,
-    gradient: 'qcRingGreen',
-    from: '#5FD97E',
-    to: '#34C759',
-    textColor: 'var(--qc-success-text, #147a36)',
+    gradient: 'qcRingCobalt',
+    from: '#3b82f6',
+    to: '#1d4ed8',
+    textColor: 'var(--qc-brand-text, #1d4ed8)',
   },
   {
     key: 'pending',
     label: '待质控',
     r: 36,
     rate: rates.value.pending,
-    gradient: 'qcRingAmber',
-    from: '#FFB340',
-    to: '#FF9500',
-    textColor: 'var(--qc-warning-text, #a64d00)',
+    gradient: 'qcRingSlate',
+    from: '#94a3b8',
+    to: '#64748b',
+    textColor: 'var(--qc-warning-text, #475569)',
   },
 ])
 
@@ -1010,19 +1013,19 @@ function ringDash(radius: number, rate: number): string {
 }
 
 const TONE_GRADIENTS: Record<MqIconTone, string> = {
-  neutral: 'linear-gradient(90deg, #A1A7B3, #6E7585)',
-  brand: 'linear-gradient(90deg, #6FB0FF, #0A6CFF)',
-  success: 'linear-gradient(90deg, #6EE08E, #34C759)',
-  warning: 'linear-gradient(90deg, #FFC36B, #FF9500)',
-  danger: 'linear-gradient(90deg, #FF7A70, #FF3B30)',
+  neutral: 'linear-gradient(90deg, #94a3b8, #475569)',
+  brand: 'linear-gradient(90deg, #60a5fa, #2563eb)',
+  success: 'linear-gradient(90deg, #60a5fa, #1d4ed8)',
+  warning: 'linear-gradient(90deg, #94a3b8, #64748b)',
+  danger: 'linear-gradient(90deg, #6366f1, #312e81)',
 }
 
 const TONE_TEXT_COLORS: Record<MqIconTone, string> = {
-  neutral: 'var(--mq-text-tertiary)',
-  brand: 'var(--qc-brand-text, #0a58cc)',
-  success: 'var(--qc-success-text, #147a36)',
-  warning: 'var(--qc-warning-text, #a64d00)',
-  danger: 'var(--qc-danger-text, #c81e32)',
+  neutral: 'var(--qc-slate-text, #475569)',
+  brand: 'var(--qc-brand-text, #1d4ed8)',
+  success: 'var(--qc-brand-text, #1d4ed8)',
+  warning: 'var(--qc-warning-text, #475569)',
+  danger: 'var(--qc-danger-text, #312e81)',
 }
 
 function toneTextColor(tone: MqIconTone): string {

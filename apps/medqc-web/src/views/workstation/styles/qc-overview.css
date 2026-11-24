@@ -1,10 +1,11 @@
 /* v7.1 液态玻璃 · 首页概览 */
 .qc-home-shell {
-  /* 首页内高对比度语义文字色（浅色玻璃底上均满足 WCAG AA >= 4.5:1） */
-  --qc-brand-text: #0a58cc;
-  --qc-success-text: #147a36;
-  --qc-warning-text: #a64d00;
-  --qc-danger-text: #c81e32;
+  /* 首页统一临床蓝灰同色系（靛蓝 / 钴蓝 / 冷灰，告别红绿橙撞色，满足 WCAG AA >= 4.5:1） */
+  --qc-brand-text: #1d4ed8;
+  --qc-slate-text: #475569;
+  --qc-success-text: #1d4ed8;
+  --qc-warning-text: #475569;
+  --qc-danger-text: #312e81;
 }
 
 /* 避免与 .ws-content 的顶部留白叠加出 18px 假滚动条，并给右下角悬浮助手球留出底部安全间距 */
@@ -462,8 +463,18 @@ button.qc-home-defect-analysis__row:focus-visible {
 }
 
 .qc-home-rings__legend dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--mq-font-12);
   font-weight: 600;
+}
+
+.qc-home-rings__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .qc-home-rings__legend dd {

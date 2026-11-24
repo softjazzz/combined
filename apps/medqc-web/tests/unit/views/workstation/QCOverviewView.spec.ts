@@ -340,7 +340,7 @@ describe('QCOverviewView', () => {
         helper: card.get('.qc-home-metric__helper').text(),
       })),
     ).toEqual([
-      { label: '有确定问题的病历', value: '2份', helper: '含确定问题的病历' },
+      { label: '有确定问题的病历', value: '2份', helper: '需重点复核与整改' },
       { label: '已完成', value: '13份', helper: '已生成正式质控结果' },
       { label: '纳入病历', value: '18份', helper: '当前筛选范围' },
     ])
