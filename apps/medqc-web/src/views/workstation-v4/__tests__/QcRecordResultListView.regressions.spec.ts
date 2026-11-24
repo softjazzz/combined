@@ -53,6 +53,7 @@ const mockRecordsState = {
     runningState: 'unknown',
   }),
   qcSummaryState: ref<QcSummaryLoadState>('pending'),
+  qcTotalsReady: ref(true),
   refreshData: vi.fn(),
   searchText: ref(''),
   selectHospFilter: vi.fn(),

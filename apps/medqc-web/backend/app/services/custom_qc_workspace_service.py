@@ -10,10 +10,13 @@ import uuid
 from ..core.execution_timing import project_stage_timing, timed
 from ..core.settings import get_settings
 
+from collections import OrderedDict
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO, StringIO
 from functools import lru_cache, partial
+from threading import RLock
 from time import monotonic
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
@@ -2506,6 +2509,100 @@ class WorkspaceBatchJobListResult:
     page_size: int
 
 
+_SUMMARY_CACHE_LOCK = RLock()
+_WATERMARK_SUMMARY_CACHE: "OrderedDict[tuple[Any, ...], Dict[tuple[str, str, str], Dict[str, Any]]]" = OrderedDict()
+_WATERMARK_SUMMARY_CACHE_MAX = 32
+_ENVELOPE_SUMMARY_CACHE: "OrderedDict[tuple[Any, ...], Dict[str, Any]]" = OrderedDict()
+_ENVELOPE_SUMMARY_CACHE_MAX = 4096
+_PARTIAL_SUMMARY_CACHE: "OrderedDict[tuple[Any, ...], Dict[str, Any]]" = OrderedDict()
+_PARTIAL_SUMMARY_CACHE_MAX = 2048
+_RECORD_ID_ILIKE_SQL_THRESHOLD = 50
+
+
+def clear_luxian_0609_summary_caches() -> None:
+    """清空基于不可变版本键的质控摘要缓存（供测试或运维手动重置）。"""
+    with _SUMMARY_CACHE_LOCK:
+        _WATERMARK_SUMMARY_CACHE.clear()
+        _ENVELOPE_SUMMARY_CACHE.clear()
+        _PARTIAL_SUMMARY_CACHE.clear()
+
+
+def _watermark_bucket_get(
+    bucket_key: tuple[Any, ...],
+    identities: set[tuple[str, str, str]],
+) -> tuple[Dict[tuple[str, str, str], Dict[str, Any]], set[tuple[str, str, str]]]:
+    with _SUMMARY_CACHE_LOCK:
+        bucket = _WATERMARK_SUMMARY_CACHE.get(bucket_key)
+        if bucket is None:
+            return {}, set(identities)
+        _WATERMARK_SUMMARY_CACHE.move_to_end(bucket_key)
+        hits: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+        missing: set[tuple[str, str, str]] = set()
+        for identity in identities:
+            cached = bucket.get(identity)
+            if cached is not None:
+                hits[identity] = deepcopy(cached)
+            else:
+                missing.add(identity)
+        return hits, missing
+
+
+def _watermark_bucket_merge(
+    bucket_key: tuple[Any, ...],
+    projections: Mapping[tuple[str, str, str], Dict[str, Any]],
+) -> None:
+    if not projections:
+        return
+    with _SUMMARY_CACHE_LOCK:
+        bucket = _WATERMARK_SUMMARY_CACHE.get(bucket_key)
+        if bucket is None:
+            bucket = {}
+            _WATERMARK_SUMMARY_CACHE[bucket_key] = bucket
+        for identity, value in projections.items():
+            bucket[identity] = deepcopy(value)
+        _WATERMARK_SUMMARY_CACHE.move_to_end(bucket_key)
+        while len(_WATERMARK_SUMMARY_CACHE) > _WATERMARK_SUMMARY_CACHE_MAX:
+            _WATERMARK_SUMMARY_CACHE.popitem(last=False)
+
+
+def _session_cache_scope_key(session: Session) -> Optional[str]:
+    bind = session.get_bind() if hasattr(session, "get_bind") else None
+    if bind is None:
+        return None
+    dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+    if dialect_name == "sqlite":
+        return f"sqlite:{id(bind)}"
+    url = getattr(bind, "url", None)
+    if url is not None and hasattr(url, "render_as_string"):
+        return f"{dialect_name}:{url.render_as_string(hide_password=True)}"
+    return f"{dialect_name}:{id(bind)}"
+
+
+def _lru_cache_get(
+    cache: "OrderedDict[tuple[Any, ...], Dict[str, Any]]",
+    key: tuple[Any, ...],
+) -> Optional[Dict[str, Any]]:
+    with _SUMMARY_CACHE_LOCK:
+        cached = cache.get(key)
+        if cached is None:
+            return None
+        cache.move_to_end(key)
+        return deepcopy(cached)
+
+
+def _lru_cache_put(
+    cache: "OrderedDict[tuple[Any, ...], Dict[str, Any]]",
+    key: tuple[Any, ...],
+    value: Dict[str, Any],
+    max_size: int,
+) -> None:
+    with _SUMMARY_CACHE_LOCK:
+        cache[key] = deepcopy(value)
+        cache.move_to_end(key)
+        while len(cache) > max_size:
+            cache.popitem(last=False)
+
+
 class CustomQCWorkspaceService:
     def __init__(self, *, readonly: bool = False) -> None:
         if engine is None:
@@ -4451,6 +4548,49 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def _read_luxian_summary_watermark(
+        self,
+        session: Session,
+    ) -> Optional[tuple[Any, ...]]:
+        """读取质控任务与信封表的轻量水印，零 TOAST 读取且无 TTL 过期窗口。"""
+        try:
+            from ..database import clinical_connection as _clinical_conn
+
+            active_sel = _clinical_conn.current_selection()
+            clinical_binding = (
+                None if active_sel is None else str(active_sel.get("binding") or "")
+            )
+            job_row = session.execute(
+                select(
+                    sa.func.count().label("cnt"),
+                    sa.func.max(self._batch_job_table.c.updated_at).label("max_updated"),
+                    sa.func.max(self._batch_job_table.c.finished_at).label("max_finished"),
+                    sa.func.max(self._batch_job_table.c.created_at).label("max_created"),
+                    sa.func.sum(
+                        case((self._batch_job_table.c.status == "completed", 1), else_=0)
+                    ).label("completed_cnt"),
+                    sa.func.sum(
+                        case((self._batch_job_table.c.status == "failed", 1), else_=0)
+                    ).label("failed_cnt"),
+                )
+            ).first()
+            env_row = session.execute(
+                select(
+                    sa.func.count().label("cnt"),
+                    sa.func.max(self._record_result_envelope_table.c.updated_at).label("max_updated"),
+                    sa.func.max(self._record_result_envelope_table.c.id).label("max_id"),
+                )
+            ).first()
+            if job_row is None or env_row is None:
+                return None
+            return (
+                clinical_binding,
+                tuple(str(v) if v is not None else "" for v in job_row),
+                tuple(str(v) if v is not None else "" for v in env_row),
+            )
+        except Exception:
+            return None
+
     def build_luxian_0609_completed_record_result_summaries(
         self,
         *,
@@ -4483,24 +4623,13 @@ class CustomQCWorkspaceService:
         identities = {identity for identity in identities if all(identity)}
         if not identities:
             return {}
+        requested_identities_count = len(identities)
 
         normalized_rule_set_key = _safe_text(rule_set_key)
         normalized_rule_set_version = _safe_text(rule_set_version)
         if not normalized_rule_set_key or not normalized_rule_set_version:
             raise ValueError("病历池结果摘要缺少规则集身份")
 
-        visit_ids = sorted({identity[2] for identity in identities})
-        escaped_visit_ids = {
-            visit_id: visit_id.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_").replace('"', '\\"')
-            for visit_id in visit_ids
-        }
-        record_id_conditions = [
-            self._batch_job_table.c.record_ids_json.ilike(
-                f'%"{escaped_visit_ids[visit_id]}"%',
-                escape="\\",
-            )
-            for visit_id in visit_ids
-        ]
         # 规则集身份仍由 Python 做精确校验；这里仅以文本预筛掉与当前 LX0609
         # 代次无关的历史任务，避免全院首页解析大批无关 filters/summary JSON。
         # 两处都保留，是为了维持读取模型“filters 优先、summary 兼容回退”的合同。
@@ -4520,7 +4649,46 @@ class CustomQCWorkspaceService:
         rule_version_candidate = or_(filters_rule_version_candidate, summary_rule_version_candidate)
         session = (session_factory or _session)()
         try:
-            base_job_predicate = and_(
+            cache_scope_key = _session_cache_scope_key(session) if not include_items else None
+            watermark_bucket_key: Optional[tuple[Any, ...]] = None
+            cached_watermark_hits: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+            if cache_scope_key is not None:
+                wm_started = monotonic()
+                watermark = self._read_luxian_summary_watermark(session)
+                query_seconds += monotonic() - wm_started
+                if watermark is not None:
+                    watermark_bucket_key = (
+                        cache_scope_key,
+                        normalized_rule_set_key,
+                        normalized_rule_set_version,
+                        bool(include_rule_set_context),
+                        bool(include_latest_partial),
+                        watermark,
+                    )
+                    cached_watermark_hits, missing_identities = _watermark_bucket_get(
+                        watermark_bucket_key,
+                        identities,
+                    )
+                    if not missing_identities:
+                        return cached_watermark_hits
+                    identities = missing_identities
+
+            visit_ids = sorted({identity[2] for identity in identities})
+            use_record_id_ilike = len(visit_ids) <= _RECORD_ID_ILIKE_SQL_THRESHOLD
+            record_id_conditions = []
+            if use_record_id_ilike:
+                escaped_visit_ids = {
+                    visit_id: visit_id.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_").replace('"', '\\"')
+                    for visit_id in visit_ids
+                }
+                record_id_conditions = [
+                    self._batch_job_table.c.record_ids_json.ilike(
+                        f'%"{escaped_visit_ids[visit_id]}"%',
+                        escape="\\",
+                    )
+                    for visit_id in visit_ids
+                ]
+            base_predicates = [
                 self._batch_job_table.c.status.in_(
                     ("completed", "failed", "running", "queued", "canceled")
                 ),
@@ -4528,12 +4696,15 @@ class CustomQCWorkspaceService:
                     self._batch_job_table.c.parent_job_id.is_(None),
                     self._batch_job_table.c.parent_job_id == "",
                 ),
-                or_(*record_id_conditions),
-            )
+            ]
+            if record_id_conditions:
+                base_predicates.append(or_(*record_id_conditions))
+            base_job_predicate = and_(*base_predicates)
             job_columns = (
                 self._batch_job_table.c.id,
                 self._batch_job_table.c.status,
                 self._batch_job_table.c.created_at,
+                self._batch_job_table.c.updated_at,
                 self._batch_job_table.c.finished_at,
                 self._batch_job_table.c.filters_json,
                 self._batch_job_table.c.record_ids_json,
@@ -4633,6 +4804,7 @@ class CustomQCWorkspaceService:
                     "id": job_id,
                     "status": _safe_text(row.get("status"), "queued"),
                     "created_at": row.get("created_at"),
+                    "updated_at": row.get("updated_at"),
                     "finished_at": row.get("finished_at"),
                     "record_ids": record_ids if isinstance(record_ids, list) else [],
                     "filters": filters if isinstance(filters, dict) else {},
@@ -4665,7 +4837,12 @@ class CustomQCWorkspaceService:
                         ):
                             failed_jobs_by_identity.setdefault(identity, []).append(job)
             if not jobs_by_id:
-                return {identity: {"status": "not_run"} for identity in identities}
+                empty_projections = {identity: {"status": "not_run"} for identity in identities}
+                if watermark_bucket_key is not None:
+                    _watermark_bucket_merge(watermark_bucket_key, empty_projections)
+                if cached_watermark_hits:
+                    empty_projections.update(cached_watermark_hits)
+                return empty_projections
 
             envelope_columns = self._record_result_envelope_table.c
             envelope_selection_columns = (
@@ -4815,6 +4992,24 @@ class CustomQCWorkspaceService:
                     if ready_selection.job.get("saved_partial_attempt"):
                         selected_job = ready_selection.job
                         selected_job_id = _safe_text(selected_job.get("id"))
+                        partial_cache_key: Optional[tuple[Any, ...]] = None
+                        if cache_scope_key is not None:
+                            filters_digest = hashlib.sha256(
+                                str(selected_job.get("saved_filters_json") or "").encode("utf-8")
+                            ).hexdigest()
+                            partial_cache_key = (
+                                cache_scope_key,
+                                selected_job_id,
+                                str(selected_job.get("updated_at") or ""),
+                                str(selected_job.get("finished_at") or ""),
+                                filters_digest,
+                                identity,
+                                tuple(selected_job["result_rule_scope"]),
+                            )
+                            cached_partial = _lru_cache_get(_PARTIAL_SUMMARY_CACHE, partial_cache_key)
+                            if cached_partial is not None:
+                                projections[identity] = cached_partial
+                                continue
                         if selected_job_id not in saved_partial_batches:
                             query_started = monotonic()
                             saved_row = session.execute(select(
@@ -4874,7 +5069,7 @@ class CustomQCWorkspaceService:
                         finally:
                             result_parse_seconds += monotonic() - parse_started
                         if partial.get("failure_stage"):
-                            projections[identity] = {
+                            projection_result = {
                                 "status": "technical_error",
                                 "data_origin": "saved_partial_task",
                                 "job_id": selected_job_id,
@@ -4882,12 +5077,20 @@ class CustomQCWorkspaceService:
                                 "result_rule_scope": list(selected_job["result_rule_scope"]),
                                 **partial,
                             }
+                            if partial_cache_key is not None:
+                                _lru_cache_put(
+                                    _PARTIAL_SUMMARY_CACHE,
+                                    partial_cache_key,
+                                    projection_result,
+                                    _PARTIAL_SUMMARY_CACHE_MAX,
+                                )
+                            projections[identity] = projection_result
                             continue
                         status_counts: Dict[str, int] = {}
                         for item in partial["items"]:
                             item_status = _safe_text(item.get("status"), "unknown")
                             status_counts[item_status] = status_counts.get(item_status, 0) + 1
-                        projections[identity] = {
+                        projection_result = {
                             "status": "ready" if partial["items"] else "failed",
                             "completed_at": (
                                 selected_job.get("finished_at").isoformat()
@@ -4904,6 +5107,19 @@ class CustomQCWorkspaceService:
                             ),
                             **partial,
                         }
+                        if partial_cache_key is not None:
+                            # 摘要模式下仅缓存轻量投影，避免把大体积明细驻留内存。
+                            cached_summary_copy = {
+                                k: v for k, v in projection_result.items() if k != "items"
+                            }
+                            cached_summary_copy["items"] = []
+                            _lru_cache_put(
+                                _PARTIAL_SUMMARY_CACHE,
+                                partial_cache_key,
+                                cached_summary_copy,
+                                _PARTIAL_SUMMARY_CACHE_MAX,
+                            )
+                        projections[identity] = projection_result
                         continue
                     selected_job_id = _safe_text(ready_selection.job.get("id"))
                     selected_envelopes = exact_envelopes.get(selected_job_id, [])
@@ -4936,17 +5152,44 @@ class CustomQCWorkspaceService:
                 else:
                     projections[identity] = {"status": "not_run"}
 
-            # 选轮只读取元数据，再分批加载实际选中的信封内容。
+            # 选轮只读取元数据；摘要模式先命中不可变版本键缓存，仅对未命中行加载信封正文。
+            uncached_selected: list[tuple[tuple[str, str, str], Dict[str, Any], Dict[str, Any], Optional[tuple[Any, ...]]]] = []
+            for identity, job, selected_row in selected_canonical:
+                env_cache_key: Optional[tuple[Any, ...]] = None
+                if cache_scope_key is not None:
+                    env_cache_key = (
+                        cache_scope_key,
+                        _safe_text(selected_row.get("id")),
+                        str(selected_row.get("updated_at") or ""),
+                        normalized_rule_set_key,
+                        normalized_rule_set_version,
+                        str(job.get("finished_at") or ""),
+                    )
+                    cached_summary = _lru_cache_get(_ENVELOPE_SUMMARY_CACHE, env_cache_key)
+                    if cached_summary is not None:
+                        if include_rule_set_context and cached_summary.get("status") == "ready":
+                            cached_summary.update({
+                                "root_job_id": _safe_text(job.get("id")),
+                                "envelope_id": _safe_text(selected_row.get("id")),
+                                "rule_set_key": normalized_rule_set_key,
+                                "rule_set_version": _rule_set_value(job, "rule_set_version"),
+                                "result_rule_scope": list(job.get("result_rule_scope") or []),
+                                "result_scope_kind": job.get("result_scope_kind", "unknown"),
+                            })
+                        projections[identity] = cached_summary
+                        continue
+                uncached_selected.append((identity, job, selected_row, env_cache_key))
+
             batch_size = 500
-            for offset in range(0, len(selected_canonical), batch_size):
-                selected_batch = selected_canonical[offset:offset + batch_size]
+            for offset in range(0, len(uncached_selected), batch_size):
+                selected_batch = uncached_selected[offset:offset + batch_size]
                 query_started = monotonic()
                 rows = session.execute(select(
                     *envelope_selection_columns, envelope_columns.envelope_json,
-                ).where(envelope_columns.id.in_([row["id"] for _, _, row in selected_batch]))).mappings().all()
+                ).where(envelope_columns.id.in_([row["id"] for _, _, row, _ in selected_batch]))).mappings().all()
                 query_seconds += monotonic() - query_started
                 bodies_by_id = {row["id"]: row for row in rows}
-                for identity, job, selected_row in selected_batch:
+                for identity, job, selected_row, env_cache_key in selected_batch:
                     body = bodies_by_id.get(selected_row["id"])
                     if body is None or any(body[key] != value for key, value in selected_row.items()):
                         continue
@@ -4958,6 +5201,13 @@ class CustomQCWorkspaceService:
                         rule_set_key=normalized_rule_set_key,
                     )
                     result_parse_seconds += monotonic() - parse_started
+                    if env_cache_key is not None:
+                        _lru_cache_put(
+                            _ENVELOPE_SUMMARY_CACHE,
+                            env_cache_key,
+                            summary,
+                            _ENVELOPE_SUMMARY_CACHE_MAX,
+                        )
                     if include_rule_set_context and summary.get("status") == "ready":
                         summary.update({
                             "root_job_id": _safe_text(job.get("id")),
@@ -4968,6 +5218,10 @@ class CustomQCWorkspaceService:
                             "result_scope_kind": job.get("result_scope_kind", "unknown"),
                         })
                     projections[identity] = summary
+            if watermark_bucket_key is not None:
+                _watermark_bucket_merge(watermark_bucket_key, projections)
+            if cached_watermark_hits:
+                projections.update(cached_watermark_hits)
             return projections
         finally:
             session.close()
@@ -4977,7 +5231,7 @@ class CustomQCWorkspaceService:
                     "workstation_qc_summary_slow query_ms=%d result_parse_ms=%d other_ms=%d total_ms=%d matched=%d",
                     query_seconds * 1000, result_parse_seconds * 1000,
                     max(0.0, elapsed - query_seconds - result_parse_seconds) * 1000,
-                    elapsed * 1000, len(identities),
+                    elapsed * 1000, requested_identities_count,
                 )
 
     @staticmethod

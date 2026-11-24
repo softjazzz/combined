@@ -8,6 +8,7 @@ from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..core.response import get_trace_id, success_response
@@ -244,7 +245,8 @@ async def get_workstation_home(
 ):
     try:
         inst_scope = resolve_non_global_institute_scope(current_user)
-        data = default_workstation_aggregation_service.get_home(
+        data = await run_in_threadpool(
+            default_workstation_aggregation_service.get_home,
             target_date=date,
             department=department,
             severity=severity,
@@ -272,11 +274,16 @@ async def get_luxian_0609_home(
 
     try:
         effective_scope = _effective_case_scope(request, current_user)
-        data = default_workstation_aggregation_service.get_luxian_0609_home(
-            department=department,
-            keyword=keyword,
-            priority_limit=priority_limit,
-            **({"case_scope": effective_scope} if effective_scope is not None else {}),
+        kwargs = {
+            "department": department,
+            "keyword": keyword,
+            "priority_limit": priority_limit,
+        }
+        if effective_scope is not None:
+            kwargs["case_scope"] = effective_scope
+        data = await run_in_threadpool(
+            default_workstation_aggregation_service.get_luxian_0609_home,
+            **kwargs,
         )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
@@ -304,19 +311,26 @@ async def get_luxian_0609_analytics(
         )
         if inst_scope is not None:
             try:
-                data = default_workstation_aggregation_service.get_luxian_0609_analytics(
+                data = await run_in_threadpool(
+                    default_workstation_aggregation_service.get_luxian_0609_analytics,
                     **kwargs,
                     institute_id=inst_scope,
                 )
             except TypeError:
-                if _has_other_institute_records(inst_scope):
+                if await run_in_threadpool(_has_other_institute_records, inst_scope):
                     raise HTTPException(
                         status_code=403,
                         detail="多院区环境下当前统计接口未开启分院隔离，无权跨院读取",
                     )
-                data = default_workstation_aggregation_service.get_luxian_0609_analytics(**kwargs)
+                data = await run_in_threadpool(
+                    default_workstation_aggregation_service.get_luxian_0609_analytics,
+                    **kwargs,
+                )
         else:
-            data = default_workstation_aggregation_service.get_luxian_0609_analytics(**kwargs)
+            data = await run_in_threadpool(
+                default_workstation_aggregation_service.get_luxian_0609_analytics,
+                **kwargs,
+            )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
         _raise_workstation_http_error(exc)

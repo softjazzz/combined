@@ -607,7 +607,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import MqIcon from '@/components/icons/MqIcon.vue'
@@ -975,30 +975,46 @@ function clearKeyword() {
   void router.replace({ query })
 }
 
+const KEYWORD_DEBOUNCE_MS = 280
+let fetchSeq = 0
+let keywordDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearKeywordDebounceTimer() {
+  if (keywordDebounceTimer !== null) {
+    clearTimeout(keywordDebounceTimer)
+    keywordDebounceTimer = null
+  }
+}
+
 async function fetchHome() {
+  const seq = ++fetchSeq
   loading.value = true
   loadError.value = false
   try {
     const res = await ApiService.get<ClinicalQcHomePayload>('/api/v1/workstation/qc-home', {
       department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
       keyword: keyword.value.trim() || undefined,
-      hotspot_limit: 20,
-      todo_limit: 1,
+      priority_limit: 20,
     })
+    if (seq !== fetchSeq) return
     if (!res.success || !res.data?.clinical_qc)
       throw new Error(String(res.error || '首页聚合未返回'))
     homeData.value = res.data
   } catch {
+    if (seq !== fetchSeq) return
     homeData.value = null
     loadError.value = true
   } finally {
-    loading.value = false
+    if (seq === fetchSeq) {
+      loading.value = false
+    }
   }
 }
 
 watch(
   () => route.fullPath,
   () => {
+    clearKeywordDebounceTimer()
     applyRouteFilters()
     void fetchHome()
   },
@@ -1006,14 +1022,33 @@ watch(
 )
 
 watch(
-  [departmentFilter, keyword],
+  departmentFilter,
   () => {
     if (syncingFromRoute.value) return
+    clearKeywordDebounceTimer()
     void fetchHome()
   },
-  // 路由同步期间立即识别保护标记，由路由监听统一请求，避免清除关键词时重复加载。
+  // 路由同步期间立即识别保护标记，由路由监听统一请求，避免重复加载。
   { flush: 'sync' },
 )
+
+watch(
+  keyword,
+  () => {
+    if (syncingFromRoute.value) return
+    clearKeywordDebounceTimer()
+    keywordDebounceTimer = setTimeout(() => {
+      keywordDebounceTimer = null
+      void fetchHome()
+    }, KEYWORD_DEBOUNCE_MS)
+  },
+  { flush: 'sync' },
+)
+
+onBeforeUnmount(() => {
+  clearKeywordDebounceTimer()
+  fetchSeq += 1
+})
 </script>
 
 <style scoped src="./styles/qc-overview.css"></style>

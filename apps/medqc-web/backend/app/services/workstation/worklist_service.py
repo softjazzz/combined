@@ -188,6 +188,8 @@ class WorkstationAggregationService:
         self._session_factory = session_factory or SessionLocal
         if self._session_factory is None:
             raise RuntimeError("DATABASE_URL is not configured; workstation aggregation unavailable")
+        self._custom_qc_workspace_service: Any | None = None
+        self._custom_qc_workspace_service_cls: Any | None = None
 
     def get_frontpage_worklist(
         self,
@@ -1113,15 +1115,26 @@ class WorkstationAggregationService:
             )
         return list(records_by_identity.values())
 
+    def _get_readonly_custom_qc_workspace_service(self) -> Any:
+        from ..custom_qc_workspace_service import CustomQCWorkspaceService
+
+        cached_cls = getattr(self, "_custom_qc_workspace_service_cls", None)
+        cached_svc = getattr(self, "_custom_qc_workspace_service", None)
+        if cached_svc is not None and cached_cls is CustomQCWorkspaceService:
+            return cached_svc
+        svc = CustomQCWorkspaceService(readonly=True)
+        self._custom_qc_workspace_service_cls = CustomQCWorkspaceService
+        self._custom_qc_workspace_service = svc
+        return svc
+
     def _load_luxian_0609_summaries(
         self,
         record_refs: List[Dict[str, str]],
     ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
         """复用正式摘要入口，包含最新部分失败轮的已校验结果。"""
 
-        from ..custom_qc_workspace_service import CustomQCWorkspaceService
-
-        return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        svc = self._get_readonly_custom_qc_workspace_service()
+        return svc.build_luxian_0609_completed_record_result_summaries(
             record_refs=record_refs,
             session_factory=self._session_factory,
             include_latest_partial=True,
