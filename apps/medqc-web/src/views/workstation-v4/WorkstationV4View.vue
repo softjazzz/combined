@@ -59,6 +59,8 @@
         @batch-defer="handleBatchDefer"
         @batch-assign="handleBatchAssign"
         @clear-filters="handleClearFilters"
+        @search="handleSearch"
+        @refresh="handleRefresh"
         @page-change="handlePageChange"
       />
       <CurrentMedicalRecordDrawer :record="medicalRecordFocus" @close="medicalRecordFocus = null" />
@@ -1272,6 +1274,7 @@ function handleGenerateFrontpage() {
 }
 
 function openPasteFrontpageModal() {
+  void ensureExtractionSettingsLoaded()
   detailMainTab.value = 'frontpage'
   pasteFrontpageModalVisible.value = true
 }
@@ -2115,10 +2118,8 @@ function clearAnalyticsDrilldown() {
 }
 
 onMounted(() => {
-  if (route.query.assist !== 'message') void ensureExtractionSettingsLoaded()
   fetchData()
   void refreshActiveWorklist()
-  fetchAssistNotifications()
 })
 
 // 鍒囨崲鐥呭巻鏃舵竻闄や笂娆＄敓鎴愮粨鏋滐紝骞跺姞杞芥枃涔﹀垪琛ㄤ笌缁撶畻娓呭崟
@@ -2230,6 +2231,7 @@ const icdApplyLabel = computed(() => {
 })
 
 function openRecord(record: PatientRecord) {
+  void ensureExtractionSettingsLoaded()
   selectedStageRecord.value = record
   selectedRecordKey.value = getRecordNavigationKey(record)
   openSessionRecord(record.visitId || record.id)
@@ -2391,6 +2393,26 @@ function handlePageChange(page: number, nextPageSize?: number) {
     return
   }
   handleBasePageChange(page, resolvedPageSize)
+}
+
+function handleSearch() {
+  const pageChanged = currentPage.value !== 1
+  currentPage.value = 1
+  if (isAggregatedStageMode.value) {
+    if (!pageChanged) {
+      void fetchStageWorklist(currentStageFilter.value)
+    }
+    return
+  }
+  void fetchData(1)
+}
+
+function handleRefresh() {
+  if (isAggregatedStageMode.value) {
+    void fetchStageWorklist(currentStageFilter.value)
+    return
+  }
+  void refreshData()
 }
 
 function handleClearFilters() {

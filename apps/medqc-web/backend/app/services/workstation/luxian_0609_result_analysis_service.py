@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone
+from threading import RLock
 from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+from ...services import custom_qc_workspace_service as _workspace_module
 from ...services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ...services.luxian_0609_rule_master import load_luxian_0609_rule_master
+
+_ORIGINAL_CUSTOM_QC_WORKSPACE_SERVICE = CustomQCWorkspaceService
+_RESULT_ANALYSIS_CACHE_LOCK = RLock()
+_WORKSPACE_SERVICE_CACHE: dict[str, Any] = {"cls": None, "instance": None}
+_RESULT_ANALYSIS_WATERMARK_CACHE: "OrderedDict[tuple[Any, ...], dict[tuple[str, str, str], dict[str, Any] | None]]" = OrderedDict()
+_RESULT_ANALYSIS_WATERMARK_CACHE_MAX = 32
 
 _RESULT_STATUSES = (
     "non_compliant",
@@ -183,6 +191,148 @@ def _load_current_workstation_records(
     return list(unique_records.values())
 
 
+def clear_luxian_0609_result_analysis_caches() -> None:
+    """清空结果分析水印缓存及只读工作区服务实例缓存（供测试或运维手动重置）。"""
+
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        _RESULT_ANALYSIS_WATERMARK_CACHE.clear()
+        _WORKSPACE_SERVICE_CACHE["cls"] = None
+        _WORKSPACE_SERVICE_CACHE["instance"] = None
+
+
+def _resolve_workspace_service_cls() -> Any:
+    if CustomQCWorkspaceService is not _ORIGINAL_CUSTOM_QC_WORKSPACE_SERVICE:
+        return CustomQCWorkspaceService
+    return _workspace_module.CustomQCWorkspaceService
+
+
+def _get_readonly_workspace_service() -> Any:
+    cls = _resolve_workspace_service_cls()
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        if _WORKSPACE_SERVICE_CACHE["cls"] is cls and _WORKSPACE_SERVICE_CACHE["instance"] is not None:
+            return _WORKSPACE_SERVICE_CACHE["instance"]
+        svc = cls(readonly=True)
+        _WORKSPACE_SERVICE_CACHE["cls"] = cls
+        _WORKSPACE_SERVICE_CACHE["instance"] = svc
+        return svc
+
+
+def _project_lightweight_result(raw_projection: Any) -> dict[str, Any] | None:
+    """仅保留结果分析所需的轻量投影，不缓存原始证据或病历正文。"""
+
+    if not isinstance(raw_projection, Mapping):
+        return None
+    status = _normalized_status(raw_projection.get("status"))
+    if status != "ready":
+        return {"status": status}
+    completed_at = _safe_text(raw_projection.get("completed_at"))
+    raw_items = raw_projection.get("items")
+    if not isinstance(raw_items, list):
+        return {
+            "status": status,
+            "completed_at": completed_at,
+            "items": None,
+        }
+    projected_items: list[dict[str, str] | None] = []
+    for raw_item in raw_items:
+        if not isinstance(raw_item, Mapping):
+            projected_items.append(None)
+            continue
+        projected_items.append(
+            {
+                "rule_id": _normalized_rule_id(raw_item.get("rule_id") or raw_item.get("rule_code")),
+                "status": _normalized_status(raw_item.get("status")),
+            }
+        )
+    return {
+        "status": status,
+        "completed_at": completed_at,
+        "items": projected_items,
+    }
+
+
+def _clone_lightweight_result(projected: Mapping[str, Any]) -> dict[str, Any]:
+    cloned: dict[str, Any] = {"status": projected.get("status", "")}
+    if "completed_at" in projected:
+        cloned["completed_at"] = projected["completed_at"]
+    if "items" in projected:
+        items = projected["items"]
+        cloned["items"] = (
+            [dict(item) if isinstance(item, Mapping) else item for item in items]
+            if isinstance(items, list)
+            else items
+        )
+    return cloned
+
+
+def _read_result_analysis_watermark_key(
+    svc: Any,
+    *,
+    session_factory: Callable[[], Any] | None = None,
+) -> tuple[Any, ...] | None:
+    watermark_reader = getattr(svc, "_read_luxian_summary_watermark", None)
+    if not callable(watermark_reader):
+        return None
+    factory = session_factory or _workspace_module._session
+    try:
+        session = factory()
+    except Exception:
+        return None
+    try:
+        db_scope = _workspace_module._session_cache_scope_key(session)
+        if db_scope is None:
+            return None
+        watermark = watermark_reader(session)
+        if watermark is None:
+            return None
+        return (db_scope, watermark)
+    except Exception:
+        return None
+    finally:
+        close = getattr(session, "close", None)
+        if callable(close):
+            close()
+
+
+def _result_analysis_cache_get(
+    bucket_key: tuple[Any, ...],
+    identities: Sequence[tuple[str, str, str]],
+) -> tuple[dict[tuple[str, str, str], dict[str, Any]], list[tuple[str, str, str]]]:
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        bucket = _RESULT_ANALYSIS_WATERMARK_CACHE.get(bucket_key)
+        if bucket is None:
+            return {}, list(identities)
+        _RESULT_ANALYSIS_WATERMARK_CACHE.move_to_end(bucket_key)
+        hits: dict[tuple[str, str, str], dict[str, Any]] = {}
+        missing: list[tuple[str, str, str]] = []
+        for identity in identities:
+            if identity in bucket:
+                cached = bucket[identity]
+                if cached is not None:
+                    hits[identity] = _clone_lightweight_result(cached)
+            else:
+                missing.append(identity)
+        return hits, missing
+
+
+def _result_analysis_cache_merge(
+    bucket_key: tuple[Any, ...],
+    projections: Mapping[tuple[str, str, str], dict[str, Any] | None],
+) -> None:
+    if not projections:
+        return
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        bucket = _RESULT_ANALYSIS_WATERMARK_CACHE.get(bucket_key)
+        if bucket is None:
+            bucket = {}
+            _RESULT_ANALYSIS_WATERMARK_CACHE[bucket_key] = bucket
+        for identity, value in projections.items():
+            bucket[identity] = _clone_lightweight_result(value) if value is not None else None
+        _RESULT_ANALYSIS_WATERMARK_CACHE.move_to_end(bucket_key)
+        while len(_RESULT_ANALYSIS_WATERMARK_CACHE) > _RESULT_ANALYSIS_WATERMARK_CACHE_MAX:
+            _RESULT_ANALYSIS_WATERMARK_CACHE.popitem(last=False)
+
+
 class Luxian0609ResultAnalysisService:
     """按当前病历范围聚合最新 Canonical 结果，并提供规则到病历的下钻。"""
 
@@ -193,19 +343,85 @@ class Luxian0609ResultAnalysisService:
         result_loader: Callable[[Sequence[Mapping[str, Any]]], Mapping[tuple[str, str, str], Mapping[str, Any]]]
         | None = None,
         rule_name_loader: Callable[[], Mapping[str, str]] = _default_rule_name_loader,
+        session_factory: Callable[[], Any] | None = None,
     ) -> None:
         self._record_scope_loader = record_scope_loader
         self._result_loader = result_loader or self._load_latest_results
         self._rule_name_loader = rule_name_loader
+        self._session_factory = session_factory
 
-    @staticmethod
     def _load_latest_results(
+        self,
         record_refs: Sequence[Mapping[str, Any]],
     ) -> Mapping[tuple[str, str, str], Mapping[str, Any]]:
-        return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
-            record_refs=record_refs,
-            include_items=True,
+        normalized_refs: list[dict[str, str]] = []
+        identities: list[tuple[str, str, str]] = []
+        seen: set[tuple[str, str, str]] = set()
+        for ref in record_refs:
+            if not isinstance(ref, Mapping):
+                continue
+            identity = _identity_from_record(ref)
+            if identity is None or identity in seen:
+                continue
+            seen.add(identity)
+            identities.append(identity)
+            normalized_refs.append(
+                {
+                    "institute_id": identity[0],
+                    "patient_id": identity[1],
+                    "visit_id": identity[2],
+                }
+            )
+        if not identities:
+            return {}
+
+        svc = _get_readonly_workspace_service()
+        bucket_key = _read_result_analysis_watermark_key(
+            svc,
+            session_factory=self._session_factory,
         )
+        if bucket_key is None:
+            call_kwargs: dict[str, Any] = {
+                "record_refs": normalized_refs,
+                "include_items": True,
+            }
+            if self._session_factory is not None:
+                call_kwargs["session_factory"] = self._session_factory
+            return svc.build_luxian_0609_completed_record_result_summaries(**call_kwargs)
+
+        cached_hits, missing_identities = _result_analysis_cache_get(bucket_key, identities)
+        if not missing_identities:
+            return cached_hits
+
+        missing_refs = [
+            {
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
+            }
+            for identity in missing_identities
+        ]
+        call_kwargs = {
+            "record_refs": missing_refs,
+            "include_items": True,
+        }
+        if self._session_factory is not None:
+            call_kwargs["session_factory"] = self._session_factory
+        raw_loaded = svc.build_luxian_0609_completed_record_result_summaries(**call_kwargs)
+
+        projected_loaded: dict[tuple[str, str, str], dict[str, Any] | None] = {}
+        result: dict[tuple[str, str, str], dict[str, Any]] = dict(cached_hits)
+        for identity in missing_identities:
+            if identity in raw_loaded:
+                projected = _project_lightweight_result(raw_loaded[identity])
+                projected_loaded[identity] = projected
+                if projected is not None:
+                    result[identity] = _clone_lightweight_result(projected)
+            else:
+                projected_loaded[identity] = None
+
+        _result_analysis_cache_merge(bucket_key, projected_loaded)
+        return result
 
     def get_analysis(
         self,

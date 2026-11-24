@@ -48,7 +48,11 @@ export const clinicalSourcesApi = {
     return unwrap((await http.get<Envelope<ClinicalSourceSettings>>(base)).data)
   },
   async save(value: ClinicalSourceSettings) {
-    return unwrap((await http.put<Envelope<ClinicalSourceSettings>>(base, value)).data)
+    const saved = unwrap((await http.put<Envelope<ClinicalSourceSettings>>(base, value)).data)
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('medqc:clinical-sources-saved'))
+    }
+    return saved
   },
   async check(value: ClinicalSourceSettings) {
     return unwrap(

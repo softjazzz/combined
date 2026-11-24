@@ -9,6 +9,7 @@ import { WORKSTATION_LIST_PAGE_SIZE } from '../utils/workstationListPagination'
 const WORKSTATION_URL = '/api/medical-records/workstation'
 const ALL_DEPARTMENTS = '全部科室'
 const ALL_DOCTORS = '全部主管医师'
+const CLINICAL_SOURCE_OPTIONS_TTL_MS = 60_000
 const EMPTY_QC_SUMMARY: RecordPoolQcSummary = {
   totalRecords: 0,
   readyRecords: 0,
@@ -22,6 +23,114 @@ export type WorkstationDateRange = [string, string] | null
 export type HospitalStatusScope = 'all' | 'inpatient' | 'discharged' | 'unknown'
 export type RecordPoolSyncScope = 'all' | 'today_inpatient'
 export type InpatientSort = 'default' | 'longest' | 'recent'
+
+type ClinicalSourceOptionsResult = Awaited<ReturnType<typeof clinicalSourcesApi.options>>
+type ClinicalSourceOptionsLoader = typeof clinicalSourcesApi.options
+
+interface CachedClinicalSourceOptions {
+  value: ClinicalSourceOptionsResult
+  expiresAt: number
+  loader: ClinicalSourceOptionsLoader
+  mockImpl: unknown
+}
+
+interface InFlightClinicalSourceOptions {
+  promise: Promise<ClinicalSourceOptionsResult>
+  loader: ClinicalSourceOptionsLoader
+  mockImpl: unknown
+}
+
+let cachedClinicalSourceOptions: CachedClinicalSourceOptions | null = null
+let inFlightClinicalSourceOptions: InFlightClinicalSourceOptions | null = null
+
+function getMockImplementationIdentity(loader: unknown): unknown {
+  if (typeof loader !== 'function') return undefined
+  const maybeMock = loader as { getMockImplementation?: () => unknown }
+  return typeof maybeMock.getMockImplementation === 'function'
+    ? maybeMock.getMockImplementation()
+    : undefined
+}
+
+export function resetClinicalSourceOptionsCache() {
+  cachedClinicalSourceOptions = null
+  inFlightClinicalSourceOptions = null
+}
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('medqc:clinical-sources-saved', resetClinicalSourceOptionsCache)
+}
+
+function isCacheableClinicalSourceOptions(result: unknown): result is ClinicalSourceOptionsResult {
+  const sources = (result as { sources?: unknown } | null | undefined)?.sources
+  return (
+    Array.isArray(sources) &&
+    sources.some(
+      (option) =>
+        Boolean(option) &&
+        typeof option === 'object' &&
+        (option as { id?: unknown }).id === 'independent_cdm' &&
+        (option as { enabled?: unknown }).enabled === true,
+    )
+  )
+}
+
+async function loadClinicalSourceOptions(): Promise<ClinicalSourceOptionsResult> {
+  const loader = clinicalSourcesApi.options
+  const mockImpl = getMockImplementationIdentity(loader)
+  if (
+    cachedClinicalSourceOptions &&
+    cachedClinicalSourceOptions.loader === loader &&
+    cachedClinicalSourceOptions.mockImpl === mockImpl &&
+    Date.now() < cachedClinicalSourceOptions.expiresAt
+  ) {
+    return cachedClinicalSourceOptions.value
+  }
+  if (
+    inFlightClinicalSourceOptions &&
+    inFlightClinicalSourceOptions.loader === loader &&
+    inFlightClinicalSourceOptions.mockImpl === mockImpl
+  ) {
+    return inFlightClinicalSourceOptions.promise
+  }
+
+  let tracked!: InFlightClinicalSourceOptions
+  const promise = (async () => {
+    const result = await loader()
+    if (inFlightClinicalSourceOptions === tracked) {
+      if (isCacheableClinicalSourceOptions(result)) {
+        cachedClinicalSourceOptions = {
+          value: result,
+          expiresAt: Date.now() + CLINICAL_SOURCE_OPTIONS_TTL_MS,
+          loader,
+          mockImpl,
+        }
+      } else {
+        cachedClinicalSourceOptions = null
+      }
+    }
+    return result
+  })()
+  tracked = { promise, loader, mockImpl }
+  inFlightClinicalSourceOptions = tracked
+  try {
+    return await promise
+  } finally {
+    if (inFlightClinicalSourceOptions === tracked) {
+      inFlightClinicalSourceOptions = null
+    }
+  }
+}
+
+function isAbortError(error: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true
+  if (!error || typeof error !== 'object') return false
+  const record = error as { code?: unknown; name?: unknown }
+  return (
+    record.code === 'ERR_CANCELED' ||
+    record.name === 'CanceledError' ||
+    record.name === 'AbortError'
+  )
+}
 
 function normalizeDepartment(raw: unknown): DeptInfo {
   const source = (raw || {}) as Record<string, unknown>
@@ -87,9 +196,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   async function initializeSource() {
     if (sourceId.value) return
     if (!sourceLoading) sourceLoading = (async () => {
-      const options = await clinicalSourcesApi.options()
+      const options = await loadClinicalSourceOptions()
       const requested = 'independent_cdm'
       if (!options.sources.some((option) => option.id === requested && option.enabled)) {
+        resetClinicalSourceOptionsCache()
         throw new Error('当前数据源已停用或无效，请重新选择')
       }
       sourceOptions.value = options.sources
@@ -120,11 +230,13 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const syncScope = ref<RecordPoolSyncScope>('all')
   const inpatientSort = ref<InpatientSort>('default')
   let activeRequestSequence = 0
+  let listRequest: AbortController | undefined
   let summaryRequest: AbortController | undefined
   const loadedTotals = ref<{ scope: string; total: number }>()
   const qcTotalsReady = computed(() => loadedTotals.value !== undefined)
   if (getCurrentScope()) onScopeDispose(() => {
     ++activeRequestSequence
+    listRequest?.abort()
     summaryRequest?.abort()
   })
 
@@ -187,7 +299,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
 
   async function fetchData(page = 1, targetPageSize = pageSize.value, isPagination = false) {
     const requestSequence = ++activeRequestSequence
+    listRequest?.abort()
     summaryRequest?.abort()
+    let listController: AbortController | undefined
     loading.value = true
     loadError.value = false
     if (!isPagination) {
@@ -248,9 +362,15 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         }
       }
 
-      const response = await ApiService.getRaw(WORKSTATION_URL, {
-        ...params, page, page_size: requestedPageSize, qc_summary_mode: 'deferred',
-      })
+      listController = new AbortController()
+      listRequest = listController
+      const response = await ApiService.getRaw(
+        WORKSTATION_URL,
+        {
+          ...params, page, page_size: requestedPageSize, qc_summary_mode: 'deferred',
+        },
+        { signal: listController.signal },
+      )
       const data = workstationPayload(response.data)
 
       const normalizedRecords = Array.isArray(data.records)
@@ -293,7 +413,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         qcSummaryState.value = 'ready'
       }
     } catch (error) {
-      if (requestSequence !== activeRequestSequence) return
+      if (requestSequence !== activeRequestSequence || isAbortError(error, listController?.signal)) {
+        return
+      }
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
       loadError.value = true
       allRecords.value = []
@@ -302,6 +424,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       qcSummary.value = { ...EMPTY_QC_SUMMARY }
       qcSummaryState.value = 'unavailable'
     } finally {
+      if (listController && listRequest === listController) listRequest = undefined
       if (requestSequence === activeRequestSequence) {
         loading.value = false
       }
@@ -311,6 +434,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   function selectSource(value: string) {
     if (!sourceOptions.value.some((option) => option.id === value && option.enabled)) return
     ++activeRequestSequence
+    listRequest?.abort()
+    summaryRequest?.abort()
+    resetClinicalSourceOptionsCache()
     if (value !== 'independent_cdm') throw new Error('普通病历固定读取东华CDM')
     sourceId.value = 'independent_cdm'
     setPageClinicalSource(value)
@@ -336,7 +462,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   }
 
   function refreshData() {
-    fetchData(currentPage.value)
+    return fetchData(currentPage.value)
   }
 
   function selectDept(deptName: string) {

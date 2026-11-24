@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, OrderedDict
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta, timezone
+from threading import RLock
 from types import SimpleNamespace
 from typing import Any, Callable, Optional
+import weakref
 
 from sqlalchemy import DateTime, String, and_, case, cast, exists, func, inspect as sa_inspect, or_, text, tuple_
 from sqlalchemy.orm import Session
@@ -747,9 +749,51 @@ def _parse_datetime_value(value: Any) -> datetime | None:
     return None
 
 
+_DISCHARGE_RECORD_COLUMNS_CACHE_LOCK = RLock()
+_DISCHARGE_RECORD_COLUMNS_CACHE: "OrderedDict[tuple[Any, ...], dict[str, dict[str, Any]] | None]" = OrderedDict()
+_DISCHARGE_RECORD_COLUMNS_CACHE_MAX = 64
+_DISCHARGE_RECORD_COLUMNS_TRACKED_BINDS: set[int] = set()
+
+
+def clear_workstation_discharge_record_columns_cache() -> None:
+    """清空工作台出院记录列元数据缓存（供测试或表结构变更后手动重置）。"""
+
+    with _DISCHARGE_RECORD_COLUMNS_CACHE_LOCK:
+        _DISCHARGE_RECORD_COLUMNS_CACHE.clear()
+        _DISCHARGE_RECORD_COLUMNS_TRACKED_BINDS.clear()
+
+
+def _evict_discharge_record_columns_for_bind(bind_id: int) -> None:
+    with _DISCHARGE_RECORD_COLUMNS_CACHE_LOCK:
+        stale_keys = [key for key in _DISCHARGE_RECORD_COLUMNS_CACHE if key[1] == bind_id]
+        for key in stale_keys:
+            _DISCHARGE_RECORD_COLUMNS_CACHE.pop(key, None)
+        _DISCHARGE_RECORD_COLUMNS_TRACKED_BINDS.discard(bind_id)
+
+
+def _clone_discharge_record_columns(
+    columns: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]] | None:
+    if columns is None:
+        return None
+    return {name: dict(meta) for name, meta in columns.items()}
+
+
 def _workstation_discharge_record_columns(session) -> dict[str, dict[str, Any]] | None:
     bind = session.get_bind()
+    dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
     table_name = DischargeRecord.__table__.name
+    schema = clinical_read_schema()
+    bind_obj = getattr(bind, "engine", bind)
+    cache_key: tuple[Any, ...] | None = None
+    if dialect_name != "sqlite":
+        schema_key = (schema or "public") if dialect_name == "postgresql" else schema
+        cache_key = (dialect_name, id(bind_obj), schema_key, table_name)
+        with _DISCHARGE_RECORD_COLUMNS_CACHE_LOCK:
+            if cache_key in _DISCHARGE_RECORD_COLUMNS_CACHE:
+                _DISCHARGE_RECORD_COLUMNS_CACHE.move_to_end(cache_key)
+                return _clone_discharge_record_columns(_DISCHARGE_RECORD_COLUMNS_CACHE[cache_key])
+
     required_columns = {
         "institute_id",
         "patient_id",
@@ -760,7 +804,7 @@ def _workstation_discharge_record_columns(session) -> dict[str, dict[str, Any]] 
         "update_time",
     }
 
-    if bind.dialect.name == "postgresql":
+    if dialect_name == "postgresql":
         rows = session.execute(
             text("""
                 SELECT table_schema, column_name, data_type, udt_name
@@ -768,20 +812,35 @@ def _workstation_discharge_record_columns(session) -> dict[str, dict[str, Any]] 
                 WHERE table_name = :table_name
                   AND table_schema = :source_schema
             """),
-            {"table_name": table_name, "source_schema": clinical_read_schema() or "public"},
+            {"table_name": table_name, "source_schema": schema or "public"},
         ).mappings().all()
         columns: dict[str, dict[str, Any]] = {}
         for row in rows:
             # 字段和类型仅来自本次实际读取的临床表，不混合影子表元数据。
             columns.setdefault(row["column_name"], dict(row))
-        return columns if required_columns.issubset(columns) else None
+        result = columns if required_columns.issubset(columns) else None
+    else:
+        inspector = sa_inspect(bind)
+        if not inspector.has_table(table_name, schema=schema):
+            result = None
+        else:
+            columns = {column["name"]: column for column in inspector.get_columns(table_name, schema=schema)}
+            result = columns if required_columns.issubset(columns) else None
 
-    inspector = sa_inspect(bind)
-    schema = clinical_read_schema()
-    if not inspector.has_table(table_name, schema=schema):
-        return None
-    columns = {column["name"]: column for column in inspector.get_columns(table_name, schema=schema)}
-    return columns if required_columns.issubset(columns) else None
+    if cache_key is not None:
+        with _DISCHARGE_RECORD_COLUMNS_CACHE_LOCK:
+            _DISCHARGE_RECORD_COLUMNS_CACHE[cache_key] = _clone_discharge_record_columns(result)
+            _DISCHARGE_RECORD_COLUMNS_CACHE.move_to_end(cache_key)
+            while len(_DISCHARGE_RECORD_COLUMNS_CACHE) > _DISCHARGE_RECORD_COLUMNS_CACHE_MAX:
+                _DISCHARGE_RECORD_COLUMNS_CACHE.popitem(last=False)
+            bind_id = id(bind_obj)
+            if bind_id not in _DISCHARGE_RECORD_COLUMNS_TRACKED_BINDS:
+                try:
+                    weakref.finalize(bind_obj, _evict_discharge_record_columns_for_bind, bind_id)
+                    _DISCHARGE_RECORD_COLUMNS_TRACKED_BINDS.add(bind_id)
+                except TypeError:
+                    pass
+    return result
 
 
 def _workstation_discharge_time_expr(columns: dict[str, dict[str, Any]]):
@@ -1315,62 +1374,72 @@ def get_workstation_data(
                 real_offset = max(offset - demo_count, 0)
 
             if real_limit > 0:
-                candidate_limit = real_offset + real_limit
-                frontpage_candidates = (
-                    q.order_by(*_workstation_order_by(effective_inpatient_sort, discharge_summary))
-                    .limit(candidate_limit)
-                    .all()
-                )
-                indexed_candidates = _workstation_sorted_records(
-                    indexed_filtered_records,
-                    effective_inpatient_sort,
-                )[:candidate_limit]
-                records = _workstation_sorted_records(
-                    [*frontpage_candidates, *indexed_candidates],
-                    effective_inpatient_sort,
-                )[real_offset : real_offset + real_limit]
+                if not indexed_filtered_records:
+                    records = (
+                        q.order_by(*_workstation_order_by(effective_inpatient_sort, discharge_summary))
+                        .offset(real_offset)
+                        .limit(real_limit)
+                        .all()
+                    )
+                else:
+                    candidate_limit = real_offset + real_limit
+                    frontpage_candidates = (
+                        q.order_by(*_workstation_order_by(effective_inpatient_sort, discharge_summary))
+                        .limit(candidate_limit)
+                        .all()
+                    )
+                    indexed_candidates = _workstation_sorted_records(
+                        indexed_filtered_records,
+                        effective_inpatient_sort,
+                    )[:candidate_limit]
+                    records = _workstation_sorted_records(
+                        [*frontpage_candidates, *indexed_candidates],
+                        effective_inpatient_sort,
+                    )[real_offset : real_offset + real_limit]
 
-        full_record_refs = [
-            {
-                "institute_id": str(row.institute_id).strip(),
-                "patient_id": str(row.patient_id).strip(),
-                "visit_id": str(row.visit_id).strip(),
-            }
-            for row in q.with_entities(
-                MedicalRecordFrontpage.institute_id,
-                MedicalRecordFrontpage.patient_id,
-                MedicalRecordFrontpage.visit_id,
-            ).all()
-            if all((row.institute_id, row.patient_id, row.visit_id))
-        ]
-        full_record_refs.extend(
-            {
-                "institute_id": str(row.institute_id).strip(),
-                "patient_id": str(row.patient_id).strip(),
-                "visit_id": str(row.visit_id).strip(),
-            }
-            for row in indexed_filtered_records
-        )
-        summary_loader = qc_projection_loader or (
-            lambda refs: _load_latest_luxian_0609_qc_summaries(
-                refs,
-                session_factory=session_factory,
+        full_record_refs: list[dict[str, str]] = []
+        latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]] = {}
+        if qc_summary_mode != "deferred":
+            full_record_refs = [
+                {
+                    "institute_id": str(row.institute_id).strip(),
+                    "patient_id": str(row.patient_id).strip(),
+                    "visit_id": str(row.visit_id).strip(),
+                }
+                for row in q.with_entities(
+                    MedicalRecordFrontpage.institute_id,
+                    MedicalRecordFrontpage.patient_id,
+                    MedicalRecordFrontpage.visit_id,
+                ).all()
+                if all((row.institute_id, row.patient_id, row.visit_id))
+            ]
+            full_record_refs.extend(
+                {
+                    "institute_id": str(row.institute_id).strip(),
+                    "patient_id": str(row.patient_id).strip(),
+                    "visit_id": str(row.visit_id).strip(),
+                }
+                for row in indexed_filtered_records
             )
-        )
-        summary_refs = _workstation_qc_summary_refs(
-            full_record_refs, qc_summary_identities, include_totals=qc_summary_include_totals,
-        )
-        latest_qc_summary_map = {}
-        if qc_summary_mode != "deferred" and summary_refs:
-            latest_qc_summary_map = _normalize_latest_qc_summary_map(summary_loader(summary_refs))
-        if qc_summary_mode == "only":
-            return _workstation_qc_summary_payload(
-                summary_refs, latest_qc_summary_map,
-                (CaseRef(*(str(value or "").strip() for value in (r.institute_id, r.patient_id, r.visit_id)))
-                 for r in records),
-                requested_identities=qc_summary_identities,
-                include_totals=qc_summary_include_totals,
+            summary_loader = qc_projection_loader or (
+                lambda refs: _load_latest_luxian_0609_qc_summaries(
+                    refs,
+                    session_factory=session_factory,
+                )
             )
+            summary_refs = _workstation_qc_summary_refs(
+                full_record_refs, qc_summary_identities, include_totals=qc_summary_include_totals,
+            )
+            if summary_refs:
+                latest_qc_summary_map = _normalize_latest_qc_summary_map(summary_loader(summary_refs))
+            if qc_summary_mode == "only":
+                return _workstation_qc_summary_payload(
+                    summary_refs, latest_qc_summary_map,
+                    (CaseRef(*(str(value or "").strip() for value in (r.institute_id, r.patient_id, r.visit_id)))
+                     for r in records),
+                    requested_identities=qc_summary_identities,
+                    include_totals=qc_summary_include_totals,
+                )
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}
         if records and discharge_summary is not None:
@@ -1452,29 +1521,7 @@ def get_workstation_data(
             for row in indexed_department_records
         )
 
-        dept_total_count = clinical_query(session, func.count()).select_from(MedicalRecordFrontpage)
-        if case_scope is not None:
-            dept_total_count = dept_total_count.filter(case_scope.predicate(MedicalRecordFrontpage))
-        if discharge_summary is not None:
-            dept_total_count = dept_total_count.outerjoin(
-                discharge_summary,
-                _workstation_discharge_join_condition(discharge_summary),
-            )
-        dept_total_count = _apply_workstation_filters(
-            dept_total_count,
-            dept=None,
-            doctor=doctor,
-            keyword=keyword,
-            start_date=start_date,
-            end_date=end_date,
-            date_field=date_field,
-            hospital_status=normalized_hospital_status,
-            sync_scope=normalized_sync_scope,
-            include_department=False,
-            include_doctor=True,
-            discharge_summary=discharge_summary,
-        ).scalar() or 0
-        dept_total_count = int(dept_total_count) + len(indexed_department_records)
+        dept_total_count = sum(int(d.total) for d in dept_stats) + len(indexed_department_records)
 
         doctor_name_expr = func.trim(MedicalRecordFrontpage.attending_physician_sign).label(
             "doctor_name"
@@ -1556,9 +1603,27 @@ def get_workstation_data(
         frontpage_generate_state_map: dict[str, dict[str, Any]] = {}
         demo_frontpage_generate_state_map: dict[str, dict[str, Any]] = {}
         if visit_ids:
-            all_real_visit_counts = Counter(
-                str(ref["visit_id"]) for ref in full_record_refs
-            )
+            if qc_summary_mode == "deferred":
+                all_real_visit_counts: Counter[str] = Counter()
+                unique_real_visit_ids = list(dict.fromkeys(v for v in real_visit_ids if v))
+                if unique_real_visit_ids:
+                    for visit_id, count in (
+                        q.filter(MedicalRecordFrontpage.visit_id.in_(unique_real_visit_ids))
+                        .with_entities(MedicalRecordFrontpage.visit_id, func.count())
+                        .group_by(MedicalRecordFrontpage.visit_id)
+                        .all()
+                    ):
+                        normalized_visit_id = str(visit_id or "").strip()
+                        if normalized_visit_id:
+                            all_real_visit_counts[normalized_visit_id] += int(count)
+                    for row in indexed_filtered_records:
+                        normalized_visit_id = str(row.visit_id or "").strip()
+                        if normalized_visit_id:
+                            all_real_visit_counts[normalized_visit_id] += 1
+            else:
+                all_real_visit_counts = Counter(
+                    str(ref["visit_id"]) for ref in full_record_refs
+                )
             safe_real_visit_ids = [
                 visit_id
                 for visit_id in real_visit_ids

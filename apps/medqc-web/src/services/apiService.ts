@@ -222,7 +222,7 @@ apiClient.interceptors.response.use(
     const pageOwnedRequestFailed = pageOwnedGet && (responseStatus === undefined
         ? error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED'
         : responseStatus >= 500 && responseStatus < 600)
-    if (backgroundQcSummary && error.code === 'ERR_CANCELED') return Promise.reject(error)
+    if ((backgroundQcSummary || pageOwnedGet) && error.code === 'ERR_CANCELED') return Promise.reject(error)
     const traceId = extractTraceIdFromResponse(error.response) || extractTraceIdFromResponse(error)
     attachTraceIdToError(error, traceId)
 

@@ -104,6 +104,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { clinicalSourcesApi, type ClinicalSourceSettings } from '@/api/clinicalSources'
+import { resetClinicalSourceOptionsCache } from '@/views/workstation-v4/composables/usePatientRecords'
 
 const settings = ref<ClinicalSourceSettings | null>(null)
 const loading = ref(false)
@@ -125,6 +126,7 @@ async function save() {
   busy.value = true
   try {
     settings.value = await clinicalSourcesApi.save({ ...settings.value, default_source: 'independent_cdm', legacy_enabled: false })
+    resetClinicalSourceOptionsCache()
     notice.value = '设置已保存，已有任务继续使用创建时的来源'
   } catch {
     notice.value = '保存失败，请检查来源、部署凭据，或重新读取后再保存'

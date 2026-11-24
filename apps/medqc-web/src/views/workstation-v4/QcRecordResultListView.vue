@@ -444,6 +444,7 @@ const {
   departments,
   fetchData,
   handlePageChange,
+  hospFilter,
   loadError,
   loading,
   qcSummary,
@@ -762,8 +763,18 @@ watch(
     medicalRecordFocus.value = null
     closeResultDrawer()
     clearSelection()
+    activeDept.value = ALL_DEPARTMENTS
+    activeDoctor.value = '全部主管医师'
+    searchText.value = ''
+    dateRange.value = null
+    currentPage.value = 1
+    activeView.value = 'records'
     dateField.value = carePhase === 'inpatient' ? 'admission' : 'discharge'
+    const prevHospFilter = hospFilter?.value
     selectHospFilter(carePhase)
+    if (prevHospFilter === carePhase) {
+      void fetchData(1)
+    }
   },
 )
 

@@ -376,17 +376,21 @@ async def get_luxian_0609_result_analysis(
         )
         if inst_scope is not None:
             try:
-                data = default_luxian_0609_result_analysis_service.get_analysis(
+                data = await run_in_threadpool(
+                    default_luxian_0609_result_analysis_service.get_analysis,
                     **kwargs,
                     institute_id=inst_scope,
                 )
             except TypeError:
-                if _has_other_institute_records(inst_scope):
+                if await run_in_threadpool(_has_other_institute_records, inst_scope):
                     raise HTTPException(
                         status_code=403,
                         detail="多院区环境下当前统计下钻接口未开启分院隔离，无权跨院读取",
                     )
-                data = default_luxian_0609_result_analysis_service.get_analysis(**kwargs)
+                data = await run_in_threadpool(
+                    default_luxian_0609_result_analysis_service.get_analysis,
+                    **kwargs,
+                )
                 if isinstance(data, dict) and isinstance(data.get("record_page"), dict):
                     rp = data["record_page"]
                     if isinstance(rp.get("items"), list):
@@ -400,7 +404,10 @@ async def get_luxian_0609_result_analysis(
                             },
                         }
         else:
-            data = default_luxian_0609_result_analysis_service.get_analysis(**kwargs)
+            data = await run_in_threadpool(
+                default_luxian_0609_result_analysis_service.get_analysis,
+                **kwargs,
+            )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
         _raise_workstation_http_error(exc)

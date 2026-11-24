@@ -239,22 +239,47 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
             filter_columns += [source.c.department, source.c.doctor]
         with engine.connect() as connection:
             rows = []
-            if qc_summary_identities is None and not page_only:
-                order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
-                order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
-                page_columns = filter_columns if qc_summary_mode == "only" else [source]
-                page_query = select(*page_columns).where(*predicates).order_by(
-                    order, *[source.c[k] for k in KEYS]
-                ).offset((page-1)*page_size).limit(page_size)
-                rows = connection.execute(page_query).mappings().all()
-            # 需要总统计时保留筛选全集的三键。单页摘要仅查询当前授权筛选内的请求三键。
-            filtered_rows = connection.execute(
-                select(*filter_columns).where(*predicates)
-            ).mappings().all()
-            frontpage_refs = None if qc_summary_mode == "only" else _frontpage_refs(
-                connection, [tuple(row[key] for key in KEYS) for row in rows]
-            )
-        total = len(filtered_rows)
+            filtered_rows = []
+            facet_rows = []
+            if qc_summary_mode == "deferred":
+                # 延迟摘要模式不读取全量三键，直接按 (department, doctor) 聚合总数与筛选项。
+                facet_rows = connection.execute(
+                    select(
+                        source.c.department,
+                        source.c.doctor,
+                        func.count().label("cnt"),
+                    )
+                    .where(*predicates)
+                    .group_by(source.c.department, source.c.doctor)
+                ).mappings().all()
+                total = sum(int(row["cnt"]) for row in facet_rows)
+                if total > 0 and qc_summary_identities is None and not page_only:
+                    order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
+                    order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
+                    page_query = select(source).where(*predicates).order_by(
+                        order, *[source.c[k] for k in KEYS]
+                    ).offset((page-1)*page_size).limit(page_size)
+                    rows = connection.execute(page_query).mappings().all()
+                frontpage_refs = _frontpage_refs(
+                    connection, [tuple(row[key] for key in KEYS) for row in rows]
+                )
+            else:
+                if qc_summary_identities is None and not page_only:
+                    order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
+                    order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
+                    page_columns = filter_columns if qc_summary_mode == "only" else [source]
+                    page_query = select(*page_columns).where(*predicates).order_by(
+                        order, *[source.c[k] for k in KEYS]
+                    ).offset((page-1)*page_size).limit(page_size)
+                    rows = connection.execute(page_query).mappings().all()
+                # 需要总统计时保留筛选全集的三键。单页摘要仅查询当前授权筛选内的请求三键。
+                filtered_rows = connection.execute(
+                    select(*filter_columns).where(*predicates)
+                ).mappings().all()
+                frontpage_refs = None if qc_summary_mode == "only" else _frontpage_refs(
+                    connection, [tuple(row[key] for key in KEYS) for row in rows]
+                )
+                total = len(filtered_rows)
         summary_started = monotonic()
         from .medical_records.query_service import (
             _build_qc_summary, _load_latest_luxian_0609_qc_summaries,
@@ -281,8 +306,19 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                 requested_identities=qc_summary_identities,
                 include_totals=qc_summary_include_totals,
             )
-        departments = Counter(row["department"] for row in filtered_rows).items()
-        doctors = Counter(row["doctor"] for row in filtered_rows if row["doctor"]).items()
+        if qc_summary_mode == "deferred":
+            department_counts: Counter = Counter()
+            doctor_counts: Counter = Counter()
+            for row in facet_rows:
+                cnt = int(row["cnt"])
+                department_counts[row["department"]] += cnt
+                if row["doctor"]:
+                    doctor_counts[row["doctor"]] += cnt
+            departments = department_counts.items()
+            doctors = doctor_counts.items()
+        else:
+            departments = Counter(row["department"] for row in filtered_rows).items()
+            doctors = Counter(row["doctor"] for row in filtered_rows if row["doctor"]).items()
         records = []
         for row in rows:
             admission, discharge = _datetime(row["admission"]), _datetime(row["discharge"])

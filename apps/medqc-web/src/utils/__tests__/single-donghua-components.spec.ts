@@ -42,7 +42,11 @@ describe('真实面板及病历池单源行为', () => {
     vi.mocked(ApiService.getRaw).mockResolvedValue({ data: { records: [{ id: 'R', institute_id: 'I', patient_id: 'P', visit_id: 'V' }], total: 1 }, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } })
     const records = usePatientRecords()
     await records.fetchData()
-    expect(ApiService.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', expect.objectContaining({ source_id: 'independent_cdm' }))
+    expect(ApiService.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      expect.objectContaining({ source_id: 'independent_cdm' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(records.allRecords.value[0].sourceId).toBe('independent_cdm')
     expect(new URL(window.location.href).searchParams.get('source_id')).toBe('independent_cdm')
   })
@@ -153,7 +157,12 @@ describe('真实面板及病历池单源行为', () => {
     expect(records.allRecords.value[0].recordKey).toBe(recordKey)
     expect(records.allRecords.value[0].latestQcSummary).toBeUndefined()
     const params = { page: 1, page_size: 15, hospital_status: 'discharged', date_field: 'discharge', source_id: 'independent_cdm', keyword: '合成' }
-    expect(ApiService.getRaw).toHaveBeenNthCalledWith(1, '/api/medical-records/workstation', { ...params, qc_summary_mode: 'deferred' })
+    expect(ApiService.getRaw).toHaveBeenNthCalledWith(
+      1,
+      '/api/medical-records/workstation',
+      { ...params, qc_summary_mode: 'deferred' },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(ApiService.postRaw).toHaveBeenCalledWith(
       '/api/medical-records/workstation/qc-summary', { record_keys: [recordKey] },
       expect.objectContaining({

@@ -41,7 +41,7 @@
                 <a-button
                   size="small"
                   class="wv4-analysis-overview__action"
-                  @click="emit('page-change', currentPage)"
+                  @click="emit('refresh')"
                 >
                   刷新
                 </a-button>
@@ -70,7 +70,7 @@
                   size="large"
                   allow-clear
                   @update:value="emit('update:searchText', $event)"
-                  @press-enter="emit('page-change', 1)"
+                  @press-enter="emit('search')"
                 >
                   <template #prefix>
                     <SearchOutlined class="text-slate-400" />
@@ -238,7 +238,7 @@
                     type="primary"
                     size="small"
                     class="wv4-filter-actions__button"
-                    @click="emit('page-change', 1)"
+                    @click="emit('search')"
                   >
                     查询
                   </a-button>
@@ -293,7 +293,7 @@
           <template #action>
             <a-button
               size="small"
-              @click="emit('page-change', currentPage)"
+              @click="emit('refresh')"
             >
               重试
             </a-button>
@@ -512,6 +512,8 @@ const emit = defineEmits<{
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []
+  search: []
+  refresh: []
   'page-change': [page: number, pageSize?: number]
 }>()
 

@@ -138,6 +138,7 @@ describe('apiService trace propagation', () => {
     { mode: 'deferred', responseStatus: 503, suppressed: true },
     { mode: 'deferred', code: 'ERR_NETWORK', suppressed: true },
     { mode: 'deferred', code: 'ECONNABORTED', suppressed: true },
+    { mode: 'deferred', code: 'ERR_CANCELED', suppressed: true },
     { mode: 'deferred', responseStatus: 403, suppressed: false },
     { mode: 'inline', responseStatus: 503, suppressed: false },
   ])('工作台列表 $mode 的 $responseStatus$code 失败提示符合所属入口', async ({
