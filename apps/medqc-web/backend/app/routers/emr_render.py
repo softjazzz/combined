@@ -1,10 +1,12 @@
 """EMR 文书渲染 API（BundleOnly 结构化展示）"""
 
+from contextlib import ExitStack
 import json
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 
 from fastapi import APIRouter, Depends, Request, Query, HTTPException
+from sqlalchemy import and_, or_, select
 from starlette.concurrency import run_in_threadpool
 
 from ..core.supabase_client import get_supabase, async_execute
@@ -14,6 +16,7 @@ from ..services.medical_records.detail_service import (
     enforce_institute_access,
     resolve_non_global_institute_scope,
 )
+from ..services.saved_result_access import scope_needs_donghua_result_proof
 from ..services.bundles.emr_view import (
     build_documents_tree,
     load_bundle_document,
@@ -289,6 +292,73 @@ def _pick_live_document(documents, domain, doc_type, doc_id):
     return pick_document(documents=candidates, doc_type=doc_type, doc_id=doc_id)
 
 
+def _resolve_verified_donghua_history_material(
+    request: Request,
+    *,
+    inst_scope: str,
+    record_id: str,
+    institute_id: Optional[str],
+    patient_id: Optional[str],
+    visit_id: Optional[str],
+    source_view: str,
+) -> Optional[Dict[str, Any]]:
+    """仅当上游已针对本次请求核验东华冻结历史材料且任务、病例三键和来源绑定全部一致时放行。"""
+    if source_view != "saved":
+        return None
+    verified = getattr(request.state, "verified_history_material", None)
+    root_job = str(getattr(request.state, "material_root_job_id", "") or "").strip()
+    if not isinstance(verified, dict) or not root_job:
+        return None
+    req_identity = (
+        str(institute_id or "").strip(),
+        str(patient_id or "").strip(),
+        _resolve_bundle_visit_id(record_id, visit_id),
+    )
+    if not all(req_identity):
+        return None
+    active = case_material.current()
+    if active is not None and active is not verified:
+        return None
+    if verified.get("identity") != list(req_identity):
+        return None
+    material_job_id = str(verified.get("job_id") or "").strip()
+    if material_job_id and material_job_id != root_job:
+        return None
+    selection = getattr(request.state, "clinical_source", None)
+    if (
+        isinstance(selection, dict)
+        and "binding" in verified
+        and str(verified.get("binding") or "") != str(selection.get("binding") or "")
+    ):
+        return None
+    try:
+        needs_proof = scope_needs_donghua_result_proof(inst_scope, req_identity[0])
+    except HTTPException:
+        return None
+    if not needs_proof:
+        return None
+    return verified
+
+
+def _run_with_verified_history_context(
+    request: Request,
+    verified_material: Optional[Dict[str, Any]],
+    fn,
+    **kwargs,
+):
+    if verified_material is None:
+        return fn(**kwargs)
+    from ..database import clinical_connection as clinical
+
+    with ExitStack() as stack:
+        selection = getattr(request.state, "clinical_source", None)
+        if clinical.current_selection() is None and isinstance(selection, dict):
+            stack.enter_context(clinical.selected(selection))
+        if case_material.current() is None:
+            stack.enter_context(case_material.activate(verified_material))
+        return fn(**kwargs)
+
+
 @router.get("/{record_id}/documents")
 async def get_record_documents(
     request: Request,
@@ -308,14 +378,27 @@ async def get_record_documents(
 ):
     """获取病历文书列表（BundleOnly）。"""
     own_identity = getattr(request.state, "doctor_case_identity", None)
+    verified_history_material: Optional[Dict[str, Any]] = None
     if own_identity:
         institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
     else:
-        inst_scope = await run_in_threadpool(resolve_non_global_institute_scope, current_user)
+        inst_scope = resolve_non_global_institute_scope(current_user)
         if inst_scope is not None:
-            if institute_id is not None and str(institute_id).strip():
-                enforce_institute_access(inst_scope, institute_id)
-            institute_id = inst_scope
+            verified_history_material = _resolve_verified_donghua_history_material(
+                request,
+                inst_scope=inst_scope,
+                record_id=record_id,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_view=source_view,
+            )
+            if verified_history_material is not None:
+                institute_id = str(institute_id or "").strip()
+            else:
+                if institute_id is not None and str(institute_id).strip():
+                    enforce_institute_access(inst_scope, institute_id)
+                institute_id = inst_scope
     if document_scope is not None and (source_view != "saved" or view != "summary"):
         raise HTTPException(422, "document_scope_requires_saved_summary")
     if source_view == "current":
@@ -357,6 +440,9 @@ async def get_record_documents(
         if document_scope is not None:
             loader_kwargs["document_scope"] = document_scope
     payload = await run_in_threadpool(
+        _run_with_verified_history_context,
+        request,
+        verified_history_material,
         loader,
         **loader_kwargs,
     )
@@ -385,18 +471,32 @@ async def render_document(
     """获取文书内容 + 结构化渲染块 + 缺陷标注（BundleOnly）。"""
     own_identity = getattr(request.state, "doctor_case_identity", None)
     inst_scope: Optional[str] = None
+    verified_history_material: Optional[Dict[str, Any]] = None
     if own_identity:
         institute_id, patient_id, visit_id = (own_identity[k] for k in ("institute_id", "patient_id", "visit_id"))
     else:
-        inst_scope = await run_in_threadpool(resolve_non_global_institute_scope, current_user)
+        inst_scope = resolve_non_global_institute_scope(current_user)
         if inst_scope is not None:
-            if institute_id is not None and str(institute_id).strip():
-                enforce_institute_access(inst_scope, institute_id)
-            institute_id = inst_scope
+            verified_history_material = _resolve_verified_donghua_history_material(
+                request,
+                inst_scope=inst_scope,
+                record_id=record_id,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_view=source_view,
+            )
+            if verified_history_material is not None:
+                institute_id = str(institute_id or "").strip()
+            else:
+                if institute_id is not None and str(institute_id).strip():
+                    enforce_institute_access(inst_scope, institute_id)
+                institute_id = inst_scope
     if clinical_surgery_version is not None:
         identity = tuple(str(value or "").strip() for value in (institute_id, patient_id, visit_id))
         if (
             source_view != "current" or case_material.current() is not None
+            or verified_history_material is not None
             or request.query_params.get("job_id") or doc_type != "surgery_record"
             or not doc_id or not all(identity) or identity[2] != record_id
         ):
@@ -418,7 +518,8 @@ async def render_document(
             "defect_annotations": [], "total_annotations": 0,
         }, message="获取手术记录成功", trace_id=get_trace_id(request))
     current = None
-    if case_material.current() is None:
+    active_material = case_material.current() or verified_history_material
+    if active_material is None:
         current = await run_in_threadpool(
             _load_live_cdm_documents, record_id, institute_id, patient_id, visit_id)
     if current is not None:
@@ -430,8 +531,11 @@ async def render_document(
             "documents_tree": build_documents_tree([selected] if selected else []),
             "empty_reason": "" if selected else "document_not_found",
         }
-    elif execution_domain or (case_material.current() is not None and doc_id):
+    elif execution_domain or (active_material is not None and doc_id):
         selected = await run_in_threadpool(
+            _run_with_verified_history_context,
+            request,
+            verified_history_material,
             _load_document_from_bundle,
             record_id=record_id,
             institute_id=institute_id,
@@ -447,6 +551,9 @@ async def render_document(
         }
     else:
         documents_payload = await run_in_threadpool(
+            _run_with_verified_history_context,
+            request,
+            verified_history_material,
             _load_documents_from_bundle,
             record_id=record_id,
             institute_id=institute_id,
@@ -471,10 +578,31 @@ async def render_document(
     layout_version = str(view_payload.get("layout_version") or "bundle_struct_v1")
     empty_reason = str(view_payload.get("empty_reason") or documents_payload.get("empty_reason") or "")
 
-    if inst_scope is not None and not selected:
+    selected_inst = str(selected.get("institute_id") or "").strip() if isinstance(selected, dict) else ""
+    selected_pat = str(selected.get("patient_id") or "").strip() if isinstance(selected, dict) else ""
+    effective_inst = str(institute_id or selected_inst or "").strip()
+    effective_pat = str(patient_id or selected_pat or "").strip()
+    effective_visit = _resolve_bundle_visit_id(record_id, visit_id)
+    requested_job_id = str(request.query_params.get("job_id") or "").strip()
+    material_root_job_id = str(getattr(request.state, "material_root_job_id", "") or "").strip()
+    is_historical_view = bool(
+        requested_job_id or material_root_job_id or active_material is not None
+    )
+
+    if not selected:
         annotations, annotation_status = [], "no_result"
     else:
-        annotations, annotation_status = await _load_defect_annotations(record_id, content)
+        annotations, annotation_status = await _load_defect_annotations(
+            record_id,
+            content,
+            institute_id=effective_inst,
+            patient_id=effective_pat,
+            visit_id=effective_visit,
+            inst_scope=inst_scope if verified_history_material is None else None,
+            requested_job_id=requested_job_id,
+            material_root_job_id=material_root_job_id,
+            is_historical_view=is_historical_view,
+        )
 
     return success_response(
         data={
@@ -507,24 +635,28 @@ def _decode_json_list(value: Any) -> List[Dict[str, Any]]:
     return [item for item in value if isinstance(item, dict)]
 
 
+def _parse_raw_output(row: Dict[str, Any]) -> Dict[str, Any]:
+    raw_value = row.get("raw_output")
+    if isinstance(raw_value, dict):
+        return raw_value
+    if isinstance(raw_value, str) and raw_value.strip():
+        try:
+            parsed = json.loads(raw_value)
+        except ValueError:
+            logger.warning("qc_results.raw_output 不是合法 JSON，无法还原缺陷标注")
+            return {}
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
 def _extract_qc_findings(row: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """从 qc_results 行取出 issues / evaluation_results。
 
     当前 alembic 表结构只有 raw_output（完整结果 JSON 文本），没有 issues、
     evaluation_results 列；旧库可能另有 issues 列。优先用独立列，缺失时回退 raw_output。
     """
-    raw_output: Dict[str, Any] = {}
-    raw_value = row.get("raw_output")
-    if isinstance(raw_value, dict):
-        raw_output = raw_value
-    elif isinstance(raw_value, str) and raw_value.strip():
-        try:
-            parsed = json.loads(raw_value)
-        except ValueError:
-            logger.warning("qc_results.raw_output 不是合法 JSON，无法还原缺陷标注")
-        else:
-            if isinstance(parsed, dict):
-                raw_output = parsed
+    raw_output = _parse_raw_output(row)
     issues = _decode_json_list(row.get("issues")) if "issues" in row else []
     if not issues:
         issues = _decode_json_list(raw_output.get("issues"))
@@ -534,11 +666,190 @@ def _extract_qc_findings(row: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Lis
     return issues, eval_results
 
 
-async def _load_defect_annotations(record_id: str, content: str) -> Tuple[List[Dict[str, Any]], str]:
-    """读取最近一次质控结果的缺陷标注，返回 (标注列表, 状态)。"""
+def _extract_qc_result_ownership(row: Dict[str, Any]) -> Dict[str, str]:
+    """提取 qc_results 行的病例三键与任务归属（兼容列与 raw_output 嵌套字段）。"""
+    raw_output = _parse_raw_output(row)
+    nested_sources = [
+        src
+        for src in (
+            raw_output,
+            raw_output.get("record_ref"),
+            raw_output.get("case_identity"),
+            raw_output.get("case_ref"),
+        )
+        if isinstance(src, dict)
+    ]
+
+    def _pick(*keys: str) -> str:
+        for key in keys:
+            val = row.get(key)
+            if val is not None and str(val).strip():
+                return str(val).strip()
+        for src in nested_sources:
+            for key in keys:
+                val = src.get(key)
+                if val is not None and str(val).strip():
+                    return str(val).strip()
+        return ""
+
+    return {
+        "institute_id": _pick("institute_id"),
+        "patient_id": _pick("patient_id"),
+        "visit_id": _pick("visit_id", "record_id"),
+        "job_id": _pick("job_id", "batch_job_id", "root_job_id", "material_root_job_id"),
+    }
+
+
+def _row_matches_annotation_scope(
+    row: Dict[str, Any],
+    *,
+    expected_institute_id: str,
+    expected_patient_id: str,
+    expected_visit_id: str,
+    expected_job_ids: set[str],
+    require_job_binding: bool,
+) -> bool:
+    owner = _extract_qc_result_ownership(row)
+    if expected_institute_id:
+        if not owner["institute_id"] or owner["institute_id"] != expected_institute_id:
+            return False
+    if expected_patient_id:
+        if not owner["patient_id"] or owner["patient_id"] != expected_patient_id:
+            return False
+    if expected_visit_id:
+        if owner["visit_id"] and owner["visit_id"] != expected_visit_id:
+            return False
+    if require_job_binding:
+        if not expected_job_ids or not owner["job_id"] or owner["job_id"] not in expected_job_ids:
+            return False
+    return True
+
+
+def _build_annotations_from_findings(
+    content: str,
+    issues: List[Dict[str, Any]],
+    eval_results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    annotations: List[Dict[str, Any]] = []
+    for i, issue in enumerate(issues):
+        annotation = _build_annotation_from_issue(content, issue, i)
+        if annotation:
+            annotations.append(annotation)
+    for result in eval_results:
+        status_value = str(result.get("status") or "").strip().lower()
+        is_non_compliant = (
+            status_value in {"non_compliant", "confirmed_defect", "ai_suggested_non_compliant"}
+            or result.get("is_compliant") is False
+        )
+        if is_non_compliant:
+            annotation = _build_annotation_from_result(content, result, len(annotations))
+            if annotation:
+                annotations.append(annotation)
+    return annotations
+
+
+def _load_historical_envelope_annotations_sync(
+    *,
+    expected_job_ids: set[str],
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    content: str,
+) -> Optional[List[Dict[str, Any]]]:
+    """历史查看时，按原任务与病例三键读取对应的 Canonical Envelope 缺陷标注。"""
+    if not (expected_job_ids and institute_id and patient_id and visit_id):
+        return None
+    from ..database import connection as db_connection
+    from ..services.custom_qc_workspace_service import _record_result_envelopes_table
+
+    session_factory = getattr(db_connection, "SessionLocal", None)
+    if session_factory is None:
+        return None
+    table = _record_result_envelopes_table()
+    try:
+        with session_factory() as session:
+            stmt = (
+                select(table)
+                .where(
+                    and_(
+                        or_(
+                            table.c.root_job_id.in_(sorted(expected_job_ids)),
+                            table.c.job_id.in_(sorted(expected_job_ids)),
+                        ),
+                        table.c.institute_id == institute_id,
+                        table.c.patient_id == patient_id,
+                        table.c.visit_id == visit_id,
+                    )
+                )
+                .limit(2)
+            )
+            exec_options = {}
+            bind = session.get_bind()
+            if bind is not None and getattr(bind.dialect, "name", "") == "sqlite" and table.schema:
+                exec_options["schema_translate_map"] = {table.schema: None}
+            rows = (
+                session.execute(stmt, execution_options=exec_options)
+                .mappings()
+                .all()
+            )
+    except Exception:
+        return None
+    if len(rows) != 1:
+        return None
+    try:
+        envelope = json.loads(str(rows[0].get("envelope_json") or ""))
+    except ValueError:
+        return None
+    if not isinstance(envelope, dict):
+        return None
+    env_visit = str(envelope.get("visit_id") or envelope.get("record_id") or "").strip()
+    if env_visit and env_visit != visit_id:
+        return None
+    items = envelope.get("items")
+    if not isinstance(items, list):
+        return None
+    eval_results = [item for item in items if isinstance(item, dict)]
+    return _build_annotations_from_findings(content, [], eval_results)
+
+
+async def _load_defect_annotations(
+    record_id: str,
+    content: str,
+    *,
+    institute_id: str = "",
+    patient_id: str = "",
+    visit_id: str = "",
+    inst_scope: Optional[str] = None,
+    requested_job_id: str = "",
+    material_root_job_id: str = "",
+    is_historical_view: bool = False,
+) -> Tuple[List[Dict[str, Any]], str]:
+    """读取与当前病例三键（及历史任务/结果信封）严格绑定的质控缺陷标注，返回 (标注列表, 状态)。"""
     from ..database.clinical_connection import configured
     if configured():
         return [], "unavailable_for_source"
+
+    expected_institute_id = str(institute_id or inst_scope or "").strip()
+    expected_patient_id = str(patient_id or "").strip()
+    expected_visit_id = str(visit_id or record_id or "").strip()
+    expected_job_ids = {
+        val for val in (str(requested_job_id or "").strip(), str(material_root_job_id or "").strip()) if val
+    }
+
+    if is_historical_view:
+        if not (expected_job_ids and expected_institute_id and expected_patient_id and expected_visit_id):
+            return [], "no_result"
+        envelope_annotations = await run_in_threadpool(
+            _load_historical_envelope_annotations_sync,
+            expected_job_ids=expected_job_ids,
+            institute_id=expected_institute_id,
+            patient_id=expected_patient_id,
+            visit_id=expected_visit_id,
+            content=content,
+        )
+        if envelope_annotations is not None:
+            return envelope_annotations, "loaded"
+
     sb = get_supabase()
     if sb is None:
         return [], "unavailable"
@@ -549,25 +860,50 @@ async def _load_defect_annotations(record_id: str, content: str) -> Tuple[List[D
             .select("*")
             .eq("record_id", record_id)
             .order("created_at", desc=True)
-            .limit(1)
+            .limit(20)
         )
-    except Exception as exc:
-        logger.error("获取缺陷标注失败: record_id=%s error_type=%s", record_id, type(exc).__name__)
+    except Exception:
+        logger.error("获取缺陷标注失败: record_id=%s", record_id)
         return [], "unavailable"
     qc_data = list(getattr(qc_resp, "data", None) or [])
     if not qc_data:
         return [], "no_result"
-    issues, eval_results = _extract_qc_findings(qc_data[0])
-    annotations: List[Dict[str, Any]] = []
-    for i, issue in enumerate(issues):
-        annotation = _build_annotation_from_issue(content, issue, i)
-        if annotation:
-            annotations.append(annotation)
-    for result in eval_results:
-        if result.get("status") == "non_compliant" or not result.get("is_compliant", True):
-            annotation = _build_annotation_from_result(content, result, len(annotations))
-            if annotation:
-                annotations.append(annotation)
+
+    require_identity_proof = bool(
+        is_historical_view or expected_institute_id or expected_patient_id or inst_scope is not None
+    )
+    selected_row: Optional[Dict[str, Any]] = None
+    if require_identity_proof:
+        for row in qc_data:
+            if not isinstance(row, dict):
+                continue
+            if _row_matches_annotation_scope(
+                row,
+                expected_institute_id=expected_institute_id,
+                expected_patient_id=expected_patient_id,
+                expected_visit_id=expected_visit_id,
+                expected_job_ids=expected_job_ids,
+                require_job_binding=is_historical_view,
+            ):
+                selected_row = row
+                break
+        if selected_row is None:
+            # 无法证明归属当前病例三键或历史任务时，保留正文、省略该组标注。
+            return [], "no_result"
+    else:
+        distinct_owners = {
+            (owner["institute_id"], owner["patient_id"])
+            for row in qc_data
+            if isinstance(row, dict)
+            for owner in (_extract_qc_result_ownership(row),)
+            if owner["institute_id"] or owner["patient_id"]
+        }
+        if len(distinct_owners) > 1:
+            return [], "no_result"
+        selected_row = qc_data[0]
+
+    issues, eval_results = _extract_qc_findings(selected_row)
+    annotations = _build_annotations_from_findings(content, issues, eval_results)
     return annotations, "loaded"
 
 

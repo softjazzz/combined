@@ -88,9 +88,9 @@ def _client(monkeypatch, session_factory) -> TestClient:
     app = FastAPI()
     app.include_router(emr_router_module.router)
     app.dependency_overrides[get_current_user] = lambda: {
-        "id": "u-qc",
-        "roles": ["qc_manager"],
-        "role": "qc_manager",
+        "id": "u-admin",
+        "roles": ["admin"],
+        "role": "admin",
     }
     return TestClient(app)
 

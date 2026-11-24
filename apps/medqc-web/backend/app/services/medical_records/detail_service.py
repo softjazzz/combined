@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Literal, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import inspect as sa_inspect, select, text as sql_text
@@ -41,8 +41,16 @@ def _normalize_user_roles(current_user: Optional[dict[str, Any]]) -> set[str]:
     return roles
 
 
-def resolve_non_global_institute_scope(current_user: Optional[dict[str, Any]]) -> Optional[str]:
-    """为非全局角色解析持久 institute_id；全局角色返回 None，持久库优先于请求态字段。"""
+@dataclass(frozen=True)
+class ResolvedInstituteScope:
+    """显式区分三类账号机构范围：global（全局权限）、institute（仅本机构）、missing（机构缺失）。"""
+
+    kind: Literal["global", "institute", "missing"]
+    institute_id: Optional[str] = None
+
+
+def inspect_institute_scope(current_user: Optional[dict[str, Any]]) -> ResolvedInstituteScope:
+    """解析账号机构范围，严禁把未绑定机构的非全局账号混同为全局权限。"""
     from ...database import connection as db_connection
     from ..defect_rectification_service import RectificationError, _person
 
@@ -55,11 +63,11 @@ def resolve_non_global_institute_scope(current_user: Optional[dict[str, Any]]) -
             with session_factory() as session:
                 person = _person(session, actor_id)
             if person["roles"] & _GLOBAL_INSTITUTE_ROLES:
-                return None
+                return ResolvedInstituteScope(kind="global", institute_id=None)
             inst = person.get("institute_id")
             if isinstance(inst, str) and inst.strip() and inst == inst.strip():
-                return inst
-            return None
+                return ResolvedInstituteScope(kind="institute", institute_id=inst)
+            return ResolvedInstituteScope(kind="missing", institute_id=None)
         except RectificationError:
             # 单元测试未写入 sys_users 时的兼容回退：继续检查调用方主体。
             pass
@@ -72,11 +80,21 @@ def resolve_non_global_institute_scope(current_user: Optional[dict[str, Any]]) -
 
     roles = _normalize_user_roles(current_user)
     if roles & _GLOBAL_INSTITUTE_ROLES:
-        return None
+        return ResolvedInstituteScope(kind="global", institute_id=None)
     fallback_inst = (current_user or {}).get("institute_id")
     if isinstance(fallback_inst, str) and fallback_inst.strip() and fallback_inst == fallback_inst.strip():
-        return fallback_inst
-    return None
+        return ResolvedInstituteScope(kind="institute", institute_id=fallback_inst)
+    return ResolvedInstituteScope(kind="missing", institute_id=None)
+
+
+def resolve_non_global_institute_scope(current_user: Optional[dict[str, Any]]) -> Optional[str]:
+    """为非全局角色解析持久 institute_id；仅全局角色返回 None，非全局机构缺失直接 fail-closed 403。"""
+    resolved = inspect_institute_scope(current_user)
+    if resolved.kind == "global":
+        return None
+    if resolved.kind == "institute" and resolved.institute_id:
+        return resolved.institute_id
+    raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
 
 
 def enforce_institute_access(

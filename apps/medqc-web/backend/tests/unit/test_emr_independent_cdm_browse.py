@@ -35,7 +35,9 @@ def browse(monkeypatch):
     monkeypatch.setattr(router, "load_bundle_document", lambda **_: None)
     app = FastAPI()
     app.include_router(router.router)
-    app.dependency_overrides[get_current_user] = lambda: dict(id="test", roles=["qc_manager"])
+    app.dependency_overrides[get_current_user] = lambda: dict(
+        id="test", roles=["qc_manager"], institute_id=IDENTITY["institute_id"]
+    )
     return TestClient(app), calls
 
 

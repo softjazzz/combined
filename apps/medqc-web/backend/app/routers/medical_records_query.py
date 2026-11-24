@@ -14,8 +14,8 @@ from ..services.case_identity import CaseRef
 from ..services.doctor_case_scope import get_doctor_case_scope
 from ..services.medical_records.detail_service import (
     InstituteCaseScope,
+    inspect_institute_scope,
     list_departments_for_institute,
-    resolve_non_global_institute_scope,
 )
 from ..services.medical_records.query_service import (
     get_departments,
@@ -35,10 +35,12 @@ def _effective_case_scope(request: Request, current_user: Optional[Dict[str, Any
     doctor_scope = get_doctor_case_scope(request)
     if doctor_scope is not None:
         return doctor_scope
-    institute_scope = resolve_non_global_institute_scope(current_user)
-    if institute_scope is not None:
-        return InstituteCaseScope(institute_scope)
-    return None
+    resolved = inspect_institute_scope(current_user)
+    if resolved.kind == "global":
+        return None
+    if resolved.kind == "institute" and resolved.institute_id:
+        return InstituteCaseScope(resolved.institute_id)
+    raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
 
 
 @router.post("/workstation/hospitalization-status/verify")
@@ -106,10 +108,12 @@ async def get_departments_api(
         doctor_scope = get_doctor_case_scope(request)
         if doctor_scope is not None:
             return get_departments(case_scope=doctor_scope)
-        institute_scope = resolve_non_global_institute_scope(current_user)
-        if institute_scope is not None:
-            return list_departments_for_institute(institute_scope)
-        return get_departments(case_scope=None)
+        resolved = inspect_institute_scope(current_user)
+        if resolved.kind == "global":
+            return get_departments(case_scope=None)
+        if resolved.kind == "institute" and resolved.institute_id:
+            return list_departments_for_institute(resolved.institute_id)
+        raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
