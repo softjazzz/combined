@@ -1,10 +1,14 @@
 import { defineComponent, h } from 'vue'
-import { shallowMount } from '@vue/test-utils'
+import { flushPromises, mount, shallowMount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import { message } from 'ant-design-vue'
+import * as currentMedicalRecordService from '@/services/current-medical-record'
 import * as sichuanService from '@/services/sichuan-rule-workspace-service'
+import CurrentMedicalRecordDrawer from '@/views/workstation-v4/components/CurrentMedicalRecordDrawer.vue'
 import WorkstationV4ListView from '@/views/workstation-v4/components/WorkstationV4ListView.vue'
+import BatchTablePanel from '@/views/workstation-v4/components/workbench/BatchTablePanel.vue'
+import RecordPoolPreviewPanel from '@/views/workstation-v4/components/workbench/RecordPoolPreviewPanel.vue'
 import { resolveResultPresentation } from '@/views/workstation-v4/components/qc/latestQcSummaryPresentation'
 import {
   runRecordPoolFilterQc,
@@ -802,6 +806,248 @@ describe('P0-1, P0-3, P0-4 & confirmedOnly contract regressions', () => {
       loadingSpy.mockRestore()
       successSpy.mockRestore()
       errorSpy.mockRestore()
+    }
+  })
+})
+
+describe('Record pool UI polish, loading UX & accessibility regressions', () => {
+  it('renders the record-pool heading as h1 with accessible aria-labels on search and select controls', () => {
+    const wrapper = mountListView()
+    const title = wrapper.get('#workstation-list-overview-title')
+    expect(title.element.tagName).toBe('H1')
+    expect(title.classes()).toContain('wv4-analysis-overview__title')
+    expect(title.classes()).toContain('mq-page-title')
+
+    expect(wrapper.get('.workbench-controls__search-input').attributes('aria-label')).toBe(
+      '搜索患者、住院号、科室',
+    )
+    expect(wrapper.get('select.workbench-dept-select').attributes('aria-label')).toBe('科室筛选')
+    expect(wrapper.get('select.workbench-doctor-select').attributes('aria-label')).toBe(
+      '主管医师筛选',
+    )
+    expect(wrapper.get('select.workbench-hosp-segmented').attributes('aria-label')).toBe('住院状态')
+  })
+
+  it('provides a retry button on the qcSummary unavailable alert that emits refresh', async () => {
+    const wrapper = mountListView({ loadError: false, qcSummaryState: 'unavailable' })
+    const alert = wrapper.get('[role="alert"]')
+    expect(alert.classes()).toContain('wv4-list__status-alert')
+    expect(alert.classes()).toContain('wv4-list__status-alert--warning')
+
+    const retryBtn = wrapper.get('[data-testid="retry-qc-summary"]')
+    expect(retryBtn.text()).toBe('重试')
+    await retryBtn.trigger('click')
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+  })
+
+  it('shows title tooltips and crisp loading copy on RecordPoolPreviewPanel', () => {
+    const wrapper = mount(RecordPoolPreviewPanel, {
+      props: {
+        row: {
+          id: 'r-1',
+          recordKey: 'k-1',
+          patientName: '欧阳非常长患者姓名',
+          visitId: 'VISIT_2026_VERY_LONG_0001',
+          department: '心血管内科',
+          stageStatus: '待处理',
+          riskReason: '',
+          updatedAt: '2026-08-08',
+          isDemo: false,
+        },
+        qcLoading: true,
+      },
+    })
+
+    expect(wrapper.get('.pool-preview__name').attributes('title')).toBe('欧阳非常长患者姓名')
+    expect(wrapper.get('.pool-preview__visit').attributes('title')).toBe(
+      '住院号 VISIT_2026_VERY_LONG_0001',
+    )
+    const qcButton = wrapper.get('[data-testid="record-pool-preview-qc"]')
+    expect(qcButton.text()).toContain('创建中…')
+    expect(qcButton.attributes('disabled')).toBeDefined()
+    expect(qcButton.attributes('aria-busy')).toBe('true')
+  })
+
+  it('supports keyboard Enter/Space row preview selection, aria-current, non-focusable visit id, and crisp loading copy in BatchTablePanel', () => {
+    const TableStub = defineComponent({
+      name: 'ATable',
+      props: {
+        columns: { type: Array, default: () => [] },
+        dataSource: { type: Array, default: () => [] },
+      },
+      setup(props, { slots }) {
+        return () =>
+          h(
+            'div',
+            { 'data-testid': 'table-stub' },
+            (props.dataSource as Record<string, unknown>[]).flatMap((record) =>
+              (props.columns as Array<Record<string, unknown>>).map((column) =>
+                h('div', { 'data-column': String(column.key || '') }, [
+                  slots.bodyCell?.({ column, record }),
+                ]),
+              ),
+            ),
+          )
+      },
+    })
+
+    const wrapper = mount(BatchTablePanel, {
+      props: {
+        rows: [
+          {
+            id: 'r-1',
+            recordKey: 'key-1',
+            patientName: '患者甲',
+            visitId: 'V-1',
+            department: '内科',
+            stageStatus: '待处理',
+            riskReason: '',
+            updatedAt: '2026-08-08',
+            isDemo: false,
+          },
+          {
+            id: 'r-2',
+            recordKey: 'key-2',
+            patientName: '患者乙',
+            visitId: 'V-2',
+            department: '外科',
+            stageStatus: '待处理',
+            riskReason: '',
+            updatedAt: '2026-08-08',
+            isDemo: false,
+          },
+        ],
+        selectedRowKeys: ['key-1'],
+        summaryText: '',
+        recordPoolMode: true,
+        activeRowKey: 'key-1',
+        showPrimaryAction: true,
+        primaryActionLabel: '质控所选（1）',
+        primaryActionLoading: true,
+        showFilterQcAction: true,
+        filterQcCount: 19,
+        filterQcLoading: true,
+      },
+      global: {
+        stubs: {
+          ATable: TableStub,
+          AButton: passthroughStub('AButton', 'button'),
+          APopconfirm: passthroughStub('APopconfirm'),
+        },
+      },
+    })
+
+    expect(wrapper.get('.batch-table-panel__visit-id').attributes('tabindex')).toBeUndefined()
+    expect(wrapper.get('.batch-table-panel__action--primary').text()).toBe('创建中…')
+    expect(wrapper.get('[data-testid="filter-qc-action"]').text()).toBe('创建中…')
+
+    const table = wrapper.getComponent({ name: 'ATable' })
+    const customRow = (table.vm.$attrs['custom-row'] ?? table.vm.$attrs.customRow) as (
+      record: Record<string, unknown>,
+    ) => {
+      tabindex?: number
+      'aria-current'?: string
+      onKeydown?: (event: KeyboardEvent) => void
+    }
+
+    const activeRowAttrs = customRow({ id: 'r-1', recordKey: 'key-1' })
+    const inactiveRowAttrs = customRow({ id: 'r-2', recordKey: 'key-2' })
+    expect(activeRowAttrs.tabindex).toBe(0)
+    expect(activeRowAttrs['aria-current']).toBe('true')
+    expect(inactiveRowAttrs.tabindex).toBe(0)
+    expect(inactiveRowAttrs['aria-current']).toBeUndefined()
+
+    const rowEl = document.createElement('tr')
+    const preventDefault = vi.fn()
+    inactiveRowAttrs.onKeydown?.({
+      key: 'Enter',
+      target: rowEl,
+      currentTarget: rowEl,
+      preventDefault,
+    } as unknown as KeyboardEvent)
+    inactiveRowAttrs.onKeydown?.({
+      key: ' ',
+      target: rowEl,
+      currentTarget: rowEl,
+      preventDefault,
+    } as unknown as KeyboardEvent)
+    const buttonEl = document.createElement('button')
+    inactiveRowAttrs.onKeydown?.({
+      key: 'Enter',
+      target: buttonEl,
+      currentTarget: rowEl,
+      preventDefault,
+    } as unknown as KeyboardEvent)
+
+    expect(preventDefault).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('select-row')).toEqual([['key-2'], ['key-2']])
+  })
+
+  it('retries loading documents from CurrentMedicalRecordDrawer error alert', async () => {
+    vi.useFakeTimers()
+    const loadSpy = vi
+      .spyOn(currentMedicalRecordService, 'loadCurrentMedicalRecord')
+      .mockResolvedValueOnce({ success: false, message: '读取超时', errorType: 'timeout' })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { documents: [], caseKey: '["H-1","P-1","V-1"]' } as never,
+      })
+
+    try {
+      const wrapper = mount(CurrentMedicalRecordDrawer, {
+        props: {
+          record: {
+            id: 'V-1',
+            visitId: 'V-1',
+            instituteId: 'H-1',
+            patientId: 'P-1',
+            bedNo: '',
+            name: '患者甲',
+            sex: '女',
+            age: 40,
+            insurance: '',
+            department: '内科',
+            admissionDate: '2026-08-01',
+            dischargeDate: '2026-08-08',
+            days: 7,
+            diagnosis: '',
+            diagnosisCode: '',
+            doctor: '',
+            status: 'pending',
+          },
+        },
+        global: {
+          stubs: {
+            ADrawer: passthroughStub('ADrawer'),
+            QCRecordCompareWorkbench: defineComponent({
+              name: 'QCRecordCompareWorkbench',
+              setup() {
+                return () => h('div', { 'data-testid': 'drawer-workbench' })
+              },
+            }),
+            ReadonlyMedicalRecordHeader: true,
+            RecordViewCloseIcon: true,
+            HospitalLoading: true,
+          },
+        },
+      })
+
+      await flushPromises()
+      await vi.runAllTimersAsync()
+      await flushPromises()
+      expect(wrapper.find('.current-medical-record-drawer__error').exists()).toBe(true)
+      const retryBtn = wrapper.get('[data-testid="retry-current-medical-record"]')
+      await retryBtn.trigger('click')
+      await flushPromises()
+      await vi.runAllTimersAsync()
+      await flushPromises()
+
+      expect(loadSpy).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('[data-testid="drawer-workbench"]').exists()).toBe(true)
+      wrapper.unmount()
+    } finally {
+      loadSpy.mockRestore()
+      vi.useRealTimers()
     }
   })
 })

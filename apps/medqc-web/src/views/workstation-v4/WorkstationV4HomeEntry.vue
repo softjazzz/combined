@@ -31,7 +31,6 @@ const showHome = computed(() => !hasLaunchQuery.value && !hasAnalyticsDrilldown.
 <style scoped>
 .wv4-home-entry {
   position: relative;
-  min-height: 100vh;
   color: var(--mq-text-primary);
   font-family: var(--mq-font-family);
 }

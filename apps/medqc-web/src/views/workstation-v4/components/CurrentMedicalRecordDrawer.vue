@@ -14,7 +14,24 @@
       <ReadonlyMedicalRecordHeader :context="recordContext" />
     </template>
     <HospitalLoading v-if="showLoading" label="正在读取病历文书" fill />
-    <Alert v-else-if="loadError" type="error" show-icon :message="loadError" />
+    <div v-else-if="loadError" class="current-medical-record-drawer__error">
+      <Alert
+        type="error"
+        class="current-medical-record-drawer__alert"
+        show-icon
+        :message="loadError"
+      >
+        <template #action>
+          <Button
+            size="small"
+            data-testid="retry-current-medical-record"
+            @click="retryLoad"
+          >
+            重试
+          </Button>
+        </template>
+      </Alert>
+    </div>
     <QCRecordCompareWorkbench
       v-else
       :provided-documents="documents"
@@ -34,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { Alert, Drawer } from 'ant-design-vue'
+import { Alert, Button, Drawer } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import { useMinimumLoading } from '@/composables/useMinimumLoading'
@@ -52,6 +69,11 @@ const documents = ref<EditableMedicalRecordDocument[]>([])
 const loading = ref(false)
 const showLoading = useMinimumLoading(() => loading.value, () => Boolean(props.record))
 const loadError = ref('')
+const loadAttempt = ref(0)
+
+function retryLoad() {
+  loadAttempt.value += 1
+}
 const recordKey = computed(() => {
   const record = props.record
   return buildCaseRecordKey(record?.instituteId, record?.patientId, record?.visitId)
@@ -70,8 +92,8 @@ const recordContext = computed(() => {
 })
 
 watch(
-  () => props.record,
-  async (record, _, onCleanup) => {
+  [() => props.record, loadAttempt],
+  async ([record], _, onCleanup) => {
     let active = true
     onCleanup(() => { active = false })
     documents.value = []
@@ -94,6 +116,16 @@ watch(
 </script>
 
 <style scoped>
+.current-medical-record-drawer__error {
+  padding: 4px 20px 20px;
+}
+
+.current-medical-record-drawer__alert {
+  border-radius: 14px;
+  border-color: rgba(224, 38, 58, 0.22);
+  background: rgba(255, 255, 255, 0.88);
+}
+
 :global(.current-medical-record-drawer .ant-drawer-content) {
   background: var(--mq-bg-mesh);
 }

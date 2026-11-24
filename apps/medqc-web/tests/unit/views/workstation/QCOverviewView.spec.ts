@@ -860,9 +860,202 @@ describe('QCOverviewView', () => {
     await select.setValue('呼吸内科')
     await flushHomeLoad()
     expect(wrapper.find('[data-testid="home-load-error"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-load-error"]').attributes('role')).toBe('alert')
     expect(wrapper.find('.qc-home-toolbar').exists()).toBe(true)
     expect((wrapper.get('select[aria-label="统计科室"]').element as HTMLSelectElement).value).toBe(
       '呼吸内科',
     )
+  })
+
+  it('不嵌套 main 标签，移除 KPI 水印并对零值 KPI 完全中性化', async () => {
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          kpis: {
+            records_total: 18,
+            qc_pending_total: 0,
+            qc_completed_total: 18,
+            high_risk_review_total: 0,
+          },
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    expect(wrapper.find('main.mq-page').exists()).toBe(false)
+    expect(wrapper.find('div.mq-page').exists()).toBe(true)
+    expect(wrapper.find('.qc-home-metric__watermark').exists()).toBe(false)
+
+    const riskCard = wrapper.get('.qc-home-metric--risk')
+    expect(riskCard.classes()).toContain('is-zero')
+    expect(riskCard.get('mq-icon-tile-stub').attributes('tone')).toBe('neutral')
+  })
+
+  it('支持再次点击已选中科室取消筛选，并正确设置 aria-pressed、is-physician、title 与 aria-hidden', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const deptBtn = wrapper.get('[data-testid="analysis-object-department"]')
+    const physBtn = wrapper.get('[data-testid="analysis-object-physician"]')
+    expect(deptBtn.attributes('aria-pressed')).toBe('true')
+    expect(physBtn.attributes('aria-pressed')).toBe('false')
+
+    const row = wrapper.get('[data-testid="defect-analysis-row"]')
+    expect(row.attributes('aria-pressed')).toBe('false')
+    expect(row.get('.qc-home-defect-analysis__meta strong').attributes('title')).toBe('神经外科')
+    expect(row.get('.qc-home-defect-analysis__metric').attributes('aria-hidden')).toBeUndefined()
+    expect(row.get('.qc-home-defect-analysis__track').attributes('aria-hidden')).toBe('true')
+
+    await row.trigger('click')
+    await flushHomeLoad()
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').classes()).toContain('is-active')
+
+    // 再次点击已选中科室，切换回全部科室
+    apiGet.mockClear()
+    await wrapper.get('[data-testid="defect-analysis-row"]').trigger('click')
+    await flushHomeLoad()
+    expect(apiGet).toHaveBeenCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({ department: undefined }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').attributes('aria-pressed')).toBe('false')
+
+    await physBtn.trigger('click')
+    await nextTick()
+    expect(physBtn.attributes('aria-pressed')).toBe('true')
+    expect(wrapper.findAll('[data-testid="defect-analysis-row"]')[0].classes()).toContain('is-physician')
+  })
+
+  it('平均缺陷数小于 1 时按实际最大值满幅缩放，且非零进度条标记 is-nonzero', async () => {
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          department_distribution: [
+            {
+              department: '心内科',
+              records_total: 10,
+              completed_record_total: 10,
+              high_risk_review_total: 2,
+              data_gap_record_total: 0,
+              uncertain_record_total: 0,
+              defect_total: 4,
+              average_defect_count: 0.4,
+            },
+            {
+              department: '呼吸内科',
+              records_total: 10,
+              completed_record_total: 10,
+              high_risk_review_total: 1,
+              data_gap_record_total: 0,
+              uncertain_record_total: 0,
+              defect_total: 1,
+              average_defect_count: 0.1,
+            },
+            {
+              department: '骨科',
+              records_total: 10,
+              completed_record_total: 10,
+              high_risk_review_total: 0,
+              data_gap_record_total: 0,
+              uncertain_record_total: 0,
+              defect_total: 0,
+              average_defect_count: 0,
+            },
+          ],
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    await wrapper.get('[data-testid="analysis-metric"]').setValue('average')
+    await nextTick()
+
+    const bars = wrapper.findAll('.qc-home-defect-analysis__track i')
+    expect(bars[0].attributes('style')).toContain('width: 100%')
+    expect(bars[0].classes()).toContain('is-nonzero')
+    expect(bars[1].attributes('style')).toContain('width: 25%')
+    expect(bars[1].classes()).toContain('is-nonzero')
+    expect(bars[2].attributes('style')).toContain('width: 0%')
+    expect(bars[2].classes()).not.toContain('is-nonzero')
+  })
+
+  it('使用 SVG 圆环展示结论结构，百分比严格归一化至 100%，极小非零切片保留最小可见弧长，并反映部分失败态', async () => {
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          kpis: {
+            ...clinicalQcPayload.clinical_qc.kpis,
+            qc_partial_failed_total: 2,
+          },
+          canonical_status_counts: {
+            non_compliant: 1,
+            data_gap: 1,
+            compliant: 1000,
+          },
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const ring = wrapper.get('.qc-home-conclusion__ring')
+    expect(ring.attributes('role')).toBe('img')
+    expect(ring.attributes('aria-label')).toContain('含未全部完成病历')
+    expect(ring.find('svg.qc-home-conclusion__svg').exists()).toBe(true)
+
+    const circles = ring.findAll('svg.qc-home-conclusion__svg circle')
+    // 1 背景轨 + 3 切片弧
+    expect(circles).toHaveLength(4)
+    const firstDash = Number(circles[1].attributes('stroke-dasharray')?.split(' ')[0] || 0)
+    expect(firstDash).toBeGreaterThanOrEqual(6)
+
+    const percents = wrapper
+      .findAll('.qc-home-conclusion__percent')
+      .map((node) => Number(node.text().replace('%', '')))
+    const sumTenths = percents.reduce((acc, pct) => acc + Math.round(pct * 10), 0)
+    expect(sumTenths).toBe(1000)
+  })
+
+  it('当 records_total 为 0 时渲染清晰空态提示，并将关键词与清除按钮包裹为同一不拆行分组', async () => {
+    routeState.query = { keyword: '罕见病历关键字' }
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          kpis: {
+            records_total: 0,
+            qc_pending_total: 0,
+            qc_completed_total: 0,
+            high_risk_review_total: 0,
+          },
+          canonical_status_counts: {},
+          department_distribution: [],
+          physician_distribution: [],
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    expect(wrapper.find('[data-testid="home-zero-records"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-zero-records"]').text()).toContain('当前筛选范围内暂无纳入病历')
+    const keywordGroup = wrapper.get('.qc-home-toolbar__keyword-group')
+    expect(keywordGroup.find('.qc-home-toolbar__keyword').attributes('title')).toBe('关键词：罕见病历关键字')
+    expect(keywordGroup.find('[aria-label="清除关键词"]').exists()).toBe(true)
   })
 })

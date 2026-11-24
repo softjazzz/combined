@@ -53,7 +53,7 @@
             :disabled="selectedRowKeys.length === 0 || readonly || primaryActionLoading"
             @click="emit('batch-extract', selectedRowKeys)"
           >
-            {{ primaryActionLabel }}
+            {{ primaryActionLoading && recordPoolMode ? '创建中…' : primaryActionLabel }}
           </a-button>
           <a-popconfirm
             v-if="showFilterQcAction"
@@ -70,7 +70,7 @@
               :loading="filterQcLoading"
               :disabled="filterQcDisabled"
             >
-              质控当前筛选（{{ filterQcCount }}）
+              {{ filterQcLoading ? '创建中…' : `质控当前筛选（${filterQcCount}）` }}
             </a-button>
           </a-popconfirm>
           <a-button
@@ -152,7 +152,6 @@
                 <span
                   class="batch-table-panel__visit-id"
                   :title="record.visitId"
-                  :tabindex="recordPoolMode ? 0 : undefined"
                 >
                   {{ record.visitId }}
                 </span>
@@ -473,12 +472,12 @@ function tableHospitalDate(value?: string) {
 // 患者列不再独占剩余空间，日期列保留完整日期与时间的两行宽度。
 const recordPoolColumns = [
   { title: '患者 / 住院号', key: 'patient', dataIndex: 'patient', width: '24%' },
-  { title: '科室', key: 'department', dataIndex: 'department', width: '22%', ellipsis: true },
+  { title: '科室', key: 'department', dataIndex: 'department', width: '21%', ellipsis: true },
   {
     title: '住院状态',
     key: 'hospitalizationStatus',
     dataIndex: 'hospitalizationStatus',
-    width: '12%',
+    width: '13%',
   },
   { title: '入院日期', key: 'admissionDate', dataIndex: 'admissionDate', width: '16%' },
   { title: '出院日期', key: 'dischargeDate', dataIndex: 'dischargeDate', width: '16%' },
@@ -487,16 +486,29 @@ const recordPoolColumns = [
 
 const columns = computed(() => (recordPoolMode.value ? recordPoolColumns : stageColumns))
 
-// 病历池模式：点击行（非按钮/勾选框）只切换右侧预览，查看详情仍走“查看”按钮
+// 病历池模式：点击或键盘 Enter/Space 选中行（非按钮/勾选框）只切换右侧预览，查看详情仍走“查看”按钮
 const INTERACTIVE_SELECTOR = 'button, a, input, label, .ant-checkbox-wrapper, [role="button"]'
 
 function buildCustomRow(record: WorkbenchRow) {
   if (!props.recordPoolMode) return {}
+  const key = record.recordKey || record.id
+  const active = Boolean(props.activeRowKey && props.activeRowKey === key)
   return {
+    tabindex: 0,
+    'aria-current': active ? ('true' as const) : undefined,
     onClick: (event: MouseEvent) => {
       const target = event.target as HTMLElement | null
       if (target?.closest(INTERACTIVE_SELECTOR)) return
-      emit('select-row', record.recordKey || record.id)
+      emit('select-row', key)
+    },
+    onKeydown: (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return
+      const target = event.target as HTMLElement | null
+      if (target && target !== event.currentTarget && target.closest(INTERACTIVE_SELECTOR)) return
+      if (event.key === ' ' || event.key === 'Spacebar') {
+        event.preventDefault()
+      }
+      emit('select-row', key)
     },
   }
 }
@@ -567,10 +579,10 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel__action {
-  height: 34px !important;
-  border-radius: 9px !important;
-  padding: 0 16px !important;
-  font-weight: 700 !important;
+  height: 36px !important;
+  border-radius: 10px !important;
+  padding: 0 14px !important;
+  font-weight: 500 !important;
   transition:
     box-shadow 160ms ease,
     border-color 160ms ease,
@@ -592,9 +604,9 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel__action--secondary {
-  border-color: transparent !important;
-  background: transparent !important;
-  color: var(--mq-text-secondary) !important;
+  border: 1px solid rgba(20, 40, 80, 0.12) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--mq-text-primary) !important;
   box-shadow: none !important;
 }
 
@@ -608,7 +620,12 @@ function rowClassName(record: WorkbenchRow): string {
     0 8px 16px rgba(191, 207, 228, 0.12) !important;
 }
 
-.batch-table-panel__action--secondary:hover,
+.batch-table-panel__action--secondary:hover:not(:disabled) {
+  border-color: rgba(10, 108, 255, 0.32) !important;
+  background: rgba(10, 108, 255, 0.05) !important;
+  color: var(--mq-brand-700) !important;
+}
+
 .batch-table-panel__action--ghost:hover,
 .batch-table-panel__detail-button:hover {
   border-color: transparent !important;
@@ -713,26 +730,26 @@ function rowClassName(record: WorkbenchRow): string {
   justify-content: center;
   min-width: 48px;
   border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 16px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .batch-table-panel__hospitalization-status--inpatient {
-  background: rgba(10, 108, 255, 0.1);
-  color: var(--mq-brand-700);
+  background: var(--mq-info-bg);
+  color: var(--mq-info-text);
 }
 
 .batch-table-panel__hospitalization-status--discharged {
-  background: rgba(22, 163, 74, 0.1);
-  color: #15803d;
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
 }
 
 .batch-table-panel__hospitalization-status--unknown {
-  border-color: rgba(203, 213, 225, 0.9);
-  background: rgba(248, 250, 252, 0.96);
-  color: #64748b;
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
 }
 
 .batch-table-panel__date-pair {
@@ -964,10 +981,10 @@ function rowClassName(record: WorkbenchRow): string {
 }
 
 .batch-table-panel--record-pool :deep(.ant-table-tbody > tr:hover > td) {
-  background: #f7faff;
+  background: rgba(10, 108, 255, 0.04);
 }
 
 .batch-table-panel--record-pool :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: var(--mq-brand-tint-6);
+  background: rgba(10, 108, 255, 0.085);
 }
 </style>

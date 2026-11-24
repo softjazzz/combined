@@ -262,4 +262,31 @@ describe('QCOverviewView performance & race guards', () => {
     expect(wrapper.get('[data-testid="data-health"]').text()).toContain('2026-08-08 09:20')
     wrapper.unmount()
   })
+
+  it('keeps dashboard visible with .is-refreshing during in-place refresh instead of flashing home-loading', async () => {
+    const refreshDeferred = deferred<ReturnType<typeof makeHomePayload>>()
+    apiGetMock
+      .mockResolvedValueOnce(makeHomePayload(12))
+      .mockReturnValueOnce(refreshDeferred.promise)
+
+    const wrapper = mountOverview()
+    // Cold load renders centered home-loading
+    expect(wrapper.find('[data-testid="home-loading"]').exists()).toBe(true)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-overview"]').exists()).toBe(true)
+
+    // Subsequent department change keeps dashboard mounted and marks .is-refreshing
+    await wrapper.get('select.qc-home-department').setValue('心内科')
+    expect(wrapper.find('[data-testid="home-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-overview"]').exists()).toBe(true)
+    expect(wrapper.get('.qc-home-body').classes()).toContain('is-refreshing')
+    expect(wrapper.get('[aria-label="刷新首页数据"]').classes()).toContain('is-refreshing')
+
+    refreshDeferred.resolve(makeHomePayload(7, { department: '心内科' }))
+    await flushPromises()
+    expect(wrapper.get('.qc-home-body').classes()).not.toContain('is-refreshing')
+    expect(wrapper.text()).toContain('7')
+    wrapper.unmount()
+  })
 })

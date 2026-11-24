@@ -1,5 +1,5 @@
 <template>
-  <main class="qc-record-result-list-view running-qc-refined running-qc-apple">
+  <div class="qc-record-result-list-view running-qc-refined running-qc-apple">
     <!-- 页头：眉标 + 大标题；右侧视图切换与“质控所选” -->
     <section class="qc-record-result-list-view__header mq-page-head">
       <div class="mq-page-head__copy">
@@ -111,11 +111,11 @@
           aria-label="病历筛选条件"
         >
           <div
-            class="qc-record-result-list-view__filter-field"
+            class="qc-record-result-list-view__filter-field qc-record-result-list-view__source-field"
             aria-label="病历数据源"
           >
             <span class="qc-record-result-list-view__field-label">数据源</span>
-            <span>东华CDM</span>
+            <span class="qc-record-result-list-view__source-badge">东华CDM</span>
           </div>
           <div class="qc-record-result-list-view__filter-field">
             <span class="qc-record-result-list-view__field-label">关键词</span>
@@ -183,8 +183,10 @@
           <div
             class="qc-record-result-list-view__export-menu"
             @focusout="handleExportMenuFocusOut"
+            @keydown.esc="closeExportMenu"
           >
             <button
+              ref="exportTriggerRef"
               class="qc-record-result-list-view__export-trigger"
               type="button"
               data-testid="qc-result-export-trigger"
@@ -192,7 +194,6 @@
               :aria-expanded="exportMenuOpen"
               aria-haspopup="menu"
               @click="exportMenuOpen = !exportMenuOpen"
-              @keydown.esc="exportMenuOpen = false"
             >
               <Download
                 :size="15"
@@ -366,7 +367,7 @@
       :load-job-metadata="!route.path?.startsWith('/workstation-v5/')"
       @close="closeResultDrawer"
     />
-  </main>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -427,6 +428,7 @@ const noticeTone = computed<'info' | 'error'>(() =>
 )
 const exporting = ref(false)
 const exportMenuOpen = ref(false)
+const exportTriggerRef = ref<HTMLButtonElement | null>(null)
 const drawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
 const selectedRecordKeys = ref<string[]>([])
@@ -705,6 +707,12 @@ function refreshAfterSelectedQc() {
   previewRefreshKey.value += 1
   analysisRefreshKey.value += 1
   refreshData()
+}
+
+function closeExportMenu() {
+  if (!exportMenuOpen.value) return
+  exportMenuOpen.value = false
+  exportTriggerRef.value?.focus()
 }
 
 function handleExportMenuFocusOut(event: FocusEvent) {
@@ -1114,6 +1122,7 @@ function closeResultDrawer() {
   z-index: 20;
   top: calc(100% + 8px);
   right: 0;
+  left: auto;
   display: grid;
   min-width: 246px;
   overflow: hidden;
@@ -1273,12 +1282,12 @@ function closeResultDrawer() {
   }
 
   .qc-record-result-list-view__toolbar-actions {
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .qc-record-result-list-view__export-options {
-    right: auto;
-    left: 0;
+    right: 0;
+    left: auto;
   }
 
   .qc-record-result-list-view__pagination {

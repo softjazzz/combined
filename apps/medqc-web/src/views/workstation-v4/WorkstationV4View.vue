@@ -1,5 +1,8 @@
 <template>
-  <div class="workstation-shell relative h-full flex overflow-hidden">
+  <div
+    class="workstation-shell relative flex"
+    :class="viewMode === 'list' ? 'workstation-shell--list min-h-full' : 'h-full overflow-hidden'"
+  >
     <!-- ====== 列表模式 ====== -->
     <template v-if="viewMode === 'list'">
       <WorkstationV4ListView
@@ -557,8 +560,8 @@ const displayDepartments = computed(() =>
   isAggregatedStageMode.value ? stageDepartments.value : departments.value,
 )
 
-const displayLoading = computed(
-  () => (isAggregatedStageMode.value ? stageLoading.value : loading.value) || batchExtracting.value,
+const displayLoading = computed(() =>
+  isAggregatedStageMode.value ? stageLoading.value : loading.value,
 )
 
 const displayServerTotal = computed(() =>

@@ -1,6 +1,6 @@
 <template>
   <div class="qc-home-shell">
-    <main class="mq-page">
+    <div class="mq-page">
       <!-- 页头：眉标一行写清范围（纯文字，不做胶囊）；右侧工具栏只留科室筛选与刷新 -->
       <header
         class="mq-page-head"
@@ -16,8 +16,14 @@
           v-if="clinicalQc || loadError || departmentFilter !== 'all' || keyword.trim()"
           class="qc-home-toolbar"
         >
-          <template v-if="keyword.trim()">
-            <span class="qc-home-toolbar__keyword">关键词：{{ keyword.trim() }}</span>
+          <span
+            v-if="keyword.trim()"
+            class="qc-home-toolbar__keyword-group"
+          >
+            <span
+              class="qc-home-toolbar__keyword"
+              :title="`关键词：${keyword.trim()}`"
+            >关键词：{{ keyword.trim() }}</span>
             <button
               type="button"
               class="qc-home-toolbar__clear"
@@ -26,7 +32,7 @@
             >
               清除
             </button>
-          </template>
+          </span>
           <label class="qc-home-pulldown qc-home-pulldown--bordered">
             <select
               v-model="departmentFilter"
@@ -57,12 +63,19 @@
             ><path d="m6 9 6 6 6-6" /></svg>
           </label>
           <span
-            v-if="clinicalQc"
+            v-if="isRefreshing"
+            class="qc-home-toolbar__refreshing"
+            role="status"
+            aria-live="polite"
+          >更新中…</span>
+          <span
+            v-else-if="clinicalQc"
             class="qc-home-toolbar__time"
           >生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
           <button
             type="button"
             class="qc-home-icon-button"
+            :class="{ 'is-refreshing': isRefreshing }"
             aria-label="刷新首页数据"
             :disabled="loading"
             @click="void fetchHome()"
@@ -80,6 +93,7 @@
         v-if="loadError"
         class="mq-card qc-home-notice"
         data-testid="home-load-error"
+        role="alert"
       >
         <MqIconTile
           name="tech_error"
@@ -100,7 +114,7 @@
       </section>
 
       <section
-        v-else-if="loading"
+        v-else-if="loading && !clinicalQc"
         class="mq-card qc-home-loading"
         data-testid="home-loading"
         aria-live="polite"
@@ -113,7 +127,46 @@
         </div>
       </section>
 
-      <template v-else-if="clinicalQc">
+      <div
+        v-else-if="clinicalQc"
+        class="qc-home-body"
+        :class="{ 'is-refreshing': isRefreshing }"
+        :aria-busy="isRefreshing ? 'true' : undefined"
+      >
+        <section
+          v-if="recordsTotal === 0"
+          class="mq-card qc-home-zero-hint"
+          data-testid="home-zero-records"
+          role="status"
+        >
+          <MqIconTile
+            name="stack"
+            tone="neutral"
+            :size="36"
+          />
+          <div class="qc-home-zero-hint__copy">
+            <strong>{{ hasActiveFilters ? '当前筛选范围内暂无纳入病历' : '当前范围内暂无纳入病历' }}</strong>
+            <span>{{ hasActiveFilters ? '可切换回全部科室、清除关键词，或前往病历池查看病历。' : '请先在病历池同步或选择病历发起质控。' }}</span>
+          </div>
+          <div class="qc-home-zero-hint__actions">
+            <button
+              v-if="hasActiveFilters"
+              type="button"
+              class="qc-home-button"
+              @click="resetFilters"
+            >
+              重置筛选
+            </button>
+            <button
+              type="button"
+              class="qc-home-button qc-home-button--primary"
+              @click="openRecordPool"
+            >
+              进入病历池
+            </button>
+          </div>
+        </section>
+
         <section
           class="qc-home-overview"
           aria-label="质控总览"
@@ -261,23 +314,13 @@
             :key="card.key"
             :class="['qc-home-metric', `qc-home-metric--${card.key}`, { 'is-zero': card.value === 0 }]"
           >
-            <span
-              class="qc-home-metric__watermark"
-              aria-hidden="true"
-            >
-              <MqIcon
-                :name="card.icon"
-                :size="104"
-                :color="toneColor(card.tone)"
-              />
-            </span>
             <div class="qc-home-metric__head">
               <MqIconTile
                 :name="card.icon"
-                :tone="card.tone"
+                :tone="card.value === 0 ? 'neutral' : card.tone"
                 :size="40"
               />
-              <div>
+              <div class="qc-home-metric__titles">
                 <span class="qc-home-metric__label">{{ card.label }}</span>
                 <p class="qc-home-metric__helper">
                   {{ card.helper }}
@@ -287,12 +330,15 @@
             <div class="qc-home-metric__foot">
               <strong class="qc-home-metric__value">{{ card.value }}<small>份</small></strong>
               <span class="qc-home-metric__rate">
-                <em :style="{ color: toneColor(card.tone) }">{{ card.rateLabel }}</em>
+                <em
+                  :style="{ color: card.value === 0 ? undefined : toneTextColor(card.tone) }"
+                  :title="card.rateLabel"
+                >{{ card.rateLabel }}</em>
                 <span
                   class="qc-home-metric__track"
                   aria-hidden="true"
                 >
-                  <i :style="{ width: `${card.rate}%`, background: toneGradient(card.tone) }" />
+                  <i :style="{ width: `${card.rate}%`, background: card.value === 0 ? 'transparent' : toneGradient(card.tone) }" />
                 </span>
               </span>
             </div>
@@ -329,6 +375,7 @@
                     type="button"
                     class="mq-segmented__item"
                     :class="{ 'is-active': analysisObject === 'department' }"
+                    :aria-pressed="analysisObject === 'department'"
                     data-testid="analysis-object-department"
                     @click="analysisObject = 'department'"
                   >
@@ -338,6 +385,7 @@
                     type="button"
                     class="mq-segmented__item"
                     :class="{ 'is-active': analysisObject === 'physician' }"
+                    :aria-pressed="analysisObject === 'physician'"
                     data-testid="analysis-object-physician"
                     @click="analysisObject = 'physician'"
                   >
@@ -411,25 +459,36 @@
                   'qc-home-defect-analysis__row',
                   {
                     'is-active': analysisObject === 'department' && departmentFilter === item.name,
+                    'is-physician': analysisObject === 'physician',
                   },
                 ]"
                 data-testid="defect-analysis-row"
+                :aria-pressed="
+                  analysisObject === 'department' ? departmentFilter === item.name : undefined
+                "
                 :aria-label="
-                  analysisObject === 'department' ? `切换到${item.name}科室质控范围` : undefined
+                  analysisObject === 'department'
+                    ? departmentFilter === item.name
+                      ? `取消${item.name}科室筛选，返回全部科室`
+                      : `切换到${item.name}科室质控范围`
+                    : undefined
                 "
                 @click="analysisObject === 'department' && selectDepartment(item.name)"
               >
                 <div class="qc-home-defect-analysis__meta">
-                  <strong>{{ item.name }}</strong>
+                  <strong :title="item.name">{{ item.name }}</strong>
                   <span>纳入 {{ item.recordsTotal }} 份 · 完成
                     {{ item.completedRecordTotal }} 份</span>
                 </div>
-                <div
-                  class="qc-home-defect-analysis__metric"
-                  aria-hidden="true"
-                >
-                  <div class="qc-home-defect-analysis__track">
-                    <i :style="{ width: `${defectAnalysisPercent(item)}%` }" />
+                <div class="qc-home-defect-analysis__metric">
+                  <div
+                    class="qc-home-defect-analysis__track"
+                    aria-hidden="true"
+                  >
+                    <i
+                      :class="{ 'is-nonzero': defectAnalysisValue(item) > 0 }"
+                      :style="{ width: `${defectAnalysisPercent(item)}%` }"
+                    />
                   </div>
                   <strong>{{ formatAnalysisMetric(item) }}</strong>
                 </div>
@@ -484,7 +543,7 @@
                   >
                     结论结构
                   </h2>
-                  <p>{{ !confirmedResultsOnly && clinicalQc.kpis.qc_partial_failed_total ? '已回写的有效规则结论，含未全部完成病历。' : '已完成病历中的规则结论。' }}</p>
+                  <p>{{ hasPartialFailedConclusion ? '已回写的有效规则结论，含未全部完成病历。' : '已完成病历中的规则结论。' }}</p>
                 </div>
               </header>
               <div
@@ -494,17 +553,46 @@
                 <div
                   class="qc-home-conclusion__ring"
                   role="img"
-                  :aria-label="`已完成规则结论共 ${conclusionTotal} 条`"
-                  :style="{ background: conclusionRingBackground }"
+                  :aria-label="conclusionRingAriaLabel"
                 >
-                  <div>
+                  <svg
+                    class="qc-home-conclusion__svg"
+                    width="120"
+                    height="120"
+                    viewBox="0 0 120 120"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      cx="60"
+                      cy="60"
+                      :r="CONCLUSION_RING_RADIUS"
+                      fill="none"
+                      stroke="rgba(118, 128, 160, 0.12)"
+                      stroke-width="14"
+                    />
+                    <circle
+                      v-for="arc in conclusionRingArcs"
+                      :key="arc.status"
+                      cx="60"
+                      cy="60"
+                      :r="CONCLUSION_RING_RADIUS"
+                      fill="none"
+                      :stroke="arc.color"
+                      stroke-width="14"
+                      stroke-linecap="butt"
+                      :stroke-dasharray="arc.dashArray"
+                      :stroke-dashoffset="arc.dashOffset"
+                      transform="rotate(-90 60 60)"
+                    />
+                  </svg>
+                  <div class="qc-home-conclusion__center">
                     <strong>{{ conclusionTotal }}</strong>
                     <span>规则结论</span>
                   </div>
                 </div>
                 <ul
                   class="qc-home-conclusion__legend"
-                  :aria-label="!confirmedResultsOnly && clinicalQc.kpis.qc_partial_failed_total ? '已回写有效规则结论图例' : '已完成病历中的规则结论图例'"
+                  :aria-label="hasPartialFailedConclusion ? '已回写有效规则结论图例' : '已完成病历中的规则结论图例'"
                 >
                   <li
                     v-for="segment in conclusionSegments"
@@ -514,8 +602,10 @@
                       :style="{ background: segment.color }"
                       aria-hidden="true"
                     />
-                    <span>{{ segment.label }} {{ segment.value }}</span>
-                    <small>{{ segment.percent }}%</small>
+                    <span class="qc-home-conclusion__item-main">
+                      <span class="qc-home-conclusion__label">{{ segment.label }}</span>{{ ' ' }}<strong class="qc-home-conclusion__count">{{ segment.value }}</strong>
+                    </span>
+                    <small class="qc-home-conclusion__percent">{{ segment.percent.toFixed(1) }}%</small>
                   </li>
                 </ul>
               </div>
@@ -596,16 +686,17 @@
             </section>
           </div>
         </section>
-      </template>
+      </div>
 
       <section
         v-else-if="!loading"
         class="mq-card qc-home-empty"
         data-testid="home-empty"
       >
-        <a-empty description="当前暂无可展示的全病历质控汇总">
+        <a-empty>
           <template #description>
-            <p>请先在病历池完成质控；系统不会用旧工作流数据代替正式质控结果。</p>
+            <strong class="qc-home-empty__title">当前暂无可展示的全病历质控汇总</strong>
+            <p class="qc-home-empty__desc">请先在病历池完成质控；系统不会用旧工作流数据代替正式质控结果。</p>
           </template>
           <button
             type="button"
@@ -616,7 +707,7 @@
           </button>
         </a-empty>
       </section>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -626,7 +717,7 @@ import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
-import { MQ_ICON_TONES, type MqIconName, type MqIconTone } from '@/components/icons/mqIcons'
+import { type MqIconName, type MqIconTone } from '@/components/icons/mqIcons'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
@@ -660,6 +751,18 @@ interface ConclusionSegment {
   color: string
   percent: number
 }
+
+interface ConclusionRingArc {
+  status: string
+  color: string
+  dashArray: string
+  dashOffset: string
+}
+
+const CONCLUSION_RING_RADIUS = 46
+const CONCLUSION_RING_CIRCUMFERENCE = 2 * Math.PI * CONCLUSION_RING_RADIUS
+const CONCLUSION_RING_GAP = 1.5
+const CONCLUSION_RING_MIN_ARC = 6
 
 type AnalysisObject = 'department' | 'physician'
 type AnalysisMetric = 'total' | 'average'
@@ -715,6 +818,10 @@ const homeData = ref<ClinicalQcHomePayload | null>(null)
 const cachedDepartmentOptions = ref<string[]>([])
 
 const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
+const isRefreshing = computed(() => loading.value && Boolean(clinicalQc.value))
+const hasActiveFilters = computed(
+  () => departmentFilter.value !== 'all' || Boolean(keyword.value.trim()),
+)
 const currentUserRoles = computed<string[]>(() => {
   if (Array.isArray(authStore.userRoles)) {
     return authStore.userRoles.map((role) => String(role).trim().toLowerCase()).filter(Boolean)
@@ -873,7 +980,7 @@ const ringDefs = computed(() => [
     gradient: 'qcRingRed',
     from: '#FF6B61',
     to: '#FF3B30',
-    textColor: 'var(--mq-danger-text)',
+    textColor: 'var(--qc-danger-text, #c81e32)',
   },
   {
     key: 'completion',
@@ -883,7 +990,7 @@ const ringDefs = computed(() => [
     gradient: 'qcRingGreen',
     from: '#5FD97E',
     to: '#34C759',
-    textColor: 'var(--mq-success-text)',
+    textColor: 'var(--qc-success-text, #147a36)',
   },
   {
     key: 'pending',
@@ -893,7 +1000,7 @@ const ringDefs = computed(() => [
     gradient: 'qcRingAmber',
     from: '#FFB340',
     to: '#FF9500',
-    textColor: 'var(--mq-warning-text)',
+    textColor: 'var(--qc-warning-text, #a64d00)',
   },
 ])
 
@@ -910,8 +1017,16 @@ const TONE_GRADIENTS: Record<MqIconTone, string> = {
   danger: 'linear-gradient(90deg, #FF7A70, #FF3B30)',
 }
 
-function toneColor(tone: MqIconTone): string {
-  return MQ_ICON_TONES[tone].color
+const TONE_TEXT_COLORS: Record<MqIconTone, string> = {
+  neutral: 'var(--mq-text-tertiary)',
+  brand: 'var(--qc-brand-text, #0a58cc)',
+  success: 'var(--qc-success-text, #147a36)',
+  warning: 'var(--qc-warning-text, #a64d00)',
+  danger: 'var(--qc-danger-text, #c81e32)',
+}
+
+function toneTextColor(tone: MqIconTone): string {
+  return TONE_TEXT_COLORS[tone]
 }
 
 function toneGradient(tone: MqIconTone): string {
@@ -934,6 +1049,10 @@ const scopeLine = computed(() => {
   return parts.join(' · ')
 })
 
+const hasPartialFailedConclusion = computed(
+  () => !confirmedResultsOnly.value && Boolean(clinicalQc.value?.kpis.qc_partial_failed_total),
+)
+
 const conclusionSegments = computed<ConclusionSegment[]>(() => {
   const counts = clinicalQc.value?.canonical_status_counts || {}
   const visibleMeta = confirmedResultsOnly.value
@@ -946,23 +1065,127 @@ const conclusionSegments = computed<ConclusionSegment[]>(() => {
     }))
     .filter((segment) => segment.value > 0)
   const total = values.reduce((sum, segment) => sum + segment.value, 0)
-  return values.map((segment) => ({
+  if (!total || !values.length) return []
+
+  // 最大余额法归一化到精确 100.0%（十分之一百分位总和 = 1000），非零项至少 0.1%
+  const raw = values.map((segment, index) => {
+    const exactTenths = (segment.value / total) * 1000
+    const floorTenths = Math.floor(exactTenths)
+    return {
+      index,
+      value: segment.value,
+      tenths: Math.max(1, floorTenths),
+      remainder: exactTenths - floorTenths,
+    }
+  })
+
+  let diff = 1000 - raw.reduce((sum, entry) => sum + entry.tenths, 0)
+  if (diff > 0) {
+    const order = [...raw].sort(
+      (a, b) => b.remainder - a.remainder || b.value - a.value || a.index - b.index,
+    )
+    for (let i = 0; i < diff; i += 1) {
+      order[i % order.length].tenths += 1
+    }
+  } else if (diff < 0) {
+    const order = [...raw]
+      .filter((entry) => entry.tenths > 1)
+      .sort((a, b) => a.remainder - b.remainder || b.value - a.value || b.index - a.index)
+    let cursor = 0
+    while (diff < 0 && order.length) {
+      const target = order[cursor % order.length]
+      if (target.tenths > 1) {
+        target.tenths -= 1
+        diff += 1
+      }
+      cursor += 1
+      if (cursor > order.length * 10) break
+    }
+  }
+
+  return values.map((segment, index) => ({
     ...segment,
-    percent: total ? Number(((segment.value / total) * 100).toFixed(1)) : 0,
+    percent: Number((raw[index].tenths / 10).toFixed(1)),
   }))
 })
+
 const conclusionTotal = computed(() =>
   conclusionSegments.value.reduce((sum, segment) => sum + segment.value, 0),
 )
-const conclusionRingBackground = computed(() => {
-  if (!conclusionSegments.value.length) return 'transparent'
-  let offset = 0
-  const stops = conclusionSegments.value.map((segment) => {
-    const start = offset
-    offset += segment.percent
-    return `${segment.color} ${start}% ${offset}%`
+
+const conclusionRingAriaLabel = computed(() => {
+  const prefix = hasPartialFailedConclusion.value
+    ? `已回写有效规则结论共 ${conclusionTotal.value} 条（含未全部完成病历）`
+    : `已完成规则结论共 ${conclusionTotal.value} 条`
+  if (!conclusionSegments.value.length) return prefix
+  const details = conclusionSegments.value
+    .map((segment) => `${segment.label} ${segment.value} 条（${segment.percent.toFixed(1)}%）`)
+    .join('，')
+  return `${prefix}：${details}`
+})
+
+const conclusionRingArcs = computed<ConclusionRingArc[]>(() => {
+  const segments = conclusionSegments.value
+  const total = conclusionTotal.value
+  if (!segments.length || !total) return []
+
+  if (segments.length === 1) {
+    return [
+      {
+        status: segments[0].status,
+        color: segments[0].color,
+        dashArray: `${CONCLUSION_RING_CIRCUMFERENCE.toFixed(2)} 0`,
+        dashOffset: '0',
+      },
+    ]
+  }
+
+  const available = CONCLUSION_RING_CIRCUMFERENCE - segments.length * CONCLUSION_RING_GAP
+  const lengths = new Array<number>(segments.length).fill(0)
+  const clamped = new Array<boolean>(segments.length).fill(false)
+
+  // 迭代为极小非零切片保留最小可见弧长，其余切片按真实权重占满剩余周长
+  let changed = true
+  while (changed) {
+    changed = false
+    let clampedSum = 0
+    let freeWeight = 0
+    for (let i = 0; i < segments.length; i += 1) {
+      if (clamped[i]) {
+        clampedSum += CONCLUSION_RING_MIN_ARC
+      } else {
+        freeWeight += segments[i].value
+      }
+    }
+    const remaining = Math.max(0, available - clampedSum)
+    for (let i = 0; i < segments.length; i += 1) {
+      if (clamped[i]) {
+        lengths[i] = CONCLUSION_RING_MIN_ARC
+        continue
+      }
+      const share = freeWeight > 0 ? (segments[i].value / freeWeight) * remaining : 0
+      if (share < CONCLUSION_RING_MIN_ARC) {
+        clamped[i] = true
+        lengths[i] = CONCLUSION_RING_MIN_ARC
+        changed = true
+      } else {
+        lengths[i] = share
+      }
+    }
+  }
+
+  let cursor = 0
+  return segments.map((segment, index) => {
+    const length = lengths[index]
+    const arc: ConclusionRingArc = {
+      status: segment.status,
+      color: segment.color,
+      dashArray: `${length.toFixed(2)} ${(CONCLUSION_RING_CIRCUMFERENCE - length).toFixed(2)}`,
+      dashOffset: `${(-cursor).toFixed(2)}`,
+    }
+    cursor += length + CONCLUSION_RING_GAP
+    return arc
   })
-  return `conic-gradient(${stops.join(', ')})`
 })
 
 const sourceStateText = computed(() => {
@@ -1049,17 +1272,17 @@ const defectAnalysisItems = computed(() => {
 const hiddenDefectAnalysisCount = computed(() =>
   Math.max(0, allDefectAnalysisItems.value.length - defectAnalysisItems.value.length),
 )
-const defectAnalysisMaximum = computed(() =>
-  Math.max(
-    1,
-    ...defectAnalysisItems.value.map((item) =>
-      analysisMetric.value === 'average' ? item.averageDefectCount : item.defectTotal,
-    ),
-  ),
-)
+function defectAnalysisValue(item: DefectAnalysisItem): number {
+  return analysisMetric.value === 'average' ? item.averageDefectCount : item.defectTotal
+}
+
+const defectAnalysisMaximum = computed(() => {
+  const max = Math.max(0, ...defectAnalysisItems.value.map((item) => defectAnalysisValue(item)))
+  return max > 0 ? max : 1
+})
 
 function defectAnalysisPercent(item: DefectAnalysisItem): number {
-  const value = analysisMetric.value === 'average' ? item.averageDefectCount : item.defectTotal
+  const value = defectAnalysisValue(item)
   return Number(((value / defectAnalysisMaximum.value) * 100).toFixed(1))
 }
 
@@ -1070,7 +1293,7 @@ function formatAnalysisMetric(item: DefectAnalysisItem): string {
 }
 
 function selectDepartment(department: string) {
-  departmentFilter.value = department
+  departmentFilter.value = departmentFilter.value === department ? 'all' : department
 }
 
 function formatDateTime(value?: string | null): string {
@@ -1116,6 +1339,26 @@ function clearKeyword() {
   if (departmentFilter.value === 'all') delete query.department
   else query.department = departmentFilter.value
   void router.replace({ query })
+}
+
+function resetFilters() {
+  if (typeof route.query.keyword === 'string' || typeof route.query.department === 'string') {
+    const query = { ...route.query }
+    delete query.keyword
+    delete query.department
+    void router.replace({ query })
+    return
+  }
+  if (keyword.value.trim()) {
+    syncingFromRoute.value = true
+    keyword.value = ''
+    departmentFilter.value = 'all'
+    syncingFromRoute.value = false
+    clearKeywordDebounceTimer()
+    void fetchHome()
+    return
+  }
+  departmentFilter.value = 'all'
 }
 
 const KEYWORD_DEBOUNCE_MS = 280

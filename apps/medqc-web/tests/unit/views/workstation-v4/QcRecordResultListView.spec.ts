@@ -961,4 +961,21 @@ describe('QcRecordResultListView', () => {
       notice.element.compareDocumentPosition(split.element) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
   })
+
+  it('根节点使用 div 避免嵌套 main，数据源以徽标呈现，导出菜单内部按 Esc 可关闭', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    expect(wrapper.element.tagName).toBe('DIV')
+    expect(wrapper.find('main').exists()).toBe(false)
+    expect(wrapper.get('.qc-record-result-list-view__source-badge').text()).toBe('东华CDM')
+
+    const trigger = wrapper.get('[data-testid="qc-result-export-trigger"]')
+    await trigger.trigger('click')
+    expect(wrapper.find('[role="menu"]').exists()).toBe(true)
+
+    const filteredOption = wrapper.get('[data-testid="qc-result-export-filtered"]')
+    await filteredOption.trigger('keydown.esc')
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+  })
 })

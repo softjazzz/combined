@@ -111,6 +111,10 @@
   background: transparent;
 }
 
+.wv4-list .workbench-hosp-filter {
+  flex-wrap: wrap;
+}
+
 .wv4-list .record-pool-field-label,
 .wv4-list .workbench-hosp-filter__label {
   display: inline-flex;
@@ -166,21 +170,26 @@
 }
 
 .wv4-list .wv4-record-pool-filter__summary {
+  display: block;
+  width: 100%;
   margin: 0;
-  padding: 0 2px;
+  padding: 2px 2px 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
+  line-height: 1.5;
+  white-space: normal;
 }
 
-/* antd 控件：与 .mq-input 同外观 */
+/* antd 控件：与 .mq-input 同外观，统一 36px 高度与 10px 圆角 */
 .wv4-list :deep(.ant-input-affix-wrapper),
 .wv4-list :deep(.ant-select:not(.ant-select-customize-input) .ant-select-selector),
 .wv4-list :deep(.ant-picker) {
   min-height: 36px;
   border: 1px solid rgba(60, 60, 80, 0.1);
-  border-radius: var(--mq-radius-control);
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.85);
   box-shadow: inset 0 1px 2px rgba(10, 55, 115, 0.04);
 }
@@ -219,10 +228,10 @@
   background: transparent;
 }
 
-/* 住院状态：antd 分段控件改为 .mq-segmented 外观 */
+/* 住院状态：antd 分段控件改为 .mq-segmented 外观，总高 36px、圆角 10px */
 .wv4-list .workbench-hosp-segmented {
   padding: 3px;
-  border-radius: 13px;
+  border-radius: 10px;
   background: var(--mq-bg-muted);
 }
 
@@ -231,20 +240,20 @@
 }
 
 .wv4-list .workbench-hosp-segmented :deep(.ant-segmented-item) {
-  border-radius: 10px;
+  border-radius: 7px;
   color: var(--mq-text-secondary);
 }
 
 .wv4-list .workbench-hosp-segmented :deep(.ant-segmented-item-label) {
   min-height: 30px;
-  padding: 0 14px;
+  padding: 0 12px;
   font-size: var(--mq-font-13);
   line-height: 30px;
 }
 
 .wv4-list .workbench-hosp-segmented :deep(.ant-segmented-item-selected),
 .wv4-list .workbench-hosp-segmented :deep(.ant-segmented-thumb) {
-  border-radius: 10px;
+  border-radius: 7px;
   background: #ffffff;
   box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
   color: var(--mq-text-primary);
@@ -354,6 +363,41 @@
   font-size: var(--mq-font-13);
 }
 
+.wv4-list :deep(.wv4-list__status-alert.ant-alert) {
+  padding: 10px 16px;
+  border: 1px solid rgba(118, 128, 160, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 2px 8px rgba(10, 45, 90, 0.04);
+  color: var(--mq-text-primary);
+}
+
+.wv4-list :deep(.wv4-list__status-alert--warning.ant-alert) {
+  border-color: rgba(118, 128, 160, 0.24);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.wv4-list :deep(.wv4-list__status-alert--warning .ant-alert-icon) {
+  color: var(--mq-warning-icon);
+}
+
+.wv4-list :deep(.wv4-list__status-alert--error.ant-alert) {
+  border-color: rgba(224, 38, 58, 0.22);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.wv4-list :deep(.wv4-list__status-alert--error .ant-alert-icon) {
+  color: var(--mq-danger-icon);
+}
+
+.wv4-list :deep(.wv4-list__status-alert .ant-alert-message) {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+
 .wv4-list .wv4-list__empty {
   display: flex;
   flex-direction: column;
@@ -384,16 +428,27 @@
   gap: 16px;
 }
 
-.wv4-list :deep(.batch-table-panel__row--selectable) {
+.wv4-list :deep(.batch-table-panel__row--selectable),
+.wv4-list :deep(.batch-table-panel__row--active) {
   cursor: pointer;
 }
 
-.wv4-list :deep(.batch-table-panel__row--active > td) {
-  background: rgba(255, 255, 255, 0.92) !important;
+.wv4-list :deep(.ant-table-tbody > tr.batch-table-panel__row--active > td) {
+  background: rgba(10, 108, 255, 0.065);
 }
 
-.wv4-list :deep(.batch-table-panel__row--active > td:first-child) {
+.wv4-list :deep(.ant-table-tbody > tr.batch-table-panel__row--active:hover > td),
+.wv4-list :deep(.ant-table-tbody > tr.batch-table-panel__row--active > td.ant-table-cell-row-hover) {
+  background: rgba(10, 108, 255, 0.095);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr.batch-table-panel__row--active > td:first-child) {
   box-shadow: inset 3px 0 0 var(--mq-brand-600);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr:focus-visible) {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: -2px;
 }
 
 @media (max-width: 1360px) {
@@ -461,10 +516,43 @@
   color: var(--mq-info-text);
 }
 
-.wv4-list :deep(.batch-table-panel__action.ant-btn) {
-  height: 34px;
-  padding-inline: 16px;
-  font-size: var(--mq-font-13);
+.wv4-list :deep(.batch-table-panel__action.ant-btn),
+.wv4-list :deep(.record-pool-task-history__entry.ant-btn) {
+  height: 36px !important;
+  padding-inline: 14px !important;
+  border-radius: 10px !important;
+  font-size: var(--mq-font-13) !important;
+  font-weight: 500 !important;
+}
+
+.wv4-list :deep(.record-pool-task-history__entry.ant-btn) {
+  border: 1px solid rgba(20, 40, 80, 0.12) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--mq-text-secondary) !important;
+}
+
+.wv4-list :deep(.record-pool-task-history__entry.ant-btn:hover) {
+  border-color: rgba(10, 108, 255, 0.32) !important;
+  background: rgba(10, 108, 255, 0.05) !important;
+  color: var(--mq-brand-600) !important;
+}
+
+.wv4-list :deep(.batch-table-panel__action--secondary.ant-btn) {
+  border: 1px solid rgba(20, 40, 80, 0.12) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--mq-text-primary) !important;
+}
+
+.wv4-list :deep(.batch-table-panel__action--secondary.ant-btn:hover:not(:disabled)) {
+  border-color: rgba(10, 108, 255, 0.32) !important;
+  background: rgba(10, 108, 255, 0.05) !important;
+  color: var(--mq-brand-600) !important;
+}
+
+.wv4-list :deep(.batch-table-panel__action--secondary.ant-btn:disabled) {
+  border-color: rgba(20, 40, 80, 0.08) !important;
+  background: rgba(118, 128, 160, 0.08) !important;
+  color: var(--mq-text-disabled) !important;
 }
 
 .wv4-list :deep(.batch-table-panel__action--primary:not(:disabled)) {
@@ -512,7 +600,21 @@
 }
 
 .wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: rgba(10, 108, 255, 0.06);
+  background: rgba(10, 108, 255, 0.085);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected:hover > td),
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-row-hover) {
+  background: rgba(10, 108, 255, 0.115);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected.batch-table-panel__row--active > td) {
+  background: rgba(10, 108, 255, 0.12);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected.batch-table-panel__row--active:hover > td),
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected.batch-table-panel__row--active > td.ant-table-cell-row-hover) {
+  background: rgba(10, 108, 255, 0.15);
 }
 
 .wv4-list :deep(.batch-table-panel__patient-name) {
@@ -549,19 +651,52 @@
 .wv4-list :deep(.batch-table-panel__hospitalization-status) {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+  gap: 5px;
+  padding: 3px 9px;
   border: 0;
   border-radius: 999px;
   background: var(--mq-neutral-bg);
   color: var(--mq-text-secondary);
   font-size: var(--mq-font-12);
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status::before) {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a1a7b3;
+  content: '';
 }
 
 .wv4-list :deep(.batch-table-panel__hospitalization-status--inpatient) {
   background: var(--mq-info-bg);
   color: var(--mq-info-text);
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--inpatient::before) {
+  background: var(--mq-info-icon);
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--discharged) {
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--discharged::before) {
+  background: #a1a7b3;
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--unknown) {
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--unknown::before) {
+  background: var(--mq-warning-icon);
 }
 
 .wv4-list :deep(.batch-table-panel__detail-button) {

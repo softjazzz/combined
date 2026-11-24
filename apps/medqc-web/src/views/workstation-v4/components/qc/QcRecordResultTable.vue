@@ -19,6 +19,7 @@
                 type="checkbox"
                 aria-label="选择当前页全部病历"
                 :checked="allPageRowsSelected"
+                :indeterminate="somePageRowsSelected"
                 :disabled="rows.length === 0"
                 @click.stop
                 @change="togglePageSelection"
@@ -61,7 +62,7 @@
                 compactReview && activeRecordKey === row.recordKey,
             }"
             :data-record-key="row.recordKey"
-            :aria-selected="selectedRecordKeys.includes(row.recordKey)"
+            :aria-current="activeRecordKey && activeRecordKey === row.recordKey ? 'true' : undefined"
             tabindex="0"
             @click="openResult(row.recordKey)"
             @keydown.enter.self.prevent="openResult(row.recordKey)"
@@ -119,6 +120,7 @@
               <span
                 v-if="row.bedNumber"
                 class="qc-record-result-table__bed-number"
+                :title="row.bedNumber"
               >{{
                 row.bedNumber
               }}</span>
@@ -156,7 +158,12 @@
                 {{ row.issueSummary }}
               </template>
             </td>
-            <td>{{ formatDisplayTime(row.latestQcTime) }}</td>
+            <td
+              class="qc-record-result-table__latest-qc-cell"
+              :title="formatDisplayTime(row.latestQcTime)"
+            >
+              {{ formatDisplayTime(row.latestQcTime) }}
+            </td>
             <td class="qc-record-result-table__action-cell">
               <button
                 v-if="compactReview"
@@ -172,6 +179,7 @@
                 class="qc-record-result-table__view-button"
                 data-testid="open-saved-result"
                 type="button"
+                :aria-label="`查看${row.patientName || row.visitId || '当前病历'}质控结果`"
                 @click.stop="emit('open-full', row.recordKey)"
               >
                 查看结果
@@ -184,6 +192,11 @@
                     row.resultStatus !== 'not-run',
                 }"
                 type="button"
+                :aria-label="
+                  row.resultStatus === 'not-run'
+                    ? `${row.patientName || row.visitId || '当前病历'}暂无质控结果`
+                    : `查看${row.patientName || row.visitId || '当前病历'}质控结果`
+                "
                 @click.stop="openResult(row.recordKey)"
               >
                 {{ row.resultStatus === 'not-run' ? '暂无结果' : '查看结果' }}
@@ -265,6 +278,12 @@ const allPageRowsSelected = computed(
   () =>
     props.rows.length > 0 &&
     props.rows.every((row) => props.selectedRecordKeys.includes(row.recordKey)),
+)
+const somePageRowsSelected = computed(
+  () =>
+    props.rows.length > 0 &&
+    !allPageRowsSelected.value &&
+    props.rows.some((row) => props.selectedRecordKeys.includes(row.recordKey)),
 )
 
 function displayTime(row: QcRecordResultRow): string {
@@ -530,24 +549,27 @@ function togglePageSelection(event: Event) {
   border-bottom-color: rgba(29, 29, 31, 0.065);
 }
 
-.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(2) {
+.qc-record-result-table--inpatient:not(.qc-record-result-table--compact-review) .qc-record-result-table__row td:nth-child(2) {
   min-width: 190px;
 }
 
-.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(3) {
+.qc-record-result-table--inpatient:not(.qc-record-result-table--compact-review) .qc-record-result-table__row td:nth-child(3) {
   min-width: 130px;
 }
 
-.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(4),
-.qc-record-result-table--inpatient .qc-record-result-table__row td:nth-child(6) {
+.qc-record-result-table--inpatient:not(.qc-record-result-table--compact-review) .qc-record-result-table__row td:nth-child(4),
+.qc-record-result-table--inpatient:not(.qc-record-result-table--compact-review) .qc-record-result-table__row td:nth-child(6) {
   min-width: 160px;
   color: var(--mq-text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
-.qc-record-result-table--inpatient .qc-record-result-table__summary {
+.qc-record-result-table--inpatient:not(.qc-record-result-table--compact-review) .qc-record-result-table__summary {
   min-width: 230px;
   max-width: 340px;
+}
+
+.qc-record-result-table--inpatient .qc-record-result-table__summary {
   white-space: normal;
 }
 
@@ -579,7 +601,8 @@ function togglePageSelection(event: Event) {
   background: var(--mq-bg-surface);
   vertical-align: middle;
 }
-.qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:checked {
+.qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:checked,
+.qc-record-result-table--inpatient .qc-record-result-table__table input[type='checkbox']:indeterminate {
   appearance: auto;
   accent-color: var(--mq-brand-600);
 }
@@ -652,7 +675,7 @@ function togglePageSelection(event: Event) {
 
 /* 主从复核列表：与病历池列表同一套外观（患者 / 住院号、科室、摘要、最近质控、查看胶囊）。 */
 .qc-record-result-table--compact-review .qc-record-result-table__table {
-  min-width: 640px;
+  min-width: 760px;
   table-layout: fixed;
 }
 
@@ -661,24 +684,37 @@ function togglePageSelection(event: Event) {
   box-sizing: border-box;
   min-width: 0;
   max-width: none;
-  padding-right: 12px;
-  padding-left: 12px;
+  padding-right: 10px;
+  padding-left: 10px;
 }
 
+.qc-record-result-table--compact-review .qc-record-result-table__selection-heading,
+.qc-record-result-table--compact-review .qc-record-result-table__selection-cell,
 .qc-record-result-table--compact-review th:nth-child(1) {
   width: 40px;
+  max-width: 40px !important;
+  padding-left: 8px;
+  padding-right: 4px !important;
+}
+.qc-record-result-table--compact-review th:nth-child(2) {
+  width: auto;
+  min-width: 180px;
 }
 .qc-record-result-table--compact-review th:nth-child(3) {
-  width: 120px;
+  width: 108px;
 }
 .qc-record-result-table--compact-review th:nth-child(4) {
-  width: 160px;
+  width: 148px;
 }
 .qc-record-result-table--compact-review th:nth-child(5) {
-  width: 132px;
+  width: 126px;
 }
+.qc-record-result-table--compact-review .qc-record-result-table__action-heading,
+.qc-record-result-table--compact-review .qc-record-result-table__action-cell,
 .qc-record-result-table--compact-review th:nth-child(6) {
-  width: 180px;
+  width: 148px;
+  padding-left: 6px;
+  padding-right: 8px;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__table thead th {
   font-size: 12px;
@@ -754,10 +790,16 @@ function togglePageSelection(event: Event) {
   padding-top: 8px;
   padding-bottom: 8px;
 }
-.qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(5) {
+.qc-record-result-table--compact-review .qc-record-result-table__row td:nth-child(5),
+.qc-record-result-table--compact-review .qc-record-result-table__latest-qc-cell {
+  overflow: hidden;
+  padding-right: 8px;
+  padding-left: 8px;
   color: #727b87;
-  font-size: 13px;
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .qc-record-result-table--compact-review .qc-record-result-table__summary-separator {
   display: inline;
@@ -767,7 +809,7 @@ function togglePageSelection(event: Event) {
 /* 「查看」胶囊：与病历池一致，浅灰底，悬停与当前行转浅蓝 */
 .qc-record-result-table__view-button {
   height: 26px;
-  padding: 0 12px;
+  padding: 0 8px;
   border: 0;
   border-radius: 999px;
   background: var(--mq-bg-muted);
@@ -787,7 +829,7 @@ function togglePageSelection(event: Event) {
   color: var(--mq-brand-700);
 }
 .qc-record-result-table__view-button + .qc-record-result-table__view-button {
-  margin-left: 6px;
+  margin-left: 4px;
 }
 .qc-record-result-table__view-button:focus-visible {
   outline: 2px solid var(--mq-brand-600);

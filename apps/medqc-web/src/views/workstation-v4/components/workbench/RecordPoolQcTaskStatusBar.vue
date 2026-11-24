@@ -613,7 +613,7 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status--danger {
-  border-color: rgba(239, 68, 68, 0.2);
+  border-color: rgba(118, 128, 160, 0.24);
 }
 
 .record-pool-qc-status--danger::before {
@@ -1111,8 +1111,8 @@ onBeforeUnmount(() => {
   color: var(--mq-text-tertiary);
 }
 .record-pool-qc-status--danger {
-  background: color-mix(in srgb, var(--mq-danger-icon) 4%, var(--mq-bg-surface));
-  border-color: color-mix(in srgb, var(--mq-warning-icon) 17%, var(--mq-bg-page));
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(118, 128, 160, 0.24);
 }
 .record-pool-qc-status--success {
   background: color-mix(in srgb, var(--mq-success-icon) 4%, var(--mq-bg-surface));

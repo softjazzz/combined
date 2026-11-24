@@ -13,12 +13,12 @@
             <div class="wv4-analysis-overview__header mq-page-head">
               <div class="mq-page-head__copy">
                 <span class="mq-page-eyebrow">{{ overviewEyebrow }}</span>
-                <h3
+                <h1
                   id="workstation-list-overview-title"
                   class="wv4-analysis-overview__title mq-page-title"
                 >
                   {{ overviewTitle }}
-                </h3>
+                </h1>
                 <p
                   v-if="isStageQueueMode"
                   class="wv4-analysis-overview__subtitle"
@@ -67,6 +67,7 @@
                   :value="searchText"
                   class="workbench-controls__search-input"
                   :placeholder="searchPlaceholder"
+                  :aria-label="searchPlaceholder"
                   size="large"
                   allow-clear
                   @update:value="emit('update:searchText', $event)"
@@ -95,6 +96,7 @@
                   <a-range-picker
                     :value="dateRange || undefined"
                     class="workbench-date-row__range"
+                    :aria-label="`${formatWorkstationDateFieldLabel(dateField)}范围`"
                     size="large"
                     allow-clear
                     :allow-empty="[true, true]"
@@ -116,6 +118,7 @@
                     :value="hospFilter"
                     :options="hospOptions"
                     class="workbench-hosp-segmented"
+                    aria-label="住院状态"
                     @update:value="emit('selectHospFilter', normalizeHospFilterValue($event))"
                   />
                   <a-button
@@ -165,6 +168,7 @@
                   />科室</span>
                   <a-select
                     :aria-labelledby="!isStageQueueMode ? 'record-pool-dept-label' : undefined"
+                    aria-label="科室筛选"
                     :value="activeDept"
                     class="workbench-dept-select"
                     size="large"
@@ -212,6 +216,7 @@
                   />主管医师</span>
                   <a-select
                     aria-labelledby="record-pool-doctor-label"
+                    aria-label="主管医师筛选"
                     :value="activeDoctor"
                     class="workbench-doctor-select"
                     size="large"
@@ -287,6 +292,7 @@
         <Alert
           v-if="!displayLoading && loadError"
           type="error"
+          class="wv4-list__status-alert wv4-list__status-alert--error"
           message="病历列表加载失败"
           show-icon
         >
@@ -302,12 +308,24 @@
         <Alert
           v-else-if="!isStageQueueMode && !displayLoading && qcSummaryState === 'unavailable'"
           type="warning"
+          class="wv4-list__status-alert wv4-list__status-alert--warning"
           message="质控摘要暂不可用"
           show-icon
-        />
+        >
+          <template #action>
+            <a-button
+              size="small"
+              data-testid="retry-qc-summary"
+              @click="emit('refresh')"
+            >
+              重试
+            </a-button>
+          </template>
+        </Alert>
         <Alert
           v-if="filterQcBlockedReason"
           type="warning"
+          class="wv4-list__status-alert wv4-list__status-alert--warning"
           :message="filterQcBlockedReason"
           show-icon
           data-testid="filter-qc-blocked-warning"

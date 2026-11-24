@@ -816,7 +816,7 @@ const handleLogout = async () => {
   flex: 1 1 auto;
   min-width: 0;
   padding-top: 18px;
-  overflow-x: hidden;
+  overflow-x: clip;
   background: transparent;
 }
 
