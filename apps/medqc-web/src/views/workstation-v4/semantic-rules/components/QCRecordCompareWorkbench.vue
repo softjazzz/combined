@@ -1475,8 +1475,9 @@ onBeforeUnmount(() => {
   padding: 8px 16px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
 }
 .record-content-toolbar > div {
   min-width: 0;
@@ -1519,11 +1520,14 @@ onBeforeUnmount(() => {
 }
 .record-location-chip {
   margin-left: auto;
-  padding: 4px 8px;
+  flex: none;
+  padding: 4px 10px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.045);
   color: rgba(29, 29, 31, 0.62) !important;
   font-size: 11px !important;
+  line-height: 16px;
+  white-space: nowrap;
 }
 .record-location-chip.is-matched {
   background: rgba(16, 185, 129, 0.1);

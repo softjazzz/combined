@@ -6,12 +6,26 @@
           <strong class="result-section-title"
             ><ClipboardCheck :size="18" aria-hidden="true" />质控结果</strong
           >
-          <span data-testid="single-record-result-summary">{{ resultExecutionSummary }}</span>
+          <span
+            class="toolbar-count-chip"
+            :class="{ 'is-confirmed': confirmedResultsOnly && viewItems.length > 0 }"
+            data-testid="single-record-result-summary"
+            >{{ resultExecutionSummary }}</span
+          >
+        </div>
+        <div v-if="renderedItems.length > 0" class="toolbar-progress">
+          <span
+            class="toolbar-review-progress"
+            :class="{ 'is-complete': reviewedVisibleCount === renderedItems.length }"
+            data-testid="single-record-review-progress"
+          >
+            已看 {{ reviewedVisibleCount }}/{{ renderedItems.length }}
+          </span>
         </div>
       </div>
       <template v-if="viewItems.length">
         <div
-          v-if="!isGroupedPresentation"
+          v-if="!isGroupedPresentation && statusTabs.length > 1"
           class="result-tabs"
           role="tablist"
           aria-label="质控结果状态筛选"
@@ -32,7 +46,7 @@
           </button>
         </div>
         <div
-          v-else
+          v-else-if="isGroupedPresentation && reportTabs.length > 1"
           class="result-tabs result-report-tabs"
           role="tablist"
           aria-label="病历质控报告分类"
@@ -71,7 +85,7 @@
 
     <div v-else class="result-list" :class="{ 'is-grouped': isGroupedPresentation }">
       <article
-        v-for="item in renderedItems"
+        v-for="(item, itemIndex) in renderedItems"
         v-show="shouldRenderDocumentGroupItem(item.key)"
         :key="item.key"
         class="result-row"
@@ -79,10 +93,13 @@
           `is-${item.tone}`,
           {
             'is-expanded': expandedKey === item.key,
+            'is-active': activeItemKey === item.key,
+            'is-reviewed': reviewedKeys.has(item.key) && activeItemKey !== item.key,
             'is-document-group-start': documentGroupForItem(item.key)?.isFirst,
             'is-document-group-collapsed': !isDocumentGroupExpandedForItem(item.key),
           },
         ]"
+        :aria-current="activeItemKey === item.key ? 'true' : undefined"
         :data-testid="
           isDocumentGroupExpandedForItem(item.key) ? 'single-record-result-row' : undefined
         "
@@ -126,17 +143,40 @@
           @click="handleContentClick($event, item)"
         >
           <span class="result-main">
+            <span class="result-meta-bar">
+              <span class="result-meta-left">
+                <span class="result-index-badge">{{ String(itemIndex + 1).padStart(2, '0') }}</span>
+                <span
+                  v-if="cardDocumentTag(item)"
+                  class="result-doc-badge"
+                  data-testid="single-record-doc-badge"
+                >
+                  <FileText :size="12" aria-hidden="true" />
+                  {{ cardDocumentTag(item) }}
+                </span>
+              </span>
+              <span class="result-meta-right">
+                <span
+                  v-if="reviewedKeys.has(item.key)"
+                  class="result-reviewed-badge"
+                  data-testid="single-record-reviewed-badge"
+                >
+                  <Check :size="11" :stroke-width="2.6" aria-hidden="true" />
+                  已查看
+                </span>
+                <span
+                  v-if="!isCompliantResult(item) && !isSingleConfirmedView"
+                  class="status-cell status-pill mq-status"
+                  :class="[`is-${item.tone}`, statusModifierClass(item)]"
+                  >{{ item.displayStatus }}</span
+                >
+              </span>
+            </span>
             <span class="result-title-row">
               <span v-if="isCompliantResult(item)" class="status-cell compliant-dot">
                 <span class="visually-hidden">合规</span>
               </span>
-              <strong class="rule-name" :title="displayRuleName(item)">{{ displayRuleName(item) }}</strong>
-              <span
-                v-if="!isCompliantResult(item)"
-                class="status-cell status-pill mq-status"
-                :class="[`is-${item.tone}`, statusModifierClass(item)]"
-                >{{ item.displayStatus }}</span
-              >
+              <strong class="rule-name" :title="displayRuleName(item)">{{ cardHeadlineTitle(item) }}</strong>
             </span>
             <span
               v-if="(!isCompliantResult(item) || expandedKey === item.key) && !copyMatchHeadline(item)"
@@ -158,15 +198,14 @@
                 class="copy-match-headline-documents"
                 data-testid="copy-match-headline-documents"
               >
-                <span>
+                <span class="copy-match-doc-line">
+                  <em class="copy-match-seq">篇1</em>
                   <strong>{{ copyMatchHeadline(item)?.leftLabel }}</strong>
-                  <i aria-hidden="true">·</i>
                   <time>{{ copyMatchHeadline(item)?.leftTime }}</time>
                 </span>
-                <ArrowRight aria-hidden="true" :size="16" :stroke-width="1.6" />
-                <span>
+                <span class="copy-match-doc-line">
+                  <em class="copy-match-seq">篇2</em>
                   <strong>{{ copyMatchHeadline(item)?.rightLabel }}</strong>
-                  <i aria-hidden="true">·</i>
                   <time>{{ copyMatchHeadline(item)?.rightTime }}</time>
                 </span>
               </span>
@@ -175,22 +214,42 @@
                   相似度 <strong>{{ copyMatchHeadline(item)?.similarity }}</strong>
                 </span>
                 <span>
-                  判定阈值 <strong>{{ copyMatchHeadline(item)?.threshold }}</strong>
+                  阈值 <strong>{{ copyMatchHeadline(item)?.threshold }}</strong>
                 </span>
-                <span v-if="copyMatchHeadline(item)?.additionalCount">
+                <span v-if="copyMatchHeadline(item)?.additionalCount" class="copy-match-extra">
                   另有 <strong>{{ copyMatchHeadline(item)?.additionalCount }}</strong> 组
                 </span>
               </span>
             </span>
-            <span class="result-footer">
-              <span class="result-details-hint" aria-hidden="true">
-                {{ expandedKey === item.key ? '收起详情' : '展开详情' }}
-                <ChevronUp v-if="expandedKey === item.key" :size="16" />
-                <ChevronDown v-else :size="16" />
-              </span>
-            </span>
           </span>
         </button>
+        <div
+          v-if="isDocumentGroupExpandedForItem(item.key)"
+          class="result-footer"
+        >
+          <button
+            v-if="primaryEvidence(item)"
+            type="button"
+            class="result-locate-btn"
+            data-testid="single-record-quick-locate"
+            @click="locatePrimaryEvidence(item)"
+          >
+            <FileText :size="13" aria-hidden="true" />
+            <span>定位原文</span>
+            <ArrowRight :size="13" aria-hidden="true" />
+          </button>
+          <span v-else class="result-footer-spacer" aria-hidden="true" />
+          <button
+            type="button"
+            class="result-details-hint"
+            :aria-expanded="expandedKey === item.key"
+            @click="toggle(item.key)"
+          >
+            {{ expandedKey === item.key ? '收起详情' : '展开详情' }}
+            <ChevronUp v-if="expandedKey === item.key" :size="15" />
+            <ChevronDown v-else :size="15" />
+          </button>
+        </div>
 
         <template v-if="isDocumentGroupExpandedForItem(item.key) && expandedKey === item.key">
           <ConsultationRecommendationSummary
@@ -491,10 +550,12 @@ import { message } from 'ant-design-vue'
 import { QC_RESULT_STATUS_LABELS } from '../utils/qcResultStatusLabels'
 import {
   ArrowRight,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   ClipboardCheck,
+  FileText,
   ListFilter,
 } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
@@ -996,10 +1057,63 @@ const documentGroupByItemKey = computed(() => {
   return entries
 })
 const hasVisibleResults = computed(() => renderedItems.value.length > 0)
+const isSingleConfirmedView = computed(() => {
+  if (confirmedResultsOnly.value) return true
+  if (isGroupedPresentation.value) return activeReportTab.value === 'non_compliant'
+  return activeTab.value === 'non_compliant'
+})
 const expandedKey = ref('')
+const activeItemKey = ref('')
+const reviewedKeys = ref<Set<string>>(new Set())
 const feedbackOpenKey = ref('')
 const ruleTextOpenKey = ref('')
 const collapsedDocumentGroupKeys = ref<Set<string>>(new Set())
+
+const reviewedVisibleCount = computed(
+  () => renderedItems.value.filter((item) => reviewedKeys.value.has(item.key)).length,
+)
+
+function markReviewed(key: string) {
+  if (!key || reviewedKeys.value.has(key)) return
+  const next = new Set(reviewedKeys.value)
+  next.add(key)
+  reviewedKeys.value = next
+}
+
+function splitRuleDocumentPrefix(item: SingleRecordQcResultViewItem): {
+  docTag: string
+  title: string
+} {
+  const full = displayRuleName(item).trim()
+  const match = full.match(/^([^\s：:]{2,12})[：:]\s*(.+)$/)
+  if (match && match[1] && match[2]) {
+    return { docTag: match[1].trim(), title: match[2].trim() }
+  }
+  const sourceDoc = String(item.source_document || '').trim()
+  const copyDoc = copyMatchHeadline(item)?.leftLabel || ''
+  return { docTag: sourceDoc || copyDoc, title: full }
+}
+
+function cardDocumentTag(item: SingleRecordQcResultViewItem): string {
+  return splitRuleDocumentPrefix(item).docTag
+}
+
+function cardHeadlineTitle(item: SingleRecordQcResultViewItem): string {
+  return splitRuleDocumentPrefix(item).title
+}
+
+function primaryEvidence(item: SingleRecordQcResultItem): SingleRecordQcEvidence | null {
+  const list = displayEvidence(item)
+  return list.length > 0 ? list[0] : null
+}
+
+function locatePrimaryEvidence(item: SingleRecordQcResultViewItem) {
+  const target = primaryEvidence(item)
+  if (!target) return
+  activeItemKey.value = item.key
+  markReviewed(item.key)
+  emit('locate-evidence', target)
+}
 
 function documentGroupForItem(itemKey: string) {
   return documentGroupByItemKey.value.get(itemKey)
@@ -1042,12 +1156,16 @@ watch(
     activeReportTab.value = resolveDefaultReportTab()
     collapsedDocumentGroupKeys.value = new Set()
     expandedKey.value = ''
+    activeItemKey.value = ''
+    reviewedKeys.value = new Set()
   },
   { immediate: true },
 )
 
 function toggle(key: string) {
   expandedKey.value = expandedKey.value === key ? '' : key
+  activeItemKey.value = key
+  markReviewed(key)
   emit('select', key)
 }
 
@@ -1178,6 +1296,8 @@ watch(
   (value) => {
     if (!value || !viewItems.value.some((item) => item.key === value)) return
     expandedKey.value = value
+    activeItemKey.value = value
+    markReviewed(value)
   },
   { immediate: true },
 )
