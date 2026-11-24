@@ -27,8 +27,10 @@ const {
   listLuxian0609CustomerRules,
   listManualSampleValidationRuleSets,
   matchManualSamplePool,
+  previewManualSamplePoolHospitalizationScope,
   runManualSamplePool,
   syncManualSamplePoolRecords,
+  syncManualSamplePoolRecordsByHospitalization,
   getSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJobDebugSnapshot,
   listSichuanWorkspaceBatchJobs,
@@ -69,8 +71,10 @@ const {
   listLuxian0609CustomerRules: vi.fn(),
   listManualSampleValidationRuleSets: vi.fn(),
   matchManualSamplePool: vi.fn(),
+  previewManualSamplePoolHospitalizationScope: vi.fn(),
   runManualSamplePool: vi.fn(),
   syncManualSamplePoolRecords: vi.fn(),
+  syncManualSamplePoolRecordsByHospitalization: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
   getSichuanWorkspaceBatchJobDebugSnapshot: vi.fn(),
   listSichuanWorkspaceBatchJobs: vi.fn(),
@@ -117,8 +121,10 @@ vi.mock('@/services/manual-case-sample-service', () => ({
   listLuxian0609CustomerRules,
   listManualSampleValidationRuleSets,
   matchManualSamplePool,
+  previewManualSamplePoolHospitalizationScope,
   runManualSamplePool,
   syncManualSamplePoolRecords,
+  syncManualSamplePoolRecordsByHospitalization,
 }))
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
@@ -1042,8 +1048,9 @@ function expectedCompactLocalTime(value: string): string {
   return `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}`
 }
 
-async function mountView() {
+async function mountView(options: { attachTo?: HTMLElement } = {}) {
   const wrapper = mount(CustomerSampleValidationView, {
+    ...(options.attachTo ? { attachTo: options.attachTo } : {}),
     global: {
       stubs: {
         AButton: AButtonStub,
@@ -5279,5 +5286,122 @@ describe('CustomerSampleValidationView', () => {
     )
     // 删除激活样本池并自动选中 pool2 后，恢复 pool2 的最近质控任务
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-pool-2')
+  })
+
+  it('Batch3: 范围提示 pill 带 title tooltip，且验收工件/内置目录提示徽章使用中性描边样式', async () => {
+    listManualSampleValidationRuleSets.mockResolvedValueOnce({
+      success: false,
+      message: 'fallback',
+    })
+    const wrapper = await mountView()
+
+    const scopePill = wrapper.get('.customer-sample-scope-pill')
+    expect(scopePill.attributes('title')).toBe(scopePill.text())
+
+    const fallbackBadge = wrapper.get('.customer-sample-subtle-notice-badge')
+    expect(fallbackBadge.text()).toBe('内置目录')
+    expect(fallbackBadge.classes()).not.toContain('bg-amber-50')
+  })
+
+  it('Batch3: 非 0609 模式下导览自动跳过缺失的 lx0609-scope 步骤，并支持 Escape 关闭', async () => {
+    const wrapper = await mountView({ attachTo: document.body })
+
+    const switchTo0916 = wrapper.get('button[data-rule-set-key="luxian_0916_qc_v1"]')
+    await switchTo0916.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    expect(document.querySelector('[data-customer-guide="lx0609-scope"]')).toBeNull()
+
+    const guideButton = wrapper.findAll('button').find((node) => node.text().includes('功能导览'))
+    expect(guideButton).toBeTruthy()
+    await guideButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.get('.customer-sample-tour-count').text()).toBe('1 / 5')
+    expect(wrapper.text()).toContain('先选择样本池')
+
+    const nextButton = wrapper.get('.customer-sample-guide-next')
+    await nextButton.trigger('click')
+    await nextTick()
+    expect(wrapper.text()).toContain('确认验证规则集')
+
+    await nextButton.trigger('click')
+    await nextTick()
+    expect(wrapper.text()).not.toContain('限定 LX0609 质控点范围')
+    expect(wrapper.text()).toContain('创建测试病历')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+    expect(wrapper.find('.customer-sample-tour-layer').exists()).toBe(false)
+  })
+
+  it('Batch3: 住院范围同步切换样本池重置科室、校验出院日期顺序，并在期间出院模式使用两列布局', async () => {
+    const { ref: vueRef } = await import('vue')
+    const { useCustomerSampleHospitalizationSync } = await import(
+      '@/views/workstation-v4/customer-sample-validation/useCustomerSampleHospitalizationSync'
+    )
+
+    previewManualSamplePoolHospitalizationScope.mockResolvedValue({
+      success: true,
+      data: {
+        counts: { active: 2, discharged: 3, deduplicated: 4, existing_in_pool: 1, new_to_pool: 3 },
+        departments: [{ name: '普外科', total_count: 4 }],
+        warnings: [],
+      },
+    })
+    syncManualSamplePoolRecordsByHospitalization.mockResolvedValue({
+      success: true,
+      data: { job_id: 'sync-job-1' },
+    })
+
+    const selectedPoolId = vueRef<string | undefined>('pool-1')
+    const openSyncJob = vi.fn().mockResolvedValue(undefined)
+    const sync = useCustomerSampleHospitalizationSync({ selectedPoolId, openSyncJob })
+
+    await sync.openHospitalizationSyncModal()
+    sync.hospitalizationSyncForm.value.departments = ['普外科']
+
+    selectedPoolId.value = 'pool-2'
+    await nextTick()
+    expect(sync.hospitalizationSyncForm.value.departments).toEqual([])
+    expect(sync.hospitalizationSyncPreview.value).toBeNull()
+
+    sync.hospitalizationSyncForm.value.scopeMode = 'discharged'
+    sync.hospitalizationSyncForm.value.dischargeStartDate = '2026-06-20'
+    sync.hospitalizationSyncForm.value.dischargeEndDate = '2026-06-10'
+    await sync.refreshHospitalizationScopePreview()
+    expect(sync.hospitalizationSyncPreviewError.value).toContain('出院开始日期不能晚于出院结束日期')
+    expect(sync.hospitalizationSyncCanSubmit.value).toBe(false)
+
+    syncManualSamplePoolRecordsByHospitalization.mockClear()
+    await sync.handleHospitalizationSync()
+    expect(syncManualSamplePoolRecordsByHospitalization).not.toHaveBeenCalled()
+    expect(message.warning).toHaveBeenCalledWith('出院开始日期不能晚于出院结束日期')
+
+    // 同时验证页面弹窗在期间出院模式下使用 sm:grid-cols-2 而非 sm:grid-cols-3
+    const wrapper = await mountView()
+    const syncMenuBtn = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('按住院范围同步'))
+    expect(syncMenuBtn).toBeTruthy()
+    await syncMenuBtn!.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    const dischargedBtn = wrapper
+      .findAll('.a-segmented-stub button')
+      .find((node) => node.text().trim() === '期间出院')
+    expect(dischargedBtn).toBeTruthy()
+    await dischargedBtn!.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    const dateGrid = wrapper
+      .findAll('.a-modal-stub .grid')
+      .find((node) => node.text().includes('出院开始日期'))
+    expect(dateGrid).toBeTruthy()
+    expect(dateGrid!.classes()).toContain('sm:grid-cols-2')
+    expect(dateGrid!.classes()).not.toContain('sm:grid-cols-3')
   })
 })

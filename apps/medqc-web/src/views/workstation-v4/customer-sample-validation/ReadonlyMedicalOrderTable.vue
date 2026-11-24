@@ -1,8 +1,14 @@
 <template>
   <section class="readonly-medical-order-table" data-testid="readonly-medical-order-table">
-    <div class="editable-copy-order-type-switch">
+    <div
+      class="editable-copy-order-type-switch"
+      role="radiogroup"
+      aria-label="医嘱类型切换"
+    >
       <button
         type="button"
+        role="radio"
+        :aria-checked="activeType === 'long'"
         :class="{ 'is-active': activeType === 'long' }"
         @click="activeType = 'long'"
       >
@@ -10,6 +16,8 @@
       </button>
       <button
         type="button"
+        role="radio"
+        :aria-checked="activeType === 'temporary'"
         :class="{ 'is-active': activeType === 'temporary' }"
         @click="activeType = 'temporary'"
       >
@@ -53,8 +61,10 @@
           <tr
             v-for="row in visibleRows"
             :key="row.document.key"
+            tabindex="0"
             :class="{ 'is-active': row.document.key === selectedKey }"
             @click="emit('select', row.document.key)"
+            @keydown.enter.prevent="emit('select', row.document.key)"
           >
             <td>{{ row.startTime }}</td>
             <td>{{ row.plannedEndTime || '未返回' }}</td>
@@ -341,6 +351,11 @@ watch(
 .editable-copy-order-table tbody tr:hover,
 .editable-copy-order-table tbody tr.is-active {
   background: rgba(10, 108, 255, 0.07);
+}
+
+.editable-copy-order-table tbody tr:focus-visible {
+  outline: 2px solid var(--mq-brand-600, #0a6cff);
+  outline-offset: -2px;
 }
 
 .editable-copy-order-empty {

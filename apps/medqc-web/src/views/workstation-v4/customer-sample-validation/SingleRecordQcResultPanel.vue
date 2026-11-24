@@ -85,7 +85,7 @@
 
     <div v-else class="result-list" :class="{ 'is-grouped': isGroupedPresentation }">
       <article
-        v-for="(item, itemIndex) in renderedItems"
+        v-for="item in renderedItems"
         v-show="shouldRenderDocumentGroupItem(item.key)"
         :key="item.key"
         class="result-row"
@@ -145,7 +145,7 @@
           <span class="result-main">
             <span class="result-meta-bar">
               <span class="result-meta-left">
-                <span class="result-index-badge">{{ String(itemIndex + 1).padStart(2, '0') }}</span>
+                <span class="result-index-badge">{{ visibleDisplayIndex(item.key) }}</span>
                 <span
                   v-if="cardDocumentTag(item)"
                   class="result-doc-badge"
@@ -1184,6 +1184,23 @@ function shouldRenderDocumentGroupItem(itemKey: string) {
   return !group || group.count <= 1 || group.isFirst || isDocumentGroupExpanded(group.key)
 }
 
+const visibleDisplayIndexByKey = computed(() => {
+  const indexMap = new Map<string, number>()
+  let visibleIndex = 0
+  for (const item of renderedItems.value) {
+    if (isDocumentGroupExpandedForItem(item.key)) {
+      visibleIndex += 1
+      indexMap.set(item.key, visibleIndex)
+    }
+  }
+  return indexMap
+})
+
+function visibleDisplayIndex(itemKey: string): string {
+  const index = visibleDisplayIndexByKey.value.get(itemKey)
+  return index ? String(index).padStart(2, '0') : ''
+}
+
 function resolveDefaultReportTab(): SingleRecordQcResultReportTab {
   if (confirmedResultsOnly.value) return 'non_compliant'
   if (presentation.value.counts.nonCompliant) return 'non_compliant'
@@ -1658,7 +1675,7 @@ watch(
   padding: 0;
   -webkit-user-select: text;
   user-select: text;
-  cursor: text;
+  cursor: pointer;
 }
 
 .result-row-header {
@@ -1914,7 +1931,7 @@ watch(
 }
 .fact-list {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 5px 10px;
   margin: 0;
 }
@@ -1987,9 +2004,9 @@ watch(
 .implant-event-block {
   overflow: hidden;
   padding: 0 !important;
-  border: 1px solid rgba(217, 45, 32, 0.14);
-  border-radius: 9px;
-  background: rgba(255, 251, 250, 0.78);
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.9);
 }
 
 .implant-event-list {
@@ -2000,26 +2017,40 @@ watch(
 .implant-event-row {
   display: grid;
   gap: 3px;
-  padding: 9px 10px;
-  border-top: 1px solid rgba(217, 45, 32, 0.08);
+  padding: 9px 12px;
+  border-top: 1px solid rgba(15, 23, 42, 0.07);
+  background: #ffffff;
 }
 
 .implant-event-row:first-child {
-  border-top: 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.07);
 }
 
 .implant-event-row strong {
-  color: rgba(29, 29, 31, 0.9);
+  color: var(--mq-text-primary, #0f172a);
   font-size: 12px;
   font-weight: 700;
   line-height: 19px;
 }
 
 .implant-event-row span {
-  color: #b42318;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--mq-text-secondary, #334155);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 19px;
+}
+
+.implant-event-row span::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d97706;
+  flex: none;
+  align-self: center;
 }
 
 .fact-list dt {
@@ -2067,10 +2098,10 @@ watch(
 .copy-pair-row {
   display: grid;
   gap: 5px;
-  padding: 8px 9px;
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  border-radius: 8px;
-  background: rgba(10, 108, 255, 0.025);
+  padding: 9px 11px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.9);
 }
 
 .copy-pair-head {
@@ -2079,15 +2110,32 @@ watch(
 }
 
 .copy-pair-head strong {
-  color: rgba(29, 29, 31, 0.78);
+  color: var(--mq-text-primary, #0f172a);
   font-size: 12px;
   font-weight: 650;
 }
 
 .copy-pair-head span {
-  color: #d92d20;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--mq-text-primary, #0f172a);
   font-size: 11px;
   font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.copy-pair-head span::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #d97706;
+  flex: none;
 }
 
 .copy-pair-documents {
@@ -2262,7 +2310,7 @@ watch(
 
 .result-detail :deep(.timeliness-metric) {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 10px;
   align-items: baseline;
   padding: 0;
@@ -2287,7 +2335,8 @@ watch(
 }
 
 .result-detail :deep(.timeliness-metric.is-overdue strong) {
-  color: #c62828;
+  color: var(--mq-text-primary, #0f172a);
+  font-weight: 600;
 }
 
 .result-detail :deep(.timeline-point strong) {
@@ -2308,7 +2357,7 @@ watch(
   padding-top: 6px !important;
 }
 .result-detail .decision-fact-block .fact-list {
-  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 6px 10px;
   padding: 0 0 10px;
 }

@@ -350,13 +350,27 @@ watch(
 }
 .result-history-nav button { margin-inline-start: auto; }
 .customer-record-result-warning {
-  margin: 12px 16px;
-  padding: 12px 16px;
-  color: #92400e;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px 0;
+  padding: 10px 14px;
+  color: var(--mq-text-primary, #0f172a);
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  font-size: 13px;
+  line-height: 20px;
   overflow-wrap: anywhere;
+}
+.customer-record-result-warning::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d97706;
+  flex: none;
 }
 :global(.customer-record-result-drawer .ant-drawer-title) {
   min-width: 0;

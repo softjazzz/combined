@@ -103,8 +103,26 @@ const variant = computed(() => props.variant)
   line-height: 21px;
 }
 
+.timeliness-metric.is-overdue {
+  background: rgba(248, 250, 252, 0.95);
+}
+
 .timeliness-metric.is-overdue strong {
-  color: #d92d20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--mq-text-primary, #0f172a);
+  font-weight: 700;
+}
+
+.timeliness-metric.is-overdue strong::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d97706;
+  flex: none;
 }
 
 .timeliness-timeline {

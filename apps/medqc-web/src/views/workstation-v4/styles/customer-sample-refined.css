@@ -39,6 +39,7 @@
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-13);
   font-weight: 600;
+  line-height: 18px;
 }
 
 .customer-sample-page .customer-sample-page-title .mq-page-title {
@@ -65,6 +66,15 @@
   color: var(--mq-text-primary);
   font-size: var(--mq-font-14);
   font-weight: 500;
+  transform: none;
+}
+
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn:not(.ant-btn-primary):hover),
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn:not(.ant-btn-primary):focus) {
+  border-color: rgba(10, 108, 255, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 12px rgba(10, 55, 115, 0.12);
+  color: var(--mq-brand-700);
   transform: none;
 }
 
@@ -194,6 +204,7 @@
   background: transparent;
   font-size: var(--mq-font-13);
   font-weight: 400;
+  vertical-align: middle;
 }
 
 .customer-sample-page :deep(.ant-table-tbody > tr:hover > td) {

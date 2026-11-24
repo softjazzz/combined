@@ -344,9 +344,10 @@ watch(
 
 <style scoped>
 .qc-result-feedback {
-  margin-top: 16px;
-  padding: 12px 0 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  container-type: inline-size;
+  margin: 0;
+  padding: 0;
+  border-top: 0;
   color: rgba(29, 29, 31, 0.72);
   font-size: 12px;
   line-height: 18px;
@@ -565,7 +566,7 @@ watch(
   line-height: 17px;
 }
 
-@media (max-width: 520px) {
+@container (max-width: 520px) {
   .feedback-prompt,
   .feedback-submitted {
     align-items: flex-start;

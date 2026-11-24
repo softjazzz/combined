@@ -162,7 +162,7 @@
                     </a-button>
                     <span
                       v-if="ruleSetDirectoryFallbackActive"
-                      class="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[12px] font-medium text-amber-700"
+                      class="customer-sample-subtle-notice-badge shrink-0"
                     >
                       内置目录
                     </span>
@@ -224,7 +224,7 @@
                       selectedRuleSet?.artifact_freshness?.status &&
                       selectedRuleSet.artifact_freshness.status !== 'fresh'
                     "
-                    class="customer-sample-coverage-chip border-amber-200 bg-amber-50 text-amber-700"
+                    class="customer-sample-coverage-chip customer-sample-subtle-notice-badge"
                   >
                     验收工件需刷新
                   </span>
@@ -556,7 +556,7 @@
                       搜索、筛选并勾选病历后发起当前模式的质控任务。
                     </div>
                   </div>
-                  <div class="customer-sample-scope-pill">
+                  <div class="customer-sample-scope-pill" :title="currentScopeDescription">
                     {{ currentScopeDescription }}
                   </div>
                 </div>
@@ -595,7 +595,7 @@
                       @change="handleFilterChange"
                     />
                     <div
-                      class="flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
+                      class="customer-sample-filter-control flex items-center border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
                     >
                       <span class="mr-2">{{
                         isSyncedOnlyValidationMode ? '首批筛选已关闭' : '仅首批'
@@ -607,21 +607,27 @@
                       />
                     </div>
                     <div
-                      class="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
+                      class="customer-sample-filter-control customer-sample-filter-control--select flex items-center gap-2 border border-slate-200 bg-slate-50 pl-3 pr-1 text-[13px] text-slate-600"
                     >
                       <span>并发病历数</span>
                       <a-select
                         v-model:value="runOptions.maxParallelRecords"
                         :disabled="initialConfigLoading"
-                        class="w-[88px] customer-sample-toolbar-select"
-                        size="middle"
+                        class="w-[78px] customer-sample-filter-inline-select"
+                        size="small"
                         :options="parallelOptions"
                       />
                     </div>
-                    <a-button type="primary" class="!rounded-full" @click="handleSearchRecords">
+                    <a-button
+                      type="primary"
+                      class="customer-sample-filter-btn"
+                      @click="handleSearchRecords"
+                    >
                       查询
                     </a-button>
-                    <a-button class="!rounded-full" @click="resetFilters"> 重置 </a-button>
+                    <a-button class="customer-sample-filter-btn" @click="resetFilters">
+                      重置
+                    </a-button>
                   </div>
                 </div>
 
@@ -1055,7 +1061,13 @@
 
         <div
           class="grid grid-cols-1 gap-3"
-          :class="hospitalizationScopeNeedsDischargeRange ? 'sm:grid-cols-3' : ''"
+          :class="
+            hospitalizationSyncForm.scopeMode === 'active_and_discharged'
+              ? 'sm:grid-cols-3'
+              : hospitalizationSyncForm.scopeMode === 'discharged'
+                ? 'sm:grid-cols-2'
+                : ''
+          "
         >
           <label v-if="hospitalizationSyncForm.scopeMode !== 'discharged'" class="block">
             <span class="mb-1.5 block text-[13px] font-medium text-slate-700">在院统计日期</span>

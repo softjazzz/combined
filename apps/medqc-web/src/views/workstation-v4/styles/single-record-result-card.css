@@ -157,12 +157,29 @@
 }
 
 .result-index-badge {
-  color: var(--mq-text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 6px;
+  background: #eef2f7;
+  color: #1e293b;
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  line-height: 20px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.result-row.is-active .result-index-badge {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
 }
 
 .result-doc-badge {
@@ -513,7 +530,10 @@
 }
 
 /* ---------- 展开态：分区依次排列 ---------- */
-.result-row.is-expanded > :not(.result-trigger):not(.result-document-group-header):not(.result-footer) {
+.result-row.is-expanded
+  > :not(.result-trigger):not(.result-document-group-header):not(.result-footer):not(
+    .result-detail
+  ):not(.result-card-actions) {
   margin-right: 14px;
   margin-left: 14px;
 }
@@ -526,7 +546,8 @@
 }
 
 .result-row.is-expanded > .result-detail {
-  margin-bottom: 8px;
+  margin: 0 0 8px;
+  padding: 10px 14px 0;
 }
 
 .result-row.is-expanded > .result-suggestion-disclosure {
@@ -563,7 +584,7 @@
 
 .summary-narrative > .detail-block {
   display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 10px;
   align-items: baseline;
 }
@@ -622,8 +643,9 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 12px;
-  background: rgba(118, 128, 160, 0.07);
+  background: rgba(248, 250, 252, 0.9);
 }
 
 .result-detail :deep(.timeliness-metric span) {
@@ -639,12 +661,30 @@
 }
 
 .result-detail :deep(.timeliness-metric.is-overdue) {
-  background: var(--mq-danger-bg);
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.result-detail :deep(.timeliness-metric.is-overdue span),
+.result-detail :deep(.timeliness-metric.is-overdue span) {
+  color: var(--mq-text-tertiary);
+}
+
 .result-detail :deep(.timeliness-metric.is-overdue strong) {
-  color: var(--mq-danger-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mq-text-primary, #0f172a);
+  font-weight: 700;
+}
+
+.result-detail :deep(.timeliness-metric.is-overdue strong::before) {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d97706;
+  flex: none;
 }
 
 /* 资料待核实：先说缺什么 */
@@ -662,7 +702,7 @@
 }
 
 .data-gap-block .fact-list {
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 6px 10px;
 }
 
@@ -743,6 +783,7 @@
   display: inline-flex;
   min-height: 28px;
   align-items: center;
+  gap: 6px;
   margin: 0;
   color: var(--mq-info-text);
   font-size: var(--mq-font-13);
@@ -753,6 +794,18 @@
 
 .model-analysis summary::-webkit-details-marker {
   display: none;
+}
+
+.model-analysis summary::before {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1;
+  content: '▸';
+  transition: transform 160ms ease;
+}
+
+.model-analysis[open] summary::before {
+  transform: rotate(90deg);
 }
 
 .model-analysis[open] > p {
@@ -847,7 +900,7 @@
 
 .rule-fulltext {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 6px 10px;
   padding: 10px 14px;
 }
@@ -871,8 +924,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 14px;
-  padding: 0 0 6px;
+  margin: 0;
+  padding: 6px 14px 10px;
   border-top: 0;
 }
 

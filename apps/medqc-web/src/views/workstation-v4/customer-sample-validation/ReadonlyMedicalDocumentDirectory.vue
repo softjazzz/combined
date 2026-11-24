@@ -38,13 +38,19 @@
         type="search"
         class="readonly-medical-document-search"
         data-testid="record-document-search"
+        aria-label="搜索病历文书"
         :placeholder="summaryOnly ? '搜索文书标题或已加载医嘱' : '搜索标题、正文或医嘱'"
       >
-      <div class="readonly-medical-document-filter">
+      <div
+        class="readonly-medical-document-filter"
+        role="group"
+        aria-label="文书筛选"
+      >
         <button
           type="button"
           data-testid="record-document-filter-all"
           :class="{ 'is-active': filter === 'all' }"
+          :aria-pressed="filter === 'all'"
           @click="filter = 'all'"
         >
           全部
@@ -53,6 +59,7 @@
           type="button"
           data-testid="record-document-filter-content"
           :class="{ 'is-active': filter === 'content' }"
+          :aria-pressed="filter === 'content'"
           @click="filter = 'content'"
         >
           有正文
@@ -61,6 +68,7 @@
           type="button"
           data-testid="record-document-filter-order"
           :class="{ 'is-active': filter === 'orders' }"
+          :aria-pressed="filter === 'orders'"
           @click="selectOrdersFilter"
         >
           医嘱

@@ -509,11 +509,12 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(attention).toContain('资料待核实 13')
     expect(attention).toContain('数据缺口 6')
     expect(attention).toContain('待判断 3')
+    expect(attention).toContain('未执行 4')
     expect(attention).not.toContain('合规 28')
     expect(other).toContain('其他结果')
     expect(other).toContain('合规 28')
     expect(other).toContain('不适用 17')
-    expect(other).toContain('未执行 4')
+    expect(other).not.toContain('未执行 4')
     expect(wrapper.get('[data-testid="qc-task-settled-summary"]').text()).toContain('更新')
     expect(wrapper.get('[data-testid="qc-task-diagnostic-warning"]').text()).toBe(
       '2 项规则未完成，请查看技术详情',

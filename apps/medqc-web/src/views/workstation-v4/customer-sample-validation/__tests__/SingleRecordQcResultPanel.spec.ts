@@ -468,4 +468,89 @@ describe('SingleRecordQcResultPanel clinician UX refinements', () => {
     first.unmount()
     second.unmount()
   })
+
+  it('renders .result-index-badge contiguously (01, 02, ...) and renumbers without gaps when a document group is collapsed', async () => {
+    const groupedItems: SingleRecordQcResultItem[] = [
+      {
+        rule_id: 'LX0609-01-01-01',
+        rule_name: '入院记录：入院记录及时性',
+        source_document: '入院记录',
+        status: 'non_compliant',
+        conclusion: '入院记录超期。',
+      },
+      {
+        rule_id: 'LX0609-04-02-01',
+        rule_name: '手术记录：手术记录完成时限',
+        source_document: '手术记录',
+        status: 'non_compliant',
+        conclusion: '手术记录超期。',
+      },
+      {
+        rule_id: 'LX0609-04-02-02',
+        rule_name: '手术记录：术者签名核对',
+        source_document: '手术记录',
+        status: 'non_compliant',
+        conclusion: '手术记录缺少术者签名。',
+      },
+      {
+        rule_id: 'LX0609-04-02-04',
+        rule_name: '手术记录：植入物信息完整性',
+        source_document: '手术记录',
+        status: 'non_compliant',
+        conclusion: '缺少植入物材质。',
+      },
+      {
+        rule_id: 'LX0609-02-01-05',
+        rule_name: '查房记录：病危查房记录',
+        source_document: '查房记录',
+        status: 'non_compliant',
+        conclusion: '缺少每日查房记录。',
+      },
+    ]
+
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: groupedItems,
+        presentationMode: 'grouped',
+      },
+      global: {
+        stubs: {
+          MqIcon: true,
+          QcResultFeedbackControl: true,
+          QcRemediationSuggestion: true,
+          CriterionResultBlock: true,
+          ConsultationRecommendationSummary: true,
+          ExamLabEventResultBlock: true,
+          TimelinessResultBlock: true,
+        },
+      },
+    })
+
+    // Initially all 5 cards are visible -> 01..05
+    expect(wrapper.findAll('.result-index-badge').map((node) => node.text())).toEqual([
+      '01',
+      '02',
+      '03',
+      '04',
+      '05',
+    ])
+
+    // Collapse the 3-item 手术记录 group -> remaining visible cards renumber contiguously to 01, 02
+    const groupToggle = wrapper.get('[data-testid="single-record-document-group-toggle"]')
+    await groupToggle.trigger('click')
+    expect(groupToggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.findAll('.result-index-badge').map((node) => node.text())).toEqual(['01', '02'])
+
+    // Re-expand the group -> returns to 01..05
+    await groupToggle.trigger('click')
+    expect(wrapper.findAll('.result-index-badge').map((node) => node.text())).toEqual([
+      '01',
+      '02',
+      '03',
+      '04',
+      '05',
+    ])
+
+    wrapper.unmount()
+  })
 })

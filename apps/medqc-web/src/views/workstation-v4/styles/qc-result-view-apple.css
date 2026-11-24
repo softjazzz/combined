@@ -58,8 +58,8 @@
 }
 :global(.customer-record-result-drawer .rule-name) {
   font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
+  font-weight: 650;
+  line-height: 21px;
   color: var(--mq-text-primary);
 }
 :global(.customer-record-result-drawer .result-source),
@@ -72,10 +72,12 @@
 :global(.customer-record-result-drawer .summary-narrative) {
   font-size: 13px;
   font-weight: 400;
-  line-height: 1.75;
-  color: var(--mq-neutral-text);
+  line-height: 22px;
+  color: var(--mq-text-secondary);
 }
 :global(.customer-record-result-drawer .result-detail) {
+  margin-inline: 0;
+  padding: 10px 14px 0;
   background: var(--mq-bg-surface);
   border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
 }
@@ -228,19 +230,19 @@
 }
 :global(.customer-record-result-drawer .result-trigger),
 :global(.customer-record-result-drawer .result-row:not(.is-expanded) .result-trigger) {
-  padding: 16px 18px 12px;
+  padding: 11px 14px 9px;
 }
 :global(.customer-record-result-drawer .result-title-row) {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
 }
 :global(.customer-record-result-drawer .rule-name) {
   flex: 1;
   min-width: 0;
   font-size: 14px;
-  line-height: 23px;
-  font-weight: 500;
+  line-height: 21px;
+  font-weight: 650;
 }
 :global(.customer-record-result-drawer .status-pill) {
   flex-shrink: 0;
@@ -255,10 +257,10 @@
   gap: 8px;
 }
 :global(.customer-record-result-drawer .rule-conclusion) {
-  margin-top: 10px;
-  color: var(--mq-text-tertiary);
+  margin-top: 0;
+  color: var(--mq-text-secondary);
   font-size: 13px;
-  line-height: 23px;
+  line-height: 22px;
 }
 :global(.customer-record-result-drawer .result-document-group-header) {
   padding: 0;
@@ -267,23 +269,21 @@
   font-weight: 500;
 }
 :global(.customer-record-result-drawer .result-card-actions) {
-  margin: 0 18px;
-  padding: 4px 0 6px;
+  margin: 0;
+  padding: 6px 14px 10px;
   border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 :global(.customer-record-result-drawer .result-card-actions button) {
   font-size: 12px;
   font-weight: 400;
   color: var(--mq-text-tertiary);
 }
-:global(.customer-record-result-drawer .result-detail) {
-  padding: 0 18px;
-}
 
 :global(.customer-record-result-drawer .result-document-group-toggle) {
   min-height: 36px;
-  padding: 7px 18px;
+  padding: 7px 14px;
   box-sizing: border-box;
 }
 
@@ -384,16 +384,17 @@
   border-color: var(--mq-brand-200);
   color: var(--mq-brand-700);
 }
-:global(.customer-record-result-drawer .result-card-actions) {
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-/* 原文目录：以缩进和选中背景表达层级，去掉装饰树线。 */
+/* 原文目录：以缩进和选中背景表达层级，去掉装饰树线；避免与内部子块叠加双倍内边距。 */
 :global(.customer-record-result-drawer .readonly-medical-document-directory) {
-  background: color-mix(in srgb, var(--mq-neutral-text) 5%, var(--mq-bg-surface));
-  padding: 16px;
-  border-color: color-mix(in srgb, var(--mq-neutral-text) 12%, var(--mq-bg-surface));
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: var(--mq-radius-card, 24px);
+  background: rgba(236, 243, 252, 0.48);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow:
+    0 6px 22px rgba(43, 65, 96, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 :global(.customer-record-result-drawer .readonly-medical-document-directory *) {
   font-family: 'Source Han Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif !important;
@@ -402,15 +403,16 @@
   height: 36px;
   border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 17%, var(--mq-bg-surface));
   border-radius: 8px;
-  background: var(--mq-bg-surface);
+  background: rgba(255, 255, 255, 0.72);
   font-size: 13px;
 }
 :global(.customer-record-result-drawer .readonly-medical-document-filter) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 3px;
+  margin: 0 14px 10px;
   padding: 3px;
-  background: color-mix(in srgb, var(--mq-neutral-text) 12%, var(--mq-bg-surface));
+  background: rgba(213, 225, 241, 0.55);
   border-radius: 8px;
 }
 :global(.customer-record-result-drawer .readonly-medical-document-filter button) {
@@ -426,6 +428,9 @@
   background: var(--mq-bg-surface);
   color: var(--mq-brand-600);
   box-shadow: 0 1px 3px rgba(33, 53, 81, 0.08);
+}
+:global(.customer-record-result-drawer .readonly-medical-document-groups) {
+  padding: 2px 14px 14px;
 }
 :global(.customer-record-result-drawer .readonly-medical-document-group-title) {
   padding: 10px 6px;
@@ -443,6 +448,8 @@
   padding-left: 10px;
 }
 :global(.customer-record-result-drawer .readonly-medical-document-item) {
+  width: 100%;
+  margin: 0 0 4px;
   padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -463,16 +470,6 @@
 }
 
 /* 玻璃仅用于导航和工具层，原文与判定正文保留实色。 */
-:global(.customer-record-result-drawer .readonly-medical-document-directory) {
-  background: rgba(236, 243, 252, 0.48);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
-  backdrop-filter: blur(24px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  border-radius: 12px;
-  box-shadow:
-    0 6px 22px rgba(43, 65, 96, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-}
 :global(.customer-record-result-drawer .result-toolbar) {
   background: rgba(235, 243, 253, 0.55);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
@@ -480,19 +477,14 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.9);
   box-shadow: 0 3px 12px rgba(43, 65, 96, 0.04);
 }
-:global(.customer-record-result-drawer .readonly-medical-document-search) {
-  background: rgba(255, 255, 255, 0.72);
-}
-:global(.customer-record-result-drawer .readonly-medical-document-filter) {
-  background: rgba(213, 225, 241, 0.55);
-}
 
 /* 中央原文阅读层：工作区与纸面分离，不覆盖证据高亮。 */
 :global(.customer-record-result-drawer .record-content-scroll) {
   background: color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
   padding: 20px;
 }
-:global(.customer-record-result-drawer .record-content-sections) {
+:global(.customer-record-result-drawer .record-content-sections),
+:global(.customer-record-result-drawer .record-content-text) {
   background: var(--mq-bg-surface);
   border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 17%, var(--mq-bg-surface));
   border-radius: 10px;
@@ -521,7 +513,8 @@
   :global(.customer-record-result-drawer .record-content-scroll) {
     padding: 10px;
   }
-  :global(.customer-record-result-drawer .record-content-sections) {
+  :global(.customer-record-result-drawer .record-content-sections),
+  :global(.customer-record-result-drawer .record-content-text) {
     padding: 16px;
   }
 }

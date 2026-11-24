@@ -308,6 +308,7 @@ const attentionStatusKeys = new Set([
   'data_quality_gap',
   'uncertain',
   'ai_suggested_non_compliant',
+  'not_executed',
 ])
 const attentionStatusChips = computed(() =>
   (presentation.value?.statusChips || []).filter((chip) => attentionStatusKeys.has(chip.key)),
@@ -605,34 +606,43 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 .qc-task-status__live-result-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  padding: 0 8px;
+}
+
+.qc-task-status__live-result-status::before {
+  width: 6px;
+  height: 6px;
   flex: none;
   border-radius: 999px;
-  background: rgba(100, 116, 139, 0.1);
-  color: #475569;
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 19px;
-  padding: 0 7px;
+  background: #94a3b8;
+  content: '';
 }
 
-.qc-task-status__live-result-status.is-danger {
-  background: rgba(239, 68, 68, 0.08);
-  color: #dc2626;
+.qc-task-status__live-result-status.is-danger::before {
+  background: #dc2626;
 }
 
-.qc-task-status__live-result-status.is-warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #b45309;
+.qc-task-status__live-result-status.is-warning::before {
+  background: #d97706;
 }
 
-.qc-task-status__live-result-status.is-review {
-  background: rgba(10, 108, 255, 0.08);
-  color: #0a6cff;
+.qc-task-status__live-result-status.is-review::before {
+  background: #2563eb;
 }
 
-.qc-task-status__live-result-status.is-success {
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
+.qc-task-status__live-result-status.is-success::before {
+  background: #059669;
 }
 
 .qc-task-status__live-result-text {
@@ -762,32 +772,63 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 .qc-task-status__chips > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.035);
-  color: rgba(29, 29, 31, 0.6);
+  background: #ffffff;
+  color: #0f172a;
   font-size: 12px;
-  line-height: 22px;
-  padding: 0 8px;
+  font-weight: 500;
+  line-height: 20px;
+  padding: 1px 9px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
-.qc-task-status__chips .is-danger {
-  background: rgba(239, 68, 68, 0.07);
-  color: #dc2626;
+.qc-task-status__chips > span::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: #94a3b8;
+  content: '';
 }
 
-.qc-task-status__chips .is-warning {
-  background: rgba(245, 158, 11, 0.09);
-  color: #b45309;
+.qc-task-status__chips > span strong {
+  color: #0f172a;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.qc-task-status__chips .is-review {
-  background: rgba(10, 108, 255, 0.07);
-  color: #0a6cff;
+.qc-task-status__chips .is-danger,
+.qc-task-status__chips .is-warning,
+.qc-task-status__chips .is-review,
+.qc-task-status__chips .is-success,
+.qc-task-status__chips .is-muted {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  color: #0f172a;
 }
 
-.qc-task-status__chips .is-success {
-  background: rgba(16, 185, 129, 0.08);
-  color: #047857;
+.qc-task-status__chips .is-danger::before {
+  background: #dc2626;
+}
+
+.qc-task-status__chips .is-warning::before {
+  background: #d97706;
+}
+
+.qc-task-status__chips .is-review::before {
+  background: #2563eb;
+}
+
+.qc-task-status__chips .is-success::before {
+  background: #059669;
+}
+
+.qc-task-status__chips .is-muted::before {
+  background: #94a3b8;
 }
 
 .qc-task-status__other-results {
@@ -801,10 +842,14 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 .qc-task-status__other-results > span:not(:first-child) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.035);
-  color: rgba(29, 29, 31, 0.62);
-  padding: 0 7px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #475569;
+  padding: 0 8px;
 }
 
 .qc-task-status__actions {

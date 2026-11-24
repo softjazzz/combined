@@ -28,6 +28,8 @@
       >
         <button
           type="button"
+          role="tab"
+          :aria-selected="mobileTab === 'record'"
           :class="{ 'is-active': mobileTab === 'record' }"
           @click="mobileTab = 'record'"
         >
@@ -35,6 +37,8 @@
         </button>
         <button
           type="button"
+          role="tab"
+          :aria-selected="mobileTab === 'result'"
           :class="{ 'is-active': mobileTab === 'result' }"
           @click="mobileTab = 'result'"
         >
@@ -215,10 +219,13 @@
                   v-if="section.parts.match"
                   :ref="setHighlightElement"
                   class="record-evidence-highlight"
-                  :class="{ 'is-block-highlight': section.isBlockHighlight }"
-                  tabindex="0"
-                  @click="emitSelectedIssue"
-                  @keydown.enter="emitSelectedIssue"
+                  :class="{
+                    'is-block-highlight': section.isBlockHighlight,
+                    'is-interactive': Boolean(selectedIssueKey),
+                  }"
+                  :tabindex="selectedIssueKey ? 0 : undefined"
+                  @click="selectedIssueKey ? emitSelectedIssue() : undefined"
+                  @keydown.enter="selectedIssueKey ? emitSelectedIssue() : undefined"
                 >{{ section.parts.match }}</mark><span>{{ section.parts.after }}</span>
               </p>
             </section>
@@ -234,10 +241,13 @@
                 v-if="documentTextParts.match"
                 :ref="setHighlightElement"
                 class="record-evidence-highlight"
-                :class="{ 'is-block-highlight': documentTextIsBlockHighlight }"
-                tabindex="0"
-                @click="emitSelectedIssue"
-                @keydown.enter="emitSelectedIssue"
+                :class="{
+                  'is-block-highlight': documentTextIsBlockHighlight,
+                  'is-interactive': Boolean(selectedIssueKey),
+                }"
+                :tabindex="selectedIssueKey ? 0 : undefined"
+                @click="selectedIssueKey ? emitSelectedIssue() : undefined"
+                @keydown.enter="selectedIssueKey ? emitSelectedIssue() : undefined"
           >{{ documentTextParts.match }}</mark><span>{{ documentTextParts.after }}</span></pre>
         </div>
         <div
@@ -1828,13 +1838,15 @@ onBeforeUnmount(() => {
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.28);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  cursor: pointer;
   transition:
     background 160ms ease,
     box-shadow 160ms ease;
 }
-.record-evidence-highlight:hover,
-.record-evidence-highlight:focus-visible {
+.record-evidence-highlight.is-interactive {
+  cursor: pointer;
+}
+.record-evidence-highlight.is-interactive:hover,
+.record-evidence-highlight.is-interactive:focus-visible {
   background: #bfdbfe;
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.45);
   outline: none;
@@ -1864,8 +1876,8 @@ onBeforeUnmount(() => {
   line-height: 18px;
   letter-spacing: 0.02em;
 }
-.record-evidence-highlight.is-block-highlight:hover,
-.record-evidence-highlight.is-block-highlight:focus-visible {
+.record-evidence-highlight.is-block-highlight.is-interactive:hover,
+.record-evidence-highlight.is-block-highlight.is-interactive:focus-visible {
   background: #d8e8ff;
   border-color: #60a5fa;
   box-shadow: 0 6px 16px rgba(37, 99, 235, 0.15);
@@ -2166,12 +2178,21 @@ onBeforeUnmount(() => {
     display: none;
   }
   .record-document-select {
+    position: relative;
     min-width: 180px;
     margin-left: auto;
     display: block;
   }
   .record-document-select > span {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
   .record-document-select select {
     width: 100%;
