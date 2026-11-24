@@ -907,25 +907,65 @@ async def _load_defect_annotations(
     return annotations, "loaded"
 
 
+def _extract_annotation_text_candidates(value: Any) -> List[str]:
+    """从 str / list[dict|str] / dict 等不同形态的 evidence/findings 中提取纯文本片段。"""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return [cleaned] if cleaned else []
+    if isinstance(value, dict):
+        candidates: List[str] = []
+        for key in (
+            "quote",
+            "excerpt",
+            "snippet",
+            "text",
+            "content",
+            "evidence",
+            "summary",
+            "description",
+            "value",
+        ):
+            raw = value.get(key)
+            if isinstance(raw, str) and raw.strip():
+                candidates.append(raw.strip())
+        return candidates
+    if isinstance(value, (list, tuple)):
+        candidates = []
+        for item in value:
+            candidates.extend(_extract_annotation_text_candidates(item))
+        return candidates
+    cleaned = str(value).strip()
+    return [cleaned] if cleaned else []
+
+
+def _coerce_annotation_text(value: Any) -> str:
+    """将可能为 list/dict/None 的标注字段规范为单段字符串，避免 str.find 抛 TypeError。"""
+    candidates = _extract_annotation_text_candidates(value)
+    return "；".join(dict.fromkeys(candidates)) if candidates else ""
+
+
 def _build_annotation_from_issue(
     content: str, issue: Dict[str, Any], index: int
 ) -> Optional[Dict[str, Any]]:
     """从质控 issue 构建缺陷标注"""
-    description = issue.get("description", "")
-    evidence = issue.get("evidence", "")
-    severity = issue.get("severity", "warning")
-    location = issue.get("location", "")
-    rule_name = issue.get("rule_name", "")
+    description = _coerce_annotation_text(issue.get("description", ""))
+    evidence_candidates = _extract_annotation_text_candidates(issue.get("evidence", ""))
+    evidence = "；".join(dict.fromkeys(evidence_candidates))
+    severity = _coerce_annotation_text(issue.get("severity", "warning")) or "warning"
+    location = _coerce_annotation_text(issue.get("location", ""))
+    rule_name = _coerce_annotation_text(issue.get("rule_name", ""))
 
     start_offset = -1
     end_offset = -1
-    search_text = evidence or description
+    search_text = (evidence_candidates[0] if evidence_candidates else "") or description
 
     if content:
         # 候选搜索词（按优先级）
-        candidates = []
-        if evidence:
-            candidates.append(evidence[:30])
+        candidates: List[str] = []
+        for ev in evidence_candidates:
+            candidates.append(ev[:30])
         if description:
             candidates.append(description[:30])
         # 从 location / rule_name 提取病历章节关键词
@@ -935,12 +975,14 @@ def _build_annotation_from_issue(
             "入院记录", "出院记录", "病程记录", "手术记录",
             "医嘱", "过敏史", "预防接种", "诊断",
         ]
-        for text in [location, rule_name]:
-            if text:
+        for text_field in [location, rule_name]:
+            if text_field:
                 for kw in _section_keywords:
-                    if kw in text:
+                    if kw in text_field:
                         candidates.append(kw)
         for candidate in candidates:
+            if not candidate:
+                continue
             pos = content.find(candidate)
             if pos >= 0:
                 start_offset = pos
@@ -949,7 +991,7 @@ def _build_annotation_from_issue(
                 break
 
     return {
-        "defect_id": issue.get("id", f"issue_{index}"),
+        "defect_id": str(issue.get("id") or f"issue_{index}"),
         "start_offset": start_offset,
         "end_offset": end_offset,
         "keyword": search_text[:50] if search_text else "",
@@ -957,8 +999,8 @@ def _build_annotation_from_issue(
         "evidence": evidence,
         "severity": severity,
         "rule_name": rule_name,
-        "category": issue.get("category", ""),
-        "suggestion": issue.get("suggestion", ""),
+        "category": _coerce_annotation_text(issue.get("category", "")),
+        "suggestion": _coerce_annotation_text(issue.get("suggestion", "")),
     }
 
 
@@ -966,28 +1008,39 @@ def _build_annotation_from_result(
     content: str, result: Dict[str, Any], index: int
 ) -> Optional[Dict[str, Any]]:
     """从评估结果构建缺陷标注"""
-    findings = result.get("findings", "")
-    evidence = result.get("evidence", "")
+    findings = _coerce_annotation_text(
+        result.get("findings") or result.get("customer_summary") or result.get("description") or ""
+    )
+    evidence_candidates = _extract_annotation_text_candidates(result.get("evidence", ""))
+    evidence = "；".join(dict.fromkeys(evidence_candidates))
 
-    search_text = evidence or findings
+    search_text = (evidence_candidates[0] if evidence_candidates else "") or findings
     start_offset = -1
     end_offset = -1
 
-    if search_text and content:
-        pos = content.find(search_text[:30])
-        if pos >= 0:
-            start_offset = pos
-            end_offset = pos + min(len(search_text), 50)
+    if content:
+        candidates = [ev[:30] for ev in evidence_candidates if ev]
+        if findings:
+            candidates.append(findings[:30])
+        for candidate in candidates:
+            pos = content.find(candidate)
+            if pos >= 0:
+                start_offset = pos
+                end_offset = pos + min(len(candidate), 50)
+                search_text = candidate
+                break
 
     return {
-        "defect_id": result.get("rule_id", f"result_{index}"),
+        "defect_id": str(result.get("rule_id") or f"result_{index}"),
         "start_offset": start_offset,
         "end_offset": end_offset,
         "keyword": search_text[:50] if search_text else "",
         "description": findings,
         "evidence": evidence,
         "severity": "error",
-        "rule_name": result.get("rule_name", ""),
+        "rule_name": _coerce_annotation_text(result.get("rule_name", "")),
         "category": "语义质控",
-        "suggestion": result.get("suggestion", ""),
+        "suggestion": _coerce_annotation_text(
+            result.get("suggestion") or result.get("customer_suggestion") or ""
+        ),
     }

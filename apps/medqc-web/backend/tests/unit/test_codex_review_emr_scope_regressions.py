@@ -624,3 +624,56 @@ def test_p1_3_single_db_annotations_bind_tri_key_and_history_job_and_omit_unprov
     assert r_legacy.json()["data"]["content"] == content
     assert r_legacy.json()["data"]["annotation_status"] == "no_result"
     assert r_legacy.json()["data"]["defect_annotations"] == []
+
+
+def test_build_annotation_handles_list_and_dict_evidence_without_type_error():
+    content = "主诉：发热3天。现病史：患者出现反复咳嗽，未规律服药。"
+    # Canonical Envelope 常见形态：evidence 为 list[dict] / list[str] / 空列表 []
+    ann_list_dict = emr_render._build_annotation_from_result(
+        content,
+        {
+            "rule_id": "LX0609-02-01-05",
+            "rule_name": "查房记录规范性",
+            "status": "non_compliant",
+            "findings": "缺少每日病程记录",
+            "evidence": [{"quote": "反复咳嗽，未规律服药", "source_label": "入院记录"}],
+            "suggestion": "请补充病程记录",
+        },
+        0,
+    )
+    assert ann_list_dict is not None
+    assert ann_list_dict["defect_id"] == "LX0609-02-01-05"
+    assert ann_list_dict["start_offset"] == content.find("反复咳嗽，未规律服药")
+    assert ann_list_dict["end_offset"] > ann_list_dict["start_offset"]
+    assert isinstance(ann_list_dict["evidence"], str)
+    assert "反复咳嗽，未规律服药" in ann_list_dict["evidence"]
+
+    ann_empty_list = emr_render._build_annotation_from_result(
+        content,
+        {
+            "rule_id": "LX0609-02-01-06",
+            "rule_name": "主诉完整性",
+            "status": "non_compliant",
+            "findings": "发热3天",
+            "evidence": [],
+        },
+        1,
+    )
+    assert ann_empty_list is not None
+    assert ann_empty_list["start_offset"] == content.find("发热3天")
+    assert ann_empty_list["evidence"] == ""
+
+    ann_issue_list = emr_render._build_annotation_from_issue(
+        content,
+        {
+            "id": "ISS-1",
+            "description": "缺少记录",
+            "evidence": [{"snippet": "发热3天"}],
+            "severity": "error",
+            "rule_name": "入院记录规范",
+        },
+        2,
+    )
+    assert ann_issue_list is not None
+    assert ann_issue_list["start_offset"] == content.find("发热3天")
+    assert ann_issue_list["evidence"] == "发热3天"
