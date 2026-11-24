@@ -51,27 +51,44 @@
 
 /* ---------- 顶部工具栏精简：单分类隐藏空 Tab 槽，右侧显示核对进度 ---------- */
 .toolbar-top {
-  padding: 11px 14px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
 }
 
 .toolbar-summary {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  margin: 0;
+}
+
+.toolbar-summary .result-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  margin: 0;
+  line-height: 28px;
 }
 
 .toolbar-count-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 9px;
-  border: 1px solid rgba(15, 23, 42, 0.09);
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 999px;
   background: #ffffff;
   color: var(--mq-text-secondary);
-  font-size: var(--mq-font-12);
+  font-size: var(--mq-font-13, 13px);
   font-weight: 600;
-  line-height: 18px;
+  line-height: 20px;
   white-space: nowrap;
+  box-sizing: border-box;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
@@ -99,15 +116,17 @@
 .toolbar-review-progress {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  height: 28px;
+  padding: 0 11px;
   border-radius: 999px;
-  background: rgba(10, 108, 255, 0.07);
+  background: rgba(10, 108, 255, 0.09);
   color: var(--mq-brand-700, #0052cc);
-  font-size: 11px;
+  font-size: var(--mq-font-13, 13px);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  line-height: 18px;
+  line-height: 20px;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .toolbar-review-progress.is-complete {

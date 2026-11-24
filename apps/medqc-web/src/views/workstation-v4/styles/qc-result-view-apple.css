@@ -148,23 +148,28 @@
 
 /* 结果导航：固定网格与克制的选中层次。 */
 :global(.customer-record-result-drawer .result-toolbar) {
-  padding: 16px;
+  padding: 12px 16px;
+}
+:global(.customer-record-result-drawer .toolbar-top) {
+  padding: 0;
+  align-items: center;
 }
 :global(.customer-record-result-drawer .toolbar-summary) {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 6px 10px;
-  margin-bottom: 12px;
+  gap: 8px 10px;
+  margin-bottom: 0;
 }
 :global(.customer-record-result-drawer .toolbar-summary > span) {
-  font-size: 12px;
-  color: var(--mq-text-tertiary);
+  font-size: 13px;
+  line-height: 20px;
 }
 :global(.customer-record-result-drawer .result-tabs) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
+  margin: 12px 0 0;
   padding: 5px;
   background: color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
   border: 1px solid rgba(112, 130, 155, 0.08);
