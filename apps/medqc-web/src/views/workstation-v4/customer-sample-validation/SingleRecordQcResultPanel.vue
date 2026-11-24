@@ -151,7 +151,7 @@
                   class="result-doc-badge"
                   data-testid="single-record-doc-badge"
                 >
-                  <FileText :size="12" aria-hidden="true" />
+                  <FileText :size="13" aria-hidden="true" />
                   {{ cardDocumentTag(item) }}
                 </span>
               </span>
@@ -161,7 +161,7 @@
                   class="result-reviewed-badge"
                   data-testid="single-record-reviewed-badge"
                 >
-                  <Check :size="11" :stroke-width="2.6" aria-hidden="true" />
+                  <Check :size="13" :stroke-width="2.4" aria-hidden="true" />
                   已查看
                 </span>
                 <span

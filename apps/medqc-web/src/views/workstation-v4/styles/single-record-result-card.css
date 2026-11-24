@@ -158,25 +158,25 @@
 
 .result-index-badge {
   color: var(--mq-text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  line-height: 18px;
+  line-height: 20px;
 }
 
 .result-doc-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  max-width: 190px;
-  padding: 1px 8px;
+  gap: 5px;
+  max-width: 210px;
+  padding: 2px 9px;
   border-radius: 6px;
   background: rgba(10, 108, 255, 0.08);
   color: var(--mq-brand-700, #0052cc);
-  font-size: 11px;
+  font-size: var(--mq-font-13, 13px);
   font-weight: 600;
-  line-height: 18px;
+  line-height: 20px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -190,14 +190,14 @@
 .result-reviewed-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 7px;
+  gap: 4px;
+  padding: 2px 9px;
   border-radius: 999px;
   background: rgba(16, 185, 129, 0.11);
   color: #047857;
-  font-size: 11px;
+  font-size: var(--mq-font-13, 13px);
   font-weight: 600;
-  line-height: 18px;
+  line-height: 20px;
   white-space: nowrap;
 }
 
