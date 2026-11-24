@@ -1594,10 +1594,10 @@ onBeforeUnmount(() => {
   margin: 0 -14px;
   padding-right: 14px;
   padding-left: 14px;
-  border: 1px solid rgba(225, 29, 72, 0.18);
+  border: 1px solid #bfdbfe;
   border-radius: 10px;
-  background: linear-gradient(90deg, rgba(255, 228, 230, 0.5) 0%, rgba(255, 241, 242, 0.65) 100%);
-  box-shadow: inset 4px 0 0 #e11d48;
+  background: #edf4ff;
+  box-shadow: none;
 }
 .record-content-section.is-evidence-target.has-block-highlight {
   margin: 0;
@@ -1608,7 +1608,7 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 .record-content-section.is-evidence-target .record-content-section-title {
-  color: #be123c;
+  color: #1d4ed8;
 }
 .record-content-section:first-child {
   padding-top: 2px;
@@ -1646,12 +1646,12 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 .record-evidence-highlight {
-  padding: 2px 4px;
-  border-radius: 4px;
-  background: rgba(225, 29, 72, 0.12);
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: #dbeafe;
   color: #0f172a;
   font-weight: 500;
-  box-shadow: inset 0 -2px 0 rgba(225, 29, 72, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.28);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   cursor: pointer;
@@ -1661,31 +1661,30 @@ onBeforeUnmount(() => {
 }
 .record-evidence-highlight:hover,
 .record-evidence-highlight:focus-visible {
-  background: rgba(225, 29, 72, 0.19);
-  box-shadow: inset 0 -2px 0 #e11d48;
+  background: #bfdbfe;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.45);
   outline: none;
 }
 .record-evidence-highlight.is-block-highlight {
   display: block;
   margin: 6px 0;
-  padding: 12px 14px 12px 16px;
-  border: 1px solid rgba(225, 29, 72, 0.24);
-  border-left: 4px solid #e11d48;
+  padding: 12px 15px;
+  border: 1.5px solid #93c5fd;
   border-radius: 10px;
-  background: linear-gradient(90deg, rgba(255, 228, 230, 0.72) 0%, rgba(255, 241, 242, 0.88) 100%);
+  background: #e2eeff;
   color: #0f172a;
   font-weight: 400;
-  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.08);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.11);
 }
 .record-evidence-highlight.is-block-highlight::before {
-  content: '质控命中原文';
+  content: '定位原文';
   display: block;
   width: fit-content;
-  margin-bottom: 6px;
+  margin-bottom: 7px;
   padding: 1px 8px;
   border-radius: 999px;
-  background: rgba(225, 29, 72, 0.12);
-  color: #be123c;
+  background: #2563eb;
+  color: #ffffff;
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
@@ -1693,10 +1692,9 @@ onBeforeUnmount(() => {
 }
 .record-evidence-highlight.is-block-highlight:hover,
 .record-evidence-highlight.is-block-highlight:focus-visible {
-  background: linear-gradient(90deg, rgba(255, 228, 230, 0.9) 0%, rgba(255, 241, 242, 0.96) 100%);
-  border-color: rgba(225, 29, 72, 0.36);
-  border-left-color: #be123c;
-  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.12);
+  background: #d8e8ff;
+  border-color: #60a5fa;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.15);
   outline: none;
 }
 .record-result-column {
