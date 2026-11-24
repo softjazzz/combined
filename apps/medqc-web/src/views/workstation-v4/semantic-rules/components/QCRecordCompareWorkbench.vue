@@ -184,7 +184,10 @@
               v-for="section in documentSectionViews"
               :key="section.key"
               class="record-content-section"
-              :class="{ 'is-evidence-target': section.isMatchedSection }"
+              :class="{
+                'is-evidence-target': section.isMatchedSection,
+                'has-block-highlight': section.isBlockHighlight,
+              }"
               :data-section-key="section.key"
             >
               <h3 class="record-content-section-title">
@@ -195,6 +198,7 @@
                   v-if="section.parts.match"
                   :ref="setHighlightElement"
                   class="record-evidence-highlight"
+                  :class="{ 'is-block-highlight': section.isBlockHighlight }"
                   tabindex="0"
                   @click="emitSelectedIssue"
                   @keydown.enter="emitSelectedIssue"
@@ -209,6 +213,7 @@
                 v-if="documentTextParts.match"
                 :ref="setHighlightElement"
                 class="record-evidence-highlight"
+                :class="{ 'is-block-highlight': documentTextIsBlockHighlight }"
                 tabindex="0"
                 @click="emitSelectedIssue"
                 @keydown.enter="emitSelectedIssue"
@@ -652,6 +657,15 @@ const locationMessage = computed(() => {
   if (locationState.value === 'missing') return '未找到对应文书，请手动核对'
   return selectedDocument.value ? '手动浏览文书' : '等待选择质控结果'
 })
+function isBlockEvidenceMatch(parts: { before: string; match: string; after: string }) {
+  const match = parts.match.trim()
+  if (!match) return false
+  if (!parts.before.trim() && !parts.after.trim()) return true
+  const startsOnNewLine = !parts.before || /\n[ \t]*$/u.test(parts.before)
+  const endsOnNewLine = !parts.after || /^[ \t]*\n/u.test(parts.after)
+  return startsOnNewLine && endsOnNewLine && (match.includes('\n') || match.length >= 60)
+}
+
 const documentTextParts = computed(() => {
   const content = selectedDocument.value?.content || ''
   const range = matchedRange.value
@@ -664,6 +678,7 @@ const documentTextParts = computed(() => {
     after: content.slice(range.end),
   }
 })
+const documentTextIsBlockHighlight = computed(() => isBlockEvidenceMatch(documentTextParts.value))
 
 const documentSectionViews = computed(() => {
   const document = selectedDocument.value
@@ -697,18 +712,20 @@ const documentSectionViews = computed(() => {
         quoteStart = localStart
       }
     }
+    const parts =
+      quoteStart >= 0
+        ? {
+            before: displayedText.slice(0, quoteStart),
+            match: quote,
+            after: displayedText.slice(quoteStart + quote.length),
+          }
+        : { before: displayedText, match: '', after: '' }
     return {
       ...section,
       displayLabel: displaySectionLabel(preliminary?.label || section.label),
       isMatchedSection: matchedSectionKey.value === section.key,
-      parts:
-        quoteStart >= 0
-          ? {
-              before: displayedText.slice(0, quoteStart),
-              match: quote,
-              after: displayedText.slice(quoteStart + quote.length),
-            }
-          : { before: displayedText, match: '', after: '' },
+      isBlockHighlight: isBlockEvidenceMatch(parts),
+      parts,
     }
   })
 })
@@ -1577,12 +1594,19 @@ onBeforeUnmount(() => {
   margin: 0 -14px;
   padding-right: 14px;
   padding-left: 14px;
-  border-radius: 8px;
-  background: rgba(245, 158, 11, 0.07);
-  box-shadow: inset 3px 0 0 rgba(245, 158, 11, 0.88);
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.045);
+  box-shadow: inset 3px 0 0 rgba(37, 99, 235, 0.72);
+}
+.record-content-section.is-evidence-target.has-block-highlight {
+  margin: 0;
+  padding-right: 0;
+  padding-left: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .record-content-section.is-evidence-target .record-content-section-title {
-  color: #a65f00;
+  color: #1d4ed8;
 }
 .record-content-section:first-child {
   padding-top: 2px;
@@ -1620,11 +1644,39 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 .record-evidence-highlight {
-  padding: 2px 1px;
-  border-radius: 3px;
-  background: #fff0a8;
-  color: #6b4b00;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  padding: 1px 3px;
+  border-radius: 4px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #0f172a;
+  box-shadow: inset 0 -2px 0 rgba(37, 99, 235, 0.36);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+.record-evidence-highlight:hover,
+.record-evidence-highlight:focus-visible {
+  background: rgba(37, 99, 235, 0.16);
+  box-shadow: inset 0 -2px 0 rgba(37, 99, 235, 0.65);
+  outline: none;
+}
+.record-evidence-highlight.is-block-highlight {
+  display: block;
+  margin: 4px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #f0f6ff;
+  color: #0f172a;
+  border-left: 3px solid #2563eb;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14);
+}
+.record-evidence-highlight.is-block-highlight:hover,
+.record-evidence-highlight.is-block-highlight:focus-visible {
+  background: #e8f1ff;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.26);
+  outline: none;
 }
 .record-result-column {
   border-left: 1px solid rgba(0, 0, 0, 0.08);
