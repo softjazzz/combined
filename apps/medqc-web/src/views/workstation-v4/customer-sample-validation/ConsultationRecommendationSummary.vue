@@ -14,9 +14,9 @@
     <section
       v-if="comparedRows.length"
       class="consultation-compared"
-      aria-labelledby="consultation-compared-title"
+      :aria-labelledby="comparedTitleId"
     >
-      <h5 id="consultation-compared-title">纳入缺陷核对</h5>
+      <h5 :id="comparedTitleId">纳入缺陷核对</h5>
       <ol class="consultation-recommendation-list">
         <li
           v-for="(row, index) in comparedRows"
@@ -60,10 +60,10 @@
     <section
       v-if="excludedRows.length"
       class="consultation-excluded mq-soft"
-      aria-labelledby="consultation-excluded-title"
+      :aria-labelledby="excludedTitleId"
     >
       <div class="consultation-excluded-heading">
-        <h5 id="consultation-excluded-title">不作为缺陷依据</h5>
+        <h5 :id="excludedTitleId">不作为缺陷依据</h5>
         <span>{{ excludedRows.length }} 条</span>
       </div>
       <p class="consultation-excluded-intro">以下建议按质控口径不核对执行医嘱，原因见各条说明。</p>
@@ -94,6 +94,10 @@
   </section>
 </template>
 
+<script lang="ts">
+let consultationSummaryInstanceSeed = 0
+</script>
+
 <script setup lang="ts">
 import { computed } from 'vue'
 
@@ -102,6 +106,10 @@ import type { ConsultationRecommendationPresentation } from './single-record-res
 const props = defineProps<{
   presentation: ConsultationRecommendationPresentation
 }>()
+
+const instanceId = ++consultationSummaryInstanceSeed
+const comparedTitleId = `consultation-compared-title-${instanceId}`
+const excludedTitleId = `consultation-excluded-title-${instanceId}`
 
 const comparedRows = computed(() =>
   props.presentation.rows.filter((row) => row.state !== 'excluded'),

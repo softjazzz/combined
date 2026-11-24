@@ -442,8 +442,8 @@
               >
                 <span class="evidence-chips-label">关键证据</span>
                 <button
-                  v-for="evidence in displayEvidence(item)"
-                  :key="evidence.source_ref"
+                  v-for="(evidence, evIndex) in displayEvidence(item)"
+                  :key="`${evidence.source_ref}-${evidence.recommendation_index ?? ''}-${evidence.evidence_role ?? ''}-${evIndex}`"
                   type="button"
                   class="evidence-chip"
                   :class="{ 'is-active': activeEvidenceKey === evidenceIdentity(item.key, evidence) }"
@@ -490,7 +490,7 @@
               :feedback="feedbackByRule[item.rule_id]"
               :loading="feedbackLoading"
               :saving="feedbackSavingRuleId === item.rule_id"
-              :error-message="feedbackError"
+              :error-message="feedbackErrorByRule[item.rule_id] || feedbackError"
               @submit="emit('submit-feedback', item.rule_id, $event)"
             />
           </section>
@@ -608,6 +608,7 @@ const props = withDefaults(
     feedbackEnabled?: boolean
     feedbackLoading?: boolean
     feedbackError?: string
+    feedbackErrorByRule?: Record<string, string>
     feedbackSavingRuleId?: string
     debugContext?: QcResultDebugContext
   }>(),
@@ -617,6 +618,7 @@ const props = withDefaults(
     feedbackEnabled: false,
     feedbackLoading: false,
     feedbackError: '',
+    feedbackErrorByRule: () => ({}),
     feedbackSavingRuleId: '',
   },
 )
@@ -1190,16 +1192,37 @@ function resolveDefaultReportTab(): SingleRecordQcResultReportTab {
   return 'all'
 }
 
+const itemsDatasetSignature = computed(() => {
+  const contextSignature = [
+    props.debugContext?.instituteId || '',
+    props.debugContext?.patientId || '',
+    props.debugContext?.visitId || '',
+    props.debugContext?.recordId || '',
+    props.debugContext?.recordRef || '',
+    props.debugContext?.jobId || '',
+  ].join('|')
+  const itemsSignature = props.items
+    .map(
+      (item, index) =>
+        `${index}:${item.rule_id}:${item.status}:${item.conclusion || ''}:${item.detail || ''}:${item.source_document || ''}:${(item.evidence || []).map((entry) => entry.source_ref).join(',')}`,
+    )
+    .join('\u0000')
+  return `${contextSignature}::${itemsSignature}`
+})
+
 watch(
-  [() => props.presentationMode, () => props.items],
+  [() => props.presentationMode, itemsDatasetSignature],
   () => {
-    if (!isGroupedPresentation.value) return
-    activeReportTab.value = resolveDefaultReportTab()
-    collapsedDocumentGroupKeys.value = new Set()
     expandedKey.value = ''
     activeItemKey.value = ''
     activeEvidenceKey.value = ''
     reviewedKeys.value = new Set()
+    feedbackOpenKey.value = ''
+    ruleTextOpenKey.value = ''
+    if (isGroupedPresentation.value) {
+      activeReportTab.value = resolveDefaultReportTab()
+      collapsedDocumentGroupKeys.value = new Set()
+    }
   },
   { immediate: true },
 )

@@ -12,7 +12,11 @@
           <p>查看质控引擎用于区分手术、操作及手术等级的当前口径。</p>
         </div>
         <div class="catalog-page-actions">
-          <span class="catalog-version">{{ data?.version || '目录加载中' }}</span>
+          <span
+            class="catalog-version"
+            :class="{ 'is-error': Boolean(loadError && !data?.version) }"
+            data-testid="catalog-version"
+          >{{ versionBadgeText }}</span>
           <a-button @click="goBack">
             <ArrowLeft :size="15" />返回样本验证
           </a-button>
@@ -35,7 +39,8 @@
         <div class="summary-strip">
           <button
             class="summary-item"
-            :class="{ active: !filters.category && !filters.level }"
+            :class="{ active: isAllFilter }"
+            data-testid="catalog-summary-all"
             @click="showAll"
           >
             <span>目录总数</span><strong>{{ data?.summary.total ?? '—' }}</strong>
@@ -135,6 +140,21 @@
         </div>
 
         <div class="catalog-table-wrap">
+          <div
+            v-if="loadError"
+            class="catalog-error-banner"
+            data-testid="catalog-load-error"
+          >
+            <span>{{ loadError }}</span>
+            <a-button
+              size="small"
+              type="primary"
+              data-testid="catalog-retry"
+              @click="loadCatalog"
+            >
+              重新加载
+            </a-button>
+          </div>
           <div class="catalog-table-meta">
             <span>当前筛选 <strong>{{ data?.total ?? 0 }}</strong> 条</span>
             <span>有效等级是质控判定使用的等级</span>
@@ -186,7 +206,16 @@
               </template>
             </template>
             <template #emptyText>
-              <a-empty description="没有符合当前条件的手术操作" />
+              <a-empty :description="loadError ? '目录加载失败，请点击重试' : '没有符合当前条件的手术操作'">
+                <a-button
+                  v-if="loadError"
+                  size="small"
+                  type="primary"
+                  @click="loadCatalog"
+                >
+                  重新加载
+                </a-button>
+              </a-empty>
             </template>
           </a-table>
         </div>
@@ -208,8 +237,10 @@ import {
 } from '@/views/workstation-v4/surgery-catalog/service'
 
 const loading = ref(false)
+const loadError = ref('')
 const router = useRouter()
 const data = ref<SurgeryProcedureCatalogData>()
+let catalogRequestSeq = 0
 const filters = reactive({
   keyword: '',
   category: undefined as string | undefined,
@@ -244,10 +275,25 @@ const pagination = computed<TablePaginationConfig>(() => ({
   size: 'small',
 }))
 
+const isAllFilter = computed(
+  () =>
+    !filters.category &&
+    !filters.level &&
+    !filters.source &&
+    !String(filters.keyword || '').trim(),
+)
 const isLevelFourFilter = computed(() => filters.category === '手术' && filters.level === '四级')
+const versionBadgeText = computed(() => {
+  if (data.value?.version) return data.value.version
+  if (loading.value) return '目录加载中'
+  if (loadError.value) return '目录加载失败'
+  return '暂无目录版本'
+})
 
 async function loadCatalog(): Promise<void> {
+  const seq = ++catalogRequestSeq
   loading.value = true
+  loadError.value = ''
   try {
     const result = await fetchSurgeryProcedureCatalog({
       keyword: filters.keyword,
@@ -257,11 +303,17 @@ async function loadCatalog(): Promise<void> {
       page: filters.page,
       pageSize: filters.pageSize,
     })
+    if (seq !== catalogRequestSeq) return
     data.value = result
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '加载手术操作分级目录失败')
+    if (seq !== catalogRequestSeq) return
+    const errMsg = error instanceof Error ? error.message : '加载手术操作分级目录失败'
+    loadError.value = errMsg
+    message.error(errMsg)
   } finally {
-    loading.value = false
+    if (seq === catalogRequestSeq) {
+      loading.value = false
+    }
   }
 }
 
@@ -280,8 +332,10 @@ function resetFilters(): void {
 }
 
 function showAll(): void {
+  filters.keyword = ''
   filters.category = undefined
   filters.level = undefined
+  filters.source = undefined
   applyFilters()
 }
 
@@ -674,6 +728,23 @@ onMounted(() => void loadCatalog())
   background: var(--mq-bg-muted);
   color: var(--mq-text-tertiary);
   font-family: var(--mq-font-mono);
+}
+
+.catalog-version.is-error {
+  background: rgba(207, 19, 34, 0.08);
+  color: #cf1322;
+}
+
+.catalog-error-banner {
+  align-items: center;
+  background: rgba(207, 19, 34, 0.06);
+  border-bottom: 1px solid rgba(207, 19, 34, 0.14);
+  color: #cf1322;
+  display: flex;
+  font-size: 13px;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 26px;
 }
 
 .catalog-workbench {

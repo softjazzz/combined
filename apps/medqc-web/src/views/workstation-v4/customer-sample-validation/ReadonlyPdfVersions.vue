@@ -65,6 +65,12 @@ const emit = defineEmits<{ (event: 'select', key: string): void }>()
 const expanded = ref(false)
 const isExpanded = computed(() => expanded.value || props.forceOpen)
 watch(
+  () => props.parentKey,
+  () => {
+    expanded.value = props.versions.some((version) => version.key === props.selectedKey)
+  },
+)
+watch(
   () => props.selectedKey,
   (key) => {
     if (props.versions.some((version) => version.key === key)) expanded.value = true
@@ -73,7 +79,24 @@ watch(
 )
 function pageLabel(version: EditableMedicalRecordDocument) {
   const pages = [...new Set(version.pdf_source_pages || [])]
-  return pages.length === 1 ? String(pages[0]) : pages.join('–')
+    .filter((page) => Number.isFinite(page))
+    .sort((left, right) => left - right)
+  if (!pages.length) return ''
+  const ranges: string[] = []
+  let start = pages[0]!
+  let end = start
+  for (let index = 1; index < pages.length; index += 1) {
+    const page = pages[index]!
+    if (page === end + 1) {
+      end = page
+    } else {
+      ranges.push(start === end ? String(start) : `${start}–${end}`)
+      start = page
+      end = page
+    }
+  }
+  ranges.push(start === end ? String(start) : `${start}–${end}`)
+  return ranges.join('、')
 }
 </script>
 

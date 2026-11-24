@@ -2,6 +2,7 @@ import { SAMPLE_RULE_SET_RUN_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { loadCurrentMedicalRecord } from '@/services/current-medical-record'
+import { openConfirmDialog } from '../utils/confirmDialog'
 import { emptyMedicalOrderFilters, matchesMedicalOrderFilters } from './medicalOrderFilters'
 import type {
   EditableMedicalRecordDocument,
@@ -42,6 +43,200 @@ import {
   type EditableCopyOrderTypeFilter,
 } from './editableCopyPresentation'
 
+const BEIJING_OFFSET = '+08:00'
+
+function isValidCalendarDateParts(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+): boolean {
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59 ||
+    second < 0 ||
+    second > 59
+  ) {
+    return false
+  }
+  const utcCheck = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
+  return (
+    utcCheck.getUTCFullYear() === year &&
+    utcCheck.getUTCMonth() === month - 1 &&
+    utcCheck.getUTCDate() === day &&
+    utcCheck.getUTCHours() === hour &&
+    utcCheck.getUTCMinutes() === minute &&
+    utcCheck.getUTCSeconds() === second
+  )
+}
+
+function formatDateInBeijingIso(date: Date): string {
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || ''
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}${BEIJING_OFFSET}`
+}
+
+export function formatLocalDateTimeInput(date = new Date()): string {
+  const pad = (input: number) => String(input).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+export function normalizeEditableCopyDateTime(value?: string): string | undefined {
+  const text = String(value || '').trim()
+  if (!text || text === '-' || text === '未返回') return undefined
+  const normalized = text.includes('T') ? text : text.replace(' ', 'T')
+  const tzMatch = normalized.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:?\d{2})?$/iu,
+  )
+  if (tzMatch) {
+    const year = Number(tzMatch[1])
+    const month = Number(tzMatch[2])
+    const day = Number(tzMatch[3])
+    const hour = Number(tzMatch[4])
+    const minute = Number(tzMatch[5])
+    const second = tzMatch[6] ? Number(tzMatch[6]) : 0
+    const msRaw = tzMatch[7] || ''
+    const offsetRaw = tzMatch[8] || ''
+    if (!isValidCalendarDateParts(year, month, day, hour, minute, second)) {
+      return undefined
+    }
+    const pad = (input: number) => String(input).padStart(2, '0')
+    const msSuffix = msRaw ? `.${msRaw.slice(0, 3)}` : ''
+    if (!offsetRaw) {
+      return `${tzMatch[1]}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(second)}${msSuffix}${BEIJING_OFFSET}`
+    }
+    const normalizedOffset =
+      offsetRaw.toUpperCase() === 'Z'
+        ? 'Z'
+        : offsetRaw.includes(':')
+          ? offsetRaw
+          : `${offsetRaw.slice(0, 3)}:${offsetRaw.slice(3)}`
+    const candidate = `${tzMatch[1]}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(second)}${msSuffix}${normalizedOffset}`
+    const parsed = new Date(candidate)
+    if (Number.isNaN(parsed.getTime())) return undefined
+    return normalizedOffset === 'Z' ? formatDateInBeijingIso(parsed) : candidate
+  }
+  const dateOnlyMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/u)
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1])
+    const month = Number(dateOnlyMatch[2])
+    const day = Number(dateOnlyMatch[3])
+    if (!isValidCalendarDateParts(year, month, day, 0, 0, 0)) return undefined
+    return `${dateOnlyMatch[1]}-${dateOnlyMatch[2]}-${dateOnlyMatch[3]}T00:00:00${BEIJING_OFFSET}`
+  }
+  return undefined
+}
+
+function isBlankDateTimeInput(value?: string): boolean {
+  const text = String(value || '').trim()
+  return !text || text === '-' || text === '未返回'
+}
+
+function parseValidAge(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 && value <= 150 ? Math.round(value) : null
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const matched = trimmed.match(/^(\d+(?:\.\d+)?)\s*(?:岁|周岁)?$/u)
+    if (!matched) return null
+    const parsed = Number(matched[1])
+    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 150 ? Math.round(parsed) : null
+  }
+  return null
+}
+
+function resolveEditableCopyPatientSex(record: ManualSamplePoolRecord): string {
+  const direct = String(record.patient_sex || '').trim()
+  if (direct && direct !== '-') return direct
+  for (const item of record.sample_items || []) {
+    const payload = item.raw_payload
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue
+    const basicInfo = payload.basic_info
+    const candidates = [
+      payload.patient_sex,
+      payload.sex,
+      typeof basicInfo === 'object' && basicInfo !== null && !Array.isArray(basicInfo)
+        ? (basicInfo as Record<string, unknown>).sex
+        : undefined,
+    ]
+    const found = candidates
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .find((value) => Boolean(value) && value !== '-')
+    if (found) return found
+  }
+  return '未说明'
+}
+
+function resolveEditableCopyPatientAge(record: ManualSamplePoolRecord): number {
+  const direct = parseValidAge(record.patient_age)
+  if (direct !== null) return direct
+  for (const item of record.sample_items || []) {
+    const payload = item.raw_payload
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue
+    const basicInfo = payload.basic_info
+    const candidates = [
+      payload.patient_age,
+      payload.age,
+      typeof basicInfo === 'object' && basicInfo !== null && !Array.isArray(basicInfo)
+        ? (basicInfo as Record<string, unknown>).age
+        : undefined,
+    ]
+    for (const candidate of candidates) {
+      const parsed = parseValidAge(candidate)
+      if (parsed !== null) return parsed
+    }
+  }
+  return 50
+}
+
+function serializeEditableCopyDraft(draft: EditableCopyDraft | null): string {
+  if (!draft) return ''
+  return JSON.stringify({
+    caseTitle: draft.caseTitle,
+    patientName: draft.patientName,
+    sex: draft.sex,
+    age: draft.age,
+    mrNo: draft.mrNo,
+    department: draft.department,
+    admissionTime: draft.admissionTime,
+    dischargeTime: draft.dischargeTime,
+    mainDiagnosis: draft.mainDiagnosis,
+    manualIssueText: draft.manualIssueText,
+    documents: draft.documents.map((doc) => ({
+      key: doc.key,
+      document_type: doc.document_type,
+      title: doc.title,
+      record_time: doc.record_time || '',
+      submit_time: doc.submit_time || '',
+      content: doc.content || '',
+      doctor_name: doc.doctor_name || '',
+      doctor_code: doc.doctor_code || '',
+      enabled: doc.enabled !== false,
+      is_new: Boolean(doc.is_new),
+    })),
+  })
+}
+
 export interface CustomerSampleEditableCopyDependencies {
   selectedPool: Ref<ManualSamplePool | undefined>
   selectedPoolId: Ref<string | undefined>
@@ -54,6 +249,9 @@ export interface CustomerSampleEditableCopyDependencies {
   loadPools: () => Promise<void>
   loadRecords: () => Promise<void>
   openBatchJob: (jobId: string) => Promise<void>
+  loadLatestSyncJob?: () => Promise<void>
+  restoreCurrentQcTaskForSelectedPool?: () => Promise<void>
+  onPoolSwitched?: (poolId: string) => Promise<void> | void
 }
 
 export function useCustomerSampleEditableCopyController(
@@ -71,6 +269,9 @@ export function useCustomerSampleEditableCopyController(
     loadPools,
     loadRecords,
     openBatchJob,
+    loadLatestSyncJob,
+    restoreCurrentQcTaskForSelectedPool,
+    onPoolSwitched,
   } = dependencies
 
   const editableCopyOpen = ref(false)
@@ -80,6 +281,13 @@ export function useCustomerSampleEditableCopyController(
   const editableCopyReadonly = ref(false)
   const editableCopySourceRecord = ref<ManualSamplePoolRecord | null>(null)
   const editableCopyDraft = ref<EditableCopyDraft | null>(null)
+  const editableCopyInitialSnapshot = ref('')
+  const isEditableCopyDirty = computed(
+    () =>
+      !editableCopyReadonly.value &&
+      Boolean(editableCopyDraft.value) &&
+      serializeEditableCopyDraft(editableCopyDraft.value) !== editableCopyInitialSnapshot.value,
+  )
   const editableCopyNewDocumentType = ref('daily_course_record')
   const editableCopyDocumentQuery = ref('')
   const editableCopyDocumentFilter = ref<EditableCopyDocumentFilter>('all')
@@ -182,6 +390,7 @@ export function useCustomerSampleEditableCopyController(
     editableCopyOrderFilters.value = emptyMedicalOrderFilters()
     editableCopySourceRecord.value = record
     editableCopyDraft.value = null
+    editableCopyInitialSnapshot.value = ''
     editableCopyOpen.value = true
     editableCopyLoading.value = true
     const visitId = record.matched_visit_id || ''
@@ -232,6 +441,9 @@ export function useCustomerSampleEditableCopyController(
     editableCopyDraft.value = buildEditableCopyDraft(currentRecord, result.data.documents, {
       readonly: targetReadonly,
     })
+    editableCopyInitialSnapshot.value = targetReadonly
+      ? ''
+      : serializeEditableCopyDraft(editableCopyDraft.value)
     editableCopyDocumentQuery.value = ''
     editableCopyDocumentFilter.value = 'all'
     editableCopyOrderTypeFilter.value = editableCopyOrderRows.value.some(
@@ -267,10 +479,14 @@ export function useCustomerSampleEditableCopyController(
   function resolveEditableCopyAdmissionTime(record: ManualSamplePoolRecord): string {
     const admissionTime = formatRecordDateTime(record.admission_time)
     if (admissionTime) return admissionTime
-    const raw = record.created_at || record.updated_at || new Date().toISOString()
-    const parsed = parseBackendDateTime(raw)
-    if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 16)
-    return parsed.toISOString().slice(0, 16)
+    const raw = record.created_at || record.updated_at
+    if (raw) {
+      const parsed = parseBackendDateTime(raw)
+      if (!Number.isNaN(parsed.getTime())) {
+        return formatDateInBeijingIso(parsed).slice(0, 16)
+      }
+    }
+    return formatLocalDateTimeInput(new Date())
   }
 
   function selectEditableCopyDocument(key: string) {
@@ -350,7 +566,7 @@ export function useCustomerSampleEditableCopyController(
       key: `editable-new-${normalizedType}-${timestamp}`,
       document_type: normalizedType,
       title,
-      record_time: new Date().toISOString().slice(0, 16),
+      record_time: formatLocalDateTimeInput(new Date()),
       submit_time: '',
       content:
         normalizedType === 'medical_order'
@@ -409,8 +625,8 @@ export function useCustomerSampleEditableCopyController(
         ? sourceTitle || resolveRecordIdentifier(record)
         : resolveEditableCopyTitle(record),
       patientName: patientName === '-' ? '脱敏患者' : patientName,
-      sex: '未说明',
-      age: 50,
+      sex: resolveEditableCopyPatientSex(record),
+      age: resolveEditableCopyPatientAge(record),
       mrNo: '',
       department: record.department || '未说明科室',
       admissionTime: readonlyMode
@@ -436,17 +652,41 @@ export function useCustomerSampleEditableCopyController(
     await loadEditableCopyDocuments(record, { readonly: false })
   }
 
-  function closeEditableCopyDrawer() {
-    if (editableCopySaving.value || editableCopySaveAndRunLoading.value) return
+  function resetEditableCopyState() {
     documentLoadSeq += 1
     editableCopyLoading.value = false
     editableCopyOpen.value = false
     editableCopyReadonly.value = false
     editableCopySourceRecord.value = null
     editableCopyDraft.value = null
+    editableCopyInitialSnapshot.value = ''
     editableCopyActiveDocumentKey.value = ''
     editableCopyDocumentQuery.value = ''
     editableCopyDocumentFilter.value = 'all'
+    editableCopyOrderFilters.value = emptyMedicalOrderFilters()
+  }
+
+  function closeEditableCopyDrawer(force?: boolean | Event) {
+    const forceClose = force === true
+    if (!forceClose && (editableCopySaving.value || editableCopySaveAndRunLoading.value)) {
+      editableCopyOpen.value = true
+      return
+    }
+    if (!forceClose && isEditableCopyDirty.value) {
+      editableCopyOpen.value = true
+      openConfirmDialog({
+        title: '放弃未保存的修改？',
+        content: '当前编辑副本有未保存的修改，关闭后这些修改将会丢失。',
+        okText: '放弃修改',
+        cancelText: '继续编辑',
+        danger: true,
+        onOk: () => {
+          resetEditableCopyState()
+        },
+      })
+      return
+    }
+    resetEditableCopyState()
   }
 
   function buildEditableCopySourceMeta(record: ManualSamplePoolRecord) {
@@ -464,33 +704,61 @@ export function useCustomerSampleEditableCopyController(
     }
   }
 
-  function normalizeEditableCopyDateTime(value?: string): string | undefined {
-    const text = String(value || '').trim()
-    if (!text || text === '-' || text === '未返回') return undefined
-    const parsed = parseBackendDateTime(text)
-    if (Number.isNaN(parsed.getTime())) return undefined
-    return parsed.toISOString()
-  }
-
   function buildEditableCopyPayload(
     record: ManualSamplePoolRecord,
-  ): ManualTestRecordCreateRequest | null {
+  ): { payload: ManualTestRecordCreateRequest | null; error?: string } {
     const draft = editableCopyDraft.value
-    if (!draft) return null
-    const enabledDocuments = draft.documents
-      .filter((document) => document.enabled !== false)
-      .map((document) => ({
+    if (!draft) return { payload: null, error: '请先读取源病历文书' }
+    if (isBlankDateTimeInput(draft.admissionTime)) {
+      return { payload: null, error: '请填写有效的入院时间' }
+    }
+    const normalizedAdmissionTime = normalizeEditableCopyDateTime(draft.admissionTime)
+    if (!normalizedAdmissionTime) {
+      return { payload: null, error: '入院时间格式无效，请检查后重试' }
+    }
+    let normalizedDischargeTime: string | undefined
+    if (!isBlankDateTimeInput(draft.dischargeTime)) {
+      normalizedDischargeTime = normalizeEditableCopyDateTime(draft.dischargeTime)
+      if (!normalizedDischargeTime) {
+        return { payload: null, error: '出院时间格式无效，请检查后重试' }
+      }
+    }
+    const enabledDocuments: ManualTestRecordCreateRequest['documents'] = []
+    for (const document of draft.documents) {
+      if (document.enabled === false) continue
+      if (!String(document.content || '').trim()) continue
+      let normalizedRecordTime: string | undefined
+      if (!isBlankDateTimeInput(document.record_time)) {
+        normalizedRecordTime = normalizeEditableCopyDateTime(document.record_time)
+        if (!normalizedRecordTime) {
+          return {
+            payload: null,
+            error: `文书「${document.title || document.document_type}」的记录时间格式无效`,
+          }
+        }
+      }
+      let normalizedSubmitTime: string | undefined
+      if (!isBlankDateTimeInput(document.submit_time)) {
+        normalizedSubmitTime = normalizeEditableCopyDateTime(document.submit_time)
+        if (!normalizedSubmitTime) {
+          return {
+            payload: null,
+            error: `文书「${document.title || document.document_type}」的提交时间格式无效`,
+          }
+        }
+      }
+      enabledDocuments.push({
         document_type: document.document_type,
         title: document.title,
-        record_time: normalizeEditableCopyDateTime(document.record_time),
-        submit_time: normalizeEditableCopyDateTime(document.submit_time),
+        record_time: normalizedRecordTime,
+        submit_time: normalizedSubmitTime,
         content: document.content,
         doctor_name: document.doctor_name,
         doctor_code: document.doctor_code,
         enabled: true,
-      }))
-      .filter((document) => document.content.trim())
-    return {
+      })
+    }
+    const payload: ManualTestRecordCreateRequest = {
       case_title: draft.caseTitle.trim() || resolveEditableCopyTitle(record),
       basic_info: {
         patient_name: draft.patientName.trim() || '脱敏患者',
@@ -498,30 +766,35 @@ export function useCustomerSampleEditableCopyController(
         age: Number.isFinite(draft.age) ? draft.age : 50,
         mr_no: draft.mrNo.trim() || undefined,
         department: draft.department.trim() || record.department || '未说明科室',
-        admission_time:
-          normalizeEditableCopyDateTime(draft.admissionTime) || new Date().toISOString(),
-        discharge_time: normalizeEditableCopyDateTime(draft.dischargeTime),
+        admission_time: normalizedAdmissionTime,
+        discharge_time: normalizedDischargeTime,
         main_diagnosis: draft.mainDiagnosis.trim() || '源病历编辑副本',
       },
       documents: enabledDocuments,
-      selected_rule_ids: isLuxian0609Mode.value
-        ? normalizeLuxianRuleIds(selectedLuxianCustomerRuleIds.value)
-        : [],
+      ...(isLuxian0609Mode.value
+        ? { selected_rule_ids: normalizeLuxianRuleIds(selectedLuxianCustomerRuleIds.value) }
+        : {}),
       manual_issue_text: draft.manualIssueText.trim(),
       template_key: 'customer_source_editable_copy',
       source: buildEditableCopySourceMeta(record),
     }
+    return { payload }
   }
 
   async function saveEditableCopy(options: { runAfterSave: boolean }) {
+    if (editableCopySaving.value || editableCopySaveAndRunLoading.value) return
     if (editableCopyReadonly.value) {
       message.warning('当前为只读查看模式，不能保存测试病历')
       return
     }
     const sourceRecord = editableCopySourceRecord.value
-    const payload = sourceRecord ? buildEditableCopyPayload(sourceRecord) : null
-    if (!sourceRecord || !payload) {
+    if (!sourceRecord) {
       message.warning('请先读取源病历文书')
+      return
+    }
+    const { payload, error: payloadError } = buildEditableCopyPayload(sourceRecord)
+    if (!payload) {
+      message.warning(payloadError || '请先读取源病历文书')
       return
     }
     if (!payload.documents.length) {
@@ -537,59 +810,72 @@ export function useCustomerSampleEditableCopyController(
     } else {
       editableCopySaving.value = true
     }
-    const createResult = await createManualTestMedicalRecord(payload)
-    if (options.runAfterSave) {
-      editableCopySaveAndRunLoading.value = false
-    } else {
-      editableCopySaving.value = false
-    }
-    if (!createResult.success || !createResult.data) {
-      message.error(createResult.message || '保存编辑副本失败')
-      return
-    }
-    message.success('编辑副本已保存为自建测试病历')
-    documentLoadSeq += 1
-    editableCopyOpen.value = false
-    await loadPools()
-    if (selectedPoolId.value !== CUSTOMER_TEST_POOL_ID) {
-      selectedPoolId.value = CUSTOMER_TEST_POOL_ID
-      selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
-    }
-    await loadRecords()
-    if (!options.runAfterSave) return
+    try {
+      const createResult = await createManualTestMedicalRecord(payload)
+      if (!createResult.success || !createResult.data) {
+        message.error(createResult.message || '保存编辑副本失败')
+        return
+      }
+      message.success('编辑副本已保存为自建测试病历')
+      closeEditableCopyDrawer(true)
+      await loadPools()
+      const switchedPool = selectedPoolId.value !== CUSTOMER_TEST_POOL_ID
+      if (switchedPool) {
+        selectedPoolId.value = CUSTOMER_TEST_POOL_ID
+        selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
+      }
+      await loadRecords()
+      if (switchedPool) {
+        await Promise.all([
+          Promise.resolve(onPoolSwitched?.(CUSTOMER_TEST_POOL_ID)),
+          Promise.resolve(loadLatestSyncJob?.()),
+          Promise.resolve(restoreCurrentQcTaskForSelectedPool?.()),
+        ])
+      }
+      if (!options.runAfterSave) return
 
-    const createdItem = createResult.data.item
-    const createdSampleItemId = String(createdItem?.id || '').trim()
-    const createdInstituteId = String(createdItem?.matched_institute_id || '').trim()
-    const createdPatientId = String(createdItem?.matched_patient_id || '').trim()
-    const createdVisitId = String(createdItem?.matched_visit_id || '').trim()
-    if (!createdSampleItemId || !createdInstituteId || !createdPatientId || !createdVisitId) {
-      message.error('编辑副本已保存，但病例三坐标尚未完整生成，未发起质控任务')
-      return
+      const createdItem = createResult.data.item
+      const createdSampleItemId = String(createdItem?.id || '').trim()
+      const createdInstituteId = String(createdItem?.matched_institute_id || '').trim()
+      const createdPatientId = String(createdItem?.matched_patient_id || '').trim()
+      const createdVisitId = String(createdItem?.matched_visit_id || '').trim()
+      if (!createdSampleItemId || !createdInstituteId || !createdPatientId || !createdVisitId) {
+        message.error('编辑副本已保存，但病例三坐标尚未完整生成，未发起质控任务')
+        return
+      }
+      const runPayload = {
+        sample_item_ids: [createdSampleItemId],
+        record_refs: [
+          {
+            institute_id: createdInstituteId,
+            patient_id: createdPatientId,
+            visit_id: createdVisitId,
+          },
+        ],
+        max_parallel_records: 1,
+        validation_mode: selectedValidationMode.value,
+        rule_set_key: selectedRuleSetPayloadKey.value,
+        ...(payload.selected_rule_ids !== undefined
+          ? { selected_rule_ids: payload.selected_rule_ids }
+          : {}),
+      }
+      const runResult = await runManualSamplePool(CUSTOMER_TEST_POOL_ID, runPayload, {
+        timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS,
+      })
+      if (!runResult.success || !runResult.data) {
+        message.error(runResult.message || '编辑副本已保存，但发起验证失败')
+        return
+      }
+      message.success('编辑副本验证任务已创建')
+      await openBatchJob(runResult.data.job_id)
+    } catch (error: any) {
+      message.error(
+        error?.message || (options.runAfterSave ? '保存并验证编辑副本失败' : '保存编辑副本失败'),
+      )
+    } finally {
+      editableCopySaving.value = false
+      editableCopySaveAndRunLoading.value = false
     }
-    const runPayload = {
-      sample_item_ids: [createdSampleItemId],
-      record_refs: [
-        {
-          institute_id: createdInstituteId,
-          patient_id: createdPatientId,
-          visit_id: createdVisitId,
-        },
-      ],
-      max_parallel_records: 1,
-      validation_mode: selectedValidationMode.value,
-      rule_set_key: selectedRuleSetPayloadKey.value,
-      selected_rule_ids: payload.selected_rule_ids,
-    }
-    const runResult = await runManualSamplePool(CUSTOMER_TEST_POOL_ID, runPayload, {
-      timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS,
-    })
-    if (!runResult.success || !runResult.data) {
-      message.error(runResult.message || '编辑副本已保存，但发起验证失败')
-      return
-    }
-    message.success('编辑副本验证任务已创建')
-    await openBatchJob(runResult.data.job_id)
   }
 
   return {
@@ -600,6 +886,7 @@ export function useCustomerSampleEditableCopyController(
     editableCopyReadonly,
     editableCopySourceRecord,
     editableCopyDraft,
+    isEditableCopyDirty,
     editableCopyNewDocumentType,
     editableCopyDocumentQuery,
     editableCopyDocumentFilter,

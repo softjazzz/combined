@@ -11,6 +11,7 @@ vi.mock('@/composables/useQcResultVisibility', () => ({
 }))
 
 import SingleRecordQcResultPanel from '../SingleRecordQcResultPanel.vue'
+import ConsultationRecommendationSummary from '../ConsultationRecommendationSummary.vue'
 import type { SingleRecordQcResultItem } from '../single-record-result-model'
 
 function makeConfirmedItems(): SingleRecordQcResultItem[] {
@@ -283,5 +284,188 @@ describe('SingleRecordQcResultPanel clinician UX refinements', () => {
     expect(rows2[0].attributes('aria-current')).toBe('true')
     expect(rows2[1].classes()).not.toContain('is-active')
     expect(wrapper2.get('[data-testid="single-record-evidence"]').classes()).toContain('is-active')
+  })
+
+  it.each(['flat', 'grouped'] as const)(
+    'P1-18: %s 模式下切换 items 数据集时重置展开、激活、已看、反馈与规则全文状态',
+    async (presentationMode) => {
+      const wrapper = mount(SingleRecordQcResultPanel, {
+        props: {
+          items: makeConfirmedItems(),
+          presentationMode,
+          feedbackEnabled: true,
+        },
+        global: {
+          stubs: {
+            MqIcon: true,
+            QcResultFeedbackControl: true,
+            QcRemediationSuggestion: true,
+            CriterionResultBlock: true,
+            ConsultationRecommendationSummary: true,
+            ExamLabEventResultBlock: true,
+            TimelinessResultBlock: true,
+          },
+        },
+      })
+
+      await wrapper.findAll('[data-testid="single-record-result-toggle"]')[0].trigger('click')
+      await wrapper.get('[data-testid="single-record-feedback-entry-hint"]').trigger('click')
+      await wrapper.get('[data-testid="single-record-rule-fulltext-toggle"]').trigger('click')
+      expect(wrapper.find('[data-testid="single-record-feedback-disclosure"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="single-record-rule-fulltext"]').exists()).toBe(true)
+      expect(wrapper.get('[data-testid="single-record-review-progress"]').text()).toBe('已看 1/2')
+
+      await wrapper.setProps({
+        items: [
+          {
+            rule_id: 'LX0609-01-01-01',
+            rule_name: '入院记录：入院记录及时性',
+            status: 'non_compliant',
+            conclusion: '第二份病历问题。',
+            evidence: [],
+          },
+        ],
+      })
+
+      expect(wrapper.get('[data-testid="single-record-result-toggle"]').attributes('aria-expanded')).toBe('false')
+      expect(wrapper.find('[data-testid="single-record-feedback-disclosure"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="single-record-rule-fulltext"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="single-record-review-progress"]').text()).toBe('已看 0/1')
+      expect(wrapper.findAll('[data-testid="single-record-result-row"]')[0].classes()).not.toContain('is-active')
+      wrapper.unmount()
+    },
+  )
+
+  it('P1-18: 相同 source_ref 的多条证据胶囊稳定渲染且按规则隔离反馈错误', async () => {
+    const items: SingleRecordQcResultItem[] = [
+      {
+        rule_id: 'LX0609-03-01-04',
+        rule_name: '会诊记录：会诊意见执行核对',
+        status: 'non_compliant',
+        conclusion: '两条建议来自同一会诊文书。',
+        customer_display_facts: {
+          recommendation_evidence: [
+            {
+              episode_index: 1,
+              recommendation_index: 1,
+              recommendation_text: '建议复查血常规',
+              execution_state: 'missing',
+              opinion_evidence: [
+                {
+                  source_type: 'consultation_record',
+                  source_ref: 'src_0123456789abcdef01234567',
+                },
+              ],
+            },
+            {
+              episode_index: 1,
+              recommendation_index: 2,
+              recommendation_text: '建议完善凝血功能检查',
+              execution_state: 'missing',
+              opinion_evidence: [
+                {
+                  source_type: 'consultation_record',
+                  source_ref: 'src_0123456789abcdef01234567',
+                },
+              ],
+            },
+          ],
+        },
+        evidence: [],
+      },
+      {
+        rule_id: 'LX0609-02-01-05',
+        rule_name: '查房记录：病危查房',
+        status: 'non_compliant',
+        conclusion: '缺少查房记录。',
+        evidence: [],
+      },
+    ]
+
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items,
+        presentationMode: 'flat',
+        feedbackEnabled: true,
+        feedbackErrorByRule: { 'LX0609-03-01-04': '仅规则1保存失败' },
+      },
+      global: {
+        stubs: {
+          MqIcon: true,
+          QcRemediationSuggestion: true,
+          CriterionResultBlock: true,
+          ConsultationRecommendationSummary: true,
+          ExamLabEventResultBlock: true,
+          TimelinessResultBlock: true,
+        },
+      },
+    })
+
+    const toggles = wrapper.findAll('[data-testid="single-record-result-toggle"]')
+    await toggles[0].trigger('click')
+    const chips = wrapper.findAll('[data-testid="single-record-evidence"]')
+    expect(chips).toHaveLength(2)
+    expect(chips[0].text()).toContain('第1条建议')
+    expect(chips[1].text()).toContain('第2条建议')
+
+    await wrapper.get('[data-testid="single-record-feedback-entry-hint"]').trigger('click')
+    expect(wrapper.get('[data-testid="qc-result-feedback-error"]').text()).toContain('仅规则1保存失败')
+
+    // 切换到第二条规则后，不应显示第一条规则的保存错误
+    await toggles[1].trigger('click')
+    await wrapper.get('[data-testid="single-record-feedback-entry-hint"]').trigger('click')
+    expect(wrapper.find('[data-testid="qc-result-feedback-error"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('P1-18: ConsultationRecommendationSummary 为每个实例生成唯一标题 ID', () => {
+    const presentation = {
+      comparedCount: 1,
+      excludedCount: 1,
+      checkedSources: ['会诊记录', '医嘱'],
+      rows: [
+        {
+          key: 'r1',
+          episodeIndex: 1,
+          recommendationIndex: 1,
+          state: 'missing' as const,
+          statusLabel: '未执行',
+          text: '建议复查血常规',
+          detail: '未见对应医嘱',
+        },
+        {
+          key: 'r2',
+          episodeIndex: 1,
+          recommendationIndex: 2,
+          state: 'excluded' as const,
+          statusLabel: '不纳入',
+          text: '必要时随访',
+          detail: '按口径不纳入',
+        },
+      ],
+    }
+
+    const first = mount(ConsultationRecommendationSummary, { props: { presentation } })
+    const second = mount(ConsultationRecommendationSummary, { props: { presentation } })
+
+    const firstComparedId = first.get('.consultation-compared h5').attributes('id')
+    const secondComparedId = second.get('.consultation-compared h5').attributes('id')
+    const firstExcludedId = first.get('.consultation-excluded h5').attributes('id')
+    const secondExcludedId = second.get('.consultation-excluded h5').attributes('id')
+
+    expect(firstComparedId).toBeTruthy()
+    expect(secondComparedId).toBeTruthy()
+    expect(firstComparedId).not.toBe(secondComparedId)
+    expect(first.get('.consultation-compared').attributes('aria-labelledby')).toBe(firstComparedId)
+    expect(second.get('.consultation-compared').attributes('aria-labelledby')).toBe(secondComparedId)
+
+    expect(firstExcludedId).toBeTruthy()
+    expect(secondExcludedId).toBeTruthy()
+    expect(firstExcludedId).not.toBe(secondExcludedId)
+    expect(first.get('.consultation-excluded').attributes('aria-labelledby')).toBe(firstExcludedId)
+    expect(second.get('.consultation-excluded').attributes('aria-labelledby')).toBe(secondExcludedId)
+
+    first.unmount()
+    second.unmount()
   })
 })

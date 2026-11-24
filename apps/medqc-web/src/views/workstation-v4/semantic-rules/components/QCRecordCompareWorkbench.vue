@@ -223,6 +223,10 @@
               </p>
             </section>
           </div>
+          <ReadonlyMedicalDocumentContent
+            v-else-if="hasStructuredReportFallback(selectedDocument)"
+            :document="selectedDocument"
+          />
           <pre
             v-else
             class="record-content-text"
@@ -269,6 +273,7 @@
           :feedback-enabled="feedbackEnabled"
           :feedback-loading="feedbackLoading"
           :feedback-error="feedbackError"
+          :feedback-error-by-rule="feedbackErrorByRule"
           :feedback-saving-rule-id="feedbackSavingRuleId"
           @select="selectSingleRecordResult"
           @locate-evidence="locateSingleRecordEvidence"
@@ -450,6 +455,7 @@ import {
   getEditableMedicalRecordDocuments,
 } from '@/services/manual-case-sample-service'
 import ReadonlyMedicalDocumentDirectory from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalDocumentDirectory.vue'
+import ReadonlyMedicalDocumentContent from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalDocumentContent.vue'
 import ReadonlyFrontpageContent from '@/views/workstation-v4/customer-sample-validation/ReadonlyFrontpageContent.vue'
 import ReadonlyMedicalOrderTable from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalOrderTable.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
@@ -527,6 +533,7 @@ const feedbackByRule = qcFeedback.feedbackByRule
 const feedbackEnabled = qcFeedback.isEnabled
 const feedbackLoading = qcFeedback.loading
 const feedbackError = qcFeedback.error
+const feedbackErrorByRule = qcFeedback.errorByRule
 const feedbackSavingRuleId = qcFeedback.savingRuleId
 
 function handleSubmitFeedback(ruleId: string, input: SaveQcResultFeedbackInput) {
@@ -940,6 +947,14 @@ function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): Docum
   return sourceDocument ? { document: sourceDocument } : null
 }
 
+function hasStructuredReportFallback(document: EditableMedicalRecordDocument) {
+  return (
+    Boolean(document.report_items?.length) &&
+    !document.content?.trim() &&
+    !deduplicateMedicalDocumentSections(document.sections || []).length
+  )
+}
+
 function isDocumentLoaded(document: EditableMedicalRecordDocument) {
   return (
     isMedicalOrderDocument(document) ||
@@ -984,47 +999,62 @@ async function ensureDocumentLoaded(
     ? `${documentKey}::${renderOverride.sourceDocumentId}`
     : documentKey
   let request = documentRequests.get(requestKey)
-  if (!request) {
-    const renderSummary = renderOverride
-      ? {
-          ...summary,
-          source_document_id: renderOverride.sourceDocumentId,
-          ...(renderOverride.sourceRef ? { source_ref: renderOverride.sourceRef } : {}),
-        }
-      : props.lazyResultDocuments
-        ? { ...summary, source_document_id: summary.key }
-        : summary
-    request = getEditableMedicalRecordDocument(props.visitId, renderSummary, {
-      ...(props.jobId ? { job_id: props.jobId } : {}),
-      ...(props.sourceView === 'saved' && props.jobId && props.recordRef ? { record_ref: props.recordRef } : {}),
-      institute_id: String(props.instituteId || '').trim() || undefined,
-      patient_id: String(props.patientId || '').trim() || undefined,
-      visit_id: String(props.visitId || '').trim(),
-    })
-    documentRequests.set(requestKey, request)
-  }
-  const result = await request
-  if (documentRequests.get(requestKey) === request) documentRequests.delete(requestKey)
-  if (generation !== loadGeneration) return null
-  if (contentLoadingKey.value === documentKey) contentLoadingKey.value = ''
-  if (!result.success || !result.data) {
+  try {
+    if (!request) {
+      const renderSummary = renderOverride
+        ? {
+            ...summary,
+            source_document_id: renderOverride.sourceDocumentId,
+            ...(renderOverride.sourceRef ? { source_ref: renderOverride.sourceRef } : {}),
+          }
+        : props.lazyResultDocuments
+          ? { ...summary, source_document_id: summary.key }
+          : summary
+      request = getEditableMedicalRecordDocument(props.visitId, renderSummary, {
+        ...(props.jobId ? { job_id: props.jobId } : {}),
+        ...(props.sourceView === 'saved' && props.jobId && props.recordRef
+          ? { record_ref: props.recordRef }
+          : {}),
+        institute_id: String(props.instituteId || '').trim() || undefined,
+        patient_id: String(props.patientId || '').trim() || undefined,
+        visit_id: String(props.visitId || '').trim(),
+      })
+      documentRequests.set(requestKey, request)
+    }
+    const result = await request
+    if (generation !== loadGeneration) return null
+    if (!result.success || !result.data) {
+      if (selectedDocumentKey.value === documentKey) {
+        contentLoadError.value = result.message || '读取当前文书失败'
+      }
+      return null
+    }
+    const loadedDocument = {
+      ...summary,
+      ...result.data,
+      // 仅使用 override 作为渲染请求参数，目录仍保留汇总项身份与安全引用。
+      key: summary.key,
+      source_document_id: summary.source_document_id,
+      source_ref: summary.source_ref,
+      source_document_aliases: summary.source_document_aliases,
+      content_loaded: true,
+    }
+    replaceDocument(loadedDocument)
+    return loadedDocument
+  } catch {
+    if (generation !== loadGeneration) return null
     if (selectedDocumentKey.value === documentKey) {
-      contentLoadError.value = result.message || '读取当前文书失败'
+      contentLoadError.value = '读取当前文书失败'
     }
     return null
+  } finally {
+    if (request && documentRequests.get(requestKey) === request) {
+      documentRequests.delete(requestKey)
+    }
+    if (generation === loadGeneration && contentLoadingKey.value === documentKey) {
+      contentLoadingKey.value = ''
+    }
   }
-  const loadedDocument = {
-    ...summary,
-    ...result.data,
-    // 仅使用 override 作为渲染请求参数，目录仍保留汇总项身份与安全引用。
-    key: summary.key,
-    source_document_id: summary.source_document_id,
-    source_ref: summary.source_ref,
-    source_document_aliases: summary.source_document_aliases,
-    content_loaded: true,
-  }
-  replaceDocument(loadedDocument)
-  return loadedDocument
 }
 
 function scoreDocumentMetadata(
@@ -1072,20 +1102,61 @@ async function applyLocatedDocument(
   document: EditableMedicalRecordDocument,
   range: { start: number; end: number } | null,
   sectionKey = '',
+  sequence?: number,
 ) {
   selectedDocumentKey.value = document.key
-  matchedRange.value = range
-  matchedSectionKey.value = range ? '' : sectionKey
-  locationState.value = range ? 'matched' : sectionKey ? 'section' : 'document'
+  const isOrderDoc = isMedicalOrderDocument(document)
+  const isFrontpageDoc = document.document_type === 'mr' && Boolean(document.frontpage_display)
+  const isStructuredReportDoc = hasStructuredReportFallback(document)
+  const supportsInlineHighlight = !isOrderDoc && !isFrontpageDoc && !isStructuredReportDoc
+
+  matchedRange.value = supportsInlineHighlight ? range : null
+  let hasVisibleQuoteHighlight = false
+  if (matchedRange.value) {
+    if (documentSectionViews.value.length) {
+      hasVisibleQuoteHighlight = documentSectionViews.value.some((section) =>
+        Boolean(section.parts.match),
+      )
+    } else {
+      hasVisibleQuoteHighlight = Boolean(documentTextParts.value.match)
+    }
+  }
+  if (!hasVisibleQuoteHighlight) {
+    matchedRange.value = null
+  }
+
+  const effectiveSectionKey = hasVisibleQuoteHighlight ? '' : sectionKey
+  matchedSectionKey.value = effectiveSectionKey
+  locationState.value = hasVisibleQuoteHighlight
+    ? 'matched'
+    : effectiveSectionKey
+      ? 'section'
+      : 'document'
   mobileTab.value = 'record'
   await nextTick()
-  if (range) highlightElement.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
-  else if (sectionKey) {
+  if (sequence !== undefined && sequence !== documentSelectionSequence) return
+  if (isOrderDoc) {
+    let activeOrderRow = recordScroller.value?.querySelector<HTMLElement>(
+      '.editable-copy-order-table-wrap tbody tr.is-active',
+    )
+    if (!activeOrderRow) {
+      await nextTick()
+      if (sequence !== undefined && sequence !== documentSelectionSequence) return
+      activeOrderRow = recordScroller.value?.querySelector<HTMLElement>(
+        '.editable-copy-order-table-wrap tbody tr.is-active',
+      )
+    }
+    activeOrderRow?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+  } else if (hasVisibleQuoteHighlight) {
+    highlightElement.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+  } else if (effectiveSectionKey) {
     const sectionElement = Array.from(
       recordScroller.value?.querySelectorAll<HTMLElement>('[data-section-key]') || [],
-    ).find((element) => element.dataset.sectionKey === sectionKey)
+    ).find((element) => element.dataset.sectionKey === effectiveSectionKey)
     sectionElement?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
-  } else recordScroller.value?.scrollTo?.({ top: 0, behavior: 'smooth' })
+  } else {
+    recordScroller.value?.scrollTo?.({ top: 0, behavior: 'smooth' })
+  }
 }
 
 async function tryLocateEvidence(
@@ -1097,6 +1168,9 @@ async function tryLocateEvidence(
   if (exactMatch) {
     const exactSummary = exactMatch.document
     selectedDocumentKey.value = exactSummary.key
+    matchedRange.value = null
+    matchedSectionKey.value = ''
+    locationState.value = 'idle'
     const exactDocument = await ensureDocumentLoaded(
       exactSummary.key,
       exactMatch.renderSourceDocumentId
@@ -1111,7 +1185,8 @@ async function tryLocateEvidence(
     await applyLocatedDocument(
       exactDocument,
       range,
-      range ? '' : findSectionKey(exactDocument, evidence.section_field_path),
+      findSectionKey(exactDocument, evidence.section_field_path),
+      sequence,
     )
     return true
   }
@@ -1122,19 +1197,28 @@ async function tryLocateEvidence(
     .map((document) => ({ document, range: findQuoteRange(document, evidence.quote) }))
     .find((item) => item.range)
   if (quoteDocument) {
-    await applyLocatedDocument(quoteDocument.document, quoteDocument.range)
+    await applyLocatedDocument(
+      quoteDocument.document,
+      quoteDocument.range,
+      findSectionKey(quoteDocument.document, evidence.section_field_path),
+      sequence,
+    )
     return true
   }
   if (allowMetadataFallback) {
     const metadataSummary = matchDocumentByMetadata(evidence)
     if (metadataSummary) {
       selectedDocumentKey.value = metadataSummary.key
+      matchedRange.value = null
+      matchedSectionKey.value = ''
+      locationState.value = 'idle'
       const metadataDocument = await ensureDocumentLoaded(metadataSummary.key)
       if (!metadataDocument || sequence !== documentSelectionSequence) return false
       await applyLocatedDocument(
         metadataDocument,
         null,
         findSectionKey(metadataDocument, evidence.section_field_path),
+        sequence,
       )
       return true
     }
@@ -1213,6 +1297,7 @@ async function selectSingleRecordResult(key: string) {
 
 async function locateSelectedIssue() {
   if (props.documentOnly) return
+  const sequence = ++documentSelectionSequence
   const issue = selectedIssue.value
   if (!issue) {
     locationState.value = 'idle'
@@ -1237,19 +1322,27 @@ async function locateSelectedIssue() {
       return priority(right) - priority(left)
     })
     for (const evidence of orderedReferencedEvidences) {
-      if (await tryLocateEvidence(evidence, false)) return
+      if (sequence !== documentSelectionSequence) return
+      if (await tryLocateEvidence(evidence, false, sequence)) return
+      if (sequence !== documentSelectionSequence) return
     }
+    if (sequence !== documentSelectionSequence) return
     locationState.value = 'missing'
     matchedRange.value = null
     matchedSectionKey.value = ''
     return
   }
   for (const evidence of issue.evidences) {
-    if (await tryLocateEvidence(evidence, false)) return
+    if (sequence !== documentSelectionSequence) return
+    if (await tryLocateEvidence(evidence, false, sequence)) return
+    if (sequence !== documentSelectionSequence) return
   }
   for (const evidence of issue.evidences) {
-    if (await tryLocateEvidence(evidence, true)) return
+    if (sequence !== documentSelectionSequence) return
+    if (await tryLocateEvidence(evidence, true, sequence)) return
+    if (sequence !== documentSelectionSequence) return
   }
+  if (sequence !== documentSelectionSequence) return
   const document = matchDocumentByMetadata({
     key: `${issue.key}-target-document`,
     source_document_type: issue.target_document_type,
@@ -1257,12 +1350,16 @@ async function locateSelectedIssue() {
   })
   if (document) {
     selectedDocumentKey.value = document.key
+    matchedRange.value = null
+    matchedSectionKey.value = ''
+    locationState.value = 'idle'
     const loadedDocument = await ensureDocumentLoaded(document.key)
+    if (sequence !== documentSelectionSequence) return
     if (!loadedDocument) {
       locationState.value = 'missing'
       return
     }
-    await applyLocatedDocument(loadedDocument, null)
+    await applyLocatedDocument(loadedDocument, null, '', sequence)
     return
   }
   locationState.value = 'missing'
@@ -1285,7 +1382,7 @@ function emitSelectedIssue() {
 }
 
 function setHighlightElement(value: unknown) {
-  if (value instanceof HTMLElement) highlightElement.value = value
+  highlightElement.value = value instanceof HTMLElement ? value : null
 }
 
 async function selectDocument(documentKey: string) {
@@ -1341,25 +1438,35 @@ function loadOrders() {
   const generation = loadGeneration
   const visitId = props.visitId.trim()
   ordersLoadState.value = 'loading'
-  orderRequest = getEditableMedicalRecordDocuments(visitId, {
-    institute_id: props.instituteId,
-    patient_id: props.patientId,
-    visit_id: visitId,
-    job_id: props.jobId,
-    record_ref: props.recordRef || undefined,
-    view: 'summary',
-    document_scope: 'orders',
-  }).then((result) => {
-    if (generation !== loadGeneration) return
-    if (!result.success || !result.data) {
-      ordersLoadState.value = 'failed'
-      return
+  orderRequest = (async () => {
+    try {
+      const result = await getEditableMedicalRecordDocuments(visitId, {
+        institute_id: props.instituteId,
+        patient_id: props.patientId,
+        visit_id: visitId,
+        job_id: props.jobId,
+        record_ref: props.recordRef || undefined,
+        view: 'summary',
+        document_scope: 'orders',
+      })
+      if (generation !== loadGeneration) return
+      if (!result.success || !result.data) {
+        ordersLoadState.value = 'failed'
+        return
+      }
+      documents.value = [
+        ...documents.value,
+        ...result.data.documents.filter((document) => document.enabled !== false),
+      ]
+      ordersLoadState.value = undefined
+    } catch {
+      if (generation === loadGeneration) {
+        ordersLoadState.value = 'failed'
+      }
+    } finally {
+      if (generation === loadGeneration) orderRequest = undefined
     }
-    documents.value = [...documents.value, ...result.data.documents.filter((document) => document.enabled !== false)]
-    ordersLoadState.value = undefined
-  }).finally(() => {
-    if (generation === loadGeneration) orderRequest = undefined
-  })
+  })()
   return orderRequest
 }
 
@@ -1403,40 +1510,50 @@ async function loadDocuments() {
     return
   }
   loading.value = true
-  const result = await getEditableMedicalRecordDocuments(visitId || recordRef, {
-    // 文书 Bundle 仍以三坐标读取；job/record_ref 仅用于结果归属，不可替代病历身份。
-    institute_id: String(props.instituteId || '').trim() || undefined,
-    patient_id: String(props.patientId || '').trim() || undefined,
-    visit_id: visitId,
-    ...(jobId && props.sourceView !== 'current'
-      ? {
-          job_id: jobId,
-          ...(recordRef ? { record_ref: recordRef } : {}),
-        }
-      : {}),
-    ...(props.sourceView === 'current'
-      ? { view: 'full' as const, source_view: 'current' as const }
-      : {
-          view: 'summary' as const,
-          ...(props.lazyResultDocuments ? { document_scope: 'clinical' as const } : {}),
-        }),
-  })
-  if (generation !== loadGeneration) return
-  loading.value = false
-  if (!result.success || !result.data) {
-    loadError.value = result.message || '读取病历文书失败'
-    return
+  try {
+    const result = await getEditableMedicalRecordDocuments(visitId || recordRef, {
+      // 文书 Bundle 仍以三坐标读取；job/record_ref 仅用于结果归属，不可替代病历身份。
+      institute_id: String(props.instituteId || '').trim() || undefined,
+      patient_id: String(props.patientId || '').trim() || undefined,
+      visit_id: visitId,
+      ...(jobId && props.sourceView !== 'current'
+        ? {
+            job_id: jobId,
+            ...(recordRef ? { record_ref: recordRef } : {}),
+          }
+        : {}),
+      ...(props.sourceView === 'current'
+        ? { view: 'full' as const, source_view: 'current' as const }
+        : {
+            view: 'summary' as const,
+            ...(props.lazyResultDocuments ? { document_scope: 'clinical' as const } : {}),
+          }),
+    })
+    if (generation !== loadGeneration) return
+    loading.value = false
+    if (!result.success || !result.data) {
+      loadError.value = result.message || '读取病历文书失败'
+      return
+    }
+    documents.value = result.data.documents.filter((document) => document.enabled !== false)
+    if (props.lazyResultDocuments) {
+      ordersLoadState.value = 'deferred'
+      const defaultKey = findAdmissionDocument()?.key || resolveDefaultDocumentKey()
+      if (defaultKey) await selectDocument(defaultKey)
+      return
+    }
+    selectedDocumentKey.value = resolveDefaultDocumentKey()
+    if (selectedIssue.value) await locateSelectedIssue()
+    else if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
+  } catch {
+    if (generation === loadGeneration) {
+      loadError.value = '读取病历文书失败'
+    }
+  } finally {
+    if (generation === loadGeneration) {
+      loading.value = false
+    }
   }
-  documents.value = result.data.documents.filter((document) => document.enabled !== false)
-  if (props.lazyResultDocuments) {
-    ordersLoadState.value = 'deferred'
-    const admission = findAdmissionDocument()
-    if (admission) await selectDocument(admission.key)
-    return
-  }
-  selectedDocumentKey.value = resolveDefaultDocumentKey()
-  if (selectedIssue.value) await locateSelectedIssue()
-  else if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
 }
 
 watch(

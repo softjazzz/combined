@@ -78,11 +78,22 @@ describe('质控记录列表展示模型', () => {
     expect(row.isCompleted).toBe(false)
   })
 
-  it('仅有轻量失败元数据时不推断结果全部丢失', () => {
+  it('完全失败任务渲染 danger 语气和执行失败标签，不误判为未全部完成', () => {
     const row = buildTaskHistoryRow(job({ status: 'failed', summary: null, has_results: false }))
+    expect(row.statusLabel).toBe('执行失败')
+    expect(row.statusTone).toBe('danger')
+    expect(row.detailText).toBe('查看失败原因')
+    expect(row.detailTone).toBe('danger')
+    expect(row.canExport).toBe(false)
+    expect(row.isCompleted).toBe(false)
+  })
+
+  it('失败但 has_results=true 时归类为部分失败，保持 warning 语气并允许导出', () => {
+    const row = buildTaskHistoryRow(job({ status: 'failed', summary: null, has_results: true }))
     expect(row.statusLabel).toBe('未全部完成')
-    expect(row.detailText).not.toContain('未形成可交付')
-    expect(row.detailText).toContain('查看原因')
+    expect(row.statusTone).toBe('warning')
+    expect(row.detailText).toBe('查看原因及已有结果')
+    expect(row.canExport).toBe(true)
   })
 
   it('轻量列表的进度只取病历计数', () => {

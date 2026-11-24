@@ -156,6 +156,8 @@ export function useCustomerSampleValidationController() {
   const syncLoading = ref(false)
   const importingPool = ref(false)
   const selectedRowKeys = ref<string[]>([])
+  const selectedRecordsById = ref<Map<string, ManualSamplePoolRecord>>(new Map())
+  const recordsLoadError = ref('')
   const initialQueryJobHandled = ref(false)
   const initialFocusedRecordSearchHandled = ref(false)
   const importModalOpen = ref(false)
@@ -186,9 +188,17 @@ export function useCustomerSampleValidationController() {
   const selectedRuleSetKey = ref<string>(LUXIAN_0609_RULE_SET_KEY)
   const ruleSetDirectoryFallbackActive = ref(false)
   const internalDiagnosticKeys = ref<string[]>([])
+  const internalDiagnosticExpanded = computed(() => internalDiagnosticKeys.value.includes('sheet2'))
   const selectedLuxianCustomerRuleIds = ref<string[]>([])
   const luxian0609RuleCatalog = ref<ManualLuxian0609RuleCatalogItem[]>([])
   const expandedLuxianRuleFamilyKeys = ref<string[]>([])
+  const luxianScopeOpen = ref(false)
+  const isLuxianScopeExpanded = computed(
+    () =>
+      luxianScopeOpen.value ||
+      (customerSampleGuideOpen.value &&
+        currentCustomerSampleGuideStep.value?.target === 'lx0609-scope'),
+  )
   const importWorkflow = ref<ImportWorkflowState | null>(null)
 
   const detailOpen = ref(false)
@@ -340,7 +350,9 @@ export function useCustomerSampleValidationController() {
     records,
     pagination,
     selectedRowKeys,
+    clearSelectedRecords,
     loadPools,
+    restoreCurrentQcTaskForSelectedPool,
   })
 
   const filters = ref({
@@ -479,18 +491,33 @@ export function useCustomerSampleValidationController() {
     () =>
       luxianRuleFamilies.value.filter((family) => luxianRuleFamilySelectedCount(family) > 0).length,
   )
-  const luxianDefaultRuleCount = computed(
-    () => Number(selectedRuleSet.value?.rule_count || 71) - acceptanceOnlyRuleIds.value.size,
-  )
-  const luxianScopeModeText = computed(() =>
-    selectedLuxianCustomerRuleIds.value.length
-      ? selectedAcceptanceCount.value
-        ? `当前将运行：${selectedLuxianCustomerRuleIds.value.length} 个质控点 · 待验收 ${selectedAcceptanceCount.value} 条`
-        : isAllLuxianRulesSelected.value
-          ? `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
-          : `当前将运行：${selectedLuxianFamilyCount.value} 个质控族 · ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
-      : `当前将运行：全部 ${luxianDefaultRuleCount.value} 个0609质控点`,
-  )
+  const luxianDefaultRuleCount = computed(() => {
+    if (luxian0609RuleCatalog.value.length > 0) {
+      return Math.max(0, defaultLuxianRuleIds.value.length)
+    }
+    return Math.max(
+      0,
+      Number(selectedRuleSet.value?.rule_count || 71) - acceptanceOnlyRuleIds.value.size,
+    )
+  })
+  const luxianScopeModeText = computed(() => {
+    const acceptanceHint =
+      acceptanceOnlyRuleIds.value.size > 0
+        ? `（另有 ${acceptanceOnlyRuleIds.value.size} 个待验收）`
+        : ''
+    if (!selectedLuxianCustomerRuleIds.value.length) {
+      return `当前将运行：全部 ${luxianDefaultRuleCount.value} 个0609质控点${acceptanceHint}`
+    }
+    if (selectedAcceptanceCount.value) {
+      return `当前将运行：${selectedLuxianCustomerRuleIds.value.length} 个质控点 · 待验收 ${selectedAcceptanceCount.value} 条`
+    }
+    if (isAllLuxianRulesSelected.value) {
+      return acceptanceHint
+        ? `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个0609质控点${acceptanceHint}`
+        : `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
+    }
+    return `当前将运行：${selectedLuxianFamilyCount.value} 个质控族 · ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
+  })
   const luxianScopeHelperText = computed(() =>
     selectedLuxianCustomerRuleIds.value.length
       ? '已限定本次质控范围；待验收规则须逐条勾选，全选和质控族选择不包含待验收规则。'
@@ -614,13 +641,20 @@ export function useCustomerSampleValidationController() {
     ]
   })
 
+  const poolRunnableCount = computed(() => {
+    const pool = selectedPool.value
+    if (isSyncedOnlyValidationMode.value) {
+      return pool?.matched_items ?? 0
+    }
+    if (typeof pool?.ready_items === 'number') {
+      return pool.ready_items
+    }
+    return records.value.filter((record) => isRunnableRecord(record)).length
+  })
+
   const workflowSteps = computed(() => {
     const pool = selectedPool.value
-    const runnableValue = isLuxian0609Mode.value
-      ? (pool?.matched_items ?? 0)
-      : isSyncedOnlyValidationMode.value
-        ? (pool?.matched_items ?? 0)
-        : (pool?.ready_items ?? 0)
+    const runnableValue = poolRunnableCount.value
     return [
       {
         label: '匹配',
@@ -642,14 +676,10 @@ export function useCustomerSampleValidationController() {
 
   const summaryCards = computed(() => {
     const pool = selectedPool.value
-    const runnableValue = isLuxian0609Mode.value
-      ? (pool?.matched_items ?? 0)
-      : isSyncedOnlyValidationMode.value
-        ? (pool?.matched_items ?? 0)
-        : (pool?.ready_items ?? 0)
+    const runnableValue = poolRunnableCount.value
     let runnableHelp = '文书已就绪，可直接开始当前模式质控'
     if (isLuxian0609Mode.value) {
-      runnableHelp = '已关联真实病历即可开始0609质控；可再限定 LX0609 质控点范围'
+      runnableHelp = '已关联、已同步且文书已就绪的病历可开始0609质控；可再限定 LX0609 质控点范围'
     } else if (isFormalFastScreenMode.value) {
       runnableHelp = '已匹配且已同步，可开始正式 84 条质控'
     } else if (selectedValidationMode.value === 'programmatic') {
@@ -777,9 +807,10 @@ export function useCustomerSampleValidationController() {
   })
 
   const selectedRecordStats = computed(() => {
-    const selectedRecords = records.value.filter((record) =>
-      selectedRowKeys.value.includes(record.id),
-    )
+    const currentRecordsById = new Map(records.value.map((record) => [record.id, record]))
+    const selectedRecords = selectedRowKeys.value
+      .map((key) => currentRecordsById.get(key) || selectedRecordsById.value.get(key))
+      .filter((record): record is ManualSamplePoolRecord => Boolean(record))
     const runnableRecords = selectedRecords.filter((record) => isRunnableRecord(record))
     const blockerCounts = selectedRecords.reduce(
       (counts, record) => {
@@ -882,12 +913,21 @@ export function useCustomerSampleValidationController() {
     if (!isLuxian0609Mode.value) return validationModeLabel(selectedValidationMode.value)
     if (!selectedLuxianCustomerRuleIds.value.length) return '全量0609'
     const selected = new Set(selectedLuxianCustomerRuleIds.value)
-    const fullFamilies = luxianRuleFamilies.value.filter(
-      (family) =>
-        family.ruleIds.length > 0 && family.ruleIds.every((ruleId) => selected.has(ruleId)),
-    )
+    const fullFamilies = luxianRuleFamilies.value
+      .map((family) => ({
+        family,
+        defaultRuleIds: family.ruleIds.filter(
+          (ruleId) => !acceptanceOnlyRuleIds.value.has(ruleId),
+        ),
+      }))
+      .filter(
+        ({ defaultRuleIds }) =>
+          defaultRuleIds.length > 0 && defaultRuleIds.every((ruleId) => selected.has(ruleId)),
+      )
     if (fullFamilies.length > 0) {
-      const allSelectedRuleIds = new Set(fullFamilies.flatMap((family) => family.ruleIds))
+      const allSelectedRuleIds = new Set(
+        fullFamilies.flatMap(({ defaultRuleIds }) => defaultRuleIds),
+      )
       const hasOnlyFullFamilies = selectedLuxianCustomerRuleIds.value.every((ruleId) =>
         allSelectedRuleIds.has(ruleId),
       )
@@ -1083,8 +1123,27 @@ export function useCustomerSampleValidationController() {
 
   const rowSelection = computed(() => ({
     selectedRowKeys: selectedRowKeys.value,
-    onChange: (keys) => {
-      selectedRowKeys.value = keys.map((key) => String(key))
+    preserveSelectedRowKeys: true,
+    onChange: (keys: Array<string | number>, selectedRows?: ManualSamplePoolRecord[]) => {
+      const normalizedKeys = keys.map((key) => String(key))
+      selectedRowKeys.value = normalizedKeys
+      const currentRecordsById = new Map(records.value.map((record) => [record.id, record]))
+      const selectedRowsById = new Map(
+        (selectedRows || [])
+          .filter((row): row is ManualSamplePoolRecord => Boolean(row && row.id))
+          .map((row) => [row.id, row]),
+      )
+      const nextMap = new Map<string, ManualSamplePoolRecord>()
+      for (const key of normalizedKeys) {
+        const resolved =
+          currentRecordsById.get(key) ||
+          selectedRowsById.get(key) ||
+          selectedRecordsById.value.get(key)
+        if (resolved) {
+          nextMap.set(key, resolved)
+        }
+      }
+      selectedRecordsById.value = nextMap
     },
   }))
 
@@ -1271,7 +1330,7 @@ export function useCustomerSampleValidationController() {
 
   function runnableRequirementHint(): string {
     if (isLuxian0609Mode.value) {
-      return '泸县0609支持从已关联真实病历直接发起验证；选择质控族/质控点只限定规则范围，不会限制样本池或病历选择。'
+      return '泸县0609需使用已关联、已同步且文书就绪的病历发起验证；选择质控族/质控点只限定规则范围，不会限制样本池或病历选择。'
     }
     if (selectedValidationMode.value === 'formal_fast_screen_full') {
       return '未关联真实病历或尚未同步到本地 PG 的病历不会进入正式质控；若后台 final scope 收集不到，会返回终末病历未同步错误。'
@@ -1284,7 +1343,7 @@ export function useCustomerSampleValidationController() {
 
   function selectedRecordNotRunnableMessage(): string {
     if (isLuxian0609Mode.value) {
-      return '当前选中的病历还未完成病历关联，暂时无法开始0609质控'
+      return '当前选中的病历还未完成病历关联、同步或文书准备，暂时无法开始0609质控'
     }
     if (selectedValidationMode.value === 'formal_fast_screen_full') {
       return '当前选中的病历还未完成匹配或同步，暂时无法发起正式质控 84 条'
@@ -1312,12 +1371,21 @@ export function useCustomerSampleValidationController() {
 
   function clearSelectedRecords() {
     selectedRowKeys.value = []
+    selectedRecordsById.value = new Map()
+  }
+
+  function handleLuxianScopeToggle(event: Event) {
+    const target = event.target as HTMLDetailsElement | null
+    if (!target) return
+    luxianScopeOpen.value = Boolean(target.open)
   }
 
   function scrollToLuxianScope() {
+    luxianScopeOpen.value = true
     const target = document.getElementById('customer-sample-luxian-scope')
     if (!target) return
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    ;(target as HTMLDetailsElement).open = true
+    target.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
   }
 
   function normalizeRuleSetKey(
@@ -1534,6 +1602,7 @@ export function useCustomerSampleValidationController() {
     }
     if (selectedPoolId.value && !pools.value.some((item) => item.id === selectedPoolId.value)) {
       selectedPoolId.value = undefined
+      clearSelectedRecords()
     }
     if (!selectedPoolId.value && pools.value.length > 0) {
       selectedPoolId.value = pools.value[0].id
@@ -1556,28 +1625,44 @@ export function useCustomerSampleValidationController() {
     const poolId = selectedPoolId.value
     if (!poolId) {
       itemLoading.value = false
+      recordsLoadError.value = ''
       records.value = []
       pagination.value.total = 0
       return
     }
+    recordsLoadError.value = ''
     itemLoading.value = true
-    const result = await getManualSamplePoolRecords(poolId, {
-      coverage_type: filters.value.coverageType,
-      match_status: filters.value.matchStatus,
-      include_in_batch_1: isSyncedOnlyValidationMode.value
-        ? undefined
-        : filters.value.includeInBatch,
-      q: filters.value.query || undefined,
-      page: pagination.value.page,
-      page_size: pagination.value.pageSize,
-    }).finally(() => {
+    let result: Awaited<ReturnType<typeof getManualSamplePoolRecords>>
+    try {
+      result = await getManualSamplePoolRecords(poolId, {
+        coverage_type: filters.value.coverageType || undefined,
+        match_status: filters.value.matchStatus || undefined,
+        include_in_batch_1: isSyncedOnlyValidationMode.value
+          ? undefined
+          : filters.value.includeInBatch,
+        q: filters.value.query || undefined,
+        page: pagination.value.page,
+        page_size: pagination.value.pageSize,
+      })
+    } catch (error: any) {
+      if (pageDisposed || requestSequence !== recordsRequestSequence || poolId !== selectedPoolId.value) {
+        return
+      }
+      const errorMessage = error?.message || '获取样本明细失败'
+      recordsLoadError.value = errorMessage
+      message.error(errorMessage)
+      return
+    } finally {
       if (!pageDisposed && requestSequence === recordsRequestSequence) itemLoading.value = false
-    })
+    }
     if (pageDisposed || requestSequence !== recordsRequestSequence || poolId !== selectedPoolId.value) return
     if (!result.success || !result.data) {
-      message.error(result.message || '获取样本明细失败')
+      const errorMessage = result.message || '获取样本明细失败'
+      recordsLoadError.value = errorMessage
+      message.error(errorMessage)
       return
     }
+    recordsLoadError.value = ''
     selectedPool.value = result.data.pool
     const focusedRecordId = String(route?.query?.recordId || '').trim()
     records.value = sortManualSampleRecordsForDisplay(
@@ -1597,9 +1682,30 @@ export function useCustomerSampleValidationController() {
       await loadRecords()
       return
     }
-    selectedRowKeys.value = selectedRowKeys.value.filter((key) =>
-      records.value.some((item) => item.id === key),
-    )
+    if (selectedRowKeys.value.length) {
+      const selectedKeySet = new Set(selectedRowKeys.value)
+      const nextMap = new Map(selectedRecordsById.value)
+      let updated = false
+      for (const record of records.value) {
+        if (selectedKeySet.has(record.id)) {
+          nextMap.set(record.id, record)
+          updated = true
+        }
+      }
+      if (updated) {
+        selectedRecordsById.value = nextMap
+      }
+    }
+  }
+
+  function handleSearchRecords() {
+    pagination.value.page = 1
+    void loadRecords()
+  }
+
+  function handleFilterChange() {
+    pagination.value.page = 1
+    void loadRecords()
   }
 
   async function openInitialQueryJob() {
@@ -1625,7 +1731,7 @@ export function useCustomerSampleValidationController() {
       void Promise.resolve(router?.replace?.({ query: nextQuery })).catch(() => {})
     }
     pagination.value.page = 1
-    selectedRowKeys.value = []
+    clearSelectedRecords()
     selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
     if (importWorkflow.value && importWorkflow.value.poolId !== selectedPoolId.value) {
       importWorkflow.value = null
@@ -1644,6 +1750,7 @@ export function useCustomerSampleValidationController() {
   }
 
   function applyValidationModeEffects(normalizedMode: ManualSampleValidationMode) {
+    const previousMode = selectedValidationMode.value
     selectedValidationMode.value = normalizedMode
     if (normalizedMode === 'programmatic') {
       filters.value.coverageType = 'programmatic'
@@ -1655,6 +1762,9 @@ export function useCustomerSampleValidationController() {
       filters.value.coverageType = 'llm_intrinsic'
       filters.value.includeInBatch = true
     } else {
+      if (previousMode === 'programmatic' || filters.value.coverageType === 'programmatic') {
+        filters.value.coverageType = undefined
+      }
       filters.value.includeInBatch = true
     }
   }
@@ -1724,6 +1834,7 @@ export function useCustomerSampleValidationController() {
     const normalizedRuleIds = normalizeLuxianRuleIds(ruleIds).filter(
       (id) => !acceptanceOnlyRuleIds.value.has(id),
     )
+    if (!normalizedRuleIds.length) return
     const current = new Set(selectedLuxianCustomerRuleIds.value)
     if (normalizedRuleIds.every((ruleId) => current.has(ruleId))) {
       normalizedRuleIds.forEach((ruleId) => current.delete(ruleId))
@@ -1792,7 +1903,7 @@ export function useCustomerSampleValidationController() {
       clearLuxianRuleScope()
     }
     pagination.value.page = 1
-    selectedRowKeys.value = []
+    clearSelectedRecords()
     await loadRecords()
   }
 
@@ -1875,6 +1986,10 @@ export function useCustomerSampleValidationController() {
     if (key === 'mode-legacy-customer') {
       selectedRuleSetKey.value = LEGACY_CUSTOMER_RULE_SET_KEY
       await handleRuleSetChange(selectedRuleSetKey.value)
+      return
+    }
+    if (key === 'toggle-internal-diagnostic') {
+      toggleInternalDiagnostic()
     }
   }
 
@@ -1911,7 +2026,7 @@ export function useCustomerSampleValidationController() {
       includeInBatch: !isSyncedOnlyValidationMode.value,
     }
     pagination.value.page = 1
-    selectedRowKeys.value = []
+    clearSelectedRecords()
     loadRecords()
   }
 
@@ -2269,7 +2384,7 @@ export function useCustomerSampleValidationController() {
         key: runKey,
         duration: 3,
       })
-      selectedRowKeys.value = []
+      clearSelectedRecords()
       await trackCurrentQcTask(result.data.job_id)
       void loadPools()
     } catch (error: any) {
@@ -2334,7 +2449,7 @@ export function useCustomerSampleValidationController() {
         key: options.runKey,
         duration: 4,
       })
-      selectedRowKeys.value = []
+      clearSelectedRecords()
       await trackCurrentQcTask(jobId)
       void loadPools()
       return true
@@ -3611,10 +3726,12 @@ export function useCustomerSampleValidationController() {
     handleDownloadTemplate,
     handleExportBatchReport,
     handleExportCurrentTask,
+    handleFilterChange,
     handleHospitalizationSync,
     handleImportFileSelect,
     handleImportPool,
     handleInternalDiagnosticChange,
+    handleLuxianScopeToggle,
     handleMoreActionKey,
     handlePoolChange,
     handlePoolManagementSearch,
@@ -3623,6 +3740,7 @@ export function useCustomerSampleValidationController() {
     handleReviewCurrentTask,
     handleRuleSetChange,
     handleRunPool,
+    handleSearchRecords,
     handleSyncPoolRecords,
     History,
     hospitalizationPreviewMetrics,
@@ -3644,12 +3762,14 @@ export function useCustomerSampleValidationController() {
     importWorkflow,
     importWorkflowSteps,
     InboxOutlined,
+    internalDiagnosticExpanded,
     internalDiagnosticKeys,
     isAllLuxianRulesSelected,
     isEditableCopyDocumentGroupExpanded,
     isEditableOrderDocument,
     isLastCustomerSampleGuideStep,
     isLuxian0609Mode,
+    isLuxianScopeExpanded,
     isSyncedOnlyValidationMode,
     itemColumns,
     itemLoading,
@@ -3668,6 +3788,7 @@ export function useCustomerSampleValidationController() {
     LuxianRuleScopePanel,
     luxianScopeHelperText,
     luxianScopeModeText,
+    luxianScopeOpen,
     mainRuleSets,
     managedPools,
     matchLoading,
@@ -3698,6 +3819,7 @@ export function useCustomerSampleValidationController() {
     recordResultComparisonFocus,
     recordResultComparisonOpen,
     records,
+    recordsLoadError,
     recordScopeHint,
     refreshHospitalizationScopePreview,
     refreshLuxianAggregateJobs,

@@ -13,7 +13,9 @@
         <p class="task-history__desc">每次发起的样本质控任务，点开查看结果或导出报告。</p>
       </div>
       <div class="mq-page-head__actions">
-        <a-button :loading="loading" @click="loadJobs"> 刷新 </a-button>
+        <a-button :loading="loading" data-testid="task-history-refresh" @click="handleRefresh">
+          刷新
+        </a-button>
       </div>
     </section>
 
@@ -45,7 +47,29 @@
 
     <section class="task-history__list mq-card">
       <a-spin :spinning="loading">
-        <div v-if="!jobs.length && loaded" class="task-history__empty">
+        <div
+          v-if="loadError && !jobs.length"
+          class="task-history__error"
+          data-testid="task-history-error"
+        >
+          <p class="task-history__error-text">{{ loadError }}</p>
+          <a-button type="primary" size="small" data-testid="task-history-retry" @click="loadJobs">
+            重新加载
+          </a-button>
+        </div>
+
+        <div
+          v-else-if="loadError && jobs.length"
+          class="task-history__error-banner"
+          data-testid="task-history-error"
+        >
+          <span>{{ loadError }}</span>
+          <a-button size="small" data-testid="task-history-retry" @click="loadJobs">
+            重新加载
+          </a-button>
+        </div>
+
+        <div v-if="!loadError && !jobs.length && loaded" class="task-history__empty">
           {{
             query.keyword || query.status ? '没有符合条件的质控任务。' : '还没有发起过质控任务。'
           }}
@@ -82,12 +106,15 @@
 
             <div class="task-history__actions">
               <a-button
-                :type="row.isRunning ? 'default' : 'primary'"
+                :type="row.isRunning || row.statusTone === 'danger' ? 'default' : 'primary'"
+                :danger="row.statusTone === 'danger'"
                 size="small"
                 data-testid="task-history-open"
                 @click="openJob(jobById(row.id))"
               >
-                {{ row.isRunning ? '查看进度' : '查看结果' }}
+                {{
+                  row.isRunning ? '查看进度' : row.statusTone === 'danger' ? '查看原因' : '查看结果'
+                }}
               </a-button>
               <a-dropdown v-if="row.canExport" :trigger="['click']">
                 <a-button
@@ -133,6 +160,8 @@
       :export-batch-job-report="exportCurrentJob"
       :review-batch-job-result="reviewCurrentJob"
       :review-batch-job-loading="reviewingJobId === jobDetail?.id"
+      :cancel-batch-job="cancelJob"
+      :cancel-batch-job-loading="Boolean(jobDetail?.id && cancelingJobId === jobDetail.id)"
       :get-batch-job-status-tag-class="getBatchJobStatusClass"
       :get-batch-job-status-text="getBatchJobStatusText"
       :format-date-time="formatBatchJobDateTime"
@@ -141,10 +170,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
+  cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJobDebugSnapshot,
@@ -157,6 +187,7 @@ import type {
   SichuanBatchJobDebugSnapshot,
   SichuanBatchJobStatus,
 } from '@/views/workstation-v4/semantic-rules/types'
+import { isBatchJobPollingActive } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 import { downloadBlob, normalizeBatchExportBlob } from './batchExport'
 import {
   formatBatchJobDateTime,
@@ -169,9 +200,13 @@ import {
   type TaskHistoryTone,
 } from './taskHistoryPresentation'
 
+const JOB_POLL_INTERVAL_MS = 3000
+
 const router = useRouter()
+const route = typeof useRoute === 'function' ? useRoute() : null
 const loading = ref(false)
 const loaded = ref(false)
+const loadError = ref('')
 const jobs = ref<SichuanBatchJob[]>([])
 const total = ref(0)
 const jobDetail = ref<SichuanBatchJob | null>(null)
@@ -180,7 +215,13 @@ const jobDebugSnapshot = ref<SichuanBatchJobDebugSnapshot | null>(null)
 const jobDebugLoading = ref(false)
 const resultOpen = ref(false)
 const reviewingJobId = ref('')
+const cancelingJobId = ref('')
+let listRequestSeq = 0
+let detailRequestSeq = 0
 let jobDebugRequestId = 0
+let jobPollTimer: ReturnType<typeof setTimeout> | null = null
+let unmounted = false
+let lastLoadedKeyword = ''
 
 const query = reactive({
   keyword: '',
@@ -197,8 +238,99 @@ const STATUS_OPTIONS: Array<{ value: '' | SichuanBatchJobStatus; label: string }
   { value: 'canceled', label: '已取消' },
 ]
 
+const VALID_STATUS_SET = new Set<string>(STATUS_OPTIONS.map((option) => option.value))
+
 const currentJobId = computed(() => String(jobDetail.value?.id || '').trim())
 const rowGroups = computed(() => groupTaskHistoryRows(jobs.value.map(buildTaskHistoryRow)))
+
+function readFirstQueryValue(value: unknown): string {
+  return String(Array.isArray(value) ? value[0] || '' : value || '').trim()
+}
+
+function initQueryFromRoute() {
+  const rawQuery = route?.query || {}
+  const keyword = readFirstQueryValue(rawQuery.q ?? rawQuery.keyword)
+  const rawStatus = readFirstQueryValue(rawQuery.status)
+  const rawPage = Number.parseInt(readFirstQueryValue(rawQuery.page), 10)
+  query.keyword = keyword
+  query.status = VALID_STATUS_SET.has(rawStatus)
+    ? (rawStatus as '' | SichuanBatchJobStatus)
+    : ''
+  query.page = Number.isFinite(rawPage) && rawPage >= 1 ? rawPage : 1
+  lastLoadedKeyword = query.keyword
+}
+
+function syncQueryToRoute() {
+  if (!router?.replace) return
+  const nextQuery: Record<string, string> = {}
+  if (query.keyword) nextQuery.q = query.keyword
+  if (query.status) nextQuery.status = query.status
+  if (query.page > 1) nextQuery.page = String(query.page)
+  const currentQuery = route?.query || {}
+  const currentQ = readFirstQueryValue(currentQuery.q)
+  const currentStatus = readFirstQueryValue(currentQuery.status)
+  const currentPage = readFirstQueryValue(currentQuery.page)
+  if (
+    currentQ === (nextQuery.q || '') &&
+    currentStatus === (nextQuery.status || '') &&
+    currentPage === (nextQuery.page || '')
+  ) {
+    return
+  }
+  void Promise.resolve(router.replace({ query: nextQuery })).catch(() => {})
+}
+
+function syncJobInList(updatedJob: SichuanBatchJob) {
+  const index = jobs.value.findIndex((item) => item.id === updatedJob.id)
+  if (index >= 0) jobs.value.splice(index, 1, updatedJob)
+}
+
+function stopJobPolling() {
+  if (jobPollTimer !== null) {
+    clearTimeout(jobPollTimer)
+    jobPollTimer = null
+  }
+}
+
+function startJobPolling(jobId: string, seq: number) {
+  stopJobPolling()
+  if (unmounted || !resultOpen.value || seq !== detailRequestSeq) return
+  jobPollTimer = setTimeout(() => {
+    void pollActiveJob(jobId, seq)
+  }, JOB_POLL_INTERVAL_MS)
+}
+
+async function pollActiveJob(jobId: string, seq: number) {
+  jobPollTimer = null
+  if (unmounted || !resultOpen.value || seq !== detailRequestSeq) return
+  try {
+    const result = await getSichuanWorkspaceBatchJob(jobId)
+    if (unmounted || !resultOpen.value || seq !== detailRequestSeq) return
+    if (result.success && result.data) {
+      jobDetail.value = result.data
+      syncJobInList(result.data)
+      if (isBatchJobPollingActive(result.data)) {
+        startJobPolling(jobId, seq)
+      } else {
+        void fetchJobDebugSnapshot(jobId)
+      }
+      return
+    }
+    if (jobDetail.value && isBatchJobPollingActive(jobDetail.value)) {
+      startJobPolling(jobId, seq)
+    }
+  } catch {
+    if (
+      !unmounted &&
+      resultOpen.value &&
+      seq === detailRequestSeq &&
+      jobDetail.value &&
+      isBatchJobPollingActive(jobDetail.value)
+    ) {
+      startJobPolling(jobId, seq)
+    }
+  }
+}
 
 function jobById(id: string) {
   return jobs.value.find((job) => job.id === id) as SichuanBatchJob
@@ -222,58 +354,108 @@ function handleRowMenu(id: string, event: { key: string | number }) {
   if (event.key === 'review') void reviewJob(job)
 }
 
+initQueryFromRoute()
+
 onMounted(() => {
   void loadJobs()
 })
 
+onUnmounted(() => {
+  unmounted = true
+  listRequestSeq += 1
+  detailRequestSeq += 1
+  jobDebugRequestId += 1
+  stopJobPolling()
+})
+
 async function loadJobs() {
+  const seq = ++listRequestSeq
+  const requestKeyword = query.keyword
   loading.value = true
+  loadError.value = ''
   try {
     const result = await listSichuanWorkspaceBatchJobs({
       view: 'overview',
       page: query.page,
       page_size: query.pageSize,
-      q: query.keyword || undefined,
+      q: requestKeyword || undefined,
       status: query.status || undefined,
     })
+    if (seq !== listRequestSeq) return
     if (!result.success || !result.data) {
-      message.error(result.message || '获取质控记录失败')
+      const errMsg = result.message || '获取质控记录失败'
+      loadError.value = errMsg
+      message.error(errMsg)
       return
     }
     jobs.value = result.data.items || []
-    total.value = Number(result.data.total || jobs.value.length || 0)
+    total.value = Number(result.data.total ?? jobs.value.length ?? 0)
+    lastLoadedKeyword = requestKeyword
     loaded.value = true
+  } catch (error: any) {
+    if (seq !== listRequestSeq) return
+    const errMsg = error?.message || '获取质控记录失败'
+    loadError.value = errMsg
+    message.error(errMsg)
   } finally {
-    loading.value = false
+    if (seq === listRequestSeq) {
+      loading.value = false
+    }
   }
 }
 
 function handleSearch() {
   query.page = 1
+  syncQueryToRoute()
+  void loadJobs()
+}
+
+function handleRefresh() {
+  if (query.keyword !== lastLoadedKeyword) {
+    query.page = 1
+  }
+  syncQueryToRoute()
   void loadJobs()
 }
 
 function goPage(page: number) {
   query.page = Math.max(1, page)
+  syncQueryToRoute()
   void loadJobs()
 }
 
 async function openJob(job: SichuanBatchJob) {
+  if (!job?.id) return
+  const seq = ++detailRequestSeq
+  stopJobPolling()
   resultOpen.value = true
+  jobDetail.value = null
   jobDebugRequestId += 1
   jobDebugLoading.value = false
   jobDebugSnapshot.value = null
   jobDetailLoading.value = true
   try {
     const result = await getSichuanWorkspaceBatchJob(job.id)
+    if (seq !== detailRequestSeq || !resultOpen.value) return
     if (!result.success || !result.data) {
       message.error(result.message || '获取任务详情失败')
+      closeResult()
       return
     }
     jobDetail.value = result.data
+    syncJobInList(result.data)
     void fetchJobDebugSnapshot(job.id)
+    if (isBatchJobPollingActive(result.data)) {
+      startJobPolling(result.data.id, seq)
+    }
+  } catch (error: any) {
+    if (seq !== detailRequestSeq) return
+    message.error(error?.message || '获取任务详情失败')
+    closeResult()
   } finally {
-    jobDetailLoading.value = false
+    if (seq === detailRequestSeq) {
+      jobDetailLoading.value = false
+    }
   }
 }
 
@@ -310,11 +492,37 @@ async function fetchJobDebugSnapshot(
 }
 
 function closeResult() {
+  detailRequestSeq += 1
   jobDebugRequestId += 1
+  stopJobPolling()
   resultOpen.value = false
   jobDetail.value = null
+  jobDetailLoading.value = false
   jobDebugSnapshot.value = null
   jobDebugLoading.value = false
+}
+
+async function cancelJob(jobId: string) {
+  const normalizedId = String(jobId || currentJobId.value).trim()
+  if (!normalizedId || cancelingJobId.value) return
+  cancelingJobId.value = normalizedId
+  try {
+    const result = await cancelSichuanWorkspaceBatchJob(normalizedId)
+    if (!result.success || !result.data) {
+      message.error(result.message || '停止任务失败')
+      return
+    }
+    stopJobPolling()
+    syncJobInList(result.data)
+    if (jobDetail.value?.id === result.data.id) {
+      jobDetail.value = result.data
+    }
+    message.success('任务已停止')
+  } catch (error: any) {
+    message.error(error?.message || '停止任务失败')
+  } finally {
+    cancelingJobId.value = ''
+  }
 }
 
 async function exportById(jobId: string, format: 'xlsx' | 'csv' | 'html' = 'html') {
@@ -353,8 +561,7 @@ async function reviewJob(job: SichuanBatchJob): Promise<SichuanBatchJob | null> 
       return null
     }
     const updatedJob = result.data.job
-    const index = jobs.value.findIndex((item) => item.id === updatedJob.id)
-    if (index >= 0) jobs.value.splice(index, 1, updatedJob)
+    syncJobInList(updatedJob)
     if (jobDetail.value?.id === updatedJob.id) jobDetail.value = updatedJob
     const count = Number(result.data.review_report?.summary?.total_findings || 0)
     message.success(count > 0 ? `复核完成，发现 ${count} 条复核建议` : '复核完成，暂无高风险建议')
@@ -371,3 +578,31 @@ async function reviewCurrentJob() {
 </script>
 
 <style scoped src="../styles/task-history.css"></style>
+<style scoped>
+.task-history__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 36px 20px;
+  text-align: center;
+}
+
+.task-history__error-text {
+  margin: 0;
+  color: var(--mq-danger-text, #cf1322);
+  font-size: var(--mq-font-13, 13px);
+}
+
+.task-history__error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--mq-border);
+  background: var(--mq-danger-bg, rgba(207, 19, 34, 0.06));
+  color: var(--mq-danger-text, #cf1322);
+  font-size: var(--mq-font-13, 13px);
+}
+</style>

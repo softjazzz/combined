@@ -122,6 +122,10 @@
                         <a-menu-item @click="handleMoreActionKey('mode-legacy-customer')">
                           历史客户包
                         </a-menu-item>
+                        <a-menu-divider />
+                        <a-menu-item @click="handleMoreActionKey('toggle-internal-diagnostic')">
+                          {{ internalDiagnosticExpanded ? '隐藏内部验收诊断' : '展开内部验收诊断' }}
+                        </a-menu-item>
                       </a-sub-menu>
                     </a-menu>
                   </template>
@@ -323,19 +327,17 @@
                 data-customer-guide="lx0609-scope"
                 class="customer-sample-scope-disclosure"
                 :class="customerSampleGuideTargetClass('lx0609-scope')"
-                :open="
-                  customerSampleGuideOpen &&
-                  currentCustomerSampleGuideStep?.target === 'lx0609-scope'
-                    ? true
-                    : undefined
-                "
+                :open="isLuxianScopeExpanded"
+                @toggle="handleLuxianScopeToggle"
               >
                 <summary class="customer-sample-scope-summary">
                   <span class="customer-sample-scope-summary__title">质控点范围</span>
                   <span class="customer-sample-scope-summary__value">{{
                     luxianScopeModeText
                   }}</span>
-                  <span class="customer-sample-scope-summary__action">调整范围</span>
+                  <span class="customer-sample-scope-summary__action">{{
+                    isLuxianScopeExpanded ? '收起范围' : '调整范围'
+                  }}</span>
                 </summary>
                 <LuxianRuleScopePanel
                   :families="luxianRuleFamilies"
@@ -355,7 +357,10 @@
               </details>
             </section>
 
-            <section class="customer-sample-diagnostic-panel">
+            <section
+              v-if="internalDiagnosticExpanded"
+              class="customer-sample-diagnostic-panel"
+            >
               <a-collapse
                 v-model:active-key="internalDiagnosticKeys"
                 ghost
@@ -562,10 +567,11 @@
                   <div class="flex flex-1 flex-col gap-3 xl:flex-row xl:items-center">
                     <a-input
                       v-model:value="filters.query"
+                      allow-clear
                       class="w-full xl:min-w-[320px] xl:flex-1 customer-sample-toolbar-input"
                       size="middle"
                       placeholder="搜索患者、住院号或问题摘要"
-                      @press-enter="loadRecords()"
+                      @press-enter="handleSearchRecords"
                     />
                   </div>
 
@@ -577,6 +583,7 @@
                       allow-clear
                       placeholder="样本范围"
                       :options="coverageOptions"
+                      @change="handleFilterChange"
                     />
                     <a-select
                       v-model:value="filters.matchStatus"
@@ -585,6 +592,7 @@
                       allow-clear
                       placeholder="病历关联"
                       :options="matchStatusOptions"
+                      @change="handleFilterChange"
                     />
                     <div
                       class="flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
@@ -595,6 +603,7 @@
                       <a-switch
                         v-model:checked="filters.includeInBatch"
                         :disabled="isSyncedOnlyValidationMode"
+                        @change="handleFilterChange"
                       />
                     </div>
                     <div
@@ -609,14 +618,31 @@
                         :options="parallelOptions"
                       />
                     </div>
-                    <a-button type="primary" class="!rounded-full" @click="loadRecords()">
+                    <a-button type="primary" class="!rounded-full" @click="handleSearchRecords">
                       查询
                     </a-button>
                     <a-button class="!rounded-full" @click="resetFilters"> 重置 </a-button>
                   </div>
                 </div>
 
+                <div
+                  v-if="recordsLoadError"
+                  class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-700"
+                  data-testid="records-load-error-banner"
+                  role="alert"
+                >
+                  <span>病历列表加载失败：{{ recordsLoadError }}</span>
+                  <a-button
+                    size="small"
+                    class="!rounded-full"
+                    :loading="itemLoading"
+                    @click="loadRecords()"
+                  >
+                    重新加载
+                  </a-button>
+                </div>
                 <a-table
+                  v-else
                   class="customer-sample-record-table"
                   row-key="id"
                   size="middle"
@@ -1910,10 +1936,12 @@ const {
   handleDownloadTemplate,
   handleExportBatchReport,
   handleExportCurrentTask,
+  handleFilterChange,
   handleHospitalizationSync,
   handleImportFileSelect,
   handleImportPool,
   handleInternalDiagnosticChange,
+  handleLuxianScopeToggle,
   handleMoreActionKey,
   handlePoolChange,
   handlePoolManagementSearch,
@@ -1922,6 +1950,7 @@ const {
   handleReviewCurrentTask,
   handleRuleSetChange,
   handleRunPool,
+  handleSearchRecords,
   handleSyncPoolRecords,
   History,
   hospitalizationPreviewMetrics,
@@ -1943,12 +1972,14 @@ const {
   importWorkflow,
   importWorkflowSteps,
   InboxOutlined,
+  internalDiagnosticExpanded,
   internalDiagnosticKeys,
   isAllLuxianRulesSelected,
   isEditableCopyDocumentGroupExpanded,
   isEditableOrderDocument,
   isLastCustomerSampleGuideStep,
   isLuxian0609Mode,
+  isLuxianScopeExpanded,
   isSyncedOnlyValidationMode,
   itemColumns,
   itemLoading,
@@ -1997,6 +2028,7 @@ const {
   recordResultComparisonFocus,
   recordResultComparisonOpen,
   records,
+  recordsLoadError,
   recordScopeHint,
   refreshHospitalizationScopePreview,
   refreshLuxianAggregateJobs,

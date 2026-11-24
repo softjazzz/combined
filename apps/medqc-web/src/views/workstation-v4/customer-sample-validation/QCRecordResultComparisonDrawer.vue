@@ -70,7 +70,7 @@
         当前为定向质控结果，仅覆盖本次选择的 {{ latestResult.expected_rule_count }} 项。
       </section>
       <QCRecordCompareWorkbench
-        v-if="latestResult && focus.visitId"
+        v-if="latestResult && focus?.visitId"
         v-show="!showLoading"
         :visit-id="focus.visitId"
         source-view="saved"

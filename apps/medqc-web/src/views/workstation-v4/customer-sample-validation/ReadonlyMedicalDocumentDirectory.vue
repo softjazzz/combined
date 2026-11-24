@@ -286,15 +286,34 @@ const expandedGroupKeys = ref(new Set<string>())
 
 function selectOrdersFilter() {
   filter.value = 'orders'
+  const next = new Set(expandedGroupKeys.value)
+  next.add('orders')
+  expandedGroupKeys.value = next
   if (props.ordersLoadState === 'deferred' || props.ordersLoadState === 'failed') {
-    expandedGroupKeys.value = new Set(['orders'])
     emit('load-orders')
   }
 }
 
-watch(() => props.loading, (loading) => {
-  if (loading && props.summaryOnly) filter.value = 'all'
-})
+watch(
+  () => props.loading,
+  (loading) => {
+    if (!loading) return
+    query.value = ''
+    expandedGroupKeys.value = new Set()
+    if (props.summaryOnly) filter.value = 'all'
+  },
+)
+
+watch(
+  () => props.documents.map((document) => document.key),
+  (nextKeys, previousKeys) => {
+    if (!previousKeys?.length) return
+    if (!nextKeys.length || !nextKeys.some((key) => previousKeys.includes(key))) {
+      query.value = ''
+      expandedGroupKeys.value = new Set()
+    }
+  },
+)
 
 type DirectoryGroup = {
   key: string
@@ -426,9 +445,10 @@ function syncExpandedGroups() {
     const selectedParent = documentGroups.value.find((group) =>
       (group.subgroups || []).some((subgroup) => subgroup.key === selectedGroupKey),
     )
-    expandedGroupKeys.value = new Set(
-      selectedParent ? [selectedParent.key, selectedGroupKey] : [selectedGroupKey],
-    )
+    const next = new Set(expandedGroupKeys.value)
+    if (selectedParent) next.add(selectedParent.key)
+    next.add(selectedGroupKey)
+    expandedGroupKeys.value = next
     return
   }
 

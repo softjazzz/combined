@@ -34,10 +34,60 @@ const ATableStub = defineComponent({
 })
 
 const passthroughStub = defineComponent({
-  setup(_, { slots }) {
-    return () => h('div', slots.default?.())
+  inheritAttrs: false,
+  setup(_, { attrs, slots }) {
+    return () => h('div', attrs, slots.default?.())
   },
 })
+
+const AButtonStub = defineComponent({
+  inheritAttrs: false,
+  setup(_, { attrs, slots }) {
+    return () => h('button', attrs, slots.default?.())
+  },
+})
+
+const AInputStub = defineComponent({
+  props: { value: { type: String, default: '' } },
+  emits: ['update:value', 'pressEnter'],
+  setup(props, { emit }) {
+    return () =>
+      h('input', {
+        class: 'catalog-search-stub',
+        value: props.value,
+        onInput: (e: Event) => emit('update:value', (e.target as HTMLInputElement).value),
+      })
+  },
+})
+
+const ASelectStub = defineComponent({
+  props: { value: { type: String, default: undefined } },
+  emits: ['update:value', 'change'],
+  setup(props, { attrs, slots }) {
+    return () => h('div', { ...attrs, 'data-value': props.value || '' }, slots.default?.())
+  },
+})
+
+function mountCatalog() {
+  return mount(SurgeryProcedureCatalogView, {
+    global: {
+      stubs: {
+        ATable: ATableStub,
+        'a-table': ATableStub,
+        AButton: AButtonStub,
+        'a-button': AButtonStub,
+        AInput: AInputStub,
+        'a-input': AInputStub,
+        ASelect: ASelectStub,
+        'a-select': ASelectStub,
+        ASelectOption: passthroughStub,
+        'a-select-option': passthroughStub,
+        AEmpty: passthroughStub,
+        'a-empty': passthroughStub,
+      },
+    },
+  })
+}
 
 describe('SurgeryProcedureCatalogView', () => {
   beforeEach(() => {
@@ -74,24 +124,7 @@ describe('SurgeryProcedureCatalogView', () => {
   })
 
   it('使用全宽固定布局展示四列目录并保留客户口径说明', async () => {
-    const wrapper = mount(SurgeryProcedureCatalogView, {
-      global: {
-        stubs: {
-          ATable: ATableStub,
-          'a-table': ATableStub,
-          AButton: passthroughStub,
-          'a-button': passthroughStub,
-          AInput: passthroughStub,
-          'a-input': passthroughStub,
-          ASelect: passthroughStub,
-          'a-select': passthroughStub,
-          ASelectOption: passthroughStub,
-          'a-select-option': passthroughStub,
-          AEmpty: passthroughStub,
-          'a-empty': passthroughStub,
-        },
-      },
-    })
+    const wrapper = mountCatalog()
     await flushPromises()
 
     expect(wrapper.text()).toContain('四级手术2337')
@@ -101,5 +134,82 @@ describe('SurgeryProcedureCatalogView', () => {
     expect(table.props('scroll')).toEqual({ x: 1020 })
     expect(table.props('tableLayout')).toBe('fixed')
     expect(wrapper.find('.catalog-table-wrap').exists()).toBe(true)
+  })
+
+  it('加载失败时退出“目录加载中”状态，展示错误提示与重试按钮', async () => {
+    fetchCatalog.mockRejectedValueOnce(new Error('目录接口超时'))
+    const wrapper = mountCatalog()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="catalog-version"]').text()).toBe('目录加载失败')
+    expect(wrapper.get('[data-testid="catalog-load-error"]').text()).toContain('目录接口超时')
+
+    await wrapper.get('[data-testid="catalog-retry"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="catalog-version"]').text()).toBe(
+      'luxian-surgery-procedure-2025-v1',
+    )
+    expect(wrapper.find('[data-testid="catalog-load-error"]').exists()).toBe(false)
+  })
+
+  it('并发筛选请求按序号防竞态，过期响应不会覆盖新结果', async () => {
+    let resolveFirst!: (val: unknown) => void
+    const firstPromise = new Promise((resolve) => {
+      resolveFirst = resolve
+    })
+    fetchCatalog
+      .mockReturnValueOnce(firstPromise)
+      .mockResolvedValueOnce({
+        version: 'v-new',
+        policy: { level_priority: '', conditional_level_four: '', category_boundary: '' },
+        summary: { total: 10, surgery: 8, operation: 2, level_four_surgery: 1 },
+        filter_options: { categories: [], levels: [], sources: [] },
+        items: [],
+        total: 10,
+        page: 1,
+        page_size: 20,
+        total_pages: 1,
+      })
+
+    const wrapper = mountCatalog()
+    // 触发第二次加载
+    await wrapper.get('[data-testid="catalog-summary-all"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="catalog-version"]').text()).toBe('v-new')
+
+    // 旧请求晚到，不应覆盖 v-new
+    resolveFirst({
+      version: 'v-stale',
+      policy: { level_priority: '', conditional_level_four: '', category_boundary: '' },
+      summary: { total: 999, surgery: 999, operation: 0, level_four_surgery: 0 },
+      filter_options: { categories: [], levels: [], sources: [] },
+      items: [],
+      total: 999,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="catalog-version"]').text()).toBe('v-new')
+  })
+
+  it('输入 keyword 或选择 source 筛选时“目录总数”不高亮 active', async () => {
+    const wrapper = mountCatalog()
+    await flushPromises()
+
+    const allButton = wrapper.get('[data-testid="catalog-summary-all"]')
+    expect(allButton.classes()).toContain('active')
+
+    await wrapper.get('.catalog-search-stub').setValue('血肿')
+    expect(allButton.classes()).not.toContain('active')
+
+    await wrapper.get('.catalog-search-stub').setValue('')
+    expect(allButton.classes()).toContain('active')
+
+    const sourceSelect = wrapper.findAllComponents(ASelectStub)[2]
+    sourceSelect.vm.$emit('update:value', 'hospital_performance')
+    await flushPromises()
+    expect(allButton.classes()).not.toContain('active')
   })
 })

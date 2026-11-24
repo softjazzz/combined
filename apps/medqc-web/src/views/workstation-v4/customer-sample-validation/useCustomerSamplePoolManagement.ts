@@ -15,7 +15,9 @@ export interface CustomerSamplePoolManagementDependencies {
   records: Ref<ManualSamplePoolRecord[]>
   pagination: Ref<{ page: number; pageSize: number; total: number }>
   selectedRowKeys: Ref<string[]>
+  clearSelectedRecords?: () => void
   loadPools: () => Promise<void>
+  restoreCurrentQcTaskForSelectedPool?: () => Promise<void>
 }
 
 export function useCustomerSamplePoolManagement(
@@ -24,8 +26,16 @@ export function useCustomerSamplePoolManagement(
   const workstationConfirmation = useWorkstationConfirmation()
   const route = useRoute()
   const router = useRouter()
-  const { selectedPoolId, selectedPool, records, pagination, selectedRowKeys, loadPools } =
-    dependencies
+  const {
+    selectedPoolId,
+    selectedPool,
+    records,
+    pagination,
+    selectedRowKeys,
+    clearSelectedRecords,
+    loadPools,
+    restoreCurrentQcTaskForSelectedPool,
+  } = dependencies
 
   const poolManagementOpen = ref(false)
   const poolManagementLoading = ref(false)
@@ -106,18 +116,30 @@ export function useCustomerSamplePoolManagement(
           message.error(result.message || '删除样本池失败')
           throw new Error(result.message || '删除样本池失败')
         }
-        if (selectedPoolId.value === pool.id) {
+        const deletedActivePool = selectedPoolId.value === pool.id
+        if (deletedActivePool) {
           selectedPoolId.value = undefined
           selectedPool.value = undefined
           records.value = []
           pagination.value.total = 0
-          selectedRowKeys.value = []
+          if (clearSelectedRecords) {
+            clearSelectedRecords()
+          } else {
+            selectedRowKeys.value = []
+          }
           const nextQuery = { ...route.query }
           delete nextQuery.poolId
           await router.replace({ query: nextQuery })
         }
+        const remainingOnCurrentPage = managedPools.value.filter((item) => item.id !== pool.id).length
+        if (remainingOnCurrentPage === 0 && poolManagementPagination.value.page > 1) {
+          poolManagementPagination.value.page -= 1
+        }
         message.success(`已删除样本池“${result.data.pool_name || pool.name}”`)
         await Promise.all([loadManagedPools(), loadPools()])
+        if (deletedActivePool) {
+          await restoreCurrentQcTaskForSelectedPool?.()
+        }
       },
     })
   }
