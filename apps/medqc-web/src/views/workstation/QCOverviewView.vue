@@ -227,275 +227,76 @@
             </nav>
           </div>
 
-          <!-- 质控进度 3D 立体玻璃仪表盘（比例均由现有 KPI 计算） -->
+          <!-- 质控进度圆环卡（浅色玻璃，比例均由现有 KPI 计算） -->
           <div
             class="qc-home-rings"
             aria-label="质控进度"
-            @mousemove="onRingsPointerMove"
-            @mouseleave="onRingsPointerLeave"
           >
-            <div class="qc-home-rings__head">
-              <span class="qc-home-rings__title">质控进度</span>
-              <span class="qc-home-rings__subtitle">{{ activeRingSummary.label }}</span>
-            </div>
+            <span class="qc-home-rings__title">质控进度</span>
             <div class="qc-home-rings__body">
-              <div class="qc-home-rings__dial-stage">
-                <div
-                  class="qc-home-rings__dial-3d"
-                  :style="dialTransformStyle"
-                >
-                  <span
-                    class="qc-home-rings__floor-shadow"
-                    aria-hidden="true"
-                  />
-                  <!-- 底层 3D 底座与凹槽轨道 -->
-                  <svg
-                    class="qc-home-rings__layer-svg qc-home-rings__base-svg"
-                    width="136"
-                    height="136"
-                    viewBox="0 0 220 220"
-                    aria-hidden="true"
-                  >
-                    <defs>
-                      <radialGradient
-                        id="qcDialPlateGrad"
-                        cx="42%"
-                        cy="30%"
-                        r="72%"
-                      >
-                        <stop
-                          offset="0%"
-                          stop-color="#ffffff"
-                          stop-opacity="0.96"
-                        />
-                        <stop
-                          offset="65%"
-                          stop-color="#f1f5f9"
-                          stop-opacity="0.92"
-                        />
-                        <stop
-                          offset="100%"
-                          stop-color="#dbeafe"
-                          stop-opacity="0.88"
-                        />
-                      </radialGradient>
-                      <linearGradient
-                        id="qcDialRimGrad"
-                        x1="0%"
-                        y1="0%"
-                        x2="100%"
-                        y2="100%"
-                      >
-                        <stop
-                          offset="0%"
-                          stop-color="#ffffff"
-                        />
-                        <stop
-                          offset="55%"
-                          stop-color="#cbd5e1"
-                        />
-                        <stop
-                          offset="100%"
-                          stop-color="#94a3b8"
-                        />
-                      </linearGradient>
-                    </defs>
-                    <!-- 底座厚度侧壁 -->
-                    <circle
-                      cx="110"
-                      cy="116"
-                      r="105"
-                      fill="#cbd5e1"
-                      fill-opacity="0.65"
-                    />
-                    <circle
-                      cx="110"
-                      cy="113"
-                      r="105"
-                      fill="#e2e8f0"
-                      fill-opacity="0.85"
-                    />
-                    <!-- 底座顶面玻璃盘 -->
-                    <circle
-                      cx="110"
-                      cy="110"
-                      r="105"
-                      fill="url(#qcDialPlateGrad)"
-                      stroke="url(#qcDialRimGrad)"
-                      stroke-width="2"
-                    />
-                    <!-- 外圈精密刻度 -->
-                    <circle
-                      cx="110"
-                      cy="110"
-                      r="100.5"
-                      fill="none"
-                      stroke="rgba(30, 41, 59, 0.16)"
-                      stroke-width="1.5"
-                      stroke-dasharray="1.4 9.1"
-                    />
-                    <!-- 三圈内凹玻璃槽 -->
-                    <g
-                      v-for="ring in ringDefs"
-                      :key="`track-${ring.key}`"
-                    >
-                      <circle
-                        cx="110"
-                        cy="111.5"
-                        :r="ring.r"
-                        fill="none"
-                        stroke="rgba(255, 255, 255, 0.85)"
-                        stroke-width="11"
-                      />
-                      <circle
-                        cx="110"
-                        cy="110"
-                        :r="ring.r"
-                        fill="none"
-                        stroke="rgba(15, 23, 42, 0.075)"
-                        stroke-width="11"
-                      />
-                    </g>
-                  </svg>
-
-                  <!-- 三个独立 Z 轴浮起与物理挤出厚度的 3D 环层 -->
-                  <div
+              <svg
+                width="96"
+                height="96"
+                viewBox="0 0 200 200"
+                aria-hidden="true"
+              >
+                <defs>
+                  <linearGradient
                     v-for="ring in ringDefs"
-                    :key="`ring3d-${ring.key}`"
-                    class="qc-home-rings__ring-layer"
-                    :class="{
-                      'is-dimmed': hoveredRingKey !== null && hoveredRingKey !== ring.key,
-                      'is-highlighted': hoveredRingKey === ring.key,
-                    }"
-                    :style="{ '--ring-z': `${ring.z}px`, '--ring-z-hover': `${ring.z + 10}px` }"
+                    :id="ring.gradient"
+                    :key="ring.gradient"
+                    x1="0"
+                    y1="0"
+                    x2="1"
+                    y2="1"
                   >
-                    <svg
-                      v-if="ring.rate > 0"
-                      class="qc-home-rings__layer-svg"
-                      width="136"
-                      height="136"
-                      viewBox="0 0 220 220"
-                      aria-hidden="true"
-                    >
-                      <defs>
-                        <linearGradient
-                          :id="ring.gradient"
-                          x1="0%"
-                          y1="0%"
-                          x2="100%"
-                          y2="100%"
-                        >
-                          <stop
-                            offset="0%"
-                            :stop-color="ring.from"
-                          />
-                          <stop
-                            offset="52%"
-                            :stop-color="ring.mid"
-                          />
-                          <stop
-                            offset="100%"
-                            :stop-color="ring.to"
-                          />
-                        </linearGradient>
-                      </defs>
-                      <!-- 3D 立体挤出侧壁（多层深度叠影） -->
-                      <g transform="translate(0 5.5)">
-                        <circle
-                          cx="110"
-                          cy="110"
-                          :r="ring.r"
-                          fill="none"
-                          :stroke="ring.depthShadow"
-                          stroke-opacity="0.45"
-                          stroke-width="11"
-                          stroke-linecap="round"
-                          :stroke-dasharray="ringDash(ring.r, ring.rate)"
-                          transform="rotate(-90 110 110)"
-                        />
-                      </g>
-                      <g transform="translate(0 3.2)">
-                        <circle
-                          cx="110"
-                          cy="110"
-                          :r="ring.r"
-                          fill="none"
-                          :stroke="ring.depthSide"
-                          stroke-width="11"
-                          stroke-linecap="round"
-                          :stroke-dasharray="ringDash(ring.r, ring.rate)"
-                          transform="rotate(-90 110 110)"
-                        />
-                      </g>
-                      <g transform="translate(0 1.4)">
-                        <circle
-                          cx="110"
-                          cy="110"
-                          :r="ring.r"
-                          fill="none"
-                          :stroke="ring.to"
-                          stroke-width="11"
-                          stroke-linecap="round"
-                          :stroke-dasharray="ringDash(ring.r, ring.rate)"
-                          transform="rotate(-90 110 110)"
-                        />
-                      </g>
-                      <!-- 3D 顶面亮泽渐变弧 -->
-                      <circle
-                        cx="110"
-                        cy="110"
-                        :r="ring.r"
-                        fill="none"
-                        :stroke="`url(#${ring.gradient})`"
-                        stroke-width="11"
-                        stroke-linecap="round"
-                        :stroke-dasharray="ringDash(ring.r, ring.rate)"
-                        transform="rotate(-90 110 110)"
-                      />
-                      <!-- 顶部玻璃镜面高光脊线 -->
-                      <g transform="translate(0 -1.6)">
-                        <circle
-                          cx="110"
-                          cy="110"
-                          :r="ring.r"
-                          fill="none"
-                          stroke="rgba(255, 255, 255, 0.52)"
-                          stroke-width="2.4"
-                          stroke-linecap="round"
-                          :stroke-dasharray="ringDash(ring.r, ring.rate)"
-                          transform="rotate(-90 110 110)"
-                        />
-                      </g>
-                    </svg>
-                  </div>
-
-                  <!-- 中心悬浮 3D 水晶表盘 -->
-                  <div
-                    class="qc-home-rings__medallion"
-                    aria-hidden="true"
-                  >
-                    <strong>{{ formatRate(activeRingSummary.rate) }}<small>%</small></strong>
-                    <span>{{ activeRingSummary.shortLabel }}</span>
-                  </div>
-                </div>
-              </div>
+                    <stop
+                      offset="0"
+                      :stop-color="ring.from"
+                    />
+                    <stop
+                      offset="1"
+                      :stop-color="ring.to"
+                    />
+                  </linearGradient>
+                </defs>
+                <g
+                  v-for="ring in ringDefs"
+                  :key="ring.key"
+                >
+                  <circle
+                    cx="100"
+                    cy="100"
+                    :r="ring.r"
+                    fill="none"
+                    :stroke="`url(#${ring.gradient})`"
+                    stroke-opacity="0.14"
+                    stroke-width="20"
+                  />
+                  <!-- 零值不画进度弧，避免圆角端点残留成一个点 -->
+                  <circle
+                    v-if="ring.rate > 0"
+                    cx="100"
+                    cy="100"
+                    :r="ring.r"
+                    fill="none"
+                    :stroke="`url(#${ring.gradient})`"
+                    stroke-width="20"
+                    stroke-linecap="round"
+                    :stroke-dasharray="ringDash(ring.r, ring.rate)"
+                    transform="rotate(-90 100 100)"
+                  />
+                </g>
+              </svg>
               <dl class="qc-home-rings__legend">
                 <div
                   v-for="ring in ringDefs"
                   :key="ring.key"
-                  class="qc-home-rings__legend-row"
-                  :class="{ 'is-active': hoveredRingKey === ring.key }"
-                  @mouseenter="hoveredRingKey = ring.key"
-                  @focusin="hoveredRingKey = ring.key"
                 >
                   <dt :style="{ color: ring.textColor }">
-                    <i
-                      class="qc-home-rings__bar"
-                      :style="{ background: `linear-gradient(180deg, ${ring.from}, ${ring.to})` }"
-                      aria-hidden="true"
-                    />{{ ring.label }}
+                    {{ ring.label }}
                   </dt>
-                  <dd>{{ formatRate(ring.rate) }}<small>%</small></dd>
+                  <dd>{{ formatRate(ring.rate) }}<small> %</small></dd>
                 </div>
               </dl>
             </div>
@@ -516,7 +317,7 @@
             <div class="qc-home-metric__head">
               <MqIconTile
                 :name="card.icon"
-                :tone="card.value === 0 ? 'neutral' : card.key === 'risk' ? 'brand' : card.tone"
+                :tone="card.value === 0 ? 'neutral' : card.tone"
                 :size="40"
               />
               <div class="qc-home-metric__titles">
@@ -851,7 +652,7 @@
                 >
                   <MqIconTile
                     name="tech_error"
-                    tone="neutral"
+                    tone="warning"
                     :size="34"
                   />
                   <dt>技术异常</dt>
@@ -862,7 +663,7 @@
                 <div data-testid="health-status-item">
                   <MqIconTile
                     name="success"
-                    tone="brand"
+                    tone="success"
                     :size="34"
                   />
                   <dt>最近成功质控</dt>
@@ -978,11 +779,11 @@ interface DefectAnalysisItem {
 }
 
 const CONCLUSION_STATUS_META = [
-  { status: 'non_compliant', label: QC_RESULT_STATUS_LABELS.non_compliant, color: '#312e81' },
-  { status: 'data_gap', label: QC_RESULT_STATUS_LABELS.data_gap, color: '#0ea5e9' },
+  { status: 'non_compliant', label: QC_RESULT_STATUS_LABELS.non_compliant, color: '#ef4444' },
+  { status: 'data_gap', label: QC_RESULT_STATUS_LABELS.data_gap, color: '#f59e0b' },
   { status: 'uncertain', label: QC_RESULT_STATUS_LABELS.uncertain, color: '#64748b' },
-  { status: 'compliant', label: '合规', color: '#2563eb' },
-  // 首页统一采用临床蓝灰同色系层级，避免红绿橙高饱和撞色。
+  { status: 'compliant', label: '合规', color: '#10b981' },
+  // 与质控分析页保持同一套语义色，避免同一状态在不同首页模块变色。
   { status: 'not_applicable', label: '不适用', color: '#94a3b8' },
   { status: 'not_executed', label: '未执行', color: '#cbd5e1' },
 ] as const
@@ -1098,7 +899,7 @@ const kpiCards = computed<KpiCard[]>(() => {
       key: 'risk',
       label: '有确定问题的病历',
       value: Number(kpis?.high_risk_review_total || 0),
-      helper: '需重点复核与整改',
+      helper: '含确定问题的病历',
       icon: 'issue',
       tone: 'danger',
     },
@@ -1116,7 +917,7 @@ const kpiCards = computed<KpiCard[]>(() => {
       value: Number(kpis?.qc_completed_total || 0),
       helper: '已生成正式质控结果',
       icon: 'fp_qc',
-      tone: 'brand',
+      tone: 'success',
     },
     {
       key: 'records',
@@ -1124,7 +925,7 @@ const kpiCards = computed<KpiCard[]>(() => {
       value: Number(kpis?.records_total || 0),
       helper: '当前筛选范围',
       icon: 'stack',
-      tone: 'neutral',
+      tone: 'brand',
     },
   ]
 })
@@ -1170,86 +971,38 @@ const metricCards = computed<MetricCard[]>(() => [
   },
 ])
 
-const hoveredRingKey = ref<string | null>(null)
-const dialTiltX = ref(36)
-const dialTiltY = ref(-8)
-
-const dialTransformStyle = computed(() => ({
-  transform: `rotateX(${dialTiltX.value.toFixed(1)}deg) rotateY(${dialTiltY.value.toFixed(1)}deg) rotateZ(-4deg)`,
-}))
-
-function onRingsPointerMove(event: MouseEvent) {
-  const host = event.currentTarget as HTMLElement | null
-  if (!host) return
-  const rect = host.getBoundingClientRect()
-  if (!rect.width || !rect.height) return
-  const nx = Math.max(-1, Math.min(1, ((event.clientX - rect.left) / rect.width) * 2 - 1))
-  const ny = Math.max(-1, Math.min(1, ((event.clientY - rect.top) / rect.height) * 2 - 1))
-  dialTiltX.value = 34 - ny * 11
-  dialTiltY.value = nx * 14
-}
-
-function onRingsPointerLeave() {
-  hoveredRingKey.value = null
-  dialTiltX.value = 36
-  dialTiltY.value = -8
-}
-
 const ringDefs = computed(() => [
   {
     key: 'issue',
     label: '问题率',
-    shortLabel: '问题率',
-    r: 89,
-    z: 6,
+    r: 84,
     rate: rates.value.issue,
-    gradient: 'qcRingIndigo',
-    from: '#a5b4fc',
-    mid: '#4f46e5',
-    to: '#312e81',
-    depthSide: '#1e1b4b',
-    depthShadow: '#1e1b4b',
-    textColor: 'var(--qc-danger-text, #312e81)',
+    gradient: 'qcRingRed',
+    from: '#FF6B61',
+    to: '#FF3B30',
+    textColor: 'var(--qc-danger-text, #c81e32)',
   },
   {
     key: 'completion',
     label: '完成率',
-    shortLabel: '已完成',
-    r: 71,
-    z: 10,
+    r: 60,
     rate: rates.value.completion,
-    gradient: 'qcRingCobalt',
-    from: '#7dd3fc',
-    mid: '#2563eb',
-    to: '#1d4ed8',
-    depthSide: '#1e3a8a',
-    depthShadow: '#1e3a8a',
-    textColor: 'var(--qc-brand-text, #1d4ed8)',
+    gradient: 'qcRingGreen',
+    from: '#5FD97E',
+    to: '#34C759',
+    textColor: 'var(--qc-success-text, #147a36)',
   },
   {
     key: 'pending',
     label: '待质控',
-    shortLabel: '待质控',
-    r: 53,
-    z: 14,
+    r: 36,
     rate: rates.value.pending,
-    gradient: 'qcRingSlate',
-    from: '#e2e8f0',
-    mid: '#64748b',
-    to: '#475569',
-    depthSide: '#334155',
-    depthShadow: '#1e293b',
-    textColor: 'var(--qc-warning-text, #475569)',
+    gradient: 'qcRingAmber',
+    from: '#FFB340',
+    to: '#FF9500',
+    textColor: 'var(--qc-warning-text, #a64d00)',
   },
 ])
-
-const activeRingSummary = computed(() => {
-  if (hoveredRingKey.value) {
-    const matched = ringDefs.value.find((ring) => ring.key === hoveredRingKey.value)
-    if (matched) return matched
-  }
-  return ringDefs.value[1] || ringDefs.value[0]
-})
 
 function ringDash(radius: number, rate: number): string {
   const circumference = 2 * Math.PI * radius
@@ -1257,19 +1010,19 @@ function ringDash(radius: number, rate: number): string {
 }
 
 const TONE_GRADIENTS: Record<MqIconTone, string> = {
-  neutral: 'linear-gradient(90deg, #94a3b8, #475569)',
-  brand: 'linear-gradient(90deg, #60a5fa, #2563eb)',
-  success: 'linear-gradient(90deg, #60a5fa, #1d4ed8)',
-  warning: 'linear-gradient(90deg, #94a3b8, #64748b)',
-  danger: 'linear-gradient(90deg, #6366f1, #312e81)',
+  neutral: 'linear-gradient(90deg, #A1A7B3, #6E7585)',
+  brand: 'linear-gradient(90deg, #6FB0FF, #0A6CFF)',
+  success: 'linear-gradient(90deg, #6EE08E, #34C759)',
+  warning: 'linear-gradient(90deg, #FFC36B, #FF9500)',
+  danger: 'linear-gradient(90deg, #FF7A70, #FF3B30)',
 }
 
 const TONE_TEXT_COLORS: Record<MqIconTone, string> = {
-  neutral: 'var(--qc-slate-text, #475569)',
-  brand: 'var(--qc-brand-text, #1d4ed8)',
-  success: 'var(--qc-brand-text, #1d4ed8)',
-  warning: 'var(--qc-warning-text, #475569)',
-  danger: 'var(--qc-danger-text, #312e81)',
+  neutral: 'var(--mq-text-tertiary)',
+  brand: 'var(--qc-brand-text, #0a58cc)',
+  success: 'var(--qc-success-text, #147a36)',
+  warning: 'var(--qc-warning-text, #a64d00)',
+  danger: 'var(--qc-danger-text, #c81e32)',
 }
 
 function toneTextColor(tone: MqIconTone): string {

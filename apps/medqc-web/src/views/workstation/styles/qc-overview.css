@@ -1,11 +1,10 @@
 /* v7.1 液态玻璃 · 首页概览 */
 .qc-home-shell {
-  /* 首页统一临床蓝灰同色系（靛蓝 / 钴蓝 / 冷灰，告别红绿橙撞色，满足 WCAG AA >= 4.5:1） */
-  --qc-brand-text: #1d4ed8;
-  --qc-slate-text: #475569;
-  --qc-success-text: #1d4ed8;
-  --qc-warning-text: #475569;
-  --qc-danger-text: #312e81;
+  /* 首页内高对比度语义文字色（浅色玻璃底上均满足 WCAG AA >= 4.5:1） */
+  --qc-brand-text: #0a58cc;
+  --qc-success-text: #147a36;
+  --qc-warning-text: #a64d00;
+  --qc-danger-text: #c81e32;
 }
 
 /* 避免与 .ws-content 的顶部留白叠加出 18px 假滚动条，并给右下角悬浮助手球留出底部安全间距 */
@@ -422,9 +421,9 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-rings {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  padding: 18px 22px;
+  padding: 18px 24px;
   border: 1px solid var(--mq-glass-border);
   border-radius: var(--mq-radius-card);
   background: var(--mq-glass-bg);
@@ -434,23 +433,10 @@ button.qc-home-defect-analysis__row:focus-visible {
   color: var(--mq-text-primary);
 }
 
-.qc-home-rings__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .qc-home-rings__title {
   color: var(--mq-text-primary);
   font-size: var(--mq-font-14);
   font-weight: 600;
-}
-
-.qc-home-rings__subtitle {
-  color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-12);
-  font-weight: 500;
 }
 
 .qc-home-rings__body {
@@ -461,186 +447,38 @@ button.qc-home-defect-analysis__row:focus-visible {
   gap: 16px 20px;
 }
 
-.qc-home-rings__dial-stage {
-  position: relative;
-  display: grid;
+.qc-home-rings__body svg {
   flex-shrink: 0;
-  width: 142px;
-  height: 132px;
-  place-items: center;
-  perspective: 680px;
-}
-
-.qc-home-rings__dial-3d {
-  position: relative;
-  width: 136px;
-  height: 136px;
-  transform-style: preserve-3d;
-  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
-}
-
-.qc-home-rings__floor-shadow {
-  position: absolute;
-  inset: 14px 8px -6px;
-  border-radius: 50%;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(30, 58, 138, 0.24) 0%,
-    rgba(30, 58, 138, 0.1) 48%,
-    rgba(30, 58, 138, 0) 76%
-  );
-  filter: blur(8px);
-  transform: translateZ(-18px) scaleY(0.92);
-  pointer-events: none;
-}
-
-.qc-home-rings__layer-svg {
-  position: absolute;
-  inset: 0;
-  display: block;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.qc-home-rings__base-svg {
-  transform: translateZ(0px);
-}
-
-.qc-home-rings__ring-layer {
-  position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
-  transform: translateZ(var(--ring-z, 8px));
-  transition:
-    transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 220ms ease;
-  pointer-events: none;
-}
-
-.qc-home-rings__ring-layer.is-highlighted {
-  transform: translateZ(var(--ring-z-hover, 18px)) scale(1.025);
-  filter: drop-shadow(0 8px 12px rgba(30, 58, 138, 0.26));
-}
-
-.qc-home-rings__ring-layer.is-dimmed {
-  opacity: 0.28;
-}
-
-.qc-home-rings__medallion {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  width: 54px;
-  height: 54px;
-  margin: -27px 0 0 -27px;
-  border: 1px solid rgba(255, 255, 255, 0.92);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 32% 24%,
-    rgba(255, 255, 255, 0.98) 0%,
-    rgba(241, 245, 249, 0.92) 70%,
-    rgba(219, 234, 254, 0.88) 100%
-  );
-  box-shadow:
-    0 10px 18px rgba(15, 23, 42, 0.16),
-    0 2px 5px rgba(30, 58, 138, 0.14),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.98);
-  text-align: center;
-  transform: translateZ(24px) rotateX(-16deg);
-  pointer-events: none;
-}
-
-.qc-home-rings__medallion strong {
-  color: var(--mq-text-primary);
-  font-family: var(--mq-font-display);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  font-variant-numeric: tabular-nums;
-}
-
-.qc-home-rings__medallion strong small {
-  margin-left: 0.5px;
-  color: var(--mq-text-tertiary);
-  font-size: 9px;
-  font-weight: 600;
-}
-
-.qc-home-rings__medallion span {
-  color: var(--mq-text-tertiary);
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1.15;
 }
 
 .qc-home-rings__legend {
-  display: grid;
-  flex: 1 1 150px;
-  gap: 6px;
+  display: flex;
+  flex: 1 1 160px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px 18px;
   min-width: 0;
   margin: 0;
 }
 
-.qc-home-rings__legend-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 5px 8px;
-  border-radius: 9px;
-  cursor: default;
-  transition:
-    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.qc-home-rings__legend-row:hover,
-.qc-home-rings__legend-row.is-active {
-  background: rgba(37, 99, 235, 0.065);
-  transform: translateX(2px);
-}
-
 .qc-home-rings__legend dt {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--mq-font-13);
+  font-size: var(--mq-font-12);
   font-weight: 600;
-  white-space: nowrap;
-}
-
-.qc-home-rings__bar {
-  width: 3px;
-  height: 16px;
-  border-radius: 999px;
-  flex-shrink: 0;
 }
 
 .qc-home-rings__legend dd {
   margin: 0;
-  color: var(--mq-text-primary);
   font-family: var(--mq-font-display);
-  font-size: 17px;
-  font-weight: 700;
+  font-size: var(--mq-font-20);
+  font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .qc-home-rings__legend small {
-  margin-left: 2px;
   color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-12);
-  font-weight: 500;
+  font-size: var(--mq-font-13);
 }
 
 /* 三栏指标卡 */
