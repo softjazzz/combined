@@ -422,9 +422,9 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-rings {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  padding: 18px 24px;
+  padding: 18px 22px;
   border: 1px solid var(--mq-glass-border);
   border-radius: var(--mq-radius-card);
   background: var(--mq-glass-bg);
@@ -434,10 +434,23 @@ button.qc-home-defect-analysis__row:focus-visible {
   color: var(--mq-text-primary);
 }
 
+.qc-home-rings__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .qc-home-rings__title {
   color: var(--mq-text-primary);
   font-size: var(--mq-font-14);
   font-weight: 600;
+}
+
+.qc-home-rings__subtitle {
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-12);
+  font-weight: 500;
 }
 
 .qc-home-rings__body {
@@ -448,48 +461,126 @@ button.qc-home-defect-analysis__row:focus-visible {
   gap: 16px 20px;
 }
 
-.qc-home-rings__body svg {
+.qc-home-rings__dial {
+  position: relative;
+  display: grid;
   flex-shrink: 0;
+  width: 120px;
+  height: 120px;
+  place-items: center;
+}
+
+.qc-home-rings__dial svg,
+.qc-home-rings__center {
+  grid-area: 1 / 1;
+}
+
+.qc-home-rings__dial svg {
+  display: block;
+}
+
+.qc-home-rings__arc-group {
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.qc-home-rings__arc-group.is-dimmed {
+  opacity: 0.24;
+}
+
+.qc-home-rings__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.qc-home-rings__center strong {
+  color: var(--mq-text-primary);
+  font-family: var(--mq-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-home-rings__center strong small {
+  margin-left: 1px;
+  color: var(--mq-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.qc-home-rings__center span {
+  color: var(--mq-text-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .qc-home-rings__legend {
-  display: flex;
-  flex: 1 1 160px;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 8px 18px;
+  display: grid;
+  flex: 1 1 150px;
+  gap: 6px;
   min-width: 0;
   margin: 0;
+}
+
+.qc-home-rings__legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  cursor: default;
+  transition:
+    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.qc-home-rings__legend-row:hover,
+.qc-home-rings__legend-row.is-active {
+  background: rgba(37, 99, 235, 0.065);
+  transform: translateX(2px);
 }
 
 .qc-home-rings__legend dt {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--mq-font-12);
+  gap: 8px;
+  font-size: var(--mq-font-13);
   font-weight: 600;
+  white-space: nowrap;
 }
 
-.qc-home-rings__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+.qc-home-rings__bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 999px;
   flex-shrink: 0;
 }
 
 .qc-home-rings__legend dd {
   margin: 0;
+  color: var(--mq-text-primary);
   font-family: var(--mq-font-display);
-  font-size: var(--mq-font-20);
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .qc-home-rings__legend small {
+  margin-left: 2px;
   color: var(--mq-text-tertiary);
-  font-size: var(--mq-font-13);
+  font-size: var(--mq-font-12);
+  font-weight: 500;
 }
 
 /* 三栏指标卡 */

@@ -227,79 +227,157 @@
             </nav>
           </div>
 
-          <!-- 质控进度圆环卡（浅色玻璃，比例均由现有 KPI 计算） -->
+          <!-- 质控进度精密仪表环卡（浅色玻璃，比例均由现有 KPI 计算） -->
           <div
             class="qc-home-rings"
             aria-label="质控进度"
+            @mouseleave="hoveredRingKey = null"
           >
-            <span class="qc-home-rings__title">质控进度</span>
+            <div class="qc-home-rings__head">
+              <span class="qc-home-rings__title">质控进度</span>
+              <span class="qc-home-rings__subtitle">{{ activeRingSummary.label }}</span>
+            </div>
             <div class="qc-home-rings__body">
-              <svg
-                width="96"
-                height="96"
-                viewBox="0 0 200 200"
-                aria-hidden="true"
-              >
-                <defs>
-                  <linearGradient
-                    v-for="ring in ringDefs"
-                    :id="ring.gradient"
-                    :key="ring.gradient"
-                    x1="0"
-                    y1="0"
-                    x2="1"
-                    y2="1"
-                  >
-                    <stop
-                      offset="0"
-                      :stop-color="ring.from"
-                    />
-                    <stop
-                      offset="1"
-                      :stop-color="ring.to"
-                    />
-                  </linearGradient>
-                </defs>
-                <g
-                  v-for="ring in ringDefs"
-                  :key="ring.key"
+              <div class="qc-home-rings__dial">
+                <svg
+                  width="120"
+                  height="120"
+                  viewBox="0 0 220 220"
+                  aria-hidden="true"
                 >
+                  <defs>
+                    <linearGradient
+                      v-for="ring in ringDefs"
+                      :id="ring.gradient"
+                      :key="ring.gradient"
+                      x1="0%"
+                      y1="0%"
+                      x2="100%"
+                      y2="100%"
+                    >
+                      <stop
+                        offset="0%"
+                        :stop-color="ring.from"
+                      />
+                      <stop
+                        offset="55%"
+                        :stop-color="ring.mid"
+                      />
+                      <stop
+                        offset="100%"
+                        :stop-color="ring.to"
+                      />
+                    </linearGradient>
+                    <radialGradient
+                      id="qcRingCoreGlow"
+                      cx="50%"
+                      cy="38%"
+                      r="65%"
+                    >
+                      <stop
+                        offset="0%"
+                        stop-color="#ffffff"
+                        stop-opacity="0.96"
+                      />
+                      <stop
+                        offset="100%"
+                        stop-color="#f1f5f9"
+                        stop-opacity="0.65"
+                      />
+                    </radialGradient>
+                    <filter
+                      id="qcRingArcShadow"
+                      x="-20%"
+                      y="-20%"
+                      width="140%"
+                      height="140%"
+                    >
+                      <feDropShadow
+                        dx="0"
+                        dy="2"
+                        stdDeviation="3"
+                        flood-color="#1e3a8a"
+                        flood-opacity="0.18"
+                      />
+                    </filter>
+                  </defs>
+                  <!-- 外圈精密刻度线 -->
                   <circle
-                    cx="100"
-                    cy="100"
-                    :r="ring.r"
+                    cx="110"
+                    cy="110"
+                    r="105"
                     fill="none"
-                    stroke="#e2e8f0"
-                    stroke-width="18"
+                    stroke="rgba(15, 23, 42, 0.13)"
+                    stroke-width="1.4"
+                    stroke-dasharray="1.4 9.6"
                   />
-                  <!-- 零值不画进度弧，避免圆角端点残留成一个点 -->
+                  <!-- 中心微透玻璃表盘 -->
                   <circle
-                    v-if="ring.rate > 0"
-                    cx="100"
-                    cy="100"
-                    :r="ring.r"
-                    fill="none"
-                    :stroke="`url(#${ring.gradient})`"
-                    stroke-width="18"
-                    stroke-linecap="round"
-                    :stroke-dasharray="ringDash(ring.r, ring.rate)"
-                    transform="rotate(-90 100 100)"
+                    cx="110"
+                    cy="110"
+                    r="39"
+                    fill="url(#qcRingCoreGlow)"
+                    stroke="rgba(15, 23, 42, 0.06)"
+                    stroke-width="1"
                   />
-                </g>
-              </svg>
+                  <g
+                    v-for="ring in ringDefs"
+                    :key="ring.key"
+                    class="qc-home-rings__arc-group"
+                    :class="{
+                      'is-dimmed': hoveredRingKey !== null && hoveredRingKey !== ring.key,
+                      'is-highlighted': hoveredRingKey === ring.key,
+                    }"
+                  >
+                    <circle
+                      cx="110"
+                      cy="110"
+                      :r="ring.r"
+                      fill="none"
+                      stroke="rgba(15, 23, 42, 0.055)"
+                      stroke-width="10"
+                    />
+                    <!-- 零值不画进度弧，避免圆角端点残留成一个点 -->
+                    <circle
+                      v-if="ring.rate > 0"
+                      cx="110"
+                      cy="110"
+                      :r="ring.r"
+                      fill="none"
+                      :stroke="`url(#${ring.gradient})`"
+                      stroke-width="10"
+                      stroke-linecap="round"
+                      :stroke-dasharray="ringDash(ring.r, ring.rate)"
+                      filter="url(#qcRingArcShadow)"
+                      transform="rotate(-90 110 110)"
+                    />
+                  </g>
+                </svg>
+                <div
+                  class="qc-home-rings__center"
+                  aria-hidden="true"
+                >
+                  <strong>{{ formatRate(activeRingSummary.rate) }}<small>%</small></strong>
+                  <span>{{ activeRingSummary.shortLabel }}</span>
+                </div>
+              </div>
               <dl class="qc-home-rings__legend">
                 <div
                   v-for="ring in ringDefs"
                   :key="ring.key"
+                  class="qc-home-rings__legend-row"
+                  :class="{ 'is-active': hoveredRingKey === ring.key }"
+                  @mouseenter="hoveredRingKey = ring.key"
+                  @focusin="hoveredRingKey = ring.key"
                 >
                   <dt :style="{ color: ring.textColor }">
                     <i
-                      class="qc-home-rings__dot"
-                      :style="{ background: ring.to }"
+                      class="qc-home-rings__bar"
+                      :style="{ background: `linear-gradient(180deg, ${ring.from}, ${ring.to})` }"
                       aria-hidden="true"
                     />{{ ring.label }}
                   </dt>
-                  <dd>{{ formatRate(ring.rate) }}<small> %</small></dd>
+                  <dd>{{ formatRate(ring.rate) }}<small>%</small></dd>
                 </div>
               </dl>
             </div>
@@ -974,38 +1052,54 @@ const metricCards = computed<MetricCard[]>(() => [
   },
 ])
 
+const hoveredRingKey = ref<string | null>(null)
+
 const ringDefs = computed(() => [
   {
     key: 'issue',
     label: '问题率',
-    r: 84,
+    shortLabel: '问题率',
+    r: 91,
     rate: rates.value.issue,
     gradient: 'qcRingIndigo',
-    from: '#4f46e5',
+    from: '#818cf8',
+    mid: '#4338ca',
     to: '#312e81',
     textColor: 'var(--qc-danger-text, #312e81)',
   },
   {
     key: 'completion',
     label: '完成率',
-    r: 60,
+    shortLabel: '已完成',
+    r: 73,
     rate: rates.value.completion,
     gradient: 'qcRingCobalt',
-    from: '#3b82f6',
+    from: '#38bdf8',
+    mid: '#2563eb',
     to: '#1d4ed8',
     textColor: 'var(--qc-brand-text, #1d4ed8)',
   },
   {
     key: 'pending',
     label: '待质控',
-    r: 36,
+    shortLabel: '待质控',
+    r: 55,
     rate: rates.value.pending,
     gradient: 'qcRingSlate',
-    from: '#94a3b8',
-    to: '#64748b',
+    from: '#cbd5e1',
+    mid: '#64748b',
+    to: '#475569',
     textColor: 'var(--qc-warning-text, #475569)',
   },
 ])
+
+const activeRingSummary = computed(() => {
+  if (hoveredRingKey.value) {
+    const matched = ringDefs.value.find((ring) => ring.key === hoveredRingKey.value)
+    if (matched) return matched
+  }
+  return ringDefs.value[1] || ringDefs.value[0]
+})
 
 function ringDash(radius: number, rate: number): string {
   const circumference = 2 * Math.PI * radius
