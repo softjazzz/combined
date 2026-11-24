@@ -4,7 +4,7 @@ import { AxiosHeaders } from 'axios'
 import Panel from '@/views/workstation-v4/components/system-config/ClinicalSourceSettingsPanel.vue'
 import { clinicalSourcesApi } from '@/api/clinicalSources'
 import { ApiService } from '@/services/apiService'
-import { usePatientRecords } from '@/views/workstation-v4/composables/usePatientRecords'
+import { usePatientRecords, resetClinicalSourceOptionsCache } from '@/views/workstation-v4/composables/usePatientRecords'
 import type { ClinicalSourceSettings } from '@/api/clinicalSources'
 
 vi.mock('@/api/clinicalSources', () => ({ clinicalSourcesApi: { configuration: vi.fn(), save: vi.fn(), check: vi.fn(), options: vi.fn() } }))
@@ -20,6 +20,7 @@ function response(data: unknown) {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  resetClinicalSourceOptionsCache()
   window.history.replaceState({}, '', '/workstation-v5/running-records?source_id=legacy_pg')
   vi.mocked(clinicalSourcesApi.configuration).mockResolvedValue(structuredClone(settings))
   vi.mocked(clinicalSourcesApi.save).mockResolvedValue(structuredClone(settings))
@@ -59,6 +60,31 @@ describe('真实面板及病历池单源行为', () => {
     expect(ApiService.getRaw).not.toHaveBeenCalled()
     expect(records.allRecords.value).toEqual([])
     vi.restoreAllMocks()
+  })
+
+  it('后端显式返回 legacy_compat 时使用本地 legacy_pg 数据源并保持 URL 一致', async () => {
+    vi.mocked(clinicalSourcesApi.options).mockResolvedValue({
+      mode: 'legacy_compat',
+      default_source: 'legacy_pg',
+      sources: [
+        { id: 'legacy_pg', name: '原有数据源', enabled: true },
+        { id: 'independent_cdm', name: '服务器CDM', enabled: false },
+      ],
+    })
+    vi.mocked(ApiService.getRaw).mockResolvedValue(
+      response({ records: [{ id: 'R1', institute_id: 'I', patient_id: 'P1', visit_id: 'V1' }], total: 1 }),
+    )
+    const records = usePatientRecords('inpatient')
+    await records.fetchData()
+    expect(records.loadError.value).toBe(false)
+    expect(records.sourceId.value).toBe('legacy_pg')
+    expect(ApiService.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      expect.objectContaining({ source_id: 'legacy_pg', hospital_status: 'inpatient' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(records.allRecords.value[0]?.sourceId).toBe('legacy_pg')
+    expect(new URL(window.location.href).searchParams.get('source_id')).toBe('legacy_pg')
   })
 
   it('同筛选翻页只读取本页摘要，主动刷新重新统计全集', async () => {

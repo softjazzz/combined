@@ -1,5 +1,14 @@
-import { clinicalSourcesApi, type ClinicalSourceId, type ClinicalSourceOption } from '@/api/clinicalSources'
-import { setPageClinicalSource } from '@/utils/clinical-source'
+import {
+  clinicalSourcesApi,
+  type ClinicalSourceId,
+  type ClinicalSourceMode,
+  type ClinicalSourceOption,
+} from '@/api/clinicalSources'
+import {
+  resetClinicalSourceMode,
+  setClinicalSourceMode,
+  setPageClinicalSource,
+} from '@/utils/clinical-source'
 import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { ApiService } from '@/services/apiService'
 import type { DeptInfo, DoctorInfo, PatientRecord, QcSummaryLoadState, RecordPoolQcSummary } from '../types'
@@ -54,23 +63,39 @@ function getMockImplementationIdentity(loader: unknown): unknown {
 export function resetClinicalSourceOptionsCache() {
   cachedClinicalSourceOptions = null
   inFlightClinicalSourceOptions = null
+  resetClinicalSourceMode()
 }
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('medqc:clinical-sources-saved', resetClinicalSourceOptionsCache)
 }
 
+function resolveRequestedClinicalSource(
+  options: ClinicalSourceOptionsResult,
+  urlSourceId?: string | null,
+): ClinicalSourceId {
+  if (options.mode !== 'legacy_compat') return 'independent_cdm'
+  if (
+    (urlSourceId === 'legacy_pg' || urlSourceId === 'independent_cdm') &&
+    options.sources.some((option) => option.id === urlSourceId && option.enabled)
+  ) {
+    return urlSourceId
+  }
+  return options.default_source
+}
+
 function isCacheableClinicalSourceOptions(result: unknown): result is ClinicalSourceOptionsResult {
-  const sources = (result as { sources?: unknown } | null | undefined)?.sources
-  return (
-    Array.isArray(sources) &&
-    sources.some(
-      (option) =>
-        Boolean(option) &&
-        typeof option === 'object' &&
-        (option as { id?: unknown }).id === 'independent_cdm' &&
-        (option as { enabled?: unknown }).enabled === true,
-    )
+  const candidate = result as Partial<ClinicalSourceOptionsResult> | null | undefined
+  const sources = candidate?.sources
+  if (!Array.isArray(sources)) return false
+  const targetId: unknown =
+    candidate?.mode === 'legacy_compat' ? candidate.default_source : 'independent_cdm'
+  return sources.some(
+    (option) =>
+      Boolean(option) &&
+      typeof option === 'object' &&
+      (option as { id?: unknown }).id === targetId &&
+      (option as { enabled?: unknown }).enabled === true,
   )
 }
 
@@ -192,19 +217,24 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const initialDoctor = initialRouteQuery.get('doctor')?.trim()
   const initialKeyword = initialRouteQuery.get('keyword')?.trim() || ''
   const sourceId = ref<ClinicalSourceId | ''>('')
+  const sourceMode = ref<ClinicalSourceMode>('fixed_donghua_cdm')
   const sourceOptions = ref<ClinicalSourceOption[]>([])
   let sourceLoading: Promise<void> | undefined
   async function initializeSource() {
     if (sourceId.value) return
     if (!sourceLoading) sourceLoading = (async () => {
       const options = await loadClinicalSourceOptions()
-      const requested = 'independent_cdm'
+      const mode: ClinicalSourceMode =
+        options.mode === 'legacy_compat' ? 'legacy_compat' : 'fixed_donghua_cdm'
+      const requested = resolveRequestedClinicalSource(options, initialRouteQuery.get('source_id'))
       if (!options.sources.some((option) => option.id === requested && option.enabled)) {
         resetClinicalSourceOptionsCache()
         throw new Error('当前数据源已停用或无效，请重新选择')
       }
+      sourceMode.value = mode
       sourceOptions.value = options.sources
-      sourceId.value = requested as ClinicalSourceId
+      sourceId.value = requested
+      setClinicalSourceMode(mode, sourceId.value)
       setPageClinicalSource(sourceId.value)
     })().finally(() => { sourceLoading = undefined })
     await sourceLoading
@@ -460,6 +490,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         return
       }
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
+      cachedClinicalSourceOptions = null
       loadError.value = true
       allRecords.value = []
       serverTotal.value = 0
@@ -480,9 +511,12 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     listRequest?.abort()
     summaryRequest?.abort()
     resetClinicalSourceOptionsCache()
-    if (value !== 'independent_cdm') throw new Error('普通病历固定读取东华CDM')
-    sourceId.value = 'independent_cdm'
-    setPageClinicalSource(value)
+    if (sourceMode.value !== 'legacy_compat' && value !== 'independent_cdm') {
+      throw new Error('普通病历固定读取东华CDM')
+    }
+    sourceId.value = value as ClinicalSourceId
+    setClinicalSourceMode(sourceMode.value, sourceId.value)
+    setPageClinicalSource(sourceId.value)
     allRecords.value = []
     departments.value = []
     doctors.value = []

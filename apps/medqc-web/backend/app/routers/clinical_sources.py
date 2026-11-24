@@ -2,7 +2,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..core.audit import audit_event
-from ..core.clinical_defaults import FIXED_CDM_MODE, INDEPENDENT_CDM, LEGACY_PG, get_clinical_defaults
+from ..core.clinical_defaults import (
+    FIXED_CDM_MODE,
+    INDEPENDENT_CDM,
+    LEGACY_COMPAT_MODE,
+    LEGACY_PG,
+    get_clinical_defaults,
+)
 from ..core.response import success_response
 from ..core.security import get_current_user
 from ..database import clinical_connection
@@ -25,10 +31,14 @@ def options(_user: dict = Depends(get_current_user)):
                 "sources": [{"id": INDEPENDENT_CDM, "name": get_clinical_defaults().fixed_cdm_name,
                              "enabled": value.cdm.enabled}],
             })
-        return success_response(data={"default_source": value.default_source, "sources": [
-            {"id": LEGACY_PG, "name": value.legacy_name, "enabled": value.legacy_enabled},
-            {"id": INDEPENDENT_CDM, "name": value.cdm.name, "enabled": value.cdm.enabled},
-        ]})
+        return success_response(data={
+            "mode": LEGACY_COMPAT_MODE,
+            "default_source": value.default_source,
+            "sources": [
+                {"id": LEGACY_PG, "name": value.legacy_name, "enabled": value.legacy_enabled},
+                {"id": INDEPENDENT_CDM, "name": value.cdm.name, "enabled": value.cdm.enabled},
+            ],
+        })
     except PipelineError as error:
         raise HTTPException(error.status, error.code) from None
 

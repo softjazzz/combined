@@ -1,8 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { clinicalSourceForRequest, setPageClinicalSource } from '../clinical-source'
+import {
+  clinicalSourceForRequest,
+  resetClinicalSourceMode,
+  setClinicalSourceMode,
+  setPageClinicalSource,
+} from '../clinical-source'
 
 describe('固定东华来源，历史与材料专用入口保持中立', () => {
-  beforeEach(() => window.history.replaceState({}, '', '/workstation-v5/running-records?source_id=legacy_pg'))
+  beforeEach(() => {
+    resetClinicalSourceMode()
+    window.history.replaceState({}, '', '/workstation-v5/running-records?source_id=legacy_pg')
+  })
   it('普通请求忽略URL里的旧来源选择', () => {
     expect(clinicalSourceForRequest('/api/medical-records/workstation')).toBe('independent_cdm')
     expect(clinicalSourceForRequest('/api/v1/emr/V/documents')).toBe('independent_cdm')
@@ -30,5 +38,16 @@ describe('固定东华来源，历史与材料专用入口保持中立', () => {
     expect(clinicalSourceForRequest(url, 'GET')).toBeUndefined()
     expect(clinicalSourceForRequest(url, 'post')).toBe('independent_cdm')
     expect(clinicalSourceForRequest(`${url}-extra`, 'get')).toBe('independent_cdm')
+  })
+
+  it('仅在显式 legacy_compat 模式下透传 legacy_pg，且不污染材料与历史接口', () => {
+    setClinicalSourceMode('legacy_compat', 'legacy_pg')
+    setPageClinicalSource('legacy_pg')
+    expect(new URL(window.location.href).searchParams.get('source_id')).toBe('legacy_pg')
+    expect(clinicalSourceForRequest('/api/medical-records/workstation')).toBe('legacy_pg')
+    expect(clinicalSourceForRequest('/api/v1/emr/V/documents')).toBe('legacy_pg')
+    expect(clinicalSourceForRequest('/api/v1/qc/sichuan/workspace/batch-jobs/old')).toBeUndefined()
+    window.history.replaceState({}, '', '/workstation-v5/customer-sample-validation?source_id=legacy_pg')
+    expect(clinicalSourceForRequest('/api/v1/emr/V/documents')).toBeUndefined()
   })
 })

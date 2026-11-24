@@ -1,12 +1,14 @@
 import { http } from '@/utils/http'
 
 export type ClinicalSourceId = 'legacy_pg' | 'independent_cdm'
+export type ClinicalSourceMode = 'fixed_donghua_cdm' | 'legacy_compat'
 export interface ClinicalSourceOption {
   id: ClinicalSourceId
   name: string
   enabled: boolean
 }
 export interface ClinicalSourceOptions {
+  mode?: ClinicalSourceMode
   default_source: ClinicalSourceId
   sources: ClinicalSourceOption[]
 }
