@@ -130,6 +130,23 @@
               </template>
             </select>
           </label>
+          <button
+            v-if="ordersLoadState"
+            type="button"
+            class="record-load-orders-btn"
+            :class="{ 'is-failed': ordersLoadState === 'failed' }"
+            data-testid="record-narrow-load-orders"
+            :disabled="ordersLoadState === 'loading'"
+            @click="loadAndSelectOrders"
+          >
+            {{
+              ordersLoadState === 'loading'
+                ? '读取医嘱中…'
+                : ordersLoadState === 'failed'
+                  ? '重试加载医嘱'
+                  : '查看医嘱'
+            }}
+          </button>
           <span
             v-if="!documentOnly"
             class="record-location-chip"
@@ -925,6 +942,7 @@ function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): Docum
 
 function isDocumentLoaded(document: EditableMedicalRecordDocument) {
   return (
+    isMedicalOrderDocument(document) ||
     document.content_loaded === true ||
     Boolean(document.content?.trim()) ||
     Boolean(document.sections?.length) ||
@@ -944,6 +962,7 @@ async function ensureDocumentLoaded(
 ) {
   const summary = documents.value.find((document) => document.key === documentKey)
   if (!summary) return null
+  if (isMedicalOrderDocument(summary)) return summary
   const currentClinicalSurgery = props.sourceView === 'current' && Boolean(summary.clinical_surgery_version)
   if (!currentClinicalSurgery) {
     if (props.providedDocuments !== undefined || props.sourceView === 'current') return summary
@@ -1155,14 +1174,40 @@ function toCompareEvidence(evidence: SingleRecordQcEvidence): QCRecordCompareEvi
   }
 }
 
+const EXAM_LAB_COURSE_EVIDENCE_TYPES = new Set([
+  'first_course_record',
+  'daily_course_record',
+  'senior_course_record',
+  'rescue_record',
+])
+
+function displayEvidenceForSingleRecord(item: SingleRecordQcResultItem): SingleRecordQcEvidence[] {
+  const evidence = recommendationEvidenceForSingleRecord(item)
+  if (
+    item.status !== 'non_compliant' ||
+    !['LX0609-06-01-04', 'LX0609-06-01-05', 'LX0609-06-03-03', 'LX0609-06-03-04'].includes(
+      item.rule_id,
+    )
+  ) {
+    return evidence
+  }
+  return evidence.filter((entry) => !EXAM_LAB_COURSE_EVIDENCE_TYPES.has(entry.source_type || ''))
+}
+
 async function locateSingleRecordEvidence(evidence: SingleRecordQcEvidence) {
   await locateEvidence(toCompareEvidence(evidence))
 }
 
 async function selectSingleRecordResult(key: string) {
   const result = singleRecordViewItems.value.find((item) => item.key === key)
-  const evidence = result ? recommendationEvidenceForSingleRecord(result)[0] : undefined
-  if (!evidence) return
+  const evidence = result ? displayEvidenceForSingleRecord(result)[0] : undefined
+  if (!evidence) {
+    ++documentSelectionSequence
+    matchedRange.value = null
+    matchedSectionKey.value = ''
+    locationState.value = 'idle'
+    return
+  }
   await locateSingleRecordEvidence(evidence)
 }
 
@@ -1250,6 +1295,8 @@ async function selectDocument(documentKey: string) {
   matchedRange.value = null
   matchedSectionKey.value = ''
   locationState.value = 'idle'
+  const summary = documents.value.find((document) => document.key === documentKey)
+  if (summary && isMedicalOrderDocument(summary)) return
   await ensureDocumentLoaded(documentKey)
 }
 
@@ -1314,6 +1361,16 @@ function loadOrders() {
     if (generation === loadGeneration) orderRequest = undefined
   })
   return orderRequest
+}
+
+async function loadAndSelectOrders() {
+  const generation = loadGeneration
+  await loadOrders()
+  if (generation !== loadGeneration || ordersLoadState.value) return
+  const firstOrder = documents.value.find((document) => isMedicalOrderDocument(document))
+  if (firstOrder) {
+    await selectDocument(firstOrder.key)
+  }
 }
 
 async function loadDocuments() {
@@ -1977,6 +2034,7 @@ onBeforeUnmount(() => {
   font-weight: 650;
 }
 .record-document-select,
+.record-load-orders-btn,
 .record-compare-mobile-tabs {
   display: none;
 }
@@ -2005,6 +2063,38 @@ onBeforeUnmount(() => {
     border-radius: 8px;
     background: #fff;
     font-size: 12px;
+  }
+  .record-load-orders-btn {
+    display: inline-flex;
+    flex: none;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    border: 1px solid rgba(10, 108, 255, 0.24);
+    border-radius: 8px;
+    background: rgba(10, 108, 255, 0.07);
+    color: #0a6cff;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease;
+  }
+  .record-load-orders-btn:hover:not(:disabled) {
+    border-color: rgba(10, 108, 255, 0.42);
+    background: rgba(10, 108, 255, 0.13);
+  }
+  .record-load-orders-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+  .record-load-orders-btn.is-failed {
+    border-color: rgba(180, 35, 24, 0.28);
+    background: rgba(239, 68, 68, 0.08);
+    color: #b42318;
   }
   .record-location-chip {
     margin-left: 0;

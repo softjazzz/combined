@@ -1163,6 +1163,9 @@ describe('CustomerSampleValidationView', () => {
     listLuxian0609CustomerRules.mockReturnValueOnce(catalog.promise)
     const wrapper = await mountView()
     expect(getManualSamplePoolRecords).toHaveBeenCalled()
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+    await nextTick()
     expect(wrapper.find('[data-customer-guide="run-validation"]').attributes('disabled')).toBeDefined()
     expect(runManualSamplePool).not.toHaveBeenCalled()
     config.resolve({ execution_concurrency: { max_parallel_records: 2 } })
@@ -2461,16 +2464,15 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.get('.customer-sample-scroll').classes()).toContain('has-work-dock')
   })
 
-  it('客户样本复现模式未选择病历时提示先选择病历', async () => {
+  it('客户样本复现模式未选择病历时禁用主按钮并提示先选择病历', async () => {
     const wrapper = await mountView()
 
     const runButton = wrapper.findAll('button').find((node) => node.text().includes('请先选择病历'))
     expect(runButton).toBeTruthy()
-    expect(runButton!.attributes('disabled')).toBeUndefined()
+    expect(runButton!.attributes('disabled')).toBeDefined()
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(message.warning).toHaveBeenCalledWith('请先选择要质控的病历')
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 
@@ -4453,10 +4455,10 @@ describe('CustomerSampleValidationView', () => {
 
     const runButton = wrapper.findAll('button').find((node) => node.text().includes('请先选择病历'))
     expect(runButton).toBeTruthy()
+    expect(runButton!.attributes('disabled')).toBeDefined()
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(message.warning).toHaveBeenCalledWith('请先选择要质控的病历')
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 

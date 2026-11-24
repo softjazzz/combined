@@ -6,6 +6,7 @@
       presentation?.statusClass,
       presentation?.normalizedStatus ? `is-${presentation.normalizedStatus}` : 'is-unknown',
       presentation?.isRunning ? 'is-expanded' : 'is-collapsed',
+      { 'is-compact': isCompactActive },
     ]"
     data-testid="customer-sample-qc-task-status"
     aria-live="polite"
@@ -23,6 +24,12 @@
                 <strong>{{ presentation?.statusTitle }}</strong>
                 <span class="qc-task-status__badge">{{ presentation?.statusLabel }}</span>
                 <span class="qc-task-status__rule-set">{{ presentation?.ruleSetText }}</span>
+                <span
+                  v-if="isCompactActive && presentation?.recordProgressText"
+                  class="qc-task-status__compact-meta"
+                >
+                  {{ presentation.recordProgressText }}
+                </span>
               </div>
               <p v-if="presentation?.isRunning">
                 {{ presentation.phaseText }}
@@ -51,7 +58,7 @@
             </a-button>
             <a-dropdown
               v-if="task.status === 'completed' && !task.read_only"
-              placement="bottomRight"
+              placement="topRight"
             >
               <a-button
                 size="small"
@@ -87,10 +94,21 @@
             >
               质控记录
             </a-button>
+            <a-button
+              v-if="collapsible && !presentation?.isRunning"
+              type="text"
+              size="small"
+              class="qc-task-status__collapse-toggle"
+              data-testid="qc-task-toggle-compact"
+              :aria-expanded="!isCompactActive"
+              @click="emit('toggle-compact')"
+            >
+              {{ isCompactActive ? '展开任务栏' : '收起' }}
+            </a-button>
           </div>
         </div>
 
-        <div class="qc-task-status__body">
+        <div v-show="!isCompactActive" class="qc-task-status__body">
           <div
             v-if="presentation?.isRunning"
             class="qc-task-status__progress"
@@ -253,11 +271,15 @@ const props = withDefaults(
     loading?: boolean
     canceling?: boolean
     reviewing?: boolean
+    compact?: boolean
+    collapsible?: boolean
   }>(),
   {
     loading: false,
     canceling: false,
     reviewing: false,
+    compact: false,
+    collapsible: false,
   },
 )
 
@@ -267,6 +289,7 @@ const emit = defineEmits<{
   review: [jobId: string]
   export: [jobId: string]
   'open-history': []
+  'toggle-compact': []
 }>()
 
 const { confirmedResultsOnly } = useQcResultVisibility()
@@ -277,6 +300,7 @@ const presentation = computed(() =>
       })
     : null,
 )
+const isCompactActive = computed(() => Boolean(props.compact && !presentation.value?.isRunning))
 const attentionStatusKeys = new Set([
   'technical_error',
   'non_compliant',
@@ -357,6 +381,27 @@ onBeforeUnmount(stopLiveResultRotation)
 
 .qc-task-status.is-expanded .qc-task-status__layout {
   padding-block: 16px;
+}
+
+.qc-task-status.is-compact .qc-task-status__layout {
+  padding: 10px 16px;
+}
+
+.qc-task-status.is-compact .qc-task-status__header {
+  align-items: center;
+}
+
+.qc-task-status.is-compact .qc-task-status__title strong {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.qc-task-status__compact-meta {
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
 }
 
 .qc-task-status__header,
@@ -767,11 +812,22 @@ onBeforeUnmount(stopLiveResultRotation)
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
-  max-width: 440px;
+  max-width: 520px;
 }
 
 .qc-task-status__actions :deep(.ant-btn) {
   border-radius: 8px;
+}
+
+.qc-task-status__collapse-toggle {
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.qc-task-status__collapse-toggle:hover,
+.qc-task-status__collapse-toggle:focus {
+  color: #0a6cff;
 }
 
 @media (max-width: 1080px) {

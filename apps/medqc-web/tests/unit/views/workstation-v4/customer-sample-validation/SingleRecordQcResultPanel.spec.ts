@@ -364,7 +364,7 @@ describe('SingleRecordQcResultPanel', () => {
   it('默认以紧凑摘要展示，客户可明确展开和收起完整详情', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [items[0]!] } })
     const trigger = wrapper.get('[data-testid="single-record-result-toggle"]')
-    const detailsHint = trigger.get('.result-details-hint')
+    const detailsHint = wrapper.get('.result-footer .result-details-hint')
 
     expect(trigger.attributes('aria-expanded')).toBe('false')
     expect(detailsHint.text()).toBe('展开详情')
@@ -429,7 +429,8 @@ describe('SingleRecordQcResultPanel', () => {
     }
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [item] } })
 
-    expect(wrapper.get('.rule-name').text()).toBe(item.rule_name)
+    expect(wrapper.get('[data-testid="single-record-doc-badge"]').text()).toContain('主诉能导出第一诊断')
+    expect(wrapper.get('.rule-name').text()).toBe('主诉书写不规范或不能导出第一诊断。')
     expect(wrapper.get('.rule-name').attributes('title')).toBe(item.rule_name)
     await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
     expect(wrapper.find('[data-testid="single-record-rule-fulltext"]').exists()).toBe(false)
@@ -487,8 +488,12 @@ describe('SingleRecordQcResultPanel', () => {
         props: { items: resultItems, presentationMode },
       })
       const names = wrapper.findAll('.rule-name')
-      expect(names.map((name) => name.text())).toEqual(resultItems.map((item) => item.rule_name))
-      expect(names[0]!.attributes('title')).toBe('手术记录：完成时限核对')
+      const docBadges = wrapper.findAll('[data-testid="single-record-doc-badge"]')
+      expect(docBadges.map((badge) => badge.text())).toEqual(['手术记录', '手术记录', '术前小结', '查房记录'])
+      expect(names.map((name) => name.attributes('title'))).toEqual(
+        resultItems.map((item) => item.rule_name),
+      )
+      expect(names[0]!.text()).toBe('完成时限核对')
       wrapper.unmount()
     }
   })
@@ -640,17 +645,17 @@ describe('SingleRecordQcResultPanel', () => {
     })
 
     const headline = wrapper.get('[data-testid="copy-match-headline"]')
-    expect(headline.get('[data-testid="copy-match-headline-documents"]').text()).toContain(
-      '日常病程记录·2026-07-08 08:35:49',
-    )
-    expect(headline.get('[data-testid="copy-match-headline-documents"]').text()).toContain(
-      '日常病程记录·2026-07-11 09:13:25',
-    )
+    const docLines = headline.get('[data-testid="copy-match-headline-documents"]').text()
+    expect(docLines).toContain('篇1')
+    expect(docLines).toContain('日常病程记录')
+    expect(docLines).toContain('2026-07-08 08:35:49')
+    expect(docLines).toContain('篇2')
+    expect(docLines).toContain('2026-07-11 09:13:25')
     expect(headline.get('[data-testid="copy-match-headline-metrics"]').text()).toContain(
       '相似度 100%',
     )
     expect(headline.get('[data-testid="copy-match-headline-metrics"]').text()).toContain(
-      '判定阈值 70%',
+      '阈值 70%',
     )
     expect(headline.get('[data-testid="copy-match-headline-metrics"]').text()).toContain(
       '另有 3 组',
@@ -709,7 +714,7 @@ describe('SingleRecordQcResultPanel', () => {
     )
     const rows = wrapper.findAll('[data-testid="single-record-result-row"]')
     expect(rows).toHaveLength(3)
-    expect(rows.map((row) => row.get('.rule-name').text())).toEqual(
+    expect(rows.map((row) => row.get('.rule-name').attributes('title'))).toEqual(
       items.map((item) => item.rule_name),
     )
     expect(rows[0]!.get('.status-cell').text()).toContain('确定问题')

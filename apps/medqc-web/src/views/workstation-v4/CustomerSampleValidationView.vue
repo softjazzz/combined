@@ -3,7 +3,7 @@
     <div
       class="customer-sample-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 xl:px-5"
       :class="{
-        'has-work-dock': Boolean(currentQcTask) || selectedRecordStats.selectedCount > 0,
+        'has-work-dock': hasWorkDock,
       }"
     >
       <div class="customer-sample-container mx-auto w-full max-w-[1440px]">
@@ -636,8 +636,9 @@
     </div>
 
     <div
-      v-if="currentQcTask || selectedRecordStats.selectedCount > 0 || runLoading"
+      v-if="hasWorkDock"
       class="customer-sample-work-dock"
+      :class="{ 'is-compact': isWorkDockTaskCompact }"
       data-testid="customer-sample-work-dock"
       aria-live="polite"
     >
@@ -647,11 +648,14 @@
           :loading="currentQcTaskLoading"
           :canceling="cancelBatchJobLoading"
           :reviewing="reviewBatchJobLoadingId === currentQcTask?.id"
+          :compact="isWorkDockTaskCompact"
+          :collapsible="canCollapseWorkDockTask"
           @view-result="openCurrentTaskResult"
           @cancel="confirmCancelBatchJob"
           @review="handleReviewCurrentTask"
           @export="handleExportCurrentTask"
           @open-history="openTaskHistoryPage"
+          @toggle-compact="toggleWorkDockTaskCompact"
         />
       </div>
 
@@ -1812,8 +1816,9 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watchEffect } from 'vue'
+import { computed, reactive, ref, watch, watchEffect } from 'vue'
 import { formatPaddedQcTaskDateTime } from './utils/qcTaskTime'
+import { isBatchJobPollingActive } from './semantic-rules/utils/batchJobStatus'
 import { deferredComponent } from './customer-sample-validation/deferredComponent'
 const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
@@ -2066,6 +2071,53 @@ watchEffect(() => {
   if (batchResultOpen.value) mountedDrawers.batch = true
   if (recordResultComparisonOpen.value) mountedDrawers.comparison = true
   if (reviewDrawerVisible.value) mountedDrawers.review = true
+})
+
+const hasWorkDock = computed(
+  () =>
+    Boolean(currentQcTask.value) || selectedRecordStats.value.selectedCount > 0 || runLoading.value,
+)
+
+const isCurrentQcTaskRunning = computed(() => isBatchJobPollingActive(currentQcTask.value))
+
+const canCollapseWorkDockTask = computed(
+  () =>
+    Boolean(currentQcTask.value) &&
+    !isCurrentQcTaskRunning.value &&
+    selectedRecordStats.value.selectedCount === 0 &&
+    !runLoading.value,
+)
+
+// 历史终态任务默认以单行紧凑底栏呈现，避免挤压病历池空间；新任务运行或勾选病历时自动展开。
+const workDockTaskCompact = ref(true)
+
+const isWorkDockTaskCompact = computed(
+  () => canCollapseWorkDockTask.value && workDockTaskCompact.value,
+)
+
+function toggleWorkDockTaskCompact() {
+  if (!canCollapseWorkDockTask.value) return
+  workDockTaskCompact.value = !workDockTaskCompact.value
+}
+
+watch(
+  [isCurrentQcTaskRunning, () => selectedRecordStats.value.selectedCount, runLoading],
+  ([running, selectedCount, loading]) => {
+    if (running || selectedCount > 0 || loading) {
+      workDockTaskCompact.value = false
+    }
+  },
+  { immediate: true },
+)
+
+watch(selectedPoolId, () => {
+  if (
+    !isCurrentQcTaskRunning.value &&
+    selectedRecordStats.value.selectedCount === 0 &&
+    !runLoading.value
+  ) {
+    workDockTaskCompact.value = true
+  }
 })
 </script>
 

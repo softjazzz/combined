@@ -1,8 +1,11 @@
 .customer-sample-page {
   position: relative;
+  display: flex;
+  flex-direction: column;
   height: calc(100vh - 18px);
   height: calc(100dvh - 18px);
   min-height: 0;
+  overflow: hidden;
   --customer-sample-canvas: color-mix(in srgb, var(--mq-neutral-text) 5%, var(--mq-bg-surface));
   --customer-sample-surface: rgba(255, 255, 255, 0.86);
   --customer-sample-surface-strong: rgba(255, 255, 255, 0.94);
@@ -41,12 +44,15 @@
 }
 
 .customer-sample-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   background: var(--customer-sample-canvas);
-  padding-bottom: 20px;
+  padding-bottom: 24px;
 }
 
 .customer-sample-scroll.has-work-dock {
-  padding-bottom: 220px;
+  padding-bottom: 24px;
 }
 
 .customer-sample-container {
@@ -137,7 +143,7 @@
   font-weight: 600;
 }
 
-.customer-sample-toolbar-actions :deep(.ant-btn-primary) {
+.customer-sample-toolbar-actions :deep(.ant-btn-primary:not(:disabled):not(.ant-btn-disabled)) {
   background: var(--mq-brand-600);
   border-color: var(--mq-brand-600);
   box-shadow:
@@ -145,13 +151,26 @@
     0 4px 10px rgba(10, 108, 255, 0.16);
 }
 
-.customer-sample-toolbar-actions :deep(.ant-btn-primary:hover),
-.customer-sample-toolbar-actions :deep(.ant-btn-primary:focus) {
+.customer-sample-toolbar-actions :deep(.ant-btn-primary:not(:disabled):not(.ant-btn-disabled):hover),
+.customer-sample-toolbar-actions :deep(.ant-btn-primary:not(:disabled):not(.ant-btn-disabled):focus) {
   background: var(--mq-brand-700);
   border-color: var(--mq-brand-700);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 5px 12px rgba(10, 108, 255, 0.18);
+}
+
+.customer-sample-toolbar-actions :deep(.ant-btn-primary:disabled),
+.customer-sample-toolbar-actions :deep(.ant-btn-primary.ant-btn-disabled),
+.customer-sample-toolbar-actions :deep(.ant-btn-primary:disabled:hover),
+.customer-sample-toolbar-actions :deep(.ant-btn-primary:disabled:focus) {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: rgba(148, 163, 184, 0.18);
+  background-image: none;
+  color: rgba(15, 23, 42, 0.42);
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .customer-sample-toolbar-actions :deep(.ant-btn-default) {
@@ -662,20 +681,19 @@
 }
 
 .customer-sample-work-dock {
-  /* 根页面为定位容器，随内容区域宽度变化，不侵入侧栏。 */
-  position: absolute;
-  right: max(24px, calc((100% - 1440px) / 2 + 24px));
-  bottom: 22px;
-  left: max(24px, calc((100% - 1440px) / 2 + 24px));
-  z-index: 120;
+  /* 非遮挡 flex 底部页脚，固定位于滚动区域下方，不侵入侧栏也不覆盖病历池与分页。 */
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 20;
+  width: min(1440px, calc(100% - 48px));
   max-width: 1440px;
-  margin: 0 auto;
+  margin: 10px auto 14px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow:
-    0 14px 34px rgba(15, 23, 42, 0.14),
-    0 1px 2px rgba(15, 23, 42, 0.06);
+    0 8px 24px rgba(15, 23, 42, 0.08),
+    0 1px 2px rgba(15, 23, 42, 0.05);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
 }
@@ -786,10 +804,23 @@
   font-weight: 600;
 }
 
-.customer-sample-selection-run-actions :deep(.ant-btn-primary) {
+.customer-sample-selection-run-actions :deep(.ant-btn-primary:not(:disabled):not(.ant-btn-disabled)) {
   background: var(--mq-brand-600);
   border-color: var(--mq-brand-600);
   box-shadow: 0 5px 14px rgba(10, 108, 255, 0.18);
+}
+
+.customer-sample-selection-run-actions :deep(.ant-btn-primary:disabled),
+.customer-sample-selection-run-actions :deep(.ant-btn-primary.ant-btn-disabled),
+.customer-sample-selection-run-actions :deep(.ant-btn-primary:disabled:hover),
+.customer-sample-selection-run-actions :deep(.ant-btn-primary:disabled:focus) {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: rgba(148, 163, 184, 0.18);
+  background-image: none;
+  color: rgba(15, 23, 42, 0.42);
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .customer-sample-luxian-aggregate-drawer :deep(.ant-drawer-body) {
@@ -2766,9 +2797,8 @@
   }
 
   .customer-sample-work-dock {
-    right: 12px;
-    bottom: 12px;
-    left: 12px;
+    width: calc(100% - 24px);
+    margin: 8px auto 12px;
   }
 
   .customer-sample-work-dock__selection {
@@ -2777,7 +2807,7 @@
   }
 
   .customer-sample-scroll.has-work-dock {
-    padding-bottom: 306px;
+    padding-bottom: 20px;
   }
 
   .customer-sample-selection-run-actions {

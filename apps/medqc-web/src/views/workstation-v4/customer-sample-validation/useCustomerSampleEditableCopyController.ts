@@ -156,23 +156,68 @@ export function useCustomerSampleEditableCopyController(
     return document ? editableCopyDocumentGroupKey(document) : ''
   })
 
-  async function loadEditableCopyDocuments(record: ManualSamplePoolRecord): Promise<boolean> {
+  let documentLoadSeq = 0
+
+  function isSameEditableCopyRecord(
+    left: ManualSamplePoolRecord | null,
+    right: ManualSamplePoolRecord | null,
+  ): boolean {
+    if (!left || !right) return false
+    if (left === right) return true
+    return (
+      String(left.id || '') === String(right.id || '') &&
+      String(left.matched_institute_id || '') === String(right.matched_institute_id || '') &&
+      String(left.matched_patient_id || '') === String(right.matched_patient_id || '') &&
+      String(left.matched_visit_id || '') === String(right.matched_visit_id || '')
+    )
+  }
+
+  async function loadEditableCopyDocuments(
+    record: ManualSamplePoolRecord,
+    options?: { readonly?: boolean },
+  ): Promise<boolean> {
+    const seq = ++documentLoadSeq
+    const targetReadonly = Boolean(options?.readonly ?? editableCopyReadonly.value)
+    editableCopyReadonly.value = targetReadonly
     editableCopyOrderFilters.value = emptyMedicalOrderFilters()
     editableCopySourceRecord.value = record
     editableCopyDraft.value = null
     editableCopyOpen.value = true
     editableCopyLoading.value = true
     const visitId = record.matched_visit_id || ''
-    const result = await (editableCopyReadonly.value
-      ? loadCurrentMedicalRecord(visitId, {
-          instituteId: record.matched_institute_id,
-          patientId: record.matched_patient_id,
-        })
-      : getEditableMedicalRecordDocuments(visitId, {
-          institute_id: record.matched_institute_id,
-          patient_id: record.matched_patient_id,
-          visit_id: record.matched_visit_id,
-        }))
+    let result:
+      | Awaited<ReturnType<typeof loadCurrentMedicalRecord>>
+      | Awaited<ReturnType<typeof getEditableMedicalRecordDocuments>>
+    try {
+      result = await (targetReadonly
+        ? loadCurrentMedicalRecord(visitId, {
+            instituteId: record.matched_institute_id,
+            patientId: record.matched_patient_id,
+          })
+        : getEditableMedicalRecordDocuments(visitId, {
+            institute_id: record.matched_institute_id,
+            patient_id: record.matched_patient_id,
+            visit_id: record.matched_visit_id,
+          }))
+    } catch (error: any) {
+      if (
+        seq !== documentLoadSeq ||
+        !editableCopyOpen.value ||
+        !isSameEditableCopyRecord(editableCopySourceRecord.value, record)
+      ) {
+        return false
+      }
+      editableCopyLoading.value = false
+      message.error(error?.message || '读取源病历文书失败')
+      return false
+    }
+    if (
+      seq !== documentLoadSeq ||
+      !editableCopyOpen.value ||
+      !isSameEditableCopyRecord(editableCopySourceRecord.value, record)
+    ) {
+      return false
+    }
     editableCopyLoading.value = false
     if (!result.success || !result.data) {
       message.error(result.message || '读取源病历文书失败')
@@ -181,11 +226,11 @@ export function useCustomerSampleEditableCopyController(
     if (!result.data.documents.length) {
       message.warning('当前源病历未读取到可编辑文书')
     }
-    const currentRecord = editableCopyReadonly.value
+    const currentRecord = targetReadonly
       ? { ...record, admission_time: result.data.current_record?.admission_time || '' }
       : record
     editableCopyDraft.value = buildEditableCopyDraft(currentRecord, result.data.documents, {
-      readonly: editableCopyReadonly.value,
+      readonly: targetReadonly,
     })
     editableCopyDocumentQuery.value = ''
     editableCopyDocumentFilter.value = 'all'
@@ -209,7 +254,7 @@ export function useCustomerSampleEditableCopyController(
       return
     }
     editableCopyReadonly.value = true
-    await loadEditableCopyDocuments(record)
+    await loadEditableCopyDocuments(record, { readonly: true })
   }
 
   function resolveEditableCopyTitle(record: ManualSamplePoolRecord): string {
@@ -388,11 +433,13 @@ export function useCustomerSampleEditableCopyController(
       return
     }
     editableCopyReadonly.value = false
-    await loadEditableCopyDocuments(record)
+    await loadEditableCopyDocuments(record, { readonly: false })
   }
 
   function closeEditableCopyDrawer() {
     if (editableCopySaving.value || editableCopySaveAndRunLoading.value) return
+    documentLoadSeq += 1
+    editableCopyLoading.value = false
     editableCopyOpen.value = false
     editableCopyReadonly.value = false
     editableCopySourceRecord.value = null
@@ -501,6 +548,7 @@ export function useCustomerSampleEditableCopyController(
       return
     }
     message.success('编辑副本已保存为自建测试病历')
+    documentLoadSeq += 1
     editableCopyOpen.value = false
     await loadPools()
     if (selectedPoolId.value !== CUSTOMER_TEST_POOL_ID) {

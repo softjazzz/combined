@@ -446,9 +446,10 @@
                   :key="evidence.source_ref"
                   type="button"
                   class="evidence-chip"
+                  :class="{ 'is-active': activeEvidenceKey === evidenceIdentity(item.key, evidence) }"
                   data-testid="single-record-evidence"
                   :title="evidenceHint(evidence)"
-                  @click="emit('locate-evidence', evidence)"
+                  @click="locateEvidenceItem(item, evidence)"
                 >
                   {{ evidenceLabel(evidence) }}
                 </button>
@@ -1094,6 +1095,7 @@ const isSingleConfirmedView = computed(() => {
 })
 const expandedKey = ref('')
 const activeItemKey = ref('')
+const activeEvidenceKey = ref('')
 const reviewedKeys = ref<Set<string>>(new Set())
 const feedbackOpenKey = ref('')
 const ruleTextOpenKey = ref('')
@@ -1132,17 +1134,26 @@ function cardHeadlineTitle(item: SingleRecordQcResultViewItem): string {
   return splitRuleDocumentPrefix(item).title
 }
 
+function evidenceIdentity(itemKey: string, evidence: SingleRecordQcEvidence): string {
+  return `${itemKey}::${evidence.source_ref}::${evidence.field_path || ''}::${evidence.recommendation_index || ''}::${evidence.evidence_role || ''}`
+}
+
 function primaryEvidence(item: SingleRecordQcResultItem): SingleRecordQcEvidence | null {
   const list = displayEvidence(item)
   return list.length > 0 ? list[0] : null
 }
 
+function locateEvidenceItem(item: SingleRecordQcResultViewItem, evidence: SingleRecordQcEvidence) {
+  activeItemKey.value = item.key
+  activeEvidenceKey.value = evidenceIdentity(item.key, evidence)
+  markReviewed(item.key)
+  emit('locate-evidence', evidence)
+}
+
 function locatePrimaryEvidence(item: SingleRecordQcResultViewItem) {
   const target = primaryEvidence(item)
   if (!target) return
-  activeItemKey.value = item.key
-  markReviewed(item.key)
-  emit('locate-evidence', target)
+  locateEvidenceItem(item, target)
 }
 
 function documentGroupForItem(itemKey: string) {
@@ -1187,14 +1198,22 @@ watch(
     collapsedDocumentGroupKeys.value = new Set()
     expandedKey.value = ''
     activeItemKey.value = ''
+    activeEvidenceKey.value = ''
     reviewedKeys.value = new Set()
   },
   { immediate: true },
 )
 
 function toggle(key: string) {
-  expandedKey.value = expandedKey.value === key ? '' : key
+  if (expandedKey.value === key) {
+    expandedKey.value = ''
+    return
+  }
+  expandedKey.value = key
   activeItemKey.value = key
+  const item = renderedItems.value.find((entry) => entry.key === key)
+  const primary = item ? primaryEvidence(item) : null
+  activeEvidenceKey.value = primary ? evidenceIdentity(key, primary) : ''
   markReviewed(key)
   emit('select', key)
 }
@@ -2277,6 +2296,13 @@ watch(
   padding: 0;
   border-bottom: 0;
   text-align: left;
+}
+
+.evidence-chips .evidence-chip.is-active {
+  border-color: var(--mq-brand-600, #0a6cff);
+  background: rgba(10, 108, 255, 0.14);
+  color: var(--mq-brand-700, #0052cc);
+  box-shadow: 0 0 0 2px rgba(10, 108, 255, 0.12);
 }
 </style>
 

@@ -151,4 +151,137 @@ describe('SingleRecordQcResultPanel clinician UX refinements', () => {
 
     expect(wrapper.find('[role="tablist"]').exists()).toBe(true)
   })
+
+  it('does not emit select when collapsing an already-expanded card', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: makeConfirmedItems(),
+        presentationMode: 'grouped',
+      },
+      global: {
+        stubs: {
+          MqIcon: true,
+          QcResultFeedbackControl: true,
+          QcRemediationSuggestion: true,
+          CriterionResultBlock: true,
+          ConsultationRecommendationSummary: true,
+          ExamLabEventResultBlock: true,
+          TimelinessResultBlock: true,
+        },
+      },
+    })
+
+    const firstToggle = wrapper.findAll('[data-testid="single-record-result-toggle"]')[0]
+    await firstToggle.trigger('click')
+    expect(wrapper.emitted('select')).toEqual([['LX0609-02-01-05-0']])
+    expect(firstToggle.attributes('aria-expanded')).toBe('true')
+
+    // Collapsing via the card trigger must NOT emit select again
+    await firstToggle.trigger('click')
+    expect(firstToggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.emitted('select')).toHaveLength(1)
+
+    // Re-expand and collapse via the footer details button
+    await firstToggle.trigger('click')
+    expect(wrapper.emitted('select')).toHaveLength(2)
+    const collapseButton = wrapper.findAll('.result-details-hint')[0]
+    await collapseButton.trigger('click')
+    expect(firstToggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.emitted('select')).toHaveLength(2)
+  })
+
+  it('updates active card and chip state when clicking an evidence chip inside an expanded card', async () => {
+    const items = makeConfirmedItems()
+    items[0] = {
+      ...items[0],
+      evidence: [
+        ...items[0].evidence!,
+        {
+          source_ref: 'senior_course_record:doc-2',
+          source_type: 'senior_course_record',
+          source_label: '上级医师查房记录',
+          evidence_excerpt: '上级查房评估',
+        },
+      ],
+    }
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items,
+        presentationMode: 'grouped',
+      },
+      global: {
+        stubs: {
+          MqIcon: true,
+          QcResultFeedbackControl: true,
+          QcRemediationSuggestion: true,
+          CriterionResultBlock: true,
+          ConsultationRecommendationSummary: true,
+          ExamLabEventResultBlock: true,
+          TimelinessResultBlock: true,
+        },
+      },
+    })
+
+    // Expand card 0, then switch active focus to card 1 via its trigger
+    const toggles = wrapper.findAll('[data-testid="single-record-result-toggle"]')
+    await toggles[0].trigger('click')
+    // Click second evidence chip inside card 0
+    const chips = wrapper.findAll('[data-testid="single-record-evidence"]')
+    expect(chips).toHaveLength(2)
+    expect(chips[0].classes()).toContain('is-active')
+
+    // Click second chip -> activates card 0, marks second chip active, emits locate-evidence
+    await chips[1].trigger('click')
+    const rows = wrapper.findAll('[data-testid="single-record-result-row"]')
+    expect(rows[0].classes()).toContain('is-active')
+    expect(rows[0].attributes('aria-current')).toBe('true')
+    expect(chips[1].classes()).toContain('is-active')
+    expect(chips[0].classes()).not.toContain('is-active')
+    expect(wrapper.emitted('locate-evidence')).toEqual([[items[0].evidence![1]]])
+    expect(wrapper.find('[data-testid="single-record-review-progress"]').text()).toBe('已看 1/2')
+
+    // Verify clicking an evidence chip inside still-expanded card 0 reclaims active state from card 1
+    const twoEvidenceItems = makeConfirmedItems()
+    twoEvidenceItems[1] = {
+      ...twoEvidenceItems[1],
+      evidence: [
+        {
+          source_ref: 'senior_course_record:doc-9',
+          source_type: 'senior_course_record',
+          source_label: '上级医师查房记录',
+        },
+      ],
+    }
+    const wrapper2 = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: twoEvidenceItems,
+        presentationMode: 'grouped',
+      },
+      global: {
+        stubs: {
+          MqIcon: true,
+          QcResultFeedbackControl: true,
+          QcRemediationSuggestion: true,
+          CriterionResultBlock: true,
+          ConsultationRecommendationSummary: true,
+          ExamLabEventResultBlock: true,
+          TimelinessResultBlock: true,
+        },
+      },
+    })
+    await wrapper2.findAll('[data-testid="single-record-result-toggle"]')[0].trigger('click')
+    // Move active state to card 1 via quick locate (card 0 stays expanded)
+    await wrapper2.findAll('[data-testid="single-record-quick-locate"]')[1].trigger('click')
+    let rows2 = wrapper2.findAll('[data-testid="single-record-result-row"]')
+    expect(rows2[1].classes()).toContain('is-active')
+    expect(rows2[0].classes()).not.toContain('is-active')
+
+    // Now click the evidence chip inside still-expanded card 0 -> card 0 regains active state
+    await wrapper2.get('[data-testid="single-record-evidence"]').trigger('click')
+    rows2 = wrapper2.findAll('[data-testid="single-record-result-row"]')
+    expect(rows2[0].classes()).toContain('is-active')
+    expect(rows2[0].attributes('aria-current')).toBe('true')
+    expect(rows2[1].classes()).not.toContain('is-active')
+    expect(wrapper2.get('[data-testid="single-record-evidence"]').classes()).toContain('is-active')
+  })
 })

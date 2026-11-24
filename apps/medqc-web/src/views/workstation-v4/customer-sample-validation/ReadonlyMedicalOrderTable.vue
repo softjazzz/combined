@@ -148,16 +148,18 @@ const scopedRows = computed(() => rows.value.filter((row) => row.orderTypeKey ==
 const visibleRows = computed(() =>
   scopedRows.value.filter((row) => matchesMedicalOrderFilters(row, filters.value)),
 )
-watch(
-  () => orderDocuments.value.map((document) => document.key).join('\u0000'),
-  () => {
-    filters.value = emptyMedicalOrderFilters()
-  },
+const orderKeysSignature = computed(() =>
+  orderDocuments.value.map((document) => document.key).join('\u0000'),
 )
 
+watch(orderKeysSignature, () => {
+  filters.value = emptyMedicalOrderFilters()
+})
+
 watch(
-  [() => props.selectedKey, orderDocuments],
-  ([selectedKey, documents]) => {
+  [() => props.selectedKey, orderKeysSignature],
+  ([selectedKey]) => {
+    const documents = orderDocuments.value
     const selected = documents.find((document) => document.key === selectedKey)
     if (selected) {
       activeType.value = resolveMedicalOrderTypeKey(selected)
