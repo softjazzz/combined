@@ -15,14 +15,14 @@ def raise_medical_records_http_error(exc: Exception) -> None:
     from ..services.data_pipeline_settings import PipelineError
     if isinstance(exc, PipelineError):
         raise HTTPException(exc.status, exc.code) from None
-    if isinstance(exc, MedicalRecordsValidationError):
-        raise HTTPException(status_code=400, detail=str(exc))
+    if isinstance(exc, (MedicalRecordsValidationError, ValueError)):
+        raise HTTPException(status_code=400, detail=str(exc)) from None
     if isinstance(exc, MedicalRecordsNotFoundError):
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from None
     from ..database.clinical_connection import configured
     if configured():
         raise HTTPException(503, "clinical_source_read_unavailable") from None
     if isinstance(exc, MedicalRecordsStorageError):
-        raise HTTPException(status_code=500, detail=str(exc))
-    raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from None
+    raise HTTPException(status_code=500, detail=str(exc)) from None
 

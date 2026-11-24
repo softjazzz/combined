@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
-from ..core.security import get_current_user
+from ..core.security import require_roles
 from ..services.case_identity import CaseRef
 from ..services.doctor_case_scope import get_doctor_case_scope
 from ..services.medical_records.detail_service import (
@@ -30,6 +30,22 @@ from .medical_records_common import raise_medical_records_http_error
 
 router = APIRouter(tags=["病案数据-查询"])
 
+_VERIFY_HOSPITALIZATION_STATUS_ROLES = (
+    "admin",
+    "super_admin",
+    "qc_manager",
+    "sync_admin",
+)
+_MEDICAL_RECORDS_READ_ROLES = (
+    "admin",
+    "super_admin",
+    "qc_manager",
+    "qc_staff",
+    "sync_admin",
+    "doctor",
+    "coder",
+)
+
 
 def _effective_case_scope(request: Request, current_user: Optional[Dict[str, Any]]):
     doctor_scope = get_doctor_case_scope(request)
@@ -45,7 +61,9 @@ def _effective_case_scope(request: Request, current_user: Optional[Dict[str, Any
 
 @router.post("/workstation/hospitalization-status/verify")
 async def verify_workstation_hospitalization_status(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(
+        require_roles(*_VERIFY_HOSPITALIZATION_STATUS_ROLES)
+    ),
 ):
     """轻量核验病历池病例当前是否仍在院，不同步病历文书。"""
 
@@ -64,7 +82,7 @@ async def list_medical_records_api(
     end_date: Optional[date] = Query(None, description="出院截止日期"),
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(description="每页条数"),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):
     try:
         return list_medical_records(
@@ -86,7 +104,7 @@ async def get_stats_api(
     dept: Optional[str] = Query(None, description="科室筛选"),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):
     try:
         return get_stats(
@@ -102,7 +120,7 @@ async def get_stats_api(
 @router.get("/departments")
 async def get_departments_api(
     request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):
     try:
         doctor_scope = get_doctor_case_scope(request)
@@ -195,7 +213,7 @@ def get_workstation_data_api(
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(default=50, max_value=HEAVY_MAX_PAGE_SIZE, description="每页条数"),
     qc_summary_mode: Literal["inline", "deferred", "only"] = Query("inline"),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):
     return _query_workstation(
         request,
@@ -243,7 +261,7 @@ def get_workstation_qc_summary_api(
     request: Request,
     body: WorkstationQcSummaryRequest,
     filters: dict[str, Any] = Depends(_workstation_filters),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):
     """按已显示的病历取行摘要，可同时按相同筛选取全集统计。"""
     return _query_workstation(

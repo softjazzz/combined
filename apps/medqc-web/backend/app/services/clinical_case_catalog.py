@@ -108,16 +108,43 @@ def _datetime(value):
     return result
 
 
+def _is_institute_only_scope(case_scope) -> bool:
+    if case_scope is None:
+        return False
+    from .medical_records.detail_service import InstituteCaseScope
+    if isinstance(case_scope, InstituteCaseScope):
+        return True
+    return (
+        bool(getattr(case_scope, "institute_id", None))
+        and not hasattr(case_scope, "doctor_name")
+        and not hasattr(case_scope, "department")
+    )
+
+
 def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None, end_date=None,
                 date_field="visit", hospital_status="all", case_scope=None, institute_id=None):
     predicates = []
     if case_scope is not None:
         case_scope.require_filters(dept, doctor)
-        predicates.append(tuple_(*[source.c[k] for k in KEYS]).in_(case_scope.case_refs))
-    if dept:
-        predicates.append(source.c.department == dept)
-    if doctor:
-        predicates.append(source.c.doctor == doctor)
+        if _is_institute_only_scope(case_scope):
+            predicates.append(source.c.institute_id == case_scope.institute_id)
+        else:
+            predicates.append(tuple_(*[source.c[k] for k in KEYS]).in_(case_scope.case_refs))
+    normalized_dept = str(dept or "").strip()
+    if normalized_dept:
+        if normalized_dept == "未分科室":
+            predicates.append(
+                or_(
+                    source.c.department.is_(None),
+                    func.trim(source.c.department) == "",
+                    source.c.department == "未分科室",
+                )
+            )
+        else:
+            predicates.append(source.c.department == normalized_dept)
+    normalized_doctor = str(doctor or "").strip()
+    if normalized_doctor:
+        predicates.append(source.c.doctor == normalized_doctor)
     if keyword:
         predicates.append(or_(*[source.c[k].contains(keyword, autoescape=True) for k in ("name", "mr_no", "visit_id")]))
     if hospital_status == "inpatient":
@@ -229,9 +256,25 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         catalog_started = monotonic()
         engine = clinical.get_engine()
         source = catalog(engine, include_frontpage=False)
+        normalized_dept = str(dept or "").strip()
+        normalized_doctor = str(doctor or "").strip()
         predicates = _predicates(source, dept=dept, doctor=doctor, keyword=keyword,
             start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
             case_scope=case_scope)
+        dept_facet_predicates = (
+            _predicates(source, dept=None, doctor=doctor, keyword=keyword,
+                start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
+                case_scope=case_scope)
+            if qc_summary_mode != "only" and normalized_dept
+            else None
+        )
+        doctor_facet_predicates = (
+            _predicates(source, dept=dept, doctor=None, keyword=keyword,
+                start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
+                case_scope=case_scope)
+            if qc_summary_mode != "only" and normalized_doctor
+            else None
+        )
         filter_columns = [source.c[key] for key in KEYS]
         if page_only:
             predicates.append(tuple_(*filter_columns).in_(qc_summary_identities or ()))
@@ -240,19 +283,87 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         with engine.connect() as connection:
             rows = []
             filtered_rows = []
-            facet_rows = []
+            department_counts: Counter = Counter()
+            doctor_counts: Counter = Counter()
             if qc_summary_mode == "deferred":
-                # 延迟摘要模式不读取全量三键，直接按 (department, doctor) 聚合总数与筛选项。
-                facet_rows = connection.execute(
-                    select(
-                        source.c.department,
-                        source.c.doctor,
-                        func.count().label("cnt"),
-                    )
-                    .where(*predicates)
-                    .group_by(source.c.department, source.c.doctor)
-                ).mappings().all()
-                total = sum(int(row["cnt"]) for row in facet_rows)
+                if not normalized_dept and not normalized_doctor:
+                    # 延迟摘要模式不读取全量三键，直接按 (department, doctor) 聚合总数与筛选项。
+                    facet_rows = connection.execute(
+                        select(
+                            source.c.department,
+                            source.c.doctor,
+                            func.count().label("cnt"),
+                        )
+                        .where(*predicates)
+                        .group_by(source.c.department, source.c.doctor)
+                    ).mappings().all()
+                    total = 0
+                    for row in facet_rows:
+                        cnt = int(row["cnt"])
+                        total += cnt
+                        department_counts[str(row["department"] or "").strip() or "未分科室"] += cnt
+                        doc_name = str(row["doctor"] or "").strip()
+                        if doc_name:
+                            doctor_counts[doc_name] += cnt
+                else:
+                    if normalized_dept and not normalized_doctor:
+                        doctor_rows = connection.execute(
+                            select(source.c.doctor, func.count().label("cnt"))
+                            .where(*predicates)
+                            .group_by(source.c.doctor)
+                        ).mappings().all()
+                        total = sum(int(row["cnt"]) for row in doctor_rows)
+                        for row in doctor_rows:
+                            doc_name = str(row["doctor"] or "").strip()
+                            if doc_name:
+                                doctor_counts[doc_name] += int(row["cnt"])
+                        dept_rows = connection.execute(
+                            select(source.c.department, func.count().label("cnt"))
+                            .where(*dept_facet_predicates)
+                            .group_by(source.c.department)
+                        ).mappings().all()
+                        for row in dept_rows:
+                            department_counts[str(row["department"] or "").strip() or "未分科室"] += int(row["cnt"])
+                    elif normalized_doctor and not normalized_dept:
+                        dept_rows = connection.execute(
+                            select(source.c.department, func.count().label("cnt"))
+                            .where(*predicates)
+                            .group_by(source.c.department)
+                        ).mappings().all()
+                        total = sum(int(row["cnt"]) for row in dept_rows)
+                        for row in dept_rows:
+                            department_counts[str(row["department"] or "").strip() or "未分科室"] += int(row["cnt"])
+                        doctor_rows = connection.execute(
+                            select(source.c.doctor, func.count().label("cnt"))
+                            .where(*doctor_facet_predicates)
+                            .group_by(source.c.doctor)
+                        ).mappings().all()
+                        for row in doctor_rows:
+                            doc_name = str(row["doctor"] or "").strip()
+                            if doc_name:
+                                doctor_counts[doc_name] += int(row["cnt"])
+                    else:
+                        total = int(
+                            connection.execute(
+                                select(func.count()).select_from(source).where(*predicates)
+                            ).scalar_one()
+                        )
+                        dept_rows = connection.execute(
+                            select(source.c.department, func.count().label("cnt"))
+                            .where(*dept_facet_predicates)
+                            .group_by(source.c.department)
+                        ).mappings().all()
+                        for row in dept_rows:
+                            department_counts[str(row["department"] or "").strip() or "未分科室"] += int(row["cnt"])
+                        doctor_rows = connection.execute(
+                            select(source.c.doctor, func.count().label("cnt"))
+                            .where(*doctor_facet_predicates)
+                            .group_by(source.c.doctor)
+                        ).mappings().all()
+                        for row in doctor_rows:
+                            doc_name = str(row["doctor"] or "").strip()
+                            if doc_name:
+                                doctor_counts[doc_name] += int(row["cnt"])
                 if total > 0 and qc_summary_identities is None and not page_only:
                     order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
                     order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
@@ -280,6 +391,33 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                     connection, [tuple(row[key] for key in KEYS) for row in rows]
                 )
                 total = len(filtered_rows)
+                if qc_summary_mode != "only":
+                    if dept_facet_predicates is not None:
+                        dept_rows = connection.execute(
+                            select(source.c.department, func.count().label("cnt"))
+                            .where(*dept_facet_predicates)
+                            .group_by(source.c.department)
+                        ).mappings().all()
+                        for row in dept_rows:
+                            department_counts[str(row["department"] or "").strip() or "未分科室"] += int(row["cnt"])
+                    else:
+                        for row in filtered_rows:
+                            department_counts[str(row["department"] or "").strip() or "未分科室"] += 1
+                    if doctor_facet_predicates is not None:
+                        doctor_rows = connection.execute(
+                            select(source.c.doctor, func.count().label("cnt"))
+                            .where(*doctor_facet_predicates)
+                            .group_by(source.c.doctor)
+                        ).mappings().all()
+                        for row in doctor_rows:
+                            doc_name = str(row["doctor"] or "").strip()
+                            if doc_name:
+                                doctor_counts[doc_name] += int(row["cnt"])
+                    else:
+                        for row in filtered_rows:
+                            doc_name = str(row["doctor"] or "").strip()
+                            if doc_name:
+                                doctor_counts[doc_name] += 1
         summary_started = monotonic()
         from .medical_records.query_service import (
             _build_qc_summary, _load_latest_luxian_0609_qc_summaries,
@@ -306,19 +444,8 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                 requested_identities=qc_summary_identities,
                 include_totals=qc_summary_include_totals,
             )
-        if qc_summary_mode == "deferred":
-            department_counts: Counter = Counter()
-            doctor_counts: Counter = Counter()
-            for row in facet_rows:
-                cnt = int(row["cnt"])
-                department_counts[row["department"]] += cnt
-                if row["doctor"]:
-                    doctor_counts[row["doctor"]] += cnt
-            departments = department_counts.items()
-            doctors = doctor_counts.items()
-        else:
-            departments = Counter(row["department"] for row in filtered_rows).items()
-            doctors = Counter(row["doctor"] for row in filtered_rows if row["doctor"]).items()
+        departments = department_counts.items()
+        doctors = doctor_counts.items()
         records = []
         for row in rows:
             admission, discharge = _datetime(row["admission"]), _datetime(row["discharge"])

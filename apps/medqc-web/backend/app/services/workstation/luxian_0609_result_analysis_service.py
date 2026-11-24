@@ -82,106 +82,311 @@ def _default_rule_name_loader() -> dict[str, str]:
     return {entry.rule_id: entry.title for entry in load_luxian_0609_rule_master()}
 
 
-def _load_current_workstation_records(
+def _is_doctor_case_scope(case_scope: Any) -> bool:
+    return case_scope is not None and hasattr(case_scope, "doctor_name")
+
+
+def _is_institute_case_scope(case_scope: Any) -> bool:
+    return (
+        case_scope is not None
+        and not hasattr(case_scope, "doctor_name")
+        and hasattr(case_scope, "institute_id")
+    )
+
+
+def _matches_case_scope_identity(
+    identity: tuple[str, str, str],
+    case_scope: Any,
+) -> bool:
+    if case_scope is None:
+        return True
+    if _is_doctor_case_scope(case_scope):
+        return identity in getattr(case_scope, "case_refs", ())
+    if _is_institute_case_scope(case_scope):
+        scope_inst = _safe_text(getattr(case_scope, "institute_id", None))
+        return bool(scope_inst) and identity[0] == scope_inst
+    return True
+
+
+def _load_single_db_workstation_records(
+    session: Any,
     *,
     department: str | None,
     doctor: str | None,
     hospital_status: str,
+    institute_id: str | None = None,
+    case_scope=None,
 ) -> list[dict[str, str]]:
-    """用病历池同一筛选口径读取当前范围的最小身份与维度字段。"""
-
+    from sqlalchemy import func, or_
+    from sqlalchemy.orm import Session as _Session
+    from ...services.clinical_read import clinical_query
     from ...services.medical_records.query_service import (
         MedicalRecordFrontpage,
         _apply_workstation_filters,
         _filter_indexed_registration_records,
         _load_indexed_registration_records,
         _load_hospitalization_projection_map,
-        _session_factory,
         _workstation_department_expr,
         _workstation_discharge_join_condition,
         _workstation_discharge_summary_subquery,
     )
 
-    session = _session_factory()
-    try:
-        discharge_summary = _workstation_discharge_summary_subquery(session)
-        query = session.query(MedicalRecordFrontpage)
-        if discharge_summary is not None:
-            query = query.outerjoin(
-                discharge_summary,
-                _workstation_discharge_join_condition(discharge_summary),
+    normalized_department = _safe_text(department) or None
+    normalized_institute_id = _safe_text(institute_id) or None
+    is_unassigned_dept = normalized_department == "未分科室"
+
+    discharge_summary = _workstation_discharge_summary_subquery(session)
+    if isinstance(session, _Session) or hasattr(session, "get_bind"):
+        query = clinical_query(session, MedicalRecordFrontpage)
+    else:
+        try:
+            query = clinical_query(session, MedicalRecordFrontpage)
+        except AttributeError:
+            query = session.query(MedicalRecordFrontpage)
+    if case_scope is not None:
+        query = query.filter(case_scope.predicate(MedicalRecordFrontpage))
+    if normalized_institute_id is not None:
+        query = query.filter(MedicalRecordFrontpage.institute_id == normalized_institute_id)
+    if discharge_summary is not None:
+        query = query.outerjoin(
+            discharge_summary,
+            _workstation_discharge_join_condition(discharge_summary),
+        )
+    query = _apply_workstation_filters(
+        query,
+        dept=None if is_unassigned_dept else normalized_department,
+        doctor=doctor,
+        keyword=None,
+        start_date=None,
+        end_date=None,
+        date_field="visit",
+        hospital_status=hospital_status,
+        sync_scope="all",
+        include_department=not is_unassigned_dept,
+        include_doctor=True,
+        discharge_summary=discharge_summary,
+    )
+    dept_expr = _workstation_department_expr(discharge_summary)
+    if is_unassigned_dept:
+        query = query.filter(
+            or_(
+                dept_expr.is_(None),
+                func.trim(dept_expr) == "",
+                func.trim(dept_expr) == "未分科室",
             )
-        query = _apply_workstation_filters(
-            query,
-            dept=department,
-            doctor=doctor,
-            keyword=None,
-            start_date=None,
-            end_date=None,
-            date_field="visit",
-            hospital_status=hospital_status,
-            sync_scope="all",
-            include_department=True,
-            include_doctor=True,
-            discharge_summary=discharge_summary,
         )
-        department_expr = _workstation_department_expr(discharge_summary).label("department")
-        rows = query.with_entities(
-            MedicalRecordFrontpage.institute_id,
-            MedicalRecordFrontpage.patient_id,
-            MedicalRecordFrontpage.visit_id,
-            MedicalRecordFrontpage.name.label("patient_name"),
-            MedicalRecordFrontpage.attending_physician_sign.label("attending_physician"),
-            department_expr,
-        ).all()
-        records = [
-            {
-                "institute_id": _safe_text(row.institute_id),
-                "patient_id": _safe_text(row.patient_id),
-                "visit_id": _safe_text(row.visit_id),
-                "patient_name": _safe_text(row.patient_name),
-                "department": _safe_text(row.department, "未分科室") or "未分科室",
-                "attending_physician": _safe_text(
-                    row.attending_physician,
-                    "未登记主治医师",
-                )
-                or "未登记主治医师",
-            }
-            for row in rows
-        ]
-        indexed_records = _filter_indexed_registration_records(
-            _load_indexed_registration_records(session),
-            dept=department,
-            doctor=doctor,
-            keyword=None,
-            start_date=None,
-            end_date=None,
-            date_field="visit",
-            hospital_status=hospital_status,
-            sync_scope="all",
-            hospitalization_projection_map=_load_hospitalization_projection_map(session),
+    department_expr = dept_expr.label("department")
+    rows = query.with_entities(
+        MedicalRecordFrontpage.institute_id,
+        MedicalRecordFrontpage.patient_id,
+        MedicalRecordFrontpage.visit_id,
+        MedicalRecordFrontpage.name.label("patient_name"),
+        MedicalRecordFrontpage.attending_physician_sign.label("attending_physician"),
+        department_expr,
+    ).all()
+    records = [
+        {
+            "institute_id": _safe_text(row.institute_id),
+            "patient_id": _safe_text(row.patient_id),
+            "visit_id": _safe_text(row.visit_id),
+            "patient_name": _safe_text(row.patient_name),
+            "department": _safe_text(row.department, "未分科室") or "未分科室",
+            "attending_physician": _safe_text(
+                row.attending_physician,
+                "未登记主治医师",
+            )
+            or "未登记主治医师",
+        }
+        for row in rows
+    ]
+    indexed_records = _filter_indexed_registration_records(
+        _load_indexed_registration_records(session),
+        dept=None if is_unassigned_dept else normalized_department,
+        doctor=doctor,
+        keyword=None,
+        start_date=None,
+        end_date=None,
+        date_field="visit",
+        hospital_status=hospital_status,
+        sync_scope="all",
+        hospitalization_projection_map=_load_hospitalization_projection_map(session),
+    )
+    for record in indexed_records:
+        identity = (
+            _safe_text(record.institute_id),
+            _safe_text(record.patient_id),
+            _safe_text(record.visit_id),
         )
-        records.extend(
+        if not all(identity):
+            continue
+        if normalized_institute_id is not None and identity[0] != normalized_institute_id:
+            continue
+        if case_scope is not None and not _matches_case_scope_identity(identity, case_scope):
+            continue
+        dept_label = _safe_text(
+            record.discharge_dept_name or record.admission_dept_name,
+            "未分科室",
+        ) or "未分科室"
+        if is_unassigned_dept and dept_label != "未分科室":
+            continue
+        records.append(
             {
-                "institute_id": _safe_text(record.institute_id),
-                "patient_id": _safe_text(record.patient_id),
-                "visit_id": _safe_text(record.visit_id),
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
                 "patient_name": _safe_text(record.name),
-                "department": _safe_text(
-                    record.discharge_dept_name or record.admission_dept_name,
-                    "未分科室",
-                )
-                or "未分科室",
+                "department": dept_label,
                 "attending_physician": _safe_text(
                     record.attending_physician_sign,
                     "未登记主治医师",
                 )
                 or "未登记主治医师",
             }
-            for record in indexed_records
         )
-    finally:
-        session.close()
+    return records
+
+
+def _load_independent_workstation_records(
+    *,
+    department: str | None,
+    doctor: str | None,
+    hospital_status: str,
+    institute_id: str | None = None,
+    case_scope=None,
+) -> list[dict[str, str]]:
+    from sqlalchemy import func, inspect as sa_inspect, or_, select
+    from sqlalchemy.orm import Session as _Session
+    from ...database import clinical_connection
+    from ...services import clinical_case_catalog as catalog_service
+
+    normalized_department = _safe_text(department) or None
+    normalized_doctor = _safe_text(doctor) or None
+    normalized_institute_id = _safe_text(institute_id) or None
+
+    if case_scope is not None and hasattr(case_scope, "require_filters"):
+        case_scope.require_filters(normalized_department, normalized_doctor)
+
+    effective_case_scope = case_scope
+    effective_institute_id = normalized_institute_id
+    if _is_institute_case_scope(case_scope):
+        scope_inst = _safe_text(getattr(case_scope, "institute_id", None)) or None
+        if effective_institute_id and scope_inst and effective_institute_id != scope_inst:
+            return []
+        effective_institute_id = scope_inst or effective_institute_id
+        effective_case_scope = None
+    elif _is_doctor_case_scope(case_scope):
+        scope_inst = _safe_text(getattr(case_scope, "institute_id", None)) or None
+        if effective_institute_id and scope_inst and effective_institute_id != scope_inst:
+            return []
+        if not getattr(case_scope, "case_refs", ()):
+            return []
+
+    clinical_engine = clinical_connection.get_engine()
+    if clinical_engine is None:
+        return []
+
+    inspector = sa_inspect(clinical_engine)
+    has_catalog = (
+        inspector.has_table("admission_record", schema="cdm")
+        and inspector.has_table("discharge_record", schema="cdm")
+    )
+    if not has_catalog:
+        with _Session(clinical_engine) as cdm_session:
+            return _load_single_db_workstation_records(
+                cdm_session,
+                department=normalized_department,
+                doctor=normalized_doctor,
+                hospital_status=hospital_status,
+                institute_id=normalized_institute_id,
+                case_scope=case_scope,
+            )
+
+    source = catalog_service.catalog(clinical_engine, include_frontpage=False)
+    is_unassigned_dept = normalized_department == "未分科室"
+    predicates = catalog_service._predicates(
+        source,
+        dept=None if is_unassigned_dept else normalized_department,
+        doctor=normalized_doctor,
+        keyword=None,
+        hospital_status=hospital_status,
+        case_scope=effective_case_scope,
+        institute_id=effective_institute_id,
+    )
+    if is_unassigned_dept:
+        predicates.append(
+            or_(
+                source.c.department.is_(None),
+                func.trim(source.c.department) == "",
+                func.trim(source.c.department) == "未分科室",
+            )
+        )
+    with clinical_engine.connect() as connection:
+        rows = (
+            connection.execute(
+                select(
+                    source.c.institute_id,
+                    source.c.patient_id,
+                    source.c.visit_id,
+                    source.c.name,
+                    source.c.department,
+                    source.c.doctor,
+                ).where(*predicates)
+            )
+            .mappings()
+            .all()
+        )
+    return [
+        {
+            "institute_id": _safe_text(row.get("institute_id")),
+            "patient_id": _safe_text(row.get("patient_id")),
+            "visit_id": _safe_text(row.get("visit_id")),
+            "patient_name": _safe_text(row.get("name")),
+            "department": _safe_text(row.get("department"), "未分科室") or "未分科室",
+            "attending_physician": _safe_text(
+                row.get("doctor"),
+                "未登记主治医师",
+            )
+            or "未登记主治医师",
+        }
+        for row in rows
+    ]
+
+
+def _load_current_workstation_records(
+    *,
+    department: str | None,
+    doctor: str | None,
+    hospital_status: str,
+    institute_id: str | None = None,
+    case_scope=None,
+) -> list[dict[str, str]]:
+    """用病历池同一筛选口径读取当前范围的最小身份与维度字段。"""
+
+    from ...database import clinical_connection
+
+    if clinical_connection.configured():
+        records = _load_independent_workstation_records(
+            department=department,
+            doctor=doctor,
+            hospital_status=hospital_status,
+            institute_id=institute_id,
+            case_scope=case_scope,
+        )
+    else:
+        from ...services.medical_records.query_service import _session_factory
+
+        session = _session_factory()
+        try:
+            records = _load_single_db_workstation_records(
+                session,
+                department=department,
+                doctor=doctor,
+                hospital_status=hospital_status,
+                institute_id=institute_id,
+                case_scope=case_scope,
+            )
+        finally:
+            session.close()
 
     unique_records: dict[tuple[str, str, str], dict[str, str]] = {}
     for record in records:
@@ -435,6 +640,8 @@ class Luxian0609ResultAnalysisService:
         completed_to: datetime | None = None,
         page: int = 1,
         page_size: int = 20,
+        institute_id: str | None = None,
+        case_scope=None,
     ) -> dict[str, Any]:
         hospital_status = _CARE_PHASE_TO_HOSPITAL_STATUS.get(_safe_text(care_phase).lower())
         if hospital_status is None:
@@ -452,15 +659,23 @@ class Luxian0609ResultAnalysisService:
 
         normalized_department = _safe_text(department) or None
         normalized_doctor = _safe_text(doctor) or None
-        scope_records = self._record_scope_loader(
-            department=normalized_department,
-            doctor=normalized_doctor,
-            hospital_status=hospital_status,
-        )
+        normalized_institute_id = _safe_text(institute_id) or None
+        loader_kwargs: dict[str, Any] = {
+            "department": normalized_department,
+            "doctor": normalized_doctor,
+            "hospital_status": hospital_status,
+        }
+        if normalized_institute_id is not None:
+            loader_kwargs["institute_id"] = normalized_institute_id
+        if case_scope is not None:
+            loader_kwargs["case_scope"] = case_scope
+        scope_records = self._record_scope_loader(**loader_kwargs)
         records_by_identity = {
             identity: record
             for record in scope_records
             if (identity := _identity_from_record(record)) is not None
+            and (normalized_institute_id is None or identity[0] == normalized_institute_id)
+            and (case_scope is None or _matches_case_scope_identity(identity, case_scope))
         }
         projections = self._result_loader(
             [

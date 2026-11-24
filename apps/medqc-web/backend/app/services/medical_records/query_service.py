@@ -88,6 +88,75 @@ def _load_hospitalization_projection_map(
     }
 
 
+def _escape_like_pattern(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
+def _department_filter_condition(dept_expr, dept: str):
+    normalized_dept = str(dept or "").strip()
+    if normalized_dept == "未分科室":
+        return or_(
+            dept_expr.is_(None),
+            func.trim(dept_expr) == "",
+            dept_expr == "未分科室",
+        )
+    return dept_expr == normalized_dept
+
+
+def _workstation_keyword_condition(keyword: Optional[str]):
+    normalized = str(keyword or "").strip()
+    if not normalized:
+        return None
+    kw = f"%{_escape_like_pattern(normalized)}%"
+    return or_(
+        MedicalRecordFrontpage.name.ilike(kw, escape="\\"),
+        MedicalRecordFrontpage.mr_no.ilike(kw, escape="\\"),
+        MedicalRecordFrontpage.inpat_no.ilike(kw, escape="\\"),
+        MedicalRecordFrontpage.visit_id.ilike(kw, escape="\\"),
+    )
+
+
+def _indexed_record_matches_case_scope(record: SimpleNamespace, case_scope) -> bool:
+    if case_scope is None:
+        return True
+    identity = (
+        str(getattr(record, "institute_id", None) or "").strip(),
+        str(getattr(record, "patient_id", None) or "").strip(),
+        str(getattr(record, "visit_id", None) or "").strip(),
+    )
+    if not all(identity):
+        return False
+    scope_institute = str(getattr(case_scope, "institute_id", None) or "").strip()
+    scope_doctor = getattr(case_scope, "doctor_name", None)
+    scope_department = getattr(case_scope, "department", None)
+    if scope_institute and scope_doctor is None and scope_department is None:
+        return identity[0] == scope_institute
+    raw_refs = getattr(case_scope, "case_refs", None)
+    if raw_refs and identity in raw_refs:
+        return True
+    if scope_institute and scope_doctor is not None and scope_department is not None:
+        expected_doctor = str(scope_doctor).strip()
+        expected_department = str(scope_department).strip()
+        if not expected_doctor or not expected_department:
+            return False
+        rec_dept = str(
+            getattr(record, "discharge_dept_name", None)
+            or getattr(record, "admission_dept_name", None)
+            or ""
+        ).strip()
+        rec_doctor = str(getattr(record, "attending_physician_sign", None) or "").strip()
+        return (
+            identity[0] == scope_institute
+            and rec_dept == expected_department
+            and rec_doctor == expected_doctor
+        )
+    return False
+
+
 def list_medical_records(
     dept: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -107,8 +176,11 @@ def list_medical_records(
         with _session_factory() as session:
             mr = MedicalRecordFrontpage
             query = clinical_query(session, mr).filter(case_scope.predicate(mr))
-            if keyword:
-                query = query.filter(mr.name.contains(keyword))
+            if dept:
+                query = query.filter(_department_filter_condition(_workstation_department_expr(None), dept))
+            keyword_condition = _workstation_keyword_condition(keyword)
+            if keyword_condition is not None:
+                query = query.filter(keyword_condition)
             if start_date:
                 query = query.filter(mr.admission_datetime >= datetime.combine(start_date, datetime.min.time()))
             if end_date:
@@ -149,12 +221,16 @@ def get_stats(
         with _session_factory() as session:
             mr = MedicalRecordFrontpage
             query = clinical_query(session, mr).filter(case_scope.predicate(mr))
+            if dept:
+                query = query.filter(_department_filter_condition(_workstation_department_expr(None), dept))
             if start_date:
                 query = query.filter(mr.admission_datetime >= datetime.combine(start_date, datetime.min.time()))
             if end_date:
                 query = query.filter(mr.discharge_datetime <= datetime.combine(end_date, datetime.max.time()))
             refs = tuple(tuple(row) for row in query.with_entities(mr.institute_id, mr.patient_id, mr.visit_id).all())
             count = len(refs)
+            if not refs:
+                return {"total_records": 0, "total_qc_issues": 0, "open_qc_issues": 0, "resolved_qc_issues": 0}
             issues = session.query(QCResult).filter(tuple_(QCResult.institute_id, QCResult.patient_id, QCResult.visit_id).in_(refs))
             total = issues.count()
             opened = issues.filter(QCResult.status == "open").count()
@@ -171,12 +247,17 @@ def get_departments(*, case_scope=None) -> list[str]:
         result = workstation(case_scope=case_scope, page_size=1, qc_projection_loader=lambda _: {})
         return [item["name"] for item in result["departments"]]
     if case_scope is not None:
-        return [case_scope.department]
+        if hasattr(case_scope, "department") and getattr(case_scope, "department", None):
+            return [case_scope.department]
+        if hasattr(case_scope, "institute_id") and getattr(case_scope, "institute_id", None):
+            from .detail_service import list_departments_for_institute
+            return list_departments_for_institute(case_scope.institute_id)
+        return []
     repo = get_repository()
     return repo.list_departments()
 
 
-def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
+def _load_indexed_registration_records(session, *, case_scope=None) -> list[SimpleNamespace]:
     """读取已同步但尚无病案首页的病例，不向 ``mr`` 写入伪首页。"""
 
     bind = session.get_bind()
@@ -197,6 +278,10 @@ def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
             for field in ("institute_id", "patient_id", "visit_id")
         )
     }
+    if case_scope is not None:
+        scope_institute = str(getattr(case_scope, "institute_id", None) or "").strip()
+        if scope_institute:
+            indexed_refs = {ref for ref in indexed_refs if ref[0] == scope_institute}
     if not indexed_refs:
         return []
 
@@ -313,6 +398,8 @@ def _load_indexed_registration_records(session) -> list[SimpleNamespace]:
                 _cdm_frontpage_empty=True,
             )
         )
+    if case_scope is not None:
+        records = [record for record in records if _indexed_record_matches_case_scope(record, case_scope)]
     return records
 
 
@@ -345,21 +432,33 @@ def _filter_indexed_registration_records(
     for record in records:
         identity = (str(record.institute_id), str(record.patient_id), str(record.visit_id))
         projection = hospitalization_projection_map.get(identity) or {}
-        projection_status = str(projection.get("status") or "")
+        projection_status = str(projection.get("status") or "").strip().lower()
         verified_at = _parse_datetime_value(projection.get("verified_at"))
-        if sync_scope == "today_inpatient" and not (
-            projection_status == "inpatient"
-            and verified_at is not None
-            and verified_at.date() == _hospital_today()
+        locally_discharged = (
+            _parse_datetime_value(record.discharge_datetime) is not None
+            or bool(getattr(record, "_has_discharge_record", False))
+        )
+        if sync_scope == "today_inpatient" and (
+            locally_discharged
+            or not (
+                projection_status == "inpatient"
+                and verified_at is not None
+                and verified_at.date() == _hospital_today()
+            )
         ):
             continue
-        department = record.discharge_dept_name or record.admission_dept_name or ""
-        if dept and department != dept:
-            continue
+        department = str(record.discharge_dept_name or record.admission_dept_name or "").strip()
+        if dept:
+            normalized_dept = str(dept).strip()
+            if normalized_dept == "未分科室":
+                if department and department != "未分科室":
+                    continue
+            elif department != normalized_dept:
+                continue
         if normalized_doctor and str(record.attending_physician_sign or "").strip() != normalized_doctor:
             continue
-        if normalized_keyword and normalized_keyword not in " ".join(
-            str(value or "").lower()
+        if normalized_keyword and not any(
+            normalized_keyword in str(value or "").lower()
             for value in (record.name, record.mr_no, record.inpat_no, record.visit_id)
         ):
             continue
@@ -376,17 +475,16 @@ def _filter_indexed_registration_records(
                 )
             if not date_matches:
                 continue
-        locally_discharged = (
-            _parse_datetime_value(record.discharge_datetime) is not None
-            or bool(getattr(record, "_has_discharge_record", False))
-        )
         discharged = projection_status == "discharged" or locally_discharged
         inpatient = not locally_discharged and (
             projection_status == "inpatient" or not projection_status
         )
+        unknown = not discharged and projection_status != "inpatient"
         if hospital_status == "inpatient" and not inpatient:
             continue
         if hospital_status == "discharged" and not discharged:
+            continue
+        if hospital_status == "unknown" and not unknown:
             continue
         filtered.append(record)
     return filtered
@@ -926,10 +1024,10 @@ def _workstation_discharge_join_condition(discharge_summary):
 def _workstation_department_expr(discharge_summary=None):
     department_candidates = []
     if discharge_summary is not None:
-        department_candidates.append(discharge_summary.c.dept_name)
+        department_candidates.append(func.nullif(func.trim(discharge_summary.c.dept_name), ""))
     department_candidates.extend([
-        MedicalRecordFrontpage.discharge_dept_name,
-        MedicalRecordFrontpage.admission_dept_name,
+        func.nullif(func.trim(MedicalRecordFrontpage.discharge_dept_name), ""),
+        func.nullif(func.trim(MedicalRecordFrontpage.admission_dept_name), ""),
         "",
     ])
     return func.coalesce(
@@ -1018,25 +1116,21 @@ def _apply_workstation_filters(
 ):
     query = query.filter(_workstation_identity_condition())
     if include_department and dept:
-        query = query.filter(_workstation_department_expr(discharge_summary) == dept)
+        query = query.filter(_department_filter_condition(_workstation_department_expr(discharge_summary), dept))
     normalized_doctor = str(doctor or "").strip()
     if include_doctor and normalized_doctor:
         query = query.filter(
             func.trim(MedicalRecordFrontpage.attending_physician_sign) == normalized_doctor
         )
-    if keyword:
-        kw = f"%{keyword}%"
-        query = query.filter(
-            MedicalRecordFrontpage.name.like(kw) |
-            MedicalRecordFrontpage.mr_no.like(kw) |
-            MedicalRecordFrontpage.inpat_no.like(kw)
-        )
+    keyword_condition = _workstation_keyword_condition(keyword)
+    if keyword_condition is not None:
+        query = query.filter(keyword_condition)
     date_condition = _workstation_date_condition(start_date, end_date, date_field, discharge_summary)
     if date_condition is not None:
         query = query.filter(date_condition)
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
-    if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
-        raise ValueError("hospital_status must be one of: all, inpatient, discharged")
+    if normalized_hospital_status not in {"all", "inpatient", "discharged", "unknown"}:
+        raise ValueError("hospital_status must be one of: all, inpatient, discharged, unknown")
     has_projection = _projection_matches_frontpage()
     if normalized_hospital_status == "discharged":
         query = query.filter(
@@ -1053,6 +1147,14 @@ def _apply_workstation_filters(
                     _projection_matches_frontpage(status="inpatient"),
                     ~has_projection,
                 ),
+            )
+        )
+    elif normalized_hospital_status == "unknown":
+        query = query.filter(
+            and_(
+                ~_workstation_is_discharged_expr(discharge_summary),
+                ~_projection_matches_frontpage(status="discharged"),
+                ~_projection_matches_frontpage(status="inpatient"),
             )
         )
     normalized_sync_scope = str(sync_scope or "all").strip().lower()
@@ -1187,8 +1289,8 @@ def get_workstation_data(
             analytics_result_status=analytics_result_status, analytics_scope=analytics_scope)
     session_factory = session_factory or _session_factory
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
-    if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
-        raise ValueError("hospital_status must be one of: all, inpatient, discharged")
+    if normalized_hospital_status not in {"all", "inpatient", "discharged", "unknown"}:
+        raise ValueError("hospital_status must be one of: all, inpatient, discharged, unknown")
     normalized_sync_scope = str(sync_scope or "all").strip().lower()
     if normalized_sync_scope not in {"all", "today_inpatient"}:
         raise ValueError("sync_scope must be one of: all, today_inpatient")
@@ -1224,7 +1326,7 @@ def get_workstation_data(
     with session_factory() as session:
         settings, _ = settings_loader()
         hospitalization_projection_map = _load_hospitalization_projection_map(session)
-        indexed_registration_records = _load_indexed_registration_records(session) if case_scope is None else []
+        indexed_registration_records = _load_indexed_registration_records(session, case_scope=case_scope)
         real_total_count = (
             clinical_query(session, func.count()).select_from(MedicalRecordFrontpage).filter(
                 case_scope.predicate(MedicalRecordFrontpage) if case_scope is not None else True
@@ -1234,7 +1336,13 @@ def get_workstation_data(
         demo_filtered = demo_filter(demo_candidates, dept=dept, keyword=keyword)
         include_demo = case_scope is None and demo_policy(settings, int(real_total_count))
         visible_demos = demo_filtered if include_demo and not (start_date or end_date) else []
-        if normalized_hospital_status != "all":
+        if normalized_hospital_status == "unknown":
+            visible_demos = [
+                demo
+                for demo in visible_demos
+                if _parse_datetime_value(demo.get("dischargeDate")) is None
+            ]
+        elif normalized_hospital_status != "all":
             visible_demos = [
                 demo
                 for demo in visible_demos

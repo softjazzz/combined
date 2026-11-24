@@ -202,7 +202,14 @@ async def prepare_task_material_request(request: Request) -> None:
 
 
 def prepare_request(request: Request) -> None:
-    paths = ("/api/medical-records", "/api/v1/medical-records", "/api/v1/records", "/api/v1/emr", "/api/v1/qc/sichuan/workspace")
+    paths = (
+        "/api/medical-records",
+        "/api/v1/medical-records",
+        "/api/v1/records",
+        "/api/v1/emr",
+        "/api/v1/qc/sichuan/workspace",
+        "/api/v1/workstation",
+    )
     # 样本集和其它业务API仍属业务库，不让全局默认改变1026或管理操作。
     path = request.url.path
     if request.method == "POST" and path == "/api/v1/qc/sichuan/workspace/batch-jobs" and getattr(request.state, "registered_pdf_task_source", None):
@@ -276,7 +283,13 @@ def prepare_request(request: Request) -> None:
                     raise PipelineError("ordinary_source_fixed_donghua_cdm",409)
                 default = INDEPENDENT_CDM
             else:
-                default = settings.default_source if path.endswith("/workstation") or request.method == "POST" else LEGACY_PG
+                default = (
+                    settings.default_source
+                    if path.endswith("/workstation")
+                    or path.startswith("/api/v1/workstation")
+                    or request.method == "POST"
+                    else LEGACY_PG
+                )
             request.state.clinical_source = snapshot(settings, header or query or default)
         if request.state.clinical_source["id"] == "independent_cdm" and "medical-records/" in path:
             suffix = path.split("medical-records/", 1)[1]

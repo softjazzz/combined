@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from sqlalchemy import String, and_, asc, cast, desc, exists, func, or_
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session, load_only
 
 from ...database.models.cdm import (
@@ -21,6 +22,45 @@ from ..validation_material_source import is_explicitly_invalid_document_status
 
 CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
 CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
+_UNTRUSTED_PROJECTION_SOURCES = frozenset(
+    {"", "inpat_registration", "mr", "source_scope_unmatched"}
+)
+
+
+def _is_fresh_projection_timestamp(verified_at: Any, *, max_age_hours: int = 24) -> bool:
+    if verified_at is None:
+        return False
+    if isinstance(verified_at, str):
+        try:
+            verified_at = datetime.fromisoformat(verified_at.strip())
+        except ValueError:
+            return False
+    if not isinstance(verified_at, datetime):
+        return False
+    if verified_at.tzinfo is not None:
+        delta = datetime.now(timezone.utc) - verified_at.astimezone(timezone.utc)
+        return timedelta(hours=-1) <= delta <= timedelta(hours=max_age_hours)
+    now_local = datetime.now()
+    now_hospital = datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
+    return any(
+        timedelta(hours=-1) <= (ref_now - verified_at) <= timedelta(hours=max_age_hours)
+        for ref_now in (now_local, now_hospital)
+    )
+
+
+def _resolve_verified_projection_status(projection_row: Any) -> tuple[str, str, Any]:
+    if projection_row is None:
+        return "", "", None
+    status = _safe_text(getattr(projection_row, "status", None)).lower()
+    if status not in {"inpatient", "discharged"}:
+        return "", "", None
+    source = _safe_text(getattr(projection_row, "source", None))
+    if not source or source.lower() in _UNTRUSTED_PROJECTION_SOURCES:
+        return "", "", None
+    verified_at = getattr(projection_row, "verified_at", None)
+    if not _is_fresh_projection_timestamp(verified_at):
+        return "", "", None
+    return status, source, verified_at
 
 
 def _should_exclude_customer_test(
@@ -279,6 +319,7 @@ class RecordRepository:
         keyword: Optional[str],
         _metadata_only: bool = False,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
+        _load_verified_status: bool = True,
     ) -> List[Dict[str, Any]]:
         """按三坐标读取原始临床执行锚点，禁止按 visit 串病例。"""
         missing_refs = [
@@ -316,6 +357,36 @@ class RecordRepository:
         _capture_private_orm_identities(_private_identity_collector, "discharge_record", discharge_rows)
         _capture_private_orm_identities(_private_identity_collector, "inpat_registration", registration_rows)
         _capture_private_orm_identities(_private_identity_collector, "admission_record", admission_rows)
+
+        projection_by_ref: Dict[CaseRef, Any] = {}
+        if _load_verified_status and not self._material_schema:
+            try:
+                if hasattr(session, "begin_nested"):
+                    with session.begin_nested():
+                        projection_rows = (
+                            session.query(HospitalizationStatusProjection)
+                            .filter(exact_clause(HospitalizationStatusProjection))
+                            .all()
+                        )
+                else:
+                    projection_rows = (
+                        session.query(HospitalizationStatusProjection)
+                        .filter(exact_clause(HospitalizationStatusProjection))
+                        .all()
+                    )
+            except (OperationalError, ProgrammingError):
+                projection_rows = []
+            for row in projection_rows:
+                ref = CaseRef.from_mapping(row.__dict__)
+                existing = projection_by_ref.get(ref)
+                if existing is None or (
+                    getattr(row, "verified_at", None) is not None
+                    and (
+                        getattr(existing, "verified_at", None) is None
+                        or getattr(row, "verified_at", None) > getattr(existing, "verified_at", None)
+                    )
+                ):
+                    projection_by_ref[ref] = row
 
         discharge_by_ref = {
             CaseRef.from_mapping(row.__dict__): row for row in discharge_rows
@@ -361,12 +432,27 @@ class RecordRepository:
                 document_status=getattr(discharge_source, "document_status", None),
             )
             discharge_datetime = discharge_selection.value
-            scene = resolve_scene(discharge=discharge_selection, document_present=discharge_source is not None,
+            verified_status, verified_source, verified_at = _resolve_verified_projection_status(
+                projection_by_ref.get(ref)
+            )
+            scene = resolve_scene(
+                discharge=discharge_selection,
+                document_present=discharge_source is not None,
                 document_invalid=is_explicitly_invalid_document_status(
-                    getattr(discharge_source, "document_status", None)))
-            # 旧住院投影可能含首页/排除法推断，不能作为新质控的正向状态证据。
-            scene["qc_scene_source"] = discharge_selection.source
-            scene["qc_scene_verified_at"] = ""
+                    getattr(discharge_source, "document_status", None)
+                ),
+                verified_status=verified_status,
+            )
+            if verified_status and scene["qc_scene_reason"] in {
+                "verified_inpatient_state",
+                "verified_discharge_state",
+                "discharge_state_conflict",
+            }:
+                scene["qc_scene_source"] = verified_source
+                scene["qc_scene_verified_at"] = _to_iso_datetime(verified_at)
+            else:
+                scene["qc_scene_source"] = discharge_selection.source
+                scene["qc_scene_verified_at"] = ""
             item_scope = scene["qc_scope"]
             if scope_value != "all" and item_scope != scope_value:
                 continue
@@ -379,8 +465,13 @@ class RecordRepository:
             item_doctor = _safe_text(
                 first_anchor_value("attending_physician_sign")
             )
-            if department and item_department != department:
-                continue
+            if department:
+                normalized_dept = department.strip()
+                if normalized_dept == "未分科室":
+                    if item_department and item_department != "未分科室":
+                        continue
+                elif item_department != normalized_dept:
+                    continue
             if doctor and item_doctor != doctor:
                 continue
             if keyword:
@@ -863,6 +954,7 @@ class RecordRepository:
         _private_identity_collector: Callable[[str, Any], None] | None = None,
         institute_id: Optional[str] = None,
         include_test_records: bool = False,
+        _load_verified_status: bool = True,
     ) -> List[Dict[str, Any]]:
         effective_include_test = bool(include_test_records or self._include_test_records)
         from ..validation_material_source import is_material_copy, material_source_schema
@@ -884,7 +976,7 @@ class RecordRepository:
                         date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
                         record_refs=group, sync_scope=sync_scope, _private_identity_collector=_private_identity_collector,
                         institute_id=institute_id, include_test_records=effective_include_test,
-                        _metadata_only=_metadata_only))
+                        _metadata_only=_metadata_only, _load_verified_status=_load_verified_status))
                 return collected
         if record_ids and any(str(value).startswith("pdfv_") for value in record_ids):
             raise ValueError("material_copy_requires_complete_case_refs")
@@ -933,6 +1025,7 @@ class RecordRepository:
                     scope=scope, department=department, doctor=doctor, date_field=date_field,
                     start_date=start_date, end_date=end_date, keyword=keyword,
                     _private_identity_collector=_private_identity_collector, _metadata_only=_metadata_only,
+                    _load_verified_status=_load_verified_status,
                 ))
             return sorted(records, key=lambda item: (item["discharge_datetime"], item["admission_datetime"],
                                                      item["record_key"]), reverse=True)
@@ -970,7 +1063,7 @@ class RecordRepository:
         effective_include_test = bool(include_test_records or self._include_test_records)
         filters = dict(scope="all", department=None, doctor=None, date_field="admission",
                        start_date=None, end_date=None, keyword=None,
-                       include_test_records=effective_include_test)
+                       include_test_records=effective_include_test, _load_verified_status=False)
         full_refs = [CaseRef.from_mapping(item) for item in records if all(CaseRef.from_mapping(item))]
         sources = self.collect_records(**filters, record_refs=full_refs) if full_refs else []
         source_by_ref: Dict[CaseRef, Dict[str, Any]] = {

@@ -183,6 +183,53 @@ def _table(table_name: str, *schemas: str) -> Table:
     return _table_candidates(table_name, tuple(schemas))
 
 
+def _is_doctor_case_scope(case_scope: Any) -> bool:
+    return case_scope is not None and hasattr(case_scope, "doctor_name")
+
+
+def _is_institute_case_scope(case_scope: Any) -> bool:
+    return (
+        case_scope is not None
+        and not hasattr(case_scope, "doctor_name")
+        and hasattr(case_scope, "institute_id")
+    )
+
+
+def _resolve_hospital_scope(
+    *,
+    case_scope: Any = None,
+    institute_id: Optional[str] = None,
+) -> str:
+    if case_scope is not None:
+        if _is_doctor_case_scope(case_scope):
+            return "doctor"
+        if _is_institute_case_scope(case_scope):
+            return "institute"
+        return "scoped"
+    if _safe_text(institute_id).strip():
+        return "institute"
+    return "all"
+
+
+def _matches_case_scope_identity(
+    identity: tuple[str, str, str],
+    case_scope: Any,
+) -> bool:
+    if case_scope is None:
+        return True
+    if _is_doctor_case_scope(case_scope):
+        case_refs = getattr(case_scope, "case_refs", ())
+        return identity in case_refs
+    if _is_institute_case_scope(case_scope):
+        scope_inst = _safe_text(getattr(case_scope, "institute_id", None)).strip()
+        return bool(scope_inst) and identity[0] == scope_inst
+    return True
+
+
+def _normalized_department_label(value: Any) -> str:
+    return _safe_text(value, "未分科室").strip() or "未分科室"
+
+
 class WorkstationAggregationService:
     def __init__(self, session_factory: Any | None = None) -> None:
         self._session_factory = session_factory or SessionLocal
@@ -283,6 +330,8 @@ class WorkstationAggregationService:
         recipient_id: Optional[str] = None,
         hotspot_limit: int = 50,
         todo_limit: int = 12,
+        institute_id: Optional[str] = None,
+        case_scope=None,
     ) -> Dict[str, Any]:
         session: Session = self._session_factory()
         try:
@@ -310,11 +359,18 @@ class WorkstationAggregationService:
                 target_date=date_value,
                 recipient_id=recipient_id,
             )
+            projection_kwargs: Dict[str, Any] = {
+                "department": department,
+                "keyword": keyword,
+                "priority_limit": hotspot_limit,
+            }
+            if case_scope is not None:
+                projection_kwargs["case_scope"] = case_scope
+            if institute_id is not None:
+                projection_kwargs["institute_id"] = institute_id
             clinical_qc = self._build_luxian_0609_home_projection(
                 session,
-                department=department,
-                keyword=keyword,
-                priority_limit=hotspot_limit,
+                **projection_kwargs,
             )
             return {
                 "date": date_value.strftime("%Y-%m-%d"),
@@ -341,6 +397,7 @@ class WorkstationAggregationService:
         keyword: Optional[str] = None,
         priority_limit: int = 20,
         case_scope=None,
+        institute_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """返回当前全病历质控首页所需的最小 Canonical 汇总。
 
@@ -350,12 +407,18 @@ class WorkstationAggregationService:
 
         session: Session = self._session_factory()
         try:
+            projection_kwargs: Dict[str, Any] = {
+                "department": department,
+                "keyword": keyword,
+                "priority_limit": priority_limit,
+            }
+            if case_scope is not None:
+                projection_kwargs["case_scope"] = case_scope
+            if institute_id is not None:
+                projection_kwargs["institute_id"] = institute_id
             clinical_qc = self._build_luxian_0609_home_projection(
                 session,
-                department=department,
-                keyword=keyword,
-                priority_limit=priority_limit,
-                **({"case_scope": case_scope} if case_scope is not None else {}),
+                **projection_kwargs,
             )
             return {
                 "department_options": clinical_qc["department_options"],
@@ -372,6 +435,8 @@ class WorkstationAggregationService:
         completed_to: Optional[datetime] = None,
         department: Optional[str] = None,
         job_id: Optional[str] = None,
+        institute_id: Optional[str] = None,
+        case_scope=None,
     ) -> Dict[str, Any]:
         """按已完成根任务的 Canonical Envelope 汇总泸县质控统计。
 
@@ -382,9 +447,19 @@ class WorkstationAggregationService:
         if completed_from and completed_to and completed_from > completed_to:
             raise ValueError("completed_from 不能晚于 completed_to")
         normalized_job_id = _safe_text(job_id).strip() or None
+        normalized_institute_id = _safe_text(institute_id).strip() or None
+        normalized_department = _safe_text(department).strip() or None
         session: Session = self._session_factory()
         try:
-            records = self._load_luxian_home_records(session, department=None, keyword=None)
+            load_kwargs: Dict[str, Any] = {
+                "department": None,
+                "keyword": None,
+            }
+            if case_scope is not None:
+                load_kwargs["case_scope"] = case_scope
+            if normalized_institute_id is not None:
+                load_kwargs["institute_id"] = normalized_institute_id
+            records = self._load_luxian_home_records(session, **load_kwargs)
             records_by_identity = {
                 (
                     _safe_text(record.get("institute_id")).strip(),
@@ -397,19 +472,46 @@ class WorkstationAggregationService:
                     for key in ("institute_id", "patient_id", "visit_id")
                 )
             }
-            if department:
+            if normalized_institute_id is not None:
                 records_by_identity = {
                     identity: record
                     for identity, record in records_by_identity.items()
-                    if _safe_text(record.get("department")).strip() == department
+                    if identity[0] == normalized_institute_id
                 }
+            if case_scope is not None:
+                records_by_identity = {
+                    identity: record
+                    for identity, record in records_by_identity.items()
+                    if _matches_case_scope_identity(identity, case_scope)
+                }
+            if normalized_department:
+                records_by_identity = {
+                    identity: record
+                    for identity, record in records_by_identity.items()
+                    if _normalized_department_label(record.get("department"))
+                    == normalized_department
+                }
+            scoped_filter_active = bool(
+                normalized_institute_id or case_scope is not None or normalized_department
+            )
+            event_loader_kwargs: Dict[str, Any] = {
+                "records_by_identity": records_by_identity,
+                "completed_from": completed_from,
+                "completed_to": completed_to,
+                "job_id": normalized_job_id,
+            }
+            if scoped_filter_active:
+                event_loader_kwargs["scoped_filter_active"] = True
             events, invalid_total = self._load_luxian_0609_analytics_events(
                 session,
-                records_by_identity=records_by_identity,
-                completed_from=completed_from,
-                completed_to=completed_to,
-                job_id=normalized_job_id,
+                **event_loader_kwargs,
             )
+            if normalized_institute_id is not None or case_scope is not None:
+                events = [
+                    event
+                    for event in events
+                    if event.get("identity") in records_by_identity
+                ]
         finally:
             session.close()
 
@@ -596,7 +698,10 @@ class WorkstationAggregationService:
                 "scene": "final",
                 "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
                 "rule_set_version": LUXIAN_0609_RULE_SET_VERSION,
-                "hospital_scope": "all",
+                "hospital_scope": _resolve_hospital_scope(
+                    case_scope=case_scope,
+                    institute_id=normalized_institute_id,
+                ),
                 "generated_at": datetime.now().astimezone().isoformat(),
             },
             "kpis": {
@@ -627,6 +732,7 @@ class WorkstationAggregationService:
         completed_from: Optional[datetime],
         completed_to: Optional[datetime],
         job_id: Optional[str],
+        scoped_filter_active: bool = False,
     ) -> tuple[list[Dict[str, Any]], int]:
         """读取当前版本已完成根任务的 Canonical 事件，缺失只进入数据健康。"""
 
@@ -670,6 +776,19 @@ class WorkstationAggregationService:
             ):
                 continue
             record_ids = _json_loads_if_needed(row.get("record_ids_json"))
+            raw_record_refs = source.get("record_refs")
+            record_refs: set[tuple[str, str, str]] = set()
+            if isinstance(raw_record_refs, list):
+                for raw_ref in raw_record_refs:
+                    if not isinstance(raw_ref, Mapping):
+                        continue
+                    ref_identity = (
+                        _safe_text(raw_ref.get("institute_id")).strip(),
+                        _safe_text(raw_ref.get("patient_id")).strip(),
+                        _safe_text(raw_ref.get("visit_id")).strip(),
+                    )
+                    if all(ref_identity):
+                        record_refs.add(ref_identity)
             job = {
                 "finished_at": row.get("finished_at"),
                 "record_ids": {
@@ -679,6 +798,7 @@ class WorkstationAggregationService:
                 }
                 if isinstance(record_ids, list)
                 else set(),
+                "record_refs": record_refs,
             }
             filter_rule_set_key = _safe_text(source.get("rule_set_key")).strip()
             filter_rule_set_version = _safe_text(source.get("rule_set_version")).strip()
@@ -740,11 +860,28 @@ class WorkstationAggregationService:
         invalid_total = 0
         for root_job_id, job in jobs.items():
             record_ids = job["record_ids"]
-            matching_identities = [
-                identity for identity in records_by_identity if identity[2] in record_ids
-            ]
-            unresolved_visit_ids = record_ids - {identity[2] for identity in matching_identities}
-            invalid_total += len(unresolved_visit_ids)
+            job_refs = job.get("record_refs") or set()
+            if job_refs:
+                matching_identities = [
+                    identity
+                    for identity in job_refs
+                    if identity in records_by_identity
+                    and (not record_ids or identity[2] in record_ids)
+                ]
+                if not scoped_filter_active:
+                    unresolved_visit_ids = record_ids - {
+                        identity[2] for identity in matching_identities
+                    }
+                    invalid_total += len(unresolved_visit_ids)
+            else:
+                matching_identities = [
+                    identity for identity in records_by_identity if identity[2] in record_ids
+                ]
+                if not scoped_filter_active:
+                    unresolved_visit_ids = record_ids - {
+                        identity[2] for identity in matching_identities
+                    }
+                    invalid_total += len(unresolved_visit_ids)
             for identity in matching_identities:
                 candidates = rows_by_event.get((root_job_id, *identity), [])
                 if len(candidates) != 1:
@@ -798,6 +935,7 @@ class WorkstationAggregationService:
         keyword: Optional[str],
         priority_limit: int,
         case_scope=None,
+        institute_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """按病历池相同三坐标范围聚合全病历 Canonical 质控摘要。
 
@@ -805,12 +943,57 @@ class WorkstationAggregationService:
         三坐标权威来源时保持 unknown，不能从旧工作流、文案或文书数量回填。
         """
 
-        records = self._load_luxian_home_records(
-            session,
-            department=department,
-            keyword=keyword,
-            **({"case_scope": case_scope} if case_scope is not None else {}),
+        normalized_department = _safe_text(department).strip() or None
+        normalized_institute_id = _safe_text(institute_id).strip() or None
+        if case_scope is not None and hasattr(case_scope, "require_filters"):
+            case_scope.require_filters(normalized_department, None)
+
+        load_kwargs: Dict[str, Any] = {
+            "department": None,
+            "keyword": keyword,
+        }
+        if case_scope is not None:
+            load_kwargs["case_scope"] = case_scope
+        if normalized_institute_id is not None:
+            load_kwargs["institute_id"] = normalized_institute_id
+
+        scoped_records = self._load_luxian_home_records(session, **load_kwargs)
+        if normalized_institute_id is not None:
+            scoped_records = [
+                record
+                for record in scoped_records
+                if _safe_text(record.get("institute_id")).strip() == normalized_institute_id
+            ]
+        if case_scope is not None:
+            scoped_records = [
+                record
+                for record in scoped_records
+                if _matches_case_scope_identity(
+                    (
+                        _safe_text(record.get("institute_id")).strip(),
+                        _safe_text(record.get("patient_id")).strip(),
+                        _safe_text(record.get("visit_id")).strip(),
+                    ),
+                    case_scope,
+                )
+            ]
+
+        # 科室下拉选项必须来自科室筛选前的当前范围病历，避免选中单个科室后抹去其他选项。
+        department_options = sorted(
+            {
+                _normalized_department_label(record.get("department"))
+                for record in scoped_records
+            }
         )
+        if normalized_department is not None:
+            records = [
+                record
+                for record in scoped_records
+                if _normalized_department_label(record.get("department"))
+                == normalized_department
+            ]
+        else:
+            records = scoped_records
         record_refs = [
             {
                 "institute_id": _safe_text(record.get("institute_id")).strip(),
@@ -968,8 +1151,11 @@ class WorkstationAggregationService:
         generated_at = datetime.now().astimezone().isoformat()
         return {
             "scope": {
-                "hospital_scope": "all",
-                "department": department or None,
+                "hospital_scope": _resolve_hospital_scope(
+                    case_scope=case_scope,
+                    institute_id=normalized_institute_id,
+                ),
+                "department": normalized_department,
                 "scene": "final",
                 "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
                 "rule_set_version": LUXIAN_0609_RULE_SET_VERSION,
@@ -993,7 +1179,7 @@ class WorkstationAggregationService:
             },
             "canonical_status_counts": dict(sorted(canonical_status_counts.items())),
             "priority_items": priority_items[: max(1, priority_limit)],
-            "department_options": sorted(department_distribution),
+            "department_options": department_options,
             "department_distribution": [
                 {
                     "department": name,
@@ -1046,9 +1232,145 @@ class WorkstationAggregationService:
         department: Optional[str],
         keyword: Optional[str],
         case_scope=None,
+        institute_id: Optional[str] = None,
     ) -> List[Dict[str, str]]:
         """复用病历池的筛选器，仅读取三坐标齐全的真实 CDM 病历。"""
 
+        from ...database import clinical_connection
+
+        if clinical_connection.configured():
+            return self._load_independent_luxian_home_records(
+                department=department,
+                keyword=keyword,
+                case_scope=case_scope,
+                institute_id=institute_id,
+            )
+        return self._load_single_db_luxian_home_records(
+            session,
+            department=department,
+            keyword=keyword,
+            case_scope=case_scope,
+            institute_id=institute_id,
+        )
+
+    def _load_independent_luxian_home_records(
+        self,
+        *,
+        department: Optional[str],
+        keyword: Optional[str],
+        case_scope=None,
+        institute_id: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
+        from sqlalchemy import inspect as sa_inspect
+        from ...database import clinical_connection
+        from .. import clinical_case_catalog as catalog_service
+
+        normalized_department = _safe_text(department).strip() or None
+        normalized_keyword = _safe_text(keyword).strip() or None
+        normalized_institute_id = _safe_text(institute_id).strip() or None
+
+        if case_scope is not None and hasattr(case_scope, "require_filters"):
+            case_scope.require_filters(normalized_department, None)
+
+        effective_case_scope = case_scope
+        effective_institute_id = normalized_institute_id
+        if _is_institute_case_scope(case_scope):
+            scope_inst = _safe_text(getattr(case_scope, "institute_id", None)).strip() or None
+            if effective_institute_id and scope_inst and effective_institute_id != scope_inst:
+                return []
+            effective_institute_id = scope_inst or effective_institute_id
+            effective_case_scope = None
+        elif _is_doctor_case_scope(case_scope):
+            scope_inst = _safe_text(getattr(case_scope, "institute_id", None)).strip() or None
+            if effective_institute_id and scope_inst and effective_institute_id != scope_inst:
+                return []
+            if not getattr(case_scope, "case_refs", ()):
+                return []
+
+        clinical_engine = clinical_connection.get_engine()
+        if clinical_engine is None:
+            return []
+
+        inspector = sa_inspect(clinical_engine)
+        has_catalog = (
+            inspector.has_table("admission_record", schema="cdm")
+            and inspector.has_table("discharge_record", schema="cdm")
+        )
+        if not has_catalog:
+            with Session(clinical_engine) as cdm_session:
+                return self._load_single_db_luxian_home_records(
+                    cdm_session,
+                    department=normalized_department,
+                    keyword=normalized_keyword,
+                    case_scope=case_scope,
+                    institute_id=normalized_institute_id,
+                )
+
+        source = catalog_service.catalog(clinical_engine, include_frontpage=False)
+        is_unassigned_dept = normalized_department == "未分科室"
+        predicates = catalog_service._predicates(
+            source,
+            dept=None if is_unassigned_dept else normalized_department,
+            doctor=None,
+            keyword=normalized_keyword,
+            hospital_status="all",
+            case_scope=effective_case_scope,
+            institute_id=effective_institute_id,
+        )
+        if is_unassigned_dept:
+            predicates.append(
+                or_(
+                    source.c.department.is_(None),
+                    func.trim(source.c.department) == "",
+                    func.trim(source.c.department) == "未分科室",
+                )
+            )
+        with clinical_engine.connect() as connection:
+            rows = (
+                connection.execute(
+                    select(
+                        source.c.institute_id,
+                        source.c.patient_id,
+                        source.c.visit_id,
+                        source.c.name,
+                        source.c.doctor,
+                        source.c.department,
+                    ).where(*predicates)
+                )
+                .mappings()
+                .all()
+            )
+        records_by_identity: Dict[tuple[str, str, str], Dict[str, str]] = {}
+        for row in rows:
+            identity = (
+                _safe_text(row.get("institute_id")).strip(),
+                _safe_text(row.get("patient_id")).strip(),
+                _safe_text(row.get("visit_id")).strip(),
+            )
+            if not all(identity):
+                continue
+            records_by_identity.setdefault(
+                identity,
+                {
+                    "institute_id": identity[0],
+                    "patient_id": identity[1],
+                    "visit_id": identity[2],
+                    "patient_name": _safe_text(row.get("name")).strip(),
+                    "attending_physician": _safe_text(row.get("doctor")).strip(),
+                    "department": _safe_text(row.get("department")).strip() or "未分科室",
+                },
+            )
+        return list(records_by_identity.values())
+
+    def _load_single_db_luxian_home_records(
+        self,
+        session: Session,
+        *,
+        department: Optional[str],
+        keyword: Optional[str],
+        case_scope=None,
+        institute_id: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
         from ..medical_records.query_service import (
             MedicalRecordFrontpage,
             _apply_workstation_filters,
@@ -1056,22 +1378,34 @@ class WorkstationAggregationService:
             _workstation_discharge_join_condition,
             _workstation_discharge_summary_subquery,
         )
-
-        discharge_summary = _workstation_discharge_summary_subquery(session)
         from ..clinical_read import clinical_query
 
-        query = (clinical_query(session, MedicalRecordFrontpage) if case_scope is not None
-                 else session.query(MedicalRecordFrontpage))
+        normalized_department = _safe_text(department).strip() or None
+        normalized_institute_id = _safe_text(institute_id).strip() or None
+        discharge_summary = _workstation_discharge_summary_subquery(session)
+
+        # 单库模式下始终通过 clinical_query 遵循 DB_SCHEMA_MODE=split，避免管理员误读 public.mr。
+        if isinstance(session, Session) or hasattr(session, "get_bind"):
+            query = clinical_query(session, MedicalRecordFrontpage)
+        else:
+            try:
+                query = clinical_query(session, MedicalRecordFrontpage)
+            except AttributeError:
+                query = session.query(MedicalRecordFrontpage)
+
         if case_scope is not None:
             query = query.filter(case_scope.predicate(MedicalRecordFrontpage))
+        if normalized_institute_id is not None:
+            query = query.filter(MedicalRecordFrontpage.institute_id == normalized_institute_id)
         if discharge_summary is not None:
             query = query.outerjoin(
                 discharge_summary,
                 _workstation_discharge_join_condition(discharge_summary),
             )
+        is_unassigned_dept = normalized_department == "未分科室"
         query = _apply_workstation_filters(
             query,
-            dept=department,
+            dept=None if is_unassigned_dept else normalized_department,
             doctor=None,
             keyword=keyword,
             start_date=None,
@@ -1081,17 +1415,26 @@ class WorkstationAggregationService:
             # 参数必须显式传入，避免新增筛选合同后首页运行时漏参。
             hospital_status="all",
             sync_scope="all",
-            include_department=True,
+            include_department=not is_unassigned_dept,
             include_doctor=False,
             discharge_summary=discharge_summary,
         )
+        dept_expr = _workstation_department_expr(discharge_summary)
+        if is_unassigned_dept:
+            query = query.filter(
+                or_(
+                    dept_expr.is_(None),
+                    func.trim(dept_expr) == "",
+                    func.trim(dept_expr) == "未分科室",
+                )
+            )
         rows = query.with_entities(
             MedicalRecordFrontpage.institute_id,
             MedicalRecordFrontpage.patient_id,
             MedicalRecordFrontpage.visit_id,
             MedicalRecordFrontpage.name.label("patient_name"),
             MedicalRecordFrontpage.attending_physician_sign.label("attending_physician"),
-            _workstation_department_expr(discharge_summary).label("department"),
+            dept_expr.label("department"),
         ).all()
         records_by_identity: Dict[tuple[str, str, str], Dict[str, str]] = {}
         for row in rows:

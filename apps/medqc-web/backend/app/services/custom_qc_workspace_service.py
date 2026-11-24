@@ -4598,53 +4598,61 @@ class CustomQCWorkspaceService:
             if not job_cols or not env_cols:
                 return None
 
-            if dialect_name == "postgresql":
-                def _pg_row_digest(table: Table, cols: list[Any]) -> Optional[tuple[str, ...]]:
-                    row_sig = sa.func.concat_ws(
-                        "|",
-                        *(sa.func.coalesce(sa.cast(col, sa.String), "") for col in cols),
-                    )
-                    row_hash = sa.func.hashtext(row_sig)
-                    agg = session.execute(
-                        select(
-                            sa.func.count().label("cnt"),
-                            sa.func.coalesce(
-                                sa.func.sum(sa.cast(row_hash, sa.BigInteger)),
-                                0,
-                            ).label("sum_hash"),
-                            sa.func.coalesce(
-                                sa.func.bit_xor(row_hash),
-                                0,
-                            ).label("xor_hash"),
-                        ).select_from(table)
-                    ).first()
-                    if agg is None:
+            def _read_signatures() -> Optional[tuple[Any, ...]]:
+                if dialect_name == "postgresql":
+                    def _pg_row_digest(table: Table, cols: list[Any]) -> Optional[tuple[str, ...]]:
+                        row_sig = sa.func.concat_ws(
+                            "|",
+                            *(sa.func.coalesce(sa.cast(col, sa.String), "") for col in cols),
+                        )
+                        row_hash = sa.func.hashtext(row_sig)
+                        agg = session.execute(
+                            select(
+                                sa.func.count().label("cnt"),
+                                sa.func.coalesce(
+                                    sa.func.sum(sa.cast(row_hash, sa.BigInteger)),
+                                    0,
+                                ).label("sum_hash"),
+                                sa.func.coalesce(
+                                    sa.func.bit_xor(row_hash),
+                                    0,
+                                ).label("xor_hash"),
+                            ).select_from(table)
+                        ).first()
+                        if agg is None:
+                            return None
+                        return tuple(str(v) if v is not None else "" for v in agg)
+
+                    job_sig = _pg_row_digest(self._batch_job_table, job_cols)
+                    env_sig = _pg_row_digest(self._record_result_envelope_table, env_cols)
+                    if job_sig is None or env_sig is None:
                         return None
-                    return tuple(str(v) if v is not None else "" for v in agg)
+                    return (clinical_binding, job_sig, env_sig)
 
-                job_sig = _pg_row_digest(self._batch_job_table, job_cols)
-                env_sig = _pg_row_digest(self._record_result_envelope_table, env_cols)
-                if job_sig is None or env_sig is None:
-                    return None
-                return (clinical_binding, job_sig, env_sig)
+                def _python_row_digest(table: Table, cols: list[Any]) -> tuple[str, ...]:
+                    rows = session.execute(
+                        select(*cols).order_by(table.c.id.asc())
+                    ).all()
+                    hasher = hashlib.blake2b(digest_size=16)
+                    for row in rows:
+                        hasher.update(
+                            "|".join("" if v is None else str(v) for v in row).encode("utf-8")
+                        )
+                        hasher.update(b"\n")
+                    return (str(len(rows)), hasher.hexdigest())
 
-            def _python_row_digest(table: Table, cols: list[Any]) -> tuple[str, ...]:
-                rows = session.execute(
-                    select(*cols).order_by(table.c.id.asc())
-                ).all()
-                hasher = hashlib.blake2b(digest_size=16)
-                for row in rows:
-                    hasher.update(
-                        "|".join("" if v is None else str(v) for v in row).encode("utf-8")
-                    )
-                    hasher.update(b"\n")
-                return (str(len(rows)), hasher.hexdigest())
+                return (
+                    clinical_binding,
+                    _python_row_digest(self._batch_job_table, job_cols),
+                    _python_row_digest(self._record_result_envelope_table, env_cols),
+                )
 
-            return (
-                clinical_binding,
-                _python_row_digest(self._batch_job_table, job_cols),
-                _python_row_digest(self._record_result_envelope_table, env_cols),
-            )
+            # 在 SAVEPOINT 内读取水印，防止缺表、旧版 PG 缺 bit_xor 或权限异常毒化主事务。
+            begin_nested = getattr(session, "begin_nested", None)
+            if callable(begin_nested):
+                with begin_nested():
+                    return _read_signatures()
+            return _read_signatures()
         except Exception:
             return None
 
@@ -5143,18 +5151,31 @@ class CustomQCWorkspaceService:
                                 )
                             projections[identity] = projection_result
                             continue
+                        excluded_rule_ids = (
+                            LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+                            if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY
+                            else frozenset()
+                        )
+                        visible_partial_items = [
+                            item
+                            for item in partial["items"]
+                            if _safe_text(
+                                item.get("rule_id") or item.get("rule_code")
+                            ).upper()
+                            not in excluded_rule_ids
+                        ]
                         status_counts: Dict[str, int] = {}
-                        for item in partial["items"]:
+                        for item in visible_partial_items:
                             item_status = _safe_text(item.get("status"), "unknown")
                             status_counts[item_status] = status_counts.get(item_status, 0) + 1
                         projection_result = {
-                            "status": "ready" if partial["items"] else "failed",
+                            "status": "ready" if visible_partial_items else "failed",
                             "completed_at": (
                                 selected_job.get("finished_at").isoformat()
                                 if isinstance(selected_job.get("finished_at"), datetime)
                                 else _safe_text(selected_job.get("finished_at")) or None
                             ),
-                            "total_rule_count": len(partial["items"]),
+                            "total_rule_count": len(visible_partial_items),
                             "status_counts": dict(sorted(status_counts.items())),
                             "data_origin": "saved_partial_task",
                             "job_id": selected_job_id,
@@ -5163,17 +5184,20 @@ class CustomQCWorkspaceService:
                                 "result_scope_kind", "unknown"
                             ),
                             **partial,
+                            "execution_status": (
+                                "partial_failed" if visible_partial_items else "failed"
+                            ),
+                            "completed_rule_count": len(visible_partial_items),
+                            "items": visible_partial_items,
                         }
+                        if not include_items:
+                            # 摘要模式下统一剥离大体积明细，避免污染 _PARTIAL_SUMMARY_CACHE 与 _WATERMARK_SUMMARY_CACHE。
+                            projection_result.pop("items", None)
                         if partial_cache_key is not None:
-                            # 摘要模式下仅缓存轻量投影，避免把大体积明细驻留内存。
-                            cached_summary_copy = {
-                                k: v for k, v in projection_result.items() if k != "items"
-                            }
-                            cached_summary_copy["items"] = []
                             _lru_cache_put(
                                 _PARTIAL_SUMMARY_CACHE,
                                 partial_cache_key,
-                                cached_summary_copy,
+                                projection_result,
                                 _PARTIAL_SUMMARY_CACHE_MAX,
                             )
                         projections[identity] = projection_result
